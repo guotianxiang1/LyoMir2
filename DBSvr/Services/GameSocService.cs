@@ -1253,11 +1253,28 @@ namespace DBSvr
                         request.TailValue50) ? 0 : 1;
                     break;
                 case NativeZongpaiSubCommand.AddMember:
-                    // 0x593070: (MasterName, MemberName, RoleName) pushed in
-                    // reverse order tail+0x25, tail+0x10, tail+0x00.
+                    // 模板 0x593140 (len 85)：
+                    //   insert into ZongpaiMember(MasterName, MemberName, RoleName)
+                    //   values("%s", "%s", "%s");
+                    // TVarRec 数组自 [ebp-0x30] 起、每槽 8 字节，ecx=2 (高位索引，共 3 元素)：
+                    //   0x5930D3  slot0 = [ebp-0x08]   -> %s#1 MasterName
+                    //   0x5930DD  slot1 = [ebp+0x08]   -> %s#2 MemberName
+                    //   0x5930E7  slot2 = [ebp-0x0C]   -> %s#3 RoleName
+                    //   0x5930F9  mov eax,0x593140 / 0x5930FE call 0x40CF30 (Format)
+                    //
+                    // ⚠️ 此前 memberName 传 TailSlot10、roleName 传 TailSlot25，是**传反**。
+                    // 三条同向证据：
+                    //  (a) DDL 0x5BF0C4：`MemberName varchar(15)` / `RoleName varchar(20)`，
+                    //      而槽容量是 tail+0x10 → 0x25-0x10=0x15 = 长度字节+20 ⇒ 容量 20 = RoleName；
+                    //      tail+0x25 → 0x35-0x25=0x10 = 长度字节+15 ⇒ 容量 15 = MemberName。
+                    //  (b) 同 DDL 有 `unique key MemberName_Index(MemberName)` —— MemberName
+                    //      **单列唯一**。把可重复的 RoleName 写进该列，同一师门加入第二个成员
+                    //      即撞唯一键 ⇒ 写坏数据，不只是字段错位。
+                    //  (c) 本文件内部自相矛盾：RemoveMember(sub4) 与 UpdateMemberRole(sub5)
+                    //      都用 TailSlot25 作 memberName、TailSlot10 作 roleName，唯 sub3 反着写。
                     result = _zongpaiService.AddMember(masterName,
-                        LegacyGbkText.Decode(request.TailSlot10),
-                        LegacyGbkText.Decode(request.TailSlot25)) ? 0 : 1;
+                        LegacyGbkText.Decode(request.TailSlot25),
+                        LegacyGbkText.Decode(request.TailSlot10)) ? 0 : 1;
                     break;
                 case NativeZongpaiSubCommand.RemoveMember:
                     // 0x593198: where MasterName=tail+0x00 and MemberName=tail+0x25.
