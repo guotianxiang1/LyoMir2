@@ -1,0 +1,421 @@
+using System.Buffers.Binary;
+using System.Text;
+using GameSvr;
+using SystemModule;
+
+PrepareRuntimeConfig();
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+var gbk = Encoding.GetEncoding(936);
+
+M2Share.UserEngine = new UserEngine();
+M2Share.ObjectManager = new ObjectManager();
+M2Share.UserEngine.m_MagicList.Add(new TMagic { wMagicID = 10, sMagicName = "技能十" });
+M2Share.UserEngine.m_MagicList.Add(new TMagic { wMagicID = 69, sMagicName = "特殊技能" });
+M2Share.UserEngine.m_HeroMagicList.Add(new TMagic { wMagicID = 10, sMagicName = "技能十" });
+M2Share.UserEngine.m_HeroMagicList.Add(new TMagic { wMagicID = 69, sMagicName = "特殊技能" });
+M2Share.g_Config.dwNeedExps[77] = 34567890;
+
+var human = new THumDataInfo();
+human.Data.btSecHeroPracticeRewardMode = 3;
+human.Data.btSecHeroPracticeCostTier = 2;
+human.Data.wSecHeroPracticeLevel = 0xC3D4;
+human.Data.nLingFu = 123456;
+human.Data.nUsedLingFu = 654321;
+var player = new TPlayObject();
+var getHumData = typeof(UserEngine).GetMethod("GetHumData",
+    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+Assert(getHumData != null, "player native load method");
+var loadArguments = new object[] { player, human };
+getHumData!.Invoke(M2Share.UserEngine, loadArguments);
+Equal((byte)3, player.m_btSecHeroPracticeRewardMode,
+    "player secondary-hero practice reward mode load");
+Equal((byte)2, player.m_btSecHeroPracticeCostTier,
+    "player secondary-hero practice cost tier load");
+Equal((ushort)0xC3D4, player.m_wSecHeroPracticeLevel,
+    "player secondary-hero practice level load");
+Equal(123456, player.m_nLingFu, "player native LingFu load");
+Equal(654321, player.m_nUsedLingFu, "player native used LingFu load");
+var playerSnapshot = new THumDataInfo();
+player.MakeSaveRcd(ref playerSnapshot);
+Equal(player.m_btSecHeroPracticeRewardMode,
+    playerSnapshot.Data.btSecHeroPracticeRewardMode,
+    "player secondary-hero practice reward mode save");
+Equal(player.m_btSecHeroPracticeCostTier, playerSnapshot.Data.btSecHeroPracticeCostTier,
+    "player secondary-hero practice cost tier save");
+Equal(player.m_wSecHeroPracticeLevel, playerSnapshot.Data.wSecHeroPracticeLevel,
+    "player secondary-hero practice level save");
+Equal(player.m_nLingFu, playerSnapshot.Data.nLingFu,
+    "player native LingFu save");
+Equal(player.m_nUsedLingFu, playerSnapshot.Data.nUsedLingFu,
+    "player native used LingFu save");
+
+var raw = new byte[NativeHeroDbFrameCodec.HeroRecordSize];
+WriteShortString(raw, NativeHeroDbFrameCodec.MasterNameOffset, 15, "主人甲");
+WriteShortString(raw, NativeHeroDbFrameCodec.HeroNameOffset, 15, "英雄乙");
+raw[NativeHeroDbFrameCodec.RaceOffset] = Grobal2.RC_HEROOBJECT;
+raw[NativeHeroDbFrameCodec.SexOffset] = 1;
+raw[NativeHeroDbFrameCodec.JobOffset] = 2;
+raw[NativeHeroDbFrameCodec.HeroTypeOffset] = 2;
+raw[NativeHeroDbFrameCodec.HeroRankOffset] = 7;
+Equal(0xAC, NativeHeroDbFrameCodec.ForceExpOffset - 8,
+    "hero force-exp record+8 relative offset");
+Equal(0xB0, NativeHeroDbFrameCodec.ForceLvOffset - 8,
+    "hero force-level record+8 relative offset");
+BinaryPrimitives.WriteInt32LittleEndian(
+    raw.AsSpan(NativeHeroDbFrameCodec.ForceExpOffset, 4), unchecked((int)0x89ABCDEF));
+BinaryPrimitives.WriteInt32LittleEndian(
+    raw.AsSpan(NativeHeroDbFrameCodec.ForceLvOffset, 4), 0x10203040);
+raw[0x150] = 0xCE;
+BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.LevelOffset, 2), 77);
+BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.GoldOffset, 4), 123456);
+BinaryPrimitives.WriteUInt32LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.ExpOffset, 4), 0x71234567);
+WriteSplit(raw, NativeHeroDbFrameCodec.HpLowOffset, NativeHeroDbFrameCodec.HpHighOffset, 240573);
+WriteSplit(raw, NativeHeroDbFrameCodec.MpLowOffset, NativeHeroDbFrameCodec.MpHighOffset, 131119);
+BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.CurrentXOffset, 4), 321);
+BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.CurrentYOffset, 4), 654);
+raw[NativeHeroDbFrameCodec.NativeCommonInformationOption1Offset] = 1;
+BinaryPrimitives.WriteInt32LittleEndian(
+    raw.AsSpan(NativeHeroDbFrameCodec.NativeCommonInformationOption2Offset, 4), 87654321);
+raw[NativeHeroDbFrameCodec.NativeCommonInformationOption3Offset] = 0;
+
+var equip0 = raw.AsSpan(NativeHeroDbFrameCodec.EquippedItemsOffset,
+    NativeHeroDbFrameCodec.ItemRecordSize);
+WriteItem(equip0, 1001, 101, 500, 800, 0x81);
+equip0[0xB8] = 1;
+equip0[100] = 0xA5;
+var emptyEquip2 = raw.AsSpan(NativeHeroDbFrameCodec.EquippedItemsOffset
+                             + 2 * NativeHeroDbFrameCodec.ItemRecordSize,
+    NativeHeroDbFrameCodec.ItemRecordSize);
+emptyEquip2[111] = 0xB6;
+
+var bag0 = raw.AsSpan(NativeHeroDbFrameCodec.BagItemsOffset,
+    NativeHeroDbFrameCodec.ItemRecordSize);
+WriteItem(bag0, 2002, 202, 10, 20, 0xC0);
+bag0[120] = 0xC7;
+
+var normal0 = raw.AsSpan(NativeHeroDbFrameCodec.NormalMagicOffset,
+    NativeHeroDbFrameCodec.MagicRecordSize);
+WriteMagic(normal0, 10, 2, 3, 4000);
+normal0[20] = 0xD8;
+var unknownNormal = raw.AsSpan(NativeHeroDbFrameCodec.NormalMagicOffset
+                               + 5 * NativeHeroDbFrameCodec.MagicRecordSize,
+    NativeHeroDbFrameCodec.MagicRecordSize);
+WriteMagic(unknownNormal, 777, 1, 0, 7000);
+unknownNormal[30] = 0xE9;
+var unknownNormalCopy = unknownNormal.ToArray();
+var special0 = raw.AsSpan(NativeHeroDbFrameCodec.SpecialMagicOffset,
+    NativeHeroDbFrameCodec.MagicRecordSize);
+WriteMagic(special0, 69, 3, 1, 9000);
+special0[25] = 0xFA;
+
+Assert(NativeHeroDbFrameCodec.TryCreateRecord(raw, out var nativeRecord, out var error), error);
+var nativeType7 = new byte[4 + 16];
+BinaryPrimitives.WriteUInt32LittleEndian(nativeType7, 0x0000FAFA);
+for (var i = 0; i < 16; i++) nativeType7[4 + i] = (byte)(0x40 + i);
+nativeType7[4 + 12] = 1;
+var nativeType7Record = nativeType7.AsSpan(4, 16).ToArray();
+var nativeType2 = Enumerable.Range(0, 72).Select(i => (byte)i).ToArray();
+var nativeType6 = Enumerable.Range(0, 10).Select(i => (byte)(0x20 + i)).ToArray();
+var dyn = new NativeHeroDynamicData(new[]
+{
+    new NativeHeroDynamicSection(2, nativeType2),
+    new NativeHeroDynamicSection(6, nativeType6),
+    new NativeHeroDynamicSection(7, nativeType7)
+});
+Assert(NativeHeroDbFrameCodec.TryEncodeDynamicData(dyn, out var originalDyn, out error), error);
+
+var hero = new HeroObject();
+Assert(ReferenceEquals(hero.m_HeroMagicList, hero.m_MagicList),
+    "hero magic list is not the base combat list");
+Equal(16, hero.m_UseItems.Length, "hero equipment slots before load");
+Assert(NativeHeroRuntimeCodec.TryApply(hero, nativeRecord, dyn, out error), error);
+Equal("主人甲", hero.MasterName, "master name");
+Equal("英雄乙", hero.m_sCharName, "hero name");
+Equal((byte)2, hero.m_btJob, "native job mapping");
+Equal(raw[NativeHeroDbFrameCodec.RaceOffset], hero.m_btRaceImg, "native race appearance");
+Equal((byte)2, hero.HeroType, "hero type");
+Equal((byte)7, hero.HeroRank, "hero rank");
+Equal(unchecked((int)0x89ABCDEF), hero.m_nForceExp, "hero force experience");
+Equal(0x10203040, hero.m_nForceLv, "hero force level");
+Equal(900000, hero.m_nMaxForceExp, "hero force maximum after load");
+Assert(hero.m_boNativeCommonInformationOption1,
+    "hero common-information option 1 load");
+Equal(87654321, hero.m_nNativeCommonInformationOption2,
+    "hero common-information option 2 load");
+Assert(!hero.m_boNativeCommonInformationOption3,
+    "hero common-information option 3 load");
+Equal(34567890, hero.m_Abil.MaxExp, "hero max exp must be level-derived");
+Equal(240573, hero.m_WAbil.HP, "hero 32-bit HP");
+Equal(131119, hero.m_WAbil.MP, "hero 32-bit MP");
+Equal(16, hero.m_UseItems.Length, "hero equipment slots after load");
+Equal((byte)1, hero.m_UseItems[0].Bind, "hero equipment bind load +0xB8");
+Equal(1, hero.m_ItemList.Count, "hero bag count");
+Equal(2, hero.m_MagicList.Count, "known hero magic count");
+Assert(ReferenceEquals(hero.m_HeroMagicList, hero.m_MagicList),
+    "hero magic list alias was lost during load");
+Assert(NativeHeroRuntimeCodec.TryRename(hero, "英雄改", out error), error);
+Equal("英雄改", hero.m_sCharName, "runtime rename");
+Equal("英雄改", hero.NativeHeroState.Record.HeroName, "runtime fixed-record rename");
+Equal((byte)0xCE, hero.NativeHeroState.Record.ToArray()[0x150],
+    "runtime rename changed an unknown fixed byte");
+
+hero.MasterName = "主人丙";
+hero.m_sCharName = "英雄丁";
+hero.m_nGold = 654321;
+hero.m_Abil.Exp = 7654321;
+hero.m_Abil.MaxExp = 9876543;
+hero.m_boNativeCommonInformationOption1 = false;
+hero.m_nNativeCommonInformationOption2 = -24680;
+hero.m_boNativeCommonInformationOption3 = true;
+hero.m_nForceExp = unchecked((int)0xFEDCBA98);
+hero.m_nForceLv = 0x50607080;
+hero.m_WAbil.HP = 245000;
+hero.m_WAbil.MP = 135000;
+hero.m_UseItems[0].Dura = 499;
+hero.m_UseItems[0].NativeRecord[0xB8] = 0;
+hero.m_UseItems[0].Bind = 1;
+hero.m_UseItems[0].ys1 = 0x10203040;
+hero.m_UseItems[0].ys2 = 2;
+hero.m_UseItems[0].ys17 = 17;
+hero.m_UseItems[0].jp1 = 21;
+hero.m_UseItems[0].jp6 = 26;
+hero.m_UseItems[0].pname = "hero-source";
+hero.m_UseItems[0].desc1 = "hero-line-1";
+hero.m_UseItems[0].sourceTime = "2026-07-15";
+hero.m_ItemList[0].MakeIndex = 2222;
+hero.m_ItemList[0].ys3 = 33;
+hero.m_ItemList[0].jp4 = 44;
+hero.m_ItemList[0].desc2 = "hero-bag";
+hero.m_ItemList[0].killerName = "hero-killer";
+hero.m_ItemList[0].mapName = "hero-map";
+hero.m_MagicList.Single(x => x.wMagIdx == 10).nTranPoint = 4444;
+hero.m_MagicList.Single(x => x.wMagIdx == 69).nTranPoint = 9999;
+
+Assert(NativeHeroRuntimeCodec.TryCreateSnapshot(hero, out var snapshot,
+    out var snapshotDyn, out error), error);
+var saved = snapshot.ToArray();
+Equal((byte)2, saved[NativeHeroDbFrameCodec.JobOffset], "snapshot native job");
+Equal(hero.m_btRaceImg, saved[NativeHeroDbFrameCodec.RaceOffset], "snapshot native race");
+Equal((byte)0xCE, saved[0x150], "fixed unknown byte");
+Equal(unchecked((int)0xFEDCBA98), snapshot.ForceExp,
+    "snapshot hero force experience");
+Equal(0x50607080, snapshot.ForceLv, "snapshot hero force level");
+Equal((byte)0xA5, saved[NativeHeroDbFrameCodec.EquippedItemsOffset + 100],
+    "equipment unknown tail");
+Equal((byte)1, saved[NativeHeroDbFrameCodec.EquippedItemsOffset + 0xB8],
+    "equipment bind save +0xB8");
+Equal((byte)0xB6, saved[NativeHeroDbFrameCodec.EquippedItemsOffset
+                       + 2 * NativeHeroDbFrameCodec.ItemRecordSize + 111],
+    "empty equipment unknown tail");
+Equal((byte)0xC7, saved[NativeHeroDbFrameCodec.BagItemsOffset + 120],
+    "bag unknown tail");
+Equal((byte)0xD8, saved[NativeHeroDbFrameCodec.NormalMagicOffset + 20],
+    "known normal magic unknown tail");
+Equal((byte)0xFA, saved[NativeHeroDbFrameCodec.SpecialMagicOffset + 25],
+    "known special magic unknown tail");
+Assert(saved.AsSpan(NativeHeroDbFrameCodec.NormalMagicOffset
+                    + 5 * NativeHeroDbFrameCodec.MagicRecordSize,
+        NativeHeroDbFrameCodec.MagicRecordSize).SequenceEqual(unknownNormalCopy),
+    "unknown magic record changed");
+Equal((ushort)499, BinaryPrimitives.ReadUInt16LittleEndian(saved.AsSpan(
+    NativeHeroDbFrameCodec.EquippedItemsOffset + 6, 2)), "equipment durability patch");
+Equal(2222, BinaryPrimitives.ReadInt32LittleEndian(saved.AsSpan(
+    NativeHeroDbFrameCodec.BagItemsOffset, 4)), "bag item patch");
+Equal(4444, BinaryPrimitives.ReadInt32LittleEndian(saved.AsSpan(
+    NativeHeroDbFrameCodec.NormalMagicOffset + 12, 4)), "normal magic patch");
+Equal(9999, BinaryPrimitives.ReadInt32LittleEndian(saved.AsSpan(
+    NativeHeroDbFrameCodec.SpecialMagicOffset + 12, 4)), "special magic patch");
+Equal((uint)245000, snapshot.Hp, "snapshot 32-bit HP");
+Equal((uint)135000, snapshot.Mp, "snapshot 32-bit MP");
+Assert(!snapshot.NativeCommonInformationOption1,
+    "snapshot common-information option 1");
+Equal(-24680, snapshot.NativeCommonInformationOption2,
+    "snapshot common-information option 2");
+Assert(snapshot.NativeCommonInformationOption3,
+    "snapshot common-information option 3");
+Assert(NativeHeroDbFrameCodec.TryEncodeDynamicData(snapshotDyn, out var savedDyn, out error), error);
+Assert(!savedDyn.AsSpan().SequenceEqual(originalDyn),
+    "eye sidecar was not added to dynamic data");
+var savedType7 = snapshotDyn.Sections.Single(section => section.Type == 7).Payload;
+Assert(savedType7.AsSpan(4, 16).SequenceEqual(nativeType7Record),
+    "native type-7 record changed while adding eye carrier");
+for (var offset = 4 + 16; offset < savedType7.Length; offset += 16)
+    Equal((byte)0xFF, savedType7[offset + 12],
+        "eye carrier selector must remain invisible to native jobs 0..2");
+Assert(YanshenHeroDynamicCodec.TryExtract(snapshotDyn, 2,
+    out var heroSidecar, out error), error);
+Assert(heroSidecar.Length > 0, "hero eye sidecar payload is empty");
+
+var second = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(second, snapshot, snapshotDyn, out error), error);
+Equal("英雄丁", second.m_sCharName, "round-trip hero name");
+Equal(unchecked((int)0xFEDCBA98), second.m_nForceExp,
+    "round-trip hero force experience");
+Equal(0x50607080, second.m_nForceLv, "round-trip hero force level");
+Equal(900000, second.m_nMaxForceExp,
+    "round-trip hero force maximum after load");
+Assert(!second.m_boNativeCommonInformationOption1,
+    "round-trip common-information option 1");
+Equal(-24680, second.m_nNativeCommonInformationOption2,
+    "round-trip common-information option 2");
+Assert(second.m_boNativeCommonInformationOption3,
+    "round-trip common-information option 3");
+Equal(34567890, second.m_Abil.MaxExp,
+    "round-trip max exp must remain level-derived");
+Equal(245000, second.m_WAbil.HP, "round-trip 32-bit HP");
+Equal((byte)1, second.m_UseItems[0].Bind, "round-trip equipment bind");
+Equal(2, second.m_MagicList.Count, "round-trip known magic count");
+Equal(0x10203040, second.m_UseItems[0].ys1, "round-trip hero equipment ys1");
+Equal((byte)17, second.m_UseItems[0].ys17, "round-trip hero equipment ys17");
+Equal((byte)26, second.m_UseItems[0].jp6, "round-trip hero equipment jp6");
+Equal("hero-source", second.m_UseItems[0].pname, "round-trip hero equipment pname");
+Equal("hero-line-1", second.m_UseItems[0].desc1, "round-trip hero equipment desc1");
+Equal("2026-07-15", second.m_UseItems[0].sourceTime,
+    "round-trip hero equipment sourceTime");
+Equal((byte)33, second.m_ItemList[0].ys3, "round-trip hero bag ys3");
+Equal((byte)44, second.m_ItemList[0].jp4, "round-trip hero bag jp4");
+Equal("hero-bag", second.m_ItemList[0].desc2, "round-trip hero bag desc2");
+Equal("hero-killer", second.m_ItemList[0].killerName,
+    "round-trip hero bag killerName");
+Equal("hero-map", second.m_ItemList[0].mapName, "round-trip hero bag mapName");
+
+Assert(YanshenHeroDynamicCodec.TryMerge(snapshotDyn, 0, heroSidecar,
+    out var twoSlotDynamic, out error), error);
+Assert(YanshenHeroDynamicCodec.TryExtract(twoSlotDynamic, 0,
+        out var slot0Sidecar, out error) && slot0Sidecar.SequenceEqual(heroSidecar),
+    "hero eye slot 0 was not preserved");
+Assert(YanshenHeroDynamicCodec.TryExtract(twoSlotDynamic, 2,
+        out var slot2Sidecar, out error) && slot2Sidecar.SequenceEqual(heroSidecar),
+    "hero eye slot 2 was overwritten");
+Assert(YanshenHeroDynamicCodec.TryMerge(twoSlotDynamic, 2, Array.Empty<byte>(),
+    out var slot2Cleared, out error), error);
+Assert(YanshenHeroDynamicCodec.TryExtract(slot2Cleared, 2,
+        out slot2Sidecar, out error) && slot2Sidecar.Length == 0,
+    "hero eye slot 2 carrier was not removed");
+Assert(YanshenHeroDynamicCodec.TryExtract(slot2Cleared, 0,
+        out slot0Sidecar, out error) && slot0Sidecar.SequenceEqual(heroSidecar),
+    "clearing hero eye slot 2 damaged slot 0");
+
+var corruptSections = snapshotDyn.Sections.Select(section =>
+{
+    var payload = (byte[])section.Payload.Clone();
+    if (section.Type == 7) payload[4 + 16 + 16] ^= 1;
+    return new NativeHeroDynamicSection(section.Type, payload);
+}).ToArray();
+Assert(!YanshenHeroDynamicCodec.TryExtract(new NativeHeroDynamicData(corruptSections),
+        2, out _, out error) && error.Contains("trailer", StringComparison.Ordinal),
+    "corrupt hero eye carrier CRC was accepted");
+
+Assert(YanshenItemSidecarCodec.TryApply(Array.Empty<byte>(), second.m_UseItems,
+        second.m_ItemList.ToArray(), Array.Empty<TUserItem>(), out error), error);
+Assert(NativeHeroRuntimeCodec.TryCreateSnapshot(second, out var clearedSnapshot,
+    out var clearedDynamic, out error), error);
+var clearedHero = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(clearedHero, clearedSnapshot,
+    clearedDynamic, out error), error);
+Equal(0, clearedHero.m_UseItems[0].ys1, "cleared hero equipment eye data returned");
+Equal((byte)0, clearedHero.m_ItemList[0].ys3, "cleared hero bag eye data returned");
+Assert(clearedDynamic.Sections.Single(section => section.Type == 7).Payload
+        .AsSpan(4, 16).SequenceEqual(nativeType7Record),
+    "clearing hero eye carrier damaged native type-7 record");
+
+var wideRaw = (byte[])raw.Clone();
+WriteSplit(wideRaw, NativeHeroDbFrameCodec.HpLowOffset,
+    NativeHeroDbFrameCodec.HpHighOffset, 65536);
+Assert(NativeHeroDbFrameCodec.TryCreateRecord(wideRaw, out var wideRecord, out error), error);
+var wideHero = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(wideHero, wideRecord, dyn, out error), error);
+Equal(65536, wideHero.m_WAbil.HP, "native hero HP at first 32-bit value");
+
+var overflowRaw = (byte[])raw.Clone();
+WriteSplit(overflowRaw, NativeHeroDbFrameCodec.HpLowOffset,
+    NativeHeroDbFrameCodec.HpHighOffset, 0x80000000);
+Assert(NativeHeroDbFrameCodec.TryCreateRecord(overflowRaw, out var overflowRecord, out error), error);
+Assert(!NativeHeroRuntimeCodec.TryApply(new HeroObject(), overflowRecord, dyn, out error)
+       && error.Contains("HP/MP", StringComparison.Ordinal),
+    "native HP above signed 32-bit range was accepted");
+
+while (hero.m_ItemList.Count <= NativeHeroDbFrameCodec.BagItemCount)
+    hero.m_ItemList.Add(new TUserItem { wIndex = 1 });
+Assert(!NativeHeroRuntimeCodec.TryCreateSnapshot(hero, out _, out _, out error)
+       && error.Contains("bag capacity", StringComparison.Ordinal),
+    "oversized hero bag was truncated");
+
+var equipmentOverflow = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(equipmentOverflow, snapshot, snapshotDyn, out error), error);
+equipmentOverflow.m_UseItems = new TUserItem[17];
+equipmentOverflow.m_UseItems[16] = new TUserItem { wIndex = 1 };
+Assert(!NativeHeroRuntimeCodec.TryCreateSnapshot(equipmentOverflow, out _, out _, out error)
+       && error.Contains("exactly 16", StringComparison.Ordinal),
+    "oversized hero equipment was truncated");
+
+var magicOverflow = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(magicOverflow, snapshot, snapshotDyn, out error), error);
+for (var i = 0; i < 54; i++)
+    magicOverflow.m_MagicList.Add(new TUserMagic { wMagIdx = (ushort)(1000 + i) });
+Assert(!NativeHeroRuntimeCodec.TryCreateSnapshot(magicOverflow, out _, out _, out error)
+       && error.Contains("magic capacity exceeded", StringComparison.Ordinal),
+    "hero magic overflow ignored the reserved unknown record");
+
+Console.WriteLine(
+    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed");
+
+void WriteShortString(byte[] destination, int offset, int maximumLength, string value)
+{
+    var bytes = gbk.GetBytes(value);
+    Assert(bytes.Length <= maximumLength, "test short string is oversized");
+    destination.AsSpan(offset, maximumLength + 1).Clear();
+    destination[offset] = (byte)bytes.Length;
+    bytes.CopyTo(destination, offset + 1);
+}
+
+static void WriteSplit(byte[] destination, int lowOffset, int highOffset, uint value)
+{
+    BinaryPrimitives.WriteUInt16LittleEndian(destination.AsSpan(lowOffset, 2), (ushort)value);
+    BinaryPrimitives.WriteUInt16LittleEndian(destination.AsSpan(highOffset, 2), (ushort)(value >> 16));
+}
+
+static void WriteItem(Span<byte> destination, int makeIndex, ushort itemIndex,
+    ushort dura, ushort duraMax, byte flags)
+{
+    BinaryPrimitives.WriteInt32LittleEndian(destination.Slice(0, 4), makeIndex);
+    BinaryPrimitives.WriteUInt16LittleEndian(destination.Slice(4, 2), itemIndex);
+    BinaryPrimitives.WriteUInt16LittleEndian(destination.Slice(6, 2), dura);
+    BinaryPrimitives.WriteUInt16LittleEndian(destination.Slice(8, 2), duraMax);
+    for (var i = 0; i < 14; i++) destination[10 + i] = (byte)(i + 1);
+    destination[0x27] = flags;
+}
+
+static void WriteMagic(Span<byte> destination, ushort magicId, byte level, byte key, int train)
+{
+    BinaryPrimitives.WriteUInt16LittleEndian(destination.Slice(0, 2), magicId);
+    destination[2] = level;
+    destination[3] = key;
+    BinaryPrimitives.WriteInt32LittleEndian(destination.Slice(4, 4), train);
+}
+
+static void Equal<T>(T expected, T actual, string message) where T : IEquatable<T>
+{
+    if (!expected.Equals(actual))
+        throw new InvalidOperationException($"{message}: expected={expected} actual={actual}");
+}
+
+static void Assert(bool condition, string message)
+{
+    if (!condition) throw new InvalidOperationException(message);
+}
+
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}

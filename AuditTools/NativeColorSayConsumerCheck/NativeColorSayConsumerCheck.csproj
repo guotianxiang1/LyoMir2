@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>NativeColorSayConsumerCheck</AssemblyName>
+    <RootNamespace>NativeColorSayConsumerCheck</RootNamespace>
+    <OutputPath>..\..\..\Build\AuditTools\NativeColorSayConsumerCheck\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NoWarn>CS0414;CS0168;CS0169;CS0649</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GameSvr\GameSvr.csproj" />
+  </ItemGroup>
+
+</Project>

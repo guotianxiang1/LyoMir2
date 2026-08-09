@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "name": "clean-uint-maximum",
+      "authoritativeDatValue": "0xFFFFFFFF",
+      "primary": [
+        {
+          "owner": "player-clean",
+          "location": "bag[0]",
+          "makeIndex": 1003,
+          "itemIndex": 1
+        },
+        {
+          "owner": "player-clean",
+          "location": "bag[1]",
+          "makeIndex": -1,
+          "itemIndex": 2
+        }
+      ],
+      "references": [
+        {
+          "owner": "mail-clean",
+          "location": "attachment[0]",
+          "makeIndex": "0x000003EB",
+          "itemIndex": 1
+        },
+        {
+          "owner": "upgrade-clean",
+          "location": "record[0]",
+          "makeIndex": 4294967295,
+          "itemIndex": 2
+        }
+      ],
+      "expected": {
+        "gatePassed": false,
+        "primaryItems": 2,
+        "referenceItems": 2,
+        "highWater": "4294967295",
+        "highWaterHex": "0xFFFFFFFF",
+        "duplicatePrimaryIds": 0,
+        "duplicatePrimaryOccurrences": 0,
+        "zeroPrimaryIds": 0,
+        "negativeIntPrimaryIds": 1,
+        "danglingReferences": 0,
+        "counterValue": "4294967295",
+        "counterValueHex": "0xFFFFFFFF",
+        "counterBelowHighWater": false,
+        "primaryRanges": {
+          "zero": 0,
+          "original-generator-00000001-FFFFFFF6": 1,
+          "above-reset-threshold-FFFFFFF7-FFFFFFFF": 1
+        },
+        "primaryModulo3": {
+          "0": 1,
+          "1": 1,
+          "2": 0
+        },
+        "duplicateMakeIndexHex": [],
+        "negativeSignedIntPatterns": [
+          -1
+        ],
+        "gateFailures": [
+          "schemaVersion 1 is inspection-only and cannot authorize production migration"
+        ]
+      }
+    },
+    {
+      "name": "duplicate-zero-negative-and-low-dat",
+      "authoritativeDatValue": "0x7FFFFFFF",
+      "primary": [
+        {
+          "owner": "player-a",
+          "location": "bag[0]",
+          "makeIndex": 1003,
+          "itemIndex": 1
+        },
+        {
+          "owner": "player-a",
+          "location": "bag[1]",
+          "makeIndex": -2147483647,
+          "itemIndex": 2
+        },
+        {
+          "owner": "player-b",
+          "location": "equipment[0]",
+          "makeIndex": "0x80000001",
+          "itemIndex": 3
+        },
+        {
+          "owner": "player-b",
+          "location": "bag[0]",
+          "makeIndex": 0,
+          "itemIndex": 4
+        }
+      ],
+      "references": [
+        {
+          "owner": "mail-a",
+          "location": "attachment[0]",
+          "makeIndex": 1003,
+          "itemIndex": 1
+        },
+        {
+          "owner": "upgrade-a",
+          "location": "record[0]",
+          "makeIndex": 2147483649,
+          "itemIndex": 2
+        },
+        {
+          "owner": "mail-b",
+          "location": "attachment[0]",
+          "makeIndex": 0,
+          "itemIndex": 4
+        },
+        {
+          "owner": "upgrade-b",
+          "location": "record[0]",
+          "makeIndex": 2000,
+          "itemIndex": 5
+        }
+      ],
+      "expected": {
+        "gatePassed": false,
+        "primaryItems": 4,
+        "referenceItems": 4,
+        "highWater": "2147483649",
+        "highWaterHex": "0x80000001",
+        "duplicatePrimaryIds": 1,
+        "duplicatePrimaryOccurrences": 2,
+        "zeroPrimaryIds": 1,
+        "negativeIntPrimaryIds": 2,
+        "danglingReferences": 2,
+        "counterValue": "2147483647",
+        "counterValueHex": "0x7FFFFFFF",
+        "counterBelowHighWater": true,
+        "primaryRanges": {
+          "zero": 1,
+          "original-generator-00000001-FFFFFFF6": 3,
+          "above-reset-threshold-FFFFFFF7-FFFFFFFF": 0
+        },
+        "primaryModulo3": {
+          "0": 2,
+          "1": 1,
+          "2": 0
+        },
+        "duplicateMakeIndexHex": [
+          "0x80000001"
+        ],
+        "negativeSignedIntPatterns": [
+          -2147483647,
+          -2147483647
+        ],
+        "gateFailures": [
+          "schemaVersion 1 is inspection-only and cannot authorize production migration",
+          "authoritative counter authoritative-original-dat is below primary unsigned high-water",
+          "1 duplicate nonzero primary MakeIndex values",
+          "1 active primary items have MakeIndex zero",
+          "2 references do not match a nonzero primary item"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,1019 @@
+using System.Reflection;
+using GameSvr;
+using SystemModule;
+
+PrepareRuntimeConfig();
+M2Share.g_Config = new GameSvrConfig();
+M2Share.CastleManager = new CastleManager();
+M2Share.ObjectManager = new ObjectManager();
+M2Share.LogSystem = new MirLog();
+M2Share.ProcessMsgCriticalSection = new object();
+M2Share.LogMsgCriticalSection = new object();
+M2Share.LogStringList = new System.Collections.ArrayList();
+M2Share.g_MonSayMsgList = new Dictionary<string, IList<TMonSayMsg>>();
+
+var environment = new Envirnoment();
+typeof(Envirnoment).GetMethod("Initialize", BindingFlags.Instance | BindingFlags.NonPublic)!
+    .Invoke(environment, new object[] { (short)10, (short)10 });
+
+var mover = NewObject(environment, Grobal2.RC_PLAYOBJECT, 1, 1);
+var playerBlocker = NewObject(environment, Grobal2.RC_PLAYOBJECT, 2, 1);
+Place(environment, mover);
+Place(environment, playerBlocker);
+
+Assert(!environment.CanWalkEx(2, 1, false), "players did not block running by default");
+Assert(!environment.CanWalk(2, 1, false), "players did not block walking");
+Equal(0, environment.MoveToMovingObjectForRun(1, 1, mover, 2, 1, false),
+    "blocked run commit");
+Equal(1, environment.GetXYObjCount(1, 1), "mover was removed after blocked commit");
+
+M2Share.g_Config.boRunHuman = true;
+Assert(environment.CanWalkEx(2, 1, false), "global RunHuman was ignored");
+Assert(!environment.CanWalk(2, 1, false), "RunHuman incorrectly changed walking collision");
+M2Share.g_Config.boRunHuman = false;
+environment.Flag.boRUNHUMAN = true;
+Assert(environment.CanWalkEx(2, 1, false), "map RUNHUMAN was ignored");
+environment.Flag.boRUNHUMAN = false;
+
+var monsterBlocker = NewObject(environment, Grobal2.RC_MONSTER, 3, 1);
+Place(environment, monsterBlocker);
+Assert(!environment.CanWalkEx(3, 1, false), "monsters did not block running by default");
+M2Share.g_Config.boRunMon = true;
+Assert(environment.CanWalkEx(3, 1, false), "global RunMon was ignored");
+M2Share.g_Config.boRunMon = false;
+environment.Flag.boRUNMON = true;
+Assert(environment.CanWalkEx(3, 1, false), "map RUNMON was ignored");
+environment.Flag.boRUNMON = false;
+
+monsterBlocker.m_boDeath = true;
+Assert(environment.CanWalkEx(3, 1, false), "dead monster still blocked running");
+monsterBlocker.m_boDeath = false;
+
+playerBlocker.m_boDeath = true;
+Equal(1, environment.MoveToMovingObjectForRun(1, 1, mover, 2, 1, false),
+    "run commit through dead object");
+Equal(0, environment.GetXYObjCount(1, 1), "successful commit left mover at source");
+var foundDestination = false;
+var destination = environment.GetMapCellInfo(2, 1, ref foundDestination);
+Assert(foundDestination, "destination cell was not found");
+Equal(2, destination.Count, "successful commit did not add mover at destination");
+
+var sourceMap = NewEnvironment("MoveRollbackSource", "SourceMapFile", 0);
+var blockedTargetMap = NewEnvironment("MoveRollbackTarget", "TargetMapFile", 0);
+for (var x = 0; x < blockedTargetMap.wWidth; x++)
+{
+    for (var y = 0; y < blockedTargetMap.wHeight; y++)
+        blockedTargetMap.SetMapXYFlag(x, y, false);
+}
+
+var mapManager = new MapManager();
+RegisterMap(mapManager, sourceMap);
+RegisterMap(mapManager, blockedTargetMap);
+M2Share.MapManager = mapManager;
+M2Share.nServerIndex = 0;
+
+long playerCountTick = 20_000;
+var playerCountRooms = new NativeDynamicRoomManager(() => playerCountTick);
+var playerCountSource = NewEnvironment("PlayerCountLifecycle", "PlayerCountLifecycleFile", 0);
+var playerCountTarget = NewEnvironment("PlayerCountTarget", "PlayerCountTargetFile", 0);
+RegisterMap(mapManager, playerCountSource);
+RegisterMap(mapManager, playerCountTarget);
+var playerCountCleanupCount = 0;
+var playerCountTargetCleanupCount = 0;
+Assert(playerCountRooms.RegisterIdleRoom("PlayerCountLifecycle", 0, playerCountSource, 0,
+    _ =>
+    {
+        playerCountCleanupCount++;
+        return true;
+    }), "player-count dynamic room registration failed");
+Assert(playerCountRooms.RegisterIdleRoom("PlayerCountTarget", 0, playerCountTarget, 0,
+    _ =>
+    {
+        playerCountTargetCleanupCount++;
+        return true;
+    }), "player-count target dynamic room registration failed");
+Assert(playerCountRooms.TryReserveIdleRoom("PlayerCountLifecycle", null,
+    out var playerCountIndex),
+    "player-count dynamic room was not reserved");
+Assert(playerCountRooms.TryReserveIdleRoom("PlayerCountTarget", null,
+    out _),
+    "player-count target dynamic room was not reserved");
+
+var playerCountPlayer = new TPlayObject
+{
+    m_PEnvir = playerCountSource,
+    m_sMapName = playerCountSource.sMapName,
+    m_sMapFileName = playerCountSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Assert(!playerCountPlayer.m_boAddToMaped && playerCountPlayer.m_boDelFormMaped,
+    "new player did not start as unpublished");
+playerCountPlayer.Initialize();
+Assert(!playerCountPlayer.m_boAddtoMapSuccess,
+    "new player was not published during Initialize");
+Equal(1, playerCountSource.HumCount,
+    "new player Initialize did not increment human count");
+Equal(1, playerCountSource.DynamicRoomPlayerCount,
+    "new player Initialize did not increment dynamic physical occupancy");
+Assert(playerCountPlayer.m_boAddToMaped && !playerCountPlayer.m_boDelFormMaped,
+    "new player Initialize did not publish map registration flags");
+
+var playerClone = new TPlayCloneObject(playerCountPlayer);
+Equal(Grobal2.RC_PLAYCLONE, (int)playerClone.m_btRaceServer,
+    "player clone retained the real-player race");
+Equal(1, playerCountSource.HumCount,
+    "player clone incremented the human count");
+Equal(1, playerCountSource.DynamicRoomPlayerCount,
+    "player clone incremented dynamic physical occupancy");
+Equal(1, playerCountSource.MonCount,
+    "player clone did not use monster-class map accounting");
+playerCountSource.DeleteFromMap(playerClone.m_nCurrX, playerClone.m_nCurrY,
+    CellType.OS_MOVINGOBJECT, playerClone);
+Equal(1, playerCountSource.HumCount,
+    "player clone removal decremented the human count");
+Equal(1, playerCountSource.DynamicRoomPlayerCount,
+    "player clone removal decremented dynamic physical occupancy");
+Equal(0, playerCountSource.MonCount,
+    "player clone removal left monster-class map accounting");
+Equal(0, playerCountCleanupCount,
+    "player clone removal ran dynamic room cleanup");
+
+playerCountTick += 120_001;
+playerCountRooms.Run();
+Assert(playerCountRooms.TryGetActiveRoom("PlayerCountLifecycle", playerCountIndex,
+           out var activePlayerCountRoom)
+       && ReferenceEquals(playerCountSource, activePlayerCountRoom),
+    "occupied dynamic room closed during the empty-room timer");
+
+playerCountPlayer.Die();
+Assert(playerCountPlayer.m_boDeath, "player death did not set the death state");
+Equal(0, playerCountSource.HumCount,
+    "player death changed legacy active-player accounting");
+Equal(1, playerCountSource.DynamicRoomPlayerCount,
+    "player death decremented dynamic physical occupancy");
+Assert(playerCountRooms.TryGetActiveRoom("PlayerCountLifecycle", playerCountIndex,
+           out activePlayerCountRoom)
+       && ReferenceEquals(playerCountSource, activePlayerCountRoom),
+    "player death closed an occupied dynamic room");
+Equal(0, playerCountCleanupCount,
+    "player death ran dynamic room cleanup");
+
+typeof(TBaseObject).GetMethod("ReAlive", BindingFlags.Instance | BindingFlags.NonPublic)!
+    .Invoke(playerCountPlayer, null);
+Assert(!playerCountPlayer.m_boDeath, "player revive did not clear the death state");
+Equal(0, playerCountSource.HumCount,
+    "player revive changed legacy active-player accounting");
+Equal(1, playerCountSource.DynamicRoomPlayerCount,
+    "player revive changed dynamic physical occupancy");
+
+playerCountPlayer.Die();
+playerCountTick++;
+playerCountPlayer.SpaceMove(playerCountTarget.sMapName, 4, 4, 0);
+Equal(0, playerCountSource.HumCount,
+    "dead player map change changed source active-player accounting");
+Equal(0, playerCountTarget.HumCount,
+    "dead player map change changed target active-player accounting");
+Equal(0, playerCountSource.DynamicRoomPlayerCount,
+    "dead player map change did not decrement source physical occupancy");
+Equal(1, playerCountTarget.DynamicRoomPlayerCount,
+    "dead player map change did not increment target physical occupancy");
+Equal(1, playerCountCleanupCount,
+    "player map change did not clean the source dynamic room once");
+playerCountTarget.DeleteFromMap(4, 4, CellType.OS_MOVINGOBJECT, playerCountPlayer);
+Equal(0, playerCountTarget.DynamicRoomPlayerCount,
+    "dead player removal left a dynamic physical-occupancy leak");
+Equal(1, playerCountTargetCleanupCount,
+    "dead player removal did not clean the target dynamic room once");
+
+var verifyMapSource = NewEnvironment("VerifyMapLifecycle", "VerifyMapLifecycleFile", 0);
+RegisterMap(mapManager, verifyMapSource);
+var verifyMapCleanupCount = 0;
+Assert(playerCountRooms.RegisterIdleRoom("VerifyMapLifecycle", 0, verifyMapSource, 0,
+    _ =>
+    {
+        verifyMapCleanupCount++;
+        return true;
+    }), "verify-map dynamic room registration failed");
+Assert(playerCountRooms.TryReserveIdleRoom("VerifyMapLifecycle", null, out _),
+    "verify-map dynamic room was not reserved");
+var verifyMapPlayer = new TPlayObject
+{
+    m_PEnvir = verifyMapSource,
+    m_sMapName = verifyMapSource.sMapName,
+    m_sMapFileName = verifyMapSource.m_sMapFileName,
+    m_nCurrX = 2,
+    m_nCurrY = 2
+};
+Place(verifyMapSource, verifyMapPlayer);
+typeof(Envirnoment).GetMethod("ReleaseCellObjectList",
+        BindingFlags.Instance | BindingFlags.NonPublic)!
+    .Invoke(verifyMapSource, new object[] { 2, 2 });
+Equal(0, GetCellObjectCount(verifyMapSource, 2, 2),
+    "verify-map setup did not remove the stale cell entry");
+Equal(1, verifyMapSource.DynamicRoomPlayerCount,
+    "stale cell cleanup removed logical dynamic occupancy");
+verifyMapSource.VerifyMapTime(2, 2, verifyMapPlayer);
+Equal(1, GetCellObjectCount(verifyMapSource, 2, 2),
+    "VerifyMapTime did not restore the player cell");
+Equal(1, verifyMapSource.DynamicRoomPlayerCount,
+    "VerifyMapTime duplicated dynamic physical occupancy");
+playerCountTick++;
+verifyMapSource.DeleteFromMap(2, 2, CellType.OS_MOVINGOBJECT, verifyMapPlayer);
+Equal(0, verifyMapSource.DynamicRoomPlayerCount,
+    "verified player removal left dynamic physical occupancy");
+Equal(1, verifyMapCleanupCount,
+    "verified player removal did not clean the dynamic room once");
+
+var teleporting = NewObject(sourceMap, Grobal2.RC_MONSTER, 4, 4);
+teleporting.m_sMapName = sourceMap.sMapName;
+teleporting.m_sMapFileName = sourceMap.m_sMapFileName;
+Place(sourceMap, teleporting);
+teleporting.SpaceMove(blockedTargetMap.sMapName, 4, 4, 0);
+
+Assert(ReferenceEquals(sourceMap, teleporting.m_PEnvir),
+    "failed SpaceMove changed the environment pointer");
+Equal(sourceMap.sMapName, teleporting.m_sMapName,
+    "failed SpaceMove changed the map name");
+Equal(sourceMap.m_sMapFileName, teleporting.m_sMapFileName,
+    "failed SpaceMove changed the map file name");
+Equal((short)4, teleporting.m_nCurrX, "failed SpaceMove changed X");
+Equal((short)4, teleporting.m_nCurrY, "failed SpaceMove changed Y");
+Equal(1, sourceMap.GetXYObjCount(4, 4),
+    "failed SpaceMove did not restore the source-map object");
+Equal(1, sourceMap.MonCount, "failed SpaceMove changed source monster count");
+Equal(0, blockedTargetMap.MonCount,
+    "failed SpaceMove changed target monster count");
+Assert(teleporting.m_boAddToMaped && !teleporting.m_boDelFormMaped,
+    "failed SpaceMove did not restore map registration flags");
+
+var gateTraveler = NewObject(sourceMap, Grobal2.RC_MONSTER, 5, 5);
+gateTraveler.m_sMapName = sourceMap.sMapName;
+gateTraveler.m_sMapFileName = sourceMap.m_sMapFileName;
+Place(sourceMap, gateTraveler);
+var gateObserver = NewObject(sourceMap, Grobal2.RC_PLAYOBJECT, 6, 5);
+Place(sourceMap, gateObserver);
+var gateChangeMapCount = CountMessages(gateTraveler, Grobal2.RM_CHANGEMAP);
+var gateClearObjectsCount = CountMessages(gateTraveler, Grobal2.RM_CLEAROBJECTS);
+var gateDisappearCount = CountMessages(gateObserver, Grobal2.RM_DISAPPEAR);
+var enterAnotherMap = typeof(TBaseObject).GetMethod("EnterAnotherMap",
+    BindingFlags.Instance | BindingFlags.NonPublic)!;
+var gateMoveSucceeded = (bool)enterAnotherMap.Invoke(gateTraveler,
+    new object[] { blockedTargetMap, 4, 4 })!;
+
+Assert(!gateMoveSucceeded, "blocked gate move succeeded");
+Assert(ReferenceEquals(sourceMap, gateTraveler.m_PEnvir),
+    "failed gate move changed the environment pointer");
+Equal(sourceMap.sMapName, gateTraveler.m_sMapName,
+    "failed gate move changed the map name");
+Equal(sourceMap.m_sMapFileName, gateTraveler.m_sMapFileName,
+    "failed gate move changed the map file name");
+Equal((short)5, gateTraveler.m_nCurrX, "failed gate move changed X");
+Equal((short)5, gateTraveler.m_nCurrY, "failed gate move changed Y");
+Equal(1, sourceMap.GetXYObjCount(5, 5),
+    "failed gate move did not restore the source-map object");
+Equal(2, sourceMap.MonCount, "failed gate move changed source monster count");
+Equal(0, blockedTargetMap.MonCount,
+    "failed gate move changed target monster count");
+Assert(gateTraveler.m_boAddToMaped && !gateTraveler.m_boDelFormMaped,
+    "failed gate move did not restore map registration flags");
+Equal(gateChangeMapCount, CountMessages(gateTraveler, Grobal2.RM_CHANGEMAP),
+    "failed gate move queued a map-change message");
+Equal(gateClearObjectsCount, CountMessages(gateTraveler, Grobal2.RM_CLEAROBJECTS),
+    "failed gate move queued a clear-objects message");
+Equal(gateDisappearCount, CountMessages(gateObserver, Grobal2.RM_DISAPPEAR),
+    "failed gate move sent a disappear message to a source observer");
+
+var committedGateTarget = NewEnvironment("CommittedGateTarget",
+    "CommittedGateTargetFile", 0);
+var observerGateMoveSucceeded = (bool)enterAnotherMap.Invoke(gateTraveler,
+    new object[] { committedGateTarget, 4, 4 })!;
+Assert(observerGateMoveSucceeded, "valid gate move failed");
+Assert(ReferenceEquals(committedGateTarget, gateTraveler.m_PEnvir),
+    "valid gate move did not commit the target environment");
+Equal(gateChangeMapCount + 1,
+    CountMessages(gateTraveler, Grobal2.RM_CHANGEMAP),
+    "committed gate move did not queue one map-change message");
+Equal(gateClearObjectsCount + 1,
+    CountMessages(gateTraveler, Grobal2.RM_CLEAROBJECTS),
+    "committed gate move did not queue one clear-objects message");
+Equal(gateDisappearCount + 1,
+    CountMessages(gateObserver, Grobal2.RM_DISAPPEAR),
+    "committed gate move did not notify the source observer once");
+
+long dynamicTick = 10_000;
+var dynamicRooms = new NativeDynamicRoomManager(() => dynamicTick);
+var dynamicSource = NewEnvironment("MoveLifecycle", "MoveLifecycleFile", 0);
+RegisterMap(mapManager, dynamicSource);
+var dynamicPrepareCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("MoveLifecycle", 0, dynamicSource, 0, _ =>
+{
+    dynamicPrepareCount++;
+    return true;
+}), "dynamic source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("MoveLifecycle", null, out _),
+    "dynamic source was not reserved");
+
+var dynamicPlayer = new TPlayObject
+{
+    m_PEnvir = dynamicSource,
+    m_sMapName = dynamicSource.sMapName,
+    m_sMapFileName = dynamicSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_btRaceServer = Grobal2.RC_PLAYOBJECT
+};
+Place(dynamicSource, dynamicPlayer);
+dynamicTick++;
+
+dynamicPlayer.SpaceMove(blockedTargetMap.sMapName, 4, 4, 0);
+Assert(dynamicRooms.TryGetActiveRoom("MoveLifecycle", dynamicSource.DynamicRoomIndex,
+           out var activeDynamic)
+       && ReferenceEquals(dynamicSource, activeDynamic),
+    "failed dynamic-room SpaceMove closed the occupied room");
+Equal(1, dynamicSource.HumCount,
+    "failed dynamic-room SpaceMove changed source human count");
+Equal(0, dynamicPrepareCount,
+    "failed dynamic-room SpaceMove ran room cleanup");
+
+dynamicPlayer.SpaceMove(dynamicSource.sMapName, 6, 6, 0);
+Assert(dynamicRooms.TryGetActiveRoom("MoveLifecycle", dynamicSource.DynamicRoomIndex,
+           out activeDynamic)
+       && ReferenceEquals(dynamicSource, activeDynamic),
+    "same-room SpaceMove closed the occupied room");
+Equal(1, dynamicSource.HumCount,
+    "same-room SpaceMove changed source human count");
+Equal(0, dynamicPrepareCount,
+    "same-room SpaceMove ran room cleanup");
+
+var dynamicGateMoveSucceeded = (bool)enterAnotherMap.Invoke(dynamicPlayer,
+    new object[] { blockedTargetMap, 4, 4 })!;
+Assert(!dynamicGateMoveSucceeded, "blocked dynamic-room gate move succeeded");
+Assert(dynamicRooms.TryGetActiveRoom("MoveLifecycle", dynamicSource.DynamicRoomIndex,
+           out activeDynamic)
+       && ReferenceEquals(dynamicSource, activeDynamic),
+    "failed dynamic-room gate move closed the occupied room");
+Equal(1, dynamicSource.HumCount,
+    "failed dynamic-room gate move changed source human count");
+Equal(0, dynamicPrepareCount,
+    "failed dynamic-room gate move ran room cleanup");
+
+var exceptionSource = NewEnvironment("ExceptionMoveLifecycle", "ExceptionMoveFile", 0);
+RegisterMap(mapManager, exceptionSource);
+var exceptionPrepareCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("ExceptionMoveLifecycle", 0, exceptionSource, 0,
+    _ =>
+    {
+        exceptionPrepareCount++;
+        return true;
+    }), "exception SpaceMove source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("ExceptionMoveLifecycle", null, out _),
+    "exception SpaceMove source was not reserved");
+var exceptionPlayer = new TPlayObject
+{
+    m_PEnvir = exceptionSource,
+    m_sMapName = exceptionSource.sMapName,
+    m_sMapFileName = exceptionSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Place(exceptionSource, exceptionPlayer);
+var savedExceptionVisibleHumans = exceptionPlayer.m_VisibleHumanList;
+exceptionPlayer.m_VisibleHumanList = null;
+exceptionPlayer.SpaceMove(sourceMap.sMapName, 8, 8, 0);
+exceptionPlayer.m_VisibleHumanList = savedExceptionVisibleHumans;
+Assert(ReferenceEquals(exceptionSource, exceptionPlayer.m_PEnvir),
+    "SpaceMove exception did not restore the source environment");
+Equal((short)3, exceptionPlayer.m_nCurrX, "SpaceMove exception did not restore X");
+Equal((short)3, exceptionPlayer.m_nCurrY, "SpaceMove exception did not restore Y");
+Equal(1, GetCellObjectCount(exceptionSource, 3, 3),
+    "SpaceMove exception did not restore the source cell");
+Equal(1, exceptionSource.HumCount,
+    "SpaceMove exception changed source human count");
+Equal(1, exceptionSource.DynamicRoomPlayerCount,
+    "SpaceMove exception changed source physical occupancy");
+Assert(exceptionPlayer.m_boAddToMaped && !exceptionPlayer.m_boDelFormMaped,
+    "SpaceMove exception did not restore map registration flags");
+Assert(dynamicRooms.TryGetActiveRoom("ExceptionMoveLifecycle",
+        exceptionSource.DynamicRoomIndex, out _),
+    "SpaceMove exception closed the occupied dynamic room");
+Equal(0, exceptionPrepareCount,
+    "SpaceMove exception ran dynamic room cleanup");
+
+var exceptionGateSource = NewEnvironment("ExceptionGateLifecycle", "ExceptionGateFile", 0);
+RegisterMap(mapManager, exceptionGateSource);
+var exceptionGatePrepareCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("ExceptionGateLifecycle", 0, exceptionGateSource, 0,
+    _ =>
+    {
+        exceptionGatePrepareCount++;
+        return true;
+    }), "exception gate source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("ExceptionGateLifecycle", null, out _),
+    "exception gate source was not reserved");
+var exceptionGatePlayer = new TPlayObject
+{
+    m_PEnvir = exceptionGateSource,
+    m_sMapName = exceptionGateSource.sMapName,
+    m_sMapFileName = exceptionGateSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Place(exceptionGateSource, exceptionGatePlayer);
+var savedExceptionGateVisibleHumans = exceptionGatePlayer.m_VisibleHumanList;
+exceptionGatePlayer.m_VisibleHumanList = null;
+var exceptionGateMoveSucceeded = (bool)enterAnotherMap.Invoke(exceptionGatePlayer,
+    new object[] { sourceMap, 7, 8 })!;
+exceptionGatePlayer.m_VisibleHumanList = savedExceptionGateVisibleHumans;
+Assert(!exceptionGateMoveSucceeded, "gate exception unexpectedly committed the move");
+Assert(ReferenceEquals(exceptionGateSource, exceptionGatePlayer.m_PEnvir),
+    "gate exception did not restore the source environment");
+Equal((short)3, exceptionGatePlayer.m_nCurrX, "gate exception did not restore X");
+Equal((short)3, exceptionGatePlayer.m_nCurrY, "gate exception did not restore Y");
+Equal(1, GetCellObjectCount(exceptionGateSource, 3, 3),
+    "gate exception did not restore the source cell");
+Equal(1, exceptionGateSource.HumCount,
+    "gate exception changed source human count");
+Equal(1, exceptionGateSource.DynamicRoomPlayerCount,
+    "gate exception changed source physical occupancy");
+Assert(exceptionGatePlayer.m_boAddToMaped && !exceptionGatePlayer.m_boDelFormMaped,
+    "gate exception did not restore map registration flags");
+Assert(dynamicRooms.TryGetActiveRoom("ExceptionGateLifecycle",
+        exceptionGateSource.DynamicRoomIndex, out _),
+    "gate exception closed the occupied dynamic room");
+Equal(0, exceptionGatePrepareCount,
+    "gate exception ran dynamic room cleanup");
+
+var committedTarget = NewEnvironment("CommittedTarget", "CommittedTargetFile", 0);
+RegisterMap(mapManager, committedTarget);
+dynamicPlayer.SpaceMove(committedTarget.sMapName, 4, 4, 0);
+Assert(!dynamicRooms.TryGetActiveRoom("MoveLifecycle",
+        dynamicSource.DynamicRoomIndex, out _),
+    "successful dynamic-room SpaceMove left the source room active");
+Equal(0, dynamicSource.HumCount,
+    "successful dynamic-room SpaceMove did not remove the source player");
+Equal(1, committedTarget.HumCount,
+    "successful dynamic-room SpaceMove did not add the target player");
+Equal(1, dynamicPrepareCount,
+    "successful dynamic-room SpaceMove did not run source cleanup once");
+
+var gateSource = NewEnvironment("GateLifecycle", "GateLifecycleFile", 0);
+RegisterMap(mapManager, gateSource);
+var gatePrepareCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("GateLifecycle", 0, gateSource, 0, _ =>
+{
+    gatePrepareCount++;
+    return true;
+}), "dynamic gate source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("GateLifecycle", null, out _),
+    "dynamic gate source was not reserved");
+
+var dynamicGatePlayer = new TPlayObject
+{
+    m_PEnvir = gateSource,
+    m_sMapName = gateSource.sMapName,
+    m_sMapFileName = gateSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_btRaceServer = Grobal2.RC_PLAYOBJECT
+};
+Place(gateSource, dynamicGatePlayer);
+dynamicTick++;
+var committedGateMoveSucceeded = (bool)enterAnotherMap.Invoke(dynamicGatePlayer,
+    new object[] { committedTarget, 5, 5 })!;
+Assert(committedGateMoveSucceeded, "valid dynamic-room gate move failed");
+Assert(!dynamicRooms.TryGetActiveRoom("GateLifecycle",
+        gateSource.DynamicRoomIndex, out _),
+    "successful dynamic-room gate move left the source room active");
+Equal(0, gateSource.HumCount,
+    "successful dynamic-room gate move did not remove the source player");
+Equal(2, committedTarget.HumCount,
+    "successful dynamic-room gate move did not add the target player");
+Equal(1, gatePrepareCount,
+    "successful dynamic-room gate move did not run source cleanup once");
+
+var crossServerTarget = NewEnvironment("CrossServerTarget", "CrossServerTargetFile", 1);
+RegisterMap(mapManager, crossServerTarget);
+var crossServerSource = NewEnvironment("CrossServerLifecycle", "CrossServerSourceFile", 0);
+RegisterMap(mapManager, crossServerSource);
+var crossServerCleanupCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("CrossServerLifecycle", 0, crossServerSource, 0,
+    _ =>
+    {
+        crossServerCleanupCount++;
+        return true;
+    }), "cross-server source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("CrossServerLifecycle", null, out _),
+    "cross-server source was not reserved");
+var crossServerPlayer = new TPlayObject
+{
+    m_PEnvir = crossServerSource,
+    m_sMapName = crossServerSource.sMapName,
+    m_sMapFileName = crossServerSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Place(crossServerSource, crossServerPlayer);
+dynamicTick++;
+crossServerPlayer.SpaceMove(crossServerTarget.sMapName, 4, 4, 0);
+Equal(0, crossServerSource.HumCount,
+    "cross-server move did not remove source human count");
+Equal(0, crossServerSource.DynamicRoomPlayerCount,
+    "cross-server move did not remove source physical occupancy");
+Equal(0, GetCellObjectCount(crossServerSource, 3, 3),
+    "cross-server move left the player in the source cell");
+Assert(crossServerPlayer.m_boSwitchData && crossServerPlayer.m_boReconnection,
+    "cross-server move did not set transfer state");
+Equal(crossServerTarget.nServerIndex, crossServerPlayer.m_nServerIndex,
+    "cross-server move did not select the target server");
+Equal(1, crossServerCleanupCount,
+    "cross-server move did not clean the source dynamic room once");
+
+var ghostSource = NewEnvironment("GhostLifecycle", "GhostLifecycleFile", 0);
+RegisterMap(mapManager, ghostSource);
+var ghostCleanupCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("GhostLifecycle", 0, ghostSource, 0,
+    _ =>
+    {
+        ghostCleanupCount++;
+        return true;
+    }), "ghost source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("GhostLifecycle", null, out _),
+    "ghost source was not reserved");
+var ghostPlayer = new TPlayObject
+{
+    m_PEnvir = ghostSource,
+    m_sMapName = ghostSource.sMapName,
+    m_sMapFileName = ghostSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Place(ghostSource, ghostPlayer);
+dynamicTick++;
+ghostPlayer.MakeGhost();
+Assert(ghostPlayer.m_boGhost, "MakeGhost did not set the ghost state");
+Equal(0, ghostSource.HumCount, "MakeGhost did not remove source human count");
+Equal(0, ghostSource.DynamicRoomPlayerCount,
+    "MakeGhost did not remove source physical occupancy");
+Equal(0, GetCellObjectCount(ghostSource, 3, 3),
+    "MakeGhost left the player in the source cell");
+Equal(1, ghostCleanupCount,
+    "MakeGhost did not clean the source dynamic room once");
+ghostPlayer.MakeGhost();
+Equal(1, ghostCleanupCount,
+    "repeated MakeGhost cleaned the dynamic room more than once");
+
+var failedCrossServerSource = NewEnvironment("CrossServerDeleteFailure",
+    "CrossServerDeleteFailureFile", 0);
+RegisterMap(mapManager, failedCrossServerSource);
+var failedCrossServerCleanupCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("CrossServerDeleteFailure", 0,
+    failedCrossServerSource, 0, _ =>
+    {
+        failedCrossServerCleanupCount++;
+        return true;
+    }), "cross-server delete-failure source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("CrossServerDeleteFailure", null,
+           out _),
+    "cross-server delete-failure source was not reserved");
+var failedCrossServerPlayer = new TPlayObject
+{
+    m_PEnvir = failedCrossServerSource,
+    m_sMapName = failedCrossServerSource.sMapName,
+    m_sMapFileName = failedCrossServerSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Place(failedCrossServerSource, failedCrossServerPlayer);
+dynamicTick++;
+RemoveCellObjectWithoutAccounting(failedCrossServerSource, 3, 3,
+    CellType.OS_MOVINGOBJECT, failedCrossServerPlayer);
+var failedCrossServerDisappearCount = CountMessages(failedCrossServerPlayer,
+    Grobal2.RM_DISAPPEAR);
+var failedCrossServerTargetHumCount = crossServerTarget.HumCount;
+var failedCrossServerInitialServerIndex = failedCrossServerPlayer.m_nServerIndex;
+failedCrossServerPlayer.SpaceMove(crossServerTarget.sMapName, 4, 4, 0);
+Assert(ReferenceEquals(failedCrossServerSource,
+        failedCrossServerPlayer.m_PEnvir),
+    "cross-server delete failure changed the environment pointer");
+Equal(failedCrossServerSource.sMapName, failedCrossServerPlayer.m_sMapName,
+    "cross-server delete failure changed the map name");
+Equal(failedCrossServerSource.m_sMapFileName,
+    failedCrossServerPlayer.m_sMapFileName,
+    "cross-server delete failure changed the map file name");
+Equal((short)3, failedCrossServerPlayer.m_nCurrX,
+    "cross-server delete failure changed X");
+Equal((short)3, failedCrossServerPlayer.m_nCurrY,
+    "cross-server delete failure changed Y");
+Assert(!failedCrossServerPlayer.m_bo316
+       && !failedCrossServerPlayer.m_boSwitchData
+       && !failedCrossServerPlayer.m_boEmergencyClose
+       && !failedCrossServerPlayer.m_boReconnection,
+    "cross-server delete failure changed transfer flags");
+Equal(string.Empty, failedCrossServerPlayer.m_sSwitchMapName,
+    "cross-server delete failure changed the switch map");
+Equal((short)0, failedCrossServerPlayer.m_nSwitchMapX,
+    "cross-server delete failure changed switch X");
+Equal((short)0, failedCrossServerPlayer.m_nSwitchMapY,
+    "cross-server delete failure changed switch Y");
+Equal(failedCrossServerInitialServerIndex,
+    failedCrossServerPlayer.m_nServerIndex,
+    "cross-server delete failure changed the target server");
+Equal(failedCrossServerDisappearCount,
+    CountMessages(failedCrossServerPlayer, Grobal2.RM_DISAPPEAR),
+    "cross-server delete failure queued a disappear message");
+Equal(1, failedCrossServerSource.HumCount,
+    "cross-server delete failure changed source human count");
+Equal(1, failedCrossServerSource.DynamicRoomPlayerCount,
+    "cross-server delete failure changed source physical occupancy");
+Equal(failedCrossServerTargetHumCount, crossServerTarget.HumCount,
+    "cross-server delete failure changed target human count");
+Assert(failedCrossServerPlayer.m_boAddToMaped
+       && !failedCrossServerPlayer.m_boDelFormMaped,
+    "cross-server delete failure changed map registration flags");
+Assert(dynamicRooms.TryGetActiveRoom("CrossServerDeleteFailure",
+        failedCrossServerSource.DynamicRoomIndex, out _),
+    "cross-server delete failure closed the occupied dynamic room");
+Equal(0, failedCrossServerCleanupCount,
+    "cross-server delete failure ran dynamic room cleanup");
+
+var walk = typeof(TBaseObject).GetMethod("Walk",
+    BindingFlags.Instance | BindingFlags.NonPublic)!;
+var crossServerGateSuccessSource = NewEnvironment("CrossServerGateSuccess",
+    "CrossServerGateSuccessFile", 0);
+RegisterMap(mapManager, crossServerGateSuccessSource);
+var crossServerGateSuccessObserver = NewObject(crossServerGateSuccessSource,
+    Grobal2.RC_PLAYOBJECT, 3, 3);
+Place(crossServerGateSuccessSource, crossServerGateSuccessObserver);
+var crossServerGateSuccessPlayer = new TPlayObject
+{
+    m_PEnvir = crossServerGateSuccessSource,
+    m_sMapName = crossServerGateSuccessSource.sMapName,
+    m_sMapFileName = crossServerGateSuccessSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_boFixedHideMode = false
+};
+Place(crossServerGateSuccessSource, crossServerGateSuccessPlayer);
+var crossServerGateSuccess = new TGateObj
+{
+    DEnvir = crossServerTarget,
+    nDMapX = 4,
+    nDMapY = 4
+};
+Assert(ReferenceEquals(crossServerGateSuccess,
+        crossServerGateSuccessSource.AddToMap(3, 3,
+            CellType.OS_GATEOBJECT, crossServerGateSuccess)),
+    "cross-server success gate placement failed");
+var crossServerGateSuccessDisappearCount = CountMessages(
+    crossServerGateSuccessObserver, Grobal2.RM_DISAPPEAR);
+var crossServerGateSuccessWalkCount = CountMessages(
+    crossServerGateSuccessObserver, Grobal2.RM_WALK);
+var crossServerGateWalkSucceeded = (bool)walk.Invoke(
+    crossServerGateSuccessPlayer, new object[] { Grobal2.RM_WALK })!;
+Assert(crossServerGateWalkSucceeded,
+    "cross-server gate success returned a failed walk");
+Assert(crossServerGateSuccessPlayer.m_boSwitchData
+       && crossServerGateSuccessPlayer.m_boReconnection,
+    "cross-server gate success did not set transfer state");
+Equal(1, crossServerGateSuccessSource.HumCount,
+    "cross-server gate success did not remove the traveler");
+Equal(crossServerGateSuccessDisappearCount + 1,
+    CountMessages(crossServerGateSuccessObserver, Grobal2.RM_DISAPPEAR),
+    "cross-server gate success did not send exactly one disappear message");
+Equal(crossServerGateSuccessWalkCount,
+    CountMessages(crossServerGateSuccessObserver, Grobal2.RM_WALK),
+    "cross-server gate success leaked a trailing walk message");
+
+var crossServerGateFailureSource = NewEnvironment("CrossServerGateFailure",
+    "CrossServerGateFailureFile", 0);
+RegisterMap(mapManager, crossServerGateFailureSource);
+var crossServerGateFailureObserver = NewObject(crossServerGateFailureSource,
+    Grobal2.RC_PLAYOBJECT, 3, 3);
+Place(crossServerGateFailureSource, crossServerGateFailureObserver);
+var crossServerGateFailurePlayer = new TPlayObject
+{
+    m_PEnvir = crossServerGateFailureSource,
+    m_sMapName = crossServerGateFailureSource.sMapName,
+    m_sMapFileName = crossServerGateFailureSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_boFixedHideMode = false
+};
+Place(crossServerGateFailureSource, crossServerGateFailurePlayer);
+var crossServerGateFailure = new TGateObj
+{
+    DEnvir = crossServerTarget,
+    nDMapX = 4,
+    nDMapY = 4
+};
+Assert(ReferenceEquals(crossServerGateFailure,
+        crossServerGateFailureSource.AddToMap(3, 3,
+            CellType.OS_GATEOBJECT, crossServerGateFailure)),
+    "cross-server failure gate placement failed");
+RemoveCellObjectWithoutAccounting(crossServerGateFailureSource, 3, 3,
+    CellType.OS_MOVINGOBJECT, crossServerGateFailurePlayer);
+var crossServerGateFailureDisappearCount = CountMessages(
+    crossServerGateFailureObserver, Grobal2.RM_DISAPPEAR);
+var crossServerGateFailureWalkCount = CountMessages(
+    crossServerGateFailureObserver, Grobal2.RM_WALK);
+var crossServerGateFailureServerIndex =
+    crossServerGateFailurePlayer.m_nServerIndex;
+var crossServerGateWalkContinued = (bool)walk.Invoke(
+    crossServerGateFailurePlayer, new object[] { Grobal2.RM_WALK })!;
+Assert(crossServerGateWalkContinued,
+    "cross-server gate delete failure rejected the completed walk step");
+Assert(!crossServerGateFailurePlayer.m_bo316
+       && !crossServerGateFailurePlayer.m_boSwitchData
+       && !crossServerGateFailurePlayer.m_boEmergencyClose
+       && !crossServerGateFailurePlayer.m_boReconnection,
+    "cross-server gate delete failure changed transfer flags");
+Equal(string.Empty, crossServerGateFailurePlayer.m_sSwitchMapName,
+    "cross-server gate delete failure changed the switch map");
+Equal((short)0, crossServerGateFailurePlayer.m_nSwitchMapX,
+    "cross-server gate delete failure changed switch X");
+Equal((short)0, crossServerGateFailurePlayer.m_nSwitchMapY,
+    "cross-server gate delete failure changed switch Y");
+Equal(crossServerGateFailureServerIndex,
+    crossServerGateFailurePlayer.m_nServerIndex,
+    "cross-server gate delete failure changed the target server");
+Equal(crossServerGateFailureDisappearCount,
+    CountMessages(crossServerGateFailureObserver, Grobal2.RM_DISAPPEAR),
+    "cross-server gate delete failure queued a disappear message");
+Equal(crossServerGateFailureWalkCount + 1,
+    CountMessages(crossServerGateFailureObserver, Grobal2.RM_WALK),
+    "cross-server gate delete failure did not retain one walk message");
+Equal(2, crossServerGateFailureSource.HumCount,
+    "cross-server gate delete failure changed source human count");
+Assert(crossServerGateFailurePlayer.m_boAddToMaped
+       && !crossServerGateFailurePlayer.m_boDelFormMaped,
+    "cross-server gate delete failure changed map registration flags");
+
+var noHorseBlockedSource = NewEnvironment("NoHorseBlockedSource",
+    "NoHorseBlockedSourceFile", 0);
+var noHorseBlockedPlayer = new TPlayObject
+{
+    m_PEnvir = noHorseBlockedSource,
+    m_sMapName = noHorseBlockedSource.sMapName,
+    m_sMapFileName = noHorseBlockedSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_boOnHorse = true
+};
+Place(noHorseBlockedSource, noHorseBlockedPlayer);
+blockedTargetMap.Flag.boNOHORSE = true;
+var noHorseBlockedMoveSucceeded = (bool)enterAnotherMap.Invoke(
+    noHorseBlockedPlayer, new object[] { blockedTargetMap, 4, 4 })!;
+blockedTargetMap.Flag.boNOHORSE = false;
+Assert(!noHorseBlockedMoveSucceeded,
+    "blocked NOHORSE move unexpectedly committed");
+Assert(noHorseBlockedPlayer.m_boOnHorse,
+    "blocked NOHORSE move dismounted the player");
+Assert(ReferenceEquals(noHorseBlockedSource, noHorseBlockedPlayer.m_PEnvir)
+       && CellContains(noHorseBlockedSource, 3, 3, noHorseBlockedPlayer),
+    "blocked NOHORSE move did not restore the source placement");
+
+var noHorseExceptionSource = NewEnvironment("NoHorseExceptionSource",
+    "NoHorseExceptionSourceFile", 0);
+var noHorseExceptionTarget = NewEnvironment("NoHorseExceptionTarget",
+    "NoHorseExceptionTargetFile", 0);
+noHorseExceptionTarget.Flag.boNOHORSE = true;
+var noHorseExceptionPlayer = new TPlayObject
+{
+    m_PEnvir = noHorseExceptionSource,
+    m_sMapName = noHorseExceptionSource.sMapName,
+    m_sMapFileName = noHorseExceptionSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_boOnHorse = true
+};
+Place(noHorseExceptionSource, noHorseExceptionPlayer);
+var noHorseVisibleSentinel = NewObject(noHorseExceptionSource,
+    Grobal2.RC_MONSTER, 4, 3);
+noHorseExceptionPlayer.m_VisibleHumanList.Add(noHorseVisibleSentinel);
+var savedNoHorseVisibleItems = noHorseExceptionPlayer.m_VisibleItems;
+noHorseExceptionPlayer.m_VisibleItems = null;
+var noHorseExceptionMoveSucceeded = (bool)enterAnotherMap.Invoke(
+    noHorseExceptionPlayer, new object[] { noHorseExceptionTarget, 4, 4 })!;
+noHorseExceptionPlayer.m_VisibleItems = savedNoHorseVisibleItems;
+Assert(!noHorseExceptionMoveSucceeded,
+    "exceptional NOHORSE move unexpectedly committed");
+Assert(noHorseExceptionPlayer.m_boOnHorse,
+    "exceptional NOHORSE move dismounted the player");
+Assert(ReferenceEquals(noHorseExceptionSource,
+        noHorseExceptionPlayer.m_PEnvir)
+       && CellContains(noHorseExceptionSource, 3, 3,
+           noHorseExceptionPlayer),
+    "exceptional NOHORSE move did not restore the source placement");
+Assert(noHorseExceptionPlayer.m_VisibleHumanList.Contains(
+        noHorseVisibleSentinel),
+    "exceptional NOHORSE move did not restore visible humans");
+
+var noHorseSuccessSource = NewEnvironment("NoHorseSuccessSource",
+    "NoHorseSuccessSourceFile", 0);
+var noHorseSuccessTarget = NewEnvironment("NoHorseSuccessTarget",
+    "NoHorseSuccessTargetFile", 0);
+noHorseSuccessTarget.Flag.boNOHORSE = true;
+var noHorseSuccessPlayer = new TPlayObject
+{
+    m_PEnvir = noHorseSuccessSource,
+    m_sMapName = noHorseSuccessSource.sMapName,
+    m_sMapFileName = noHorseSuccessSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_boOnHorse = true
+};
+Place(noHorseSuccessSource, noHorseSuccessPlayer);
+var noHorseSuccessMoveSucceeded = (bool)enterAnotherMap.Invoke(
+    noHorseSuccessPlayer, new object[] { noHorseSuccessTarget, 4, 4 })!;
+Assert(noHorseSuccessMoveSucceeded,
+    "valid NOHORSE move did not commit");
+Assert(!noHorseSuccessPlayer.m_boOnHorse,
+    "committed NOHORSE move left the player mounted");
+Assert(ReferenceEquals(noHorseSuccessTarget, noHorseSuccessPlayer.m_PEnvir)
+       && CellContains(noHorseSuccessTarget, 4, 4, noHorseSuccessPlayer),
+    "committed NOHORSE move did not attach to the target");
+
+var horseAllowedSource = NewEnvironment("HorseAllowedSource",
+    "HorseAllowedSourceFile", 0);
+var horseAllowedTarget = NewEnvironment("HorseAllowedTarget",
+    "HorseAllowedTargetFile", 0);
+var horseAllowedPlayer = new TPlayObject
+{
+    m_PEnvir = horseAllowedSource,
+    m_sMapName = horseAllowedSource.sMapName,
+    m_sMapFileName = horseAllowedSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3,
+    m_boOnHorse = true
+};
+Place(horseAllowedSource, horseAllowedPlayer);
+var horseAllowedMoveSucceeded = (bool)enterAnotherMap.Invoke(
+    horseAllowedPlayer, new object[] { horseAllowedTarget, 4, 4 })!;
+Assert(horseAllowedMoveSucceeded,
+    "valid horse-allowed move did not commit");
+Assert(horseAllowedPlayer.m_boOnHorse,
+    "horse-allowed move dismounted the player");
+Assert(ReferenceEquals(horseAllowedTarget, horseAllowedPlayer.m_PEnvir)
+       && CellContains(horseAllowedTarget, 4, 4, horseAllowedPlayer),
+    "horse-allowed move did not attach to the target");
+
+var staleGhostSource = NewEnvironment("StaleGhostLifecycle",
+    "StaleGhostLifecycleFile", 0);
+RegisterMap(mapManager, staleGhostSource);
+var staleGhostCleanupCount = 0;
+Assert(dynamicRooms.RegisterIdleRoom("StaleGhostLifecycle", 0,
+    staleGhostSource, 0, _ =>
+    {
+        staleGhostCleanupCount++;
+        return true;
+    }), "stale ghost source registration failed");
+Assert(dynamicRooms.TryReserveIdleRoom("StaleGhostLifecycle", null,
+           out _),
+    "stale ghost source was not reserved");
+var staleGhostPlayer = new TPlayObject
+{
+    m_PEnvir = staleGhostSource,
+    m_sMapName = staleGhostSource.sMapName,
+    m_sMapFileName = staleGhostSource.m_sMapFileName,
+    m_nCurrX = 3,
+    m_nCurrY = 3
+};
+Place(staleGhostSource, staleGhostPlayer);
+dynamicTick++;
+RemoveCellObjectWithoutAccounting(staleGhostSource, 3, 3,
+    CellType.OS_MOVINGOBJECT, staleGhostPlayer);
+Equal(1, staleGhostSource.HumCount,
+    "stale ghost setup lost source human registration");
+Equal(1, staleGhostSource.DynamicRoomPlayerCount,
+    "stale ghost setup lost physical occupancy registration");
+staleGhostPlayer.MakeGhost();
+Assert(staleGhostPlayer.m_boGhost,
+    "stale-cell MakeGhost did not set the ghost state");
+Equal(0, staleGhostSource.HumCount,
+    "stale-cell MakeGhost did not remove source human registration");
+Equal(0, staleGhostSource.DynamicRoomPlayerCount,
+    "stale-cell MakeGhost did not remove physical occupancy registration");
+Assert(!staleGhostPlayer.m_boAddToMaped
+       && staleGhostPlayer.m_boDelFormMaped,
+    "stale-cell MakeGhost did not update map registration flags");
+Equal(1, staleGhostCleanupCount,
+    "stale-cell MakeGhost did not clean the dynamic room once");
+staleGhostPlayer.MakeGhost();
+Equal(0, staleGhostSource.HumCount,
+    "repeated stale-cell MakeGhost underflowed source human count");
+Equal(0, staleGhostSource.DynamicRoomPlayerCount,
+    "repeated stale-cell MakeGhost changed physical occupancy");
+Equal(1, staleGhostCleanupCount,
+    "repeated stale-cell MakeGhost cleaned the dynamic room again");
+
+Console.WriteLine("MovementCollisionCheck PASS");
+
+static TBaseObject NewObject(Envirnoment environment, byte race, short x, short y)
+{
+    return new TBaseObject
+    {
+        m_PEnvir = environment,
+        m_btRaceServer = race,
+        m_nCurrX = x,
+        m_nCurrY = y
+    };
+}
+
+static void Place(Envirnoment environment, TBaseObject actor)
+{
+    actor.m_boAddToMaped = false;
+    actor.m_boDelFormMaped = false;
+    Assert(ReferenceEquals(actor, environment.AddToMap(actor.m_nCurrX,
+        actor.m_nCurrY, CellType.OS_MOVINGOBJECT, actor)), "place actor");
+}
+
+static int GetCellObjectCount(Envirnoment environment, int x, int y)
+{
+    var found = false;
+    return environment.GetMapCellInfo(x, y, ref found).Count;
+}
+
+static bool CellContains(Envirnoment environment, int x, int y,
+    object target)
+{
+    var found = false;
+    var cell = environment.GetMapCellInfo(x, y, ref found);
+    return found && cell.ObjList != null && cell.ObjList.Any(entry =>
+        ReferenceEquals(entry.CellObj, target));
+}
+
+static void RemoveCellObjectWithoutAccounting(Envirnoment environment,
+    int x, int y, CellType cellType, object target)
+{
+    var found = false;
+    var cell = environment.GetMapCellInfo(x, y, ref found);
+    Assert(found && cell.ObjList != null,
+        "stale-cell setup could not find the source cell");
+    var index = -1;
+    for (var i = 0; i < cell.ObjList.Count; i++)
+    {
+        var entry = cell.ObjList[i];
+        if (entry.CellType == cellType && ReferenceEquals(entry.CellObj, target))
+        {
+            index = i;
+            break;
+        }
+    }
+    Assert(index >= 0, "stale-cell setup could not find the target object");
+    cell.ObjList.RemoveAt(index);
+}
+
+static int CountMessages(TBaseObject actor, int ident) =>
+    actor.m_MsgList.Count(message => message.wIdent == ident);
+
+static Envirnoment NewEnvironment(string mapName, string mapFileName,
+    int serverIndex)
+{
+    var environment = new Envirnoment
+    {
+        sMapName = mapName,
+        m_sMapFileName = mapFileName,
+        nServerIndex = serverIndex
+    };
+    typeof(Envirnoment).GetMethod("Initialize", BindingFlags.Instance |
+        BindingFlags.NonPublic)!.Invoke(environment, new object[] { (short)10, (short)10 });
+    return environment;
+}
+
+static void RegisterMap(MapManager manager, Envirnoment environment)
+{
+    var field = typeof(MapManager).GetField("m_MapList",
+        BindingFlags.Instance | BindingFlags.NonPublic)!;
+    var maps = (IDictionary<string, Envirnoment>)field.GetValue(manager)!;
+    maps.Add(environment.sMapName, environment);
+}
+
+static void Equal<T>(T expected, T actual, string label)
+{
+    if (!EqualityComparer<T>.Default.Equals(expected, actual))
+        throw new InvalidOperationException($"{label}: expected {expected}, got {actual}");
+}
+
+static void Assert(bool condition, string message)
+{
+    if (!condition) throw new InvalidOperationException(message);
+}
+
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}

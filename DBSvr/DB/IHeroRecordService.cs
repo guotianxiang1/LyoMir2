@@ -1,0 +1,74 @@
+using System;
+using System.Collections.Generic;
+
+namespace DBSvr
+{
+    /// <summary>
+    /// 英雄索引服务接口 (对应 hero_index 表)。
+    /// 与 user_index 同构设计，共用相同分页/排行模式。
+    /// </summary>
+    public interface IHeroRecordService
+    {
+        void LoadQuickList();
+        int Index(string heroName);
+        int CreateHero(string masterName, string heroName, int heroType, int job, int sex, long heroId);
+        bool DeleteHero(int idx);
+        bool HardDeleteHero(int idx);
+        bool IsHeroNameExists(string heroName);
+        List<HeroIndexInfo> QueryHeroesByMaster(string masterName);
+        List<HeroIndexInfo> QueryDeletedHeroesByMaster(string masterName);
+        int ChrCountOfMaster(string masterName);
+        bool UpdateHeroIndex(int idx, int level, int exp, int job, int sex, int forceLv, int forceExp, int sfLevel,
+            int isDelete = -1, int heroType = -1, int consignation = -1);
+        bool UpdateLvChangeTime(int idx);
+        bool RestoreHero(string heroName);
+        bool RenameHero(string oldName, string newName, int idx);
+        bool SetHeroConsignation(int idx, int expectedValue, int newValue);
+        bool RenameMaster(string oldMaster, string newMaster);
+        int GetIdxByName(string heroName);
+        bool TryGetNativeHeroByName(byte[] heroName, out HeroIndexInfo hero);
+        bool TryGetNativeForceLevelIndex(byte[] heroName, out int index);
+        List<RankEntry> GetHeroLevelRank(int limit = 100);
+        List<HeroSortEntry> GetHeroPage(int lastIdx, int limit = 5000);
+    }
+
+    public class HeroIndexInfo
+    {
+        public int Idx;
+        public string MasterName;
+        public byte[] MasterNameBytes;
+        public string HeroName;
+        public byte[] HeroNameBytes;
+        public bool IsDelete;
+        public int HeroType;
+        public int Consignation;
+        public int Job;
+        public int Sex;
+        public int Level;
+        public int Exp;
+        public int ForceLv;
+        public int ForceExp;
+        public int SfLevel;
+        public long HeroId;
+        public DateTime ModifyDate;
+    }
+
+    public class HeroSortEntry
+    {
+        public int Idx;
+        public string MasterName;
+        public string HeroName;
+        public bool IsDelete;
+        public int HeroType;
+        public int Consignation;
+        public int Level;
+        public int Job;
+        public int Sex;
+        public int Exp;
+        public int ForceLv;
+        public int ForceExp;
+        public int SfLevel;
+        public long HeroId;
+        public DateTime ModifyDate;
+    }
+}

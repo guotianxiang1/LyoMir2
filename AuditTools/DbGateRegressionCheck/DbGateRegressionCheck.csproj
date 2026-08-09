@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\SystemModule\SystemModule.csproj" />
+    <ProjectReference Include="..\..\DBSvr\DBSvr.csproj" />
+    <Compile Include="..\..\GameGate-CS\Core\SharedBackendHub.cs" Link="GameGate\SharedBackendHub.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\GateConfig.cs" Link="GameGate\GateConfig.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\AbusiveFilter.cs" Link="GameGate\AbusiveFilter.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\SessionManager.cs" Link="GameGate\SessionManager.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\DelayQueue.cs" Link="GameGate\DelayQueue.cs" />
+    <Compile Include="..\..\GameGate-CS\Models\ClientSession.cs" Link="GameGate\ClientSession.cs" />
+    <Compile Include="..\..\GameGate-CS\Models\GameCommand.cs" Link="GameGate\GameCommand.cs" />
+    <Compile Include="..\..\GameSvr\GameGate\SendQueue.cs" Link="GameSvr\SendQueue.cs" />
+  </ItemGroup>
+</Project>

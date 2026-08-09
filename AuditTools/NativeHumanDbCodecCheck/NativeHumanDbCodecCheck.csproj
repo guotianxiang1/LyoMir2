@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\SystemModule\SystemModule.csproj" />
+    <Compile Include="..\..\DBSvr\Core\NativeHumanDataCodec.cs" Link="DBSvr\NativeHumanDataCodec.cs" />
+    <Compile Include="..\..\GameSvr\Services\NativeHumanDbCodec.cs" Link="GameSvr\NativeHumanDbCodec.cs" />
+  </ItemGroup>
+</Project>

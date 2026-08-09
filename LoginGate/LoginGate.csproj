@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LoginGate</AssemblyName>
+    <RootNamespace>LoginGate</RootNamespace>
+    <ApplicationIcon>Resources\LoginGate.ico</ApplicationIcon>
+    <Version>1.0.1.104</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MySql.Data" Version="8.0.28" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SystemModule\SystemModule.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\original_auth_panel.png"
+                      LogicalName="LoginGate.Resources.original_auth_panel.png" />
+  </ItemGroup>
+</Project>

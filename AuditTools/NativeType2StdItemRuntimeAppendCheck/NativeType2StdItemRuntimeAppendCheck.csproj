@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <Compile Include="..\..\GameSvr\Services\NativeType2StdItemSnapshotState.cs" Link="GameSvr\NativeType2StdItemSnapshotState.cs" />
+    <Compile Include="..\..\GameSvr\Services\NativeType2StdItemRuntimeAppend.cs" Link="GameSvr\NativeType2StdItemRuntimeAppend.cs" />
+  </ItemGroup>
+</Project>

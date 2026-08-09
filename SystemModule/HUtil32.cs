@@ -1,0 +1,835 @@
+using System;
+using System.Text;
+using System.Threading;
+
+namespace SystemModule
+{
+    public class HUtil32
+    {
+        private static long _sequence;
+        public const string Backslash = "/";
+        public static readonly Encoding GbkEncoding = CreateGbkEncoding();
+
+        public static TUserItem DelfautItem = new TUserItem();
+        public static TMagicRcd DetailtMagicRcd = new TMagicRcd();
+
+        private static Encoding CreateGbkEncoding()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(936);
+        }
+
+        
+        
+        
+        public static int Sequence()
+        {
+            var sequence = Interlocked.Increment(ref _sequence);
+            if (sequence > int.MaxValue)
+                throw new InvalidOperationException("Object ID sequence exhausted.");
+            return (int)sequence;
+        }
+
+        public static int GetTickCount()
+        {
+            return Environment.TickCount;
+        }
+
+        public static int MakeLong(int lowPart, int highPart)
+        {
+            return lowPart | (short)highPart << 16;
+        }
+
+        public static int MakeLong(double lowPart, double highPart)
+        {
+            return (int)lowPart | ((int)highPart << 16);
+        }
+
+        public static int MakeLong(ushort lowPart, int highPart)
+        {
+            return lowPart | (short)highPart << 16;
+        }
+
+        public static int MakeLong(short lowPart, int highPart)
+        {
+            return (ushort)lowPart | ((short)highPart << 16);
+        }
+
+        public static int MakeLong(short lowPart, short highPart)
+        {
+            return (ushort)lowPart | (highPart << 16);
+        }
+
+        public static int MakeLong(short lowPart, ushort highPart)
+        {
+            return (ushort)lowPart | ((short)highPart << 16);
+        }
+
+        
+        
+        
+        
+
+        public static ushort MakeWord(int bLow, int bHigh)
+        {
+            return (ushort)(bLow | (bHigh << 8));
+        }
+
+        public static ushort HiWord(int dword)
+        {
+            return (ushort)(dword >> 16);
+        }
+
+        public static ushort LoWord(int dword)
+        {
+            return (ushort)dword;
+        }
+
+        public static byte HiByte(short W)
+        {
+            return (byte)(W >> 8);
+        }
+
+        public static byte HiByte(int W)
+        {
+            return (byte)(W >> 8);
+        }
+
+        public static byte LoByte(short W)
+        {
+            return (byte)W;
+        }
+
+        public static byte LoByte(int W)
+        {
+            return (byte)W;
+        }
+
+        public static bool IsVarNumber(string Str)
+        {
+            return (CompareLStr(Str, "HUMAN", 5)) || (CompareLStr(Str, "GUILD", 5)) || (CompareLStr(Str, "GLOBAL", 6));
+        }
+
+        // Delphi RTL Round() = banker's rounding (half-to-even), and the native M2Server uses the
+        // plain RTL Round everywhere (no custom rounding helper exists in the reference tree).
+        // The previous C# form `(int)Math.Round(x + 0.5, 1, AwayFromZero)` diverged two ways:
+        //   (a) half-up instead of half-to-even  -> Round(2.5) = 3, Delphi gives 2;
+        //   (b) the spurious `,1,` digit rounded any fractional part in [0.45,0.5) up by one
+        //       -> Round(2.46) = 3, Delphi gives 2.
+        // Feeds exp / damage / price / HP-MP formulas game-wide (167 call sites).
+        public static int Round(object r)
+        {
+            return (int)Math.Round(Convert.ToDouble(r), MidpointRounding.ToEven);
+        }
+
+        /// <summary>
+        /// 战神's <c>(a / den) * a</c> ability chains, evaluated at the x87's
+        /// EXTENDED (64-bit significand) precision rather than IEEE double.
+        /// <para>
+        /// The two-instruction sequence is <c>fild / fdiv dword / fild / fmulp /
+        /// call @ROUND</c> — for example 0x6BA4E3..0x6BA4F7 (den 50, then
+        /// <c>add eax,0x0F</c>) and 0x6BA3B5..0x6BA3C9 (den 90, then
+        /// <c>add eax,0x0C</c>). The quotient is NEVER spilled to memory, so it
+        /// keeps all 64 significand bits into the multiply. A C# <c>double</c>
+        /// chain rounds the quotient to 53 bits first, and that double rounding
+        /// changes the final half-to-even decision for a handful of inputs.
+        /// </para>
+        /// <para>
+        /// Only <c>den</c> 50 and 90 are actually affected; every other divisor
+        /// 战神 uses in these formulas (2, 3, 4, 5, 6, 8, 13, 15, 20, 42, 100) is
+        /// provably tie-free over the whole level domain, which is why the plain
+        /// <see cref="Round(double)"/> is correct for them. Computing the product
+        /// as an exact rational and rounding half-to-even reproduces the extended
+        /// result exactly, because a 64-bit significand holds <c>n/den * n</c>'s
+        /// rounding decision for every value the game can reach.
+        /// </para>
+        /// </summary>
+        public static int RoundDivMulExtended(long value, long denominator)
+        {
+            // exact numerator/denominator of (value / denominator) * value
+            var numerator = value * value;
+            if (denominator == 0) return 0;
+            if (denominator < 0)
+            {
+                numerator = -numerator;
+                denominator = -denominator;
+            }
+
+            var quotient = numerator / denominator;
+            var remainder = numerator - quotient * denominator;
+            if (remainder < 0)
+            {
+                // C# truncates toward zero; shift to a floor + non-negative
+                // remainder so the half-to-even test below is symmetric.
+                quotient -= 1;
+                remainder += denominator;
+            }
+
+            var twice = 2 * remainder;
+            if (twice > denominator) quotient += 1;
+            else if (twice == denominator && (quotient & 1) != 0) quotient += 1;
+            return (int)quotient;
+        }
+
+        public static int Round(double r)
+        {
+            return (int)Math.Round(r, MidpointRounding.ToEven);
+        }
+
+        
+        
+        
+        
+        
+        
+        public static bool RangeInDefined(int values, int min, int max)
+        {
+            return Math.Max(min, values) == Math.Min(values, max);
+        }
+
+        
+        
+        
+        
+        
+        
+        public static bool RangeInDefined(long values, int min, int max)
+        {
+            return Math.Max(min, values) == Math.Min(values, max);
+        }
+
+        public static void EnterCriticalSections(object obj)
+        {
+            Monitor.Enter(obj);
+        }
+
+        public static void LeaveCriticalSections(object obj)
+        {
+            Monitor.Exit(obj);
+        }
+
+        public static void EnterCriticalSection(object obj)
+        {
+            Monitor.Enter(obj);
+        }
+
+        public static void LeaveCriticalSection(object obj)
+        {
+            Monitor.Exit(obj);
+        }
+
+        public static string GetString(byte[] bytes, int index, int count)
+        {
+            return GbkEncoding.GetString(bytes, index, count);
+        }
+
+        public static DateTime DoubleToDateTime(double xd)
+        {
+            return (new DateTime(1899, 12, 30)).AddDays(xd);
+        }
+
+        public static double DateTimeToDouble(DateTime dt)
+        {
+            TimeSpan ts = dt - new DateTime(1899, 12, 30);
+            return ts.TotalDays;
+        }
+
+        public static string StrPas(byte[] buff)
+        {
+            var nLen = buff.Length;
+            var ret = new string('\0', nLen);
+            var sb = new StringBuilder(ret);
+            for (var i = 0; i < nLen; i++)
+            {
+                sb[i] = (char)buff[i];
+            }
+            return sb.ToString();
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        private static unsafe int StringToBytePtr(string str, byte* retby, int StartIndex)
+        {
+            var bDecode = false;
+            if (string.IsNullOrEmpty(str)) return 0;
+            for (var i = 0; i < str.Length; i++)
+                if (str[i] >> 8 != 0)
+                {
+                    bDecode = true;
+                    break;
+                }
+
+            var nLen = 0;
+            if (bDecode)
+                nLen = GbkEncoding.GetByteCount(str);
+            else
+                nLen = str.Length;
+            if (retby == null)
+                return nLen;
+
+            if (bDecode)
+            {
+                var by = GbkEncoding.GetBytes(str);
+                var pb = retby + StartIndex;
+                for (var i = 0; i < by.Length; i++)
+                    *pb++ = by[i];
+            }
+            else
+            {
+                var pb = retby + StartIndex;
+                for (var i = 0; i < str.Length; i++) *pb++ = (byte)str[i];
+            }
+
+            return nLen;
+        }
+
+        public static string CaptureString(string source, ref string rdstr)
+        {
+            string result;
+            int st;
+            int et;
+            int c;
+            int len;
+            int i;
+            if (source == "")
+            {
+                rdstr = "";
+                result = "";
+                return result;
+            }
+            c = 1;
+            len = source.Length;
+            while (source[c] == ' ')
+                if (c < len)
+                    c++;
+                else
+                    break;
+            if (source[c] == '\"' && c < len)
+            {
+                st = c + 1;
+                et = len;
+                for (i = c + 1; i <= len; i++)
+                    if (source[i] == '\"')
+                    {
+                        et = i - 1;
+                        break;
+                    }
+            }
+            else
+            {
+                st = c;
+                et = len;
+                for (i = c; i <= len; i++)
+                    if (source[i] == ' ')
+                    {
+                        et = i - 1;
+                        break;
+                    }
+            }
+
+            rdstr = source.Substring(st - 1, et - st + 1);
+            if (len >= et + 2)
+                result = source.Substring(et + 2 - 1, len - (et + 1));
+            else
+                result = "";
+            return result;
+        }
+
+        public static int Str_ToInt(string Str, int def)
+        {
+            var result = def;
+            if (int.TryParse(Str, out result))
+            {
+                return result;
+            }
+            return result;
+        }
+
+        public static DateTime Str_ToDate(string Str)
+        {
+            DateTime result;
+            if (Str.Trim() == "")
+                result = DateTime.Today;
+            else
+                result = Convert.ToDateTime(Str);
+            return result;
+        }
+
+        public static DateTime Str_ToTime(string Str)
+        {
+            DateTime result;
+            if (Str.Trim() == "")
+                result = DateTime.Now;
+            else
+                result = Convert.ToDateTime(Str);
+            return result;
+        }
+
+        public static string GetValidStr3(string Str, ref string Dest, char Divider)
+        {
+            var Ary = Str.Split('/'); 
+            if (Ary.Length > 0)
+                Dest = Ary[0]; 
+            else
+                Dest = "";
+            if (Ary.Length > 1)
+                return Ary[1]; 
+            else
+                return "";
+        }
+
+        public static string GetValidStr3(string Str, ref string Dest, char[] DividerAry)
+        {
+            var Div = new char[DividerAry.Length];
+            int i;
+            for (i = 0; i < DividerAry.Length; i++) Div[i] = DividerAry[i];
+            var Ary = Str.Split(Div, 2, StringSplitOptions.RemoveEmptyEntries); 
+            if (Ary.Length > 0)
+                Dest = Ary[0]; 
+            else
+                Dest = "";
+            if (Ary.Length > 1)
+                return Ary[1]; 
+            else
+                return "";
+        }
+
+        public static string GetValidStr3(string Str, ref string Dest, string[] DividerAry)
+        {
+            var Div = new char[DividerAry.Length];
+            for (var i = 0; i < DividerAry.Length; i++) Div[i] = DividerAry[i][0];
+            var Ary = Str.Split(Div, 2, StringSplitOptions.RemoveEmptyEntries); 
+            Dest = Ary.Length > 0 ? Ary[0] : "";
+            return Ary.Length > 1 ? Ary[1] : "";
+        }
+
+        public static string GetValidStr3(string Str, ref int Dest, string[] DividerAry)
+        {
+            var Div = new char[DividerAry.Length];
+            for (var i = 0; i < DividerAry.Length; i++) Div[i] = DividerAry[i][0];
+            var Ary = Str.Split(Div, 2, StringSplitOptions.RemoveEmptyEntries); 
+            if (Ary.Length > 0)
+            {
+                if (!int.TryParse(Ary[0], out Dest))
+                {
+                    Dest = -1;
+                }
+            }
+            return Ary.Length > 1 ? Ary[1] : "";
+        }
+
+        public static string GetValidStr3(string Str, ref string Dest, string DividerAry)
+        {
+            var div = new char[DividerAry.Length];
+            for (var i = 0; i < DividerAry.Length; i++) div[i] = DividerAry[i];
+            var Ary = Str.Split(div, 2, StringSplitOptions.RemoveEmptyEntries); 
+            Dest = Ary.Length > 0 ? Ary[0] : "";
+            return Ary.Length > 1 ? Ary[1] : "";
+        }
+
+        public static string GetValidStrCap(string Str, ref string Dest, string[] Divider)
+        {
+            string result;
+            Str = Str.TrimStart();
+            if (Str != "")
+            {
+                if (Str[0] == '\"')
+                    result = CaptureString(Str, ref Dest);
+                else
+                    result = GetValidStr3(Str, ref Dest, Divider);
+            }
+            else
+            {
+                result = "";
+                Dest = "";
+            }
+
+            return result;
+        }
+
+        public static bool IsStringNumber(string str)
+        {
+            var result = true;
+            for (var i = 0; i <= str.Length - 1; i++)
+            {
+                if ((byte)str[i] < (byte)'0' || (byte)str[i] > (byte)'9')
+                {
+                    result = false;
+                    break;
+                }
+            }
+            return result;
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        
+        public static string ArrestStringEx(string Source, string SearchAfter, string ArrestBefore, ref string ArrestStr)
+        {
+            if (string.IsNullOrEmpty(Source))
+            {
+                return string.Empty;
+            }
+            var result = string.Empty;
+            bool GoodData = false;
+            ArrestStr = string.Empty;
+            try
+            {
+                int srclen = Source.Length;
+                if (srclen >= 2)
+                {
+                    if (Source[0].ToString() == SearchAfter)
+                    {
+                        Source = Source.Substring(1, srclen - 1);
+                        srclen = Source.Length;
+                        GoodData = true;
+                    }
+                    else
+                    {
+                        var n = Source.IndexOf(SearchAfter, StringComparison.Ordinal) + 1;
+                        if (n > 0)
+                        {
+                            Source = Source.Substring(n, srclen - n);
+                            srclen = Source.Length;
+                            GoodData = true;
+                        }
+                    }
+                }
+                if (GoodData)
+                {
+                    var n = Source.IndexOf(ArrestBefore, StringComparison.Ordinal) + 1;
+                    if (n > 0)
+                    {
+                        ArrestStr = Source.Substring(0, n - 1);
+                        result = Source.Substring(n, srclen - n);
+                    }
+                    else
+                    {
+                        result = SearchAfter + Source;
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i <= srclen; i++)
+                    {
+                        if (Source[i - 1].ToString() == SearchAfter)
+                        {
+                            result = Source.Substring(i - 1, srclen - i + 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                ArrestStr = string.Empty;
+                result = string.Empty;
+            }
+            return result;
+        }
+
+        public static string ArrestStringEx(string Source, char SearchAfter, char ArrestBefore, ref string ArrestStr)
+        {
+            var result = string.Empty;
+            int srclen;
+            bool GoodData;
+            int n;
+            ArrestStr = string.Empty;
+            if (Source == "")
+            {
+                result = "";
+                return result;
+            }
+
+            try
+            {
+                srclen = Source.Length;
+                GoodData = false;
+                if (srclen >= 2)
+                {
+                    if (Source[0].ToString() == SearchAfter.ToString())
+                    {
+                        Source = Source.Substring(1, srclen - 1);
+                        srclen = Source.Length;
+                        GoodData = true;
+                    }
+                    else
+                    {
+                        n = Source.IndexOf(SearchAfter) + 1;
+                        if (n > 0)
+                        {
+                            Source = Source.Substring(n, srclen - n);
+                            srclen = Source.Length;
+                            GoodData = true;
+                        }
+                    }
+                }
+
+                if (GoodData)
+                {
+                    n = Source.IndexOf(ArrestBefore) + 1;
+                    if (n > 0)
+                    {
+                        ArrestStr = Source.Substring(0, n - 1);
+                        result = Source.Substring(n, srclen - n);
+                    }
+                    else
+                    {
+                        result = SearchAfter + Source;
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i <= srclen; i++)
+                        if (Source[i - 1].ToString() == SearchAfter.ToString())
+                        {
+                            result = Source.Substring(i - 1, srclen - i + 1);
+                            break;
+                        }
+                }
+            }
+            catch
+            {
+                ArrestStr = "";
+                result = "";
+            }
+            return result;
+        }
+
+        public static bool CompareLStr(string src, string targ, int compn)
+        {
+            var result = false;
+            if (compn <= 0) return result;
+            if (src.Length < compn) return result;
+            if (targ.Length < compn) return result;
+            result = true;
+            for (var i = 0; i <= compn - 1; i++)
+            {
+                if (char.ToUpper(src[i]) == char.ToUpper(targ[i])) continue;
+                result = false;
+                break;
+            }
+            return result;
+        }
+
+        private static bool IsEnglish(char Ch)
+        {
+            return Ch >= 'A' && Ch <= 'Z' || Ch >= 'a' && Ch <= 'z';
+        }
+
+        public static bool IsEngNumeric(char Ch)
+        {
+            return IsEnglish(Ch) || Ch >= '0' && Ch <= '9'; ;
+        }
+
+        public static bool IsEnglishStr(string sEngStr)
+        {
+            var result = false;
+            for (var i = 0; i < sEngStr.Length; i++)
+            {
+                result = IsEnglish(sEngStr[i]);
+                if (result) break;
+            }
+            return result;
+        }
+
+        public static string ReplaceChar(string src, char srcchr, char repchr)
+        {
+            if (src != "")
+            {
+                int len = src.Length;
+                var sb = new StringBuilder();
+                for (var i = 0; i < len; i++)
+                    sb.Append(src[i] == srcchr ? repchr : src[i]);
+                return sb.ToString();
+            }
+            return src;
+        }
+
+        public static int TagCount(string source, char tag)
+        {
+            var tcount = 0;
+            for (var i = 0; i <= source.Length - 1; i++)
+                if (source[i] == tag)
+                    tcount++;
+            return tcount;
+        }
+
+        public static string BoolToStr(bool boo)
+        {
+            string result;
+            if (boo)
+                result = "TRUE";
+            else
+                result = "FALSE";
+            return result;
+        }
+
+        public static int _MIN(int n1, int n2)
+        {
+            int result;
+            if (n1 < n2)
+                result = n1;
+            else
+                result = n2;
+            return result;
+        }
+
+        public static int _MAX(int n1, int n2)
+        {
+            int result;
+            if (n1 > n2)
+                result = n1;
+            else
+                result = n2;
+            return result;
+        }
+
+        public static string BoolToCStr(bool b)
+        {
+            return b ? "是" : "否";  // 是 : 否 (GBK compatible)
+        }
+
+        public static string BoolToIntStr(bool b)
+        {
+            string result;
+            if (b)
+                result = "1";
+            else
+                result = "0";
+            return result;
+        }
+
+        public static byte[] GetBytes(string str)
+        {
+            return GbkEncoding.GetBytes(str);
+        }
+
+        public static byte[] GetBytes(int str)
+        {
+            return GbkEncoding.GetBytes(str.ToString());
+        }
+
+        public static int GetByteCount(char strSrc)
+        {
+            return GbkEncoding.GetByteCount(strSrc.ToString());
+        }
+
+        public static int GetDayCount(DateTime MaxDate, DateTime MinDate)
+        {
+            if (MaxDate < MinDate) return 0;
+            int YearMax = MaxDate.Year;
+            int MonthMax = MaxDate.Month;
+            int DayMax = MaxDate.Day;
+            int YearMin = MinDate.Year;
+            int MonthMin = MinDate.Month;
+            int DayMin = MinDate.Day;
+            YearMax -= YearMin;
+            YearMin = 0;
+            return YearMax * 12 * 30 + MonthMax * 30 + DayMax - (YearMin * 12 * 30 + MonthMin * 30 + DayMin);
+        }
+
+        
+        
+        
+        
+        
+        
+        
+        public static unsafe string SBytePtrToString(sbyte* by, int StartIndex, int Len)
+        {
+            try
+            {
+                return BytePtrToString((byte*)by, StartIndex, Len);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
+        private static unsafe string BytePtrToString(byte* by, int StartIndex, int Len)
+        {
+            var ret = new string('\0', Len);
+            var sb = new StringBuilder(ret);
+
+            by += StartIndex;
+            for (var i = 0; i < Len; i++) sb[i] = (char)*@by++;
+
+            return sb.ToString();
+        }
+
+        
+        
+        
+        
+        public static unsafe byte[] StringToByteAry(string str, out int strLength)
+        {
+            strLength = StringToBytePtr(str, null, 0);
+            var ret = new byte[strLength + 1];
+            fixed (byte* pb = ret)
+            {
+                StringToBytePtr(str, pb, 1);
+            }
+            return ret;
+        }
+
+        public static bool CompareBackLStr(string Src, string targ, int compn)
+        {
+            var result = false;
+            if (compn <= 0)
+            {
+                return result;
+            }
+            if (Src.Length < compn)
+            {
+                return result;
+            }
+            if (targ.Length < compn)
+            {
+                return result;
+            }
+            var slen = Src.Length;
+            var tLen = targ.Length;
+            result = true;
+            for (var i = 0; i < compn; i++)
+            {
+                if (char.ToUpper(Src[slen - (i + 1)]) != char.ToUpper(targ[tLen - (i + 1)]))
+                {
+                    result = false;
+                    break;
+                }
+            }
+            return result;
+        }
+
+        public static long IpToInt(string ip)
+        {
+            if (string.IsNullOrEmpty(ip))
+            {
+                return -1;
+            }
+            char[] separator = new[] { '.' };
+            string[] items = ip.Split(separator);
+            return long.Parse(items[0]) << 24
+                   | long.Parse(items[1]) << 16
+                   | long.Parse(items[2]) << 8
+                   | long.Parse(items[3]);
+        }
+
+    }
+}

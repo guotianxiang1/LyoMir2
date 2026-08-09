@@ -1,0 +1,13 @@
+2026-08-03 00:02 [INFO] IpAddress.txt 不存在，使用 DBServerIP 配置
+2026-08-03 00:02 [WARN] M2Auth.dll 不存在
+2026-08-03 00:02 [INFO] DBServer Native77 监听端口：5600
+2026-08-03 00:02 [INFO] PIG 兼容监听端口：7766
+2026-08-03 00:02 [INFO] 客户端选服监听端口：7000
+2026-08-03 00:02 [INFO] LoginGate 服务已启动
+2026-08-03 00:02 [WARN] 原版授权适配器未配置，未发起外部认证
+2026-08-03 00:05 [INFO] IpAddress.txt 不存在，使用 DBServerIP 配置
+2026-08-03 00:05 [WARN] M2Auth.dll 不存在
+2026-08-03 00:05 [INFO] DBServer Native77 监听端口：5600
+2026-08-03 00:05 [INFO] PIG 兼容监听端口：7766
+2026-08-03 00:05 [INFO] 客户端选服监听端口：7000
+2026-08-03 00:05 [INFO] LoginGate 服务已启动

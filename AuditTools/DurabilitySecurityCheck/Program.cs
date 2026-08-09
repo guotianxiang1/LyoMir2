@@ -1,0 +1,172 @@
+using System.Reflection;
+using DBSvr;
+using GameSvr;
+using SystemModule;
+
+if (args.Length != 1)
+    throw new ArgumentException("Usage: DurabilitySecurityCheck <repository root>");
+
+var root = Path.GetFullPath(args[0]);
+var failures = new List<string>();
+
+Run("debug builds do not grant GM permission", CheckCommandPermission);
+Run("robot creation is privileged and bounded", CheckRobotCommand);
+Run("save queue keeps only the newest immutable snapshot", CheckSaveCoalescing);
+Run("old save attempts cannot remove a newer snapshot", CheckSaveAttemptCompletionGuard);
+Run("offline gold requests remain queued and ordered", CheckGoldQueue);
+Run("DB internal record bypass accepts only the native sentinel", CheckInternalRequest);
+
+if (failures.Count != 0)
+{
+    Console.Error.WriteLine(string.Join(Environment.NewLine, failures));
+    return 1;
+}
+
+Console.WriteLine("Durability/security regression checks passed.");
+return 0;
+
+void Run(string name, Action check)
+{
+    try
+    {
+        check();
+        Console.WriteLine("PASS " + name);
+    }
+    catch (Exception ex)
+    {
+        failures.Add("FAIL " + name + ": " + ex.Message);
+    }
+}
+
+void CheckCommandPermission()
+{
+    var source = Read("GameSvr", "Command", "BaseCommond.cs");
+    Check(!source.Contains("#if DEBUG", StringComparison.Ordinal),
+        "BaseCommond contains a DEBUG permission branch");
+    Check(!source.Contains("m_btPermission = 10", StringComparison.Ordinal),
+        "BaseCommond still promotes ordinary players");
+}
+
+void CheckRobotCommand()
+{
+    var source = Read("GameSvr", "Command", "Commands", "CreateAIUserCommand.cs");
+    Check(source.Contains("\"AddRebotsPlay\", \"增加机器人玩家\", \"数量\", 10",
+        StringComparison.Ordinal), "AddRebotsPlay permission is not 10");
+    Check(source.Contains("int.TryParse", StringComparison.Ordinal) &&
+          source.Contains("userCount <= 0", StringComparison.Ordinal),
+        "robot count is not strictly validated");
+    Check(source.Contains("MaxPerRequest", StringComparison.Ordinal) &&
+          source.Contains("MaxRobots", StringComparison.Ordinal) &&
+          source.Contains("RobotPopulation", StringComparison.Ordinal),
+        "robot request or population cap is missing");
+}
+
+void CheckSaveCoalescing()
+{
+    var engine = new TFrontEngine();
+    var first = Save("Account", "Role", retry: 3, nextRetry: 1234, lastLog: 5678);
+    var latest = Save("account", "role", retry: 0, nextRetry: 0, lastLog: 0);
+    engine.AddToSaveRcdList(first);
+    engine.AddToSaveRcdList(latest);
+
+    var queue = SaveQueue(engine);
+    Equal(1, queue.Count, "same account/role was not coalesced");
+    Same(latest, queue[0], "latest snapshot did not replace the old snapshot");
+    Equal(3, latest.nReTryCount, "retry count was not inherited");
+    Equal(1234, latest.NextRetryTick, "retry deadline was not inherited");
+    Equal(5678, latest.LastErrorLogTick, "log throttle was not inherited");
+    Check(latest.Generation > first.Generation, "snapshot generation did not advance");
+
+    engine.AddToSaveRcdList(Save("OtherAccount", "Role", 0, 0, 0));
+    Equal(2, SaveQueue(engine).Count, "different accounts were incorrectly merged");
+}
+
+void CheckSaveAttemptCompletionGuard()
+{
+    var source = Read("GameSvr", "Services", "FrnEngn.cs");
+    Check(source.Contains("if (m_SaveRcdList[j] == SaveRcd)", StringComparison.Ordinal),
+        "save-attempt removal is not tied to the attempted snapshot instance");
+    Check(source.Contains("ReferenceEquals(current, SaveRcd)", StringComparison.Ordinal),
+        "in-flight failure does not distinguish a replacement snapshot");
+    Check(source.Contains("SameSaveKey(existing, SaveRcd)", StringComparison.Ordinal),
+        "save coalescing no longer uses account and character");
+}
+
+void CheckGoldQueue()
+{
+    var source = Read("GameSvr", "Services", "FrnEngn.cs");
+    Check(!source.Contains("m_ChangeGoldList.Clear()", StringComparison.Ordinal),
+        "offline gold queue is cleared before DB confirmation");
+    Check(source.Contains("changeResult != GoldChangeResult.Retry", StringComparison.Ordinal),
+        "offline gold failures are not retained");
+    Check(source.Contains("ReferenceEquals(m_ChangeGoldList[j], GoldChangeInfo)",
+        StringComparison.Ordinal), "gold completion can remove another request");
+    Check(source.Contains("attemptedUsers.Add", StringComparison.Ordinal),
+        "same-character gold requests can overtake a failed predecessor");
+}
+
+void CheckInternalRequest()
+{
+    var method = typeof(GameSocService).GetMethod("IsInternalRecordRequest",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException(typeof(GameSocService).FullName,
+            "IsInternalRecordRequest");
+
+    Check(Invoke(new LoadHumDataPacket
+    {
+        sAccount = "1", sChrName = "Role", sUserAddr = "1", nSessionID = 1
+    }), "native internal sentinel was rejected");
+    Check(!Invoke(new LoadHumDataPacket
+    {
+        sAccount = "1", sChrName = "Role", sUserAddr = "127.0.0.1", nSessionID = 1
+    }), "non-sentinel IP bypassed session validation");
+    Check(!Invoke(new LoadHumDataPacket
+    {
+        sAccount = "player", sChrName = "Role", sUserAddr = "1", nSessionID = 1
+    }), "ordinary account bypassed session validation");
+    Check(!Invoke(new LoadHumDataPacket
+    {
+        sAccount = "1", sChrName = "", sUserAddr = "1", nSessionID = 1
+    }), "empty character bypassed session validation");
+
+    bool Invoke(LoadHumDataPacket packet) => (bool)method.Invoke(null, new object[] { packet })!;
+}
+
+string Read(params string[] parts) => File.ReadAllText(
+    Path.Combine(new[] { root }.Concat(parts).ToArray()));
+
+static TSaveRcd Save(string account, string role, int retry, int nextRetry, int lastLog) =>
+    new()
+    {
+        sAccount = account,
+        sChrName = role,
+        nReTryCount = retry,
+        NextRetryTick = nextRetry,
+        LastErrorLogTick = lastLog
+    };
+
+static IList<TSaveRcd> SaveQueue(TFrontEngine engine)
+{
+    var field = typeof(TFrontEngine).GetField("m_SaveRcdList",
+        BindingFlags.NonPublic | BindingFlags.Instance)
+        ?? throw new MissingFieldException(typeof(TFrontEngine).FullName, "m_SaveRcdList");
+    return (IList<TSaveRcd>)(field.GetValue(engine)
+        ?? throw new InvalidOperationException("save queue is null"));
+}
+
+static void Check(bool condition, string message)
+{
+    if (!condition) throw new InvalidOperationException(message);
+}
+
+static void Equal<T>(T expected, T actual, string message) where T : notnull
+{
+    if (!EqualityComparer<T>.Default.Equals(expected, actual))
+        throw new InvalidOperationException($"{message}: expected {expected}, actual {actual}");
+}
+
+static void Same(object expected, object actual, string message)
+{
+    if (!ReferenceEquals(expected, actual))
+        throw new InvalidOperationException(message);
+}

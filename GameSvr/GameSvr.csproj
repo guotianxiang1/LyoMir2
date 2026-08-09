@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <RootNamespace>GameSvr</RootNamespace>
+        <UserSecretsId>1fd3fe7d-5ab8-4c52-b44f-47638c9af29a</UserSecretsId>
+        <LangVersion>10</LangVersion>
+        <Nullable>disable</Nullable>
+        <BaseOutputPath>bin\</BaseOutputPath>
+        <PackageId>GameSvr</PackageId>
+        <OutputType>WinExe</OutputType>
+        <UseWindowsForms>true</UseWindowsForms>
+        <IsPublishable>True</IsPublishable>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+      <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+      <WarningLevel>4</WarningLevel>
+      <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+      <Prefer32bit>false</Prefer32bit>
+      <Optimize>False</Optimize>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+      <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+      <Optimize>True</Optimize>
+    </PropertyGroup>
+    <PropertyGroup Condition="$(Configuration)=='Release' and $([MSBuild]::IsOSPlatform('Windows'))">
+      <OutputPath>D:\lyom2Release\mud2.0\Mir200\GS1\</OutputPath>
+      <PublishDir>D:\lyom2Release\mud2.0\Mir200\GS1\</PublishDir>
+      <PublishUrl>D:\lyom2Release\mud2.0\Mir200\GS1\</PublishUrl>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(RunConfiguration)' == 'MirServer' " />
+
+	<Choose>
+		<When Condition="$(Configuration)=='Release'">
+			<PropertyGroup>
+				<DebugSymbols>false</DebugSymbols>
+				<Optimize>true</Optimize>
+				<DefineConstants>TRACE</DefineConstants>
+			</PropertyGroup>
+		</When>
+		<When Condition="$(Configuration)=='Debug'">
+			<Choose>
+				<When Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+					<PropertyGroup>
+						<OutputPath>..\..\Build\Mir200</OutputPath>
+					</PropertyGroup>
+				</When>
+				<When Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+					<PropertyGroup>
+						<OutputPath>/Volumes/Data/Mir200</OutputPath>
+					</PropertyGroup>
+				</When>
+				<When Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+					<PropertyGroup>
+						<OutputPath>/Volumes/opt/Mir200</OutputPath>
+					</PropertyGroup>
+				</When>
+			</Choose>
+		</When>
+	</Choose>
+	
+  <ItemGroup>
+    <PackageReference Include="MySql.Data" Version="8.0.28" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="Properties\launchSettings.json">
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\M2Server_icon_000_1imgs.ico" />
+    <EmbeddedResource Include="Resources\M2Server_bitmap_000.bmp" />
+    <EmbeddedResource Include="Resources\M2Server_bitmap_001.bmp" />
+    <EmbeddedResource Include="Resources\M2Server_bitmap_002.bmp" />
+    <EmbeddedResource Include="Resources\M2Server_bitmap_003.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SystemModule\SystemModule.csproj">
+    </ProjectReference>
+    <Compile Include="..\DBSvr\Core\NativeHumanDataCodec.cs" Link="Shared\NativeHumanDataCodec.cs" />
+    <Compile Include="..\DBSvr\Core\NativeItemExtractionProtocol.cs" Link="Shared\NativeItemExtractionProtocol.cs" />
+    <Compile Include="..\DBSvr\Core\NativeItemInjectionProtocol.cs" Link="Shared\NativeItemInjectionProtocol.cs" />
+  </ItemGroup>
+</Project>

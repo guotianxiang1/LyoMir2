@@ -1,0 +1,43 @@
+.git
+.github
+.vs
+.vscode
+*.log
+*.tmp
+**/bin/
+**/obj/
+**/Build/
+Build/
+Client/
+ConsoleControl/
+对照参看/
+
+# --- added 2026-08-10: repo re-rooted at LyoMir2-master ---
+# The previous repo was rooted at D:/loym2 and swallowed 80+ GB of scratch,
+# which is why .git reached 2.4G with zero commits.
+
+# vendored .NET SDK / NuGet cache (308M, 2457 files)
+.dotnet-cli/
+
+# build artifacts (108M)
+artifacts/
+
+# root-level icon dump (59M) -- NOT csproj-referenced. The leading slash is
+# load-bearing: GameSvr/Resources, GameGate-CS/Resources and
+# LoginGate/Resources ARE EmbeddedResource inputs and must stay tracked.
+/Resources/
+
+# RE notes and evidence (48M); the real corpus lives in D:/loym2/staging
+/staging/
+
+# runtime backups
+_runtime_backup_*/
+
+# stray scratch at the tree root
+/_*.txt
+/_*.xml
+/build_out.txt
+
+# publish output (163MB GameGate.exe + vendored runtime dlls);
+# no csproj HintPath references any of it, so it is pure build output.
+**/publish/

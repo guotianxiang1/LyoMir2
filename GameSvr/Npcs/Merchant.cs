@@ -1,0 +1,2406 @@
+using SystemModule;
+using SystemModule.Common;
+using System.IO;
+
+namespace GameSvr
+{
+    
+    
+    
+    
+    public class Merchant : NormNpc
+    {
+        public string m_sScript = string.Empty;
+        
+        
+        
+        public int m_nPriceRate = 0;
+        internal int m_nRebate = 100;  // Buy/sell price ratio: 100=full, 50=half
+        public bool m_boCastle = false;
+        public int dwRefillGoodsTick = 0;
+        
+        
+        
+        public IList<int> m_ItemTypeList = null;
+        public IList<TGoods> m_RefillGoodsList = null;
+        
+        
+        
+        internal IList<IList<TUserItem>> m_GoodsList = null;
+
+        private bool _nativeGoodsDirty;
+        private int _nativeGoodsSaveTick;
+        internal bool NativeGoodsDirty => _nativeGoodsDirty;
+        internal int NativeGoodsSaveTick => _nativeGoodsSaveTick;
+        
+        
+        
+        internal IList<TItemPrice> m_ItemPriceList = null;
+        
+        
+        
+        private static readonly object UpgradeWeaponSync = new();
+        public bool m_boCanMove = false;
+        public int m_dwMoveTime = 0;
+        public int m_dwMoveTick = 0;
+        
+        
+        
+        public bool m_boBuy = false;
+        
+        
+        
+        public bool m_boSell = false;
+        public bool m_boMakeDrug = false;
+        public bool m_boPrices = false;
+        public bool m_boStorage = false;
+        public bool m_boGetback = false;
+        public bool m_boUpgradenow = false;
+        public bool m_boGetBackupgnow = false;
+        public bool m_boRepair = false;
+        public bool m_boS_repair = false;
+        public bool m_boSendmsg = false;
+        public bool m_boGetMarry = false;
+        public bool m_boGetMaster = false;
+        public bool m_boUseItemName = false;
+        public bool m_boOffLineMsg = false;
+        private readonly Dictionary<int, List<ShopDetailHandle>> _shopDetailHandles = new();
+        private int _nextShopDetailHandle = 1;
+
+        private sealed class ShopDetailHandle
+        {
+            public int Handle;
+            public TUserItem Item;
+        }
+
+        private void ClearShopDetailHandles(TPlayObject playObject)
+        {
+            if (playObject == null)
+            {
+                return;
+            }
+            _shopDetailHandles.Remove(playObject.ObjectId);
+        }
+
+        private int RegisterShopDetailHandle(TPlayObject playObject, TUserItem item)
+        {
+            if (playObject == null || item == null)
+            {
+                return 0;
+            }
+            if (!_shopDetailHandles.TryGetValue(playObject.ObjectId, out var handles))
+            {
+                handles = new List<ShopDetailHandle>(10);
+                _shopDetailHandles[playObject.ObjectId] = handles;
+            }
+            var handle = _nextShopDetailHandle;
+            _nextShopDetailHandle = unchecked(_nextShopDetailHandle + 1);
+            if (handle <= 0)
+            {
+                handle = 1;
+                _nextShopDetailHandle = 2;
+            }
+            handles.Add(new ShopDetailHandle
+            {
+                Handle = handle,
+                Item = item
+            });
+            return handle;
+        }
+
+        private TUserItem ResolveShopDetailItem(TPlayObject playObject, int handle)
+        {
+            if (playObject == null || handle <= 0)
+            {
+                return null;
+            }
+            if (!_shopDetailHandles.TryGetValue(playObject.ObjectId, out var handles))
+            {
+                return null;
+            }
+            for (var i = 0; i < handles.Count; i++)
+            {
+                if (handles[i].Handle == handle)
+                {
+                    return handles[i].Item;
+                }
+            }
+            return null;
+        }
+
+        private void RemoveShopDetailHandle(TPlayObject playObject, int handle)
+        {
+            if (playObject == null || handle <= 0)
+            {
+                return;
+            }
+            if (!_shopDetailHandles.TryGetValue(playObject.ObjectId, out var handles))
+            {
+                return;
+            }
+            for (var i = handles.Count - 1; i >= 0; i--)
+            {
+                if (handles[i].Handle == handle)
+                {
+                    handles.RemoveAt(i);
+                    break;
+                }
+            }
+            if (handles.Count == 0)
+            {
+                _shopDetailHandles.Remove(playObject.ObjectId);
+            }
+        }
+
+        private void AddItemPrice(int nIndex, int nPrice)
+        {
+            TItemPrice ItemPrice;
+            ItemPrice = new TItemPrice
+            {
+                wIndex = (short)nIndex,
+                nPrice = nPrice
+            };
+            m_ItemPriceList.Add(ItemPrice);
+        }
+
+        private bool EnsureItemPrice(int nIndex)
+        {
+            for (var i = 0; i < m_ItemPriceList.Count; i++)
+            {
+                if (m_ItemPriceList[i].wIndex == nIndex)
+                {
+                    return false;
+                }
+            }
+
+            var stdItem = M2Share.UserEngine.GetStdItem(nIndex);
+            if (stdItem == null)
+            {
+                return false;
+            }
+
+            m_ItemPriceList.Add(new TItemPrice
+            {
+                wIndex = (short)nIndex,
+                nPrice = HUtil32.Round(stdItem.Price * 1.1)
+            });
+            return true;
+        }
+
+        private bool EnsureGoodsPrices()
+        {
+            var changed = false;
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                var items = m_GoodsList[i];
+                if (items.Count > 0)
+                {
+                    changed |= EnsureItemPrice(items[0].wIndex);
+                }
+            }
+
+            for (var i = 0; i < m_RefillGoodsList.Count; i++)
+            {
+                var itemIndex = M2Share.UserEngine.GetStdItemIdx(m_RefillGoodsList[i].sItemName);
+                if (itemIndex > 0)
+                {
+                    changed |= EnsureItemPrice(itemIndex);
+                }
+            }
+            return changed;
+        }
+
+        internal static string GetNativeGoodsFilePath(string rootPath,
+            string scriptName, string mapName)
+        {
+            return Path.Combine(rootPath ?? string.Empty, "NpcSave",
+                $"{scriptName}-{mapName}.Sav");
+        }
+
+        internal static string GetNativeGoodsRootPath()
+        {
+            return Path.GetFullPath(Path.Combine(
+                M2Share.sConfigPath ?? string.Empty,
+                M2Share.g_Config?.sEnvirDir ?? string.Empty));
+        }
+
+        internal void LoadGoodRecord(string rootPath)
+        {
+            var fileName = GetNativeGoodsFilePath(rootPath, m_sScript, m_sMapName);
+            if (!File.Exists(fileName)) return;
+
+            var data = File.ReadAllBytes(fileName);
+            m_GoodsList.Clear();
+            var count = data.Length / NativeMerchantGoodsCodec.RecordSize;
+            for (var i = 0; i < count; i++)
+            {
+                var item = NativeMerchantGoodsCodec.Decode(data.AsSpan(
+                    i * NativeMerchantGoodsCodec.RecordSize,
+                    NativeMerchantGoodsCodec.RecordSize));
+                if (item.MakeIndex == 0 || item.wIndex == 0) continue;
+                AddItemToGoodsList(item);
+            }
+        }
+
+        internal void SaveGoodRecord(string rootPath)
+        {
+            var fileName = GetNativeGoodsFilePath(rootPath, m_sScript, m_sMapName);
+            Directory.CreateDirectory(Path.GetDirectoryName(fileName)!);
+
+            var count = 0;
+            for (var i = 0; i < m_GoodsList.Count; i++)
+                count += m_GoodsList[i]?.Count ?? 0;
+            if (count == 0)
+            {
+                File.Delete(fileName);
+                return;
+            }
+
+            var data = new byte[count * NativeMerchantGoodsCodec.RecordSize];
+            var offset = 0;
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                var items = m_GoodsList[i];
+                if (items == null) continue;
+                for (var j = 0; j < items.Count; j++)
+                {
+                    var record = NativeMerchantGoodsCodec.Encode(items[j]);
+                    record.CopyTo(data, offset);
+                    offset += record.Length;
+                }
+            }
+            AtomicFile.WriteAllBytes(fileName, data);
+        }
+
+        public void SaveNPCData()
+        {
+            SaveGoodRecord(GetNativeGoodsRootPath());
+        }
+
+        internal void SaveNativeGoodsIfDue(int currentTick, string rootPath)
+        {
+            if (!HasNativePasProperty(9) || !_nativeGoodsDirty ||
+                unchecked((uint)(currentTick - _nativeGoodsSaveTick)) < 60000)
+                return;
+
+            SaveNativeGoods(currentTick, rootPath);
+        }
+
+        internal void FlushNativeGoods(int currentTick, string rootPath)
+        {
+            if (!HasNativePasProperty(9)) return;
+            SaveNativeGoods(currentTick, rootPath);
+        }
+
+        private void SaveNativeGoods(int currentTick, string rootPath)
+        {
+            _nativeGoodsDirty = false;
+            try
+            {
+                SaveGoodRecord(rootPath);
+                _nativeGoodsSaveTick = currentTick;
+            }
+            catch
+            {
+                _nativeGoodsDirty = true;
+                throw;
+            }
+        }
+
+        private void MarkNativeGoodsDirty()
+        {
+            _nativeGoodsDirty = true;
+        }
+
+        internal string StorageAllBagItems(TPlayObject sender)
+        {
+            if (sender == null || !sender.m_boReadyRun ||
+                !HasNativePasProperty(9))
+                return string.Empty;
+
+            for (var i = 0; i < sender.m_ItemList.Count; i++)
+            {
+                var item = sender.m_ItemList[i];
+                if (item == null) continue;
+                if (NativeMerchantGoodsCodec.TryEncode(item, out _,
+                        out var error))
+                    continue;
+
+                M2Share.ErrorMessage(
+                    $"StorageAllBagItems rejected {sender.m_sCharName} item " +
+                    $"{item.MakeIndex}: {error}");
+                return string.Empty;
+            }
+
+            var deletedItems = new List<TDeleteItem>(sender.m_ItemList.Count);
+            for (var i = sender.m_ItemList.Count - 1; i >= 0; i--)
+            {
+                var item = sender.m_ItemList[i];
+                if (item == null) continue;
+
+                sender.m_ItemList.RemoveAt(i);
+                if (!AddItemToGoodsList(item)) continue;
+                MarkNativeGoodsDirty();
+                EnsureItemPrice(item.wIndex);
+                var itemName = M2Share.UserEngine.GetStdItemName(item.wIndex);
+                deletedItems.Add(new TDeleteItem
+                {
+                    sItemName = itemName,
+                    MakeIndex = item.MakeIndex,
+                    ClientItemID = sender.EnsureClientItemId(item)
+                });
+                M2Share.AddGameDataLog("10" + "\t" + sender.m_sMapName + "\t" +
+                    sender.m_nCurrX + "\t" + sender.m_nCurrY + "\t" +
+                    sender.m_sCharName + "\t" + itemName + "\t" + item.MakeIndex +
+                    "\t" + '1' + "\t" + m_sCharName);
+            }
+
+            if (deletedItems.Count == 0) return "你的背包没有东西";
+
+            sender.SendMsg(sender, Grobal2.RM_SENDDELITEMLIST, 0,
+                deletedItems.Count, 0, 0, string.Empty, deletedItems);
+            sender.WeightChanged();
+            return $"一共收取了您背包里的 {deletedItems.Count} 件物品。";
+        }
+
+        private void CheckItemPrice(int nIndex)
+        {
+            TItemPrice ItemPrice;
+            double n10;
+            GoodItem StdItem;
+            for (var i = 0; i < m_ItemPriceList.Count; i++)
+            {
+                ItemPrice = m_ItemPriceList[i];
+                if (ItemPrice.wIndex == nIndex)
+                {
+                    n10 = ItemPrice.nPrice;
+                    if (Math.Round(n10 * 1.1) > n10)
+                    {
+                        n10 = HUtil32.Round(n10 * 1.1);
+                    }
+                    else
+                    {
+                        n10++;
+                    }
+                    ItemPrice.nPrice = (int)n10;
+                    m_ItemPriceList[i] = ItemPrice;
+                    return;
+                }
+            }
+            StdItem = M2Share.UserEngine.GetStdItem(nIndex);
+            if (StdItem != null)
+            {
+                AddItemPrice(nIndex, HUtil32.Round(StdItem.Price * 1.1));
+            }
+        }
+
+        private IList<TUserItem> GetRefillList(int nIndex)
+        {
+            IList<TUserItem> result = null;
+            IList<TUserItem> List;
+            if (nIndex <= 0)
+            {
+                return result;
+            }
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                List = m_GoodsList[i];
+                if (List.Count > 0)
+                {
+                    if (List[0].wIndex == nIndex)
+                    {
+                        result = List;
+                        break;
+                    }
+                }
+            }
+            return result;
+        }
+
+        private void RefillGoods_RefillItems(ref IList<TUserItem> List, string sItemName, int nInt)
+        {
+            TUserItem UserItem;
+            var changed = false;
+            if (List == null)
+            {
+                List = new List<TUserItem>();
+                m_GoodsList.Add(List);
+            }
+            for (var i = 0; i < nInt; i++)
+            {
+                UserItem = new TUserItem();
+                if (M2Share.UserEngine.CopyToUserItemFromName(sItemName, ref UserItem))
+                {
+                    List.Insert(0, UserItem);
+                    changed = true;
+                }
+                else
+                {
+                    Dispose(UserItem);
+                }
+            }
+            if (changed) MarkNativeGoodsDirty();
+        }
+
+        private void RefillGoods_DelReFillItem(ref IList<TUserItem> List, int nInt)
+        {
+            var changed = false;
+            for (var i = List.Count - 1; i >= 0; i--)
+            {
+                if (nInt <= 0)
+                {
+                    break;
+                }
+                Dispose(List[i]);
+                List.RemoveAt(i);
+                changed = true;
+                nInt -= 1;
+            }
+            if (changed) MarkNativeGoodsDirty();
+        }
+
+        public bool FillGoods(string itemName, int count, int interval)
+        {
+            var itemIndex = M2Share.UserEngine.GetStdItemIdx(itemName);
+            if (itemIndex <= 0)
+            {
+                return false;
+            }
+
+            count = Math.Max(0, count);
+            interval = Math.Max(1, interval);
+            EnsureItemPrice(itemIndex);
+
+            var refillGoods = new TGoods
+            {
+                sItemName = itemName,
+                nCount = count,
+                dwRefillTime = interval,
+                dwRefillTick = HUtil32.GetTickCount()
+            };
+            var refillIndex = -1;
+            for (var i = 0; i < m_RefillGoodsList.Count; i++)
+            {
+                if (string.Equals(m_RefillGoodsList[i].sItemName, itemName, StringComparison.OrdinalIgnoreCase))
+                {
+                    refillIndex = i;
+                    break;
+                }
+            }
+            if (refillIndex >= 0)
+            {
+                m_RefillGoodsList[refillIndex] = refillGoods;
+            }
+            else
+            {
+                m_RefillGoodsList.Add(refillGoods);
+            }
+
+            var refillList = GetRefillList(itemIndex);
+            if (refillList == null)
+            {
+                refillList = new List<TUserItem>();
+                m_GoodsList.Add(refillList);
+            }
+            if (refillList.Count < count)
+            {
+                RefillGoods_RefillItems(ref refillList, itemName, count - refillList.Count);
+            }
+            else if (refillList.Count > count)
+            {
+                RefillGoods_DelReFillItem(ref refillList, refillList.Count - count);
+            }
+
+            m_boBuy = true;
+            return true;
+        }
+
+        private void RefillGoods()
+        {
+            TGoods Goods;
+            int nIndex;
+            int nRefillCount;
+            IList<TUserItem> RefillList;
+            IList<TUserItem> RefillList20;
+            bool bo21;
+            const string sExceptionMsg = "[Exception] TMerchant::RefillGoods {0}/{1}:{2} [{3}] Code:{4}";
+            try
+            {
+                for (var i = 0; i < m_RefillGoodsList.Count; i++)
+                {
+                    Goods = m_RefillGoodsList[i];
+                    if ((HUtil32.GetTickCount() - Goods.dwRefillTick) > (Goods.dwRefillTime * 60 * 1000))
+                    {
+                        Goods.dwRefillTick = HUtil32.GetTickCount();
+                        nIndex = M2Share.UserEngine.GetStdItemIdx(Goods.sItemName);
+                        if (nIndex >= 0)
+                        {
+                            RefillList = GetRefillList(nIndex);
+                            nRefillCount = 0;
+                            if (RefillList != null)
+                            {
+                                nRefillCount = RefillList.Count;
+                            }
+                            if (Goods.nCount > nRefillCount)
+                            {
+                                CheckItemPrice(nIndex);
+                                RefillGoods_RefillItems(ref RefillList, Goods.sItemName, Goods.nCount - nRefillCount);
+                            }
+                            if (Goods.nCount < nRefillCount)
+                            {
+                                RefillGoods_DelReFillItem(ref RefillList, nRefillCount - Goods.nCount);
+                            }
+                        }
+                    }
+                }
+                for (var i = 0; i < m_GoodsList.Count; i++)
+                {
+                    RefillList20 = m_GoodsList[i];
+                    if (RefillList20.Count > 1000)
+                    {
+                        bo21 = false;
+                        for (var j = 0; j < m_RefillGoodsList.Count; j++)
+                        {
+                            Goods = m_RefillGoodsList[j];
+                            nIndex = M2Share.UserEngine.GetStdItemIdx(Goods.sItemName);
+                            if (RefillList20[0].wIndex == nIndex)
+                            {
+                                bo21 = true;
+                                break;
+                            }
+                        }
+                        if (!bo21)
+                        {
+                            RefillGoods_DelReFillItem(ref RefillList20, RefillList20.Count - 1000);
+                        }
+                        else
+                        {
+                            RefillGoods_DelReFillItem(ref RefillList20, RefillList20.Count - 5000);
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                M2Share.MainOutMessage(format(sExceptionMsg, m_sCharName, m_nCurrX, m_nCurrY, e.Message, M2Share.nCHECK));
+            }
+        }
+
+        private bool CheckItemType(int nStdMode)
+        {
+            var result = false;
+            for (var i = 0; i < m_ItemTypeList.Count; i++)
+            {
+                if (m_ItemTypeList[i] == nStdMode)
+                {
+                    result = true;
+                    break;
+                }
+            }
+            return result;
+        }
+
+        private double GetItemPrice(int nIndex)
+        {
+            double result = -1;
+            TItemPrice ItemPrice;
+            GoodItem StdItem;
+            for (var i = 0; i < m_ItemPriceList.Count; i++)
+            {
+                ItemPrice = m_ItemPriceList[i];
+                if (ItemPrice.wIndex == nIndex)
+                {
+                    result = ItemPrice.nPrice;
+                    break;
+                }
+            }
+            if (result < 0)
+            {
+                StdItem = M2Share.UserEngine.GetStdItem(nIndex);
+                if (StdItem != null)
+                {
+                    if (CheckItemType(StdItem.StdMode))
+                    {
+                        result = StdItem.Price;
+                    }
+                }
+            }
+            return result;
+        }
+
+        private void UpgradeWaponAddValue(TPlayObject User, IList<TUserItem> ItemList,
+            ref byte btDc, ref byte btSc, ref byte btMc, ref byte btCc, ref byte btDura)
+        {
+            TUserItem UserItem;
+            GoodItem StdItem;
+            TStdItem StdItem80 = null;
+            IList<TDeleteItem> DelItemList = null;
+            int nDc;
+            int nSc;
+            int nMc;
+            var nDcMin = 0;
+            var nDcMax = 0;
+            var nScMin = 0;
+            var nScMax = 0;
+            var nMcMin = 0;
+            var nMcMax = 0;
+            var nDura = 0;
+            var nItemCount = 0;
+            IList<double> DuraList = new List<double>();
+            for (var i = ItemList.Count - 1; i >= 0; i--)
+            {
+                UserItem = ItemList[i];
+                if (M2Share.UserEngine.GetStdItemName(UserItem.wIndex) == M2Share.g_Config.sBlackStone)
+                {
+                    DuraList.Add(Math.Round(UserItem.Dura / 1.0e3));
+                    if (DelItemList == null)
+                    {
+                        DelItemList = new List<TDeleteItem>();
+                    }
+                    DelItemList.Add(new TDeleteItem()
+                    {
+                        MakeIndex = UserItem.MakeIndex,
+                        ClientItemID = User.EnsureClientItemId(UserItem),
+                        sItemName = M2Share.g_Config.sBlackStone
+                    });
+                    DisPose(UserItem);
+                    ItemList.RemoveAt(i);
+                }
+                else
+                {
+                    if (M2Share.IsAccessory(UserItem.wIndex))
+                    {
+                        StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        if (StdItem != null)
+                        {
+                            StdItem.GetStandardItem(ref StdItem80);
+                            StdItem.GetItemAddValue(UserItem, ref StdItem80);
+                            nDc = 0;
+                            nSc = 0;
+                            nMc = 0;
+                            switch (StdItem80.StdMode)
+                            {
+                                case 19:
+                                case 20:
+                                case 21:
+                                    nDc = HUtil32.HiWord(StdItem80.DC) + HUtil32.LoWord(StdItem80.DC);
+                                    nSc = HUtil32.HiWord(StdItem80.SC) + HUtil32.LoWord(StdItem80.SC);
+                                    nMc = HUtil32.HiWord(StdItem80.MC) + HUtil32.LoWord(StdItem80.MC);
+                                    break;
+                                case 22:
+                                case 23:
+                                    nDc = HUtil32.HiWord(StdItem80.DC) + HUtil32.LoWord(StdItem80.DC);
+                                    nSc = HUtil32.HiWord(StdItem80.SC) + HUtil32.LoWord(StdItem80.SC);
+                                    nMc = HUtil32.HiWord(StdItem80.MC) + HUtil32.LoWord(StdItem80.MC);
+                                    break;
+                                case 24:
+                                case 26:
+                                    nDc = HUtil32.HiWord(StdItem80.DC) + HUtil32.LoWord(StdItem80.DC) + 1;
+                                    nSc = HUtil32.HiWord(StdItem80.SC) + HUtil32.LoWord(StdItem80.SC) + 1;
+                                    nMc = HUtil32.HiWord(StdItem80.MC) + HUtil32.LoWord(StdItem80.MC) + 1;
+                                    break;
+                            }
+                            if (nDcMin < nDc)
+                            {
+                                nDcMax = nDcMin;
+                                nDcMin = nDc;
+                            }
+                            else
+                            {
+                                if (nDcMax < nDc)
+                                {
+                                    nDcMax = nDc;
+                                }
+                            }
+                            if (nScMin < nSc)
+                            {
+                                nScMax = nScMin;
+                                nScMin = nSc;
+                            }
+                            else
+                            {
+                                if (nScMax < nSc)
+                                {
+                                    nScMax = nSc;
+                                }
+                            }
+                            if (nMcMin < nMc)
+                            {
+                                nMcMax = nMcMin;
+                                nMcMin = nMc;
+                            }
+                            else
+                            {
+                                if (nMcMax < nMc)
+                                {
+                                    nMcMax = nMc;
+                                }
+                            }
+                            if (DelItemList == null)
+                            {
+                                DelItemList = new List<TDeleteItem>();
+                            }
+                            DelItemList.Add(new TDeleteItem()
+                            {
+                                sItemName = StdItem.Name,
+                                MakeIndex = UserItem.MakeIndex,
+                                ClientItemID = User.EnsureClientItemId(UserItem)
+                            });
+                            if (StdItem.NeedIdentify == 1)
+                            {
+                                M2Share.AddGameDataLog("26" + "\t" + User.m_sMapName + "\t" + User.m_nCurrX + "\t" + User.m_nCurrY + "\t" + User.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
+                            }
+                            DisPose(UserItem);
+                            ItemList.RemoveAt(i);
+                        }
+                    }
+                }
+            }
+            for (var i = 0; i < DuraList.Count; i++)
+            {
+                for (var j = DuraList.Count - 1; j > i; j--)
+                {
+                    if (DuraList[j] > DuraList[j - 1])
+                    {
+                        var temp = DuraList[j];
+                        DuraList[j] = DuraList[j - 1];
+                        DuraList[j - 1] = temp;
+                    }
+                }
+            }
+            for (var i = 0; i < DuraList.Count; i++)
+            {
+                nDura = nDura + (int)DuraList[i];
+                nItemCount++;
+                if (nItemCount > 5)
+                {
+                    break;
+                }
+            }
+            if (nItemCount == 0) return;
+            btDura = (byte)HUtil32.Round(HUtil32._MIN(5, nItemCount) + HUtil32._MIN(5, nItemCount) * (nDura / nItemCount / 5.0));
+            btDc = (byte)(nDcMin + nDcMin / 5 + nDcMax / 3);
+            btSc = (byte)(nScMin + nScMin / 5 + nScMax / 3);
+            btMc = (byte)(nMcMin + nMcMin / 5 + nMcMax / 3);
+            btCc = 0;
+            if (DelItemList != null)
+            {
+                User.SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
+                    DelItemList.Count, 0, 0, "", DelItemList);
+            }
+            if (DuraList != null)
+            {
+                DuraList = null;
+            }
+        }
+
+        private void UpgradeWapon(TPlayObject User)
+        {
+            switch (ClickUpWeaponNow(User))
+            {
+                case 1:
+                    GotoLable(User, M2Share.sUPGRADEING, false);
+                    break;
+                case 2:
+                    GotoLable(User, M2Share.sUPGRADEOK, false);
+                    break;
+                default:
+                    GotoLable(User, M2Share.sUPGRADEFAIL, false);
+                    break;
+            }
+        }
+
+        public int ClickUpWeaponNow(TPlayObject user)
+        {
+            return QueueNativeWeaponUpgrade(user, false);
+        }
+
+        public int ClickUpWeaponNoBreak(TPlayObject user)
+        {
+            return QueueNativeWeaponUpgrade(user, true);
+        }
+
+        public int ClickGetBackUpWeapon(TPlayObject user)
+        {
+            lock (UpgradeWeaponSync)
+            {
+                try
+                {
+                    if (user == null || !user.IsEnoughBag()) return -1;
+                    var record = M2Share.WeaponUpgrades.GetByCharacter(user.m_sCharName);
+                    if (record == null) return 0;
+                    if (!record.Built && user.m_btPermission < 4) return 1;
+                    if (!LegacyUserItem208Codec.TryDecode(record.WeaponData, out var item, out var error))
+                    {
+                        M2Share.ErrorMessage($"WeaponUpg decode rejected for {user.m_sCharName}, idx={record.Idx}: {error}");
+                        return 0;
+                    }
+                    if (record.ItemIdx != item.wIndex || record.ItemId != unchecked((uint)item.MakeIndex))
+                    {
+                        M2Share.ErrorMessage($"WeaponUpg identity mismatch for {user.m_sCharName}, idx={record.Idx}");
+                        return 0;
+                    }
+
+                    var stdItem = M2Share.UserEngine.GetStdItem(item.wIndex);
+                    if (stdItem == null)
+                    {
+                        M2Share.ErrorMessage($"WeaponUpg item definition missing for {user.m_sCharName}, item={item.wIndex}");
+                        return 0;
+                    }
+                    ApplyNativeWeaponUpgrade(user, item, record);
+                    if (!M2Share.WeaponUpgrades.Delete(record.Idx)) return 0;
+                    if (!user.AddItemToBag(item))
+                    {
+                        M2Share.ErrorMessage($"WeaponUpg bag changed after delete for {user.m_sCharName}, idx={record.Idx}");
+                        return -1;
+                    }
+                    if (stdItem.NeedIdentify == 1)
+                    {
+                        M2Share.AddGameDataLog("24" + "\t" + user.m_sMapName + "\t" + user.m_nCurrX + "\t" + user.m_nCurrY + "\t" + user.m_sCharName + "\t" + stdItem.Name + "\t" + item.MakeIndex + "\t" + '1' + "\t" + '0');
+                    }
+                    user.SendAddItem(item);
+                    return 2;
+                }
+                catch (Exception ex)
+                {
+                    M2Share.ErrorMessage($"WeaponUpg get-back failed for {user?.m_sCharName}: {ex.Message}");
+                    return 0;
+                }
+            }
+        }
+
+        private int QueueNativeWeaponUpgrade(TPlayObject user, bool noBreak)
+        {
+            lock (UpgradeWeaponSync)
+            {
+                try
+                {
+                    if (user == null) return 0;
+                    if (M2Share.WeaponUpgrades.HasPending(user.m_sCharName)) return 1;
+                    return CommitNativeWeaponUpgrade(user, noBreak) ? 2 : 0;
+                }
+                catch (Exception ex)
+                {
+                    M2Share.ErrorMessage($"WeaponUpg submit failed for {user?.m_sCharName}: {ex.Message}");
+                    return 0;
+                }
+            }
+        }
+
+        private bool CommitNativeWeaponUpgrade(TPlayObject user, bool noBreak)
+        {
+            const int normalPrice = 10000;
+            const int noBreakPrice = 30000;
+            const string refineScroll = "武器修炼卷";
+            const string sureSuccessOre = "紫金神矿";
+
+            var weapon = user.m_UseItems[Grobal2.U_WEAPON];
+            var price = noBreak ? noBreakPrice : normalPrice;
+            if (weapon == null || weapon.wIndex == 0 || weapon.Dura <= 2000 ||
+                weapon.btValue == null || weapon.btValue.Length != 14 || weapon.btValue[9] != 0 ||
+                user.m_nGold < price || user.CheckItems(M2Share.g_Config.sBlackStone) == null)
+            {
+                return false;
+            }
+            if (noBreak && (GetBlackStoneDuraTotal(user) < 30 || user.CheckItems(refineScroll) == null))
+            {
+                return false;
+            }
+
+            var queuedItem = new TUserItem(weapon);
+            var useSureSuccessOre = noBreak && user.CheckItems(sureSuccessOre) != null;
+            queuedItem.UpgradeFlags = noBreak
+                ? (byte)(0x80 | (useSureSuccessOre ? 0x40 : 0))
+                : (byte)0;
+            if (!LegacyUserItem208Codec.TryEncode(queuedItem, out _, out var codecError))
+            {
+                M2Share.ErrorMessage($"WeaponUpg submit rejected for {user.m_sCharName}: {codecError}");
+                return false;
+            }
+
+            byte upDc = 0;
+            byte upSc = 0;
+            byte upMc = 0;
+            byte upCc = 0;
+            byte upDura = 0;
+            UpgradeWaponAddValue(user, user.m_ItemList, ref upDc, ref upSc, ref upMc, ref upCc, ref upDura);
+            if (noBreak)
+            {
+                if (!ConsumeOneBagItem(user, refineScroll)) return false;
+                if (useSureSuccessOre) ConsumeOneBagItem(user, sureSuccessOre);
+            }
+            if (!LegacyUserItem208Codec.TryEncode(queuedItem, out var weaponData, out codecError))
+            {
+                M2Share.ErrorMessage($"WeaponUpg encode failed for {user.m_sCharName}: {codecError}");
+                return false;
+            }
+
+            var idx = M2Share.WeaponUpgrades.Insert(user.m_sUserID, user.m_sCharName, queuedItem,
+                upDc, upSc, upMc, upCc, upDura, weaponData);
+            if (idx <= 0) return false;
+
+            user.DecGold(price);
+            AddWeaponUpgradeTax(price);
+            user.GoldChanged();
+            var stdItem = M2Share.UserEngine.GetStdItem(weapon.wIndex);
+            if (stdItem?.NeedIdentify == 1)
+            {
+                M2Share.AddGameDataLog("25" + "\t" + user.m_sMapName + "\t" + user.m_nCurrX + "\t" + user.m_nCurrY + "\t" + user.m_sCharName + "\t" + stdItem.Name + "\t" + weapon.MakeIndex + "\t" + '1' + "\t" + '0');
+            }
+            user.SendDelItems(weapon);
+            weapon.wIndex = 0;
+            user.RecalcAbilitys();
+            user.FeatureChanged();
+            user.SendMsg(user, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
+            return true;
+        }
+
+        private static int GetBlackStoneDuraTotal(TPlayObject user)
+        {
+            var total = 0;
+            foreach (var item in user.m_ItemList)
+            {
+                if (item != null && string.Equals(M2Share.UserEngine.GetStdItemName(item.wIndex),
+                        M2Share.g_Config.sBlackStone, StringComparison.OrdinalIgnoreCase))
+                {
+                    total += HUtil32.Round(item.Dura / 1000.0);
+                }
+            }
+            return total;
+        }
+
+        private static bool ConsumeOneBagItem(TPlayObject user, string itemName)
+        {
+            var item = user.CheckItems(itemName);
+            if (item == null || !user.DelBagItem(item.MakeIndex, itemName)) return false;
+            var deleteItems = new List<TDeleteItem>
+            {
+                new()
+                {
+                    MakeIndex = item.MakeIndex,
+                    ClientItemID = user.EnsureClientItemId(item),
+                    sItemName = itemName
+                }
+            };
+            user.SendMsg(user, Grobal2.RM_SENDDELITEMLIST, 0,
+                deleteItems.Count, 0, 0, "", deleteItems);
+            return true;
+        }
+
+        private void AddWeaponUpgradeTax(int price)
+        {
+            // ✅ 战神字节证据 (Tier-1)。EA: sub_6CA020 @0x6CA163-0x6CA182 (不磨损档 K=0x7530=30000) /
+            //     sub_6C9D98 @0x6C9E89-0x6C9EA7 (普通档 K=0x2710=10000):
+            //   mov edx,K ; call sub_6C7D64(DecGold) ; cmp byte [ebp-5],0 ; je <skip> ;
+            //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,K ; call sub_65B31C(IncRateGold)
+            // => 税额 == 【本次实际扣款额】:同一个立即数 K 同时喂给 DecGold 和 IncRateGold。
+            // 故此处必须用形参 price(= noBreak?30000:10000,与上游 user.DecGold(price) 同值),
+            // 不能另取 nUpgradeWeaponPrice —— 后者在不磨损档只累 10000,少收 2/3 的税。
+            // 门只有 ONE 条: `cmp byte [ebp-5],0 / je`,其值来自 [merchant+0x578](税开关);
+            // caller 佐证 sub_6446D5 `mov dl,byte [esi+0x578]` / @0x6446DD call sub_6CA020。
+            // 原生【没有】 castle==nil 的第二分支: sub_65B31C 全 CODE 段(E8 rel32 全扫描)仅 5 个 caller
+            // (0x63ECF2 买 / 0x63F020 修 / 0x63F28E 卖 / 0x6C9EA7 普通升级 / 0x6CA182 不磨损升级),
+            // 已逐一反汇编,全部单门单分支,接收者恒是【单个城堡对象 [[0x7D6214]]】而非 CastleManager 列表;
+            // 且 sub_65B31C 不出现在 1349 个 Delphi VMT 的任何槽位(无虚派发入口)。
+            // 镜像内 "GetAllNpcTax" / "UpgradeWeaponPrice" 字符串各 0 hits(GBK+latin1 双编码搜过)——
+            // 战神这两个价是编译期硬编码立即数,boGetAllNpcTax 本身就是 ref 分支引入的概念。
+            // => 曾按 ref 加的 `else if (boGetAllNpcTax) → CastleManager.IncRateGold(...)` 回退分支
+            //    在战神不存在,已删除(原生无城主时【不累计任何税】,删除即等价)。
+            // 并列 ref 引用(保留,勿删;来源=GameOfMir 参考分支,非战神,仅算术形态线索):
+            //   ObjNpc.pas:1190/1194 主张两个分支都累计固定 nUpgradeWeaponPrice —— 已被上述字节证据否证。
+            if (!m_boCastle) return;
+            if (m_Castle != null)
+            {
+                m_Castle.IncRateGold(price);
+            }
+        }
+
+        private static void ApplyNativeWeaponUpgrade(TPlayObject user, TUserItem item, WeaponUpgradeRecord record)
+        {
+            if (record.UpDura <= 8)
+            {
+                item.DuraMax = item.DuraMax > 3000
+                    ? (ushort)(item.DuraMax - 3000)
+                    : (ushort)(item.DuraMax >> 1);
+                if (item.Dura > item.DuraMax) item.Dura = item.DuraMax;
+            }
+            else if (record.UpDura <= 15)
+            {
+                if (M2Share.RandomNumber.Random(record.UpDura) < 6 && item.DuraMax > 1000)
+                {
+                    item.DuraMax -= 1000;
+                }
+                if (item.Dura > item.DuraMax) item.Dura = item.DuraMax;
+            }
+            else if (record.UpDura >= 18)
+            {
+                var value = M2Share.RandomNumber.Random(record.UpDura - 18);
+                var loss = value < 5 ? 1000 : value < 8 ? 2000 : 4000;
+                item.DuraMax = unchecked((ushort)(item.DuraMax - loss));
+            }
+
+            var tieChoice = record.UpDc == record.UpSc && record.UpDc == record.UpMc && record.UpDc == record.UpCc
+                ? M2Share.RandomNumber.Random(4)
+                : -1;
+            var status = (byte)1;
+            if ((record.UpDc >= record.UpMc && record.UpDc >= record.UpSc && record.UpDc >= record.UpCc) || tieChoice == 0)
+                status = RollNativeWeaponUpgrade(user, item, record.UpDc, 10);
+            if ((record.UpMc >= record.UpDc && record.UpMc >= record.UpSc && record.UpMc >= record.UpCc) || tieChoice == 1)
+                status = RollNativeWeaponUpgrade(user, item, record.UpMc, 20);
+            if ((record.UpSc >= record.UpMc && record.UpSc >= record.UpDc && record.UpSc >= record.UpCc) || tieChoice == 2)
+                status = RollNativeWeaponUpgrade(user, item, record.UpSc, 30);
+            if ((record.UpCc >= record.UpMc && record.UpCc >= record.UpDc && record.UpCc >= record.UpSc) || tieChoice == 2)
+                status = RollNativeWeaponUpgrade(user, item, record.UpCc, 40);
+            item.btValue[9] = status;
+        }
+
+        private static byte RollNativeWeaponUpgrade(TPlayObject user, TUserItem item, byte points, int successCode)
+        {
+            var capped = HUtil32._MIN(11, points);
+            var chance = HUtil32._MIN(85, capped * 7 + 10 + item.btValue[3] - item.btValue[4] + user.m_nBodyLuckLevel);
+            var noBreak = (item.UpgradeFlags & 0x80) != 0;
+            var sureSuccess = (item.UpgradeFlags & 0x40) != 0;
+            if (!sureSuccess && M2Share.RandomNumber.Random(noBreak ? 390 : 130) >= chance) return 1;
+            var result = successCode;
+            if (chance > 63 && M2Share.RandomNumber.Random(30) == 0) result = successCode + 1;
+            if (chance > 79 && M2Share.RandomNumber.Random(200) == 0) result = successCode + 2;
+            return (byte)result;
+        }
+
+        
+        
+        
+        
+        private void GetBackupgWeapon(TPlayObject user)
+        {
+            switch (ClickGetBackUpWeapon(user))
+            {
+                case -1:
+                    GotoLable(user, M2Share.sGETBACKUPGFULL, false);
+                    break;
+                case 1:
+                    GotoLable(user, M2Share.sGETBACKUPGING, false);
+                    break;
+                case 2:
+                    GotoLable(user, M2Share.sGETBACKUPGOK, false);
+                    break;
+                default:
+                    GotoLable(user, M2Share.sGETBACKUPGFAIL, false);
+                    break;
+            }
+        }
+
+        
+        
+        
+        
+        
+        
+        private int GetUserPrice(TPlayObject PlayObject, double nPrice)
+        {
+            int result;
+            if (m_boCastle)
+            {
+                if (m_Castle != null && m_Castle.IsMasterGuild(PlayObject.m_MyGuild))
+                {
+                    var n14 = HUtil32._MAX(60, HUtil32.Round(m_nPriceRate * (M2Share.g_Config.nCastleMemberPriceRate / 100.0)));//80%
+                    result = HUtil32.Round(nPrice / 100 * n14);
+                }
+                else
+                {
+                    result = HUtil32.Round(nPrice / 100 * m_nPriceRate);
+                }
+            }
+            else
+            {
+                result = HUtil32.Round(nPrice / 100 * m_nPriceRate);
+            }
+            // Apply rebate: scale buy price by m_nRebate/100
+            if (m_nRebate != 100)
+                result = HUtil32.Round(result * m_nRebate / 100.0);
+            return result;
+        }
+
+        private void UserSelect_SuperRepairItem(TPlayObject User)
+        {
+            User.SendMsg(this, Grobal2.RM_SENDUSERSREPAIR, 0, ObjectId, 0, 0, "");
+        }
+
+        private const int NewMarketInfoNameSize = 16;
+
+        internal static byte[] EncodeNewMarketInfo(string itemName, int nextFlag, int price, int count, int itemIndex)
+        {
+            var nameBuffer = new byte[NewMarketInfoNameSize];
+            HUtil32.GbkEncoding.GetEncoder().Convert(
+                (itemName ?? string.Empty).AsSpan(),
+                nameBuffer.AsSpan(1),
+                true,
+                out _,
+                out var bytesUsed,
+                out _);
+            nameBuffer[0] = (byte)bytesUsed;
+
+            using var stream = new MemoryStream(32);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(nameBuffer);
+            writer.Write(nextFlag);
+            writer.Write(price);
+            writer.Write(count);
+            writer.Write(itemIndex);
+            return stream.ToArray();
+        }
+
+        public void UserSelect_BuyItem(TPlayObject User, int nInt)
+        {
+            ClearShopDetailHandles(User);
+            using var goodsStream = new MemoryStream();
+            var n10 = 0;
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                var List14 = m_GoodsList[i];
+                if (List14.Count == 0) continue;
+                var UserItem = List14[0];
+                var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                if (StdItem != null)
+                {
+                    var sName = ItmUnit.GetItemName(UserItem);
+                    var nPrice = GetUserPrice(User, GetItemPrice(UserItem.wIndex));
+                    var nStock = List14.Count;
+                    short nSubMenu;
+                    if (StdItem.StdMode <= 4 || StdItem.StdMode == 30 || StdItem.StdMode == 31 || StdItem.StdMode == 42)
+                    {
+                        nSubMenu = 0;
+                    }
+                    else
+                    {
+                        nSubMenu = 1;
+                    }
+                    var record = EncodeNewMarketInfo(sName, nSubMenu, nPrice, nStock, UserItem.wIndex);
+                    goodsStream.Write(record, 0, record.Length);
+                    n10++;
+                }
+            }
+            User.SendMsg(this, Grobal2.RM_SENDGOODSLIST, 0, ObjectId, n10, 0,
+                string.Empty, goodsStream.ToArray());
+        }
+
+        private void UserSelect_SellItem(TPlayObject User)
+        {
+            User.SendMsg(this, Grobal2.RM_SENDUSERSELL, 0, ObjectId, 0, 0, "");
+        }
+
+        private void UserSelect_RepairItem(TPlayObject User)
+        {
+            User.SendMsg(this, Grobal2.RM_SENDUSERREPAIR, 0, ObjectId, 0, 0, "");
+        }
+
+        private void UserSelect_MakeDurg(TPlayObject User)
+        {
+            IList<TUserItem> List14;
+            TUserItem UserItem;
+            GoodItem StdItem;
+            var sSendMsg = string.Empty;
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                List14 = m_GoodsList[i];
+                UserItem = List14[0];
+                StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                if (StdItem != null)
+                {
+                    sSendMsg = sSendMsg + StdItem.Name + '/' + 0 + '/' + M2Share.g_Config.nMakeDurgPrice + '/' + 1 + '/';
+                }
+            }
+            if (sSendMsg != "")
+            {
+                User.SendMsg(this, Grobal2.RM_USERMAKEDRUGITEMLIST, 0, ObjectId, 0, 0, sSendMsg);
+            }
+        }
+
+        private void UserSelect_ItemPrices(TPlayObject User)
+        {
+        }
+
+        private void UserSelect_Storage(TPlayObject User)
+        {
+            User.m_nStoragePage = 0;
+            User.SendMsg(this, Grobal2.RM_USERSTORAGEITEM, 0, ObjectId, 0, 0, "");
+        }
+
+        private void UserSelect_GetBack(TPlayObject User)
+        {
+            User.m_nStoragePage = 0;
+            User.SendMsg(this, Grobal2.RM_USERGETBACKITEM, 0, ObjectId, 0, 0, "");
+        }
+
+        private void UserSelect_GetNextPage(TPlayObject User)
+        {
+            var totalPages = HUtil32._MAX(2, (User.m_StorageItemList.Count + TPlayObject.STORAGE_PAGE_SIZE - 1) / TPlayObject.STORAGE_PAGE_SIZE);
+            if (User.m_nStoragePage < totalPages - 1)
+            {
+                User.m_nStoragePage++;
+            }
+            User.SendMsg(this, Grobal2.RM_USERGETBACKITEM, 0, ObjectId, 0, 0, "");
+        }
+
+        private void UserSelect_GetPreviousPage(TPlayObject User)
+        {
+            if (User.m_nStoragePage > 0)
+            {
+                User.m_nStoragePage--;
+            }
+            User.SendMsg(this, Grobal2.RM_USERGETBACKITEM, 0, ObjectId, 0, 0, "");
+        }
+
+
+        public override void UserSelect(TPlayObject PlayObject, string sData)
+        {
+            var sLabel = string.Empty;
+            const string sExceptionMsg = "[Exception] TMerchant::UserSelect... Data: {0}";
+            base.UserSelect(PlayObject, sData);
+            if (this is not Merchant)// 如果类名不是 TMerchant 则不执行以下处理函数
+            {
+                return;
+            }
+            try
+            {
+                if (!m_boCastle || !(m_Castle != null && m_Castle.m_boUnderWar))
+                {
+                    if (!PlayObject.m_boDeath && sData != "" && sData[0] == '@')
+                    {
+                        string sMsg = HUtil32.GetValidStr3(sData, ref sLabel, new char[] { '\r' });
+                        PlayObject.m_sScriptLable = sData;
+                        if (string.Compare(sLabel, M2Share.sGETNEXTPAGE, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boGetback)
+                            {
+                                UserSelect_GetNextPage(PlayObject);
+                            }
+                            return;
+                        }
+                        if (string.Compare(sLabel, M2Share.sGETPREVIOUSPAGE, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boGetback)
+                            {
+                                UserSelect_GetPreviousPage(PlayObject);
+                            }
+                            return;
+                        }
+                        bool boCanJmp = PlayObject.LableIsCanJmp(sLabel);
+                        if (!boCanJmp)
+                        {
+                            return;
+                        }
+                        if (string.Compare(sLabel, M2Share.sSL_SENDMSG, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (sMsg == "")
+                            {
+                                return;
+                            }
+                        }
+                        if (TryGotoPascalLabel(PlayObject, sLabel))
+                        {
+                            return;
+                        }
+                        if (string.Compare(sLabel, M2Share.sOFFLINEMSG, StringComparison.OrdinalIgnoreCase) == 0)// 增加挂机
+                        {
+                            if (m_boOffLineMsg)
+                            {
+                                SetOffLineMsg(PlayObject, sMsg);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sSL_SENDMSG, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boSendmsg)
+                            {
+                                SendCustemMsg(PlayObject, sMsg);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sSUPERREPAIR, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boS_repair)
+                            {
+                                UserSelect_SuperRepairItem(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sBUY, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boBuy)
+                            {
+                                UserSelect_BuyItem(PlayObject, 0);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sSELL, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boSell)
+                            {
+                                UserSelect_SellItem(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sREPAIR, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boRepair)
+                            {
+                                UserSelect_RepairItem(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sMAKEDURG, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boMakeDrug)
+                            {
+                                UserSelect_MakeDurg(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sPRICES, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boPrices)
+                            {
+                                UserSelect_ItemPrices(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sSTORAGE, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boStorage)
+                            {
+                                UserSelect_Storage(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sGETBACK, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boGetback)
+                            {
+                                UserSelect_GetBack(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sGETNEXTPAGE, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boGetback)
+                            {
+                                UserSelect_GetNextPage(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sGETPREVIOUSPAGE, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boGetback)
+                            {
+                                UserSelect_GetPreviousPage(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sUPGRADENOW, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boUpgradenow)
+                            {
+                                UpgradeWapon(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sGETBACKUPGNOW, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (m_boGetBackupgnow)
+                            {
+                                GetBackupgWeapon(PlayObject);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sGETMARRY, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            // Faithful no-op: this M2Server baseline has NO native merchant marry command.
+                            // The labels "getmarry"/"getmaster" and the script commands GETMARRY(303)/
+                            // GETMASTER(304) have ZERO occurrences in M2Server_unpacked_fixed.exe (raw grep
+                            // 2026-08-02), and m_boGetMarry/m_boGetMaster are never armed. The only native
+                            // marriage flow is the PAS 月老 path (RequestMarry/AgreeMarry/DisAgreeMarry/
+                            // NpcDivMarry), already ported (NativeCorpsService marry cluster). No merchant
+                            // transaction is invented. (Previously a copy-paste stub that wrongly called
+                            // GetBackupgWeapon.)
+                        }
+                        else if (string.Compare(sLabel, M2Share.sGETMASTER, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            // See sGETMARRY above: no native merchant master command; flag never armed; no-op.
+                        }
+                        else if (HUtil32.CompareLStr(sLabel, M2Share.sUSEITEMNAME, M2Share.sUSEITEMNAME.Length))
+                        {
+                            if (m_boUseItemName)
+                            {
+                                ChangeUseItemName(PlayObject, sLabel, sMsg);
+                            }
+                        }
+                        else if (string.Compare(sLabel, M2Share.sEXIT, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            PlayObject.SendMsg(this, Grobal2.RM_MERCHANTDLGCLOSE, 0, ObjectId, 0, 0, "");
+                        }
+                        else if (string.Compare(sLabel, M2Share.sBACK, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            if (PlayObject.m_sScriptGoBackLable == "")
+                            {
+                                PlayObject.m_sScriptGoBackLable = M2Share.sMAIN;
+                            }
+                            GotoLable(PlayObject, PlayObject.m_sScriptGoBackLable, false);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                M2Share.MainOutMessage(format(sExceptionMsg, sData));
+                M2Share.MainOutMessage(ex.StackTrace);
+            }
+        }
+
+        public override void Run()
+        {
+            try
+            {
+                SaveNativeGoodsIfDue(HUtil32.GetTickCount(),
+                    GetNativeGoodsRootPath());
+                if ((HUtil32.GetTickCount() - dwRefillGoodsTick) > 30000)
+                {
+                    dwRefillGoodsTick = HUtil32.GetTickCount();
+                    RefillGoods();
+                }
+                if (M2Share.RandomNumber.Random(50) == 0)
+                {
+                    TurnTo((byte)M2Share.RandomNumber.Random(8));
+                }
+                else
+                {
+                    if (M2Share.RandomNumber.Random(50) == 0)
+                    {
+                        SendRefMsg(Grobal2.RM_HIT, m_btDirection, m_nCurrX, m_nCurrY, 0, "");
+                    }
+                }
+                if (m_boCastle && m_Castle != null && m_Castle.m_boUnderWar)
+                {
+                    if (!m_boFixedHideMode)
+                    {
+                        SendRefMsg(Grobal2.RM_DISAPPEAR, 0, 0, 0, 0, "");
+                        m_boFixedHideMode = true;
+                    }
+                }
+                else
+                {
+                    if (m_boFixedHideMode)
+                    {
+                        m_boFixedHideMode = false;
+                        SendRefMsg(Grobal2.RM_HIT, m_btDirection, m_nCurrX, m_nCurrY, 0, "");
+                    }
+                }
+                if (m_boCanMove && (HUtil32.GetTickCount() - m_dwMoveTick) > m_dwMoveTime * 1000)
+                {
+                    m_dwMoveTick = HUtil32.GetTickCount();
+                    SendRefMsg(Grobal2.RM_SPACEMOVE_FIRE, 0, 0, 0, 0, "");
+                    MapRandomMove(m_sMapName, 0);
+                }
+            }
+            catch (Exception e)
+            {
+                M2Share.ErrorMessage(e.Message);
+            }
+            base.Run();
+        }
+
+        public override bool Operate(TProcessMessage ProcessMsg)
+        {
+            return base.Operate(ProcessMsg);
+        }
+
+        public void LoadNPCData()
+        {
+            LoadGoodRecord(GetNativeGoodsRootPath());
+            EnsureGoodsPrices();
+        }
+
+        public Merchant() : base()
+        {
+            m_btRaceImg = Grobal2.RCC_MERCHANT;
+            m_wAppr = 0;
+            m_nPriceRate = 100;
+            m_nRebate = 100;
+            m_boCastle = false;
+            m_ItemTypeList = new List<int>();
+            m_RefillGoodsList = new List<TGoods>();
+            m_GoodsList = new List<IList<TUserItem>>();
+            m_ItemPriceList = new List<TItemPrice>();
+            dwRefillGoodsTick = HUtil32.GetTickCount();
+            _nativeGoodsSaveTick = HUtil32.GetTickCount();
+            m_boBuy = false;
+            m_boSell = false;
+            m_boMakeDrug = false;
+            m_boPrices = false;
+            m_boStorage = false;
+            m_boGetback = false;
+            m_boUpgradenow = false;
+            m_boGetBackupgnow = false;
+            m_boRepair = false;
+            m_boS_repair = false;
+            m_boGetMarry = false;
+            m_boGetMaster = false;
+            m_boUseItemName = false;
+            m_dwMoveTick = HUtil32.GetTickCount();
+        }
+
+        
+        
+        
+        public void LoadMerchantScript()
+        {
+            m_ItemTypeList.Clear();
+            var sScriptDir = string.IsNullOrEmpty(m_sFilePath) ? M2Share.sPsNpcscripts : m_sFilePath;
+            m_sPath = sScriptDir;
+            // 战神版: .pas 脚本由 PasEngine 在 GotoLable 中动态加载，不加载 .txt
+        }
+
+        public override void Click(TPlayObject PlayObject)
+        {
+            base.Click(PlayObject);
+        }
+
+        protected override void GetVariableText(TPlayObject PlayObject, ref string sMsg, string sVariable)
+        {
+            string sText;
+            base.GetVariableText(PlayObject, ref sMsg, sVariable);
+            switch (sVariable)
+            {
+                case "$PRICERATE":
+                    sText = m_nPriceRate.ToString();
+                    sMsg = ReplaceVariableText(sMsg, "<$PRICERATE>", sText);
+                    break;
+                case "$UPGRADEWEAPONFEE":
+                    sText = M2Share.g_Config.nUpgradeWeaponPrice.ToString();
+                    sMsg = ReplaceVariableText(sMsg, "<$UPGRADEWEAPONFEE>", sText);
+                    break;
+                case "$USERWEAPON":
+                    {
+                        if (PlayObject.m_UseItems[Grobal2.U_WEAPON].wIndex != 0)
+                        {
+                            sText = M2Share.UserEngine.GetStdItemName(PlayObject.m_UseItems[Grobal2.U_WEAPON].wIndex);
+                        }
+                        else
+                        {
+                            sText = "无";
+                        }
+                        sMsg = ReplaceVariableText(sMsg, "<$USERWEAPON>", sText);
+                        break;
+                    }
+            }
+        }
+
+        private double GetUserItemPrice(TUserItem UserItem)
+        {
+            double result;
+            GoodItem StdItem;
+            double n20;
+            int nC;
+            int n14;
+            var n10 = GetItemPrice(UserItem.wIndex);
+            if (n10 > 0)
+            {
+                StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 && UserItem.DuraMax > 0)
+                {
+                    if (StdItem.StdMode == 40)// 肉
+                    {
+                        if (UserItem.Dura <= UserItem.DuraMax)
+                        {
+                            n20 = n10 / 2.0 / UserItem.DuraMax * (UserItem.DuraMax - UserItem.Dura);
+                            n10 = HUtil32._MAX(2, HUtil32.Round(n10 - n20));
+                        }
+                        else
+                        {
+                            n10 = n10 + HUtil32.Round(n10 / UserItem.DuraMax * 2.0 * (UserItem.DuraMax - UserItem.Dura));
+                        }
+                    }
+                    if (StdItem.StdMode == 43)
+                    {
+                        // ✅ 战神字节证据 (Tier-1)。StdMode 43 = TOreItem,原生是 VMT slot+0x20 的 override
+                        // sub_7862B4(基类 = sub_783D70,@0x786366 算完再 call 落回基类)。
+                        // 10000 下限钳位 @0x7862DA-0x7862E2:全程【只动 EBX 这个局部寄存器】,
+                        // 【从不写回 [esi+0x28]】(UserItem.DuraMax 字段)。
+                        // 旧 C# 写成 `UserItem.DuraMax = 10000;` —— 为了【算个价】就把玩家物品的耐久上限
+                        // 永久改掉(查询卖价/买价/修理报价都会触发),是持久化污染。现改为只钳位到局部。
+                        // 另: 基类 sub_783D70 @0x783E9D `mov [ebp-0x1C],esi` 里的 ESI 是从 [ebx+0x28]
+                        // 【重新读取】的原始字段值,故下面 StdMode>4 段仍应使用未钳位的 UserItem.DuraMax。
+                        // Dura>DuraMax 分支的 1.3 是 10 字节 extended 常量 [0x786378](不是 float32)。
+                        var oreDuraMax = UserItem.DuraMax < 10000 ? 10000 : UserItem.DuraMax;
+                        if (UserItem.Dura <= oreDuraMax)
+                        {
+                            n20 = n10 / 2.0 / oreDuraMax * (oreDuraMax - UserItem.Dura);
+                            n10 = HUtil32._MAX(2, HUtil32.Round(n10 - n20));
+                        }
+                        else
+                        {
+                            n10 = n10 + HUtil32.Round(n10 / oreDuraMax * 1.3 * (oreDuraMax - UserItem.Dura));
+                        }
+                    }
+                    if (StdItem.StdMode > 4)
+                    {
+                        n14 = 0;
+                        nC = 0;
+                        while (true)
+                        {
+                            if (StdItem.StdMode == 5 || StdItem.StdMode == 6)
+                            {
+                                if (nC != 4 && nC != 9)
+                                {
+                                    if (nC == 6)
+                                    {
+                                        if (UserItem.btValue[nC] > 10)
+                                        {
+                                            n14 = n14 + (UserItem.btValue[nC] - 10) * 2;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        n14 = n14 + UserItem.btValue[nC];
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                n14 += UserItem.btValue[nC];
+                            }
+                            nC++;
+                            if (nC >= 8)
+                            {
+                                break;
+                            }
+                        }
+                        if (n14 > 0)
+                        {
+                            // ✅ 战神字节证据 (Tier-1)。EA: sub_783D70 = TBaseItem VMT slot+0x20 价格虚方法,
+                            // 调用链 sub_63F380(GetUserItemPrice 包装) @0x63F39A call sub_63F3B4(基础价) →
+                            // @0x63F3A7 `mov ecx,[eax] / call dword [ecx+0x20]` 虚派发 → sub_783D70。
+                            // 关键算术 @0x783E73-0x783E86 (raw: ... F7 F9 / F7 6D F8 / 03 F8):
+                            //   cmp dword[ebp-8],0 ; jle skip        ; n14 > 0 ?
+                            //   mov eax,edi ; mov ecx,5 ; cdq ; idiv ecx    ; eax = n10 div 5 (32-bit signed 真整除)
+                            //   imul dword[ebp-8]                            ; eax = (n10 div 5) * n14
+                            //   add edi,eax                                  ; <<< n10 := n10 + (n10 div 5)*n14
+                            // => `div 5` 确实是整除,但【基础价 n10 本身仍在】——不是 `n10 := n10 div 5 * n14`。
+                            // 丢掉 `n10 +` 会把带属性装备(StdMode>4)定价压成 0.2*n14 倍:n14=1 时 -83%
+                            // (正确 1.2*n10 / 错值 0.2*n10),n14=5 时 -50%(正确 2.0 / 错值 1.0)。
+                            // 该函数同时服务【买/卖/修】三条钱路(买 sub_63EB34@0x63EC47、卖 sub_63F200@0x63F22E、
+                            // 修 sub_63EE9C 经 GetUserPrice),故三处一起偏低。
+                            // 属性累加循环 @0x783DAC-0x783E6D (跳表 0x783E03,btValue 基址 item+0x2A;
+                            // StdMode 5/6 时 nC==4 跳过、nC==6 走阈值 10 的 (v-10)*2)。
+                            // StdMode 40/43 不在本函数: TMeatItem sub_786208 / TOreItem sub_7862B4 是 override,
+                            // 各自算完再 call sub_783D70 落回基类(@0x7862A3 / @0x786366)。
+                            // 原生此步的 n10 是【整数 EDI】(idiv 前必须是整数);C# 的 n10 是 double,故显式 (int)
+                            // 截断以复刻 idiv。原生 idiv 对负数向零截断(Math.Floor 向下取整,方向不同),
+                            // 基础价非负故不触发,记录备查。
+                            // 并列 ref 引用(保留,勿删;来源=GameOfMir 参考分支,非战神,仅算术形态线索):
+                            //   ObjNpc.pas:1910 `n10 := n10 div 5 * n14` —— 该 ref 行【漏了 `n10 +`】,
+                            //   照抄它造成本次 -83% 定价 bug;`div` 是整除这半句 ref 恰好说对。
+                            n10 = n10 + (double)((int)n10 / 5 * n14);
+                        }
+                        n10 = HUtil32.Round(n10 / StdItem.DuraMax * UserItem.DuraMax);
+                        n20 = n10 / 2.0 / UserItem.DuraMax * (UserItem.DuraMax - UserItem.Dura);
+                        n10 = HUtil32._MAX(2, HUtil32.Round(n10 - n20));
+                    }
+                }
+            }
+            result = n10;
+            return result;
+        }
+
+        public void ClientBuyItem(TPlayObject PlayObject, string sItemName, int nInt)
+        {
+            IList<TUserItem> List20;
+            TUserItem UserItem;
+            GoodItem StdItem;
+            int nPrice;
+            string sUserItemName;
+            var bo29 = false;
+            var n1C = 1;
+            var detailItem = ResolveShopDetailItem(PlayObject, nInt);
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                if (bo29)
+                {
+                    break;
+                }
+                List20 = m_GoodsList[i];
+                if (List20.Count == 0) continue;
+                UserItem = List20[0];
+                StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                if (StdItem != null)
+                {
+                    sUserItemName = ItmUnit.GetItemName(UserItem);
+                    if (PlayObject.IsAddWeightAvailable(StdItem.Weight))
+                    {
+                        if (sUserItemName == sItemName)
+                        {
+                            for (var j = 0; j < List20.Count; j++)
+                            {
+                                UserItem = List20[j];
+                                var isStaticGoods = StdItem.StdMode <= 4 || StdItem.StdMode == 30 ||
+                                                    StdItem.StdMode == 31 || StdItem.StdMode == 42;
+                                if (isStaticGoods || ReferenceEquals(UserItem, detailItem))
+                                {
+                                    nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
+                                    if (PlayObject.m_nGold >= nPrice && nPrice > 0)
+                                    {
+                                        if (PlayObject.AddItemToBag(UserItem))
+                                        {
+                                            PlayObject.m_nGold -= nPrice;
+                                            // ✅ 战神字节证据 (Tier-1)。买入税点 sub_63EB34 @0x63ECDC-0x63ECF2:
+                                            //   mov eax,[ebp-4] ; cmp byte [eax+0x578],0 ; je 0x63ECF7   <== 唯一门,无 else
+                                            //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,[ebp-0x14]  ; <== 本次成交价 nPrice
+                                            //   call sub_65B31C(IncRateGold)
+                                            // 累计的恒是【本次实际动的钱】,接收者恒是【单个城堡对象 [[0x7D6214]]】
+                                            // (静态值 0x7DC2C0,运行期填对象指针——不是 CastleManager 列表)。
+                                            // sub_65B31C 全 CODE 段仅 5 个 caller(E8 rel32 全扫描,已逐一反汇编:
+                                            // 0x63ECF2 买 / 0x63F020 修 / 0x63F28E 卖 / 0x6C9EA7+0x6CA182 升级),
+                                            // 全部单门单分支,且不在 1349 个 Delphi VMT 的任何槽位。
+                                            // 字符串 "GetAllNpcTax"/"UpgradeWeaponPrice" 镜像内各 0 hits。
+                                            // => 曾按 ref(ObjNpc.pas:1982) 加的 `else if (boGetAllNpcTax) →
+                                            //    CastleManager.IncRateGold(nUpgradeWeaponPrice)` 回退分支在战神
+                                            //    不存在(发明出来的钱路),已删除:原生无城主时【不累计任何税】。
+                                            //    ref-MIR2/GameOfMir 是另一个 Mir2 分支,非战神,仅算术形态线索。
+                                            if (m_boCastle && m_Castle != null)
+                                            {
+                                                m_Castle.IncRateGold(nPrice);
+                                            }
+                                            PlayObject.SendAddItem(UserItem);
+
+                                            if (StdItem.NeedIdentify == 1)
+                                            {
+                                                M2Share.AddGameDataLog('9' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
+                                            }
+                                            List20.RemoveAt(j);
+                                            MarkNativeGoodsDirty();
+                                            if (List20.Count <= 0)
+                                            {
+                                                m_GoodsList.RemoveAt(i);
+                                            }
+                                            if (!isStaticGoods)
+                                            {
+                                                RemoveShopDetailHandle(PlayObject, nInt);
+                                            }
+                                            n1C = 0;
+                                        }
+                                        else
+                                        {
+                                            n1C = 2;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        n1C = 3;
+                                    }
+                                    bo29 = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        n1C = 2;
+                    }
+                }
+            }
+            if (n1C == 0)
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_BUYITEM_SUCCESS, 0, PlayObject.m_nGold, nInt, 0, "");
+            }
+            else
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_BUYITEM_FAIL, 0, n1C, 0, 0, "");
+            }
+        }
+
+        public void ClientGetDetailGoodsList(TPlayObject PlayObject, string sItemName, int nInt)
+        {
+            int nItemCount;
+            IList<TUserItem> List20;
+            TStdItem StdItem = null;
+            TOClientItem OClientItem = new TOClientItem();
+            var sSendMsg = string.Empty;
+            GoodItem Item;
+            TUserItem UserItem;
+            ClearShopDetailHandles(PlayObject);
+            if (PlayObject.m_nSoftVersionDateEx == 0)
+            {
+                nItemCount = 0;
+                for (var i = 0; i < m_GoodsList.Count; i++)
+                {
+                    List20 = m_GoodsList[i];
+                    UserItem = List20[0];
+                    Item = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                    if (Item != null && Item.Name == sItemName)
+                    {
+                        if (List20.Count - 1 < nInt)
+                        {
+                            nInt = HUtil32._MAX(0, List20.Count - 10);
+                        }
+                        for (var j = List20.Count - 1; j >= 0; j--)
+                        {
+                            UserItem = List20[j];
+                            var detailHandle = RegisterShopDetailHandle(PlayObject, UserItem);
+                            Item.GetStandardItem(ref StdItem);
+                            Item.GetItemAddValue(UserItem, ref StdItem);
+                            M2Share.CopyStdItemToOStdItem(StdItem, OClientItem.Item);
+                            OClientItem.Dura = UserItem.Dura;
+                            OClientItem.DuraMax = (ushort)GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
+                            OClientItem.MakeIndex = detailHandle;
+                            sSendMsg = sSendMsg + EDcode.EncodeBuffer(OClientItem) + '/';
+                            nItemCount++;
+                            if (nItemCount >= 10)
+                            {
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                PlayObject.SendMsg(this, Grobal2.RM_SENDDETAILGOODSLIST, 0,
+                    ObjectId, nItemCount, nInt, string.Empty,
+                    HUtil32.GetBytes(sSendMsg));
+            }
+            else
+            {
+                nItemCount = 0;
+                using var detailBody = new MemoryStream();
+                for (var i = 0; i < m_GoodsList.Count; i++)
+                {
+                    List20 = m_GoodsList[i];
+                    if (List20.Count <= 0)
+                    {
+                        continue;
+                    }
+                    UserItem = List20[0];
+                    Item = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                    if (Item != null && Item.Name == sItemName)
+                    {
+                        if (List20.Count - 1 < nInt)
+                        {
+                            nInt = HUtil32._MAX(0, List20.Count - 10);
+                        }
+                        for (var j = List20.Count - 1; j >= 0; j--)
+                        {
+                            UserItem = List20[j];
+                            var detailHandle = RegisterShopDetailHandle(PlayObject, UserItem);
+                            var detailItem = new TUserItem(UserItem)
+                            {
+                                DuraMax = (ushort)GetUserPrice(PlayObject,
+                                    GetUserItemPrice(UserItem)),
+                                ClientItemID = detailHandle
+                            };
+                            var record = TPlayObject.EncodeClientItemRecord(detailItem);
+                            detailBody.Write(record, 0, record.Length);
+                            nItemCount++;
+                            if (nItemCount >= 10)
+                            {
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                PlayObject.SendMsg(this, Grobal2.RM_SENDDETAILGOODSLIST, 0,
+                    ObjectId, nItemCount, nInt, string.Empty, detailBody.ToArray());
+            }
+        }
+
+        public void ClientQuerySellPrice(TPlayObject PlayObject, TUserItem UserItem)
+        {
+            var nC = GetSellItemPrice(GetUserItemPrice(UserItem));
+            if (nC >= 0)
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_SENDBUYPRICE, 0, nC, 0, 0, "");
+            }
+            else
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_SENDBUYPRICE, 0, 0, 0, 0, "");
+            }
+        }
+
+        private int GetSellItemPrice(double nPrice)
+        {
+            // ✅ 战神字节证据 (Tier-1)。卖价 = GetUserItemPrice **div 2**(向零截断),不是 Round(/2.0)。
+            // EA: sub_63F200 @0x63F22E-0x63F23E:
+            //   call sub_63F380(GetUserItemPrice) ; mov esi,eax ;
+            //   sar esi,1 ; jns +3 ; adc esi,0    ; <== Delphi `div 2` 的标准代码生成(负数向零修正)
+            //   jle 0x63F315                      ; <=0 -> 失败
+            // `HUtil32.Round(nPrice/2.0)` 是银行家舍入,在【奇数价】上多付 1 金:
+            //   n=7 → C# 4 / 原生 3;n=11 → C# 6 / 原生 5;n=3 → C# 2 / 原生 1(n=5/9 恰好同值)。
+            // 每笔卖出都走这条路,故是全服系统性偏高。改为整数截断除 2。
+            // 另: 原生卖出侧【不经】 sub_640208(GetUserPrice),即卖价不吃 PriceRate —— 与本函数一致。
+            // m_nRebate 缩放: 整个 sub_63F200(300 字节全扫)无任何 fdiv/fmul/fild,也不读 rebate 形状字段;
+            // 但 m_nRebate 默认 100 且只由 PAS `setrebate`(PasApiBridge.cs) 设置,默认配置下该分支不执行。
+            // 战神 PAS 侧有无 setrebate 未核 → INCONCLUSIVE,按证据规则【保留不动】,不作为背离处理。
+            var result = (int)nPrice / 2;
+            if (m_nRebate != 100)
+                result = HUtil32.Round(result * m_nRebate / 100.0);
+            return result;
+        }
+
+        private bool ClientSellItem_sub_4A1C84(TUserItem UserItem)
+        {
+            var result = true;
+            var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+            if (StdItem != null && (StdItem.StdMode == 25 || StdItem.StdMode == 30))
+            {
+                if (UserItem.Dura < 4000)
+                {
+                    result = false;
+                }
+            }
+            return result;
+        }
+
+        public bool ClientSellItem(TPlayObject PlayObject, TUserItem UserItem)
+        {
+            var result = false;
+            GoodItem StdItem;
+            var nPrice = GetSellItemPrice(GetUserItemPrice(UserItem));
+            if (nPrice > 0 && ClientSellItem_sub_4A1C84(UserItem))
+            {
+                if (PlayObject.IncGold(nPrice))
+                {
+                    // ✅ 战神字节证据 (Tier-1)。卖出税点 sub_63F200 @0x63F27C-0x63F28E:
+                    //   call dword [ecx+0x28C](IncGold 虚派发) ; test al,al ; je 0x63F315 ;
+                    //   cmp byte [edi+0x578],0 ; je 0x63F293      <== 唯一门,无 else
+                    //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,esi   ; <== 本次成交价(半价)
+                    //   call sub_65B31C(IncRateGold)
+                    // sub_65B31C 全 CODE 段仅 5 个 caller(全扫描+逐一反汇编),全部单门单分支,
+                    // 接收者恒是【单个城堡对象 [[0x7D6214]]】,不存在"遍历城堡列表"的第二形态。
+                    // => 曾按 ref(ObjNpc.pas:2176) 加的 `else if (boGetAllNpcTax) →
+                    //    CastleManager.IncRateGold(nUpgradeWeaponPrice)` 回退分支在战神不存在,已删除
+                    //    (原生无城主时不累计任何税);"GetAllNpcTax" 字符串镜像内 0 hits。
+                    //    ref-MIR2/GameOfMir 是另一个 Mir2 分支,非战神,仅算术形态线索。
+                    if (m_boCastle && m_Castle != null)
+                    {
+                        m_Castle.IncRateGold(nPrice);
+                    }
+                    PlayObject.SendMsg(this, Grobal2.RM_USERSELLITEM_OK, 0, PlayObject.m_nGold, 0, 0, "");
+                    AddItemToGoodsList(UserItem);
+                    MarkNativeGoodsDirty();
+                    StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                    if (StdItem.NeedIdentify == 1)
+                    {
+                        M2Share.AddGameDataLog("10" + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
+                    }
+                    result = true;
+                }
+                else
+                {
+                    PlayObject.SendMsg(this, Grobal2.RM_USERSELLITEM_FAIL, 0, 0, 0, 0, "");
+                }
+            }
+            else
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_USERSELLITEM_FAIL, 0, 0, 0, 0, "");
+            }
+            return result;
+        }
+
+        private bool AddItemToGoodsList(TUserItem UserItem)
+        {
+            var result = false;
+            if (UserItem == null)
+            {
+                return result;
+            }
+            var ItemList = GetRefillList(UserItem.wIndex);
+            if (ItemList == null)
+            {
+                ItemList = new List<TUserItem>();
+                m_GoodsList.Add(ItemList);
+            }
+            ItemList.Insert(0, UserItem);
+            result = true;
+            return result;
+        }
+
+        private bool ClientMakeDrugItem_sub_4A28FC(TPlayObject PlayObject, string sItemName)
+        {
+            bool result = false;
+            IList<TMakeItem> List10 = M2Share.GetMakeItemInfo(sItemName);
+            TUserItem UserItem = null;
+            IList<TDeleteItem> List28;
+            string s20 = string.Empty;
+            int n1C = 0;
+            if (List10 == null)
+            {
+                return result;
+            }
+            result = true;
+            for (var i = 0; i < List10.Count; i++)
+            {
+                s20 = List10[i].ItemName;
+                n1C = List10[i].ItemCount;
+                for (var j = 0; j < PlayObject.m_ItemList.Count; j++)
+                {
+                    if (M2Share.UserEngine.GetStdItemName(PlayObject.m_ItemList[j].wIndex) == s20)
+                    {
+                        n1C -= 1;
+                    }
+                }
+                if (n1C > 0)
+                {
+                    result = false;
+                    break;
+                }
+            }
+            if (result)
+            {
+                List28 = null;
+                for (var i = 0; i < List10.Count; i++)
+                {
+                    s20 = List10[i].ItemName;
+                    n1C = List10[i].ItemCount;
+                    for (var j = PlayObject.m_ItemList.Count - 1; j >= 0; j--)
+                    {
+                        if (n1C <= 0)
+                        {
+                            break;
+                        }
+                        UserItem = PlayObject.m_ItemList[j];
+                        if (M2Share.UserEngine.GetStdItemName(UserItem.wIndex) == s20)
+                        {
+                            if (List28 == null)
+                            {
+                                List28 = new List<TDeleteItem>();
+                            }
+                            List28.Add(new TDeleteItem()
+                            {
+                                sItemName = s20,
+                                MakeIndex = UserItem.MakeIndex,
+                                ClientItemID = PlayObject.EnsureClientItemId(UserItem)
+                            });
+                            Dispose(UserItem);
+                            PlayObject.m_ItemList.RemoveAt(j);
+                            n1C -= 1;
+                        }
+                    }
+                }
+                if (List28 != null)
+                {
+                    PlayObject.SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
+                        List28.Count, 0, 0, "", List28);
+                }
+            }
+            return result;
+        }
+
+        public void ClientMakeDrugItem(TPlayObject PlayObject, string sItemName)
+        {
+            IList<TUserItem> List1C;
+            TUserItem MakeItem;
+            TUserItem UserItem;
+            GoodItem StdItem;
+            var n14 = 1;
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                List1C = m_GoodsList[i];
+                MakeItem = List1C[0];
+                StdItem = M2Share.UserEngine.GetStdItem(MakeItem.wIndex);
+                if (StdItem != null && StdItem.Name == sItemName)
+                {
+                    if (PlayObject.m_nGold >= M2Share.g_Config.nMakeDurgPrice)
+                    {
+                        if (ClientMakeDrugItem_sub_4A28FC(PlayObject, sItemName))
+                        {
+                            UserItem = new TUserItem();
+                            M2Share.UserEngine.CopyToUserItemFromName(sItemName, ref UserItem);
+                            if (PlayObject.AddItemToBag(UserItem))
+                            {
+                                PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
+                                PlayObject.SendAddItem(UserItem);
+                                StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                                if (StdItem.NeedIdentify == 1)
+                                {
+                                    M2Share.AddGameDataLog('2' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
+                                }
+                                n14 = 0;
+                                break;
+                            }
+                            else
+                            {
+                                DisPose(UserItem);
+                                n14 = 2;
+                            }
+                        }
+                        else
+                        {
+                            n14 = 4;
+                        }
+                    }
+                    else
+                    {
+                        n14 = 3;
+                    }
+                }
+            }
+            if (n14 == 0)
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_MAKEDRUG_SUCCESS, 0, PlayObject.m_nGold, 0, 0, "");
+            }
+            else
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_MAKEDRUG_FAIL, 0, n14, 0, 0, "");
+            }
+        }
+
+        
+        
+        
+        
+        
+        public void ClientQueryRepairCost(TPlayObject PlayObject, TUserItem UserItem)
+        {
+            int nRepairPrice;
+            var nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
+            if (nPrice > 0 && UserItem.DuraMax > UserItem.Dura)
+            {
+                if (UserItem.DuraMax > 0)
+                {
+                    nRepairPrice = HUtil32.Round(((double)(nPrice / 3) / UserItem.DuraMax) * (UserItem.DuraMax - UserItem.Dura));
+                }
+                else
+                {
+                    nRepairPrice = nPrice;
+                }
+                if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR)
+                {
+                    if (m_boS_repair)
+                    {
+                        nRepairPrice = nRepairPrice * M2Share.g_Config.nSuperRepairPriceRate;
+                    }
+                    else
+                    {
+                        nRepairPrice = -1;
+                    }
+                }
+                else
+                {
+                    if (!m_boRepair)
+                    {
+                        nRepairPrice = -1;
+                    }
+                }
+                PlayObject.SendMsg(this, Grobal2.RM_SENDREPAIRCOST, 0, nRepairPrice, 0, 0, "");
+            }
+            else
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_SENDREPAIRCOST, 0, -1, 0, 0, "");
+            }
+        }
+
+        
+        
+        
+        
+        
+        
+        public bool ClientRepairItem(TPlayObject PlayObject, TUserItem UserItem)
+        {
+            int nRepairPrice;
+            var result = false;
+            var boCanRepair = true;
+            if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR && !m_boS_repair)
+            {
+                boCanRepair = false;
+            }
+            if (PlayObject.m_sScriptLable != M2Share.sSUPERREPAIR && !m_boRepair)
+            {
+                boCanRepair = false;
+            }
+            if (PlayObject.m_sScriptLable == "@fail_s_repair")
+            {
+                SendMsgToUser(PlayObject, "对不起!我不能帮你修理这个物品。\\ \\ \\<返回/@main>");
+                PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL, 0, 0, 0, 0, "");
+                return result;
+            }
+            var nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
+            // 战神 sub_63EE9C：超级修理的 ×3 是在**成本算完之后**乘的，不是乘基础价。
+            //   @0x63EF90-0x63EFCC  esi := Round(((price /(idiv 3)) / DuraMax) * Abs(DuraMax-Dura))
+            //   @0x63EFD3-0x63EFE2  `cmp byte[player+0x185C],2` / `jne` / **`lea eax,[esi+esi*2]`**（=esi*3）/ `esi=eax`
+            // 旧 C# 在此处先把 nPrice 乘了 rate，于是那个 3 又被下面的整数 `/3` 吃掉：
+            //   预览(ClientQueryRepairCost:2108) = Round(((price/3)/DuraMax)*ΔDura) * 3
+            //   旧执行                          = Round(((price*3/3)/DuraMax)*ΔDura) = Round((price/DuraMax)*ΔDura)
+            // 只要 price % 3 != 0（截断被预览放大 3 倍、被执行吸收），两者数值不同 →
+            // **客户端看到预览价、被扣执行价** 的系统性错扣。现改为与预览/原生一致：乘在 Round 之后。
+            // 注意 `/3` 在原生是真整除（@0x63EF98 `cdq`/`idiv ecx`），不得浮点化。
+            GoodItem StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+            if (StdItem != null)
+            {
+                if (boCanRepair && nPrice > 0 && UserItem.DuraMax > UserItem.Dura && StdItem.StdMode != 43)
+                {
+                    if (UserItem.DuraMax > 0)
+                    {
+                        nRepairPrice = HUtil32.Round(((double)(nPrice / 3) / UserItem.DuraMax) * (UserItem.DuraMax - UserItem.Dura));
+                    }
+                    else
+                    {
+                        nRepairPrice = nPrice;
+                    }
+                    if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR)
+                    {
+                        // 原生 @0x63EFDF 硬编码 ×3；nSuperRepairPriceRate 默认 3，故默认配置下逐字一致。
+                        // 原生的 ×3 对两个分支（DuraMax>0 与 DuraMax==0 的裸价回退）都生效，此处同。
+                        nRepairPrice = nRepairPrice * M2Share.g_Config.nSuperRepairPriceRate;
+                    }
+                    if (PlayObject.DecGold(nRepairPrice))
+                    {
+                        // ✅ 战神字节证据 (Tier-1)。修理税点 sub_63EE9C @0x63F00E-0x63F020:
+                        //   call sub_6C7D64(DecGold) ; test al,al ; je 0x63F0E5 ;
+                        //   cmp byte [edi+0x578],0 ; je 0x63F025      <== 唯一门,无 else
+                        //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,esi   ; <== 本次修理费
+                        //   call sub_65B31C(IncRateGold)
+                        // sub_65B31C 全 CODE 段仅 5 个 caller(E8 rel32 全扫描,已逐一反汇编),
+                        // 全部单门单分支,接收者恒是【单个城堡对象 [[0x7D6214]]】。
+                        // => 曾按 ref(ObjNpc.pas:2473) 加的 `else if (boGetAllNpcTax) →
+                        //    CastleManager.IncRateGold(nUpgradeWeaponPrice)` 回退分支在战神不存在,已删除
+                        //    (原生无城主时不累计任何税);"GetAllNpcTax" 字符串镜像内 0 hits。
+                        //    ref-MIR2/GameOfMir 是另一个 Mir2 分支,非战神,仅算术形态线索。
+                        if (m_boCastle && m_Castle != null)
+                        {
+                            m_Castle.IncRateGold(nRepairPrice);
+                        }
+                        if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR)
+                        {
+                            UserItem.Dura = UserItem.DuraMax;
+                            PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_OK, 0, PlayObject.m_nGold, UserItem.Dura, UserItem.DuraMax, "");
+                            GotoLable(PlayObject, M2Share.sSUPERREPAIROK, false);
+                        }
+                        else
+                        {
+                            UserItem.DuraMax -= (ushort)((UserItem.DuraMax - UserItem.Dura) / M2Share.g_Config.nRepairItemDecDura);
+                            UserItem.Dura = UserItem.DuraMax;
+                            PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_OK, 0, PlayObject.m_nGold, UserItem.Dura, UserItem.DuraMax, "");
+                            GotoLable(PlayObject, M2Share.sREPAIROK, false);
+                        }
+                        result = true;
+                    }
+                    else
+                    {
+                        PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL, 0, 0, 0, 0, "");
+                    }
+                }
+                else
+                {
+                    PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL, 0, 0, 0, 0, "");
+                }
+            }
+            return result;
+        }
+
+        public override void ClearScript()
+        {
+            // 注意：不重置商店功能标志 (m_boBuy, m_boSell, m_boRepair 等)
+            // 这些标志应该在 OnInitialize 或 OpenXXX API 中设置，并在整个会话期间保持有效
+            // 如果在这里重置，会导致玩家打开商店界面后，查询价格和交易操作失败
+
+            // m_boBuy = false;
+            // m_boSell = false;
+            // m_boMakeDrug = false;
+            // m_boPrices = false;
+            // m_boStorage = false;
+            // m_boGetback = false;
+            // m_boUpgradenow = false;
+            // m_boGetBackupgnow = false;
+            // m_boRepair = false;
+            // m_boS_repair = false;
+
+            m_boGetMarry = false;
+            m_boGetMaster = false;
+            m_boUseItemName = false;
+
+            // PasEngine: clear persistent NPC script state on reload to prevent state leak
+            M2Share.PasEngine?.ClearNpcState(this);
+
+            base.ClearScript();
+        }
+
+        
+        
+        
+        
+        
+        protected void SetOffLineMsg(TPlayObject PlayObject, string sMsg)
+        {
+            PlayObject.m_sOffLineLeaveword = sMsg;
+        }
+
+        protected override void SendCustemMsg(TPlayObject PlayObject, string sMsg)
+        {
+            base.SendCustemMsg(PlayObject, sMsg);
+        }
+
+        
+        
+        
+        public void ClearData()
+        {
+            TUserItem UserItem;
+            IList<TUserItem> ItemList;
+            TItemPrice ItemPrice;
+            const string sExceptionMsg = "[Exception] TMerchant::ClearData";
+            try
+            {
+                for (var i = 0; i < m_GoodsList.Count; i++)
+                {
+                    ItemList = m_GoodsList[i];
+                    for (var j = 0; j < ItemList.Count; j++)
+                    {
+                        UserItem = ItemList[j];
+                        Dispose(UserItem);
+                    }
+                }
+                m_GoodsList.Clear();
+                for (var i = 0; i < m_ItemPriceList.Count; i++)
+                {
+                    ItemPrice = m_ItemPriceList[i];
+                    Dispose(ItemPrice);
+                }
+                m_ItemPriceList.Clear();
+            }
+            catch (Exception e)
+            {
+                M2Share.ErrorMessage(sExceptionMsg);
+                M2Share.ErrorMessage(e.Message);
+            }
+        }
+
+        private void ChangeUseItemName(TPlayObject PlayObject, string sLabel, string sItemName)
+        {
+            if (!PlayObject.m_boChangeItemNameFlag)
+            {
+                return;
+            }
+            PlayObject.m_boChangeItemNameFlag = false;
+            var sWhere = sLabel.Substring(M2Share.sUSEITEMNAME.Length, sLabel.Length - M2Share.sUSEITEMNAME.Length);
+            var btWhere = (byte)HUtil32.Str_ToInt(sWhere, -1);
+            if (btWhere >= PlayObject.m_UseItems.GetLowerBound(0) && btWhere <= PlayObject.m_UseItems.GetUpperBound(0))
+            {
+                var UserItem = PlayObject.m_UseItems[btWhere];
+                if (UserItem.wIndex == 0)
+                {
+                    var sMsg = format(M2Share.g_sYourUseItemIsNul, M2Share.GetUseItemName(btWhere));
+                    PlayObject.SendMsg(this, Grobal2.RM_MENU_OK, 0, PlayObject.ObjectId, 0, 0, sMsg);
+                    return;
+                }
+                if (UserItem.btValue[13] == 1)
+                {
+                    M2Share.ItemUnit.DelCustomItemName(UserItem.MakeIndex, UserItem.wIndex);
+                }
+                if (!string.IsNullOrEmpty(sItemName))
+                {
+                    M2Share.ItemUnit.AddCustomItemName(UserItem.MakeIndex, UserItem.wIndex, sItemName);
+                    UserItem.btValue[13] = 1;
+                }
+                else
+                {
+                    M2Share.ItemUnit.DelCustomItemName(UserItem.MakeIndex, UserItem.wIndex);
+                    UserItem.btValue[13] = 0;
+                }
+                M2Share.ItemUnit.SaveCustomItemName();
+                PlayObject.SendMsg(PlayObject, Grobal2.RM_SENDUSEITEMS, 0, 0, 0, 0, "");
+                PlayObject.SendMsg(this, Grobal2.RM_MENU_OK, 0, PlayObject.ObjectId, 0, 0, "");
+            }
+        }
+
+        private void DisPose(object obj)
+        {
+            obj = null;
+        }
+    }
+}

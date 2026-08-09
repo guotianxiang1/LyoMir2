@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <OutputPath>..\..\..\Build\AuditTools\NativeTimedExpBuffCheck\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\GameSvr\GameSvr.csproj" />
+    <!-- Read-only: the clock base these deadlines are measured against comes from
+         the DBServer session suffix, so the audit calls the real writer to check
+         whether it actually populates offset 0x40. GameSvr.csproj shared-compiles
+         three DBSvr/Core files, so this reference MUST be aliased or every shared
+         type resolves twice (CS0433, with a misleading CS8422 cascade). -->
+    <ProjectReference Include="..\..\DBSvr\DBSvr.csproj"
+                      Aliases="dbsvr" />
+  </ItemGroup>
+</Project>
