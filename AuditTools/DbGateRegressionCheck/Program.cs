@@ -606,10 +606,26 @@ static Task TestNativeHumanBind()
         "native secondary-hero practice cost tier raw +0x4F1");
     Equal(bound.Data.wSecHeroPracticeLevel, BitConverter.ToUInt16(bound.NativeData, 0x04F2),
         "native secondary-hero practice level raw +0x4F2");
-    Equal(bound.Data.nLingFu, BitConverter.ToInt32(bound.NativeData, 0x00F8),
-        "native LingFu raw +0xF8");
-    Equal(bound.Data.nUsedLingFu, BitConverter.ToInt32(bound.NativeData, 0x00FC),
-        "native used LingFu raw +0xFC");
+    // ⚠️ 这两条此前断言 0xF8/0xFC，偏移是**审计自己写错的**，不是 codec 的 bug。
+    // M2Server 逐字证据（SAVE sub_6B0FF0 / LOAD sub_6AFD7C）：
+    //   0x6B1288  mov eax,[ebx+0xbd8]      ; obj+0xBD8 = nLingFu
+    //   0x6B128E  mov [esi+0xf0],eax       ; -> rec+0xF0
+    //   0x6B1294  mov eax,[ebx+0xbdc]      ; obj+0xBDC = MyUsedLfNum
+    //   0x6B129A  mov [esi+0xf4],eax       ; -> rec+0xF4
+    //   0x6B0240  mov eax,[eax+0xf4] / 0x6B0249 mov [edx+0xbdc],eax   (LOAD 回填)
+    // C# NativeHumanDataCodec 的 LingFuOffset=0x00F0 / UsedLingFuOffset=0x00F4
+    // 与原版一致，先前 actual=0 是**正确行为**，红灯是假红。
+    //
+    // rec+0xF8 另有其人：M2 SAVE 0x6B14FF `mov dword ptr [esi+0xf8],eax`，
+    // 源 = sub_714334([obj+0x1824]) = [p+8]+[p+0xC]（**和**，非单字段），
+    // 装载器 0x714340 跑 `select Idx,Value,UsedValue,Value2 from CreditCard where CharName="%s";`
+    // Value→+0x8、Value2→+0xC ⇒ rec+0xF8 = CreditCard Value+Value2 的存档快照，与灵符无关。
+    // 且 LOAD 侧**无人读** rec+0xF8（1165 条指令穷举 disp，0xF8 命中 0，
+    // 同扫描 0xF0/0xF4 各 1 命中，灵敏度对照通过）。
+    Equal(bound.Data.nLingFu, BitConverter.ToInt32(bound.NativeData, 0x00F0),
+        "native LingFu raw +0xF0 (obj+0xBD8; @0x6B128E)");
+    Equal(bound.Data.nUsedLingFu, BitConverter.ToInt32(bound.NativeData, 0x00F4),
+        "native used LingFu raw +0xF4 (obj+0xBDC; @0x6B129A)");
     Equal((ushort)24, BitConverter.ToUInt16(bound.NativeData, 0x050E),
         "native 24-slot storage capacity raw +0x50E");
     Equal(bound.Data.Abil.HP, BitConverter.ToInt32(bound.NativeData, 0x48),
@@ -1868,14 +1884,36 @@ static Task TestUnsupportedGameSocCommands()
         Check(type.GetMethod(name, flags) == null && type.GetField(name, flags) == null,
             $"unproven GDM handler returned: {name}");
     }
-    foreach (var field in new[]
-             {
-                 "_zongpaiService", "_transferService"
-             })
-    {
-        Check(type.GetField(field, flags) == null,
-            $"unproven GDM dependency returned: {field}");
-    }
+    // ⚠️ `_zongpaiService` 已从 deny-list 移出并转为**正向**断言。
+    // 它此前被当作\"未经原版证据支撑的依赖\"，那是本 deny-list 写于 0803 宗派逆向
+    // **完成之前**的过时快照 —— 这条红是**假红**。
+    //
+    // 原版活性铁证（DBServer_repaired_20260803.exe，我已逐字复核）：
+    //   type1 opcode 0x170 = 宗派/师门子协议
+    //     索引：add eax,0xfffffe96 (= -0x16A) / cmp eax,0x34 / jmp [eax*4+0x598B23]
+    //     TABLE B idx6 @0x598B3B -> 0x599206 -> 0x59C51C -> 0x594070
+    //     一级派发 = 0x5940E0 的 14 字节 byteMap（值域 0..4）+ 0x5940EE 的 5 项 dword 表
+    //     （0x594122 只是 group-1 的二级表；其 sub 0/9/10/11/12 五项经 byteMap 不可达 = 死项）
+    //   启动路径无条件播种（连库成功门之后）：
+    //     0x592103  cmp byte ptr [eax+0x10], 0      ; 连库成功门
+    //     0x59210C  call 0x592D68                   ; 播种 zongpairole
+    //     0x592114  call 0x5926EC                   ; 三表各一条 SELECT
+    //   19 条活业务 SQL + 3 条 DDL（gamedata.ZongpaiBase / ZongpaiRole / ZongpaiMember）
+    //
+    // ⚠️ 三条 DDL 自身零 dword-ref，但**不据此判死**：本镜像里所有
+    // `CREATE TABLE IF NOT EXISTS` 常量一律零引用，包括确定活着的 mir3.* 那批，
+    // 故\"零 xref\"不携带死/活信息。表活性由上面的启动链独立证明。
+    // DDL 如何送进 MySQL 仍标 UNPROVEN。
+    Check(type.GetField("_zongpaiService", flags) != null,
+        "native 0x170 zongpai dependency is missing (proven live: opcode 0x170 "
+        + "dispatch @0x598B3B->0x599206->0x59C51C->0x594070, startup seeding "
+        + "@0x59210C/0x592114, 19 live SQL + 3 DDL)");
+
+    // `_transferService` 留在 deny-list：跨区传送侧尚未做同等级的活性举证。
+    // （已知 [0x5E0A9C] 那个带锁 SQL 队列承载 IsTransLock/DesZoneId/TransferModal
+    //   三条模板，但\"C# 这个字段对应原版哪条链\"未经核验，故不转正向断言。）
+    Check(type.GetField("_transferService", flags) == null,
+        "unproven GDM dependency returned: _transferService");
     Check(type.GetMethods(flags).Any(method => method.Name == "LoadHeroRcd")
           && type.GetMethods(flags).Any(method => method.Name == "SaveHeroRcd")
           && type.GetMethods(flags).Any(method => method.Name == "CreateHeroRcd")
