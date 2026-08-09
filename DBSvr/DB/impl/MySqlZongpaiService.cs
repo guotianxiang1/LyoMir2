@@ -52,6 +52,26 @@ namespace DBSvr
             return cmd.ExecuteNonQuery() > 0;
         }
 
+        /// <summary>
+        /// 该师门当前成员行数；查询失败返回 -1（调用方必须据此放弃删除，fail-closed）。
+        /// 复刻原版门 0x591DC4：`call dword [edx+0x14]`(Count) / `dec eax` / `sete`
+        /// ⇒ 成员数**恰为 1** 才允许解散。原版读的是内存表容器，这里用等价的行计数。
+        /// </summary>
+        public int CountMembers(string masterName)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return -1;
+            try
+            {
+                using var cmd = new MySqlCommand(
+                    "SELECT COUNT(*) FROM gamedata.ZongpaiMember WHERE MasterName=@n", conn);
+                cmd.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                var scalar = cmd.ExecuteScalar();
+                return scalar == null ? -1 : Convert.ToInt32(scalar);
+            }
+            catch { return -1; }
+        }
+
         public bool DeleteMaster(string masterName)
         {
             using var conn = OpenConn();

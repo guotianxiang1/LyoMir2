@@ -23,6 +23,14 @@ namespace DBSvr
         bool RemoveMember(string masterName, string memberName);
         bool UpdateMemberRole(string masterName, string memberName, string roleName);
 
+        /// <summary>
+        /// 该师门当前成员行数。用于复刻原版 sub 13 (DeleteMaster) 的前置门：
+        /// 0x591DC4 `call dword [edx+0x14]`(Count) / `dec eax` / `sete`
+        /// ⇒ 仅当成员数**恰为 1** 才允许解散（0x593FB8 `test al,al` / `je 0x59400D`
+        /// 不满足则连删都不删）。查询失败返回 -1，调用方据此不得执行删除。
+        /// </summary>
+        int CountMembers(string masterName);
+
         // === 改名 ===
         bool RenameMaster(string oldName, string newName);
         bool RenameMember(string masterName, string oldName, string newName);

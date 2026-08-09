@@ -1319,11 +1319,42 @@ namespace DBSvr
                         NativeZongpaiReplyMode.Sender);
                     return;
                 case NativeZongpaiSubCommand.DeleteMaster:
-                    // 0x593F6C calls the member-delete worker 0x593198 first and
-                    // only then deletes zongpaibase, so the C# transactional
-                    // two-table delete is faithful.
-                    result = _zongpaiService.DeleteMaster(
-                        LegacyGbkText.Decode(request.TailSlot35)) ? 0 : 1;
+                    // ⚠️ 原注释说「C# 的两表事务删除是忠实的」——**那是错的**，它只比对了
+                    // 调用顺序，漏了原版的前置门，且删除范围比原版宽。
+                    //
+                    // 原版 worker 0x593F6C：
+                    //   0x593F9B  call 0x49BAA8          ; 按 MasterName 查内存表记录
+                    //   0x593FA3  cmp [ebp-0x10],0 / je  ; 查不到 -> 整段跳过
+                    //   0x593FB3  call 0x591DC4          ; ★成员数门
+                    //   0x593FB8  test al,al / je 0x59400D ; 不满足 -> **连删都不删**
+                    //   0x593FCA  call 0x593198          ; delete ZongpaiMember（单行）
+                    //   0x593FE7  call 0x40CF30 + 0x59403C ; delete zongpaibase（ecx=0，1 参）
+                    //   0x594000  call 0x49B7EC          ; 移除内存表记录
+                    //
+                    // 门 0x591DC4 逐字：
+                    //   0x591DD0  mov eax,[eax+4]        ; 成员容器
+                    //   0x591DD3  mov edx,[eax]
+                    //   0x591DD5  call dword [edx+0x14]  ; 虚调用 Count
+                    //   0x591DD8  dec eax
+                    //   0x591DD9  sete byte [ebp-5]      ; ⇒ Count **恰为 1**
+                    //
+                    // 两处背离：
+                    //  (1) C# 无门 —— 任何成员数都允许解散；
+                    //  (2) 原版删成员走 0x593198 =
+                    //      `delete from ZongpaiMember where MasterName="%s" and MemberName="%s"`
+                    //      （**单行**；因门保证只有 1 个成员，那一行即全部），
+                    //      而 C# 是 `DELETE ... WHERE MasterName=@n`（**删光全部成员行**）。
+                    //  在门成立时两者等价；门一缺，C# 就会在多成员师门上删光成员 ⇒ 写坏数据。
+                    //
+                    // 故在此补门：成员数不为 1 时按原版**静默不做任何删除**（result 保持 0，
+                    // 原版 0x59400D 出口也不置错误码），并保留 C# 的 masterName 单参调用
+                    // （门成立 ⇒ 唯一成员行的 MemberName 必然属于该 master，范围等价）。
+                    if (_zongpaiService.CountMembers(
+                            LegacyGbkText.Decode(request.TailSlot35)) == 1)
+                    {
+                        result = _zongpaiService.DeleteMaster(
+                            LegacyGbkText.Decode(request.TailSlot35)) ? 0 : 1;
+                    }
                     break;
                 default:
                     // Sub-commands 0/1/10/11/12: the original reads its in-memory
