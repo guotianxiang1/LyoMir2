@@ -1246,11 +1246,25 @@ namespace DBSvr
             switch (request.SubCommand)
             {
                 case NativeZongpaiSubCommand.CreateMaster:
-                    // 0x592E88: values("%s", %d, %u) — name from tail+0x35,
-                    // level from tail+0x50.
+                    // 模板 0x592FD4 (len 101)：
+                    //   insert into ZongpaiBase(MasterName, MasterLevel, StudentExp, UpdateTime)
+                    //   values("%s", %d, %u, Now());
+                    // TVarRec 自 [ebp-0x30]、每槽 8 字节，ecx=2（3 元素）：
+                    //   0x592ED8  slot0 = [ebp-0x08]         type 0x0B -> %s MasterName
+                    //   0x592EDF  movzx eax, word [ebp-0x0a] ★16 位零扩展
+                    //   0x592EE3  slot1 = eax                type 0x00 -> %d MasterLevel
+                    //   0x592EEA  slot2 = [ebp+0x08]         type 0x00 -> %u StudentExp
+                    // 调用点 0x594213 定出各值的 tail 来源：
+                    //   0x5941EE  mov eax,[eax+0x50] / 0x5941F1 push eax  ; tail+0x50 dword -> StudentExp
+                    //   0x5941FB  add edx,0x35 / 0x5941FE call 0x404E5C   ; tail+0x35 Str   -> MasterName
+                    //   0x59420C  mov cx, word ptr [eax+0x4c]             ; tail+0x4C WORD  -> MasterLevel
+                    //
+                    // ⚠️ 此前两处错：MasterLevel 传的是 TailValue50（应为 tail+0x4C 的低 16 位），
+                    // 且 StudentExp 被在 SQL 里硬写 0（应为 tail+0x50）——一个错位、一个丢失。
                     result = _zongpaiService.CreateMaster(
                         LegacyGbkText.Decode(request.TailSlot35),
-                        request.TailValue50) ? 0 : 1;
+                        (ushort)request.TailValue4C,
+                        unchecked((uint)request.TailValue50)) ? 0 : 1;
                     break;
                 case NativeZongpaiSubCommand.AddMember:
                     // 模板 0x593140 (len 85)：

@@ -10,14 +10,35 @@ namespace DBSvr
     /// </summary>
     public class MySqlZongpaiService : IZongpaiService
     {
-        public bool CreateMaster(string masterName, int masterLevel)
+        /// <summary>
+        /// 原版模板 0x592FD4 (len 101)：
+        ///   insert into ZongpaiBase(MasterName, MasterLevel, StudentExp, UpdateTime)
+        ///   values("%s", %d, %u, Now());
+        /// TVarRec 自 [ebp-0x30] 起、每槽 8 字节，ecx=2（高位索引，共 3 元素）：
+        ///   0x592ED8  slot0 = [ebp-0x08]           type 0x0B(string) -> %s MasterName
+        ///   0x592EDF  movzx eax, word [ebp-0x0a]   ★16 位零扩展
+        ///   0x592EE3  slot1 = eax                  type 0x00(int)    -> %d MasterLevel
+        ///   0x592EEA  slot2 = [ebp+0x08]           type 0x00(int)    -> %u StudentExp
+        /// 调用点 0x594213 给出各值的 tail 来源：
+        ///   0x5941EE  mov eax,[eax+0x50] / 0x5941F1 push eax   ; tail+0x50 dword -> StudentExp
+        ///   0x5941FB  add edx,0x35 / 0x5941FE call 0x404E5C    ; tail+0x35 Str   -> MasterName
+        ///   0x59420C  mov cx, word ptr [eax+0x4c]              ; tail+0x4C WORD  -> MasterLevel
+        ///
+        /// ⚠️ 修正两处背离：此前 MasterLevel 传的是 tail+0x50，且 StudentExp 在 SQL 里
+        /// 硬写 0 —— 两个字段一个错位、一个丢失。MasterLevel 取 tail+0x4C 的**低 16 位**
+        /// （原版 movzx word，DDL 亦为 `MasterLevel smallint unsigned`）；
+        /// StudentExp 取 tail+0x50（DDL `StudentExp int unsigned`，故按无符号写）。
+        /// </summary>
+        public bool CreateMaster(string masterName, int masterLevel, uint studentExp)
         {
             using var conn = OpenConn();
             if (conn == null) return false;
             using var cmd = new MySqlCommand(
-                "INSERT INTO gamedata.ZongpaiBase(MasterName, MasterLevel, StudentExp, UpdateTime) VALUES(@n,@l,0,NOW())", conn);
+                "INSERT INTO gamedata.ZongpaiBase(MasterName, MasterLevel, StudentExp, UpdateTime) VALUES(@n,@l,@e,NOW())", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
-            cmd.Parameters.AddWithValue("@l", masterLevel);
+            // 原版是 movzx word ⇒ 只有低 16 位进 SQL，且 DDL 是 smallint unsigned。
+            cmd.Parameters.AddWithValue("@l", (ushort)masterLevel);
+            cmd.Parameters.AddWithValue("@e", studentExp);
             cmd.ExecuteNonQuery();
             return true;
         }

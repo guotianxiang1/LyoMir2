@@ -8,7 +8,12 @@ namespace DBSvr
     public interface IZongpaiService
     {
         // === 师父 ===
-        bool CreateMaster(string masterName, int masterLevel);
+        /// <summary>
+        /// 原版 sub 2：模板 0x592FD4，三个 TVarRec 槽依次为
+        /// MasterName(tail+0x35 Str) / MasterLevel(tail+0x4C **WORD**) / StudentExp(tail+0x50 dword)。
+        /// 调用点 0x594213；`0x59420C mov cx, word ptr [eax+0x4c]` 是 level 只取 16 位的判据。
+        /// </summary>
+        bool CreateMaster(string masterName, int masterLevel, uint studentExp);
         bool UpdateMasterLevel(string masterName, int level);
         bool UpdateMasterExp(string masterName, int exp);
         bool UpdateStudentExp(string masterName, int exp);
