@@ -510,9 +510,35 @@ namespace DBSvr.Core
             // 我此前写成 `(byte)(AuthFlags75 & 0xFF)`，把 0x0800 整位丢掉 ——
             // 领奖标志再也到不了 GameSvr。**修复前那个\"越界 ushort\"在这一点上反而是对的。**
             //
-            // 正确形态：按 u16 写（恢复原版整字语义），同时保留 0x56 的独立来源通道 ——
-            // 网吧位（0x56 & 0x10，即 u16 的 bit12）的**来源**仍 UNPROVEN，
-            // 两个镜像都无写入者，故 AuthByte56 默认 0，不发明算法凭空产生该位。
+            // 正确形态：按 u16 写（恢复原版整字语义），同时保留 0x56 的独立来源通道。
+            //
+            // ⚠️ 二次更正（上面写的「rec+0x75」和「两个镜像都无写入者」两处都错，按字节推翻）：
+            //
+            // (1) 载体不是人物记录，是 DBServer 的**账号/登录会话对象**（下称 ACCT）。
+            //     宿主函数的字符串坐实：0x5CC410「你的账号存在风险…修改密码」、
+            //     0x5CE6CC「[错误]：帐号被锁定 / 帐号被CD卡登录锁定 / 服务器维护，禁止登录」。
+            //     链路是三段而非两段：
+            //       入站报文体 body+0x4B --(0x5CE8B1 批发整字)--> ACCT+0x75
+            //       ACCT+0x75 --(0x5CDDDF 读 / 0x5CDDE3 写 [ebp-0x53])--> blockA+0x55
+            //       blockA(0xA0) --(0x598833 rep movsd)--> rec+0xEF00
+            //       另一块 0x108 --> rec+0xEFA0        (0xA0 + 0x108 = 0x1A8 ✔)
+            //     ⚠️ ACCT→blockA **不是常数差**（同段还有 0x10→0x4B、0x0E→0x4C、
+            //     0x77→0x49、0x78→0x48），故「0x75 与 0x55 差 0x20」是巧合，
+            //     **不可当换算规则外推**。
+            //
+            // (2) 网吧位 bit12（= 字节 0x56 的 bit4）**DBServer 自己会置**。
+            //     全镜像 `or word [reg+0x75], imm16` 仅两个站点，imm 都是 0x1000：
+            //       0x5CE96C / 0x5CEF51   or word ptr [eax+0x75], 0x1000
+            //     门 = 0x5C9A24 `(self+0x78 <> nil) and (TStrings.IndexOf(...) <> -1)`：
+            //       0x5C9A33 cmp dword [eax+0x78],0 / je   → nil 则返 false
+            //       0x5C9A44 call dword [ecx+0x54]         → TStrings.IndexOf
+            //       0x5C9A47 inc eax / 0x5C9A48 setne      → 即 IndexOf <> -1
+            //     即「登录 IP 命中名单」。名单单例来自 [0x5D9B04]+0x78，
+            //     其 ini 装填源尚未定案（UNPROVEN）。
+            //
+            // 现状：C# 侧尚无 IP 名单子系统，AuthByte56 全仓零生产者 → bit12 恒 0。
+            // 这是**已知缺口（缺前置子系统）**，不再是「来源不明」。补齐需先实现
+            // IP 名单装载 + ACCT 会话对象；在那之前不得凭空造值。
             BinaryPrimitives.WriteUInt16LittleEndian(destination.Slice(0x55, 2),
                 (ushort)(context.AuthFlags75 | ((ushort)context.AuthByte56 << 8)));
 
