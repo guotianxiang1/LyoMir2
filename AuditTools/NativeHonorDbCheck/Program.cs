@@ -1,8 +1,20 @@
 using GameSvr;
 using MySql.Data.MySqlClient;
 
+// No connection string => INCOMPLETE (exit 2), not a throw. Throwing made an
+// unattended sweep record this as FAIL, which is a false red: "a live database
+// was never supplied" is an environment gap, not a defect in the code under
+// test. Exit 2 is this tree's INCOMPLETE convention, so the run is still
+// visibly not-green and can never be mistaken for a pass.
 if (args.Length != 1)
-    throw new ArgumentException("Usage: NativeHonorDbCheck <MySQL connection string>");
+{
+    Console.WriteLine("SKIP NativeHonorDbCheck: no MySQL connection string given.");
+    Console.WriteLine("  usage: NativeHonorDbCheck <MySQL connection string>");
+    Console.WriteLine("SKIP reason: every assertion in this check needs a live "
+        + "database; none were executed, so this run proves nothing about the "
+        + "honor DB contract.");
+    return 2;
+}
 
 PrepareRuntimeConfig();
 M2Share.g_Config = new GameSvrConfig { sConnctionString = args[0] };
@@ -35,6 +47,11 @@ finally
     command.Parameters.AddWithValue("@name", characterName);
     command.ExecuteNonQuery();
 }
+
+// Reached only when the try block completed without throwing, i.e. every
+// assertion above held. An Assert failure still propagates as an unhandled
+// exception (nonzero exit), which the runner classifies as FAIL.
+return 0;
 
 static void Assert(bool condition, string message)
 {

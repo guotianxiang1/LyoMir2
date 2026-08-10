@@ -41,3 +41,7 @@ _runtime_backup_*/
 # publish output (163MB GameGate.exe + vendored runtime dlls);
 # no csproj HintPath references any of it, so it is pure build output.
 **/publish/
+
+# run_audits.py output artifact (regenerated on every sweep, machine-specific
+# paths and timings); the runner itself is committed, its results are not.
+/AuditTools/_audit_report.json
