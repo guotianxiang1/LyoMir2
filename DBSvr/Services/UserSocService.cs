@@ -43,6 +43,25 @@ namespace DBSvr
         private readonly INativeRenameCascadeService _renameCascade;
         private readonly object _gateLock = new();
 
+        /// <summary>
+        /// ⚠️ 这个名单**不是**全局 fail-closed 闸门。我先前在这里写过
+        /// 「不登记则请求根本进不到 switch」——那句话是错的，已按调用点推翻：
+        ///
+        /// <see cref="IsSupported"/> 只在 <see cref="TryDecodeUserPacket"/> 内被调用两次，
+        /// 把关的是两条**文本编码**路径：EDcode 16 字节头、Legend 格式。
+        /// 而生产线路是原版 0x77 帧 —— 它走
+        ///   0x77 帧解析 -> MobileCmdMap.ToServer(dataMessage.Ident)
+        ///              -> ProcessDecodedUserPacket(...)
+        /// （见本文件 :496-499），**完全绕过本名单**。
+        /// 所以在 native 线上，可达性判据只有一条：switch 里有没有活的 case。
+        ///
+        /// 另一个必须知道的陷阱：MobileCmdMap.ToServer 会在进 switch **之前**
+        /// 把 4002/4012/4013/4014/4015/4017 改写成 104/101/102/105/106/103。
+        /// 故 `case 4012` 这类写法是**死代码**（假红）。4016 不在该映射表里，
+        /// ToServer 的兜底是 `TryGetValue ? v : clientIdent`（原值透传），
+        /// 所以 `case Grobal2.CM_RENAMECHR4016` 能命中 —— 这是巧合而非设计，
+        /// 若日后把 4016 加进映射表，本文件的 case 会立刻变成死代码。
+        /// </summary>
         private static readonly ushort[] SupportedUserCommands =
         {
             Grobal2.CM_QUERYCHR,
@@ -54,9 +73,9 @@ namespace DBSvr
             4004, // 手游认证
             4039, // CM_SELCHR_EXIT
             1018, // CM_LOGINNOTICEOK
-            // 0xFB0 角色改名。原版内层派发 idx = 4016 - 0xFAC = 4 -> grp 5 ->
-            // 0x5CE404 -> call fn_5CD2EC。本白名单是 fail-closed，
-            // 不登记则请求根本进不到 switch，所以两处都必须加。
+            // 0xFB0 角色改名（原版内层派发 idx = 4016 - 0xFAC = 4 -> grp 5 ->
+            // 0x5CE404 -> call fn_5CD2EC）。登记在此只对文本线路有效；
+            // native 0x77 线靠上面 switch 里的 case 生效。
             Grobal2.CM_RENAMECHR4016,
         };
 
@@ -621,7 +640,7 @@ namespace DBSvr
                     break;
 
                 case Grobal2.CM_RENAMECHR4016: // 0xFB0 角色改名
-                    ProcessRenameChr(body, packetParam, ref userInfo);
+                    ProcessRenameChr(body, pktSessionId, ref userInfo);
                     break;
 
                 case Grobal2.CM_QUERYCHR:
@@ -1047,14 +1066,28 @@ namespace DBSvr
         ///   0x5CD3B7  cmp err,1 / jne ⇒ 只有成功才发 77BBAA33 转发
         ///   0x5CD4A5  回包 opcode 与请求同为 0xFB0，错误码在记录首 dword
         /// </summary>
-        private void ProcessRenameChr(string sData, ushort packetParam,
+        private void ProcessRenameChr(string sData, int packetRecog,
             ref TUserInfo userInfo)
         {
-            // 0x5CD303/0x5CD307：cl = (Recog == 0)，cl == 0 时才是改名路径。
-            // 即 Recog != 0 才改名；Recog == 0 走的是另一条（重发选角列表）分支。
-            if (packetParam == 0)
+            // 极性判据逐字（分支体 0x5CE404 -> 校验层 0x5CD2EC）：
+            //   0x5CE412  mov eax, [ebp-0x1c]   ; eax = 报文头指针
+            //   0x5CE415  cmp dword ptr [eax],0 ; 比的是 **dword[msg+0]**
+            //   0x5CE418  sete cl               ; cl = (dword[msg+0] == 0)
+            //   0x5CE41E  call 0x5CD2EC
+            //   0x5CD303  cmp byte [ebp-9],0 / 0x5CD307 je 0x5CD335
+            //             ⇒ cl == 0 才走改名 ⇒ **dword[msg+0] != 0 才改名**
+            //
+            // dword[msg+0] 就是 Recog：LegacyGateType18 的 body 布局把 Recog 写在
+            // 偏移 0（WriteInt32LittleEndian(span(0,4), Recog)），Param 在偏移 6。
+            //
+            // ⚠️ 我此前传的是 packetParam —— **读错字段**。原版读 Recog，
+            // 而 Param 是另一个偏移（+6），两者无关。已按字节改为 Recog。
+            if (packetRecog == 0)
             {
-                Log("[RenameChr] Recog==0 -> 非改名分支(原版 0x5CD309)，忽略");
+                // 0x5CD309 起的非改名腿：mov byte [Self+0xb],1；
+                // 若 Self+0x48 非空则 call 0x5CD544（选角进入）。
+                // ⚠️ 那条腿 C# 尚未实现 —— 这是**已知缺口**，不是「忽略」。
+                Log("[RenameChr] Recog==0 -> 原版走 0x5CD309 选角进入腿，C# 未实现");
                 return;
             }
 
