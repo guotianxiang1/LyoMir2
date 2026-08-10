@@ -15,7 +15,12 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("INSERT INTO mir3.user_storage(PTID) VALUES(@p)", conn);
+            // 原生 0x5B9D70 `Insert Into user_storage(PTID) values("%s");`
+            // 修正：原来写成 `INSERT INTO mir3.user_storage(...)`，原生此语句
+            // **无** schema 前缀（同库内 0x5AB224 才带 mir3.，这种不一致是原版
+            // 有意为之），关键字大小写亦按原生逐字还原。
+            using var cmd = new MySqlCommand(
+                "Insert Into user_storage(PTID) values(@p);", conn);
             cmd.Parameters.AddWithValue("@p", ptid);
             cmd.ExecuteNonQuery();
             return true;
@@ -25,9 +30,16 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return null;
-            using var cmd = new MySqlCommand("SELECT Data FROM mir3.user_storage WHERE Idx=@i", conn);
+            // 原生 0x5ACBB0 `select High_Priority idx, data from user_storage where idx=%u`
+            // 修正三处：(1) 丢了 High_Priority（原版对大表 blob 读刻意加此修饰符）；
+            // (2) 多加了 mir3. 前缀，原生无；(3) 原生选的是 `idx, data` 两列，
+            // 故不能再用 ExecuteScalar（那会取到第一列 idx 当数据），改按列名读 data。
+            using var cmd = new MySqlCommand(
+                "select High_Priority idx, data from user_storage where idx=@i", conn);
             cmd.Parameters.AddWithValue("@i", idx);
-            var data = cmd.ExecuteScalar() as byte[];
+            using var dr = cmd.ExecuteReader();
+            if (!dr.Read()) return null;
+            var data = dr["data"] as byte[];
             return data != null ? BlobCompressor.TryDecompress(data) : null;
         }
 
@@ -35,9 +47,17 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return null;
-            using var cmd = new MySqlCommand("SELECT Data FROM mir3.user_storage WHERE PTID=@p LIMIT 1", conn);
+            // 原生探针 0x5B9D2C(ShortString, len=55)
+            // `Select High_Priority idx from user_storage where PTID="` + PTID + `"`
+            // 修正：原来带 `LIMIT 1`，原生**没有** LIMIT（PTID 有 UNIQUE 索引，
+            // 原版靠唯一键而非 LIMIT 收敛）；并补回 High_Priority、去掉 mir3. 前缀。
+            // 原生该探针只取 idx；此处业务要的是 data，故列表为 C# 投影（见报告）。
+            using var cmd = new MySqlCommand(
+                "Select High_Priority idx, data from user_storage where PTID=@p", conn);
             cmd.Parameters.AddWithValue("@p", ptid);
-            var data = cmd.ExecuteScalar() as byte[];
+            using var dr = cmd.ExecuteReader();
+            if (!dr.Read()) return null;
+            var data = dr["data"] as byte[];
             return data != null ? BlobCompressor.TryDecompress(data) : null;
         }
 
@@ -47,6 +67,10 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return false;
             var compressed = BlobCompressor.Compress(data);
+            // BLOCKED: 原生没有任何 `update user_storage set data=` 字面量
+            // （raw 普查：'set data'/'unhex'/'update user_storage' 在 CODE 快照 0 命中）。
+            // 原生走 0x5B9DF0 打开数据集后用 TBlobStream 写 data 字段并 Post，
+            // 无独立 UPDATE SQL。此 UNHEX 方案为 C# 特有实现，功能等价、不会增删物品。
             using var cmd = new MySqlCommand(
                 "UPDATE mir3.user_storage SET Data=UNHEX(@d) WHERE Idx=@i", conn);
             cmd.Parameters.Add("@d", MySqlDbType.LongText).Value = Convert.ToHexString(compressed);
@@ -58,7 +82,11 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("DELETE FROM mir3.user_storage WHERE Idx=@i", conn);
+            // 原生 0x5B91B0 首句 `delete from user_storage where idx=%d;`
+            // （原生该 VA 是一条双语句串，按 idx 删这半句逐字如此）
+            // 修正：去掉 mir3. 前缀 + 关键字还原为原生小写。
+            using var cmd = new MySqlCommand(
+                "delete from user_storage where idx=@i;", conn);
             cmd.Parameters.AddWithValue("@i", idx);
             return cmd.ExecuteNonQuery() > 0;
         }
@@ -67,7 +95,10 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("DELETE FROM mir3.user_storage WHERE PTID=@p", conn);
+            // 原生 0x5B917C `delete from user_storage where PTID="%s";`
+            // 修正：去掉 mir3. 前缀 + 关键字还原为原生小写。
+            using var cmd = new MySqlCommand(
+                "delete from user_storage where PTID=@p;", conn);
             cmd.Parameters.AddWithValue("@p", ptid);
             return cmd.ExecuteNonQuery() > 0;
         }
@@ -76,7 +107,11 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("UPDATE mir3.user_storage SET PTID=@n WHERE PTID=@o", conn);
+            // 原生 0x5AB224 `update mir3.user_storage set PTID="%s" where PTID="%s";`
+            // 此句原生**确实带** mir3. 前缀（与同库其余 user_storage 语句不带前缀
+            // 形成的不一致是原版有意为之，不得归一化）。仅还原关键字大小写。
+            using var cmd = new MySqlCommand(
+                "update mir3.user_storage set PTID=@n where PTID=@o;", conn);
             cmd.Parameters.AddWithValue("@n", newPtid); cmd.Parameters.AddWithValue("@o", oldPtid);
             cmd.ExecuteNonQuery();
             return true;
@@ -86,7 +121,11 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return (0, null);
-            using var cmd = new MySqlCommand("SELECT Idx, PTID FROM mir3.user_storage WHERE Idx=@i", conn);
+            // 原生 0x5B90F0 `Select High_Priority idx, PTID, data from user_storage where idx=%d`
+            // 修正：补回 High_Priority、去掉 mir3. 前缀、列名还原为原生小写 idx/data。
+            using var cmd = new MySqlCommand(
+                "Select High_Priority idx, PTID, data from user_storage where idx=@i",
+                conn);
             cmd.Parameters.AddWithValue("@i", idx);
             using var dr = cmd.ExecuteReader();
             if (dr.Read()) return (dr.GetInt32(0), dr.GetString(1));
@@ -97,8 +136,15 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return 0;
-            using var cmd = new MySqlCommand("SELECT COALESCE(MAX(Idx),0) FROM mir3.user_storage", conn);
-            return Convert.ToInt32(cmd.ExecuteScalar());
+            // 原生 0x5B3E54 `Select High_Priority Max(idx) as MaxIdx from ` + 表名
+            // （该 VA 是拼接模板，表名运行时追加）
+            // 修正：原来是 `SELECT COALESCE(MAX(Idx),0)`。原生 Max(idx) 是**裸**聚合，
+            // 空表返回 NULL；COALESCE 会把 NULL 变成 0，抹掉"空表"与"最大 idx 为 0"
+            // 两种状态的区别。此处按原生保持裸聚合，NULL 在 C# 侧显式判。
+            using var cmd = new MySqlCommand(
+                "Select High_Priority Max(idx) as MaxIdx from user_storage", conn);
+            var value = cmd.ExecuteScalar();
+            return value == null || value == DBNull.Value ? 0 : Convert.ToInt32(value);
         }
 
         public NativeAccountStorageBlobResult LoadNativeStorage(int idx)
@@ -106,15 +152,18 @@ namespace DBSvr
             using var connection = OpenConn();
             if (connection == null)
                 return new NativeAccountStorageBlobResult { Result = 0 };
+            // 原生 0x5B9DF0 concat head `Select High_Priority idx, data from user_storage where idx =`
+            // 修正：补回 High_Priority 和两列选择；去掉 mir3. 前缀；列名还原原生小写。
             using var command = new MySqlCommand(
-                "SELECT Data FROM mir3.user_storage WHERE Idx=@idx",
+                "Select High_Priority idx, data from user_storage where idx=@idx",
                 connection);
             command.Parameters.AddWithValue("@idx", idx);
-            var value = command.ExecuteScalar();
+            using var dr = command.ExecuteReader();
+            if (!dr.Read())
+                return new NativeAccountStorageBlobResult { Result = 0 };
+            var value = dr["data"];
             if (value == null || value == DBNull.Value)
-                return value == DBNull.Value
-                    ? NativeAccountStorageBlobCodec.Decode(Array.Empty<byte>())
-                    : new NativeAccountStorageBlobResult { Result = 0 };
+                return NativeAccountStorageBlobCodec.Decode(Array.Empty<byte>());
             return NativeAccountStorageBlobCodec.Decode((byte[])value);
         }
 
@@ -124,12 +173,13 @@ namespace DBSvr
             var result = new List<NativeStorageIndexEntry>();
             using var connection = OpenConn();
             if (connection == null) return result;
+            // 原生 0x005AC630 `select Idx, PTID from User_Storage where Idx>%d order by Idx Limit 5000`
+            // 修正：(1) 去掉 mir3. 前缀；(2) 还原表名大小写 User_Storage；
+            // (3) 去掉参数化 LIMIT，恢复原生硬编码 Limit 5000（调用方已固定传 5000，行为等价）。
             using var command = new MySqlCommand(
-                @"SELECT Idx, PTID FROM mir3.user_storage
-                  WHERE Idx>@lastIdx ORDER BY Idx LIMIT @limit",
+                "select Idx, PTID from User_Storage where Idx>@lastIdx order by Idx Limit 5000",
                 connection);
             command.Parameters.AddWithValue("@lastIdx", lastIdx);
-            command.Parameters.AddWithValue("@limit", Math.Min(limit, 5000));
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
@@ -149,8 +199,12 @@ namespace DBSvr
         {
             using var connection = OpenConn();
             if (connection == null) return 0;
+            // 原生探针: ShortString @0x5B9D2C len=55
+            // `Select High_Priority idx from user_storage where PTID="` + PTID + `"`
+            // 修正：去掉 mir3. 前缀和 LIMIT 1（PTID UNIQUE 索引，原生不加 LIMIT）；
+            // 补回 High_Priority；列名还原原生小写 idx。
             using (var query = new MySqlCommand(
-                       "SELECT Idx FROM mir3.user_storage WHERE PTID=@ptid LIMIT 1",
+                       "Select High_Priority idx from user_storage where PTID=@ptid",
                        connection))
             {
                 query.Parameters.Add("@ptid", MySqlDbType.Binary).Value =
@@ -162,8 +216,9 @@ namespace DBSvr
 
             try
             {
+                // 原生 0x5B9D70 `Insert Into user_storage(PTID) values("%s");`（无 mir3. 前缀）
                 using var insert = new MySqlCommand(
-                    "INSERT INTO mir3.user_storage(PTID) VALUES(@ptid)",
+                    "Insert Into user_storage(PTID) values(@ptid)",
                     connection);
                 insert.Parameters.Add("@ptid", MySqlDbType.Binary).Value =
                     account ?? Array.Empty<byte>();
@@ -171,10 +226,15 @@ namespace DBSvr
             }
             catch { return 0; }
 
+            // 原生 0x5B9DA8 `Select High_Priority LAST_INSERT_ID() from user_storage limit 1`
+            // 修正：补回 High_Priority 和 from 子句；原生循环 0x5B9B11..0x5B9B35
+            //   mov [ebp-0x18],1  ; cmp [ebp-0x18],0xB ; jne 循环头
+            //   => 计数器 1..10 在循环体内取值，到 11 时退出 => 10 次，与 attempt<10 一致。
             for (var attempt = 0; attempt < 10; attempt++)
             {
                 using var identity = new MySqlCommand(
-                    "SELECT LAST_INSERT_ID()", connection);
+                    "Select High_Priority LAST_INSERT_ID() from user_storage limit 1",
+                    connection);
                 var value = identity.ExecuteScalar();
                 if (value != null && value != DBNull.Value
                     && Convert.ToInt32(value) > 0)
@@ -190,6 +250,10 @@ namespace DBSvr
             catch (ArgumentOutOfRangeException) { return false; }
             using var connection = OpenConn();
             if (connection == null) return false;
+            // 原生 0x5B9DF0 `Select High_Priority idx, data from user_storage where idx =` (concat head)
+            // 原生通过 TADOQuery 数据集的 TBlobStream 写 blob，而非 UPDATE SQL。
+            // C# 此处用 UNHEX(@data) UPDATE 替代——功能等价但 SQL 文本是 C# 特有实现。
+            // BLOCKED: 无对应原生 UPDATE user_storage SET Data= 字面量，故沿用现有方案。
             using var command = new MySqlCommand(
                 "UPDATE mir3.user_storage SET Data=UNHEX(@data) WHERE Idx=@idx",
                 connection);

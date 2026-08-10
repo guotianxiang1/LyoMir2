@@ -20,7 +20,11 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return null;
-            using var cmd = new MySqlCommand("SELECT Data FROM mir3.dominatorpet WHERE MasterId=@m", conn);
+            // 原生 0x0059748C `Select High_Priority Data From dominatorpet where MasterId=%d;`
+            // 修正：补回 High_Priority（原版对大表 blob 读刻意加此修饰符）；
+            // 去掉 mir3. 前缀（原生此语句无前缀）；关键字大小写逐字还原。
+            using var cmd = new MySqlCommand(
+                "Select High_Priority Data From dominatorpet where MasterId=@m;", conn);
             cmd.Parameters.AddWithValue("@m", masterId);
             var blob = cmd.ExecuteScalar() as byte[];
             return NativeDominatorPetBlobCodec.TryDecode(blob, out var data,
@@ -31,12 +35,17 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return (0, null);
-            using var cmd = new MySqlCommand("SELECT Idx, Data FROM mir3.dominatorpet WHERE MasterId=@m", conn);
+            // 原生 0x005B948C `Select High_Priority idx, data from dominatorpet where MasterID=%d;`
+            // 注意：此句原生把键列拼成 **MasterID**（大写 ID），而 0x59748C/0x5B9548
+            // 等处是 MasterId。这种同库内不一致是原版有意为之，不得归一化。
+            // 修正：补回 High_Priority、去掉 mir3. 前缀、列名还原原生小写 idx/data。
+            using var cmd = new MySqlCommand(
+                "Select High_Priority idx, data from dominatorpet where MasterID=@m;", conn);
             cmd.Parameters.AddWithValue("@m", masterId);
             using var dr = cmd.ExecuteReader();
             if (dr.Read())
             {
-                var blob = dr["Data"] as byte[];
+                var blob = dr["data"] as byte[];
                 return (dr.GetInt32(0),
                     NativeDominatorPetBlobCodec.TryDecode(blob, out var data,
                         out _) ? data : LoadBackupPet(masterId));
@@ -48,8 +57,12 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
+            // 原生 0x00597DC8 / 0x005B94D8（两处逐字相同）
+            // `Insert Into dominatorpet(MasterName, MasterId, Level, Exp, CreateDate) values("%s", %d, %d, %d, Now());`
+            // 修正：去掉 mir3. 前缀（原生无）；关键字/函数大小写还原为 values(...)、Now()。
             using var cmd = new MySqlCommand(
-                "INSERT INTO mir3.dominatorpet(MasterName, MasterId, Level, Exp, CreateDate) VALUES(@n, @m, @l, @e, NOW())", conn);
+                "Insert Into dominatorpet(MasterName, MasterId, Level, Exp, CreateDate) values(@n, @m, @l, @e, Now());",
+                conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
             cmd.Parameters.AddWithValue("@m", masterId);
             cmd.Parameters.AddWithValue("@l", level); cmd.Parameters.AddWithValue("@e", exp);
@@ -64,8 +77,11 @@ namespace DBSvr
             if (conn == null) return false;
             if (!NativeDominatorPetBlobCodec.TryEncode(data, out var blob,
                     out _)) return false;
+            // 原生 0x00597B2C（blob 保存路径内，@0x5979C5 Format argc=2）
+            // `Update dominatorpet Set Level=%d, Exp=%d, ModifyDate=Now() where MasterId=%d;`
+            // 修正：去掉 mir3. 前缀（原生无）；Set/Now() 大小写逐字还原。
             using (var index = new MySqlCommand(
-                       "UPDATE mir3.dominatorpet SET Level=@l, Exp=@e, ModifyDate=NOW() WHERE MasterId=@m",
+                       "Update dominatorpet Set Level=@l, Exp=@e, ModifyDate=Now() where MasterId=@m;",
                        conn))
             {
                 index.Parameters.AddWithValue("@l", level);
@@ -73,6 +89,10 @@ namespace DBSvr
                 index.Parameters.AddWithValue("@m", masterId);
                 if (index.ExecuteNonQuery() <= 0) return false;
             }
+            // BLOCKED: 原生没有 `Update dominatorpet Set Data=` 字面量
+            // （raw 普查 'set data'/'unhex' 在 CODE 快照 0 命中）。原生在 0x597B84
+            // 打开数据集后用 TBlobStream 写 data 字段（fn 0x597924，字段名字面量
+            // 0x00597BD0 = 'data'），无独立 UPDATE SQL。此 UNHEX 方案为 C# 特有实现。
             using var cmd = new MySqlCommand(
                 "UPDATE mir3.dominatorpet SET Data=UNHEX(@d) WHERE MasterId=@m",
                 conn);
@@ -89,8 +109,11 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
+            // 原生 0x005B957C（type-1 handler 内，@0x5B9371 Format argc=2）
+            // `Update dominatorpet Set Level=%d, Exp=%d, ModifyDate=Now() where MasterId=%d;`
+            // 修正：去掉 mir3. 前缀（原生无）；Set/Now() 大小写逐字还原。
             using var cmd = new MySqlCommand(
-                "UPDATE mir3.dominatorpet SET Level=@l, Exp=@e, ModifyDate=NOW() WHERE MasterId=@m", conn);
+                "Update dominatorpet Set Level=@l, Exp=@e, ModifyDate=Now() where MasterId=@m;", conn);
             cmd.Parameters.AddWithValue("@l", level); cmd.Parameters.AddWithValue("@e", exp); cmd.Parameters.AddWithValue("@m", masterId);
             return cmd.ExecuteNonQuery() > 0;
         }
@@ -99,7 +122,10 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("DELETE FROM mir3.dominatorpet WHERE MasterId=@m", conn);
+            // 原生 0x005B9548 `delete from dominatorpet where MasterId=%d;`
+            // 修正：去掉 mir3. 前缀（原生无）；关键字还原为原生全小写。
+            using var cmd = new MySqlCommand(
+                "delete from dominatorpet where MasterId=@m;", conn);
             cmd.Parameters.AddWithValue("@m", masterId);
             return cmd.ExecuteNonQuery() > 0;
         }
@@ -108,7 +134,19 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("UPDATE mir3.dominatorpet SET MasterName=@n WHERE MasterName=@o", conn);
+            // 原生改名级联腿 fn 0x5A923C，拼接点 0x5A9781..0x5A97A4（3 段 LStrCatN）：
+            //   0x005AA0C4 `Update ignore Mir3`
+            // + 运行时库名后缀 [ebp-0x14]（默认空）
+            // + 0x005AA0E0 `.dominatorpet set MasterName="%s" where MasterName="%s";`
+            // => `Update ignore Mir3.dominatorpet set MasterName="%s" where MasterName="%s";`
+            //
+            // ⚠ 最高危修正：原来**丢了 IGNORE**。原生 `Update ignore` 在改名撞上
+            // MasterName 唯一索引时静默跳过该行；无 IGNORE 时 MySQL 抛重复键错误，
+            // 改名级联会中途中断——dominatorpet 仍挂旧主人名而其它表已改新名，
+            // 按新名查不到宠物 = 宠物连同其身上物品事实性丢失。
+            // 同时修正 schema 大小写：原生是 **Mir3**（大写 M），不是 mir3。
+            using var cmd = new MySqlCommand(
+                "Update ignore Mir3.dominatorpet set MasterName=@n where MasterName=@o;", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newMaster));
             cmd.Parameters.Add(LegacyGbkText.Parameter("@o", oldMaster));
             cmd.ExecuteNonQuery();
@@ -120,10 +158,15 @@ namespace DBSvr
             var list = new List<PetIndexInfo>();
             using var conn = OpenConn();
             if (conn == null) return list;
+            // 原生 0x00596E94
+            // `select Idx, MasterId, MasterName, Level, Exp  from dominatorpet where Idx>%d order by Idx Limit 5000;`
+            // 修正：(1) 去掉 mir3. 前缀；(2) 保留原生 `Exp` 与 `from` 之间的**双空格**；
+            // (3) 去掉参数化 LIMIT，恢复原生硬编码 Limit 5000（唯一调用方
+            //     NativeDominatorPetCache 固定传 5000，行为等价）；
+            // (4) 关键字还原为原生全小写 select/where/order by。
             using var cmd = new MySqlCommand(
-                "SELECT Idx, MasterId, MasterName, Level, Exp FROM mir3.dominatorpet WHERE Idx > @l ORDER BY Idx LIMIT @lim", conn);
+                "select Idx, MasterId, MasterName, Level, Exp  from dominatorpet where Idx>@l order by Idx Limit 5000;", conn);
             cmd.Parameters.AddWithValue("@l", lastIdx);
-            cmd.Parameters.AddWithValue("@lim", Math.Min(limit, DBShare.BatchLimit));
             using var dr = cmd.ExecuteReader();
             while (dr.Read())
                 list.Add(new PetIndexInfo

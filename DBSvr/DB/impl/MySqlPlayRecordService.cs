@@ -680,6 +680,9 @@ namespace DBSvr
 
             using var connection = OpenConnection();
             if (connection == null) return;
+            // 逐字对应原生 0x5AE1E4：
+            //   Update mir3.user_index set IsTransLock=0, DesZoneId=0, DesGroupId=0
+            //   where idx=%d;
             using var update = new MySqlCommand(
                 @"UPDATE mir3.user_index
                   SET IsTransLock=0, DesZoneId=0, DesGroupId=0
@@ -687,6 +690,110 @@ namespace DBSvr
                 connection);
             update.Parameters.AddWithValue("@idx", index);
             update.ExecuteNonQuery();
+        }
+
+        /// <summary>
+        /// 转服置锁的持久化。逐字对应原生 0x5AE114：
+        ///   Update mir3.user_index set IsTransLock=1, DesZoneId=%d, DesGroupId=%d
+        ///   where idx=%d;
+        /// 该模板在原生 fn 0x5AE07C 内格式化（0x5AE0D4 取模板、0x5AE0CF mov ecx,2
+        /// = 3 个占位符）。三个槽位按填充顺序为：
+        ///   槽0 = rec+0x6C (0x5AE0A6 movzx eax,word[eax+0x6C]) → DesZoneId
+        ///   槽1 = rec+0x6E (0x5AE0B4 movzx eax,word[eax+0x6E]) → DesGroupId
+        ///   槽2 = rec+0x0C (0x5AE0C2 mov eax,[eax+0x0C])       → idx
+        /// rec+0x6C/0x6E/0x0C 的身份由装载器 0x5A663B 交叉验证：它把 SELECT
+        /// (0x5A6CF0) 的第 23/24 列 DesZoneId/DesGroupId 分别写入 rec+0x6C/rec+0x6E。
+        /// 原生同时把 rec+0x38(IsTransLock) 置 1（0x5AE09B mov byte[eax+0x38],1），
+        /// 与 SQL 里写死的 IsTransLock=1 一致，故此处也写死 1。
+        ///
+        /// 触发点（原生 fn 0x5AD30C，在 0x5AD34D 调用上述例程）：先经 0x5ABC3C 按
+        /// 转服请求定位角色记录，命中后写 rec+0x6C=DesZoneId、rec+0x6E=DesGroupId，
+        /// 随即发这条 UPDATE；未命中（记录为空）则整段跳过、不发 SQL。
+        ///
+        /// BLOCKED（仅限接线，不影响本 SQL 的正确性）：外层派发入口在 0x5D2C99，
+        /// 其 cx/dx 取自消息体 [msg+0x12]/[msg+0x10]、另有两个栈参传给 0x5ABC3C
+        /// 作查找键；这条链路对应的 C# 调用方在 DBSvr/Services/GameSocService.cs，
+        /// 该文件本轮不可改动，故此方法暂不接线。缺失证据 = 0x5D2C99 所属派发函数
+        /// 的 opcode 号与 0x5ABC3C 的查找键语义。
+        /// </summary>
+        public bool PersistNativeTransferLock(int index, int destinationZoneId,
+            int destinationGroupId)
+        {
+            if (index <= 0) return false;
+            using var connection = OpenConnection();
+            if (connection == null) return false;
+            try
+            {
+                using (var update = new MySqlCommand(
+                           @"UPDATE mir3.user_index
+                             SET IsTransLock=1, DesZoneId=@zoneId,
+                                 DesGroupId=@groupId
+                             WHERE idx=@idx", connection))
+                {
+                    update.Parameters.AddWithValue("@zoneId", destinationZoneId);
+                    update.Parameters.AddWithValue("@groupId", destinationGroupId);
+                    update.Parameters.AddWithValue("@idx", index);
+                    if (update.ExecuteNonQuery() <= 0) return false;
+                }
+                lock (NativeType3CacheLock)
+                    if (NativeType3ByIndex.TryGetValue(index, out var record))
+                    {
+                        record.IsTransLock = true;
+                        record.DestinationZoneId = destinationZoneId;
+                        record.DestinationGroupId = destinationGroupId;
+                    }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DBShare.MainOutMessage(
+                    $"[NativeTransLock] persist idx={index}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// TransferModal 的持久化。逐字对应原生 0x5AE2C8：
+        ///   Update mir3.user_index set TransferModal=%d where idx=%d;
+        /// 注意列名大小写：这条 UPDATE 用大写 T 的 TransferModal，而装载用的
+        /// SELECT(0x5A6CF0) 写的是小写 transferModal——原版自身就不一致，属有意
+        /// 保真项，不要归一化。
+        /// 模板在原生 fn 0x5AE238 内格式化（0x5AE285 取模板、0x5AE280 mov ecx,1
+        /// = 2 个占位符）：槽0 = 入参 dl（同时被写入 rec+0x3B，见 0x5AE25D
+        /// mov byte[eax+0x3B],dl），槽1 = rec+0x0C = idx。rec+0x3B 的身份由装载器
+        /// 0x5A663B 交叉验证：SELECT 第 22 列 transferModal 写入 rec+0x3B。
+        ///
+        /// 触发点（原生 fn 0x5A7BE4，在 0x5A7C6C 调用）：角色索引行建立/登记后
+        /// （rec+0x0C=idx、rec+0x70/0x74=UserId 刚被写入），带
+        /// `cmp byte[eax+0x3B],0 / jbe` 守卫——即仅当 transferModal 非 0 时才发这条
+        /// UPDATE，为 0 时静默跳过。此处保留同一守卫。
+        ///
+        /// BLOCKED（仅限接线）：该链路的 C# 调用方位于本轮不可改动的
+        /// DBSvr/Services/GameSocService.cs；缺失证据 = 0x5A7BE4 的外层派发入口
+        /// 0x5D2A8D 所属函数的 opcode 号。
+        /// </summary>
+        public bool PersistNativeTransferModal(int index, byte transferModal)
+        {
+            if (index <= 0) return false;
+            // 原生守卫：transferModal 为 0 时不发 SQL（0x5A7C5D cmp/jbe）。
+            if (transferModal == 0) return false;
+            using var connection = OpenConnection();
+            if (connection == null) return false;
+            try
+            {
+                using var update = new MySqlCommand(
+                    @"UPDATE mir3.user_index SET TransferModal=@modal
+                      WHERE idx=@idx", connection);
+                update.Parameters.AddWithValue("@modal", transferModal);
+                update.Parameters.AddWithValue("@idx", index);
+                return update.ExecuteNonQuery() > 0;
+            }
+            catch (Exception ex)
+            {
+                DBShare.MainOutMessage(
+                    $"[NativeTransferModal] persist idx={index}: {ex.Message}");
+                return false;
+            }
         }
 
         public void SetNativeCharacterBusy(byte[] characterName)
@@ -885,17 +992,19 @@ namespace DBSvr
                 int isSelect;
                 int forceLevel;
                 uint forceExperience;
+                // 原生没有这条 SELECT：IsDelete/IsSelect/ForceLv/ForceExp 直接取自
+                // 内存记录 rec+0x37 / rec+0x36 / rec+0x4C / rec+0x50（装载器
+                // 0x5A663B 把 user_index 各列写入这些偏移）。这里用 SELECT 模拟该
+                // 内存记录，因此只能按主键 idx 定位——原生保存 SQL(0x5B152C) 也是
+                // where idx=%d。曾经附加的 PTID/ChrName 谓词会在改名后查不到行，
+                // 使整个保存静默失败（写 0 行）。
                 using (var select = new MySqlCommand(
                     @"SELECT IsDelete, IsSelect, ForceLv, ForceExp
                       FROM mir3.user_index
-                      WHERE idx=@idx AND PTID=@account AND ChrName=@name
+                      WHERE idx=@idx
                       LIMIT 1", conn))
                 {
                     select.Parameters.AddWithValue("@idx", idx);
-                    select.Parameters.Add(LegacyGbkText.Parameter(
-                        "@account", persistence.Account));
-                    select.Parameters.Add(LegacyGbkText.Parameter(
-                        "@name", persistence.CharacterName));
                     using var reader = select.ExecuteReader();
                     if (!reader.Read()) return false;
                     isDelete = reader.GetInt32("IsDelete");
@@ -919,6 +1028,37 @@ namespace DBSvr
                     changed.ExecuteNonQuery();
                 }
 
+                // 逐字对应原生保存模板 0x5B152C：
+                //   Update user_index Set PTID="%s", IsDelete=%d,IsSelect=%d,Level=%d,
+                //   Job=%d,Sex=%d,ModifyDate=Now(),Exp=%u, ApprenticeNum=%d,
+                //   HeroCardLv=%d,PlatinaChrLv=%d, ForceLv=%d, ForceExp=%u,
+                //   FightPoints=%d, sfLevel=%d where idx=%d;
+                // 15 个占位符 = 0x5B0F50 mov ecx,0xE，格式化调用在 0x5B0F5A。
+                //
+                // WHERE 只有 idx：原生就是 `where idx=%d`。过去多写的
+                // `AND ChrName=@name` 会让改名后的角色匹配不到行，导致每次保存
+                // 静默写 0 行（数据全丢）。idx 是主键，去掉该谓词既保真也更安全。
+                //
+                // FightPoints=0 不是笔误，而是原生行为，勿"修"成绑定值：
+                //   * 保存模板第 14 号槽位绑定 [rec+0x54]（0x5B0F17
+                //     `mov eax,[eax+0x54]`，按填充顺序数得第 14 位）；
+                //   * 装载器 0x5A663B 把 SELECT 第 14 列 FightPoints 写进
+                //     rec+0x54（0x5A68B4），所以 rec+0x54 确实是 FightPoints；
+                //   * 但保存前的投影例程 0x5ADE34（保存处理器 0x5A81B4 在
+                //     0x5A82D1 调用）在 0x5AE018/0x5AE01A 无条件执行
+                //     `xor edx,edx` + `mov [eax+0x54],edx`，把 rec+0x54 清零；
+                //     该函数内 [ebp-4]=记录、[ebp-0x14]=人物 blob 已由 0x5ADFF9
+                //     读 blob+0x53E→rec+0x44(sfLevel) 交叉验证；
+                //   * 全区段(0x5A0000..0x5C0000)扫描 `mov [reg+0x54],reg` 只有 4 处：
+                //     装载器 0x5A68B4、上述清零 0x5AE01A，以及 0x5A57ED/0x5AFD76
+                //     两处属别的对象（自指针+代码指针模式），没有任何一处写入
+                //     非零战力值；
+                //   * DBServer 从不读人物 blob 的 0x4E8（C# 侧 codec 的
+                //     FightPointsOffset）：以 disp32 形式全区段扫描 0x4E8 命中 0 处，
+                //     而同法扫描 0x53E/0x174/0x16F/0x16E 均正确命中，证明扫描有效。
+                // 结论：rec+0x54 与 blob+0x4E8 之间在 DBServer 内不存在数据流，
+                // 原版每次保存都把 FightPoints 写成 0。因此这里写 0 才是字节保真；
+                // 若改成从 blob 取值绑定，就是凭空伪造原版不存在的数据通路。
                 using (var update = new MySqlCommand(
                     @"UPDATE mir3.user_index SET
                         PTID=@account, IsDelete=@isDelete, IsSelect=@isSelect,
@@ -927,7 +1067,7 @@ namespace DBSvr
                         PlatinaChrLv=@platinaCharacterLevel,
                         ForceLv=@forceLevel, ForceExp=@forceExperience,
                         FightPoints=0, sfLevel=@sfLevel
-                      WHERE idx=@idx AND ChrName=@name", conn))
+                      WHERE idx=@idx", conn))
                 {
                     update.Parameters.Add(LegacyGbkText.Parameter(
                         "@account", persistence.Account));
@@ -949,8 +1089,6 @@ namespace DBSvr
                         forceExperience;
                     update.Parameters.AddWithValue("@sfLevel", persistence.SfLevel);
                     update.Parameters.AddWithValue("@idx", idx);
-                    update.Parameters.Add(LegacyGbkText.Parameter(
-                        "@name", persistence.CharacterName));
                     if (update.ExecuteNonQuery() > 0)
                     {
                         UpdateNativeType3Record(idx, persistence.Account, record =>
@@ -969,14 +1107,15 @@ namespace DBSvr
                     }
                 }
 
+                // 上面 UPDATE 影响 0 行有两种可能：行不存在，或所有列值与原值相同
+                // （MySQL 对无变化的 UPDATE 返回 0）。原生不区分这两种情况，这里
+                // 补一次存在性探测把"值未变"判为成功。键必须与 UPDATE 一致，只用
+                // idx：若在此附加 PTID/ChrName，改名后同样会误判为"行不存在"，把
+                // 上面刚修掉的静默失败又从这条兜底路径漏回来。
                 using var exists = new MySqlCommand(
                     @"SELECT COUNT(*) FROM mir3.user_index
-                      WHERE idx=@idx AND PTID=@account AND ChrName=@name", conn);
+                      WHERE idx=@idx", conn);
                 exists.Parameters.AddWithValue("@idx", idx);
-                exists.Parameters.Add(LegacyGbkText.Parameter(
-                    "@account", persistence.Account));
-                exists.Parameters.Add(LegacyGbkText.Parameter(
-                    "@name", persistence.CharacterName));
                 var found = Convert.ToInt32(exists.ExecuteScalar()) == 1;
                 if (found)
                 {

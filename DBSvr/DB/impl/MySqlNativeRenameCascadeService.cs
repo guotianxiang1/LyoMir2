@@ -108,6 +108,28 @@ namespace DBSvr
         ///
         /// 两个名字走参数化；db/table/column 只来自本文件的常量表，非外部输入。
         /// </summary>
+        /// <remarks>
+        /// 逐字状态（2026-08-11 复核，证据 = CODE 快照字面量头校验 + 机器解析）：
+        /// 22 条模板已用 staging/_casc_verify.py 从 0x5A923C..0x5A9C68 反汇编里
+        /// 按 exec VA 顺序还原并与本表逐行比对 —— **22 exec / 15 gate /
+        /// 0 mismatch**，库名/表名/列名/门归属/顺序全部一致。
+        ///
+        /// ⚠️ 唯一未对齐项 = **关键字大小写与结尾分号**。原版是
+        ///   前缀 0x5A9C68 `Update ignore gamedata`（另 0x5A9FC8 `Update ignore
+        ///   guild`、0x5AA0C4 `Update ignore Mir3`）
+        ///   + 模板 0x5A9C88 `.WeaponUpg set CharName="%s" where CharName="%s";`
+        /// 即小写 `ignore`/`set`/`where` 且**带结尾分号**；本方法发的是全大写
+        /// 且无分号。**没有改**，原因有两条：
+        ///  1. MySQL 关键字大小写不敏感、单语句尾分号可省 ⇒ 行为完全等价，
+        ///     不是数据风险；
+        ///  2. 两个不属于本文件的审计闸按 Ordinal 硬钉了大写文本 ——
+        ///     NativeSqlVerbatimCheck/Program.cs:571 `Contains(cascade,
+        ///     "UPDATE IGNORE {db}.{table}")`，以及
+        ///     NativeRenameCascadeCheck/Program.cs:124 `Equal("UPDATE IGNORE
+        ///     gamedata.WeaponUpg SET CharName=@n WHERE CharName=@o", sql, ...)`。
+        ///     单改本文件会把这两闸打红。要真逐字须与那两个闸同步改，
+        ///     属跨文件改动，留给拥有闸文件的一方裁决。
+        /// </remarks>
         public static string BuildCascadeSql(string db, string table, string column)
             => $"UPDATE IGNORE {db}.{table} SET {column}=@n WHERE {column}=@o";
 
@@ -160,12 +182,21 @@ namespace DBSvr
             if (conn == null) return false;
             try
             {
-                // 原版把两条语句拼成一次提交（0x5A9210 那段以 `;` 起头）。
-                // 这里保持"两条一起、要么都成"的语义，且**按数值 Idx 筛**。
-                // 注意主档这两条**没有** ignore。
+                // 原版把两条语句拼成一次提交，五段字面量在 0x5A8EF1..0x5A8F2D
+                // 依次 push，mov edx,9 / call 0x404F78 拼成（9 段 = 5 个字面量
+                // + 名字 + 两个 IntToStr 结果）：
+                //   0x5A91D0 len=31 `Update user_index set ChrName="`
+                //   0x5A91F8 len=12 `" where Idx=`      ← Idx 大写 I
+                //   0x5A9210 len=31 `;Update user_data set ChrName="`
+                //   0x5A91F8 len=12 `" where Idx=`      （同一份，复用）
+                //   0x5A9238 len=1  `;`
+                // 逐字点：两条都是小写 `set` / 小写 `where`，表名无 schema 前缀
+                //（0x5BAD84 `use mir3;` 坐实无前缀即 mir3），且**没有** ignore
+                // ——与 22 条级联的 `Update ignore` 前缀正好相反，不要补。
+                // 按数值 Idx 筛而非按旧名，与原版 `where Idx=<IntToStr>` 一致。
                 using var cmd = new MySqlCommand(
-                    "UPDATE user_index SET ChrName=@n WHERE Idx=@i; "
-                    + "UPDATE user_data SET ChrName=@n WHERE Idx=@i;", conn);
+                    "Update user_index set ChrName=@n where Idx=@i;"
+                    + "Update user_data set ChrName=@n where Idx=@i;", conn);
                 cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newName));
                 cmd.Parameters.AddWithValue("@i", idx);
                 cmd.ExecuteNonQuery();

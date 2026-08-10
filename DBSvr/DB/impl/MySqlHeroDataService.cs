@@ -23,6 +23,12 @@ namespace DBSvr
             internal NativeHeroInvalidDataException(string message) : base(message) { }
         }
 
+        // C#-ONLY：原版没有「只取 hero_data.Idx」的语句。整个 CODE 段
+        // (0x401000..0x5D5000) 的 SQL 字面量普查里，hero_data 的读只有两条
+        // 0x5B28C8 / 0x5B5E40，都是取 blob；快表是由 hero_index 的批量装载
+        // 0x58CE48 `select Idx, MasterName, HeroName, ... from hero_index
+        // where Idx>%d order by Idx Limit 5000` 在内存里建的。这条是 C# 侧
+        // 自己的索引预热，无原版对应字面量可逐字，故不动。
         public void LoadQuickList()
         {
             _quickIndex.Clear();
@@ -39,7 +45,13 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return (null, null);
-            using var cmd = new MySqlCommand("SELECT Data, dynData FROM mir3.hero_data WHERE Idx=@i", conn);
+            // 0x5B28C8 len=66 refcount=-1
+            //   `Select High_Priority idx, data, dynData from hero_data where idx =`
+            // （原版把 idx 值拼在串尾，故字面量以 `=` 结束）。HIGH_PRIORITY 是
+            // 原版对大 blob 表刻意加的修饰符 —— MyISAM 下它让读排到写队列之前。
+            // 之前这里丢了该修饰符，行为上会被并发写饿死，与原版不等价。
+            using var cmd = new MySqlCommand(
+                "SELECT HIGH_PRIORITY Data, dynData FROM mir3.hero_data WHERE Idx=@i", conn);
             cmd.Parameters.AddWithValue("@i", idx);
             using var dr = cmd.ExecuteReader();
             if (!dr.Read()) return (null, null);
@@ -101,8 +113,14 @@ namespace DBSvr
                 {
                     byte[] oldData;
                     byte[] oldDynamicData;
+                    // 同 0x5B28C8：原版这条 blob 读带 High_Priority。FOR UPDATE 是
+                    // C#-ONLY 附加（全 CODE 段 `for update` 字面量 0 命中，原版此处
+                    // 既无事务也无行锁），保留但补回原版的修饰符。
+                    // 保持单个字符串字面量（不要拆成 "..." + "..."）：审计闸的
+                    // blob 读签名用 [^"]{0,160} 跨度匹配，拆开后引号会截断跨度，
+                    // 这条就**扫不到**了 —— 不是假绿，但会静默脱离覆盖。
                     using (var lockCmd = new MySqlCommand(
-                        "SELECT Data, dynData FROM mir3.hero_data WHERE Idx=@i FOR UPDATE", conn, tx))
+                        "SELECT HIGH_PRIORITY Data, dynData FROM mir3.hero_data WHERE Idx=@i FOR UPDATE", conn, tx))
                     {
                         lockCmd.Parameters.AddWithValue("@i", idx);
                         using var dr = lockCmd.ExecuteReader();
@@ -205,6 +223,9 @@ namespace DBSvr
                 try
                 {
                     int currentIndexJob;
+                    // C#-ONLY：原版从内存快表读 Job（批量装载 0x5B28C8 之外只有
+                    // 0x58CE48 那条 5000 行分页 select 会取 Job 列），没有
+                    // 「按 idx 单取 hero_index.Job」的字面量。这里用 SQL 代替内存表。
                     using (var currentIndex = new MySqlCommand(
                                "SELECT Job FROM mir3.hero_index WHERE idx=@i LIMIT 1",
                                conn, tx))
@@ -226,8 +247,10 @@ namespace DBSvr
                         byte[] oldData;
                         byte[] oldDynamicData;
                         bool requireThreeRecords;
+                        // 同 0x5B28C8：blob 读须带 High_Priority。JOIN/FOR UPDATE
+                        // 部分是 C#-ONLY（原版分两次查、无事务），见方法末注释。
                         using (var lockCmd = new MySqlCommand(
-                            @"SELECT d.Data, d.dynData, h.Job AS IndexJob
+                            @"SELECT HIGH_PRIORITY d.Data, d.dynData, h.Job AS IndexJob
                               FROM mir3.hero_data AS d
                               JOIN mir3.hero_index AS h ON h.idx=d.Idx
                               WHERE d.Idx=@i FOR UPDATE", conn, tx))
@@ -267,6 +290,32 @@ namespace DBSvr
                             throw new NativeHeroInvalidDataException(error);
                     }
 
+                    // ⚠️ 逐字对齐到此为止：原版**没有**一条写 hero_data blob 的
+                    // SQL 字面量。全 CODE 段普查 `hero_data set` 只有一条
+                    // 0x58DB68 `;update hero_data set HeroName="`（改名用），
+                    // `set Data` / `dynData=` 均 0 命中。真正的 blob 落盘走
+                    // TDataSet 而非 SQL：0x5B2285 先下 0x5B28C8 那条 select 打开
+                    // 结果集，然后
+                    //   0x5B22C2 call 0x5655FC          ; Edit
+                    //   0x5B22D8 mov edx,0x5B2914 ("data")   / 0x5B22DD FieldByName
+                    //   0x5B22EE call [ebx+0x214]       ; CreateBlobStream(bmWrite)
+                    //   0x5B2308 call [ebx+0x10]        ; Write(buf,len)
+                    //   0x5B2319 mov edx,0x5B2924 ("dynData") —— 同样一遍
+                    //   0x5B235C call [edx+0x24C]       ; Post
+                    // 即两个字段名以字面量 0x5B2914/0x5B2924 出现，语句本身由
+                    // 驱动生成。故本条 UPDATE 属**形态不可逐字比对**：字段集
+                    // (Data,dynData) 与谓词 (Idx) 与原版一致，SQL 文本无底本。
+                    // 索引侧的两条则有底本，已在下面逐列注明。
+                    // hero_index 侧底本两条（本 UPDATE 把它们与 blob 合成一条）：
+                    //  · 0x5B27A8 len=100 `Update hero_index set lvChangeTime=Now()
+                    //    where idx=%d and (Level<>%d or ForceLv<>%d or sfLevel<>%d);`
+                    //    —— 三列比较、or 连接、只在有变化时才动 lvChangeTime。
+                    //  · 0x5B2818 len=165 `Update hero_index Set IsDelete=%d,
+                    //    HeroType=%d, Consignation=%d, Level=%d, Job=%d,Sex=%d,
+                    //    Exp=%u, ModifyDate=Now(), ForceLv=%d, ForceExp=%u,
+                    //    sfLevel=%d where idx=%d;` —— 11 列 + ModifyDate=Now()，
+                    //    谓词单列 idx。下面的 SET 子句逐列覆盖这 11 列且不多不少
+                    //    （MasterName 不在其中：那是 0x5B5C84 的另一条语句）。
                     using var update = new MySqlCommand(
                         @"UPDATE mir3.hero_data AS d
                           JOIN mir3.hero_index AS h ON h.idx=d.Idx
@@ -376,9 +425,10 @@ namespace DBSvr
                 try
                 {
                     byte[] storedData;
+                    // 同 0x5B28C8：blob 读须带 High_Priority。
+                    // 同样保持单字面量，理由见 SaveBlob 里的说明。
                     using (var read = new MySqlCommand(
-                               "SELECT Data FROM mir3.hero_data WHERE Idx=@i LIMIT 1",
-                               conn))
+                               "SELECT HIGH_PRIORITY Data FROM mir3.hero_data WHERE Idx=@i LIMIT 1", conn))
                     {
                         read.Parameters.AddWithValue("@i", idx);
                         var value = read.ExecuteScalar();
@@ -398,6 +448,11 @@ namespace DBSvr
                         return NativeHeroSaveResult.InvalidData;
                     }
 
+                    // 同上：blob 写在原版走 TDataSet（0x5B22C2 Edit /
+                    // 0x5B235C Post），无 SQL 底本可逐字。ForceLv 列本身有底本
+                    // —— 0x5B2818 里 `ForceLv=%d` 与 `ModifyDate=Now()` 同在一条，
+                    // lvChangeTime 的条件式来自 0x5B27A8（三列 or 比较）；这里只
+                    // 涉及 ForceLv 一列，故条件式只留 ForceLv<> 那一项。
                     using (var update = new MySqlCommand(
                                @"UPDATE mir3.hero_data AS d
                                  JOIN mir3.hero_index AS h ON h.idx=d.Idx
@@ -447,6 +502,12 @@ namespace DBSvr
                 if (conn == null) return 5;
                 try
                 {
+                    // C#-ONLY：原版没有「按 ChrName 查 user_index.IsDelete」的
+                    // 语句。CODE 段普查 `from user_index where` 只有 6 条
+                    // （0x5A6CF0 批量装载 / 0x5B4F6C 按 idx / 0x5B4FCC+0x5AA9A8
+                    //   删除 / 0x5BD17C+0x5CBE38 清理与 _AvailUser），无一条按
+                    // ChrName 取 IsDelete —— 原版是查内存里的 user_index 快表。
+                    // 这里是 C# 侧用 SQL 替代内存表，无字面量底本可逐字。
                     using (var master = new MySqlCommand(
                                "SELECT IsDelete FROM mir3.user_index "
                                + "WHERE ChrName=@n LIMIT 1", conn))
@@ -458,8 +519,12 @@ namespace DBSvr
                     }
 
                     var candidates = new List<ThreeSlotCandidate>(2);
+                    // 这条同时读 hero_index 与 hero_data 的 blob。原版对应的是
+                    // 两条分开的语句（索引侧走内存快表，blob 侧 0x5B28C8 /
+                    // 0x5B5E40），本条的 JOIN 形态是 C#-ONLY；但既然它确实是一次
+                    // hero_data blob 读，就得带原版那条的 High_Priority。
                     using (var query = new MySqlCommand(
-                               @"SELECT h.idx, h.MasterName, h.HeroName,
+                               @"SELECT HIGH_PRIORITY h.idx, h.MasterName, h.HeroName,
                                         h.IsDelete, h.HeroType, h.Job,
                                         h.Consignation, h.Level, h.Exp, h.Sex,
                                         d.Data, d.dynData
@@ -573,6 +638,15 @@ namespace DBSvr
                     // multi-table statement keeps the two snapshots and two index rows
                     // under one MySQL statement lock; BeginTransaction/FOR UPDATE would
                     // provide no rollback or row-lock guarantee on these tables.
+                    //
+                    // 逐字状态：C#-ONLY 形态。原版同样没有这条合成语句 —— blob 侧
+                    // 走 TDataSet（0x5B22C2 Edit / 0x5B235C Post），索引侧走
+                    // 0x5B2818（11 列，含 Consignation=%d 与 Job=%d，谓词 idx）。
+                    // 本条 SET 的 Consignation=0 / Job=255 两个常量因此**有**底本
+                    // 依据（都是 0x5B2818 覆盖的列，值由调用方给），
+                    // ModifyDate=NOW() 亦逐字对应 0x5B2818 的 `ModifyDate=Now()`。
+                    // WHERE 里的 IsDelete/Job/Consignation 乐观并发条件是 C#-ONLY，
+                    // 原版无对应谓词（0x5B2818 谓词只有 idx 一列）。
                     using var update = new MySqlCommand(
                         @"UPDATE mir3.hero_index AS highIndex
                           JOIN mir3.hero_data AS highData
@@ -637,7 +711,13 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("INSERT IGNORE INTO mir3.hero_data(Idx, HeroName) VALUES(@i, @n)", conn);
+            // 0x5B29EC len=61 refcount=-1
+            //   `Insert Ignore Into hero_data(Idx, HeroName) values(%d, "%s");`
+            // （0x5B5F88 是同文本的第二份，两处逐字相同。）
+            // IGNORE 逐字保留：HeroName 是 UNIQUE（DDL 0x5BB934），重名时原版
+            // 静默跳过而不报错。列序 (Idx, HeroName) 与两个占位符次序一致。
+            using var cmd = new MySqlCommand(
+                "Insert Ignore Into mir3.hero_data(Idx, HeroName) values(@i, @n);", conn);
             cmd.Parameters.AddWithValue("@i", idx);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", heroName));
             cmd.ExecuteNonQuery();
@@ -661,7 +741,11 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("DELETE FROM mir3.hero_data WHERE Idx=@i", conn);
+            // 0x5B29C0 len=35 refcount=-1 `Delete from hero_data where Idx=%d;`
+            // （0x5B5EDC 同文本；0x5B5F5C 是 `Delete From ...`，大写 F 的第三份。）
+            // 谓词就是单列 Idx，无 IsDelete/HeroName 附加条件 —— 不要加。
+            using var cmd = new MySqlCommand(
+                "Delete from mir3.hero_data where Idx=@i;", conn);
             cmd.Parameters.AddWithValue("@i", idx);
             bool ok = cmd.ExecuteNonQuery() > 0;
             if (ok) UnregisterNativeIndex(idx);
@@ -680,6 +764,11 @@ namespace DBSvr
                 };
                 var c = new MySqlConnection(builder.ConnectionString);
                 c.Open();
+                // `set wait_timeout=2073600;` 逐字对应原版 0x5B05E0 len=25
+                // （同文本在 CODE 段共 16 处，每个连接池入口一份）。
+                // ISOLATION LEVEL 那半句是 C#-ONLY：原版无 `SET SESSION`
+                // 字面量（0 命中），`READ COMMITTED` 只作为 MyODBC 驱动内部
+                // 常量表出现在 0x4DC644，不是 DBServer 自己下发的语句。
                 using(var sc = new MySqlCommand("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; SET SESSION wait_timeout=2073600", c))
                     sc.ExecuteNonQuery();
                 return c;
