@@ -12,6 +12,13 @@ using DBSvr.Core;
 using SystemModule.Packet;
 
 var failures = new List<string>();
+
+// Real counter, printed below. A hardcoded count in the PASS line is worthless:
+// it cannot show that newly added assertions actually executed, and a test whose
+// body throws early would silently stop asserting while still reporting the same
+// number. If this number does not move after you add assertions, they never ran.
+var asserts = 0;
+
 Run("request/response command words", CommandWords);
 Run("tail length gate 0x54", TailLengthGate);
 Run("sub-command range gate 0..0xD", SubCommandRange);
@@ -31,7 +38,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("NativeZongpaiProtocolCheck PASS tests=12 "
+Console.WriteLine($"NativeZongpaiProtocolCheck PASS tests=12 asserts={asserts} "
                   + "type1=0170 reply=0071 gate=0x54 std=0xA8/0x9C "
                   + "lvl=0x84/0x78 member=0x29 dispatch=0x594122");
 return 0;
@@ -167,10 +174,22 @@ void HeaderFieldSlots()
 
 void ReplyModes()
 {
-    // `mov [ebp-0x10], 1` at 0x5941E4/0x59431C/0x59434A/0x594378/0x59446F/
-    // 0x594556/0x59469F → sender-only.
+    // `mov [ebp-0x10], 1` at 0x59415A/0x5941E4/0x59431C/0x59434A/0x594378/
+    // 0x59446F/0x594556/0x59469F → sender-only.
+    //
+    // ⚠️ Sub-command 1 (Enumerate) belongs in THIS list. An earlier revision of
+    // this file asserted `Equal(None, GetReplyMode(Enumerate))`, which locked in
+    // a real bug: the very first instruction of the sub-1 case body is
+    //   0059415A  c7 45 f0 01 00 00 00   mov dword [ebp-0x10], 1
+    // and `[ebp-0x10]` is what the dispatcher returns (epilogue
+    // `0059481A 8b 45 f0  mov eax,[ebp-0x10]` / `ret 0xc`), which the caller
+    // 0x59C51C compares against 1 at 0x59C552 to pick the sender-only send
+    // 0x49CB34. So the original ALWAYS replies to sub 1; returning None
+    // suppressed that reply. Assertions must be written from the bytes, never
+    // from the current C# behaviour.
     foreach (var sub in new[]
              {
+                 NativeZongpaiSubCommand.Enumerate,
                  NativeZongpaiSubCommand.CreateMaster,
                  NativeZongpaiSubCommand.UpdateStudentAndMasterExp,
                  NativeZongpaiSubCommand.UpdateMasterExp,
@@ -198,12 +217,43 @@ void ReplyModes()
     Equal((int)NativeZongpaiReplyMode.None,
         (int)NativeZongpaiProtocol.GetReplyMode(
             NativeZongpaiSubCommand.UpdateStudentExp), "mode 6 unset");
+    // Sub-command 0 is mapped to group 0 by the byte map at 0x5940E0
+    // (`00 01 01 01 01 01 01 01 01 02 03 04 04 01`), and group 0's entry in the
+    // table at 0x5940EE is 0x59476B — which IS the shared exit
+    // (`0059476B 33 c0  xor eax,eax`). It never writes the route, so no reply.
     Equal((int)NativeZongpaiReplyMode.None,
         (int)NativeZongpaiProtocol.GetReplyMode(
             NativeZongpaiSubCommand.None), "mode 0");
-    Equal((int)NativeZongpaiReplyMode.None,
-        (int)NativeZongpaiProtocol.GetReplyMode(
-            NativeZongpaiSubCommand.Enumerate), "mode 1");
+
+    // Every sub-command 0..13 must be classified: the route write is either
+    // present (Sender/Broadcast) or provably absent (None). A new enum member
+    // silently defaulting to None is exactly the failure mode that produced the
+    // sub-1 bug, so pin the whole census here.
+    var expectedModes = new (NativeZongpaiSubCommand Sub, NativeZongpaiReplyMode Mode, string Site)[]
+    {
+        (NativeZongpaiSubCommand.None, NativeZongpaiReplyMode.None, "0x59476B no write"),
+        (NativeZongpaiSubCommand.Enumerate, NativeZongpaiReplyMode.Sender, "0x59415A =1"),
+        (NativeZongpaiSubCommand.CreateMaster, NativeZongpaiReplyMode.Sender, "0x5941E4 =1"),
+        (NativeZongpaiSubCommand.AddMember, NativeZongpaiReplyMode.Broadcast, "0x594220 =2"),
+        (NativeZongpaiSubCommand.RemoveMember, NativeZongpaiReplyMode.Broadcast, "0x59427C =2"),
+        (NativeZongpaiSubCommand.UpdateMemberRole, NativeZongpaiReplyMode.Broadcast, "0x5942C0 =2"),
+        (NativeZongpaiSubCommand.UpdateStudentExp, NativeZongpaiReplyMode.None, "0x5943A3 no write"),
+        (NativeZongpaiSubCommand.UpdateStudentAndMasterExp, NativeZongpaiReplyMode.Sender, "0x59431C =1"),
+        (NativeZongpaiSubCommand.UpdateMasterExp, NativeZongpaiReplyMode.Sender, "0x59434A =1"),
+        (NativeZongpaiSubCommand.UpdateMasterLevel, NativeZongpaiReplyMode.Sender, "0x59446F =1"),
+        (NativeZongpaiSubCommand.QueryMembers, NativeZongpaiReplyMode.Sender, "0x594556 =1"),
+        (NativeZongpaiSubCommand.ReadNotice, NativeZongpaiReplyMode.Sender, "0x59469F =1"),
+        (NativeZongpaiSubCommand.ModifyNotice, NativeZongpaiReplyMode.Sender, "0x59469F =1"),
+        (NativeZongpaiSubCommand.DeleteMaster, NativeZongpaiReplyMode.Sender, "0x594378 =1"),
+    };
+    Equal(14, expectedModes.Length, "route census covers 0..13");
+    for (var i = 0; i < expectedModes.Length; i++)
+    {
+        var (sub, mode, site) = expectedModes[i];
+        Equal(i, (int)sub, $"census slot {i} is sub-command {i}");
+        Equal((int)mode, (int)NativeZongpaiProtocol.GetReplyMode(sub),
+            $"census route sub{i} ({site})");
+    }
 }
 
 void StandardReplyFraming()
@@ -477,6 +527,7 @@ void Run(string name, Action test)
 
 void Equal(int expected, int actual, string what)
 {
+    asserts++;
     if (expected != actual)
         throw new Exception($"{what}: expected {expected} (0x{expected:X}), "
                             + $"got {actual} (0x{actual:X})");
@@ -484,16 +535,19 @@ void Equal(int expected, int actual, string what)
 
 void EqualText(string expected, string actual, string what)
 {
+    asserts++;
     if (!string.Equals(expected, actual, StringComparison.Ordinal))
         throw new Exception($"{what}: expected '{expected}', got '{actual}'");
 }
 
 void True(bool condition, string what)
 {
+    asserts++;
     if (!condition) throw new Exception($"{what}: expected true");
 }
 
 void False(bool condition, string what)
 {
+    asserts++;
     if (condition) throw new Exception($"{what}: expected false");
 }

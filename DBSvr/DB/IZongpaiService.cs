@@ -110,8 +110,22 @@ namespace DBSvr
         public int Idx;
         public string MasterName;
         public int MasterLevel;
-        public int StudentExp;
-        public int MasterExp;
+
+        // ⚠️ These two MUST be unsigned. The original's saturating adders cap at
+        // 0xFFB43480 (4,290,000,000), which is far above int.MaxValue
+        // (2,147,483,647), and every comparison in those helpers is unsigned:
+        //   00591CA0  81 78 14 80 34 b4 ff   cmp dword [eax+0x14],0xffb43480
+        //   00591CA7  73 46                  jae   (unsigned!)
+        //   00591CAD  76 40                  jbe   (unsigned!)
+        //   00591CC4  73 1a                  jae   (unsigned overflow test)
+        //   00591CD7  c7 40 14 80 34 b4 ff   mov dword [eax+0x14],0xffb43480
+        // (StudentExp is rec+0x14 via 0x591C8C/0x591CF8; MasterExp is rec+0x18 via
+        // 0x591D28/0x591D94 — same shape, same constant at 0x591D3F/0x591D63/
+        // 0x591D76.) Declaring these `int` and reading them with GetInt32 made any
+        // value above 2.1 billion either throw or silently wrap negative, which
+        // then failed the unsigned cap test on the very next add.
+        public uint StudentExp;
+        public uint MasterExp;
         public byte[] Notice;
         public string UpdateTime;
     }

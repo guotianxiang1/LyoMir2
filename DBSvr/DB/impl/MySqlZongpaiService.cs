@@ -288,7 +288,10 @@ namespace DBSvr
             if (dr.Read()) return new ZongpaiMasterInfo
             {
                 Idx = dr.GetInt32(0), MasterName = LegacyGbkText.Read(dr, 1), MasterLevel = dr.GetInt32(2),
-                StudentExp = dr.GetInt32(3), MasterExp = dr.GetInt32(4), Notice = dr["Notice"] as byte[]
+                // GetUInt32, not GetInt32: the column is `int unsigned` and the
+                // native cap 0xFFB43480 exceeds int.MaxValue (see ZongpaiMasterInfo).
+                StudentExp = ReadExp(dr, 3), MasterExp = ReadExp(dr, 4),
+                Notice = dr["Notice"] as byte[]
             };
             return null;
         }
@@ -380,8 +383,28 @@ namespace DBSvr
             if (conn == null) return list;
             using var cmd = new MySqlCommand("SELECT Idx, MasterName, MasterLevel, StudentExp, MasterExp, Notice FROM gamedata.ZongpaiBase ORDER BY Idx", conn);
             using var dr = cmd.ExecuteReader();
-            while (dr.Read()) list.Add(new ZongpaiMasterInfo { Idx = dr.GetInt32(0), MasterName = LegacyGbkText.Read(dr, 1), MasterLevel = dr.GetInt32(2), StudentExp = dr.GetInt32(3), MasterExp = dr.GetInt32(4), Notice = dr["Notice"] as byte[] });
+            while (dr.Read()) list.Add(new ZongpaiMasterInfo { Idx = dr.GetInt32(0), MasterName = LegacyGbkText.Read(dr, 1), MasterLevel = dr.GetInt32(2), StudentExp = ReadExp(dr, 3), MasterExp = ReadExp(dr, 4), Notice = dr["Notice"] as byte[] });
             return list;
+        }
+
+        /// <summary>
+        /// Reads an `int unsigned` exp column. The native cap is 0xFFB43480
+        /// (4,290,000,000) — above int.MaxValue — and every native comparison on
+        /// these fields is unsigned (0x591CA7 `jae`, 0x591CAD `jbe`), so a signed
+        /// read is wrong for the top half of the range.
+        ///
+        /// Tolerates a signed column too: if a deployment created the column as
+        /// signed `int`, GetUInt32 throws on the negative values that a wrapped
+        /// write left behind, so fall back and reinterpret the bits rather than
+        /// failing the whole load. Reinterpreting is what the original does — it
+        /// only ever sees 32 raw bits.
+        /// </summary>
+        private static uint ReadExp(MySqlDataReader dr, int ordinal)
+        {
+            if (dr.IsDBNull(ordinal)) return 0;
+            try { return dr.GetUInt32(ordinal); }
+            catch (OverflowException) { return unchecked((uint)dr.GetInt32(ordinal)); }
+            catch (InvalidCastException) { return unchecked((uint)dr.GetInt64(ordinal)); }
         }
 
         public List<ZongpaiMemberInfo> LoadAllMembers()

@@ -182,14 +182,57 @@ namespace DBSvr.Core
         private const int WideShortStringCapacity = 0x14;
 
         /// <summary>
-        /// Reply mode each sub-command sets via `mov [ebp-0x10], n` at its case
-        /// entry. Sub-command 6 (0x5943A3) never writes it, so the original gives
-        /// no guaranteed reply for it — modelled as None rather than inventing a
-        /// frame the original does not emit.
+        /// Reply mode each sub-command sets via `mov dword [ebp-0x10], n` at its
+        /// case entry. `[ebp-0x10]` IS the dispatcher's return value — the
+        /// epilogue is `0059481A mov eax,[ebp-0x10]` (bytes `8b 45 f0`) followed
+        /// by `ret 0xc` — and the caller 0x59C51C branches on it:
+        ///   0059C544 call 0x594070      ; -> [ebp-0x18]
+        ///   0059C54C cmp [ebp-0x10],0 / je   ; empty buffer -> send nothing
+        ///   0059C552 cmp [ebp-0x18],1 / jne  ; 1 -> 0x49CB34 (sender only)
+        ///   0059C56A cmp [ebp-0x18],2 / jne  ; 2 -> 0x59E450 (broadcast)
+        /// It is initialised to 0 at 0x5940A0 (`xor eax,eax / mov [ebp-0x10],eax`),
+        /// so "never written" == no reply.
+        ///
+        /// Full census, taken from the two-level dispatch (byte-verified):
+        /// first-level group table 0x5940EE = {0x59476B, 0x594102, 0x594465,
+        /// 0x59454C, 0x59463E} selected by the byte map at 0x5940E0 =
+        /// `00 01 01 01 01 01 01 01 01 02 03 04 04 01` (index = sub-command),
+        /// i.e. sub0 -> group0, sub1..8+13 -> group1, sub9 -> group2,
+        /// sub10 -> group3, sub11/12 -> group4.
+        ///   sub0  0x59476B  no write            -> None (native no-op)
+        ///   sub1  0x59415A  c7 45 f0 01 000000  -> Sender   ★ was wrongly None
+        ///   sub2  0x5941E4  c7 45 f0 01 000000  -> Sender
+        ///   sub3  0x594220  c7 45 f0 02 000000  -> Broadcast
+        ///   sub4  0x59427C  c7 45 f0 02 000000  -> Broadcast
+        ///   sub5  0x5942C0  c7 45 f0 02 000000  -> Broadcast
+        ///   sub6  0x5943A3  no write            -> None
+        ///   sub7  0x59431C  c7 45 f0 01 000000  -> Sender
+        ///   sub8  0x59434A  c7 45 f0 01 000000  -> Sender
+        ///   sub9  0x59446F  c7 45 f0 01 000000  -> Sender
+        ///   sub10 0x594556  c7 45 f0 01 000000  -> Sender
+        ///   sub11 0x59469F  c7 45 f0 01 000000  -> Sender (see note)
+        ///   sub12 0x59469F  c7 45 f0 01 000000  -> Sender (see note)
+        ///   sub13 0x594378  c7 45 f0 01 000000  -> Sender
+        /// The group-1 second-level table at 0x594122 has 14 slots but is only
+        /// reached for the nine sub-commands mapped to group 1; its slots for
+        /// 0/9/10/11/12 are filler pointing at the shared reply allocator
+        /// 0x5943C5 and are unreachable.
+        ///
+        /// Note on 11/12: they share one route write at 0x59469F which is guarded
+        /// by `00594695 cmp dword [ebp-0x24],0 / je 0x59476B` — the reply exists
+        /// only when the produced string is non-empty. Sender is therefore the
+        /// mode *when a reply happens*; the emptiness test belongs to the body.
+        /// Sub-command 6 (0x5943A3) never writes the route at all, so the
+        /// original gives no reply for it — modelled as None rather than
+        /// inventing a frame the original does not emit.
         /// </summary>
         public static NativeZongpaiReplyMode GetReplyMode(
             NativeZongpaiSubCommand subCommand) => subCommand switch
             {
+                // 0x59415A: the FIRST instruction of the sub-1 case body is the
+                // route write. Modelling it as None suppressed a reply the
+                // original always sends.
+                NativeZongpaiSubCommand.Enumerate => NativeZongpaiReplyMode.Sender,
                 NativeZongpaiSubCommand.CreateMaster => NativeZongpaiReplyMode.Sender,
                 NativeZongpaiSubCommand.UpdateStudentAndMasterExp => NativeZongpaiReplyMode.Sender,
                 NativeZongpaiSubCommand.UpdateMasterExp => NativeZongpaiReplyMode.Sender,
@@ -205,9 +248,16 @@ namespace DBSvr.Core
             };
 
         /// <summary>
-        /// Sub-commands routed through a group that re-tests the tail-length gate:
-        /// 1..8 and 13 via 0x594102, 9 via 0x594465, 10 via 0x59454C. Sub-command 0
-        /// falls straight to 0x59476B, and 11/12 (0x59463E) never test it.
+        /// Sub-commands routed through a group whose entry re-tests the tail-length
+        /// gate `cmp dword [ebp+0x10],0x54 / jl 0x59476B` (bytes `83 7d 10 54`).
+        /// Byte-verified per group entry:
+        ///   group1 0x594102 `83 7d 10 54` + `0f 8c` -> GATED (sub 1..8, 13)
+        ///   group2 0x594465 `83 7d 10 54` + `0f 8c` -> GATED (sub 9)
+        ///   group3 0x59454C `83 7d 10 54` + `0f 8c` -> GATED (sub 10)
+        ///   group4 0x59463E starts `8b 45 f4` (mov eax,[ebp-0xc]) -> NOT gated
+        ///                                                            (sub 11, 12)
+        ///   group0 0x59476B is the shared exit itself -> N/A (sub 0)
+        /// `[ebp+0x10]` is the dispatcher's third stack argument = the tail length.
         /// </summary>
         public static bool RequiresLengthGate(
             NativeZongpaiSubCommand subCommand) => subCommand switch
