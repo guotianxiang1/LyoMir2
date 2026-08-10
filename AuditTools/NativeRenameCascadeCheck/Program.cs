@@ -26,6 +26,7 @@ Run("whitelist: trim-length equality (0x5CCE0B)", TrimEquality);
 Run("whitelist: dangling gbk lead rejected (0x5CCF18)", DanglingLead);
 Run("cascade shape: 22 statements / 19 tables / 15 gates", CascadeShape);
 Run("cascade rows: db/table/column/gate per statement", CascadeRows);
+Run("cascade behaviour: sql text / gate cache / fire-and-forget", CascadeBehaviour);
 
 if (failures.Count != 0)
 {
@@ -103,6 +104,103 @@ void CascadeRows()
     var dbs = new SortedSet<string>(StringComparer.Ordinal);
     foreach (var r in actual) dbs.Add(r.Db);
     Equal("Mir3,gamedata,guild", string.Join(",", dbs), "exactly three schemas, verbatim case");
+}
+
+// --------------------------------- 级联行为三条（SQL 文本 / 门缓存 / fire-and-forget）
+//
+// 为什么需要这一段：上面 115 条只钉住了 Cascade[] 的**内容**，钉不住 RenameCascade
+// 的**行为**。经复核确认，以下三种改坏在只有行断言时全绿：
+//   (a) 删掉 SQL 里的 IGNORE，或把 WHERE 列写成别的列
+//   (b) 删掉 gateCache（每行查一次门；原版是 15 次 show-tables）
+//   (c) 把门关的 continue 改成 return，或在 catch 里 throw
+// 现在 SQL 组装是 BuildCascadeSql、遍历是 RunCascade（接受探测/执行委托），
+// 两者都是调用点**实际走**的路径，故断言它们等于断言行为，不是平行描述。
+void CascadeBehaviour()
+{
+    // ---- (a) SQL 文本逐字。原版 U1 模板 @0x5A9C88：
+    //      `Update ignore gamedata.WeaponUpg set CharName="%s" where CharName="%s";`
+    var sql = MySqlNativeRenameCascadeService.BuildCascadeSql(
+        "gamedata", "WeaponUpg", "CharName");
+    Equal("UPDATE IGNORE gamedata.WeaponUpg SET CharName=@n WHERE CharName=@o", sql,
+        "U1 SQL text verbatim (IGNORE + schema prefix + same col in SET/WHERE)");
+    True(sql.Contains("IGNORE"),
+        "IGNORE is mandatory: new name already present in a table must skip that row");
+    // SET 列与 WHERE 列同名（22/22，已机器校验）——把 WHERE 换成 Idx 这条会红。
+    Equal(2, CountOccurrences(sql, "CharName"),
+        "SET column and WHERE column are the same name");
+    // 库名带 schema 前缀，guild / Mir3 不是 gamedata。
+    True(MySqlNativeRenameCascadeService.BuildCascadeSql("guild", "guild_user", "CharName")
+            .Contains("guild.guild_user"),
+        "schema prefix is emitted verbatim (U11 is guild, not gamedata)");
+    True(MySqlNativeRenameCascadeService.BuildCascadeSql("Mir3", "dominatorpet", "MasterName")
+            .Contains("Mir3.dominatorpet"),
+        "U13 schema is literal Mir3 (M uppercase)");
+
+    // ---- (b) 门缓存：22 条语句只应产生 15 次门探测（原版 15 个 show-tables）。
+    var probes = new List<string>();
+    var executed = new List<string>();
+    var applied = MySqlNativeRenameCascadeService.RunCascade(
+        probeGate: (db, table) => { probes.Add(db + "." + table); return true; },
+        execute: executed.Add);
+    Equal(15, probes.Count,
+        "22 statements must produce exactly 15 gate probes (gate results are cached)");
+    Equal(15, new HashSet<string>(probes, StringComparer.Ordinal).Count,
+        "each gate probed at most once");
+    Equal(22, executed.Count, "all 22 statements run when every gate is open");
+    Equal(22, applied, "applied counts every successful statement");
+
+    // ---- (c) 门关只跳过该块，不中止后续。Kindling 关 ⇒ 少 4 条（G2 一门保 4 表）。
+    executed.Clear();
+    applied = MySqlNativeRenameCascadeService.RunCascade(
+        probeGate: (db, table) => table != "Kindling",
+        execute: executed.Add);
+    Equal(18, executed.Count,
+        "closed Kindling gate skips exactly its 4 tables, later blocks still run");
+    Equal(18, applied, "applied reflects the skipped block");
+    True(executed.Exists(x => x.Contains("mirmatchgroupmemberlist")),
+        "statements after a closed gate still run (continue, not return)");
+    False(executed.Exists(x => x.Contains("GloryPoint")),
+        "GloryPoint is gated by Kindling, not by its own table");
+
+    // U1 无门 ⇒ 即使所有门都关，它照样执行。
+    executed.Clear();
+    MySqlNativeRenameCascadeService.RunCascade(
+        probeGate: (db, table) => false,
+        execute: executed.Add);
+    Equal(1, executed.Count, "only U1 runs when every gate is closed (U1 has no gate)");
+    True(executed[0].Contains("WeaponUpg"), "the ungated statement is WeaponUpg");
+
+    // ---- (c2) fire-and-forget：每条都抛，遍历仍走完 22 条，applied 归零，不冒泡。
+    var attempts = 0;
+    var errors = new List<string>();
+    applied = MySqlNativeRenameCascadeService.RunCascade(
+        probeGate: (db, table) => true,
+        execute: _ => { attempts++; throw new InvalidOperationException("boom"); },
+        onError: (tag, db, table, msg) => errors.Add(tag));
+    Equal(22, attempts, "a throwing statement must not abort the remaining ones");
+    Equal(22, errors.Count, "every failure is reported through onError");
+    Equal(0, applied, "applied stays 0 when every statement fails");
+
+    // 只有中间一条失败时，其余 21 条仍然执行。
+    executed.Clear();
+    applied = MySqlNativeRenameCascadeService.RunCascade(
+        probeGate: (db, table) => true,
+        execute: q =>
+        {
+            if (q.Contains("guild.guild_user")) throw new InvalidOperationException("boom");
+            executed.Add(q);
+        });
+    Equal(21, executed.Count, "one failing statement does not stop the other 21");
+    Equal(21, applied, "applied excludes only the failed statement");
+}
+
+int CountOccurrences(string haystack, string needle)
+{
+    var n = 0;
+    for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+         i = haystack.IndexOf(needle, i + 1, StringComparison.Ordinal))
+        n++;
+    return n;
 }
 
 // ---------------------------------------------------------------- 长度门

@@ -93,6 +93,24 @@ namespace DBSvr
             new Stmt { Gate = "mirmatchgroupmemberlist",      Db = "gamedata", Table = "mirmatchgroupmemberlist",      Column = "CharName", Tag = "U22" },
         };
 
+        /// <summary>
+        /// 组装一条级联 UPDATE 的 SQL。提成静态纯函数**只为可断言性**：
+        /// 此前 SQL 是在 RenameCascade 里内联插值的，审计够不着，于是把
+        /// `IGNORE` 删掉、或把 `WHERE {Column}` 写成 `WHERE Idx`，
+        /// 115 条级联行断言**全绿** —— 那是真缺口，不是理论风险。
+        ///
+        /// 原版模板逐字（例 U1 @0x5A9C88）：
+        ///   `Update ignore gamedata.WeaponUpg set CharName="%s" where CharName="%s";`
+        /// 三处必须逐字保留：
+        ///  (a) `IGNORE` —— 新名已存在于该表时**跳过该行**而不报错；
+        ///  (b) SET 列与 WHERE 列**同名**（22/22 成立，已机器校验）；
+        ///  (c) 库名带 schema 前缀（guild / Mir3 不是 gamedata）。
+        ///
+        /// 两个名字走参数化；db/table/column 只来自本文件的常量表，非外部输入。
+        /// </summary>
+        public static string BuildCascadeSql(string db, string table, string column)
+            => $"UPDATE IGNORE {db}.{table} SET {column}=@n WHERE {column}=@o";
+
         /// <summary>该表在 Cascade 里的条数，供审计交叉校验。</summary>
         public static int CascadeStatementCount => Cascade.Length;
 
@@ -167,6 +185,43 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return 0;
 
+            return RunCascade(
+                probeGate: (db, table) => TableExists(conn, db, table),
+                execute: sql =>
+                {
+                    using var cmd = new MySqlCommand(sql, conn);
+                    cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newName));
+                    cmd.Parameters.Add(LegacyGbkText.Parameter("@o", oldName));
+                    cmd.ExecuteNonQuery();
+                },
+                onError: (tag, db, table, message) => DBShare.MainOutMessage(
+                    $"[GameSoc] 原生改名级联 {tag} ({db}.{table}) 失败(已忽略): "
+                    + message));
+        }
+
+        /// <summary>
+        /// 级联遍历的**纯逻辑**部分：门缓存、门关跳过、fire-and-forget。
+        /// 抽出来只为可断言性 —— 这三条语义此前全绑在真连接上，审计够不着，于是
+        ///  · 删掉 gateCache（变成每行查一次门，原版是 15 次 show-tables）
+        ///  · 把 `continue` 改成 `return`（门关就中止后续全部）
+        ///  · 在 catch 里 `throw`（破坏 fire-and-forget）
+        /// 三种改坏**115 条级联行断言全绿**。那是真缺口，不是理论风险。
+        ///
+        /// 原版对应语义：
+        ///  · 门缓存：一个 `show tables ... like "T"` 保护其后连续若干条
+        ///    （15 个门 / 22 条语句，G2 一门保 4 表）
+        ///  · 门关跳过：`test eax,eax / jle` ⇒ 跳过该块且**不报错**
+        ///  · fire-and-forget：每条 exec 之后**没有** `test al,al`，
+        ///    失败照做下一条，不回滚、不重试、不中断
+        /// </summary>
+        /// <param name="probeGate">(db, gateTable) =&gt; 表是否存在。每个门最多调一次。</param>
+        /// <param name="execute">下发一条已组装好的 UPDATE；抛异常即视为该条失败。</param>
+        /// <param name="onError">失败回调（tag, db, table, message），不得中断遍历。</param>
+        /// <returns>实际成功下发的条数（原版 applied 计数，仅用于日志）。</returns>
+        public static int RunCascade(Func<string, string, bool> probeGate,
+            Action<string> execute,
+            Action<string, string, string, string> onError = null)
+        {
             // 门结果缓存：原版对同一张表只查一次门，一个门保护其后连续若干条。
             var gateCache = new Dictionary<string, bool>(StringComparer.Ordinal);
             var applied = 0;
@@ -177,7 +232,7 @@ namespace DBSvr
                 {
                     if (!gateCache.TryGetValue(s.Gate, out var open))
                     {
-                        open = TableExists(conn, s.Db, s.Gate);
+                        open = probeGate(s.Db, s.Gate);
                         gateCache[s.Gate] = open;
                     }
                     // 门关闭 ⇒ 跳过该块，且**不报错**（原版 test eax,eax / jle）。
@@ -187,23 +242,14 @@ namespace DBSvr
                 try
                 {
                     // `Update ignore <db>.<table> set <col>="新" where <col>="旧";`
-                    // 库名与表名来自本文件内的常量表（非外部输入），故可安全插值；
-                    // 两个名字走参数化。
-                    using var cmd = new MySqlCommand(
-                        $"UPDATE IGNORE {s.Db}.{s.Table} SET {s.Column}=@n WHERE {s.Column}=@o",
-                        conn);
-                    cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newName));
-                    cmd.Parameters.Add(LegacyGbkText.Parameter("@o", oldName));
-                    cmd.ExecuteNonQuery();
+                    execute(BuildCascadeSql(s.Db, s.Table, s.Column));
                     applied++;
                 }
                 catch (Exception ex)
                 {
                     // fire-and-forget：原版每条 call 之后没有 test al,al，
                     // 失败照做下一条，也不回滚、不重试、不中断。
-                    DBShare.MainOutMessage(
-                        $"[GameSoc] 原生改名级联 {s.Tag} ({s.Db}.{s.Table}) 失败(已忽略): "
-                        + ex.Message);
+                    onError?.Invoke(s.Tag, s.Db, s.Table, ex.Message);
                 }
             }
             return applied;
