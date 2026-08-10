@@ -726,6 +726,44 @@ namespace DBSvr
                         else OutOfConnect(userInfo);
                     }
                     break;
+
+                default:
+                    // ⚠️ 此前没有 default 分支 —— 未建模的 opcode 被**静默丢弃**。
+                    // 原版不是静默的，逐字（内层派发的汇合出口）：
+                    //   0x5CE46C  cmp byte [ebp-0xd], 0   ; handled 标志
+                    //   0x5CE470  jne 0x5CE481            ; 已处理则跳过
+                    //   0x5CE472  mov ecx, 0xfb2          ; ★0xFB2 = 4018
+                    //   0x5CE477  xor edx, edx            ; dl = 0
+                    //   0x5CE47C  call 0x5CC7B4
+                    //   0x5CE481  xor eax,eax             ; ← 真正的静默出口在这里
+                    // 所以未处理的 opcode 会收到一个 **ident=4018** 的回包。
+                    //
+                    // 0x5CC7B4 的完整语义（同一函数也被 grp7 = opcode 0xFC7/4039 复用，
+                    // 见 0x5CE445 `mov ecx,0xfc7 / xor edx,edx / call 0x5CC7B4`）：
+                    //   0x5CC7C7  cmp byte [self+8], 7 / je 0x5CC863
+                    //             ; 已是状态 7 则只做收尾（印证 byte[Self+8] 值域含 7，
+                    //             ;  不是我先前写的 0..5）
+                    //   0x5CC7D6  mov edx,0xc / call 0x4036E8   ; 12 字节记录清零
+                    //   0x5CC7E0  mov ax,[ebp-0xc] / mov [ebp-0x18],ax
+                    //             ; ident = ecx 低 16 位；Recog/Param 保持 0
+                    //   0x5CC7FC  call dword [ebx+0x60]         ; 与改名回包同一个虚发送
+                    //   0x5CC7FF  cmp byte [ebp-5],0 / jne      ; dl==0 才继续下面
+                    //   0x5CC822  mov dx,0x271c / call 0x5D1CF8 ; 推 10012 消息
+                    //   0x5CC82E  cmp byte [self+8],6 / jne     ; 仅状态 6
+                    //   0x5CC837  cmp byte [self+0x19],0 / jbe
+                    //   0x5CC857  call 0x59D70C                 ; 经 [[0x5DA0E0]] 外发
+                    //   0x5CC85F  mov byte [self+8], 7          ; ★状态推进到 7
+                    //
+                    // 即原版这条腿**不只是回包，还会关闭会话**。C# 没有
+                    // byte[Self+8] 那个连接状态机、也没接 [[0x5DA0E0]] 外发通道，
+                    // 所以此处只复刻**线上可观测的那一半**（回 4018），
+                    // 并把另一半记为已知缺口，不伪造状态机也不伪造通道。
+                    Log($"[UserSoc] 未建模 opcode {ident} -> 回 4018"
+                        + "（原版 0x5CE472 同时推 10012 并把 byte[Self+8] 置 7，"
+                        + "C# 无该状态机，缺口已记）");
+                    SendEncodedPacket(userInfo,
+                        Grobal2.SM_OUTOFCONNECTION_4018, 0, 0, 0, 0, null);
+                    break;
             }
         }
 
