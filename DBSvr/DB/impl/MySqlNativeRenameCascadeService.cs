@@ -9,7 +9,9 @@ namespace DBSvr
     /// <summary>
     /// 角色改名三库级联的复刻。证据底本 DBServer_repaired_20260803.exe
     /// （sha256 70234272f417a07ab61ffafe1ebb255d31422a5ee25840481a5a10d6c6028666），
-    /// ImageBase 0x400000，CODE 未 VMP 虚拟化，所有 VA 均直读反汇编。
+    /// ImageBase 0x400000。⚠️ 此处曾写“CODE 未 VMP 虚拟化”，那是错的：
+    /// .vmp0/.vmp1 两段存在，CODE 有 688 处转移进去（E8 568 + E9 120）。
+    /// 准确说法：**大部分游戏逻辑函数未虚拟化**，所有引用的 VA 均直读反汇编。
     ///
     /// 级联块的拼接形态（以 U1 为例，0x5A9288..0x5A92D0）：
     ///   0x5A92A2  push 0x5A9C68            ; "Update ignore gamedata"（前缀，含库名）

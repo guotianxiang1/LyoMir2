@@ -1,6 +1,10 @@
 // Asserts the native 宗派/师门 sub-protocol (type1 0x0170) byte contract against
 // the 战神 DBServer disassembly. Every expected value below is quoted from a
-// specific instruction address in DBServer_unpacked.exe (CODE segment is not
+// specific instruction address in DBServer_unpacked.exe. NOTE: an earlier
+// version of this comment claimed the CODE segment is not VMProtect-affected.
+// That was wrong -- the image has .vmp0/.vmp1 and 688 CODE-to-VMP transfers
+// (E8 x568 + E9 x120, independently counted). What is true is that most game
+// logic functions are not virtualised (CODE segment is not
 // VMProtect-damaged, so these were read directly, not from pseudocode).
 // Evidence: staging/dbsvr_type1_dispatch_census_20260803.md §3之二.
 using System.Buffers.Binary;

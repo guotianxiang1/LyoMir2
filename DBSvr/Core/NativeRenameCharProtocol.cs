@@ -9,7 +9,10 @@ namespace DBSvr.Core
     ///
     /// 证据底本 DBServer_repaired_20260803.exe
     /// （sha256 70234272f417a07ab61ffafe1ebb255d31422a5ee25840481a5a10d6c6028666），
-    /// ImageBase 0x400000，CODE 未 VMP 虚拟化，以下每个常量均直读反汇编。
+    /// ImageBase 0x400000。⚠️ 此处曾写“CODE 未 VMP 虚拟化”，那是错的：
+    /// .vmp0/.vmp1 两段存在，CODE 有 688 处转移进去（E8 568 + E9 120）。
+    /// 准确说法：**大部分游戏逻辑函数未虚拟化**，
+    /// 以下每个常量均直读反汇编。
     ///
     /// 派发路径（内层是**两级表**，不是 base+idx*4）：
     ///   idx = word[msg+4] - 0xFAC = 0x04

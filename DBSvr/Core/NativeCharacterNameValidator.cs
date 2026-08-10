@@ -11,7 +11,10 @@ namespace DBSvr.Core
     ///
     /// 证据底本 DBServer_repaired_20260803.exe
     /// （sha256 70234272f417a07ab61ffafe1ebb255d31422a5ee25840481a5a10d6c6028666），
-    /// ImageBase 0x400000，CODE 未 VMP 虚拟化，以下每条规则均直读反汇编。
+    /// ImageBase 0x400000。⚠️ 此处曾写“CODE 未 VMP 虚拟化”，那是错的：
+    /// 该镜像有 .vmp0/.vmp1 两段，且 CODE 有 688 处转移进去
+    /// （E8 568 + E9 120，已独立复核）。准确说法是
+    /// **大部分游戏逻辑函数未虚拟化**，所以以下每条规则均直读反汇编。
     ///
     /// ⚠️ Delphi 的 <c>add al,K / sub al,N / jb|jae</c> 是区间判定的惯用形式：
     /// <c>add</c> 把区间下界搬到 0（对 byte 自然回绕），<c>sub</c> 置借位标志，
