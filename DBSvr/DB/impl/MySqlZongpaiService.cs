@@ -303,6 +303,30 @@ namespace DBSvr
             return null;
         }
 
+        /// <summary>
+        /// sub 12 (ModifyNotice) 落库。原版 worker 0x593D70 走的是数据集 BLOB 流写，
+        /// 见 IZongpaiService.UpdateNotice 的逐字注释。这里用等价的单条 UPDATE：
+        ///  - 只改 Notice 一列，**不带 UpdateTime**（worker 内无 Now()/UpdateTime 引用）；
+        ///  - 参数按 **byte[]** 绑定（列类型 blob，DDL 0x5BEE34），保住内嵌 0x00；
+        ///  - 原版前置门 0x593DF0 `dec eax / jne` 要求 select 恰返回 1 行，
+        ///    等价于「MasterName 无匹配则不写」——UPDATE 影响 0 行即该情形，返 false。
+        /// </summary>
+        public bool UpdateNotice(string masterName, byte[] notice)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                "UPDATE gamedata.ZongpaiBase SET Notice=@b WHERE MasterName=@n", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+            // MySqlDbType.Blob：按字节原样落库，不做任何字符集转换。
+            cmd.Parameters.Add(new MySqlParameter("@b", MySqlDbType.Blob)
+            {
+                Value = notice ?? Array.Empty<byte>()
+            });
+            // 0x593DF0 的「恰 1 行」门 ⇒ 影响 0 行视为记录不存在。
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
         public bool AddRole(string masterName, string roleName, int privilege, int maxMembers)
         {
             using var conn = OpenConn();

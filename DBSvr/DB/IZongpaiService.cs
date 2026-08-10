@@ -79,6 +79,26 @@ namespace DBSvr
         bool DeleteMaster(string masterName);
         ZongpaiMasterInfo GetMaster(string masterName);
 
+        /// <summary>
+        /// sub 12 (ModifyNotice) 的落库。原版 worker 0x593D70 用的是**数据集流写**，
+        /// 不是 UPDATE 语句：
+        ///   0x593DDB `mov eax,0x593F04` / 0x593DE0 `call 0x40CF30`(Format) ⇒
+        ///     `select idx, Notice from ZongpaiBase where MasterName = "%s";`
+        ///     （0x593F04 longstr refcount=-1 len=60，逐字）
+        ///   0x593DEB `call 0x592300` / 0x593DF0 `dec eax / jne` ⇒ 该查询必须**恰返回 1**
+        ///   0x593E0B/0x593E16 `call 0x5655FC/0x5659E4` ⇒ 数据集 Edit
+        ///   0x593E29 `call 0x556EE8`(edx=1) / 0x593E3A `call [vmt+0x214]` ⇒ 取 Notice
+        ///     字段的 BLOB 写入流（cl=1 = 写模式）
+        ///   0x593E4E `call dword [ebx+0x10]`(edx=tail 指针, ecx=tail 长度) ⇒ 原样写字节
+        ///   0x593E61 `call [vmt+0x24C]` ⇒ Post
+        /// 语义等价于 `UPDATE ZongpaiBase SET Notice=<blob> WHERE MasterName=...`，
+        /// 且**不带 UpdateTime**（整个 worker 里没有 Now()/UpdateTime 的引用）。
+        /// Notice 列类型是 <c>blob</c>（DDL 0x5BEE34），所以必须按**字节**写，
+        /// 不能按字符串写 —— tail 里的 0x00 填充也是内容的一部分。
+        /// </summary>
+        /// <returns>true = 已落库；false = 记录不存在或写库失败（调用方据此不回包）。</returns>
+        bool UpdateNotice(string masterName, byte[] notice);
+
         // === 角色 ===
         bool AddRole(string masterName, string roleName, int privilege, int maxMembers);
 

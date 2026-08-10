@@ -129,6 +129,47 @@ namespace DBSvr.Core
         public byte[] HeaderSlot35 { get; init; } = Array.Empty<byte>();
 
         /// <summary>
+        /// sub 1 的**输入**：要查找的成员名，取 tail+0x35。
+        /// 0x594173 `lea eax,[ebp-0x90]` / 0x594179 `mov edx,[ebp-4]` /
+        /// 0x59417C `add edx,0x35` / 0x59417F `call 0x404E5C`（ShortString→长串），
+        /// 该长串即 worker 0x5933CC 的 edx 参数（0x594184/0x59418A/0x59418E）。
+        /// ⚠️ 与 sub 10 不同：sub 10 的名字取 tail+0x00，sub 1 取 tail+0x35。
+        /// </summary>
+        public byte[] EnumerateMemberName => TailSlot35;
+
+        /// <summary>
+        /// sub 10 的**查询键**：师父名，取 tail+0x00。
+        /// 0x59455D `lea eax,[ebp-0x1D0]` / 0x594563 `mov edx,[ebp-4]`（**无 add**）/
+        /// 0x594566 `call 0x404E5C` ⇒ 直接用 tail 基址，即 tail+0x00。
+        /// </summary>
+        public byte[] QueryMembersMasterName => TailSlot00;
+
+        /// <summary>
+        /// sub 10 回包里回显到 body+0x25 的名字，取 tail+0x35（0x594606
+        /// `mov edx,[ebp-4]` / 0x594609 `add edx,0x35` / 0x59460C `mov cl,0x0F`）。
+        /// ⚠️ 与查询键**不是同一个槽** —— 原版用 tail+0x00 查、用 tail+0x35 回显。
+        /// </summary>
+        public byte[] QueryMembersEchoName => TailSlot35;
+
+        /// <summary>
+        /// sub 11 / sub 12 的师父名，取 **HEADER**+0x35，不是 tail。
+        /// sub 11: 0x59464D `mov edx,[ebp-0xC]` / 0x594650 `add edx,0x35`；
+        /// sub 12: 0x594679 `mov edx,[ebp-0xC]` / 0x59467C `add edx,0x35`。
+        /// `[ebp-0xC]` 是 0x59408A 存入的 edx = 0x48 字节头部基址。
+        /// </summary>
+        public byte[] NoticeMasterName => HeaderSlot35;
+
+        /// <summary>
+        /// sub 12 要写入的公告正文 = **整条 tail 原始字节**，长度 = tail 长度。
+        /// 0x59466B `mov eax,[ebp+0x10]` / push（=派发器第三参数 tail 长度 → worker 的
+        /// [ebp+0xC]）、0x59468A `mov ecx,[ebp-4]`（=tail 指针 → worker 的 [ebp-0xC]），
+        /// worker 0x593E43 `mov edx,[ebp-0xC]` / 0x593E46 `mov ecx,[ebp+0xC]` /
+        /// 0x593E4E `call dword [ebx+0x10]` ⇒ 按 (指针, 长度) 原样写进 blob 流。
+        /// ⚠️ 不是 ShortString、不做任何槽解析：tail 里的 0x00 填充也会被写进 Notice 列。
+        /// </summary>
+        public byte[] ModifyNoticeText => Tail;
+
+        /// <summary>
         /// dword the reply echoes into body+4; the original reads header[+4]
         /// (0x59443E `[[ebp-0xC]+4]`), which is the sub-command dword itself.
         /// </summary>
@@ -162,6 +203,35 @@ namespace DBSvr.Core
         public const int LevelReplyRecordSize = 0x30;
         /// <summary>Sub-command 10 stride: 0x59457F `imul eax,[n],0x29`.</summary>
         public const int MemberRecordSize = 0x29;
+
+        /// <summary>
+        /// sub 12 自己的**上界**门（与 0x54 下界门无关，group 4 没有 0x54 门）：
+        /// worker 0x593DA0 `cmp dword [ebp+0xC],0x80` / 0x593DA7 `jg 0x593ECC`
+        /// ⇒ 公告长度 &gt; 0x80 直接跳到出口，既不写库也不产生回包字符串。
+        /// 判据是 `jg`（**带符号**），且比较值是派发器透传的 tail 长度。
+        /// </summary>
+        public const int MaximumNoticeLength = 0x80;
+
+        /// <summary>
+        /// sub 10 的成员记录内部布局，逐字取自 worker 0x593B74 的填充循环：
+        ///   +0x00 (cl=0x14) RoleName    0x593C8D `mov eax,[ebp-0x30]` / 0x593C90 `mov cl,0x14`
+        ///   +0x15 (cl=0x0F) MemberName  0x593C60 `add eax,0x15` / 0x593C63 `mov cl,0x0F`
+        ///   +0x25 word      Level       0x593C9A 先清 0；0x593CD6 `mov ax,[live+0x3E]` /
+        ///                               0x593CDD `mov word [rec+0x25],ax`
+        ///   +0x27 byte      OnlineFlag  0x593CA3 先清 0；0x593CE4 `mov al,[live+0x25]` /
+        ///                               0x593CEA `mov byte [rec+0x27],al`
+        ///   +0x28           **从不写入**（0x29 - 0x28 = 1 字节尾部空洞，恒 0；
+        ///                   整块在 0x593BFC 已被 0x4036E8 清零）
+        /// ⚠️ 顺序违反直觉：容量 20 的 RoleName 在**前**、容量 15 的 MemberName 在后。
+        /// 两者由 `mov cl` 的容量与写入基址共同定死，不能按名字顺序猜。
+        /// </summary>
+        public const int MemberRecordRoleNameOffset = 0x00;
+        /// <summary>See <see cref="MemberRecordRoleNameOffset"/> (0x593C60，cl=0x0F)。</summary>
+        public const int MemberRecordMemberNameOffset = 0x15;
+        /// <summary>See <see cref="MemberRecordRoleNameOffset"/> (0x593CDD word)。</summary>
+        public const int MemberRecordLevelOffset = 0x25;
+        /// <summary>See <see cref="MemberRecordRoleNameOffset"/> (0x593CEA byte)。</summary>
+        public const int MemberRecordOnlineOffset = 0x27;
         /// <summary>
         /// Where trailing data starts, PAYLOAD-relative. The original writes it to
         /// buf+0x54, and payload == buf+0x0C (magic/type/len occupy the first 12
@@ -276,6 +346,44 @@ namespace DBSvr.Core
                 _ => false,
             };
 
+        /// <summary>
+        /// sub 12 独有的**上界**门，逐字取自 worker 0x593D70：
+        ///   0x593DA0  `cmp dword [ebp+0xC],0x80`
+        ///   0x593DA7  `jg 0x593ECC`        ; **带符号** jg，落到 worker 出口
+        /// 出口 0x593ECC 之后不写 out 参数，故 out 保持 0x593D9B（`call 0x404BF8`
+        /// 清空 out）留下的空串；派发器随即在 0x594695 `cmp [ebp-0x24],0 / je`
+        /// 判空 ⇒ **超长请求既不落库也不回包**（连 [ebp-0x10] 都不写）。
+        /// ⚠️ 这与 group 1/2/3 的 0x54 **下界**门是两件独立的事：group 4 入口
+        /// 0x59463E 是 `8b 45 f4`，根本没有 0x54 门（<see cref="RequiresLengthGate"/>）。
+        /// </summary>
+        public static bool IsNoticeLengthAccepted(int noticeLength)
+            => noticeLength <= MaximumNoticeLength;
+
+        /// <summary>
+        /// 该子命令是否把 tail 当作**带 ShortString 槽的结构**来解析。
+        /// group 1/2/3 都会（0x5941AF/0x594563/0x5941FB 之类的 `add …,0x35` 取槽），
+        /// 但 **group 4（sub 11/12）不会**：入口 0x59463E 全程只碰 tail 指针一次 ——
+        ///   0x59468A `mov ecx,[ebp-4]`（指针）配 0x59466B `mov eax,[ebp+0x10]`（长度）
+        ///   → 0x594690 `call 0x593D70`，worker 再 0x593E4E `call [ebx+0x10]` 原样写流。
+        /// 组内没有任何 `add eax,0x25` / `add eax,0x35` 之类的 tail 取槽指令
+        /// （sub 11/12 的两处 `add …,0x35` 都作用在 `[ebp-0xC]` = **header**）。
+        ///
+        /// ⚠️ 这条不是装饰：公告正文是**二进制 blob**（Notice 列类型 blob，
+        /// DDL 0x5BEE34），任意字节都合法。若对 sub 11/12 照样按 ShortString
+        /// 校验 tail，正文里 offset 0x25 的字节只要 &gt; 0x0F 整条请求就会被拒 ——
+        /// 而原版照单全收并写进库。那是 C# 侧凭空多出来的拒绝，属功能缺失。
+        /// </summary>
+        public static bool ParsesTailShortStrings(
+            NativeZongpaiSubCommand subCommand) => subCommand switch
+            {
+                // group 4：只透传 (指针, 长度)，不解析槽。
+                NativeZongpaiSubCommand.ReadNotice => false,
+                NativeZongpaiSubCommand.ModifyNotice => false,
+                // sub 0 是共享出口 0x59476B，根本不看 tail。
+                NativeZongpaiSubCommand.None => false,
+                _ => true,
+            };
+
         public static bool TryDecodeRequest(LegacyDbServerFrame frame,
             out NativeZongpaiRequest request, out string error)
         {
@@ -321,18 +429,29 @@ namespace DBSvr.Core
                 return false;
             }
 
-            if (!TryReadShortString(tail, Slot00Offset, WideShortStringCapacity,
-                    "tail", out var tailSlot00, out error)
-                || !TryReadShortString(tail, Slot10Offset, WideShortStringCapacity,
-                    "tail", out var tailSlot10, out error)
-                || !TryReadShortString(tail, Slot25Offset, ShortStringCapacity,
-                    "tail", out var tailSlot25, out error)
-                || !TryReadShortString(tail, Slot35Offset, ShortStringCapacity,
-                    "tail", out var tailSlot35, out error)
-                || !TryReadShortString(header, Slot25Offset, ShortStringCapacity,
+            // 头部槽对所有子命令都解析（sub 11/12 靠它取师父名，0x594738/0x59474E）。
+            if (!TryReadShortString(header, Slot25Offset, ShortStringCapacity,
                     "header", out var headerSlot25, out error)
                 || !TryReadShortString(header, Slot35Offset, ShortStringCapacity,
                     "header", out var headerSlot35, out error))
+                return false;
+
+            // tail 槽只对真正取槽的组解析。sub 11/12（group 4）把 tail 整块当
+            // 二进制公告正文透传（见 ParsesTailShortStrings），对它做 ShortString
+            // 校验会凭空拒掉原版接受的请求。
+            var tailSlot00 = Array.Empty<byte>();
+            var tailSlot10 = Array.Empty<byte>();
+            var tailSlot25 = Array.Empty<byte>();
+            var tailSlot35 = Array.Empty<byte>();
+            if (ParsesTailShortStrings(subCommand)
+                && (!TryReadShortString(tail, Slot00Offset, WideShortStringCapacity,
+                        "tail", out tailSlot00, out error)
+                    || !TryReadShortString(tail, Slot10Offset, WideShortStringCapacity,
+                        "tail", out tailSlot10, out error)
+                    || !TryReadShortString(tail, Slot25Offset, ShortStringCapacity,
+                        "tail", out tailSlot25, out error)
+                    || !TryReadShortString(tail, Slot35Offset, ShortStringCapacity,
+                        "tail", out tailSlot35, out error)))
                 return false;
 
             var value4C = 0;
@@ -378,6 +497,60 @@ namespace DBSvr.Core
             if (echo > 0)
                 request.Tail.AsSpan(0, echo)
                     .CopyTo(payload.AsSpan(ReplyDataOffset));
+            return new LegacyDbServerFrame(1, 0, payload);
+        }
+
+        /// <summary>
+        /// sub 1 回包（0x59415A → 共享分配器 0x5943C5）。帧型与标准回包完全相同
+        /// （0xA8/0x9C、body+2 = 返回码、body+4 = echo、tail 前 0x54 字节回显），
+        /// **但结果不是通过独立字段返回的** —— 原版把答案就地写回请求 tail，
+        /// 再让共享分配器把这段 tail 拷进回包：
+        ///   0x594196 `lea eax,[ebp-0x190]` / 0x59419C `mov edx,[ebp-0x1C]`（out1=师父名）
+        ///            / 0x59419F `mov ecx,0xFF` / 0x5941A4 `call 0x404E94`  长串→ShortString
+        ///   0x5941AF `mov eax,[ebp-4]`（**tail 基址，无 add**）/ 0x5941B2 `mov cl,0x0F`
+        ///            / 0x5941B4 `call 0x4035D8`  ⇒ 师父名写到 **tail+0x00，容量 15**
+        ///   0x5941BF `mov edx,[ebp-0x20]`（out2=角色名）/ 0x5941C7 `call 0x404E94`
+        ///   0x5941D2 `mov eax,[ebp-4]` / 0x5941D5 `add eax,0x10` / 0x5941D8 `mov cl,0x14`
+        ///            ⇒ 角色名写到 **tail+0x10，容量 20**
+        ///
+        /// 两处必须逐字复刻的细节：
+        ///  (1) 0x4035D8 **不清尾部字节**（`min(cl,srclen)` 只改长度字节+前 n 字节），
+        ///      所以槽内剩余字节保留**请求原样**，不是 0。
+        ///  (2) 未找到时 out1/out2 是空长串，0x404E94 走 `edx==0` 分支
+        ///      （0x404EB1 `mov byte [eax],0`）得到长度 0 的 ShortString，随后照样
+        ///      赋值 ⇒ **tail+0x00 与 tail+0x10 的长度字节被清 0**，其后字节不动。
+        ///      即「未找到」也会改写 tail，不是原封不动回显。
+        /// 容量不对称：写回用 15，而解码侧对 tail+0x00 放到 20 —— 原版写回处
+        /// `mov cl,0x0F` 是唯一判据，不能按解码侧的容量写。
+        /// </summary>
+        /// <param name="found">
+        /// 是否找到。true ⇒ body+2 = <see cref="EnumerateFoundResult"/>（0），
+        /// 见 worker 0x59340A/0x59347F 的**反极性**说明。
+        /// </param>
+        public static LegacyDbServerFrame CreateEnumerateResponse(
+            NativeZongpaiRequest request, bool found, byte[] masterName,
+            byte[] roleName)
+        {
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            // 原版就地改写请求 tail；这里改写副本，语义相同且不破坏调用方的请求对象。
+            var patched = request.Tail.Length == 0
+                ? Array.Empty<byte>()
+                : (byte[])request.Tail.Clone();
+
+            // 未找到 ⇒ 两个槽都按空串赋值（长度字节归 0），而不是跳过赋值。
+            WriteShortStringNoFill(patched, Slot00Offset, ShortStringCapacity,
+                found ? masterName : Array.Empty<byte>());
+            WriteShortStringNoFill(patched, Slot10Offset, WideShortStringCapacity,
+                found ? roleName : Array.Empty<byte>());
+
+            var payload = new byte[StandardReplyTotalLength - WireHeaderSize];
+            WriteReplyHeader(payload,
+                found ? EnumerateFoundResult : EnumerateNotFoundResult,
+                request.EchoDword);
+            var echo = Math.Min(MinimumTailLength, patched.Length);
+            if (echo > 0)
+                patched.AsSpan(0, echo).CopyTo(payload.AsSpan(ReplyDataOffset));
             return new LegacyDbServerFrame(1, 0, payload);
         }
 
@@ -432,11 +605,29 @@ namespace DBSvr.Core
         /// (0x594738/0x59474E read `[ebp-0xC]` = the header base); the notice text
         /// goes to payload+0x54. The original skips the reply entirely when the
         /// notice pointer is null (0x594695).
+        ///
+        /// 长度与 `+1` 的来源，以及正文拷贝的**截断语义**：
+        ///   0x5946A9 `call 0x404EB8`  ⇒ len = Length(str) = dword [str-4]
+        ///                              （0x404EBC `mov eax,[eax-4]`；空指针返 0）
+        ///   0x5946B4 `add eax,0x54` / 0x5946B7 `inc eax`  ⇒ 总长 = len + 0x54 + 1
+        ///   0x594700 `add eax,0x48` / 0x594703 `inc eax`  ⇒ 载荷 = len + 0x48 + 1
+        ///   0x5946D8 `call 0x4036E8`（ecx=0）⇒ 整个缓冲先清零，故那 `+1` 字节恒 0
+        ///   0x594766 `call 0x40C818`（eax=buf+0x54, edx=str, ecx=len）
+        ///
+        /// 0x40C818 → 0x40C7B0 是 StrPLCopy 语义，**在第一个 0x00 处截断**：
+        ///   0x40C7BF `repne scasb`（al=0，最多 ecx 字节）扫首个 NUL
+        ///   0x40C7C4 `sub ebx,ecx` ⇒ 实拷字节数 = min(len, strlen(str))
+        ///   0x40C7DA `stosb`       ⇒ 末尾补一个 NUL（即上面那个 `+1` 的用途）
+        /// ⚠️ 于是内嵌 0x00 的公告会出现 **body+2 声明的长度 &gt; 实际拷进去的字节数**，
+        /// 其后字节保持 0x5946D8 的清零值。Notice 列是 <c>blob</c>（DDL 0x5BEE34），
+        /// 二进制内容合法，所以这条不是理论情况，必须按截断复刻，
+        /// 不能整块 CopyTo —— 那会把 NUL 之后的字节也发出去。
         /// </summary>
         public static LegacyDbServerFrame CreateNoticeResponse(
             NativeZongpaiRequest request, ReadOnlySpan<byte> notice)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            // body+2 用的是 Length(str)（0x5946A9），**不是**截断后的长度。
             var length = notice.Length;
             var payload = new byte[length + HeaderSize + 1];
             WriteReplyHeader(payload, length, request.EchoDword);
@@ -444,9 +635,58 @@ namespace DBSvr.Core
                 request.HeaderSlot25);
             WriteShortString(payload, Slot35Offset, ShortStringCapacity,
                 request.HeaderSlot35);
-            if (length > 0)
-                notice.CopyTo(payload.AsSpan(ReplyDataOffset));
+            // 0x40C7BF 的 repne scasb：实拷字节数在首个 NUL 处截断。
+            var copied = notice.IndexOf((byte)0);
+            if (copied < 0) copied = length;
+            if (copied > 0)
+                notice.Slice(0, copied).CopyTo(payload.AsSpan(ReplyDataOffset));
             return new LegacyDbServerFrame(1, 0, payload);
+        }
+
+        /// <summary>
+        /// sub 1 的返回码。⚠️ **极性是反的**：worker 0x5933CC 把 `[ebp-0x10]`
+        /// 初始化为 **1**（0x59340A `mov dword [ebp-0x10],1`），只在**找到**成员的
+        /// 那条路径上才改写为 0（0x59347D `xor eax,eax` / 0x59347F
+        /// `mov [ebp-0x10],eax`），出口 0x593512 `mov eax,[ebp-0x10]` 返回它，
+        /// 调用点 0x594193 `mov [ebp-0x14],eax` 把它存进 `[ebp-0x14]`，
+        /// 再由共享回包器 0x594436 `mov dx,word [ebp-0x14]` /
+        /// 0x59443A `mov word [eax+2],dx` 写进 body+2。
+        /// 所以 body+2 == 0 表示**找到**，非 0 表示没找到 —— 与其余子命令
+        /// 「0 = 成功」凑巧同向，但成因不同（这里是 found 标志，不是错误码）。
+        /// 「找到」的判据不是遍历命中，而是第二个出参非空：
+        ///   0x593467 `mov eax,[ebp+8]`（=out2）/ 0x59346A `cmp dword [eax],0` / je
+        /// ⇒ out2（角色名）为空长串（Delphi 空串 = nil 指针）时仍走未找到出口
+        /// 0x59348C 并继续遍历下一个师父。只有 out2 非空才在 0x59346F 把
+        /// 师父名（record+0x0C）写进 out1，并在 0x59347F 置 0 收工。
+        /// </summary>
+        public const int EnumerateFoundResult = 0;
+        /// <summary>See <see cref="EnumerateFoundResult"/> (0x59340A 的初值)。</summary>
+        public const int EnumerateNotFoundResult = 1;
+
+        /// <summary>
+        /// 组装一条 sub 10 成员记录（0x29 字节），布局见
+        /// <see cref="MemberRecordRoleNameOffset"/>。等级/在线位在原版取自**活体**
+        /// 角色对象（0x593CC5 `call 0x5ABC18` 按名字查，0x593CD1 `je` 查不到就
+        /// **保留 0x593C9A/0x593CA3 写下的 0**），所以查不到时必须传
+        /// level=0 / online=false，而不是回落到库里的等级。
+        /// </summary>
+        public static byte[] BuildMemberRecord(byte[] roleName,
+            byte[] memberName, ushort level, bool online)
+        {
+            var record = new byte[MemberRecordSize];
+            // 0x593C8D/0x593C90: cl=0x14 → 容量 20，写在记录起始处。
+            WriteShortString(record, MemberRecordRoleNameOffset,
+                WideShortStringCapacity, roleName);
+            // 0x593C60/0x593C63: add eax,0x15 / cl=0x0F → 容量 15。
+            WriteShortString(record, MemberRecordMemberNameOffset,
+                ShortStringCapacity, memberName);
+            // 0x593CDD: mov word [rec+0x25],ax —— word 宽度，取自 live+0x3E。
+            BinaryPrimitives.WriteUInt16LittleEndian(
+                record.AsSpan(MemberRecordLevelOffset, 2), level);
+            // 0x593CEA: mov byte [rec+0x27],al —— 直接搬 live+0x25 这一个字节。
+            record[MemberRecordOnlineOffset] = online ? (byte)1 : (byte)0;
+            // +0x28 原版从不写入，保持 0（0x593BFC 的整块清零）。
+            return record;
         }
 
         private static void WriteReplyHeader(byte[] payload, int result,
@@ -479,6 +719,31 @@ namespace DBSvr.Core
             }
             value = source.AsSpan(offset + 1, length).ToArray();
             return true;
+        }
+
+        /// <summary>
+        /// Delphi ShortString 赋值 0x4035D8 的逐字语义，用于**就地改写已有缓冲**
+        /// （sub 1 写回请求 tail）：
+        ///   0x4035D9 `mov bl,[edx]` / 0x4035DB `cmp cl,bl` / 0x4035DD `jbe`
+        ///            ⇒ 长度 = min(capacity, srclen)
+        ///   0x4035E1 `mov [eax],cl`  ⇒ 只写长度字节
+        ///   0x4035EC `call 0x4031D0` ⇒ 只搬 n 字节
+        /// **不清尾部**：槽内 n 之后的字节保持原值。<see cref="WriteShortString"/>
+        /// 写的是全新的零缓冲，那里区分不出来；这里写的是请求副本，区分得出来，
+        /// 所以必须分成两个方法而不是复用。
+        /// </summary>
+        private static void WriteShortStringNoFill(byte[] buffer, int offset,
+            int capacity, byte[] value)
+        {
+            if (offset >= buffer.Length) return;
+            var source = value ?? Array.Empty<byte>();
+            var length = Math.Min(source.Length, capacity);
+            // 尾部越界时按可写空间截断（原版靠 0x54 长度门保证槽在界内）。
+            if (offset + 1 + length > buffer.Length)
+                length = Math.Max(0, buffer.Length - offset - 1);
+            buffer[offset] = (byte)length;
+            if (length > 0)
+                source.AsSpan(0, length).CopyTo(buffer.AsSpan(offset + 1));
         }
 
         private static void WriteShortString(byte[] payload, int offset,

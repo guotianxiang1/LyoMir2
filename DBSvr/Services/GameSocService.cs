@@ -1431,15 +1431,152 @@ namespace DBSvr
                     }
                     break;
                 default:
-                    // Sub-commands 0/1/10/11/12: the original reads its in-memory
-                    // 宗派 tables (enumerate / member list / notice) whose record
-                    // layouts are not yet reversed. Staying silent matches the
-                    // original's own no-data exits rather than sending a made-up
-                    // frame.
+                    // Sub-command 0 is the shared exit (no-op in original).
                     DBShare.MainOutMessage(
                         "[GameSoc] 原生0170宗派子命令暂未实现: "
                         + $"{(int)request.SubCommand}");
                     return;
+                case NativeZongpaiSubCommand.Enumerate:
+                {
+                    // worker 0x5933CC：按 tail+0x35 的成员名，遍历内存宗派表查找
+                    // 所属师父名（out1）与角色名（out2）。
+                    // 结果通过 CreateEnumerateResponse 把 out1/out2 写回 tail+0x00/+0x10
+                    // 再拷入标准回包（详见 NativeZongpaiProtocol.CreateEnumerateResponse）。
+                    // 数据源：_zongpaiService.GetMasterByMemberName 查库，近似原版内存查。
+                    // 原版结果码极性反（0=找到），CreateEnumerateResponse 内部处理。
+                    var memberName = LegacyGbkText.Decode(request.EnumerateMemberName);
+                    var members = _zongpaiService.LoadAllMembers();
+                    var match = members.Find(m =>
+                        string.Equals(m.MemberName, memberName,
+                            StringComparison.Ordinal));
+                    byte[] outMasterName = Array.Empty<byte>();
+                    byte[] outRoleName = Array.Empty<byte>();
+                    var found = match != null;
+                    if (found)
+                    {
+                        // out1 = 师父名，来自宗派记录 +0x0C
+                        //   （0x59346F `mov eax,[ebp-0xC]` / 0x593475 `mov edx,[edx+0xC]`；
+                        //    +0x0C 由 ctor 0x591C60 `add eax,0xC` 写入 = 该记录的 MasterName）
+                        // out2 = 角色名，来自成员容器里该成员对应值对象的首字段
+                        //   （helper 0x591BE4：0x591C0A `call [ebx+0x8C]` 按名字查成员 →
+                        //    0x591C1F `call [ecx+0x18]` 取值对象 → 0x591C28 `mov edx,[edx]`）
+                        // 二者正对应 ZongpaiMemberInfo 的 MasterName / RoleName。
+                        outMasterName = LegacyGbkText.Encode(match.MasterName);
+                        outRoleName = LegacyGbkText.Encode(match.RoleName);
+                    }
+                    SendNativeZongpaiReply(sender,
+                        NativeZongpaiProtocol.CreateEnumerateResponse(
+                            request, found, outMasterName, outRoleName),
+                        NativeZongpaiReplyMode.Sender);
+                    return;
+                }
+                case NativeZongpaiSubCommand.QueryMembers:
+                {
+                    // worker 0x593B74：按 tail+0x00（QueryMembersMasterName）查成员列表，
+                    // 每行一条 0x29 字节记录，字段布局见 NativeZongpaiProtocol.BuildMemberRecord。
+                    // 回包的 body+0x25 回显 tail+0x35（QueryMembersEchoName）。
+                    // count <= 0 时仍发空帧（0x594613 jle 在分配器之后）。
+                    var queryName = LegacyGbkText.Decode(request.QueryMembersMasterName);
+                    var allMembers = _zongpaiService.LoadAllMembers();
+                    var rows = allMembers.FindAll(m =>
+                        string.Equals(m.MasterName, queryName,
+                            StringComparison.Ordinal));
+                    var count = rows.Count;
+                    byte[] recordBytes = Array.Empty<byte>();
+                    if (count > 0)
+                    {
+                        recordBytes = new byte[count * NativeZongpaiProtocol.MemberRecordSize];
+                        for (var i = 0; i < count; i++)
+                        {
+                            var row = rows[i];
+                            // 0x593CC5 `call 0x5ABC18`：按 MemberName 查活体角色。
+                            // 查不到 → level=0, online=false（0x593C9A/0x593CA3 清零）。
+                            ushort level = 0;
+                            var online = false;
+                            if (_playRecordService.TryGetNativeCharacterByName(
+                                    LegacyGbkText.Encode(row.MemberName),
+                                    out var liveChar))
+                            {
+                                // 0x593CD6: mov ax,[live+0x3E] = Level。
+                                level = (ushort)liveChar.Level;
+                                // 0x593CE4: mov al,[live+0x25] = 在线标志（非 0 = 在线）。
+                                // ChrIndexInfo 没有对应字段；NativeBusy ≈ 在线。
+                                online = liveChar.NativeBusy;
+                            }
+                            var rec = NativeZongpaiProtocol.BuildMemberRecord(
+                                LegacyGbkText.Encode(row.RoleName),
+                                LegacyGbkText.Encode(row.MemberName),
+                                level, online);
+                            rec.CopyTo(recordBytes, i * NativeZongpaiProtocol.MemberRecordSize);
+                        }
+                    }
+                    SendNativeZongpaiReply(sender,
+                        NativeZongpaiProtocol.CreateMemberListResponse(
+                            request, count, recordBytes),
+                        NativeZongpaiReplyMode.Sender);
+                    return;
+                }
+                case NativeZongpaiSubCommand.ReadNotice:
+                {
+                    // worker 0x593D30：按 HEADER+0x35（NoticeMasterName）查宗派记录，
+                    // 取 record[+0x1C]（Delphi 内存里的 Notice 长串指针）写进 out 参数。
+                    // 原版内存中 +0x1C 是 ZongpaiMasterInfo.Notice（blob 字节，DDL 0x5BEE34）。
+                    // 0x594695 `cmp [ebp-0x24],0 / je` —— out 空则不发回包（不写 [ebp-0x10]）。
+                    var noticeMaster = LegacyGbkText.Decode(request.NoticeMasterName);
+                    var masterRec = _zongpaiService.GetMaster(noticeMaster);
+                    var notice = masterRec?.Notice;
+                    if (notice == null || notice.Length == 0)
+                    {
+                        // 0x593D5C je 0x593D6C：查不到或 Notice 指针为 nil ⇒ out 空串 ⇒ 不回包。
+                        return;
+                    }
+                    SendNativeZongpaiReply(sender,
+                        NativeZongpaiProtocol.CreateNoticeResponse(request, notice),
+                        NativeZongpaiReplyMode.Sender);
+                    return;
+                }
+                case NativeZongpaiSubCommand.ModifyNotice:
+                {
+                    // worker 0x593D70：
+                    //   0x593DA0 `cmp [ebp+0xC],0x80 / jg` ⇒ tail 长度 > 0x80 则静默退出
+                    //   0x593DB0 `mov eax,[eax+0x18]`（DB 管理器）/`call 0x49BAA8` 查 HEADER+0x35
+                    //   0x593DBE `cmp [ebp-0x10],0 / je` ⇒ 查不到也静默退出
+                    //   0x593DE0 format + SQL 事务把 tail 字节写进 Notice blob
+                    //   0x593E80 `add eax,0x1c` / `mov edx,[edx]` / `call 0x404C4C`
+                    //            ⇒ 把新 Notice 长串**也写回内存对象的 +0x1C**
+                    //   回包正文 = in-memory 写回后的长串（sub 11 的路径），故 ReadNotice
+                    //   (sub 11) 紧接着就能读到刚写入的值。
+                    // sub 12 的 IsNoticeLengthAccepted 门在此显式检查，与 0x593DA7 一一对应。
+                    var tailLen = request.Tail.Length;
+                    if (!NativeZongpaiProtocol.IsNoticeLengthAccepted(tailLen))
+                    {
+                        // 0x593DA7 jg 0x593ECC ⇒ 既不落库也不回包。
+                        return;
+                    }
+                    var noticeName = LegacyGbkText.Decode(request.NoticeMasterName);
+                    var masterRec12 = _zongpaiService.GetMaster(noticeName);
+                    if (masterRec12 == null)
+                    {
+                        // 0x593DC2 je 0x593ECC ⇒ 查不到静默退出。
+                        return;
+                    }
+                    // 0x593E43 `call dword [ebx+0x10]`（Stream.Write）：把 tail 整块写入。
+                    // ⚠️ ModifyNoticeText = request.Tail，内嵌 NUL 原样进 blob。
+                    var newNotice = request.ModifyNoticeText;
+                    if (!_zongpaiService.UpdateNotice(noticeName, newNotice))
+                    {
+                        // SQL 失败 ⇒ 按 0x593DF0 `dec eax / jne 0x593ECC`：
+                        // UpdateNotice 返回码非 0 ⇒ 静默退出，不回包。
+                        return;
+                    }
+                    // 回包：把刚写入的 Notice 原样返回（原版在 0x593E80 写回内存后
+                    // sub 11 的路径读同一块内存发包，效果相同）。
+                    // 0x594695 空判：写入成功则 Notice 必然非空，直接发。
+                    SendNativeZongpaiReply(sender,
+                        NativeZongpaiProtocol.CreateNoticeResponse(request, newNotice),
+                        NativeZongpaiReplyMode.Sender);
+                    return;
+                }
             }
 
             var mode = NativeZongpaiProtocol.GetReplyMode(request.SubCommand);
