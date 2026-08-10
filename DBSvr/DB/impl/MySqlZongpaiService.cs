@@ -53,6 +53,59 @@ namespace DBSvr
             return cmd.ExecuteNonQuery() > 0;
         }
 
+        /// <summary>
+        /// sub 9 的等级同步（原版 worker 0x593944），带**幂等短路**。
+        ///   0x593A96  cmp ax, word [edx+0x20]  ; 与记录现值比较
+        ///   0x593A9A  je 0x593AF5              ; ★相等 -> 不写库
+        /// 原版先改内存再落库，这里用事务包住 SELECT ... FOR UPDATE + UPDATE
+        /// 以保证"读现值—比较—写回"是原子的（机制差异，非行为差异）。
+        /// SQL 常量 0x593B30 = `update ZongpaiBase set MasterLevel = %u where MasterName = "%s";`
+        /// 注意它**不带** UpdateTime，与 sub 2/6/8 的模板不同 —— 逐字保留。
+        /// </summary>
+        public bool UpdateMasterLevelFromLive(string masterName, ushort liveLevel)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                using var read = new MySqlCommand(
+                    "SELECT MasterLevel FROM gamedata.ZongpaiBase "
+                    + "WHERE MasterName=@n FOR UPDATE", conn, tx);
+                read.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                var scalar = read.ExecuteScalar();
+                // 0x593F9B/0x593FA3 同构：查不到宗派记录 -> 什么都不做。
+                if (scalar == null || scalar == DBNull.Value)
+                {
+                    tx.Rollback();
+                    return false;
+                }
+
+                var current = Convert.ToUInt32(scalar);
+                // 0x593A9A je：等级未变则不写库，但这是"已同步"不是失败。
+                if (current == liveLevel)
+                {
+                    tx.Rollback();
+                    return true;
+                }
+
+                // 0x593B30 模板：不带 UpdateTime。
+                using var write = new MySqlCommand(
+                    "UPDATE gamedata.ZongpaiBase SET MasterLevel=@l "
+                    + "WHERE MasterName=@n", conn, tx);
+                write.Parameters.AddWithValue("@l", liveLevel);
+                write.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                write.ExecuteNonQuery();
+                tx.Commit();
+                return true;
+            }
+            catch
+            {
+                try { tx.Rollback(); } catch { }
+                return false;
+            }
+        }
+
         // ===== 四个经验原语。原版是 read-modify-write 的内存表操作，
         // 落库只是把结果写回，所以这里用事务包住读改写以保证原子性。
         // ⚠️ 此前这两个方法是**绝对赋值**（SET StudentExp=@e），与原版的

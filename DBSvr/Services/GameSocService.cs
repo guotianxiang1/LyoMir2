@@ -1354,9 +1354,36 @@ namespace DBSvr
                     // 0x84-byte frame carrying a 48-byte record it fills in-place.
                     // That record's layout is not yet reversed, so reply with the
                     // result only and leave the record zeroed rather than invent it.
-                    result = _zongpaiService.UpdateMasterLevel(
-                        LegacyGbkText.Decode(request.TailSlot35),
-                        request.TailValue50) ? 0 : 1;
+                    //
+                    // ⚠️ 原实现用 request.TailValue50 当等级 —— **那是错的**。原版
+                    // 完全忽略请求里的等级，改从活体角色记录取（逐字，worker 0x593944）：
+                    //   0x593A7E  call 0x5ABC18            ; 按名字查活体角色记录
+                    //   0x593A86  cmp [ebp-0x18],0 / je    ; 查不到 -> 整段跳过，不写库
+                    //   0x593A8F  mov ax, word [eax+0x3e]  ; ★等级 = 活体对象 +0x3E
+                    //   0x593A96  cmp ax, word [edx+0x20]  ; 与宗派记录里的现值比
+                    //   0x593A9A  je 0x593AF5              ; ★相等则不写库（幂等短路）
+                    //   0x593AA6  mov word [edx+0x20], ax  ; 先更新内存
+                    //   0x593AB1  movzx eax, word [eax+0x20] ; SQL 参数用更新后的值
+                    // 请求里的 tail+0x50 在整个 worker 里没有任何读取点。
+                    // 宽度：word（movzx），DDL 是 MasterLevel smallint unsigned。
+                    {
+                        var levelOwner = request.TailSlot35;
+                        if (!_playRecordService.TryGetNativeCharacterByName(
+                                levelOwner, out var levelChar))
+                        {
+                            // 0x593A8A je：查不到角色 -> 不写库、不改内存。
+                            // 原版此时 [ebp-0x10] 保持进入 case 时的值（R=1），
+                            // 故仍回包，只是不落库。
+                            result = 1;
+                        }
+                        else
+                        {
+                            var liveLevel = (ushort)levelChar.Level;
+                            result = _zongpaiService.UpdateMasterLevelFromLive(
+                                LegacyGbkText.Decode(levelOwner),
+                                liveLevel) ? 0 : 1;
+                        }
+                    }
                     SendNativeZongpaiReply(sender,
                         NativeZongpaiProtocol.CreateMasterLevelResponse(
                             request, result, ReadOnlySpan<byte>.Empty),

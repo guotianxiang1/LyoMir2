@@ -17,6 +17,20 @@ namespace DBSvr
         bool UpdateMasterLevel(string masterName, int level);
 
         /// <summary>
+        /// sub 9 的等级同步（原版 worker 0x593944）。⚠️ 与 <see cref="UpdateMasterLevel"/>
+        /// 的区别是它带**幂等短路**：等级与库里现值相同时不写库。
+        ///   0x593A8F  mov ax, word [eax+0x3e]  ; 等级取自活体角色对象 +0x3E
+        ///   0x593A96  cmp ax, word [edx+0x20]  ; 与宗派记录现值比较
+        ///   0x593A9A  je 0x593AF5              ; ★相等 -> 不写库
+        ///   0x593AA6  mov word [edx+0x20], ax  ; 不同才更新
+        /// 请求报文里的等级字段（tail+0x50）在整个 worker 内没有任何读取点，
+        /// 所以调用方必须传活体等级，不能传请求里的值。
+        /// 宽度是 word（原版 movzx），DDL 为 <c>MasterLevel smallint unsigned</c>。
+        /// </summary>
+        /// <returns>true = 已同步（含"值相同故无需写库"）；false = 记录不存在或写库失败。</returns>
+        bool UpdateMasterLevelFromLive(string masterName, ushort liveLevel);
+
+        /// <summary>
         /// 原版的经验上限，两个饱和累加器都用同一个立即数：
         /// 0x591CA0 / 0x591CC6 / 0x591CD7（StudentExp）与
         /// 0x591D3C / 0x591D62 / 0x591D73（MasterExp）均为 0xFFB43480 = 4290000000。
