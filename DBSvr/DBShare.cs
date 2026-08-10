@@ -296,6 +296,21 @@ namespace DBSvr
         public string NativeText102;
         public long NativeLoginDateTimeBits;
         public string sReconnectID;
+
+        /// <summary>
+        /// 登录排队位次，复刻原版账号/会话对象的 <c>word[Self+0x9C]</c>。
+        /// 0 = 不在排队中（原版 <c>0x5CE30A cmp word [eax+0x9c],0 / jbe</c> 放行）。
+        ///
+        /// 唯一 word 写者是 <c>0x5CFC90 mov word [edx+0x9c], ax</c>；紧随其后
+        /// <c>0x5CFC97 cmp word [ebp-6],0xa / ja</c> ⇒ 位次 &lt;= 10 时才
+        /// <c>call 0x5CFCAC</c> 发位次通知（opcode 0x10EC = 4332）。
+        ///
+        /// ⚠️ C# 目前**没有**排队的生产者：<c>DrainNativeAdmissionQueue</c> 是空实现，
+        /// 注释自承「阈值仍在闭合中」。故本字段实际恒为 0，
+        /// 即那道门恒放行 —— 与「未启用排队」的原版行为一致，不是伪造。
+        /// 位次通知（4332）与准入阈值仍是已知缺口。
+        /// </summary>
+        public ushort NativeQueuePosition;
     }
 
     /// <summary>
