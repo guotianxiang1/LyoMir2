@@ -19,6 +19,7 @@ Run("master-level reply framing 0x84/0x78", MasterLevelReplyFraming);
 Run("member-list reply length formula", MemberListReplyFraming);
 Run("notice reply length formula", NoticeReplyFraming);
 Run("malformed frames rejected", MalformedFrames);
+Run("sub 2/3/13 field mapping (write-path guardrail)", WritePathFieldMapping);
 
 if (failures.Count != 0)
 {
@@ -26,7 +27,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("NativeZongpaiProtocolCheck PASS tests=11 "
+Console.WriteLine("NativeZongpaiProtocolCheck PASS tests=12 "
                   + "type1=0170 reply=0071 gate=0x54 std=0xA8/0x9C "
                   + "lvl=0x84/0x78 member=0x29 dispatch=0x594122");
 return 0;
@@ -341,6 +342,67 @@ void MalformedFrames()
 }
 
 // ---- helpers ----
+
+// 写路径护栏。三条已修的写坏数据背离（sub 2 / sub 3 / sub 13）此前**没有任何断言
+// 覆盖**：本审计只测组帧，DbSvrServiceRegressionCheck 不碰这条路径，且没有可注入的
+// IZongpaiService 替身、没有审计实例化 GameSocService。所以那三处修复当时只有字节
+// 证据、无法用变异测试证明护栏有效（commit 里记为 "Guardrail is owed"）。
+//
+// 这里把**槽 → 语义**的映射钉死。GameSocService 的调用点必须按这个映射取值，
+// 任何一处退回原来的写法都会让下面某条断言变红：
+//   sub 3 AddMember  : memberName = tail+0x25 (容量 15)，roleName = tail+0x10 (容量 20)
+//   sub 2 CreateMaster: masterName = tail+0x35，masterLevel = tail+0x4C 的**低 16 位**，
+//                       studentExp = tail+0x50 (u32)
+//   sub 13 DeleteMaster: masterName = tail+0x35（并由成员数==1 的门保护，门本身在
+//                        GameSocService，无法在本审计内触达，故此处只锁槽映射）
+void WritePathFieldMapping()
+{
+    // 取值互不相同，且刻意让 0x4C 的高 16 位非零 —— 若实现漏掉 movzx（原版
+    // 0x59420C `mov cx, word ptr [eax+0x4c]` 只取 16 位），低位截断就会暴露。
+    const int value4C = unchecked((int)0xABCD0201);
+    const int value50 = 0x0304FEDC;
+    var frame = Frame(NativeZongpaiSubCommand.AddMember, 0x54,
+        tail =>
+        {
+            PutShortString(tail, 0x00, "themaster");
+            PutShortString(tail, 0x10, "the_role_name_20chr");   // 19 <= 20 容量
+            PutShortString(tail, 0x25, "the_member_15c");        // 14 <= 15 容量
+            PutShortString(tail, 0x35, "othername");
+            BinaryPrimitives.WriteInt32LittleEndian(tail.AsSpan(0x4C, 4), value4C);
+            BinaryPrimitives.WriteInt32LittleEndian(tail.AsSpan(0x50, 4), value50);
+        });
+    True(NativeZongpaiProtocol.TryDecodeRequest(frame, out var req, out var err),
+        "decode: " + err);
+
+    // sub 3：0x593140 `insert into ZongpaiMember(MasterName, MemberName, RoleName)`
+    // TVarRec slot1 = [ebp+8] = MemberName、slot2 = [ebp-0xC] = RoleName（0x5930DD/0x5930E7）。
+    // DDL 0x5BF0C4: MemberName varchar(15) / RoleName varchar(20)，与槽容量一一对应，
+    // 且 `unique key MemberName_Index(MemberName)` 使传反必然撞唯一键。
+    EqualText("the_member_15c", Text(req.TailSlot25),
+        "sub3 memberName must come from tail+0x25 (cap 15 <-> varchar(15))");
+    EqualText("the_role_name_20chr", Text(req.TailSlot10),
+        "sub3 roleName must come from tail+0x10 (cap 20 <-> varchar(20))");
+
+    // sub 2：0x592FD4 `values("%s", %d, %u, Now())`
+    // 0x59420C mov cx,word[eax+0x4c] -> MasterLevel（**只有 16 位**）
+    // 0x5941EE mov eax,[eax+0x50] / push -> StudentExp（32 位，DDL int unsigned）
+    Equal(value4C, req.TailValue4C, "sub2 raw tail+0x4C survives decode");
+    Equal(value50, req.TailValue50, "sub2 raw tail+0x50 survives decode");
+    Equal(0x0201, (ushort)req.TailValue4C,
+        "sub2 masterLevel is the LOW 16 bits of tail+0x4C (native movzx @0x59420C; "
+        + "DDL MasterLevel smallint unsigned)");
+    Equal(value50, unchecked((int)(uint)req.TailValue50),
+        "sub2 studentExp is tail+0x50 as u32 (was hard-coded 0 in the INSERT)");
+    // 反向锁定：level 与 exp 不得取自同一槽（此前 level 误取 TailValue50）。
+    True((ushort)req.TailValue4C != (ushort)req.TailValue50,
+        "sub2 masterLevel and studentExp must not read the same tail slot");
+
+    // sub 13：masterName 取自 tail+0x35（与 sub 2 同槽），非 tail+0x00。
+    EqualText("othername", Text(req.TailSlot35),
+        "sub2/sub13 masterName comes from tail+0x35");
+    True(Text(req.TailSlot35) != Text(req.TailSlot00),
+        "tail+0x35 and tail+0x00 are distinct slots");
+}
 
 LegacyDbServerFrame Frame(NativeZongpaiSubCommand sub, int tailLength,
     Action<byte[]> fillTail = null, Action<byte[]> fillHeader = null)

@@ -791,6 +791,14 @@ namespace SystemModule
         public const int SM_DELCHR4013 = 4013;
         public const int CM_QUERYDELCHR4014 = 4014; // Query deleted chars (mobile)
         public const int CM_RECOVERCHR4015 = 4015;  // Recover character (mobile)
+        // 0xFB0 = 角色改名。原版 DBServer 内层 opcode 派发（fn_5CDF6C，12 字节头、
+        // opcode 取自 word[msg+4]）：idx = 4016 - 0xFAC = 0x04 -> grp = byte[0x5CE345+idx] = 5
+        // -> dword[0x5CE363+5*4] = 0x5CE404 -> `call 0x5CD2EC`（校验层宿主）
+        // -> 0x5CD3AF `call 0x5A8DDC`（主档 user_index/user_data）
+        // -> 0x5A912F `call 0x5A923C`（22 条三库级联，打 19 张表）
+        // 该族其余 5 个 opcode（4012/4013/4014/4015/4017）此前已有常量，唯 4016 缺失。
+        public const int CM_RENAMECHR4016 = 4016;   // Rename character (mobile)
+        public const int SM_RENAMECHR4016 = 4016;
         public const int CM_SELCHR4017 = 4017;      // Select character (mobile)
         public const int SM_SELCHR4017 = 4017;
         public const int SM_OUTOFCONNECTION_4018 = 4018;
