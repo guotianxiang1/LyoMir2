@@ -1625,9 +1625,18 @@ static void TestNativeGateDataFrames()
     Equal(2359, outer.QueryId, "select request query");
     Equal(133431, outer.Param, "select request outer param");
     Equal((ushort)4017, message.Ident, "select request ident");
-    Equal(5, message.Body.Length, "select request body length");
-    Check(message.Body.SequenceEqual(Convert.FromHexString("C1FAC9F100")),
-        "select request body bytes");
+    // ⚠️ 这两条原为 5 / `C1FAC9F100`，是照**当时的 C# 行为**写的，不是原版判据。
+    // 原版 payload 边界逐字（fn_5CDFxx）：
+    //   0x5CDFC5  sub eax, 0xc   ; len - 12
+    //   0x5CDFC8  dec eax        ; ★payloadLen = len - 13
+    //   0x5CDFCC  cmp [ebp-0x18],0 / jle -> ptr = NULL, len = 0
+    // 本帧 payloadLength = 0x11 = 17 ⇒ 17 - 13 = **4**。
+    // 而这段抓包的尾字节正是 `00`（见上面十六进制串末尾 `C1FAC9F1 00`），
+    // 即那个 `dec eax` 剥掉的是**串尾 NUL 终止符**。
+    // 所以原版给 4 字节 `C1FAC9F1`，旧断言多带了终止符。以原版为准。
+    Equal(4, message.Body.Length, "select request body length (native: len-13)");
+    Check(message.Body.SequenceEqual(Convert.FromHexString("C1FAC9F1")),
+        "select request body bytes (NUL terminator stripped, per 0x5CDFC8 dec eax)");
 
     var response = LegacyGateDataCodec.CreateResponse(
         2359, 0, 4017, 1, 0, 0, Array.Empty<byte>());
