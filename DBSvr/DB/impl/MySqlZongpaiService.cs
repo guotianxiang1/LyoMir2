@@ -55,7 +55,7 @@ namespace DBSvr
 
         /// <summary>
         /// sub 9 的等级同步（原版 worker 0x593944），带**幂等短路**。
-        ///   0x593A96  cmp ax, word [edx+0x20]  ; 与记录现值比较
+        ///   0x593A96  cmp ax, word [edx+0x20]  ; edx = 栈上出参；其 +0x20 源自 rec+0x10
         ///   0x593A9A  je 0x593AF5              ; ★相等 -> 不写库
         /// 原版先改内存再落库，这里用事务包住 SELECT ... FOR UPDATE + UPDATE
         /// 以保证"读现值—比较—写回"是原子的（机制差异，非行为差异）。

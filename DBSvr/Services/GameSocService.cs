@@ -1360,9 +1360,12 @@ namespace DBSvr
                     //   0x593A7E  call 0x5ABC18            ; 按名字查活体角色记录
                     //   0x593A86  cmp [ebp-0x18],0 / je    ; 查不到 -> 整段跳过，不写库
                     //   0x593A8F  mov ax, word [eax+0x3e]  ; ★等级 = 活体对象 +0x3E
-                    //   0x593A96  cmp ax, word [edx+0x20]  ; 与宗派记录里的现值比
+                    //   0x593A96  cmp ax, word [edx+0x20]  ; ⚠️ edx = [ebp+8] = **0x30 字节栈上出参**，
+                    //                                        ; 不是宗派记录！记录在 [ebp-0x14]。
+                    //                                        ; 该出参的 +0x20 由 0x593A58 从 rec+0x10 拷来，
+                    //                                        ; 所以这里比的仍是记录里的等级值（rec+0x10）
                     //   0x593A9A  je 0x593AF5              ; ★相等则不写库（幂等短路）
-                    //   0x593AA6  mov word [edx+0x20], ax  ; 先更新内存
+                    //   0x593AA6  mov word [edx+0x20], ax  ; 写**出参**（回包用），不是写记录内存
                     //   0x593AB1  movzx eax, word [eax+0x20] ; SQL 参数用更新后的值
                     // 请求里的 tail+0x50 在整个 worker 里没有任何读取点。
                     // 宽度：word（movzx），DDL 是 MasterLevel smallint unsigned。
