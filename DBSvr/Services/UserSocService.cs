@@ -39,6 +39,8 @@ namespace DBSvr
         private readonly GameSocService _gameSocService;
         private readonly ConfigManager _configManager;
         private readonly NativeUserAdmissionControl _nativeAdmission;
+        // 角色改名三库级联（原版 fn_5A8DDC 主档 + fn_5A923C 的 22 条级联）
+        private readonly INativeRenameCascadeService _renameCascade;
         private readonly object _gateLock = new();
 
         private static readonly ushort[] SupportedUserCommands =
@@ -52,14 +54,21 @@ namespace DBSvr
             4004, // 手游认证
             4039, // CM_SELCHR_EXIT
             1018, // CM_LOGINNOTICEOK
+            // 0xFB0 角色改名。原版内层派发 idx = 4016 - 0xFAC = 4 -> grp 5 ->
+            // 0x5CE404 -> call fn_5CD2EC。本白名单是 fail-closed，
+            // 不登记则请求根本进不到 switch，所以两处都必须加。
+            Grobal2.CM_RENAMECHR4016,
         };
 
         public UserSocService(LoginSvrService loginService, IPlayRecordService playRecordService,
             IPlayDataService playDataService,
             SensitiveWordFilter sensitiveWordFilter, WhitelistService whitelistService,
             ConfigManager configManager, GameSocService gameSocService,
-            NativeUserAdmissionControl nativeAdmission)
+            NativeUserAdmissionControl nativeAdmission,
+            INativeRenameCascadeService renameCascade)
         {
+            _renameCascade = renameCascade
+                ?? throw new ArgumentNullException(nameof(renameCascade));
             _loginService = loginService;
             _gameSocService = gameSocService;
             _playRecordService = playRecordService;
@@ -611,6 +620,10 @@ namespace DBSvr
                     SendEncodedPacket(userInfo, 4039, 0, 0, 0, 0, null);
                     break;
 
+                case Grobal2.CM_RENAMECHR4016: // 0xFB0 角色改名
+                    ProcessRenameChr(body, packetParam, ref userInfo);
+                    break;
+
                 case Grobal2.CM_QUERYCHR:
                     if (!userInfo.boChrQueryed || (HUtil32.GetTickCount() - userInfo.dwChrTick) > 200)
                     {
@@ -1013,6 +1026,141 @@ namespace DBSvr
 
             SendEncodedPacket(userInfo, msg.Ident, msg.Recog,
                 msg.Param, msg.Tag, msg.Series, null);
+        }
+
+        // ===================== 角色改名 (0xFB0 = 4016) =====================
+
+        /// <summary>
+        /// 复刻原版校验层 <c>fn_5CD2EC</c>（0x5CD2EC..0x5CD543）+ 主档/级联
+        /// <c>fn_5A8DDC</c> / <c>fn_5A923C</c>。
+        ///
+        /// 守卫顺序**照抄**，顺序本身有意义：
+        ///   0x5CD303  cmp byte [ebp-9],0 / je 0x5CD335
+        ///             ⇒ cl = (Recog == 0)，而 **cl==0 才走改名** ⇒ Recog != 0 才改名
+        ///             （极性极易写反，规格专门标注过）
+        ///   0x5CD335  新名为空 -> 直接退出，**不回包**（与"非法回 -1"是两种行为）
+        ///   0x5CD34F  长度门 [4,14]                    -> err = -1
+        ///   0x5CD35D  字符白名单 fn_5CCDE4             -> err = -1
+        ///   0x5CD376  已有错误则**跳过** DB 调用（cmp err,0 / jne 0x5CD3B7）
+        ///   0x5CD386  重名检查 0x5C22C8                -> err = -2
+        ///   0x5CD3AF  call fn_5A8DDC（主档，失败即中断，级联一条都不跑）
+        ///   0x5CD3B7  cmp err,1 / jne ⇒ 只有成功才发 77BBAA33 转发
+        ///   0x5CD4A5  回包 opcode 与请求同为 0xFB0，错误码在记录首 dword
+        /// </summary>
+        private void ProcessRenameChr(string sData, ushort packetParam,
+            ref TUserInfo userInfo)
+        {
+            // 0x5CD303/0x5CD307：cl = (Recog == 0)，cl == 0 时才是改名路径。
+            // 即 Recog != 0 才改名；Recog == 0 走的是另一条（重发选角列表）分支。
+            if (packetParam == 0)
+            {
+                Log("[RenameChr] Recog==0 -> 非改名分支(原版 0x5CD309)，忽略");
+                return;
+            }
+
+            // 原版：新名来自 [ebp-8]，旧名来自 Self+0x48。
+            // body 形如 "旧名/新名"（与本服务其它 EDcode 命令同构）；若只给一段，
+            // 则按账号解析当前角色作为旧名。
+            // ⚠️ TUserInfo **没有**当前角色名字段（我一度想当然写成 sChrName，
+            // 编译即暴露）——不发明字段，旧名走账号查询。
+            var decoded = EDcode.DeCodeString(sData)?.TrimEnd('\0') ?? string.Empty;
+            string oldName;
+            string newName;
+            var slash = decoded.IndexOf('/');
+            if (slash > 0)
+            {
+                oldName = decoded.Substring(0, slash);
+                newName = decoded.Substring(slash + 1);
+            }
+            else
+            {
+                newName = decoded;
+                oldName = ResolveAccountCharacterName(userInfo.sAccount);
+            }
+
+            var gbkNewName = LegacyGbkText.Encode(newName);
+
+            // 0x5CD335 cmp dword [ebp-8],0 / je 0x5CD53B —— 空名字**不回包**。
+            if (NativeRenameCharProtocol.IsEmptyName(gbkNewName))
+            {
+                Log("[RenameChr] 空名字 -> 原版 0x5CD339 直接退出且不回包");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(oldName))
+            {
+                // 原版 Self+0x48 为空时 0x5CD317 也是直接退出不回包。
+                Log("[RenameChr] 会话无当前角色名 -> 不回包");
+                return;
+            }
+
+            // 长度门 + 字符白名单 + 重名检查，逐条对应上面的 VA。
+            var result = NativeRenameCharProtocol.Validate(gbkNewName,
+                () => _playRecordService.Index(newName) >= 0);
+
+            if (result == NativeRenameCharProtocol.ResultInitial)
+            {
+                // 主档先写。失败即中断 —— 这是原版唯一的安全性来源
+                // （0x5A8F4A test al,al / 0x5A8F4C je 0x5A9162 -> 返回 -1，
+                //   周边 19 张表一条都不动）。顺序不可颠倒。
+                var idx = _playRecordService.Index(oldName);
+                if (_renameCascade.RenameMasterRecords(idx, newName))
+                {
+                    // 22 条级联，fire-and-forget：原版每条 call 之后没有 test al,al，
+                    // 且 fn_5A923C 无返回值、调用者 0x5A9134 无条件置 1
+                    // ⇒ 级联全失败也照样回包"成功"。这里照抄该语义。
+                    var applied = _renameCascade.RenameCascade(oldName, newName);
+                    Log($"[RenameChr] '{oldName}' -> '{newName}' 级联 {applied}/22");
+                    result = NativeRenameCharProtocol.ResultSuccess;
+                }
+                else
+                {
+                    result = NativeRenameCharProtocol.ResultInvalidName;
+                }
+            }
+
+            if (result == NativeRenameCharProtocol.ResultSuccess)
+            {
+                // 原版 0x5CD3C8 在此更新 Self+0x48（会话态当前角色名）。
+                // C# 的 TUserInfo 没有该字段，会话态角色名一律从库里解析，
+                // 主档已改名故下次解析即得新名 —— 无需也不应新增字段。
+                // 0x5CD3F2..0x5CD48F：改名成功才发 77BBAA33 内部转发（子命令 0x57）。
+                // ⚠️ 该转发的出向通道（原版 [0x5DA0E0] 的 0x59E450）在本部署未接入，
+                // 与 YBDB 6108 / GlobalServer 6020 同类。按原版对客户端侧仍回包，
+                // 仅转发缺失，且**不伪造**一个通道。
+                Log("[RenameChr] 原版此处发 77BBAA33 子命令 0x57 转发——外部通道未接入");
+            }
+
+            // 0x5CD49F..0x5CD4BF：回包 opcode 0xFB0，错误码在记录首 dword。
+            SendEncodedPacket(userInfo, NativeRenameCharProtocol.ResponseCommand,
+                result, 0, 0, 0, null);
+        }
+
+        /// <summary>
+        /// 按账号解析当前角色名，替代原版的 Self+0x48 会话态字段。
+        /// 账号下只有一个角色时返回它；多个或零个时返回空（调用方据此不回包，
+        /// 与原版 0x5CD317 "Self+0x48 为空则直接退出"一致）。
+        /// </summary>
+        private string ResolveAccountCharacterName(string account)
+        {
+            if (string.IsNullOrEmpty(account)) return null;
+            try
+            {
+                IList<TQuickID> list = new List<TQuickID>();
+                var ptid = GetPtid(account) ?? account;
+                _playRecordService.FindByAccount(ptid, ref list);
+                if (list.Count == 1) return list[0].sChrName;
+                if (list.Count == 0) return null;
+                // 多角色时无法从 body 单段推断，交由客户端用 "旧名/新名" 形式指定。
+                Log($"[RenameChr] 账号 {account} 有 {list.Count} 个角色，"
+                    + "单段 body 无法判定旧名，需用 旧名/新名 形式");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Log("[RenameChr] 解析当前角色名失败: " + ex.Message);
+                return null;
+            }
         }
 
         // ===================== 查询已删除角色 (CM_QUERYDELCHR) =====================

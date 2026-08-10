@@ -4,7 +4,7 @@ using MySql.Data.MySqlClient;
 using DBSvr.Core;
 using SystemModule;
 
-namespace DBSvr.DB.impl
+namespace DBSvr
 {
     /// <summary>
     /// 角色改名三库级联的复刻。证据底本 DBServer_repaired_20260803.exe

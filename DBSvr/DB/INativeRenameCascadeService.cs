@@ -1,4 +1,4 @@
-namespace DBSvr.DB
+namespace DBSvr
 {
     /// <summary>
     /// 角色改名的三库级联（原版 fn_5A923C）。

@@ -35,6 +35,9 @@ namespace DBSvr
                     services.AddSingleton<IStorageService, MySqlStorageService>();
                     services.AddSingleton<IPetService, MySqlPetService>();
                     services.AddSingleton<IZongpaiService, MySqlZongpaiService>();
+                    // 角色改名 opcode 0xFB0：主档(fn_5A8DDC) + 22 条三库级联(fn_5A923C)
+                    services.AddSingleton<INativeRenameCascadeService,
+                        MySqlNativeRenameCascadeService>();
                     services.AddSingleton<ITransferAreaService, MySqlTransferAreaService>();
                     services.AddSingleton<NativeAccountStorageCache>();
                     services.AddSingleton<NativeUserAdmissionControl>();

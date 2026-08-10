@@ -9,7 +9,7 @@
 //   3. 级联结构      fn_5A923C 的 22 条 UPDATE / 19 张表 / 15 个门
 using System.Text;
 using DBSvr.Core;
-using DBSvr.DB.impl;
+using DBSvr;
 
 var failures = new List<string>();
 var asserts = 0;
