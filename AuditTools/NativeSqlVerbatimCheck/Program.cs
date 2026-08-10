@@ -29,6 +29,45 @@
 // 退出码：全通过 0 / 有 FAIL 非 0 / 有 SKIP 打印 INCOMPLETE: 并退出 2。
 //
 // 预期今天为 FAIL：断言写的是"原生应有的样子"，红灯即缺口未修。
+//
+// ---------------------------------------------------------------------------
+// 2026-08-10 闸门自审（本轮只改本闸，不改任何实现文件）
+// ---------------------------------------------------------------------------
+// 一、订正的**本闸自身错误**（原断言写错，不是实现错）：
+//   1. D1a/D1b 极性反了。原断言要求 FightPoints 绑定传入值，但字节证明原版
+//      每次保存都落 0：两条模板 0x5B152C/0x5B5068 虽然把 [rec+0x54] 填进
+//      TVarRec 第 12 槽（0x5B0F17 / 0x5B4B14 `mov eax,[eax+0x54]`），可保存前
+//      的投影例程 0x5ADE34 在 0x5AE018/0x5AE01A `xor edx,edx` +
+//      `mov [eax+0x54],edx` 把该字段清零。0x5ADE57 的门是
+//      `cmp dword[ebp-0xC],0xEF00 / jl 0x5AE01D`，而它**仅有的两个**调用者
+//      0x5A82D1（ecx 由 0x5A82C9 置 0xEF00）与 0x5AEB9（ecx 由 0x5AAEB1 置
+//      0xEF00）都恰好传 0xEF00 ⇒ jl 不成立 ⇒ 两条路径都执行清零。
+//      +0x54 的写入者普查（disp8 形式 `89 /r 54`，区间 0x5A0000..0x5B8000）
+//      只有 4 处：0x5A68B4（装载器回填）、0x5AE01A（上述清零）、
+//      0x5A57ED / 0x5AFD76（另一对象类）。故实现写 FightPoints=0 是保真的，
+//      本闸原来的红灯是假红。已反向重写。
+//   2. NATIVE_ANCIENT_DELETE 原注释写"0x5BD1F8 len=47 / 0x5CA000 len=106"。
+//      0x5BD1F8 实为 `select High_Priority Count(*) from Del_Temp_Idx`，
+//      与"古老角色清理"无关，是抄错的地址。已删该 VA，只留 0x5CA000。
+//   3. NATIVE_MIRSTARS 原注释把 0x479148 / 0x4791C4 当同文两份。二者文本
+//      **不同**：0x479148 是 `sex = 0`，0x4791C4 是 `sex = 1`。已分列。
+// 二、订正的**匹配式缺陷**（实现是对的，匹配式让它红/跳 = 假红）：
+//   4. D7 用 `SET\s+MasterExp=@\w+\s+WHERE` 匹配，但实现把列名参数化成
+//      $"SET {column}=@e"，字面上永不出现 MasterExp ⇒ 永假红。改为按
+//      withUpdateTime 分支断言。
+//   5. CSONLY-4 用"存在 4 列 WHERE 子串"判红。实现补上 ScoreType 之后，
+//      那 4 列串仍是新串的**前缀** ⇒ 修好了也永远红。改为正向断言 ScoreType。
+//   6. FLAG-g 四条是**同义反复**：ok 取自本文件硬写的 csFragment 自身是否含
+//      HIGH_PRIORITY，而那些常量里从来没有 ⇒ 找到就必红、改好也必红；另两条
+//      因为实现已改写而 fragment 失配 ⇒ 落入 SKIP 而非绿。整块重写为
+//      "在树里定位该语句，再看命中文本有没有 High_Priority"。
+// 三、覆盖率分母订正（**没有缩小分母**，是放大）：
+//   原写 253 条 GAME-band / 306 总数，无从复核。本轮按字面量头严格枚举
+//   （[VA-8]==-1、[VA-4]==len、text[len]==0、文内无 NUL）得 SQL 首词字面量
+//   516 条，按内容二分：GAME 354 处（去重后 315 条不同语句）、
+//   外部 RDBMS 驱动模板 162 处（pg_/RDB$/SYS.ALL_/sysobjects/@@identity…）。
+//   分母因此由 253 上调为 354 处 / 315 条不同语句 —— 百分比变**难看**，
+//   这是订正而不是美化。枚举脚本：staging/_denominator.py。
 
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -69,9 +108,13 @@ const string NATIVE_ZONGPAIROLE_INSERT_TABLE = "zongpairole";
 // 0x5937EC len=62 —— MasterExp 不带 UpdateTime 的变体
 const string NATIVE_ZONGPAI_MASTEREXP_NO_TIME =
     "update ZongpaiBase set MasterExp = %u where MasterName = \"%s\";";
-// 0x479148 / 0x4791C4 len=113
-const string NATIVE_MIRSTARS =
+// 0x479148 len=113（sex = 0）／0x4791C4 len=113（sex = 1）
+// 订正：原注释把两条当同文两份，实际只差 sex 常量 —— 是**两条**语句。
+const string NATIVE_MIRSTARS_SEX0 =
     "select ChrName, nValue from gamedata.mirStars where sex = 0 "
+    + "Order by nValue desc, level desc, exp desc limit 100;";
+const string NATIVE_MIRSTARS_SEX1 =
+    "select ChrName, nValue from gamedata.mirStars where sex = 1 "
     + "Order by nValue desc, level desc, exp desc limit 100;";
 // 0x5C9B3C len=75
 const string NATIVE_YBCONSUME =
@@ -81,7 +124,10 @@ const string NATIVE_CASTLE_SEED_TABLE = "Guild.Castle";
 // 0x5C0CF4 —— TransferAreaScoreSendRecord 的唯一键是五列，含 ScoreType
 const string NATIVE_SENDRECORD_UNIQUE_KEY =
     "unique key Record_Index(TimeStamp, CharName, ZoneId, GroupId, ScoreType)";
-// 0x5BD1F8 len=47 / 0x5CA000 len=106（原生"古老角色"清理不用临时表）
+// 0x5CA000 len=106（原生"古老角色"清理不用临时表）
+// 订正：原注释另列的 0x5BD1F8 是抄错的地址 —— 那条实为
+// `select High_Priority Count(*) from Del_Temp_Idx`（len=47），属**不活跃**
+// 角色清理的计数句，与古老角色清理无关。已删。
 const string NATIVE_ANCIENT_DELETE =
     "delete from mir3.user_index where (year(modifyDate) <= 2008) "
     + "or (year(modifyDate) < 2010 and level <= 60);";
@@ -150,22 +196,39 @@ var awardProto = Load("DBSvr/Core/NativeAwardPlayerProtocol.cs");
 var dbShare = Load("DBSvr/DBShare.cs");
 var wholeDbSvr = LoadTree("DBSvr");
 
-// === D1 FightPoints 数据丢失 =============================================
-// 原生 0x5B152C/0x5B5068 写 FightPoints=%d（传入值）。
-Check("D1a-FightPoints-not-hardcoded-zero",
-    expected: $"native {NATIVE_USER_INDEX_SAVE_FIGHTPOINTS} => parameter bind",
+// === D1 FightPoints：原断言极性反了，已按字节反向重写 =====================
+// 追溯：本闸原来断言"必须绑定传入值"，把实现的 FightPoints=0 判为数据丢失。
+// 字节不支持该断言 ——
+//   · 模板 0x5B152C（len=219）/ 0x5B5068（len=219）确实是 `FightPoints=%d`，
+//     且第 12 槽绑 [rec+0x54]（0x5B0F17 / 0x5B4B14 `mov eax,[eax+0x54]`）；
+//   · 但保存前投影例程 0x5ADE34 在 0x5AE018/0x5AE01A 无条件
+//     `xor edx,edx` / `mov [eax+0x54],edx` 清零该字段；
+//   · 0x5ADE57 的门 `cmp dword[ebp-0xC],0xEF00 / jl 0x5AE01D` 只在 ecx<0xEF00
+//     时跳过清零，而该函数**仅有的两个**调用者都传 0xEF00
+//     （0x5A82C9→0x5A82D1、0x5AAEB1→0x5AAEB9），两条路径都清零；
+//   · 写 [reg+0x54] 的普查（disp8 编码 `89 /r 54`，0x5A0000..0x5B8000）共 4 处：
+//     0x5A68B4 装载器回填、0x5AE01A 上述清零、0x5A57ED / 0x5AFD76 属另一对象。
+//     没有任何一处写入非零战力值。
+// 结论：落 0 才是字节保真。现在断言"保存路径必须落 0"，防的是反向回归 ——
+// 有人"顺手修好"它，就会伪造一条原版不存在的数据通路。
+Check("D1a-FightPoints-save-writes-literal-zero-like-native",
+    expected: "native zeroes rec+0x54 at 0x5AE01A before formatting "
+        + $"`{NATIVE_USER_INDEX_SAVE_FIGHTPOINTS}` (0x5B152C) => column persists 0",
     actual: Contains(playRecord, "FightPoints=0")
-        ? "FightPoints=0 (hardcoded, value discarded)"
-        : "parameterised",
-    ok: !Contains(playRecord, "FightPoints=0"));
+        ? "FightPoints=0 (matches native)"
+        : "value bound (FABRICATES a data path absent from DBServer)",
+    ok: Contains(playRecord, "FightPoints=0"));
 
-// 同一列在同库另两处写的是 @fp —— 内部自相矛盾即"非有意"的旁证。
+// 旁证记录（不作判据）：另一条保存路径 MySqlPlayDataService.Update 绑 @fp。
+// 该路径的原生对应尚未定位 —— 不能据此断言两边必须一致，故只打印计数。
 var fpBound = CountOf(playRecord, "FightPoints=@fp") + CountOf(playData, "FightPoints=@fp");
 var fpZero = CountOf(playRecord, "FightPoints=0");
-Check("D1b-FightPoints-consistent-across-save-paths",
-    expected: "all user_index save paths bind FightPoints",
-    actual: "FightPoints=@fp sites=" + fpBound + ", FightPoints=0 sites=" + fpZero,
-    ok: fpZero == 0);
+Check("D1b-FightPoints-primary-save-path-is-zero",
+    expected: "the 0x5B152C-equivalent save path writes the literal 0",
+    actual: "FightPoints=0 sites=" + fpZero + " (bound @fp sites elsewhere="
+        + fpBound + "; those belong to a save path whose native counterpart "
+        + "is not yet located — informational only)",
+    ok: fpZero >= 1);
 
 // === D1c WHERE 键：原生只按 idx ==========================================
 Check("D1c-user_index-save-where-key-is-idx-only",
@@ -246,11 +309,21 @@ Check("D6-zongpairole-table-case-verbatim",
     ok: !Contains(zongpai, "INSERT IGNORE INTO gamedata.ZongpaiRole"));
 
 // === D7 MasterExp 不带 UpdateTime 的变体 ==================================
+// 匹配式订正：原来找字面 `SET MasterExp=@…`，但实现把列名参数化成
+// $"SET {column}=@e"，字面上永不出现 MasterExp ⇒ 原断言是**永假红**。
+// 现在断言"存在不带 UpdateTime 的写模板分支"，并要求它和带 UpdateTime 的
+// 分支同时存在（原版两条模板：0x59361C/0x593790 带、0x5937EC 不带）。
+var zpNoTime = Regex.IsMatch(zongpai,
+    @"UPDATE\s+\w*\.?ZongpaiBase\s+SET\s+\{?\w+\}?=@\w+\s+WHERE\s+MasterName",
+    RegexOptions.IgnoreCase);
+var zpWithTime = Regex.IsMatch(zongpai,
+    @"UPDATE\s+\w*\.?ZongpaiBase\s+SET\s+\{?\w+\}?=@\w+,\s*UpdateTime=Now\(\)",
+    RegexOptions.IgnoreCase);
 Check("D7-zongpai-masterexp-without-updatetime-path",
-    expected: $"native 0x5937EC `{NATIVE_ZONGPAI_MASTEREXP_NO_TIME}`",
-    actual: Regex.IsMatch(zongpai, @"SET\s+MasterExp=@\w+\s+WHERE")
-        ? "present" : "absent (single template always writes UpdateTime)",
-    ok: Regex.IsMatch(zongpai, @"SET\s+MasterExp=@\w+\s+WHERE"));
+    expected: $"native 0x5937EC `{NATIVE_ZONGPAI_MASTEREXP_NO_TIME}` "
+        + "coexists with the UpdateTime variant (0x59361C / 0x593790)",
+    actual: $"no-UpdateTime template={zpNoTime}, UpdateTime template={zpWithTime}",
+    ok: zpNoTime && zpWithTime);
 
 // === D8 SrcHeroName 从不被读出 ============================================
 Check("D8-SrcHeroName-column-used",
@@ -294,15 +367,24 @@ Check("CSONLY-3-no-invented-ZongpaiRole-rename-cascade",
         ? "ZongpaiRole MasterName cascade invented (third table)" : "absent",
     ok: !Contains(zongpai, "ZongpaiRole SET MasterName"));
 
-// 该表唯一键是五列（DDL 0x5C0CF4），C# WHERE 只用四列。
+// 该表唯一键是五列（DDL 0x5C0CF4）。
+// 匹配式订正：原来判"存在 4 列 WHERE 子串"即红，但补上 ScoreType 之后
+// 那 4 列串仍是新串的**前缀**，子串匹配照样命中 ⇒ 修好了也永远红。
+// 改为正向断言：该 UPDATE 的 WHERE 必须落到 ScoreType。
+var sendRecordUpdate = Regex.Match(transferArea,
+    @"UPDATE\s+\w*\.?TransferAreaScoreSendRecord\s+SET\s+State=@\w+\s+WHERE[^""]*",
+    RegexOptions.IgnoreCase);
 Check("CSONLY-4-sendrecord-where-includes-ScoreType",
-    expected: $"native DDL 0x5C0CF4 `{NATIVE_SENDRECORD_UNIQUE_KEY}` (5 columns)",
-    actual: Contains(transferArea,
-            "SET State=@e WHERE TimeStamp=@t AND CharName=@c AND ZoneId=@z AND GroupId=@g")
-        ? "4-column WHERE, ScoreType missing => updates all ScoreTypes of that key"
-        : "ScoreType present or upsert path used",
-    ok: !Contains(transferArea,
-        "SET State=@e WHERE TimeStamp=@t AND CharName=@c AND ZoneId=@z AND GroupId=@g"));
+    expected: $"native DDL 0x5C0CF4 `{NATIVE_SENDRECORD_UNIQUE_KEY}` (5 columns) "
+        + "=> the State UPDATE must key on ScoreType too",
+    actual: sendRecordUpdate.Success
+        ? (Regex.IsMatch(sendRecordUpdate.Value, @"ScoreType", RegexOptions.IgnoreCase)
+            ? "ScoreType present in WHERE"
+            : "ScoreType missing => updates all ScoreTypes of that key: "
+              + sendRecordUpdate.Value)
+        : "no State UPDATE found for that table",
+    ok: sendRecordUpdate.Success
+        && Regex.IsMatch(sendRecordUpdate.Value, @"ScoreType", RegexOptions.IgnoreCase));
 
 // 原生不用临时表做古老角色清理；Ancient_Temp_Idx 在 CODE 快照 0 命中。
 Check("CSONLY-5-ancient-cleanup-mechanism",
@@ -314,11 +396,22 @@ Check("CSONLY-5-ancient-cleanup-mechanism",
     ok: !Contains(cleanup, "Ancient_Temp_Idx"));
 
 // === NATIVE-ONLY 缺口 =====================================================
-Check("N-d-mirStars-ranking-implemented",
-    expected: $"native 0x479148 `{NATIVE_MIRSTARS}`",
-    actual: Regex.IsMatch(wholeDbSvr, @"FROM\s+gamedata\.mirStars", RegexOptions.IgnoreCase)
-        ? "present" : "absent (only mentioned in a comment)",
-    ok: Regex.IsMatch(wholeDbSvr, @"FROM\s+gamedata\.mirStars", RegexOptions.IgnoreCase));
+// 订正：原来只挂一条 mirStars。二者是**两条**不同语句（sex 常量不同），
+// 且原生按 sex 分别查询 ⇒ 分列断言，缺一条就是缺一条。
+foreach (var (va, sql, sex) in new (string Va, string Sql, string Sex)[]
+{
+    ("0x479148", NATIVE_MIRSTARS_SEX0, "0"),
+    ("0x4791C4", NATIVE_MIRSTARS_SEX1, "1"),
+})
+{
+    var ok = Regex.IsMatch(wholeDbSvr,
+        @"FROM\s+gamedata\.mirStars\s+WHERE\s+sex\s*=\s*" + sex,
+        RegexOptions.IgnoreCase);
+    Check($"N-d-mirStars-ranking-sex{sex}-implemented",
+        expected: $"native {va} `{sql}`",
+        actual: ok ? "present" : "absent (only mentioned in a comment)",
+        ok: ok);
+}
 
 // 注意：C# 的 VipYBConsume 是配置整数（DBShare.cs:56），与该表无关。
 var ybConfig = Contains(dbShare, "VipYBConsume") ? "confirmed" : "not found";
@@ -377,37 +470,56 @@ Check("N-a2-column-migration-present",
         RegexOptions.IgnoreCase));
 
 // === 旗标 g：High_Priority ================================================
-// 原生 41 条带 High_Priority，C# 全树只 1 处。整树计数只作背景，
-// 具体断言挂在四条**确定对应**的 blob 读语句上（大表读，原版刻意加了修饰符）。
+// ⚠️ 整块重写（原实现是**同义反复**，红绿都无意义）：
+// 原来 ok 取自 `Regex.IsMatch(csFragment, "HIGH_PRIORITY")`，而 csFragment 是
+// 本文件里硬写的常量、其中从来不含 HIGH_PRIORITY ⇒ 只要在树里找到该串就必红，
+// 实现改好了也照样红；而实现一旦改写 SQL 文本，Contains 失配就落进 SKIP。
+// 两条路都测不到实现。
+// 现在改成：用**结构式**在树里定位该表的 blob 读语句（不依赖任何一种写法），
+// 再看命中的语句文本自身有没有 High_Priority。全部命中都必须带 —— 原版这四张
+// 大表的每条 blob 读都带（见各 VA），漏一条就是漏一条。
 var hpSites = CountOfIgnoreCase(wholeDbSvr, "HIGH_PRIORITY");
-var hpTargets = new (string Va, string NativeSql, string CsFragment)[]
+var flatDbSvr = Regex.Replace(wholeDbSvr, @"\s+", " ");
+var hpTargets = new (string Va, string NativeSql, string Table, string Key)[]
 {
     ("0x5B1610", "Select High_Priority idx, data, ScriptData from user_data where idx =",
-        "SELECT Data, ScriptData FROM mir3.user_data WHERE Idx=@idx"),
+        "user_data", "Idx"),
     ("0x5B28C8", "Select High_Priority idx, data, dynData from hero_data where idx =",
-        "SELECT Data, dynData FROM mir3.hero_data WHERE Idx=@i"),
+        "hero_data", "Idx"),
     ("0x5B9DF0", "Select High_Priority idx, data from user_storage where idx =",
-        "SELECT Data FROM mir3.user_storage WHERE Idx=@i"),
+        "user_storage", "idx"),
     ("0x59748C", "Select High_Priority Data From dominatorpet where MasterId=%d;",
-        "SELECT Data FROM mir3.dominatorpet WHERE MasterId=@m"),
+        "dominatorpet", "MasterId"),
 };
-foreach (var (va, nativeSql, csFragment) in hpTargets)
+foreach (var (va, nativeSql, table, key) in hpTargets)
 {
-    var table = Regex.Match(csFragment, @"mir3\.(\w+)").Groups[1].Value;
-    if (!Contains(wholeDbSvr, csFragment))
+    // blob 读的结构签名：SELECT 列表里含 Data，FROM <表>，WHERE <键>。
+    // span 内不含引号 ⇒ 命中的一定落在同一个字符串字面量里。
+    var reads = Regex.Matches(flatDbSvr,
+        @"SELECT[^""]{0,160}?\bData\b[^""]{0,160}?FROM\s+(?:mir3\.)?"
+        + Regex.Escape(table) + @"\s+WHERE\s+" + Regex.Escape(key),
+        RegexOptions.IgnoreCase);
+    if (reads.Count == 0)
     {
-        // 找不到对应文本就无法比对 —— 记 SKIP（触发 INCOMPLETE + 退出码 2），
-        // 不能当成 FAIL，也绝不能当成 PASS。
-        skipped.Add($"FLAG-g-High_Priority-{table}: C# counterpart text not found "
-            + $"(expected fragment `{csFragment}`); native {va} `{nativeSql}`");
+        // 定位不到对应语句就无法比对：记 SKIP（INCOMPLETE + 退出码 2）。
+        // 既不能当 FAIL，更不能当 PASS。
+        skipped.Add($"FLAG-g-High_Priority-{table}: no blob-read statement located "
+            + $"for that table (native {va} `{nativeSql}`)");
         continue;
     }
-    var ok = Regex.IsMatch(csFragment, @"HIGH_PRIORITY", RegexOptions.IgnoreCase);
+    var missing = reads.Cast<Match>()
+        .Where(m => !Regex.IsMatch(m.Value, @"HIGH_PRIORITY", RegexOptions.IgnoreCase))
+        .Select(m => m.Value.Trim())
+        .ToList();
     Check($"FLAG-g-High_Priority-{table}",
-        expected: $"native {va} `{nativeSql}`",
-        actual: $"C# counterpart present without HIGH_PRIORITY: `{csFragment}` "
-            + $"(tree-wide HIGH_PRIORITY sites={hpSites}, native=41)",
-        ok: ok);
+        expected: $"native {va} `{nativeSql}` — every C# blob read of that table "
+            + "must carry High_Priority",
+        actual: missing.Count == 0
+            ? $"all {reads.Count} blob read(s) carry High_Priority"
+            : $"{missing.Count}/{reads.Count} blob read(s) lack it: "
+              + string.Join(" | ", missing)
+              + $" (tree-wide HIGH_PRIORITY sites={hpSites}, native=41)",
+        ok: missing.Count == 0);
 }
 
 // === 旗标 h：静态表 ORDER BY ==============================================
@@ -511,15 +623,201 @@ Check("FLAG-a-no-string-Format-on-sql",
     actual: "string.Format occurrences in DBSvr=" + stringFormatCount,
     ok: stringFormatCount == 0);
 
+// === 覆盖率补齐：逐条 native 写操作必须有 C# 对应 ==========================
+// 优先补写操作（Insert/Update/Delete）：写错会损坏数据，select 错只是读不到。
+// 每行 = (VA, 原生文本前缀, C# 侧结构式)。结构式刻意**不**绑定某一种写法
+// （前缀 mir3./列名大小写/参数名都可变），只锚定"语句种类 + 表 + 关键谓词"，
+// 这样红灯红在"原生这条语句在 C# 里没有对应"，而不是红在格式差异。
+// 每个 VA 都过了字面量头校验（[VA-8]==-1、[VA-4]==len、text[len]==0），
+// 校验脚本：staging/_newassert_eval.py（含每行的命中文本）。
+var nativeWrites = new (string Va, string Native, string CsPattern)[]
+{
+    // ---- user_index / user_data ----
+    ("0x5B1330", "Insert Into user_index(PTID, ChrName, IsDelete, IsSelect, Level, ...)",
+        @"INSERT\s+INTO\s+(?:mir3\.)?user_index\s*\(\s*PTID"),
+    ("0x5B152C", "Update user_index Set PTID=\"%s\", IsDelete=%d, ... where idx=%d;",
+        @"UPDATE\s+(?:mir3\.)?user_index\s+SET\s+PTID="),
+    ("0x5B14BC", "Update user_index set lvChangeTime=Now() where idx=%d and (...)",
+        @"UPDATE\s+(?:mir3\.)?user_index\s+SET\s+lvChangeTime\s*=\s*NOW\(\)"),
+    // 0x5B1480 与 0x5A6E30 是同义两条（原版一处写 UserId、一处写 userId），
+    // C# 只有一个站点同时充当两者的对应 —— 故两行会命中同一处，属实。
+    ("0x5B1480", "Update user_index set UserId = %d where idx = %d;",
+        @"UPDATE\s+(?:mir3\.)?user_index\s+SET\s+UserId\s*=\s*@"),
+    ("0x5A6E30", "update user_index set userId = %d where idx = %d;",
+        @"UPDATE\s+(?:mir3\.)?user_index\s+SET\s+userId\s*=\s*@"),
+    ("0x5B1740", "Insert Ignore Into user_data(Idx, ChrName) values(%d, \"%s\");",
+        @"INSERT\s+IGNORE\s+INTO\s+(?:mir3\.)?user_data\s*\(\s*Idx"),
+    ("0x5B1714", "Delete from user_data where Idx=%d;",
+        @"DELETE\s+FROM\s+(?:mir3\.)?user_data\s+WHERE\s+Idx\s*=\s*@"),
+    ("0x5B4FCC", "delete from user_index where idx=%d; delete from user_data where idx=%d;",
+        @"DELETE\s+FROM\s+(?:mir3\.)?user_index\s+WHERE\s+idx\s*=\s*@"),
+    // ---- hero_index / hero_data ----
+    ("0x5B2618", "Insert Into hero_index(MasterName, HeroName, ...) values(...);",
+        @"INSERT\s+INTO\s+(?:mir3\.)?hero_index\s*\(\s*MasterName"),
+    ("0x5B2818", "Update hero_index Set IsDelete=%d, HeroType=%d, ... where idx=%d;",
+        @"UPDATE\s+(?:mir3\.)?hero_index\s+SET\s+IsDelete="),
+    ("0x5B27A8", "Update hero_index set lvChangeTime=Now() where idx=%d and (...)",
+        @"UPDATE\s+(?:mir3\.)?hero_index\s+SET\s+lvChangeTime\s*=\s*NOW\(\)"),
+    ("0x5B29EC", "Insert Ignore Into hero_data(Idx, HeroName) values(%d, \"%s\");",
+        @"INSERT\s+IGNORE\s+INTO\s+(?:mir3\.)?hero_data\s*\(\s*Idx"),
+    ("0x5B29C0", "Delete from hero_data where Idx=%d;",
+        @"DELETE\s+FROM\s+(?:mir3\.)?hero_data\s+WHERE\s+Idx\s*=\s*@"),
+    ("0x58DCE0", "update hero_index set MasterName=\"%s\" where MasterName=\"%s\";",
+        @"UPDATE\s+(?:IGNORE\s+)?(?:mir3\.)?hero_index\s+SET\s+MasterName\s*=\s*@"),
+    ("0x58CF28", "Update hero_index set heroId = %d where idx = %d;",
+        @"UPDATE\s+(?:mir3\.)?hero_index\s+SET\s+heroId\s*=\s*@"),
+    // ---- awardplayers ----
+    ("0x5AB8C8", "Insert Ignore into awardplayers(PTID,Level,job,Sex,Status) Values(...);",
+        @"INSERT\s+IGNORE\s+INTO\s+\w*\.?awardplayers\s*\(\s*PTID"),
+    ("0x5A72F8", "Update awardplayers Set Status=1, HumName=\"%s\" where Idx=%d;",
+        @"UPDATE\s+\w*\.?awardplayers\s+SET\s+Status=1,\s*HumName="),
+    ("0x5ACDB8", "Update awardplayers set Status=2 where Idx=%d;",
+        @"UPDATE\s+\w*\.?awardplayers\s+SET\s+Status=2"),
+    // ---- zongpai ----
+    ("0x592FD4", "insert into ZongpaiBase(MasterName, MasterLevel, StudentExp, UpdateTime)",
+        @"INSERT\s+(?:IGNORE\s+)?INTO\s+\w*\.?ZongpaiBase\s*\(\s*MasterName"),
+    ("0x593140", "insert into ZongpaiMember(MasterName, MemberName, RoleName)",
+        @"INSERT\s+(?:IGNORE\s+)?INTO\s+\w*\.?ZongpaiMember\s*\(\s*MasterName"),
+    ("0x593258", "delete from ZongpaiMember where MasterName = \"%s\" and MemberName = \"%s\";",
+        @"DELETE\s+FROM\s+\w*\.?ZongpaiMember\s+WHERE\s+MasterName"),
+    ("0x593374", "update ZongpaiMember set RoleName = \"%s\" where ...;",
+        @"UPDATE\s+\w*\.?ZongpaiMember\s+SET\s+RoleName\s*=\s*@"),
+    ("0x59403C", "delete from zongpaibase where MasterName = \"%s\";",
+        @"DELETE\s+FROM\s+\w*\.?zongpaibase\s+WHERE\s+MasterName"),
+    ("0x593B30", "update ZongpaiBase set MasterLevel = %u where MasterName = \"%s\";",
+        @"UPDATE\s+\w*\.?ZongpaiBase\s+SET\s+MasterLevel\s*=\s*@"),
+    ("0x594B3C", "Update ZongpaiMember Set MemberName = \"%s\" where ...;",
+        @"UPDATE\s+\w*\.?ZongpaiMember\s+SET\s+MemberName\s*=\s*@"),
+    // ---- transfer area ----
+    ("0x595AC4", "Insert into TransferAreaScoreSendRecord(TimeStamp, CharName, ...) "
+        + "on duplicate key update State=%d;",
+        @"INSERT\s+INTO\s+\w*\.?TransferAreaScoreSendRecord\s*\(\s*TimeStamp"),
+    ("0x595968", "Delete from TransferAreaScoreSendRecord where idx = %d;",
+        @"DELETE\s+FROM\s+\w*\.?TransferAreaScoreSendRecord\s+WHERE\s+idx"),
+    ("0x5960E4", "Insert into TransferAreaScore(CharName, Score1, Score2, Score3) "
+        + "on duplicate key update ...;",
+        @"INSERT\s+INTO\s+\w*\.?TransferAreaScore\s*\(\s*CharName"),
+    ("0x5963D4", " update transferareascore set %s = (%s - %d) where CharName = \"%s\";",
+        @"UPDATE\s+\w*\.?transferareascore\s+SET"),
+    // ---- dominatorpet ----
+    ("0x597DC8", "Insert Into dominatorpet(MasterName, MasterId, Level, Exp, CreateDate)",
+        @"INSERT\s+INTO\s+(?:mir3\.)?dominatorpet\s*\(\s*MasterName"),
+    ("0x597B2C", "Update dominatorpet Set Level=%d, Exp=%d, ModifyDate=Now() "
+        + "where MasterId=%d;",
+        @"UPDATE\s+(?:mir3\.)?dominatorpet\s+SET\s+Level=@"),
+    ("0x5B9548", "delete from dominatorpet where MasterId=%d;",
+        @"DELETE\s+FROM\s+(?:mir3\.)?dominatorpet\s+WHERE\s+MasterId"),
+    // ---- user_storage ----
+    ("0x5B9D70", "Insert Into user_storage(PTID) values(\"%s\");",
+        @"INSERT\s+INTO\s+(?:mir3\.)?user_storage\s*\(\s*(?:idx,\s*)?PTID"),
+    ("0x5B917C", "delete from user_storage where PTID=\"%s\";",
+        @"DELETE\s+FROM\s+(?:mir3\.)?user_storage\s+WHERE\s+PTID"),
+    ("0x5B91B0", "delete from user_storage where idx=%d; delete ... where PTID=\"%s\";",
+        @"DELETE\s+FROM\s+(?:mir3\.)?user_storage\s+WHERE\s+idx\s*=\s*@"),
+    ("0x5AB224", "update mir3.user_storage set PTID=\"%s\" where PTID=\"%s\";",
+        @"UPDATE\s+mir3\.user_storage\s+SET\s+PTID\s*=\s*@"),
+    ("0x5AB1E0", "update gamedata.CreditCard set PTID=\"%s\" where PTID=\"%s\";",
+        @"UPDATE\s+(?:IGNORE\s+)?gamedata\.CreditCard\s+SET\s+PTID"),
+    // ---- 跨服锁 ----
+    ("0x5AD5DC", "update mir3.user_index set IsTransLock = 0;",
+        @"UPDATE\s+mir3\.user_index\s+SET\s+IsTransLock\s*=\s*0\s*"""),
+    ("0x5AE1E4", "Update mir3.user_index set IsTransLock=0, DesZoneId=0, "
+        + "DesGroupId=0 where idx=%d;",
+        @"SET\s+IsTransLock=0,\s*DesZoneId=0,\s*DesGroupId=0"),
+    // ---- 清理 / 迁移写 ----
+    ("0x5BD230", "delete user_index from user_index,del_temp_idx where ...;",
+        @"DELETE\s+user_index\s+FROM\s+(?:mir3\.)?user_index"),
+    ("0x5BD290", "delete user_data from user_data,del_temp_idx where ...;",
+        @"DELETE\s+user_data\s+FROM\s+(?:mir3\.)?user_data"),
+    ("0x5BD380", "delete from guild.guild_user where charname not in "
+        + "(select chrname from user_index);",
+        @"DELETE\s+FROM\s+guild\.guild_user\s+WHERE\s+charname\s+NOT\s+IN"),
+    ("0x5C9D3C", "delete from mir3.hero_index where masterName not in (...);",
+        @"DELETE\s+FROM\s+mir3\.hero_index\s+WHERE\s+masterName\s+NOT\s+IN"),
+    ("0x5C9DA0", "delete from mir3.hero_data where idx not in (...);",
+        @"DELETE\s+FROM\s+mir3\.hero_data\s+WHERE\s+idx\s+NOT\s+IN"),
+    ("0x5CA074", "delete from mir3.user_data where idx not in (...);",
+        @"DELETE\s+FROM\s+mir3\.user_data\s+WHERE\s+idx\s+NOT\s+IN"),
+    ("0x5BC780", "Update user_index set UserId = %d + idx;",
+        @"UPDATE\s+(?:mir3\.)?user_index\s+SET\s+UserId\s*=\s*@?\w*\s*\+\s*idx"),
+    ("0x5BCD74", "Update Hero_index set HeroId = %d + idx;",
+        @"UPDATE\s+(?:mir3\.)?Hero_index\s+SET\s+HeroId\s*=\s*@?\w*\s*\+\s*idx"),
+};
+foreach (var (va, native, csPattern) in nativeWrites)
+{
+    var ok = Regex.IsMatch(flatDbSvr, csPattern, RegexOptions.IgnoreCase);
+    Check($"COV-write-{va}",
+        expected: $"native {va} `{native}`",
+        actual: ok ? "C# counterpart present" : "NO C# counterpart (native-only write)",
+        ok: ok);
+}
+
+// 读操作补齐（写操作之后的次优先级）。同样是结构式锚定。
+var nativeReads = new (string Va, string Native, string CsPattern)[]
+{
+    ("0x5A6CF0", "select Idx, PTID, ChrName, ... from user_index where Idx>%d "
+        + "order by Idx Limit 5000",
+        @"FROM\s+(?:mir3\.)?user_index\s+WHERE\s+idx\s*>\s*@"),
+    ("0x58CE48", "select Idx, MasterName, HeroName, ... from hero_index where Idx>%d "
+        + "order by Idx Limit 5000",
+        @"FROM\s+(?:mir3\.)?hero_index\s+WHERE\s+idx\s*>\s*@"),
+    ("0x596E94", "select Idx, MasterId, MasterName, Level, Exp from dominatorpet "
+        + "where Idx>%d order by Idx Limit 5000;",
+        @"FROM\s+(?:mir3\.)?dominatorpet\s+WHERE\s+Idx\s*>\s*@"),
+    ("0x5AC630", "select Idx, PTID from User_Storage where Idx>%d order by Idx Limit 5000",
+        @"FROM\s+(?:mir3\.)?User_Storage\s+WHERE\s+Idx\s*>\s*@"),
+    ("0x592BD4", "Select High_Priority Idx, MasterName, MasterLevel, StudentExp, "
+        + "MasterExp, Notice from ZongpaiBase Order By Idx;",
+        @"FROM\s+\w*\.?ZongpaiBase\s+ORDER\s+BY\s+Idx"),
+    ("0x592C74", "Select High_Priority Idx, MasterName, RoleName, RolePrivilege, "
+        + "MaxMemberNum from ZongpaiRole Order By Idx;",
+        @"FROM\s+\w*\.?ZongpaiRole\s+ORDER\s+BY\s+Idx"),
+    ("0x592CE8", "Select High_Priority Idx, MasterName, MemberName, RoleName "
+        + "from ZongpaiMember Order By Idx;",
+        @"FROM\s+\w*\.?ZongpaiMember\s+ORDER\s+BY\s+Idx"),
+    ("0x5A74E4", "Select Idx, CharData From gamedata.halloffame where Rank=%d;",
+        @"FROM\s+gamedata\.halloffame\s+WHERE\s+Rank"),
+    ("0x595714", "Select High_Priority TimeStamp, CharName, ZoneId, GroupId, "
+        + "ScoreType, Score, State from TransferAreaScoreSendRecord where State = 1 "
+        + "Order by TimeStamp;",
+        @"FROM\s+\w*\.?TransferAreaScoreSendRecord\s+WHERE\s+State\s*=\s*1"),
+};
+foreach (var (va, native, csPattern) in nativeReads)
+{
+    var ok = Regex.IsMatch(flatDbSvr, csPattern, RegexOptions.IgnoreCase);
+    Check($"COV-read-{va}",
+        expected: $"native {va} `{native}`",
+        actual: ok ? "C# counterpart present" : "NO C# counterpart (native-only read)",
+        ok: ok);
+}
+
 // === 覆盖率 ===============================================================
-const int NativeGameBandStatements = 253;
+// ⚠️ 分母是**重新枚举**得来的，不是继承的。旧版写 253 条 GAME / 306 总数且
+// 无从复核；本轮按 Delphi 长字符串头严格枚举 CODE 快照
+// （[VA-8]==-1、[VA-4]==len32、text[len]==0、文内无 NUL），取首词为 SQL 动词
+// 的字面量共 516 处，再按内容二分：
+//   · GAME  = 354 处（去重后 315 条不同语句）—— 引用本服自有库表
+//     （mir3/gamedata/guild/gamelog/mir3_backup 及其表名），或属本服生命周期
+//     语句（wait_timeout / flush / optimize / grant to GameServer / use mir3）；
+//   · LIB   = 162 处 —— Delphi dbExpress/ADO/ODBC 驱动自带的**别的 RDBMS**
+//     元数据字典（pg_catalog / RDB$ / SYS.ALL_ / sysobjects / @@identity …）
+//     与裸动词片段，与本服无关。
+// 分母由 253 上调到 354，百分比因此变低 —— 这是订正，不是把分母改小美化。
+// 复核脚本：staging/_denominator.py（可重跑，逐条打印分类）。
+const int NativeGameBandSites = 354;
+const int NativeGameBandDistinct = 315;
+const int NativeLibBandSites = 162;
 var asserted = pass + fail;
 Console.WriteLine();
-Console.WriteLine($"COVERAGE {asserted} of {NativeGameBandStatements} "
-    + "native GAME-band statements asserted "
-    + $"({100.0 * asserted / NativeGameBandStatements:F1}%); "
-    + "native total=306 (GAME 253 + LIB 53); "
-    + "assertion count is not coverage.");
+Console.WriteLine($"COVERAGE {asserted} assertions against "
+    + $"{NativeGameBandSites} native GAME-band literal sites "
+    + $"({NativeGameBandDistinct} distinct statements) "
+    + $"= {100.0 * asserted / NativeGameBandSites:F1}% of sites, "
+    + $"{100.0 * asserted / NativeGameBandDistinct:F1}% of distinct statements; "
+    + $"native SQL literals total={NativeGameBandSites + NativeLibBandSites} "
+    + $"(GAME {NativeGameBandSites} + LIB {NativeLibBandSites}); "
+    + "assertion count is not coverage — one assertion may cover several "
+    + "sites, and several assertions may probe one statement.");
 Console.WriteLine($"RESULT pass={pass} fail={fail} skipped={skipped.Count}");
 
 if (skipped.Count > 0)
