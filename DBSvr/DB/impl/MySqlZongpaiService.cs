@@ -53,24 +53,137 @@ namespace DBSvr
             return cmd.ExecuteNonQuery() > 0;
         }
 
-        public bool UpdateMasterExp(string masterName, int exp)
+        // ===== 四个经验原语。原版是 read-modify-write 的内存表操作，
+        // 落库只是把结果写回，所以这里用事务包住读改写以保证原子性。
+        // ⚠️ 此前这两个方法是**绝对赋值**（SET StudentExp=@e），与原版的
+        // 饱和累加 / 扣减语义完全不同 —— 客户端送的是增量，绝对赋值会把
+        // 玩家的总经验直接覆盖成一次的增量值。
+
+        /// <summary>
+        /// 原版 helper 0x591C8C。饱和累加 StudentExp，返回实际发放量。
+        /// 上限 0xFFB43480；已满或增量 &lt;= 0 时返 0 且不写库。
+        /// </summary>
+        public uint AddStudentExpSaturating(string masterName, uint amount)
+            => AddSaturating(masterName, amount, "StudentExp");
+
+        /// <summary>
+        /// 原版 helper 0x591D28。结构与 0x591C8C 同构，字段换成 MasterExp。
+        /// </summary>
+        public uint AddMasterExpSaturating(string masterName, uint amount)
+            => AddSaturating(masterName, amount, "MasterExp");
+
+        /// <summary>
+        /// 原版 helper 0x591CF8。扣减 StudentExp；不足则拒绝（不部分扣）。
+        /// </summary>
+        public bool SubtractStudentExp(string masterName, uint amount)
+            => Subtract(masterName, amount, "StudentExp");
+
+        /// <summary>
+        /// 原版 helper 0x591D94。扣减 MasterExp；不足则拒绝。
+        /// </summary>
+        public bool SubtractMasterExp(string masterName, uint amount)
+            => Subtract(masterName, amount, "MasterExp");
+
+        /// <summary>
+        /// 饱和累加的共用实现。<paramref name="column"/> 只取自本文件的两个字面量，
+        /// 不是外部输入，故可插值。
+        /// </summary>
+        private static uint AddSaturating(string masterName, uint amount, string column)
         {
+            // 0x591CA9 cmp amount,0 / jbe -> 增量为 0 直接返 0，连查询都不做。
+            if (amount == 0) return 0;
+
             using var conn = OpenConn();
-            if (conn == null) return false;
-            using var cmd = new MySqlCommand("UPDATE gamedata.ZongpaiBase SET MasterExp=@e, UpdateTime=NOW() WHERE MasterName=@n", conn);
-            cmd.Parameters.AddWithValue("@e", exp);
-            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
-            return cmd.ExecuteNonQuery() > 0;
+            if (conn == null) return 0;
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                using var read = new MySqlCommand(
+                    $"SELECT {column} FROM gamedata.ZongpaiBase "
+                    + "WHERE MasterName=@n FOR UPDATE", conn, tx);
+                read.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                var scalar = read.ExecuteScalar();
+                // 0x59359D/0x5935A0：找不到记录 -> 什么都不做。
+                if (scalar == null || scalar == DBNull.Value) { tx.Rollback(); return 0; }
+
+                var current = Convert.ToUInt32(scalar);
+
+                // 0x591CA0 cmp [master+X], 0xFFB43480 / jae -> 已满，返 0 不写库。
+                if (current >= IZongpaiService.ExperienceCap) { tx.Rollback(); return 0; }
+
+                // 0x591CB5 add / 0x591CC1 cmp / jae -> 溢出检测（无符号回绕）。
+                var sum = unchecked(current + amount);
+                uint granted;
+                uint stored;
+                if (sum < current || sum > IZongpaiService.ExperienceCap)
+                {
+                    // 0x591CC6..0x591CD7：封顶，实发量 = cap - old。
+                    granted = IZongpaiService.ExperienceCap - current;
+                    stored = IZongpaiService.ExperienceCap;
+                }
+                else
+                {
+                    // 0x591CE6/0x591CEC：正常写入新总额，返回增量原值。
+                    granted = amount;
+                    stored = sum;
+                }
+
+                // 调用方（sub 6 @0x5935B4）在实发量 <= 0 时不发 SQL；
+                // 这里 granted 必 > 0（current < cap 已保证），故一定落库。
+                using var write = new MySqlCommand(
+                    $"UPDATE gamedata.ZongpaiBase SET {column}=@e, UpdateTime=NOW() "
+                    + "WHERE MasterName=@n", conn, tx);
+                write.Parameters.AddWithValue("@e", stored);
+                write.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                write.ExecuteNonQuery();
+                tx.Commit();
+                return granted;
+            }
+            catch
+            {
+                try { tx.Rollback(); } catch { }
+                return 0;
+            }
         }
 
-        public bool UpdateStudentExp(string masterName, int exp)
+        /// <summary>
+        /// 扣减的共用实现。原版 0x591D0E/0x591DAA 的 <c>ja</c> 是**严格大于**才拒，
+        /// 即 amount == current 时允许扣到 0。
+        /// </summary>
+        private static bool Subtract(string masterName, uint amount, string column)
         {
             using var conn = OpenConn();
             if (conn == null) return false;
-            using var cmd = new MySqlCommand("UPDATE gamedata.ZongpaiBase SET StudentExp=@e, UpdateTime=NOW() WHERE MasterName=@n", conn);
-            cmd.Parameters.AddWithValue("@e", exp);
-            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
-            return cmd.ExecuteNonQuery() > 0;
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                using var read = new MySqlCommand(
+                    $"SELECT {column} FROM gamedata.ZongpaiBase "
+                    + "WHERE MasterName=@n FOR UPDATE", conn, tx);
+                read.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                var scalar = read.ExecuteScalar();
+                if (scalar == null || scalar == DBNull.Value) { tx.Rollback(); return false; }
+
+                var current = Convert.ToUInt32(scalar);
+
+                // 0x591D0E cmp amount,[master+X] / 0x591D11 ja -> 不足则拒绝。
+                // 注意是 ja（严格大于）：amount == current 可以扣。
+                if (amount > current) { tx.Rollback(); return false; }
+
+                using var write = new MySqlCommand(
+                    $"UPDATE gamedata.ZongpaiBase SET {column}=@e, UpdateTime=NOW() "
+                    + "WHERE MasterName=@n", conn, tx);
+                write.Parameters.AddWithValue("@e", current - amount);
+                write.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
+                write.ExecuteNonQuery();
+                tx.Commit();
+                return true;
+            }
+            catch
+            {
+                try { tx.Rollback(); } catch { }
+                return false;
+            }
         }
 
         /// <summary>

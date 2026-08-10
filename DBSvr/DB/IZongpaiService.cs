@@ -15,8 +15,52 @@ namespace DBSvr
         /// </summary>
         bool CreateMaster(string masterName, int masterLevel, uint studentExp);
         bool UpdateMasterLevel(string masterName, int level);
-        bool UpdateMasterExp(string masterName, int exp);
-        bool UpdateStudentExp(string masterName, int exp);
+
+        /// <summary>
+        /// 原版的经验上限，两个饱和累加器都用同一个立即数：
+        /// 0x591CA0 / 0x591CC6 / 0x591CD7（StudentExp）与
+        /// 0x591D3C / 0x591D62 / 0x591D73（MasterExp）均为 0xFFB43480 = 4290000000。
+        /// </summary>
+        const uint ExperienceCap = 0xFFB43480;
+
+        /// <summary>
+        /// 饱和累加 StudentExp（原版 helper \c 0x591C8C，被 sub 6 调用）。
+        ///   0x591CA0  cmp [master+0x14], 0xFFB43480 / jae  -> 已满，返 0 且不落库
+        ///   0x591CA9  cmp amount, 0 / jbe                  -> 增量 &lt;= 0，返 0 且不落库
+        ///   0x591CB5  add / 0x591CC1 cmp / jae              -> 溢出检测
+        ///   0x591CC6  封顶为 0xFFB43480，返回**实发量** cap - old
+        ///   0x591CE6  正常路径写入新总额，返回增量原值
+        /// 调用方 sub 6 在 0x5935B4 用 `cmp [ebp-0x18],0 / jbe` 判实发量，
+        /// **实发量 &lt;= 0 时连 SQL 都不发**。
+        /// </summary>
+        /// <returns>实际发放量；0 表示未发放（调用方据此跳过 SQL）。</returns>
+        uint AddStudentExpSaturating(string masterName, uint amount);
+
+        /// <summary>
+        /// 扣减 StudentExp（原版 helper \c 0x591CF8，被 sub 7 调用）。
+        ///   0x591D0E  cmp amount, [master+0x14] / 0x591D11 ja -> 不足则**拒绝**返 false
+        ///   0x591D19  sub [master+0x14], amount / 返 true
+        /// ⚠️ 这不是累加器。规格把 sub 7 描述成「同时加师徒与师父经验」是错的 ——
+        /// 它实际是**扣师徒经验、转换为师父经验**。
+        /// </summary>
+        bool SubtractStudentExp(string masterName, uint amount);
+
+        /// <summary>
+        /// 饱和累加 MasterExp（原版 helper \c 0x591D28，被 sub 7 的后半段调用）。
+        /// 结构与 \c 0x591C8C 完全同构，只是字段换成 <c>[master+0x18]</c>：
+        ///   0x591D3C cmp / jae、0x591D45 cmp amount,0 / jbe、
+        ///   0x591D5D 溢出检测、0x591D73 封顶、0x591D82 正常写入。
+        /// </summary>
+        /// <returns>实际发放量；0 表示未发放。</returns>
+        uint AddMasterExpSaturating(string masterName, uint amount);
+
+        /// <summary>
+        /// 扣减 MasterExp（原版 helper \c 0x591D94，被 sub 8 调用）。
+        ///   0x591DAA  cmp amount, [master+0x18] / 0x591DAD ja -> 不足则拒绝
+        ///   0x591DB5  sub [master+0x18], amount / 返 true
+        /// ⚠️ sub 8 是**扣减**，不是累加。原注释「MasterExp=tail+0x4C」的绝对赋值是错的。
+        /// </summary>
+        bool SubtractMasterExp(string masterName, uint amount);
         bool DeleteMaster(string masterName);
         ZongpaiMasterInfo GetMaster(string masterName);
 

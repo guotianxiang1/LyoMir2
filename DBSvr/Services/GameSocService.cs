@@ -1303,21 +1303,51 @@ namespace DBSvr
                         LegacyGbkText.Decode(request.TailSlot10)) ? 0 : 1;
                     break;
                 case NativeZongpaiSubCommand.UpdateStudentExp:
-                    // 0x59356C: StudentExp=tail+0x4C where MasterName=tail+0x00.
-                    result = _zongpaiService.UpdateStudentExp(masterName,
-                        request.TailValue4C) ? 0 : 1;
-                    break;
+                    // worker 0x59356C。⚠️ 不是绝对赋值：
+                    //   0x5935AC  call 0x591C8C        ; **饱和累加** StudentExp
+                    //   0x5935B1  mov [ebp-0x18], eax  ; eax = 实际发放量
+                    //   0x5935B4  cmp [ebp-0x18],0 / jbe 0x5935F2
+                    //             ⇒ 实发量 <= 0 时**连 SQL 都不发**
+                    //   0x5935C1  mov eax,[master+0x14] ; SQL 写的是**累加后的新总额**
+                    // 上限 0xFFB43480 = 4290000000（0x591CA0/0x591CC6/0x591CD7）。
+                    // 增量取 tail+0x4C，此处按 dword 读（sub 2 读同一偏移的 word，
+                    // 是同一字段的两种宽度，不是两个字段 —— 0x5943BA vs 0x59420C）。
+                    _zongpaiService.AddStudentExpSaturating(masterName,
+                        unchecked((uint)request.TailValue4C));
+                    // 原版 sub 6 **不回复**：case 分支 0x5943A3 不写 [ebp-0x10]，
+                    // 而它在 0x5940A0 已初始化为 0 = ReplyMode None。
+                    return;
                 case NativeZongpaiSubCommand.UpdateStudentAndMasterExp:
-                    // 0x593670 issues both updates with tail+0x50.
-                    result = _zongpaiService.UpdateStudentExp(masterName,
-                                 request.TailValue50)
-                             && _zongpaiService.UpdateMasterExp(masterName,
-                                 request.TailValue50) ? 0 : 1;
+                    // worker 0x593670。⚠️ 规格把它描述成「同时加师徒与师父经验」是**错的**，
+                    // 字节说它是「扣师徒经验 → ÷10 → 加师父经验」的**转换**：
+                    //   0x5936C2  call 0x591CF8        ; **扣减** StudentExp（不足即拒）
+                    //   0x5936C7  test al,al / je      ; 拒则整段不做
+                    //   0x59370F  mov ecx,0xa / div ecx ; ★师父经验 = 增量 ÷ 10（无符号）
+                    //   0x59371D  call 0x591D28        ; 饱和累加 MasterExp
+                    //   0x593725  cmp [ebp-0x1c],0 / jbe ; 实发量 <= 0 则不发第二条 SQL
+                    // 两条 SQL 用的是**不同常量**：0x593790（StudentExp，带 UpdateTime）
+                    // 与 0x5937EC（MasterExp，**不带** UpdateTime）。
+                    {
+                        var delta = unchecked((uint)request.TailValue50);
+                        if (!_zongpaiService.SubtractStudentExp(masterName, delta))
+                        {
+                            // 0x5936C9 je 0x593763 ⇒ 扣减失败则不加师父经验。
+                            result = 2;
+                            break;
+                        }
+                        // 0x59370F..0x593716：div 是无符号除法，余数丢弃。
+                        _zongpaiService.AddMasterExpSaturating(masterName, delta / 10);
+                        result = 0;
+                    }
                     break;
                 case NativeZongpaiSubCommand.UpdateMasterExp:
-                    // 0x59382C: MasterExp=tail+0x4C where MasterName=tail+0x00.
-                    result = _zongpaiService.UpdateMasterExp(masterName,
-                        request.TailValue4C) ? 0 : 1;
+                    // worker 0x59382C。⚠️ 是**扣减**不是累加也不是赋值：
+                    //   0x59387A  call 0x591D94        ; 扣减 MasterExp（0x591DAA ja 不足即拒）
+                    //   0x59387F  test al,al / je      ; 拒则不发 SQL
+                    //   0x59388F  mov eax,[master+0x18] ; SQL 写扣减后的余额
+                    // SQL 常量 0x5938F0（带 UpdateTime），与 sub 7 的 0x5937EC 不同。
+                    result = _zongpaiService.SubtractMasterExp(masterName,
+                        unchecked((uint)request.TailValue4C)) ? 0 : 2;
                     break;
                 case NativeZongpaiSubCommand.UpdateMasterLevel:
                     // 0x593944: MasterLevel update; the original answers with the
