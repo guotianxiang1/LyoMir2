@@ -117,13 +117,16 @@ namespace DBSvr
         /// 上限 0xFFB43480；已满或增量 &lt;= 0 时返 0 且不写库。
         /// </summary>
         public uint AddStudentExpSaturating(string masterName, uint amount)
-            => AddSaturating(masterName, amount, "StudentExp");
+            => AddSaturating(masterName, amount, "StudentExp", withUpdateTime: true);
 
         /// <summary>
         /// 原版 helper 0x591D28。结构与 0x591C8C 同构，字段换成 MasterExp。
+        /// ⚠️ D7: 原版落库模板 0x5937EC = "update ZongpaiBase set MasterExp = %u where MasterName = "%s";"
+        ///   注意**无 UpdateTime**，与 StudentExp 模板 0x59361C 不同。
+        ///   withUpdateTime=false 令 AddSaturating 走不带 UpdateTime 的分支。
         /// </summary>
         public uint AddMasterExpSaturating(string masterName, uint amount)
-            => AddSaturating(masterName, amount, "MasterExp");
+            => AddSaturating(masterName, amount, "MasterExp", withUpdateTime: false);
 
         /// <summary>
         /// 原版 helper 0x591CF8。扣减 StudentExp；不足则拒绝（不部分扣）。
@@ -141,7 +144,8 @@ namespace DBSvr
         /// 饱和累加的共用实现。<paramref name="column"/> 只取自本文件的两个字面量，
         /// 不是外部输入，故可插值。
         /// </summary>
-        private static uint AddSaturating(string masterName, uint amount, string column)
+        private static uint AddSaturating(string masterName, uint amount, string column,
+            bool withUpdateTime = true)
         {
             // 0x591CA9 cmp amount,0 / jbe -> 增量为 0 直接返 0，连查询都不做。
             if (amount == 0) return 0;
@@ -183,9 +187,12 @@ namespace DBSvr
 
                 // 调用方（sub 6 @0x5935B4）在实发量 <= 0 时不发 SQL；
                 // 这里 granted 必 > 0（current < cap 已保证），故一定落库。
-                using var write = new MySqlCommand(
-                    $"UPDATE gamedata.ZongpaiBase SET {column}=@e, UpdateTime=NOW() "
-                    + "WHERE MasterName=@n", conn, tx);
+                // D7: StudentExp path (0x59361C/0x593790) includes UpdateTime=Now();
+                //     MasterExp path (0x5937EC) does NOT — follow each template verbatim.
+                var writeSql = withUpdateTime
+                    ? $"UPDATE gamedata.ZongpaiBase SET {column}=@e, UpdateTime=Now() WHERE MasterName=@n"
+                    : $"UPDATE gamedata.ZongpaiBase SET {column}=@e WHERE MasterName=@n";
+                using var write = new MySqlCommand(writeSql, conn, tx);
                 write.Parameters.AddWithValue("@e", stored);
                 write.Parameters.Add(LegacyGbkText.Parameter("@n", masterName));
                 write.ExecuteNonQuery();
@@ -301,7 +308,10 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return false;
             using var cmd = new MySqlCommand(
-                "INSERT IGNORE INTO gamedata.ZongpaiRole(MasterName, RoleName, RolePrivilege, MaxMemberNum) VALUES(@m,@r,@p,@x)", conn);
+                // 0x592E18: native spells the table all-lowercase ("zongpairole");
+                // other DDL/SELECT statements use "ZongpaiRole" — original is inconsistent,
+                // follow each literal individually (D6 fidelity fix).
+                "insert ignore into gamedata.zongpairole(MasterName, RoleName, RolePrivilege, MaxMemberNum) Values(@m,@r,@p,@x)", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
             cmd.Parameters.Add(LegacyGbkText.Parameter("@r", roleName));
             cmd.Parameters.AddWithValue("@p", privilege); cmd.Parameters.AddWithValue("@x", maxMembers);
@@ -350,9 +360,15 @@ namespace DBSvr
             using var tx = conn.BeginTransaction();
             try
             {
-                foreach (var sql in new[] { "UPDATE gamedata.ZongpaiBase SET MasterName=@n WHERE MasterName=@o",
-                    "UPDATE gamedata.ZongpaiMember SET MasterName=@n WHERE MasterName=@o",
-                    "UPDATE gamedata.ZongpaiRole SET MasterName=@n WHERE MasterName=@o" })
+                // CSONLY-3 fix: native rename cascade (0x594860) touches only two tables:
+                //   0x594AF0 = "Update ZongpaiBase Set MasterName = "%s" where MasterName = "%s";"
+                //   0x594BA0 = "Update ZongpaiMember Set MasterName = "%s" where MasterName = "%s";"
+                // No ZongpaiRole row exists for that worker — the third UPDATE was invented.
+                foreach (var sql in new[]
+                {
+                    "Update gamedata.ZongpaiBase Set MasterName=@n where MasterName=@o",
+                    "Update gamedata.ZongpaiMember Set MasterName=@n where MasterName=@o"
+                })
                 {
                     using var c = new MySqlCommand(sql, conn, tx);
                     c.Parameters.Add(LegacyGbkText.Parameter("@n", newName));

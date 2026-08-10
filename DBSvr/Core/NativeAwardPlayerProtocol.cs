@@ -122,12 +122,17 @@ namespace DBSvr.Core
             {
                 using var connection = new MySqlConnection(DBShare.DBConnection);
                 connection.Open();
+                // native VA 0x5A5914 len=25: "set wait_timeout=2073600;"
                 using (var session = new MySqlCommand(
-                           "SET WAIT_TIMEOUT = 2073600;", connection))
+                           "set wait_timeout=2073600;", connection))
                     session.ExecuteNonQuery();
+                // native VA 0x5AB8C8 len=87: Insert Ignore into awardplayers(PTID,Level,job,Sex,Status)
+                // column `job` is lowercase in the native literal; `PTID`, `Level`, `Sex`, `Status`
+                // match the DDL at VA 0x5BBA08. Schema mir3 is implicit in native (use mir3; 0x5BAD84)
+                // but the explicit prefix is semantically equivalent given database=mir3 in DBConnection.
                 using var command = new MySqlCommand(
                     @"INSERT IGNORE INTO mir3.awardplayers
-                        (PTID, Level, Job, Sex, Status)
+                        (PTID, Level, job, Sex, Status)
                       VALUES(@ptid, @level, @job, @sex, 0)",
                     connection);
                 command.Parameters.Add("@ptid", MySqlDbType.Binary).Value =

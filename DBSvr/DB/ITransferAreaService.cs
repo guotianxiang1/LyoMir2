@@ -21,8 +21,11 @@ namespace DBSvr
         /// <summary>插入发送记录</summary>
         bool InsertSendRecord(string timeStamp, string charName, int zoneId, int groupId, int scoreType, int score, int state);
 
-        /// <summary>更新发送记录状态</summary>
-        bool UpdateSendRecordState(string timeStamp, string charName, int zoneId, int groupId, int state);
+        /// <summary>
+        /// 更新发送记录状态。scoreType 是唯一键 Record_Index 的第 5 列
+        /// (DDL 0x5C0CF4)，省略它会覆盖同名其它 ScoreType 的兄弟行。
+        /// </summary>
+        bool UpdateSendRecordState(string timeStamp, string charName, int zoneId, int groupId, int scoreType, int state);
 
         /// <summary>清理7天过期记录</summary>
         int CleanExpiredRecords(int days = 7);

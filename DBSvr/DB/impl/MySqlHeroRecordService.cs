@@ -50,10 +50,17 @@ namespace DBSvr
             var idx = -1;
             try
             {
+                // Native VA 0x5B2618: Insert Into hero_index(MasterName, HeroName,IsDelete,HeroType,
+                // Consignation,Level, Job, Sex, Exp, CreateDate, ModifyDate, SrcZoneId, SrcGroupId,
+                // SrcHeroName, sfLevel, HeroId) values(...)
+                // Fix: add SrcHeroName column (native column 14). For local creation the native passes
+                // "" (empty string). Cross-server import that sets a real SrcHeroName is BLOCKED —
+                // no C# caller currently supplies that value, so "" is the correct default here.
                 using var cmd = new MySqlCommand(
                     @"INSERT INTO mir3.hero_index(MasterName, HeroName, IsDelete, HeroType, Consignation,
-                        Level, Job, Sex, Exp, CreateDate, ModifyDate, SrcZoneId, SrcGroupId, sfLevel, HeroId)
-                      VALUES(@m, @h, 0, @ht, 0, 0, @j, @s, 0, NOW(), NOW(), 0, 0, 0, @hid);
+                        Level, Job, Sex, Exp, CreateDate, ModifyDate, SrcZoneId, SrcGroupId, SrcHeroName,
+                        sfLevel, HeroId)
+                      VALUES(@m, @h, 0, @ht, 0, 0, @j, @s, 0, NOW(), NOW(), 0, 0, @srch, 0, @hid);
                       SELECT LAST_INSERT_ID();", conn, tx);
                 cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
                 cmd.Parameters.Add(LegacyGbkText.Parameter("@h", heroName));
@@ -61,6 +68,9 @@ namespace DBSvr
                 cmd.Parameters.AddWithValue("@j", job);
                 cmd.Parameters.AddWithValue("@s", sex);
                 cmd.Parameters.AddWithValue("@hid", heroId);
+                // SrcHeroName: "" for local creation (native 0x5B2618 passes "" for local heroes)
+                // BLOCKED: cross-server import path that sets a real SrcHeroName is not yet ported
+                cmd.Parameters.Add(LegacyGbkText.Parameter("@srch", ""));
                 idx = Convert.ToInt32(cmd.ExecuteScalar());
 
                 using var cmd2 = new MySqlCommand(
@@ -171,10 +181,12 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return list;
             using var cmd = new MySqlCommand(
+                // Native iterates all deleted heroes in-memory without a cap (0x58D800 loop).
+                // Fix: remove spurious LIMIT 10 — hiding >10 deleted heroes breaks recovery flow.
                 @"SELECT idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp,
                           ForceLv, ForceExp, sfLevel, HeroId, ModifyDate
                   FROM mir3.hero_index WHERE MasterName=@m AND IsDelete=1
-                  ORDER BY idx LIMIT 10", conn);
+                  ORDER BY idx", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
             using var dr = cmd.ExecuteReader();
             while (dr.Read()) list.Add(ReadHeroInfo(dr));
@@ -214,6 +226,23 @@ namespace DBSvr
 
         public bool UpdateLvChangeTime(int idx)
         {
+            // Native VA 0x5B27A8:
+            //   Update hero_index set lvChangeTime=Now() where idx=%d
+            //   and (Level<>%d or ForceLv<>%d or sfLevel<>%d);
+            // The native only stamps lvChangeTime when at least one of Level/ForceLv/sfLevel
+            // actually differs from the values it is about to write, so a save that changed
+            // only blob data leaves lvChangeTime alone (which matters: lvChangeTime is the final
+            // ORDER BY tiebreaker in the ranking queries at 0x478BF8..0x478E74).
+            // BLOCKED: this overload cannot reproduce the predicate -- IHeroRecordService declares
+            // UpdateLvChangeTime(int idx) with no old Level/ForceLv/sfLevel arguments, and
+            // IHeroRecordService.cs is outside this pass's editable scope. Widening the signature
+            // to match the native (compare IPlayRecordService.UpdateLvChangeTime(idx, oldLevel,
+            // oldForceLv, oldSfLevel), which already carries the native's three arguments) is the
+            // fix. Left unconditional for now: it over-stamps lvChangeTime, which perturbs ranking
+            // tiebreaks but never alters hero level/exp/item data.
+            // Note the primary save path is unaffected -- SaveRecordCore in MySqlHeroDataService
+            // applies the native's IF(h.Level<>@level OR h.ForceLv<>@forceLv OR h.sfLevel<>@sfLevel)
+            // guard inline, so this standalone method is the only divergent caller.
             using var conn = OpenConn();
             if (conn == null) return false;
             using var cmd = new MySqlCommand("UPDATE mir3.hero_index SET lvChangeTime=NOW() WHERE idx=@i", conn);
@@ -462,13 +491,32 @@ namespace DBSvr
             var list = new List<RankEntry>();
             using var conn = OpenConn();
             if (conn == null) return list;
+            // Native VA 0x478E74 (unfiltered hero ranking):
+            //   select MasterName, HeroName, Level, sfLevel from hero_index, _AvailUser
+            //   where _AvailUser.Idx=hero_index.Idx order by Level desc,  sfLevel desc,
+            //   ForceLv desc,  Exp desc, lvChangeTime Limit 100
+            // Native VA 0x5CBEC8 populates the _AvailUser temp table for heroes:
+            //   Insert Into _AvailUser select Idx from hero_index
+            //   where Date_add(ModifyDate, interval 1 month)>Now();
+            // The temp-table join is replaced by the equivalent inline ModifyDate predicate.
+            // Fixes vs old code:
+            //  - activity window was DATE_SUB(NOW(), INTERVAL 30 DAY); native is
+            //    Date_add(ModifyDate, interval 1 month)>Now() -- restored verbatim.
+            //  - "AND Level>0" was invented: the hero _AvailUser population (0x5CBEC8) has no
+            //    level floor. Contrast the user_index population at 0x5CBE38, which DOES carry
+            //    "Level>0 and AdminLevel = 0" -- the asymmetry is deliberate, so it is removed here.
+            //  - ORDER BY was missing the native's final lvChangeTime tiebreaker.
+            // BLOCKED: "IsDelete=0" is retained but UNPROVEN. Neither 0x478E74 nor the 0x5CBEC8
+            // population carries an IsDelete predicate, but the referencing ranking function is
+            // virtualised, so a pre-filter in code cannot be ruled out. Dropping the predicate
+            // would publish soft-deleted heroes into the ranking, so it is left in place pending
+            // a readable native function body.
             using var cmd = new MySqlCommand(
                 @"SELECT HeroName AS ChrName, Level, sfLevel, ForceLv, Exp, 0 AS FightPoints, 0 AS ApprenticeNum
-                  FROM mir3.hero_index WHERE IsDelete=0 AND Level>0
-                    AND ModifyDate > DATE_SUB(NOW(), INTERVAL @d DAY)
-                  ORDER BY Level DESC, sfLevel DESC, ForceLv DESC, Exp DESC
+                  FROM mir3.hero_index WHERE IsDelete=0
+                    AND Date_add(ModifyDate, interval 1 month)>Now()
+                  ORDER BY Level DESC, sfLevel DESC, ForceLv DESC, Exp DESC, lvChangeTime
                   LIMIT @l", conn);
-            cmd.Parameters.AddWithValue("@d", DBShare.RankingActiveDays);
             cmd.Parameters.AddWithValue("@l", Math.Min(limit, DBShare.RankLimit));
             using var dr = cmd.ExecuteReader();
             while (dr.Read()) list.Add(new RankEntry

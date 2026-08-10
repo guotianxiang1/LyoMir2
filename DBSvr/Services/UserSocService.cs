@@ -1285,8 +1285,21 @@ namespace DBSvr
                     using (var session = new MySqlCommand(
                                "SET WAIT_TIMEOUT = 2073600;", conn))
                         session.ExecuteNonQuery();
+                    // LIMIT 200, not 10. The original builds this list purely in
+                    // memory (fn_5A5398) and its cap is a BUFFER size, not a SQL
+                    // clause -- there is no per-account character SELECT in the
+                    // binary at all:
+                    //   005A53E2  b8a00f0000      mov eax, 0xfa0   ; 4000 bytes
+                    //   005A53F2  66c700c800      mov word [eax], 0xc8   ; = 200
+                    //   005A541C  668138c800      cmp word [eax], 0xc8
+                    //   005A5421  0f83cd000000    jae 0x5a54f4     ; stop at 200
+                    // 0xFA0 / 0xC8 == 20 bytes per row, which is exactly the
+                    // recSize used below -- independent corroboration of the cap.
+                    // The original stops at 200 silently; it does not error, so a
+                    // LIMIT is the faithful way to express the same ceiling.
+                    // LIMIT 10 silently hid characters 11..200 from the client.
                     using var cmd = new MySqlCommand(
-                        "SELECT ChrName, Job, Sex, Level FROM mir3.user_index WHERE PTID=@p AND IsDelete=1 LIMIT 10", conn);
+                        "SELECT ChrName, Job, Sex, Level FROM mir3.user_index WHERE PTID=@p AND IsDelete=1 LIMIT 200", conn);
                     cmd.Parameters.AddWithValue("@p", ptid);
                     using var dr = cmd.ExecuteReader();
                     while (dr.Read())

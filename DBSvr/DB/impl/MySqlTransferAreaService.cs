@@ -11,6 +11,14 @@ namespace DBSvr
     /// </summary>
     public class MySqlTransferAreaService : ITransferAreaService
     {
+        // BLOCKED: no native SELECT literal for TransferAreaScore exists in the CODE
+        // snapshot. A full census of 'TransferArea' literals plus every 'Score1'/'score1'
+        // occurrence yields only the insert 0x5960E4, the rename 0x5AA148 and the two
+        // CREATE TABLE statements (0x5C0EA4, 0x5C0CF4). GetScores/DeductScore/
+        // TryDeductNativeScore are C#-ONLY read/deduct paths with no Delphi counterpart
+        // to compare against; their column names (Score1..Score3, CharName) are the only
+        // part backed by the validated DDL at 0x5C0EA4. Missing evidence: the reader for
+        // the native score-spend path, whose function was virtualised.
         public Dictionary<string, int> GetScores(string charName)
         {
             var result = new Dictionary<string, int>();
@@ -95,6 +103,15 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return false;
+            // Native 0x595AC4: 'Insert into TransferAreaScoreSendRecord(TimeStamp,
+            // CharName, ZoneId,  GroupId, ScoreType, Score, State) Values("%s", "%s",
+            // %d, %d, %d, %d, %d)  on duplicate key update State=%d;'
+            // Column list, order and the ON DUPLICATE KEY UPDATE State-only payload all
+            // match; the duplicate arbitration is the 5-column Record_Index unique key
+            // (DDL 0x5C0CF4). Note the native emits no schema prefix here, relying on the
+            // connection's default schema; kept explicit as 'gamedata.' because this
+            // process connects with database=mir3 (DBShare.DBConnection), so an
+            // unqualified name would resolve to the wrong schema.
             using var cmd = new MySqlCommand(
                 @"INSERT INTO gamedata.TransferAreaScoreSendRecord(TimeStamp, CharName, ZoneId, GroupId, ScoreType, Score, State)
                   VALUES(@t,@c,@z,@g,@st,@s,@e) ON DUPLICATE KEY UPDATE State=@e", conn);
@@ -105,15 +122,33 @@ namespace DBSvr
             cmd.ExecuteNonQuery(); return true;
         }
 
-        public bool UpdateSendRecordState(string timeStamp, string charName, int zoneId, int groupId, int state)
+        /// <summary>
+        /// 更新发送记录状态。
+        /// 身份 = 5 列唯一键 Record_Index(TimeStamp, CharName, ZoneId, GroupId, ScoreType)
+        /// (DDL 0x5C0CF4)。scoreType 现为必填参数。
+        /// </summary>
+        public bool UpdateSendRecordState(string timeStamp, string charName, int zoneId, int groupId, int scoreType, int state)
         {
             using var conn = OpenConn();
             if (conn == null) return false;
+            // The native has NO standalone UPDATE for this table: a full literal census
+            // of every 'TransferArea' occurrence in the CODE snapshot yields only
+            // 0x595684 (count), 0x595714 (select State=1), 0x5958E0 (select expired idx),
+            // 0x595968 (delete by idx) and 0x595AC4 (insert .. on duplicate key update
+            // State=%d). The native mutates State exclusively through that insert's
+            // ON DUPLICATE KEY path, which is arbitrated by the 5-column unique key.
+            // This method is therefore an equivalent of that path's UPDATE half, so its
+            // WHERE must reproduce the key exactly.
+            //
+            // WRONG BEFORE: the WHERE listed only TimeStamp, CharName, ZoneId, GroupId
+            // and omitted ScoreType (the 5th key column), so one score type's update
+            // matched and overwrote every sibling row sharing the other four values.
             using var cmd = new MySqlCommand(
-                "UPDATE gamedata.TransferAreaScoreSendRecord SET State=@e WHERE TimeStamp=@t AND CharName=@c AND ZoneId=@z AND GroupId=@g", conn);
+                "UPDATE gamedata.TransferAreaScoreSendRecord SET State=@e WHERE TimeStamp=@t AND CharName=@c AND ZoneId=@z AND GroupId=@g AND ScoreType=@st", conn);
             cmd.Parameters.AddWithValue("@t", timeStamp);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@c", charName));
-            cmd.Parameters.AddWithValue("@z", zoneId); cmd.Parameters.AddWithValue("@g", groupId); cmd.Parameters.AddWithValue("@e", state);
+            cmd.Parameters.AddWithValue("@z", zoneId); cmd.Parameters.AddWithValue("@g", groupId);
+            cmd.Parameters.AddWithValue("@st", scoreType); cmd.Parameters.AddWithValue("@e", state);
             return cmd.ExecuteNonQuery() > 0;
         }
 
@@ -121,18 +156,47 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return 0;
-            using var command = new MySqlCommand(
-                "DELETE FROM gamedata.TransferAreaScoreSendRecord WHERE State=3 AND NOW() > DATE_ADD(TimeStamp, INTERVAL @d DAY)", conn);
-            command.Parameters.AddWithValue("@d", days);
-            return command.ExecuteNonQuery();
+            // Native does this in two steps, not one combined DELETE:
+            //   0x5958E0 'Select High_Priority idx from TransferAreaScoreSendRecord
+            //             where (State = 3) and (Now() > DATE_Add(TimeStamp, Interval 7 DAY));'
+            //   0x595968 'Delete from TransferAreaScoreSendRecord where idx = %d;'
+            // The 7-day interval is a literal constant in the native SELECT; the caller
+            // passes DBShare.TransferRecordDays (7), which agrees.
+            // WRONG BEFORE: a single combined DELETE ... WHERE State=3 AND NOW() > ...
+            // never enumerated idx, so deletion was not keyed on the primary key as the
+            // native's is. Rows are now deleted one-by-one by idx, matching the native.
+            var expired = new List<int>();
+            using (var select = new MySqlCommand(
+                "Select High_Priority idx from gamedata.TransferAreaScoreSendRecord where (State = 3) and (Now() > DATE_Add(TimeStamp, Interval @d DAY))", conn))
+            {
+                select.Parameters.AddWithValue("@d", days);
+                using var dr = select.ExecuteReader();
+                while (dr.Read()) expired.Add(Convert.ToInt32(dr.GetValue(0)));
+            }
+            var removed = 0;
+            foreach (var idx in expired)
+            {
+                using var del = new MySqlCommand(
+                    "Delete from gamedata.TransferAreaScoreSendRecord where idx = @i", conn); // 0x595968
+                del.Parameters.AddWithValue("@i", idx);
+                removed += del.ExecuteNonQuery();
+            }
+            return removed;
         }
 
         public bool RenameChar(string oldName, string newName)
         {
             using var conn = OpenConn();
             if (conn == null) return false;
+            // Native 0x5A9C68 ("Update ignore gamedata") + 0x5AA148
+            // (".TransferAreaScore set CharName=\"%s\" where CharName=\"%s\";")
+            // => 'Update ignore gamedata.TransferAreaScore set CharName=.. where CharName=..'
+            // WRONG BEFORE: the 'ignore' modifier was dropped. TransferAreaScore has
+            // 'Unique Key Char_Index(CharName)' (DDL 0x5C0EA4), so renaming onto an
+            // existing name raises a duplicate-key error instead of being silently
+            // skipped as the native does, aborting the rename cascade mid-way.
             using var cmd = new MySqlCommand(
-                "UPDATE gamedata.TransferAreaScore SET CharName=@n WHERE CharName=@o", conn);
+                "Update ignore gamedata.TransferAreaScore set CharName=@n where CharName=@o", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newName));
             cmd.Parameters.Add(LegacyGbkText.Parameter("@o", oldName));
             cmd.ExecuteNonQuery(); return true;
