@@ -716,9 +716,14 @@ namespace DBSvr
                         if (!string.IsNullOrEmpty(userInfo.sAccount) &&
                             _loginService.CheckSession(userInfo.sAccount, userInfo.sUserIPaddr, userInfo.nSessionID))
                         {
+                            _lastDelChrResendList = false;
                             try { DelChr(body, ref userInfo); userInfo.boChrQueryed = false; }
                             catch (Exception ex) { Log($"[DelChr] Exception: {ex.Message}"); }
-                            if (userInfo.nSessionID > 0 && !string.IsNullOrEmpty(userInfo.sAccount))
+                            // 0x5CC927 cmp word [ebp-0x16],1 / 0x5CC92C jne 0x5CC997
+                            // ⇒ 原版**只有删除真的成功**才重建并重发角色列表。
+                            // 原来这里无条件重发，配额用尽/已待删/不是本账号时也会多发一帧。
+                            if (_lastDelChrResendList &&
+                                userInfo.nSessionID > 0 && !string.IsNullOrEmpty(userInfo.sAccount))
                                 QueryChr(EDcode.EncodeString(userInfo.sAccount + "/" + userInfo.nSessionID), ref userInfo, ref gateInfo);
                         }
                         else OutOfConnect(userInfo);
@@ -1088,32 +1093,185 @@ namespace DBSvr
 
         // ===================== 删除角色 (CM_DELCHR) =====================
 
+        /// <summary>
+        /// 原版删除角色 worker <c>fn_5A5978</c>（0x5A5978..0x5A5AB5）的返回码。
+        /// 调用方 <c>fn_5CC8B8</c> 把它原样放进回包的 Param
+        /// （<c>0x5CC8EF mov [ebp-0x16],ax</c> → <c>0x5CC90C mov [ebp-0x1E],ax</c>）。
+        /// </summary>
+        private enum NativeDelChrResult : ushort
+        {
+            /// <summary>0：名字没查到，或查到但不属于本账号。worker 的初值。</summary>
+            NotFoundOrNotOwner = 0,
+
+            /// <summary>1：删除成功（唯一会重发角色列表的码）。</summary>
+            Deleted = 1,
+
+            /// <summary>2：当日配额已用尽（0x5A5A36 cmp [eax+0x10],4 / jge）。</summary>
+            QuotaExhausted = 2,
+
+            /// <summary>3：该角色已处于待删除状态（0x5A5A3F cmp byte [eax+0x37],1 / je）。</summary>
+            AlreadyPending = 3,
+
+            /// <summary>
+            /// 6：角色被跨服操作锁定。门在 <c>0x5A59F8 call 0x5AD85C</c>，读的是
+            /// 角色记录的 <c>rec+0x1E</c>（0x5AD886 mov al,[eax+0x1e]）。
+            /// 该标志只有一个置位者 0x5AEB94 和一个清位者 0x5AEBA8，
+            /// 且两者各自只有一个调用点（0x5AD822 / 0x5AD852），最终都来自
+            /// <c>0x59C970</c> —— 那个函数随后发一个 <c>0x33AABB77</c> 链路帧、
+            /// 内层 ident <c>0x13D</c>（0x59CA3B mov word [eax],0x13d），即 ISM 跨服链路。
+            /// 故语义 = 「该角色正被跨服转移/操作占用」。
+            /// </summary>
+            LockedByCrossServer = 6,
+
+            /// <summary>
+            /// 7：全局禁删开关打开。门在 <c>0x5A59DD mov eax,[0x5DA03C］/
+            /// 0x5A59E2 cmp byte [eax],0 / je</c>，非 0 即拒。
+            /// 该全局在 CODE 段有 12 处读点（同样的 <c>cmp byte [eax],0</c> 模式），
+            /// 是一个进程级布尔开关。
+            /// ⚠️ BLOCKED：**开关的生产者尚未定位**（写者不在可读 CODE 里，
+            /// 引用它的配置装载函数被 VMP 虚拟化）。因此本 C# 侧没有对应变量，
+            /// 该码恒不产生 —— 等价于「开关关闭」，与默认放行一致，不是伪造；
+            /// 但「运营把它打开」这一路径是已知缺口，定位到生产者后再补。
+            /// </summary>
+            GloballyDisabled = 7,
+        }
+
+        /// <summary>
+        /// 复刻 <c>CM_DELCHR</c>：worker <c>fn_5A5978</c> + 调用方 <c>fn_5CC8B8</c>。
+        ///
+        /// 原版把「判定」和「回包」分在两个函数里，回包形状由 fn_5CC8B8 决定：
+        ///   0x5CC8D1  cmp eax,0x0E / jg  ⇒ 角色名 &gt; 14 字节直接退出，**不回包**
+        ///   0x5CC902  mov word [ebp-0x20], 0x0FAD   ; ident 恒为 0x0FAD
+        ///   0x5CC90C  mov word [ebp-0x1E], ax       ; worker 返回码放进 Param
+        ///   0x5CC924  call dword [ebx+0x60]         ; 发包（无论成败都发这一个 ident）
+        ///   0x5CC927  cmp word [ebp-0x16],1 / jne 0x5CC997
+        ///                                           ; **只有码==1 才继续**重建并重发角色列表
+        ///
+        /// 故原版**没有**成功/失败两个不同 ident：一律 0x0FAD，区别只在 Param。
+        /// 这里保留仓库既有的 SM_DELCHR_* 常量做映射（MobileCmdMap 把两者都映回
+        /// 客户端 4013），但语义按原版统一成「一个 ident + 返回码」。
+        /// </summary>
         private void DelChr(string sData, ref TUserInfo userInfo)
         {
             var sChrName = EDcode.DeCodeString(sData)?.TrimEnd('\0');
             Log($"[DelChr] name='{sChrName}' sAccount={userInfo.sAccount}");
-            bool boCheck = false;
 
-            int nIndex = _playRecordService.Index(sChrName);
-            Log($"[DelChr] Index={nIndex}");
-            if (nIndex >= 0)
+            // 0x5CC8C9 call 0x404EB8 (Length) / 0x5CC8D1 cmp eax,0x0E / 0x5CC8D4 jg
+            // ⇒ 名字长度 > 14 时**静默退出，不回包**。原版量的是 GBK 字节数
+            // （Delphi 的 Length 对 AnsiString 就是字节数），不是字符数。
+            var nameBytes = LegacyGbkText.Encode(sChrName ?? string.Empty);
+            if (nameBytes.Length > 0x0E)
             {
-                var humRecord = _playRecordService.Get(nIndex, ref boCheck);
-                Log($"[DelChr] Get boCheck={boCheck} account={humRecord?.sAccount}");
-                if (boCheck && (humRecord.sAccount == userInfo.sAccount || humRecord.sAccount == GetPtid(userInfo.sAccount)))
-                {
-                    humRecord.boDeleted = true;
-                    boCheck = _playRecordService.Update(nIndex, ref humRecord);
-                    Log($"[DelChr] Update={boCheck}");
-                }
+                Log($"[DelChr] name too long ({nameBytes.Length} bytes) -> native sends NOTHING");
+                return;
             }
 
-            var msg = boCheck
-                ? Grobal2.MakeDefaultMsg(Grobal2.SM_DELCHR_SUCCESS, 0, 1, 0, 0)
-                : Grobal2.MakeDefaultMsg(Grobal2.SM_DELCHR_FAIL, 0, 0, 0, 0);
+            var result = DelChrWorker(sChrName, ref userInfo);
+            Log($"[DelChr] result={result} ({(ushort)result})");
 
-            SendEncodedPacket(userInfo, msg.Ident, msg.Recog,
-                msg.Param, msg.Tag, msg.Series, null);
+            // 0x5CC902/0x5CC90C/0x5CC924：ident 恒 0x0FAD，返回码进 Param。
+            SendEncodedPacket(userInfo, Grobal2.SM_DELCHR_SUCCESS, 0,
+                (ushort)result, 0, 0, null);
+
+            // 0x5CC927 cmp word [ebp-0x16],1 / 0x5CC92C jne ⇒ 仅成功才重发列表。
+            // 调用方（case CM_DELCHR）据此决定是否 QueryChr。
+            _lastDelChrResendList = result == NativeDelChrResult.Deleted;
+        }
+
+        /// <summary>
+        /// 是否需要在 <c>DelChr</c> 之后重发角色列表。
+        /// 复刻 <c>0x5CC927 cmp word [ebp-0x16],1 / jne 0x5CC997</c>：
+        /// 只有 worker 返回 1（真的删掉了）才重建列表并发 0x0FAA。
+        /// </summary>
+        private bool _lastDelChrResendList;
+
+        /// <summary>
+        /// 复刻 worker <c>fn_5A5978</c>（0x5A5978..0x5A5AB5）的判定顺序。
+        /// 顺序本身有意义，逐条对应：
+        ///   0x5A599B  返回码初值 0
+        ///   0x5A59AA  call 0x5AEF10        ; 按名字在 self+0x14 索引里找角色记录
+        ///   0x5A59B6  找不到 → 直接返回 0
+        ///   0x5A59D0  call 0x40AFB0        ; 比账号（**大小写不敏感**，a-z 折叠）
+        ///   0x5A59D7  jne → 返回 0         ; 不是本账号的角色
+        ///   0x5A59DD  全局开关 0x5DA03C    ; 非 0 → 返回 7
+        ///   0x5A59F8  call 0x5AD85C        ; 跨服锁定 rec+0x1E → 返回 6
+        ///   0x5A5A11  call 0x4034B0        ; today
+        ///   0x5A5A21  跨日则计数清零
+        ///   0x5A5A36  cmp [act+0x10],4 / jge → 返回 2
+        ///   0x5A5A3F  cmp byte [rec+0x37],1 / je → 返回 3   ; 已在待删
+        ///   0x5A5A4D  lastDay = today
+        ///   0x5A5A55  count++
+        ///   0x5A5A5B  byte[rec+0x36] = 0
+        ///   0x5A5A62  byte[rec+0x37] = 1   ; 置待删标志
+        ///   0x5A5A77  call vmt+0x14        ; 落库
+        ///   0x5A5A7A  返回码 1
+        ///
+        /// ⚠️ 记账在置标志**之前**且无回滚：即使落库失败，当日配额也已消耗一个。
+        /// 这是原版行为，不要「修正」。
+        /// </summary>
+        private NativeDelChrResult DelChrWorker(string sChrName, ref TUserInfo userInfo)
+        {
+            // 0x5A59AA：按名字找角色。找不到 → 0x5A59B6 返回 0。
+            int nIndex = _playRecordService.Index(sChrName);
+            if (nIndex < 0) return NativeDelChrResult.NotFoundOrNotOwner;
+
+            bool boCheck = false;
+            var humRecord = _playRecordService.Get(nIndex, ref boCheck);
+            if (!boCheck || humRecord == null) return NativeDelChrResult.NotFoundOrNotOwner;
+
+            // 0x5A59D0 call 0x40AFB0：原版这个比较把 'a'..'z' 减 0x20 折叠后再比，
+            // 即**大小写不敏感**（0x40AFD6/0x40AFDB/0x40AFE0）。
+            // 原来这里用 == 是大小写敏感的，会把 "Abc" 和 "abc" 判成不同账号。
+            var ptid = GetPtid(userInfo.sAccount);
+            bool owned =
+                string.Equals(humRecord.sAccount, userInfo.sAccount, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(ptid) &&
+                 string.Equals(humRecord.sAccount, ptid, StringComparison.OrdinalIgnoreCase));
+            if (!owned) return NativeDelChrResult.NotFoundOrNotOwner;
+
+            // 0x5A59DD 全局禁删开关 0x5DA03C → 返回 7。
+            // BLOCKED：生产者未定位（见 NativeDelChrResult.GloballyDisabled 注释），
+            // 故此处不产生 7，等价于开关关闭。
+
+            // 0x5A59F8 跨服锁定 rec+0x1E → 返回 6。
+            // BLOCKED：该标志由 ISM 跨服链路（0x59C970，内层 ident 0x13D）置位，
+            // C# 侧尚无 ISM 角色锁定状态，故此处不产生 6。
+            // 一旦补上 ISM 锁定，必须在这个位置、在配额之前判。
+
+            // 0x5A5A3F cmp byte [rec+0x37],1 / je → 返回 3。
+            // ⚠️ 原版这一判在配额门**之后**，但在记账之前；顺序见下。
+            // 这里先取出待删状态，实际判定保持原版位置。
+            bool alreadyPending = humRecord.boDeleted;
+
+            // 0x5A5A11..0x5A5A3A：跨日重置 + 配额门（上限 4，jge）。
+            // 配额键用账号：原版配额挂在账号对象上（0x5A5A1C mov eax,[eax] 解一层），
+            // 不是挂在连接上，所以断线重连不会刷新配额。
+            var quotaKey = !string.IsNullOrEmpty(ptid) ? ptid : userInfo.sAccount;
+
+            // 原版的门与记账是同一段代码的两半：先判 >=4 拒（不记账），
+            // 再判已待删拒（同样不记账），最后才 lastDay=today / count++。
+            // 故这里必须「先只读判门，通过后再消费」，不能一上来就 TryConsume，
+            // 否则 AlreadyPending 那条路径会被错误地扣掉一个配额。
+            if (NativeDelCharQuota.UsedToday(quotaKey) >= NativeDelCharQuota.DailyLimit)
+                return NativeDelChrResult.QuotaExhausted;
+
+            if (alreadyPending) return NativeDelChrResult.AlreadyPending;
+
+            // 0x5A5A4D/0x5A5A55：记账（lastDay = today, count++），在置标志之前。
+            if (!NativeDelCharQuota.TryConsume(quotaKey))
+                return NativeDelChrResult.QuotaExhausted;
+
+            // 0x5A5A5B byte[rec+0x36]=0 / 0x5A5A62 byte[rec+0x37]=1 / 0x5A5A77 落库。
+            // 原版**无回滚**：落库失败也不退配额、也仍然返回 1 之外的码前已扣数。
+            humRecord.boDeleted = true;
+            bool updated = _playRecordService.Update(nIndex, ref humRecord);
+            Log($"[DelChr] Update={updated} quotaUsed={NativeDelCharQuota.UsedToday(quotaKey)}");
+
+            // 0x5A5A7A：置标志成功即返回 1。原版把落库的返回值丢弃
+            // （0x5A5A77 call vmt+0x14 之后直接 0x5A5A7A mov word [ebp-0xe],1），
+            // 所以这里也不能因为 updated==false 就改码 —— 否则客户端会看到
+            // 原版永远不会发的组合。
+            return NativeDelChrResult.Deleted;
         }
 
         // ===================== 角色改名 (0xFB0 = 4016) =====================
