@@ -25,6 +25,7 @@ Run("whitelist: final quorum cjk>=1 or alnum>=2 (0x5CCF1E/0x5CCF24)", FinalQuoru
 Run("whitelist: trim-length equality (0x5CCE0B)", TrimEquality);
 Run("whitelist: dangling gbk lead rejected (0x5CCF18)", DanglingLead);
 Run("cascade shape: 22 statements / 19 tables / 15 gates", CascadeShape);
+Run("cascade rows: db/table/column/gate per statement", CascadeRows);
 
 if (failures.Count != 0)
 {
@@ -37,6 +38,72 @@ Console.WriteLine($"NativeRenameCascadeCheck PASS asserts={asserts} "
                   + "quorum=cjk1|alnum2 cascade=22/19/15 "
                   + "chain=0xFB0->0x5CD2EC->0x5A8DDC->0x5A923C");
 return 0;
+
+// ------------------------------------------------- 级联 22 行逐条（覆盖缺口补丁）
+//
+// 为什么需要这一段：CascadeShape 只断言条数 22 与门数 15。那两条对了，内容
+// 仍可以全错 —— 把 U11 的库 `guild` 写成 `gamedata`、把 U5 的列 `Charname`
+// 写成 `CharName`、把 G2 拆成 4 个独立门，条数门数都不变，审计照样绿。
+//
+// 下面每一行的期望值都**独立照原版模板常量抄写**（VA 见行尾注释），不从
+// 生产侧的 Cascade 表派生，否则就是拿实现证明实现。
+void CascadeRows()
+{
+    // (gate, db, table, column, tag)  —— 顺序 = 原版 exec VA 升序
+    var expected = new (string, string, string, string, string)[]
+    {
+        (null,        "gamedata", "WeaponUpg",              "CharName",      "U1"),  // 0x5A9C88 exec 0x5A92D0
+        ("c2citems",  "gamedata", "c2citems",               "FromChrName",   "U2"),  // 0x5A9D04 exec 0x5A934C
+        ("c2citems",  "gamedata", "c2citems",               "ToChrName",     "U3"),  // 0x5A9D44 exec 0x5A939B
+        ("Kindling",  "gamedata", "CreditCard",             "CharName",      "U4"),  // 0x5A9D9C exec 0x5A9417
+        ("Kindling",  "gamedata", "Kindling",               "Charname",      "U5"),  // 0x5A9DD8 exec 0x5A9466
+        ("Kindling",  "gamedata", "M2_HeroPointActor1204",  "Charname",      "U6"),  // 0x5A9E14 exec 0x5A94B5
+        ("Kindling",  "gamedata", "GloryPoint",             "Charname",      "U7"),  // 0x5A9E5C exec 0x5A9504
+        ("humantitle","gamedata", "humantitle",             "ChrName",       "U8"),  // 0x5A9EB4 exec 0x5A957C
+        ("TitleRelation","gamedata","TitleRelation",        "GrantName",     "U9"),  // 0x5A9F10 exec 0x5A95F8
+        ("TitleRelation","gamedata","TitleRelation",        "ChrName",       "U10"), // 0x5A9F50 exec 0x5A9647
+        ("guild_user","guild",    "guild_user",             "CharName",      "U11"), // 0x5A9FE4 exec 0x5A96BF
+        ("FeedPetManager","gamedata","FeedPetManager",      "MasterName",    "U12"), // 0x5AA040 exec 0x5A9737
+        ("dominatorpet","Mir3",   "dominatorpet",           "MasterName",    "U13"), // 0x5AA0E0 exec 0x5A97AF
+        ("TransferAreaScore","gamedata","TransferAreaScore","CharName",      "U14"), // 0x5AA148 exec 0x5A982D
+        ("dominatorvote","gamedata","dominatorvote",        "DominatorName", "U15"), // 0x5AA1AC exec 0x5A98B5
+        ("dominatorvote","gamedata","dominatorvote",        "VoterName",     "U16"), // 0x5AA1F4 exec 0x5A990A
+        ("m2_yb_deal_setinfo","gamedata","m2_yb_deal_setinfo","CharName",    "U17"), // 0x5AA258 exec 0x5A998E
+        ("humanachieve","gamedata","humanachieve",          "ChrName",       "U18"), // 0x5AA2BC exec 0x5A9A12
+        ("m2_offirankorders","gamedata","m2_offirankorders","CharName",      "U19"), // 0x5AA31C exec 0x5A9A96
+        ("m2_beatdownmonorder","gamedata","m2_beatdownmonorder","CharName",  "U20"), // 0x5AA384 exec 0x5A9B1A
+        ("mirmatchgroupapplymemberlist","gamedata","mirmatchgroupapplymemberlist","CharName","U21"), // 0x5AA3F8 exec 0x5A9B9E
+        ("mirmatchgroupmemberlist","gamedata","mirmatchgroupmemberlist","CharName","U22"),           // 0x5AA470 exec 0x5A9C22
+    };
+
+    var actual = MySqlNativeRenameCascadeService.CascadeRows;
+    Equal(expected.Length, actual.Count, "cascade row count");
+    for (var i = 0; i < expected.Length && i < actual.Count; i++)
+    {
+        var e = expected[i];
+        var a = actual[i];
+        Equal(e.Item5, a.Tag,    $"row {i} tag (order must follow exec VA)");
+        Equal(e.Item1, a.Gate,   $"{e.Item5} gate table");
+        Equal(e.Item2, a.Db,     $"{e.Item5} database (guild/Mir3 are NOT gamedata)");
+        Equal(e.Item3, a.Table,  $"{e.Item5} table");
+        Equal(e.Item4, a.Column, $"{e.Item5} column (verbatim case)");
+    }
+
+    // U1 无门：first exec 0x5A92D0 早于 first gate 0x5A92F5（机器验证过）。
+    Equal((string)null, actual[0].Gate, "U1 WeaponUpg has NO existence gate");
+    // G2 一门保 4 表：Kindling 不存在则 CreditCard/M2_HeroPointActor1204/GloryPoint 也不更新。
+    var kindling = 0;
+    foreach (var r in actual) if (r.Gate == "Kindling") kindling++;
+    Equal(4, kindling, "G2 gates 4 tables through one Kindling probe");
+    // 三张表各被打两次（不同列），故 22 条打 19 张表。
+    var tables = new HashSet<string>(StringComparer.Ordinal);
+    foreach (var r in actual) tables.Add(r.Db + "." + r.Table);
+    Equal(19, tables.Count, "22 statements hit 19 distinct tables");
+    // 三个库逐字：gamedata / guild / Mir3（M 大写）。
+    var dbs = new SortedSet<string>(StringComparer.Ordinal);
+    foreach (var r in actual) dbs.Add(r.Db);
+    Equal("Mir3,gamedata,guild", string.Join(",", dbs), "exactly three schemas, verbatim case");
+}
 
 // ---------------------------------------------------------------- 长度门
 

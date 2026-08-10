@@ -96,6 +96,30 @@ namespace DBSvr
         /// <summary>该表在 Cascade 里的条数，供审计交叉校验。</summary>
         public static int CascadeStatementCount => Cascade.Length;
 
+        /// <summary>
+        /// 级联表的只读视图，供审计**逐行**断言库名/表名/列名/门归属。
+        ///
+        /// 加这个视图的理由（记在代码里，因为它是一次真实的覆盖缺口）：
+        /// 此前审计只断言 `CascadeStatementCount==22` 与 `GateCount==15` 两条，
+        /// 于是把 `guild` 写成 `gamedata`、把 `Charname` 写成 `CharName`、
+        /// 把 G2 拆成 4 个独立门 —— 全部仍然绿。条数与门数对不代表内容对。
+        ///
+        /// 顺序即原版 exec VA 升序，审计据此逐条比对，不做集合比较
+        /// （集合比较会漏掉顺序错误，而顺序在原版里是 fail-abort 语义的一部分）。
+        /// </summary>
+        public static IReadOnlyList<(string Gate, string Db, string Table,
+            string Column, string Tag)> CascadeRows
+        {
+            get
+            {
+                var rows = new (string, string, string, string, string)[Cascade.Length];
+                for (var i = 0; i < Cascade.Length; i++)
+                    rows[i] = (Cascade[i].Gate, Cascade[i].Db, Cascade[i].Table,
+                        Cascade[i].Column, Cascade[i].Tag);
+                return rows;
+            }
+        }
+
         /// <summary>去重后的门数（原版 15 个 show tables 查询）。</summary>
         public static int GateCount
         {
