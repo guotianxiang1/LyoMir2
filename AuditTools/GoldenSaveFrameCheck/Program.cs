@@ -31,8 +31,14 @@ const int UnusedByNativeOffset = 0x3B;  // native never touches this
 var dir = args.Length > 0 ? args[0] : @"D:\loym2\staging\golden_saves_gtwl";
 if (!Directory.Exists(dir))
 {
+    // Exit 2 (INCOMPLETE), never 0 -- see the same fix in
+    // GoldenCodecFidelityCheck and NativeScriptSectionsCheck. A missing corpus
+    // must not be reportable as a pass, and an empty corpus already FAILs a few
+    // lines below, so returning 0 here made the weaker case the silent one.
     Console.WriteLine($"GoldenSaveFrameCheck SKIP: no golden frames at {dir}");
-    return 0;
+    Console.WriteLine("SKIP reason: golden-backed assertions were NOT executed; " +
+        "this run proves nothing about save-frame fidelity.");
+    return 2;
 }
 
 var files = Directory.GetFiles(dir, "user_data_idx*.bin");

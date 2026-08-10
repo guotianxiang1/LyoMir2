@@ -55,8 +55,16 @@ var groundTruth = new Dictionary<string, (int Sex, int Job, int Level)>
 var dir = args.Length > 0 ? args[0] : @"D:\loym2\staging\golden_saves_gtwl";
 if (!Directory.Exists(dir))
 {
+    // Exit 2 (INCOMPLETE), never 0. Returning 0 here made a missing corpus
+    // indistinguishable from a passing run: the runner recorded PASS for a run
+    // in which not one golden-backed assertion executed. Note the old shape was
+    // also self-inconsistent -- an EMPTY corpus directory already FAILed a few
+    // lines below, while a MISSING one rendered green, i.e. the weaker case was
+    // the silent one.
     Console.WriteLine($"GoldenCodecFidelityCheck SKIP: no golden frames at {dir}");
-    return 0;
+    Console.WriteLine("SKIP reason: golden-backed assertions were NOT executed; " +
+        "this run proves nothing about codec fidelity.");
+    return 2;
 }
 
 var files = Directory.GetFiles(dir, "user_data_idx*.bin");

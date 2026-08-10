@@ -66,6 +66,17 @@ try
         "goldens=34/34 exact-modulo-native-t6-reversal, 2nd-trip-identical");
     return 0;
 }
+// Corpus absent => INCOMPLETE (exit 2), never a silent green and never a FAIL.
+// A corpus that is PRESENT but the wrong size still falls through to the
+// generic handler below and fails, which is intended: present-but-wrong is a
+// real defect, absent is an environment gap.
+catch (GoldensUnavailableException unavailable)
+{
+    Console.WriteLine($"SKIP NativeScriptSections: {unavailable.Message}");
+    Console.WriteLine("SKIP reason: golden-backed assertions were NOT executed; " +
+        "this run proves nothing about ScriptData round-trip fidelity.");
+    return 2;
+}
 catch (Exception exception)
 {
     Console.Error.WriteLine($"NativeScriptSectionsCheck FAIL: {exception}");
@@ -583,10 +594,13 @@ static void CheckWiring()
 
 static List<(string name, byte[] blob)> GoldenBlobs()
 {
-    var directory = Path.Combine(FindRepositoryRoot(), "AuditTools",
-        "NativeScriptSectionsCheck", "goldens");
-    if (!Directory.Exists(directory))
-        throw new InvalidOperationException($"missing golden corpus {directory}");
+    var directory = GoldenDirectoryCandidates(out var candidates);
+    if (directory == null)
+        throw new GoldensUnavailableException(
+            "golden ScriptData corpus not found or empty; expected 34 *.bin at " +
+            CanonicalGoldenDirectory() + Environment.NewLine +
+            "  searched: " + string.Join(Environment.NewLine + "            ",
+                candidates));
     var result = new List<(string, byte[])>();
     foreach (var path in Directory.GetFiles(directory, "*.bin").OrderBy(p => p))
     {
@@ -820,16 +834,75 @@ static void RequireContains(string path, string needle, string label)
         throw new InvalidOperationException($"{label}: '{needle}' not found in {path}");
 }
 
-static string FindRepositoryRoot()
+// Resolve the repository root from THIS SOURCE FILE's compile-time path, not
+// from AppContext.BaseDirectory. The binary runs out of
+// AuditTools/<name>/bin/Debug/net8.0-windows/, so a BaseDirectory-relative
+// walk depends on how deep the output happens to be and breaks whenever the
+// TFM or output layout changes. [CallerFilePath] is fixed at compile time and
+// points at AuditTools/NativeScriptSectionsCheck/Program.cs.
+static string FindRepositoryRoot([CallerFilePath] string sourcePath = "")
 {
-    var dir = new DirectoryInfo(AppContext.BaseDirectory);
-    while (dir != null)
+    foreach (var start in new[] { sourcePath, AppContext.BaseDirectory })
     {
-        if (Directory.Exists(Path.Combine(dir.FullName, "GameSvr")))
-            return dir.FullName;
-        dir = dir.Parent;
+        if (string.IsNullOrEmpty(start))
+            continue;
+        var dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(start))
+            ?? start);
+        while (dir != null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "GameSvr")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
     }
     throw new InvalidOperationException("repository root not found");
+}
+
+// Where the corpus actually lives today: a sibling of the checkout, NOT inside
+// it. The checkout is D:/loym2/LyoMir2-master; the 34 blobs are at
+// D:/loym2/staging/golden_scriptdata. Reported verbatim in the SKIP message.
+static string CanonicalGoldenDirectory()
+{
+    var root = FindRepositoryRoot();
+    var parent = Directory.GetParent(root)?.FullName ?? root;
+    return Path.Combine(parent, "staging", "golden_scriptdata");
+}
+
+// Probe order: explicit M2_GOLDEN_SCRIPTDATA override, then the in-repo staging
+// path (so relocating the corpus into the checkout needs no code change), then
+// the sibling staging path where it lives today, then the legacy in-project
+// goldens/ directory. A directory that exists but holds no *.bin is treated as
+// absent, so an empty corpus cannot silently pass.
+static string GoldenDirectoryCandidates(out string[] candidates)
+{
+    var root = FindRepositoryRoot();
+    var parent = Directory.GetParent(root)?.FullName ?? root;
+    var fromEnvironment = Environment.GetEnvironmentVariable(
+        "M2_GOLDEN_SCRIPTDATA");
+    var probes = new List<string>();
+    if (!string.IsNullOrWhiteSpace(fromEnvironment))
+    {
+        // The override is AUTHORITATIVE, not merely first in line. Falling
+        // through to the default locations when an explicit override turns out
+        // to be empty or missing is a false-green generator: the run reports
+        // goldens=34/34 from a corpus the operator did not select, so pointing
+        // this variable at the wrong path looks like a pass. If it is set, it is
+        // the only candidate, and an empty/absent directory yields SKIP+exit 2.
+        candidates = new[] { Path.GetFullPath(fromEnvironment) };
+        return Directory.Exists(candidates[0])
+               && Directory.GetFiles(candidates[0], "*.bin").Length > 0
+            ? candidates[0]
+            : null;
+    }
+    probes.Add(Path.Combine(root, "staging", "golden_scriptdata"));
+    probes.Add(Path.Combine(parent, "staging", "golden_scriptdata"));
+    probes.Add(Path.Combine(root, "AuditTools", "NativeScriptSectionsCheck",
+        "goldens"));
+    candidates = probes.ToArray();
+    foreach (var probe in probes)
+        if (Directory.Exists(probe) && Directory.GetFiles(probe, "*.bin").Length > 0)
+            return probe;
+    return null;
 }
 
 static void Equal<T>(T expected, T actual, string label)
@@ -837,4 +910,13 @@ static void Equal<T>(T expected, T actual, string label)
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
         throw new InvalidOperationException(
             $"{label}: expected={expected}, actual={actual}");
+}
+
+// Thrown when the corpus is absent, so the entry point can report SKIP and exit
+// 2 (INCOMPLETE) instead of either throwing (FAIL) or quietly passing. A
+// missing corpus must never render green. Declared last: in a top-level-
+// statements file every type declaration must follow all local functions.
+sealed class GoldensUnavailableException : Exception
+{
+    public GoldensUnavailableException(string message) : base(message) { }
 }
