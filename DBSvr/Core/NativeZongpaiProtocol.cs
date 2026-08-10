@@ -64,6 +64,65 @@ namespace DBSvr.Core
         /// <summary>dword at tail+0x50.</summary>
         public int TailValue50 { get; init; }
 
+        // ===== 槽 → 语义 的选择器 =====
+        // 这些不是便利属性，而是**唯一允许的取值途径**：GameSocService 的每个 case
+        // 都必须经由它们取参数。这样审计才能在不实例化 GameSocService（20+ 依赖，
+        // 审计里构造不出来）的前提下，真正覆盖「哪个槽喂给哪个参数」这一层。
+        //
+        // 背景：sub 2 / sub 3 各有一处已确证的写坏数据的槽映射错误，
+        // 而当时**没有任何断言覆盖调用点** —— 两个审计在修复前后都绿。
+        // 把映射收敛到这里，配合 NativeZongpaiProtocolCheck 的断言，才算真护栏。
+
+        /// <summary>
+        /// sub 3 的 MemberName。模板 0x593140 的 TVarRec slot1 = [ebp+8]（0x5930DD）。
+        /// 槽容量 15（tail+0x25 到 tail+0x35 = 长度字节+15），对应 DDL 0x5BF0C4 的
+        /// <c>MemberName varchar(15)</c>，且该列有 <c>unique key MemberName_Index</c>，
+        /// 所以传错会撞唯一键而不只是存错字符串。
+        /// </summary>
+        public byte[] AddMemberMemberName => TailSlot25;
+
+        /// <summary>
+        /// sub 3 的 RoleName。TVarRec slot2 = [ebp-0xC]（0x5930E7）。
+        /// 槽容量 20（tail+0x10 到 tail+0x25），对应 <c>RoleName varchar(20)</c>。
+        /// </summary>
+        public byte[] AddMemberRoleName => TailSlot10;
+
+        /// <summary>
+        /// sub 2 的 MasterLevel。调用点 0x59420C <c>mov cx, word ptr [eax+0x4c]</c>
+        /// —— 取 tail+0x4C 的**低 16 位**（原版 movzx，DDL 为 smallint unsigned）。
+        /// </summary>
+        public ushort CreateMasterLevel => unchecked((ushort)TailValue4C);
+
+        /// <summary>
+        /// sub 2 的 StudentExp。调用点 0x5941EE <c>mov eax,[eax+0x50]</c> / push
+        /// —— tail+0x50 的完整 dword，按 u32 落库（DDL <c>int unsigned</c>）。
+        /// 此前这个值被在 INSERT 里硬写 0，客户端送的值被丢弃。
+        /// </summary>
+        public uint CreateMasterStudentExp => unchecked((uint)TailValue50);
+
+        /// <summary>
+        /// sub 6 的 StudentExp 增量。worker 0x5943BA 按 **dword** 读 tail+0x4C
+        /// （sub 2 读同一偏移的 word —— 同一字段两种宽度，不是两个字段）。
+        /// </summary>
+        public uint StudentExpDelta => unchecked((uint)TailValue4C);
+
+        /// <summary>
+        /// sub 7 的转换额度。worker 0x59433A 读 tail+0x50。
+        /// 它先从 StudentExp 扣这个数，再把 <c>额度 / 10</c> 加到 MasterExp。
+        /// </summary>
+        public uint ConvertExpAmount => unchecked((uint)TailValue50);
+
+        /// <summary>
+        /// sub 8 的 MasterExp 扣减额。worker 0x594368 按 dword 读 tail+0x4C。
+        /// </summary>
+        public uint MasterExpDelta => unchecked((uint)TailValue4C);
+
+        /// <summary>
+        /// sub 2 / sub 9 / sub 13 的 MasterName —— 取 tail+0x35，**不是** tail+0x00。
+        /// sub 2 调用点 0x5941FB <c>add edx,0x35</c>。
+        /// </summary>
+        public byte[] MasterNameSlot35 => TailSlot35;
+
         /// <summary>ShortString at header+0x25 (used by sub-commands 11/12).</summary>
         public byte[] HeaderSlot25 { get; init; } = Array.Empty<byte>();
         /// <summary>ShortString at header+0x35 (used by sub-commands 11/12/9/10).</summary>

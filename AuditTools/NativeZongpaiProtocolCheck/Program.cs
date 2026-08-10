@@ -374,33 +374,58 @@ void WritePathFieldMapping()
     True(NativeZongpaiProtocol.TryDecodeRequest(frame, out var req, out var err),
         "decode: " + err);
 
+    // ⚠️ 以下断言打的是 NativeZongpaiRequest 上的**语义访问器**，不是原始槽属性。
+    // 这是有意的：GameSocService 的每个 case 现在都经由这些访问器取参数
+    // （8 处调用点已改道），所以断言它们等于在断言调用点的取值路径。
+    // 若只断言 TailSlot25/TailSlot10 这类原始槽，那是与调用点平行的描述 ——
+    // 调用点改回传反也照样绿，即新的假绿。这一点先前踩过一次。
+
     // sub 3：0x593140 `insert into ZongpaiMember(MasterName, MemberName, RoleName)`
     // TVarRec slot1 = [ebp+8] = MemberName、slot2 = [ebp-0xC] = RoleName（0x5930DD/0x5930E7）。
     // DDL 0x5BF0C4: MemberName varchar(15) / RoleName varchar(20)，与槽容量一一对应，
     // 且 `unique key MemberName_Index(MemberName)` 使传反必然撞唯一键。
-    EqualText("the_member_15c", Text(req.TailSlot25),
-        "sub3 memberName must come from tail+0x25 (cap 15 <-> varchar(15))");
-    EqualText("the_role_name_20chr", Text(req.TailSlot10),
-        "sub3 roleName must come from tail+0x10 (cap 20 <-> varchar(20))");
+    EqualText("the_member_15c", Text(req.AddMemberMemberName),
+        "sub3 memberName must resolve to tail+0x25 (cap 15 <-> varchar(15))");
+    EqualText("the_role_name_20chr", Text(req.AddMemberRoleName),
+        "sub3 roleName must resolve to tail+0x10 (cap 20 <-> varchar(20))");
+    // 反向锁定：两者不得同源（传反时这条也会红）。
+    True(Text(req.AddMemberMemberName) != Text(req.AddMemberRoleName),
+        "sub3 memberName and roleName must not resolve to the same slot");
 
     // sub 2：0x592FD4 `values("%s", %d, %u, Now())`
     // 0x59420C mov cx,word[eax+0x4c] -> MasterLevel（**只有 16 位**）
     // 0x5941EE mov eax,[eax+0x50] / push -> StudentExp（32 位，DDL int unsigned）
     Equal(value4C, req.TailValue4C, "sub2 raw tail+0x4C survives decode");
     Equal(value50, req.TailValue50, "sub2 raw tail+0x50 survives decode");
-    Equal(0x0201, (ushort)req.TailValue4C,
+    Equal(0x0201, req.CreateMasterLevel,
         "sub2 masterLevel is the LOW 16 bits of tail+0x4C (native movzx @0x59420C; "
         + "DDL MasterLevel smallint unsigned)");
-    Equal(value50, unchecked((int)(uint)req.TailValue50),
+    Equal(value50, unchecked((int)req.CreateMasterStudentExp),
         "sub2 studentExp is tail+0x50 as u32 (was hard-coded 0 in the INSERT)");
     // 反向锁定：level 与 exp 不得取自同一槽（此前 level 误取 TailValue50）。
-    True((ushort)req.TailValue4C != (ushort)req.TailValue50,
+    True(req.CreateMasterLevel != (ushort)req.CreateMasterStudentExp,
         "sub2 masterLevel and studentExp must not read the same tail slot");
 
-    // sub 13：masterName 取自 tail+0x35（与 sub 2 同槽），非 tail+0x00。
-    EqualText("othername", Text(req.TailSlot35),
-        "sub2/sub13 masterName comes from tail+0x35");
-    True(Text(req.TailSlot35) != Text(req.TailSlot00),
+    // sub 6 读 tail+0x4C 的**完整 dword**（0x5943BA），与 sub 2 读同偏移的 word
+    // 是同一字段的两种宽度 —— 故这两个访问器必须都存在且宽度不同。
+    Equal(value4C, unchecked((int)req.StudentExpDelta),
+        "sub6 StudentExp delta is the FULL dword at tail+0x4C (@0x5943BA)");
+    Equal(value4C, unchecked((int)req.MasterExpDelta),
+        "sub8 MasterExp delta is the full dword at tail+0x4C (@0x594368)");
+    True(req.StudentExpDelta != req.CreateMasterLevel,
+        "sub6 delta (dword) and sub2 level (word) must not be the same value here");
+
+    // sub 7 的转换额度取 tail+0x50（0x59433A），与 sub 6/8 的 0x4C 不同槽。
+    Equal(value50, unchecked((int)req.ConvertExpAmount),
+        "sub7 convert amount comes from tail+0x50 (@0x59433A)");
+    True(req.ConvertExpAmount != req.StudentExpDelta,
+        "sub7 amount and sub6 delta must not resolve to the same slot");
+
+    // sub 2 / sub 9 / sub 13 的 masterName 取自 tail+0x35（0x5941FB add edx,0x35），
+    // **不是** tail+0x00。
+    EqualText("othername", Text(req.MasterNameSlot35),
+        "sub2/sub9/sub13 masterName resolves to tail+0x35");
+    True(Text(req.MasterNameSlot35) != Text(req.TailSlot00),
         "tail+0x35 and tail+0x00 are distinct slots");
 }
 

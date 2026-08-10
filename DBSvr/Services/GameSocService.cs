@@ -1262,9 +1262,9 @@ namespace DBSvr
                     // ⚠️ 此前两处错：MasterLevel 传的是 TailValue50（应为 tail+0x4C 的低 16 位），
                     // 且 StudentExp 被在 SQL 里硬写 0（应为 tail+0x50）——一个错位、一个丢失。
                     result = _zongpaiService.CreateMaster(
-                        LegacyGbkText.Decode(request.TailSlot35),
-                        (ushort)request.TailValue4C,
-                        unchecked((uint)request.TailValue50)) ? 0 : 1;
+                        LegacyGbkText.Decode(request.MasterNameSlot35),
+                        request.CreateMasterLevel,
+                        request.CreateMasterStudentExp) ? 0 : 1;
                     break;
                 case NativeZongpaiSubCommand.AddMember:
                     // 模板 0x593140 (len 85)：
@@ -1287,8 +1287,8 @@ namespace DBSvr
                     //  (c) 本文件内部自相矛盾：RemoveMember(sub4) 与 UpdateMemberRole(sub5)
                     //      都用 TailSlot25 作 memberName、TailSlot10 作 roleName，唯 sub3 反着写。
                     result = _zongpaiService.AddMember(masterName,
-                        LegacyGbkText.Decode(request.TailSlot25),
-                        LegacyGbkText.Decode(request.TailSlot10)) ? 0 : 1;
+                        LegacyGbkText.Decode(request.AddMemberMemberName),
+                        LegacyGbkText.Decode(request.AddMemberRoleName)) ? 0 : 1;
                     break;
                 case NativeZongpaiSubCommand.RemoveMember:
                     // 0x593198: where MasterName=tail+0x00 and MemberName=tail+0x25.
@@ -1313,7 +1313,7 @@ namespace DBSvr
                     // 增量取 tail+0x4C，此处按 dword 读（sub 2 读同一偏移的 word，
                     // 是同一字段的两种宽度，不是两个字段 —— 0x5943BA vs 0x59420C）。
                     _zongpaiService.AddStudentExpSaturating(masterName,
-                        unchecked((uint)request.TailValue4C));
+                        request.StudentExpDelta);
                     // 原版 sub 6 **不回复**：case 分支 0x5943A3 不写 [ebp-0x10]，
                     // 而它在 0x5940A0 已初始化为 0 = ReplyMode None。
                     return;
@@ -1328,7 +1328,7 @@ namespace DBSvr
                     // 两条 SQL 用的是**不同常量**：0x593790（StudentExp，带 UpdateTime）
                     // 与 0x5937EC（MasterExp，**不带** UpdateTime）。
                     {
-                        var delta = unchecked((uint)request.TailValue50);
+                        var delta = request.ConvertExpAmount;
                         if (!_zongpaiService.SubtractStudentExp(masterName, delta))
                         {
                             // 0x5936C9 je 0x593763 ⇒ 扣减失败则不加师父经验。
@@ -1347,7 +1347,7 @@ namespace DBSvr
                     //   0x59388F  mov eax,[master+0x18] ; SQL 写扣减后的余额
                     // SQL 常量 0x5938F0（带 UpdateTime），与 sub 7 的 0x5937EC 不同。
                     result = _zongpaiService.SubtractMasterExp(masterName,
-                        unchecked((uint)request.TailValue4C)) ? 0 : 2;
+                        request.MasterExpDelta) ? 0 : 2;
                     break;
                 case NativeZongpaiSubCommand.UpdateMasterLevel:
                     // 0x593944: MasterLevel update; the original answers with the
@@ -1367,7 +1367,7 @@ namespace DBSvr
                     // 请求里的 tail+0x50 在整个 worker 里没有任何读取点。
                     // 宽度：word（movzx），DDL 是 MasterLevel smallint unsigned。
                     {
-                        var levelOwner = request.TailSlot35;
+                        var levelOwner = request.MasterNameSlot35;
                         if (!_playRecordService.TryGetNativeCharacterByName(
                                 levelOwner, out var levelChar))
                         {
@@ -1421,10 +1421,10 @@ namespace DBSvr
                     // 原版 0x59400D 出口也不置错误码），并保留 C# 的 masterName 单参调用
                     // （门成立 ⇒ 唯一成员行的 MemberName 必然属于该 master，范围等价）。
                     if (_zongpaiService.CountMembers(
-                            LegacyGbkText.Decode(request.TailSlot35)) == 1)
+                            LegacyGbkText.Decode(request.MasterNameSlot35)) == 1)
                     {
                         result = _zongpaiService.DeleteMaster(
-                            LegacyGbkText.Decode(request.TailSlot35)) ? 0 : 1;
+                            LegacyGbkText.Decode(request.MasterNameSlot35)) ? 0 : 1;
                     }
                     break;
                 default:
