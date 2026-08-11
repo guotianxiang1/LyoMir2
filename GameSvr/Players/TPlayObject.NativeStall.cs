@@ -274,6 +274,9 @@ namespace GameSvr
                 PersistBuyResult(stall, stallItem, outcome, buyerId, sellerId, sellerNm);
 
                 SendAddItem(outcome.SeatedItem);
+                // sub_6E7DB8 (SM 4429) — the stall-item stock refresh, pushed from INSIDE the native finalize
+                // at 0x0061E44A (partial) and 0x0061E478 (whole), i.e. AFTER the ledgers, BEFORE the ack.
+                SendNativeStallStockRefresh(outcome.PartialSplit ? stallItem.ItemCount : 0);
                 SendDefMessage(responseIdent, NativeStallBuyExecutor.Success, 0, 0, 0, "");
                 return true;
             }
@@ -282,6 +285,29 @@ namespace GameSvr
             SendDefMessage(responseIdent, outcome.Code, 0, 0, 0, "");
             return true;
         }
+
+        // sub_6E7DB8 @0x006E7DB8 (38 bytes, stall_money2_out.txt:731-743) — the post-BUY stock refresh:
+        //     v3 = a2; LOWORD(a2) = 4429;
+        //     (*(vtbl + 592))(v3, a2, 0, 0, 0, a3);
+        // vtbl+592 = 0x250 = the simple SendDefMessage slot, so the frame is
+        // SendDefMessage(recog = a2-as-passed, ident = 4429, 0, 0, 0, sMsg = a3).
+        //
+        // Two facts worth stating because prose elsewhere gets them wrong:
+        //  * The ident is 4429 (SM_UPT_OTHER_DEL_STALLITEM) at BOTH call sites — there is NO 4428 send
+        //    anywhere in the image (whole-dump scan for "4428" finds only unrelated addresses). The
+        //    "4428/4429 pushes" phrasing in the manager spec §7 is wrong; 4428's constant is declared by the
+        //    client and never sent by this server.
+        //  * The RECIPIENT is the BUYER, not the seller and not nearby viewers. Disasm at 0x0061E447 loads
+        //    `eax, [ebp+var_4]`, and var_4 is the same object used as the AddItemToBag receiver at
+        //    0x0061E22D..0x0061E232 (`mov eax,[ebp+var_4]; mov edi,[eax]; call dword ptr [edi+248h]`), which
+        //    is by definition the buyer. (Hex-Rays' arg naming was not trusted here — this is read off the
+        //    instructions.)
+        //
+        // The payload is the REMAINING stock: `mov ecx,[eax+0F0h]` (stallitem itemcount) on the partial path
+        // at 0x0061E43E, and a literal 0 on the whole-sold path at 0x0061E472 (`sub_6E7DB8(0, a6)`), telling
+        // the client the listing is gone. Display-only: no money, no items, no state.
+        private void SendNativeStallStockRefresh(int remainingCount) =>
+            SendDefMessage(Grobal2.SM_UPT_OTHER_DEL_STALLITEM, remainingCount, 0, 0, 0, "");
 
         // Resolve a listed booth item by its stall key (item ClientItemID). null => the executor returns -4.
         private static NativeStallItem FindStallItem(NativeStallRecord stall, int clientItemId)
