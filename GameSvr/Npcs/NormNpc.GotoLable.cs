@@ -92,6 +92,19 @@ namespace GameSvr
 
             if (M2Share.UserEngine.GetStdItemIdx(itemName) <= 0) return;
             itemCount = Math.Clamp(itemCount, 1, 50);
+
+            // 战神 sub_6C87B4（命名奖励发放器，经 Give sub_6DF4F8 -> sub_6DF2E8 到达）的
+            // 物品循环：**容量门在循环内部、逐个物品**，不是发放前的整批预检：
+            //   0x6C8A14  call [edi+0x248]        ; AddItemToBag（内含 Count<48 门）
+            //   0x6C8A1C  je   0x6C8ADA           ; 添加失败 ->
+            //   0x6C8ADA  lea eax,[ebp-0x18]      ;   FreeAndNil(item) = sub_414C24
+            //   0x6C8AE2  jmp 0x6C8B27            ;   **跳出循环**，保留已发放的部分
+            //   0x6C8AD4  mov byte [ebp-6],1      ; 任一成功即 result=True
+            // ⇒ 原版语义 = **部分发放 + 首次失败即停 + 失败那件被释放（不掉地上）**。
+            // ⚠ 勿改回「整批预检 all-or-nothing」：此前注释引用的 0x6D7934 是 **IncGold**
+            //   的金币上限 `jg`（`cmp ebx,[eax+0x68C]` vs 金币 `[eax+0x15C]`，见
+            //   TPlayObject.IncGold），与背包容量/物品数量无关，那条引用是伪造的。
+            // ⚠ 同样勿用 DropItemDown 兜底：0x6C8ADA 是 FreeAndNil，原版不落地。
             for (var i = 0; i < itemCount; i++)
             {
                 var userItem = new TUserItem();
@@ -110,16 +123,19 @@ namespace GameSvr
                         userItem.MakeIndex + "\t1\t" + m_sCharName);
                 }
 
-                if (playObject.IsEnoughBag())
+                // 0x6C8A09 `push 0; mov cl,1; call [edi+0x248]` = 带容量门的 AddItemToBag。
+                // 与已审计的同族移植 PasApiBridge.TryGiveNativeItems 保持一致，走内层
+                // 1 参重载（Count<MAXBAGITEM 门 + TList.Add + 重量刷新 sub_73CEE4）。
+                if (!playObject.AddItemToBag(userItem))
                 {
-                    playObject.m_ItemList.Add(userItem);
-                    playObject.SendAddItem(userItem);
-                }
-                else
-                {
-                    playObject.DropItemDown(userItem, 3, false, playObject, null);
+                    // 0x6C8ADA FreeAndNil(item)(sub_414C24 -> sub_404690)，随即
+                    // 0x6C8AE2 jmp 0x6C8B27 跳出循环：失败那件被**释放**（不掉地上），
+                    // 已发放的部分**保留**，且无任何提示消息。
                     Dispose(userItem);
+                    break;
                 }
+
+                playObject.SendAddItem(userItem);
             }
         }
     }
