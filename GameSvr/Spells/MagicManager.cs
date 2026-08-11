@@ -860,6 +860,25 @@ namespace GameSvr
                     TryProduceNativeMagic59(PlayObject, UserMagic, nTargetX,
                         nTargetY);
                     break;
+                // id 111 @0x6EDE4F: 冰眼巨魔 summon with 10-min cooldown
+                // Native sub_74633C: VMT+0x128 call, checks self+0x510 cooldown,
+                // summons with nExpLevel=10, royalty=300s
+                case SpellsDef.SKILL_111:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill111IceEyeTrollSummon(
+                        UserMagic);
+                    break;
+                // id 151 @0x6EDD70 / id 154 @0x6EDD83: both dispatch through the
+                // VMT+0x1F4 magic sub-dispatcher (sub_745A20 / sub_74588C ->
+                // sub_748288) with magicId 0x97 / 0x9A, inverting the result into
+                // boSpellFail. The sub-dispatcher is not yet reversed, so the
+                // TryActivateNativeSkill151/154 bodies fail-closed (return false),
+                // reproducing the native hard-reject (0x27F) rather than guessing.
+                case SpellsDef.SKILL_151:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill151(UserMagic);
+                    break;
+                case SpellsDef.SKILL_154:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill154(UserMagic);
+                    break;
                 // ids 117, 125, 126, 127 are constant-TRUE stubs. Each
                 // trampoline calls a real function whose entire body is
                 // `push ebp; mov ebp,esp; mov al,1; pop ebp; ret N`:

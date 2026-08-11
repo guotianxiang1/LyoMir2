@@ -205,8 +205,10 @@ namespace GameSvr
         public const int SKILL_146 = 146;
         public const int SKILL_149 = 149;
         public const int SKILL_150 = 150;
+        public const int SKILL_151 = 151;
         public const int SKILL_152 = 152;
         public const int SKILL_153 = 153;
+        public const int SKILL_154 = 154;
         public const int SKILL_161 = 161;
         public const int SKILL_162 = 162;
         public const int SKILL_169 = 169;
@@ -251,6 +253,9 @@ namespace GameSvr
         // for id 63 @0x6ED82D both hold the dword 0x6EDD27, i.e. one shared
         // instruction stream rather than two copies.
         public const int SKILL_63 = 63;
+        public const int SKILL_66 = 66;
+        public const int SKILL_67 = 67;
+        public const int SKILL_111 = 111;
         public const int SKILL_117 = 117;
         public const int SKILL_118 = 118;
         public const int SKILL_125 = 125;

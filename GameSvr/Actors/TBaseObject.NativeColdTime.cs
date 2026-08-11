@@ -356,6 +356,20 @@ namespace GameSvr
         internal List<(ClientPacket Header, byte[] Body)>
             m_NativeColdTimePacketLog;
 
+        /// <summary>Simplified wrapper for GetNativeColdTimeRemaining - returns
+        /// remaining milliseconds for a given key, or 0 if not found/expired.</summary>
+        internal int GetNativeColdTimeRemaining(int key)
+        {
+            return QueryNativeColdTime(unchecked((uint)key));
+        }
+
+        /// <summary>Simplified wrapper for SetNativeColdTime - arms a cooldown
+        /// with the given key, duration, and current timestamp.</summary>
+        internal void SetNativeColdTime(int key, int durationMs, int now)
+        {
+            ArmNativeColdTime(unchecked((uint)key), durationMs, durationMs);
+        }
+
         /// <summary>Heroes have no socket of their own: sub_689A38 forwards to
         /// obj+0x68C, the master player. THumanKind's own slot is a stub, which
         /// in C# means any actor that is neither a player nor a mastered hero
