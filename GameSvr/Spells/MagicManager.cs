@@ -850,6 +850,59 @@ namespace GameSvr
                     TryProduceNativeMagic59(PlayObject, UserMagic, nTargetX,
                         nTargetY);
                     break;
+                // ids 117, 125, 126, 127 are constant-TRUE stubs. Each
+                // trampoline calls a real function whose entire body is
+                // `push ebp; mov ebp,esp; mov al,1; pop ebp; ret N`:
+                //   117 -> sub_6EEE34 raw 558becb0015dc20400
+                //   125 -> sub_6EEE40 raw 558becb0015dc20400
+                //   126 -> sub_6EEE4C raw 558becb0015dc20800
+                //   127 -> sub_6EEE58 raw 558becb0015dc20400
+                // The `xor al,1` then makes boSpellFail = 0, so DoSpell returns
+                // TRUE and the tail broadcasts the 0x27E effect packet. Net
+                // observable behaviour is identical to the convergence-routed
+                // ids: mana spent, effect packet sent, no gameplay effect.
+                // They are listed explicitly rather than left to fall through
+                // so that the FALSE-returning stubs next door cannot be
+                // "tidied" into the same arm later — the two groups send
+                // OPPOSITE packets and conflating them inverts six ids.
+                case 117:
+                case 125:
+                case 126:
+                case 127:
+                    break;
+                // ids 231 and 236 also call constant-FALSE stubs, but their
+                // trampolines DISCARD the result instead of storing it, so
+                // unlike 118/128 they still succeed:
+                //   231 @0x6EDE66: amulet gate sub_73E93C(edx=1); on failure
+                //     `mov [ebp-6],1` @0x6EDE9E = hard reject. On success it
+                //     probes bodyState bit 0x58 (sub_772960) and calls
+                //     sub_76F8BC, which reads byte [0x76F8CC] and then
+                //     CLOBBERS it with `xor eax,eax` @0x76F8C4 — so it is
+                //     unconditionally FALSE regardless of that data byte. The
+                //     `jne 0x6EE04B` @0x6EDE8E is therefore never taken and
+                //     control falls to `xor eax,eax` / `mov [ebp+8],eax`, i.e.
+                //     the target is cleared and the id succeeds. Native burns
+                //     the charm first, so this is a charm-consuming no-op.
+                //   236 @0x6EDFB4: calls sub_76F8B8, whose whole body is
+                //     `xor eax,eax; ret` (raw 33c0c3 @0x76F8B8). Result used
+                //     ONLY to decide whether to clear the target; [ebp-6] is
+                //     never written, so it always returns TRUE.
+                // Both therefore end as: mana spent, target cleared, 0x27E
+                // sent, TRUE. Clearing the target changes which effect-packet
+                // arm the tail takes (@0x6EE091 with target = nil), so it is
+                // observable and must be replicated.
+                case SpellsDef.SKILL_231:
+                    boSpellFail = true;
+                    if (Magic.CheckAmulet(PlayObject, 1, 1, ref nAmuletIdx))
+                    {
+                        Magic.UseAmulet(PlayObject, 1, 1, ref nAmuletIdx);
+                        TargeTBaseObject = null;
+                        boSpellFail = false;
+                    }
+                    break;
+                case SpellsDef.SKILL_236:
+                    TargeTBaseObject = null;
+                    break;
                 // ids 118 and 128 are constant-FALSE stubs whose result IS
                 // stored, so they are hard rejects - NOT silent no-ops.
                 //   118: TR @0x6EDF01 calls sub_6EEE28, whose whole body is
