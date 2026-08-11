@@ -1315,64 +1315,77 @@ namespace SystemModule
         public const int RM_WSJATTACK = 10018;
         public const int RM_WTJATTACK = 10019;
 
-        public const int ISM_GROUPSERVERHEART = 100;
-        public const int ISM_USERSERVERCHANGE = 200;
-        public const int ISM_USERLOGON = 201;
+        // === ISM (Inter-Server Message) Constants ===
+        // C# extensions (not in native 202..257 range):
+        public const int ISM_GROUPSERVERHEART = 100;     // C# extension - server heartbeat
+        public const int ISM_USERSERVERCHANGE = 200;     // C# extension - user server change
+        public const int ISM_USERLOGON = 201;            // C# extension - user logon
+
+        // Native ProcessOthGsMsg range (202..257) - 27 REAL / 29 SINK:
+        public const int ISM_ANTICHEAT_PENALTY = 202;    // REAL - Anti-cheat penalty (EA 0x657208, calls sub_658384)
+        public const int ISM_WHISPER = 203;              // REAL - Whisper message
+        public const int ISM_SYSOPMSG = 204;             // SINK - Sysop message (C# extension handler)
+        public const int ISM_ADDGUILD = 205;             // SINK - Add guild (C# extension handler)
+        public const int ISM_DELGUILD = 206;             // SINK - Delete guild (C# extension handler)
+        public const int ISM_SINGLEQUOTE_SCAN = 207;     // REAL - Single-quote scan (EA 0x657230, calls sub_658114)
+        public const int ISM_GUILDMSG = 208;             // SINK - Guild message (C# extension handler)
+        public const int ISM_CHATPROHIBITION = 209;      // REAL - Chat prohibition
+        public const int ISM_CHATPROHIBITIONCANCEL = 210;// REAL - Chat prohibition cancel
+        public const int ISM_CHANGECASTLEOWNER = 211;    // REAL - Change castle owner
+        public const int ISM_RELOADCASTLEINFO = 212;     // REAL - Reload castle info
+        public const int ISM_RELOADADMIN = 213;          // REAL - Reload admin
+        public const int ISM_FRIEND_INFO = 214;          // REAL - Friend info
+        public const int ISM_FRIEND_DELETE = 215;        // SINK - Friend delete (C# extension handler)
+        public const int ISM_DIVORCE = 216;              // REAL - Divorce
+        public const int ISM_MENTOR_STUDENT_1 = 217;     // REAL - Mentor/student handler 1 (EA 0x6572A4, calls sub_657CF0)
+        public const int ISM_MENTOR_STUDENT_2 = 218;     // REAL - Mentor/student handler 2 (EA 0x6572B4, calls sub_657AC0)
+        public const int ISM_TAG_SEND = 219;             // REAL - Tag send
+        public const int ISM_TAG_RESULT = 220;           // REAL - Tag result
+        public const int ISM_USER_INFO = 221;            // REAL - User info
+        public const int ISM_CHANGESERVERRECIEVEOK = 222;// REAL - Change server receive OK
+        public const int ISM_RELOADCHATLOG = 223;        // SINK - Reload chat log (C# extension handler)
+        public const int ISM_MARKETOPEN = 224;           // REAL - Market open
+        public const int ISM_MARKETCLOSE = 225;          // SINK - Market close (C# extension handler)
+        public const int ISM_LM_DELETE = 226;            // REAL - Lover manager delete
+        public const int ISM_RELOADMAKEITEMLIST = 227;   // REAL - Reload make item list
+        public const int ISM_GUILDMEMBER_RECALL = 228;   // REAL - Guild member recall
+        public const int ISM_RELOADGUILDAGIT = 229;      // SINK - Reload guild agit (C# extension handler)
+        public const int ISM_LM_WHISPER = 230;           // SINK - Lover manager whisper (C# extension handler)
+        public const int ISM_GMWHISPER = 231;            // SINK - GM whisper (C# extension handler)
+        public const int ISM_LM_LOGIN = 232;             // SINK - Lover manager login (C# extension handler)
+        public const int ISM_LM_LOGOUT = 233;            // SINK - Lover manager logout (C# extension handler)
+        public const int ISM_REQUEST_RECALL = 234;       // SINK - Request recall (C# extension handler)
+        public const int ISM_RECALL = 235;               // SINK - Recall (C# extension handler)
+        public const int ISM_LM_LOGIN_REPLY = 236;       // SINK - Lover manager login reply (C# extension handler)
+        public const int ISM_LM_KILLED_MSG = 237;        // SINK - Lover manager killed message (C# extension handler)
+        public const int ISM_REQUEST_LOVERRECALL = 238;  // SINK - Request lover recall (C# extension handler)
+        public const int ISM_STANDARDTICKREQ = 239;      // SINK - Standard tick request (C# extension handler)
+        public const int ISM_STANDARDTICK = 240;         // REAL - Standard tick
+        public const int ISM_CREDITCARD_CLEARALL = 241;  // REAL - Credit card clear all (EA 0x657354)
+        public const int ISM_GRUOPMESSAGE = 242;         // SINK - Group message (C# extension handler)
+        public const int ISM_CREDITCARD_CLEARMONTHLY = 243; // REAL - Credit card clear monthly
+        // 244-246: SINK (no native handlers)
+        public const int ISM_IDENT_247 = 247;            // REAL - Unknown handler (EA 0x657378, calls sub_65805C)
+        // 248: SINK
+        public const int ISM_SETNICKLF = 249;            // REAL - Set nick lin fu
+        // 250: SINK
+        public const int ISM_GLORYLOG_FLUSH = 251;       // REAL - Glory log flush
+        // 252-256: SINK (no native handlers)
+        public const int ISM_MAKE_CATTLE_CRAZY = 257;    // REAL - Make cattle crazy
+
+        // Obsolete constants (SGRP fixes - semantic mismatches):
+        [Obsolete("SGRP-25: Native 202 is ISM_ANTICHEAT_PENALTY, not user logout. Use ISM_ANTICHEAT_PENALTY.")]
         public const int ISM_USERLOGOUT = 202;
-        public const int ISM_WHISPER = 203;
-        public const int ISM_SYSOPMSG = 204;
-        public const int ISM_ADDGUILD = 205;
-        public const int ISM_DELGUILD = 206;
+        [Obsolete("SGRP-44: Native 207 is ISM_SINGLEQUOTE_SCAN, not reload guild. Use ISM_SINGLEQUOTE_SCAN.")]
         public const int ISM_RELOADGUILD = 207;
-        public const int ISM_GUILDMSG = 208;
-        public const int ISM_CHATPROHIBITION = 209;
-        public const int ISM_CHATPROHIBITIONCANCEL = 210;
-        public const int ISM_CHANGECASTLEOWNER = 211;
-        public const int ISM_RELOADCASTLEINFO = 212;
-        public const int ISM_RELOADADMIN = 213;
-        
-        
-        public const int ISM_FRIEND_INFO = 214;
-        public const int ISM_FRIEND_DELETE = 215;
-        public const int ISM_DIVORCE = 216;
-        public const int ISM_FRIEND_CLOSE = 217;
-        public const int ISM_FRIEND_RESULT = 218;
-        
-        public const int ISM_TAG_SEND = 219;
-        public const int ISM_TAG_RESULT = 220;
-        
-        public const int ISM_USER_INFO = 221;
-        public const int ISM_CHANGESERVERRECIEVEOK = 222;
-        public const int ISM_RELOADCHATLOG = 223;
-        public const int ISM_MARKETOPEN = 224;
-        public const int ISM_MARKETCLOSE = 225;
-        
-        public const int ISM_LM_DELETE = 226;
-        public const int ISM_RELOADMAKEITEMLIST = 227;
-        public const int ISM_GUILDMEMBER_RECALL = 228;
-        public const int ISM_RELOADGUILDAGIT = 229;
-        public const int ISM_LM_WHISPER = 230;
-        public const int ISM_GMWHISPER = 231;
-        public const int ISM_LM_LOGIN = 232;
-        public const int ISM_LM_LOGOUT = 233;
-        public const int ISM_REQUEST_RECALL = 234;
-        public const int ISM_RECALL = 235;
-        public const int ISM_LM_LOGIN_REPLY = 236;
-        public const int ISM_LM_KILLED_MSG = 237;
-        public const int ISM_REQUEST_LOVERRECALL = 238;
-        public const int ISM_STANDARDTICKREQ = 239;
-        public const int ISM_STANDARDTICK = 240;
-        public const int ISM_GUILDWAR = 241;
-        
-        
-        
-        public const int ISM_GRUOPMESSAGE = 242;
+        [Obsolete("SGRP-44: Native 207 is ISM_SINGLEQUOTE_SCAN, not server switch. Use ISM_SINGLEQUOTE_SCAN.")]
         public const int ISM_SERVERSWITCH = 207;
-        public const int ISM_CREDITCARD_CLEARALL = 241;
-        public const int ISM_CREDITCARD_CLEARMONTHLY = 243;
-        public const int ISM_SETNICKLF = 249;
-        public const int ISM_GLORYLOG_FLUSH = 251;
-        public const int ISM_MAKE_CATTLE_CRAZY = 257;
+        [Obsolete("SGRP-31: Native 241 is ISM_CREDITCARD_CLEARALL, not guild war. Use ISM_CREDITCARD_CLEARALL.")]
+        public const int ISM_GUILDWAR = 241;
+        [Obsolete("SGRP-26: Native 217 is ISM_MENTOR_STUDENT_1, not friend close. Use ISM_MENTOR_STUDENT_1.")]
+        public const int ISM_FRIEND_CLOSE = 217;
+        [Obsolete("SGRP-26: Native 218 is ISM_MENTOR_STUDENT_2, not friend result. Use ISM_MENTOR_STUDENT_2.")]
+        public const int ISM_FRIEND_RESULT = 218;
 
         public const int LA_UNDEAD = 1;
 

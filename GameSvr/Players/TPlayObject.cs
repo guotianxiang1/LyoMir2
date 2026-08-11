@@ -18,6 +18,12 @@ namespace GameSvr
         public int m_nHonorValue;
         public bool m_boHonorValueLoaded;
 
+        // Native pickup spam-check fields (player+0x3E4/0x3E8/0x3EC)
+        // sub_6B74D8 @0x6B7500: prevents picking from same coordinates within 7 seconds
+        private uint m_dwLastPickUpTick;
+        private short m_nLastPickUpX;
+        private short m_nLastPickUpY;
+
         internal int MerchantDialogSeq => _merchantDialogSeq;
 
         /// <summary>The cooldown table lives on THumanKind (created at 0x73BFF2
@@ -2106,7 +2112,8 @@ namespace GameSvr
                 if (mineEvent.MineCount > 0)
                 {
                     mineEvent.MineCount -= 1;
-                    if (M2Share.RandomNumber.Random(M2Share.g_Config.nMakeMineHitRate) == 0)
+                    // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
+                    if (M2Share.RandomNumber.Random(4) == 0)
                     {
                         var pileEvent = (PileStones)m_PEnvir.GetEvent(m_nCurrX, m_nCurrY);
                         if (pileEvent == null)
@@ -2136,7 +2143,9 @@ namespace GameSvr
                                 MakeMine2();
                             }
                         }
-                        s1C = "1";
+                        // MINE-50: Native @0x6BC2F8 sends ident 0x274 (SM_MINESUCCESS).
+                        SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
+
                         DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
                         result = true;
                     }
@@ -2149,7 +2158,9 @@ namespace GameSvr
                     }
                 }
             }
-            SendRefMsg(Grobal2.RM_HEAVYHIT, m_btDirection, m_nCurrX, m_nCurrY, 0, s1C);
+            // MINE-51: Native @0x6BC306 broadcast RM_HEAVYHIT (0x2715) payload:
+            // success in nParam (1/0), string empty. C# had it swapped.
+            SendRefMsg(Grobal2.RM_HEAVYHIT, m_btDirection, m_nCurrX, m_nCurrY, result ? 1 : 0, string.Empty);
             return result;
         }
 
