@@ -1662,6 +1662,28 @@ namespace GameSvr
             {
                 m_btDirection = olddir;
             }
+            // TRADE-49: 战神 TPlayer.CharPushed = sub_6BFD1C (VMT 0x6AC8C8+0xA4,
+            // the TPlayer OVERRIDE of the base sub_76834C at THumanKind/TCreature
+            // +0xA4) cancels an open trade when the player was actually displaced:
+            //   6BFD28  mov dl,0x34 ; call sub_772960 ; test al,al ; jne
+            //           -> xor esi,esi (internal state 0x34 = 单人坐骑 blocks the
+            //              push outright and returns 0 WITHOUT cancelling)
+            //   6BFD3F  call sub_76834C          ; inherited CharPushed, eax=steps
+            //   6BFD44  mov esi,eax
+            //   6BFD46  test esi,esi ; jle 0x6BFD51   <-- 0 steps => NO cancel
+            //   6BFD4C  call sub_6C43C4          ; DealCancel, only when steps > 0
+            //   6BFD51  mov eax,esi ; ret        ; returns the step count
+            // So the gate is `result > 0` (moved at least one cell), NOT "took
+            // damage": the trade survives a push that was fully blocked. This is
+            // the ONLY damage-adjacent DealCancel site in the image — a census of
+            // all 11 direct `call sub_6C43C4` sites (staging/_cs_dealcancel_xrefs.py)
+            // places the rest in the deal handlers themselves (sub_6C4348/6C4454/
+            // 6C4580/6D7D68), logout sub_6B2D38, and the save-timer wrapper
+            // sub_6B2C7C. StruckDamage (sub_73F9FC / sub_767A18) does NOT call it.
+            if (result > 0 && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+            {
+                (this as TPlayObject)?.DealCancel();
+            }
             return result;
         }
 
@@ -5581,6 +5603,7 @@ namespace GameSvr
             {
                 return;
             }
+            (this as TPlayObject)?.DealCancel();
             DamageHealth(nDamage);
         }
 
