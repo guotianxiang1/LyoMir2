@@ -67,10 +67,19 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return false;
             var compressed = BlobCompressor.Compress(data);
-            // BLOCKED: 原生没有任何 `update user_storage set data=` 字面量
-            // （raw 普查：'set data'/'unhex'/'update user_storage' 在 CODE 快照 0 命中）。
-            // 原生走 0x5B9DF0 打开数据集后用 TBlobStream 写 data 字段并 Post，
-            // 无独立 UPDATE SQL。此 UNHEX 方案为 C# 特有实现，功能等价、不会增删物品。
+            // 原生没有任何 `update user_storage set data=` 字面量
+            // （raw 普查：'set data'/'unhex'/'update user_storage' 在 CODE 快照 0 命中，
+            //  正对照 'Insert Into user_storage' 2 命中 ⇒ 搜索有效）。
+            // 写路径已定位（spec: staging/tdataset_blob_write_path_20260811.md §4）：
+            //   fn 0x5B9928 → SELECT 0x5B9DF0 `Select High_Priority idx, data from
+            //   user_storage where idx =` → 编辑锚点 0x5B9C1A → Fields[1]（=`data`，
+            //   按自身 SELECT 列序 `idx, data` 交叉验证）→ CreateBlobStream(bmWrite)
+            //   0x5B9C3E → Post 0x5B9C71。UPDATE 由 ZEOS resolver 运行时组装
+            //   （`UPDATE %s SET %s` @0x4ADF18 + `=?` @0x4ADF0C + ` WHERE ` @0x4ADC04），
+            //   构造式为 `UPDATE user_storage SET data=? WHERE Idx=?`。
+            // 故本处 UNHEX 方案是**同一效果的不同机制**（MATCH：机制等价），不是发明 SQL；
+            // Convert.ToHexString + UNHEX 是无损往返，不增删物品。
+            // 不改为逐字：原生侧无可比字面量，任何"逐字"期望值都会是编造的。
             using var cmd = new MySqlCommand(
                 "UPDATE mir3.user_storage SET Data=UNHEX(@d) WHERE Idx=@i", conn);
             cmd.Parameters.Add("@d", MySqlDbType.LongText).Value = Convert.ToHexString(compressed);
@@ -250,10 +259,17 @@ namespace DBSvr
             catch (ArgumentOutOfRangeException) { return false; }
             using var connection = OpenConn();
             if (connection == null) return false;
-            // 原生 0x5B9DF0 `Select High_Priority idx, data from user_storage where idx =` (concat head)
-            // 原生通过 TADOQuery 数据集的 TBlobStream 写 blob，而非 UPDATE SQL。
-            // C# 此处用 UNHEX(@data) UPDATE 替代——功能等价但 SQL 文本是 C# 特有实现。
-            // BLOCKED: 无对应原生 UPDATE user_storage SET Data= 字面量，故沿用现有方案。
+            // 订正：本方法的原生对应**不是** 0x5B9DF0 那条（那是 SaveStorage 的，
+            // fn 0x5B9928）。本方法对应 fn 0x5B8DFC，SELECT 是
+            //   0x5B90F0 len=67 `Select High_Priority idx, PTID, data from user_storage where idx=%d`
+            // ——注意它多一列 PTID、且 idx 用 %d 而非串尾拼接。
+            // 写路径（spec: staging/tdataset_blob_write_path_20260811.md §4）：
+            //   编辑锚点 0x5B8F81 → Fields[**2**]（=`data`，按自身列序 `idx, PTID, data`
+            //   交叉验证；ordinal 是 2 不是 1，与上面那条不同）→
+            //   CreateBlobStream(bmWrite) 0x5B8FA5 → Post 0x5B8FD8。
+            // UPDATE 由 ZEOS resolver 组装，构造式 `UPDATE user_storage SET data=? WHERE Idx=?`。
+            // 机制等价（MATCH），非发明 SQL；UNHEX 往返无损，不增删物品。
+            // 原生也是 ZEOS（TZQuery VMT 0x57E650，selfptr 已校验），不是 TADOQuery。
             using var command = new MySqlCommand(
                 "UPDATE mir3.user_storage SET Data=UNHEX(@data) WHERE Idx=@idx",
                 connection);

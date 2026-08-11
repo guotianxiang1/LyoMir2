@@ -89,10 +89,22 @@ namespace DBSvr
                 index.Parameters.AddWithValue("@m", masterId);
                 if (index.ExecuteNonQuery() <= 0) return false;
             }
-            // BLOCKED: 原生没有 `Update dominatorpet Set Data=` 字面量
-            // （raw 普查 'set data'/'unhex' 在 CODE 快照 0 命中）。原生在 0x597B84
-            // 打开数据集后用 TBlobStream 写 data 字段（fn 0x597924，字段名字面量
-            // 0x00597BD0 = 'data'），无独立 UPDATE SQL。此 UNHEX 方案为 C# 特有实现。
+            // 原生没有 `Update dominatorpet Set Data=` 字面量
+            // （raw 普查 'set data'/'unhex' 在 CODE 快照 0 命中，正对照
+            //  'Update dominatorpet Set Level' 2 命中 ⇒ 搜索有效）。
+            // 写路径（spec: staging/tdataset_blob_write_path_20260811.md §4）：
+            //   fn 0x597924 → SELECT 0x597B84 `Select High_Priority idx, data from
+            //   dominatorpet where MasterId =` → 编辑锚点 0x597A38 →
+            //   FieldByName('data', 字面量 0x597BD0) → CreateBlobStream(bmWrite)
+            //   0x597A59 → Post 0x597A80。resolver 构造式
+            //   `UPDATE dominatorpet SET data=? WHERE Idx=?`。机制等价（MATCH）。
+            // ⚠️ 原生这一列有**两个**写函数：另一条是 fn 0x5B9220
+            //   （SELECT 0x5B948C `... where MasterID=%d;`，注意 ID 大小写；
+            //    Fields[1] ordinal 绑定，blobstream 0x5B93B9，Post 0x5B93EC）。
+            //   C# 只有本方法一个。两者是同一列的两条上游通路，是否需要拆成
+            //   两个方法需先裁决调用方归属 —— 未改，见 spec §4 注 3。
+            // ⚠️ WHERE 键：resolver 按主键 `Idx`（DDL 0x5BBC5C），本处用 MasterId。
+            //   MasterId 有 `bigInt not null unique` ⇒ 当前等价；记录备查。
             using var cmd = new MySqlCommand(
                 "UPDATE mir3.dominatorpet SET Data=UNHEX(@d) WHERE MasterId=@m",
                 conn);
