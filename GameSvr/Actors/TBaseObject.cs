@@ -3016,7 +3016,11 @@ namespace GameSvr
 
         public void DoDamageWeapon(int nWeaponDamage)
         {
-            if (m_UseItems[Grobal2.U_WEAPON] == null || m_UseItems[Grobal2.U_WEAPON].wIndex <= 0)
+            // MINE-43: Native sub_73E804 @73E82F (bytes: 0F B7 73 26 85 F6 0F 8E 93 00 00 00)
+            // checks "jle 73E8C8" — if cur dura <= 0, return immediately.
+            // This prevents re-running the zero-dura path when the weapon is already at 0.
+            if (m_UseItems[Grobal2.U_WEAPON] == null || m_UseItems[Grobal2.U_WEAPON].wIndex <= 0
+                || m_UseItems[Grobal2.U_WEAPON].Dura <= 0)
             {
                 return;
             }
@@ -3055,7 +3059,11 @@ namespace GameSvr
             {
                 m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
             }
-            if ((nDura / 1000.0) != nDuraPoint)
+            // MINE-44: Native compares ROUND(before/1000.0) vs ROUND(after/1000.0) at EA 0x73E838
+            // and 0x73E893 (bytes: DB 45 F4 D8 35 D0 E8 73 00 E8 2E 4D CC FF) — both rounded integers.
+            // C# was comparing raw double (nDura/1000.0) with rounded int (nDuraPoint), causing
+            // near-constant packet spam. Fix: use HUtil32.Round for the comparison.
+            if (HUtil32.Round(nDura / 1000.0) != nDuraPoint)
             {
                 SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, m_UseItems[Grobal2.U_WEAPON].Dura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
             }
