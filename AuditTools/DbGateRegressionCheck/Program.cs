@@ -14,6 +14,8 @@ using SystemModule.Sockets;
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var failures = new List<string>();
+var skipped = new List<string>();
+
 await Run("44FF44 garbage + partial frame", TestFrame44);
 await Run("44FF44 bounded stream buffer", TestFrame44StreamParser);
 await Run("mobile frame native header + large payload", TestMobileCodec);
@@ -53,8 +55,6 @@ await Run("native hero 160 index selection", TestNativeHeroSelection);
 // 故改为：缺标志时显式登记 SKIP，并在收尾用**可区分的退出码**报告，
 // 让"没跑"在任何情况下都不能伪装成"通过"。
 // ---------------------------------------------------------------------------
-var skipped = new List<string>();
-
 async Task RunGated(string name, string flag, Func<string, Task> body)
 {
     var at = Array.FindIndex(args, value => value == flag);
