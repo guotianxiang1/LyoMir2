@@ -357,8 +357,21 @@ Assert(!NativeHeroRuntimeCodec.TryCreateSnapshot(magicOverflow, out _, out _, ou
        && error.Contains("magic capacity exceeded", StringComparison.Ordinal),
     "hero magic overflow ignored the reserved unknown record");
 
+// EXP-06: TrySetNativeLevel (GM @UpUserHeroLv / PAS setlevel) must preserve the B.MaxExp=100 pin.
+// Native sub_6521BC @0x652479 seeds A.MaxExp=100; @0x6524CA copies A→B. The level-up handler
+// sub_6871E0 updates only A.MaxExp (+0x244); the exp-gain loop reads B.MaxExp (+0x2C0), which
+// is permanently 100. A GM-forced level change must NOT read from the config exp table.
+var setLevelHero = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(setLevelHero, snapshot, snapshotDyn, out error), error);
+Equal(100, setLevelHero.m_Abil.MaxExp, "set-level precondition: MaxExp=100 after load");
+M2Share.g_Config.dwNeedExps[50] = 12345678;  // populate config so GetLevelExp(50) != 100
+Assert(setLevelHero.TrySetNativeLevel(50, out error), error);
+Equal(100, setLevelHero.m_Abil.MaxExp,
+    "EXP-06: TrySetNativeLevel must preserve B.MaxExp pinned at 100, not read config table");
+Equal((ushort)50, setLevelHero.m_Abil.Level, "TrySetNativeLevel applied the level");
+
 Console.WriteLine(
-    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed");
+    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-pin");
 
 void WriteShortString(byte[] destination, int offset, int maximumLength, string value)
 {
