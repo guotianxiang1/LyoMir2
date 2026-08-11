@@ -20,6 +20,14 @@ namespace GameSvr
     {
         internal const int NativeMagicProducerPushIdent = 10417;
 
+        /// <summary>Native self+0x50C: last-use tick stamp for the magic id 62
+        /// producer's 30-second gate. Read at 0x6EDC7A
+        /// (2B 83 0C 05 00 00 = sub eax,[ebx+0x50C]) and re-stamped on success.
+        /// Same shape as skill 111's +0x510 stamp
+        /// (m_dwNativeSkill111LastRecallTick), which is a plain per-object dword
+        /// rather than a coldTime-table entry.</summary>
+        internal int m_dwMagic62LastTick;
+
         internal static ushort GetNativeMagicProducerMpCost(
             TUserMagic magic)
         {

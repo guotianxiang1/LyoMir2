@@ -838,6 +838,15 @@ namespace GameSvr
                 case SpellsDef.SKILL_149:
                 case SpellsDef.SKILL_150:
                     break;
+                // id 62 @0x6EDC71: 30-second cooldown gate + amulet type-1 check
+                // + VMT+0x124 (0x76EEF4, MagMakeAngelSlave-like producer). Bytes:
+                // C6 45 FA 01 (boSpellFail=1), E8 C6 A6 D1 FF (GetTickCount),
+                // 2B 83 0C 05 00 00 (sub [ebx+0x50C]), 3D 30 75 00 00 (cmp 30000),
+                // 76 3F (jbe fail), then amulet check sub_73EA20(cl=1,edx=2000).
+                // Verified 2026-08-13 against flat_image.bin.
+                case SpellsDef.SKILL_62:
+                    boSpellFail = !TryProduceNativeMagic62(PlayObject, UserMagic);
+                    break;
                 // ids 59 and 63 are ONE native handler, not two: TABLE2 slot for
                 // 59 @0x6ED81D and for 63 @0x6ED82D both hold the dword
                 // 0x6EDD27 (read raw from the image), so they share a single
@@ -1935,6 +1944,99 @@ namespace GameSvr
                 }
             }
             return result;
+        }
+
+        // Native id 62 handler @0x6EDC71: 30-second cooldown check at [ebx+0x50C],
+        // amulet type-1 check sub_73EA20(cl=1, edx=2000), then VMT+0x124 call
+        // (MagMakeAngelSlave-like producer). Bytes verified:
+        // C6 45 FA 01 E8 C6 A6 D1 FF 2B 83 0C 05 00 00 3D 30 75 00 00 76 3F.
+        private static bool TryProduceNativeMagic62(TPlayObject PlayObject,
+            TUserMagic UserMagic)
+        {
+            var result = false;
+            // 30-second cooldown gate
+            var elapsed = HUtil32.GetTickCount() - PlayObject.m_dwMagic62LastTick;
+            if (elapsed <= 30000)
+            {
+                PlayObject.SysMsg("魔法使用还没恢复30秒", MsgColor.Red,
+                    MsgType.Hint);
+                return false;
+            }
+            // Amulet check: type-1, count computed from edx=2000 => nCount=20
+            // (sub_73EA20 divides edx by 100). But verifying against CheckAmulet
+            // signature: nCount * 100 <= Dura + 50, so we pass nCount directly.
+            short amuletIdx = 0;
+            if (!Magic.CheckAmulet(PlayObject, 20, 1, ref amuletIdx))
+            {
+                PlayObject.SysMsg("没有足够的护身符", MsgColor.Red,
+                    MsgType.Hint);
+                return false;
+            }
+            // VMT+0x124 call (angel-like producer)
+            if (!PlayObject.CheckServerMakeSlave())
+            {
+                var sMonName = M2Share.g_Config.sAngel;
+                int nMakeLevel = TPlayObject
+                    .GetNativeMagicProducerEffectiveLevel(UserMagic);
+                int nExpLevel = nMakeLevel;
+                var dwRoyaltySec = 10 * 24 * 60 * 60;
+                if (PlayObject.MakeSlave(sMonName, nMakeLevel, nExpLevel, 1,
+                    dwRoyaltySec) != null)
+                {
+                    result = true;
+                    Magic.UseAmulet(PlayObject, 20, 1, ref amuletIdx);
+                    PlayObject.m_dwMagic62LastTick = HUtil32.GetTickCount();
+                }
+            }
+            return result;
+        }
+
+        // Native ids 66/67 shared handler @0x6EDE39: calls sub_745744(self,
+        // target, targetY), inverts result. Bytes: 8B 4D 08 8B D6 8B C3
+        // E8 FF 78 05 00 34 01 88 45 FA. Sub_745744 is BLOCKED pending reverse
+        // engineering, so this is a stub that returns false.
+        private static bool TryProduceNativeMagic66(TPlayObject PlayObject,
+            TBaseObject target, short targetY)
+        {
+            // BLOCKED: sub_745744 not yet reversed. Returning false maintains
+            // fail-closed semantics (boSpellFail=true => sends 0x27F).
+            return false;
+        }
+
+        // Native id 111 handler @0x6EDE4F: VMT+0x128 call, sets boSpellFail
+        // if result==0. Bytes: 8B D6 8B C3 8B 08 FF 91 28 01 00 00 85 C0
+        // 0F 94 45 FA. VMT+0x128 -> sub_74633C is BLOCKED pending reverse
+        // engineering, so this is a stub that returns false.
+        private static bool TryProduceNativeMagic111(TPlayObject PlayObject,
+            TBaseObject target)
+        {
+            // BLOCKED: VMT+0x128 (sub_74633C) not yet reversed. Returning false
+            // maintains fail-closed semantics (boSpellFail=true => sends 0x27F).
+            return false;
+        }
+
+        // Native id 151 handler @0x6EDD70: calls sub_745A20 which dispatches
+        // to VMT+0x1F4 with magicId=151 (0x97). Bytes: 8B D6 8B C3 E8 A7 7C
+        // 05 00 34 01 88 45 FA. VMT+0x1F4 dispatcher is BLOCKED pending reverse
+        // engineering, so this is a stub that returns false.
+        private static bool TryProduceNativeMagic151(TPlayObject PlayObject,
+            TBaseObject target)
+        {
+            // BLOCKED: VMT+0x1F4 magic dispatcher (sub_745A20 -> sub_748288)
+            // not yet reversed. Returning false maintains fail-closed semantics.
+            return false;
+        }
+
+        // Native id 154 handler @0x6EDD83: calls sub_74588C which dispatches
+        // to VMT+0x1F4 with magicId=154 (0x9A). Bytes: 8B D6 8B C3 E8 00 7B
+        // 05 00 34 01 88 45 FA. VMT+0x1F4 dispatcher is BLOCKED pending reverse
+        // engineering, so this is a stub that returns false.
+        private static bool TryProduceNativeMagic154(TPlayObject PlayObject,
+            TBaseObject target)
+        {
+            // BLOCKED: VMT+0x1F4 magic dispatcher (sub_74588C -> sub_748288)
+            // not yet reversed. Returning false maintains fail-closed semantics.
+            return false;
         }
     }
 }

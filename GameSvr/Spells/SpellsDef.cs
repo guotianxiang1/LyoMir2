@@ -198,6 +198,7 @@ namespace GameSvr
         public const int SKILL_57 = 57;
         public const int SKILL_58 = 58;
         public const int SKILL_59 = 59;
+        public const int SKILL_62 = 62;
         public const int SKILL_140 = 140;
         public const int SKILL_141 = 141;
         public const int SKILL_145 = 145;
