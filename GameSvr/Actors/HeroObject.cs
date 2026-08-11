@@ -2093,7 +2093,12 @@ namespace GameSvr
             var currentMp = m_WAbil.MP;
             m_Abil.Level = (ushort)level;
             HeroLevel = (ushort)level;
-            m_Abil.MaxExp = GetLevelExp(level);
+            // EXP-06: Native B.MaxExp is pinned at 100 for hero's entire life.
+            // sub_6521BC @0x652479 sets A.MaxExp=100; @0x6524CA copies A→B (0x1F dword block).
+            // Level-up handler sub_6871E0 writes only A.MaxExp (+0x244); the exp-gain loop reads
+            // B.MaxExp (+0x2C0), so B.MaxExp remains 100 forever.
+            // A GM-forced level change must NOT pull MaxExp from the config table.
+            m_Abil.MaxExp = 100;
             RecalcLevelAbilitys();
             m_Abil.HP = Math.Min(currentHp, m_Abil.MaxHP);
             m_Abil.MP = Math.Min(currentMp, m_Abil.MaxMP);
