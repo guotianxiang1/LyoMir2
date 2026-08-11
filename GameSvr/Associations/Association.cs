@@ -274,6 +274,7 @@ namespace GameSvr
                         while (s18 != "")
                         {
                             s18 = HUtil32.GetValidStr3(s18, ref s1C, new char[] { ' ', ',' });
+                            s18 = HUtil32.GetValidStr3(s18, ref s20, new char[] { ' ', ',' });
                             if (s1C == "")
                             {
                                 break;
