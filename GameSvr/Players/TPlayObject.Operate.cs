@@ -1804,25 +1804,30 @@ namespace GameSvr
             }
             if (m_DealCreat.m_boDealOK)
             {
+                // 战神 sub_6C4580 四道检查：
+                //   @0x6C46E4-0x6C46FF: remote.CanAcceptItems(self.DealItemList.Count) → jmp 0x6C49B8
+                //   @0x6C4705-0x6C471A: remote.CanAcceptGold(self.m_nDealGolds)       → jmp 0x6C49B8
+                //   @0x6C4720-0x6C4739: self.CanAcceptItems(remote.DealItemList.Count)→ jmp 0x6C49B8
+                //   @0x6C473F-0x6C4752: self.CanAcceptGold(remote.m_nDealGolds)       → jmp 0x6C49B8
+                // **每一道检查失败均跳到同一目标 0x6C49B8**，直接调用 DealCancel（sub_6C43C4）并返回，
+                // **没有任何 per-check message**。旧 C# 把四道检查全部跑完并每条失败时都发消息，
+                // 而那四条消息字符串在二进制里 **GBK 零命中**（TCFP-22）。
+                // 删除四条非原版消息，改成原版的 fail-fast 结构。
                 bo11 = true;
                 if (Grobal2.MAXBAGITEM - m_ItemList.Count < m_DealCreat.m_DealItemList.Count)
                 {
                     bo11 = false;
-                    SysMsg(M2Share.g_sYourBagSizeTooSmall, MsgColor.Red, MsgType.Hint);
                 }
-                if (m_nGoldMax - m_nGold < m_DealCreat.m_nDealGolds)
+                if (bo11 && m_nGoldMax - m_nGold < m_DealCreat.m_nDealGolds)
                 {
-                    SysMsg(M2Share.g_sYourGoldLargeThenLimit, MsgColor.Red, MsgType.Hint);
                     bo11 = false;
                 }
-                if (Grobal2.MAXBAGITEM - m_DealCreat.m_ItemList.Count < m_DealItemList.Count)
+                if (bo11 && Grobal2.MAXBAGITEM - m_DealCreat.m_ItemList.Count < m_DealItemList.Count)
                 {
-                    SysMsg(M2Share.g_sDealHumanBagSizeTooSmall, MsgColor.Red, MsgType.Hint);
                     bo11 = false;
                 }
-                if (m_DealCreat.m_nGoldMax - m_DealCreat.m_nGold < m_nDealGolds)
+                if (bo11 && m_DealCreat.m_nGoldMax - m_DealCreat.m_nGold < m_nDealGolds)
                 {
-                    SysMsg(M2Share.g_sDealHumanGoldLargeThenLimit, MsgColor.Red, MsgType.Hint);
                     bo11 = false;
                 }
                 if (bo11)

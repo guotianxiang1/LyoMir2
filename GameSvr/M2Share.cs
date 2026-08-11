@@ -340,10 +340,6 @@ namespace GameSvr
         public static string g_sPoseDisableDealMsg = "对方禁止进入交易";
         public static string g_sDealSuccessMsg = "交易成功...";
         public static string g_sDealOKTooFast = "过早按了成交按钮?";
-        public static string g_sYourBagSizeTooSmall = "你的背包空间不够，无法装下对方交易给你的物品!!!";
-        public static string g_sDealHumanBagSizeTooSmall = "交易对方的背包空间不够，无法装下对方交易给你的物?!!!";
-        public static string g_sYourGoldLargeThenLimit = "你的所带的金币太多，无法装下对方交易给你的金币!!!";
-        public static string g_sDealHumanGoldLargeThenLimit = "交易对方的所带的金币太多，无法装下对方交易给你的金币!!!";
         public static string g_sYouDealOKMsg = "你已经确认交易了?";
         public static string g_sPoseDealOKMsg = "对方已经确认交易了?";
         public static string g_sKickClientUserMsg = "请不要使用非法外挂软?!!!";
