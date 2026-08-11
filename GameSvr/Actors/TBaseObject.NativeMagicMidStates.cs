@@ -181,8 +181,7 @@ namespace GameSvr
             if (!HasNativeActiveState(NativeMagicState30))
                 return damage;
 
-            _ = TryGetNativeTimedAbilityValue(NativeMagicState30,
-                out int value);
+            int value = GetNativeRedPoisonLevel();
             double multiplier = value == 4 ? 1.25d : 1.2d;
             return RoundNativeX87(damage * multiplier);
         }
@@ -250,8 +249,7 @@ namespace GameSvr
             }
             else if (HasNativeActiveState(NativeMagicState30))
             {
-                _ = TryGetNativeTimedAbilityValue(NativeMagicState30,
-                    out int value);
+                int value = GetNativeRedPoisonLevel();
                 multiplier = value == 4 ? 1.25d : 1.2d;
             }
             else
