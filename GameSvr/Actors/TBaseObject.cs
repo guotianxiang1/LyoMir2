@@ -4764,7 +4764,7 @@ namespace GameSvr
                         break;
                     }
                     I++;
-                    if (I >= 17)
+                    if (I >= 16)
                     {
                         break;
                     }

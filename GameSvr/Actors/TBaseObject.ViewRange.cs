@@ -37,7 +37,7 @@ namespace GameSvr
             int fallbackTimeoutMs)
         {
             if (cellObj is not MapItem mapItem)
-                return ageMs > fallbackTimeoutMs;
+                return ageMs >= fallbackTimeoutMs;
             if (!NativeMapItemExpiry.TryResolveLifetimeMs(mapItem,
                     mapItem.UserItem == null
                         ? (byte)0
