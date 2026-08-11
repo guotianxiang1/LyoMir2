@@ -1388,7 +1388,19 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_RUN:
-                    if (ClientRunXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ref dwDelayTime))
+                    // Native 0x6D9CE4: CM_RUN(3013) shares the run ladder with CM_RUN3(4108).
+                    // Try the native run path first (includes mount/state gates at 0x6BBFBC/0x6BC0D4).
+                    // If refused by state-51 absence (not mounted), fall back to legacy ClientRunXY.
+                    // EA evidence: movement_native_rulings_20260810.md lines 176-313 prove both
+                    // primitives are byte-identical twins and 3013 must route through the ladder.
+                    if (ClientNativeRun3(ProcessMsg.nParam1, ProcessMsg.nParam2))
+                    {
+                        m_dwActionTick = HUtil32.GetTickCount();
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
+                        SendSocket(M2Share.GetGoodTick);
+                    }
+                    else if (!HasNativeActiveState(51) &&
+                             ClientRunXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
