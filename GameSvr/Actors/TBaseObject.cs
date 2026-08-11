@@ -5603,7 +5603,6 @@ namespace GameSvr
             {
                 return;
             }
-            (this as TPlayObject)?.DealCancel();
             DamageHealth(nDamage);
         }
 
