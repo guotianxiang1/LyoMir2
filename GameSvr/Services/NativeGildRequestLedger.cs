@@ -200,6 +200,52 @@ namespace GameSvr.Services
             }
         }
 
+        /// <summary>
+        /// Native expiry threshold, in DAYS, applied to every pending request (join-corps, join-gild and
+        /// union alike). Tier-1: sub_6A5D6C @0x006A5D6C loads the request timestamp with
+        /// <c>dd 40 28</c> = <c>fld qword [eax+0x28]</c>, spills it (<c>dd 5d dc</c>), calls Now, then
+        /// <c>d8 25 f0 5f 6a 00</c> = <c>fsub dword [0x006A5FF0]</c> where the float32 at 0x006A5FF0 is
+        /// <c>00 00 40 40</c> = 3.0, and finally <c>dc 5d dc</c> = <c>fcomp qword [ebp-0x24]</c> +
+        /// <c>df e0</c> / <c>9e</c> / <c>0f 86</c> (jbe = skip). So an entry expires iff
+        /// <c>(Now - 3.0) &gt; request.CreatedTime</c>, strictly greater.
+        /// </summary>
+        public const double ExpiryDays = 3.0;
+
+        /// <summary>
+        /// sub_6A5D6C's purge loop: walk the timestamp-ordered list BACKWARDS (native
+        /// <c>8b 46 28 / 8b 58 08 / 4b</c> = load list, take Count, dec to index; loop bottom
+        /// <c>83 fb ff</c> = cmp ebx,-1) and drop every entry older than <see cref="ExpiryDays"/>.
+        /// Removal goes through the same teardown as accept/refuse (native sub_6A60A4 + sub_6A5070),
+        /// i.e. every index plus the global registry. Returns the removed requests, oldest-first, so the
+        /// caller can report the native count and apply any per-subtype side effects.
+        ///
+        /// The subtraction is done in OLE-date space exactly as native does it (the x87 <c>fsub</c> is on
+        /// the TDateTime double), not via <c>AddDays</c>.
+        /// </summary>
+        public IReadOnlyList<NativeGildPendingRequest> RemoveExpired(DateTime now)
+        {
+            var deadline = DateTime.FromOADate(now.ToOADate() - ExpiryDays);
+            var removed = new List<NativeGildPendingRequest>();
+            lock (_sync)
+            {
+                for (var index = _ordered.Count - 1; index >= 0; index--)
+                {
+                    var request = _ordered[index];
+                    // Native: jbe (deadline <= CreatedTime) -> not expired, skip.
+                    if (deadline <= request.CreatedTime) continue;
+                    _ordered.RemoveAt(index);
+                    _byUniqueId.Remove(request.UniqueId);
+                    _byApplicant.Remove((request.TargetKey, request.RequestId));
+                    if (request.UsesSecondaryKey)
+                        _bySecondary.Remove(
+                            (request.TargetKey, request.SecondaryKey));
+                    removed.Add(request);
+                }
+            }
+            removed.Reverse();
+            return removed;
+        }
+
         // Timestamp-ordered snapshot (native TList order) matching the given predicate, e.g. all pending
         // requests targeting a given gild. Feeds the 4570/4571 paginated reads. Pagination is applied by
         // the caller (matching the native handler's page*size / take semantics).

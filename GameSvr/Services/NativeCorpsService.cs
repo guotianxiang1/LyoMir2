@@ -2444,6 +2444,51 @@ namespace GameSvr.Services
                               || corps.ViceOwner1Id == memberId
                               || corps.ViceOwner2Id == memberId;
 
+        // ------------------------------------------------------------------------------------------------
+        // GILD-10: expiry of pending join-corps / join-gild / UNION (alliance) requests.
+        //
+        // Native purge = sub_6A5D6C @0x006A5D6C, reached from the wrapper sub_6A6058 (its only caller,
+        // 0x006A6062). Tier-1 byte evidence:
+        //   * TIME-OF-DAY GATE, before any work: FormatDateTime('hh:mm', Now) — literal 'hh:mm' at
+        //     0x006A5FD8 (mov eax,6A5FD8) — is compared against the literal '03:03' at 0x006A5FE8
+        //     (mov edx,6A5FE8) via the string-compare at 0x006A5DAD, then `0f 85 e3 01 00 00` (jnz ->
+        //     return). So the sweep only ever runs during the 03:03 minute, ONCE PER DAY.
+        //   * EXPIRY TEST, per entry: fld qword[eax+0x28] (the request timestamp) ... fsub
+        //     dword[0x006A5FF0] where that float32 is 00 00 40 40 = 3.0 DAYS, then fcomp + jbe. Entry
+        //     expires iff (Now - 3.0) > CreatedTime.
+        //   * The list is walked BACKWARDS (Count-1 down to -1: `83 fb ff`) and each victim is torn down
+        //     through the SAME helpers accept/refuse use (sub_6A60A4 @0x006A5EF0 + sub_6A5070 @0x006A5EF9).
+        //   * The tally is logged only when at least one entry was dropped (`83 7d f8 00 / 7e 3b` =
+        //     if count <= 0 skip) using the literals 0x006A5FFC + 0x006A6040.
+        //
+        // A UNION request additionally owns a DB-only pending Relation=3 gildrelation row (written by 4573
+        // ApplyGildRequestUnion above). Native's per-subtype teardown removes it on refuse (sub_708004 ->
+        // sub_5E90A4) and cancel; the same DELETE is applied here so an expired alliance request does not
+        // leave an orphan pending row that would make the pair look permanently "in negotiation".
+        // Relation=3 never enters _gildRelations, so there is no in-memory relation to touch — an
+        // ESTABLISHED alliance (Relation=1) is NOT time-limited in 战神 and is deliberately left alone:
+        // the only relation-clearing paths are break-union 4574 and declare-war.
+        internal int PurgeExpiredRequests(DateTime now)
+        {
+            lock (_sync)
+            {
+                var expired = _requestLedger.RemoveExpired(now);
+                if (expired.Count == 0) return 0;
+                if (SupportsGildWrites)
+                {
+                    foreach (var request in expired)
+                    {
+                        if (request.Kind != NativeGildRequestKind.Union)
+                            continue;
+                        DeleteGildRelationFailSafe(
+                            NativeCorpsDataSnapshot.GildRelationKey(
+                                request.SecondaryKey, request.TargetKey));
+                    }
+                }
+                return expired.Count;
+            }
+        }
+
         private void AddLogLocked(long corpsId, int type, string text)
         {
             var key = (corpsId, type);

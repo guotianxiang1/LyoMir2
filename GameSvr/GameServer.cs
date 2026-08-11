@@ -115,6 +115,9 @@ namespace GameSvr
             }
             Mall.MallManager.Instance.ProcessScheduledRefresh(DateTime.Now);
             NativeMailCacheService.ProcessScheduledSweep(DateTime.Now);
+            // GILD-10: native sub_6A5D6C pending-request expiry purge (join-corps / join-gild /
+            // alliance-union). Self-gated to the 03:03 minute exactly as the native body is.
+            NativeGildRequestExpirySweep.Run(M2Share.CorpsService, DateTime.Now);
             IdSrvClient.Instance.Run();
             M2Share.UserEngine.Run();
             M2Share.DynamicRoomManager?.Run();
