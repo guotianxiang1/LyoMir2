@@ -354,7 +354,12 @@ namespace GameSvr
                             }
                             if (s34.Equals("NOHORSE", StringComparison.OrdinalIgnoreCase))
                             {
-                                MapFlag.boNOPOSITIONMOVE = true;
+                                MapFlag.boNOHORSE = true;
+                                continue;
+                            }
+                            if (s34.Equals("NORIDE", StringComparison.OrdinalIgnoreCase))
+                            {
+                                MapFlag.boNORIDE = true;
                                 continue;
                             }
                             if (s34.Equals("NOCHAT", StringComparison.OrdinalIgnoreCase))

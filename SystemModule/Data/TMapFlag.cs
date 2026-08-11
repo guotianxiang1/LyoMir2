@@ -64,6 +64,14 @@ public class TMapFlag
     public bool boNODROPITEM;
     public bool boNOTHROWITEM;
     public bool boNOHORSE;
+    /// <summary>
+    /// 战神 map flag NORIDE -> native [flag+0x85]
+    /// (parser B sub_776008 @0x7768A5 token compare, @0x7768B6 writes byte [ebx+0x85],1).
+    /// Tested in mount-summon path sub_6EE174 @0x6EE197 and @0x70F75B.
+    /// Refusal text "当前地图不能召唤坐骑！" at 0x6EE248 (Blue 0xFCFF).
+    /// Gates riding/mount summoning, not walking.
+    /// </summary>
+    public bool boNORIDE;
     public bool boNOCHAT;
     public bool boKILLFUNC;
     public int nKILLFUNCNO;

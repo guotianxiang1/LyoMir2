@@ -17,6 +17,15 @@ namespace GameSvr
                 return;
             }
 
+            // 战神 sub_6EE174 @0x6EE197: test byte [eax+0x85],0; jne refused
+            // Refusal at 0x6EE1A0: sends "当前地图不能召唤坐骑！" (Blue 0xFCFF)
+            if (m_PEnvir?.Flag.boNORIDE == true)
+            {
+                SysMsg("当前地图不能召唤坐骑！", MsgColor.Blue, MsgType.Hint);
+                ClearNativeHorseCallPending();
+                return;
+            }
+
             var mount = m_UseItems != null &&
                         m_UseItems.Length > Grobal2.U_MOUNT
                 ? m_UseItems[Grobal2.U_MOUNT]
