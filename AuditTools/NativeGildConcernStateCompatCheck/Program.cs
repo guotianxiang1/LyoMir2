@@ -169,7 +169,7 @@ Equal(NativeGildUnionFlagCell.NativeFieldOffset, 40, "union flag native offset g
 Equal(NativeGildUnionFlagCell.HasPersistentColumn, false, "union flag has NO gamedata.Gild column");
 
 var flag = new NativeGildUnionFlagCell();
-Equal(flag.Enabled, false, "union flag defaults false (loader never reads it)");
+Equal(flag.Enabled, true, "union flag defaults true (native 0x70633A: C6 47 28 01, constructor sets TRUE)");
 Equal(flag.Set(false), NativeGildUnionFlagWrite.NoChange, "set false==current -> NoChange (no UPDATE)");
 Equal(flag.Set(true), NativeGildUnionFlagWrite.Resave, "set true (changed) -> Resave (standard UPDATE)");
 Equal(flag.Enabled, true, "flag now enabled in memory");

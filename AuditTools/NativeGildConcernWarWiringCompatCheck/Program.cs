@@ -447,17 +447,17 @@ static void EnableUnionOwnerTogglesAndSavesOnChangeOnly()
     var store = new FakeGildStore();
     var service = BuildService(store);
 
-    // Toggle ON (default is false) => change => standard 3-column Gild UPDATE.
-    Equal(0, PacketResult(DriveEnableUnion(service, 1, true)),
-        "4581 enable success code");
+    // Toggle OFF (default is now TRUE per native 0x70633A C6 47 28 01) => change => standard 3-column Gild UPDATE.
+    Equal(0, PacketResult(DriveEnableUnion(service, 1, false)),
+        "4581 disable success code");
     Equal(1, store.Calls.Count, "4581 change => exactly one Gild save");
     Equal("save:200:100:0", store.Calls[0],
         "4581 standard 3-column TrySaveGild (flag has no column)");
-    Require(GildById(service, 200).UnionEnabled,
-        "4581 in-memory session flag set true");
+    Require(!GildById(service, 200).UnionEnabled,
+        "4581 in-memory session flag set false");
 
-    // Toggle ON again => no change => sub_704EAC skips the save.
-    Equal(0, PacketResult(DriveEnableUnion(service, 1, true)),
+    // Toggle OFF again => no change => sub_704EAC skips the save.
+    Equal(0, PacketResult(DriveEnableUnion(service, 1, false)),
         "4581 no-change success code");
     Equal(1, store.Calls.Count, "4581 no-change => no additional save");
 }
@@ -471,7 +471,7 @@ static void EnableUnionNonPresidentRejectedNoStore()
     Equal(555, PacketResult(DriveEnableUnion(service, 2, true)),
         "4581 non-president/-vice reject code");
     Equal(0, store.Calls.Count, "4581 rejected no store call");
-    Require(!GildById(service, 200).UnionEnabled, "4581 rejected flag untouched");
+    Require(GildById(service, 200).UnionEnabled, "4581 rejected flag unchanged (default true)");
 }
 
 static void EnableUnionNoGildStoreFallsBackToFailClosed1000()

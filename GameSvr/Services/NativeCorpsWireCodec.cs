@@ -47,9 +47,11 @@ namespace GameSvr.Services
         internal byte[] Notice { get; set; } = Array.Empty<byte>();
         internal List<long> CorpsIds { get; } = new();
         // 4581 enable-union flag (native gild+0x28). Session-only: it has NO
-        // gamedata.Gild column, so it is never loaded or persisted (resets to
-        // false on restart) — see NativeGildConcernState/NativeGildUnionFlagCell.
-        internal bool UnionEnabled { get; set; }
+        // gamedata.Gild column, so it is never persisted.
+        // 原生 0x70633A: C6 47 28 01  mov byte [edi+0x28], 1
+        // 构造函数置 TRUE — 行会默认开放联盟请求。重启后会从默认值恢复，
+        // 因为没有 DB 列；会长需在每次重启后手动重置（与原版行为一致）。
+        internal bool UnionEnabled { get; set; } = true;
     }
 
     internal sealed class NativeCorpsDataSnapshot
