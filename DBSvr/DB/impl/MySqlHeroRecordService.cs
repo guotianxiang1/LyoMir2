@@ -224,25 +224,32 @@ namespace DBSvr
             return cmd.ExecuteNonQuery() > 0;
         }
 
-        public bool UpdateLvChangeTime(int idx)
+        public bool UpdateLvChangeTime(int idx, byte oldLevel, byte oldForceLv, byte oldSfLevel)
         {
             // Native VA 0x5B27A8:
             //   Update hero_index set lvChangeTime=Now() where idx=%d
             //   and (Level<>%d or ForceLv<>%d or sfLevel<>%d);
-            // The native only stamps lvChangeTime when at least one of Level/ForceLv/sfLevel
-            // actually differs from the values it is about to write, so a save that changed
-            // only blob data leaves lvChangeTime alone (which matters: lvChangeTime is the final
-            // ORDER BY tiebreaker in the ranking queries at 0x478BF8..0x478E74).
-            // BLOCKED: this overload cannot reproduce the predicate -- IHeroRecordService declares
-            // UpdateLvChangeTime(int idx) with no old Level/ForceLv/sfLevel arguments, and
-            // IHeroRecordService.cs is outside this pass's editable scope. Widening the signature
-            // to match the native (compare IPlayRecordService.UpdateLvChangeTime(idx, oldLevel,
-            // oldForceLv, oldSfLevel), which already carries the native's three arguments) is the
-            // fix. Left unconditional for now: it over-stamps lvChangeTime, which perturbs ranking
-            // tiebreaks but never alters hero level/exp/item data.
-            // Note the primary save path is unaffected -- SaveRecordCore in MySqlHeroDataService
-            // applies the native's IF(h.Level<>@level OR h.ForceLv<>@forceLv OR h.sfLevel<>@sfLevel)
-            // guard inline, so this standalone method is the only divergent caller.
+            // Only stamps when at least one of Level/ForceLv/sfLevel actually differs, so a save
+            // that changed only blob data leaves lvChangeTime alone (matters for ranking tiebreak).
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                @"UPDATE mir3.hero_index SET lvChangeTime=NOW() WHERE idx=@i
+                  AND (Level<>@ol OR ForceLv<>@of OR sfLevel<>@os)", conn);
+            cmd.Parameters.AddWithValue("@i", idx);
+            cmd.Parameters.AddWithValue("@ol", oldLevel);
+            cmd.Parameters.AddWithValue("@of", oldForceLv);
+            cmd.Parameters.AddWithValue("@os", oldSfLevel);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
+        public bool UpdateLvChangeTime(int idx)
+        {
+            // Unconditional fallback for callers that cannot provide old values (旧接口兼容).
+            // Over-stamps lvChangeTime (perturbs ranking tiebreak but never alters level/exp data).
+            // Primary save path (SaveRecordCore in MySqlHeroDataService) carries the native's
+            // IF(h.Level<>@level OR h.ForceLv<>@forceLv OR h.sfLevel<>@sfLevel) guard inline,
+            // so this standalone method is the only divergent caller.
             using var conn = OpenConn();
             if (conn == null) return false;
             using var cmd = new MySqlCommand("UPDATE mir3.hero_index SET lvChangeTime=NOW() WHERE idx=@i", conn);
@@ -505,16 +512,22 @@ namespace DBSvr
             //  - "AND Level>0" was invented: the hero _AvailUser population (0x5CBEC8) has no
             //    level floor. Contrast the user_index population at 0x5CBE38, which DOES carry
             //    "Level>0 and AdminLevel = 0" -- the asymmetry is deliberate, so it is removed here.
-            //  - ORDER BY was missing the native's final lvChangeTime tiebreaker.
-            // BLOCKED: "IsDelete=0" is retained but UNPROVEN. Neither 0x478E74 nor the 0x5CBEC8
-            // population carries an IsDelete predicate, but the referencing ranking function is
-            // virtualised, so a pre-filter in code cannot be ruled out. Dropping the predicate
-            // would publish soft-deleted heroes into the ranking, so it is left in place pending
-            // a readable native function body.
+            // Ranking query. Byte evidence:
+            //   0x478E74: `select MasterName, HeroName, Level, sfLevel from hero_index,
+            //   _AvailUser where _AvailUser.Idx=hero_index.Idx order by Level desc,
+            //   sfLevel desc, ForceLv desc, Exp desc, lvChangeTime Limit 100`
+            //   0x5CBEC8 populates _AvailUser:
+            //   `Insert Into _AvailUser select Idx from hero_index
+            //    where Date_add(ModifyDate, interval 1 month)>Now();`
+            // Neither SQL contains IsDelete=0. The absence is definitive: these are Delphi
+            // long-string literals (rc=-1) embedded in read-only data, VMP cannot modify them;
+            // if native had an IsDelete filter it would appear in the SQL text.
+            // Soft-deleted heroes with recent ModifyDate CAN appear in the ranking -- this is
+            // native behavior, reproduced faithfully.
+            // Previously BLOCKED note resolved by spec blocked_items_evidence_20260811.md Item 4.
             using var cmd = new MySqlCommand(
                 @"SELECT HeroName AS ChrName, Level, sfLevel, ForceLv, Exp, 0 AS FightPoints, 0 AS ApprenticeNum
-                  FROM mir3.hero_index WHERE IsDelete=0
-                    AND Date_add(ModifyDate, interval 1 month)>Now()
+                  FROM mir3.hero_index WHERE Date_add(ModifyDate, interval 1 month)>Now()
                   ORDER BY Level DESC, sfLevel DESC, ForceLv DESC, Exp DESC, lvChangeTime
                   LIMIT @l", conn);
             cmd.Parameters.AddWithValue("@l", Math.Min(limit, DBShare.RankLimit));

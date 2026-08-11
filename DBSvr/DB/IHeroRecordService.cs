@@ -20,6 +20,19 @@ namespace DBSvr
         int ChrCountOfMaster(string masterName);
         bool UpdateHeroIndex(int idx, int level, int exp, int job, int sex, int forceLv, int forceExp, int sfLevel,
             int isDelete = -1, int heroType = -1, int consignation = -1);
+        /// <summary>
+        /// 更新 lvChangeTime（原版 0x5B27A8）。
+        /// 带旧值重载：仅当 Level/ForceLv/sfLevel 中任一确实改变时才更新时间戳。
+        /// native SQL: Update hero_index set lvChangeTime=Now() where idx=%d
+        ///             and (Level&lt;&gt;%d or ForceLv&lt;&gt;%d or sfLevel&lt;&gt;%d);
+        /// </summary>
+        bool UpdateLvChangeTime(int idx, byte oldLevel, byte oldForceLv, byte oldSfLevel);
+
+        /// <summary>
+        /// 无条件更新 lvChangeTime（旧接口兼容，按原版内联路径使用）。
+        /// BLOCKED: 此重载不携带旧值故无法复现原版 WHERE 谓词，与 native 0x5B27A8 不等价。
+        /// 仅在调用方无法提供旧值时使用，会多更新时间戳（影响排行榜 tiebreak，但不破坏等级数据）。
+        /// </summary>
         bool UpdateLvChangeTime(int idx);
         bool RestoreHero(string heroName);
         bool RenameHero(string oldName, string newName, int idx);
