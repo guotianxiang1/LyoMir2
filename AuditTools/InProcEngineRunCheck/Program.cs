@@ -909,6 +909,82 @@ void RunMerchantMoneyContracts(Envirnoment map)
     Assert(!code.Contains("UserItem.DuraMax = 10000"),
         "the persistent `UserItem.DuraMax = 10000` pricing mutation came back (native clamps in EBX only)");
 
+    // ---------- E) ECON-12: pile items multiply the base price by the stack COUNT ----------
+    // Native sub_63F3B4 @0x63F442-0x63F45B gates on the runtime KIND byte
+    // `cmp byte [instance+0x14],7` (NOT template StdMode -- the same function does hop
+    // `mov eax,[eax+0x1c]` at 0x63F416/0x63F42C to reach template fields, and this gate
+    // pointedly does not), then `movzx eax,word [instance+0x26]` (= Dura) and `imul`.
+    // +0x14 is zeroed by the base item ctor sub_783788 @0x7837AE and set to 7 ONLY by the
+    // pile ctor sub_7880F0 @0x788118, which the factory sub_74C338 selects via
+    // @0x74D67E `cmp al,0x96 / jb` => StdMode >= 150. C#'s equivalent is IsPileItem.
+    // Because the multiply lives INSIDE sub_63F3B4, it is upstream of the buy shell's
+    // `jle` (0x63F3A1), the VMT+0x20 wear slot (0x63F3A9), the rate stage and the sell
+    // `sar esi,1`, so buy / sell / repair must ALL scale with the count.
+    eng.StdItemList.Add(new GoodItem
+    {
+        Name = "定价堆叠药", ItemType = GoodType.ITEM_ETC, StdMode = 150,
+        Weight = 1, DuraMax = 0, Price = 100
+    });
+    ((System.Collections.IList)GetField(pricer, "m_ItemTypeList")).Add(150);
+    // NativeItemFactory is internal and this audit is not a friend assembly, so reach
+    // IsPileItem by reflection rather than widening GameSvr's InternalsVisibleTo list.
+    var tNativeItemFactory = typeof(Merchant).Assembly.GetType("GameSvr.NativeItemFactory")
+        ?? throw new TypeLoadException("GameSvr.NativeItemFactory");
+    var miIsPileItem = tNativeItemFactory.GetMethod("IsPileItem",
+        BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public,
+        null, new[] { typeof(GoodItem) }, null)
+        ?? throw new MissingMethodException("NativeItemFactory", "IsPileItem");
+    Assert((bool)miIsPileItem.Invoke(null, new object[] { eng.GetStdItem("定价堆叠药") }),
+        "ECON-12 fixture is not a pile item -- StdMode 150 must satisfy IsPileItem "
+        + "(native factory sub_74C338 @0x74D67E `cmp al,0x96/jb` routes >=150 to pile ctor 0x7880F0)");
+
+    int pileCases = 0;
+    foreach (int qty in new[] { 1, 2, 100, 999 })
+    {
+        TUserItem pile = null;
+        if (!eng.CopyToUserItemFromName("定价堆叠药", ref pile)) continue;
+        pile.Dura = (ushort)qty;
+        double basePrice = (double)miGetUserItemPrice.Invoke(pricer, new object[] { pile });
+        Assert((int)basePrice == 100 * qty,
+            $"ECON-12 PILE BASE PRICE: qty={qty} -> {basePrice}, native sub_63F3B4 @0x63F458 "
+            + $"`imul` gives {100 * qty} (unit price 100 * count {qty}). Missing the multiply pays "
+            + "for ONE unit while ClientUserSellItem removes the WHOLE stack.");
+        // the sell half then applies div 2 on the already-multiplied base (0x63F235)
+        int sellPrice = (int)miGetSellItemPrice.Invoke(pricer, new object[] { basePrice });
+        Assert(sellPrice == (100 * qty) / 2,
+            $"ECON-12 PILE SELL PRICE: qty={qty} -> {sellPrice}, expected {(100 * qty) / 2} "
+            + "(native halves the multiplied base, so the count survives into the payout)");
+        pileCases++;
+    }
+    Assert(pileCases == 4, "ECON-12 pile pricing sweep did not run all quantity cases");
+
+    // a NON-pile item must NOT scale with Dura, or every worn weapon gets count-inflated
+    TUserItem nonPile = null;
+    Assert(eng.CopyToUserItemFromName("属性定价剑", ref nonPile), "non-pile fixture not created");
+    nonPile.DuraMax = 100; nonPile.Dura = 100;
+    double nonPilePrice = (double)miGetUserItemPrice.Invoke(pricer, new object[] { nonPile });
+    Assert((int)nonPilePrice == 1000,
+        $"ECON-12 OVER-REACH: non-pile StdMode 5 priced {nonPilePrice}, expected 1000. The count "
+        + "multiply must be gated on IsPileItem -- native `jne 0x63F45E` skips it for +0x14 != 7 "
+        + "(base ctor sub_783788 @0x7837AE writes 0), otherwise Dura doubles as a bogus multiplier.");
+    Assert(code.Contains("NativeItemFactory.IsPileItem(StdItem)"),
+        "ECON-12 pile-count multiply lost its IsPileItem gate in GetUserItemPrice "
+        + "(native gate = runtime +0x14 == 7, whose set is exactly StdMode>=150 with a class)");
+    Assert(!code.Contains("StdItem.StdMode == 7)")
+        || !code.Contains("n10 = unchecked((int)n10 * (int)UserItem.Dura)"),
+        "ECON-12 gate rewritten as template `StdMode == 7`. That is a DIFFERENT field: native "
+        + "@0x63F445 reads INSTANCE+0x14 with no +0x1C hop, and StdMode 7 (charm) never reaches "
+        + "the pile ctor in factory sub_74C338.");
+
+    Log($"ECON-12 pile pricing: base = unit * count across {pileCases} quantity cases "
+        + "(native sub_63F3B4 @0x63F454-58 `movzx eax,word [inst+0x26]` / `imul`), gated on the "
+        + "runtime KIND byte `cmp byte [inst+0x14],7` @0x63F445 -- NOT template StdMode (the same "
+        + "function hops `mov eax,[eax+0x1c]` @0x63F416/0x63F42C for template fields, this gate "
+        + "does not); +0x14 is 0 from base ctor sub_783788 @0x7837AE and 7 only from pile ctor "
+        + "sub_7880F0 @0x788118, selected by factory @0x74D67E `cmp al,0x96/jb` = StdMode>=150 "
+        + "== IsPileItem; non-pile StdMode 5 stays unscaled; multiply is upstream of the wear slot, "
+        + "rate stage and the sell div 2, so buy/sell/repair all scale with the count");
+
     Log($"MERCHANT money contracts: statted pricing = n10 + (n10 div 5)*n14 across {statCases} n14 cases "
         + "(native sub_783D70 @0x783E86 `add edi,eax`; dropping `n10 +` was -83% at n14=1: 200 vs 1200); "
         + "sell price truncates via div 2 (sub_63F200 @0x63F235 sar/jns/adc, not banker's Round: 7->3 not 4); "
