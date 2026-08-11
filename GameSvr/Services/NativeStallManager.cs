@@ -127,6 +127,110 @@ namespace GameSvr.Services
                 return new List<NativeStallRecord>(_byOwner.Values);
             }
         }
+
+        // ============================ stallmsglst quota (sub_61FCE4) ============================
+        // The native manager holds a SECOND table at mgr+0x24 (`mov eax,[ebx+0x24]; call sub_49F2D8`
+        // @0x0061D10F) — the message-list side, keyed by the SENDER's 64-bit CharID exactly like the booth
+        // table. sub_61FCE4 @0x0061FCE4 (stall_exec_out.txt:1482-1553) is its only gate:
+        //   found   -> entry[8] (cnt, +0x20) < 3  ?  sub_61F7E8(entry[0], ++entry[8]) + true  :  false
+        //   absent  -> alloc 48B, CharID -> +0x08/+0x0C, cnt(+0x20) = 1, createdate(+0x28) = now,
+        //              INSERT (sub_61F5C4) and register; returns true
+        // So the quota is 3 messages per SENDER, the 4th is refused (-2), and the counter never decays — only
+        // the expiry sweep's DELETE FROM stallmsglst (sub_61F9D8) clears it.
+        private readonly Dictionary<long, NativeStallMessageQuota> _messageQuota = new();
+
+        /// <summary>
+        /// sub_61FCE4: charge one message against <paramref name="senderId"/>'s quota for the given booth.
+        /// Returns false once the sender has already used all <see cref="StallMessageQuotaPerSender"/> slots
+        /// (the -2 rung). The row is INSERTed on first use and UPDATEd (cnt) afterwards, mirroring
+        /// sub_61F5C4 / sub_61F7E8; persistence is best-effort so a SQL outage never blocks the message.
+        /// </summary>
+        public bool TryConsumeStallMessageQuota(long senderId, string senderName,
+            NativeStallRecord target, out int count)
+        {
+            count = 0;
+            if (target == null) return false;
+            NativeStallMessageQuota quota;
+            lock (_sync)
+            {
+                if (_messageQuota.TryGetValue(senderId, out quota))
+                {
+                    // entry[8] < 3 -> ++entry[8]; else refuse. Strict `<` so 3 used slots reject the 4th.
+                    if (quota.Count >= StallMessageQuotaPerSender)
+                        return false;
+                    quota.Count++;
+                    count = quota.Count;
+                }
+                else
+                {
+                    quota = new NativeStallMessageQuota
+                    {
+                        SenderId = senderId,
+                        SenderName = senderName ?? string.Empty,
+                        StallId = target.DbIdx,
+                        Count = 1,                     // seeded at 1 (+0x20 = 1), not 0
+                        CreateDate = DateTime.Now,     // +0x28
+                    };
+                    _messageQuota[senderId] = quota;
+                    count = 1;
+                }
+            }
+
+            // Ledger persist OUTSIDE the lock (no DB I/O under the manager mutex). Best-effort / fail-safe:
+            // native only logs a failed ExecuteScript and keeps the in-memory increment.
+            var store = NativeStallWriteGate.Store;
+            if (store != null)
+            {
+                if (quota.DbIdx == 0)
+                {
+                    if (store.TryInsertStallMsg(target.DbIdx, senderId, quota.SenderName, quota.Count,
+                            quota.CreateDate, out _))
+                        quota.DbIdx = -1;              // inserted; subsequent charges take the UPDATE arm
+                }
+                else
+                {
+                    store.TryUpdateStallMsg(quota.Count, quota.DbIdx, quota.StallId, out _);
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Expiry companion of the quota table (sub_61F9D8 / sub_61C1B8 <c>DELETE FROM stallmsglst</c>): drop
+        /// every sender's counter for a booth that has just been closed and evicted, so the slots are reusable
+        /// if that owner opens a new booth. Returns the number of counters cleared.
+        /// </summary>
+        public int ClearStallMessageQuota(int stallDbIdx)
+        {
+            lock (_sync)
+            {
+                var stale = new List<long>();
+                foreach (var pair in _messageQuota)
+                    if (pair.Value.StallId == stallDbIdx)
+                        stale.Add(pair.Key);
+                foreach (var key in stale)
+                    _messageQuota.Remove(key);
+                return stale.Count;
+            }
+        }
+
+        /// <summary>sub_61FCE4 @0x0061FD57: <c>if (entry[8] &lt; 3)</c> — messages allowed per sender.</summary>
+        public const int StallMessageQuotaPerSender = 3;
+    }
+
+    /// <summary>
+    /// One <c>gamedata.stallmsglst</c> counter — the 48-byte native entry sub_61FCE4 allocates
+    /// (<c>sub_402FA0(48)</c>): CharID at +0x08/+0x0C, cnt at +0x20, createdate at +0x28.
+    /// </summary>
+    public sealed class NativeStallMessageQuota
+    {
+        /// <summary>Row id; 0 = never INSERTed, -1 = INSERTed (the UPDATE arm from then on).</summary>
+        public int DbIdx { get; set; }
+        public long SenderId { get; set; }
+        public string SenderName { get; set; } = string.Empty;
+        public int StallId { get; set; }
+        public int Count { get; set; }
+        public DateTime CreateDate { get; set; }
     }
 
     /// <summary>

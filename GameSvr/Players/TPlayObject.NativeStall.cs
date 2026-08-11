@@ -48,6 +48,8 @@ namespace GameSvr
                     return TryExecuteNativeStallBoothSetup(op, msg, responseIdent, manager);
                 case NativeStallOp.SetName:
                     return TryExecuteNativeStallSetName(msg, responseIdent, manager);
+                case NativeStallOp.MessageStall:
+                    return TryExecuteNativeStallMessage(msg, responseIdent, manager);
                 case NativeStallOp.DelItem:
                     return TryExecuteNativeStallDel(msg, responseIdent, manager);
                 case NativeStallOp.PauseStall:
@@ -138,6 +140,89 @@ namespace GameSvr
 
         /// <summary>sub_61D3E0 @0x0061D492: <c>sub_4057D0(name) &lt;= 30</c> — a Delphi AnsiString BYTE length.</summary>
         internal const int NativeStallSetNameMaxBytes = 30;
+
+        // MessageStall 4467 (sub_6E7A64 -> sub_61C80C @0x0061C80C). Leave a 留言 on someone's booth.
+        // Native body (out_stallmgr.txt:498-546), in order:
+        //   v7 = -1; sub_40C988(a6,a7) + sub_49F5F4  -> TARGET booth by the wire CharID; not found => -1
+        //   v7 = -2; sub_61FCE4(sender)  -> the per-sender quota gate; false => -2
+        //   sub_61A690(..., rec[+0x08], rec[+0x0C]) -> deliver; v7 = 1
+        // The wrapper additionally requires a decoded body >= 0x40 (64) bytes BEFORE calling the core, and a
+        // short body is a SILENT drop (NoResponse), not a reject — spec §2.4467.
+        //
+        // sub_61FCE4 @0x0061FCE4 (stall_exec_out.txt:1482-1553) is the quota ledger, keyed by the SENDER's
+        // CharID over the manager's second table (mgr+0x24, the stallmsglst side):
+        //   entry found  -> if (entry[8] < 3) { sub_61F7E8(entry[0], ++entry[8]); return true }  else return false
+        //   entry absent -> allocate 48 bytes, seed CharID(+0x08/+0x0C), cnt(+0x20)=1, createdate(+0x28)=now,
+        //                   INSERT (sub_61F5C4) and register; returns true (the a2=1 preload)
+        // So each sender may leave at most 3 messages, the 4th returns -2. The counter is per SENDER and is
+        // cleared only by the expiry sweep's DELETE (sub_61F9D8) — it does not decay.
+        //
+        // Delivery sub_61A690 @0x0061A690 is a 29-byte thunk: `return sub_7095F0(a3,a4,a2,6,a5,a6)` — the
+        // generic mail send with mailType 6 (NativeMailStore.IsSupportedTag accepts 1/4/5/6). Money-free and
+        // item-free: no gold, no attachment, no stock change anywhere on this path.
+        private bool TryExecuteNativeStallMessage(TProcessMessage msg, short responseIdent,
+            NativeStallManager manager)
+        {
+            // Wrapper guard (sub_6E7A64): body < 64 decoded bytes => SILENT drop, no SM at all.
+            var body = NativeStallWireCodec.DecodeBody(msg?.Payload);
+            if (body.Length < NativeStallMessageMinBodyBytes)
+                return true;                                     // handled, deliberately silent
+
+            if (!NativeStallWireCodec.TryDecodeMessageStall(msg, out var ownerId, out var text))
+                return true;                                     // malformed CharID => silent, same as above
+
+            var target = manager.TryGetRecordById(ownerId);       // sub_40C988 + sub_49F5F4 on the TARGET
+            long senderId = GetCachedNativeUserId();
+
+            // sub_61FCE4 quota gate. Consumed ONLY when a target exists, because native evaluates it after
+            // the target lookup returns non-null — reordering would burn a sender's quota on a dead booth.
+            bool allowed = target != null &&
+                manager.TryConsumeStallMessageQuota(senderId, m_sCharName, target, out _);
+
+            int code = NativeStallWriteTransaction.Evaluate(NativeStallOp.MessageStall, new NativeStallContext
+            {
+                MessagePayloadValid = true,                       // the >= 64 guard already passed above
+                StallRecordFound = target != null,                // else -1
+                MessageAllowed = allowed,                         // sub_61FCE4 -> else -2
+            });
+
+            if (code == 1)
+                DeliverNativeStallMessage(target, text);          // sub_61A690 -> sub_7095F0(..., 6, ...)
+
+            if (code != NativeStallWriteTransaction.NoResponse)
+                SendDefMessage(responseIdent, code, 0, 0, 0, "");
+            return true;
+        }
+
+        /// <summary>sub_6E7A64: the CM 4467 body must decode to at least 0x40 bytes or the handler is silent.</summary>
+        internal const int NativeStallMessageMinBodyBytes = 0x40;
+
+        // sub_61A690 -> sub_7095F0(recvId, recvName, body, 6, ...): deliver the 留言 to the booth owner as a
+        // mailType-6 message addressed by the booth record's owner CharID (rec+0x08/+0x0C), plus a live notice
+        // when the owner happens to be online. Fail-safe (best-effort), matching the native store posture:
+        // the ledger row + the SM 1 have already been committed, and native never rolls those back on a send
+        // failure. Money-free / item-free: moneyType and moneyCount are 0 and no attachment is created.
+        private void DeliverNativeStallMessage(NativeStallRecord target, string text)
+        {
+            if (target == null) return;
+            var body = text ?? string.Empty;
+            NativeMailStore.CreateMoneyOrderBestEffort(new NativeMailRecord
+            {
+                SenderId = GetCachedNativeUserId(),
+                Sender = m_sCharName,
+                Title = "摊位留言",
+                Context = body,
+                MailType = NativeStallMessageMailType,   // sub_61A690's literal `6`
+                MailStatus = 1,                          // UNREAD (loadable)
+                AttachStatus = 3,                        // nothing to claim (money/attachment free)
+                MoneyType = 0,
+                MoneyCount = 0,
+                AttachCount = 0,
+            }, target.OwnerName);
+        }
+
+        /// <summary>sub_61A690 @0x0061A6A3: <c>sub_7095F0(a3, a4, a2, <b>6</b>, a5, a6)</c> — the mail tag.</summary>
+        internal const byte NativeStallMessageMailType = 6;
 
         // DEL 4422 (sub_61BECC): return one listed item to the bag by makeindex, de-list it, persist, and
         // auto-pause a running booth that is now empty (sub_61E02C). Conservation is the seam's (item moved
