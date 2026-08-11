@@ -1951,17 +1951,27 @@ namespace DBSvr
                 using (var session = new MySqlCommand(
                            "SET WAIT_TIMEOUT = 2073600;", conn))
                     session.ExecuteNonQuery();
-                // 查找未领取的奖励
+                // 查找未领取的奖励。
+                // 0x5A552C `Select * from awardplayers where PTID="%s" and Status=0`
+                // （rc=-1 len=55）。库名 gamedata. → mir3.：原版先 `use mir3;`
+                // (0x5BAD84) 再跑无前缀语句；真库双证 mir3 有、gamedata 无这张表。
+                // 去掉 LIMIT 1（原版无；PTID 在真库是 UNIQUE，本就至多一行）。
+                // 注意原版是 `Select *`，这里只取 Idx —— 列裁剪不改变行为，
+                // 因为后续只用到 Idx；保留窄投影以免多读 blob 列。
                 using var sel = new MySqlCommand(
-                    "SELECT Idx FROM gamedata.awardplayers WHERE PTID=@p AND Status=0 LIMIT 1", conn);
+                    "Select Idx from mir3.awardplayers where PTID=@p and Status=0", conn);
                 sel.Parameters.AddWithValue("@p", ptid);
                 var obj = sel.ExecuteScalar();
                 if (obj != null && obj != DBNull.Value)
                 {
                     int idx = Convert.ToInt32(obj);
+                    // 0x5A72F8 `Update awardplayers Set Status=1, HumName="%s"
+                    // where Idx=%d;`（rc=-1 len=60）—— 原版此处 `Set` 首字母大写、
+                    // 谓词只按 Idx，与 0x5ACDB8 那条（Status=2）拼写风格不同，
+                    // 按各自字面量走，不要统一。
                     using var upd = new MySqlCommand(
-                        "UPDATE gamedata.awardplayers SET Status=1, HumName=@h WHERE Idx=@i", conn);
-                    upd.Parameters.AddWithValue("@h", chrName);
+                        "Update mir3.awardplayers Set Status=1, HumName=@h where Idx=@i;", conn);
+                    upd.Parameters.Add(LegacyGbkText.Parameter("@h", chrName));
                     upd.Parameters.AddWithValue("@i", idx);
                     upd.ExecuteNonQuery();
                 }

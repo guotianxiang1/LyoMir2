@@ -140,11 +140,23 @@ namespace DBSvr
             // + 0x005AA0E0 `.dominatorpet set MasterName="%s" where MasterName="%s";`
             // => `Update ignore Mir3.dominatorpet set MasterName="%s" where MasterName="%s";`
             //
-            // ⚠ 最高危修正：原来**丢了 IGNORE**。原生 `Update ignore` 在改名撞上
-            // MasterName 唯一索引时静默跳过该行；无 IGNORE 时 MySQL 抛重复键错误，
-            // 改名级联会中途中断——dominatorpet 仍挂旧主人名而其它表已改新名，
-            // 按新名查不到宠物 = 宠物连同其身上物品事实性丢失。
+            // 补回 IGNORE：原来丢了，现在与原生一致。
             // 同时修正 schema 大小写：原生是 **Mir3**（大写 M），不是 mir3。
+            //
+            // ⚠️ 真库实测修正了我先前的论证（勿再重复那个说法）：
+            // 我原先写「MasterName 有唯一索引，丢 IGNORE 会因重复键中断级联、
+            // 导致宠物连物品一起丢失」。**这是错的。** 生产库 SHOW INDEX 实测：
+            //   dominatorpet  0  PRIMARY          Idx
+            //   dominatorpet  0  MasterId         MasterId
+            //   dominatorpet  1  MasterId_Index   MasterId
+            //   dominatorpet  1  MasterName_Index MasterName   ← Non_unique=1
+            // MasterName 只有**非唯一**索引，所以改名撞名根本不会产生重复键错误。
+            // 3307 scratch 实例上按生产 DDL 建表后实测：不带 IGNORE 的同一条
+            // UPDATE 也**不报错**，两行会双双变成新名字。
+            // ⇒ 在 dominatorpet 这张表上 IGNORE 目前是**语义中性**的：
+            //    它仍然照抄原版（这是复刻的理由），但它并不在防某个已存在的崩溃。
+            // 它真正会起作用的场合是「日后有人给 MasterName 加唯一索引」，
+            // 或原版其它带唯一键的表复用同一模板。别再把它当已证的数据丢失修复。
             using var cmd = new MySqlCommand(
                 "Update ignore Mir3.dominatorpet set MasterName=@n where MasterName=@o;", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newMaster));

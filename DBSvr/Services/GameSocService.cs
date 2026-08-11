@@ -3181,19 +3181,38 @@ namespace DBSvr
                 using (var session = new MySqlCommand(
                            "SET WAIT_TIMEOUT = 2073600;", conn))
                     session.ExecuteNonQuery();
+                // 0x5A7B84 `Select Idx from awardplayers where PTID="%s" and
+                // HumName="%s" and Status=1`（rc=-1 len=74）。
+                // 三处修正：
+                //  1) 库名 gamedata. → mir3.。原版整条链路先发 `use mir3;`
+                //     (0x5BAD84 rc=-1 len=9) 再执行无前缀的语句，故真实库是 mir3。
+                //     真库已核：mir3.awardplayers 存在，gamedata 里**没有**这张表
+                //     （离线扫 datadir 的 .frm + 在线 SHOW TABLES 双证），
+                //     所以此前指向 gamedata 的写入根本落不到原版读的那张表上。
+                //  2) 去掉 LIMIT 1：原版无 LIMIT。PTID 在真库是 UNIQUE 索引
+                //     （SHOW COLUMNS 显示 PTID char(20) UNI），本就至多一行，
+                //     LIMIT 只是掩盖「若出现多行则数据已异常」这一事实。
                 using var sel = new MySqlCommand(
-                    "SELECT Idx FROM gamedata.awardplayers "
-                    + "WHERE PTID=@p AND HumName=@h AND Status=1 LIMIT 1", conn);
+                    "Select Idx from mir3.awardplayers "
+                    + "where PTID=@p and HumName=@h and Status=1", conn);
                 sel.Parameters.AddWithValue("@p", ptid);
                 sel.Parameters.AddWithValue("@h", chrName);
                 var value = sel.ExecuteScalar();
                 if (value == null || value == DBNull.Value) return false;
 
+                // 0x5ACDB8 `Update awardplayers set Status=2 where Idx=%d;`
+                // （rc=-1 len=46）。
+                //  3) 谓词只按 Idx，**不带 `and Status=1`**。多出来的 Status=1 会
+                //     改变幂等性：原版对已是 Status=2 的行仍然「更新成功」
+                //     （影响 0 行但语句成立），而加了 Status=1 之后重复领取会
+                //     走进 false 分支。这是行为差异，不是防御性改进。
                 using var upd = new MySqlCommand(
-                    "UPDATE gamedata.awardplayers SET Status=2 "
-                    + "WHERE Idx=@i AND Status=1", conn);
+                    "Update mir3.awardplayers set Status=2 where Idx=@i;", conn);
                 upd.Parameters.AddWithValue("@i", Convert.ToInt32(value));
-                return upd.ExecuteNonQuery() > 0;
+                upd.ExecuteNonQuery();
+                // 原版 0x5ACDB8 之后不检查影响行数（无 dec eax/jne 之类的门），
+                // 拿到 Idx 即视为领取成功。故这里返回 true 而不是 rows>0。
+                return true;
             }
             catch (Exception ex)
             {
