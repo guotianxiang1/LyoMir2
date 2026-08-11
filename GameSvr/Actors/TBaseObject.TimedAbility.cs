@@ -43,11 +43,6 @@ namespace GameSvr
                 return false;
             }
 
-            if (internalType == 18 && HasNativeActiveState(NativeState26Type))
-            {
-                RemoveTimedAbilityInternal(NativeState26Type);
-            }
-
             var node = FindTimedAbilityInternal(internalType);
             var abilityChanged = false;
 
@@ -87,6 +82,10 @@ namespace GameSvr
                 }
                 SetNativeActiveState(node.InternalType);
                 ApplyNativeTimedAbilityMutation(node.InternalType);
+                if (node.InternalType == 18 && HasNativeActiveState(NativeState26Type))
+                {
+                    RemoveTimedAbilityInternal(NativeState26Type);
+                }
                 if (node.InternalType == 20 && node.Value > 3)
                 {
                     AddTimedAbilityInternal(19, 0, -1, 1);
