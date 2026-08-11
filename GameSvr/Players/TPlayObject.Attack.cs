@@ -83,14 +83,33 @@ namespace GameSvr
                             GoodItem StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_WEAPON].wIndex);
                             if (StdItem != null && StdItem.Shape == 19)
                             {
-                                if (PileStones(n14, n18))
+                                // MINE-07: native TPlayObject.PileStones (sub_6BC1EC) gates the dig
+                                // on two cell checks before touching the mine event, neither of
+                                // which existed here:
+                                //   0x6BC23F call sub_7776A8   ; GetCellInfo(envir+0x128, nX, nY, &cell)
+                                //   0x6BC24A cmp byte [cell+0x00],0
+                                //   0x6BC24D je fail            ; terrain attribute must be NON-ZERO
+                                //     (Walk=0 rejects; only HighWall=1 / LowWall=2 may be dug)
+                                // The area-restriction byte at cell+0x04 is the same per-cell flag
+                                // IsSkillAllowedAt already reads via GetMapCellSkillFlag
+                                // (sub_77BE88 @ 0x77BEAB: mov cl,[eax+edx*4+4] -- same cell record,
+                                // offset +4). Native tests it earlier via sub_772A50 at the top of
+                                // ClientHitXY (0x6EC08F) for every hit ident, silently failing with
+                                // no dig-specific message when set.
+                                var mapCell = false;
+                                var cellInfo = m_PEnvir.GetMapCellInfo(n14, n18, ref mapCell);
+                                if (mapCell && cellInfo.Attribute != CellAttribute.Walk &&
+                                    m_PEnvir.GetMapCellSkillFlag(n14, n18) == 0)
                                 {
-                                    SendSocket("=DIG");
+                                    if (PileStones(n14, n18))
+                                    {
+                                        SendSocket("=DIG");
+                                    }
+                                    m_nHealthTick -= 30;
+                                    m_nSpellTick -= 50;
+                                    m_nSpellTick = HUtil32._MAX(0, m_nSpellTick);
+                                    DecreaseHealthSpellRecoveryStep(2);
                                 }
-                                m_nHealthTick -= 30;
-                                m_nSpellTick -= 50;
-                                m_nSpellTick = HUtil32._MAX(0, m_nSpellTick);
-                                DecreaseHealthSpellRecoveryStep(2);
                                 return result;
                             }
                         }
