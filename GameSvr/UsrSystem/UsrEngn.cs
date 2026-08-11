@@ -2269,6 +2269,9 @@ namespace GameSvr
                     dwSendOnlineHumTime = HUtil32.GetTickCount();
                     IdSrvClient.Instance.SendOnlineHumCountMsg(OnlinePlayObject);
                 }
+                // Stall (摆摊) 3-minute maintenance tick (sub_61BFB8). Owns its own 180000 ms interval gate
+                // and no-ops when the stall subsystem is dormant, so calling it every pass is cheap.
+                NativeStallExpiryTick.Run();
             }
             catch (Exception e)
             {
