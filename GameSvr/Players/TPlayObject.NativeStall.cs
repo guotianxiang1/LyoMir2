@@ -46,6 +46,8 @@ namespace GameSvr
                 case NativeStallOp.SetTimeLevel:
                 case NativeStallOp.StartStall:
                     return TryExecuteNativeStallBoothSetup(op, msg, responseIdent, manager);
+                case NativeStallOp.SetName:
+                    return TryExecuteNativeStallSetName(msg, responseIdent, manager);
                 case NativeStallOp.DelItem:
                     return TryExecuteNativeStallDel(msg, responseIdent, manager);
                 case NativeStallOp.PauseStall:
@@ -93,6 +95,49 @@ namespace GameSvr
                 SendDefMessage(responseIdent, code, 0, 0, 0, "");
             return true;
         }
+
+        // SetName 4420 (sub_6E7984 -> sub_61D3E0 @0x0061D3E0). Native body (out_stallmgr.txt:392-456), in
+        // order: sub_40C988(self[+0x588],[+0x58C]) + sub_49F5F4 resolve; when NOT found it CREATES the record
+        // (sub_61ED04 + sub_49F128 insert) — so SetName is a get-or-create op, exactly like SetTimeLevel, and
+        // the "no record" rung is unreachable in practice. Then, first-fail-wins:
+        //   rec[+0x40]==1 (running)        -> -3   (a live booth cannot be renamed)
+        //   sub_4057D0(name) > 30          -> -1   (length is in BYTES: Delphi StrLen on the GBK AnsiString)
+        //   name empty (v16 == 0)          -> -2
+        //   else sub_62159C(commit name) + sub_61F48C(persist) -> 1
+        // Wire: the name is the WHOLE decoded body as a GBK C-string (spec §2.4420) — NOT the lossy sMsg.
+        // Moves no money and no items: the only mutation is the record's StallName + the header persist.
+        private bool TryExecuteNativeStallSetName(TProcessMessage msg, short responseIdent,
+            NativeStallManager manager)
+        {
+            // sub_61D3E0 resolves-or-CREATES (sub_61ED04) before the ladder, so use GetOrCreate — not
+            // TryGetRecord, which would add a non-native "no stall" reject.
+            var record = manager.GetOrCreate(m_sCharName, GetCachedNativeUserId());
+            string name = NativeStallWireCodec.DecodeSetStallName(msg);
+
+            // Native measures the Delphi AnsiString length = GBK BYTE count, not UTF-16 chars: a 16-char
+            // Chinese name is 32 bytes and IS rejected. Counting chars here would wrongly accept it.
+            int nameBytes = string.IsNullOrEmpty(name) ? 0 : HUtil32.GetBytes(name).Length;
+
+            int code = NativeStallWriteTransaction.Evaluate(NativeStallOp.SetName, new NativeStallContext
+            {
+                StallRecordFound = true,                                    // get-or-create always yields one
+                StallRunning = record.Status == StallRecordStatus.Running,  // rec[+0x40]==1 -> -3
+                NameTooLong = nameBytes > NativeStallSetNameMaxBytes,       // sub_4057D0 > 30 -> -1
+                NameEmpty = nameBytes == 0,                                 // -2
+            });
+
+            if (code == 1)
+            {
+                record.StallName = name;                                    // sub_62159C commit
+                PersistStallHeader(record, NativeStallWriteGate.Store);     // sub_61F48C persist
+            }
+            if (code != NativeStallWriteTransaction.NoResponse)
+                SendDefMessage(responseIdent, code, 0, 0, 0, "");
+            return true;
+        }
+
+        /// <summary>sub_61D3E0 @0x0061D492: <c>sub_4057D0(name) &lt;= 30</c> — a Delphi AnsiString BYTE length.</summary>
+        internal const int NativeStallSetNameMaxBytes = 30;
 
         // DEL 4422 (sub_61BECC): return one listed item to the bag by makeindex, de-list it, persist, and
         // auto-pause a running booth that is now empty (sub_61E02C). Conservation is the seam's (item moved
