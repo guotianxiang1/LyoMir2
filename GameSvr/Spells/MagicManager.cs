@@ -812,31 +812,62 @@ namespace GameSvr
                         TargeTBaseObject = null;
                     }
                     break;
-                // Magic IDs 140, 141, 145, 146: Native DEFAULT convergence handlers.
-                // All four route to the default sink at 0x6EE04B in sub_6ED62C.
-                // Native behavior (verified via audit Magic140_141_145_146Check):
+                // Magic IDs 140, 141, 145, 146, 149, 150: Native DEFAULT
+                // convergence handlers - all six route to the default sink at
+                // 0x6EE04B in sub_6ED62C. Dispatch proof (2026-08-13, raw read
+                // of flat_image.bin): ids 112..150 reach 0x6ED841
+                // `add eax,-0x75` / `cmp eax,0xB` / `ja 0x6EE04B`, so only
+                // 117..128 have TABLE3 slots (@0x6ED854) and 129..150 all fall
+                // to DEFAULT. Native behavior (audit Magic140_141_145_146Check):
                 //   - boSpellFail remains FALSE (entry default at 0x6ED63C)
                 //   - DoSpell returns TRUE at 0x6EE0C3
                 //   - Sends RM_MAGICFIRE (0x27E) effect packet
                 //   - MP deducted at entry (0x6ED65E, before dispatch)
                 //   - No gameplay effect, no skill training
-                // Implementation: empty case = fall through to success path.
+                // NOTE: earlier comments here attributed 0x6EDEC1 to id 149 and
+                // 0x6EDF01 to id 150. Both were misattributions - TABLE3 slot
+                // reads prove 0x6EDEC1 = id 117 and 0x6EDF01 = id 118 (see
+                // staging/magic_dispatch_map_FINAL_20260813.md). Id 150 used to
+                // hard-reject here on the strength of that wrong comment; the
+                // native default sink SUCCEEDS, so it now breaks like its
+                // siblings.
                 case SpellsDef.SKILL_140:
                 case SpellsDef.SKILL_141:
                 case SpellsDef.SKILL_145:
                 case SpellsDef.SKILL_146:
-                    break;
-                // Magic ID 149: Native handler at 0x6EDEC1, calls sub_6EEE34
-                // which returns al=1, then inverts via `xor al,1` at 0x6EDED7,
-                // resulting in boSpellFail=0 (success). Mana spent, effect sent,
-                // no gameplay. Silent success stub.
                 case SpellsDef.SKILL_149:
-                    break;
-                // Magic ID 150: Native handler at 0x6EDF01, calls sub_6EEE28
-                // which returns al=0 (raw: 558bec33c05dc20800 at 0x6EEE28),
-                // then inverts via `xor al,1` at 0x6EDF1B, resulting in
-                // boSpellFail=1 (hard reject). Caller sends RM_MAGICFIREFAIL (0x27F).
                 case SpellsDef.SKILL_150:
+                    break;
+                // ids 59 and 63 are ONE native handler, not two: TABLE2 slot for
+                // 59 @0x6ED81D and for 63 @0x6ED82D both hold the dword
+                // 0x6EDD27 (read raw from the image), so they share a single
+                // instruction stream. The trampoline @0x6EDD27 pushes
+                // `[ebp+0xC]` (targetY) then the literal 0x258 = 600 and calls
+                // sub_76F33C, discarding the result (`jmp 0x6EE04B` @0x6EDD3C
+                // without touching [ebp-6]) - so this id can never hard-reject.
+                case SpellsDef.SKILL_59:
+                case SpellsDef.SKILL_63:
+                    TryProduceNativeMagic59(PlayObject, UserMagic, nTargetX,
+                        nTargetY);
+                    break;
+                // ids 118 and 128 are constant-FALSE stubs whose result IS
+                // stored, so they are hard rejects - NOT silent no-ops.
+                //   118: TR @0x6EDF01 calls sub_6EEE28, whose whole body is
+                //        `push ebp; mov ebp,esp; xor eax,eax; pop ebp; ret 8`
+                //        (raw 558bec33c05dc20800 @0x6EEE28).
+                //   128: TR @0x6EDF89 calls sub_6EEE64, whole body
+                //        `push ebp; mov ebp,esp; push ecx; mov [ebp-4],edx;
+                //         xor eax,eax; pop ecx; pop ebp; ret`
+                //        (raw 558bec518955fc33c0595dc3 @0x6EEE64).
+                // Both trampolines then do `mov [ebp-7],al` / `mov al,[ebp-7]` /
+                // `xor al,1` / `mov [ebp-6],al` (@0x6EDF15 and @0x6EDFA4), so
+                // boSpellFail becomes 1 and DoSpell returns FALSE. The caller
+                // @0x6BCCBA then sends ident 0x27F = RM_MAGICFIREFAIL. Mana was
+                // already spent at 0x6ED65E, and no 0x27E effect packet is sent.
+                // TABLE3 slot proof: dword[0x6ED854+1*4] = 0x6EDF01 (id 118),
+                // dword[0x6ED854+11*4] = 0x6EDF89 (id 128).
+                case SpellsDef.SKILL_118:
+                case SpellsDef.SKILL_128:
                     boSpellFail = true;
                     break;
                 case SpellsDef.SKILL_152:
@@ -1434,6 +1465,64 @@ namespace GameSvr
         // per-target resolve happen 600 ms later inside the 10177 receiver
         // (ApplyNativeAreaMagicEffect), so targets can still walk out of the blast
         // and the damage takes the category-3 path rather than legacy RM_MAGSTRUCK.
+        // Native sub_76F33C @0x76F33C-0x76F3EE, the shared body for wMagicID 59
+        // and 63. Disassembled from its own verified prologue (raw 558bec83c4f8
+        // 535657). Order is load-bearing for RandSeed fidelity:
+        //   76F34C  mov  al,[0x76F3F4] ; mov [ebp-5],al   ; flags, image byte = 00
+        //   76F35E  call sub_4C8648                       ; skill power (raw btLevel)
+        //   76F365  mov  edi,[ebx+0x294]                  ; LoWord(MC)
+        //   76F36B  add  edx,edi                          ; base = power + LoWord(MC)
+        //   76F36D  mov  ecx,[ebx+0x298] ; sub ecx,edi ; inc ecx  ; spread, INCLUSIVE
+        //   76F37A  call [edi+0xCC]                       ; GetAttackPower -> edi
+        //   76F384  call sub_4C896C ; cmp al,4 ; jne 0x76F3A5     ; effLevel == 4 ONLY
+        //   76F38D  fild dword [ebx+0x298]                ; HiWord(MC) as integer
+        //   76F393  fld  xword [0x76F3F8]                 ; 80-bit extended 0.1
+        //   76F399  fmulp ; call sub_403574                ; @ROUND, half-to-even
+        //   76F3A0  add  eax,5 ; add edi,eax              ; += Round(HiWord(MC)*0.1)+5
+        //   76F3BD..76F3C5  push 1 / push 3 / push flags / push 1
+        //   76F3CD  call sub_76FE44 with edx = 0 (xor edx,edx @0x76F3C9)
+        //   76F3D2  mov eax,3 ; call sub_403B4C ; inc ecx ; call [ebx+0x3C]
+        // Three faithfulness points, each byte-checked:
+        //  (a) The stat pair is +0x294/+0x298 = MC. Adjudicated against two
+        //      controls rather than assumed: the id-2 heal body reads the OTHER
+        //      pair +0x29C/+0x2A0 (@0x76E4B2/@0x76E4BE) and its audited C# case
+        //      uses SC, while the id-9 body reads +0x294/+0x298 (@0x76EC7B) and
+        //      its C# case uses MC. Two independent bodies agree.
+        //  (b) `xor edx,edx` @0x76F3C9 means target = NIL — this is an AREA
+        //      dispatch (category 3, range 1), so nothing lands at cast time.
+        //  (c) The x87 constant at 0x76F3F8 is the 80-bit extended 0.1
+        //      (raw cdccccccccccccccfb3f = 0.10000000000000000555...), NOT
+        //      exactly 1/10. I brute-forced the whole reachable u16 domain
+        //      comparing the exact 64-bit-significand product + banker's round
+        //      against C# `Math.Round(v * 0.1d, ToEven)`: ZERO divergences, so
+        //      plain double is provably safe here and RoundDivMulExtended is
+        //      not needed.
+        // The delay is the trampoline's literal 0x258 = 600 (@0x6EDD2B), passed
+        // as a stack arg rather than baked into the body.
+        private static void TryProduceNativeMagic59(TPlayObject PlayObject,
+            TUserMagic UserMagic, short nTargetX, short nTargetY)
+        {
+            int lowMagic = HUtil32.LoWord(PlayObject.m_WAbil.MC);
+            int highMagic = HUtil32.HiWord(PlayObject.m_WAbil.MC);
+            int rawDamage = PlayObject.GetAttackPower(
+                TPlayObject.CalculateNativeMagicProducerSkillPower(UserMagic) +
+                    lowMagic,
+                highMagic - lowMagic + 1);
+            if (TPlayObject.GetNativeMagicProducerEffectiveLevel(UserMagic) == 4)
+            {
+                rawDamage = unchecked(rawDamage +
+                    HUtil32.Round(highMagic * 0.1d) + 5);
+            }
+            PlayObject.QueueNativeMagicEffect(3, null, rawDamage,
+                UserMagic.MagicInfo.wMagicID, nTargetX, nTargetY, 1, true, 0,
+                MagicDamageContext.Capture(UserMagic), 600);
+            // Native trains UNCONDITIONALLY @0x76F3D2-0x76F3E5, outside the
+            // DoSpell tail's `btLevel < 3 && boTrain` gate — same shape as the
+            // already-audited QueueNativeAreaBlast.
+            PlayObject.TrainNativeMagicProducer(UserMagic,
+                M2Share.RandomNumber.Random(3) + 1);
+        }
+
         private static void QueueNativeAreaBlast(TPlayObject PlayObject,
             TUserMagic UserMagic, short nTargetX, short nTargetY)
         {

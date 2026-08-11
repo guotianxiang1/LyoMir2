@@ -246,5 +246,19 @@ namespace GameSvr
         public const int SKILL_318 = 318;
         public const int SKILL_319 = 319;
         public const int SKILL_320 = 320;
+        // Byte-proven alias of 59: DoSpell TABLE2 slot for id 59 @0x6ED81D and
+        // for id 63 @0x6ED82D both hold the dword 0x6EDD27, i.e. one shared
+        // instruction stream rather than two copies.
+        public const int SKILL_63 = 63;
+        public const int SKILL_118 = 118;
+        public const int SKILL_128 = 128;
+        // Byte-proven alias of 48: TABLE2 slot for id 48 @0x6ED7F1 holds
+        // 0x6EDE0F and the compare ladder reaches the same EA for 213
+        // (0x6ED8C7 sub eax,0x16 / 0x6ED8CA je 0x6EDE0F).
+        public const int SKILL_213 = 213;
+        public const int SKILL_231 = 231;
+        public const int SKILL_236 = 236;
+        public const int SKILL_288 = 288;
+        public const int SKILL_289 = 289;
     }
 }
