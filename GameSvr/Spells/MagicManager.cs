@@ -865,10 +865,10 @@ namespace GameSvr
                 // so that the FALSE-returning stubs next door cannot be
                 // "tidied" into the same arm later — the two groups send
                 // OPPOSITE packets and conflating them inverts six ids.
-                case 117:
-                case 125:
-                case 126:
-                case 127:
+                case SpellsDef.SKILL_117:
+                case SpellsDef.SKILL_125:
+                case SpellsDef.SKILL_126:
+                case SpellsDef.SKILL_127:
                     break;
                 // ids 231 and 236 also call constant-FALSE stubs, but their
                 // trampolines DISCARD the result instead of storing it, so
@@ -921,6 +921,32 @@ namespace GameSvr
                 // dword[0x6ED854+11*4] = 0x6EDF89 (id 128).
                 case SpellsDef.SKILL_118:
                 case SpellsDef.SKILL_128:
+                    boSpellFail = true;
+                    break;
+                // ids 288, 289, 315, 316 dispatch through TPlayer VMT slots
+                // whose targets are genuinely empty, and the trampolines store
+                // the inverted result, so all four are HARD REJECTS.
+                // Slots resolved on TPlayer VMT V = 0x6AC8C8 after passing the
+                // SelfPtr self-check dword[V-0x4C] == V (required, because
+                // adjacent VMTs are contiguous and a wrong base still yields a
+                // plausible pointer):
+                //   +0x224 -> 0x6ED26C  raw 33c0c390        xor eax,eax; ret
+                //   +0x228 -> 0x6ED270  raw 558bec33c05d..  empty w/ frame, ret 4
+                //   +0x234 -> 0x6ED290  raw 33c0c390        xor eax,eax; ret
+                //   +0x238 -> 0x6ED294  raw 33c0c390        xor eax,eax; ret
+                // Each trampoline (@0x6EDFF2, @0x6EE008, @0x6EE024, @0x6EE03A)
+                // does `xor al,1` / `mov [ebp-6],al`, so boSpellFail = 1 and
+                // DoSpell returns FALSE => the caller sends 0x27F. Note 289 is
+                // an empty body WITH a stack frame (it takes one arg and
+                // ignores it); that is a calling-convention difference, not a
+                // real implementation, so it belongs with the other three.
+                // TPlayer's only descendant, TGdMsgGMAgent (0x62EF8C),
+                // inherits all four slots unchanged, so no override rescues
+                // them for any object that can reach DoSpell.
+                case SpellsDef.SKILL_288:
+                case SpellsDef.SKILL_289:
+                case SpellsDef.SKILL_315:
+                case SpellsDef.SKILL_316:
                     boSpellFail = true;
                     break;
                 case SpellsDef.SKILL_152:
@@ -980,16 +1006,20 @@ namespace GameSvr
                 case SpellsDef.SKILL_179:
                 case SpellsDef.SKILL_180:
                     break;
-                // Magic IDs 291-320: VMT-dispatched stub handlers.
-                // Prior analysis: 315/316 are VMT-dispatched stub handlers that
-                // return FALSE (hard reject). The remaining IDs in this band are
-                // default-sink handlers that likewise reject. Per the native
-                // dispatch contract, the "return FALSE" within the magic handler
-                // is captured into boSpellFail, and the DoSpell post-switch block
-                // (lines 900-915) inverts it: on boSpellFail the caller sends
-                // RM_MAGICFIREFAIL (0x27F) and returns FRame result. Setting
-                // boSpellFail=true reproduces the native hard-reject exactly,
-                // matching the established pattern for SKILL_150/161/162/171-174.
+                // Magic IDs 291-314 and 317-320: DEFAULT convergence, silent
+                // success. Dispatch proof (2026-08-13, raw read of
+                // flat_image.bin, see staging/magic_dispatch_map_FINAL_20260813.md):
+                // for id > 289 the ladder @0x6ED904 is
+                //   sub eax,0x13B (315) / je 0x6EE024
+                //   dec eax        (316) / je 0x6EE03A
+                //   jmp 0x6EE04B          (everything else)
+                // so ONLY 315/316 have real (reject) handlers - they live in
+                // the evidence-backed arm above. The rest of the band falls to
+                // the DEFAULT sink 0x6EE04B: boSpellFail stays 0, the 0x27E
+                // effect packet is sent and DoSpell returns TRUE. The previous
+                // arm here rejected the whole band on the claim that the
+                // default sink "likewise rejects", which contradicts this
+                // file's own 169/170 and 179/180 traces of the same sink.
                 case SpellsDef.SKILL_291:
                 case SpellsDef.SKILL_292:
                 case SpellsDef.SKILL_293:
@@ -1014,13 +1044,10 @@ namespace GameSvr
                 case SpellsDef.SKILL_312:
                 case SpellsDef.SKILL_313:
                 case SpellsDef.SKILL_314:
-                case SpellsDef.SKILL_315:
-                case SpellsDef.SKILL_316:
                 case SpellsDef.SKILL_317:
                 case SpellsDef.SKILL_318:
                 case SpellsDef.SKILL_319:
                 case SpellsDef.SKILL_320:
-                    boSpellFail = true;
                     break;
             }
             if (boSpellFail)
