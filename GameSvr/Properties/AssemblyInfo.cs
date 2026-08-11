@@ -45,3 +45,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeAllowGroupReCallPersistCheck")]
 [assembly: InternalsVisibleTo("NativeClassIsOperatorCheck")]
 [assembly: InternalsVisibleTo("NativeWinExpChainCheck")]
+[assembly: InternalsVisibleTo("NativeCastLockMovementGateCheck")]

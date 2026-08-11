@@ -90,7 +90,11 @@ namespace GameSvr
                 HasNativeActiveState(26) ||
                 HasNativeActiveState(24) ||
                 HasNativeActiveState(62) ||
-                m_boDeath || m_nNativeForcedMoveRemaining != 0 ||
+                // MOVE-15 — this is the same +0x574 term as the other three
+                // native movement cases, here at `call [ecx+0x40]` 0x6D9DBD
+                // in case 4108. Routed through the shared predicate so all
+                // four sites read one field.
+                m_boDeath || IsNativeCanActBlockedByForcedMove() ||
                 m_PEnvir == null)
             {
                 return false;

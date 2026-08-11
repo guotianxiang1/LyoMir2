@@ -175,6 +175,21 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-15 bypass closure — NOT a byte-faithful port, and marked as
+            // such deliberately. CM_HORSERUN(3035) has NO native movement
+            // handler: the main CM dispatcher's jumptable at 0x6D858B stops at
+            // 3017, and the only native 3035 is a broadcast ident inside
+            // sub_6EC078 (case label at 0x6EC29C, `mov cx,0x3F9` then
+            // sub_7707A8) reached from the HIT cases, which never touches X/Y.
+            // So there is no native EA to cite for this gate. It is added
+            // because leaving it open would let a mounted player keep moving
+            // through the cast window that 3011/3013/4108 all refuse, which
+            // would reintroduce the very defect MOVE-15 describes via the one
+            // movement opcode native does not have.
+            if (IsNativeCanActBlockedByForcedMove())
+            {
+                return result;
+            }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanRun)// 防麻
             {
                 return result;
@@ -535,6 +550,17 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-15 — same gate on the run ladder: `call [ecx+0x40]` at
+            // 0x6D9D23 (run case 3013), ahead of the run primitive
+            // sub_6BBFBC at 0x6D9D39. Run passes dl=1 to the inherited
+            // predicate and walk passes 0 (that arg only selects the
+            // bodyState 0x18 term at 0x76B398, `test al,bl`); the +0x574
+            // term at 0x6E6716 is arg-independent, so it applies identically
+            // to walk and run.
+            if (IsNativeCanActBlockedByForcedMove())
+            {
+                return result;
+            }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanRun)
             {
                 return result;
@@ -617,9 +643,21 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-15 — gate 4 of the native walk ladder is `call [ecx+0x40]`
+            // at 0x6D9C07 (walk case 3011), the TPlayer can-act override
+            // sub_6E6700, which refuses while the cast lock +0x574 is set.
+            // It runs BEFORE the walk primitive sub_6BBCD8 (0x6D9C1D), so the
+            // refusal must precede CheckActionStatus and all interval
+            // bookkeeping here. Leaving dwDelayTime at 0 makes the caller
+            // answer SM_ACT_FAIL(630) with X/Y/Dir, which is native's 0x276
+            // correction at 0x6D9C4B.
+            if (IsNativeCanActBlockedByForcedMove())
+            {
+                return result;
+            }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanWalk)
             {
-                return result; 
+                return result;
             }
             if (!boLateDelivery && (!M2Share.g_Config.boSpeedHackCheck))
             {

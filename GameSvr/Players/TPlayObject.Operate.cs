@@ -447,7 +447,18 @@ namespace GameSvr
         private bool ClientChangeDir(short wIdent, int nX, int nY, int nDir, ref int dwDelayTime)
         {
             var result = false;
-            if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0) 
+            // MOVE-15 — turn (case 3010) opens with the can-act call
+            // `call [ecx+0x40]` at 0x6D9B6C, arg dl=0 (`xor edx,edx` at
+            // 0x6D9B65), before it even reads the requested direction from
+            // byte[msg+0xA] at 0x6D9B76. So the cast lock blocks a turn too.
+            // Native's refusal here pushes FOUR ZEROS before `mov dx,0x276`
+            // (0x6D9B94-0x6D9B9E) — the turn correction carries no
+            // coordinates, unlike walk/run.
+            if (IsNativeCanActBlockedByForcedMove())
+            {
+                return result;
+            }
+            if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0)
             {
                 return result;
             }
@@ -480,6 +491,15 @@ namespace GameSvr
 
         private bool ClientSitDownHit(int nX, int nY, int nDir, ref int dwDelayTime)
         {
+            // MOVE-15 — pose/sit (case 3012) is the fourth and last native
+            // vmt+0x40 site: `mov dl,1` at 0x6D9C7D then `call [ecx+0x40]` at
+            // 0x6D9C84, and it is the ONLY gate that case has. Its refusal
+            // also pushes four zeros (0x6D9C8B) before `mov dx,0x276`
+            // at 0x6D9C95.
+            if (IsNativeCanActBlockedByForcedMove())
+            {
+                return false;
+            }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0)// 闃查夯
             {
                 return false;

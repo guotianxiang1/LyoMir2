@@ -40,6 +40,34 @@ namespace GameSvr
                 effectiveLevel, magic);
         }
 
+        // MOVE-15 — the TPlayer can-act override, VMT+0x40 = sub_6E6700.
+        // It calls the inherited TCreature predicate sub_76B354 first, then
+        // adds exactly ONE extra player-only term:
+        //   6E6700  55 8B EC              push ebp / mov ebp,esp
+        //   6E670D  E8 42 4C 08 00        call 0x76B354          ; inherited
+        //   6E6712  84 C0                 test al, al
+        //   6E6714  74 09                 je   0x6E671F          ; inherited false
+        //   6E6716  83 BE 74 05 00 00 00  cmp  dword [esi+0x574], 0
+        //   6E671D  74 04                 je   0x6E6723          ; zero  -> TRUE
+        //   6E671F  33 C0                 xor  eax, eax          ; non-0 -> FALSE
+        //   6E6723  B0 01                 mov  al, 1
+        // `+0x574` is this class's m_nNativeForcedMoveRemaining, not a
+        // separate field: the whole displacement census over the unpacked
+        // image is 7 primary player-chain instructions and they are one
+        // chain — the two writes in the CM_SPELL skill-27 branch
+        // (0x6BC9A3 `mov dword [esi+0x574],5`, 0x6BC9AF `... ,3`), this read
+        // at 0x6E6716, and the four count operations in the step processor
+        // sub_73F200 (0x73F217 cmp, 0x73F224 dec, 0x73F3DE clear on failure,
+        // 0x73F469 cmp before queueing the 250 ms continuation).
+        // TRAP: this term is a TPlayer OVERRIDE. TCreature and THumanKind
+        // keep sub_76B354 unchanged, so monsters are never blocked by it.
+        // The predicate must stay on TPlayObject and must never be pushed
+        // down into TBaseObject.
+        internal bool IsNativeCanActBlockedByForcedMove()
+        {
+            return m_nNativeForcedMoveRemaining != 0;
+        }
+
         internal static bool IsNativeMotaeboTimingReady(int now,
             int lastMotaeboTick, int lastHitTick)
         {
