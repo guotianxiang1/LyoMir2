@@ -343,6 +343,17 @@ namespace GameSvr
             var result = 0;
             try
             {
+                // 原版 sub_7797CC 第 2 步（0x779825 / 0x779835）：目标坐标必须落在
+                // [0,Width) x [0,Height)，否则整个调用直接 FALSE —— 关键是这道闸在第 10 步
+                // (0x779A5B) 的"从旧格摘链"之前，所以越界的尝试不会动到对象的位置。
+                // C# 这边摘链在前、校验在后：越界目标会先把对象从旧格删掉，再因为
+                // GetMapCellInfo 取不到目标格而永不落格 —— 对象被摘成孤儿。
+                // 怪物 mover 故意允许尝试 x==Width（MOVE-42），靠的就是这道闸兜住，
+                // 所以放宽怪物边界之前必须先补上它。
+                if (!TryGetMapCellIndex(nX, nY, out _))
+                {
+                    return -1;
+                }
                 bo1A = true;
                 MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
                 if (!boFlag && mapCell)

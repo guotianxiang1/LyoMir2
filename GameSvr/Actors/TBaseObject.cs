@@ -1104,6 +1104,49 @@ namespace GameSvr
             }
         }
 
+        // ── 原版的 mover 是"按类型分"的三个 VMT+0x30 槽（MOVE-40，Tier-1 VMT 普查）：
+        //     TCreature / TPsNpc                             -> 0x767568（xor eax,eax; ret，永不移动）
+        //     TAnimal / TMonster / TAIMon / 卫士 / TFieldHero -> 0x71F0F4
+        //     THumanKind / TPlayer / THeroAct                 -> 0x741224
+        //   三者在"入口闸 / 方向校验 / 边界"三处各不相同，严禁合成一套边界
+        //   （MOVE-38 / MOVE-41 / MOVE-42：四行是同一个表达式，必须一起修）。
+        //   C# 的继承链是 TBaseObject -> AnimalObject -> {各怪物, TPlayObject, HeroObject}，
+        //   人形类挂在 AnimalObject 之下，所以人形边界必须在 TPlayObject / HeroObject
+        //   各自 override 回来，光靠本类的基实现会被 AnimalObject 的 override 截断。
+        //
+        // 本类对应 TCreature/TPsNpc 那一槽 0x767568，其整个函数体只有两条指令：
+        //   767568  33c0    xor eax, eax
+        //   76756A  c3      ret
+        // 即"永不移动"，故基实现一律返回 false，而不是复制人形边界。
+        // 与之相符：C# 里 NormNpc / SuperGuard / GuardUnit 及其子类没有任何
+        // WalkTo 或 GotoTargetXY 调用点（两种写法各扫一遍均零命中），
+        // 所以这一槽在 C# 中本就走不到；此处把它写成 false 是让"走不到"变成
+        // "即使走到也不动"，与 0x767568 逐字节一致。
+        protected virtual bool WalkToInBounds(short nNX, short nNY)
+        {
+            return false;
+        }
+
+        // 0x74123E  sub eax,8 / jb fail —— 人形 mover 校验方向 0..7。
+        // 怪物 mover 用无符号的 0x71F115 sub eax,8 / jae fail，对 byte 入参等价，
+        // 故两侧共用本实现，不另 override。
+        // C# 原先完全没有这道校验：越界方向会穿过 switch 留下 nNX=nNY=0，
+        // 再配上怪物侧放宽后的 >= 0 就会把对象瞬移到 (0,0)（MOVE-37 备注）。
+        protected virtual bool WalkToDirectionIsValid(byte btDir)
+        {
+            return btDir <= Grobal2.DR_UPLEFT;
+        }
+
+        // 怪物 mover 的入口闸 0x71F106 cmp byte [ebx+0x480],0 / jne fail，
+        // +0x480 即 m_boHolySeize（BreakHolySeizeMode 0x71E9EB 读、0x71E9F4 写同一字节），
+        // 所以怪物侧沿用本实现即可，不另 override。
+        // MOVE-41 说人形 mover 缺这道闸，但 0x741224 的序言（0x741224..0x74123E）未被 dump 覆盖，
+        // 无法逐字节证明它没有，故此处保留现状：不凭"未见到的字节"去删玩家的定身闸。
+        protected virtual bool WalkToEntryGateBlocks()
+        {
+            return m_boHolySeize || HasTimedAbility(13);
+        }
+
         public bool WalkTo(byte btDir, bool boFlag)
         {
             short nOX = 0;
@@ -1115,7 +1158,12 @@ namespace GameSvr
             bool bo29;
             const string sExceptionMsg = "[Exception] TBaseObject::WalkTo";
             bool result = false;
-            if (m_boHolySeize || HasTimedAbility(13))
+            if (WalkToEntryGateBlocks())
+            {
+                return result;
+            }
+            // 方向校验在 Dir 落盘之前：原版 0x74123E 的失败路径不会走到 0x74124A。
+            if (!WalkToDirectionIsValid(btDir))
             {
                 return result;
             }
@@ -1161,7 +1209,10 @@ namespace GameSvr
                         nNY = (short)(m_nCurrY - 1);
                         break;
                 }
-                if (nNX >= 0 && m_PEnvir.wWidth - 1 >= nNX && nNY >= 0 && m_PEnvir.wHeight - 1 >= nNY)
+                // 边界按类型分派：人形用本类的 > 0 / < Width，怪物在 AnimalObject 里 override 成
+                // >= 0 / <= Width（MOVE-38 / MOVE-42）。原先这里是一条共用的 >= 0 && <= Width-1，
+                // 两侧都不匹配：它放玩家进第 0 列（原版拒绝），又挡住怪物碰 Width-1。
+                if (WalkToInBounds(nNX, nNY))
                 {
                     bo29 = true;
                     if (bo2BA && !m_PEnvir.CanSafeWalk(nNX, nNY))
@@ -5702,6 +5753,27 @@ namespace GameSvr
                 m_dwStatusArrTick[nType] = HUtil32.GetTickCount();
                 m_nCharStatus = GetCharStatus();
                 m_btGreenPoisoningPoint = (byte)nPoint;
+                // POIS-12. 红毒(state 0x1E=30)的伤害放大档位由 **level** 选择，
+                // 而这个 level 在原版是【链表记录】里的值，不是位:
+                //   767A94  B2 1E / E8 ->0x772960   HasState(0x1E)；没中毒就整档跳过
+                //   767A9F  74 38                   je 0x767AD9
+                //   767AA1  B2 1E / E8 ->0x773BEC   取该状态的 level
+                //   767AAA  83 F8 04                cmp eax,4
+                //   767AAD  75 15                   jne -> 走 1.2 档
+                //   767AB5  D8 0D 3C7B7600          fmul dword[0x767B3C]  = 1.25  (float32 00 00 A0 3F)
+                //   767ACA  DB 2D 407B7600          fld  xword[0x767B40]  = 1.2   (ext80 9A99..FF3F)
+                // C# 侧 ApplyNativeStruckAmplifyStates / ApplyNativeTargetMidMagicStates
+                // 用 TryGetNativeTimedAbilityValue(30) 读 level，可是 MakePosion 以前
+                // 只写 legacy 槽 m_wStatusTimeArr[1]，从不写 level：实测(4 条腿)
+                //   MakePosion(POISON_DAMAGEARMOR,60,pt=4) -> HasNativeActiveState(30)=True
+                //   但 MidMagic(1000)=1200，即 **level 恒为 0，×1.25 档永远打不到**。
+                // 所以真正的缺口是 level 不落地(不是"整档不触发"——×1.2 一直在生效)。
+                // 这里补记 level：nPoint 就是原版 push 进 AddState 的那个 level 参数
+                // (0x680ACC push 3 / 0x680AE0 push 0 / 0x666D42 push 1 同一位置)。
+                if (nType == Grobal2.POISON_DAMAGEARMOR)
+                {
+                    RecordNativeRedPoisonLevel(nPoint, nTime);
+                }
                 if (nOldCharStatus != m_nCharStatus)
                 {
                     StatusChanged();

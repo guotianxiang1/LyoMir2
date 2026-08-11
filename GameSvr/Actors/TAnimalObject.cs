@@ -19,6 +19,22 @@ namespace GameSvr
             base.AttackDir(TargeTBaseObject, 0, nDir);
         }
 
+        // 怪物 mover sub_71F0F4（VMT+0x30，TAnimal / TMonster / TAIMon / 卫士 / TFieldHero 共用）
+        // 的边界比人形 sub_741224 松整整一格 —— MOVE-42，四个跳转逐条对照：
+        //   0x71F141  test esi,esi        / jl fail  -> newX >= 0        （人形 0x741276 是 jle，> 0）
+        //   0x71F14F  cmp esi,[eax+0x3C]  / jg fail  -> newX <= Width    （人形 0x741284 是 jge，< Width）
+        //   0x71F158  test edi,edi        / jl fail  -> newY >= 0
+        //   0x71F166  cmp edi,[eax+0x40]  / jg fail  -> newY <= Height
+        // 于是怪物可以"尝试"第 0 行/列和 Width/Height，x==Width 那一格再由
+        // MoveToMovingObject 自己的 [0,Width) 闸拒掉；净效果是怪物能站上第 0 行/列，玩家不能。
+        // 原版注记明确要求"不要给两个 mover 共用一个边界 helper"，故此处单独 override。
+        // 人形类（TPlayObject / HeroObject）继承自本类，必须各自把人形边界 override 回去。
+        protected override bool WalkToInBounds(short nNX, short nNY)
+        {
+            return nNX >= 0 && nNX <= m_PEnvir.wWidth
+                && nNY >= 0 && nNY <= m_PEnvir.wHeight;
+        }
+
         public AnimalObject() : base()
         {
             m_nNotProcessCount = 0;

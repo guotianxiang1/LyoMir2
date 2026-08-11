@@ -229,6 +229,16 @@ namespace GameSvr
             master?.SysMsg(hint, MsgColor.Red, MsgType.Hint);
         }
 
+        // THeroAct 的 mover 与 THumanKind / TPlayer 同槽 0x741224（人形），不是 0x71F0F4（怪物）——
+        // MOVE-40 的 VMT 普查逐列列出。英雄在 C# 里挂在 AnimalObject 之下，
+        // 不 override 就会继承怪物的松边界，故把人形边界取回（0x741276 jle、0x741284 jge）。
+        // 注意 TFieldHero 是另一回事：它在普查里走 0x71F0F4，沿用父类的怪物边界即忠实。
+        protected override bool WalkToInBounds(short nNX, short nNY)
+        {
+            return nNX > 0 && nNX < m_PEnvir.wWidth
+                && nNY > 0 && nNY < m_PEnvir.wHeight;
+        }
+
         public override bool Operate(TProcessMessage ProcessMsg)
         {
             if (ProcessMsg.wIdent == Grobal2.RM_NATIVE_EXP_CONTINUE)
