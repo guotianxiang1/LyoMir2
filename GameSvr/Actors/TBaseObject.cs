@@ -2951,7 +2951,10 @@ namespace GameSvr
             {
                 nDura = 0;
                 m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
-                if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                // 原版 slot 1 (sub_73E804) 到此为止：0x73E850 mov word [ebx+0x26],0
+                // 全函数无 0x75F27C(清槽)/0x404690(释放) ⇒ 武器留在身上，0 耐久。
+                // 下面的销毁分支是【非原版行为】，仅在运营方显式开启时执行。
+                if (M2Share.g_Config.boDeleteWeaponOnZeroDura && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
                     var PlayObject = this as TPlayObject;
                     PlayObject.SendDelItems(m_UseItems[Grobal2.U_WEAPON]);
@@ -2960,9 +2963,15 @@ namespace GameSvr
                     {
                         M2Share.AddGameDataLog('3' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[Grobal2.U_WEAPON].MakeIndex + "\t" + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
                     }
+                    // 发包必须先于清空 wIndex：原先的顺序在 wIndex=0 之后才读
+                    // m_UseItems[U_WEAPON].DuraMax，属 use-after-clear。
+                    SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, nDura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
+                    m_UseItems[Grobal2.U_WEAPON].wIndex = 0;
                 }
-                m_UseItems[Grobal2.U_WEAPON].wIndex = 0;
-                SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, nDura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
+                else
+                {
+                    SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, nDura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
+                }
             }
             else
             {

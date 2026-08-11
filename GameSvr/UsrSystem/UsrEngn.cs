@@ -3778,20 +3778,21 @@ namespace GameSvr
             PlayObject.m_QuestFlag = HumData.QuestFlag;
             PlayObject.m_ScriptVVars.Clear();
             PlayObject.m_ScriptSVars.Clear();
+            // 原生 SetV/SetS 无零值特例（sub_6E4140 四个存储点原样写入），
+            // 所以持久化的 0 必须原样载回。先前这里跳过 0，会把写入端
+            // 已修好的零值在下次登录时重新抹掉——两处必须同时成立。
             if (HumData.ScriptV != null)
             {
                 foreach (var variable in HumData.ScriptV)
                 {
-                    if (variable.Value != 0)
-                        PlayObject.m_ScriptVVars[variable.Key] = variable.Value;
+                    PlayObject.m_ScriptVVars[variable.Key] = variable.Value;
                 }
             }
             if (HumData.ScriptS != null)
             {
                 foreach (var variable in HumData.ScriptS)
                 {
-                    if (variable.Value != 0)
-                        PlayObject.m_ScriptSVars[variable.Key] = variable.Value;
+                    PlayObject.m_ScriptSVars[variable.Key] = variable.Value;
                 }
             }
             if (PlayObject.m_ScriptVVars.Count == 0 && HumData.IntVar != null)

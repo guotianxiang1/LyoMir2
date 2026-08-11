@@ -8312,11 +8312,13 @@ namespace GameSvr.PasEngine
             };
             if (variables == null) return;
 
-            var intValue = value.AsInt();
-            if (intValue == 0)
-                variables.Remove(flat);
-            else
-                variables[flat] = intValue;
+            // 原生 upsert sub_6E4140 没有任何零值判断：四个存储点都原样写入。
+            //   0x6E4187 / 0x6E41C2 / 0x6E4231 / 0x6E4260  mov [..], edx
+            // 且无条件返回 TRUE（0x6E4152 mov byte [ebp-9],1 在入口，
+            // 0x6E4264 mov al,[ebp-9] 在每个出口）。
+            // 先前这里把 0 当作"删除键"，导致 SetV(n,f,0) 之后 GetV 读回 -1
+            // 而不是 0，反转了下游所有 "= 0" 的任务判断。
+            variables[flat] = value.AsInt();
         }
 
         // =====================================================================
