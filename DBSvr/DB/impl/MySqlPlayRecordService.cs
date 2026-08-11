@@ -441,6 +441,81 @@ namespace DBSvr
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
+        /// <summary>
+        /// 创建 GM 角色 (原版 0x5A8124 GameMaster.txt 批量导入)。
+        /// Native VA 0x5A8124 len=143:
+        ///   insert Ignore into user_index(PTID, LoginID, ChrName, Level, AdminLevel,
+        ///                                  CreateDate, ModifyDate)
+        ///   Values("%s", "%s", "%s", 40, 5, Now(), Now());
+        /// 注意：原版 LoginID 和 ChrName 使用相同的 token（第二个分词结果），
+        ///       此处接受独立参数以保持接口灵活性。
+        /// </summary>
+        public int CreateGMCharacter(string ptid, string loginId, string chrName)
+        {
+            using var conn = OpenConnection();
+            if (conn == null) return -1;
+
+            try
+            {
+                // Native 0x5A8124: INSERT IGNORE，包含 LoginID 列，Level=40, AdminLevel=5
+                using var cmd = new MySqlCommand(
+                    @"INSERT IGNORE INTO mir3.user_index(PTID, LoginID, ChrName, Level, AdminLevel,
+                                                          CreateDate, ModifyDate)
+                      VALUES(@ptid, @loginId, @chrName, 40, 5, NOW(), NOW());
+                      SELECT LAST_INSERT_ID();", conn);
+                cmd.Parameters.AddWithValue("@ptid", ptid);
+                cmd.Parameters.AddWithValue("@loginId", loginId);
+                cmd.Parameters.Add("@chrName", MySqlDbType.VarBinary).Value = LegacyGbkText.Encode(chrName);
+
+                var result = cmd.ExecuteScalar();
+                if (result == null || result == DBNull.Value) return 0;
+
+                int idx = Convert.ToInt32(result);
+                if (idx > 0)
+                {
+                    DBShare.MainOutMessage($"[CreateGMCharacter] idx={idx} ptid={ptid} loginId={loginId} chr={chrName}");
+                }
+                return idx;
+            }
+            catch (Exception ex)
+            {
+                DBShare.MainOutMessage($"[CreateGMCharacter] ERR: {ex.Message}");
+                return -1;
+            }
+        }
+
+        /// <summary>
+        /// 设置角色管理员等级 (原版 0x5A86E8)。
+        /// Native VA 0x5A86E8 len=49:
+        ///   Update user_index set AdminLevel=%d where idx=%d;
+        /// </summary>
+        public bool SetAdminLevel(int idx, int adminLevel)
+        {
+            using var conn = OpenConnection();
+            if (conn == null) return false;
+
+            try
+            {
+                // Native 0x5A86E8: 参数化的 AdminLevel 更新
+                using var cmd = new MySqlCommand(
+                    "UPDATE mir3.user_index SET AdminLevel=@adminLevel WHERE idx=@idx", conn);
+                cmd.Parameters.AddWithValue("@adminLevel", adminLevel);
+                cmd.Parameters.AddWithValue("@idx", idx);
+
+                int affected = cmd.ExecuteNonQuery();
+                if (affected > 0)
+                {
+                    DBShare.MainOutMessage($"[SetAdminLevel] idx={idx} AdminLevel={adminLevel}");
+                }
+                return affected > 0;
+            }
+            catch (Exception ex)
+            {
+                DBShare.MainOutMessage($"[SetAdminLevel] ERR idx={idx}: {ex.Message}");
+                return false;
+            }
+        }
+
         public void RegisterNativeCharacterName(byte[] characterName)
         {
             lock (NativeIdentityMutationLock)

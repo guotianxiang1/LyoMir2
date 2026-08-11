@@ -839,7 +839,9 @@ namespace DBSvr
             }
 
             var ticket = ExtractCStr(body, 0);
-            var account = ResolveMobileTicket(ticket);
+            // Removed ResolveMobileTicket per account_schema_ownership_20260811.md —
+            // ticket resolution belongs to LoginGate, not DBServer. Use ticket as-is.
+            var account = ticket;
             Log($"[MobileAuth] ticket={ticket?.Substring(0, Math.Min(8, ticket?.Length ?? 0))}... account={account} sessionId={sessionId}");
 
             if (string.IsNullOrEmpty(account) || sessionId == 0)
@@ -938,7 +940,9 @@ namespace DBSvr
             userInfo.nSessionID = nSessionID;
 
             // 从 user_index 直接查询角色列表
-            var ptid = GetPtid(sAccount);
+            // Removed GetPtid per account_schema_ownership_20260811.md — the native
+            // DBServer does not map uid->pt_id; it uses sAccount directly.
+            var ptid = sAccount;
             var chrList = _playRecordService.QueryChrByPtid(ptid ?? sAccount);
             Log($"[QueryChr] Found {chrList.Count} chars for account={sAccount}");
             // Character rows are authoritative data. Encoding problems must never be
@@ -1009,17 +1013,17 @@ namespace DBSvr
                 {
                     nCode = 2; Log($"[NewChr] Name exists: {sChrName}");
                 }
-                else if (_playRecordService.ChrCountOfAccount(GetPtid(sAccount) ?? sAccount) >= 4)
+                else if (_playRecordService.ChrCountOfAccount(sAccount) >= 4)
                 {
                     nCode = 3; Log($"[NewChr] Max chars reached for {sAccount}");
                 }
-                else if (_playRecordService.TodayCreateCount(GetPtid(sAccount) ?? sAccount) >= 4)
+                else if (_playRecordService.TodayCreateCount(sAccount) >= 4)
                 {
                     nCode = 3; Log($"[NewChr] Daily limit reached for {sAccount}");
                 }
                 else
                 {
-                    var ptid = GetPtid(sAccount) ?? sAccount;
+                    var ptid = sAccount;
 
                     // GM创建: 检查是否为GM账号
                     bool isGmCreate = IsGmAccount(sAccount);
@@ -1222,7 +1226,7 @@ namespace DBSvr
             // 0x5A59D0 call 0x40AFB0：原版这个比较把 'a'..'z' 减 0x20 折叠后再比，
             // 即**大小写不敏感**（0x40AFD6/0x40AFDB/0x40AFE0）。
             // 原来这里用 == 是大小写敏感的，会把 "Abc" 和 "abc" 判成不同账号。
-            var ptid = GetPtid(userInfo.sAccount);
+            var ptid = userInfo.sAccount;
             bool owned =
                 string.Equals(humRecord.sAccount, userInfo.sAccount, StringComparison.OrdinalIgnoreCase) ||
                 (!string.IsNullOrEmpty(ptid) &&
@@ -1407,7 +1411,7 @@ namespace DBSvr
             try
             {
                 IList<TQuickID> list = new List<TQuickID>();
-                var ptid = GetPtid(account) ?? account;
+                var ptid = account;
                 _playRecordService.FindByAccount(ptid, ref list);
                 if (list.Count == 1) return list[0].sChrName;
                 if (list.Count == 0) return null;
@@ -1428,7 +1432,7 @@ namespace DBSvr
         private bool QueryDelChr(string sData, ref TUserInfo userInfo, ref TGateInfo gateInfo)
         {
             string sAccount = userInfo.sAccount;
-            string ptid = GetPtid(sAccount) ?? sAccount;
+            string ptid = sAccount;
             int nSessionID = userInfo.nSessionID;
             // CM_QUERYDELCHR 无 body，直接用 userInfo 中的账号信息
             Log($"[QueryDelChr] account={sAccount} ptid={ptid} session={nSessionID}");
@@ -1494,7 +1498,7 @@ namespace DBSvr
         private void ResDelChr(string sData, ref TUserInfo userInfo)
         {
             string sAccount = userInfo.sAccount ?? "";
-            string ptid = GetPtid(sAccount) ?? sAccount;
+            string ptid = sAccount;
             var sChrName = EDcode.DeCodeString(sData)?.TrimEnd('\0');
             Log($"[ResDelChr] account={sAccount} ptid={ptid} chrName='{sChrName}'");
             bool boDataOK = false;
@@ -1554,7 +1558,7 @@ namespace DBSvr
 
             // 更新选择状态
             IList<TQuickID> chrList = new List<TQuickID>();
-            string ptid = GetPtid(sAccount) ?? sAccount;
+            string ptid = sAccount;
             if (_playRecordService.FindByAccount(ptid, ref chrList) >= 0)
             {
                 foreach (var qid in chrList)
@@ -1572,7 +1576,7 @@ namespace DBSvr
             int dataIndex = _playDataService.Index(sChrName);
             if (recordIndex > 0 && dataIndex == recordIndex)
             {
-                var ptid2 = GetPtid(sAccount) ?? sAccount;
+                var ptid2 = sAccount;
                 if (userInfo.WireMode == TGateWireMode.Native77)
                 {
                     // The original DBServer pushes the selected record directly over port 6000
@@ -1866,48 +1870,12 @@ namespace DBSvr
 
         // ===================== Ticket 解析 =====================
 
-        private static string ResolveMobileTicket(string ticket)
-        {
-            if (string.IsNullOrEmpty(ticket)) return null;
-            try
-            {
-                using var conn = new MySqlConnection(DBShare.DBConnection);
-                conn.Open();
-                using (var session = new MySqlCommand(
-                           "SET WAIT_TIMEOUT = 2073600;", conn))
-                    session.ExecuteNonQuery();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = @"SELECT t.pt_id FROM account.ticket t
-                    WHERE BINARY t.ticket=BINARY @t AND t.create_time>@exp LIMIT 1";
-                cmd.Parameters.AddWithValue("@t", ticket);
-                cmd.Parameters.AddWithValue("@exp", DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 300);
-                var result = cmd.ExecuteScalar()?.ToString();
-                if (!string.IsNullOrEmpty(result)) return result;
-            }
-            catch (Exception ex)
-            {
-                DBShare.MainOutMessage("[MobileAuth] ticket解析失败: " + ex.Message);
-            }
-            // Ticket validation failed — do NOT fall through to use raw ticket as account name
-            return null;
-        }
-
-        private static string GetPtid(string account)
-        {
-            try
-            {
-                using var conn = new MySqlConnection(DBShare.DBConnection);
-                conn.Open();
-                using (var session = new MySqlCommand(
-                           "SET WAIT_TIMEOUT = 2073600;", conn))
-                    session.ExecuteNonQuery();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT pt_id FROM account.normal WHERE uid=@uid LIMIT 1";
-                cmd.Parameters.AddWithValue("@uid", account);
-                return cmd.ExecuteScalar()?.ToString();
-            }
-            catch (Exception ex) { Debug.WriteLine("GetPtid failed: " + ex.Message); return null; }
-        }
+        // ResolveMobileTicket / GetPtid REMOVED per account_schema_ownership_20260811.md:
+        // account.ticket and account.normal belong to the login platform (logincenter Lua
+        // + LoginGate C#), NOT to DBServer. The native DBServer binary has 0 hits for
+        // these table names. The methods here were invented, contradicting the original's
+        // architecture. Callers that still need ticket resolution should route through
+        // LoginGate's IMobileTicketStore, not have DBServer directly query account.*.
 
         /// <summary>
         /// 检查是否为GM账号 (通过 GameMaster.txt 列表判断)。

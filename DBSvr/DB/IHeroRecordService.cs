@@ -30,6 +30,18 @@ namespace DBSvr
         bool TryGetNativeForceLevelIndex(byte[] heroName, out int index);
         List<RankEntry> GetHeroLevelRank(int limit = 100);
         List<HeroSortEntry> GetHeroPage(int lastIdx, int limit = 5000);
+
+        /// <summary>
+        /// 惰性回填 heroId（原版 0x58CF28: Update hero_index set heroId = %d where idx = %d）。
+        /// 仅当 heroId == 0 时调用，分配全局唯一 ID 并写回单行。
+        /// 原版触发：hero_index 加载器检测到 heroId=0 时调用 0x5CA174 分配器。
+        /// 公式：heroId = ((zoneId * 1000 + groupId + 10000000) * 1000000000) + idx
+        /// </summary>
+        /// <param name="idx">hero_index.idx 主键</param>
+        /// <param name="zoneId">ZoneId 配置（DBService.ini [Setup] ZoneIdx）</param>
+        /// <param name="groupId">GroupId 配置（DBService.ini [Setup] GroupIdx）</param>
+        /// <returns>新分配的 heroId，失败返回 0</returns>
+        long BackfillHeroId(int idx, int zoneId, int groupId);
     }
 
     public class HeroIndexInfo

@@ -60,6 +60,19 @@ namespace DBSvr
         /// <summary>创建新角色 (INSERT INTO user_index + user_data)</summary>
         int CreateCharacter(string ptid, string chrName, int job, int sex, int hair, int level = 1);
 
+        /// <summary>
+        /// 创建 GM 角色 (原版 0x5A8124 批量导入路径)。
+        /// 对应 native: insert Ignore into user_index(PTID, LoginID, ChrName, Level, AdminLevel, ...)
+        /// Values("%s", "%s", "%s", 40, 5, Now(), Now());
+        /// </summary>
+        int CreateGMCharacter(string ptid, string loginId, string chrName);
+
+        /// <summary>
+        /// 设置角色管理员等级 (原版 0x5A86E8)。
+        /// 对应 native: Update user_index set AdminLevel=%d where idx=%d;
+        /// </summary>
+        bool SetAdminLevel(int idx, int adminLevel);
+
         /// <summary>角色名是否已存在</summary>
         bool IsChrNameExists(string chrName);
 

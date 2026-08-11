@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace DBSvr
@@ -30,7 +31,27 @@ namespace DBSvr
         /// <summary>清理7天过期记录</summary>
         int CleanExpiredRecords(int days = 7);
 
+        /// <summary>
+        /// 读取待发送记录（State=1），按 TimeStamp 升序（原版 0x595714）。
+        /// 原版 0x595430 函数定期轮询，读取 State=1 记录填充 0x27 字节结构体推入列表。
+        /// </summary>
+        List<TransferAreaSendRecord> GetPendingSendRecords();
+
         /// <summary>改名级联</summary>
         bool RenameChar(string oldName, string newName);
+    }
+
+    /// <summary>
+    /// TransferAreaScoreSendRecord 记录（原版 0x595430 的 0x27 字节结构体）。
+    /// </summary>
+    public class TransferAreaSendRecord
+    {
+        public DateTime TimeStamp { get; set; }
+        public string CharName { get; set; }
+        public ushort ZoneId { get; set; }
+        public ushort GroupId { get; set; }
+        public ushort ScoreType { get; set; }
+        public ushort Score { get; set; }
+        public ushort State { get; set; }
     }
 }

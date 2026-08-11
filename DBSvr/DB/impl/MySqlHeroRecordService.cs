@@ -603,5 +603,46 @@ namespace DBSvr
             return Encoding.Latin1.GetBytes(reader.GetString(ordinal));
         }
 
+        /// <summary>
+        /// 惰性回填 heroId（原版 0x58CF28: Update hero_index set heroId = %d where idx = %d）。
+        ///
+        /// 原版行为：
+        /// - 加载器 0x58CBDE 检测 heroId == 0 时调用分配器 0x5CA174
+        /// - 分配器公式（0x5CA174 逐字节逆向）：
+        ///   heroId = ((ZoneId * 1000 + GroupId + 10000000) * 1000000000) + idx
+        /// - 执行单行 UPDATE（0x58CF28 字面量，注意小写 hero_index/heroId）
+        ///
+        /// 证据链：
+        /// - 0x58CBD2..0x58CBDC: cmp heroId.hi/lo, 0 → jne skip（64位比较门）
+        /// - 0x5CA191: mov eax, [eax+0x50]  ; ZoneId (dword)
+        /// - 0x5CA19F: mov eax, [eax+0x54]  ; GroupId (dword)
+        /// - 0x405C28: __llmul (64位乘法helper，ret 8弹栈操作数)
+        /// </summary>
+        public long BackfillHeroId(int idx, int zoneId, int groupId)
+        {
+            // 原版 0x5CA174 分配器公式（证据：0x5CA182/0x5CA189 push常量，
+            // 0x405C28 __llmul，0x5CA1AD add 0x989680）
+            long baseId = ((long)zoneId * 1000 + groupId + 10000000) * 1000000000L;
+            long newId = baseId + idx;
+
+            using var conn = OpenConn();
+            if (conn == null) return 0;
+
+            try
+            {
+                // 原版 0x58CF28（注意小写 hero_index, heroId，与 0x5BCD74 大写形式不同）
+                using var cmd = new MySqlCommand(
+                    "Update hero_index set heroId = @id where idx = @idx", conn);
+                cmd.Parameters.AddWithValue("@id", newId);
+                cmd.Parameters.AddWithValue("@idx", idx);
+                cmd.ExecuteNonQuery();
+                return newId;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
     }
 }

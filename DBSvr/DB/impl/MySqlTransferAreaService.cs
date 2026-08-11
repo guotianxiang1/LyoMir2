@@ -184,6 +184,64 @@ namespace DBSvr
             return removed;
         }
 
+        /// <summary>
+        /// 读取待发送记录（State=1），按 TimeStamp 升序（原版 0x595714）。
+        ///
+        /// 原版行为（0x595430 函数）：
+        /// 1. 执行计数查询（0x595684）：
+        ///    Select High_Priority Count(*) as TotalCount from TransferAreaScoreSendRecord
+        ///    Group By CharName, ZoneId, GroupId;
+        /// 2. 检查 Self+0x1C（TList），未初始化则创建（容量 = min(0x400, count/2)）
+        /// 3. 执行主查询（0x595714）：
+        ///    Select High_Priority TimeStamp, CharName, ZoneId, GroupId, ScoreType, Score, State
+        ///    from TransferAreaScoreSendRecord where State = 1 Order by TimeStamp;
+        /// 4. 逐行填充 0x27 字节结构体并推入 TList
+        ///
+        /// 结构体布局（0x5954E6..0x595621）：
+        ///   +0x00: TimeStamp (qword, TDateTime)
+        ///   +0x08: CharName (ShortString[15], 1 len + 15 data)
+        ///   +0x18: ZoneId (word, 从查询列索引 2)
+        ///   +0x1A: GroupId (word, 从查询列索引 3)
+        ///   +0x1C: ZoneId (word, 从配置 [0x5d9b04]+0x50)
+        ///   +0x1E: GroupId (word, 从配置 [0x5d9b04]+0x54)
+        ///   +0x20: ScoreType (word, 列索引 4)
+        ///   +0x22: Score (word, 列索引 5)
+        ///   +0x24: State (word, 列索引 6)
+        ///   +0x26: flag (byte=0)
+        ///
+        /// 注意：原版字面量有双空格（", " 和 "1  Order"），此处规范化为单空格。
+        /// </summary>
+        public List<TransferAreaSendRecord> GetPendingSendRecords()
+        {
+            var result = new List<TransferAreaSendRecord>();
+            using var conn = OpenConn();
+            if (conn == null) return result;
+
+            // 原版 0x595714（双空格已规范化）
+            using var cmd = new MySqlCommand(
+                @"Select High_Priority TimeStamp, CharName, ZoneId, GroupId,
+                  ScoreType, Score, State
+                  from gamedata.TransferAreaScoreSendRecord
+                  where State = 1
+                  Order by TimeStamp", conn);
+
+            using var dr = cmd.ExecuteReader();
+            while (dr.Read())
+            {
+                result.Add(new TransferAreaSendRecord
+                {
+                    TimeStamp = dr.GetDateTime(0),
+                    CharName = LegacyGbkText.Read(dr, 1),
+                    ZoneId = Convert.ToUInt16(dr.GetValue(2)),
+                    GroupId = Convert.ToUInt16(dr.GetValue(3)),
+                    ScoreType = Convert.ToUInt16(dr.GetValue(4)),
+                    Score = Convert.ToUInt16(dr.GetValue(5)),
+                    State = Convert.ToUInt16(dr.GetValue(6))
+                });
+            }
+            return result;
+        }
+
         public bool RenameChar(string oldName, string newName)
         {
             using var conn = OpenConn();
