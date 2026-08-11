@@ -1861,66 +1861,71 @@ namespace GameSvr
             return result;
         }
 
+        /// 战神 <c>GetRandomXY sub_7782D0</c> (ret 8) — the ONE random-spot search
+        /// primitive behind every teleport. All 11 native callers reach this same
+        /// function (0x64F4AB, 0x667498, 0x679FF9, 0x6B9C81, 0x6B9DC7, 0x6BD346,
+        /// 0x6BD4EA, 0x728A35, 0x768DB5, 0x768EA7, 0x788070), so there is no second
+        /// native search with different constants. Byte-pinned parameters:
+        /// <code>
+        /// 77830A  stepX := 3
+        /// 778311  cmp Width,0x32   ; below 50 -> stepX := 2
+        /// 77831E  cmp Height,0xFA  ; 250 or more -> margin := 0x32 (50)
+        /// 778328  cmp Height,0x1E  ; 30 or more  -> margin := 0x14 (20)
+        /// 77832D  margin := 2
+        /// 778346  mov esi,0x1F     ; retry count = 31, NOT 32
+        /// 778358  probe sub_777EF8 (boIgnoreOccupancy from caller = 1 here)
+        /// 778361/778373  X advance by stepX, else reseed Random(Width div 2)+margin
+        /// 778387/77839F  Y advance by stepX, else reseed Random(Height div 2)+margin
+        /// 7783BE  dec esi / jne    ; loop
+        /// </code>
+        /// On total failure it falls back to a random LinkPoint (0x7783C4-0x7783FD):
+        /// list at Envir[+0x10], count at [eax+8], X = word[rec+0], Y = word[rec+2];
+        /// FALSE only when that list is empty. The fallback is gated on the caller's
+        /// flag byte [ebp+8], and every teleport caller pushes 1 (0x6BD336 `push 1
+        /// push 1` same-map, 0x6BD4EA cross-map both flags 1), so it is unconditional
+        /// here. This body previously used step 3/10 at Width&lt;80, margin 50/15/2 at
+        /// Height 150/50, a retry count of 201 and a reseed of Random(Width) with no
+        /// margin, and had no LinkPoint fallback at all — none of which native has.
         private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
         {
-            int n14;
-            short n18;
-            int n1C;
-            bool result = false;
-            if (Envir.wWidth < 80)
-            {
-                n18 = 3;
-            }
-            else
-            {
-                n18 = 10;
-            }
-            if (Envir.wHeight < 150)
-            {
-                if (Envir.wHeight < 50)
-                {
-                    n1C = 2;
-                }
-                else
-                {
-                    n1C = 15;
-                }
-            }
-            else
-            {
-                n1C = 50;
-            }
-            n14 = 0;
-            while (true)
+            var nStep = (short)(Envir.wWidth < 50 ? 2 : 3);
+            var nMargin = Envir.wHeight < 30
+                ? 2
+                : Envir.wHeight < 250 ? 20 : 50;
+            for (var nRetry = 0; nRetry < 31; nRetry++)
             {
                 if (Envir.CanWalk(nX, nY, true))
                 {
-                    result = true;
-                    break;
+                    return true;
                 }
-                if (nX < (Envir.wWidth - n1C - 1))
+                if (nX < (Envir.wWidth - nMargin - 1))
                 {
-                    nX += n18;
+                    nX += nStep;
                 }
                 else
                 {
-                    nX = (short)M2Share.RandomNumber.Random(Envir.wWidth);
-                    if (nY < (Envir.wHeight - n1C - 1))
+                    nX = (short)(M2Share.RandomNumber.Random(Envir.wWidth / 2)
+                        + nMargin);
+                    if (nY < (Envir.wHeight - nMargin - 1))
                     {
-                        nY += n18;
+                        nY += nStep;
                     }
                     else
                     {
-                        nY = (short)M2Share.RandomNumber.Random(Envir.wHeight);
+                        nY = (short)(M2Share.RandomNumber.Random(Envir.wHeight / 2)
+                            + nMargin);
                     }
                 }
-                n14++;
-                if (n14 >= 201)
-                {
-                    break;
-                }
             }
-            return result;
+            if (Envir.m_PointList == null || Envir.m_PointList.Count == 0)
+            {
+                return false;
+            }
+            var Point = Envir.m_PointList[
+                M2Share.RandomNumber.Random(Envir.m_PointList.Count)];
+            nX = Point.nX;
+            nY = Point.nY;
+            return true;
         }
 
         internal bool TrySpaceMoveToEnvironment(Envirnoment targetEnvironment,
