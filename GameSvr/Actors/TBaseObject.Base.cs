@@ -710,6 +710,22 @@ namespace GameSvr
                         m_nSpellTick = 0;
                         HealthSpellChanged();
                     }
+                    // POIS-09/POIS-10 — 战神 sub_76B6F0 @0x76BD4F-0x76BE1C 在同一个
+                    // 2500ms 闸后还服务另外四个 bodyState 档(0x06/0x01/0x1C/0x1F),
+                    // 一个 tick 只取优先级最高的那一档。上面那段走的是 legacy 12 槽
+                    // overlay(m_wStatusTimeArr),与 obj+0x168 位集是两套载体,故这里
+                    // 并列而非替换 —— 详见 TBaseObject.NativePoisonTick.cs 的字节表。
+                    // 伤害由 rec.Value+1 得出,其中 0x06 = MIN(MaxHP,5000000)/100、
+                    // 0x01 = 同上/30,每 tick 覆写节点值;0x1C/0x1F 用施法者给的量。
+                    if (TryResolveNativePoisonTickDamage(out var nNativePoisonDamage)
+                        && nNativePoisonDamage > 0)
+                    {
+                        DamageHealth(nNativePoisonDamage);
+                        // 0x76BE12/0x76BE17 清两个回复预算(obj+0x10 / obj+0x14)。
+                        m_nHealthTick = 0;
+                        m_nSpellTick = 0;
+                        HealthSpellChanged();
+                    }
                 }
             }
             catch (Exception ex)
