@@ -688,6 +688,7 @@ namespace GameSvr
             m_nPerHealing = 5;
             m_dwIncHealthSpellTick = HUtil32.GetTickCount();
             m_btGreenPoisoningPoint = 0;
+            m_btRedPoisoningLevel = 0;
             m_nFightZoneDieCount = 0;
             m_nGoldMax = M2Share.g_Config.nHumanMaxGold;
             m_nCharStatus = 0;
@@ -5750,7 +5751,7 @@ namespace GameSvr
                 // (0x680ACC push 3 / 0x680AE0 push 0 / 0x666D42 push 1 同一位置)。
                 if (nType == Grobal2.POISON_DAMAGEARMOR)
                 {
-                    RecordNativeRedPoisonLevel(nPoint, nTime);
+                    RecordNativeRedPoisonLevel(nPoint);
                 }
                 if (nOldCharStatus != m_nCharStatus)
                 {
