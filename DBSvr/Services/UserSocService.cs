@@ -1035,17 +1035,8 @@ namespace DBSvr
                     {
                         try
                         {
-                            if (isGmCreate)
-                            {
-                                using var conn = new MySqlConnection(DBShare.DBConnection);
-                                conn.Open();
-                                using (var session = new MySqlCommand(
-                                           "SET WAIT_TIMEOUT = 2073600;", conn))
-                                    session.ExecuteNonQuery();
-                                using var cmd = new MySqlCommand("UPDATE mir3.user_index SET AdminLevel=5, Level=40 WHERE idx=@i", conn);
-                                cmd.Parameters.AddWithValue("@i", idx);
-                                cmd.ExecuteNonQuery();
-                            }
+                            // CreateGMCharacter (via _playRecordService) already sets Level=40
+                            // and AdminLevel=5 in the INSERT per native 0x5A8124, so no UPDATE needed here.
                             var humanRCD = new THumDataInfo();
                             humanRCD.Header.sName = sChrName;
                             humanRCD.Header.sAccount = ptid;
