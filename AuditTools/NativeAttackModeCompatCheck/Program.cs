@@ -127,8 +127,11 @@ static void CheckDirectBehaviorMatrix()
     ClearGroup(self, unrelated);
     CheckMode(self, sameCorps, 4, false, false, "hostile same Corps");
     CheckMode(self, sameGild, 4, false, false, "hostile same Gild");
-    CheckMode(self, hostileGild, 4, true, false,
-        "hostile Gild relation");
+    // Native 0x683204/0x6846B0 test ONLY al==1 (allies) for PK prevention.
+    // No native code tests al==2 (war) to enable PK. War relation does NOT
+    // make targets attackable in hostile mode.
+    CheckMode(self, hostileGild, 4, false, false,
+        "hostile Gild relation does not enable PK");
 
     unrelated.m_boPKFlag = true;
     CheckMode(self, unrelated, 4, true, false, "hostile PK flag");
