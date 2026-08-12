@@ -63,12 +63,32 @@ namespace GameSvr.Services
         // gamedata.gildconcern rows: source gild id -> destination gild ids.
         internal Dictionary<long, List<long>> GildConcerns { get; } = new();
 
+        // GILD-02: Native relation key normalization (0x5E6E8F..0x5E6ECF) compares
+        // high dword SIGNED (jge at 0x5E6E9B), then low dword UNSIGNED (jae at 0x5E6E97).
+        // The C# must match this exactly: cast high dword to int (signed), compare; if equal,
+        // compare low dwords unsigned. Generated guild IDs are confined to [0, 2^48), so the
+        // divergence (negative high dword) is unreachable in practice, but we match native
+        // byte-for-byte to preserve the ordering contract for any loaded native data.
         internal static (ulong First, ulong Second) GildRelationKey(
             long first, long second)
         {
+            // Split into high and low dwords
+            var firstHigh = unchecked((int)(first >> 32));   // signed high dword
+            var firstLow = unchecked((uint)first);           // unsigned low dword
+            var secondHigh = unchecked((int)(second >> 32)); // signed high dword
+            var secondLow = unchecked((uint)second);         // unsigned low dword
+
+            // Compare high dword SIGNED
+            bool firstLess;
+            if (firstHigh != secondHigh)
+                firstLess = firstHigh < secondHigh;
+            else
+                // High dwords equal, compare low dword UNSIGNED
+                firstLess = firstLow < secondLow;
+
             var firstId = unchecked((ulong)first);
             var secondId = unchecked((ulong)second);
-            return firstId <= secondId
+            return firstLess
                 ? (firstId, secondId)
                 : (secondId, firstId);
         }
