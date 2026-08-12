@@ -402,12 +402,25 @@ namespace GameSvr
             ClearNativeSkill152StateOnExit();
         }
 
+        // Native @ 0x773254: inclusion bitmap (14 bytes @ 0x77326C) defines which state
+        // changes trigger RecalcAbilitys. The bitmap has 37 set bits covering states:
+        // [6, 13, 14, 24-31, 32-36, 38-40, 67-70, 77, 82-86, 88-93, 95, 96].
+        // STATE-41: Prior buggy exclusion list {19,20,26,45,49,59} incorrectly excluded
+        // state 26 which native INCLUDES, plus incorrectly triggered ~70 states native excludes.
+        private static readonly byte[] NativeRecalcBitmap = new byte[14]
+        {
+            0x40, 0x60, 0x00, 0xFF, 0xDF, 0x01, 0x00,
+            0x00, 0x78, 0x20, 0x7C, 0xBF, 0x01, 0x00
+        };
+
         private static bool RequiresTimedAbilityRecalc(byte internalType)
         {
-            return internalType != 19 && internalType != 20 &&
-                   internalType != NativeState26Type &&
-                   internalType != 45 && internalType != 49 &&
-                   internalType != NativeSkill153ShieldState;
+            if (internalType > 111)
+                return false;
+
+            int byteIndex = internalType / 8;
+            int bitIndex = internalType % 8;
+            return (NativeRecalcBitmap[byteIndex] & (1 << bitIndex)) != 0;
         }
 
         protected void MarkAbilityRecalcPending()

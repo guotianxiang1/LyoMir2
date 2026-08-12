@@ -949,6 +949,132 @@ skipped.Add("COV-zongpai-0x593F04-getmaster-minimal-projection: "
         + "NATIVE-ONLY (schema probe, C# has no show-tables-like queries)");
 }
 
+// === hero_data / hero_index READ gap (12 VAs verified 2026-08-12) =========
+//
+// Byte analysis: all 12 passed header check (rc=-1, ln==len(b), no NUL inside).
+// Census text agrees with bytes for all 12. No corrections needed.
+//
+// Distribution:
+//   hero_data (3 VAs): all NATIVE-ONLY
+//   hero_index (9 VAs): 3 assertions (HRRANK-1/2/3), 5 NATIVE-ONLY + 1 skipped
+//
+// Evidence base: dbserver_CODE_live.bin (0x401000..0x5D5000) + reunpacked i64.
+// Owner function analysis: _heroread_owner.py (staging)
+
+// ---- hero_data NATIVE-ONLY sites (3 VAs) ----------------------------------
+// All three belong to cross-server import family (cluster B, func 0x5B53AC)
+// or CreateHero collision check (func 0x5B1C08, cluster A). C# has no equivalent
+// cross-server import handler; collision check queries hero_index not hero_data.
+
+skipped.Add("0x5B2954 len=57 `Select idx from hero_data where HeroName=\"%s\" and Idx<>%d` "
+    + "NATIVE-ONLY: CreateHero collision check (C# checks hero_index not hero_data)");
+skipped.Add("0x5B5E40 len=75 `Select High_Priority idx, HeroName, Data,dynData from hero_data where idx =` "
+    + "NATIVE-ONLY: cluster B cross-server import (no C# counterpart)");
+skipped.Add("0x5B5F08 len=62 `Select High_Priority Idx from hero_data where HeroName = \"%s\";` "
+    + "NATIVE-ONLY: cluster B cross-server import (no C# counterpart)");
+
+// ---- hero_index NATIVE-ONLY sites (5 VAs) ---------------------------------
+skipped.Add("0x58CE20 len=31 `select Count(*) from hero_index` "
+    + "NATIVE-ONLY: heroId backfill progress report (C# counts have WHERE clauses)");
+skipped.Add("0x5B5B38 len=61 `Select High_Priority idx,HeroName from hero_index where idx =` "
+    + "NATIVE-ONLY: cluster B cross-server import (no C# counterpart)");
+skipped.Add("0x5B8750 len=166 `select MasterName, HeroName, ... into outfile \"%s\" ...` "
+    + "NATIVE-ONLY: weekly export routine (no OUTFILE in DBSvr)");
+skipped.Add("0x5C9CD0 len=99 `select count(*) from mir3.hero_index where masterName not in (select chrName from mir3.user_index);` "
+    + "NATIVE-ONLY: orphan-hero deletion gate (C# CleanupService skips count, runs DELETE unconditionally)");
+
+// ---- hero_index ranking queries (0x478BF8/CCC/DA0/E74 → 2 assertions) ----
+//
+// Native (bytes verified):
+//   0x478BF8 len=201 (Job=0), 0x478CCC len=201 (Job=1), 0x478DA0 len=201 (Job=2):
+//     select MasterName, HeroName, Level, sfLevel from hero_index, _AvailUser
+//     where _AvailUser.Idx=hero_index.Idx and Job = N order by Level desc,
+//     sfLevel desc, ForceLv desc, Exp desc, lvChangeTime Limit 100
+//   0x478E74 len=191 (no Job filter):
+//     ...Idx=hero_index.Idx order by Level desc,  sfLevel desc, ForceLv desc,
+//      Exp desc, lvChangeTime Limit 100
+//     Note: native 0x478E74 has double spaces after "Level desc," and "ForceLv desc,"
+//     — preserved fact, not normalisation target.
+//
+// C# counterpart: DBSvr/Core/NativeType2RankingLoader.cs CategorySql()
+//   categories 4/5/6 → Job={category - 4}  (Job=0/1/2)
+//   category 7       → no Job predicate
+//
+// Intentional _AvailUser asymmetry (native 0x5CBE38 vs 0x5CBEC8):
+//   user_index population adds WHERE Level>0 AND AdminLevel=0 — hero_index does NOT.
+//   Do NOT assert a Level/AdminLevel filter on the hero branch.
+{
+    var flatRankingHr = Regex.Replace(
+        Load("DBSvr/Core/NativeType2RankingLoader.cs"), @"\s+", " ");
+
+    // HRRANK-1: job-filtered hero ranking template (categories 4/5/6)
+    // ok: extracted from NativeType2RankingLoader.cs source, not from constants here
+    var jobFilteredTemplate = Regex.IsMatch(flatRankingHr,
+        @"hero_index.*_AvailUser.*Job\s*=\s*\{category\s*-\s*4\}.*" +
+        @"ORDER\s+BY\s+Level\s+desc.*sfLevel\s+desc.*ForceLv\s+desc.*Exp\s+desc.*lvChangeTime",
+        RegexOptions.IgnoreCase);
+
+    Check("HRRANK-1-hero-ranking-job-template",
+        expected: "native 0x478BF8/CCC/DA0 (categories 4/5/6) — Job-filtered hero ranking, " +
+                  "Job={category - 4}, ORDER BY Level desc sfLevel desc ForceLv desc Exp desc lvChangeTime",
+        actual: jobFilteredTemplate
+            ? "Job-filtered template present (Job={category - 4})"
+            : "absent or Job binding incorrect",
+        ok: jobFilteredTemplate);
+
+    // HRRANK-2: unfiltered hero ranking (category 7)
+    // Tight: anchors to hero_index+_AvailUser without Job=, requires lvChangeTime.
+    // Scope is this file only — prevents user_index sibling from giving false green.
+    // Mutation self-check: removing lvChangeTime from cat-7 → FAIL (verified).
+    var unfilteredTemplate = Regex.IsMatch(flatRankingHr,
+        @"mir3\.hero_index,\s+_AvailUser\s+WHERE\s+_AvailUser\.Idx\s*=\s*mir3\.hero_index\.Idx\s+" +
+        @"ORDER\s+BY\s+Level\s+DESC,\s+sfLevel\s+DESC,\s+ForceLv\s+DESC,\s+Exp\s+DESC,\s+lvChangeTime\s+LIMIT\s+100",
+        RegexOptions.IgnoreCase);
+
+    var unfilteredHasNoJob = unfilteredTemplate &&
+        !Regex.IsMatch(flatRankingHr,
+            @"category\s*==\s*7.*?AND\s+Job", RegexOptions.IgnoreCase);
+
+    Check("HRRANK-2-hero-ranking-unfiltered-no-job",
+        expected: "native 0x478E74 (category 7) — unfiltered hero ranking, NO Job predicate, " +
+                  "lvChangeTime in ORDER BY (intentional _AvailUser asymmetry: no Level/AdminLevel filter)",
+        actual: unfilteredTemplate
+            ? (unfilteredHasNoJob
+                ? "unfiltered template present, NO Job filter, lvChangeTime present"
+                : "template present but HAS Job filter (divergence)")
+            : "absent or lvChangeTime missing",
+        ok: unfilteredHasNoJob);
+}
+
+// ---- hero_index LAST_INSERT_ID (0x5B2724 → 1 assertion) ------------------
+//
+// Native 0x5B2724 len=61:
+//   `Select High_Priority LAST_INSERT_ID() from hero_index limit 1`
+// Owner: func 0x5B1C08 (CreateHero), issued immediately after INSERT.
+//
+// C# counterpart in MySqlHeroRecordService.cs CreateHero():
+//   Single command: `INSERT INTO mir3.hero_index(...) VALUES(...); SELECT LAST_INSERT_ID();`
+//   MySql.Data supports multi-statement via semicolons; result is the same new idx.
+//   Divergence: native issues a separate query with FROM hero_index + High_Priority + LIMIT;
+//   C# appends to the INSERT. Functionally equivalent.
+//
+// Mutation self-check: removing `; SELECT LAST_INSERT_ID();` → FAIL (verified).
+{
+    var flatHeroRecHr = Regex.Replace(
+        Load("DBSvr/DB/impl/MySqlHeroRecordService.cs"), @"\s+", " ");
+    var createHeroLastId = Regex.IsMatch(flatHeroRecHr,
+        @"INSERT\s+INTO\s+mir3\.hero_index.*VALUES.*SELECT\s+LAST_INSERT_ID\(\)",
+        RegexOptions.IgnoreCase);
+
+    Check("HRRANK-3-hero-create-last-insert-id",
+        expected: "native 0x5B2724 `Select High_Priority LAST_INSERT_ID() from hero_index limit 1` " +
+                  "— CreateHero retrieves new idx via LAST_INSERT_ID() after INSERT",
+        actual: createHeroLastId
+            ? "INSERT mir3.hero_index + SELECT LAST_INSERT_ID() present in same command"
+            : "LAST_INSERT_ID() missing or not co-located with INSERT",
+        ok: createHeroLastId);
+}
+
 // === 覆盖率 ===============================================================
 // ⚠️ 分母是**重新枚举**得来的，不是继承的。旧版写 253 条 GAME / 306 总数且
 // 无从复核；本轮按 Delphi 长字符串头严格枚举 CODE 快照
