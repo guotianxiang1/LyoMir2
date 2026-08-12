@@ -1277,19 +1277,8 @@ namespace GameSvr
                             nMsgCount = GetTurnMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxTurnMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sBunOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
+                                // MOVE-22: Native never disconnects, kicks or logs a fast client.
+                                // Simply send correction back to client.
                                 SendMoveActionFail();
                             }
                             else
@@ -1329,19 +1318,8 @@ namespace GameSvr
                             nMsgCount = GetWalkMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxWalkMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sWalkOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
+                                // MOVE-22: Native never disconnects, kicks or logs a fast client.
+                                // Simply send correction back to client.
                                 SendMoveActionFail();
                                 if (m_boTestSpeedMode)
                                 {
@@ -1389,19 +1367,8 @@ namespace GameSvr
                             nMsgCount = GetRunMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxRunMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sRunOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
+                                // MOVE-22: Native never disconnects, kicks or logs a fast client.
+                                // Simply send correction back to client.
                                 SendMoveActionFail();
                                 if (m_boTestSpeedMode)
                                 {
@@ -1438,19 +1405,8 @@ namespace GameSvr
                             nMsgCount = GetRunMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxRunMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sRunOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
+                                // MOVE-22: Native never disconnects, kicks or logs a fast client.
+                                // Simply send correction back to client.
                                 SendMoveActionFail();
                             }
                             else
