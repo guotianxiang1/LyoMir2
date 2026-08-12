@@ -1769,9 +1769,9 @@ namespace GameSvr.Services
         // enemies), paginated exactly like the native handler: pageStart =
         // page*pageSize; result = 12 when the caller has no gild, otherwise 0 (a
         // past-the-end page returns 0 + an empty slice — these handlers have no
-        // gild-list "30" code). Order is by partner gild id: the native per-gild
-        // TLists (gild+48 / gild+52) are in insertion order, which the normalized
-        // pair dictionary does not preserve; the result SET is equivalent.
+        // gild-list "30" code). Order is by CreateTime ascending: the native per-gild
+        // TLists (gild+48 / gild+52) are in insertion order, which corresponds to
+        // CreateTime.
         internal IReadOnlyList<(long Id, string Name)> GetGildRelationPage(
             long playerId, byte relation, int page, int pageSize, out int result)
         {
@@ -1785,7 +1785,7 @@ namespace GameSvr.Services
                 }
 
                 var self = unchecked((ulong)gild.Id);
-                var matches = new List<(long Id, string Name)>();
+                var matches = new List<(long Id, string Name, DateTime CreateTime)>();
                 foreach (var pair in _gildRelations)
                 {
                     if (pair.Value.Relation != relation) continue;
@@ -1797,15 +1797,15 @@ namespace GameSvr.Services
                     else
                         continue;
                     if (_gildById.TryGetValue(other, out var otherGild))
-                        matches.Add((other, otherGild.Name));
+                        matches.Add((other, otherGild.Name, pair.Value.CreateTime));
                 }
 
-                matches.Sort((left, right) => left.Id.CompareTo(right.Id));
+                matches.Sort((left, right) => left.CreateTime.CompareTo(right.CreateTime));
                 var start = (long)page * pageSize;
                 if (start >= matches.Count)
                     return Array.Empty<(long, string)>();
                 return matches.Skip(unchecked((int)start)).Take(pageSize)
-                    .ToArray();
+                    .Select(m => (m.Id, m.Name)).ToArray();
             }
         }
 
