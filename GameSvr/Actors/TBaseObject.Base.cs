@@ -2155,13 +2155,13 @@ namespace GameSvr
                     }
                     if (StdItem.AniCount == 180)
                     {
-                        
-                        m_dwPKDieLostExp = StdItem.DuraMax * M2Share.g_Config.dwPKDieLostExpRate;
+                        // DURA-03: read instance DuraMax (obj+0x28) not template DuraMax (+0x1C)
+                        m_dwPKDieLostExp = m_UseItems[i].DuraMax * M2Share.g_Config.dwPKDieLostExpRate;
                     }
                     if (StdItem.AniCount == 181)
                     {
-                        
-                        m_nPKDieLostLevel = StdItem.DuraMax / M2Share.g_Config.nPKDieLostLevelRate;
+                        // DURA-03: read instance DuraMax (obj+0x28) not template DuraMax (+0x1C)
+                        m_nPKDieLostLevel = m_UseItems[i].DuraMax / M2Share.g_Config.nPKDieLostLevelRate;
                     }
                     
                 }
@@ -2344,13 +2344,13 @@ namespace GameSvr
                 }
                 if (StdItem.Shape == 180)
                 {
-                    
-                    m_dwPKDieLostExp = StdItem.DuraMax * M2Share.g_Config.dwPKDieLostExpRate;
+                    // DURA-03: read instance DuraMax (obj+0x28) not template DuraMax (+0x1C)
+                    m_dwPKDieLostExp = m_UseItems[i].DuraMax * M2Share.g_Config.dwPKDieLostExpRate;
                 }
                 if (StdItem.Shape == 181)
                 {
-                    
-                    m_nPKDieLostLevel = StdItem.DuraMax / M2Share.g_Config.nPKDieLostLevelRate;
+                    // DURA-03: read instance DuraMax (obj+0x28) not template DuraMax (+0x1C)
+                    m_nPKDieLostLevel = m_UseItems[i].DuraMax / M2Share.g_Config.nPKDieLostLevelRate;
                 }
                 
                 if (StdItem.Shape == 120)
