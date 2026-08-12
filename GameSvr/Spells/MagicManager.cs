@@ -605,6 +605,7 @@ namespace GameSvr
                     }
                     break;
                 case SpellsDef.SKILL_GROUPAMYOUNSUL:
+                case SpellsDef.SKILL_213:
                     if (MagGroupAmyounsul(PlayObject, UserMagic, nTargetX, nTargetY, TargeTBaseObject))
                     {
                         boTrain = true;
