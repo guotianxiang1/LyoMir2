@@ -6,6 +6,12 @@ namespace GameSvr
     {
         protected virtual void Whisper(string whostr, string saystr)
         {
+            // 战神 sub_6BB864 @0x6BB8A4: cmp eax,0xFF; jle; clamps whisper to 255 bytes.
+            // Native enforces this gate before any further processing.
+            if (saystr.Length > 255)
+            {
+                saystr = saystr.Substring(0, 255);
+            }
             var svidx = 0;
             var PlayObject = M2Share.UserEngine.GetPlayObject(whostr);
             if (PlayObject != null)
@@ -107,9 +113,16 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject.ProcessSayMsg Msg = {0}";
             try
             {
+                // 战神 sub_6BB2F8 @0x6BB2FE/0x6BBC38/0x6BBB0C/0x6BBA50: all chat types
+                // (say/shout/guild/group) clamp to 255 bytes (cmp eax,0xFF; jle).
+                // Apply native's hard limit first, then the configurable soft limit.
+                if (sData.Length > 255)
+                {
+                    sData = sData.Substring(0, 255);
+                }
                 if (sData.Length > M2Share.g_Config.nSayMsgMaxLen)
                 {
-                    sData = sData.Substring(0, M2Share.g_Config.nSayMsgMaxLen); 
+                    sData = sData.Substring(0, M2Share.g_Config.nSayMsgMaxLen);
                 }
                 if ((HUtil32.GetTickCount() - m_dwSayMsgTick) < M2Share.g_Config.dwSayMsgTime)
                 {
