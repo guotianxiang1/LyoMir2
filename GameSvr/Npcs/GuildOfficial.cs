@@ -182,23 +182,53 @@ namespace GameSvr
         
         private void ReQuestGuildWar(TPlayObject PlayObject, string sGuildName)
         {
-            if (M2Share.GuildManager.FindGuild(sGuildName) != null)
-            {
-                if (PlayObject.m_nGold >= M2Share.g_Config.nGuildWarPrice)
-                {
-                    PlayObject.DecGold(M2Share.g_Config.nGuildWarPrice);
-                    PlayObject.GoldChanged();
-                    PlayObject.ReQuestGuildWar(sGuildName);
-                }
-                else
-                {
-                    PlayObject.SysMsg("你没有足够的金币!!!", MsgColor.Red, MsgType.Hint);
-                }
-            }
-            else
+            // Gate 1: Target guild exists
+            Association targetGuild = M2Share.GuildManager.FindGuild(sGuildName);
+            if (targetGuild == null)
             {
                 PlayObject.SysMsg("行会 " + sGuildName + " 不存在!!!", MsgColor.Red, MsgType.Hint);
+                return;
             }
+
+            // Gate 2: Check gold availability (but don't deduct yet)
+            if (PlayObject.m_nGold < M2Share.g_Config.nGuildWarPrice)
+            {
+                PlayObject.SysMsg("你没有足够的金币!!!", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            // Gate 3: Is guild master
+            if (!PlayObject.IsGuildMaster())
+            {
+                PlayObject.SysMsg("只有行会掌门人才能申请!!!", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            // Gate 4: Has guild (implicit in IsGuildMaster, but explicit check for clarity)
+            if (PlayObject.m_MyGuild == null)
+            {
+                PlayObject.SysMsg("你还没有加入行会!!!", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            // Gate 5: Not own guild
+            if (PlayObject.m_MyGuild == targetGuild)
+            {
+                PlayObject.SysMsg("不能向自己的行会宣战!!!", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            // Gate 6: ServerIndex check
+            if (M2Share.nServerIndex != 0)
+            {
+                PlayObject.SysMsg("这个命令不能在本服务器上使用!!!", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            // All gates passed - now deduct gold and process
+            PlayObject.DecGold(M2Share.g_Config.nGuildWarPrice);
+            PlayObject.GoldChanged();
+            PlayObject.ReQuestGuildWar(sGuildName);
         }
 
         private void DoNate(TPlayObject PlayObject)
