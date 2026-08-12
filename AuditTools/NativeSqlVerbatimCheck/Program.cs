@@ -803,6 +803,152 @@ skipped.Add("COV-zongpai-0x593F04-getmaster-minimal-projection: "
     + "retrieves only idx+Notice; C# GetMaster retrieves all 6 columns "
     + "(documented divergence: wider projection, same WHERE clause)");
 
+// === Small READ families (gap census 20260812) — 10 families, 12 VAs =====
+{
+    // ── antiqueitems (1 VA) ─────────────────────────────────────────────────
+    // 0x5C76AC len=41: select High_Priority * from AntiqueItems;
+    // C# mirror: NativeType2StaticLoader.cs:46 AntiqueItemsSql constant
+    // ⚠️ This is one of the 4 static tables WITHOUT order by (native intentional).
+    var antiqueLoad = Regex.IsMatch(staticLoader,
+        @"select\s+High_Priority\s+\*\s+from\s+AntiqueItems\s*;",
+        RegexOptions.IgnoreCase);
+    Check("MR-static-no-order-by-AntiqueItems",
+        expected: "native 0x5C76AC `select High_Priority * from AntiqueItems;` "
+            + "(no ORDER BY — one of 4 unordered static tables)",
+        actual: antiqueLoad
+            ? "present in NativeType2StaticLoader"
+            : "absent or ORDER BY added (native has no ORDER BY for this table)",
+        ok: antiqueLoad);
+
+    // ── dominatorpet (1 VA) ─────────────────────────────────────────────────
+    // 0x5B36DC len=39: show Tables from %s like "dominatorpet"
+    // NATIVE-ONLY: schema probe, no C# equivalent (C# uses direct DDL/ALTER).
+    skipped.Add("0x5B36DC len=39 `show Tables from %s like \"dominatorpet\"` "
+        + "NATIVE-ONLY (schema probe, C# has no show-tables-like queries)");
+
+    // ── fieldhero (1 VA) ────────────────────────────────────────────────────
+    // 0x5C3790 len=38: select High_Priority * from fieldhero;
+    // C# mirror: NativeType2StaticLoader.cs:48 FieldHeroSql constant
+    // ⚠️ This is one of the 4 static tables WITHOUT order by (native intentional).
+    var fieldHeroLoad = Regex.IsMatch(staticLoader,
+        @"select\s+High_Priority\s+\*\s+from\s+fieldhero\s*;",
+        RegexOptions.IgnoreCase);
+    Check("MR-static-no-order-by-fieldhero",
+        expected: "native 0x5C3790 `select High_Priority * from fieldhero;` "
+            + "(no ORDER BY — one of 4 unordered static tables)",
+        actual: fieldHeroLoad
+            ? "present in NativeType2StaticLoader"
+            : "absent or ORDER BY added (native has no ORDER BY for this table)",
+        ok: fieldHeroLoad);
+
+    // ── guild_user (1 VA) ───────────────────────────────────────────────────
+    // 0x5C0768 len=50: show columns from Guild.guild_user like "sfLevel";
+    // C# mirror: NativeSchemaProvisioner.cs ProbeColumn call (exact verbatim)
+    // This is a schema migration gate checking if sfLevel column exists.
+    var guildUserProbe = Regex.IsMatch(wholeDbSvr,
+        @"show\s+columns\s+from\s+Guild\.guild_user\s+like\s+""sfLevel""",
+        RegexOptions.IgnoreCase);
+    Check("MR-schema-probe-guild_user-sfLevel",
+        expected: "native 0x5C0768 `show columns from Guild.guild_user like \"sfLevel\";` "
+            + "(schema migration gate for sfLevel column)",
+        actual: guildUserProbe
+            ? "present in NativeSchemaProvisioner"
+            : "absent (migration gate missing)",
+        ok: guildUserProbe);
+
+    // ── monster (1 VA) ──────────────────────────────────────────────────────
+    // 0x5C5EF4 len=36: select High_Priority * from monster;
+    // C# mirror: NativeType2StaticLoader.cs:42 MonsterSql constant
+    // ⚠️ This is one of the 4 static tables WITHOUT order by (native intentional).
+    // ⚠️ Note: distinct from 0x5C34F0 which might be a different variant.
+    var monsterLoad = Regex.IsMatch(staticLoader,
+        @"select\s+High_Priority\s+\*\s+from\s+monster\s*;",
+        RegexOptions.IgnoreCase);
+    Check("MR-static-no-order-by-monster",
+        expected: "native 0x5C5EF4 `select High_Priority * from monster;` "
+            + "(no ORDER BY — one of 4 unordered static tables)",
+        actual: monsterLoad
+            ? "present in NativeType2StaticLoader"
+            : "absent or ORDER BY added (native has no ORDER BY for this table)",
+        ok: monsterLoad);
+
+    // ── stditems (2 VAs) ────────────────────────────────────────────────────
+    // 0x5CA288 len=35: select count(*) from mir3.stditems;
+    // C# mirror: NativeType2StdItemsImportService.cs COUNT(*) queries
+    // Used during import to check row counts.
+    var stdItemsCount = Regex.IsMatch(wholeDbSvr,
+        @"SELECT\s+COUNT\(\*\)\s+FROM\s+mir3\.stditems",
+        RegexOptions.IgnoreCase);
+    Check("MR-stditems-count-import",
+        expected: "native 0x5CA288 `select count(*) from mir3.stditems;` "
+            + "(import validation COUNT query)",
+        actual: stdItemsCount
+            ? "COUNT(*) FROM mir3.stditems present in NativeType2StdItemsImportService"
+            : "absent (import validation missing)",
+        ok: stdItemsCount);
+
+    // 0x5CA9B4 len=51: select * from stditems where idx > %d order by idx;
+    // NATIVE-ONLY: batch-read pattern, C# does not use this incremental read approach.
+    skipped.Add("0x5CA9B4 len=51 `select * from stditems where idx > %d order by idx;` "
+        + "NATIVE-ONLY (batch incremental read, C# uses full-table ORDER BY load)");
+
+    // ── superskill (1 VA) ───────────────────────────────────────────────────
+    // 0x5C8404 len=39: Select High_Priority * from SuperSkill;
+    // C# mirror: NativeType2StaticLoader.cs:52 SuperSkillSql constant
+    // ⚠️ Note capital 'S' in Select (native verbatim spelling).
+    // ⚠️ This is one of the 4 static tables WITHOUT order by (native intentional).
+    var superSkillLoad = Regex.IsMatch(staticLoader,
+        @"Select\s+High_Priority\s+\*\s+from\s+SuperSkill\s*;",
+        RegexOptions.IgnoreCase);
+    Check("MR-static-no-order-by-SuperSkill",
+        expected: "native 0x5C8404 `Select High_Priority * from SuperSkill;` "
+            + "(capital S; no ORDER BY — one of 4 unordered static tables)",
+        actual: superSkillLoad
+            ? "present in NativeType2StaticLoader"
+            : "absent or ORDER BY added (native has no ORDER BY for this table)",
+        ok: superSkillLoad);
+
+    // ── transferareascore (1 VA) ────────────────────────────────────────────
+    // 0x596390 len=56:  select %s from transferareascore where charname = "%s";
+    // Native uses runtime column selection (first %s = column name parameter).
+    // C# mirror: MySqlTransferAreaService.cs:65 templated SELECT {field} FROM...
+    var transScoreRead = Regex.IsMatch(wholeDbSvr,
+        @"SELECT\s+\{?field\}?\s+FROM\s+gamedata\.transferareascore\s+WHERE\s+charname\s*=\s*@",
+        RegexOptions.IgnoreCase);
+    Check("MR-transferareascore-read-by-charname",
+        expected: "native 0x596390 ` select %s from transferareascore where charname = \"%s\";` "
+            + "(runtime column selection, e.g., Score1/Score2/Score3)",
+        actual: transScoreRead
+            ? "templated SELECT {field} FROM transferareascore WHERE charname present"
+            : "absent (cross-server score lookup missing)",
+        ok: transScoreRead);
+
+    // ── transferareascoresendrecord (1 VA) ──────────────────────────────────
+    // 0x5958E0 len=127: Select High_Priority idx from TransferAreaScoreSendRecord
+    //                   where (State = 3) and (Now() > DATE_Add(TimeStamp, Interval 7 DAY));
+    // C# mirror: MySqlTransferAreaService.cs expired-record cleanup query (State=3, 7 DAY)
+    // ⚠️ Note: distinct from 0x595714 which queries State=1.
+    var sendRecordExpired = Regex.IsMatch(wholeDbSvr,
+        @"Select\s+High_Priority\s+idx\s+from\s+\w*\.?TransferAreaScoreSendRecord\s+"
+        + @"where\s+\(\s*State\s*=\s*3\s*\)\s+and\s+\(\s*Now\(\)\s*>\s*DATE_Add\("
+        + @"TimeStamp\s*,\s*Interval\s+@?\w*\s+DAY\s*\)",
+        RegexOptions.IgnoreCase);
+    Check("MR-sendrecord-expired-state3-cleanup",
+        expected: "native 0x5958E0 `Select High_Priority idx from TransferAreaScoreSendRecord "
+            + "where (State = 3) and (Now() > DATE_Add(TimeStamp, Interval 7 DAY));` "
+            + "(expired-record cleanup; distinct from State=1 read)",
+        actual: sendRecordExpired
+            ? "State=3 + DATE_Add 7 DAY cleanup query present"
+            : "absent (expired record cleanup missing or predicate changed)",
+        ok: sendRecordExpired);
+
+    // ── user_storage (1 VA) ─────────────────────────────────────────────────
+    // 0x5B35E4 len=39: show Tables from %s like "user_storage"
+    // NATIVE-ONLY: schema probe, no C# equivalent (C# uses direct DDL/ALTER).
+    skipped.Add("0x5B35E4 len=39 `show Tables from %s like \"user_storage\"` "
+        + "NATIVE-ONLY (schema probe, C# has no show-tables-like queries)");
+}
+
 // === 覆盖率 ===============================================================
 // ⚠️ 分母是**重新枚举**得来的，不是继承的。旧版写 253 条 GAME / 306 总数且
 // 无从复核；本轮按 Delphi 长字符串头严格枚举 CODE 快照
