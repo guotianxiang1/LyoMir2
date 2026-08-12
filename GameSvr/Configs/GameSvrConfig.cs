@@ -1456,7 +1456,7 @@ namespace GameSvr
             nGuildMemberMaxLimit = 200;
             nGuildNameLen = 16;
             nAttackPosionRate = 5;
-            nAttackPosionTime = 5;
+            nAttackPosionTime = 30;  // Native 0x666D44: mov cx, 0x1E (30 ticks), not config-driven
             dwRevivalTime = 60 * 1000; 
             boUserMoveCanDupObj = false;
             boUserMoveCanOnItem = true;
