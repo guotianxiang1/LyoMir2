@@ -1682,7 +1682,7 @@ namespace GameSvr
                         // No function call, no x87 instructions, no player-count scaling.
                         if (MonGen.dwStartTick == 0 || nTemp > MonGen.dwZenTime)
                         {
-                            var nGenCount = MonGen.nActiveCount; 
+                            var nGenCount = MonGen.nActiveCount;
                             var boRegened = true;
                             // ✅ 战神字节证据 (Tier-1)。EA: ProcessMon sub_67C150 Phase-2 @0x67C27A-0x67C297:
                             //   67C278  mov   esi,eax                 ; ESI = MonGen 记录(round-robin 取自 [+0x48] 游标)
@@ -1697,17 +1697,11 @@ namespace GameSvr
                             // worker sub_67C9E0 只扫 CertList([gen+0x3C]) 找空位逐格补齐
                             // (@0x67CA15 找空位 → @0x67CA3B call sub_679F8C 工厂 → @0x67CA9B inc nActiveCount)。
                             // => nMonGenRate 这个比率缩放在战神【不存在】,是 ref 分支特性。
-                            // 保留本式的理由(不是忠实,是"默认等价"): 默认 nMonGenRate=10 时
-                            //   _MAX(1, Round(_MAX(1,nCount) / (10/10.0))) == _MAX(1, nCount) == 原生 [gen+0x24]
-                            //   (nCount>=1 时同值),故默认配置下【无行为差异】;仅当管理员改过 nMonGenRate
-                            //   才会偏离原版。属"参数化引入的可配置偏离",非活 bug。
-                            // 并列 ref 引用(保留,勿删;来源=GameOfMir 参考分支,非战神,仅算术形态线索):
-                            //   UsrEngn.pas:1164 `nGenModCount = _MAX(1, Round(_MAX(1,nCount)/(nMonGenRate/10.0)))`
-                            //   —— 该比率缩放已被上述字节证据否证为非战神形态。
-                            // (更早的整数式 (nCount/nMonGenRate)*10 在默认配置下把 nCount<10 截断成 0 =
-                            //  永不刷怪,那才是真 bug,已修。)
-                            var nGenModCount = HUtil32._MAX(1, HUtil32.Round(
-                                HUtil32._MAX(1, MonGen.nCount) / (M2Share.g_Config.nMonGenRate / 10.0)));
+                            //
+                            // DROP-30: 移除非原生的 nMonGenRate 缩放，改用原版的直接整数比较。
+                            // 验证: _verify_mongen_rate.py 确认 EA 0x67C27A-0x67C297 无 x87/div 指令。
+                            // 原版逻辑: if (nCount > nActiveCount) spawn (nCount - nActiveCount)
+                            var nTargetCount = MonGen.nCount;
                             // The boNOHUMNOMON half of this gate is GONE (Tier-1
                             // negative evidence): 战神 has no such map flag —
                             // 0 byte hits image-wide for every spelling, and the
@@ -1719,9 +1713,9 @@ namespace GameSvr
                             // null-safety necessity, not a behavioural gate.
                             var map = M2Share.MapManager.FindMap(MonGen.sMapName);
                             boCanCreate = map != null;
-                            if (nGenModCount > nGenCount && boCanCreate)// 增加 控制刷怪数量比�?
+                            if (nTargetCount > nGenCount && boCanCreate)
                             {
-                                boRegened = RegenMonsters(MonGen, nGenModCount - nGenCount);
+                                boRegened = RegenMonsters(MonGen, nTargetCount - nGenCount);
                             }
                             if (boRegened)
                             {
