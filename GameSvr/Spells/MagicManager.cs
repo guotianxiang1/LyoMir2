@@ -812,6 +812,33 @@ namespace GameSvr
                         TargeTBaseObject = null;
                     }
                     break;
+                // Magic IDs 140, 141, 145, 146: Native DEFAULT convergence handlers.
+                // All four route to the default sink at 0x6EE04B in sub_6ED62C.
+                // Native behavior (verified via audit Magic140_141_145_146Check):
+                //   - boSpellFail remains FALSE (entry default at 0x6ED63C)
+                //   - DoSpell returns TRUE at 0x6EE0C3
+                //   - Sends RM_MAGICFIRE (0x27E) effect packet
+                //   - MP deducted at entry (0x6ED65E, before dispatch)
+                //   - No gameplay effect, no skill training
+                // Implementation: empty case = fall through to success path.
+                case SpellsDef.SKILL_140:
+                case SpellsDef.SKILL_141:
+                case SpellsDef.SKILL_145:
+                case SpellsDef.SKILL_146:
+                    break;
+                // Magic ID 149: Native handler at 0x6EDEC1, calls sub_6EEE34
+                // which returns al=1, then inverts via `xor al,1` at 0x6EDED7,
+                // resulting in boSpellFail=0 (success). Mana spent, effect sent,
+                // no gameplay. Silent success stub.
+                case SpellsDef.SKILL_149:
+                    break;
+                // Magic ID 150: Native handler at 0x6EDF01, calls sub_6EEE28
+                // which returns al=0 (raw: 558bec33c05dc20800 at 0x6EEE28),
+                // then inverts via `xor al,1` at 0x6EDF1B, resulting in
+                // boSpellFail=1 (hard reject). Caller sends RM_MAGICFIREFAIL (0x27F).
+                case SpellsDef.SKILL_150:
+                    boSpellFail = true;
+                    break;
                 case SpellsDef.SKILL_152:
                     boSpellFail = !PlayObject.TryActivateNativeSkill152(
                         UserMagic);
@@ -819,6 +846,34 @@ namespace GameSvr
                 case SpellsDef.SKILL_153:
                     boSpellFail = !PlayObject.TryActivateNativeSkill153Shield(
                         UserMagic);
+                    break;
+                // Magic IDs 161, 162: Native hard rejects (per task description).
+                // These IDs require subsystems or mechanics not yet reverse-engineered.
+                // Implementation: set boSpellFail=true to send RM_MAGICFIREFAIL (0x27F).
+                case SpellsDef.SKILL_161:
+                case SpellsDef.SKILL_162:
+                    boSpellFail = true;
+                    break;
+                // Magic IDs 169 (0xA9), 170 (0xAA): Native DEFAULT convergence handlers.
+                // Both route to 0x6EE04B in DoSpell (sub_6ED62C). Verified via dispatch
+                // ladder trace (commit 26c0dd3):
+                //   0x6ED891: cmp eax, 0xA7 (167); jg 0x6ED8BC  → 169/170 > 167, jump
+                //   0x6ED8BC: sub eax, 0xBF (191); je handler_191  → 169/170 - 191 < 0, skip
+                //   0x6ED8C7: sub eax, 0x16 (22); je handler_213  → negative, skip
+                //   0x6ED8D0: jmp 0x6EE04B (DEFAULT convergence)
+                // DEFAULT path sets result=TRUE (0x6EE0C3), sends RM_MAGICFIRE (0x27E),
+                // returns success. No gameplay effect, no training. Silent success stubs.
+                case SpellsDef.SKILL_169:
+                case SpellsDef.SKILL_170:
+                    break;
+                // Magic IDs 171-174: Native hard rejects (per task description).
+                // These rely on a type-based subsystem not yet reverse-engineered.
+                // Implementation: set boSpellFail=true to faithfully reject.
+                case SpellsDef.SKILL_171:
+                case SpellsDef.SKILL_172:
+                case SpellsDef.SKILL_173:
+                case SpellsDef.SKILL_174:
+                    boSpellFail = true;
                     break;
                 // ids 179 (0xB3) and 180 (0xB4) are convergence-routed no-ops.
                 // DoSpell multi-level dispatch (sub_6ED62C): the switch has eight
