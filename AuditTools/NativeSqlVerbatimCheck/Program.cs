@@ -131,6 +131,33 @@ const string NATIVE_SENDRECORD_UNIQUE_KEY =
 const string NATIVE_ANCIENT_DELETE =
     "delete from mir3.user_index where (year(modifyDate) <= 2008) "
     + "or (year(modifyDate) < 2010 and level <= 60);";
+// 0x5B94D8 len=103
+const string NATIVE_DOMINATORPET_INSERT =
+    "Insert Into dominatorpet(MasterName, MasterId, Level, Exp, CreateDate) "
+    + "values(\"%s\", %d, %d, %d, Now());";
+// 0x5B957C len=77
+const string NATIVE_DOMINATORPET_UPDATE_LEVEL =
+    "Update dominatorpet Set Level=%d, Exp=%d, ModifyDate=Now() where MasterId=%d;";
+// 0x5B377C len=82
+const string NATIVE_BACKUP_DOMINATORPET =
+    "Insert LOW_PRIORITY Into mir3_backup.dominatorpet select * from mir3.dominatorpet;";
+// 0x5B913C len=53
+const string NATIVE_USERSTORAGE_INSERT_IDX =
+    "Insert Into user_storage(idx, PTID) values(%d, \"%s\");";
+// 0x5B3680 len=82
+const string NATIVE_BACKUP_USERSTORAGE =
+    "Insert LOW_PRIORITY Into mir3_backup.user_storage select * from mir3.user_storage;";
+// 0x5938F0 len=82
+const string NATIVE_ZONGPAI_MASTEREXP_WITH_TIME =
+    "update ZongpaiBase set MasterExp = %u, UpdateTime = Now() where MasterName = \"%s\";";
+// 0x5CBE38 len=132
+const string NATIVE_AVAILUSER_USER_INDEX =
+    "Insert Into _AvailUser select Idx from user_index where Level>0 and AdminLevel = 0 "
+    + "and Date_add(ModifyDate, interval 1 month)>Now();";
+// 0x5CBEC8 len=101
+const string NATIVE_AVAILUSER_HERO_INDEX =
+    "Insert Into _AvailUser select Idx from hero_index "
+    + "where Date_add(ModifyDate, interval 1 month)>Now();";
 // 静态表加载 9 条写死语句里带 ORDER BY 的 5 条
 var nativeStaticOrderBy = new (string Va, string Sql)[]
 {
@@ -194,6 +221,9 @@ var dbInit = Load("DBSvr/Core/DatabaseInitService.cs");
 var staticLoader = Load("DBSvr/Core/NativeType2StaticLoader.cs");
 var awardProto = Load("DBSvr/Core/NativeAwardPlayerProtocol.cs");
 var dbShare = Load("DBSvr/DBShare.cs");
+var pet = Load("DBSvr/DB/impl/MySqlPetService.cs");
+var backup = Load("DBSvr/Core/BackupService.cs");
+var ranking = Load("DBSvr/Core/NativeType2RankingLoader.cs");
 var wholeDbSvr = LoadTree("DBSvr");
 
 // === D1 FightPoints：原断言极性反了，已按字节反向重写 =====================
@@ -1073,6 +1103,149 @@ skipped.Add("0x5C9CD0 len=99 `select count(*) from mir3.hero_index where masterN
             ? "INSERT mir3.hero_index + SELECT LAST_INSERT_ID() present in same command"
             : "LAST_INSERT_ID() missing or not co-located with INSERT",
         ok: createHeroLastId);
+}
+
+// === petstorage / backup / availuser (8 assertions from 8 VAs) ============
+// ─── 1. 0x5B94D8  Insert Into dominatorpet(MasterName,MasterId,...,CreateDate) ──
+// C# site: MySqlPetService.cs CreatePet() line 64
+// Pattern: INSERT INTO dominatorpet( MasterName ... MasterId ... CreateDate )
+Check("NEW-0x5B94D8-dominatorpet-insert-with-createdate",
+    expected: $"native 0x5B94D8 `{NATIVE_DOMINATORPET_INSERT}`",
+    actual: Regex.IsMatch(flatDbSvr,
+        @"INSERT\s+INTO\s+(?:mir3\.)?dominatorpet\s*\([^)]*\bMasterName\b[^)]*\bMasterId\b[^)]*CreateDate[^)]*\)",
+        RegexOptions.IgnoreCase)
+        ? "present: INSERT dominatorpet(MasterName,...,MasterId,...,CreateDate,...)"
+        : "absent (NATIVE-ONLY gap — CreatePet does not include CreateDate column)",
+    ok: Regex.IsMatch(flatDbSvr,
+        @"INSERT\s+INTO\s+(?:mir3\.)?dominatorpet\s*\([^)]*\bMasterName\b[^)]*\bMasterId\b[^)]*CreateDate[^)]*\)",
+        RegexOptions.IgnoreCase));
+
+// ─── 2. 0x5B957C  Update dominatorpet Set Level=…,Exp=…,ModifyDate=Now() ───────
+// C# sites: MySqlPetService.cs SavePet() line 84, UpdatePetLevel() line 128
+// Pattern: UPDATE dominatorpet SET Level=@? Exp=@? ModifyDate=Now() WHERE MasterId=@?
+// (keyword case: Set / where matches native verbatim; regex is case-insensitive for safety)
+Check("NEW-0x5B957C-dominatorpet-update-level-exp-modifydate",
+    expected: $"native 0x5B957C `{NATIVE_DOMINATORPET_UPDATE_LEVEL}`",
+    actual: Regex.IsMatch(flatDbSvr,
+        @"UPDATE\s+(?:mir3\.)?dominatorpet\s+Set\s+Level=@\w+,\s*Exp=@\w+,"
+        + @"\s*ModifyDate=Now\(\)\s+where\s+MasterId=@",
+        RegexOptions.IgnoreCase)
+        ? "present: UPDATE dominatorpet Set Level=@?,Exp=@?,ModifyDate=Now() where MasterId=@?"
+        : "absent (NATIVE-ONLY gap — ModifyDate=Now() not updated on level save)",
+    ok: Regex.IsMatch(flatDbSvr,
+        @"UPDATE\s+(?:mir3\.)?dominatorpet\s+Set\s+Level=@\w+,\s*Exp=@\w+,"
+        + @"\s*ModifyDate=Now\(\)\s+where\s+MasterId=@",
+        RegexOptions.IgnoreCase));
+
+// ─── 3. 0x5B377C  Insert LOW_PRIORITY Into mir3_backup.dominatorpet select * ──
+// C# site: BackupService.cs HotBackupToMir3Backup() loop (interpolated template)
+// Strategy: (a) template emits INSERT LOW_PRIORITY INTO mir3_backup.  (b) "dominatorpet"
+//           appears in the table list.
+{
+    var lpTemplate = Regex.IsMatch(flatDbSvr,
+        @"INSERT\s+LOW_PRIORITY\s+INTO\s+mir3_backup\.",
+        RegexOptions.IgnoreCase);
+    var domInList = Contains(backup, "\"dominatorpet\"");
+    Check("NEW-0x5B377C-backup-dominatorpet-low-priority-select",
+        expected: $"native 0x5B377C `{NATIVE_BACKUP_DOMINATORPET}`",
+        actual: $"INSERT LOW_PRIORITY template={lpTemplate}, dominatorpet in table list={domInList}",
+        ok: lpTemplate && domInList);
+}
+
+// ─── 4. 0x5B913C  Insert Into user_storage(idx, PTID) values(…) ─────────────
+// C# status: NATIVE-ONLY — C# only does INSERT INTO user_storage(PTID) using
+// AUTO_INCREMENT; it never supplies an explicit idx value.
+// This assertion is expected to FAIL (red light = real gap).
+Check("NEW-0x5B913C-user-storage-insert-explicit-idx-PTID",
+    expected: $"native 0x5B913C `{NATIVE_USERSTORAGE_INSERT_IDX}` (idx explicit in column list)",
+    actual: Regex.IsMatch(flatDbSvr,
+        @"INSERT\s+INTO\s+(?:mir3\.)?user_storage\s*\(\s*idx\s*,\s*PTID\b",
+        RegexOptions.IgnoreCase)
+        ? "present: idx column explicit"
+        : "absent (NATIVE-ONLY: C# uses (PTID) only; AUTO_INCREMENT assigns idx — "
+          + "native supplies idx explicitly from the transferred object's Idx field)",
+    ok: Regex.IsMatch(flatDbSvr,
+        @"INSERT\s+INTO\s+(?:mir3\.)?user_storage\s*\(\s*idx\s*,\s*PTID\b",
+        RegexOptions.IgnoreCase));
+
+// ─── 5. 0x5B3680  Insert LOW_PRIORITY Into mir3_backup.user_storage select * ─
+// C# site: BackupService.cs HotBackupToMir3Backup() same loop as dominatorpet
+{
+    var lpTemplate2 = Regex.IsMatch(flatDbSvr,
+        @"INSERT\s+LOW_PRIORITY\s+INTO\s+mir3_backup\.",
+        RegexOptions.IgnoreCase);
+    var storageInList = Contains(backup, "\"user_storage\"");
+    Check("NEW-0x5B3680-backup-user-storage-low-priority-select",
+        expected: $"native 0x5B3680 `{NATIVE_BACKUP_USERSTORAGE}`",
+        actual: $"INSERT LOW_PRIORITY template={lpTemplate2}, user_storage in table list={storageInList}",
+        ok: lpTemplate2 && storageInList);
+}
+
+// ─── 6. 0x5938F0  update ZongpaiBase set MasterExp = %u, UpdateTime = Now() ──
+// C# site: MySqlZongpaiService.cs Subtract() method line 234-235
+// The Add() path uses withUpdateTime=true → Now() (lowercase); the Subtract()
+// path uses NOW() (uppercase) because it was written separately.
+// D7 already covers the Add withUpdateTime path (0x5937EC no-UpdateTime variant).
+// This assertion covers the Subtract path at 0x5938F0.
+//
+// Technical note: the Subtract() SQL is split across two C# string literals:
+//   $"UPDATE gamedata.ZongpaiBase SET {column}=@e, UpdateTime=NOW() "
+//   + "WHERE MasterName=@n"
+// After Regex.Replace(wholeDbSvr, @"\s+", " ") the flat source contains:
+//   UpdateTime=NOW() " + "WHERE MasterName=@n
+// The pattern must span this string-concatenation join.
+{
+    // Pattern is case-sensitive (no IgnoreCase) to distinguish NOW() from Now().
+    var subtractEmitsUpdateTime = Regex.IsMatch(
+        Regex.Replace(zongpai, @"\s+", " "),
+        @"UPDATE\s+\w*\.?ZongpaiBase\s+SET\s+\{?\w+\}?=@\w+,\s*UpdateTime=NOW\(\)"
+        + @"\s*[""][^""]*[""]?\s*\+\s*[""]WHERE\s+MasterName");
+    var subtractMasterExpCall = Regex.IsMatch(
+        Regex.Replace(zongpai, @"\s+", " "),
+        @"Subtract\s*\(\s*masterName\s*,\s*amount\s*,\s*""MasterExp""\s*\)");
+    Check("NEW-0x5938F0-zongpai-masterexp-subtract-with-updatetime",
+        expected: $"native 0x5938F0 `{NATIVE_ZONGPAI_MASTEREXP_WITH_TIME}` "
+            + "(Subtract() path; distinct from Add-withUpdateTime=false already in D7)",
+        actual: $"Subtract emits UpdateTime=NOW()={subtractEmitsUpdateTime}, "
+            + $"SubtractMasterExp->Subtract(\"MasterExp\")={subtractMasterExpCall}",
+        ok: subtractEmitsUpdateTime && subtractMasterExpCall);
+}
+
+// ─── 7. 0x5CBE38  Insert Into _AvailUser … user_index … Level>0 AND AdminLevel=0 ─
+// C# site: NativeType2RankingLoader.cs CreateAvailableUsers(heroes=false) line 137-140
+var availUserIndexOk = Regex.IsMatch(
+    Regex.Replace(ranking, @"\s+", " "),
+    @"INSERT\s+INTO\s+_AvailUser\s+SELECT\s+Idx\s+FROM\s+\w*\.?user_index"
+    + @"\s+WHERE\s+(?:Level>0|Level\s*>\s*0).{0,120}?AdminLevel\s*=\s*0",
+    RegexOptions.IgnoreCase);
+Check("NEW-0x5CBE38-availuser-insert-user-index-level-adminlevel",
+    expected: $"native 0x5CBE38 `{NATIVE_AVAILUSER_USER_INDEX}`",
+    actual: availUserIndexOk
+        ? "present: INSERT _AvailUser FROM user_index WHERE Level>0 AND AdminLevel=0 AND DATE_ADD"
+        : "absent (NATIVE-ONLY gap — Level>0/AdminLevel=0 filter missing)",
+    ok: availUserIndexOk);
+
+// ─── 8. 0x5CBEC8  Insert Into _AvailUser … hero_index … (NO Level/AdminLevel) ─
+// C# site: NativeType2RankingLoader.cs CreateAvailableUsers(heroes=true) line 133-136
+// ⚠️ Intentional asymmetry: the hero_index branch has NO Level/AdminLevel filter.
+//    Do NOT add AdminLevel=0 here to make it "consistent" — that would diverge from native.
+// Strategy: locate the verbatim @-string for the heroes branch, verify it has
+// DATE_ADD but not Level or AdminLevel.
+{
+    var rankingRaw = Regex.Replace(ranking, @"\s+", " ");
+    // Match the heroes=true branch string literal in the ternary
+    var heroLitM = Regex.Match(rankingRaw,
+        @"""INSERT INTO _AvailUser\s+SELECT Idx FROM \w*\.?hero_index\s+WHERE DATE_ADD[^""]*""",
+        RegexOptions.IgnoreCase);
+    var heroLitFound = heroLitM.Success;
+    var heroHasNoLevelFilter = heroLitFound
+        && !Regex.IsMatch(heroLitM.Value, @"\bLevel\b|\bAdminLevel\b", RegexOptions.IgnoreCase);
+    Check("NEW-0x5CBEC8-availuser-insert-hero-index-no-level-filter",
+        expected: $"native 0x5CBEC8 `{NATIVE_AVAILUSER_HERO_INDEX}` "
+            + "(intentionally NO Level>0/AdminLevel=0 — asymmetry with user_index branch is correct)",
+        actual: $"hero_index literal found={heroLitFound}, "
+            + $"no Level/AdminLevel in hero branch={heroHasNoLevelFilter}",
+        ok: heroLitFound && heroHasNoLevelFilter);
 }
 
 // === 覆盖率 ===============================================================
