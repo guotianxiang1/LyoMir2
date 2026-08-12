@@ -577,7 +577,22 @@ namespace GameSvr
 
         internal virtual bool CountsAsPlayerPresence =>
             m_btRaceServer == Grobal2.RC_PLAYOBJECT;
-        
+
+        /// <summary>
+        /// Native sub_76B354 base can-act predicate: 6-gate ladder.
+        /// MOVE-14: Gate 5 takes caller argument for bodyState 0x18 selective block.
+        /// </summary>
+        internal virtual bool IsNativeCanActBlocked(int callerArg)
+        {
+            if (m_boDeath) return true;
+            if (HasNativeActiveState(0x1D)) return true;
+            if (HasNativeActiveState(0x01)) return true;
+            if (HasNativeActiveState(0x1A)) return true;
+            if (HasNativeActiveState(0x18) && callerArg != 0) return true; // MOVE-14
+            if (HasNativeActiveState(0x3E)) return true;
+            return false;
+        }
+
         public bool m_boAutoChangeColor = false;
         public int m_dwAutoChangeColorTick = 0;
         public int m_nAutoChangeIdx = 0;
