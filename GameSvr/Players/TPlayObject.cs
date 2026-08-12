@@ -320,7 +320,14 @@ namespace GameSvr
         
         public bool IsAddWeightAvailable(int nWeight)
         {
-            return m_WAbil.Weight + nWeight <= m_WAbil.MaxWeight;
+            // Native sub_73C950 @ 0x73C950:
+            //   mov edx, [eax+0x2C4]  ; edx = Weight
+            //   cmp edx, [eax+0x2C8]  ; vs MaxWeight
+            //   setl al               ; al=1 if Weight < MaxWeight (STRICT <, not <=)
+            // Native ignores the dx (item weight) parameter passed by callers,
+            // comparing only current vs max. We preserve nWeight for sanity
+            // but match the strict-less-than polarity. DROP-39.
+            return m_WAbil.Weight + nWeight < m_WAbil.MaxWeight;
         }
 
         internal int EnsureClientItemId(TUserItem item)
