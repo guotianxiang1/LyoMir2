@@ -101,7 +101,11 @@ namespace GameSvr
                 {
                     if (m_boCanReAlive && m_pMonGen != null)
                     {
-                        var dwMakeGhostTime = HUtil32._MAX(10 * 1000, M2Share.UserEngine.ProcessMonsters_GetZenTime(m_pMonGen.dwZenTime) - 20 * 1000);
+                        // ✅ SPAWN-32: Use dwZenTime directly (no ProcessMonsters_GetZenTime scaling).
+                        // The formula (dwZenTime - 20sec) makes corpses become ghosts 20 seconds
+                        // before the next spawn cycle, preventing visual overlap. The _MAX(10sec, ...)
+                        // ensures minimum 10-second corpse display even for fast spawns.
+                        var dwMakeGhostTime = HUtil32._MAX(10 * 1000, m_pMonGen.dwZenTime - 20 * 1000);
                         if (dwMakeGhostTime > M2Share.g_Config.dwMakeGhostTime)
                         {
                             dwMakeGhostTime = M2Share.g_Config.dwMakeGhostTime;

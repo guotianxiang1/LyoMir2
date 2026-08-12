@@ -1589,9 +1589,37 @@ namespace GameSvr
             int nC;
             int n14;
             var n10 = GetItemPrice(UserItem.wIndex);
+            StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+            // ✅ 战神字节证据 (Tier-1) — ECON-25: 堆叠物品的基础价要【乘堆叠数量】。
+            // EA: sub_63F3B4(基础价解析器) 尾部 @0x63F442-0x63F45B,两条取价分支(商人价格表命中 /
+            // 模板价 ROUND(Price*1.1))汇合之后【无条件】执行:
+            //   0063F442  8b45fc      mov   eax,[ebp-4]          ; eax = 物品【实例】
+            //   0063F445  80781407    cmp   byte [eax+0x14],7    ; 实例 KIND 字节 == 7 ?
+            //   0063F449  7513        jne   0x63f45e             ; 非堆叠 -> 跳过
+            //   0063F44B  837df800    cmp   dword [ebp-8],0
+            //   0063F44F  7e0d        jle   0x63f45e             ; 价 <=0 -> 跳过
+            //   0063F454  0fb74026    movzx eax,word [eax+0x26]  ; 数量 = 实例+0x26 (= Dura)
+            //   0063F458  f76df8      imul  dword [ebp-8]        ; 单操作数 imul,只留低 32 位
+            //   0063F45B  8945f8      mov   [ebp-8],eax
+            // 位置决定性: 乘法在 sub_63F3B4 【内部】,即在 sub_63F380 @0x63F3A9 派发
+            // VMT+0x20(磨损/属性段)【之前】,也在 sub_640208(费率段)与卖价 sar 1 之前。故
+            // 买(0x63EC47)/卖(0x63F22E)/修(0x63EF73) 三条钱路共用这一段,放在本函数顶部即三路齐覆盖。
+            // 门是【实例】+0x14 == 7,不是模板 StdMode —— 注意同函数 @0x63F41B 的姊妹读法
+            // `mov eax,[eax+0x1c] / mov dl,[eax+0x14]` 先解引用模板才取 +0x14(那个才是 StdMode),
+            // 两个 +0x14 是不同字段。实例 +0x14 是各子类构造器写的 KIND 标记:
+            // 基类 TBaseItem 构造器 sub_783788 @0x7837AE 写 0,堆叠基类 sub_7880F0 @0x788118 写 7
+            // (同处 @0x788112 写 word[+0x26]=1 = 新建堆叠计数 1),全镜像内【只有堆叠族写 7】
+            // (idat_bounded_close_20260802.md TARGET 1)。C# 对该谓词的既有约定是
+            // NativeItemFactory.IsPileItem(StdMode>=150 && 有运行时类名),已被物品使用 mode 4 /
+            // 钻石锻造 / 英雄吞噬三处沿用,此处保持一致。
+            // 乘法是 32 位 imul,溢出【静默截断】不做 64 位加宽,故用 unchecked 整数乘复刻。
+            // 数量取【实例】+0x26 (UserItem.Dura),不是模板 DuraMax。
+            if (n10 > 0 && NativeItemFactory.IsPileItem(StdItem))
+            {
+                n10 = unchecked((int)n10 * (int)UserItem.Dura);
+            }
             if (n10 > 0)
             {
-                StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                 if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 && UserItem.DuraMax > 0)
                 {
                     if (StdItem.StdMode == 40)// 肉

@@ -1673,7 +1673,14 @@ namespace GameSvr
                     if (MonGen != null && !string.IsNullOrEmpty(MonGen.sMonName) && !M2Share.g_Config.boVentureServer)
                     {
                         var nTemp = HUtil32.GetTickCount() - MonGen.dwStartTick;
-                        if (MonGen.dwStartTick == 0 || nTemp > ProcessMonsters_GetZenTime(MonGen.dwZenTime))
+                        // ✅ SPAWN-32: Native uses dwZenTime directly without player-count scaling.
+                        // Tier-1 evidence at 0x67C28E-0x67C297:
+                        //   67C28E  mov eax,[ebp-0x14]     ; current tick
+                        //   67C291  sub eax,[esi+0x34]     ; subtract dwStartTick
+                        //   67C294  cmp eax,[esi+0x30]     ; compare with [MonGen+0x30]=dwZenTime
+                        //   67C297  jbe 0x67C2BA           ; skip spawn if elapsed <= dwZenTime
+                        // No function call, no x87 instructions, no player-count scaling.
+                        if (MonGen.dwStartTick == 0 || nTemp > MonGen.dwZenTime)
                         {
                             var nGenCount = MonGen.nActiveCount; 
                             var boRegened = true;
