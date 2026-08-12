@@ -62,6 +62,7 @@ namespace GameSvr.Services
                 var attachments = new List<TUserItem>();
                 foreach (var spec in itemSpecs)
                 {
+                    if (attachmentCount >= 6) break;
                     if (!TryCreateAttachment(spec, out var item)) continue;
                     if (!NativeMailAttachmentCodec.TryEncode(item, out var attachmentRecord, out _))
                         continue;
