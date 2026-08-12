@@ -1406,15 +1406,10 @@ namespace GameSvr
             {
                 return result;
             }
-            if (cert1.m_MyGuild.GuildWarList.Count <= 0)
-            {
-                return result;
-            }
-            m_boGuildWarArea = true;
-            if (cert1.m_MyGuild.IsWarGuild(cert2.m_MyGuild) && cert2.m_MyGuild.IsWarGuild(cert1.m_MyGuild))
-            {
-                result = 2;
-            }
+            // Native: Guild war is declaratory only with no combat effect.
+            // The m_boGuildWarArea=true assignment and GuildWarList.Count gate are invented C# behavior.
+            // Native supports same-guild (result=1) and ally (result=3) relations only.
+            // War relation (result=2) is tracked but never consumed by combat (no native ==2 test exists).
             if (cert1.m_MyGuild == cert2.m_MyGuild)
             {
                 result = 1;
