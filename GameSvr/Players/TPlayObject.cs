@@ -2087,6 +2087,21 @@ namespace GameSvr
         
         
         
+
+                    // SKILL-12: Native coldTime arm at 0x7443F1 after successful cast.
+                    // Arms with key = magic id (same sub_4C853C getter at 0x7443E0),
+                    // duration = 45000ms (literal 0xAFC8 at 0x7443E8), Total argument = 0
+                    // (on stack, implicit in the `call [VMT+0x1F0]`). A second arm site at
+                    // 0x773D53 uses 30000ms. The arm is CONDITIONAL on result==true: native
+                    // places it in the success path after the magic handler returns.
+                    if (result)
+                    {
+                        // Use 45000ms to match the primary arm site at 0x7443F1. The 30000ms
+                        // site at 0x773D53 is context-specific (likely monster/NPC casters);
+                        // player casts route through sub_744388 which uses 45000ms.
+                        const int nativeCooldownDuration = 45000;
+                        ArmNativeColdTime((uint)magicId, nativeCooldownDuration, 0);
+                    }
         
         private bool PileStones(int nX, int nY)
         {
