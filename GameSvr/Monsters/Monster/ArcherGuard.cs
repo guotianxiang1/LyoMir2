@@ -25,6 +25,7 @@ namespace GameSvr
             if (nPower > 0)
             {
                 nPower = TargeTBaseObject.GetHitStruckDamage(this, nPower);
+                nPower = TargeTBaseObject.ApplyNativePhysicalCritical(this, nPower);
             }
             if (nPower > 0)
             {

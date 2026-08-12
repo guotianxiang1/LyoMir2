@@ -63,6 +63,7 @@ namespace GameSvr
                         if (BaseObject != null && BaseObject != this && IsProperTarget(BaseObject) && M2Share.RandomNumber.Random(BaseObject.m_wSpeedPoint) < m_btHitPoint)
                         {
                             nDamage = BaseObject.GetHitStruckDamage(this, nDamage);
+                            nDamage = BaseObject.ApplyNativePhysicalCritical(this, nDamage);
                             if (nDamage > 0)
                             {
                                 BaseObject.StruckDamage(nDamage, this);

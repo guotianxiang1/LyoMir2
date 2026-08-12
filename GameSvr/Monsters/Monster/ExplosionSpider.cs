@@ -34,7 +34,9 @@ namespace GameSvr
                     if (Math.Abs(m_nCurrX - BaseObject.m_nCurrX) <= 1 && Math.Abs(m_nCurrY - BaseObject.m_nCurrY) <= 1)
                     {
                         n10 = 0;
-                        n10 += BaseObject.GetHitStruckDamage(this, nPower / 2);
+                        int physicalDamage = BaseObject.GetHitStruckDamage(this, nPower / 2);
+                        physicalDamage = BaseObject.ApplyNativePhysicalCritical(this, physicalDamage);
+                        n10 += physicalDamage;
                         n10 += BaseObject.GetMagStruckDamage(this, nPower / 2);
                         if (n10 > 0)
                         {

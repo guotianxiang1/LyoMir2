@@ -184,7 +184,9 @@ namespace GameSvr
                 if (this.IsProperTarget(BaseObject))
                 {
                     nDamage = 0;
-                    nDamage += BaseObject.GetHitStruckDamage(this, nHitPower);
+                    int physicalDamage = BaseObject.GetHitStruckDamage(this, nHitPower);
+                    physicalDamage = BaseObject.ApplyNativePhysicalCritical(this, physicalDamage);
+                    nDamage += physicalDamage;
                     nDamage += BaseObject.GetMagStruckDamage(this, nMagPower);
                     if (nDamage > 0)
                     {

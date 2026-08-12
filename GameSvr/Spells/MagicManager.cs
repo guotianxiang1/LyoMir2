@@ -1257,7 +1257,7 @@ namespace GameSvr
                 }
                 if (PlayObject.IsProperTarget(BaseObject))
                 {
-                    var nPower = PlayObject.GetAttackPower(HUtil32.LoWord(PlayObject.m_WAbil.DC), HUtil32.HiWord(PlayObject.m_WAbil.DC) - HUtil32.LoWord(PlayObject.m_WAbil.DC));
+                    int nPower = PlayObject.GetAttackPower(HUtil32.LoWord(PlayObject.m_WAbil.DC), HUtil32.HiWord(PlayObject.m_WAbil.DC) - HUtil32.LoWord(PlayObject.m_WAbil.DC));
                     if (M2Share.RandomNumber.Random(BaseObject.m_wSpeedPoint) >= PlayObject.m_btHitPoint)
                     {
                         nPower = 0;
@@ -1265,6 +1265,7 @@ namespace GameSvr
                     if (nPower > 0)
                     {
                         nPower = BaseObject.GetHitStruckDamage(PlayObject, nPower);
+                        nPower = BaseObject.ApplyNativePhysicalCritical(PlayObject, nPower);
                     }
                     if (nPower > 0)
                     {
