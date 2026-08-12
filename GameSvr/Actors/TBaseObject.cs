@@ -2672,7 +2672,16 @@ namespace GameSvr
                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                 if (StdItem != null)
                 {
-                    result += StdItem.Weight;
+                    // Native sub_73E8D4: for pile items (byte[item+0x14]==7), multiply Weight by Dura
+                    // Equivalent: StdMode >= 150 && runtime type TBasePileItem
+                    if (NativeItemFactory.IsPileItem(StdItem))
+                    {
+                        result = unchecked((ushort)(result + StdItem.Weight * UserItem.Dura));
+                    }
+                    else
+                    {
+                        result += StdItem.Weight;
+                    }
                 }
             }
             return result;
@@ -5125,52 +5134,61 @@ namespace GameSvr
 
         public bool InSafeZone(Envirnoment Envir, int nX, int nY)
         {
-            int nSafeX;
-            int nSafeY;
+            // MFLG-17: Same logic as InSafeZone() but with explicit Envir/coordinates
+
+            // Step 1: null check returns FALSE
             if (Envir == null)
             {
-                return true;
+                return false;
             }
-            bool result = Envir.Flag.boSAFE;
-            if (result)
+
+            // Step 2: boSAFE flag
+            if (Envir.Flag.boSAFE)
             {
                 return true;
             }
-            if ((Envir.sMapName != M2Share.g_Config.sRedHomeMap) || (Math.Abs(nX - M2Share.g_Config.nRedHomeX) > M2Share.g_Config.nSafeZoneSize) || (Math.Abs(nY - M2Share.g_Config.nRedHomeY) > M2Share.g_Config.nSafeZoneSize))
-            {
-                result = false;
-            }
-            else
-            {
-                return true;
-            }
+
+            // Step 3: StartPointList iteration
             for (int i = 0; i < M2Share.StartPointList.Count; i++)
             {
-                if (M2Share.StartPointList[i].m_sMapName == Envir.sMapName)
+                var startPoint = M2Share.StartPointList[i];
+                if (startPoint != null && startPoint.m_sMapName == Envir.sMapName)
                 {
-                    if (M2Share.StartPointList[i] != null)
+                    int nSafeX = startPoint.m_nCurrX;
+                    int nSafeY = startPoint.m_nCurrY;
+                    if ((Math.Abs(nX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) &&
+                        (Math.Abs(nY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
                     {
-                        nSafeX = M2Share.StartPointList[i].m_nCurrX;
-                        nSafeY = M2Share.StartPointList[i].m_nCurrY;
-                        if ((Math.Abs(nX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) && (Math.Abs(nY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
-                        {
-                            result = true;
-                        }
+                        return true;
                     }
                 }
             }
-            if (!result && M2Share.SafeZoneList != null)
+
+            // Step 4: RedHomeMap check
+            if (M2Share.g_Config.nSafeZoneSize > 0 &&
+                !string.IsNullOrEmpty(M2Share.g_Config.sRedHomeMap) &&
+                string.Equals(Envir.sMapName, M2Share.g_Config.sRedHomeMap, StringComparison.OrdinalIgnoreCase))
+            {
+                if ((Math.Abs(nX - M2Share.g_Config.nRedHomeX) <= M2Share.g_Config.nSafeZoneSize) &&
+                    (Math.Abs(nY - M2Share.g_Config.nRedHomeY) <= M2Share.g_Config.nSafeZoneSize))
+                {
+                    return true;
+                }
+            }
+
+            // Step 5: SafeZoneList polygon check
+            if (M2Share.SafeZoneList != null)
             {
                 for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
                 {
                     if (M2Share.SafeZoneList[i].Contains(Envir.sMapName, nX, nY))
                     {
-                        result = true;
-                        break;
+                        return true;
                     }
                 }
             }
-            return result;
+
+            return false;
         }
 
         public void OpenHolySeizeMode(int dwInterval)
