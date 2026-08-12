@@ -5431,7 +5431,8 @@ namespace GameSvr
                 return;
             }
             bo19 = false;
-            if (m_UseItems[Grobal2.U_DRESS] != null && m_UseItems[Grobal2.U_DRESS].wIndex > 0)
+            // DURA-16: U_DRESS also requires 1/8 probability gate, matching other equipment slots
+            if (m_UseItems[Grobal2.U_DRESS] != null && m_UseItems[Grobal2.U_DRESS].wIndex > 0 && M2Share.RandomNumber.Random(8) == 0)
             {
                 nDura = m_UseItems[Grobal2.U_DRESS].Dura;
                 nOldDura = HUtil32.Round(nDura / 1000.0);
