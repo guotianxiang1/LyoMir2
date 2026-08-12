@@ -68,11 +68,11 @@ namespace SystemModule.Common
             }
         }
 
-        
-        
-        
+
+
+
         public StringList()
-            : this(10)
+            : this(100)
         {
         }
 
