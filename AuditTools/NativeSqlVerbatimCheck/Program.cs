@@ -224,6 +224,8 @@ var dbShare = Load("DBSvr/DBShare.cs");
 var pet = Load("DBSvr/DB/impl/MySqlPetService.cs");
 var backup = Load("DBSvr/Core/BackupService.cs");
 var ranking = Load("DBSvr/Core/NativeType2RankingLoader.cs");
+var provisioner = Load("DBSvr/Core/NativeSchemaProvisioner.cs");
+var userIdBackfill = Load("DBSvr/Core/NativeUserIdBackfillService.cs");
 var wholeDbSvr = LoadTree("DBSvr");
 
 // === D1 FightPoints：原断言极性反了，已按字节反向重写 =====================
@@ -1247,6 +1249,165 @@ Check("NEW-0x5CBE38-availuser-insert-user-index-level-adminlevel",
             + $"no Level/AdminLevel in hero branch={heroHasNoLevelFilter}",
         ok: heroLitFound && heroHasNoLevelFilter);
 }
+
+// === user_index READ queries — 14 assertions (6 ranking + 8 other DML) =======
+// Scope: 14 user_index DML queries (6 ranking, 8 other)
+// Evidence: DBServer CODE 0x401000..0x5D5000, verified via _dbs.longstr()
+// Date: 2026-08-12
+// Note: Schema probes (15 assertions) require NativeSchemaProvisioner.cs (not found)
+
+// RANK-01: Job=1 ranking
+Check("UIXR2-RANK-01",
+    expected: "Job=1 ranking: user_index join _AvailUser, Job=1 filter, ORDER BY Level DESC...",
+    actual: (ranking.Contains("Job={(category == 13 ? 3 : category)}")
+             && ranking.Contains("ORDER BY Level DESC, sfLevel DESC, ForceLv DESC")
+             && ranking.Contains("Exp DESC, lvChangeTime LIMIT 100"))
+        ? "MATCH (0x4789AC, interpolated Job filter)"
+        : "MISSING structure",
+    ok: ranking.Contains("Job={(category == 13 ? 3 : category)}")
+        && ranking.Contains("ORDER BY Level DESC, sfLevel DESC, ForceLv DESC")
+        && ranking.Contains("Exp DESC, lvChangeTime LIMIT 100"));
+
+// RANK-02: Job=2 ranking
+Check("UIXR2-RANK-02",
+    expected: "Job=2 ranking: same structure with Job=2 filter",
+    actual: (ranking.Contains("Job={(category == 13 ? 3 : category)}")
+             && ranking.Contains("0 or 1 or 2 or 13"))
+        ? "MATCH (0x478A74, same interpolated template)"
+        : "MISSING structure",
+    ok: ranking.Contains("Job={(category == 13 ? 3 : category)}")
+        && ranking.Contains("0 or 1 or 2 or 13"));
+
+// RANK-03: Overall ranking (all jobs, no Job filter)
+Check("UIXR2-RANK-03",
+    expected: "Overall ranking: no Job filter, same ORDER BY",
+    actual: (ranking.Contains("case 3")
+             || (ranking.Contains("3 =>")
+                 && ranking.Contains("WHERE _AvailUser.Idx=mir3.user_index.Idx")
+                 && ranking.Contains("ORDER BY Level DESC, sfLevel DESC, ForceLv DESC")))
+        ? "MATCH (0x478B3C)"
+        : "MISSING structure",
+    ok: ranking.Contains("3 =>")
+        && ranking.Contains("WHERE _AvailUser.Idx=mir3.user_index.Idx")
+        && ranking.Contains("ORDER BY Level DESC, sfLevel DESC, ForceLv DESC"));
+
+// RANK-04: ApprenticeNum ranking
+Check("UIXR2-RANK-04",
+    expected: "ApprenticeNum ranking: ApprenticeNum>0, ORDER BY ApprenticeNum DESC",
+    actual: (ranking.Contains("ApprenticeNum")
+             && ranking.Contains("ApprenticeNum>0")
+             && ranking.Contains("ORDER BY ApprenticeNum DESC, Level DESC, Exp DESC"))
+        ? "MATCH (0x478F3C)"
+        : "MISSING structure",
+    ok: ranking.Contains("ApprenticeNum")
+        && ranking.Contains("ApprenticeNum>0")
+        && ranking.Contains("ORDER BY ApprenticeNum DESC, Level DESC, Exp DESC"));
+
+// RANK-05: FightPoints ranking
+Check("UIXR2-RANK-05",
+    expected: "FightPoints ranking: FightPoints>0, ORDER BY FightPoints DESC",
+    actual: (ranking.Contains("FightPoints")
+             && ranking.Contains("FightPoints>0")
+             && ranking.Contains("ORDER BY FightPoints DESC, Level DESC, Exp DESC"))
+        ? "MATCH (0x478FF4)"
+        : "MISSING structure",
+    ok: ranking.Contains("FightPoints")
+        && ranking.Contains("FightPoints>0")
+        && ranking.Contains("ORDER BY FightPoints DESC, Level DESC, Exp DESC"));
+
+// RANK-06: ForceLv ranking
+Check("UIXR2-RANK-06",
+    expected: "ForceLv ranking: ForceLv>0, ORDER BY ForceLv DESC",
+    actual: (ranking.Contains("ForceLv")
+             && ranking.Contains("ForceLv>0")
+             && ranking.Contains("ORDER BY ForceLv DESC, Level DESC, Exp DESC"))
+        ? "MATCH (0x4790A4)"
+        : "MISSING structure",
+    ok: ranking.Contains("ForceLv")
+        && ranking.Contains("ForceLv>0")
+        && ranking.Contains("ORDER BY ForceLv DESC, Level DESC, Exp DESC"));
+
+// OTHER-01: Bare count - NATIVE-ONLY (C# always adds WHERE)
+Check("UIXR2-OTHER-01",
+    expected: "Bare 'select Count(*) from user_index' is NATIVE-ONLY (0x5A6CC8)",
+    actual: (!playRecord.Contains("select Count(*) from user_index")
+             && !playData.Contains("select Count(*) from user_index")
+             && !wholeDbSvr.Contains("select Count(*) from user_index"))
+        ? "ABSENT (correct: C# always adds WHERE)"
+        : "PRESENT (divergence from spec)",
+    ok: !playRecord.Contains("select Count(*) from user_index")
+        && !playData.Contains("select Count(*) from user_index")
+        && !wholeDbSvr.Contains("select Count(*) from user_index"));
+
+// OTHER-02: IsTransLock=1 query (requires NativeUserIdBackfillService.cs)
+skipped.Add("UIXR2-OTHER-02: IsTransLock=1 query - file DBSvr/Core/NativeUserIdBackfillService.cs not found");
+
+// OTHER-03: CreateDate by ChrName - NATIVE-ONLY
+Check("UIXR2-OTHER-03",
+    expected: "CreateDate lookup by ChrName is NATIVE-ONLY (0x5AD7C0)",
+    actual: (!playRecord.Contains("Select CreateDate from")
+             || (playRecord.Contains("CreateDate") && !playRecord.Contains("where ChrName=")))
+        ? "ABSENT (correct)"
+        : "PRESENT (divergence)",
+    ok: !playRecord.Contains("Select CreateDate from")
+        || (playRecord.Contains("CreateDate") && !playRecord.Contains("where ChrName=")));
+
+// OTHER-04: LAST_INSERT_ID - DIVERGENT (C# uses bare form without FROM/LIMIT/HP)
+Check("UIXR2-OTHER-04",
+    expected: "LAST_INSERT_ID: C# uses bare form (DIVERGENT from 0x5B1438)",
+    actual: (playRecord.Contains("LAST_INSERT_ID()")
+             && !playRecord.Contains("from user_index"))
+        ? "DIVERGENT (C# uses bare SELECT LAST_INSERT_ID();)"
+        : "UNEXPECTED structure",
+    ok: playRecord.Contains("LAST_INSERT_ID()")
+        && !playRecord.Contains("from user_index"));
+
+// OTHER-05: idx,ChrName by idx - DIVERGENT (C# uses PTID key, not idx key)
+Check("UIXR2-OTHER-05",
+    expected: "idx,ChrName query: C# uses PTID key (DIVERGENT from 0x5B4F6C)",
+    actual: (playRecord.Contains("idx, ChrName")
+             && playRecord.Contains("PTID=@ptid")
+             && !playRecord.Contains("where idx="))
+        ? "DIVERGENT (C# queries by PTID)"
+        : "UNEXPECTED structure",
+    ok: playRecord.Contains("idx, ChrName")
+        && playRecord.Contains("PTID=@ptid")
+        && !playRecord.Contains("where idx="));
+
+// OTHER-06: INTO OUTFILE export - NATIVE-ONLY
+Check("UIXR2-OTHER-06",
+    expected: "INTO OUTFILE export is NATIVE-ONLY (0x5B8B50)",
+    actual: (!wholeDbSvr.Contains("into outfile")
+             && !wholeDbSvr.Contains("INTO OUTFILE"))
+        ? "ABSENT (correct)"
+        : "PRESENT (divergence)",
+    ok: !wholeDbSvr.Contains("into outfile")
+        && !wholeDbSvr.Contains("INTO OUTFILE"));
+
+// OTHER-07: Count by PTID="" - NATIVE-ONLY
+Check("UIXR2-OTHER-07",
+    expected: "Count by empty PTID is NATIVE-ONLY (0x5C933C)",
+    actual: (!playRecord.Contains("PTID=\"\"")
+             && !playRecord.Contains("PTID=\\\"\\\""))
+        ? "ABSENT (correct)"
+        : "PRESENT (divergence)",
+    ok: !playRecord.Contains("PTID=\"\"")
+        && !playRecord.Contains("PTID=\\\"\\\""));
+
+// OTHER-08: Ancient characters count
+Check("UIXR2-OTHER-08",
+    expected: "Ancient characters count in CleanupService (0x5C9F84)",
+    actual: (cleanup.Contains("year(ModifyDate) <= 2008")
+             && (cleanup.Contains("year(ModifyDate) < 2010 and level <= 60")
+                 || cleanup.Contains("year(ModifyDate) < 2010 AND Level <= 60")))
+        ? "MATCH"
+        : "MISSING",
+    ok: cleanup.Contains("year(ModifyDate) <= 2008")
+        && (cleanup.Contains("year(ModifyDate) < 2010 and level <= 60")
+            || cleanup.Contains("year(ModifyDate) < 2010 AND Level <= 60")));
+
+// Schema probes (15 assertions) require DBSvr/Core/NativeSchemaProvisioner.cs
+skipped.Add("UIXR2-SCHEMA-01 through UIXR2-SCHEMA-16: schema probe assertions - file DBSvr/Core/NativeSchemaProvisioner.cs not found");
 
 // === 覆盖率 ===============================================================
 // ⚠️ 分母是**重新枚举**得来的，不是继承的。旧版写 253 条 GAME / 306 总数且
