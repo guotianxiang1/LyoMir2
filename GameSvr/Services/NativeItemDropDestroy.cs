@@ -61,6 +61,9 @@ namespace GameSvr
         /// </summary>
         internal const int AuthenOrder = 4;
 
+        /// <summary><c>sub_78389C</c> mode 2 used by trade (<c>mov edx,2</c>).</summary>
+        internal const int TransferModeTrade = 2;
+
         /// <summary><c>sub_78389C</c> mode used by all three drop paths (<c>mov edx,5</c>).</summary>
         internal const int TransferModeDrop = 5;
 
@@ -76,6 +79,7 @@ namespace GameSvr
         /// 7838D1  test esi,esi / jne 0x783979                     ; marked -> return 0 (ALLOW)
         /// 7838D9  cmp edi,5 / ja 0x783979                         ; mode &gt; 5 -> return 0
         /// 7838E2  jmp [edi*4+0x7838E9]                            ; per-mode jumptable
+        ///   mode 2 -> 0x783911: reject (esi=3) if [item+0xFC]!=0 OR Reserved02 &amp; 0x02
         ///   mode 5 -> 0x783940: reject (esi=5) unless [item+0xFC]!=0
         ///                       OR Reserved02 &amp; 0x0200 OR &amp; 0x0400 OR &amp; 0x0080
         /// </code>
@@ -98,6 +102,19 @@ namespace GameSvr
 
             // 0x7838D9: only modes 0..5 have a jumptable entry.
             if ((uint)mode > 5) return 0;
+
+            // 0x783911 (mode 2): reject when stdItem.Reserved02 & 0x02 (no-trade flag).
+            // Native bytes: 80 BB FC 00 00 00 00 (cmp byte [ebx+0xFC],0) / 75 09 (jne allow)
+            //               8B 43 1C (mov eax,[ebx+0x1C]) / F6 40 03 02 (test byte [eax+3],2)
+            //               74 56 (je reject) / BE 03 00 00 00 (mov esi,3) / EB 4F (jmp return)
+            // [item+0xFC] has no C# counterpart yet, so that disjunct is omitted.
+            if (mode == TransferModeTrade)
+            {
+                if ((stdItem.NativeReserved02 & 0x0002) != 0)
+                {
+                    return 3;
+                }
+            }
 
             // 0x783940 (mode 5): reject when the item carries any of the bind / timed
             // classes.  [item+0xFC] (the always-drop class) has no C# counterpart yet, so

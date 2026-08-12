@@ -489,7 +489,7 @@ namespace GameSvr
                 }
                 m_dwTurnTick = HUtil32.GetTickCount();
             }
-            SendRefMsg(Grobal2.RM_POWERHIT, 0, 0, 0, 0, "");
+            SendRefMsg(Grobal2.RM_SPELL2, 0, 0, 0, 0, "");
             return true;
         }
 
