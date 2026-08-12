@@ -463,7 +463,7 @@ namespace GameSvr.Services
         {
             using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT GildID1,GildID2,Relation " +
+                "SELECT GildID1,GildID2,Relation,CreateTime " +
                 "FROM gamedata.GildRelation ORDER BY GildID1,GildID2";
             using var reader = command.ExecuteReader();
             while (reader.Read())
@@ -472,6 +472,7 @@ namespace GameSvr.Services
                 var second = ReadId(reader, 1);
                 var relation = unchecked((byte)Convert.ToInt32(
                     reader.GetValue(2)));
+                var createTime = reader.GetDateTime(3);
                 if (first == 0 || second == 0 || first == second
                     || !snapshot.GildById.ContainsKey(first)
                     || !snapshot.GildById.ContainsKey(second)
@@ -479,7 +480,7 @@ namespace GameSvr.Services
                     continue;
                 var key = NativeCorpsDataSnapshot.GildRelationKey(first,
                     second);
-                if (!snapshot.GildRelations.TryAdd(key, relation))
+                if (!snapshot.GildRelations.TryAdd(key, (relation, createTime)))
                     throw new InvalidDataException(
                         $"duplicate Gild relation {first}/{second}");
             }

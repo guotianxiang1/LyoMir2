@@ -193,6 +193,9 @@ namespace GameSvr
                 // 1. Guild war expiration checks
                 M2Share.GuildManager.Run();
 
+                // 1b. Native (MySQL) guild war expiration (GILD-27)
+                M2Share.CorpsService.ExpireGildWars(M2Share.g_Config.dwGuildWarTime);
+
                 // 2. Castle manager — includes war state, tax collection, door repair
                 M2Share.CastleManager.Run();
                 if (!M2Share.CastleManager.Save())

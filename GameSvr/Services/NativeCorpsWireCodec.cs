@@ -58,7 +58,7 @@ namespace GameSvr.Services
             new();
         internal Dictionary<long, NativeGildSnapshot> GildById { get; } =
             new();
-        internal Dictionary<(ulong First, ulong Second), byte>
+        internal Dictionary<(ulong First, ulong Second), (byte Relation, DateTime CreateTime)>
             GildRelations { get; } = new();
         // gamedata.gildconcern rows: source gild id -> destination gild ids.
         internal Dictionary<long, List<long>> GildConcerns { get; } = new();

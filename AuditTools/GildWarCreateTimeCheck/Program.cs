@@ -1,182 +1,266 @@
-// GILD-28: Audit tool to verify guild war CreateTime is persisted and loaded.
+// GILD-27: Audit tool proving guild war CreateTime is persisted, loaded and consumed.
 //
-// Before the fix:
-//   LoadGildRelations (NativeCorpsStore.cs line 461-486) read GildID1, GildID2,
-//   Relation from the gildrelation table but DID NOT read CreateTime. This left
-//   all wars with CreateTime=DateTime.MinValue, causing wars to never expire.
+// The bug:
+//   NativeCorpsService._gildRelations was Dictionary<(ulong,ulong), byte> — it held
+//   ONLY the relation byte. LoadGildRelations (NativeCorpsStore.cs) likewise selected
+//   only GildID1,GildID2,Relation. CreateTime was written to the DB on INSERT
+//   (NativeGildMySqlStore.InsertGildRelationSql) but never read back and never kept
+//   in memory, so nothing could compute a war deadline: wars never expired.
 //
 // The fix:
-//   1. LoadGildRelations now reads CreateTime from the DB
-//   2. ExpireGildWars ticks in Phase4 and removes wars where CreateTime+duration<=now
-//   3. DeclareWar and war acceptance write DateTime.Now as CreateTime
+//   1. GildRelations/_gildRelations carry (byte Relation, DateTime CreateTime)
+//   2. LoadGildRelations SELECTs CreateTime and stores it
+//   3. Both relation writers (DeclareWar -> type 2, union accept -> type 1) stamp
+//      DateTime.Now into the in-memory tuple AND pass it to the DB insert
+//   4. ExpireGildWars(durationMs) removes wars past CreateTime+duration and is
+//      ticked from GameServer.ProcessPhase4_SlowerExecute
 //
-// This audit proves:
-//   - LoadGildRelations reads CreateTime (LOAD audit point)
-//   - All loaded wars have CreateTime != MinValue (COVERAGE audit)
-//   - DeclareWar writes DateTime.Now (INSERT audit point)
-//   - ExpireGildWars is wired and ticking (TICK audit point)
+// Native anchor for the expiry rule itself: the file-based twin
+// AssociationManager.Run() (Associations/AssociationManager.cs) drops a war when
+// (GetTickCount()-dwWarTick) > dwWarTime, with dwWarTime = g_Config.dwGuildWarTime.
+// The MySQL path stores an absolute timestamp instead of a tick, so the equivalent
+// predicate is CreateTime+dwGuildWarTime <= now.
 //
-// Evidence chain:
-//   - Native writes CreateTime: NativeGildMySqlStore.cs line 151-153
-//   - Native must read it back: the bug was losing it across restart
-//   - File-based system: Association.cs line 282-296 saves remaining-ms
+// Every check below is fail-closed: a missing/unreadable source file is a FAIL, not
+// a skip (AppContext.BaseDirectory points at bin/ and has no .cs — a classic silent
+// false-green). Source lines are stripped of // comments before matching so that a
+// commented-out call site cannot satisfy a wiring assertion.
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using GameSvr.Services;
 
 namespace GildWarCreateTimeCheck
 {
-    class Program
+    internal static class Program
     {
-        static int Main()
+        private static int _passed;
+        private static int _failed;
+
+        private static int Main()
         {
-            Console.WriteLine("[GILD-28] Audit: Guild war CreateTime persistence");
-            Console.WriteLine("=".PadRight(70, '='));
+            Console.WriteLine("[GILD-27] Audit: guild war CreateTime persistence + expiry");
+            Console.WriteLine(new string('=', 70));
 
-            var passed = 0;
-            var failed = 0;
+            var service = ReadSource("GameSvr/Services/NativeCorpsService.cs");
+            var store = ReadSource("GameSvr/Services/NativeCorpsStore.cs");
+            var codec = ReadSource("GameSvr/Services/NativeCorpsWireCodec.cs");
+            var expiry = ReadSource("GameSvr/Services/NativeGildWarExpiry.cs");
+            var server = ReadSource("GameSvr/GameServer.cs");
+            var gildSql = ReadSource("GameSvr/Services/NativeGildMySqlStore.cs");
 
-            // Check 1: LoadGildRelations reads CreateTime from gildrelation table
-            if (CheckLoadReadsCreateTime())
-            {
-                Console.WriteLine("[PASS] LoadGildRelations reads CreateTime column");
-                passed++;
-            }
-            else
-            {
-                Console.WriteLine("[FAIL] LoadGildRelations does NOT read CreateTime");
-                failed++;
-            }
+            // ---- shape: the tuple actually reaches both dictionaries -------------
+            Assert("snapshot GildRelations is keyed to (Relation, CreateTime)",
+                codec, s => Has(s,
+                    "Dictionary<(ulong First, ulong Second), (byte Relation, DateTime CreateTime)>",
+                    "GildRelations"));
 
-            // Check 2: GildRelations dictionary type includes CreateTime
-            if (CheckDictionaryTypeIncludesTime())
-            {
-                Console.WriteLine("[PASS] GildRelations stores (Relation, CreateTime)");
-                passed++;
-            }
-            else
-            {
-                Console.WriteLine("[FAIL] GildRelations type is wrong");
-                failed++;
-            }
+            Assert("_gildRelations field is keyed to (Relation, CreateTime)",
+                service, s => Has(s,
+                    "Dictionary<(ulong First, ulong Second), (byte Relation, DateTime CreateTime)>",
+                    "_gildRelations"));
 
-            // Check 3: ExpireGildWars exists and is public/internal
-            if (CheckExpireGildWarsExists())
-            {
-                Console.WriteLine("[PASS] ExpireGildWars method exists");
-                passed++;
-            }
-            else
-            {
-                Console.WriteLine("[FAIL] ExpireGildWars method missing");
-                failed++;
-            }
+            Assert("Unavailable ctor builds the tuple dictionary",
+                service, s => Has(s,
+                    "new Dictionary<(ulong, ulong), (byte, DateTime)>()"));
 
-            // Check 4: GameServer.cs wires ExpireGildWars in Phase4
-            if (CheckPhase4Wiring())
-            {
-                Console.WriteLine("[PASS] GameServer Phase4 calls ExpireGildWars");
-                passed++;
-            }
-            else
-            {
-                Console.WriteLine("[FAIL] ExpireGildWars not wired in Phase4");
-                failed++;
-            }
+            AssertFalse("no byte-only relation dictionary survives anywhere",
+                new[] { service, codec },
+                s => Has(s, "Dictionary<(ulong First, ulong Second), byte>")
+                     || Has(s, "Dictionary<(ulong, ulong), byte>"));
 
-            // Check 5: DeclareWar writes DateTime.Now to CreateTime
-            if (CheckDeclareWarWritesNow())
-            {
-                Console.WriteLine("[PASS] DeclareWar stores DateTime.Now");
-                passed++;
-            }
-            else
-            {
-                Console.WriteLine("[FAIL] DeclareWar doesn't write CreateTime");
-                failed++;
-            }
+            // ---- load: CreateTime is selected and stored ------------------------
+            Assert("LoadGildRelations SELECTs CreateTime",
+                store, s => Has(s, "SELECT GildID1,GildID2,Relation,CreateTime"));
 
-            // Check 6: NativeGildWarExpiry helper exists
-            if (CheckExpiryHelperExists())
-            {
-                Console.WriteLine("[PASS] NativeGildWarExpiry helper class exists");
-                passed++;
-            }
-            else
-            {
-                Console.WriteLine("[FAIL] NativeGildWarExpiry helper missing");
-                failed++;
-            }
+            Assert("LoadGildRelations reads column 3 as DateTime",
+                store, s => Has(s, "reader.GetDateTime(3)"));
 
-            Console.WriteLine("=".PadRight(70, '='));
-            Console.WriteLine($"Result: {passed} passed, {failed} failed");
+            Assert("LoadGildRelations stores (relation, createTime)",
+                store, s => Has(s, "TryAdd(key, (relation, createTime))"));
 
-            return failed == 0 ? 0 : 1;
+            // ---- write: both relation types stamp a timestamp -------------------
+            Assert("DeclareWar stamps (GildHostile, DateTime.Now) in memory",
+                service, s => Has(s,
+                    "_gildRelations[relationKey] = (GildHostile, DateTime.Now)"));
+
+            Assert("DeclareWar forwards the timestamp to the DB insert",
+                service, s => Has(s,
+                    "InsertGildRelationFailSafe(relationKey, GildHostile, DateTime.Now)"));
+
+            Assert("union accept stamps (GildUnion, DateTime.Now) in memory",
+                service, s => Has(s,
+                    "_gildRelations[relationKey] = (GildUnion, DateTime.Now)"));
+
+            Assert("union accept forwards the timestamp to the DB insert",
+                service, s => Has(s,
+                    "InsertGildRelationFailSafe(relationKey, GildUnion, DateTime.Now)"));
+
+            Assert("InsertGildRelationFailSafe takes createTime and binds it (no inline NOW)",
+                service, s => Has(s,
+                    "InsertGildRelationFailSafe(\n            (ulong First, ulong Second) relationKey, int relation, DateTime createTime)".Replace("\n            ", " "))
+                    || (Has(s, "int relation, DateTime createTime)")
+                        && Has(s, "relation,\n                        createTime, out var error)".Replace("\n                        ", " "))));
+
+            Assert("gildrelation INSERT still carries a bound CreateTime param",
+                gildSql, s => Has(s,
+                    "INSERT INTO gamedata.gildrelation(GildID1,GildID2,Relation,")
+                    && Has(s, "CreateTime) VALUES(@g1,@g2,@relation,@created)"));
+
+            // ---- consume: expiry exists, is correct, and is ticked --------------
+            Assert("NativeGildWarExpiry.GetExpired takes the tuple dictionary",
+                expiry, s => Has(s,
+                    "Dictionary<(ulong First, ulong Second), (byte Relation, DateTime CreateTime)> relations"));
+
+            Assert("expiry only drops hostile relations (unions never expire)",
+                expiry, s => Has(s, "pair.Value.Relation != GildHostile")
+                             && Has(s, "continue"));
+
+            Assert("expiry deadline is CreateTime + duration",
+                expiry, s => Has(s, "pair.Value.CreateTime.AddMilliseconds(durationMs)"));
+
+            Assert("ExpireGildWars removes the relation in memory",
+                service, s => Has(s, "internal void ExpireGildWars(int durationMs)")
+                              && Has(s, "_gildRelations.Remove(relationKey)"));
+
+            Assert("ExpireGildWars pushes the DB DELETE",
+                service, s => InBlock(s, "internal void ExpireGildWars",
+                    "DeleteGildRelationFailSafe(relationKey)"));
+
+            Assert("ExpireGildWars calls the shared expiry helper",
+                service, s => InBlock(s, "internal void ExpireGildWars",
+                    "NativeGildWarExpiry.GetExpired(_gildRelations, now, durationMs)"));
+
+            Assert("ExpireGildWars takes the service lock",
+                service, s => InBlock(s, "internal void ExpireGildWars", "lock (_sync)"));
+
+            Assert("Phase4 ticks ExpireGildWars with the configured war time",
+                server, s => InBlock(s, "private void ProcessPhase4_SlowerExecute",
+                    "M2Share.CorpsService.ExpireGildWars(M2Share.g_Config.dwGuildWarTime)"));
+
+            Console.WriteLine(new string('=', 70));
+            Console.WriteLine($"Result: {_passed} passed, {_failed} failed");
+            return _failed == 0 ? 0 : 1;
         }
 
-        static bool CheckLoadReadsCreateTime()
-        {
-            var path = "../../GameSvr/Services/NativeCorpsStore.cs";
-            if (!System.IO.File.Exists(path)) return false;
-            var source = System.IO.File.ReadAllText(path);
+        // ---- harness ---------------------------------------------------------
 
-            // Must read the CreateTime column from the gildrelation table
-            return source.Contains("reader.GetDateTime(") &&
-                   source.Contains("LoadGildRelations") &&
-                   source.Contains("CreateTime");
+        private static void Assert(string name, string source,
+            Func<string, bool> predicate)
+        {
+            if (source == null)
+            {
+                Fail(name + "  [source file missing]");
+                return;
+            }
+            bool ok;
+            try
+            {
+                ok = predicate(source);
+            }
+            catch (Exception ex)
+            {
+                Fail(name + "  [predicate threw: " + ex.Message + "]");
+                return;
+            }
+            if (ok) Pass(name); else Fail(name);
         }
 
-        static bool CheckDictionaryTypeIncludesTime()
+        private static void AssertFalse(string name, IEnumerable<string> sources,
+            Func<string, bool> forbidden)
         {
-            var path = "../../GameSvr/Services/NativeCorpsDataSnapshot.cs";
-            if (!System.IO.File.Exists(path)) return false;
-            var source = System.IO.File.ReadAllText(path);
-
-            // GildRelations must be Dictionary<(ulong,ulong), (byte, DateTime)>
-            return source.Contains("(byte Relation, DateTime CreateTime)>") &&
-                   source.Contains("GildRelations");
+            var all = sources.ToArray();
+            if (all.Any(s => s == null))
+            {
+                Fail(name + "  [source file missing]");
+                return;
+            }
+            if (all.Any(forbidden)) Fail(name); else Pass(name);
         }
 
-        static bool CheckExpireGildWarsExists()
+        private static void Pass(string name)
         {
-            var path = "../../GameSvr/Services/NativeCorpsService.cs";
-            if (!System.IO.File.Exists(path)) return false;
-            var source = System.IO.File.ReadAllText(path);
-
-            return source.Contains("ExpireGildWars");
+            Console.WriteLine("[PASS] " + name);
+            _passed++;
         }
 
-        static bool CheckPhase4Wiring()
+        private static void Fail(string name)
         {
-            var path = "../../GameSvr/GameServer.cs";
-            if (!System.IO.File.Exists(path)) return false;
-            var source = System.IO.File.ReadAllText(path);
-
-            // Phase4 must call M2Share.CorpsService.ExpireGildWars
-            return source.Contains("ExpireGildWars") &&
-                   source.Contains("ProcessPhase4");
+            Console.WriteLine("[FAIL] " + name);
+            _failed++;
         }
 
-        static bool CheckDeclareWarWritesNow()
-        {
-            var path = "../../GameSvr/Services/NativeCorpsService.cs";
-            if (!System.IO.File.Exists(path)) return false;
-            var source = System.IO.File.ReadAllText(path);
+        // Whitespace-insensitive substring match: the repo wraps long expressions
+        // across lines, so both needle and haystack are collapsed before compare.
+        private static bool Has(string source, params string[] needles) =>
+            needles.All(n => Collapse(source).Contains(Collapse(n)));
 
-            // DeclareWar must write (GildHostile, DateTime.Now)
-            return source.Contains("GildHostile") &&
-                   source.Contains("DateTime.Now") &&
-                   source.Contains("_gildRelations[relationKey]");
+        private static string Collapse(string value)
+        {
+            var sb = new System.Text.StringBuilder(value.Length);
+            var pendingSpace = false;
+            foreach (var ch in value)
+            {
+                if (char.IsWhiteSpace(ch)) { pendingSpace = sb.Length > 0; continue; }
+                if (pendingSpace) { sb.Append(' '); pendingSpace = false; }
+                sb.Append(ch);
+            }
+            return sb.ToString();
         }
 
-        static bool CheckExpiryHelperExists()
+        // Confine a match to one method body so a hit elsewhere in the file cannot
+        // satisfy a wiring assertion. Brace-counts from the signature.
+        private static bool InBlock(string source, string signature, string needle)
         {
-            var path = "../../GameSvr/Services/NativeGildWarExpiry.cs";
-            return System.IO.File.Exists(path);
+            var start = source.IndexOf(signature, StringComparison.Ordinal);
+            if (start < 0) return false;
+            var open = source.IndexOf('{', start);
+            if (open < 0) return false;
+            var depth = 0;
+            for (var i = open; i < source.Length; i++)
+            {
+                if (source[i] == '{') depth++;
+                else if (source[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                        return Has(source.Substring(open, i - open + 1), needle);
+                }
+            }
+            return false;
+        }
+
+        // Strip // comments (keeping string literals intact is unnecessary here: no
+        // asserted needle contains "//") so commented-out code cannot pass a check.
+        private static string StripLineComments(string source)
+        {
+            var sb = new System.Text.StringBuilder(source.Length);
+            foreach (var line in source.Split('\n'))
+            {
+                var trimmed = line.TrimStart();
+                if (trimmed.StartsWith("//", StringComparison.Ordinal))
+                {
+                    sb.Append('\n');
+                    continue;
+                }
+                var idx = line.IndexOf("//", StringComparison.Ordinal);
+                sb.Append(idx >= 0 ? line.Substring(0, idx) : line).Append('\n');
+            }
+            return sb.ToString();
+        }
+
+        // [CallerFilePath] anchors on this source file: AppContext.BaseDirectory is
+        // bin/ and holds no .cs, which would turn every scan into a silent SKIP.
+        private static string ReadSource(string relativeFromRepoRoot,
+            [CallerFilePath] string thisFile = null)
+        {
+            var dir = Path.GetDirectoryName(thisFile);
+            if (dir == null) return null;
+            var path = Path.GetFullPath(Path.Combine(dir, "..", "..",
+                relativeFromRepoRoot.Replace('/', Path.DirectorySeparatorChar)));
+            return File.Exists(path) ? StripLineComments(File.ReadAllText(path)) : null;
         }
     }
 }

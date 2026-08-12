@@ -166,7 +166,7 @@ namespace GameSvr.Services
         private readonly NativeSocialPersistenceQueue _persistence;
         private readonly Dictionary<long, NativeCorpsSnapshot> _corpsById;
         private readonly Dictionary<long, NativeGildSnapshot> _gildById;
-        private readonly Dictionary<(ulong First, ulong Second), byte>
+        private readonly Dictionary<(ulong First, ulong Second), (byte Relation, DateTime CreateTime)>
             _gildRelations;
         private readonly Dictionary<long, long> _memberToCorps = new();
         private readonly Dictionary<long, long> _corpsToGild = new();
@@ -183,7 +183,7 @@ namespace GameSvr.Services
         {
             _corpsById = new Dictionary<long, NativeCorpsSnapshot>();
             _gildById = new Dictionary<long, NativeGildSnapshot>();
-            _gildRelations = new Dictionary<(ulong, ulong), byte>();
+            _gildRelations = new Dictionary<(ulong, ulong), (byte, DateTime)>();
         }
 
         private NativeCorpsService(INativeCorpsStore store,
@@ -228,6 +228,29 @@ namespace GameSvr.Services
                 service = Unavailable;
                 error = "native Corps index rebuild failed: " + ex.Message;
                 return false;
+            }
+        }
+
+        // GILD-27: Expire wars based on CreateTime + duration. Wars (Relation=2) expire
+        // after dwGuildWarTime (default 3 hours). This is called from GameServer Phase4.
+        // The native equivalent is AssociationManager.Run() line ~159 which checks
+        // (GetTickCount()-dwWarTick) > dwWarTime for the file-based system.
+        internal void ExpireGildWars(int durationMs)
+        {
+            if (!SupportsGildWrites) return;
+
+            lock (_sync)
+            {
+                var now = DateTime.Now;
+                var expired = NativeGildWarExpiry.GetExpired(_gildRelations, now, durationMs);
+
+                foreach (var war in expired)
+                {
+                    var relationKey = NativeCorpsDataSnapshot.GildRelationKey(
+                        war.FirstGildId, war.SecondGildId);
+                    _gildRelations.Remove(relationKey);
+                    DeleteGildRelationFailSafe(relationKey);
+                }
             }
         }
 
@@ -311,7 +334,8 @@ namespace GameSvr.Services
                 if (sameGild) return;
                 _gildRelations.TryGetValue(
                     NativeCorpsDataSnapshot.GildRelationKey(selfGildId,
-                        targetGildId), out gildRelation);
+                        targetGildId), out var relationTuple);
+                gildRelation = relationTuple.Relation;
             }
         }
 
@@ -994,8 +1018,8 @@ namespace GameSvr.Services
             {
                 relationKey = NativeCorpsDataSnapshot.GildRelationKey(
                     callerGild.Id, targetGildId);
-                allied = _gildRelations.TryGetValue(relationKey, out var rel)
-                         && rel == GildUnion;
+                allied = _gildRelations.TryGetValue(relationKey, out var relationTuple)
+                         && relationTuple.Relation == GildUnion;
             }
 
             return new NativeGildUnionConcernContext
@@ -1075,8 +1099,8 @@ namespace GameSvr.Services
             if (!NativeGildDeclareWarTransaction.InsertsRelation(result))
                 return result;
 
-            _gildRelations[relationKey] = GildHostile;
-            InsertGildRelationFailSafe(relationKey, GildHostile);
+            _gildRelations[relationKey] = (GildHostile, DateTime.Now);
+            InsertGildRelationFailSafe(relationKey, GildHostile, DateTime.Now);
             return result;
         }
 
@@ -1105,8 +1129,8 @@ namespace GameSvr.Services
             {
                 relationKey = NativeCorpsDataSnapshot.GildRelationKey(
                     callerGild.Id, targetGildId);
-                if (_gildRelations.TryGetValue(relationKey, out var rel))
-                    relationState = rel;
+                if (_gildRelations.TryGetValue(relationKey, out var relationTuple))
+                    relationState = relationTuple.Relation;
             }
 
             return new NativeGildDeclareWarContext
@@ -1129,14 +1153,14 @@ namespace GameSvr.Services
         }
 
         private void InsertGildRelationFailSafe(
-            (ulong First, ulong Second) relationKey, int relation)
+            (ulong First, ulong Second) relationKey, int relation, DateTime createTime)
         {
             try
             {
                 if (!_gildStore.TryInsertGildRelation(
                         unchecked((long)relationKey.First),
                         unchecked((long)relationKey.Second), relation,
-                        DateTime.Now, out var error))
+                        createTime, out var error))
                     M2Share.ErrorMessage("[SQL Failed] " + error);
             }
             catch (Exception ex)
@@ -1764,7 +1788,7 @@ namespace GameSvr.Services
                 var matches = new List<(long Id, string Name)>();
                 foreach (var pair in _gildRelations)
                 {
-                    if (pair.Value != relation) continue;
+                    if (pair.Value.Relation != relation) continue;
                     long other;
                     if (pair.Key.First == self)
                         other = unchecked((long)pair.Key.Second);
@@ -1811,9 +1835,11 @@ namespace GameSvr.Services
                     {
                         if (!_gildById.TryGetValue(dstId, out var dstGild))
                             continue;
-                        _gildRelations.TryGetValue(
+                        var relation = (byte)0;
+                        if (_gildRelations.TryGetValue(
                             NativeCorpsDataSnapshot.GildRelationKey(gild.Id,
-                                dstId), out var relation);
+                                dstId), out var relationTuple))
+                            relation = relationTuple.Relation;
                         matches.Add((dstId, dstGild.Name, relation));
                     }
                 }
@@ -1900,9 +1926,12 @@ namespace GameSvr.Services
                 _gildById.TryGetValue(targetGildId, out var targetGild);
                 byte relation = 0;
                 if (hasGild && targetGild != null)
-                    _gildRelations.TryGetValue(
+                {
+                    if (_gildRelations.TryGetValue(
                         NativeCorpsDataSnapshot.GildRelationKey(ownGild.Id,
-                            targetGildId), out relation);
+                            targetGildId), out var relationTuple))
+                        relation = relationTuple.Relation;
+                }
 
                 var context = new NativeGildRequestUnionContext
                 {
@@ -1935,7 +1964,7 @@ namespace GameSvr.Services
                 {
                     InsertGildRelationFailSafe(
                         NativeCorpsDataSnapshot.GildRelationKey(ownGild.Id,
-                            targetGildId), GildPendingUnion);
+                            targetGildId), GildPendingUnion, DateTime.Now);
                     if (result == NativeGildRequestUnionTransaction.Success)
                         result = _requestLedger.Add(
                             new NativeGildPendingRequest
@@ -2212,8 +2241,8 @@ namespace GameSvr.Services
                         // save_relation (sub_5E6E60 n4=1): DELETE-3 then INSERT-1 on the canonical pair
                         // (no in-place UPDATE); type-1 enters _gildRelations (union list) + fail-safe DB.
                         DeleteGildRelationFailSafe(relationKey);
-                        _gildRelations[relationKey] = GildUnion;
-                        InsertGildRelationFailSafe(relationKey, GildUnion);
+                        _gildRelations[relationKey] = (GildUnion, DateTime.Now);
+                        InsertGildRelationFailSafe(relationKey, GildUnion, DateTime.Now);
                         saveRelationResult = 0;
                     }
                 }
