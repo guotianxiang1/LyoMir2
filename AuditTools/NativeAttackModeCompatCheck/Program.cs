@@ -221,10 +221,10 @@ static NativeCorpsService CreateCombatService()
     AddGild(snapshot, 4000, 500);
     snapshot.GildRelations.Add(
         NativeCorpsDataSnapshot.GildRelationKey(1000, 2000),
-        NativeCorpsService.GildUnion);
+        (NativeCorpsService.GildUnion, DateTime.MinValue));
     snapshot.GildRelations.Add(
         NativeCorpsDataSnapshot.GildRelationKey(1000, 3000),
-        NativeCorpsService.GildHostile);
+        (NativeCorpsService.GildHostile, DateTime.MinValue));
 
     Assert(NativeCorpsService.TryCreate(new FakeStore(snapshot),
         out var service, out var error), "combat service: " + error);
