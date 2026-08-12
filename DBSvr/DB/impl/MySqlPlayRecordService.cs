@@ -572,7 +572,7 @@ namespace DBSvr
                 foreach (var index in indices)
                 {
                     using var selectData = new MySqlCommand(
-                        "SELECT Data FROM mir3.user_data WHERE Idx=@idx FOR UPDATE",
+                        "SELECT HIGH_PRIORITY Data FROM mir3.user_data WHERE Idx=@idx FOR UPDATE",
                         connection, tx);
                     selectData.Parameters.AddWithValue("@idx", index);
                     var value = selectData.ExecuteScalar() as byte[];

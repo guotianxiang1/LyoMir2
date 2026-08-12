@@ -231,7 +231,7 @@ namespace DBSvr
             if (conn == null) return (null, null);
 
             using var cmd = new MySqlCommand(
-                "SELECT Data, ScriptData FROM mir3.user_data WHERE Idx=@idx", conn);
+                "SELECT HIGH_PRIORITY Data, ScriptData FROM mir3.user_data WHERE Idx=@idx", conn);
             cmd.Parameters.AddWithValue("@idx", idx);
             using var dr = cmd.ExecuteReader();
             if (!dr.Read()) return (null, null);
