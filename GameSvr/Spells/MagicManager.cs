@@ -820,6 +820,27 @@ namespace GameSvr
                     boSpellFail = !PlayObject.TryActivateNativeSkill153Shield(
                         UserMagic);
                     break;
+                // ids 179 (0xB3) and 180 (0xB4) are convergence-routed no-ops.
+                // DoSpell multi-level dispatch (sub_6ED62C): the switch has eight
+                // comparison tiers: @0x6ED79A (151), @0x6ED884 (231), @0x6ED891
+                // (167), @0x6ED8A0 (172), @0x6ED8BC (191), @0x6ED8C7 (213),
+                // @0x6ED8D0 (default sink). For ids 179 and 180:
+                //   0x6ED79A: cmp eax, 0x97 (151) → 179 > 151, jmp 0x6ED884
+                //   0x6ED884: cmp eax, 0xE7 (231) → 179 < 231, fall through
+                //   0x6ED891: cmp eax, 0xA7 (167) → 179 > 167, jmp 0x6ED8BC
+                //   0x6ED8BC: sub eax, 0xBF (191) → 179 != 191, fall through
+                //   0x6ED8C7: sub eax, 0x16 (22) → (179-191) != 22, fall through
+                //   0x6ED8D0: jmp 0x6EE04B → default convergence handler.
+                // The convergence handler @0x6EE04B checks boSpellFail (initially
+                // 0, set by @0x6ED63C `mov byte ptr [ebp-5],0`). Since no
+                // intervening code sets the flag, both ids fall through to the
+                // success path @0x6EE051-0x6EE0C3: send the 0x27E effect packet and
+                // return TRUE (@0x6EE0C3: `mov byte ptr [ebp-5],1`). Mana was
+                // already deducted in the DoSpell entry @0x6ED65C. Net effect: mana
+                // spent, effect packet broadcast, no game state change.
+                case SpellsDef.SKILL_179:
+                case SpellsDef.SKILL_180:
+                    break;
             }
             if (boSpellFail)
             {

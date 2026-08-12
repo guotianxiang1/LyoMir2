@@ -200,5 +200,7 @@ namespace GameSvr
         public const int SKILL_59 = 59;
         public const int SKILL_152 = 152;
         public const int SKILL_153 = 153;
+        public const int SKILL_179 = 179;
+        public const int SKILL_180 = 180;
     }
 }
