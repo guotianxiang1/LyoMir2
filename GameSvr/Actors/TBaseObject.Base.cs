@@ -1182,7 +1182,7 @@ namespace GameSvr
                     {
                         if (m_LastHiter.m_MyGuild != null && m_MyGuild != null)
                         {
-                            m_LastHiter.m_MyGuild.TeamFightWhoWinPoint(m_LastHiter.m_sCharName, 100);
+                            m_LastHiter.m_MyGuild.TeamFightWhoWinPoint(m_LastHiter.m_sCharName, m_Abil.Level);
                             tStr = m_LastHiter.m_MyGuild.sGuildName + ':' + m_LastHiter.m_MyGuild.nContestPoint + "  " + m_MyGuild.sGuildName + ':' + m_MyGuild.nContestPoint;
                             M2Share.UserEngine.CryCry(Grobal2.RM_CRY, m_PEnvir, m_nCurrX, m_nCurrY, 1000, M2Share.g_Config.btCryMsgFColor, M2Share.g_Config.btCryMsgBColor, "- " + tStr);
                         }
