@@ -85,8 +85,13 @@ namespace GameSvr
                         CorpsService.AppointViceCaptain);
                     return true;
                 case Grobal2.CM_CORPS_STEPDOWN:
-                    SendNativeCorpsStatus(Grobal2.SM_CORPS_STEPDOWN,
-                        CorpsService.StepDown(GetCachedNativeUserId()));
+                    var result = CorpsService.StepDown(GetCachedNativeUserId());
+                    SendNativeCorpsStatus(Grobal2.SM_CORPS_STEPDOWN, result);
+                    if (result == 0)
+                    {
+                        SendNativePlayerCorps(Grobal2.SM_PLAYER_CORPS);
+                        SendNativeSocialRoleRefresh();
+                    }
                     return true;
                 case Grobal2.CM_CORPS_GET_RECRUIT_CONDITION:
                     SendNativeCorpsRecruitCondition(processMessage);
@@ -423,8 +428,11 @@ namespace GameSvr
         {
             var body = GetNativeCorpsBody(processMessage);
             if (!NativeCorpsWireCodec.TryReadId(body, out var memberId)) return;
-            SendNativeCorpsStatus(ident,
-                operation(GetCachedNativeUserId(), memberId));
+            var result = operation(GetCachedNativeUserId(), memberId);
+            SendNativeCorpsStatus(ident, result);
+            if (result != 0) return;
+            SendNativePlayerCorps(Grobal2.SM_PLAYER_CORPS);
+            SendNativeSocialRoleRefresh();
         }
 
         private void SendNativeCorpsRecruitCondition(
