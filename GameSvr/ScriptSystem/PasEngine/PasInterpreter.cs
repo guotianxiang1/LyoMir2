@@ -52,6 +52,7 @@ namespace GameSvr.PasEngine
                 "ConvertDateTimeToDB", "ConvertDBToDateTime",
                 // Variable system (G is public; V/S are player variables)
                 "GetG", "GetV", "GetS",
+                "SetG", "SetV", "SetS", "GroupSetV", "GroupSetS",
                 // Check functions
                 "CheckBagItem", "CheckBagItemEx", "CheckSkill", "CheckHeroSkill",
                 "CheckLevel", "CheckGold", "CheckJob", "CheckGameGold",
@@ -76,9 +77,6 @@ namespace GameSvr.PasEngine
 
             _builtinProcs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                // Variable setters
-                "SetG", "SetV", "SetS",
-                "GroupSetV", "GroupSetS",
                 // Messaging
                 "ServerSay", "NpcSay", "NpcNotice", "NpcSideNotice", "NpcMapNotice",
                 // INI
@@ -1789,6 +1787,32 @@ namespace GameSvr.PasEngine
                         ? _api.GetPlayerVar('S', args[0].AsInt(), args[1].AsInt())
                         : PasValue.FromInt(-1);
 
+                // ===== Variable setters (now return bool) =====
+                case "setg":
+                    return args.Count >= 3
+                        ? PasValue.FromBool(_api.SetGlobalVar(args[0].AsInt(), args[1].AsInt(), args[2]))
+                        : PasValue.FromBool(false);
+
+                case "setv":
+                    return args.Count >= 3
+                        ? PasValue.FromBool(_api.SetPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]))
+                        : PasValue.FromBool(false);
+
+                case "sets":
+                    return args.Count >= 3
+                        ? PasValue.FromBool(_api.SetPlayerVar('S', args[0].AsInt(), args[1].AsInt(), args[2]))
+                        : PasValue.FromBool(false);
+
+                case "groupsetv":
+                    return args.Count >= 3
+                        ? PasValue.FromBool(_api.SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]))
+                        : PasValue.FromBool(false);
+
+                case "groupsets":
+                    return args.Count >= 3
+                        ? PasValue.FromBool(_api.SetGroupPlayerVar('S', args[0].AsInt(), args[1].AsInt(), args[2]))
+                        : PasValue.FromBool(false);
+
                 // ===== INI file =====
                 case "readinisectionstr":
                     return args.Count >= 3
@@ -2007,33 +2031,6 @@ namespace GameSvr.PasEngine
                         args[2] = PasValue.FromInt(time.Minute);
                         args[3] = PasValue.FromInt(time.Second);
                         args[4] = PasValue.FromInt(time.Millisecond);
-                    }
-                    break;
-
-                // ===== Variable setters =====
-                case "setg":
-                    if (args.Count >= 3) _api.SetGlobalVar(args[0].AsInt(), args[1].AsInt(), args[2]);
-                    break;
-
-                case "setv":
-                    if (args.Count >= 3) _api.SetPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                    break;
-
-                case "sets":
-                    if (args.Count >= 3) _api.SetPlayerVar('S', args[0].AsInt(), args[1].AsInt(), args[2]);
-                    break;
-
-                case "groupsetv":
-                    if (args.Count >= 3)
-                    {
-                        _api.SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                    }
-                    break;
-
-                case "groupsets":
-                    if (args.Count >= 3)
-                    {
-                        _api.SetPlayerVar('S', args[0].AsInt(), args[1].AsInt(), args[2]);
                     }
                     break;
 

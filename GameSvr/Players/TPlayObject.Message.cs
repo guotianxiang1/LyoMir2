@@ -504,6 +504,11 @@ namespace GameSvr
             if (m_boDecGameGold && (HUtil32.GetTickCount() - m_dwDecGameGoldTick) > m_dwDecGameGoldTime)
             {
                 m_dwDecGameGoldTick = HUtil32.GetTickCount();
+                // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
+                if (m_DealCreat != null)
+                {
+                    DealCancel();
+                }
                 if (m_nGameGold >= m_nDecGameGold)
                 {
                     m_nGameGold -= m_nDecGameGold;
@@ -545,6 +550,11 @@ namespace GameSvr
                 if ((HUtil32.GetTickCount() - m_dwDecGameGoldTick) > m_PEnvir.Flag.nDECGAMEGOLDTIME * 1000)
                 {
                     m_dwDecGameGoldTick = HUtil32.GetTickCount();
+                    // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
+                    if (m_DealCreat != null)
+                    {
+                        DealCancel();
+                    }
                     if (m_nGameGold >= m_PEnvir.Flag.nDECGAMEGOLD)
                     {
                         m_nGameGold -= m_PEnvir.Flag.nDECGAMEGOLD;

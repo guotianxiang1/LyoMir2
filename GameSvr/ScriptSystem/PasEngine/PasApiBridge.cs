@@ -8170,12 +8170,16 @@ namespace GameSvr.PasEngine
             return PasValue.FromInt(M2Share.g_Config.GlobalVal[flat]);
         }
 
-        public void SetGlobalVar(int group, int index, PasValue value)
+        public bool SetGlobalVar(int group, int index, PasValue value)
         {
-            if (M2Share.g_Config == null) return;
+            if (M2Share.g_Config == null) return false;
             int flat = group * 100 + index;
             if (flat >= 0 && flat < M2Share.g_Config.GlobalVal.Length)
+            {
                 M2Share.g_Config.GlobalVal[flat] = value.AsInt();
+                return true;
+            }
+            return false;
         }
 
         // =====================================================================
@@ -8276,33 +8280,37 @@ namespace GameSvr.PasEngine
             return value == NativeScriptVarMiss ? 0 : value;
         }
 
-        public void SetPlayerVar(char type, int group, int index, PasValue value)
+        public bool SetPlayerVar(char type, int group, int index, PasValue value)
         {
-            SetPlayerVar(CurrentPlayer, type, group, index, value);
+            return SetPlayerVar(CurrentPlayer, type, group, index, value);
         }
 
-        internal void SetGroupPlayerVar(char type, int group, int index, PasValue value)
+        internal bool SetGroupPlayerVar(char type, int group, int index, PasValue value)
         {
             var members = CurrentPlayer?.m_GroupOwner?.m_GroupMembers;
             if (members == null || members.Count == 0)
             {
-                SetPlayerVar(type, group, index, value);
-                return;
+                return SetPlayerVar(type, group, index, value);
             }
 
+            bool anySuccess = false;
             foreach (var player in members)
-                SetPlayerVar(player, type, group, index, value);
+            {
+                if (SetPlayerVar(player, type, group, index, value))
+                    anySuccess = true;
+            }
+            return anySuccess;
         }
 
         /// <summary>
         /// `SetV`/`SetS` = sub_6DF288 / sub_6DF240. A rejected argument pair writes
         /// nothing at all (0x6DF2B3/0x6DF2B7, 0x6DF251/0x6DF255).
         /// </summary>
-        private static void SetPlayerVar(TPlayObject player, char type, int group,
+        private static bool SetPlayerVar(TPlayObject player, char type, int group,
             int index, PasValue value)
         {
-            if (player == null) return;
-            if (!NativeScriptVarArgsAccepted(group, index)) return;
+            if (player == null) return false;
+            if (!NativeScriptVarArgsAccepted(group, index)) return false;
             int flat = group * 1000 + index;
             var variables = char.ToUpperInvariant(type) switch
             {
@@ -8310,7 +8318,7 @@ namespace GameSvr.PasEngine
                 'S' => player.m_ScriptSVars,
                 _ => null
             };
-            if (variables == null) return;
+            if (variables == null) return false;
 
             // 原生 upsert sub_6E4140 没有任何零值判断：四个存储点都原样写入。
             //   0x6E4187 / 0x6E41C2 / 0x6E4231 / 0x6E4260  mov [..], edx
@@ -8319,6 +8327,7 @@ namespace GameSvr.PasEngine
             // 先前这里把 0 当作"删除键"，导致 SetV(n,f,0) 之后 GetV 读回 -1
             // 而不是 0，反转了下游所有 "= 0" 的任务判断。
             variables[flat] = value.AsInt();
+            return true;
         }
 
         // =====================================================================
