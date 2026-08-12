@@ -2945,7 +2945,9 @@ namespace GameSvr
                 return;
             }
             int nDura = m_UseItems[Grobal2.U_WEAPON].Dura;
-            var nDuraPoint = HUtil32.Round(nDura / 1.03);
+            // DURA-04: Native uses 1000.0 divisor (EA 0x73E8D0: float32 1000.0), not 1.03
+            // Display threshold: Round(Dura / 1000.0) with half-even rounding (@ROUND at EA 0x403574)
+            var nDuraPoint = HUtil32.Round(nDura / 1000.0);
             nDura -= nWeaponDamage;
             if (nDura <= 0)
             {
@@ -2977,7 +2979,7 @@ namespace GameSvr
             {
                 m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
             }
-            if ((nDura / 1.03) != nDuraPoint)
+            if ((nDura / 1000.0) != nDuraPoint)
             {
                 SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, m_UseItems[Grobal2.U_WEAPON].Dura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
             }

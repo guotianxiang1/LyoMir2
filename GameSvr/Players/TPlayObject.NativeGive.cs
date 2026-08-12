@@ -196,7 +196,7 @@ namespace GameSvr
                 }
 
                 hero.HeroLevel = hero.m_Abil.Level;
-                hero.m_Abil.MaxExp = hero.GetLevelExp(hero.m_Abil.Level);
+                // EXP-06: B.MaxExp is pinned at 100 at birth and never refreshed on level-up.
                 hero.RecalcLevelAbilitys();
                 hero.RecalcAbilitys();
                 hero.SendMsg(hero, Grobal2.RM_LEVELUP, 0, hero.m_Abil.Exp,

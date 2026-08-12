@@ -147,8 +147,9 @@ namespace GameSvr
 
             if (IsNativeFightZone(target) || target.m_boPKFlag)
                 return true;
-            if (social.GildRelation == NativeCorpsService.GildHostile)
-                return true;
+            // Native 0x683204 and 0x6846B0 test ONLY al==1 (allies) for PK prevention.
+            // No native code tests al==2 (war) to enable PK. War relation does NOT
+            // make targets attackable outside fight zones.
             return target.m_nPkPoint >= M2Share.g_Config.nPKPunishPoint;
         }
 
