@@ -36,10 +36,10 @@ namespace GameSvr
                 else
                 {
                     m_boVisible = false;
-                    MineCount = M2Share.RandomNumber.Random(200) + 1;
+                    MineCount = M2Share.RandomNumber.Random(200);
                     AddStoneMineTick = HUtil32.GetTickCount();
                     m_boActive = false;
-                    _addStoneCount = M2Share.RandomNumber.Random(80) + 1;
+                    _addStoneCount = M2Share.RandomNumber.Random(80);
                 }
             }
         }
