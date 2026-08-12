@@ -1,0 +1,10 @@
+Testing mutation for small reads gate assertions:
+
+1. MR-static-no-order-by-AntiqueItems
+2. MR-static-no-order-by-fieldhero  
+3. MR-schema-probe-guild_user-sfLevel
+4. MR-static-no-order-by-monster
+5. MR-stditems-count-import
+6. MR-static-no-order-by-SuperSkill
+7. MR-transferareascore-read-by-charname
+8. MR-sendrecord-expired-state3-cleanup

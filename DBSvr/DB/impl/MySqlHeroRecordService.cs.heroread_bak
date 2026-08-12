@@ -1,0 +1,661 @@
+﻿using MySql.Data.MySqlClient;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Text;
+using DBSvr.Core;
+using SystemModule;
+
+namespace DBSvr
+{
+    /// <summary>
+    /// 英雄索引 MySQL 实现 (对应 hero_index 表)。
+    /// </summary>
+    public class MySqlHeroRecordService : IHeroRecordService
+    {
+        private readonly ConcurrentDictionary<string, int> _quickIndex =
+            new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, int> _nativeRawNameIndex =
+            new(StringComparer.Ordinal);
+        private readonly object _heroMutationLock = new();
+
+        public void LoadQuickList()
+        {
+            _quickIndex.Clear();
+            _nativeRawNameIndex.Clear();
+            using var conn = OpenConn();
+            if (conn == null) return;
+            using var cmd = new MySqlCommand(
+                "SELECT idx, HeroName, IsDelete FROM mir3.hero_index", conn);
+            using var dr = cmd.ExecuteReader();
+            while (dr.Read())
+            {
+                var index = dr.GetInt32("idx");
+                var rawName = ReadAnsiBytes(dr, "HeroName");
+                _nativeRawNameIndex[
+                    NativeForceLevelProtocol.NormalizeCharacterNameKey(rawName)] = index;
+                if (dr.GetInt32("IsDelete") == 0)
+                    _quickIndex[LegacyGbkText.Read(dr, "HeroName")] = index;
+            }
+        }
+
+        public int Index(string heroName)
+            => _quickIndex.TryGetValue(heroName ?? "", out int i) ? i : -1;
+
+        public int CreateHero(string masterName, string heroName, int heroType, int job, int sex, long heroId)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return -1;
+            using var tx = conn.BeginTransaction();
+            var idx = -1;
+            try
+            {
+                // Native VA 0x5B2618: Insert Into hero_index(MasterName, HeroName,IsDelete,HeroType,
+                // Consignation,Level, Job, Sex, Exp, CreateDate, ModifyDate, SrcZoneId, SrcGroupId,
+                // SrcHeroName, sfLevel, HeroId) values(...)
+                // Fix: add SrcHeroName column (native column 14). For local creation the native passes
+                // "" (empty string). Cross-server import that sets a real SrcHeroName is BLOCKED —
+                // no C# caller currently supplies that value, so "" is the correct default here.
+                using var cmd = new MySqlCommand(
+                    @"INSERT INTO mir3.hero_index(MasterName, HeroName, IsDelete, HeroType, Consignation,
+                        Level, Job, Sex, Exp, CreateDate, ModifyDate, SrcZoneId, SrcGroupId, SrcHeroName,
+                        sfLevel, HeroId)
+                      VALUES(@m, @h, 0, @ht, 0, 0, @j, @s, 0, NOW(), NOW(), 0, 0, @srch, 0, @hid);
+                      SELECT LAST_INSERT_ID();", conn, tx);
+                cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
+                cmd.Parameters.Add(LegacyGbkText.Parameter("@h", heroName));
+                cmd.Parameters.AddWithValue("@ht", heroType);
+                cmd.Parameters.AddWithValue("@j", job);
+                cmd.Parameters.AddWithValue("@s", sex);
+                cmd.Parameters.AddWithValue("@hid", heroId);
+                // SrcHeroName: "" for local creation (native 0x5B2618 passes "" for local heroes)
+                // BLOCKED: cross-server import path that sets a real SrcHeroName is not yet ported
+                cmd.Parameters.Add(LegacyGbkText.Parameter("@srch", ""));
+                idx = Convert.ToInt32(cmd.ExecuteScalar());
+
+                using var cmd2 = new MySqlCommand(
+                    "INSERT IGNORE INTO mir3.hero_data(Idx, HeroName) VALUES(@idx, @h)", conn, tx);
+                cmd2.Parameters.AddWithValue("@idx", idx);
+                cmd2.Parameters.Add(LegacyGbkText.Parameter("@h", heroName));
+                if (cmd2.ExecuteNonQuery() != 1)
+                    throw new InvalidOperationException(
+                        $"native hero_data row was not created for idx={idx}");
+
+                tx.Commit();
+                _quickIndex[heroName] = idx;
+                _nativeRawNameIndex[
+                    NativeForceLevelProtocol.NormalizeCharacterNameKey(
+                        LegacyGbkText.Encode(heroName))] = idx;
+                DBShare.MainOutMessage($"[HeroCreate] OK idx={idx} master={masterName} hero={heroName}");
+                return idx;
+            }
+            catch (Exception ex)
+            {
+                try { tx.Rollback(); } catch { }
+                if (idx > 0)
+                {
+                    try
+                    {
+                        using var cleanupData = new MySqlCommand(
+                            "DELETE FROM mir3.hero_data WHERE Idx=@i", conn);
+                        cleanupData.Parameters.AddWithValue("@i", idx);
+                        cleanupData.ExecuteNonQuery();
+                        using var cleanupIndex = new MySqlCommand(
+                            "DELETE FROM mir3.hero_index WHERE idx=@i", conn);
+                        cleanupIndex.Parameters.AddWithValue("@i", idx);
+                        cleanupIndex.ExecuteNonQuery();
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        DBShare.MainOutMessage(
+                            $"[HeroCreate] compensation failed idx={idx}: {cleanupEx.Message}");
+                    }
+                }
+                DBShare.MainOutMessage($"[HeroCreate] ERR: {ex.Message}");
+                return -1;
+            }
+        }
+
+        public bool DeleteHero(int idx)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                "UPDATE mir3.hero_index SET IsDelete=1, ModifyDate=NOW() " +
+                "WHERE idx=@i AND IsDelete=0", conn);
+            cmd.Parameters.AddWithValue("@i", idx);
+            var deleted = cmd.ExecuteNonQuery() > 0;
+            if (deleted) RemoveQuickIndex(idx);
+            return deleted;
+        }
+
+        public bool HardDeleteHero(int idx)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                using var c1 = new MySqlCommand("DELETE FROM mir3.hero_data WHERE idx=@i", conn, tx);
+                c1.Parameters.AddWithValue("@i", idx);
+                c1.ExecuteNonQuery();
+                using var c2 = new MySqlCommand("DELETE FROM mir3.hero_index WHERE idx=@i", conn, tx);
+                c2.Parameters.AddWithValue("@i", idx);
+                c2.ExecuteNonQuery();
+                tx.Commit();
+                RemoveQuickIndex(idx);
+                RemoveNativeForceIndex(idx);
+                return true;
+            }
+            catch { try { tx.Rollback(); } catch { } return false; }
+        }
+
+        public bool IsHeroNameExists(string heroName)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return true;
+            using var cmd = new MySqlCommand("SELECT COUNT(*) FROM mir3.hero_index WHERE HeroName=@n", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", heroName));
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
+
+        public List<HeroIndexInfo> QueryHeroesByMaster(string masterName)
+        {
+            var list = new List<HeroIndexInfo>();
+            using var conn = OpenConn();
+            if (conn == null) return list;
+            using var cmd = new MySqlCommand(
+                @"SELECT idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp,
+                          ForceLv, ForceExp, sfLevel, HeroId, ModifyDate
+                  FROM mir3.hero_index WHERE MasterName=@m AND IsDelete=0
+                  ORDER BY idx", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
+            using var dr = cmd.ExecuteReader();
+            while (dr.Read()) list.Add(ReadHeroInfo(dr));
+            return list;
+        }
+
+        public List<HeroIndexInfo> QueryDeletedHeroesByMaster(string masterName)
+        {
+            var list = new List<HeroIndexInfo>();
+            using var conn = OpenConn();
+            if (conn == null) return list;
+            using var cmd = new MySqlCommand(
+                // Native iterates all deleted heroes in-memory without a cap (0x58D800 loop).
+                // Fix: remove spurious LIMIT 10 — hiding >10 deleted heroes breaks recovery flow.
+                @"SELECT idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp,
+                          ForceLv, ForceExp, sfLevel, HeroId, ModifyDate
+                  FROM mir3.hero_index WHERE MasterName=@m AND IsDelete=1
+                  ORDER BY idx", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
+            using var dr = cmd.ExecuteReader();
+            while (dr.Read()) list.Add(ReadHeroInfo(dr));
+            return list;
+        }
+
+        public int ChrCountOfMaster(string masterName)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return 99;
+            using var cmd = new MySqlCommand(
+                "SELECT COUNT(*) FROM mir3.hero_index WHERE MasterName=@m AND IsDelete=0", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@m", masterName));
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
+
+        public bool UpdateHeroIndex(int idx, int level, int exp, int job, int sex, int forceLv, int forceExp, int sfLevel,
+            int isDelete = -1, int heroType = -1, int consignation = -1)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                @"UPDATE mir3.hero_index SET Level=@l, Exp=@e, Job=@j, Sex=@s,
+                    ForceLv=@fl, ForceExp=@fe, sfLevel=@sf,
+                    IsDelete=IF(@idlt<0,IsDelete,@idlt), HeroType=IF(@ht<0,HeroType,@ht),
+                    Consignation=IF(@cs<0,Consignation,@cs),
+                    ModifyDate=NOW()
+                  WHERE idx=@i", conn);
+            cmd.Parameters.AddWithValue("@l", level); cmd.Parameters.AddWithValue("@e", exp);
+            cmd.Parameters.AddWithValue("@j", job); cmd.Parameters.AddWithValue("@s", sex);
+            cmd.Parameters.AddWithValue("@fl", forceLv); cmd.Parameters.AddWithValue("@fe", forceExp);
+            cmd.Parameters.AddWithValue("@sf", sfLevel); cmd.Parameters.AddWithValue("@i", idx);
+            cmd.Parameters.AddWithValue("@idlt", isDelete); cmd.Parameters.AddWithValue("@ht", heroType);
+            cmd.Parameters.AddWithValue("@cs", consignation);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
+        public bool UpdateLvChangeTime(int idx, byte oldLevel, byte oldForceLv, byte oldSfLevel)
+        {
+            // Native VA 0x5B27A8:
+            //   Update hero_index set lvChangeTime=Now() where idx=%d
+            //   and (Level<>%d or ForceLv<>%d or sfLevel<>%d);
+            // Only stamps when at least one of Level/ForceLv/sfLevel actually differs, so a save
+            // that changed only blob data leaves lvChangeTime alone (matters for ranking tiebreak).
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                @"UPDATE mir3.hero_index SET lvChangeTime=NOW() WHERE idx=@i
+                  AND (Level<>@ol OR ForceLv<>@of OR sfLevel<>@os)", conn);
+            cmd.Parameters.AddWithValue("@i", idx);
+            cmd.Parameters.AddWithValue("@ol", oldLevel);
+            cmd.Parameters.AddWithValue("@of", oldForceLv);
+            cmd.Parameters.AddWithValue("@os", oldSfLevel);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
+        public bool UpdateLvChangeTime(int idx)
+        {
+            // Unconditional fallback for callers that cannot provide old values (旧接口兼容).
+            // Over-stamps lvChangeTime (perturbs ranking tiebreak but never alters level/exp data).
+            // Primary save path (SaveRecordCore in MySqlHeroDataService) carries the native's
+            // IF(h.Level<>@level OR h.ForceLv<>@forceLv OR h.sfLevel<>@sfLevel) guard inline,
+            // so this standalone method is the only divergent caller.
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand("UPDATE mir3.hero_index SET lvChangeTime=NOW() WHERE idx=@i", conn);
+            cmd.Parameters.AddWithValue("@i", idx);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
+        public bool RestoreHero(string heroName)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                "UPDATE mir3.hero_index SET IsDelete=0, ModifyDate=NOW() WHERE HeroName=@n", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", heroName));
+            bool ok = cmd.ExecuteNonQuery() > 0;
+            if (ok) _quickIndex[heroName] = GetIdxByName(heroName);
+            return ok;
+        }
+
+        public bool RenameHero(string oldName, string newName, int idx)
+        {
+            if (idx <= 0 || string.IsNullOrEmpty(oldName) || string.IsNullOrEmpty(newName)
+                || string.Equals(oldName, newName, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            lock (_heroMutationLock)
+            {
+                using var conn = OpenConn();
+                if (conn == null) return false;
+                byte[] oldStoredData;
+                byte[] oldStoredDynamicData;
+                string indexName;
+                string dataName;
+                try
+                {
+                    using (var read = new MySqlCommand(
+                               @"SELECT h.HeroName AS IndexName, d.HeroName AS DataName,
+                                        d.Data, d.dynData
+                                 FROM mir3.hero_index AS h
+                                 JOIN mir3.hero_data AS d ON d.Idx=h.idx
+                                 WHERE h.idx=@i AND h.IsDelete=0", conn))
+                    {
+                        read.Parameters.AddWithValue("@i", idx);
+                        using var dr = read.ExecuteReader();
+                        if (!dr.Read()) return false;
+                        indexName = LegacyGbkText.Read(dr, "IndexName");
+                        dataName = LegacyGbkText.Read(dr, "DataName");
+                        oldStoredData = dr["Data"] as byte[] ?? Array.Empty<byte>();
+                        oldStoredDynamicData = dr["dynData"] as byte[] ?? Array.Empty<byte>();
+                    }
+                    if (!string.Equals(indexName, oldName, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(dataName, oldName, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    using (var collision = new MySqlCommand(
+                               "SELECT COUNT(*) FROM mir3.hero_index WHERE HeroName=@n AND idx<>@i", conn))
+                    {
+                        collision.Parameters.Add(LegacyGbkText.Parameter("@n", newName));
+                        collision.Parameters.AddWithValue("@i", idx);
+                        if (Convert.ToInt32(collision.ExecuteScalar()) != 0) return false;
+                    }
+                    if (!NativeHeroBlobCodec.TryDecodeDataBlob(oldStoredData,
+                            out var records, out var error)
+                        || !NativeHeroBlobCodec.TryDecodeDynamicBlob(
+                            oldStoredDynamicData, out _, out error))
+                    {
+                        DBShare.MainOutMessage($"[HeroRename] REJECT idx={idx}: {error}");
+                        return false;
+                    }
+
+                    var renamedRecords = (byte[])records.Clone();
+                    for (var offset = 0; offset < renamedRecords.Length;
+                         offset += NativeHeroDbFrameCodec.HeroRecordSize)
+                    {
+                        var source = renamedRecords.AsSpan(offset,
+                            NativeHeroDbFrameCodec.HeroRecordSize).ToArray();
+                        if (!NativeHeroDbFrameCodec.TryRenameRecord(
+                                source, newName, out var renamed, out error))
+                        {
+                            DBShare.MainOutMessage($"[HeroRename] REJECT idx={idx}: {error}");
+                            return false;
+                        }
+                        renamed.CopyTo(renamedRecords, offset);
+                    }
+                    if (!NativeHeroBlobCodec.TryEncodeDataBlob(
+                            renamedRecords, out var newStoredData, out error))
+                    {
+                        DBShare.MainOutMessage($"[HeroRename] REJECT idx={idx}: {error}");
+                        return false;
+                    }
+
+                    using var rename = new MySqlCommand(
+                        @"UPDATE mir3.hero_index AS h
+                          JOIN mir3.hero_data AS d ON d.Idx=h.idx
+                          SET h.HeroName=@n, h.ModifyDate=NOW(),
+                              d.HeroName=@n, d.Data=@d
+                          WHERE h.idx=@i AND h.HeroName=@o AND h.IsDelete=0
+                            AND d.HeroName=@o", conn);
+                    rename.Parameters.Add(LegacyGbkText.Parameter("@n", newName));
+                    rename.Parameters.Add("@d", MySqlDbType.Blob).Value = newStoredData;
+                    rename.Parameters.AddWithValue("@i", idx);
+                    rename.Parameters.Add(LegacyGbkText.Parameter("@o", oldName));
+                    if (rename.ExecuteNonQuery() <= 0) return false;
+
+                    _quickIndex.TryRemove(oldName, out _);
+                    _quickIndex[newName] = idx;
+                    _nativeRawNameIndex.TryRemove(
+                        NativeForceLevelProtocol.NormalizeCharacterNameKey(
+                            LegacyGbkText.Encode(oldName)), out _);
+                    _nativeRawNameIndex[
+                        NativeForceLevelProtocol.NormalizeCharacterNameKey(
+                            LegacyGbkText.Encode(newName))] = idx;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    DBShare.MainOutMessage($"[HeroRename] REJECT idx={idx}: {ex.Message}");
+                    return false;
+                }
+            }
+        }
+
+        public bool SetHeroConsignation(int idx, int expectedValue, int newValue)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand(
+                @"UPDATE mir3.hero_index SET Consignation=@n
+                  WHERE idx=@i AND IsDelete=0 AND Consignation=@o", conn);
+            cmd.Parameters.AddWithValue("@n", newValue);
+            cmd.Parameters.AddWithValue("@i", idx);
+            cmd.Parameters.AddWithValue("@o", expectedValue);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+
+        public bool RenameMaster(string oldMaster, string newMaster)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            using var cmd = new MySqlCommand("UPDATE mir3.hero_index SET MasterName=@n WHERE MasterName=@o", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", newMaster));
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@o", oldMaster));
+            cmd.ExecuteNonQuery();
+            return true;
+        }
+
+        public int GetIdxByName(string heroName)
+        {
+            using var conn = OpenConn();
+            if (conn == null) return -1;
+            using var cmd = new MySqlCommand(
+                "SELECT idx FROM mir3.hero_index WHERE HeroName=@n AND IsDelete=0 LIMIT 1", conn);
+            cmd.Parameters.Add(LegacyGbkText.Parameter("@n", heroName));
+            return Convert.ToInt32(cmd.ExecuteScalar() ?? -1);
+        }
+
+        public bool TryGetNativeHeroByName(byte[] heroName,
+            out HeroIndexInfo hero)
+        {
+            hero = null;
+            if (heroName == null || heroName.Length == 0) return false;
+
+            var key = NativeForceLevelProtocol.NormalizeCharacterNameKey(heroName);
+            using var conn = OpenConn();
+            if (conn == null) return false;
+            const string select =
+                @"SELECT idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp,
+                         ForceLv, ForceExp, sfLevel, HeroId, ModifyDate
+                  FROM mir3.hero_index";
+            if (_nativeRawNameIndex.TryGetValue(key, out var index))
+            {
+                using (var cached = new MySqlCommand(
+                           select + " WHERE idx=@idx AND HeroName=@name LIMIT 1",
+                           conn))
+                {
+                    cached.Parameters.AddWithValue("@idx", index);
+                    cached.Parameters.Add("@name", MySqlDbType.Binary).Value =
+                        heroName;
+                    using var cachedReader = cached.ExecuteReader();
+                    if (cachedReader.Read())
+                    {
+                        hero = ReadHeroInfo(cachedReader);
+                        return true;
+                    }
+                }
+                _nativeRawNameIndex.TryRemove(key, out _);
+            }
+
+            using var cmd = new MySqlCommand(
+                select + " WHERE HeroName=@name LIMIT 1", conn);
+            cmd.Parameters.Add("@name", MySqlDbType.Binary).Value = heroName;
+            using var dr = cmd.ExecuteReader();
+            if (!dr.Read()) return false;
+            hero = ReadHeroInfo(dr);
+            _nativeRawNameIndex[key] = hero.Idx;
+            return true;
+        }
+
+        public bool TryGetNativeForceLevelIndex(byte[] heroName, out int index)
+        {
+            heroName ??= Array.Empty<byte>();
+            var key = NativeForceLevelProtocol.NormalizeCharacterNameKey(heroName);
+            if (_nativeRawNameIndex.TryGetValue(key, out index)) return true;
+            using var conn = OpenConn();
+            if (conn == null)
+            {
+                index = -1;
+                return false;
+            }
+            using var cmd = new MySqlCommand(
+                "SELECT idx FROM mir3.hero_index WHERE HeroName=@name LIMIT 1", conn);
+            cmd.Parameters.Add("@name", MySqlDbType.Binary).Value = heroName;
+            var value = cmd.ExecuteScalar();
+            if (value == null || value == DBNull.Value)
+            {
+                index = -1;
+                return false;
+            }
+            index = Convert.ToInt32(value);
+            _nativeRawNameIndex[key] = index;
+            return true;
+        }
+
+        private void RemoveQuickIndex(int idx)
+        {
+            foreach (var pair in _quickIndex)
+            {
+                if (pair.Value != idx) continue;
+                ((ICollection<KeyValuePair<string, int>>)_quickIndex).Remove(pair);
+                break;
+            }
+        }
+
+        private void RemoveNativeForceIndex(int idx)
+        {
+            foreach (var pair in _nativeRawNameIndex)
+            {
+                if (pair.Value != idx) continue;
+                ((ICollection<KeyValuePair<string, int>>)_nativeRawNameIndex)
+                    .Remove(pair);
+                break;
+            }
+        }
+
+        public List<RankEntry> GetHeroLevelRank(int limit = 100)
+        {
+            var list = new List<RankEntry>();
+            using var conn = OpenConn();
+            if (conn == null) return list;
+            // Native VA 0x478E74 (unfiltered hero ranking):
+            //   select MasterName, HeroName, Level, sfLevel from hero_index, _AvailUser
+            //   where _AvailUser.Idx=hero_index.Idx order by Level desc,  sfLevel desc,
+            //   ForceLv desc,  Exp desc, lvChangeTime Limit 100
+            // Native VA 0x5CBEC8 populates the _AvailUser temp table for heroes:
+            //   Insert Into _AvailUser select Idx from hero_index
+            //   where Date_add(ModifyDate, interval 1 month)>Now();
+            // The temp-table join is replaced by the equivalent inline ModifyDate predicate.
+            // Fixes vs old code:
+            //  - activity window was DATE_SUB(NOW(), INTERVAL 30 DAY); native is
+            //    Date_add(ModifyDate, interval 1 month)>Now() -- restored verbatim.
+            //  - "AND Level>0" was invented: the hero _AvailUser population (0x5CBEC8) has no
+            //    level floor. Contrast the user_index population at 0x5CBE38, which DOES carry
+            //    "Level>0 and AdminLevel = 0" -- the asymmetry is deliberate, so it is removed here.
+            // Ranking query. Byte evidence:
+            //   0x478E74: `select MasterName, HeroName, Level, sfLevel from hero_index,
+            //   _AvailUser where _AvailUser.Idx=hero_index.Idx order by Level desc,
+            //   sfLevel desc, ForceLv desc, Exp desc, lvChangeTime Limit 100`
+            //   0x5CBEC8 populates _AvailUser:
+            //   `Insert Into _AvailUser select Idx from hero_index
+            //    where Date_add(ModifyDate, interval 1 month)>Now();`
+            // Neither SQL contains IsDelete=0. The absence is definitive: these are Delphi
+            // long-string literals (rc=-1) embedded in read-only data, VMP cannot modify them;
+            // if native had an IsDelete filter it would appear in the SQL text.
+            // Soft-deleted heroes with recent ModifyDate CAN appear in the ranking -- this is
+            // native behavior, reproduced faithfully.
+            // Previously BLOCKED note resolved by spec blocked_items_evidence_20260811.md Item 4.
+            using var cmd = new MySqlCommand(
+                @"SELECT HeroName AS ChrName, Level, sfLevel, ForceLv, Exp, 0 AS FightPoints, 0 AS ApprenticeNum
+                  FROM mir3.hero_index WHERE Date_add(ModifyDate, interval 1 month)>Now()
+                  ORDER BY Level DESC, sfLevel DESC, ForceLv DESC, Exp DESC, lvChangeTime
+                  LIMIT @l", conn);
+            cmd.Parameters.AddWithValue("@l", Math.Min(limit, DBShare.RankLimit));
+            using var dr = cmd.ExecuteReader();
+            while (dr.Read()) list.Add(new RankEntry
+            {
+                ChrName = LegacyGbkText.Read(dr, 0),
+                Level = dr.GetInt32(1),
+                SfLevel = dr.GetInt32(2),
+                ForceLv = dr.GetInt32(3),
+                Exp = unchecked((int)Convert.ToUInt32(dr[4]))
+            });
+            return list;
+        }
+
+        public List<HeroSortEntry> GetHeroPage(int lastIdx, int limit = 5000)
+        {
+            var list = new List<HeroSortEntry>();
+            using var conn = OpenConn();
+            if (conn == null) return list;
+            using var cmd = new MySqlCommand(
+                @"SELECT idx, MasterName, HeroName, IsDelete, HeroType, Consignation,
+                         Level, Job, Sex, Exp, ForceLv, ForceExp, sfLevel, HeroId, ModifyDate
+                  FROM mir3.hero_index WHERE idx > @last ORDER BY idx LIMIT @l", conn);
+            cmd.Parameters.AddWithValue("@last", lastIdx);
+            cmd.Parameters.AddWithValue("@l", Math.Min(limit, DBShare.BatchLimit));
+            using var dr = cmd.ExecuteReader();
+            while (dr.Read())
+            {
+                list.Add(new HeroSortEntry
+                {
+                    Idx = dr.GetInt32("idx"),
+                    MasterName = LegacyGbkText.Read(dr, "MasterName"),
+                    HeroName = LegacyGbkText.Read(dr, "HeroName"),
+                    IsDelete = dr.GetInt32("IsDelete") != 0, HeroType = dr.GetInt32("HeroType"),
+                    Consignation = dr.GetInt32("Consignation"), Level = dr.GetInt32("Level"),
+                    Job = dr.GetInt32("Job"), Sex = dr.GetInt32("Sex"),
+                    Exp = unchecked((int)Convert.ToUInt32(dr["Exp"])),
+                    ForceLv = dr.IsDBNull(dr.GetOrdinal("ForceLv")) ? 0 : dr.GetInt32("ForceLv"),
+                    ForceExp = dr.IsDBNull(dr.GetOrdinal("ForceExp")) ? 0 : dr.GetInt32("ForceExp"),
+                    SfLevel = dr.IsDBNull(dr.GetOrdinal("sfLevel")) ? 0 : dr.GetInt32("sfLevel"),
+                    HeroId = dr.IsDBNull(dr.GetOrdinal("HeroId")) ? 0 : dr.GetInt64("HeroId"),
+                    ModifyDate = dr.GetDateTime("ModifyDate")
+                });
+            }
+            return list;
+        }
+
+        private static MySqlConnection OpenConn()
+        {
+            try
+            {
+                var c = new MySqlConnection(DBShare.DBConnection);
+                c.Open();
+                using(var sc = new MySqlCommand("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; SET SESSION wait_timeout=2073600", c))
+                    sc.ExecuteNonQuery();
+                return c;
+            }
+            catch { return null; }
+        }
+
+        private static HeroIndexInfo ReadHeroInfo(MySqlDataReader dr) => new()
+        {
+            Idx = dr.GetInt32("idx"),
+            MasterName = LegacyGbkText.Read(dr, "MasterName"),
+            MasterNameBytes = ReadAnsiBytes(dr, "MasterName"),
+            HeroName = LegacyGbkText.Read(dr, "HeroName"),
+            HeroNameBytes = ReadAnsiBytes(dr, "HeroName"),
+            IsDelete = dr.GetInt32("IsDelete") != 0, HeroType = dr.GetInt32("HeroType"),
+            Consignation = dr.GetInt32("Consignation"),
+            Job = dr.GetInt32("Job"), Sex = dr.GetInt32("Sex"), Level = dr.GetInt32("Level"),
+            Exp = unchecked((int)Convert.ToUInt32(dr["Exp"])),
+            ForceLv = dr.IsDBNull(dr.GetOrdinal("ForceLv")) ? 0 : dr.GetInt32("ForceLv"),
+            ForceExp = dr.IsDBNull(dr.GetOrdinal("ForceExp")) ? 0 : dr.GetInt32("ForceExp"),
+            SfLevel = dr.IsDBNull(dr.GetOrdinal("sfLevel")) ? 0 : dr.GetInt32("sfLevel"),
+            HeroId = dr.IsDBNull(dr.GetOrdinal("HeroId")) ? 0 : dr.GetInt64("HeroId"),
+            ModifyDate = dr.GetDateTime("ModifyDate")
+        };
+
+        private static byte[] ReadAnsiBytes(MySqlDataReader reader, string name)
+        {
+            var ordinal = reader.GetOrdinal(name);
+            if (reader.IsDBNull(ordinal)) return Array.Empty<byte>();
+            var value = reader.GetValue(ordinal);
+            if (value is byte[] bytes) return (byte[])bytes.Clone();
+            return Encoding.Latin1.GetBytes(reader.GetString(ordinal));
+        }
+
+        /// <summary>
+        /// 惰性回填 heroId（原版 0x58CF28: Update hero_index set heroId = %d where idx = %d）。
+        ///
+        /// 原版行为：
+        /// - 加载器 0x58CBDE 检测 heroId == 0 时调用分配器 0x5CA174
+        /// - 分配器公式（0x5CA174 逐字节逆向）：
+        ///   heroId = ((ZoneId * 1000 + GroupId + 10000000) * 1000000000) + idx
+        /// - 执行单行 UPDATE（0x58CF28 字面量，注意小写 hero_index/heroId）
+        ///
+        /// 证据链：
+        /// - 0x58CBD2..0x58CBDC: cmp heroId.hi/lo, 0 → jne skip（64位比较门）
+        /// - 0x5CA191: mov eax, [eax+0x50]  ; ZoneId (dword)
+        /// - 0x5CA19F: mov eax, [eax+0x54]  ; GroupId (dword)
+        /// - 0x405C28: __llmul (64位乘法helper，ret 8弹栈操作数)
+        /// </summary>
+        public long BackfillHeroId(int idx, int zoneId, int groupId)
+        {
+            // 原版 0x5CA174 分配器公式（证据：0x5CA182/0x5CA189 push常量，
+            // 0x405C28 __llmul，0x5CA1AD add 0x989680）
+            long baseId = ((long)zoneId * 1000 + groupId + 10000000) * 1000000000L;
+            long newId = baseId + idx;
+
+            using var conn = OpenConn();
+            if (conn == null) return 0;
+
+            try
+            {
+                // 原版 0x58CF28（注意小写 hero_index, heroId，与 0x5BCD74 大写形式不同）
+                using var cmd = new MySqlCommand(
+                    "Update hero_index set heroId = @id where idx = @idx", conn);
+                cmd.Parameters.AddWithValue("@id", newId);
+                cmd.Parameters.AddWithValue("@idx", idx);
+                cmd.ExecuteNonQuery();
+                return newId;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+    }
+}
