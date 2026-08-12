@@ -246,6 +246,7 @@ namespace GameSvr
                         // receives the attacker as a stack arg
                         // (`mov ecx,[ebp+0x18]; xchg edx,ecx`) and forwards it
                         // to +0xA8. Here that attacker is `this`.
+                        nSecPwr = BaseObject.ApplyNativePhysicalCritical(this, nSecPwr);
                         BaseObject.StruckDamage(nSecPwr, this);
                         BaseObject.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101, (short)nSecPwr, BaseObject.m_WAbil.HP, BaseObject.m_WAbil.MaxHP, ObjectId, "", 500);
                         if (BaseObject.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
@@ -546,8 +547,9 @@ namespace GameSvr
                     continue;
                 }
 
-                var damage = target.GetHitStruckDamage(this,
+                var damage = (int)target.GetHitStruckDamage(this,
                     CalculateSunSwordDistancePower(scaledPower, distance));
+                damage = target.ApplyNativePhysicalCritical(this, damage);
                 // Native supplies the attacker in ecx at every +0xA8 site, e.g.
                 // 0x666CEA `call [ebx+0x1B4]` then 0x666D06 `mov ecx,edi;
                 // call [ebx+0xA8]` with the SAME edi. `this` is that edi here.
@@ -779,6 +781,7 @@ namespace GameSvr
                 if (nPower > 0)
                 {
                     nPower = AttackTarget.GetHitStruckDamage(this, nPower);
+                    nPower = AttackTarget.ApplyNativePhysicalCritical(this, nPower);
                     nWeaponDamage = M2Share.RandomNumber.Random(5) + 2 - m_AddAbil.btWeaponStrong;
                 }
                 if (nPower > 0)

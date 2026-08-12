@@ -217,6 +217,35 @@ namespace GameSvr
             return RoundNativeX87(damage * multiplier);
         }
 
+        internal int ApplyNativePhysicalCritical(TBaseObject source, int damage)
+        {
+            if (source == null || source.m_sNativeCriticalChance < 0 ||
+                m_sNativeAntiCriticalChance < 0 ||
+                m_sNativeCriticalDamageReduction < 0)
+            {
+                return damage;
+            }
+
+            int criticalChance = Math.Min((int)source.m_sNativeCriticalChance,
+                10000);
+            int antiCriticalChance = Math.Min(
+                (int)m_sNativeAntiCriticalChance, 10000);
+            int criticalReduction = Math.Min(
+                (int)m_sNativeCriticalDamageReduction, 10000);
+            int threshold = RoundNativeX87(
+                (100.0d - antiCriticalChance / 100.0d) *
+                (criticalChance / 100.0d));
+
+            if (M2Share.RandomNumber.Random(10000) > threshold)
+                return damage;
+
+            double increase = source.m_nNativeCriticalDamageIncrease / 10000.0d;
+            double multiplier = 1.5d + increase;
+            multiplier -= criticalReduction * 0.00005d;
+            multiplier -= increase * criticalReduction / 10000.0d;
+            return RoundNativeX87(damage * multiplier);
+        }
+
         private static int RoundNativeX87(double value) =>
             unchecked((int)(long)Math.Round(value, MidpointRounding.ToEven));
 

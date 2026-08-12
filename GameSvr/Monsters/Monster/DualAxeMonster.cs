@@ -17,6 +17,7 @@ namespace GameSvr
                 if (nDamage > 0)
                 {
                     nDamage = Target.GetHitStruckDamage(this, nDamage);
+                    nDamage = Target.ApplyNativePhysicalCritical(this, nDamage);
                 }
                 if (nDamage > 0)
                 {
