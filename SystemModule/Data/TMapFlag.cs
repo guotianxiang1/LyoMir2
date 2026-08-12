@@ -143,4 +143,37 @@ public class TMapFlag
 
     public byte BreakLevel;
     public ushort CrazyBreakLevel;
+
+    // MFLG-12/MFLG-24: Additional map flags from 战神 token census
+    /// <summary>
+    /// 战神 map flag <c>NOMAGIC</c>. DORMANT gate: 0 consumers in 战神 binary
+    /// (image-wide scan). Parser recognizes the token to match native domain,
+    /// but no runtime code reads this field.
+    /// </summary>
+    public bool boNOMAGIC;
+
+    /// <summary>
+    /// 战神 map flag <c>NOTHROUGH</c>.
+    /// </summary>
+    public bool boNOTHROUGH;
+
+    /// <summary>
+    /// 战神 map flag <c>DARE</c>.
+    /// </summary>
+    public bool boDARE;
+
+    /// <summary>
+    /// 战神 map flag <c>MONATTACK</c>.
+    /// </summary>
+    public bool boMONATTACK;
+
+    /// <summary>
+    /// 战神 map flag <c>LIMITHEROLEVEL</c>.
+    /// </summary>
+    public bool boLIMITHEROLEVEL;
+
+    /// <summary>
+    /// 战神 map flag <c>TRIGGERBOMB</c>.
+    /// </summary>
+    public bool boTRIGGERBOMB;
 }

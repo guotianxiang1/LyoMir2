@@ -547,6 +547,39 @@ namespace GameSvr
                 mapFlag.boNOEQUIPRELIVE = true;
                 return true;
             }
+            // MFLG-12/MFLG-24: Additional map flags from 战神 token census
+            if (token.Equals("NOTHROUGH", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boNOTHROUGH = true;
+                return true;
+            }
+            if (token.Equals("DARE", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boDARE = true;
+                return true;
+            }
+            if (token.Equals("MONATTACK", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boMONATTACK = true;
+                return true;
+            }
+            if (token.Equals("LIMITHEROLEVEL", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boLIMITHEROLEVEL = true;
+                return true;
+            }
+            // DORMANT gate: 0 consumers in 战神 binary (image-wide scan). Parser recognizes
+            // the token to match native domain, but no runtime code reads this field.
+            if (token.Equals("NOMAGIC", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boNOMAGIC = true;
+                return true;
+            }
+            if (token.Equals("TRIGGERBOMB", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boTRIGGERBOMB = true;
+                return true;
+            }
             return false;
         }
 
