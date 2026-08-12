@@ -194,17 +194,8 @@ namespace GameSvr
             {
                 return result;
             }
-            // MOVE-15 bypass closure — NOT a byte-faithful port, and marked as
-            // such deliberately. CM_HORSERUN(3035) has NO native movement
-            // handler: the main CM dispatcher's jumptable at 0x6D858B stops at
-            // 3017, and the only native 3035 is a broadcast ident inside
-            // sub_6EC078 (case label at 0x6EC29C, `mov cx,0x3F9` then
-            // sub_7707A8) reached from the HIT cases, which never touches X/Y.
-            // So there is no native EA to cite for this gate. It is added
-            // because leaving it open would let a mounted player keep moving
-            // through the cast window that 3011/3013/4108 all refuse, which
-            // would reintroduce the very defect MOVE-15 describes via the one
-            // movement opcode native does not have.
+            // MOVE-15 — C# extension (no native opcode). Cast lock must block
+            // horse run just like it blocks walk/run/turn/pose on foot.
             if (IsNativeCanActBlockedByForcedMove())
             {
                 return result;
@@ -671,6 +662,20 @@ namespace GameSvr
             // answer SM_ACT_FAIL(630) with X/Y/Dir, which is native's 0x276
             // correction at 0x6D9C4B.
             if (IsNativeCanActBlockedByForcedMove())
+            {
+                return result;
+            }
+            // MOVE-13 — VMT+0x40 at 0x6E6700 calls inherited gate 0x76B354,
+            // which tests four states that must block walk/run/turn/pose:
+            // State 29 (0x1D) at 0x76B368, State 1 (0x01) at 0x76B375,
+            // State 26 (0x1A) at 0x76B382, State 62 (0x3E) at 0x76B39C.
+            // State 24 (0x18) is tested at 0x76B38F but blocks only run
+            // (arg-dependent: walk passes dl=0, run passes dl=1).
+            // State 45 (0x2D) is tested one level out in VMT+0xC4 at 0x73D441.
+            if (HasNativeActiveState(29) ||  // 0x1D
+                HasNativeActiveState(1) ||   // 0x01
+                HasNativeActiveState(26) ||  // 0x1A
+                HasNativeActiveState(62))    // 0x3E
             {
                 return result;
             }

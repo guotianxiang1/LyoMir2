@@ -1726,6 +1726,14 @@ namespace GameSvr
                             if (boRegened)
                             {
                                 MonGen.dwStartTick = HUtil32.GetTickCount();
+                                if (m_nCurrMonGen < m_MonGenList.Count - 1)
+                                {
+                                    m_nCurrMonGen++;
+                                }
+                                else
+                                {
+                                    m_nCurrMonGen = 0;
+                                }
                             }
                         }
                     }
@@ -3154,12 +3162,22 @@ namespace GameSvr
 
         
         
-        
-        
-        
+
+
+
         private TBaseObject CreateGeneratedMonster(MonGenInfo monGen, short x,
             short y)
         {
+            // SPAWN-15: Check capacity before spawning (native slot check at 0x67CA15).
+            // Native: fixed-size array with NULL check: cmp dword [eax+edi*4],0
+            // C#: CertList is dynamic but must respect nCount capacity limit.
+            // Bug window: nActiveCount decrements at death but CertList entry removal
+            // is deferred 5min (ghost-reap) -> without this gate, unbounded growth.
+            if (monGen.CertList == null || monGen.CertList.Count >= monGen.nCount)
+            {
+                return null;
+            }
+
             var cert = AddBaseObject(monGen.sMapName, x, y, monGen.nRace,
                 monGen.sMonName, false);
             if (cert == null) return null;
@@ -3177,6 +3195,7 @@ namespace GameSvr
                 cert.m_dwReAliveTick = HUtil32.GetTickCount();
                 cert.m_pMonGen = monGen;
                 monGen.nActiveCount = activeCountBefore + 1;
+                nMonsterCount++;  // Native 0x67CA9E..0x67CAA1
                 certificatePublishAttempted = true;
                 monGen.CertList.Add(cert);
                 monGen.CertCount = certificateCountBefore + 1;
@@ -3196,6 +3215,7 @@ namespace GameSvr
                 }
                 monGen.nActiveCount = activeCountBefore;
                 monGen.CertCount = certificateCountBefore;
+                nMonsterCount--;  // Rollback
                 cert.m_boCanReAlive = oldCanReAlive;
                 cert.m_dwReAliveTick = oldReAliveTick;
                 cert.m_pMonGen = oldMonGen;
