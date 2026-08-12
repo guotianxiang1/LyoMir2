@@ -28,7 +28,10 @@ namespace GameSvr
         {
             using var memoryStream = new MemoryStream();
             var itemCount = 0;
-            for (var i = 0; i < m_ItemList.Count; i++)
+            // 战神 sub_64392C @ 0x64392C ("StorageAllBagItems") iterates BACKWARDS (HIGH->LOW):
+            // 0x6439A3: mov esi,[eax+8]; dec esi  → esi = count-1
+            // 0x643A26: dec esi; 0x643A27: cmp esi,0FFFFFFFFh; jnz → loop while esi >= 0
+            for (var i = m_ItemList.Count - 1; i >= 0; i--)
             {
                 var userItem = m_ItemList[i];
                 if (M2Share.UserEngine.GetStdItem(userItem.wIndex) == null)
