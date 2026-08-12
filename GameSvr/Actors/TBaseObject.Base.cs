@@ -696,10 +696,73 @@ namespace GameSvr
             }
             try
             {
-                if ((HUtil32.GetTickCount() - m_dwPoisoningTick) > M2Share.g_Config.dwPosionDecHealthTime)
+                // Native sub_76BD33: 2500ms tick services FOUR poison indices in if/else-if chain (POIS-08).
+                // Compare is jb-to-skip => fires on elapsed >= 2500 (POIS-05), not strictly >.
+                if ((HUtil32.GetTickCount() - m_dwPoisoningTick) >= M2Share.g_Config.dwPosionDecHealthTime)
                 {
                     m_dwPoisoningTick = HUtil32.GetTickCount();
-                    if (m_wStatusTimeArr[Grobal2.POISON_DECHEALTH] > 0)
+
+                    // Native 0x76BD53: index 0x06, damage = Min(MaxHP,1000000)/100 (POIS-09).
+                    if (HasNativeState(Grobal2.STATE_POISON_MAXHP_DIV100))
+                    {
+                        var clampedMaxHP = Math.Min(m_WAbil.MaxHP, 1000000);
+                        var damage = clampedMaxHP / 100 + 1;  // idiv 0x64 then +1 at 0x76BE01
+                        if (damage > 0)
+                        {
+                            if (m_boAnimal)
+                                m_nMeatQuality -= 1000;
+                            DamageHealth(damage);
+                            m_nHealthTick = 0;
+                            m_nSpellTick = 0;
+                            HealthSpellChanged();
+                        }
+                    }
+                    // Native 0x76BD8C: index 0x01, damage = Min(MaxHP,1000000)/30 (POIS-09).
+                    else if (HasNativeState(Grobal2.STATE_POISON_MAXHP_DIV30))
+                    {
+                        var clampedMaxHP = Math.Min(m_WAbil.MaxHP, 1000000);
+                        var damage = clampedMaxHP / 30 + 1;   // idiv 0x1E then +1
+                        if (damage > 0)
+                        {
+                            if (m_boAnimal)
+                                m_nMeatQuality -= 1000;
+                            DamageHealth(damage);
+                            m_nHealthTick = 0;
+                            m_nSpellTick = 0;
+                            HealthSpellChanged();
+                        }
+                    }
+                    // Native 0x76BDC5: index 0x1C, uses [rec+0x0A]+1 as-is.
+                    else if (HasNativeState(Grobal2.STATE_POISON_CASTER_VALUE))
+                    {
+                        var damage = GetNativeStateValue(Grobal2.STATE_POISON_CASTER_VALUE) + 1;
+                        if (damage > 0)
+                        {
+                            if (m_boAnimal)
+                                m_nMeatQuality -= 1000;
+                            DamageHealth(damage);
+                            m_nHealthTick = 0;
+                            m_nSpellTick = 0;
+                            HealthSpellChanged();
+                        }
+                    }
+                    // Native 0x76BDE0: index 0x1F (damage poison), uses [rec+0x0A]+1 as-is.
+                    else if (HasNativeState(Grobal2.STATE_DAMAGE_POISON))
+                    {
+                        var damage = GetNativeStateValue(Grobal2.STATE_DAMAGE_POISON) + 1;
+                        if (damage > 0)
+                        {
+                            if (m_boAnimal)
+                                m_nMeatQuality -= 1000;
+                            DamageHealth(damage);
+                            m_nHealthTick = 0;
+                            m_nSpellTick = 0;
+                            HealthSpellChanged();
+                        }
+                    }
+                    // Legacy C# poison index 0 (POISON_DECHEALTH) for backwards compatibility.
+                    // Note: native index 0 = monster burrow (POIS-11), not poison.
+                    else if (m_wStatusTimeArr[Grobal2.POISON_DECHEALTH] > 0)
                     {
                         if (m_boAnimal)
                         {
