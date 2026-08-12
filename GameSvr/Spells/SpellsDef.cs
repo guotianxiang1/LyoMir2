@@ -216,5 +216,35 @@ namespace GameSvr
         public const int SKILL_174 = 174;
         public const int SKILL_179 = 179;
         public const int SKILL_180 = 180;
+        public const int SKILL_291 = 291;
+        public const int SKILL_292 = 292;
+        public const int SKILL_293 = 293;
+        public const int SKILL_294 = 294;
+        public const int SKILL_295 = 295;
+        public const int SKILL_296 = 296;
+        public const int SKILL_297 = 297;
+        public const int SKILL_298 = 298;
+        public const int SKILL_299 = 299;
+        public const int SKILL_300 = 300;
+        public const int SKILL_301 = 301;
+        public const int SKILL_302 = 302;
+        public const int SKILL_303 = 303;
+        public const int SKILL_304 = 304;
+        public const int SKILL_305 = 305;
+        public const int SKILL_306 = 306;
+        public const int SKILL_307 = 307;
+        public const int SKILL_308 = 308;
+        public const int SKILL_309 = 309;
+        public const int SKILL_310 = 310;
+        public const int SKILL_311 = 311;
+        public const int SKILL_312 = 312;
+        public const int SKILL_313 = 313;
+        public const int SKILL_314 = 314;
+        public const int SKILL_315 = 315;
+        public const int SKILL_316 = 316;
+        public const int SKILL_317 = 317;
+        public const int SKILL_318 = 318;
+        public const int SKILL_319 = 319;
+        public const int SKILL_320 = 320;
     }
 }

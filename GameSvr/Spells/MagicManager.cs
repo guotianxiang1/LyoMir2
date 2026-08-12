@@ -896,6 +896,48 @@ namespace GameSvr
                 case SpellsDef.SKILL_179:
                 case SpellsDef.SKILL_180:
                     break;
+                // Magic IDs 291-320: VMT-dispatched stub handlers.
+                // Prior analysis: 315/316 are VMT-dispatched stub handlers that
+                // return FALSE (hard reject). The remaining IDs in this band are
+                // default-sink handlers that likewise reject. Per the native
+                // dispatch contract, the "return FALSE" within the magic handler
+                // is captured into boSpellFail, and the DoSpell post-switch block
+                // (lines 900-915) inverts it: on boSpellFail the caller sends
+                // RM_MAGICFIREFAIL (0x27F) and returns FRame result. Setting
+                // boSpellFail=true reproduces the native hard-reject exactly,
+                // matching the established pattern for SKILL_150/161/162/171-174.
+                case SpellsDef.SKILL_291:
+                case SpellsDef.SKILL_292:
+                case SpellsDef.SKILL_293:
+                case SpellsDef.SKILL_294:
+                case SpellsDef.SKILL_295:
+                case SpellsDef.SKILL_296:
+                case SpellsDef.SKILL_297:
+                case SpellsDef.SKILL_298:
+                case SpellsDef.SKILL_299:
+                case SpellsDef.SKILL_300:
+                case SpellsDef.SKILL_301:
+                case SpellsDef.SKILL_302:
+                case SpellsDef.SKILL_303:
+                case SpellsDef.SKILL_304:
+                case SpellsDef.SKILL_305:
+                case SpellsDef.SKILL_306:
+                case SpellsDef.SKILL_307:
+                case SpellsDef.SKILL_308:
+                case SpellsDef.SKILL_309:
+                case SpellsDef.SKILL_310:
+                case SpellsDef.SKILL_311:
+                case SpellsDef.SKILL_312:
+                case SpellsDef.SKILL_313:
+                case SpellsDef.SKILL_314:
+                case SpellsDef.SKILL_315:
+                case SpellsDef.SKILL_316:
+                case SpellsDef.SKILL_317:
+                case SpellsDef.SKILL_318:
+                case SpellsDef.SKILL_319:
+                case SpellsDef.SKILL_320:
+                    boSpellFail = true;
+                    break;
             }
             if (boSpellFail)
             {
