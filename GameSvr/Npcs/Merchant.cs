@@ -2130,8 +2130,8 @@ namespace GameSvr
                             M2Share.UserEngine.CopyToUserItemFromName(sItemName, ref UserItem);
                             if (PlayObject.AddItemToBag(UserItem))
                             {
-                                PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
                                 PlayObject.SendAddItem(UserItem);
+                                PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                                 if (StdItem.NeedIdentify == 1)
                                 {
