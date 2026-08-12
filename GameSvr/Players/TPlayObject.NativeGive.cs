@@ -102,6 +102,8 @@ namespace GameSvr
                 GrantNativeHeroExperience(hero, heroExperience, countAsFightExperience, false);
             }
 
+            // EXP-09: Native 6C04DB-6C04E8: after Exp+=, level>=999 zeroes exp before
+            // RM_WINEXP and the level-up loop, preventing overflow accumulation at cap.
             if (m_Abil.Level >= 999)
                 m_Abil.Exp = 0;
 
