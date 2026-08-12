@@ -514,7 +514,7 @@ namespace GameSvr
                 }
                 m_dwTurnTick = HUtil32.GetTickCount();
             }
-            SendRefMsg(Grobal2.RM_POWERHIT, 0, 0, 0, 0, "");
+            SendRefMsg(Grobal2.RM_SPELL2, 0, 0, 0, 0, "");
             return true;
         }
 
@@ -1635,6 +1635,20 @@ namespace GameSvr
                         sUserItemName = ItmUnit.GetItemName(UserItem);// 鍙栬嚜瀹氫箟鐗╁搧鍚嶇О
                         if (string.Compare(sUserItemName, sItemName, StringComparison.OrdinalIgnoreCase) == 0 && m_DealItemList.Count < 12)
                         {
+                            // TRADE-11: 战神 sub_78389C mode 2 transfer permission gate at 0x6C4230.
+                            // Native: BA 02 00 00 00 (mov edx,2) / 8B C6 (mov eax,esi=UserItem)
+                            //         E8 67 F6 0B 00 (call sub_78389C) / 89 45 F0 (mov [ebp-0x10],eax)
+                            //         83 7D F0 00 (cmp dword [ebp-0x10],0) / 7F 56 (jg reject)
+                            // Returns non-zero when stdItem.Reserved02 & 0x02 (the no-trade flag).
+                            var stdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                            if (NativeItemDropDestroy.CheckTransferPermission(UserItem, stdItem,
+                                NativeItemDropDestroy.TransferModeTrade) != 0)
+                            {
+                                // Native rejects by jumping to 0x6C4294, which breaks out of the item
+                                // loop and falls through to send SM_DEALADDITEM_FAIL. No other message.
+                                break;
+                            }
+
                             m_DealItemList.Add(UserItem);
                             this.SendAddDealItem(UserItem);
                             m_ItemList.RemoveAt(i);

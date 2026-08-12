@@ -19,8 +19,11 @@ namespace GameSvr
             if (!TryResolveNativeItem(itemName, out var itemIndex, out var stdItem))
                 return false;
 
+            // CRAFT-14: Material availability check (Pass 1) scans LOW -> HIGH (ascending)
+            // to match regular crafting (Merchant.cs:2029). Consumption (Pass 2) below
+            // remains HIGH -> LOW (descending) matching native sub_74054C at 0x740596.
             var available = 0;
-            for (var index = m_ItemList.Count - 1; index >= 0; index--)
+            for (var index = 0; index < m_ItemList.Count; index++)
             {
                 var item = m_ItemList[index];
                 if (item == null || item.wIndex != itemIndex) continue;
