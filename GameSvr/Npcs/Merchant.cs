@@ -1653,7 +1653,7 @@ namespace GameSvr
                         }
                         else
                         {
-                            n10 = n10 + HUtil32.Round(n10 / oreDuraMax * 1.3 * (oreDuraMax - UserItem.Dura));
+                            n10 = n10 + HUtil32.RoundOrePriceBonus((long)n10, oreDuraMax, oreDuraMax - UserItem.Dura);
                         }
                     }
                     if (StdItem.StdMode > 4)

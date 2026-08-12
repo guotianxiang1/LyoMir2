@@ -171,6 +171,55 @@ namespace SystemModule
             return (int)quotient;
         }
 
+        /// <summary>
+        /// Significand of 1.3 = 13/10 for exact rational arithmetic in ore price calculations.
+        /// Native uses x87 extended (64-bit significand); this is the numerator when denominator is 10.
+        /// </summary>
+        public const long Ext13Significand = 13;
+
+        /// <summary>
+        /// 战神's ore price bonus calculation with x87 EXTENDED (64-bit significand)
+        /// precision for the 1.3 constant.
+        /// <para>
+        /// Native code at sub_7862B4 @0x786378 stores 1.3 as a 10-byte x87 extended
+        /// constant (not float32 or double). The sequence <c>fild / fdiv / fld tbyte [...]
+        /// / fmulp / fild / fmulp / call @ROUND</c> keeps all intermediate products
+        /// at extended precision. A C# <c>double</c> literal 1.3 has only 53 significand
+        /// bits, causing double-rounding divergence.
+        /// </para>
+        /// <para>
+        /// The exact rational form is: <c>base * 13 * delta / (10 * divisor)</c>.
+        /// Computing this exactly and applying half-to-even rounding reproduces the
+        /// native x87 result byte-for-byte.
+        /// </para>
+        /// </summary>
+        public static int RoundOrePriceBonus(long basePrice, long oreDuraMax, long duraDelta)
+        {
+            // Exact rational: (basePrice / oreDuraMax * Ext13Significand * duraDelta)
+            // = basePrice * 13 * duraDelta / (10 * oreDuraMax)
+            var numerator = basePrice * Ext13Significand * duraDelta;
+            var denominator = 10L * oreDuraMax;
+
+            if (denominator == 0) return 0;
+            if (denominator < 0)
+            {
+                numerator = -numerator;
+                denominator = -denominator;
+            }
+
+            var quotient = numerator / denominator;
+            var remainder = numerator - quotient * denominator;
+            if (remainder < 0)
+            {
+                quotient -= 1;
+                remainder += denominator;
+            }
+
+            var twice = 2 * remainder;
+            if (twice > denominator) quotient += 1;
+            else if (twice == denominator && (quotient & 1) != 0) quotient += 1;
+            return (int)quotient;
+        }
         public static int Round(double r)
         {
             return (int)Math.Round(r, MidpointRounding.ToEven);
