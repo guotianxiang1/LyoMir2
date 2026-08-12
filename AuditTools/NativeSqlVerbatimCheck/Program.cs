@@ -1876,16 +1876,48 @@ skipped.Add("COV-ddl-grant_uguiedit-0x5BAEAC: "
             : "缺失",
         ok: finalHeroDataDelete);
 
-    // 0x5B276C：heroId 回填。
-    var finalHeroIdBackfill = Regex.IsMatch(flatDbSvr,
-        @"UPDATE\s+(mir3\.)?hero_index\s+SET\s+heroId\s*=\s*@\w+\s+WHERE\s+idx\s*=\s*@",
-        RegexOptions.IgnoreCase);
-    Check("FINAL-hero_index-heroId-backfill",
-        expected: "native 0x5B276C `Update hero_index set heroId = %d where idx = %d;`",
-        actual: finalHeroIdBackfill
-            ? "UPDATE hero_index SET heroId=@ WHERE idx=@ 存在"
-            : "缺失",
-        ok: finalHeroIdBackfill);
+    // 0x5B276C：heroId 回填。字节已核：rc=-1、ln=49、文本
+    // `Update hero_index set heroId = %d where idx = %d;`。
+    // C# 侧全树 grep HeroId 只命中 CreateHero 的 INSERT 列与各处 SELECT 列表，
+    // 没有任何 `UPDATE hero_index SET heroId=` 语句。原版这条属一次性回填工具
+    // 路径（与 0x58CE20 `select Count(*) from hero_index` 的进度播报同源）；
+    // C# 建号时即写入 HeroId，不存在事后回填阶段。故记 NATIVE-ONLY。
+    skipped.Add("0x5B276C len=49 `Update hero_index set heroId = %d where idx = %d;` "
+        + "NATIVE-ONLY: 一次性 heroId 回填工具（C# CreateHero 建号即写 HeroId，无回填路径）");
+
+    // ── VAs 51-60: DDL statements (ALTER TABLE + temp table ops + CREATE TABLE) ──
+    // 这 10 条都是 DDL：hero_index 列迁移(4) + 临时表(2) + CREATE TABLE(3) + monster 列迁移(1)
+    // 全部属 NATIVE-ONLY：C# 的 DatabaseInitService 只执行一次性建表，不运行列迁移。
+
+    skipped.Add("0x5BCD00 (VA 51) len=107 `Alter table hero_index add column HeroId bigInt default 0;Create index` "
+        + "NATIVE-ONLY: DDL schema migration — C# assumes columns exist");
+
+    skipped.Add("0x5BCDE8 (VA 52) len=70 `Alter table mir3_backup.Hero_index add column HeroId bigInt default 0;` "
+        + "NATIVE-ONLY: DDL backup table schema migration");
+
+    skipped.Add("0x5BCE74 (VA 53) len=68 `Alter table Hero_index add lvChangeTime DateTime default \"2100-1-1\";` "
+        + "NATIVE-ONLY: DDL schema migration — C# assumes columns exist");
+
+    skipped.Add("0x5BCF0C (VA 54) len=80 `Alter table mir3_backup.Hero_index add lvChangeTime DateTime default` "
+        + "NATIVE-ONLY: DDL backup table schema migration");
+
+    skipped.Add("0x5BD138 (VA 55) len=57 `Create Temporary Table Del_Temp_Idx(Idx int Primary Key);` "
+        + "NATIVE-ONLY: temporary table creation for bulk deletion — C# cleanup uses different strategy");
+
+    skipped.Add("0x5BD30C (VA 56) len=34 `drop Temporary Table Del_Temp_Idx;` "
+        + "NATIVE-ONLY: temporary table cleanup — paired with VA 55");
+
+    skipped.Add("0x5BD3FC (VA 57) len=848 `Create table if not exists humanmagic` "
+        + "NATIVE-ONLY: DDL table creation — C# DatabaseInitService handles table provisioning");
+
+    skipped.Add("0x5BD758 (VA 58) len=788 `Create table if not exists heromagic` "
+        + "NATIVE-ONLY: DDL table creation — C# DatabaseInitService handles table provisioning");
+
+    skipped.Add("0x5BDA78 (VA 59) len=861 `Create table if not exists monster` "
+        + "NATIVE-ONLY: DDL table creation — C# DatabaseInitService handles table provisioning");
+
+    skipped.Add("0x5BDE18 (VA 60) len=54 `Alter table monster add JobFastness integer default 0;` "
+        + "NATIVE-ONLY: DDL schema migration — C# assumes columns exist");
 }
 
 // === 覆盖率 ===============================================================
