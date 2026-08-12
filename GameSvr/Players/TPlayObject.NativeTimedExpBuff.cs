@@ -858,8 +858,14 @@ namespace GameSvr
             if (m_nNativeExpBuffSeconds > NativeExpBuffGrantMaxSeconds)
                 return NativeExpBuffGrantOutcome.OverCap;
 
-            m_nNativeExpBuffSeconds = unchecked(
+            // BUFF-09: Clamp the post-grant total to the cap. Without this gate,
+            // granting 10 hours when sitting at 7,999,900s yields 8,035,900s,
+            // which exceeds the 8,000,000s cap by 35,900s.
+            var granted = unchecked(
                 m_nNativeExpBuffSeconds + hours * NativeExpBuffGrantUnitSeconds);
+            m_nNativeExpBuffSeconds = granted > NativeExpBuffGrantMaxSeconds
+                ? NativeExpBuffGrantMaxSeconds
+                : granted;
             m_nNativeExpBuffMultiplier = multiplier;
             return NativeExpBuffGrantOutcome.Granted;
         }
@@ -916,10 +922,15 @@ namespace GameSvr
             if (m_nNativeTrueSightSeconds > NativeExpBuffGrantMaxSeconds)
                 return false;
 
+            // BUFF-09: Clamp the post-grant total to the cap, matching the
+            // sibling GrantNativeExpBuff fix.
             // 7865EC div (unsigned, truncating) / 7865EE imul eax,0xE10
-            m_nNativeTrueSightSeconds = unchecked(
+            var granted = unchecked(
                 m_nNativeTrueSightSeconds
                 + (duraMax / 1000) * NativeExpBuffGrantUnitSeconds);
+            m_nNativeTrueSightSeconds = granted > NativeExpBuffGrantMaxSeconds
+                ? NativeExpBuffGrantMaxSeconds
+                : granted;
             return true;
         }
 
