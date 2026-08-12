@@ -554,6 +554,16 @@ namespace GameSvr
                         m_WAbil.MaxHandWeight = AddTimedWord(m_WAbil.MaxHandWeight,
                             m_WAbil.MaxHandWeight, ushort.MaxValue);
                         break;
+                    case 22:
+                        // STATE-38: State 0x36 handler (internalType 54, case 22).
+                        // Native EA 0x7735E0: Subtracts value from AC/MAC low and high,
+                        // floored at 0. Native uses MAX helper (0x4C7004) for each field.
+                        // Bytes: 8B 56 18 2B 53 0A 33 C0 E8 17 3A D5 FF 89 46 18 ...
+                        // Fields: esi+0x18/0x1C/0x20/0x24 = Self+0x27C/0x280/0x284/0x288
+                        // (ACLow, ACHigh, MACLow, MACHigh in working ability record).
+                        m_WAbil.AC = SubtractTimedRange(m_WAbil.AC, value);
+                        m_WAbil.MAC = SubtractTimedRange(m_WAbil.MAC, value);
+                        break;
                     case 43:
                         AddNativeHqFastness(value);
                         break;
@@ -603,6 +613,22 @@ namespace GameSvr
             return HUtil32.MakeLong(
                 unchecked((ushort)(HUtil32.LoWord(ability) + value)),
                 unchecked((ushort)(HUtil32.HiWord(ability) + value)));
+        }
+
+        /// <summary>
+        /// STATE-38: Subtracts value from both low and high components of a range ability,
+        /// with zero floor. Native EA 0x7735E0 uses MAX helper (0x4C7004) for each field:
+        /// mov edx,[esi+N]; sub edx,[ebx+0xA]; xor eax,eax; call 0x4C7004; mov [esi+N],eax.
+        /// The MAX helper returns max(edx, eax=0), equivalent to Math.Max(x - v, 0).
+        /// Used for state 0x36 AC/MAC subtraction.
+        /// </summary>
+        private static int SubtractTimedRange(int ability, int value)
+        {
+            int low = HUtil32.LoWord(ability);
+            int high = HUtil32.HiWord(ability);
+            return HUtil32.MakeLong(
+                unchecked((ushort)Math.Max(low - value, 0)),
+                unchecked((ushort)Math.Max(high - value, 0)));
         }
 
         private static int AddTimedUpper(int ability, int value)
