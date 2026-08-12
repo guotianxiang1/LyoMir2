@@ -5080,56 +5080,69 @@ namespace GameSvr
 
         public bool InSafeZone()
         {
-            int nSafeX;
-            int nSafeY;
+            // MFLG-17: Fixed safe zone rule order and logic to match native sub_76858C
+            // Native ladder:
+            //   1. m_PEnvir == null -> FALSE (not true!)
+            //   2. m_PEnvir.Flag.boSAFE -> TRUE
+            //   3. StartPointList check -> TRUE if found
+            //   4. RedHomeMap check (only if nSafeZoneSize > 0) -> TRUE if in range
+            //   5. SafeZoneList polygon check -> TRUE if inside
+
+            // Step 1: null check returns FALSE (7684B5-7684B7: xor eax,eax / test edi,edi / je)
             if (m_PEnvir == null)
             {
-                return true;
+                return false;
             }
-            var result = m_PEnvir.Flag.boSAFE;
-            if (result)
+
+            // Step 2: boSAFE flag (76859B-76859D: test al,al / jne)
+            if (m_PEnvir.Flag.boSAFE)
             {
                 return true;
             }
-            if ((m_PEnvir.sMapName != M2Share.g_Config.sRedHomeMap) || (Math.Abs(m_nCurrX - M2Share.g_Config.nRedHomeX) > M2Share.g_Config.nSafeZoneSize) || (Math.Abs(m_nCurrY - M2Share.g_Config.nRedHomeY) > M2Share.g_Config.nSafeZoneSize))
-            {
-                result = false;
-            }
-            else
-            {
-                result = true;
-            }
-            if (result)
-            {
-                return result;
-            }
+
+            // Step 3: StartPointList iteration (sub_7684A0 -> sub_696D7C)
             for (int i = 0; i < M2Share.StartPointList.Count; i++)
             {
-                if (M2Share.StartPointList[i].m_sMapName == m_PEnvir.sMapName)
+                var startPoint = M2Share.StartPointList[i];
+                if (startPoint != null && startPoint.m_sMapName == m_PEnvir.sMapName)
                 {
-                    if (M2Share.StartPointList[i] != null)
+                    int nSafeX = startPoint.m_nCurrX;
+                    int nSafeY = startPoint.m_nCurrY;
+                    if ((Math.Abs(m_nCurrX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) &&
+                        (Math.Abs(m_nCurrY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
                     {
-                        nSafeX = M2Share.StartPointList[i].m_nCurrX;
-                        nSafeY = M2Share.StartPointList[i].m_nCurrY;
-                        if ((Math.Abs(m_nCurrX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) && (Math.Abs(m_nCurrY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
-                        {
-                            result = true;
-                        }
+                        return true;
                     }
                 }
             }
-            if (!result && M2Share.SafeZoneList != null)
+
+            // Step 4: RedHomeMap check (76850E-768549)
+            // Native: 76850E test edi,edi / 768510 jle -> skip if nSafeZoneSize <= 0
+            if (M2Share.g_Config.nSafeZoneSize > 0 &&
+                !string.IsNullOrEmpty(M2Share.g_Config.sRedHomeMap) &&
+                string.Equals(m_PEnvir.sMapName, M2Share.g_Config.sRedHomeMap, StringComparison.OrdinalIgnoreCase))
+            {
+                // Native: 768527-768549 uses <= for range check (not >)
+                if ((Math.Abs(m_nCurrX - M2Share.g_Config.nRedHomeX) <= M2Share.g_Config.nSafeZoneSize) &&
+                    (Math.Abs(m_nCurrY - M2Share.g_Config.nRedHomeY) <= M2Share.g_Config.nSafeZoneSize))
+                {
+                    return true;
+                }
+            }
+
+            // Step 5: SafeZoneList polygon check (76854F-76856E: call sub_696E48)
+            if (M2Share.SafeZoneList != null)
             {
                 for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
                 {
                     if (M2Share.SafeZoneList[i].Contains(m_PEnvir.sMapName, m_nCurrX, m_nCurrY))
                     {
-                        result = true;
-                        break;
+                        return true;
                     }
                 }
             }
-            return result;
+
+            return false;
         }
 
         public bool InSafeZone(Envirnoment Envir, int nX, int nY)
