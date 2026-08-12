@@ -143,7 +143,7 @@ namespace GameSvr
             {
                 var castleManager = M2Share.CastleManager;
                 var currentCastle = castleManager?.InCastleWarArea(this);
-                if (m_PEnvir != null && m_PEnvir.Flag.boFightZone)
+                if (m_PEnvir != null && (m_PEnvir.Flag.boFightZone || m_PEnvir.Flag.boFight3Zone))
                 {
                     result = 28;
                 }
