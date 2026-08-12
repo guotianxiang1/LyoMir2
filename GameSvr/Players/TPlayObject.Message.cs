@@ -1122,6 +1122,14 @@ namespace GameSvr
                     if (!TryClientNativeItemMergeGated(ProcessMsg.nParam1, ProcessMsg.nParam2))
                         SendDefMessage(1, 0, 0, 0, 0, "");
                     break;
+                case Grobal2.CM_LOGINNOTICEOK:
+                    // Native dispatch tree routes opcode 1018 (0x3FA) to DEFAULT handler at 0x6DBC2C.
+                    // The DEFAULT handler is a cleanup routine (xor eax,eax; pop edx; pop ecx; pop ecx;
+                    // mov fs:[eax],edx; jmp exit) that performs no message-specific logic. The client
+                    // sends CM_LOGINNOTICEOK when the player acknowledges the login notice/MOTD dialog;
+                    // the server does not need to take any action in response. This explicit no-op case
+                    // documents the native behavior (silent acknowledgment, no server-side state change).
+                    break;
                 case Grobal2.CM_GROUPMODE:
                     if (ProcessMsg.nParam2 == 0)
                     {
