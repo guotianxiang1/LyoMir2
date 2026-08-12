@@ -2594,14 +2594,16 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_WIDEHIT:
                 case Grobal2.CM_FIREHIT:
-                    if (M2Share.g_Config.boActionSendActionMsg) 
+                    // MOVE-19: Direction encoding - Native applies & 7 mask (EA 0x6D9B76: and al,7)
+                    // GameGate rewrites packet.Tag = inner.Series, so direction comes from Tag but needs mask
+                    if (M2Share.g_Config.boActionSendActionMsg)
                     {
-                        PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Tag, HUtil32.LoWord(DefMsg.Recog),
+                        PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Tag & 7, HUtil32.LoWord(DefMsg.Recog),
                             HUtil32.HiWord(DefMsg.Recog), 0, "");
                     }
                     else
                     {
-                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Tag, HUtil32.LoWord(DefMsg.Recog),
+                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Tag & 7, HUtil32.LoWord(DefMsg.Recog),
                             HUtil32.HiWord(DefMsg.Recog), 0, "");
                     }
                     break;
