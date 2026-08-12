@@ -981,9 +981,13 @@ namespace GameSvr
                 {
                     TrainCurrentSkill(wHitMode);
                 }
+                // DURA-11: Cursed weapons (btValue[3] > 0) do not lose durability
                 if ((nWeaponDamage > 0) && (m_UseItems[Grobal2.U_WEAPON] != null) && (m_UseItems[Grobal2.U_WEAPON].wIndex > 0))
                 {
-                    DoDamageWeapon(nWeaponDamage);
+                    if (m_UseItems[Grobal2.U_WEAPON].btValue[3] == 0)
+                    {
+                        DoDamageWeapon(nWeaponDamage);
+                    }
                 }
                 if (AttackTarget.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                 {
