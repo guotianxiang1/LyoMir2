@@ -314,6 +314,20 @@ namespace GameSvr
         // 3. @ 0x772FB8: ImmuneCheck (sub_773C44) → refuse if immune
         internal virtual bool CanAddNativeTimedAbility(byte internalType)
         {
+        // STATE-11: Apply gate (VMT+0x1E8 @ EA 0x772F84 base implementation).
+        // Called inside the native add function at 0x7730E9. If this returns false,
+        // the entire application aborts SILENTLY with no messages, no bitset changes,
+        // no list mutations - the caller sees no evidence the attempt was made.
+        // Virtual to allow subclass-specific gates (e.g., TFoxBossMon has override at 0x5FA508).
+        //
+        // Base gate checks (91 classes use this implementation):
+        // - Range: state_id > 0x6F (111) -> refuse
+        // - State 52 (riding someone else's horse) active -> refuse ALL
+        // - State 16 (immunity) active with value >= 5 -> refuse states 45, 53
+        // - State 16 active -> refuse states {0, 13, 24, 26, 28, 29, 30, 31} via IsBlockedByNativeState16
+        // - State 18 active OR state 26 deadline not expired -> refuse state 26
+        //
+        // STATE-20/21/23/24: Additional gate checks documented in method body below.
             if (internalType > NativeActiveStateMax)
             {
                 return false;
