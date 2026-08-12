@@ -369,6 +369,11 @@ namespace GameSvr
                                 MapFlag.nKILLFUNCNO = HUtil32.Str_ToInt(s38, -1);
                                 continue;
                             }
+                            if (s34.Equals("NOC2C", StringComparison.OrdinalIgnoreCase))
+                            {
+                                MapFlag.boNOC2C = true;
+                                continue;
+                            }
                             // NOHUMNOMON REMOVED (2026-08-09, Tier-1 negative
                             // evidence). 战神 has no such map flag: an image-wide
                             // byte scan for NOHUMNOMON / NOHUMNOMONSTER / NOHUM /
