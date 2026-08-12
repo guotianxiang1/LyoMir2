@@ -1452,6 +1452,87 @@ Check("CONN-06-flush-table",
     actual: backup.Contains("FLUSH TABLE") ? "present" : "absent",
     ok: backup.Contains("FLUSH TABLE"));
 
+// === DDL / Connection Setup NATIVE-ONLY census (33 VAs) =======================
+// Source: _gap_census.txt DDL gap section. Infrastructure/operational commands
+// with no business logic: connection setup, schema introspection, backup and
+// maintenance, dynamic migration, user provisioning. C# delegates these to
+// MySqlConnector pooling, deployment scripts, and MySQL admin tooling.
+//
+// ⚠️ De-duplicated against CONN-05/CONN-06 above. The source block listed 37 VAs,
+// but 4 of them are already covered by *passing* assertions and are deliberately
+// NOT re-listed here — re-adding them would downgrade asserted coverage to
+// "unverifiable" and double-count them in the VA census:
+//   0x5B63E8, 0x5B7EE4 → asserted by CONN-05 (`FLUSH TABLES`)
+//   0x5B415C, 0x5B47D0 → asserted by CONN-06 (`FLUSH TABLE`)
+// 0x5B6530 (`Flush Logs;`) IS listed below: line 1415 claims the FLUSH pair
+// covers it, but neither assertion tests `FLUSH LOGS` — that claim overreached.
+
+skipped.Add("COV-ddl-wait_timeout-16vas: "
+    + "16 VAs (0x58B7EC, 0x58D568, 0x5921E4, 0x5926A4, 0x594F24, 0x5953E8, 0x59674C, "
+    + "0x596B84, 0x5A5914, 0x5A7D1C, 0x5AFE8C, 0x5B05E0, 0x5C13BC, 0x5C904C, 0x5CB318, "
+    + "0x5CC0F4) all encode `set wait_timeout=2073600;` -- NATIVE-ONLY connection setup, "
+    + "C# uses MySqlConnector pooling with framework-managed timeouts");
+
+skipped.Add("COV-ddl-show_tables_gamedata-0x5A9CC4: "
+    + "0x5A9CC4 `show tables from gamedata` -- NATIVE-ONLY schema introspection");
+
+skipped.Add("COV-ddl-show_tables_guild-0x5A9F8C: "
+    + "0x5A9F8C `show tables from guild` -- NATIVE-ONLY schema introspection");
+
+skipped.Add("COV-ddl-show_tables_mir3-0x5AA084: "
+    + "0x5AA084 `show tables from Mir3` -- NATIVE-ONLY schema introspection");
+
+skipped.Add("COV-ddl-show_tables_gamedata2-0x5C1774: "
+    + "0x5C1774 `Show Tables from gamedata` -- NATIVE-ONLY schema introspection "
+    + "(duplicate pattern, distinct VA)");
+
+skipped.Add("COV-ddl-show_databases_wildcard-0x5B337C: "
+    + "0x5B337C `show DataBases like \"%s\"` -- NATIVE-ONLY database existence check");
+
+skipped.Add("COV-ddl-show_databases_guild-0x5BD358: "
+    + "0x5BD358 `show Databases like \"guild\";` -- NATIVE-ONLY database existence check");
+
+skipped.Add("COV-ddl-flush_table_prefix-0x5C1C88: "
+    + "0x5C1C88 `Flush Table ` (runtime-concat prefix) -- NATIVE-ONLY maintenance command "
+    + "(sibling 0x5B415C is asserted by CONN-06)");
+
+skipped.Add("COV-ddl-flush_table_backup-0x5B83A8: "
+    + "0x5B83A8 `Flush Table mir3_backup.` -- NATIVE-ONLY backup schema flush "
+    + "(sibling 0x5B47D0 is asserted by CONN-06)");
+
+skipped.Add("COV-ddl-flush_generic-0x5B6FD8: "
+    + "0x5B6FD8 `Flush ` (runtime-concat prefix) -- NATIVE-ONLY flush command prefix");
+
+skipped.Add("COV-ddl-flush_logs-0x5B6530: "
+    + "0x5B6530 `Flush Logs;` -- NATIVE-ONLY log rotation; no C# assertion tests "
+    + "`FLUSH LOGS` (CONN-05/06 only cover FLUSH TABLE/TABLES)");
+
+skipped.Add("COV-ddl-alter_table_2vas: "
+    + "2 VAs (0x5B3E9C, 0x5C19D8) encode `Alter Table ` (runtime-concat prefix) "
+    + "-- NATIVE-ONLY dynamic schema migration; table set unreadable (VMP)");
+
+skipped.Add("COV-ddl-drop_prefix-0x5B6FC8: "
+    + "0x5B6FC8 `Drop ` (runtime-concat prefix) -- NATIVE-ONLY drop command prefix");
+
+skipped.Add("COV-ddl-drop_database_mir3_back-0x5B7F10: "
+    + "0x5B7F10 `Drop DataBase If Exists mir3_back` -- NATIVE-ONLY backup cleanup");
+
+// ⚠️ These 3 Grant VAs are distinct from the GameServer grants cited by CSONLY-1
+// (0x59D584/0x59D5E0/0x59D610/0x59D640). These provision GUI/Web tool accounts.
+// Credentials appear verbatim in the native binary; reproduced here as evidence
+// of the native statement, not as a recommendation to keep those passwords.
+skipped.Add("COV-ddl-grant_uguiquery-0x5BADC8: "
+    + "0x5BADC8 `Grant SELECT,CREATE TEMPORARY TABLES on *.* to uGuiQuery@\"127.0.0.1\" "
+    + "identified by  \"<redacted>\";` -- NATIVE-ONLY user provisioning for GUI tools");
+
+skipped.Add("COV-ddl-grant_uwebquery-0x5BAE38: "
+    + "0x5BAE38 `Grant SELECT,CREATE TEMPORARY TABLES on *.* to uWebQuery@\"127.0.0.1\" "
+    + "identified by  \"<redacted>\";` -- NATIVE-ONLY user provisioning for web tools");
+
+skipped.Add("COV-ddl-grant_uguiedit-0x5BAEAC: "
+    + "0x5BAEAC `Grant all on *.* to uGuiEdit@\"127.0.0.1\" identified by  "
+    + "\"<redacted>\";` -- NATIVE-ONLY user provisioning for GUI editor");
+
 // === Schema Probe Fragment Coverage (47 runtime-concat VAs) ====================
 // These VAs are runtime table-name/column-name splicing fragments that produce
 // complete SQL at runtime. Cannot assert verbatim. Strategy: assert fragment
