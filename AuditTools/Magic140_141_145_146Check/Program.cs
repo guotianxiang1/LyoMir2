@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using GameSvr;
 using SystemModule;
@@ -37,23 +38,21 @@ namespace Magic140_141_145_146Check
 
             Console.WriteLine("=== Magic 140/141/145/146 Audit ===\n");
 
+            // Prepare runtime configuration files
+            PrepareRuntimeConfig();
+
             // Test fixture: create a minimal environment
             var config = new GameSvrConfig();
-            var randomNumber = new RandomNumber();
+            var randomNumber = RandomNumber.GetInstance();
             var userEngine = new UserEngine();
 
             // Initialize M2Share (required by MagicManager)
-            var m2ShareType = typeof(M2Share);
-            var configField = m2ShareType.GetField("_config",
-                BindingFlags.Static | BindingFlags.NonPublic);
-            var randomField = m2ShareType.GetField("RandomNumber",
-                BindingFlags.Static | BindingFlags.Public);
-            var engineField = m2ShareType.GetField("UserEngine",
-                BindingFlags.Static | BindingFlags.Public);
-
-            configField?.SetValue(null, config);
-            randomField?.SetValue(null, randomNumber);
-            engineField?.SetValue(null, userEngine);
+            M2Share.g_Config = config;
+            M2Share.RandomNumber = randomNumber;
+            M2Share.UserEngine = userEngine;
+            M2Share.ObjectManager = new ObjectManager();
+            M2Share.LogMsgCriticalSection = new object();
+            M2Share.ProcessHumanCriticalSection = new object();
 
             var manager = new MagicManager();
 
@@ -72,6 +71,13 @@ namespace Magic140_141_145_146Check
             player.m_boCanSpell = true;
             player.m_boDeath = false;
             player.m_boStickMode = false;
+
+            // Critical: DoSpell has an anti-bot gate at line 244-250 that checks
+            // m_nSoftVersionDateEx==0 && m_dwClientTick==0 && wMagicID>40
+            // If both are zero, spells with ID > 40 (except 153) are rejected.
+            // Set at least one to a non-zero value to pass the gate.
+            player.m_nSoftVersionDateEx = 1;
+            player.m_dwClientTick = 1;
 
             // Create mock magic definitions for IDs 140, 141, 145, 146
             var magicIds = new ushort[] { 140, 141, 145, 146 };
@@ -140,13 +146,14 @@ namespace Magic140_141_145_146Check
             Console.WriteLine("Verification: checking that IDs 140-146 are NOT in hard-reject list");
 
             // Read the source to confirm they don't set boSpellFail = true
-            var sourceCode = System.IO.File.ReadAllText(
-                "GameSvr/Spells/MagicManager.cs");
+            var repoRoot = FindRepositoryRoot();
+            var sourceCode = File.ReadAllText(
+                Path.Combine(repoRoot, "GameSvr", "Spells", "MagicManager.cs"));
 
             // These IDs should appear in case statements but NOT followed by "boSpellFail = true"
             foreach (var magicId in magicIds)
             {
-                var casePattern = $"case {magicId}:";
+                var casePattern = $"case SpellsDef.SKILL_{magicId}:";
                 var hasCase = sourceCode.Contains(casePattern);
                 Assert(hasCase, $"ID {magicId} should have explicit case statement");
 
@@ -183,6 +190,40 @@ namespace Magic140_141_145_146Check
                 Console.WriteLine($"\n✗ {failCount} CHECKS FAILED");
                 return 1;
             }
+        }
+
+        static void PrepareRuntimeConfig()
+        {
+            var runtimeDirectory = AppContext.BaseDirectory;
+            File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+                "[Server]" + Environment.NewLine);
+            File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+                "[String]" + Environment.NewLine);
+            File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+                "[Command]" + Environment.NewLine);
+            var shareDirectory = Path.Combine(Path.GetFullPath(
+                Path.Combine(runtimeDirectory, "..")), "Share");
+            Directory.CreateDirectory(shareDirectory);
+            File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+                "[PlayerLevelExp]" + Environment.NewLine);
+            File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+                "[Integer]" + Environment.NewLine);
+        }
+
+        static string FindRepositoryRoot()
+        {
+            foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+            {
+                var directory = new DirectoryInfo(start);
+                while (directory != null)
+                {
+                    if (File.Exists(Path.Combine(directory.FullName,
+                            "GameSvr", "GameSvr.csproj")))
+                        return directory.FullName;
+                    directory = directory.Parent;
+                }
+            }
+            throw new DirectoryNotFoundException("GameSvr repository root not found");
         }
     }
 }
