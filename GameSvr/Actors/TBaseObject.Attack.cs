@@ -791,7 +791,8 @@ namespace GameSvr
                     TryApplyNativeState26AfterPhysicalDamage(AttackTarget, nPower);
                     if (!AttackTarget.m_boUnParalysis && m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_btAntiPoison + M2Share.g_Config.nAttackPosionRate) == 0))
                     {
-                        AttackTarget.MakePosion(Grobal2.POISON_STONE, M2Share.g_Config.nAttackPosionTime, 0);
+                        // Native 0x666D42: push 1 (level), not 0. C# applies POISON_STONE due to different index spaces (POIS-37).
+                        AttackTarget.MakePosion(Grobal2.POISON_STONE, M2Share.g_Config.nAttackPosionTime, 1);
                     }
                     if (m_nHongMoSuite > 0)// 虹魔，吸血
                     {
