@@ -131,6 +131,16 @@ public class TMapFlag
     /// </summary>
     public bool boNOEQUIPRELIVE;
 
+    /// <summary>
+    /// 战神 map flag <c>NOC2C</c> -> native <c>[flag+0x82]</c>
+    /// (parser sub_774D98 @0x7756F7 dec edi / sete al writes computed value;
+    /// parser sub_776008 @0x776483 mov byte [ebx+0x82],1 writes immediate 1).
+    /// Consumer at 0x6F0A3F (sub_6F09C4, opcode 0x546). Both parsers write the
+    /// same offset 0x82. Flag name appears in native token pool B alongside
+    /// AUTORELIVE, NOEQUIPRELIVE, NOHERO, etc.
+    /// </summary>
+    public bool boNOC2C;
+
     public byte BreakLevel;
     public ushort CrazyBreakLevel;
 }
