@@ -1012,8 +1012,18 @@ skipped.Add("0x5B5B38 len=61 `Select High_Priority idx,HeroName from hero_index 
     + "NATIVE-ONLY: cluster B cross-server import (no C# counterpart)");
 skipped.Add("0x5B8750 len=166 `select MasterName, HeroName, ... into outfile \"%s\" ...` "
     + "NATIVE-ONLY: weekly export routine (no OUTFILE in DBSvr)");
-skipped.Add("0x5C9CD0 len=99 `select count(*) from mir3.hero_index where masterName not in (select chrName from mir3.user_index);` "
-    + "NATIVE-ONLY: orphan-hero deletion gate (C# CleanupService skips count, runs DELETE unconditionally)");
+// 0x5C9CD0: orphan-hero count gate before DELETE (native func 0x5C9B60)
+// C# site: DBSvr/Core/CleanupService.cs CleanOrphanData() line ~113
+Check("NEW-0x5C9CD0-orphan-hero-count-gate",
+    expected: "native 0x5C9CD0 `select count(*) from mir3.hero_index where masterName not in (select chrName from mir3.user_index);`",
+    actual: Regex.IsMatch(cleanup,
+        @"SELECT\s+COUNT\(\*\)\s+FROM\s+mir3\.hero_index\s+WHERE\s+MasterName\s+NOT\s+IN\s*\(\s*SELECT\s+ChrName\s+FROM\s+mir3\.user_index\s*\)",
+        RegexOptions.IgnoreCase)
+        ? "present: orphan-hero count gate in CleanOrphanData()"
+        : "absent (count gate missing before orphan-hero DELETE)",
+    ok: Regex.IsMatch(cleanup,
+        @"SELECT\s+COUNT\(\*\)\s+FROM\s+mir3\.hero_index\s+WHERE\s+MasterName\s+NOT\s+IN\s*\(\s*SELECT\s+ChrName\s+FROM\s+mir3\.user_index\s*\)",
+        RegexOptions.IgnoreCase));
 
 // ---- hero_index ranking queries (0x478BF8/CCC/DA0/E74 → 2 assertions) ----
 //

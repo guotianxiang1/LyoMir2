@@ -115,6 +115,16 @@ namespace DBSvr.Core
 
             try
             {
+                // 0x5C9CD0 孤儿英雄计数门 —— 原版在删除 hero_index 前先计数。
+                // 为 0 时不报日志(原版行为), 但其他孤儿行仍应清理。
+                using (var countCmd = new MySqlCommand(
+                    "SELECT COUNT(*) FROM mir3.hero_index WHERE MasterName NOT IN (SELECT ChrName FROM mir3.user_index)", conn))
+                {
+                    int orphanHeroCount = Convert.ToInt32(countCmd.ExecuteScalar());
+                    if (orphanHeroCount > 0)
+                        DBShare.MainOutMessage($"[Cleanup] 发现 {orphanHeroCount} 个孤儿英雄索引");
+                }
+
                 string[] orphans =
                 {
                     // 0x5C9DA0 逐字
