@@ -3165,6 +3165,7 @@ namespace GameSvr
                 cert.m_dwReAliveTick = HUtil32.GetTickCount();
                 cert.m_pMonGen = monGen;
                 monGen.nActiveCount = activeCountBefore + 1;
+                nMonsterCount++;  // Native 0x67CA9E..0x67CAA1
                 certificatePublishAttempted = true;
                 monGen.CertList.Add(cert);
                 monGen.CertCount = certificateCountBefore + 1;
@@ -3184,6 +3185,7 @@ namespace GameSvr
                 }
                 monGen.nActiveCount = activeCountBefore;
                 monGen.CertCount = certificateCountBefore;
+                nMonsterCount--;  // Rollback
                 cert.m_boCanReAlive = oldCanReAlive;
                 cert.m_dwReAliveTick = oldReAliveTick;
                 cert.m_pMonGen = oldMonGen;
