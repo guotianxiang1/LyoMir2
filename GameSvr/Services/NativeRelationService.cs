@@ -148,7 +148,13 @@ namespace GameSvr.Services
                     NativeRelationKind.Friend, out var count, out var contains))
                 return -1;
             if (contains) return -3;
-            return count >= Limit ? -4 : 0;
+            if (count >= Limit) return -4;
+
+            // FRIEND-08: Check target's friend list capacity
+            if (!_store.TryInspect(target.UserId, requester.UserId,
+                    NativeRelationKind.Friend, out var targetCount, out _))
+                return -1;
+            return targetCount >= Limit ? -4 : 0;
         }
 
         internal int AddDirected(NativeRelationPlayer owner,
