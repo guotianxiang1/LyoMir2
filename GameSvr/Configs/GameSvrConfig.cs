@@ -1528,7 +1528,11 @@ namespace GameSvr
             nMinMasterLevel = 35;
             nMaxApprenticeLevel = 28;
             nHeroUnionMaxEnergy = 200;
-            nCastleGoldMax = 10000000;
+            // ✅ ECON-22: Native castle treasury caps are HARDCODED constants (not config-driven).
+            // EA 0x65B37C: cmp 0x5F5E100 (100,000,000) for +0x80 total gold
+            // EA 0x65B343: cmp 0x1E8480 (2,000,000) for +0x84 daily income
+            // Overflow is CLAMPED not dropped (0x65B366 / 0x65B38C mov instructions).
+            nCastleGoldMax = 100000000;
             nCastleOneDayGold = 2000000;
             nRepairDoorPrice = 2000000;
             nRepairWallPrice = 500000;
