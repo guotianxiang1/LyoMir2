@@ -1885,6 +1885,100 @@ skipped.Add("COV-ddl-grant_uguiedit-0x5BAEAC: "
     skipped.Add("0x5B276C len=49 `Update hero_index set heroId = %d where idx = %d;` "
         + "NATIVE-ONLY: 一次性 heroId 回填工具（C# CreateHero 建号即写 HeroId，无回填路径）");
 
+    // ───────────────────────────────────────────────────────────────────────
+    // Batch 1: First 10 VAs from _unmentioned_exact.txt
+    // ───────────────────────────────────────────────────────────────────────
+    // These were previously marked as "not referenced" in UnmentionedVAsBatch1.cs,
+    // but actual C# implementations exist and are now verified.
+
+    // VA 1: 0x58DB24 len=32 - update hero_index set HeroName="
+    // C# implementation: MySqlHeroRecordService.RenameHero (line 337-342)
+    // UPDATE mir3.hero_index AS h JOIN mir3.hero_data AS d ON d.Idx=h.idx
+    //   SET h.HeroName=@n, h.ModifyDate=NOW(), d.HeroName=@n, d.Data=@d
+    //   WHERE h.idx=@i AND h.HeroName=@o AND h.IsDelete=0 AND d.HeroName=@o
+    var batch1_va01_heroRename = Regex.IsMatch(flatDbSvr,
+        @"UPDATE\s+.*hero_index.*\s+SET\s+.*HeroName\s*=",
+        RegexOptions.IgnoreCase);
+    Check("BATCH1-01-hero-rename-heroname",
+        expected: "native 0x58DB24: UPDATE hero_index SET HeroName fragment",
+        actual: batch1_va01_heroRename
+            ? "UPDATE hero_index SET HeroName present"
+            : "absent",
+        ok: batch1_va01_heroRename);
+
+    // VA 2: 0x58E298 len=71 - delete from hero_data where idx=%d;delete from hero_index where idx=%d
+    // C# implementation: MySqlHeroRecordService.HardDeleteHero (line 139-144)
+    // Cascading delete in transaction: DELETE FROM mir3.hero_data WHERE idx=@i
+    //                                  DELETE FROM mir3.hero_index WHERE idx=@i
+    var batch1_va02_heroDelete = Regex.IsMatch(flatDbSvr,
+        @"DELETE\s+FROM\s+.*hero_data\s+WHERE\s+idx\s*=",
+        RegexOptions.IgnoreCase)
+        && Regex.IsMatch(flatDbSvr,
+        @"DELETE\s+FROM\s+.*hero_index\s+WHERE\s+idx\s*=",
+        RegexOptions.IgnoreCase);
+    Check("BATCH1-02-hero-cascading-delete",
+        expected: "native 0x58E298: DELETE FROM hero_data/hero_index WHERE idx (cascading)",
+        actual: batch1_va02_heroDelete
+            ? "hero cascading delete present"
+            : "absent",
+        ok: batch1_va02_heroDelete);
+
+    // VA 3: 0x5AA9A8 len=71 - delete from user_data where idx=%d;delete from user_index where idx=%d
+    // C# implementation: MySqlPlayRecordService (line 1312-1317)
+    // Cascading delete in transaction: DELETE FROM mir3.user_data WHERE idx=@idx
+    //                                  DELETE FROM mir3.user_index WHERE idx=@idx
+    var batch1_va03_userDelete = Regex.IsMatch(flatDbSvr,
+        @"DELETE\s+FROM\s+.*user_data\s+WHERE\s+idx\s*=",
+        RegexOptions.IgnoreCase)
+        && Regex.IsMatch(flatDbSvr,
+        @"DELETE\s+FROM\s+.*user_index\s+WHERE\s+idx\s*=",
+        RegexOptions.IgnoreCase);
+    Check("BATCH1-03-user-cascading-delete",
+        expected: "native 0x5AA9A8: DELETE FROM user_data/user_index WHERE idx (cascading)",
+        actual: batch1_va03_userDelete
+            ? "user cascading delete present"
+            : "absent",
+        ok: batch1_va03_userDelete);
+
+    // VAs 4-9: 0x5AB3E8, 0x5AB4AC, 0x5AB590, 0x5AB608, 0x5AB698, 0x5AB708
+    // ALTER TABLE DDL statements for schema migration (AdminLevel, ScriptData, dynData)
+    // These columns are used in C# code (AdminLevel in ranking queries, ScriptData/dynData
+    // in persistence), but the DDL migration statements themselves are NATIVE-ONLY.
+    // C# assumes these columns already exist in the schema.
+    skipped.Add("0x5AB3E8 (VA 4) len=117 `alter table user_index Add AdminLevel tinyint unsigned default 0, Add` "
+        + "NATIVE-ONLY: DDL schema migration — C# assumes AdminLevel column exists "
+        + "(used in NativeType2RankingLoader WHERE AdminLevel=0)");
+
+    skipped.Add("0x5AB4AC (VA 5) len=129 `alter table mir3_backup.user_index Add AdminLevel tinyint unsigned def` "
+        + "NATIVE-ONLY: DDL backup table schema migration for AdminLevel");
+
+    skipped.Add("0x5AB590 (VA 6) len=42 `alter table user_data Add ScriptData Blob;` "
+        + "NATIVE-ONLY: DDL schema migration — C# assumes ScriptData column exists "
+        + "(used in NativeSavePersistenceData.ScriptDataBlob persistence)");
+
+    skipped.Add("0x5AB608 (VA 7) len=54 `alter table mir3_backup.user_data Add ScriptData Blob;` "
+        + "NATIVE-ONLY: DDL backup table schema migration for ScriptData");
+
+    skipped.Add("0x5AB698 (VA 8) len=39 `Alter table hero_data Add dynData Blob;` "
+        + "NATIVE-ONLY: DDL schema migration — C# assumes dynData column exists "
+        + "(used in NativeHeroBlobCodec.TryDecodeDynamicBlob)");
+
+    skipped.Add("0x5AB708 (VA 9) len=51 `Alter table mir3_backup.hero_data Add dynData Blob;` "
+        + "NATIVE-ONLY: DDL backup table schema migration for dynData");
+
+    // VA 10: 0x5B33A0 len=28 - Create DataBase mir3_backup;
+    // C# implementation: BackupService.ExecuteBackup (line 55-57)
+    // CREATE DATABASE IF NOT EXISTS mir3_backup
+    var batch1_va10_createBackupDb = Regex.IsMatch(flatDbSvr,
+        @"CREATE\s+DATABASE.*mir3_backup",
+        RegexOptions.IgnoreCase);
+    Check("BATCH1-10-create-backup-database",
+        expected: "native 0x5B33A0: CREATE DATABASE mir3_backup",
+        actual: batch1_va10_createBackupDb
+            ? "CREATE DATABASE mir3_backup present"
+            : "absent",
+        ok: batch1_va10_createBackupDb);
+
     // ── VAs 51-60: DDL statements (ALTER TABLE + temp table ops + CREATE TABLE) ──
     // 这 10 条都是 DDL：hero_index 列迁移(4) + 临时表(2) + CREATE TABLE(3) + monster 列迁移(1)
     // 全部属 NATIVE-ONLY：C# 的 DatabaseInitService 只执行一次性建表，不运行列迁移。
