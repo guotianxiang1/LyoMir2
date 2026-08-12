@@ -44,7 +44,7 @@ namespace GameSvr
                                 BaseObject.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101, (short)nDamage, BaseObject.m_WAbil.HP, BaseObject.m_WAbil.MaxHP, this.ObjectId, "", 300);
                                 if (m_boUsePoison)
                                 {
-                                    if (M2Share.RandomNumber.Random(this.m_btAntiPoison + 20) == 0)
+                                    if (M2Share.RandomNumber.Random(BaseObject.m_btAntiPoison + 20) == 0)
                                     {
                                         BaseObject.MakePosion(Grobal2.POISON_DECHEALTH, 30, 1);
                                     }
