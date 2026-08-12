@@ -1409,6 +1409,49 @@ Check("UIXR2-OTHER-08",
 // Schema probes (15 assertions) require DBSvr/Core/NativeSchemaProvisioner.cs
 skipped.Add("UIXR2-SCHEMA-01 through UIXR2-SCHEMA-16: schema probe assertions - file DBSvr/Core/NativeSchemaProvisioner.cs not found");
 
+// === Connection Setup SQL (6 assertions: 4 OPTIMIZE + 2 FLUSH) ===================
+// Coverage: 29 VAs from DDL gap census connection initialization statements
+// - OPTIMIZE TABLE: 4 sites (0x5BD070, 0x5BD094, 0x5BD0B8, 0x5BD0DC)
+// - FLUSH: 2 assertions covering 5+ sites (0x5B63E8, 0x5B7EE4, 0x5B415C, 0x5B47D0, 0x5B6530)
+// - SKIP: 23 VAs (wait_timeout 16, use mir3 1, show tables 3, Grant 3)
+// Date: 2026-08-12
+
+// CONN-01: OPTIMIZE TABLE user_index
+Check("CONN-01-optimize-user_index",
+    expected: "native 0x5BD070 `OPTIMIZE TABLE user_index;`",
+    actual: backup.Contains("OPTIMIZE TABLE user_index") ? "present" : "absent",
+    ok: backup.Contains("OPTIMIZE TABLE user_index"));
+
+// CONN-02: OPTIMIZE TABLE user_data
+Check("CONN-02-optimize-user_data",
+    expected: "native 0x5BD094 `OPTIMIZE TABLE user_data;`",
+    actual: backup.Contains("OPTIMIZE TABLE user_data") ? "present" : "absent",
+    ok: backup.Contains("OPTIMIZE TABLE user_data"));
+
+// CONN-03: OPTIMIZE TABLE hero_index
+Check("CONN-03-optimize-hero_index",
+    expected: "native 0x5BD0B8 `OPTIMIZE TABLE hero_index;`",
+    actual: backup.Contains("OPTIMIZE TABLE hero_index") ? "present" : "absent",
+    ok: backup.Contains("OPTIMIZE TABLE hero_index"));
+
+// CONN-04: OPTIMIZE TABLE hero_data
+Check("CONN-04-optimize-hero_data",
+    expected: "native 0x5BD0DC `OPTIMIZE TABLE hero_data;`",
+    actual: backup.Contains("OPTIMIZE TABLE hero_data") ? "present" : "absent",
+    ok: backup.Contains("OPTIMIZE TABLE hero_data"));
+
+// CONN-05: FLUSH TABLES (global)
+Check("CONN-05-flush-tables",
+    expected: "native 0x5B63E8 / 0x5B7EE4 `Flush Tables;`",
+    actual: backup.Contains("FLUSH TABLES") ? "present" : "absent",
+    ok: backup.Contains("FLUSH TABLES"));
+
+// CONN-06: FLUSH TABLE (per-table)
+Check("CONN-06-flush-table",
+    expected: "native 0x5B415C / 0x5B47D0 `Flush Table` (builder concat)",
+    actual: backup.Contains("FLUSH TABLE") ? "present" : "absent",
+    ok: backup.Contains("FLUSH TABLE"));
+
 // === Schema Probe Fragment Coverage (47 runtime-concat VAs) ====================
 // These VAs are runtime table-name/column-name splicing fragments that produce
 // complete SQL at runtime. Cannot assert verbatim. Strategy: assert fragment
