@@ -519,14 +519,14 @@ namespace GameSvr
                                                         {
                                                             if (MapItem.OfBaseObject != null)
                                                             {
-                                                                if (((TBaseObject)MapItem.OfBaseObject).m_boGhost)
+                                                                if (((TBaseObject)MapItem.OfBaseObject).m_boDeath)
                                                                 {
                                                                     MapItem.OfBaseObject = null;
                                                                 }
                                                             }
                                                             if (MapItem.DropBaseObject != null)
                                                             {
-                                                                if (((TBaseObject)MapItem.DropBaseObject).m_boGhost)
+                                                                if (((TBaseObject)MapItem.DropBaseObject).m_boDeath)
                                                                 {
                                                                     MapItem.DropBaseObject = null;
                                                                 }

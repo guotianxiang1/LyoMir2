@@ -392,6 +392,7 @@ namespace GameSvr
         
         
         public byte m_btCreditPoint = 0;
+        public byte m_btAntiAddictionTier = 0;
         public int m_nShengWan = 0;
         public int m_nForceLv = 0;
         public int m_nForceExp = 0;
@@ -1673,14 +1674,14 @@ namespace GameSvr
                                                 {
                                                     if (MapItem.OfBaseObject as TBaseObject != null)
                                                     {
-                                                        if ((MapItem.OfBaseObject as TBaseObject).m_boGhost)
+                                                        if ((MapItem.OfBaseObject as TBaseObject).m_boDeath)
                                                         {
                                                             MapItem.OfBaseObject = null;
                                                         }
                                                     }
                                                     if (MapItem.DropBaseObject as TBaseObject != null)
                                                     {
-                                                        if ((MapItem.DropBaseObject as TBaseObject).m_boGhost)
+                                                        if ((MapItem.DropBaseObject as TBaseObject).m_boDeath)
                                                         {
                                                             MapItem.DropBaseObject = null;
                                                         }
