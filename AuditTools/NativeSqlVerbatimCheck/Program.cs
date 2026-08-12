@@ -791,6 +791,18 @@ foreach (var (va, native, csPattern) in nativeReads)
         ok: ok);
 }
 
+// === zongpaibase ==========================================================
+// 0x593F04 len=60 — GetMaster by name reads only idx+Notice, not all 6 columns
+// NATIVE-ONLY: C# GetMaster reads all 6 columns (Idx, MasterName, MasterLevel,
+// StudentExp, MasterExp, Notice), which is a superset that includes the native
+// columns. The extra columns are used in the same method, so this is NOT a bug
+// but a documented divergence (C# retrieves more data than strictly required by
+// the native equivalent, trading network bytes for simpler code).
+skipped.Add("COV-zongpai-0x593F04-getmaster-minimal-projection: "
+    + "native 0x593F04 `select idx, Notice from ZongpaiBase where MasterName = \"%s\";` "
+    + "retrieves only idx+Notice; C# GetMaster retrieves all 6 columns "
+    + "(documented divergence: wider projection, same WHERE clause)");
+
 // === 覆盖率 ===============================================================
 // ⚠️ 分母是**重新枚举**得来的，不是继承的。旧版写 253 条 GAME / 306 总数且
 // 无从复核；本轮按 Delphi 长字符串头严格枚举 CODE 快照
