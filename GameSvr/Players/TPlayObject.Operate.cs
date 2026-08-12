@@ -2284,10 +2284,10 @@ namespace GameSvr
                 return;
             }
             Merchant merchant = (Merchant)M2Share.UserEngine.FindMerchant(ObjectId);
-            for (var i = 0; i < m_ItemList.Count; i++)
+            for (var i = m_ItemList.Count - 1; i >= 0; i--)
             {
                 UserItem = m_ItemList[i];
-                sUserItemName = ItmUnit.GetItemName(UserItem); 
+                sUserItemName = ItmUnit.GetItemName(UserItem);
                 if (ClientItemIdMatches(UserItem, nItemIdx) && string.Compare(sUserItemName, sMsg, StringComparison.OrdinalIgnoreCase) == 0)
                 {
                     
