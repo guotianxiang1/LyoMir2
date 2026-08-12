@@ -1449,7 +1449,7 @@ namespace GameSvr
             {
                 SaveNativeGoodsIfDue(HUtil32.GetTickCount(),
                     GetNativeGoodsRootPath());
-                if ((HUtil32.GetTickCount() - dwRefillGoodsTick) > 60000)
+                if ((HUtil32.GetTickCount() - dwRefillGoodsTick) > 30000)
                 {
                     dwRefillGoodsTick = HUtil32.GetTickCount();
                     RefillGoods();

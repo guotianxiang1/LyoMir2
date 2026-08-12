@@ -258,7 +258,7 @@ namespace GameSvr
                             CellObj = pRemoveObject,
                             dwAddTime = HUtil32.GetTickCount()
                         };
-                        MapCellInfo.ObjList.Insert(0, OSObject);
+                        MapCellInfo.ObjList.Add(OSObject);
                         result = pRemoveObject;
                         if (btType == CellType.OS_MOVINGOBJECT)
                         {
@@ -442,7 +442,7 @@ namespace GameSvr
                                 CellObj = Cert,
                                 dwAddTime = HUtil32.GetTickCount()
                             };
-                            MapCellInfo.ObjList.Insert(0, OSObject);
+                            MapCellInfo.ObjList.Add(OSObject);
                             result = 1;
                         }
                     }
@@ -1061,7 +1061,7 @@ namespace GameSvr
                     OSObject.CellType = nType;
                     OSObject.CellObj = __Event;
                     OSObject.dwAddTime = HUtil32.GetTickCount();
-                    MapCellInfo.ObjList.Insert(0, OSObject);
+                    MapCellInfo.ObjList.Add(OSObject);
                     result = OSObject;
                 }
             }
@@ -1123,7 +1123,7 @@ namespace GameSvr
                                 CellObj = stoneMineEvent,
                                 dwAddTime = HUtil32.GetTickCount()
                             };
-                            MapCellInfo.ObjList.Insert(0, OSObject);
+                            MapCellInfo.ObjList.Add(OSObject);
                             return stoneMineEvent;
                         }
                     }
