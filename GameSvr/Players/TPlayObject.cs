@@ -2090,6 +2090,14 @@ namespace GameSvr
         
         private bool PileStones(int nX, int nY)
         {
+            // MINE-46: Hard-block when either tier byte == 3 (native 0x6BC202, 0x6BC21E)
+            // Anti-fatigue tier 3 OR cheat-penalty tier 3 completely disables mining.
+            if (m_btNativeFatigueTier == 3 || m_btNativeCheatPenaltyTier == 3)
+            {
+                SendRefMsg(Grobal2.RM_HEAVYHIT, m_btDirection, m_nCurrX, m_nCurrY, 0, string.Empty);
+                return false;
+            }
+
             var result = false;
             var s1C = string.Empty;
             var mineEvent = (StoneMineEvent)m_PEnvir.GetEvent(nX, nY);
@@ -2113,7 +2121,11 @@ namespace GameSvr
                                 pileEvent.AddEventParam();
                             }
                         }
-                        if (M2Share.RandomNumber.Random(M2Share.g_Config.nMakeMineRate) == 0)
+                        // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
+                        // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
+                        // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
+                        int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
+                        if (M2Share.RandomNumber.Random(mineRate) == 0)
                         {
                             if (m_PEnvir.Flag.boMINE)
                             {

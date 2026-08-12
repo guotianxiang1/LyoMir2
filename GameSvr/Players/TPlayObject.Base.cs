@@ -413,6 +413,23 @@ namespace GameSvr
         public uint m_dwJiaYouPoint = 0;  // ObjPlayer.JiaYouPoint, native Self+0xAF0 (Cardinal, RO property)
 
         /// <summary>
+        /// native <c>Self+0x1828</c> (Byte) — Anti-fatigue tier (防沉迷疲劳档位).
+        /// Values: 0=normal, 1=normal, 2=half-speed (mining 1/96, drop multiplier 2),
+        /// 3=hard-block (mining disabled, drop disabled).
+        /// Binary: 0x6BC202 (mining gate), 0x6BC2A3 (mining tier==2 check),
+        /// 0x71FADA/0x71FB1E (drop gates). Default 0 = not in effect.
+        /// </summary>
+        public byte m_btNativeFatigueTier = 0;
+
+        /// <summary>
+        /// native <c>Self+0x1829</c> (Byte) — Cheat penalty tier (外挂惩罚档位).
+        /// Values: 0=normal, 1=normal, 2=penalty, 3=hard-block.
+        /// Binary: 0x6BC21E (mining gate), 0x71FAE3 (drop gate).
+        /// Default 0 = not in effect.
+        /// </summary>
+        public byte m_btNativeCheatPenaltyTier = 0;
+
+        /// <summary>
         /// native <c>Self+0x18A0</c> (Word) — 元宝 trade-protection amount, persisted
         /// at rec+0x050C. Setter <c>0x6D154E</c>; named by the in-function literals
         /// 「已成功设置交易保护金额为：」 / 「修改元宝交易金额」.
