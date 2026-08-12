@@ -516,7 +516,7 @@ namespace GameSvr
         public static string g_sOnlineCountMsg = "在线?: {0}";
         public static string g_sTotalOnlineCountMsg = "总在线数: {0}";
         public static string g_sYouNeedLevelMsg = "你的等级要在{0}级以上才能用此功?!!!";
-        public static string g_sThisMapDisableSendCyCyMsg = "本地图不允许喊话!!!";
+        public static string g_sThisMapDisableSendCyCyMsg = "本地图禁止喊话";
         public static string g_sYouCanSendCyCyLaterMsg = "{0}秒后才可以再发文?!!!";
         public static string g_sYouIsDisableSendMsg = "禁止聊天!!!";
         public static string g_sYouMurderedMsg = "你犯了谋杀?!!!";
