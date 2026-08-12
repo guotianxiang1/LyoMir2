@@ -218,6 +218,12 @@ namespace GameSvr
                 {
                     if (this.IsProperTarget(BaseObject) && (!BaseObject.m_boHideMode || this.m_boCoolEye))
                     {
+                        // 战神 sub_71DA70 @0x0071DA70: view-range box gate uses strictly-greater-than
+                        // comparison (actors AT viewRange are included, beyond it are excluded).
+                        // SPAWN-25: C# was missing this native range check entirely.
+                        if (Math.Abs(this.m_nCurrX - BaseObject.m_nCurrX) > this.m_nViewRange
+                            || Math.Abs(this.m_nCurrY - BaseObject.m_nCurrY) > this.m_nViewRange)
+                            continue;
                         nC = Math.Abs(this.m_nCurrX - BaseObject.m_nCurrX) + Math.Abs(this.m_nCurrY - BaseObject.m_nCurrY);
                         if (nC < n10)
                         {
