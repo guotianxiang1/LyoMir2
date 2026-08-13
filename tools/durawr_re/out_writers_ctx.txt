@@ -1,0 +1,1551 @@
+00439227  fn=004390AC  -
+          mov eax, dword ptr [ebp - 0x1c]
+          push eax
+          call 0x4085c0
+          imul bx, ax
+          mov eax, dword ptr [ebp + 0xc]
+        >>mov word ptr [eax + 0x26], bx
+          mov eax, dword ptr [ebp + 0xc]
+          mov edx, dword ptr [ebp - 0x28]
+
+0063F040  fn=0063EE9C  -
+          cmp al, 3
+          jne 0x63f059
+          mov eax, dword ptr [ebp - 8]
+          mov ax, word ptr [eax + 0x28]
+          mov edx, dword ptr [ebp - 8]
+        >>mov word ptr [edx + 0x26], ax
+          push 0x63f130
+          push 0
+
+0063F08D  fn=0063EE9C  -
+          mov edx, dword ptr [ebp - 8]
+          sub word ptr [edx + 0x28], ax
+          mov eax, dword ptr [ebp - 8]
+          mov ax, word ptr [eax + 0x28]
+          mov edx, dword ptr [ebp - 8]
+        >>mov word ptr [edx + 0x26], ax
+          push 0x63f148
+          push 0
+
+0068686E  fn=006867B8  -
+          call dword ptr [edi + 0x3c]
+          test al, al
+          je 0x6868e5
+          mov eax, dword ptr [ebp - 0xc]
+          mov dx, word ptr [ebp - 4]
+        >>sub word ptr [eax + 0x26], dx
+          mov edi, dword ptr [ebx + 0x6d4]
+          mov eax, dword ptr [edi]
+
+0068C9DE  fn=0068C8F0  -
+          dec esi
+          jne 0x68c979
+          test byte ptr [ebp - 5], bl
+          je 0x68ca8a
+          mov eax, dword ptr [ebp - 0x10]
+        >>sub word ptr [eax + 0x26], 0x64
+          mov eax, dword ptr [ebp - 0x10]
+          mov si, word ptr [eax + 0x26]
+
+0068F4CA  fn=0068F450  -
+          jbe 0x68f541
+          movzx eax, word ptr [esi + 0x26]
+          cmp edi, eax
+          jle 0x68f4ca
+          mov edi, eax
+        >>sub word ptr [esi + 0x26], di
+          push 9
+          movzx eax, word ptr [esi + 0x26]
+
+006A0B11  fn=006A09F4  -
+          mov edx, eax
+          mov eax, edi
+          call 0x6a0ca4
+          mov dword ptr [ebp - 8], eax
+          mov eax, dword ptr [ebp - 0xc]
+        >>sub word ptr [eax + 0x26], 0x3e8
+          mov eax, dword ptr [ebp - 0xc]
+          cmp word ptr [eax + 0x26], 0x3e8
+
+006A0BB4  fn=006A09F4  -
+          movzx edx, word ptr [eax + 0x24]
+          mov eax, edi
+          call 0x6a0974
+          mov dword ptr [ebp - 8], eax
+          mov eax, dword ptr [ebp - 0xc]
+        >>sub word ptr [eax + 0x26], 0x3e8
+          mov eax, dword ptr [ebp - 0xc]
+          cmp word ptr [eax + 0x26], 0x3e8
+
+006A0C64  fn=006A09F4  -
+          call 0x6a1994
+          mov eax, dword ptr [ebp + 8]
+          xor edx, edx
+          mov dword ptr [eax], edx
+          mov eax, dword ptr [ebp - 0xc]
+        >>sub word ptr [eax + 0x26], 0x3e8
+          mov eax, dword ptr [ebp - 0xc]
+          cmp word ptr [eax + 0x26], 0x3e8
+
+006BC47A  fn=006BC3CC  -
+          call 0x74de54
+          mov esi, eax
+          test esi, esi
+          je 0x6bc499
+          call 0x6bc394
+        >>mov word ptr [esi + 0x26], ax
+          push 0
+          xor ecx, ecx
+
+006BCF99  fn=006BCEE8  -
+          mov eax, dword ptr [ebp - 0x418]
+          mov dword ptr [esi + 0x1e], eax
+          mov eax, dword ptr [ebp - 0x414]
+          mov dword ptr [esi + 0x22], eax
+          mov ax, word ptr [ebp - 0x410]
+        >>mov word ptr [esi + 0x26], ax
+          mov al, byte ptr [ebx + 0x72]
+          mov byte ptr [esi + 0x28], al
+
+006BDAE3  fn=006BDA34  -
+          mov ax, word ptr [ebx + 0x28]
+          movzx edx, ax
+          cmp edx, dword ptr [ebp - 4]
+          jl 0x6bdaed
+          mov ax, word ptr [ebp - 4]
+        >>mov word ptr [ebx + 0x26], ax
+          mov byte ptr [ebp - 0xd], 1
+          jmp 0x6bdaf8
+
+006BDAED  fn=006BDA34  -
+          jl 0x6bdaed
+          mov ax, word ptr [ebp - 4]
+          mov word ptr [ebx + 0x26], ax
+          mov byte ptr [ebp - 0xd], 1
+          jmp 0x6bdaf8
+        >>mov word ptr [ebx + 0x26], ax
+          movzx eax, word ptr [ebx + 0x28]
+          sub dword ptr [ebp - 4], eax
+
+006C89DD  fn=006C87B4  -
+          mov ax, word ptr [eax + 0x28]
+          movzx edx, ax
+          cmp ebx, edx
+          jg 0x6c89e7
+          mov eax, dword ptr [ebp - 0x18]
+        >>mov word ptr [eax + 0x26], bx
+          mov byte ptr [ebp - 0x19], 1
+          jmp 0x6c89f7
+
+006C89EA  fn=006C87B4  -
+          mov eax, dword ptr [ebp - 0x18]
+          mov word ptr [eax + 0x26], bx
+          mov byte ptr [ebp - 0x19], 1
+          jmp 0x6c89f7
+          mov edx, dword ptr [ebp - 0x18]
+        >>mov word ptr [edx + 0x26], ax
+          mov eax, dword ptr [ebp - 0x18]
+          movzx eax, word ptr [eax + 0x28]
+
+006CC612  fn=006CC420  -
+          jne 0x6cc62b
+          movzx eax, word ptr [ebx + 0x28]
+          cmp eax, dword ptr [ebp - 0x1c]
+          jl 0x6cc61c
+          mov ax, word ptr [ebp - 0x1c]
+        >>mov word ptr [ebx + 0x26], ax
+          mov byte ptr [ebp - 0x29], 1
+          jmp 0x6cc62b
+
+006CC620  fn=006CC420  -
+          mov ax, word ptr [ebp - 0x1c]
+          mov word ptr [ebx + 0x26], ax
+          mov byte ptr [ebp - 0x29], 1
+          jmp 0x6cc62b
+          mov ax, word ptr [ebx + 0x28]
+        >>mov word ptr [ebx + 0x26], ax
+          movzx eax, word ptr [ebx + 0x28]
+          sub dword ptr [ebp - 0x1c], eax
+
+006CF2B2  fn=006CF1FC  -
+          mov edx, dword ptr [eax]
+          call dword ptr [edx + 0x8c]
+          mov eax, esi
+          call 0x767548
+          mov eax, dword ptr [ebp - 4]
+        >>sub word ptr [eax + 0x26], 0x3e8
+          mov eax, dword ptr [ebp - 4]
+          mov ax, word ptr [eax + 0x28]
+
+006CF30E  fn=006CF1FC  -
+          jne 0x6cf251
+          mov eax, dword ptr [ebp - 4]
+          cmp word ptr [eax + 0x26], 0x3e8
+          jae 0x6cf318
+          mov eax, dword ptr [ebp - 4]
+        >>mov word ptr [eax + 0x26], 0
+          mov byte ptr [ebp - 5], 1
+          mov al, byte ptr [ebp - 5]
+
+006CF37D  fn=006CF324  -
+          mov eax, esi
+          mov ebx, dword ptr [eax]
+          call dword ptr [ebx + 0xec]
+          test eax, eax
+          je 0x6cf3ac
+        >>sub word ptr [edi + 0x26], 0x3e8
+          mov dx, word ptr [edi + 0x26]
+          cmp dx, 0x3e8
+
+006D5F4E  fn=006D5E50  -
+          mov eax, dword ptr [eax + 0x508]
+          mov edx, edi
+          call 0x424b30
+          mov eax, esi
+          call 0x404690
+        >>add word ptr [ebx + 0x26], 0x64
+          inc dword ptr [ebp - 8]
+          dec edi
+
+006DD6E5  fn=006DD674  -
+          mov ax, word ptr [edi + 0x28]
+          movzx edx, ax
+          cmp edx, dword ptr [ebp - 8]
+          jl 0x6dd6ed
+          mov ax, word ptr [ebp - 8]
+        >>mov word ptr [edi + 0x26], ax
+          mov bl, 1
+          jmp 0x6dd6f8
+
+006DD6ED  fn=006DD674  -
+          jl 0x6dd6ed
+          mov ax, word ptr [ebp - 8]
+          mov word ptr [edi + 0x26], ax
+          mov bl, 1
+          jmp 0x6dd6f8
+        >>mov word ptr [edi + 0x26], ax
+          movzx eax, word ptr [edi + 0x28]
+          sub dword ptr [ebp - 8], eax
+
+006DF96D  fn=006DF7E8  -
+          call dword ptr [edi + 0x268]
+          mov eax, ebx
+          call 0x404690
+          jmp 0x6df9d9
+          add dword ptr [ebp - 0x14], edi
+        >>sub word ptr [ebx + 0x26], di
+          mov ax, word ptr [ebx + 0x28]
+          push eax
+
+006DFCFB  fn=006DFCCE  -
+          mov eax, dword ptr [ebp - 0x10]
+          call 0x404690
+          jmp 0x6dfd7f
+          add dword ptr [ebp - 0xc], edi
+          mov eax, dword ptr [ebp - 0x10]
+        >>sub word ptr [eax + 0x26], di
+          mov eax, dword ptr [ebp - 0x10]
+          mov ax, word ptr [eax + 0x28]
+
+006E1642  fn=006E14E9  -
+          mov ax, word ptr [eax + 0x28]
+          cmp ax, word ptr [ebp + 8]
+          jb 0x6e1648
+          mov eax, dword ptr [ebp - 0x10]
+          mov dx, word ptr [ebp + 8]
+        >>mov word ptr [eax + 0x26], dx
+          jmp 0x6e164f
+          mov edx, dword ptr [ebp - 0x10]
+
+006E164B  fn=006E14E9  -
+          mov eax, dword ptr [ebp - 0x10]
+          mov dx, word ptr [ebp + 8]
+          mov word ptr [eax + 0x26], dx
+          jmp 0x6e164f
+          mov edx, dword ptr [ebp - 0x10]
+        >>mov word ptr [edx + 0x26], ax
+          push 0
+          mov cl, 1
+
+006E9D0B  fn=006E9CD2  -
+          push 0
+          mov cx, 0x3026
+          mov edx, ebx
+          mov eax, ebx
+          call 0x765e68
+        >>dec word ptr [esi + 0x26]
+          mov ax, word ptr [esi + 0x28]
+          push eax
+
+006EB97B  fn=006EB8E4  -
+          push dword ptr [ebp + 8]
+          push 0x6eba7c
+          lea eax, [ebp - 8]
+          mov edx, 3
+          call 0x405890
+        >>sub word ptr [ebx + 0x26], 0x3e8
+          mov eax, ebx
+          call 0x7845a0
+
+006F3356  fn=006F3324  -
+          je 0x6f335a
+          mov edx, ebx
+          mov eax, dword ptr [esi + 0x4c0]
+          call 0x75ec20
+          mov dx, word ptr [ebp - 4]
+        >>mov word ptr [eax + 0x26], dx
+          inc edi
+          cmp edi, 0x10
+
+006FC2CF  fn=006FC054  -
+          call dword ptr [ebx + 0x268]
+          mov eax, dword ptr [ebp - 0x10]
+          call 0x404690
+          jmp 0x6fc341
+          mov eax, dword ptr [ebp - 0x10]
+        >>sub word ptr [eax + 0x26], bx
+          mov eax, dword ptr [ebp - 0x10]
+          mov ax, word ptr [eax + 0x28]
+
+00709465  fn=0070944B  -
+          mov ax, word ptr [eax + 0x28]
+          movzx ecx, ax
+          cmp edx, ecx
+          jle 0x70946b
+          mov edx, dword ptr [ebp - 0x10]
+        >>mov word ptr [edx + 0x26], ax
+          jmp 0x709476
+          mov ax, word ptr [edi + 0x10]
+
+00709472  fn=0070944B  -
+          mov edx, dword ptr [ebp - 0x10]
+          mov word ptr [edx + 0x26], ax
+          jmp 0x709476
+          mov ax, word ptr [edi + 0x10]
+          mov edx, dword ptr [ebp - 0x10]
+        >>mov word ptr [edx + 0x26], ax
+          mov al, byte ptr [edi + 0x14]
+          dec al
+
+00712607  fn=007124E4  -
+          mov edx, 0x7126e4
+          mov eax, esi
+          call 0x52f1c8
+          mov edx, dword ptr [eax]
+          call dword ptr [edx + 0x58]
+        >>mov word ptr [ebx + 0x26], ax
+          lea eax, [ebp - 0x114]
+          lea edx, [ebx + 0x15]
+
+0071291E  fn=0071289C  -
+          lea eax, [esi + 0x15]
+          mov edx, dword ptr [ebx + 8]
+          add edx, 0x106
+          mov cl, 0xf
+          call 0x4039e4
+        >>mov word ptr [esi + 0x26], 0
+          mov edx, esi
+          mov eax, dword ptr [0x7dc7cc]
+
+00712BD5  fn=00712BC4  -
+          mov esi, dword ptr [eax + 0xc]
+          test esi, esi
+          je 0x712bdf
+          cmp dx, 0x3e7
+          ja 0x712bdf
+        >>mov word ptr [esi + 0x26], dx
+          mov byte ptr [eax + 4], 1
+          mov cl, 1
+
+0071ED46  fn=0071ED0E  -
+          mov eax, dword ptr [ebp - 0x10]
+          cmp byte ptr [eax + 0x14], 7
+          je 0x71ed4a
+          mov eax, dword ptr [ebp - 0x10]
+          mov dx, word ptr [ebx + 0x4a0]
+        >>mov word ptr [eax + 0x26], dx
+          mov byte ptr [ebp - 5], 1
+          push 0
+
+007201E8  fn=007201A9  -
+          mov ebx, eax
+          cmp byte ptr [ebx + 0x14], 7
+          jne 0x7201f6
+          mov eax, dword ptr [esi]
+          mov ax, word ptr [eax + 8]
+        >>mov word ptr [ebx + 0x26], ax
+          mov eax, dword ptr [esi]
+          mov word ptr [eax + 8], 0
+
+0073E850  fn=0073E810  -
+          call 0x403574
+          mov dword ptr [ebp - 8], eax
+          sub esi, dword ptr [ebp - 4]
+          test esi, esi
+          jg 0x73e88c
+        >>mov word ptr [ebx + 0x26], 0
+          mov eax, dword ptr [edi + 0x4c0]
+          call 0x75ee78
+
+0073E88C  fn=0073E810  -
+          mov cx, 0x278d
+          mov edx, edi
+          mov eax, edi
+          call 0x765e68
+          jmp 0x73e8c8
+        >>mov word ptr [ebx + 0x26], si
+          mov dword ptr [ebp - 0xc], esi
+          fild dword ptr [ebp - 0xc]
+
+0073E9A4  fn=0073E93C  -
+          jg 0x73e9e3
+          mov bl, 1
+          movzx edx, dx
+          cmp eax, edx
+          jge 0x73e9c9
+        >>sub word ptr [edi + 0x26], ax
+          push 9
+          movzx eax, word ptr [edi + 0x26]
+
+0073EB0A  fn=0073EA20  -
+          mov al, byte ptr [ebp - 6]
+          and al, byte ptr [ebp - 5]
+          je 0x73ebb5
+          mov eax, dword ptr [ebp - 0xc]
+          mov dx, word ptr [ebp - 4]
+        >>sub word ptr [eax + 0x26], dx
+          mov eax, dword ptr [ebp - 0xc]
+          mov ax, word ptr [eax + 0x26]
+
+0073EC73  fn=0073EC40  -
+          call 0x73ebf0
+          test al, al
+          je 0x73ecdb
+          cmp word ptr [esi + 0x26], 0x3e8
+          jbe 0x73ec7b
+        >>sub word ptr [esi + 0x26], 0x3e8
+          jmp 0x73ecd9
+          mov word ptr [esi + 0x26], 0
+
+0073EC7B  fn=0073EC40  -
+          je 0x73ecdb
+          cmp word ptr [esi + 0x26], 0x3e8
+          jbe 0x73ec7b
+          sub word ptr [esi + 0x26], 0x3e8
+          jmp 0x73ecd9
+        >>mov word ptr [esi + 0x26], 0
+          mov eax, dword ptr [ebp + 8]
+          mov eax, dword ptr [eax - 4]
+
+0074061A  fn=0074054C  -
+          sub edi, dword ptr [ebp - 0x18]
+          movzx eax, word ptr [ebx + 0x26]
+          cmp edi, eax
+          jge 0x7406a8
+          add dword ptr [ebp - 0x18], edi
+        >>sub word ptr [ebx + 0x26], di
+          mov eax, dword ptr [ebx + 0x20]
+          push eax
+
+00740C8D  fn=00740B04  -
+          call dword ptr [edi + 0x268]
+          mov eax, ebx
+          call 0x404690
+          jmp 0x740cf9
+          add dword ptr [ebp - 0x14], edi
+        >>sub word ptr [ebx + 0x26], di
+          mov ax, word ptr [ebx + 0x28]
+          push eax
+
+00740DE4  fn=00740D5C  -
+          movzx eax, word ptr [eax + 0x26]
+          cmp eax, dword ptr [ebp - 8]
+          jl 0x740f1d
+          mov eax, dword ptr [esi]
+          mov dx, word ptr [ebp - 8]
+        >>sub word ptr [eax + 0x26], dx
+          mov eax, dword ptr [esi]
+          mov eax, dword ptr [eax + 0x20]
+
+00741017  fn=00740FEE  -
+          cmp eax, 0x1f4
+          jl 0x741087
+          cmp eax, dword ptr [edi]
+          jg 0x74104e
+          mov dx, word ptr [ebx + 0x28]
+        >>mov word ptr [ebx + 0x26], dx
+          sub dword ptr [edi], eax
+          mov byte ptr [esi], 1
+
+00741050  fn=00740FEE  -
+          mov cx, 0xffdb
+          mov ebx, dword ptr [eax]
+          call dword ptr [ebx + 0xd4]
+          jmp 0x741087
+          mov eax, dword ptr [edi]
+        >>add word ptr [ebx + 0x26], ax
+          xor eax, eax
+          mov dword ptr [edi], eax
+
+007411AE  fn=007410D8  -
+          mov eax, dword ptr [ebp - 0x18]
+          cmp eax, dword ptr [ebp - 0x14]
+          jle 0x7411d5
+          mov edx, dword ptr [ebp - 8]
+          mov ax, word ptr [ebp - 0x14]
+        >>mov word ptr [edx + 0x26], ax
+          mov edx, dword ptr [ebp - 8]
+          mov dx, word ptr [edx + 0x28]
+
+00746517  fn=007464DC  -
+          cmp byte ptr [ebp - 1], 0
+          je 0x74651d
+          mov ax, word ptr [esi + 0x28]
+          cmp ax, word ptr [esi + 0x26]
+          je 0x74651d
+        >>mov word ptr [esi + 0x26], ax
+          mov bl, 1
+          mov eax, ebx
+
+00746FC3  fn=00746F46  -
+          call 0x768be0
+          mov eax, ebx
+          call 0x404690
+          jmp 0x747025
+          mov dword ptr [ebp - 8], edi
+        >>sub word ptr [ebx + 0x26], di
+          mov eax, dword ptr [ebx + 0x20]
+          push eax
+
+0074723A  fn=00747110  -
+          call dword ptr [edi + 0x268]
+          mov eax, ebx
+          call 0x404690
+          jmp 0x7472a6
+          add dword ptr [ebp - 0x10], edi
+        >>sub word ptr [ebx + 0x26], di
+          mov ax, word ptr [ebx + 0x28]
+          push eax
+
+00754ECE  fn=00754D40  -
+          cmp eax, edx
+          jb 0x754ed4
+          mov eax, dword ptr [esi]
+          mov ax, word ptr [eax + 0x28]
+          mov edx, dword ptr [esi]
+        >>mov word ptr [edx + 0x26], ax
+          jmp 0x754ede
+          mov eax, dword ptr [esi]
+
+00754EDA  fn=00754D40  -
+          mov edx, dword ptr [esi]
+          mov word ptr [edx + 0x26], ax
+          jmp 0x754ede
+          mov eax, dword ptr [esi]
+          mov dx, word ptr [ebx + 0x26]
+        >>add word ptr [eax + 0x26], dx
+          mov edx, dword ptr [esi]
+          mov eax, dword ptr [ebp - 4]
+
+0075EAA4  fn=0075EA40  -
+          cmp eax, dword ptr [edx - 4]
+          jle 0x75ead1
+          mov ecx, eax
+          mov eax, dword ptr [ebp + 8]
+          mov ax, word ptr [eax - 4]
+        >>sub word ptr [ebx + 0x26], ax
+          mov eax, ecx
+          mov ecx, 0x3e8
+
+0075EB51  fn=0075EA40  -
+          mov eax, dword ptr [eax - 8]
+          mov eax, dword ptr [eax + 4]
+          mov cx, 0xffdb
+          mov edi, dword ptr [eax]
+          call dword ptr [edi + 0xd4]
+        >>mov word ptr [ebx + 0x26], 0
+          mov byte ptr [esi], 1
+          mov byte ptr [ebp - 1], 1
+
+0075F602  fn=0075F5A0  -
+          call 0x75ec20
+          mov di, word ptr [eax + 0x28]
+          mov edx, ebx
+          mov eax, esi
+          call 0x75ec20
+        >>mov word ptr [eax + 0x26], di
+          mov edx, ebx
+          mov eax, esi
+
+0076019A  fn=00760180  TTemporaryManClothes#12
+          mov eax, dword ptr [ecx + 0x108]
+          fcomp qword ptr [eax + 0xa]
+          fnstsw ax
+          sahf 
+          jbe 0x7601a6
+        >>mov word ptr [ecx + 0x26], 0
+          mov word ptr [ecx + 0x28], 0
+          mov ax, word ptr [ecx + 0x28]
+
+0076030E  fn=007602F4  TTemporaryWomanClothes#12
+          mov eax, dword ptr [ecx + 0x108]
+          fcomp qword ptr [eax + 0xa]
+          fnstsw ax
+          sahf 
+          jbe 0x76031a
+        >>mov word ptr [ecx + 0x26], 0
+          mov word ptr [ecx + 0x28], 0
+          mov ax, word ptr [ecx + 0x28]
+
+00760A3C  fn=007608D4  TLWeapon#10 TBrokenWeapon#10 TSpade#10
+          mov word ptr [edi + 0x28], ax
+          movzx edx, word ptr [edi + 0x26]
+          add edx, ebx
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [edi + 0x26], ax
+          mov edx, 0xf
+          mov eax, 0xc
+
+00760E06  fn=00760DE4  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x760788
+        >>mov word ptr [esi + 0x26], 0
+          mov eax, esi
+          test bl, bl
+
+00761330  fn=007611C8  THelmet#10
+          mov word ptr [esi + 0x28], ax
+          movzx edx, word ptr [esi + 0x26]
+          add edx, ebx
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [esi + 0x26], ax
+          pop esi
+          pop ebx
+
+00761481  fn=00761338  THelmet#2
+          mov word ptr [ebx + 0x28], ax
+          movzx edx, word ptr [ebx + 0x26]
+          add edx, edi
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [ebx + 0x26], ax
+          mov eax, 0x1e
+          call 0x403b4c
+
+007618CC  fn=007618C3  -
+        <not on linear path from fn entry>
+
+00761E18  fn=00761D08  -
+          mov word ptr [esi + 0x28], ax
+          movzx edx, word ptr [esi + 0x26]
+          add edx, ebx
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [esi + 0x26], ax
+          pop esi
+          pop ebx
+
+00761F20  fn=00761E20  TRing#2
+          mov word ptr [ebx + 0x28], ax
+          movzx edx, word ptr [ebx + 0x26]
+          add edx, edi
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [ebx + 0x26], ax
+          mov eax, 0x1e
+          call 0x403b4c
+
+00762710  fn=00762600  -
+          mov word ptr [esi + 0x28], ax
+          movzx edx, word ptr [esi + 0x26]
+          add edx, ebx
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [esi + 0x26], ax
+          pop esi
+          pop ebx
+
+0076283F  fn=00762718  TArmRing#2
+          mov word ptr [ebx + 0x28], ax
+          movzx edx, word ptr [ebx + 0x26]
+          add edx, edi
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [ebx + 0x26], ax
+          mov eax, 0x1e
+          call 0x403b4c
+
+00763410  fn=007633EC  TCryCharm#6
+          test dx, dx
+          jbe 0x76341e
+          mov cl, 1
+          cmp dx, 0x3e8
+          jb 0x763418
+        >>sub word ptr [eax + 0x26], 0x3e8
+          jmp 0x76341e
+          mov word ptr [eax + 0x26], 0
+
+00763418  fn=007633EC  TCryCharm#6
+          mov cl, 1
+          cmp dx, 0x3e8
+          jb 0x763418
+          sub word ptr [eax + 0x26], 0x3e8
+          jmp 0x76341e
+        >>mov word ptr [eax + 0x26], 0
+          mov eax, ecx
+          pop ebp
+
+0076349E  fn=0076345C  THPCharm#7
+          jle 0x7634b8
+          movzx edx, word ptr [ebp - 2]
+          xor ecx, ecx
+          mov eax, edi
+          call 0x769db4
+        >>dec word ptr [ebx + 0x26]
+          mov eax, edi
+          call 0x7693e8
+
+0076351B  fn=007634DC  TMPCharm#7
+          movzx ecx, word ptr [ebp - 2]
+          cmp edx, ecx
+          jle 0x763535
+          movzx eax, word ptr [ebp - 2]
+          add dword ptr [edi + 0x2b4], eax
+        >>dec word ptr [ebx + 0x26]
+          mov eax, edi
+          call 0x7693e8
+
+007635AC  fn=0076355C  THPMPCharm#7
+          jle 0x7635b2
+          movzx edx, word ptr [ebp - 4]
+          xor ecx, ecx
+          mov eax, edi
+          call 0x769db4
+        >>dec word ptr [ebx + 0x26]
+          mov al, 1
+          mov edx, dword ptr [edi + 0x2b8]
+
+007635D0  fn=0076355C  THPMPCharm#7
+          movzx ecx, word ptr [ebp - 6]
+          cmp edx, ecx
+          jle 0x7635d6
+          movzx eax, word ptr [ebp - 6]
+          add dword ptr [edi + 0x2b4], eax
+        >>dec word ptr [ebx + 0x26]
+          mov al, 1
+          test al, al
+
+0076362C  fn=007635FC  TVessel#6
+          call dword ptr [ecx + 0x244]
+          test al, al
+          je 0x7636b0
+          cmp word ptr [ebx + 0x26], 0x64
+          jb 0x7636b0
+        >>sub word ptr [ebx + 0x26], 0x64
+          mov eax, dword ptr [ebx + 0x1c]
+          cmp byte ptr [eax + 0x17], 0
+
+007636DE  fn=007636BC  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x762c1c
+        >>mov word ptr [esi + 0x26], 0
+          mov eax, esi
+          test bl, bl
+
+0076375D  fn=00763704  -
+          add dx, 0x64
+          mov cx, word ptr [eax + 0x28]
+          cmp dx, cx
+          jbe 0x76375d
+          mov edx, ecx
+        >>mov word ptr [eax + 0x26], dx
+          mov dl, 1
+          mov eax, edx
+
+00763814  fn=007637D8  -
+          mov bx, word ptr [eax + 0x26]
+          add bx, word ptr [edx + 0x26]
+          mov edx, ebx
+          cmp dx, word ptr [eax + 0x28]
+          ja 0x76381a
+        >>mov word ptr [eax + 0x26], dx
+          mov cl, 1
+          mov eax, ecx
+
+00763B3E  fn=00763B1C  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x763348
+        >>mov word ptr [esi + 0x26], 0
+          mov eax, esi
+          test bl, bl
+
+00763CD2  fn=00763B64  -
+          xor eax, eax
+          mov dword ptr [ebp - 0x6c], eax
+          fild qword ptr [ebp - 0x70]
+          fdivrp st(1)
+          call 0x403574
+        >>mov word ptr [ebx + 0x26], ax
+          mov ax, word ptr [ebx + 0x28]
+          cmp ax, word ptr [ebx + 0x26]
+
+00763CE0  fn=00763B64  -
+          call 0x403574
+          mov word ptr [ebx + 0x26], ax
+          mov ax, word ptr [ebx + 0x28]
+          cmp ax, word ptr [ebx + 0x26]
+          jae 0x763ce4
+        >>mov word ptr [ebx + 0x26], ax
+          push 0xc
+          movzx eax, word ptr [ebx + 0x26]
+
+00763FAA  fn=00763F23  -
+          xor eax, eax
+          mov dword ptr [ebp - 0x58], eax
+          fild qword ptr [ebp - 0x5c]
+          fdivrp st(1)
+          call 0x403574
+        >>mov word ptr [ebx + 0x26], ax
+          mov ax, word ptr [ebx + 0x28]
+          cmp ax, word ptr [ebx + 0x26]
+
+00763FB8  fn=00763F23  -
+          call 0x403574
+          mov word ptr [ebx + 0x26], ax
+          mov ax, word ptr [ebx + 0x28]
+          cmp ax, word ptr [ebx + 0x26]
+          jae 0x763fbc
+        >>mov word ptr [ebx + 0x26], ax
+          push 0xc
+          movzx eax, word ptr [ebx + 0x26]
+
+00764184  fn=007640FC  TMarkStoneCharm#7
+          add dword ptr [ebx + 0x108], eax
+          mov eax, ebx
+          call 0x764544
+          test al, al
+          je 0x764190
+        >>dec word ptr [ebx + 0x26]
+          xor eax, eax
+          mov dword ptr [ebx + 0x108], eax
+
+007641EE  fn=007640FC  TMarkStoneCharm#7
+          add dword ptr [ebx + 0x108], eax
+          mov eax, ebx
+          call 0x764544
+          test al, al
+          je 0x7641fa
+        >>dec word ptr [ebx + 0x26]
+          xor eax, eax
+          mov dword ptr [ebx + 0x108], eax
+
+007837E6  fn=00783788  -
+          mov eax, dword ptr [ebp + 8]
+          mov dword ptr [ebx + 0x20], eax
+          mov ax, word ptr [esi]
+          mov word ptr [ebx + 0x24], ax
+          mov ax, word ptr [esi + 0x1c]
+        >>mov word ptr [ebx + 0x26], ax
+          mov word ptr [ebx + 0x28], ax
+          mov byte ptr [ebx + 0xd8], 0
+
+00783A32  fn=007839E8  TEquipItem#11 TClothes#11 TManClothes#11
+          mov eax, dword ptr [ebx + 0x1c]
+          cmp byte ptr [eax + 0x14], 0x28
+          jne 0x783a40
+          cmp word ptr [ebx + 0x26], 0x7d0
+          jbe 0x783a3a
+        >>sub word ptr [ebx + 0x26], 0x7d0
+          jmp 0x783a40
+          mov word ptr [ebx + 0x26], 0
+
+00783A3A  fn=007839E8  TEquipItem#11 TClothes#11 TManClothes#11
+          jne 0x783a40
+          cmp word ptr [ebx + 0x26], 0x7d0
+          jbe 0x783a3a
+          sub word ptr [ebx + 0x26], 0x7d0
+          jmp 0x783a40
+        >>mov word ptr [ebx + 0x26], 0
+          call 0x408340
+          mov dword ptr [ebx + 8], eax
+
+00783F2F  fn=00783EFC  TEquipItem#10 TRWeapon#10 THeadMask#10
+          mov dword ptr [ebp - 8], eax
+          fild dword ptr [ebp - 8]
+          fdiv dword ptr [0x783f38]
+          fmulp st(1)
+          call 0x403574
+        >>mov word ptr [ebx + 0x26], ax
+          pop ebx
+          pop ecx
+
+00784050  fn=00783F40  -
+          mov word ptr [esi + 0x28], ax
+          movzx edx, word ptr [esi + 0x26]
+          add edx, ebx
+          mov eax, 0xfde8
+          call 0x4c700c
+        >>mov word ptr [esi + 0x26], ax
+          pop esi
+          pop ebx
+
+0078458D  fn=00784584  -
+          mov cx, word ptr [eax + 0x28]
+          cmp dx, cx
+          jbe 0x784592
+        >>mov word ptr [eax + 0x26], cx
+          ret 
+          mov word ptr [eax + 0x26], dx
+
+00784592  fn=00784584  -
+          mov cx, word ptr [eax + 0x28]
+          cmp dx, cx
+          jbe 0x784592
+          mov word ptr [eax + 0x26], cx
+          ret 
+        >>mov word ptr [eax + 0x26], dx
+          ret 
+          nop 
+
+0078468E  fn=007845B8  TEquipItem#15 TClothes#15 TManClothes#15
+          mov eax, dword ptr [eax]
+          mov ecx, 0x7846f0
+          mov dx, 0x30
+          call 0x79d3d8
+          mov ax, word ptr [ebx + 0x28]
+        >>mov word ptr [ebx + 0x26], ax
+          xor eax, eax
+          pop edx
+
+007849CD  fn=00784984  TEquipItem#16 TClothes#16 TManClothes#16
+          je 0x7849d9
+          lea edx, [esi + 0x20]
+          mov byte ptr [edx + 0x17], 1
+          test bl, bl
+          je 0x7849d9
+        >>mov word ptr [esi + 0x26], 0
+          mov word ptr [esi + 0x28], 0
+          pop esi
+
+007858E6  fn=00785894  TLuckOil#6
+          xor ebx, ebx
+          jmp 0x78591f
+          mov eax, esi
+          call 0x73d214
+          mov eax, dword ptr [ebp - 4]
+        >>dec word ptr [eax + 0x26]
+          mov eax, dword ptr [ebp - 4]
+          cmp word ptr [eax + 0x26], 0
+
+007859BF  fn=00785948  TRepairOil#6
+          mov eax, ecx
+          mov edi, 0x1e
+          cdq 
+          idiv edi
+          sub word ptr [ebx + 0x28], ax
+        >>add word ptr [ebx + 0x26], cx
+          push 1
+          movzx eax, word ptr [ebx + 0x26]
+
+007859FF  fn=00785948  TRepairOil#6
+          call dword ptr [ebx + 0xd4]
+          jmp 0x785a30
+          cmp al, 0xa
+          jne 0x785a30
+          mov ax, word ptr [ebx + 0x28]
+        >>mov word ptr [ebx + 0x26], ax
+          push 1
+          movzx edx, ax
+
+00786B0D  fn=00786A6C  TRope#6
+          mov edx, edi
+          call 0x750bc4
+          mov edi, eax
+          test edi, edi
+          je 0x786b48
+        >>sub word ptr [esi + 0x26], 0x3e8
+          push 0
+          mov cl, 1
+
+00786C2A  fn=00786B74  TRopeExt#6
+          mov edx, dword ptr [ebp - 0xc]
+          call 0x74de54
+          mov edi, eax
+          test edi, edi
+          je 0x786c65
+        >>sub word ptr [esi + 0x26], 0x3e8
+          push 0
+          mov cl, 1
+
+00786D0B  fn=00786C94  TCityStone#6
+          mov eax, dword ptr [ebx + 0x128]
+          cmp byte ptr [eax + 0x7c], 0
+          jne 0x786db8
+          cmp byte ptr [eax + 0x6c], 0
+          jne 0x786db8
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov ax, word ptr [esi + 0x26]
+          push eax
+
+00786E71  fn=00786DEC  TRndFlyStone#6
+          xor ecx, ecx
+          mov cl, byte ptr [eax]
+          inc ecx
+          call 0x403a84
+          je 0x786ec2
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov ax, word ptr [esi + 0x28]
+          push eax
+
+007872B6  fn=0078706C  TFireFlower#6
+          mov edx, ebx
+          mov eax, esi
+          call 0x787918
+          test al, al
+          je 0x7872e6
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov di, word ptr [esi + 0x26]
+          cmp di, 0x3e8
+
+00787365  fn=0078706C  TFireFlower#6
+          mov dx, 2
+          mov eax, ebx
+          call 0x745128
+          cmp word ptr [esi + 0x26], 0x3e8
+          jb 0x78736b
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov di, word ptr [esi + 0x26]
+          cmp di, 0x3e8
+
+00787424  fn=0078706C  TFireFlower#6
+          mov dx, 4
+          mov eax, ebx
+          call 0x745128
+          cmp word ptr [esi + 0x26], 0x3e8
+          jb 0x78742a
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov di, word ptr [esi + 0x26]
+          cmp di, 0x3e8
+
+00787A6A  fn=00787A48  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 0
+          mov byte ptr [esi + 0x14], 2
+          mov dx, 1
+
+00787CB9  fn=00787C88  -
+          call 0x783788
+          mov dx, 1
+          mov eax, esi
+          call 0x784718
+          mov byte ptr [esi + 0x14], 4
+        >>mov word ptr [esi + 0x26], 0
+          mov eax, esi
+          test bl, bl
+
+00787EFE  fn=00787EDC  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 0
+          mov byte ptr [esi + 0x14], 6
+          mov eax, esi
+
+00788112  fn=007880F0  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov byte ptr [esi + 0x14], 7
+          mov eax, esi
+
+007881F2  fn=0078813C  -
+          jl 0x788243
+          mov cx, word ptr [esi + 0x26]
+          movzx ebx, cx
+          cmp edx, ebx
+          jl 0x7881fe
+        >>add word ptr [edi + 0x26], cx
+          mov word ptr [esi + 0x26], 0
+          jmp 0x788206
+
+007881F6  fn=0078813C  -
+          mov cx, word ptr [esi + 0x26]
+          movzx ebx, cx
+          cmp edx, ebx
+          jl 0x7881fe
+          add word ptr [edi + 0x26], cx
+        >>mov word ptr [esi + 0x26], 0
+          jmp 0x788206
+          mov word ptr [edi + 0x26], ax
+
+007881FE  fn=0078813C  -
+          cmp edx, ebx
+          jl 0x7881fe
+          add word ptr [edi + 0x26], cx
+          mov word ptr [esi + 0x26], 0
+          jmp 0x788206
+        >>mov word ptr [edi + 0x26], ax
+          sub word ptr [esi + 0x26], dx
+          mov eax, dword ptr [ebp + 8]
+
+00788202  fn=0078813C  -
+          jl 0x7881fe
+          add word ptr [edi + 0x26], cx
+          mov word ptr [esi + 0x26], 0
+          jmp 0x788206
+          mov word ptr [edi + 0x26], ax
+        >>sub word ptr [esi + 0x26], dx
+          mov eax, dword ptr [ebp + 8]
+          sub eax, 1
+
+007882E5  fn=007882B8  -
+          mov ecx, dword ptr [eax]
+          call dword ptr [ecx + 0x244]
+          test al, al
+          je 0x78834f
+          mov ax, word ptr [ebp - 4]
+        >>sub word ptr [ebx + 0x26], ax
+          mov eax, dword ptr [ebp + 8]
+          sub eax, 1
+
+0078833B  fn=0078832A  -
+          leave 
+          mov edx, dword ptr [ebx + 0x1c]
+          call 0x751bbc
+          mov esi, eax
+          mov ax, word ptr [ebp - 4]
+        >>mov word ptr [esi + 0x26], ax
+          mov eax, ebx
+          call 0x784710
+
+007883EE  fn=0078835C  TGoldAcus#6
+          call 0x73cea8
+          mov edx, dword ptr [ebp - 8]
+          mov eax, esi
+          mov ecx, dword ptr [eax]
+          call dword ptr [ecx + 0x258]
+        >>dec word ptr [ebx + 0x26]
+          mov ax, word ptr [ebx + 0x28]
+          push eax
+
+00788511  fn=00788418  TNewHappyCake#6
+          mov eax, dword ptr [0x7d593c]
+          mov eax, dword ptr [eax]
+          mov cx, 0x38ff
+          mov dx, 0x64
+          call 0x5f701c
+        >>dec word ptr [edi + 0x26]
+          mov eax, edi
+          call 0x78455c
+
+007888A6  fn=00788859  -
+          mov eax, edi
+          mov ebx, dword ptr [eax]
+          call dword ptr [ebx + 0xec]
+          test eax, eax
+          je 0x7888d5
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov dx, word ptr [esi + 0x26]
+          cmp dx, 0x3e8
+
+00788AF0  fn=007889F0  TNewPlayerBox#6
+          mov eax, dword ptr [0x7d5d6c]
+          mov eax, dword ptr [eax]
+          call 0x7520c4
+          mov edi, eax
+          mov eax, dword ptr [ebp - 8]
+        >>mov word ptr [eax + 0x26], di
+          mov eax, dword ptr [ebp - 8]
+          mov ax, word ptr [eax + 0x28]
+
+00788B9D  fn=00788B60  -
+          je 0x788ba3
+          mov eax, dword ptr [0x7d5d6c]
+          mov eax, dword ptr [eax]
+          mov edx, 1
+          call 0x7520c4
+        >>mov word ptr [esi + 0x26], ax
+          jmp 0x788bae
+          xor eax, eax
+
+00788BAA  fn=00788B60  -
+          call 0x7520c4
+          mov word ptr [esi + 0x26], ax
+          jmp 0x788bae
+          xor eax, eax
+          mov al, byte ptr [0x7d4da8]
+        >>mov word ptr [esi + 0x26], ax
+          mov word ptr [esi + 0x28], 0x64
+          mov eax, esi
+
+00788BFB  fn=00788BD4  -
+          push eax
+          mov ecx, esi
+          xor edx, edx
+          mov eax, edi
+          call 0x7880f0
+        >>mov word ptr [edi + 0x26], 1
+          mov byte ptr [edi + 0x14], 7
+          mov ax, word ptr [esi + 0x48]
+
+00788C7E  fn=00788C5C  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x7880f0
+        >>mov word ptr [esi + 0x26], 1
+          mov byte ptr [esi + 0x14], 7
+          mov eax, esi
+
+00788DAD  fn=00788CA8  TTaoFaLingAddExpItem#6
+          add dword ptr [edi + 0xbc4], eax
+          jmp 0x788da4
+          mov dword ptr [edi + 0xbc4], eax
+          mov eax, dword ptr [ebp - 8]
+          mov dword ptr [esi + 0xbc8], eax
+        >>dec word ptr [ebx + 0x26]
+          cmp word ptr [ebx + 0x26], 0
+          jbe 0x788dda
+
+00788F2D  fn=00788EB8  TGroupAddExpItem#6
+          imul edx, eax, 0x3e8
+          mov eax, dword ptr [ebx + 0xa80]
+          call 0x727c1c
+          test al, al
+          je 0x788f99
+        >>sub word ptr [esi + 0x26], 0xa
+          mov di, word ptr [esi + 0x26]
+          cmp di, 0xa
+
+0078909A  fn=00789074  -
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+          mov ax, word ptr [esi + 0x28]
+        >>mov word ptr [esi + 0x26], ax
+          mov eax, esi
+          test bl, bl
+
+00789100  fn=007890BC  -
+          call 0x784718
+          lea eax, [edi + 0x20]
+          mov dword ptr [edi + 0x100], eax
+          cmp word ptr [esi + 0x26], 0xb4
+          jae 0x789106
+        >>mov word ptr [esi + 0x26], 0xb4
+          movzx eax, word ptr [esi + 0x26]
+          mov dword ptr [ebp - 4], eax
+
+00789163  fn=0078914C  TCastleCityFlyStone#12
+          mov eax, dword ptr [ecx + 0x100]
+          fcomp qword ptr [eax + 0xa]
+          fnstsw ax
+          sahf 
+          jbe 0x789169
+        >>mov word ptr [ecx + 0x26], 0
+          mov ax, word ptr [ecx + 0x28]
+          mov word ptr [edx + 0x18], ax
+
+007891EC  fn=00789174  TCastleCityFlyStone#6
+          mov eax, dword ptr [0x7d6214]
+          mov eax, dword ptr [eax]
+          mov eax, dword ptr [eax + 0x20]
+          cmp eax, dword ptr [ebx + 0x128]
+          jne 0x789241
+        >>sub word ptr [esi + 0x26], 0x64
+          mov ax, word ptr [esi + 0x28]
+          push eax
+
+0078936B  fn=00789330  TDreamFlyStone#6
+          xor ecx, ecx
+          mov cl, byte ptr [eax]
+          inc ecx
+          call 0x403a84
+          jne 0x7893c2
+        >>sub word ptr [ebx + 0x26], 0x3e8
+          mov ax, word ptr [ebx + 0x28]
+          push eax
+
+007896C6  fn=00789694  TTimerBomb#6
+          mov edx, esi
+          mov eax, edi
+          call 0x7896fc
+          test al, al
+          je 0x7896f2
+        >>sub word ptr [edi + 0x26], 0x3e8
+          cmp word ptr [edi + 0x26], 0x3e8
+          jb 0x7896d8
+
+00789A82  fn=00789A60  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 0
+          mov eax, esi
+          test bl, bl
+
+0078A0E3  fn=0078A099  -
+          mov edx, dword ptr [ebp - 0xc]
+          mov cx, word ptr [esi + 0x1908]
+          mov eax, esi
+          call 0x6def8c
+          mov eax, dword ptr [ebp - 4]
+        >>dec word ptr [eax + 0x26]
+          mov eax, dword ptr [ebp - 4]
+          mov ax, word ptr [eax + 0x28]
+
+0078A770  fn=0078A6FC  TBufferFlower#6
+          push ebp
+          mov eax, dword ptr [esi + 0xbb0]
+          call 0x78a554
+          pop ecx
+          mov eax, dword ptr [ebp - 4]
+        >>dec word ptr [eax + 0x26]
+          mov eax, dword ptr [ebp - 4]
+          mov di, word ptr [eax + 0x26]
+
+0078AAF9  fn=0078A930  TPileFlower#6
+          push 5
+          mov cx, word ptr [ebp - 2]
+          mov edx, ebx
+          mov eax, esi
+          call 0x78ab94
+        >>dec word ptr [esi + 0x26]
+          cmp word ptr [esi + 0x26], 0
+          jbe 0x78ab26
+
+0078B1FE  fn=0078B1D8  TLevelBuffItem#6
+          mov eax, ebx
+          pop ecx
+          call 0x746888
+          test eax, eax
+          jle 0x78b22e
+        >>dec word ptr [esi + 0x26]
+          mov eax, esi
+          call 0x7845a0
+
+0078B276  fn=0078B254  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x7880f0
+        >>mov word ptr [esi + 0x26], 1
+          mov byte ptr [esi + 0x14], 7
+          or byte ptr [esi + 0xfd], 8
+
+0078B2D2  fn=0078B2B0  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x7880f0
+        >>mov word ptr [esi + 0x26], 1
+          mov byte ptr [esi + 0x14], 7
+          or byte ptr [esi + 0xfd], 8
+
+0078B322  fn=0078B300  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x7880f0
+        >>mov word ptr [esi + 0x26], 1
+          mov byte ptr [esi + 0x14], 7
+          or byte ptr [esi + 0xfd], 8
+
+0078B53E  fn=0078B51C  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x7880f0
+        >>mov word ptr [esi + 0x26], 1
+          mov byte ptr [esi + 0x14], 7
+          or byte ptr [esi + 0xfd], 8
+
+0078B5AA  fn=0078B588  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov word ptr [esi + 0x28], 1
+          or byte ptr [esi + 0xfd], 8
+
+0078B61A  fn=0078B5DC  THuoYuanMedicament#6
+          push edx
+          mov ecx, dword ptr [eax + 0x50]
+          mov dx, 0x3a
+          mov eax, esi
+          call 0x745128
+        >>mov word ptr [edi + 0x26], 0
+          mov bl, 1
+          mov eax, ebx
+
+0078B64E  fn=0078B62C  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov word ptr [esi + 0x28], 1
+          or byte ptr [esi + 0xfd], 8
+
+0078B6BE  fn=0078B680  TShuiYuanMedicament#6
+          push edx
+          mov ecx, dword ptr [eax + 0x50]
+          mov dx, 0x3b
+          mov eax, esi
+          call 0x745128
+        >>mov word ptr [edi + 0x26], 0
+          mov bl, 1
+          mov eax, ebx
+
+0078B6F2  fn=0078B6D0  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov word ptr [esi + 0x28], 1
+          or byte ptr [esi + 0xfd], 8
+
+0078B762  fn=0078B724  TMuYuanMedicament#6
+          push edx
+          mov ecx, dword ptr [eax + 0x50]
+          mov dx, 0x3c
+          mov eax, esi
+          call 0x745128
+        >>mov word ptr [edi + 0x26], 0
+          mov bl, 1
+          mov eax, ebx
+
+0078B796  fn=0078B774  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov word ptr [esi + 0x28], 1
+          or byte ptr [esi + 0xfd], 8
+
+0078B80F  fn=0078B7C8  TJinYuanMedicament#6
+          imul ecx, dword ptr [edi + 0x54], 0x3e8
+          mov dl, 0x54
+          mov eax, esi
+          mov esi, dword ptr [eax]
+          call dword ptr [esi + 0x1ec]
+        >>mov word ptr [ebx + 0x26], 0
+          mov byte ptr [ebp - 1], 1
+          mov al, byte ptr [ebp - 1]
+
+0078B846  fn=0078B824  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov word ptr [esi + 0x28], 1
+          or byte ptr [esi + 0xfd], 8
+
+0078B8CE  fn=0078B878  TTuYuanMedicament#6
+          push edx
+          mov ecx, dword ptr [eax + 0x54]
+          mov dx, 0x3e
+          mov eax, ebx
+          call 0x745128
+        >>mov word ptr [edi + 0x26], 0
+          mov bl, 1
+          mov eax, ebx
+
+0078B902  fn=0078B8E0  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov eax, esi
+          test bl, bl
+
+0078B9AD  fn=0078B930  TAutoTransScore#6
+          call 0x784568
+          mov ecx, dword ptr [ebp - 0xc]
+          mov dx, 0xa
+          mov eax, esi
+          call 0x768be0
+        >>mov word ptr [edi + 0x26], 0
+          mov bl, 1
+          xor eax, eax
+
+0078BA22  fn=0078BA00  -
+          mov eax, dword ptr [ebp + 8]
+          push eax
+          xor edx, edx
+          mov eax, esi
+          call 0x783788
+        >>mov word ptr [esi + 0x26], 1
+          mov eax, esi
+          test bl, bl
+
+0078BAC2  fn=0078BA58  THorseYearBadge#6
+          mov ebx, dword ptr [eax]
+          call dword ptr [ebx + 0xd4]
+          jmp 0x78bb9c
+          cmp word ptr [esi + 0x26], 0x3e8
+          jb 0x78bb98
+        >>sub word ptr [esi + 0x26], 0x3e8
+          mov ax, word ptr [esi + 0x28]
+          push eax
+
+0078BE3F  fn=0078BD70  -
+          mov word ptr [ebx + edx*4 + 0xc1], ax
+          cmp byte ptr [ebp - 6], 6
+          jne 0x78be51
+          xor eax, eax
+          mov al, byte ptr [ebp - 3]
+        >>add word ptr [ebx + 0x26], ax
+          mov ax, word ptr [esi + 0x28]
+          cmp ax, word ptr [esi + 0x26]
+
+0078BE4D  fn=0078BD70  -
+          mov al, byte ptr [ebp - 3]
+          add word ptr [ebx + 0x26], ax
+          mov ax, word ptr [esi + 0x28]
+          cmp ax, word ptr [esi + 0x26]
+          jae 0x78be51
+        >>mov word ptr [esi + 0x26], ax
+          inc byte ptr [ebx + 0xbe]
+          xor edi, edi
+

@@ -1,0 +1,165 @@
+ability(false-positive): 5   candidate dura: 156
+### ABILITY (TAbility MAC.max, NOT durability) - 5
+  00637199 mov word ptr [esi + 0x26], ax          fn=00636D68 sibs=['0x22', '0x2a', '0x2e']
+  00699E9B mov word ptr [eax + 0x26], dx          fn=00699E84 sibs=['0x22', '0x2a']
+  00751387 mov word ptr [esi + 0x26], ax          fn=007512B4 sibs=['0x22', '0x2a', '0x2e', '0x32']
+  0075FB4C add word ptr [edi + 0x26], ax          fn=0075FB14 sibs=['0x22', '0x2a', '0x2e', '0x32']
+  00760AC3 add word ptr [esi + 0x26], ax          fn=00760A74 sibs=['0x22', '0x2a', '0x2e', '0x32']
+
+### CANDIDATE ITEM DURA WRITES - 156
+  00439227 mov word ptr [eax + 0x26], bx          fn=004390AC -                                            ev=+0x1C(pStdItem)
+  0063F040 mov word ptr [edx + 0x26], ax          fn=0063EE9C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0063F08D mov word ptr [edx + 0x26], ax          fn=0063EE9C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0068686E sub word ptr [eax + 0x26], dx          fn=006867B8 -                                            ev=+0x28(DuraMax),GetUseItems,IsA:TDragonHeart,IsClass
+  0068C9DE sub word ptr [eax + 0x26], 0x64        fn=0068C8F0 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems,IsA:TPoisons,IsClass
+  0068F4CA sub word ptr [esi + 0x26], di          fn=0068F450 -                                            ev=+0x28(DuraMax),GetUseItems,IsA:TDragonHeart,IsClass
+  006A0B11 sub word ptr [eax + 0x26], 0x3e8       fn=006A09F4 -                                            ev=+0x1C(pStdItem)
+  006A0BB4 sub word ptr [eax + 0x26], 0x3e8       fn=006A09F4 -                                            ev=+0x1C(pStdItem)
+  006A0C64 sub word ptr [eax + 0x26], 0x3e8       fn=006A09F4 -                                            ev=+0x1C(pStdItem)
+  006BC47A mov word ptr [esi + 0x26], ax          fn=006BC3CC -                                            ev=
+  006BCF99 mov word ptr [esi + 0x26], ax          fn=006BCEE8 -                                            ev=
+  006BDAE3 mov word ptr [ebx + 0x26], ax          fn=006BDA34 -                                            ev=+0x28(DuraMax)
+  006BDAED mov word ptr [ebx + 0x26], ax          fn=006BDA34 -                                            ev=+0x28(DuraMax)
+  006C89DD mov word ptr [eax + 0x26], bx          fn=006C87B4 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  006C89EA mov word ptr [edx + 0x26], ax          fn=006C87B4 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  006CC612 mov word ptr [ebx + 0x26], ax          fn=006CC420 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  006CC620 mov word ptr [ebx + 0x26], ax          fn=006CC420 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  006CF2B2 sub word ptr [eax + 0x26], 0x3e8       fn=006CF1FC -                                            ev=+0x28(DuraMax)
+  006CF30E mov word ptr [eax + 0x26], 0           fn=006CF1FC -                                            ev=+0x28(DuraMax)
+  006CF37D sub word ptr [edi + 0x26], 0x3e8       fn=006CF324 -                                            ev=+0x28(DuraMax)
+  006D5F4E add word ptr [ebx + 0x26], 0x64        fn=006D5E50 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems,IsA:TVessel,IsClass
+  006DD6E5 mov word ptr [edi + 0x26], ax          fn=006DD674 -                                            ev=+0x28(DuraMax)
+  006DD6ED mov word ptr [edi + 0x26], ax          fn=006DD674 -                                            ev=+0x28(DuraMax)
+  006DF96D sub word ptr [ebx + 0x26], di          fn=006DF7E8 -                                            ev=+0x28(DuraMax)
+  006DFCFB sub word ptr [eax + 0x26], di          fn=006DFCCE -                                            ev=+0x28(DuraMax)
+  006E1642 mov word ptr [eax + 0x26], dx          fn=006E14E9 -                                            ev=+0x28(DuraMax)
+  006E164B mov word ptr [edx + 0x26], ax          fn=006E14E9 -                                            ev=+0x28(DuraMax)
+  006E9D0B dec word ptr [esi + 0x26]              fn=006E9CD2 -                                            ev=+0x28(DuraMax)
+  006EB97B sub word ptr [ebx + 0x26], 0x3e8       fn=006EB8E4 -                                            ev=GetDura,IsA:TMicroWhelk,IsClass
+  006F3356 mov word ptr [eax + 0x26], dx          fn=006F3324 -                                            ev=GetUseItems
+  006FC2CF sub word ptr [eax + 0x26], bx          fn=006FC054 -                                            ev=+0x28(DuraMax),GetUseItems
+  00709465 mov word ptr [edx + 0x26], ax          fn=0070944B -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00709472 mov word ptr [edx + 0x26], ax          fn=0070944B -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00712607 mov word ptr [ebx + 0x26], ax          fn=007124E4 -                                            ev=
+  0071291E mov word ptr [esi + 0x26], 0           fn=0071289C -                                            ev=
+  00712BD5 mov word ptr [esi + 0x26], dx          fn=00712BC4 -                                            ev=
+  0071ED46 mov word ptr [eax + 0x26], dx          fn=0071ED0E -                                            ev=
+  007201E8 mov word ptr [ebx + 0x26], ax          fn=007201A9 -                                            ev=
+  0073E850 mov word ptr [ebx + 0x26], 0           fn=0073E810 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems
+  0073E88C mov word ptr [ebx + 0x26], si          fn=0073E810 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems
+  0073E9A4 sub word ptr [edi + 0x26], ax          fn=0073E93C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems,IsA:TBujuk,IsClass
+  0073EB0A sub word ptr [eax + 0x26], dx          fn=0073EA20 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems,IsA:TBujuk,IsClass
+  0073EC73 sub word ptr [esi + 0x26], 0x3e8       fn=0073EC40 -                                            ev=GetUseItems
+  0073EC7B mov word ptr [esi + 0x26], 0           fn=0073EC40 -                                            ev=GetUseItems
+  0074061A sub word ptr [ebx + 0x26], di          fn=0074054C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00740C8D sub word ptr [ebx + 0x26], di          fn=00740B04 -                                            ev=+0x28(DuraMax)
+  00740DE4 sub word ptr [eax + 0x26], dx          fn=00740D5C -                                            ev=+0x28(DuraMax)
+  00741017 mov word ptr [ebx + 0x26], dx          fn=00740FEE -                                            ev=+0x28(DuraMax)
+  00741050 add word ptr [ebx + 0x26], ax          fn=00740FEE -                                            ev=+0x28(DuraMax)
+  007411AE mov word ptr [edx + 0x26], ax          fn=007410D8 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems
+  00746517 mov word ptr [esi + 0x26], ax          fn=007464DC -                                            ev=+0x28(DuraMax),GetUseItems
+  00746FC3 sub word ptr [ebx + 0x26], di          fn=00746F46 -                                            ev=+0x28(DuraMax)
+  0074723A sub word ptr [ebx + 0x26], di          fn=00747110 -                                            ev=+0x28(DuraMax)
+  00754ECE mov word ptr [edx + 0x26], ax          fn=00754D40 -                                            ev=+0x28(DuraMax)
+  00754EDA add word ptr [eax + 0x26], dx          fn=00754D40 -                                            ev=+0x28(DuraMax)
+  0075EAA4 sub word ptr [ebx + 0x26], ax          fn=0075EA40 -                                            ev=IsClass
+  0075EB51 mov word ptr [ebx + 0x26], 0           fn=0075EA40 -                                            ev=IsClass
+  0075F602 mov word ptr [eax + 0x26], di          fn=0075F5A0 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetDura,GetUseItems
+  0076019A mov word ptr [ecx + 0x26], 0           fn=00760180 TTemporaryManClothes#12                      ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0076030E mov word ptr [ecx + 0x26], 0           fn=007602F4 TTemporaryWomanClothes#12                    ev=+0x28(DuraMax)
+  00760A3C mov word ptr [edi + 0x26], ax          fn=007608D4 TLWeapon#10 TBrokenWeapon#10 TSpade#10       ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00760E06 mov word ptr [esi + 0x26], 0           fn=00760DE4 -                                            ev=+0x1C(pStdItem)
+  00761330 mov word ptr [esi + 0x26], ax          fn=007611C8 THelmet#10                                   ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00761481 mov word ptr [ebx + 0x26], ax          fn=00761338 THelmet#2                                    ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007618CC mov word ptr [esi + 0x26], ax          fn=007618C3 -                                            ev=
+  00761E18 mov word ptr [esi + 0x26], ax          fn=00761D08 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00761F20 mov word ptr [ebx + 0x26], ax          fn=00761E20 TRing#2                                      ev=+0x28(DuraMax)
+  00762710 mov word ptr [esi + 0x26], ax          fn=00762600 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0076283F mov word ptr [ebx + 0x26], ax          fn=00762718 TArmRing#2                                   ev=+0x28(DuraMax)
+  00763410 sub word ptr [eax + 0x26], 0x3e8       fn=007633EC TCryCharm#6                                  ev=
+  00763418 mov word ptr [eax + 0x26], 0           fn=007633EC TCryCharm#6                                  ev=
+  0076349E dec word ptr [ebx + 0x26]              fn=0076345C THPCharm#7                                   ev=+0x1C(pStdItem)
+  0076351B dec word ptr [ebx + 0x26]              fn=007634DC TMPCharm#7                                   ev=+0x1C(pStdItem)
+  007635AC dec word ptr [ebx + 0x26]              fn=0076355C THPMPCharm#7                                 ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007635D0 dec word ptr [ebx + 0x26]              fn=0076355C THPMPCharm#7                                 ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0076362C sub word ptr [ebx + 0x26], 0x64        fn=007635FC TVessel#6                                    ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007636DE mov word ptr [esi + 0x26], 0           fn=007636BC -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0076375D mov word ptr [eax + 0x26], dx          fn=00763704 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00763814 mov word ptr [eax + 0x26], dx          fn=007637D8 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),GetDura
+  00763B3E mov word ptr [esi + 0x26], 0           fn=00763B1C -                                            ev=
+  00763CD2 mov word ptr [ebx + 0x26], ax          fn=00763B64 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00763CE0 mov word ptr [ebx + 0x26], ax          fn=00763B64 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00763FAA mov word ptr [ebx + 0x26], ax          fn=00763F23 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00763FB8 mov word ptr [ebx + 0x26], ax          fn=00763F23 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00764184 dec word ptr [ebx + 0x26]              fn=007640FC TMarkStoneCharm#7                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  007641EE dec word ptr [ebx + 0x26]              fn=007640FC TMarkStoneCharm#7                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  007837E6 mov word ptr [ebx + 0x26], ax          fn=00783788 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00783A32 sub word ptr [ebx + 0x26], 0x7d0       fn=007839E8 TEquipItem#11 TClothes#11 TManClothes#11     ev=+0x1C(pStdItem),IsClass
+  00783A3A mov word ptr [ebx + 0x26], 0           fn=007839E8 TEquipItem#11 TClothes#11 TManClothes#11     ev=+0x1C(pStdItem),IsClass
+  00783F2F mov word ptr [ebx + 0x26], ax          fn=00783EFC TEquipItem#10 TRWeapon#10 THeadMask#10       ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00784050 mov word ptr [esi + 0x26], ax          fn=00783F40 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0078458D mov word ptr [eax + 0x26], cx          fn=00784584 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00784592 mov word ptr [eax + 0x26], dx          fn=00784584 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0078468E mov word ptr [ebx + 0x26], ax          fn=007845B8 TEquipItem#15 TClothes#15 TManClothes#15     ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007849CD mov word ptr [esi + 0x26], 0           fn=00784984 TEquipItem#16 TClothes#16 TManClothes#16     ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007858E6 dec word ptr [eax + 0x26]              fn=00785894 TLuckOil#6                                   ev=+0x1C(pStdItem),GetDura,GetUseItems
+  007859BF add word ptr [ebx + 0x26], cx          fn=00785948 TRepairOil#6                                 ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems
+  007859FF mov word ptr [ebx + 0x26], ax          fn=00785948 TRepairOil#6                                 ev=+0x1C(pStdItem),+0x28(DuraMax),GetUseItems
+  00786B0D sub word ptr [esi + 0x26], 0x3e8       fn=00786A6C TRope#6                                      ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00786C2A sub word ptr [esi + 0x26], 0x3e8       fn=00786B74 TRopeExt#6                                   ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00786D0B sub word ptr [esi + 0x26], 0x3e8       fn=00786C94 TCityStone#6                                 ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00786E71 sub word ptr [esi + 0x26], 0x3e8       fn=00786DEC TRndFlyStone#6                               ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007872B6 sub word ptr [esi + 0x26], 0x3e8       fn=0078706C TFireFlower#6                                ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00787365 sub word ptr [esi + 0x26], 0x3e8       fn=0078706C TFireFlower#6                                ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00787424 sub word ptr [esi + 0x26], 0x3e8       fn=0078706C TFireFlower#6                                ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00787A6A mov word ptr [esi + 0x26], 0           fn=00787A48 -                                            ev=
+  00787CB9 mov word ptr [esi + 0x26], 0           fn=00787C88 -                                            ev=
+  00787EFE mov word ptr [esi + 0x26], 0           fn=00787EDC -                                            ev=+0x1C(pStdItem)
+  00788112 mov word ptr [esi + 0x26], 1           fn=007880F0 -                                            ev=+0x1C(pStdItem)
+  007881F2 add word ptr [edi + 0x26], cx          fn=0078813C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007881F6 mov word ptr [esi + 0x26], 0           fn=0078813C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007881FE mov word ptr [edi + 0x26], ax          fn=0078813C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  00788202 sub word ptr [esi + 0x26], dx          fn=0078813C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  007882E5 sub word ptr [ebx + 0x26], ax          fn=007882B8 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0078833B mov word ptr [esi + 0x26], ax          fn=0078832A -                                            ev=+0x1C(pStdItem),IsClass
+  007883EE dec word ptr [ebx + 0x26]              fn=0078835C TGoldAcus#6                                  ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  00788511 dec word ptr [edi + 0x26]              fn=00788418 TNewHappyCake#6                              ev=+0x28(DuraMax),GetDura
+  007888A6 sub word ptr [esi + 0x26], 0x3e8       fn=00788859 -                                            ev=+0x28(DuraMax)
+  00788AF0 mov word ptr [eax + 0x26], di          fn=007889F0 TNewPlayerBox#6                              ev=+0x28(DuraMax)
+  00788B9D mov word ptr [esi + 0x26], ax          fn=00788B60 -                                            ev=+0x28(DuraMax)
+  00788BAA mov word ptr [esi + 0x26], ax          fn=00788B60 -                                            ev=+0x28(DuraMax)
+  00788BFB mov word ptr [edi + 0x26], 1           fn=00788BD4 -                                            ev=
+  00788C7E mov word ptr [esi + 0x26], 1           fn=00788C5C -                                            ev=
+  00788DAD dec word ptr [ebx + 0x26]              fn=00788CA8 TTaoFaLingAddExpItem#6                       ev=+0x1C(pStdItem),GetDura
+  00788F2D sub word ptr [esi + 0x26], 0xa         fn=00788EB8 TGroupAddExpItem#6                           ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0078909A mov word ptr [esi + 0x26], ax          fn=00789074 -                                            ev=+0x28(DuraMax)
+  00789100 mov word ptr [esi + 0x26], 0xb4        fn=007890BC -                                            ev=+0x28(DuraMax)
+  00789163 mov word ptr [ecx + 0x26], 0           fn=0078914C TCastleCityFlyStone#12                       ev=+0x28(DuraMax)
+  007891EC sub word ptr [esi + 0x26], 0x64        fn=00789174 TCastleCityFlyStone#6                        ev=+0x28(DuraMax)
+  0078936B sub word ptr [ebx + 0x26], 0x3e8       fn=00789330 TDreamFlyStone#6                             ev=+0x28(DuraMax)
+  007896C6 sub word ptr [edi + 0x26], 0x3e8       fn=00789694 TTimerBomb#6                                 ev=+0x28(DuraMax),IsClass
+  00789A82 mov word ptr [esi + 0x26], 0           fn=00789A60 -                                            ev=+0x1C(pStdItem),IsClass
+  0078A0E3 dec word ptr [eax + 0x26]              fn=0078A099 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0078A770 dec word ptr [eax + 0x26]              fn=0078A6FC TBufferFlower#6                              ev=+0x1C(pStdItem),+0x28(DuraMax)
+  0078AAF9 dec word ptr [esi + 0x26]              fn=0078A930 TPileFlower#6                                ev=+0x1C(pStdItem),GetDura,IsClass
+  0078B1FE dec word ptr [esi + 0x26]              fn=0078B1D8 TLevelBuffItem#6                             ev=+0x1C(pStdItem),+0x28(DuraMax),GetDura
+  0078B276 mov word ptr [esi + 0x26], 1           fn=0078B254 -                                            ev=
+  0078B2D2 mov word ptr [esi + 0x26], 1           fn=0078B2B0 -                                            ev=
+  0078B322 mov word ptr [esi + 0x26], 1           fn=0078B300 -                                            ev=IsClass
+  0078B53E mov word ptr [esi + 0x26], 1           fn=0078B51C -                                            ev=
+  0078B5AA mov word ptr [esi + 0x26], 1           fn=0078B588 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B61A mov word ptr [edi + 0x26], 0           fn=0078B5DC THuoYuanMedicament#6                         ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B64E mov word ptr [esi + 0x26], 1           fn=0078B62C -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B6BE mov word ptr [edi + 0x26], 0           fn=0078B680 TShuiYuanMedicament#6                        ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B6F2 mov word ptr [esi + 0x26], 1           fn=0078B6D0 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B762 mov word ptr [edi + 0x26], 0           fn=0078B724 TMuYuanMedicament#6                          ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B796 mov word ptr [esi + 0x26], 1           fn=0078B774 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B80F mov word ptr [ebx + 0x26], 0           fn=0078B7C8 TJinYuanMedicament#6                         ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B846 mov word ptr [esi + 0x26], 1           fn=0078B824 -                                            ev=+0x1C(pStdItem),+0x28(DuraMax),IsClass
+  0078B8CE mov word ptr [edi + 0x26], 0           fn=0078B878 TTuYuanMedicament#6                          ev=+0x1C(pStdItem),IsClass
+  0078B902 mov word ptr [esi + 0x26], 1           fn=0078B8E0 -                                            ev=+0x1C(pStdItem),IsClass
+  0078B9AD mov word ptr [edi + 0x26], 0           fn=0078B930 TAutoTransScore#6                            ev=IsClass
+  0078BA22 mov word ptr [esi + 0x26], 1           fn=0078BA00 -                                            ev=
+  0078BAC2 sub word ptr [esi + 0x26], 0x3e8       fn=0078BA58 THorseYearBadge#6                            ev=+0x28(DuraMax),GetDura
+  0078BE3F add word ptr [ebx + 0x26], ax          fn=0078BD70 -                                            ev=+0x28(DuraMax)
+  0078BE4D mov word ptr [esi + 0x26], ax          fn=0078BD70 -                                            ev=+0x28(DuraMax)

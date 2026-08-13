@@ -2,14 +2,19 @@
 # -*- coding: utf-8 -*-
 """Stage 2: keep only census hits that sit on a real instruction boundary.
 
-Boundary set is built by linear-sweeping forward from every `call rel32`
-target (a guaranteed function entry) until the decode fails or a long run of
-padding is hit.  Delphi code is dense and contiguous so this recovers the
-whole .text with self-correcting alignment.
+Boundary set is built by linear-sweeping forward from every guaranteed
+function entry until the decode fails or padding is hit.  Delphi code is dense
+and contiguous so this recovers the whole .text with self-correcting alignment.
+
+Seeds must include BOTH `call/jmp rel32` targets AND every VMT virtual-method
+slot: a method that is only ever reached through the VMT (e.g. TLuckOil.vslot6
+at 0x785894, which holds `dec word [eax+0x26]` @0x7858E6) is never a rel32
+target, so a rel32-only seed set silently drops its whole body from the census.
 """
 import sys, json, struct, bisect
 from capstone import *
 from capstone.x86 import *
+from vmt import Vmts
 
 IMG = r'D:\loym2\staging\_reunpack_work\flat_image.bin'
 BASE = 0x400000
@@ -32,7 +37,16 @@ def main():
             if 0 <= t < n:
                 seeds.add(t)
             i += 1
-    sys.stderr.write('seeds: %d\n' % len(seeds))
+    rel32_seeds = len(seeds)
+    v = Vmts(data)
+    for va in v.by_va:
+        for k in range(0, 200):
+            p = v.d32(va + k * 4)
+            if p is None or not (0x401000 <= p < 0x7F0000):
+                break
+            seeds.add(p - BASE)
+    sys.stderr.write('seeds: %d (rel32 %d, +vmt %d)\n'
+                     % (len(seeds), rel32_seeds, len(seeds) - rel32_seeds))
 
     valid = set()
     for s in sorted(seeds):

@@ -1095,6 +1095,40 @@
   ]
  },
  {
+  "va": 7750020,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7749884,
+  "owner": [
+   [
+    "TMarkStoneCharm",
+    7
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7750126,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7749884,
+  "owner": [
+   [
+    "TMarkStoneCharm",
+    7
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
   "va": 7878630,
   "text": "mov word ptr [ebx + 0x26], ax",
   "bytes": "66894326",
@@ -4011,6 +4045,121 @@
   ]
  },
  {
+  "va": 7887078,
+  "text": "dec word ptr [eax + 0x26]",
+  "bytes": "66ff4826",
+  "fn": 7886996,
+  "owner": [
+   [
+    "TLuckOil",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "GetDura",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7887295,
+  "text": "add word ptr [ebx + 0x26], cx",
+  "bytes": "66014b26",
+  "fn": 7887176,
+  "owner": [
+   [
+    "TRepairOil",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7887359,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7887176,
+  "owner": [
+   [
+    "TRepairOil",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7891725,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7891564,
+  "owner": [
+   [
+    "TRope",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7892010,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7891828,
+  "owner": [
+   [
+    "TRopeExt",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7892235,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7892116,
+  "owner": [
+   [
+    "TCityStone",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7892593,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7892460,
+  "owner": [
+   [
+    "TRndFlyStone",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
   "va": 7893686,
   "text": "sub word ptr [esi + 0x26], 0x3e8",
   "bytes": "66816e26e803",
@@ -4204,6 +4353,21 @@
   ]
  },
  {
+  "va": 7899888,
+  "text": "mov word ptr [eax + 0x26], di",
+  "bytes": "66897826",
+  "fn": 7899632,
+  "owner": [
+   [
+    "TNewPlayerBox",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
   "va": 7900061,
   "text": "mov word ptr [esi + 0x26], ax",
   "bytes": "66894626",
@@ -4253,6 +4417,22 @@
   "ev": [
    "+0x1C(pStdItem)",
    "GetDura"
+  ]
+ },
+ {
+  "va": 7900973,
+  "text": "sub word ptr [esi + 0x26], 0xa",
+  "bytes": "66836e260a",
+  "fn": 7900856,
+  "owner": [
+   [
+    "TGroupAddExpItem",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
   ]
  },
  {
@@ -4389,6 +4569,23 @@
    "+0x1C(pStdItem)",
    "GetDura",
    "IsClass"
+  ]
+ },
+ {
+  "va": 7909886,
+  "text": "dec word ptr [esi + 0x26]",
+  "bytes": "66ff4e26",
+  "fn": 7909848,
+  "owner": [
+   [
+    "TLevelBuffItem",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetDura"
   ]
  },
  {
