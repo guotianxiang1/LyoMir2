@@ -355,8 +355,13 @@ Require(playerTimedSource,
 Require(timedSource,
     @"if\s*\(abilityChanged\s*&&\s*RequiresTimedAbilityRecalc\(node\.InternalType\)\)\s*\{\s*MarkAbilityRecalcPending\(\);\s*\}\s*SendTimedAbilityState\(node,\s*false\)",
     "new/higher timed state is not marked before shared notification");
+// The state-lost virtual runs between the broadcast and the companion removal: native
+// sub_77337C pushes the LOST flag as 0 at 0x773386 with `xor ecx,ecx` at 0x773388 (so the
+// seconds argument is always 0 on this side) and the per-type table is dispatched at
+// 0x742692 (`xor eax,eax / mov al,bl / add eax,-0xE / cmp eax,0x5C / ja 0x742C42 /
+// jmp [eax*4+0x7426A9]`). Pin that call site too, not just the Send/Mark ordering.
 Require(timedSource,
-    @"SendTimedAbilityState\(node,\s*true\);\s*RemoveTimedAbilityCompanion\(node\.InternalType\);\s*if\s*\(RequiresTimedAbilityRecalc\(node\.InternalType\)\)\s*\{\s*MarkAbilityRecalcPending\(\);\s*\}",
+    @"SendTimedAbilityState\(node,\s*true\);\s*OnNativeTimedStateLost\(node\.InternalType\);\s*RemoveTimedAbilityCompanion\(node\.InternalType\);\s*if\s*\(RequiresTimedAbilityRecalc\(node\.InternalType\)\)\s*\{\s*MarkAbilityRecalcPending\(\);\s*\}",
     "expired timed state is not notified before it is marked dirty");
 Require(timedSource,
     @"RecalcAbilitys\(\);\s*QueueTimedAbilitySnapshotAfterRecalc\(\);\s*" +

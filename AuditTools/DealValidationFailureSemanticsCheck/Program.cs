@@ -116,15 +116,28 @@ class Program
 
             string chgSrc = operateSrc.Substring(chgStart, chgEnd - chgStart);
 
-            if (!chgSrc.Contains("nGold < 0") && !chgSrc.Contains("nGold<0"))
+            // The native gate is `jle`, i.e. it rejects nGold <= 0, not nGold < 0:
+            //   0x6C4477  85 F6              test esi,esi        ; esi = nGold
+            //   0x6C4479  0F 8E C8 00 00 00  jle 0x6C4547        ; <=0 -> SM_DEALCHGGOLD_FAIL
+            //   0x6C4547  80 7D FF 00        cmp byte [ebp-1],0
+            //   0x6C456B  66 BA AD 02        mov dx,0x2AD        ; SM_DEALCHGGOLD_FAIL
+            // A `< 0` guard lets nGold == 0 reach the success branch, which sends the wrong
+            // ident AND lets a client reset m_DealLastTick at will. Pin the `<= 0` form and
+            // reject the loose one.
+            if (!chgSrc.Contains("nGold <= 0") && !chgSrc.Contains("nGold<=0"))
                 throw new Exception(
-                    "TCFP-27 FAIL: ClientChangeDealGold lacks `nGold < 0` guard "
-                    + "(native sub_6C4454 @0x6C4477: test esi,esi / jle rejects <=0)");
+                    "TCFP-27 FAIL: ClientChangeDealGold lacks the `nGold <= 0` guard "
+                    + "(native sub_6C4454 @0x6C4479: test esi,esi / jle 0x6C4547 rejects <=0)");
+            if (chgSrc.Contains("nGold < 0") || chgSrc.Contains("nGold<0"))
+                throw new Exception(
+                    "TCFP-27 FAIL: ClientChangeDealGold reverted to the loose `nGold < 0` "
+                    + "guard; native @0x6C4479 is `jle`, so nGold == 0 must fail too");
 
             Console.WriteLine(
-                "PASS TCFP-27 ClientChangeDealGold has `nGold < 0` reject guard "
-                + "(native sub_6C4454 @0x6C4477: test esi,esi / jle 0x6c4547 rejects <=0; "
-                + "C# rejects <0; nGold==0 is no-op either way; negative escrow NOT constructible)");
+                "PASS TCFP-27 ClientChangeDealGold has the `nGold <= 0` reject guard "
+                + "(native sub_6C4454 @0x6C4479: test esi,esi / jle 0x6c4547 rejects <=0; "
+                + "nGold==0 sends SM_DEALCHGGOLD_FAIL and does not touch m_DealLastTick; "
+                + "negative escrow NOT constructible)");
 
             Console.WriteLine(
                 "\nPASS DealValidationFailureSemanticsCheck: TCFP-22 fail-fast+no-messages / "
