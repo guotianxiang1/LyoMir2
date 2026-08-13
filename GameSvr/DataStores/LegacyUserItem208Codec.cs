@@ -65,6 +65,31 @@ namespace GameSvr
         /// <summary>First byte of the span that has no known owner in any sample.</summary>
         internal const int UnownedSpanStart = 0x56;
 
+        /// <summary>
+        /// True when <paramref name="offset"/> is inside the tail but has a proven owner,
+        /// so the fail-closed guard must leave it alone.
+        ///
+        /// The only such range past <see cref="UnownedSpanStart"/> is the 眼神 element
+        /// block ys1..ys17 at record <c>0x58..0x6B</c> (in-memory item <c>+0x78..+0x8B</c>),
+        /// which <see cref="SystemModule.YanshenNativeItemLayout"/> already maps and which
+        /// <c>NativeHumanDataCodec.DecodeItem</c> already reads back out through
+        /// <c>YanshenNativeItemLayout.Unpack</c>. Plugin dump (base 0x10000000):
+        ///   0x10075D48  c7 45 ec 78 00 00 00   mov [ebp-0x14],0x78   ; ys5  -> record 0x58
+        ///   0x10075D3F  c7 45 ec 79 00 00 00   ; ys4 -> 0x59
+        ///   0x10075D36  c7 45 ec 7a 00 00 00   ; ys3 -> 0x5A
+        ///   0x10075D2A  c7 45 ec 7b 00 00 00   ; ys2 -> 0x5B
+        ///   0x10075CF9  89 70 7c               mov [eax+0x7c],esi    ; ys1  -> record 0x5C (dword)
+        ///   0x10075D51  c7 45 ec 80 00 00 00   ; ys6 -> 0x60 ... ys17 -> 0x6B
+        /// Asserting those bytes zero would reject every item that actually carries
+        /// 眼神 element values — the same failure mode as the old blanket check, just
+        /// waiting on a deployment that uses the feature. The golden corpus cannot see
+        /// it: 0x56..0xCF is zero in all 1363 items and all 1399 production big-bag
+        /// records, so the collision is latent rather than currently firing.
+        /// </summary>
+        internal static bool HasKnownOwner(int offset) =>
+            offset >= SystemModule.YanshenNativeItemLayout.Ys5Offset
+            && offset <= SystemModule.YanshenNativeItemLayout.Ys17Offset;
+
         internal static bool TryEncode(TUserItem item, out string weaponData, out string error)
         {
             weaponData = string.Empty;
@@ -163,19 +188,20 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// Fail-closed guard over the only bytes with no known owner: 0x56..0xB7 and
-        /// 0xB9..0xCF.  Both spans are zero in all 1363 golden M2 items and all 1399
-        /// production 眼神 extra-bag records; 0xB8 is excluded because it is the native
-        /// gift byte.  Everything from 0x18 to 0x55 is the provenance block and is
-        /// carried through verbatim, so it is deliberately NOT asserted zero — the
-        /// previous blanket check refused 1232 of 1363 real records, all at 0x1C.
+        /// Fail-closed guard over the bytes with no known owner: 0x56..0x57, 0x6C..0xB7
+        /// and 0xB9..0xCF.  All of them are zero in all 1363 golden M2 items and all 1399
+        /// production 眼神 extra-bag records.  Three ranges are excluded because they DO
+        /// have an owner: 0x18..0x55 is the provenance block (the previous blanket check
+        /// refused 1232 of 1363 real records, all at 0x1C), 0x58..0x6B is the ys1..ys17
+        /// element block (see <see cref="HasKnownOwner"/>), and 0xB8 is the native gift
+        /// byte.
         /// </summary>
         private static bool TryValidateUnownedSpans(byte[] record, out string error)
         {
             error = string.Empty;
             for (var i = UnownedSpanStart; i < record.Length; i++)
             {
-                if (i == BindOffset) continue;
+                if (i == BindOffset || HasKnownOwner(i)) continue;
                 if (record[i] != 0)
                 {
                     error = $"unmapped native item data at offset 0x{i:X2}";
