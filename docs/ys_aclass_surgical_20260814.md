@@ -74,7 +74,7 @@
 | A2 | 刀刀切割 @Cutting | 未解 | §2.5 |
 | A3 | 带毒五键 | **fail-closed，且更正一处「五键同构」的错记** | §3 |
 | A4 | 野蛮麻痹 | **fail-closed** | §4 |
-| A5 | 噬魂沼泽绿毒修复 | 桩体已全解，落点待定 | §5 |
+| A5 | 噬魂沼泽绿毒修复 | 桩体+宿主全解，**C# 合击区域管线形状不同**，不接 | §5 |
 | A6 | S(1,1..150) 播种 | **内容已逐字节证实，时机不可证** | §6 |
 | A7 | 激光 S(1,82) | **已接线** | §7.1 |
 | A7 | 激光 S(1,81) | **已证实，但 C# 无对应槽，不接** | §7.2 |
@@ -306,8 +306,54 @@ nParam3=5, '', 1000)`。与 `docs/state19_rm_poison_faithful_20260814.md` 已钉
 ```
 
 **无条件**（与主审计一致），唯一与四键版的差别是 `nParam1` 从 `0x0F`(15) 变成 `0x7F`(127)。
-未接线的原因只是宿主 `0x691E2E` 所在函数本轮未定名（该处线性反汇编失步，需要先找到
-函数序言）。这是纯机械工作，evidence 已足。
+
+### 5.1 宿主已定名：`sub_691BF0` = 法道合击的「噬魂沼泽」臂
+
+```
+00691BF0 55 8BEC 83C4D4 …    sub_691BF0(eax=self, edx=参与者A, ecx=参与者B)
+                             唯一 rel32 调用者 call@0x6940B2
+00691C36 call 0x78FE88 / cmp eax,9 / jg 出口      ; 两个参与者都得离 [self+0x344] ≤ 9 格
+00691C93 push 0x691EEC                            ; 字符串 "toSelf"
+00691CB6 call 0x769258 ×2                         ; 两个参与者各放一次特效
+00691D29 call 0x68EEDC ×2 -> [ebp-0x10]           ; 两份合击伤害求和（同 HeroObject.cs:1417）
+00691D7B 5×5 区域双重循环（[ebp-0x1C]±2 × [ebp-0x20]±2）
+00691DAA   call 0x7784A8 -> esi                   ; 取该格对象
+00691DB5   call 0x767498 / je 跳过                ; IsProperTarget
+00691DE1   call [edi+0x198] -> edi                ; 伤害管线
+00691E2C   push 1
+00691E2E   【钩子】mov ecx,edi / mov edx,esi / mov eax,ebx
+00691E34   call 0x76FE44                          ; 区域法术产生器
+```
+
+GUI 自己写明了它属于哪一族（`YanshenLegacy23ReplicaPanels.cs:504`）：
+「末日审判 噬魂沼泽 劈星斩 雷霆一击(**法道合击**类技能算法)，合击技能仅支持到4级」。
+`call 0x68EEDC` 正是 `HeroObject.cs:1417` 已注明的 “final union damage”。
+
+⇒ 语义完全确定：**在 5×5 区域里每命中一个合法目标，就在产生器调用之前给它挂一次绿毒**，
+下毒人是第二个合击参与者 `[ebp-8]`，中毒者是该格对象 `esi`。
+
+### 5.2 毒参数到 C# 的映射已经可对照（不是新造）
+
+C# 的 `RM_POISON` 消费者 `TBaseObject.Base.cs:2062` 是
+`M2Share.ObjectManager.Get(ProcessMsg.nParam2)`，而既有生产者一律写成
+
+```csharp
+victim.SendDelayMsg(caster, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH,
+                    nPower, caster.ObjectId, nLevel, "", 1000);
+```
+
+逐槽对上原生：`Self=victim`、`wIdent=0x283C(10300)`、`wParam=31/30`（经
+`state19` §3 的 `31-nType` 折算即 `POISON_DECHEALTH`/`POISON_DAMAGEARMOR`）、
+`nParam1=0x7F(127)`、`nParam2=` 下毒人（原生传对象指针，C# 传 `ObjectId`，
+这是本仓既有约定）、`nParam3=5`、`sMsg=''`、`dwDelay=1000`。
+
+### 5.3 仍然不接的原因
+
+C# 侧合击族的**管线形状不同**：`HeroObject.DealNativeUnionMagicAreaHit` 是
+「取一格的对象、命中第一个就 return」，走 `SendNativeUnionStruck`；原生这里是
+5×5 双重循环喂 `sub_76FE44` 区域产生器。两者不是同一个循环，`0x691E2E` 在 C# 里
+没有一一对应的语句位置。把毒挂在形状不同的循环上，命中次数就会和原生不一致 ——
+那不是 1:1。要接得先把合击区域管线对齐，超出「外科补」的范围。
 
 ---
 
