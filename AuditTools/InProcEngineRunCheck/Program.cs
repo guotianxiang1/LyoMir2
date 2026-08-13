@@ -628,9 +628,9 @@ void RunDealEscrowSafety(Envirnoment map)
     var baseCode = string.Join("\n", baseSrc.Split('\n')
         .Select(line => { var i = line.IndexOf("//", StringComparison.Ordinal); return i >= 0 ? line[..i] : line; }));
     Assert(baseCode.Contains("(m_DealCreat.m_boGhost || m_DealCreat.m_boDeath)"),
-        "sweep no longer clears m_DealCreat on DEATH (native sub_6B3EAC @0x6B3B7C tests byte[+0x73] too)");
+        "sweep no longer clears m_DealCreat on DEATH (native sub_6B3EAC @0x6B3B73 call 0x772DA8 = [+0x74] death, @0x6B3B7C [+0x73] ghost)");
     Log("DEAL 1c ghost/death sweep: TBaseObject.Base.cs clears m_DealCreat on "
-        + "(m_boGhost || m_boDeath) — native sub_6B3EAC @0x6B3B73 ghost-getter OR @0x6B3B7C byte[+0x73] death");
+        + "(m_boGhost || m_boDeath) — native sub_6B3EAC @0x6B3B73 death-getter 0x772DA8 OR @0x6B3B7C byte[+0x73] ghost");
 }
 
 // ===== gold guards (战神 sub_6C7D64 DecGold / sub_6D791C IncGold) =====

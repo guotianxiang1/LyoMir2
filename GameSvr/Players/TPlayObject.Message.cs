@@ -3051,10 +3051,10 @@ namespace GameSvr
         {
             var requestClientItemId = ProcessMsg.nParam1;
             // 战神 sub_6D09D0 gate order, verbatim:
-            //   0x6D09E3  cmp byte [ebx+0x73],0   ; m_boDeath   -> -1
+            //   0x6D09E3  cmp byte [ebx+0x73],0   ; m_boGhost   -> -1
             //   0x6D09ED  cmp byte [ebx+0x461],0  ; m_boDealing -> -1   <-- WAS MISSING
             //   0x6D09FA  cmp dword [ebx+0xBB0],0 ; hero == nil -> -1
-            //   0x6D0A0D  call sub_772DA8         ; hero ghost  -> -1
+            //   0x6D0A0D  call sub_772DA8         ; hero death [+0x74] -> -1
             // Without the m_boDealing gate a player could stage an item in a trade and
             // then shunt the same object reference into the hero bag: the deal list and
             // the hero bag both hold it, the deal completes and hands it to the
@@ -3107,10 +3107,10 @@ namespace GameSvr
         {
             var requestClientItemId = ProcessMsg.nParam1;
             // 战神 sub_6D0B00 has the identical gate ladder:
-            //   0x6D0B13  cmp byte [ebx+0x73],0   ; m_boDeath   -> -1
+            //   0x6D0B13  cmp byte [ebx+0x73],0   ; m_boGhost   -> -1
             //   0x6D0B1D  cmp byte [ebx+0x461],0  ; m_boDealing -> -1   <-- WAS MISSING
             //   0x6D0B2A  cmp dword [ebx+0xBB0],0 ; hero == nil -> -1
-            //   0x6D0B3D  call sub_772DA8         ; hero ghost  -> -1
+            //   0x6D0B3D  call sub_772DA8         ; hero death [+0x74] -> -1
             if (m_HeroObject == null || m_boDeath || m_boDealing
                 || m_HeroObject.m_boDeath)
             {

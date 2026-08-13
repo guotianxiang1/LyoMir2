@@ -1789,12 +1789,12 @@ namespace GameSvr
             // 逐条（全部 `je/jne 0x6C49EB` = 纯 epilogue，`xor eax,eax` 后 SEH 收尾 → **静默返回，不发任何消息**）：
             //   1) @0x6C45A2 `cmp byte[ebx+0x461],0` / `je`      → 自己 m_boDealing 为假 → 静默返回
             //   2) @0x6C45AF `cmp dword[ebx+0xBAC],0` / `je`     → m_DealCreat 为空 → 静默返回
-            //   3) @0x6C45BC `cmp byte[ebx+0x73],0` / `jne`      → 自己 m_boDeath 为真 → 静默返回
+            //   3) @0x6C45BC `cmp byte[ebx+0x73],0` / `jne`      → 自己 m_boGhost 为真 → 静默返回
             //   4) @0x6C45CC `cmp byte[eax+0x461],0` / `je`      → 对端 m_boDealing 为假 → 静默返回
-            //   5) @0x6C45D9 `cmp byte[eax+0x73],0` / `jne`      → 对端 m_boDeath 为真 → 静默返回
+            //   5) @0x6C45D9 `cmp byte[eax+0x73],0` / `jne`      → 对端 m_boGhost 为真 → 静默返回
             //   6) @0x6C45E3 `cmp ebx,[eax+0xBAC]` / `jne`       → 对端 m_DealCreat 不指向自己 → 静默返回
             //   然后 @0x6C45EF `mov byte ptr [ebx+0x684], 1` = m_boDealOK := true
-            // 第 6 条（互指一致性）+ 第 1/4 条（双边 dealing）+ 第 3/5 条（双边存活）共同保证：
+            // 第 6 条（互指一致性）+ 第 1/4 条（双边 dealing）+ 第 3/5 条（双边未 ghost）共同保证：
             // 押金释放只在「双方都活着、双方都在交易中、两个指针互指」时可达。
             // 旧 C# 一条都没有（只有 m_DealCreat==null），因此一个单边悬挂的 m_DealCreat
             // （DealCancel 遗留，见 TPlayObject.cs DealCancel 注释）足以对已取回押金的一方再成交一次 = 复制。
