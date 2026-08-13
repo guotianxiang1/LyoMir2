@@ -418,6 +418,7 @@ namespace GameSvr
                         {
                             return 0;
                         }
+                        var boUnlinkedFromSource = false;
                         if (GetMapCellInfo(nCX, nCY, ref MapCellInfo) && MapCellInfo.ObjList != null)
                         {
                             var i = 0;
@@ -432,6 +433,7 @@ namespace GameSvr
                                 {
                                     if ((TBaseObject)OSObject.CellObj == Cert)
                                     {
+                                        boUnlinkedFromSource = true;
                                         MapCellInfo.Remove(i);
                                         OSObject = null;
                                         if (MapCellInfo.Count > 0)
@@ -444,6 +446,20 @@ namespace GameSvr
                                 }
                                 i++;
                             }
+                        }
+                        // MOVE-35(b) — 原版只有找到自己并摘链之后才会置 TRUE：
+                        //   00779A4C  83 7D EC 00  cmp dword [ebp-0x14],0 ; 旧格表头
+                        //   00779A50  74 5B        je  0x779AAD           ; 空表 -> FALSE
+                        //   00779A5B  8B 45 EC ..  mov eax,[node+4]
+                        //   00779A61  3B 45 0C     cmp eax,[ebp+0xC]      ; 是不是自己
+                        //   00779A64  75 35        jne 0x779A9B           ; 不是 -> 下一个
+                        //   00779A95  C6 45 F7 01  mov byte [ebp-9],1     ; 唯一置 TRUE 处
+                        //   00779AAD  33 C0        xor eax,eax            ; 遍历完 -> FALSE
+                        // C# 无论找没找到都 Add 并返回 1，于是"从一个自己并不在的格子
+                        // 搬走"会在目标格凭空多出一份登记 —— 旧格的幽灵占位就是这么来的。
+                        if (!boUnlinkedFromSource)
+                        {
+                            return 0;
                         }
                         if (GetMapCellInfo(nX, nY, ref MapCellInfo))
                         {
