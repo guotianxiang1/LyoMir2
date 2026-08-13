@@ -115,9 +115,12 @@ namespace GameSvr
             // VMT+0xC8 is MakePosion, which takes the STATE ID in dl — see
             // 0x666D48 B2 1F for what C# calls MakePosion(POISON_DECHEALTH),
             // i.e. dl = 31 - slot. Ids 0x11 and 0x18 have no legacy slot, so the
-            // native state authority is called directly.
-            target.ApplyNativeStateSeconds(0x11, 10, 1);
-            target.ApplyNativeStateSeconds(0x18, 10, 1);
+            // legacy face cannot carry them; the slot itself can, and going
+            // through it is what native does. ApplyNativeStateSeconds jumped
+            // straight to AddState and so lost 0x76B3C8's own guards and, for a
+            // player or hero target, the whole 0x746604 override.
+            target.NativeMakePosion(0x11, 10, 1);
+            target.NativeMakePosion(0x18, 10, 1);
             return true;
         }
     }
