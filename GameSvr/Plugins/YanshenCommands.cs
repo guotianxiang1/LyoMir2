@@ -10,7 +10,7 @@ namespace GameSvr.Plugins
     /// 基于逆向分析完整还原:
     /// - 40 数字命令ID (格式: !!!!集成函数,ID,参数,参数$；2.07未使用ID 6)
     /// - 15 分隔符命令 (格式: !!!!爱心分割^ID^参数^参数$)
-    /// - 7 中文命令名 (格式: !!!!命令名参数:参数:)
+    /// - 6 中文命令名 (格式: !!!!命令名参数:参数:)
     /// - 5 物品给予格式 (物品名!!!!元素数据)
     /// </summary>
     public class YanshenCommandEngine
@@ -177,15 +177,62 @@ namespace GameSvr.Plugins
             [2] = (1, 0),
         };
 
+        /// <summary>
+        /// 中文命令隧道。入口选择器 sub_1005E4D0 只认 6 个中文前缀，每个前缀
+        /// 比对之前先读一把 cfg 门（cfg = [0x1031BEFC] = [0x1031C0E0] = 0x10319DA8，
+        /// 0x10001420 与 0x10001BB0 都是 `call 0x1000D070` + `mov [glob],eax` 的
+        /// magic-static 单例，故 cfg 与 cfg2 同坐标）：
+        ///
+        ///   门读点                                    前缀字面量
+        ///   0x1005E650 cmp [eax+0x538],0x1F4  0x102BE83C `!!!!hq取sj戳`
+        ///   0x1005E6C5 cmp [eax+0x954],0x1F4  0x102BE84C `!!!!zd义回收`
+        ///   0x1005E752 cmp [eax+0x664],0x1F4  0x102BE870 `!!!!给与元素`
+        ///                                     0x102BE880 `!!!!获取元素`（共用该门）
+        ///   0x1005EDA3 cmp [eax+0x510],0x1F4  0x102BE894 `!!!!定义伤害`
+        ///   0x1005EF7B cmp [eax+0x514],0x1F4  0x102BE8A4 `!!!!英雄极品`
+        /// 五处门前都是 `A1 FC BE 31 10` mov eax,[0x1031BEFC]。
+        ///
+        /// 偏移到键名由配置序列化器给出。全镜像扫 `cmp dword[esi+disp],0x1F4`
+        /// 的三种编码（`81 3E` / `81 7E dd` / `81 BE dddddddd` + `F4 01 00 00`）
+        /// 共 75 处，分两段 run（0x100057FE..0x100065D4、0x10009EB3..0x1000A5E3），
+        /// 每处后面第一个 `push &lt;字面量VA&gt;` 就是它的键名。严格交替可证：
+        /// 74 对相邻键串在 .rdata 里首尾相接、4 字节对齐，缺口为 0
+        /// （0x102B005C→…→0x102B0338，0x102B1524→…→0x102B1694），
+        /// 中间塞不进任何被跳过的键。两份转储（0x10000000 未重定位那份与
+        /// 已重定位到 0x57C40000 的 delayed 那份）解出的 75 条完全一致。
+        ///
+        ///   cfg+0x510  cmp@0x10009EB3  push@0x10009EE5 → 0x102B1524 自定义伤害
+        ///   cfg+0x514  cmp@0x1000A043  push@0x1000A075 → 0x102B1568 英雄读取极品
+        ///   cfg+0x538  cmp@0x1000A313  push@0x1000A345 → 0x102B1610 毫秒级cd记录
+        ///   cfg+0x664  cmp@0x100057FE  push@0x10005822 → 0x102B005C 自定义元素
+        ///   cfg+0x954  cmp@0x1000A453  push@0x1000A485 → 0x102B164C 高级回收
+        /// 两条旁证：
+        /// (1) 这五个键名在原版 _ys208_runtime\config.json 里都实际存在
+        ///     （自定义伤害=1、英雄读取极品=0、毫秒级cd记录=1、高级回收=1、
+        ///     自定义元素=1），而曾被误挂在 `定义伤害` 上的 `刀刀切割`
+        ///     是同文件里的另一把开关（=0）。
+        /// (2) 2.0.7 的运行期转储独立复算一遍：配置结构体挪过位，五个偏移
+        ///     全不一样（0x4F0/0x4F4/0x518/0x644/0x930），但同一套解法解出的
+        ///     键名逐条相同 ——
+        ///       0x1005277D `mov eax,[0x10304D48]` / 0x10052782 cmp [eax+0x4F0]
+        ///         → 序列化器 0x10009D3B/0x10009D6D = 自定义伤害
+        ///       0x1005295A cmp [eax+0x4F4] → 0x10009ECB/0x10009EFD = 英雄读取极品
+        ///       0x10052040 cmp [eax+0x518] → 0x1000A19B/0x1000A1CD = 毫秒级cd记录
+        ///       0x10052142 cmp [eax+0x644] → 0x100056CE/0x100056F2 = 自定义元素
+        ///       0x100520B5 cmp [eax+0x930] → 0x1000A2DB/0x1000A30D = 高级回收
+        ///     2.0.7 的序列化器同样是 75 条。
+        ///
+        /// `plus伤害` `攻击伤害` `hq取sj间` `zd回收` `给予元素` 五个名字不在这里：
+        /// 逐条判定见 ExecuteChinese 的说明。
+        /// </summary>
         static readonly Dictionary<string, string> _chineseToggles =
             new(StringComparer.OrdinalIgnoreCase)
         {
-            ["plus伤害"]="刀刀切割",
-            ["给与元素"]="自定义元素",["给予元素"]="自定义元素",["获取元素"]="自定义元素",
-            ["定义伤害"]="刀刀切割",["攻击伤害"]="刀刀切割",
-            ["英雄极品"]="自定义元素",
-            ["hq取sj戳"]="毫秒级cd记录",["hq取sj间"]="毫秒级cd记录",
-            ["zd义回收"]="高级回收",["zd回收"]="高级回收",
+            ["给与元素"]="自定义元素",["获取元素"]="自定义元素",   // cfg+0x664
+            ["定义伤害"]="自定义伤害",                            // cfg+0x510
+            ["英雄极品"]="英雄读取极品",                          // cfg+0x514
+            ["hq取sj戳"]="毫秒级cd记录",                          // cfg+0x538
+            ["zd义回收"]="高级回收",                              // cfg+0x954
         };
 
         public YanshenCommandEngine(TPlayObject p, NormNpc n, PluginManager pm = null)
@@ -462,28 +509,57 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
+        /// 原生只有这 6 个中文命令名，取自入口选择器 sub_1005E4D0 里被
+        /// `push &lt;VA&gt;` + `call 0x1000B330`（std::string 构造）+ `call 0x10064BD0`
+        /// （前缀比对）串起来的字面量。0x102BE81C 起的标记表整段只有 8 条
+        /// `!!!!` 串：`!!!!集成函数`(0x102BE81C)、`!!!!爱心分割`(0x102BE82C)
+        /// 加下面这 6 条，外带一个分隔符 `:`(0x102BE890)。
+        ///
+        /// C# 原先另挂了 5 个名字，逐个在两份运行期转储（2.0.8 45.8MB、
+        /// 2.0.7 28.4MB）上做全镜像五编码（ascii / GBK / UTF-16LE / UTF-8 / Big5）
+        /// 扫描，判定如下：
+        ///   plus伤害  两版五编码 0 命中（GBK `70 6C 75 73 C9 CB BA A6` 也 0）。
+        ///             大小写变体 Plus/PLUS、以及去掉首字母的 `lus伤害` 同样 0。
+        ///             AllFuc.pas 的 ys_MyJn_plus 确实发 `'!!!!plus伤害'+…`，
+        ///             但两版都没有解析器，串会原样落到宿主真正的
+        ///             GetBagItemCount —— 它不是隧道命令。
+        ///   攻击伤害  GBK 仅 2 命中（2.0.8 0x102BC84E/0x102BCA36、
+        ///             2.0.7 0x102A8CDE/0x102A8EC6），都在 GUI 帮助文案里
+        ///             （"指定id技能免伤_说明注释" / "对敌人伤害增减_说明注释"
+        ///             正文的「…被某种技能攻击伤害减免或者提升」），不在标记表，
+        ///             也没有任何 push 引用它做前缀比对。
+        ///   hq取sj间  两版 0 命中；只有 `hq取sj戳`(0x102BE83C) 存在。
+        ///   zd回收    两版 0 命中（含 ZD/Zd 变体）；只有 `zd义回收`(0x102BE84C)。
+        ///   给予元素  两版 0 命中；原生是「与」不是「予」，只有
+        ///             `给与元素`(0x102BE870)。
+        /// 磁盘上的 yanshen2.0.7.dll / 2.0.8.dll 被 Themida 压着，连
+        /// `定义伤害` 这种已坐实的串都 0 命中，故只以运行期转储为准。
+        /// 另外，`push 0x102BE85C` 那种指向标记表空档的写法不是字面量引用：
+        /// 0x1005E762 push 之后 `jmp 0x108D484A`，被跳到的第一条就是
+        /// `lea esp,[esp+4]` 把它丢掉 —— Themida 的垃圾对。该空档在两份转储里
+        /// 逐字节相同，不是延迟解密的串。
+        ///
+        /// 五个名字既无字面量也无门，门、臂、以及 PluginManager 的分词名单
+        /// 一起删掉；打过来会走 EnsureCommandEnabled 的「命令未登记」分支抛出，
+        /// 与本仓对无据行为一贯的 fail-closed 处置一致。
+        ///
         /// Execute Chinese-named commands (格式2: !!!!命令名 参数:参数:)
         /// </summary>
         int ExecuteChinese(TunnelCommand cmd)
         {
             switch (cmd.ChineseCommand)
             {
-                case "plus伤害": return _api.CustomDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,4),P(cmd,3),P(cmd,5),P(cmd,6),P(cmd,7));
                 // 两条隧道的第一个字段是元素类型、第二个才是装备位，而
                 // Set/GetEquipElement 的形参顺序是 (装备位, 元素类型)，所以这里要交换。
                 // 给与元素 1005E8DD 把字段0 拿去和 1/0x11 比（类型），1005E8B2 拿字段1
                 // 去索引 [[Self+0x4C0]+idx*4+8]（装备位）；获取元素 1005EB9B 把字段1
                 // 限制在 0xF 以内（装备位），1005EBA4 把字段0 限制在 1..17（类型）。
-                case "给与元素":
-                case "给予元素": return _api.SetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
+                case "给与元素": return _api.SetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
                 case "获取元素": return _api.GetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
-                case "定义伤害":
-                case "攻击伤害": _api.DirectAttack(P(cmd,0),P(cmd,1)); return 0;
+                case "定义伤害": _api.DirectAttack(P(cmd,0),P(cmd,1)); return 0;
                 case "英雄极品": return _api.GetHeroExtreme(P(cmd,0),P(cmd,1));
-                case "hq取sj戳":
-                case "hq取sj间": return Environment.TickCount;
-                case "zd义回收":
-                case "zd回收": return _api.AutoRecycle();
+                case "hq取sj戳": return Environment.TickCount;
+                case "zd义回收": return _api.AutoRecycle();
                 default: return 0;
             }
         }

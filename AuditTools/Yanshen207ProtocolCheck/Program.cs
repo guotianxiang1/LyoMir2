@@ -45,7 +45,7 @@ if (failures.Count != 0)
 }
 
 Console.WriteLine(
-    "PASS yanshen-2.07 numeric=40 caret=15 chinese=7 give=5 bind=GiveBindItem+BindGive");
+    "PASS yanshen-2.07 numeric=40 caret=15 chinese=6 give=5 bind=GiveBindItem+BindGive");
 
 void Check(string name, Action test)
 {
@@ -98,8 +98,6 @@ static void CheckChineseTunnel()
         new ChineseCase("!!!!\u83b7\u53d6\u5143\u7d201:2$", "\u83b7\u53d6\u5143\u7d20", new[] { "1", "2" }),
         new ChineseCase("!!!!\u5b9a\u4e49\u4f24\u5bb3100:200:", "\u5b9a\u4e49\u4f24\u5bb3", new[] { "100", "200" }),
         new ChineseCase("!!!!\u82f1\u96c4\u6781\u54c13:4:", "\u82f1\u96c4\u6781\u54c1", new[] { "3", "4" }),
-        new ChineseCase("!!!!plus\u4f24\u5bb31:2:3:4:5:6:7:8:", "plus\u4f24\u5bb3",
-            new[] { "1", "2", "3", "4", "5", "6", "7", "8" }),
         new ChineseCase("!!!!hq\u53d6sj\u6233", "hq\u53d6sj\u6233", Array.Empty<string>()),
         new ChineseCase("!!!!zd\u4e49\u56de\u6536", "zd\u4e49\u56de\u6536", Array.Empty<string>())
     };
@@ -111,6 +109,29 @@ static void CheckChineseTunnel()
         Equal(TunnelFormat.ChineseName, command.Format, $"{item.Name} format");
         Equal(item.Name, command.ChineseCommand, $"{item.Name} command name");
         SequenceEqual(item.Parameters, command.Parameters, $"{item.Name} parameters");
+    }
+
+    // 原生只有 6 个中文命令名。两份运行期转储（2.0.7 0x102AA8E8.. /
+    // 2.0.8 0x102BE81C..）全镜像里 NUL 结尾的 `!!!!` 串各只有 8 条 ——
+    // 6 个中文名加 `!!!!集成函数`、`!!!!爱心分割`。下面这五个名字五编码
+    // （ascii/GBK/UTF-16LE/UTF-8/Big5）在两版上都 0 命中，`攻击伤害` 唯一的
+    // 两处 GBK 命中（2.0.8 0x102BC84E/0x102BCA36、2.0.7 0x102A8CDE/0x102A8EC6）
+    // 都在 GUI 帮助文案正文里，没有任何 push 引用它做前缀比对。
+    // 守卫它们不再被当成原生命令名切分。
+    string[] fabricated =
+    {
+        "plus\u4f24\u5bb3",              // plus伤害
+        "\u653b\u51fb\u4f24\u5bb3",      // 攻击伤害
+        "hq\u53d6sj\u95f4",              // hq取sj间
+        "zd\u56de\u6536",                // zd回收
+        "\u7ed9\u4e88\u5143\u7d20",      // 给予元素
+    };
+    foreach (var name in fabricated)
+    {
+        var command = PluginManager.ParseTunnelCommand($"!!!!{name}1:2:");
+        Require(command != null, $"{name} payload was not parsed at all");
+        Require(command.ChineseCommand != name,
+            $"{name} is not a native command name but was split out as one");
     }
 }
 

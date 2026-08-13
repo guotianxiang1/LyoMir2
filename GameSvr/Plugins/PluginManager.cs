@@ -1263,9 +1263,20 @@ namespace GameSvr.Plugins
             else // !!!!命令名参数:参数:
             {
                 cmd.Format = TunnelFormat.ChineseName;
+                // 原生认得的中文命令名恰好 6 个。两份运行期转储全镜像扫下来，
+                // NUL 结尾且以 `!!!!` 打头的 GBK 串一共只有 8 条，每条只被入口
+                // 选择器里的一处 push 引用：
+                //   2.0.8 0x102BE81C..0x102BE8A4 → push@0x1005E578/E58C/E65C/E6D1/
+                //         E794/E7A5/EDB3/EF8B（选择器 sub_1005E4D0）
+                //   2.0.7 0x102AA8E8..0x102AA95C → push@0x10051F68/1F7C/204C/20C1/
+                //         2173/2184/2792/296A
+                // 除去 `!!!!集成函数` 与 `!!!!爱心分割`，剩下的就是下面这 6 个。
+                // 曾经列在这里的 `plus伤害` 两版都 0 命中（ascii/GBK/UTF-16LE/
+                // UTF-8/Big5，含 Plus/PLUS 变体），不是原生命令名 —— AllFuc.pas 的
+                // ys_MyJn_plus 发的串在原生那边会落到宿主真正的 GetBagItemCount。
                 string[] knownNames =
                 {
-                    "plus伤害", "给与元素", "获取元素", "定义伤害",
+                    "给与元素", "获取元素", "定义伤害",
                     "英雄极品", "hq取sj戳", "zd义回收"
                 };
                 var commandName = knownNames.FirstOrDefault(x => payload.StartsWith(x, StringComparison.Ordinal));
