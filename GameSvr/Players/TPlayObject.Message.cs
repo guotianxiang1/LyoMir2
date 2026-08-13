@@ -3140,11 +3140,21 @@ namespace GameSvr
                     {
                         continue;
                     }
-                    if (M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
-                    {
-                        continue;
-                    }
-                    
+                    // 原先这里还有一次 `InDisableTakeOffList(wIndex)` 查表。战神
+                    // sub_73FC70 的整个循环体 0x73FD29..0x73FF73 里没有任何按物品编号
+                    // 查表的动作，抽签之后紧接的就是分流：
+                    //   73FD99  E8 AE 3D CC FF        call sub_403B4C   ; Random(K)
+                    //   73FD9E  85 C0 / 74 0D         test eax,eax / je -> 通过
+                    //   73FDA2  80 BF FC 00 00 00 00  cmp byte [item+0xFC],0 / 0F 84 …
+                    //   73FDAF  80 BE 78 01 00 00 00  cmp byte [self+0x178],0
+                    //   73FDB6  0F 85 12 01 00 00     jne 0x73FECE      ; 非玩家 -> 落地支
+                    //   73FDBC  A1 34 65 7D 00 …      sub_617A38(…, cl=4) 实名认证
+                    //   73FDD0  80 BF D8 00 00 00 00  cmp byte [item+0xD8],0  ; 赠品
+                    // 剩下的过滤全部走 `[std+2]` / `[std+3]` 的位与 sub_78389C，
+                    // 没有第二张按 wIndex 索引的名单。
+                    // 全镜像多编码零命中：DisableTakeOffList / DisableTakeOffList.txt /
+                    // TakeOffList 三个名字在 GBK、裸 ASCII（大小写不敏感）、UTF-16LE
+                    // 三路皆 0。按 §3.1 删除。
                     if (DropItemDown(m_UseItems[i], 2, true, BaseObject, this))
                     {
                         StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
