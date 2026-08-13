@@ -997,6 +997,13 @@ namespace GameSvr
                 case SpellsDef.SKILL_316:
                     boSpellFail = true;
                     break;
+                // id 191 @0x6EDFCF -> TPlayer VMT+0x148 = 0x6EF340, result
+                // inverted into [ebp-6] @0x6EDFED, so every refusal path in
+                // that function is a hard reject.
+                case SpellsDef.SKILL_191:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill191Freeze(
+                        UserMagic, TargeTBaseObject);
+                    break;
                 case SpellsDef.SKILL_152:
                     boSpellFail = !PlayObject.TryActivateNativeSkill152(
                         UserMagic);
