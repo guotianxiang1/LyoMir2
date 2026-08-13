@@ -210,8 +210,17 @@ static void CheckReplayOnlyWhenSet()
     // (ret 0x18), repeated byte-identically by the logon replay at 0x6B23EC-0x6B2414:
     // [ebp+0x14]=X -> Param, [ebp+0x10]=Y -> Tag.
     Equal((ushort)Grobal2.SM_FIXEDCOORD, sent[0].Ident, "replay wire ident 3420");
-    Equal(845, sent[0].Param, "replay X (0x6B23F0 movzx [esi+0x1908])");
-    Equal(674, sent[0].Tag, "replay Y (0x6B23F8 movzx [esi+0x190a])");
+    // Hop 2 (the RM 0x3026 handler) re-orders the record before it hits the wire:
+    //   6B6036  66 8B 43 02   mov ax,[rec+2]   -> Param  = wParam = 0
+    //   6B603C  8B 43 08      mov eax,[rec+8]  -> Tag    = nParam2 = X
+    //   6B6040  66 8B 43 0C   mov ax,[rec+0xC] -> Series = nParam3 = Y
+    //   6B6051  66 BA 5C 0D   mov dx,0xD5C     -> ident 3420
+    // so X lands in Tag, not Param. The enqueue at 0x6B23F0/0x6B23F8 only decides
+    // which record slot each coordinate occupies.
+    Equal(0, sent[0].Param, "replay Param is wParam=0 (0x6B6036 mov ax,[rec+2])");
+    Equal(845, sent[0].Tag, "replay X lands in Tag (0x6B603C mov eax,[rec+8])");
+    Equal(674, sent[0].Series,
+        "replay Y lands in Series (0x6B6040 mov ax,[rec+0xC])");
 }
 
 static List<ClientPacket> CaptureDefMessages(TPlayObject player, Action action)

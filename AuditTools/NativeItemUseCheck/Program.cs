@@ -115,7 +115,11 @@ Assert(!bag.Contains(nativeNoEffect), "TNoEffectItem.Use=true did not consume th
 Assert((int)GetMember(playerType, player, "m_nHungerStatus") == hungerBefore,
     "TNoEffectItem incorrectly changed hunger state");
 
-stdItems.Add(CreateGoodItem("UnsupportedSpecial", 1, 1));
+// StdMode 1 / Shape 20 = THappyCake, which has no arm in the item-use switch, so
+// it must still fall through without consuming. (Shape 1 used to sit here, but it
+// is TDoubleExpProp and that class is now ported from sub_786390 / VMT 0x77F288
+// slot +0x18, so it legitimately consumes -- asserted right below.)
+stdItems.Add(CreateGoodItem("UnsupportedSpecial", 1, 20));
 var unsupportedSpecial = CreateUserItem(1003, 3, 1, 1);
 bag.Add(unsupportedSpecial);
 clientUseItems.Invoke(player, new object[] { 1003, 0 });
