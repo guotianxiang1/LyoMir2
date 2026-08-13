@@ -1527,8 +1527,13 @@ namespace GameSvr.Plugins
         /// </summary>
         private const int RecycleElementSlots = 17;
 
-        /// <summary>与 NPC 给予灵符同一 reason（PasApiBridge.NativeGive / 魔塔奖励都用 23001）。</summary>
-        private const int RecycleLingFuReason = 23001;
+        /// <summary>
+        /// 回收的灵符 reason 是 0，不是 NPC 给予那套 23001。插件在 0x1006CE65 直接调
+        /// M2Server 的加灵符 0x6DE7BC，并在 0x1006CE68 用 <c>33 D2 xor edx,edx</c>
+        /// 把 reason 参数清零。23001 出自另一条路 —— NPC Give 派发器
+        /// <c>0x6C88FB BA D9 59 00 00 mov edx,0x59D9</c>。
+        /// </summary>
+        private const int RecycleLingFuReason = 0;
 
         /// <summary>自动回收 — 按JSON配置回收背包物品, -999=JSON语法错误</summary>
         public int AutoRecycle()
@@ -1548,9 +1553,9 @@ namespace GameSvr.Plugins
                     var itemName = M2Share.UserEngine.GetStdItemName(item.wIndex);
                     if (!recycleConfig.TryGetItemRule(itemName, out var rule, out var stackable))
                         continue;
-                    if (!RecycleTypeOpen(rule)) continue;
+                    if (!RecycleTypeOpen(rule, stackable)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
-                    if (TryRecycleOne(item, itemName, rule)) recycled++;
+                    if (TryRecycleOne(item, itemName, rule, stackable)) recycled++;
                 }
                 return recycled;
             }
@@ -1578,10 +1583,25 @@ namespace GameSvr.Plugins
                 manager.GetItemConfigValue("无限背包_是否固定")) as string == "固定格子";
         }
 
-        /// <summary>总开关：GetV(v1,v2)==关闭值 时该类型停止回收；省略则失去开关效果。</summary>
-        private bool RecycleTypeOpen(RecycleRule rule)
+        /// <summary>
+        /// 总开关：GetV(v1,v2)==关闭值 时该类型停止回收；省略则失去开关效果。
+        ///
+        /// 生效还有两个原生前置条件，两条分支不一样。可叠材料在 0x1006B783：
+        /// <code>
+        /// 1006B783  83 7D 84 FF  cmp dword [ebp-0x7C], -1   ; 关闭值，缺省 -2
+        /// 1006B787  7C 23        jl  0x1006B7AC             ; &lt; -1 ⇒ 整道门失效
+        /// </code>
+        /// 缺省值 -2 由每件重置 0x1006B2F4 <c>C7 45 84 FE FF FF FF</c> 写入，
+        /// 所以配置里把 关闭值 写成 -2 或更小等同于关掉这道门。
+        /// 物品种类在 0x1006C0BE 多两条：0x1006C0CB / 0x1006C0D4 两个 jle 要求
+        /// v1 和 v2 都为正，否则同样失效。
+        /// </summary>
+        private bool RecycleTypeOpen(RecycleRule rule, bool stackable)
         {
             if (!rule.HasMasterSwitch) return true;
+            if (rule.MasterSwitchClosedValue < -1) return true;
+            if (!stackable &&
+                (rule.MasterSwitchGroup <= 0 || rule.MasterSwitchIndex <= 0)) return true;
             return ReadPlayerV(rule.MasterSwitchGroup, rule.MasterSwitchIndex)
                    != rule.MasterSwitchClosedValue;
         }
@@ -1625,23 +1645,37 @@ namespace GameSvr.Plugins
         /// 结算一件物品。产出与删除必须一起成立：任何一路产出算不出来、落不了账，
         /// 或者物品删不掉，都整件放弃，绝不出现删了不给的中间态。
         /// </summary>
-        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule)
+        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule,
+            bool stackable)
         {
             // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
             var rate = rule.HasRate ? ReadPlayerV(rule.RateGroup, rule.RateIndex) : 0;
-            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, out var yuanbao) ||
-                !TryScaleRecyclePrice(rule.Gold, rate, out var gold) ||
-                !TryScaleRecyclePrice(rule.LingFu, rate, out var lingFu) ||
-                !TryScaleRecyclePrice(rule.Exp, rate, out var exp) ||
-                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, out var other))
+
+            // 可叠材料整堆结算，件数取 word[item+0x26]（= Dura，本仓另有 0x63F454 商人基础价
+            // 与 0x740914 背包计数两处同址判例）。0x1006BB2F 66 8B 58 26 读它，
+            // 0x1006BC07 / 0x1006BC44 / 0x1006BC76 / 0x1006BCAE / 0x1006BCD6 五路各乘一次。
+            // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
+            // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
+            var count = stackable ? item.Dura : 1;
+
+            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
+                !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
+                !TryScaleRecyclePrice(rule.LingFu, rate, count, out var lingFu) ||
+                !TryScaleRecyclePrice(rule.Exp, rate, count, out var exp) ||
+                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, count,
+                    out var other))
+                return false;
+
+            // 至少一路产出为正才允许删除：0x1006BB3B..0x1006BB57 是五连 test/cmp，
+            // 元宝 灵符 金币 其他值 经验 全部 <= 0 就 jle 0x1006BD2D 结束本件，不进删除段。
+            // 原生判的是缩放前的单价，于是 单价=1、倍率=50 这种配置会过门却只入账
+            // ⌊1*50/100⌋=0，删了不给。这里改判缩放后的金额，比原生紧一档。
+            if (yuanbao <= 0 && gold <= 0 && lingFu <= 0 && exp <= 0 && other <= 0)
                 return false;
 
             // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
             // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
             if (yuanbao > 0) return false;
-
-            // 灵符在开了信用点服务时会改走限时灵符账户，落到哪个账户无从验证，同样不回收。
-            if (lingFu > 0 && M2Share.CreditCardService?.Enabled == true) return false;
 
             // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
             if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
@@ -1701,11 +1735,17 @@ namespace GameSvr.Plugins
             return false;
         }
 
-        private static bool TryScaleRecyclePrice(int unitPrice, int rate, out int amount)
+        /// <summary>
+        /// 单价 → 实付。先按倍率缩放再乘件数，与 0x1006BBE9（缩放）后接 0x1006BC07（乘件数）
+        /// 的次序一致。原生两步都是 32 位 imul，溢出静默截断；这里放宽到 64 位并在越界时
+        /// 整件放弃，方向上只会少删不会错付。
+        /// </summary>
+        private static bool TryScaleRecyclePrice(int unitPrice, int rate, int count,
+            out int amount)
         {
             amount = 0;
             if (unitPrice <= 0) return true;
-            var scaled = rate > 0 ? (long)unitPrice * rate / 100 : unitPrice;
+            var scaled = (rate > 0 ? (long)unitPrice * rate / 100 : unitPrice) * count;
             if (scaled < 0 || scaled > int.MaxValue) return false;
             amount = (int)scaled;
             return true;
