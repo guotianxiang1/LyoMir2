@@ -3047,10 +3047,18 @@ namespace GameSvr
             IList<TDeleteItem> delList = null;
             try
             {
-                if (m_boAngryRing || m_boNoDropUseItem)
-                {
-                    return;
-                }
+                // 战神 sub_73FC70 的序言同样没有任何早退。0x73FC70..0x73FCB6：
+                //   73FC70  55 / 8B EC / 83 C4 8C          栈帧
+                //   73FC76  53 56 57                       push ebx,esi,edi
+                //   73FC79  33 D2 + 七条 mov [ebp-…],edx   七个局部清零
+                //   73FC90  8B F0                          esi := self
+                //   73FC94  55 / 68 01 00 74 00 / 64 FF 30 / 64 89 20   SEH 帧
+                //   73FCA0  33 C0 / 89 45 F4 / C6 45 FF 00 计数与红名局部清零
+                //   73FCA9  A1 AC 5F 7D 00 / 8B 00 / 3B 86 60 01 00 00
+                //   73FCB6  7D 09                          jge 0x73FCC1  ← 全函数第一条条件跳转
+                // 原先这里的 `m_boAngryRing || m_boNoDropUseItem` 早退在原生无对应，
+                // 全镜像多编码零命中（GBK / 裸 ASCII 大小写不敏感 / UTF-16LE 三路皆 0）。
+                // 按 §3.1 删除：原版死亡就是照掉装备，没有不死戒指这一说。
                 GoodItem StdItem;
                 // 人物爆率调整 patches sub_73FC70, not a runtime multiplier:
                 //   0x100B9CCC A3 BB FC 73 00 -> imm32 of 0x73FCB8 C7 45 F8 15 00 00 00 (red K)
