@@ -614,14 +614,48 @@ namespace GameSvr
                     break;
                 }
             }
-            if (result < 0)
+            // ✅ 战神字节证据 (Tier-1) — ECON-02: 价格表未命中(或表值 <= 0)时,回退价是
+            // 【ROUND(模板Price * 1.1)】,不是裸模板 Price。EA: sub_63F3B4 @0x63F40D-0x63F43F:
+            //   0063F40D  837df800        cmp   dword [ebp-8],0
+            //   0063F411  7f2f            jg    0x63F442          ; 【只有 >0】才直接用表价
+            //   0063F413  8b45fc          mov   eax,[ebp-4]
+            //   0063F416  8b401c          mov   eax,[eax+0x1c]    ; 模板
+            //   0063F41B  8a5014          mov   dl,[eax+0x14]     ; StdMode
+            //   0063F41E  8bc7            mov   eax,edi
+            //   0063F420  e8770e0000      call  0x64029C          ; 许可表 (= CheckItemType)
+            //   0063F425  84c0            test  al,al
+            //   0063F427  7419            je    0x63F442          ; 不许可 -> 保持哨兵值
+            //   0063F429  8b45fc          mov   eax,[ebp-4]
+            //   0063F42C  8b401c          mov   eax,[eax+0x1c]
+            //   0063F42F  db403c          fild  dword [eax+0x3c]  ; 【dword】有符号读,不是 word
+            //   0063F432  db2d68f46300    fld   xword [0x63F468]  ; 1.1 (10 字节 extended)
+            //   0063F438  dec9            fmulp st(1)
+            //   0063F43A  e83541dcff      call  0x403574          ; @ROUND (半偶入)
+            //   0063F43F  8945f8          mov   [ebp-8],eax
+            // 常量 @0x63F468 原始 10 字节 = cd cc cc cc cc cc cc 8c ff 3f = 1.1(exp 0x3FFF);
+            // 该地址全镜像仅 1 处引用(0x63F434),即本回退分支专用。
+            //
+            // 【无二次放大】: 表命中分支上面已 break 且【原样返回表值】,从不再乘 1.1;本回退分支
+            // 只在表值 <= 0 时进入,两条路径互斥。表内存的值本来就已经是 ROUND(Price*1.1) ——
+            // 原生建表点 sub_63EA1C @0x63EAC2-0x63EAD8 逐字为
+            //   mov eax,[edi+0x1c] / fild dword [eax+0x3c] / fld xword [0x63EB28] / fmulp /
+            //   call 0x403574 / mov [edx+4],eax
+            // (0x63EB28 亦为 1.1 extended),故 ×1.1 在原生【本就同时存在于建表点与回退点】,
+            // C# 的 EnsureItemPrice(:185) 对应前者、本处对应后者,不是重复放大。
+            // 【无 .Sav 迁移问题】: NpcSave/*.Sav 只序列化 TUserItem 记录(208 字节/条,见
+            // NativeMerchantGoodsCodec),【不含任何价格字段】;m_ItemPriceList 纯内存,每次
+            // LoadNPCData 由 EnsureGoodsPrices() 从 StdItem.Price 重建,改本处不影响存量存档。
+            //
+            // 回退条件用 <= 0 复刻 `jg`: 价格表里显式写 0 的条目,原生回落到模板价,
+            // 旧 C# 的 `result < 0` 会保留 0,使该物品因上层 `nPrice > 0` 门既不能买也不能卖。
+            if (result <= 0)
             {
                 StdItem = M2Share.UserEngine.GetStdItem(nIndex);
                 if (StdItem != null)
                 {
                     if (CheckItemType(StdItem.StdMode))
                     {
-                        result = StdItem.Price;
+                        result = HUtil32.Round(StdItem.Price * 1.1);
                     }
                 }
             }
