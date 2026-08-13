@@ -1080,6 +1080,58 @@ namespace SystemModule
         public const int CM_UPDATE_ATTENTION_COLOR = 4440;
         public const int SM_UPDATE_ATTENTION_COLOR = 4440;
 
+        // 4441/4442/4443 — single-record panel pushes of the native relation
+        // classes TFriendRelation / TAttentionRelation / TNormalBlackRelation
+        // (VMT class names read off the image at 0x6FC92C `0F 'TFriendRelation'`,
+        // 0x6FC9A8 `12 'TAttentionRelation'`, 0x6FCA28 `14 'TNormalBlackRelation'`).
+        // Each class exposes a virtual entry method (VMT slots 0x6FC928->0x6FF3FC,
+        // 0x6FC9A4->0x6FFD94, 0x6FCA24->0x700888) that emits ONE record on the
+        // +0x254 (Buf/Len) slot with Recog=0, Param=al(operation selector 0/1/2),
+        // Tag=Series=0. The records are byte-identical to the LIST replies
+        // (4430/4431/4432) already encoded by NativeRelationWireCodec.Encode:
+        //   friend    Len=0x24 {name[16],level u16@0x10,job@0x12,guild[15]@0x13,online@0x23}
+        //             0x6FF4D1 `66 BA 59 11 mov dx,0x1159` -> call [ebx+0x254]
+        //   attention Len=0x16 {name[16],level u16@0x10,job@0x12,color@0x13,online@0x14}
+        //             0x6FFE28 `66 BA 5A 11 mov dx,0x115A`
+        //   blacklist Len=0x14 {name[16],level u16@0x10,online@0x12}
+        //             0x700910 `66 BA 5B 11 mov dx,0x115B`
+        // srv_AppearTimes 4441=66, 4442=1, 4443=0.
+        // DEFERRED (BLOCKED-D5): the TFriendRelation family is a VMT-dispatched
+        // reverse-notify object (its watcher TList is at [obj+0x10]); the trigger
+        // is that object graph, not a CM arm. C# NativeRelationService is a
+        // query-on-demand MySQL store with no reverse watcher index / push. The
+        // record codec is present; the object model and trigger are NOT. Do not
+        // emit until that subsystem is ported (see docs/m_sm_d_r2_20260813.md).
+        public const int SM_RELATION_FRIEND_ENTRY = 4441;
+        public const int SM_RELATION_ATTENTION_ENTRY = 4442;
+        public const int SM_RELATION_BLACKLIST_ENTRY = 4443;
+
+        // 4444/4445 — TFriendRelation logon/logoff broadcast. For the subject
+        // player (edx), the object walks its watcher TList [this+0x10], resolves
+        // each still-online watcher via UserEngine (0x656C14) and pushes the
+        // subject's name ([player+0x106]) with Param=this[+4]. Direction inferred
+        // from the wrappers: 4444 registers the subject key first (0x6FE704 stores
+        // [+0x588]/[+0x58C] then two VMT calls) => LOGON; 4445 broadcasts then
+        // tears down (0x6FE6F8 -> 0x6FEEB8) => LOGOFF.
+        //   4444 0x6FE921 `66 BA 5C 11 mov dx,0x115C` -> call [ebx+0x250]
+        //   4445 0x6FE85D `66 BA 5D 11 mov dx,0x115D` -> call [ebx+0x250]
+        // srv_AppearTimes 4444=928, 4445=900. DEFERRED (BLOCKED-D5): same missing
+        // reverse watcher index; needs login/logout hooks over that index.
+        public const int SM_RELATION_FRIEND_LOGON = 4444;
+        public const int SM_RELATION_FRIEND_LOGOFF = 4445;
+
+        // 4446 — 元宝寄售 (YB consignment) deal-set status notify, NOT a relation
+        // packet (the prior audit mis-grouped it). Sender 0x6F75C4 reads the
+        // player's TYBDealSetInfo sub-object at [player+0x192C] (constructed at
+        // 0x6AD9B3 via 0x712820, class VMT [0x7121C8] name 'TYBDealSetInfo'):
+        //   Recog = TYBDealSetInfo[+0xC] ? word[[+0xC]+0x26] : 0   (sub_712BE4)
+        //   0x6F75E7 `66 BA 5E 11 mov dx,0x115E` -> call [ebx+0x250], no body.
+        // Dispatched from the relation/gild CM cluster arm 0x6DBB3A (same
+        // dispatcher as CM 4629). srv_AppearTimes 4446=160.
+        // DEFERRED (BLOCKED-D6): [+0x192C] TYBDealSetInfo is not modelled in C#;
+        // NativeYbDealPurchaseStateMachine is host-driven and dormant.
+        public const int SM_YBDEAL_SET_NOTIFY = 4446;
+
         // Native mail protocol backed by gamedata.mailitem/attachitem/money_order.
         public const int CM_FETCH_MAIL_LIST = 4460;
         public const int SM_FETCH_MAIL_LIST = 4460;

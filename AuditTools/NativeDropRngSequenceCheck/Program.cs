@@ -32,13 +32,13 @@ static void PinClassBounds()
     EqualSeq(Draws(Fill: 1, Std(154, 0)), Array.Empty<int>(), "pile +0x28 bare ret");
 
     // Shape 130 skips Random(80) and runs +0x08 with no extra-attr gate.
-    EqualSeq(Draws(Fill: 1, Std(15, 130)), HelmetUnknown08, "helmet shape130 +0x08");
-    EqualSeq(Draws(Fill: 1, Std(22, 130)), RingUnknown08, "ring shape130 +0x08");
-    EqualSeq(Draws(Fill: 1, Std(24, 130)), ArmRingUnknown08, "armring shape130 +0x08 after dura80");
+    EqualSeq(Draws(Fill: 1, Std(15, 130)), HelmetUnknown08(), "helmet shape130 +0x08");
+    EqualSeq(Draws(Fill: 1, Std(22, 130)), RingUnknown08(), "ring shape130 +0x08");
+    EqualSeq(Draws(Fill: 1, Std(24, 130)), ArmRingUnknown08(), "armring shape130 +0x08 after dura80");
 
-    Equal(HelmetUnknown08.Length, 49, "helmet +0x08 draw count");
-    Equal(RingUnknown08.Length, 43, "ring +0x08 draw count");
-    Equal(ArmRingUnknown08.Length, 48, "armring +0x08 draw count (80 + 47)");
+    Equal(HelmetUnknown08().Length, 49, "helmet +0x08 draw count");
+    Equal(RingUnknown08().Length, 43, "ring +0x08 draw count");
+    Equal(ArmRingUnknown08().Length, 48, "armring +0x08 draw count (80 + 47)");
 }
 
 static void PinJewelTableWrite()
@@ -171,7 +171,7 @@ static int[] Repeat(int bound, int n)
 
 static int[] Concat(params int[][] parts) => parts.SelectMany(x => x).ToArray();
 
-static readonly int[] HelmetUnknown08 = Concat(
+static int[] HelmetUnknown08() => Concat(
     Repeat(3, 4), Repeat(8, 4), Repeat(20, 4),
     Repeat(3, 4), Repeat(8, 4), Repeat(20, 4),
     Repeat(15, 3), Repeat(30, 3),
@@ -180,14 +180,14 @@ static readonly int[] HelmetUnknown08 = Concat(
     Repeat(30, 6),
     new[] { 30 });
 
-static readonly int[] RingUnknown08 = Concat(
+static int[] RingUnknown08() => Concat(
     Repeat(4, 3), Repeat(8, 3), Repeat(20, 6),
     Repeat(4, 3), Repeat(8, 3), Repeat(20, 6),
     Repeat(4, 3), Repeat(8, 3), Repeat(20, 6),
     Repeat(30, 6),
     new[] { 30 });
 
-static readonly int[] ArmRingUnknown08 = Concat(
+static int[] ArmRingUnknown08() => Concat(
     new[] { 80 },
     Repeat(5, 3), Repeat(20, 5),
     Repeat(5, 3), Repeat(20, 5),
