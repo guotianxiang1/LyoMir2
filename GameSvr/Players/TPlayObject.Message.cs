@@ -2446,7 +2446,20 @@ namespace GameSvr
                     // reaching a send slot. srv_AppearTimes.ini 764=0.
                     break;
                 case Grobal2.RM_MYSTATUS:
-                    SendDefMessage(Grobal2.SM_MYSTATUS, 0, (short)GetMyStatus(), 0, 0, "");
+                    // Native has exactly one ident-708 emitter, sub_6B6BEC, and it puts the
+                    // accumulated zone bitmask in nRecog with Param/Tag/Series all zero:
+                    //   006B6BF4  33 F6                 xor esi,esi
+                    //   006B6C02  83 CE 01              or  esi,1        ; Envir[+0x5D]
+                    //   006B6C0B  83 CE 02              or  esi,2        ; Envir[+0x5C]
+                    //   006B6C4E  83 CE 08              or  esi,8
+                    //   006B6C7E  83 CE 20              or  esi,0x20
+                    //   006B6C81  6A 00 x4              ; Param=Tag=Series=0, sMsg=nil
+                    //   006B6C89  8B CE                 mov ecx,esi      ; nRecog = bitmask
+                    //   006B6C8B  66 BA C4 02           mov dx,0x2C4
+                    //   006B6C93  FF 96 50 02 00 00     call [esi+0x250]
+                    // RefUserState() is that function. Sending GetMyStatus() (hunger, 0..4)
+                    // in Param instead made the client read hunger as zone bits.
+                    RefUserState();
                     break;
                 case Grobal2.RM_MENU_OK:
                     SendDefMessage(Grobal2.SM_MENU_OK, ProcessMsg.nParam1, 0, 0, 0, ProcessMsg.sMsg);
