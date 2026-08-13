@@ -280,8 +280,15 @@ static Task TestInternalPacket77Frames()
     const int maximumFrameLength = 0x8000;
     var oversizedHeader = new byte[InternalPacket77.HEADER_SIZE];
     BitConverter.TryWriteBytes(oversizedHeader.AsSpan(0, 4), InternalPacket77.MAGIC);
-    BitConverter.TryWriteBytes(oversizedHeader.AsSpan(12, 2),
-        (ushort)(maximumFrameLength + 1));
+    // BodyLen lives at +0x0E, not +0x0C (+0x0C is Cmd). Native:
+    //   0x5F6679 66 81 78 0E 00 30  cmp word [eax+0x0E],0x3000
+    //   0x63A674 8D 46 10           lea eax,[esi+0x10]
+    //   0x63A677 0F B7 57 0E        movzx edx,word [edi+0x0E]
+    //   0x63A67B 03 C2              add eax,edx        ; total = 0x10 + BodyLen
+    // Writing the oversize at +0x0C only set Cmd and left BodyLen = 0, so the header
+    // parsed as a perfectly valid 16-byte frame and the bound was never exercised.
+    BitConverter.TryWriteBytes(oversizedHeader.AsSpan(14, 2),
+        (ushort)(maximumFrameLength + 1 - InternalPacket77.HEADER_SIZE));
     var trailingAck = InternalPacket77.Ack(0x76543210, 12, 0x0C).ToBytes();
     var invalidThenAck = oversizedHeader.Concat(trailingAck).ToArray();
     var frameBounded = new InternalPacket77FrameParser(64 * 1024, maximumFrameLength);
@@ -474,6 +481,29 @@ static Task TestNativeHumanBind()
         "legacy zero-storage native decode: " + legacyStorageError);
     Equal(48, legacyZeroStorage.Data.StorageSpaceCount,
         "legacy zero storage capacity compatibility");
+    // The container is constructed with 48 slots and the load only overrides that when the
+    // stored word is STRICTLY greater, so 24/48 both come back as 48 and 49 comes back raw:
+    //   0x6AD8EB C7 46 08 30 00 00 00  mov dword [esi+8],0x30   ; ctor = 48
+    //   0x6B0CBC 66 8B 80 16 05 00 00  mov ax,[eax+0x516]       ; == record 0x50E
+    //   0x6B0CC3 66 83 F8 30           cmp ax,0x30
+    //   0x6B0CC7 76 0F                 jbe 0x6B0CD8             ; <= 48 -> keep 48
+    //   0x6B0CD5 89 42 08              mov [container+8],eax
+    // (save side: 0x6B112B 66 8B 40 08 mov ax,[eax+8] / 0x6B112F 66 89 86 0E 05 00 00
+    //  mov [esi+0x50E],ax — the load base is 8 bytes below the save base.)
+    foreach (var (stored, expectedSlots) in new[] { (24, 48), (48, 48), (49, 49), (192, 192) })
+    {
+        var storageBlob = new byte[NativeHumanDataCodec.DataRecordSize + 8];
+        BinaryPrimitives.WriteInt32LittleEndian(
+            storageBlob.AsSpan(4, 4), NativeHumanDataCodec.DataRecordSize);
+        storageBlob[8 + 0x3E] = 1;
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            storageBlob.AsSpan(8 + 0x050E, 2), (ushort)stored);
+        Check(NativeHumanDataCodec.TryDecode(storageBlob, null,
+                out var storageInfo, out var storageError),
+            $"stored storage capacity {stored} native decode: {storageError}");
+        Equal(expectedSlots, storageInfo.Data.StorageSpaceCount,
+            $"stored storage capacity {stored} follows the native jbe 0x30 floor");
+    }
 
     var bound = new THumDataInfo();
     bound.Data.Abil.HP = 240573;
@@ -492,7 +522,8 @@ static Task TestNativeHumanBind()
     bound.Data.wSecHeroPracticeLevel = 0xC3D4;
     bound.Data.nLingFu = 0x12345678;
     bound.Data.nUsedLingFu = 0x23456789;
-    bound.Data.StorageSpaceCount = 24;
+    // Above the native floor, so the roundtrip really does carry the stored word.
+    bound.Data.StorageSpaceCount = 96;
     var shieldNativeRecord = Enumerable.Range(0, NativeHumanDataCodec.ItemRecordSize)
         .Select(i => (byte)(i * 17 + 3))
         .ToArray();
@@ -626,8 +657,9 @@ static Task TestNativeHumanBind()
         "native LingFu raw +0xF0 (obj+0xBD8; @0x6B128E)");
     Equal(bound.Data.nUsedLingFu, BitConverter.ToInt32(bound.NativeData, 0x00F4),
         "native used LingFu raw +0xF4 (obj+0xBDC; @0x6B129A)");
-    Equal((ushort)24, BitConverter.ToUInt16(bound.NativeData, 0x050E),
-        "native 24-slot storage capacity raw +0x50E");
+    Equal((ushort)bound.Data.StorageSpaceCount,
+        BitConverter.ToUInt16(bound.NativeData, 0x050E),
+        "native storage capacity raw +0x50E (0x6B112F mov [esi+0x50E],ax)");
     Equal(bound.Data.Abil.HP, BitConverter.ToInt32(bound.NativeData, 0x48),
         "native 32-bit HP raw +0x48");
     Equal(bound.Data.Abil.MP, BitConverter.ToInt32(bound.NativeData, 0x4C),
@@ -677,8 +709,8 @@ static Task TestNativeHumanBind()
         "native LingFu roundtrip");
     Equal(bound.Data.nUsedLingFu, roundTrip.Data.nUsedLingFu,
         "native used LingFu roundtrip");
-    Equal(24, roundTrip.Data.StorageSpaceCount,
-        "native 24-slot storage capacity roundtrip");
+    Equal(bound.Data.StorageSpaceCount, roundTrip.Data.StorageSpaceCount,
+        "native storage capacity roundtrip");
     Equal(bound.Data.Abil.HP, roundTrip.Data.Abil.HP,
         "native 32-bit HP roundtrip");
     Equal(bound.Data.Abil.MP, roundTrip.Data.Abil.MP,
@@ -759,12 +791,52 @@ static Task TestNativeHumanBind()
     Check(YanshenItemSidecarCodec.TryApply(Array.Empty<byte>(), roundTrip.Data.HumItems,
             roundTrip.Data.BagItems, roundTrip.Data.StorageItems, out error),
         "clear eye sidecar fields: " + error);
+    Check(!YanshenItemSidecarCodec.HasExtensionData(roundTrip.Data.BagItems[0]),
+        "clearing the eye sidecar must empty the in-memory item");
+    Check(YanshenItemSidecarCodec.TryEncode(roundTrip.Data.HumItems,
+              roundTrip.Data.BagItems, roundTrip.Data.StorageItems,
+              out var clearedSidecar, out error) && clearedSidecar.Length == 0,
+        "cleared items must not produce an eye sidecar section: " + error);
     Check(NativeHumanDataCodec.TryEncode(roundTrip, out var clearedBlob,
             out var clearedScriptBlob, out error), "remove eye sidecar section: " + error);
     Check(NativeHumanDataCodec.TryDecode(clearedBlob, clearedScriptBlob,
             out var clearedRoundTrip, out error), "decode removed eye sidecar: " + error);
-    Check(!YanshenItemSidecarCodec.HasExtensionData(clearedRoundTrip.Data.BagItems[0]),
-        "removed eye sidecar must not restore stale fields");
+    var clearedBag = clearedRoundTrip.Data.BagItems[0];
+    // Everything YanshenNativeItemLayout.Pack rewrites unconditionally must come back
+    // exactly as the wipe left it — a stale 0x79 section resurfacing here is the bug this
+    // guards.
+    Equal(0, clearedBag.ys1, "removed eye sidecar restored a stale ys1");
+    Check(new byte[]
+    {
+        clearedBag.ys2, clearedBag.ys3, clearedBag.ys4, clearedBag.ys5,
+        clearedBag.ys6, clearedBag.ys7, clearedBag.ys8, clearedBag.ys9,
+        clearedBag.ys10, clearedBag.ys11, clearedBag.ys12, clearedBag.ys13,
+        clearedBag.ys14, clearedBag.ys15, clearedBag.ys16, clearedBag.ys17
+    }.All(value => value == 0), "removed eye sidecar restored stale ys2-ys17");
+    Check(new[]
+    {
+        clearedBag.jp1, clearedBag.jp2, clearedBag.jp3,
+        clearedBag.jp4, clearedBag.jp5, clearedBag.jp6
+    }.All(value => value == 0), "removed eye sidecar restored stale jp1-jp6");
+    // The origin block is a different matter: it is not re-derivable, and 战神 carries all
+    // 208 item bytes verbatim —
+    //   SAVE 0x6B170F 8D 70 20 lea esi,[eax+0x20] / 0x6B1712 B9 34 00 00 00 mov ecx,0x34
+    //        0x6B1717 F3 A5 rep movsd     (0x34 dwords = 208, 48-slot loop 0x6B171B cmp edi,0x30)
+    //   LOAD 0x74DB3A 8D 7B 20            / 0x74DB3D B9 34 00 00 00 / 0x74DB42 F3 A5
+    // while ScriptData type 0x79 is not a native section at all
+    //   0x6E4510 83 F8 08 cmp eax,8 / 0x6E4513 0F 87 3D 03 00 00 ja 0x6E4856
+    // (the jump table at 0x6E4520 only covers types 0..8), i.e. the sidecar is a C#-side
+    // migration overlay, never the authority. So dropping the overlay does NOT erase the
+    // carried origin bytes — but it must not let them drift either: another save/load has
+    // to be a fixed point. (What the record can represent is pinned by the sidecar
+    // roundtrip above; the record cannot hold a drop origin and a custom description at
+    // the same time, item+0x74 selects one branch.)
+    Check(NativeHumanDataCodec.TryEncode(clearedRoundTrip, out var stableBlob,
+            out var stableScriptBlob, out error), "re-encode cleared record: " + error);
+    Check(NativeHumanDataCodec.TryDecode(stableBlob, stableScriptBlob,
+            out var stableRoundTrip, out error), "re-decode cleared record: " + error);
+    AssertYanshenItem(clearedBag, stableRoundTrip.Data.BagItems[0],
+        "carried eye origin is a save/load fixed point without the sidecar");
     return Task.CompletedTask;
 }
 
