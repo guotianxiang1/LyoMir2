@@ -5,9 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <OutputPath>..\..\..\Build\AuditTools\NativeGeneralMagicCarriersCompatCheck\</OutputPath>
-  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\GameSvr\GameSvr.csproj" />
   </ItemGroup>
