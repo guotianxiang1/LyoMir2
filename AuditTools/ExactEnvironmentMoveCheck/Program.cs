@@ -15,6 +15,14 @@ M2Share.g_MonSayMsgList = new Dictionary<string, IList<TMonSayMsg>>();
 M2Share.MapManager = new MapManager();
 M2Share.nServerIndex = 0;
 
+// MOVE-52 - both space-move arms load the internal idents as immediates, so a
+// teleport that takes the default has to queue them too, not the legacy 8097/8098:
+//   006BD3AA  66 B9 85 27  mov cx, 0x2785   ; 10117 -> 006BD3B2 call 0x765E68
+//   006BD3D3  66 B9 86 27  mov cx, 0x2786   ; 10118 -> 006BD3DB call 0x765F6C
+// and the cross-map arm repeats them at 0x6BD51B / 0x6BD544.
+Equal(10117, Grobal2.RM_NATIVE_CLEAROBJECTS, "0x6BD3AA mov cx,0x2785");
+Equal(10118, Grobal2.RM_NATIVE_CHANGEMAP, "0x6BD3D3 mov cx,0x2786");
+
 var exactMove = typeof(TBaseObject).GetMethod("TrySpaceMoveToEnvironment",
     BindingFlags.Instance | BindingFlags.NonPublic)!;
 var publicSpaceMove = typeof(TBaseObject).GetMethod("SpaceMove",
@@ -65,7 +73,7 @@ Equal(exactEnvironment.m_sMapFileName, slave.m_sMapFileName,
 Assert(slave.m_boAddToMaped && !slave.m_boDelFormMaped,
     "exact move target registration flags");
 AssertMessageSequence(slave, slaveMessageStart,
-    Grobal2.RM_CLEAROBJECTS, Grobal2.RM_CHANGEMAP,
+    Grobal2.RM_NATIVE_CLEAROBJECTS, Grobal2.RM_NATIVE_CHANGEMAP,
     Grobal2.RM_SPACEMOVE_SHOW2);
 Equal(exactEnvironment.m_sMapFileName,
     slave.m_MsgList[slaveMessageStart + 1].Buff,
@@ -86,7 +94,7 @@ Assert(registeredEnvironment.CanWalk(wrapperActor.m_nCurrX,
         wrapperActor.m_nCurrY, true),
     "string SpaceMove did not use the existing random-position resolver");
 AssertMessageSequence(wrapperActor, wrapperMessageStart,
-    Grobal2.RM_CLEAROBJECTS, Grobal2.RM_CHANGEMAP,
+    Grobal2.RM_NATIVE_CLEAROBJECTS, Grobal2.RM_NATIVE_CHANGEMAP,
     Grobal2.RM_SPACEMOVE_SHOW);
 
 var blockedSource = NewEnvironment("ExactMoveBlockedSource", "blocked-source", 0);
@@ -199,7 +207,8 @@ Assert(player.m_boAddToMaped && !player.m_boDelFormMaped,
     "player target registration flags");
 
 Console.WriteLine(
-    "ExactEnvironmentMoveCheck PASS exact-reference=ok transaction=ok messages=ordered presence=ok");
+    "ExactEnvironmentMoveCheck PASS exact-reference=ok transaction=ok "
+    + "messages=ordered+native-10117/10118 presence=ok");
 return;
 
 static bool InvokeExact(MethodInfo method, TBaseObject actor,

@@ -2172,9 +2172,13 @@ static void CheckSourceContracts()
 
     var baseActor = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
         "Actors", "TBaseObject.cs")));
+    // MOVE-52: 0x6BD3AA and 0x6BD3D3 load 0x2785/0x2786 unconditionally, so the pair
+    // is the default for every teleport, not an opt-in for ExecuteNativeUserMove.
+    // ExactEnvironmentMoveCheck and DynRoomMasterRelocationCheck pin the queued
+    // sequence a default-argument caller actually gets; this is the signature tripwire.
     Contains(baseActor,
-        "boolcoordinatesAlreadyResolved=false,booluseNativeInternalMessages=false)",
-        "UserMove resolved-coordinate move controls");
+        "boolcoordinatesAlreadyResolved=false,booluseNativeInternalMessages=true)",
+        "space-move internal idents defaulted away from the native 10117/10118 pair");
     Contains(baseActor,
         "if(!coordinatesAlreadyResolved&&!SpaceMove_GetRandXY(targetEnvironment,refm_nCurrX,refm_nCurrY))returnfalse;",
         "UserMove resolved coordinates skip legacy resolver");
