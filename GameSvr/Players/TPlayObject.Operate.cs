@@ -2356,6 +2356,19 @@ namespace GameSvr
                     
                     if (merchant != null && merchant.m_boStorage && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
                     {
+                        // TRADE-42: 战神 sub_6C2A34 @0x6C2B34 `mov eax,esi` / 0x6C2B36
+                        // `E8 25 15 0C 00 call 0x784060` / 0x6C2B3B `84 C0 test al,al` /
+                        // 0x6C2B3D `0F 85 B1 01 00 00 jne 0x6C2CF4`.  sub_784060 is
+                        // `8B 40 1C mov eax,[eax+0x1C]` / `F6 40 02 80 test byte [eax+2],0x80`
+                        // / `0F 95 C0 setne al` — i.e. StdItem byte[+2] bit7, the low byte of
+                        // NativeReserved02, so the mask is 0x0080.  0x6C2CF4 is the shared
+                        // failure exit: bo19 stays false and SM_STORAGE_FAIL (dx=0x2BF) goes out.
+                        // Native runs this after the NPC gate and before the container switch.
+                        var storeStd = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        if (storeStd != null && (storeStd.NativeReserved02 & 0x0080) != 0)
+                        {
+                            break;
+                        }
                         if (m_StorageItemList.Count < Math.Clamp(m_nStorageSpaceCount,
                                 MIN_STORAGE_ITEM_COUNT, MAX_STORAGE_ITEM_COUNT))
                         {
