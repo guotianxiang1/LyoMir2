@@ -42,10 +42,35 @@
 
 ## 4. 已建立的分析方法（勿重复造轮子）
 
-- **trampoline 安装器 ABI**：两个 builder `0x10032CC0` / `0x10032FD0`（另有裸 memcpy
-  `0x10033340`）。模板是「一 dword 装一字节」数组；`0xE8`/`0xE9` 元素后紧跟 `>0xFF` 的
-  dword 时由 `0x10032DE2` 改写成 rel32；末元素的 rel32 由调用方补。详见
-  `docs/ys_aclass_surgical_20260814.md`。
+- **trampoline 安装器 ABI**：共三个 builder，**调用点实测分布如下**（`E8` rel32 全镜像穷举）：
+
+  | builder | VA | 调用点数 | 形态 |
+  |---|---|---|---|
+  | 模板 A | `0x10032CC0` | 71 | 「一 dword 装一字节」数组 |
+  | 模板 B | `0x10032FD0` | 30 | 同上 |
+  | **裸 memcpy C** | **`0x10033340`** | **306** | 4 参数，非模板 |
+
+  三者合计 **407**，与补丁站点总数 407 完全吻合 —— 即**每个站点恰好经由其中一个 builder**。
+
+  **注意：C 才是主力（306/407 = 75%），A/B 合计只占 25%。** 早期文档把 C 写成「另有」的
+  附注，导致 stub 还原器只实现了模板走法，在 C 的站点上一律报 "cannot align"。
+  典型现场：`0x100CF496`（`刀刀切割`）`call 0x10033340`，紧随其后
+  `lea ecx,[ebx+0x158]` / `push 0x102C6CC4` / `call 0x100F018C` 即状态标签调用。
+
+  模板 A/B：`0xE8`/`0xE9` 元素后紧跟 `>0xFF` 的 dword 时由 `0x10032DE2` 改写成 rel32；
+  末元素的 rel32 由调用方补。详见 `docs/ys_aclass_surgical_20260814.md`。
+
+  裸 memcpy C 的序言（`0x10033340..0x100333C5`，反汇编实录）：
+  - 取 4 个栈参：`[ebp+8]→ebx`、`[ebp+0xC]→edi`、`[ebp+0x10]→[ebp-0x1C]`、`[ebp+0x14]→[ebp-0x20]`
+  - 两道前置闸：`call 0x100329F0` 后 `cmp eax,0x64 / je` 跳过；`push 1 / call 0x11513568 /
+    test al,al / jne` 跳过
+  - 改页保护：`lea eax,[edi+1]` → `push &oldProtect / push 0x40 / push &addr /
+    call 0x10032A50`（`0x40` = PAGE_EXECUTE_READWRITE）
+  - 长度门：`cmp [ebp-0x1C],esi`(esi=0) / `jbe` 跳过
+  - 真正的拷贝：`push edi / push ebx / push [ebp-0x20] / call 0x10223FD0`
+
+  由 `lea eax,[edi+1]`（跳过 1 字节）推测 C 多用于**改写既有 `E8`/`E9` 的 rel32 操作数**
+  而非整段贴码 —— 此为推断，落地前需按站点复核，勿直接当结论用。
 - **状态标签归属法**：每条 apply/revert 臂以
   `call 0x100F018C(labelObject, "<键名>(已启动)|(未启动)")` 收尾，从安装点向前走到下一个
   标签即可把补丁站点归属到 GUI 键。全量 407 站点 → 107 特性，见
