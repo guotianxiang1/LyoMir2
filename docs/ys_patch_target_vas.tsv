@@ -1,0 +1,215 @@
+key	source	n_sites	kinds	target_vas	legacy_target_vas	delta
+AddLimLF函数修改	label-atlas	2	memcpy tramp1	0x6de8e3	0x6de8e3	-
+BB杀怪触发	label-atlas	2	memcpy tramp1	0x71f467	0x71f467	-
+BB死亡触发	label-atlas	2	memcpy tramp1	0x76631c	0x76631c	-
+IncActivePoint函数修改	label-atlas	2	memcpy tramp1	0x6f91ba	0x6f91ba	-
+ServerSay函数	label-atlas	2	memcpy	0x728913	0x728913	-
+give极品	label-atlas	2	memcpy tramp1	0x6c89ae	0x6c89ae	-
+上线触发	label-atlas	2	memcpy tramp1	0x6548bd	0x6548bd	-
+下线宝宝死亡	label-atlas	2	memcpy	0x6b5ba1	0x6b5ba1	-
+中毒时间上限	label-atlas	4	memcpy tramp2	0x76e5ce 0x76e675	0x76e5ce 0x76e675	-
+中毒飘血	label-atlas	2	memcpy tramp1	0x767e10	0x767e10	-
+人物爆率调整	legacy-only	0	-		0x73fcbb 0x73ff6c	-
+修复卡防御	label-atlas	2	memcpy	0x767910	0x767910	-
+免毒符	label-atlas	24	memcpy	0x6ed945 0x6ed9d1 0x6ed9eb 0x6eda85 0x6edab1 0x6edadf 0x6edb11 0x6edb3e 0x6edb65 0x6edb8c 0x6edc58 0x6ede1d	0x6ed945 0x6ed9d1 0x6ed9eb 0x6eda85 0x6edab1 0x6edadf 0x6edb11 0x6edb3e 0x6edb65 0x6edb8c 0x6edc58 0x6ede1d	-
+全屏拾取	label-atlas	8	memcpy tramp1	0x6b795c 0x6b796b 0x6b7a25 0x6b7a2f	0x6b795c 0x6b796b 0x6b7a25 0x6b7a2f	-
+关闭摆摊	label-atlas	2	memcpy	0x6e7c38	0x6e7c38	-
+冰咆哮主属性切换	label-atlas	4	memcpy tramp1	0x76f2cb	0x76f2cb	-
+冰咆哮范围	label-atlas	2	memcpy tramp1	0x76f300	0x76f300	-
+刀刀切割	label-atlas	2	memcpy tramp1	0x767bae	0x767bae	-
+删除技能不提示	label-atlas	2	memcpy	0x6c7797	0x6c7797	-
+刺杀剑术	label-atlas	1	memcpy	0x771c25	0x771c25 0x771c50 0x771d24	-
+升级技能不提示	label-atlas	2	memcpy	0x73f5ee	0x73f5ee	-
+半月带毒	label-atlas	2	memcpy tramp2	0x7720fb	0x7720fb	-
+半月弯刀	legacy-only	0	-		0x772046 0x772148	-
+召唤神兽	label-atlas	4	memcpy	0x76ee99 0x76eeec	0x76ee99 0x76eeec	-
+召唤神兽触发	label-atlas	2	memcpy tramp2	0x6edc5e	0x6edc5e	-
+召唤骷髅	label-atlas	2	memcpy	0x76ee1f	0x76ee1f	-
+召唤骷髅触发	label-atlas	2	memcpy tramp2	0x6edb44	0x6edb44	-
+嗜血术倍数	label-atlas	2	memcpy tramp1	0x76fc2b	0x76fc2b	-
+噬魂沼泽绿毒修复	label-atlas	2	memcpy tramp2	0x691e2e	0x691e2e	-
+回城按钮触发	label-atlas	2	memcpy tramp2	0x6dbb80	0x6dbb80	-
+土城摆摊	label-atlas	6	memcpy	0x6e7930 0x6e7c1c 0x6e7c5f	0x6e7930 0x6e7c1c 0x6e7c5f	-
+地狱雷光可换主属性	label-atlas	2	memcpy tramp1	0x76f5fb	0x76f5fb	-
+地狱雷光系数	label-atlas	2	memcpy tramp1	0x76f61a	0x76f61a	-
+地狱雷光范围	label-atlas	2	memcpy tramp1	0x76f63d	0x76f63d	-
+地面物品消失时间	label-atlas	2	memcpy	0x77a3ff	0x77a3ff	-
+基本剑术	label-atlas	2	memcpy	0x76af96 0x76afa9	0x76af96 0x76afa9	-
+复活戒指改cd	label-atlas	6	memcpy tramp1	0x73c47a 0x73c4f2 0x743751	0x73c47a 0x73c4f2 0x743751	-
+复活戒指概率	label-atlas	2	memcpy tramp1	0x74373a	0x74373a	-
+复活戒指重设	legacy-only	0	-		0x73c480 0x743758	-
+复活触发脚本	label-atlas	2	memcpy tramp1	0x73c484	0x73c484	-
+头盔属性几率_准确_值	extreme-map	0	-	0x7612d2	0x7612d2	-
+头盔属性几率_攻击_值	extreme-map	0	-	0x761237	0x761237	-
+头盔属性几率_攻速_值	extreme-map	0	-	0x7612af	0x7612af	-
+头盔属性几率_道术_值	extreme-map	0	-	0x76128c	0x76128c	-
+头盔属性几率_魔法_值	extreme-map	0	-	0x761269	0x761269	-
+头盔最随机性_极品_值	extreme-map	0	-	0x7611fb	0x7611fb	-
+头盔最高点数_准确_值	extreme-map	0	-	0x7612c6	0x7612c6	-
+头盔最高点数_攻击_值	extreme-map	0	-	0x76122b	0x76122b	-
+头盔最高点数_攻速_值	extreme-map	0	-	0x7612a3	0x7612a3	-
+头盔最高点数_道术_值	extreme-map	0	-	0x761280	0x761280	-
+头盔最高点数_魔法_值	extreme-map	0	-	0x76125d	0x76125d	-
+头盔点数几率_准确_值	extreme-map	0	-	0x7612c1	0x7612c1	-
+头盔点数几率_攻击_值	extreme-map	0	-	0x761226	0x761226	-
+头盔点数几率_攻速_值	extreme-map	0	-	0x76129e	0x76129e	-
+头盔点数几率_道术_值	extreme-map	0	-	0x76127b	0x76127b	-
+头盔点数几率_魔法_值	extreme-map	0	-	0x761258	0x761258	-
+安全区禁止丢物	label-atlas	2	memcpy tramp2	0x73cc98	0x73cc98	-
+屏蔽元宝增减信息	label-atlas	16	memcpy	0x6f8288 0x6f82c5 0x6f8b25 0x6f8b62 0x6f8bcf 0x6f8c02 0x6f9002 0x6f9047	0x6f8288 0x6f82c5 0x6f8b25 0x6f8b62 0x6f8bcf 0x6f8c02 0x6f9002 0x6f9047	-
+屏蔽元宝数据库日志	label-atlas	2	memcpy	0x70f6dc	0x70f6dc	-
+屏蔽发言频繁禁言功能	label-atlas	4	memcpy	0x6bb56a 0x6bb579	0x6bb56a 0x6bb579	-
+屏蔽属性提升提示	label-atlas	62	memcpy	0x741a21 0x741a5c 0x741a97 0x741ad2 0x741b0d 0x741b48 0x741b83 0x741bbe 0x741bf9 0x741c34 0x741c6f 0x741caa 0x741ce5 0x741d20 0x741d5b 0x741dfd 0x74281d 0x742835 0x74284d 0x742865 0x74287d 0x742895 0x7428ad 0x7428c5 0x7428dd 0x74290d 0x742925 0x74293d 0x742955 0x74296d 0x74298c	0x741a21 0x741a5c 0x741a97 0x741ad2 0x741b0d 0x741b48 0x741b83 0x741bbe 0x741bf9 0x741c34 0x741c6f 0x741caa 0x741ce5 0x741d20 0x741d5b 0x741dfd 0x74281d 0x742835 0x74284d 0x742865 0x74287d 0x742895 0x7428ad 0x7428c5 0x7428dd 0x74290d 0x742925 0x74293d 0x742955 0x74296d 0x74298c	-
+屏蔽排行榜	label-atlas	2	memcpy	0x6cba88	0x6cba88	-
+屏蔽自动绑定	label-atlas	8	memcpy	0x74dc57 0x74dd59 0x74ddc3 0x74ddef	0x74dc57 0x74dd59 0x74ddc3 0x74ddef	-
+心灵启示触发	label-atlas	2	memcpy tramp2	0x6edc2b	0x6edc2b	-
+戒指属性几率_准确_值	extreme-map	0	-	0x761dba	0x761dba	-
+戒指属性几率_攻击_值	extreme-map	0	-	0x761d2e	0x761d2e	-
+戒指属性几率_攻速_值	extreme-map	0	-	0x761d97	0x761d97	-
+戒指属性几率_道术_值	extreme-map	0	-	0x761d74	0x761d74	-
+戒指属性几率_魔法_值	extreme-map	0	-	0x761d51	0x761d51	-
+戒指最随机性_极品_值	extreme-map	0	-	0x761cf0	0x761cf0	-
+戒指最高点数_准确_值	extreme-map	0	-	0x761dae	0x761dae	-
+戒指最高点数_攻击_值	extreme-map	0	-	0x761d22	0x761d22	-
+戒指最高点数_攻速_值	extreme-map	0	-	0x761d8b	0x761d8b	-
+戒指最高点数_道术_值	extreme-map	0	-	0x761d68	0x761d68	-
+戒指最高点数_魔法_值	extreme-map	0	-	0x761d45	0x761d45	-
+戒指点数几率_准确_值	extreme-map	0	-	0x761da9	0x761da9	-
+戒指点数几率_攻击_值	extreme-map	0	-	0x761d1d	0x761d1d	-
+戒指点数几率_攻速_值	extreme-map	0	-	0x761d86	0x761d86	-
+戒指点数几率_道术_值	extreme-map	0	-	0x761d63	0x761d63	-
+戒指点数几率_魔法_值	extreme-map	0	-	0x761d40	0x761d40	-
+战士合击	legacy-only	0	-		0x7d341c 0x7d3420	-
+手镯属性几率_准确_值	extreme-map	0	-	0x7626b2	0x7626b2	-
+手镯属性几率_攻击_值	extreme-map	0	-	0x762626	0x762626	-
+手镯属性几率_攻速_值	extreme-map	0	-	0x76268f	0x76268f	-
+手镯属性几率_道术_值	extreme-map	0	-	0x76266c	0x76266c	-
+手镯属性几率_魔法_值	extreme-map	0	-	0x762649	0x762649	-
+手镯最随机性_极品_值	extreme-map	0	-	0x7625e8	0x7625e8	-
+手镯最高点数_准确_值	extreme-map	0	-	0x7626a6	0x7626a6	-
+手镯最高点数_攻击_值	extreme-map	0	-	0x76261a	0x76261a	-
+手镯最高点数_攻速_值	extreme-map	0	-	0x762683	0x762683	-
+手镯最高点数_道术_值	extreme-map	0	-	0x762660	0x762660	-
+手镯最高点数_魔法_值	extreme-map	0	-	0x76263d	0x76263d	-
+手镯点数几率_准确_值	extreme-map	0	-	0x7626a1	0x7626a1	-
+手镯点数几率_攻击_值	extreme-map	0	-	0x762615	0x762615	-
+手镯点数几率_攻速_值	extreme-map	0	-	0x76267e	0x76267e	-
+手镯点数几率_道术_值	extreme-map	0	-	0x76265b	0x76265b	-
+手镯点数几率_魔法_值	extreme-map	0	-	0x762638	0x762638	-
+指定地图编号摆摊	label-atlas	7	memcpy	0x6e7930 0x6e7934 0x6e7c1c 0x6e7c5f	0x6e7930 0x6e7934 0x6e7c1c 0x6e7c5f	-
+挖矿触发	label-atlas	2	memcpy tramp2	0x6ec111	0x6ec111	-
+捡物触发	label-atlas	2	memcpy tramp1	0x6b770c	0x6b770c	-
+摆摊穿人	label-atlas	2	memcpy	0x77931d	0x77931d	-
+攻击反伤	label-atlas	2	memcpy tramp1	0x767bb4	0x767bb4	-
+攻击触发	label-atlas	2	memcpy tramp1	0x76e35d	0x76e35d	-
+攻城修改	legacy-only	0	-		0x65bc09 0x65be2c 0x65c3b1	-
+攻杀剑术	legacy-only	0	-		0x76b02d	-
+攻沙脚本控制	label-atlas	6	memcpy	0x65c6b6 0x65c76d 0x65c785	0x65c6b6 0x65c76d 0x65c785	-
+新倍攻和暴击	label-atlas	2	memcpy tramp1	0x76c88b	0x76c88b	-
+新穿戴触发	label-atlas	4	memcpy tramp1	0x75ea37 0x75f085	0x75ea37 0x75f085	-
+施毒术	label-atlas	1	memcpy	0x76e599	0x76e599	-
+无极真气	legacy-only	0	-		0x74587c	-
+武器属性几率_准确_值	extreme-map	0	-	0x7609d8	0x7609d8	-
+武器属性几率_攻击_值	extreme-map	0	-	0x760920	0x760920	-
+武器属性几率_攻速_值	extreme-map	0	-	0x76098f	0x76098f	-
+武器属性几率_道术_值	extreme-map	0	-	0x76096a	0x76096a	-
+武器属性几率_魔法_值	extreme-map	0	-	0x760945	0x760945	-
+武器最随机性_极品_值	extreme-map	0	-	0x7608f0	0x7608f0	-
+武器最高点数_准确_值	extreme-map	0	-	0x7609cc	0x7609cc	-
+武器最高点数_攻击_值	extreme-map	0	-	0x760914	0x760914	-
+武器最高点数_攻速_值	extreme-map	0	-	0x760983	0x760983	-
+武器最高点数_道术_值	extreme-map	0	-	0x76095e	0x76095e	-
+武器最高点数_魔法_值	extreme-map	0	-	0x760939	0x760939	-
+武器点数几率_准确_值	extreme-map	0	-	0x7609c7	0x7609c7	-
+武器点数几率_攻击_值	extreme-map	0	-	0x76090f	0x76090f	-
+武器点数几率_攻速_值	extreme-map	0	-	0x76097e	0x76097e	-
+武器点数几率_道术_值	extreme-map	0	-	0x760959	0x760959	-
+武器点数几率_魔法_值	extreme-map	0	-	0x760934	0x760934	-
+武器绿毒	label-atlas	2	memcpy tramp2	0x76e2bc	0x76e2bc	-
+死亡触发	label-atlas	2	memcpy tramp2	0x6c09b5	0x6c09b5	-
+永久属性	label-atlas	24	memcpy tramp1	0x73d9cf 0x73d9d7 0x73d9e0 0x73d9e9 0x73d9f2 0x73d9fb 0x73da04 0x73da16 0x73da1f 0x73da28 0x73da31 0x73da3a	0x73d9cf 0x73d9d7 0x73d9e0 0x73d9e9 0x73d9f2 0x73d9fb 0x73da04 0x73da16 0x73da1f 0x73da28 0x73da31 0x73da3a	-
+永久攻速	label-atlas	2	memcpy tramp1	0x73d9a0	0x73d9a0	-
+法师群毒	label-atlas	2	memcpy tramp2	0x76e1a9	0x76e1a9	-
+法道合击	legacy-only	0	-		0x7d3298 0x7d329c	-
+激光命中概率	label-atlas	2	memcpy tramp1	0x76ea14	0x76ea14	-
+激光电影可换主属性	label-atlas	2	memcpy tramp1	0x76e9b5	0x76e9b5	-
+激光范围及系数	label-atlas	2	memcpy tramp1	0x76ea07	0x76ea07	-
+火墙设置时间上限	label-atlas	2	memcpy tramp2	0x7706b6	0x7706b6	-
+火球主属性切换	label-atlas	2	memcpy tramp1	0x76e3e6	0x76e3e6	-
+火球自定义范围	label-atlas	2	memcpy tramp1	0x76e425	0x76e425	-
+火雨主属切换	label-atlas	2	memcpy tramp1	0x76f365	0x76f365	-
+烈火剑法	label-atlas	2	memcpy	0x76b0ec 0x77231d	0x76b0ec 0x76b0f0 0x77231d	-
+爆裂火焰可换主属性	label-atlas	2	memcpy tramp1	0x76f23b	0x76f23b	-
+爆裂火焰范围及系数	label-atlas	2	memcpy tramp1	0x76f26b	0x76f26b	-
+物功带毒	label-atlas	2	memcpy tramp2	0x76e2bc	0x76e2bc	-
+特殊宝宝	label-atlas	4	memcpy tramp1	0x7671a2 0x76de42	0x7671a2 0x76de42	-
+特殊属性	label-atlas	4	memcpy tramp1	0x6e41bd 0x73d951	0x6e41bd 0x73d951	-
+盘古冰咆哮的范围	legacy-only	0	-		0x76f301	-
+盘古地狱雷光范围	legacy-only	0	-		0x76f643	-
+盘古流星火雨范围	legacy-only	0	-		0x76f3be	-
+盘古爆裂火焰范围	legacy-only	0	-		0x76f271	-
+盘古穿戴触发	label-atlas	4	memcpy tramp2	0x6d8e35 0x6d8e4d	0x6d8e35 0x6d8e4d	-
+盘古高级属性	label-atlas	6	memcpy tramp2	0x6ba718 0x6ba72d 0x6f9ab0	0x6ba718 0x6ba72d 0x6f9ab0	-
+盘古魔法攻击触发	label-atlas	4	memcpy tramp2	0x76dec0 0x76e1af	0x76dec0 0x76e1af	-
+禁止交易地图	label-atlas	2	memcpy tramp2	0x6c3f00	0x6c3f00	-
+禁止发言不提示	label-atlas	6	memcpy	0x6bb5cd 0x6bb625 0x6c94a9	0x6bb5cd 0x6bb625 0x6c94a9	-
+禁止宝宝休息	label-atlas	2	memcpy tramp2	0x623a73	0x623a73	-
+禁止装备自动绑定	label-atlas	2	memcpy tramp1	0x784351	0x784351	-
+移动速度	label-atlas	2	memcpy tramp1	0x73d983	0x73d983	-
+穿人穿怪	label-atlas	4	memcpy	0x6b30a3 0x768454	0x6b30a3 0x768454	-
+脚本控制人物爆率	label-atlas	6	memcpy tramp2	0x6df2cc 0x73d578 0x73dac5	0x6df2cc 0x73d578 0x73dac5	-
+脚本控制头发外显	label-atlas	2	memcpy tramp2	0x740f85	0x740f85	-
+英雄倍攻和暴击	label-atlas	2	memcpy tramp1	0x76c816	0x76c816	-
+英雄攻速移速	label-atlas	2	memcpy tramp1	0x73da43	0x73da43	-
+英雄施法速度	label-atlas	2	memcpy tramp1	0x68dd60	0x68dd60	-
+英雄穿戴触发	label-atlas	4	memcpy tramp1	0x75ea31 0x75f08c	0x75ea31 0x75f08c	-
+获取玩家对象函数	label-atlas	8	memcpy	0x646f40 0x647d24 0x736b28 0x736ef8	0x646f40 0x647d24 0x736b28 0x736ef8	-
+行会显示	label-atlas	4	memcpy	0x6c5bcb 0x6c5bf7	0x6c5bcb 0x6c5bf7	-
+衣服属性几率_准确_值	extreme-map	0	-	0x783ff2	0x783ff2	-
+衣服属性几率_攻击_值	extreme-map	0	-	0x783f66	0x783f66	-
+衣服属性几率_攻速_值	extreme-map	0	-	0x783fcf	0x783fcf	-
+衣服属性几率_道术_值	extreme-map	0	-	0x783fac	0x783fac	-
+衣服属性几率_魔法_值	extreme-map	0	-	0x783f89	0x783f89	-
+衣服最随机性_极品_值	extreme-map	0	-	0x7639f3	0x7639f3	-
+衣服最高点数_准确_值	extreme-map	0	-	0x783fe6	0x783fe6	-
+衣服最高点数_攻击_值	extreme-map	0	-	0x783f5a	0x783f5a	-
+衣服最高点数_攻速_值	extreme-map	0	-	0x783fc3	0x783fc3	-
+衣服最高点数_道术_值	extreme-map	0	-	0x783fa0	0x783fa0	-
+衣服最高点数_魔法_值	extreme-map	0	-	0x783f7d	0x783f7d	-
+衣服点数几率_准确_值	extreme-map	0	-	0x783fe1	0x783fe1	-
+衣服点数几率_攻击_值	extreme-map	0	-	0x783f55	0x783f55	-
+衣服点数几率_攻速_值	extreme-map	0	-	0x783fbe	0x783fbe	-
+衣服点数几率_道术_值	extreme-map	0	-	0x783f9b	0x783f9b	-
+衣服点数几率_魔法_值	extreme-map	0	-	0x783f78	0x783f78	-
+被击杀触发	label-atlas	2	memcpy tramp1	0x766624	0x766624	-
+装备吸血	label-atlas	2	memcpy tramp2	0x76e2a3	0x76e2a3	-
+装备提升人物爆率	label-atlas	2	memcpy tramp2	0x71fd37	0x71fd37	-
+装备来源	label-atlas	4	memcpy tramp1	0x6c8aaa 0x71fe90	0x6c8aaa 0x71fe90	-
+读取英雄装备	label-atlas	2	memcpy tramp1	0x6e04e7	0x6e04e7	-
+逐日剑法	label-atlas	2	memcpy	0x76b13e 0x76b14c	0x76b13e 0x76b14c 0x76b14d 0x771da4	-
+邮件防刷	label-atlas	2	memcpy tramp2	0x6e7810	0x6e7810	-
+野蛮等级	label-atlas	2	memcpy tramp1	0x768f67	0x768f67	-
+野蛮麻痹	label-atlas	2	memcpy tramp2	0x6bc9e2	0x6bc9e2	-
+防0拆分	label-atlas	2	memcpy tramp2	0x6e0ff3	0x6e0ff3	-
+随身仓库	label-atlas	6	memcpy	0x6c2ab9 0x6c2dc9 0x6e087c	0x6c2ab9 0x6c2dc9 0x6e087c	-
+雷电主属性切换	label-atlas	2	memcpy tramp1	0x76ea8a	0x76ea8a	-
+雷电带毒	label-atlas	2	memcpy tramp2	0x76eb1d	0x76eb1d	-
+雷电自定义范围	label-atlas	2	memcpy tramp1	0x76eb06	0x76eb06	-
+项链属性几率_准确_值	extreme-map	0	-	0x76186e	0x76186e	-
+项链属性几率_攻击_值	extreme-map	0	-	0x7617e2	0x7617e2	-
+项链属性几率_攻速_值	extreme-map	0	-	0x76184b	0x76184b	-
+项链属性几率_道术_值	extreme-map	0	-	0x761828	0x761828	-
+项链属性几率_魔法_值	extreme-map	0	-	0x761805	0x761805	-
+项链最随机性_极品_值	extreme-map	0	-	0x7617a3	0x7617a3	-
+项链最高点数_准确_值	extreme-map	0	-	0x761862	0x761862	-
+项链最高点数_攻击_值	extreme-map	0	-	0x7617d6	0x7617d6	-
+项链最高点数_攻速_值	extreme-map	0	-	0x76183f	0x76183f	-
+项链最高点数_道术_值	extreme-map	0	-	0x76181c	0x76181c	-
+项链最高点数_魔法_值	extreme-map	0	-	0x7617f9	0x7617f9	-
+项链点数几率_准确_值	extreme-map	0	-	0x76185d	0x76185d	-
+项链点数几率_攻击_值	extreme-map	0	-	0x7617d1	0x7617d1	-
+项链点数几率_攻速_值	extreme-map	0	-	0x76183a	0x76183a	-
+项链点数几率_道术_值	extreme-map	0	-	0x761817	0x761817	-
+项链点数几率_魔法_值	extreme-map	0	-	0x7617f4	0x7617f4	-
+魔法攻击触发	label-atlas	2	memcpy tramp1	0x76de84	0x76de84	-
+麻痹概率	label-atlas	2	memcpy tramp1	0x76e2d2	0x76e2d2	-
