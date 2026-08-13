@@ -100,6 +100,12 @@ namespace GameSvr
                 case Grobal2.CM_4646:
                     ClientNativePrizeList();
                     return true;
+                case Grobal2.CM_4647:
+                    ClientNativePrizePrecheck();
+                    return true;
+                case Grobal2.CM_4648:
+                    ClientNativePrizeSettle();
+                    return true;
                 default:
                     return false;
             }
@@ -485,6 +491,36 @@ namespace GameSvr
         private void ClientNativePrizeList()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4646, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4647, native leaf 0x6DBBF5, worker 0x6FB6FC.
+        ///
+        /// The leaf calls 0x6FB6FC(Self), the prize-claim precheck. It refuses when
+        /// the claimed count [Self+0x658] has reached 10 (0x6FB705 `cmp,0xa`), then
+        /// checks the diamond ceiling [Self+0x15C]+0xC350 against [Self+0x68C]
+        /// (0x6FB736), answering a fixed notice SM 0x38FF on either failure. Those
+        /// counters and the diamond-currency block are not modelled, so the gate
+        /// cannot be evaluated and no packet is emitted.
+        /// </summary>
+        private void ClientNativePrizePrecheck()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4647, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4648, native leaf 0x6DBBFF, worker 0x6FB874.
+        ///
+        /// The leaf calls 0x6FB874(Self), the prize settlement. It walks the reward
+        /// array [Self+0x62C]/[+0x62E] for [Self+0x658] entries (0x6FB8BA), resolves
+        /// each through the prize manager [[0x7D605C]] (0x6FB8B3) and credits the
+        /// payout onto [Self+0x4F0] (0x6FB8E6). The reward array, the prize manager
+        /// and the credited counters are not modelled, so the settlement and its
+        /// reply are withheld rather than invented.
+        /// </summary>
+        private void ClientNativePrizeSettle()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4648, m_sCharName);
         }
     }
 }
