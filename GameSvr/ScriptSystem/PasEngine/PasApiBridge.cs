@@ -3882,7 +3882,11 @@ namespace GameSvr.PasEngine
                 case "checkmapmonbyname":
                     if (args.Count >= 2)
                     {
-                        RejectUnimplementedNpcCreatMonsTunnel(args[0].AsString());
+                        if (TryNpcCreatMonsTunnel(args[0].AsString(), args[1].AsString(), out var spawned))
+                        {
+                            result = PasValue.FromInt(spawned);
+                            return true;
+                        }
                         var map = M2Share.MapManager.FindMap(args[0].AsString());
                         if (map != null)
                         {
@@ -7129,7 +7133,11 @@ namespace GameSvr.PasEngine
                 case "checkmapmonbyname":
                     if (args.Count >= 2)
                     {
-                        RejectUnimplementedNpcCreatMonsTunnel(args[0].AsString());
+                        if (TryNpcCreatMonsTunnel(args[0].AsString(), args[1].AsString(), out var spawned))
+                        {
+                            result = PasValue.FromInt(spawned);
+                            return true;
+                        }
                         var map = M2Share.MapManager.FindMap(args[0].AsString());
                         if (map != null)
                         {

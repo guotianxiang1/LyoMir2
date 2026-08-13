@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using SystemModule;
 using GameSvr;
 
@@ -2282,6 +2283,225 @@ namespace GameSvr.Plugins
                 created++;
             }
             return created;
+        }
+
+        public const string NpcCreatMonsSentinel = "yanshen2.0.7";
+        public const int NpcCreatMonsFieldCount = 19;
+
+        /// <summary>
+        /// NpcFuc.pas serializes
+        /// <c>0^x^y^num^round^Ac^Mac^Dc^DcMax^Mc^Sc^Speed^Hit^hp^Maxhp^AttackSpd^WalkSpd^MonName^Map</c>
+        /// and smuggles it through <c>CheckMapMonByName('yanshen2.0.7', res)</c>.
+        /// Attribute writes follow plugin JSON apply at <c>0x100884f0</c>
+        /// (<c>0x100889D7..0x10088B56</c>): each field is skipped unless &gt; 0
+        /// (<c>test/cmp ; jle</c>).
+        /// JSON key <c>Speed</c> @ <c>0x102BA7EC</c> writes word actor+0x1E8/+0x264
+        /// (<c>0x10088ABB 66 89 83 e8 01 00 00</c>), the same word native 基本剑术
+        /// adds 准确 into (<c>0x76AF99 66 01 83 64 02 00 00</c>). JSON <c>Hit</c>
+        /// @ <c>0x102BA7F4</c> writes +0x1EA/+0x266.
+        /// Opcode-0 scatter was not found in the dump; round uses the same formula
+        /// as <see cref="CreateMon"/>'s ranger.
+        /// </summary>
+        public int NpcCreateMonsFromPayload(string payload)
+        {
+            if (!TryParseNpcCreatMonsPayload(payload, out var spec, out var error))
+                throw new YanshenApiUnavailableException("NPC_CreatMons", "npc自定义函数", error);
+
+            return NpcCreateMons(spec.X, spec.Y, spec.Num, spec.Round,
+                spec.Ac, spec.Mac, spec.Dc, spec.DcMax, spec.Mc, spec.Sc,
+                spec.Speed, spec.Hit, spec.Hp, spec.MaxHp, spec.AttackSpd, spec.WalkSpd,
+                spec.MonName, spec.Map);
+        }
+
+        public int NpcCreateMons(int x, int y, int num, int round,
+            int ac, int mac, int dc, int dcMax, int mc, int sc,
+            int speed, int hit, int hp, int maxHp, int attackSpd, int walkSpd,
+            string monName, string mapName)
+        {
+            var map = M2Share.MapManager.FindMap(mapName);
+            if (map == null || num <= 0) return 0;
+
+            int created = 0;
+            for (var i = 0; i < num; i++)
+            {
+                var spawnX = x;
+                var spawnY = y;
+                if (round > 0)
+                {
+                    spawnX += M2Share.RandomNumber.Random(round * 2 + 1) - round;
+                    spawnY += M2Share.RandomNumber.Random(round * 2 + 1) - round;
+                }
+
+                var mon = M2Share.UserEngine.RegenMonsterByName(mapName, (short)spawnX, (short)spawnY, monName);
+                if (mon == null) continue;
+
+                ApplyYanshenMonsterAttrs(mon, ac, mac, dc, dcMax, mc, sc,
+                    speed, hit, hp, maxHp, attackSpd, walkSpd);
+                mon.StatusChanged();
+                created++;
+            }
+            return created;
+        }
+
+        internal static void ApplyYanshenMonsterAttrs(TBaseObject mon,
+            int ac, int mac, int dc, int dcMax, int mc, int sc,
+            int speed, int hit, int hp, int maxHp, int attackSpd, int walkSpd)
+        {
+            if (mon == null) return;
+
+            if (ac > 0)
+            {
+                var packed = HUtil32.MakeLong(ac, ac);
+                if (mon.m_Abil != null) mon.m_Abil.AC = packed;
+                mon.m_WAbil.AC = packed;
+            }
+
+            if (mac > 0)
+            {
+                var packed = HUtil32.MakeLong(mac, mac);
+                if (mon.m_Abil != null) mon.m_Abil.MAC = packed;
+                mon.m_WAbil.MAC = packed;
+            }
+
+            if (dc > 0)
+            {
+                if (mon.m_Abil != null)
+                    mon.m_Abil.DC = HUtil32.MakeLong(dc, HUtil32.HiWord(mon.m_Abil.DC));
+                mon.m_WAbil.DC = HUtil32.MakeLong(dc, HUtil32.HiWord(mon.m_WAbil.DC));
+            }
+
+            if (dcMax > 0)
+            {
+                if (mon.m_Abil != null)
+                    mon.m_Abil.DC = HUtil32.MakeLong(HUtil32.LoWord(mon.m_Abil.DC), dcMax);
+                mon.m_WAbil.DC = HUtil32.MakeLong(HUtil32.LoWord(mon.m_WAbil.DC), dcMax);
+            }
+
+            if (mc > 0)
+            {
+                var packed = HUtil32.MakeLong(mc, mc);
+                if (mon.m_Abil != null) mon.m_Abil.MC = packed;
+                mon.m_WAbil.MC = packed;
+            }
+
+            if (sc > 0)
+            {
+                var packed = HUtil32.MakeLong(sc, sc);
+                if (mon.m_Abil != null) mon.m_Abil.SC = packed;
+                mon.m_WAbil.SC = packed;
+            }
+
+            if (speed > 0)
+                mon.m_btHitPoint = unchecked((ushort)speed);
+
+            if (hit > 0)
+            {
+                mon.m_wSpeedPoint = unchecked((ushort)hit);
+                mon.m_btSpeedPoint = unchecked((byte)hit);
+            }
+
+            if (hp > 0)
+            {
+                if (mon.m_Abil != null) mon.m_Abil.HP = hp;
+                mon.m_WAbil.HP = hp;
+            }
+
+            if (maxHp > 0)
+            {
+                if (mon.m_Abil != null) mon.m_Abil.MaxHP = maxHp;
+                mon.m_WAbil.MaxHP = maxHp;
+            }
+
+            if (attackSpd > 0)
+                mon.m_nNextHitTime = attackSpd;
+
+            if (walkSpd > 0)
+                mon.m_nWalkSpeed = walkSpd;
+        }
+
+        internal static bool TryParseNpcCreatMonsPayload(string payload,
+            out NpcCreatMonsSpec spec, out string error)
+        {
+            spec = default;
+            if (string.IsNullOrEmpty(payload))
+            {
+                error = "NPC_CreatMons 载荷为空";
+                return false;
+            }
+
+            var fields = payload.Split('^');
+            if (fields.Length != NpcCreatMonsFieldCount)
+            {
+                error = $"NPC_CreatMons 载荷必须是 {NpcCreatMonsFieldCount} 段（生产 NpcFuc 含 Hit），实际 {fields.Length}";
+                return false;
+            }
+
+            if (!string.Equals(fields[0], "0", StringComparison.Ordinal))
+            {
+                error = $"NPC_CreatMons 载荷首段必须是 opcode 0，实际 '{fields[0]}'";
+                return false;
+            }
+
+            if (!TryParseNpcCreatMonsInt(fields[1], "x", out var x, out error)
+                || !TryParseNpcCreatMonsInt(fields[2], "y", out var y, out error)
+                || !TryParseNpcCreatMonsInt(fields[3], "num", out var num, out error)
+                || !TryParseNpcCreatMonsInt(fields[4], "round", out var round, out error)
+                || !TryParseNpcCreatMonsInt(fields[5], "Ac", out var ac, out error)
+                || !TryParseNpcCreatMonsInt(fields[6], "Mac", out var mac, out error)
+                || !TryParseNpcCreatMonsInt(fields[7], "Dc", out var dc, out error)
+                || !TryParseNpcCreatMonsInt(fields[8], "DcMax", out var dcMax, out error)
+                || !TryParseNpcCreatMonsInt(fields[9], "Mc", out var mc, out error)
+                || !TryParseNpcCreatMonsInt(fields[10], "Sc", out var sc, out error)
+                || !TryParseNpcCreatMonsInt(fields[11], "Speed", out var speed, out error)
+                || !TryParseNpcCreatMonsInt(fields[12], "Hit", out var hit, out error)
+                || !TryParseNpcCreatMonsInt(fields[13], "hp", out var hp, out error)
+                || !TryParseNpcCreatMonsInt(fields[14], "Maxhp", out var maxHp, out error)
+                || !TryParseNpcCreatMonsInt(fields[15], "AttackSpd", out var attackSpd, out error)
+                || !TryParseNpcCreatMonsInt(fields[16], "WalkSpd", out var walkSpd, out error))
+                return false;
+
+            spec = new NpcCreatMonsSpec
+            {
+                X = x,
+                Y = y,
+                Num = num,
+                Round = round,
+                Ac = ac,
+                Mac = mac,
+                Dc = dc,
+                DcMax = dcMax,
+                Mc = mc,
+                Sc = sc,
+                Speed = speed,
+                Hit = hit,
+                Hp = hp,
+                MaxHp = maxHp,
+                AttackSpd = attackSpd,
+                WalkSpd = walkSpd,
+                MonName = fields[17],
+                Map = fields[18],
+            };
+            error = null;
+            return true;
+        }
+
+        private static bool TryParseNpcCreatMonsInt(string text, string name, out int value, out string error)
+        {
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                error = null;
+                return true;
+            }
+
+            value = 0;
+            error = $"NPC_CreatMons 字段 {name} 不是整数: '{text}'";
+            return false;
+        }
+
+        internal struct NpcCreatMonsSpec
+        {
+            public int X, Y, Num, Round, Ac, Mac, Dc, DcMax, Mc, Sc, Speed, Hit, Hp, MaxHp, AttackSpd, WalkSpd;
+            public string MonName, Map;
         }
 
         public int AttackPlayer(TPlayObject player, int hp, int effectId)
