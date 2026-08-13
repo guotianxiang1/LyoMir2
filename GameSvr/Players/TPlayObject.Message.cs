@@ -2488,7 +2488,11 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW2, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, HUtil32.MakeWord(ProcessMsg.wParam, BaseObject.m_nLight));
+                        // RM 10336 arm 0x006B5B7A is byte-identical to the 10331 arm:
+                        //   006B5B7A/7F/84  mov ax,[ebx+4]/[ebx+8]/[ebx+2] / push
+                        //   006B5B8C  66 B9 27 03  mov cx,0x327 / call 0x006BCE54
+                        // Same producer 0x00768ED0, same zero-extended direction in wParam.
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW2, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
                     }
                     SendSocket(m_DefMsg,
                         BuildMobileActorStateBody(BaseObject.GetFeature(this), BaseObject));
