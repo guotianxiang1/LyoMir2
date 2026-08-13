@@ -1278,6 +1278,16 @@ namespace GameSvr.Plugins
             return PullEnemyCore(why, level, probability, range, tx, ty, canl, isAoe);
         }
         /// <summary>定身: duration秒, 使用LockRun状态冻结</summary>
+        /// <remarks>
+        /// 2.08 上没有任何调用方能到这里。唯一的入口 <c>ys_DingShen</c> 发的是
+        /// <c>'!!!!集成函数,9,'+shijian+'$'</c>（AllFuc.pas:513），只有 3 段；
+        /// 9 号实现体 <c>sub_10070FD0</c> 在 0x10071020 <c>83 F8 0A</c> cmp eax,0xA /
+        /// 0x10071023 <c>73 26</c> jae 要求 ≥10 段，不足即在 0x10071034
+        /// <c>B8 88 FC FF FF</c> 返回 -888。隧道侧与 PAS 桥都已按原生短路成 -888，
+        /// 本方法保留只为不改动公开 API 面。
+        /// 正文本身仍无原生字节背书（实现体 0x10070FD0 的 ≥10 段支路未反演），
+        /// 一旦将来证到 8 参定身形，这里才是落点。
+        /// </remarks>
         public int RootTarget(int duration)
         {
             if (!TunnelGate()) return 0;

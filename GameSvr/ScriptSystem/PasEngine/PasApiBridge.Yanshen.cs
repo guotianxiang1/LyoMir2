@@ -648,7 +648,13 @@ namespace GameSvr.PasEngine
                     if (args.Count >= 9) { result = PasValue.FromInt(api.PullEnemy2(args[0].AsInt(), args[1].AsInt(), args[2].AsInt(), args[3].AsInt(), args[4].AsInt(), args[5].AsInt(), args[6].AsInt(), args[7].AsInt(), args[8].AsInt())); return true; }
                     return false;
                 case "ys_dingshen":
-                    if (args.Count >= 1) { result = PasValue.FromInt(api.RootTarget(args[0].AsInt())); return true; }
+                    // 死调用：AllFuc.pas:513 发的是 '!!!!集成函数,9,'+shijian+'$'，
+                    // 切出来只有 3 段；而 9 号实现体 sub_10070FD0 在 0x10071020
+                    // `83 F8 0A` cmp eax,0xA / 0x10071023 `73 26` jae 要求 ≥10 段，
+                    // 不足就在 0x10071034 `B8 88 FC FF FF` 返回 -888。
+                    // ⇒ 2.08 原生上 ys_DingShen 永远走不到正文，恒返回 -888，
+                    // 不会去写 STATE_LOCKRUN。这里照原生短路，不调 RootTarget。
+                    if (args.Count >= 1) { result = PasValue.FromInt(-888); return true; }
                     return false;
                 case "ys_xixue":
                     if (args.Count >= 2) { result = PasValue.FromInt(api.LifeSteal(args[0].AsInt(), args[1].AsInt())); return true; }

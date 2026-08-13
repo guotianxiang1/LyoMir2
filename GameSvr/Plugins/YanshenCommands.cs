@@ -304,11 +304,13 @@ namespace GameSvr.Plugins
                         : _api.Poison(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8)),
                     7 => _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2)),
                     8 => _api.LifeSteal(P(cmd,0),P(cmd,1)),
-                    9 => cmd.Parameters.Length == 1
-                        ? _api.RootTarget(P(cmd,0))
-                        : cmd.Parameters.Length >= 9
-                            ? _api.PullEnemy2(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8))
-                            : _api.PullEnemy(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7)),
+                    // ys_DingShen 也编码成 9 号，但它只发 3 段（AllFuc.pas:513
+                    // '!!!!集成函数,9,'+shijian+'$'），过不了 _nativeArity[9] 的 8 参下限，
+                    // 上面就已经返回 -888 —— 与原生一致，这里够不到 RootTarget。
+                    // 能到这儿的只有 ys_TuiTui（8 参）与 ys_TuiTui2（9 参）。
+                    9 => cmd.Parameters.Length >= 9
+                        ? _api.PullEnemy2(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8))
+                        : _api.PullEnemy(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7)),
                     10 => _api.SetSkillExp(S(cmd,0),P(cmd,1),P(cmd,2)),
                     11 => string.Equals(S(cmd,0), "MP", StringComparison.OrdinalIgnoreCase)
                         ? _api.AddMaxMp(P(cmd,1)) : _api.AddMaxHp(P(cmd,1)),
