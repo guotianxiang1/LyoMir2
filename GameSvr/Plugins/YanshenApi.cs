@@ -3104,13 +3104,15 @@ namespace GameSvr.Plugins
         /// <summary>Email防刷检查</summary>
         public bool IsMailAntiSpamEnabled() => Enabled("邮件防刷");
 
-        /// <summary>等级禁言检查 (返回禁言所需等级, 0=不启用)</summary>
-        public int LevelMuteThreshold()
-        {
-            if (!Enabled("等级禁言")) return 0;
-            // Default: mute players below level 7
-            return 7;
-        }
+        // 等级禁言没有"等级阈值"这个量。开关本身是 config.json 顶层的单个整数键
+        // "等级禁言"（生产 D:\光头卧龙\mud2.0\Mir200\Gs1\config.json 取 1，全表 380 键
+        // 里没有任何 "等级禁言_*" 参数键），禁言状态整个落在 S(1,1) 上：7=禁言、
+        // 8=解除禁言（面板原文见 YanshenLegacy23ReplicaPanels.cs 的说明）。生产
+        // LogonQuest.pas 的 49 处调用只写 7 和 8，等级判断由脚本自己做（注释
+        // 「已升至[15]级解除禁言」用的是 15）。此前这里把 SetS(1,1,7) 里的 7 读成
+        // 了"7 级以下禁言"的等级阈值并硬编码返回，属凭空发明；S(1,1) 各模式的实际
+        // 效果无字节证据（插件加壳），按 fail-closed 不实现。
+        // 开关本身仍可由 IsLevelMute() 读取。
 
         /// <summary>人物爆率调整 — 获取爆率倍率</summary>
         public double GetPlayerDropRateMultiplier()
