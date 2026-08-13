@@ -8,6 +8,11 @@ namespace GameSvr
         internal const int RecordSize = 208;
         internal const int HexLength = RecordSize * 2;
         internal const int CoreSize = 24;
+        // Persist blob is item+0x20 .. +0xEF (0x6B1712 mov ecx,0x34 / f3 a5).
+        // Relative to that blob: +0x00 MakeIndex, +0x04 wIndex, +0x06 Dura,
+        // +0x08 DuraMax (factory 0x7837D8..0x7837EA). Native bindType is
+        // word[item+0x34] = blob+0x14 (0x784710 66 8B 40 34). Blob+0xB8 is
+        // item+0xD8, the gift flag (0x7837EE C6 83 D8 00 00 00 00), not bindType.
         internal const int UpgradeFlagsOffset = 0x27;
         internal const int BindOffset = 0xB8;
         internal const byte KnownUpgradeFlags = 0xC0;
