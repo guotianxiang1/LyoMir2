@@ -1406,12 +1406,15 @@ namespace GameSvr
                     }
                     M2Share.AddGameDataLog("19" + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + "FZ-" + HUtil32.BoolToIntStr(m_PEnvir.Flag.boFightZone) + "_F3-" + HUtil32.BoolToIntStr(m_PEnvir.Flag.boFight3Zone) + "\t" + '0' + "\t" + '1' + "\t" + tStr);
                 }
-                
-                if (m_Master == null && !m_boDelFormMaped)
-                {
-                    m_PEnvir.DelObjectCount(this);
-                    m_boDelFormMaped = true;
-                }
+                // Death ≠ logout. TPlayer.Die 0x6C07A0 → THumanKind.Die 0x741368
+                // (`0x74138A E8 8D 4F 02 00 call 0x76631C`) → TCreature.Die:
+                //   0x766323  C6 43 74 01     mov byte [ebx+0x74], 1   ; m_boDeath, not ghost
+                //   0x766351  FF 51 08        call [map.vmt+8]         ; 0x5FD4D4
+                // 0x5FD4D4 does NOT touch map+0xD8 (HumCount). That counter is only
+                // inc/dec on AddToMap / DeleteFromMap when race==0 (0x5FD559 / 0x5FD592).
+                // Ghost is a different byte: 0x7680EF C6 43 73 01 in MakeGhost.
+                // DelObjectCount + m_boDelFormMaped here mixed death with leave-map
+                // accounting and made corpses vanish from HumCount until logout.
                 SendRefMsg(Grobal2.RM_DEATH, m_btDirection, m_nCurrX, m_nCurrY, 1, "");
             }
             catch

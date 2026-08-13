@@ -7,6 +7,8 @@ using System.Linq;
 //
 // 战神 sub_6C4580 ClientDealEnd 四道校验 @0x6C46E4/0x6C4705/0x6C4720/0x6C473F 全部跳到
 // 同一失败目标 0x6C49B8，直接调 DealCancel (sub_6C43C4) 并静默返回，无任何 per-check 消息。
+// 原生没有 `bo11` 局部量；C# 的 `bo11 &&` 是这四次 jmp 的翻译形状。旧 2000 字符窗口
+// 从 `m_boDealOK` 起算，会被 TRADE-21/22 注释撑出窗口外（rule 4.17），改搜整个方法。
 // 旧 C# 把四道检查全跑完且每条失败时都发消息；那四条消息字符串在二进制里 GBK 零命中。
 //
 // 战神 sub_6C4454 ClientChangeDealGold @0x6C4477: test esi,esi / jle 0x6c4547 拒绝 nGold<=0。
@@ -49,18 +51,33 @@ class Program
                     $"TCFP-22 FAIL: {foundInM2Share}/4 dead message strings still declared in "
                     + "M2Share.cs (should be removed — no references)");
 
-            // ===== TCFP-22: fail-fast structure (bo11 && short-circuits) =====
+            // ===== TCFP-22: fail-fast structure =====
+            // Native sub_6C4580 has NO `bo11` local. Phase D is four sequential tests,
+            // each jumping to the same DealCancel join at 0x6C49B8:
+            //   0x6C46F7 call [vmt+0x244] / test al,al / 0x6C46FF je  0x6C49B8
+            //   0x6C4713 call 0x6D7948    / test al,al / 0x6C471A jne 0x6C49B8
+            //   0x6C4731 call [vmt+0x244] / test al,al / 0x6C4739 je  0x6C49B8
+            //   0x6C474B call 0x6D7948    / test al,al / 0x6C4752 jne 0x6C49B8
+            //   0x6C49B8 mov eax,ebx / 0x6C49BA E8 05 FA FF FF call 0x6C43C4 DealCancel
+            // C# translates that with a `bo11` flag + `bo11 &&` short-circuits (side-effect
+            // free, equivalent). The grep is a C# translation shape of the native jmp
+            // fail-fast, not a native token. Search the whole method — a 2000-char window
+            // starting at `m_boDealOK` was overflowing on TRADE-21/22 comments (rule 4.17).
             int dealEndStart = operateSrc.IndexOf("private void ClientDealEnd()", StringComparison.Ordinal);
             if (dealEndStart < 0)
                 throw new Exception("TCFP-22: ClientDealEnd method not found");
 
-            int validationStart = operateSrc.IndexOf("if (m_DealCreat.m_boDealOK)", dealEndStart,
+            int dealEndEnd = operateSrc.IndexOf("\r\n        private void ", dealEndStart + 1,
                 StringComparison.Ordinal);
-            if (validationStart < 0)
-                throw new Exception("TCFP-22: m_boDealOK validation block not found");
+            if (dealEndEnd < 0)
+                dealEndEnd = operateSrc.IndexOf("\n        private void ", dealEndStart + 1,
+                    StringComparison.Ordinal);
+            if (dealEndEnd < 0) dealEndEnd = operateSrc.Length;
 
-            string window = operateSrc.Substring(validationStart,
-                Math.Min(2000, operateSrc.Length - validationStart));
+            string window = operateSrc.Substring(dealEndStart, dealEndEnd - dealEndStart);
+
+            if (window.IndexOf("if (m_DealCreat.m_boDealOK)", StringComparison.Ordinal) < 0)
+                throw new Exception("TCFP-22: m_boDealOK validation block not found");
 
             int bo11AndCount = 0;
             int pos = 0;
@@ -69,6 +86,11 @@ class Program
                 bo11AndCount++;
                 pos += 7;
             }
+
+            if (window.IndexOf("DealCancel()", StringComparison.Ordinal) < 0)
+                throw new Exception(
+                    "TCFP-22 FAIL: ClientDealEnd capacity-failure path lacks DealCancel "
+                    + "(native 0x6C49B8 E8 05 FA FF FF call 0x6C43C4)");
 
             // Native: 4 checks, each jump to the same target on failure.
             // C# fail-fast: first check sets bo11=false; checks 2/3/4 use `bo11 &&` to short-circuit.

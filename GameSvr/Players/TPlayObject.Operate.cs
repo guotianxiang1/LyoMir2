@@ -2257,6 +2257,10 @@ namespace GameSvr
             // 三个容器共用这一道门。缺它则托管中的物品可被同时存入仓库。
             if (m_boDealing)
             {
+                // nSeries = container. Native 0x6C2CFA: push 0 (sMsg), push 0 (Tag),
+                // push word[ebp-0xa] (Series=container), push 0 (Param), ecx=0 (Recog),
+                // dx=0x2BF (SM_STORAGE_FAIL) → [vmt+0x250]=sub_6D7CB0. This path is
+                // container 0 (CM Series=0 → [ebp-0xa] stays 0 @0x6C2A65).
                 SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
                 return;
             }
@@ -2323,6 +2327,8 @@ namespace GameSvr
                         }
                         else
                         {
+                            // nSeries = container. Native 0x6C2CCA: same four-push shape as
+                            // FAIL, dx=0x2BE (SM_STORAGE_FULL). Container 0 on this path.
                             SendDefMessage(Grobal2.SM_STORAGE_FULL, 0, 0, 0, 0, "");
                         }
                         bo19 = true;
