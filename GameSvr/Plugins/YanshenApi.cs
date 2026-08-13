@@ -1632,7 +1632,8 @@ namespace GameSvr.Plugins
             if (!TryScaleRecyclePrice(rule.Yuanbao, rate, out var yuanbao) ||
                 !TryScaleRecyclePrice(rule.Gold, rate, out var gold) ||
                 !TryScaleRecyclePrice(rule.LingFu, rate, out var lingFu) ||
-                !TryScaleRecyclePrice(rule.Exp, rate, out var exp))
+                !TryScaleRecyclePrice(rule.Exp, rate, out var exp) ||
+                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, out var other))
                 return false;
 
             // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
@@ -1645,14 +1646,20 @@ namespace GameSvr.Plugins
             // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
             if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
 
-            var otherBase = 0;
+            // 其他 走 0x1006BCB7（可叠材料）/ 0x1006CDB4（物品种类）两段同构代码：
+            //   0x1006BCBC 7E 6F        jle  —— 缩放后 <= 0 就整段不写 SetV
+            //   0x1006BCC2 0F AF F8     imul —— 和其余四路一样吃倍率
+            //   0x1006BCFD 7D 02 / 0x1006BCFF 33 C0  —— 累加基数的负值钳到 0
+            var otherStored = 0;
             var otherTotal = 0;
-            if (rule.HasOther)
+            var otherPays = other > 0;
+            if (otherPays)
             {
                 if (!PlayerVarWritable(rule.OtherGroup, rule.OtherIndex)) return false;
-                otherBase = ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex);
-                var accumulated = (long)otherBase + rule.OtherValue;
-                if (accumulated < int.MinValue || accumulated > int.MaxValue) return false;
+                // 回滚要还原真实旧值，所以钳位只用于累加，不覆盖 otherStored。
+                otherStored = ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex);
+                var accumulated = (long)Math.Max(0, otherStored) + other;
+                if (accumulated > int.MaxValue) return false;
                 otherTotal = (int)accumulated;
             }
 
@@ -1676,7 +1683,7 @@ namespace GameSvr.Plugins
                 lingFuPaid = lingFu;
             }
 
-            if (rule.HasOther)
+            if (otherPays)
             {
                 WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherTotal);
                 otherWritten = true;
@@ -1688,7 +1695,7 @@ namespace GameSvr.Plugins
 
             if (_player.DelBagItem(item.MakeIndex, itemName)) return true;
 
-            if (otherWritten) WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherBase);
+            if (otherWritten) WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherStored);
             RollbackRecycleLingFu(lingFuPaid);
             RollbackRecycleGold(goldPaid);
             return false;
