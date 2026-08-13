@@ -60,6 +60,12 @@ namespace GameSvr
                     cert = new FireDragon();
                     break;
 
+                // race 137 group 55 handler 0x67A881  classref 0x66475C  ctor 0x66BA24  TSuicideBat
+                //   case body 无 ctor 后逻辑。ctor 已核验（见 SuicideBat.cs）。
+                case 137:
+                    cert = new SuicideBat();
+                    break;
+
                 default:
                     return false;
             }
