@@ -367,12 +367,12 @@ namespace GameSvr
                 return true;
             }
 
-            // Native @ 0x773C70: Part 2 - petrify immunity window for state 26 only
-            // Condition: state 18 NOT present AND deadline active AND current state is 26
-            // (original logic is AND, not OR)
+            // Native @ 0x773C70: Part 2 - petrify immunity window for state 26 only.
+            // 0x773C7B (75 0D jne 0x773C8A) skips the deadline compare when state 18
+            // is present, so the native predicate is (state 18 OR now < deadline).
             if (internalType == NativeState26Type &&
-                !HasNativeActiveState(18) &&
-                IsNativeState26DeadlineActive(HUtil32.GetTickCount()))
+                (HasNativeActiveState(18) ||
+                 IsNativeState26DeadlineActive(HUtil32.GetTickCount())))
             {
                 return true;
             }
