@@ -418,10 +418,27 @@ static void CheckNativeUnionDamageFormula()
     master.m_btJob = 2;
     Equal(198, hero.CalculateNativeUnionMagicDamage(master, magic, _ => 0),
         "native union SC plus SC contribution");
-    Equal(63, hero.CalculateNativeUnionPhysicalDamage(hero, magic, _ => 0),
-        "native union physical uses skill power plus hero DC");
-    Equal(135, hero.CalculateNativeUnionPhysicalDamage(master, magic, _ => 0),
-        "native union physical uses skill power plus master DC");
+    // ---------------------------------------------------------------------
+    // 物理（DC）路走的是 **另一张** 系数表。宿主有两条同形的合击结算例程，唯一
+    // 差别是 `fmul qword [eax*8 + …]` 的表基址：
+    //     0068FF6D  fmul qword [eax*8 + 0x7D33FC]   sub_68FF2C  1.5/2.0/2.4/2.6/2.8
+    //     0068EF1D  fmul qword [eax*8 + 0x7D3278]   sub_68EEDC  1.8/2.5/3.3/3.6/3.9
+    // 加法表 0x7D32D0 两条共用（@0x68FF7F / @0x68EF2F）。把两个函数的全部 rel32
+    // 调用点反汇编、看调用前读的能力字段（DC +0x28C、MC +0x294、SC +0x29C、
+    // CC +0x2A4），划分完全不交叉：
+    //     sub_68FF2C : 0x68EA31 DC  0x690ECA DC  0x690D52/0x690F9C/0x69181A CC
+    //     sub_68EEDC : 0x690C4E/0x69116C/0x691D29/0x691D58 SC
+    //                  0x6914E0/0x691716/0x691993/0x6919C2/0x69208B/0x6920B9 MC
+    // ⇒ DC/CC → 战士表，MC/SC → 法道表。此前两条 C# 路共用法道表，物理路偏高。
+    // 重算（basePower 25，random => 0，level 0，战士表 [0] = 1.5）：
+    //     hero   DC(10,10): inner = 25 + 10 = 35; 35 * 1.5 = 52.5 -> 52（半偶）
+    //     master DC(50,50): inner = 25 + 50 = 75; 75 * 1.5 = 112.5 -> 112
+    Equal(52, hero.CalculateNativeUnionPhysicalDamage(hero, magic, _ => 0),
+        "native union physical uses the warrior table 0x7D33FC (sub_68FF2C) "
+        + "plus hero DC");
+    Equal(112, hero.CalculateNativeUnionPhysicalDamage(master, magic, _ => 0),
+        "native union physical uses the warrior table 0x7D33FC (sub_68FF2C) "
+        + "plus master DC");
 
     // The base power must divide by the literal 4.0, never by (btTrainLv + 1).
     // btTrainLv is 0 in the fixture above, so sweeping it must NOT move the damage —

@@ -4225,18 +4225,53 @@ namespace GameSvr.Plugins
         public bool IsReviveResetTime() => Enabled("复活戒指重设_重设时间");
 
         // ── Combo toggle checks ──
+        //
+        // 这十二个键改写的是宿主两张合击系数表的前 5 槽（战士 0x7D33FC、法道
+        // 0x7D3278），逐槽证据与调用点划分见 YanshenComboTables 的类注释。
+        // 缺省值 **必须** 是页面对象构造函数写的出厂串，不是 0：
+        //   0x100B6F53 lea esi,[edi+0x30C] / 0x100B6F85 push "1.5"  战士_数值1
+        //   0x100B70E3 lea esi,[edi+0x3A4] / 0x100B7115 push "1.8"  法道_数值1
+        // 其余四槽同形，取值恰好等于宿主出厂 f64。插件 apply 臂
+        // （0x100B8924 / 0x100B8D48 起）写的是 atof(该字符串)，**没有** 盘古4 的
+        // `test eax,eax / jle 跳过` 非正数闸门；缺省之所以不清零，靠的就是构造函数
+        // 已经把字符串预置成出厂值。GetParam 对空串/非数值回落 default，等价。
         public bool IsWarriorCombo() => Enabled("战士合击");
-        public double WarriorComboV1() => GetParam("战士合击_数值1");
-        public double WarriorComboV2() => GetParam("战士合击_数值2");
-        public double WarriorComboV3() => GetParam("战士合击_数值3");
-        public double WarriorComboV4() => GetParam("战士合击_数值4");
-        public double WarriorComboV5() => GetParam("战士合击_数值5");
+        public double WarriorComboV1() => GetParam("战士合击_数值1", 1.5);
+        public double WarriorComboV2() => GetParam("战士合击_数值2", 2.0);
+        public double WarriorComboV3() => GetParam("战士合击_数值3", 2.4);
+        public double WarriorComboV4() => GetParam("战士合击_数值4", 2.6);
+        public double WarriorComboV5() => GetParam("战士合击_数值5", 2.8);
         public bool IsWizTaoCombo() => Enabled("法道合击");
-        public double WizTaoComboV1() => GetParam("法道合击_数值1");
-        public double WizTaoComboV2() => GetParam("法道合击_数值2");
-        public double WizTaoComboV3() => GetParam("法道合击_数值3");
-        public double WizTaoComboV4() => GetParam("法道合击_数值4");
-        public double WizTaoComboV5() => GetParam("法道合击_数值5");
+        public double WizTaoComboV1() => GetParam("法道合击_数值1", 1.8);
+        public double WizTaoComboV2() => GetParam("法道合击_数值2", 2.5);
+        public double WizTaoComboV3() => GetParam("法道合击_数值3", 3.3);
+        public double WizTaoComboV4() => GetParam("法道合击_数值4", 3.6);
+        public double WizTaoComboV5() => GetParam("法道合击_数值5", 3.9);
+
+        /// <summary>
+        /// 槽号 0..4 → <c>战士合击_数值1..5</c>；<paramref name="stock"/> 是该槽的宿主
+        /// 出厂 f64，配置缺项/空串时原样返回（构造函数默认串即出厂值）。
+        /// </summary>
+        internal double WarriorComboMultiplier(int slot, double stock) => slot switch
+        {
+            0 => GetParam("战士合击_数值1", stock),
+            1 => GetParam("战士合击_数值2", stock),
+            2 => GetParam("战士合击_数值3", stock),
+            3 => GetParam("战士合击_数值4", stock),
+            4 => GetParam("战士合击_数值5", stock),
+            _ => stock
+        };
+
+        /// <summary>槽号 0..4 → <c>法道合击_数值1..5</c>，语义同上。</summary>
+        internal double WizTaoComboMultiplier(int slot, double stock) => slot switch
+        {
+            0 => GetParam("法道合击_数值1", stock),
+            1 => GetParam("法道合击_数值2", stock),
+            2 => GetParam("法道合击_数值3", stock),
+            3 => GetParam("法道合击_数值4", stock),
+            4 => GetParam("法道合击_数值5", stock),
+            _ => stock
+        };
         public bool IsTaoComboFactor() => Enabled("道士合击系数");
         public double TaoComboV1() => GetParam("道士合击系数_数值1");
         public double TaoComboV2() => GetParam("道士合击系数_数值2");

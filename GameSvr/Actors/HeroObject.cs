@@ -54,10 +54,9 @@ namespace GameSvr
         private int m_dwNativeUnionProcessTick;
         private TUserMagic m_NativeUnionMagic;
         private static readonly byte[] NativeUnionTierBonus = { 0, 1, 1, 2, 2, 2 };
+        // 出厂系数表现在与插件覆盖同源，避免两处各写一份 11 个 f64。
         private static readonly double[] NativeUnionDamageMultiplier =
-        {
-            1.8, 2.5, 3.3, 3.6, 3.9, 3.9, 3.9, 3.9, 3.9, 3.9, 3.9
-        };
+            Plugins.YanshenComboTables.WizTaoStock;
         private static readonly int[] NativeUnionDamageBonus =
         {
             0, 0, 0, 0, 0, 6000, 8000, 10000, 12000, 14000, 21000
@@ -1375,7 +1374,8 @@ namespace GameSvr
             var power = GetNativeUnionMagicBasePower(magic, random);
             return ApplyNativeUnionParticipantFinalDamage(participant,
                 CalculateNativeUnionDamage(power, HUtil32.LoWord(ability),
-                    HUtil32.HiWord(ability), level, random));
+                    HUtil32.HiWord(ability), level, random,
+                    NativeUnionDamageTable.WizTao));
         }
 
         private int GetNativeUnionPhysicalDamage(TBaseObject attacker,
@@ -1392,10 +1392,13 @@ namespace GameSvr
             // GetNativeUnionMagicParticipantDamage (see its comment).
             var level = GetNativeUnionEffectiveLevel(magic);
             var power = GetNativeUnionMagicBasePower(magic, random);
+            // DC 走的是另一条结算例程 sub_68FF2C（系数表 0x7D33FC），不是
+            // sub_68EEDC。见 NativeUnionDamageTable 的注释与调用点划分表。
             return ApplyNativeUnionParticipantFinalDamage(attacker,
                 CalculateNativeUnionDamage(power,
                     HUtil32.LoWord(attacker.m_WAbil.DC),
-                    HUtil32.HiWord(attacker.m_WAbil.DC), level, random));
+                    HUtil32.HiWord(attacker.m_WAbil.DC), level, random,
+                    NativeUnionDamageTable.Warrior));
         }
 
         internal static int ApplyNativeUnionParticipantFinalDamage(
@@ -1439,15 +1442,35 @@ namespace GameSvr
                     magic.MagicInfo.btDefPower));
         }
 
+        /// <summary>
+        /// 宿主有两条同形的合击结算例程，唯一差别是 <c>fmul qword [eax*8 + …]</c>
+        /// 取哪张系数表：<c>sub_68FF2C @0x68FF6D</c> 取 <c>0x7D33FC</c>（战士），
+        /// <c>sub_68EEDC @0x68EF1D</c> 取 <c>0x7D3278</c>（法道）。加法表
+        /// <c>0x7D32D0</c> 两条共用（@0x68FF7F / @0x68EF2F）。调用点按能力字段
+        /// 干净二分：DC/CC → 战士，MC/SC → 法道，逐点清单见
+        /// <see cref="GameSvr.Plugins.YanshenComboTables"/>。
+        /// </summary>
+        internal enum NativeUnionDamageTable
+        {
+            /// <summary>sub_68EEDC / 0x7D3278：MC、SC 路。</summary>
+            WizTao,
+            /// <summary>sub_68FF2C / 0x7D33FC：DC、CC 路。</summary>
+            Warrior
+        }
+
         internal static int CalculateNativeUnionDamage(int basePower,
             int minimum, int maximum, int effectiveLevel,
-            Func<int, int> random)
+            Func<int, int> random,
+            NativeUnionDamageTable table = NativeUnionDamageTable.WizTao)
         {
             var level = Math.Min(Math.Max(0, effectiveLevel),
                 NativeUnionDamageMultiplier.Length - 1);
             var power = basePower + minimum + random(Math.Max(1,
                 maximum - minimum + 1));
-            return HUtil32.Round(power * NativeUnionDamageMultiplier[level]) +
+            var multiplier = table == NativeUnionDamageTable.Warrior
+                ? Plugins.YanshenComboTables.Warrior(level)
+                : Plugins.YanshenComboTables.WizTao(level);
+            return HUtil32.Round(power * multiplier) +
                 NativeUnionDamageBonus[level];
         }
 
