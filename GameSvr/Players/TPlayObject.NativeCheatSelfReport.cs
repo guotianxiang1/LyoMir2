@@ -42,13 +42,19 @@ namespace GameSvr
     {
         /// <summary>
         /// The server-wide cheat penalty policy byte at native <c>0x7D3A8C</c>.
-        /// A whole-image dword scan finds exactly three occurrences of the address:
-        /// <c>0x6CD426</c> and <c>0x6D8CDA</c> (both <c>A0 8C 3A 7D 00 mov al,[0x7D3A8C]</c>,
-        /// i.e. reads) and <c>0x7D6010</c>, which is a slot in the unit
-        /// initialisation pointer list, not a config-key table. Nothing in the image
-        /// ever writes it, so a Delphi zero-initialised global keeps the value 0 for
-        /// the whole process lifetime. Modelled as a field rather than a const so the
-        /// two policy arms below stay reachable code and keep documenting the contract.
+        /// Two direct readers: <c>0x6CD425</c> and <c>0x6D8CD9</c>
+        /// (both <c>A0 8C 3A 7D 00 mov al,[0x7D3A8C]</c>); the latter is immediately
+        /// followed by <c>0x6D8CDE mov [edx+0x1829],al</c>, i.e. it seeds the
+        /// reporting player's tier from this global.
+        ///
+        /// 【订正 2026-08-14】早前这里断言「镜像里从没有人写它，所以 Delphi 零初始化
+        /// 的全局在整个进程生命周期恒为 0」——**该结论是错的**。当时的扫描确实看到了
+        /// <c>0x7D6010</c>，却把它归类为「单元初始化指针表的槽位」就没再跟下去；
+        /// 实测 <c>[0x7D6010] = 0x007D3A8C</c>，那是**指向本字节的指针槽**。
+        /// 跨服 ident 214 的 handler <c>sub_6579B0</c> 三条臂全部
+        /// <c>mov eax,[0x7D6010]</c> 后 <c>mov byte [eax],1/2/3</c>，
+        /// 即经指针间接写入本字节。所以本值**会**在运行期被改，只是写者在跨服入口、
+        /// 不在本文件的搜索半径内。接线见 <c>MirrorMessage.ISM_GLOBAL_MODE_SET</c>。
         /// </summary>
         internal static byte NativeCheatReportPolicyTier = 0;
 

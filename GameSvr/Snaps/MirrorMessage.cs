@@ -66,6 +66,8 @@ namespace GameSvr
                 case Grobal2.ISM_CHATPROHIBITION:
                 // 224 stub 0x65730A `mov ecx,[ebp+0x10]` -> sub_6574B4 -> 声望点数
                 case Grobal2.ISM_MENTOR_REPUTATION:
+                // 214 stub 0x657287 `mov ecx,[ebp+0x10]` -> sub_6579B0 -> 策略档位
+                case Grobal2.ISM_GLOBAL_MODE_SET:
                     return true;
                 default:
                     return false;
@@ -276,11 +278,26 @@ namespace GameSvr
                     MsgGetGmRelay(serverNum, Body);
                     break;
                 case Grobal2.ISM_GLOBAL_MODE_SET:
-                    // 战神 214 (stub @0x657287 -> sub_6579B0): 对第三个整型参数做
-                    // 3 路 switch, 写全局 [[0x7D6010]] = 1/2/3。C# 传输层无第三个
-                    // 整型参数载体, 且 [0x7D6010] 无 C# 模型 —— fail-closed, 保留
-                    // 空处理 (不落 default sink: native 214 是 REAL handler,
-                    // 打印 "[Error]" 反而与 native 不符)。见报告 214 条。
+                    // 战神 214 (stub @0x657287 -> sub_6579B0)：对第三个整型参数做
+                    // 3 路跳表，每臂经指针槽写同一个全局字节：
+                    //   006579B0  83 EA 01     sub edx,1
+                    //   006579B3  72 07        jb  0x6579BC   ; 参数 0 -> 写 1
+                    //   006579B5  74 0E        je  0x6579C5   ; 参数 1 -> 写 2
+                    //   006579B7  4A / 74 14   dec edx / je 0x6579CE ; 参数 2 -> 写 3
+                    //   006579BA  EB 1A        jmp 0x6579D6   ; 其余 -> 直接 ret，不写
+                    //   006579BC  A1 10 60 7D 00 / C6 00 01    mov eax,[0x7D6010] / mov byte[eax],1
+                    //   006579C5  ...                          同上写 2
+                    //   006579CE  ...                          同上写 3
+                    // [0x7D6010] 是**指针槽**，其内容实测为 0x007D3A8C，即写的是
+                    // byte[0x7D3A8C] —— 全服外挂惩罚策略档位。该字节的读点
+                    // 0x6D8CD9 `A0 8C 3A 7D 00 mov al,[0x7D3A8C]` 紧接
+                    // 0x6D8CDE `mov [edx+0x1829],al`，把它种进上报玩家的
+                    // m_btNativeCheatPenaltyTier。故 214 = 跨服下发全服反外挂档位。
+                    // 本端载体就是 TPlayObject.NativeCheatReportPolicyTier。
+                    if (nParam >= 0 && nParam <= 2)
+                    {
+                        TPlayObject.NativeCheatReportPolicyTier = (byte)(nParam + 1);
+                    }
                     break;
                 case Grobal2.ISM_DEAD_LEG_220:
                     // 战神 220 (stub @0x6572D9 -> sub_657E08): 通篇拼串, 终点
