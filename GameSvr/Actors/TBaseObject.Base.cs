@@ -54,18 +54,28 @@ namespace GameSvr
                 if (!m_boDeath)
                 {
                     int n18;
-                    if ((m_WAbil.HP < m_WAbil.MaxHP) && (m_nHealthTick >= M2Share.g_Config.nHealthFillTime))
+                    // POIS-18 — native natural HP regen @0x76B769-0x76B7AE:
+                    //   76B769  81 7E 10 2C 01 00 00  cmp  [esi+0x10], 0x12C   ; budget >= 300
+                    //   76B770  7C 40                 jl   0x76B7B2
+                    //   76B772  33 C0 / 89 46 10      mov  [esi+0x10], 0
+                    //   76B77D  8B 43 48              mov  eax, [ebx+0x48]     ; HP
+                    //   76B780  85 C0 / 7E 2E         test eax,eax / jle skip  ; HP > 0 required
+                    //   76B784  3B 43 4C / 7D 29      cmp  eax,[ebx+0x4C] / jge skip
+                    //   76B789  8B 86 B0 02 00 00     mov  eax, [esi+0x2B0]    ; MaxHP
+                    //   76B78F  B9 4B 00 00 00        mov  ecx, 0x4B           ; 75
+                    //   76B795  F7 F9 / 8B D0 / 42    idiv ecx; edx = eax + 1
+                    //   76B79E  E8 11 E6 FF FF        call 0x769DB4            ; IncHealthSpell(n,0)
+                    // The `test eax,eax / jle` gate was missing: an actor sitting at 0 HP
+                    // could be healed back up on the tick the budget matured and so never
+                    // reach the HP == 0 death poll below. The MP branch has no such gate
+                    // natively and keeps only the MP < MaxMP compare.
+                    // Going through IncHealthSpell also picks up the bodyState 0x66 halving
+                    // at 0x769DD1, which the inline add skipped; IncHealthSpell clamps to
+                    // MaxHP and raises HealthSpellChanged itself (0x769E3C call 0x7693E8).
+                    if ((m_WAbil.HP > 0) && (m_WAbil.HP < m_WAbil.MaxHP) && (m_nHealthTick >= M2Share.g_Config.nHealthFillTime))
                     {
                         n18 = m_WAbil.MaxHP / 75 + 1;
-                        if ((long)m_WAbil.HP + n18 < m_WAbil.MaxHP)
-                        {
-                            m_WAbil.HP += n18;
-                        }
-                        else
-                        {
-                            m_WAbil.HP = m_WAbil.MaxHP;
-                        }
-                        HealthSpellChanged();
+                        IncHealthSpell(n18, 0);
                     }
                     if ((m_WAbil.MP < m_WAbil.MaxMP) && (m_nSpellTick >= M2Share.g_Config.nSpellFillTime))
                     {

@@ -1775,6 +1775,22 @@ namespace GameSvr
             {
                 return;
             }
+            // POIS-18 — native IncHealthSpell @0x769DB4 halves both amounts while
+            // bodyState 0x66 is held, between the negative guard and the clamped adds:
+            //   769DC9  85 F6 / 7C 74      test esi,esi / jl  return    ; nHP < 0
+            //   769DCF  85 FF / 7C 70      test edi,edi / jl  return    ; nMP < 0
+            //   769DD1  B2 66              mov  dl, 0x66
+            //   769DD3  8B C3 / E8 86 8B 00 00  call 0x772960           ; HasState(0x66)
+            //   769DDA  84 C0 / 74 14      test al,al / je 0x769DF2
+            //   769DDE  D1 FE / 79 03 / 83 D6 00   sar esi,1 (toward zero)
+            //   769DE8  D1 FF / 79 03 / 83 D7 00   sar edi,1
+            // Both operands are already non-negative here, so the sar/adc pair is
+            // plain integer division by two.
+            if (HasNativeActiveState(0x66))
+            {
+                nHP /= 2;
+                nMP /= 2;
+            }
             m_WAbil.HP = (int)Math.Min((long)m_WAbil.HP + nHP,
                 Math.Max(0, m_WAbil.MaxHP));
             m_WAbil.MP = (int)Math.Min((long)m_WAbil.MP + nMP,
