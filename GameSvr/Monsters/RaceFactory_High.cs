@@ -102,6 +102,11 @@ namespace GameSvr
                 case 149:
                     cert = new FireCracker();
                     break;
+
+                // race 159 TTimerBombMon : AnimalObject —— 见 Monster/TimerBombMon.cs
+                case 159:
+                    cert = new TimerBombMon();
+                    break;
             }
             return cert != null;
         }
