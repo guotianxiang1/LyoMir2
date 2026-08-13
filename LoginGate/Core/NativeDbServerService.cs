@@ -331,15 +331,24 @@ internal sealed class NativeDbServerService
             string error;
             if (result.Success && TryCreateSuccessTail(result.Account, out var tail, out error))
             {
+                // GateIdx (+1) is echoed, not chosen: PushAuthHead stores the whole
+                // request head (uSDKAuth.pas:591) and the reply ships that copy.
                 if (!LoginGateWireProtocol.TryCreateNativeAuthResponse124(
-                        6, 1, request.QueryId, tail, out response, out error))
+                        LoginGateWireProtocol.NativeAuthTypeLoginCenter,
+                        request.ProtocolVersion, request.QueryId, tail,
+                        out response, out error))
                     throw new InvalidDataException(error);
                 _log("INFO", $"票据认证成功：QueryId={request.QueryId}");
             }
             else
             {
+                // 12 bytes, wAuthType still atLoginCenterAuth, and a real nResult:
+                // uSDKAuth.pas:1624 sends the stored head verbatim, so +0 stays 6 and
+                // +8 carries the LC code. 0 there would read as LC_AUTH_SUCCESS.
                 if (!LoginGateWireProtocol.TryCreateNativeAuthFailure(
-                        0, 1, request.QueryId, "authentication failed",
+                        LoginGateWireProtocol.NativeAuthTypeLoginCenter,
+                        request.ProtocolVersion, request.QueryId,
+                        LoginGateWireProtocol.NativeLcAuthFailed, null,
                         out response, out error))
                     throw new InvalidDataException(error);
                 _log("WARN", $"票据认证失败：QueryId={request.QueryId}");
