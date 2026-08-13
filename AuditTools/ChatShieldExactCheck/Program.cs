@@ -138,7 +138,7 @@ static void CheckHearGate()
         sMsg = "allowed"
     }), "allowed RM_HEAR dispatch");
     Packet(player.m_DefMsg, Grobal2.SM_HEAR, 0x12345678,
-        HUtil32.MakeWord(0x12, 0x34), 0, 1, "allowed RM_HEAR");
+        0xFF00, 0, 1, "allowed RM_HEAR");
 }
 
 static void CheckClientConfigPacket()

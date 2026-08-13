@@ -5042,13 +5042,15 @@ namespace GameSvr
         public void SendGroupText(string sMsg)
         {
             TPlayObject PlayObject;
-            sMsg = M2Share.g_Config.sGroupMsgPreFix + sMsg;
+            // 0x7270F4 LStr len=1 "-" then 0x40581C dest = "-" + body.
+            // 〖组队〗 is 0-hit INVENTED. Recog is the member (0x7270B8 edx=esi).
+            sMsg = "-" + sMsg;
             if (m_GroupOwner != null)
             {
                 for (int i = 0; i < m_GroupOwner.m_GroupMembers.Count; i++)
                 {
                     PlayObject = m_GroupOwner.m_GroupMembers[i];
-                    PlayObject.SendMsg(this, Grobal2.RM_GROUPMESSAGE, 0, M2Share.g_Config.btGroupMsgFColor, M2Share.g_Config.btGroupMsgBColor, 0, sMsg);
+                    PlayObject.SendMsg(PlayObject, Grobal2.RM_GROUPMESSAGE, 0, 0, 0, 0, sMsg);
                 }
             }
         }

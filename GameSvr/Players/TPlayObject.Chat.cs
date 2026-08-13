@@ -18,46 +18,36 @@ namespace GameSvr
 
         protected virtual void Whisper(string whostr, string saystr)
         {
-            // 战神 sub_6BB864 @0x6BB8A4: cmp eax,0xFF; jle; clamps whisper to 255 bytes.
-            // Native enforces this gate before any further processing.
-            if (saystr.Length > 255)
-            {
-                saystr = saystr.Substring(0, 255);
-            }
+            // 0x6C94FC has no 255-byte clamp. The old comment pointing at
+            // 0x6BB8A4 was a misread: that VA is `E8 B7 C0 01 00 call 0x6d7960`
+            // on the shout-gold path, not a whisper length gate.
             var svidx = 0;
             var PlayObject = M2Share.UserEngine.GetPlayObject(whostr);
             if (PlayObject != null)
             {
+                // 0x6C954D 80 BF 2C 0D 00 00 00 cmp [edi+0xD2C],0 / je
+                // then 0x6C9556..0x6C9579 SysMsg 0x38FF "无法向 "+name+" 发送信息"
                 if (!PlayObject.m_boReadyRun)
                 {
-                    SysMsg(whostr + M2Share.g_sCanotSendmsg, MsgColor.Red, MsgType.Hint);
+                    SysMsg("无法向 " + whostr + " 发送信息", MsgColor.Red, MsgType.Hint);
                     return;
                 }
-                // 0x6C9584 F6 87 9C 0B 00 00 01 test byte [edi+0xB9C],1 / jne deny
+                // 0x6C9584 F6 87 9C 0B 00 00 01 test [edi+0xB9C],1 / jne deny
+                // 0x6C95A0 call 0x6C97A8 blocklist (0x40BD78 CompareText)
+                // deny text 0x6C9710 " 拒绝私聊"
                 if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName)
                     || (PlayObject.m_dwChatShieldMask & 0x01u) != 0)
                 {
-                    SysMsg(whostr + M2Share.g_sUserDenyWhisperMsg, MsgColor.Red, MsgType.Hint);
+                    SysMsg(whostr + " 拒绝私聊", MsgColor.Red, MsgType.Hint);
                     return;
                 }
-                if (!m_boOffLineFlag && PlayObject.m_boOffLineFlag)
-                {
-                    if (PlayObject.m_sOffLineLeaveword != "")
-                    {
-                        PlayObject.Whisper(m_sCharName, PlayObject.m_sOffLineLeaveword);
-                    }
-                    else
-                    {
-                        PlayObject.Whisper(m_sCharName, M2Share.g_Config.sServerName + '[' + M2Share.g_Config.sServerIPaddr + "]提示您");
-                    }
-                    return;
-                }
-                // Native sub_6C94FC has no permission test here: after the 0x6C9584
-                // hear-whisper gate and the 0x6C95A0 IsBlockWhisper gate it falls
-                // straight into the 0x6C95CE concat and one single enqueue. The
-                // GM tier was invented - ident 103's Param is the literal 0xFFFC
-                // (0x6B4AE4 68 FC FF 00 00), which is what btWhisperMsgFColor/BColor
-                // (0xFC/0xFF) already produced on the non-GM branch.
+                // Native sub_6C94FC has no permission test here, and no offline
+                // leaveword branch either: after the 0x6C9584 hear-whisper gate and the
+                // 0x6C95A0 IsBlockWhisper gate it falls straight into the 0x6C95CE
+                // concat and one single enqueue. The GM tier was invented - ident 103's
+                // Param is the literal 0xFFFC (0x6B4AE4 68 FC FF 00 00), which is what
+                // btWhisperMsgFColor/BColor (0xFC/0xFF) happened to produce on the
+                // non-GM branch, so the tier never showed up as a wire difference.
                 //   0x6C95F6 66 8B 93 78 02 00 00 mov dx,[ebx+0x278] -> wParam = speaker level
                 //   0x6C95FE 0F B7 C0 / 50        movzx eax,ax; push -> nParam1 = 0 -> Series
                 //   0x6C9610 8B D3                mov edx,ebx        -> BaseObject = speaker
@@ -88,7 +78,8 @@ namespace GameSvr
                 }
                 else
                 {
-                    SysMsg(whostr + M2Share.g_sUserNotOnLine, MsgColor.Red, MsgType.Hint);
+                    // 0x6C967B..0x6C9695 cx=0xFFDB, 0x6C9744 " : 无法查找"
+                    SysMsg(whostr + " : 无法查找", MsgColor.Green, MsgType.Hint);
                 }
             }
         }
@@ -150,7 +141,8 @@ namespace GameSvr
                     m_nSayMsgCount = 0;
                     m_boDisableSayMsg = true;
                     m_dwDisableSayMsgTick = now + 60 * 1000;
-                    SysMsg("发送重复的话太频繁，当前已被禁言了。", MsgColor.Red, MsgType.Hint);
+                    // 0x6BB59E push 0x6BB9B8 + IntToStr(60) + 0x6BB9E4 "秒。"
+                    SysMsg("发送重复的话太频繁，当前已被禁言60秒。", MsgColor.Red, MsgType.Hint);
                     return;
                 }
                 if (m_btSayRapidCount >= 5)
@@ -158,7 +150,8 @@ namespace GameSvr
                     m_btSayRapidCount = 0;
                     m_boDisableSayMsg = true;
                     m_dwDisableSayMsgTick = now + 60 * 1000;
-                    SysMsg("说话太频繁，当前已被禁言了。", MsgColor.Red, MsgType.Hint);
+                    // 0x6BB5F6 push 0x6BB9F4 + IntToStr(60) + 0x6BB9E4 "秒。"
+                    SysMsg("说话太频繁，当前已被禁言60秒。", MsgColor.Red, MsgType.Hint);
                     return;
                 }
                 if (elapsed >= 0x7D0 && m_btSayRapidCount >= 1)
@@ -253,7 +246,10 @@ namespace GameSvr
                                     {
                                         if (m_Abil.Level <= M2Share.g_Config.nCanShoutMsgLevel)
                                         {
-                                            SysMsg(format(M2Share.g_sYouNeedLevelMsg, M2Share.g_Config.nCanShoutMsgLevel + 1), MsgColor.Red, MsgType.Hint);
+                                            // 0x6BBA48 "喊话功能只有%d级以上才可以使用"
+                                            // Format arg is the raw threshold at [0x7D6478]=7, not +1.
+                                            SysMsg(format("喊话功能只有{0}级以上才可以使用",
+                                                M2Share.g_Config.nCanShoutMsgLevel), MsgColor.Red, MsgType.Hint);
                                             return;
                                         }
                                         m_dwShoutMsgTick = HUtil32.GetTickCount();
@@ -269,7 +265,9 @@ namespace GameSvr
                                         }
                                         return;
                                     }
-                                    SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new[] { 15 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
+                                    // 0x6BBA30 " 秒后才可以喊话" concatenated onto IntToStr(remain).
+                                    SysMsg((15 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000)
+                                        + " 秒后才可以喊话", MsgColor.Red, MsgType.Hint);
                                     return;
                                 }
                                 SysMsg(M2Share.g_sThisMapDisableSendCyCyMsg, MsgColor.Red, MsgType.Hint);
@@ -310,7 +308,12 @@ namespace GameSvr
                     }
                     return;
                 }
-                SysMsg(M2Share.g_sYouIsDisableSendMsg, MsgColor.Red, MsgType.Hint);
+                // Whisper mute is silent: 0x6C9523 80 7D 08 00 / jne exit.
+                // Guild (0x6BB719) is the path that SysMsgs 0x6BBA18.
+                if (sData.Length >= 1 && sData[0] == '/')
+                    return;
+                // 0x6BBA18 / 0x6C9758 "已经被禁止聊天"
+                SysMsg("已经被禁止聊天", MsgColor.Red, MsgType.Hint);
             }
             catch (Exception e)
             {
@@ -528,16 +531,6 @@ namespace GameSvr
                         m_boCheckOldPwd = true;
                         SysMsg(M2Share.g_sPleaseInputOldPasswordMsg, MsgColor.Green, MsgType.Hint);
                         return;
-                    }
-                    return;
-                }
-                // 世界频道前缀 @$$# — 全服广播，不走命令解析器
-                if (sData.StartsWith("@$$#", StringComparison.Ordinal))
-                {
-                    string worldMsg = sData.Length > 4 ? sData.Substring(4).TrimStart(' ') : "";
-                    if (!string.IsNullOrEmpty(worldMsg))
-                    {
-                        M2Share.UserEngine.SendBroadCastMsg(m_sCharName + ": " + worldMsg, MsgType.Cust);
                     }
                     return;
                 }
