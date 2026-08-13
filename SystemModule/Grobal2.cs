@@ -2102,5 +2102,20 @@ namespace SystemModule
         //   CM 3286 0x6DA65D -> 0x6E6B54  乾坤包·领取奖励 (列表恒空 -> reset -> SM 2957)
         //   CM 3287 0x6DA895 -> 0x6E8734  附近玩家展示物品 RM 0x3004 (独立特性, fail-closed)
         //   CM 3288 0x6DA8C4 -> 0x6E8820  自身物品 RM 0x3005 (独立特性, fail-closed)
+
+        // === ItemTransfer subsystem ===
+        // CM 4215（邻域对象交互，leaf 0x6DAFCA -> worker 0x6E8684）与 CM 4218（"物品转移
+        // 到本人"，leaf 0x6DB00C -> worker 0x6F3104）的镜像常量。两者的 CM ident 常量
+        // (CM_4215 / CM_4218) 已在上方 CM 尾段清单里定义，此处不重复。
+        //
+        // SM 4117 (0x1015)：CM 4215 唯一回包 ident。全镜像仅 worker 0x6E8684 内三处
+        // `66 BA 15 10 mov dx,0x1015`（0x6E86D0 / 0x6E86EF / 0x6E871F）发送，别无第二
+        // 发送点，故其客户端语义无法从镜像推导；回包体又取自邻居对象未建模的
+        // word[+0x608]，因此忠实实现里对该回包 fail-closed（扣留，绝不上线臆造字节）。
+        public const int SM_4117 = 4117; // 0x1015  CM4215 邻域交互唯一回包（withheld）
+
+        // CM 4218 的 1500ms 冷却门阈值：0x6F3118 `sub edx,[self+0xA6C]` /
+        // 0x6F311E `cmp edx,0x5DC` / 0x6F3124 `jbe`（无符号 <=）-> 静默丢弃。
+        public const int ItemTransferSelfThrottleMs = 0x5DC; // 1500
     }
 }
