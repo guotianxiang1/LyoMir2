@@ -3530,7 +3530,15 @@ namespace GameSvr.Plugins
         public bool IsHideGoldMsg() => Enabled("屏蔽元宝增减信息");
         public bool IsHideAttrUp() => Enabled("屏蔽属性提升提示");
         public bool IsHideRank() => Enabled("屏蔽排行榜");
-        public bool IsBlockSpam() => Enabled("屏蔽发言频繁禁言功能");
+        // 屏蔽发言频繁禁言功能 is a host-code patch, same primitive as 复活戒指重设.
+        // Plugin 0x100AC678 / 0x100AC6B2 memcpy 6×90 over the two flood-counter
+        // increments in ProcessSayMsg (sub_6BB2F8):
+        //   0x6BB56A  FF 83 74 0A 00 00  inc dword [ebx+0xA74]  → m_nSayMsgCount++
+        //   0x6BB579  FE 83 82 06 00 00  inc byte  [ebx+0x682]  → m_btSayRapidCount++
+        // Restore arm 0x100AC75D / 0x100AC797 writes the incs back. Thresholds
+        // (>=2 / >=5), the 60 s mute, and the decay decs are not patched.
+        public bool IsBlockSpamPatchOn() => PatchToggleOn("屏蔽发言频繁禁言功能");
+        public bool IsBlockSpam() => IsBlockSpamPatchOn();
         public bool IsDelSkillSilent() => Enabled("删除技能不提示");
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
         public bool IsUpSkillSilent() => Enabled("升级技能不提示");
