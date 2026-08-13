@@ -50,10 +50,15 @@ var provenanceMarkers = new[]
 var nativeEvidence = new Regex(@"sub_[0-9A-Fa-f]{6}|0x00[0-9A-Fa-f]{5,6}|@0x[0-9A-Fa-f]{6}",
     RegexOptions.Compiled);
 
+// 闸门先自证:块级取窗必须仍然抓得住"块内确实没有战神 EA"的真违规。
+// 见文件末尾 SelfTest —— 任一反例失灵就直接退出,不允许带病扫描。
+SelfTest(provenanceMarkers, nativeEvidence);
+
 var scanRoots = new[] { "GameSvr", "SystemModule", "LoginGate", "GameGate-CS" };
 var violations = new List<string>();
 var annotated = 0;
 var nativeBacked = 0;
+var blockExtended = 0;
 var filesScanned = 0;
 
 foreach (var scanRoot in scanRoots)
@@ -71,11 +76,7 @@ foreach (var scanRoot in scanRoots)
                 lines[i].Contains(f, StringComparison.Ordinal));
             if (hit == null) continue;
 
-            // 取该行前后各 6 行作为"注释块"上下文 —— 标注可能在块首。
-            var lo = Math.Max(0, i - 6);
-            var hi = Math.Min(lines.Length - 1, i + 6);
-            var block = string.Join('\n', lines[lo..(hi + 1)]);
-
+            var block = ContextBlock(lines, i);
             if (provenanceMarkers.Any(m => block.Contains(m, StringComparison.Ordinal)))
             {
                 annotated++;
@@ -84,6 +85,7 @@ foreach (var scanRoot in scanRoots)
             if (nativeEvidence.IsMatch(block))
             {
                 nativeBacked++;
+                if (!nativeEvidence.IsMatch(NeighbourhoodOnly(lines, i))) blockExtended++;
                 continue;
             }
 
@@ -115,9 +117,12 @@ if (filesScanned == 0)
         "请确认传入的仓库根目录正确(应含 GameSvr/ 等源码树)。");
 }
 
+// blockExtended = 只因把窗口从 ±6 行放宽到整个注释块才判为合规的条数。
+// 这是本闸唯一被放宽的口子,显式计数,便于复核它有没有悄悄膨胀。
 Console.WriteLine(
     $"ProvenanceGuardCheck PASS files={filesScanned} refCitations={annotated + nativeBacked} " +
-    $"annotated={annotated} nativeBacked={nativeBacked} unprovenanced=0");
+    $"annotated={annotated} nativeBacked={nativeBacked} blockExtended={blockExtended} " +
+    "unprovenanced=0");
 return;
 
 static string FindRepositoryRoot()
@@ -130,4 +135,128 @@ static string FindRepositoryRoot()
         dir = dir.Parent;
     }
     throw new DirectoryNotFoundException("找不到仓库根(含 GameSvr 的目录)");
+}
+
+// 本闸头部写的判据是"必须在【同一注释块】内标注/给证",旧实现拿 ±6 行邻域近似它。
+// 真实注释块远比 13 行长,近似会差一行就误报:TBaseObject.Base.cs 的 MakeGhost 文档块
+// 从 1518 行铺到 1555 行,战神 EA(sub_768060 / sub_7681B4 / 0x7680E9 ...)密集列在块首,
+// 两条 Delphi 引用是块尾"三条独立旁证"的第 (3) 条;引用行 1545 的 ±6 窗口是 1539..1551,
+// 恰好把最近的 sub_67C150(1538 行)挡在外面。这里改成按注释块取窗,落实原本的判据。
+//
+// 取【并集】而不是直接替换邻域:邻域是旧口径的下限,保留它才能保证凡是旧实现抓得到的
+// 违规现在依然抓得到(引用写在代码行上、证据在相邻代码里的情形也不会新报)。
+static string ContextBlock(string[] lines, int index)
+{
+    var (blockLo, blockHi) = CommentBlockRange(lines, index);
+    var lo = Math.Min(blockLo, Math.Max(0, index - 6));
+    var hi = Math.Max(blockHi, Math.Min(lines.Length - 1, index + 6));
+    return string.Join('\n', lines[lo..(hi + 1)]);
+}
+
+static string NeighbourhoodOnly(string[] lines, int index)
+{
+    var lo = Math.Max(0, index - 6);
+    var hi = Math.Min(lines.Length - 1, index + 6);
+    return string.Join('\n', lines[lo..(hi + 1)]);
+}
+
+// 注释块 = 以该行为中心、上下连续且【同类】的注释行。代码行、空行、以及从 /// 切换到 //
+// 都会截断,所以块不会越过一段代码去够到隔壁注释里的地址。引用行本身不是注释时返回单行,
+// 由 ContextBlock 退回旧邻域口径。
+static (int Lo, int Hi) CommentBlockRange(string[] lines, int index)
+{
+    var kind = CommentKind(lines[index]);
+    if (kind == CommentLineKind.NotComment) return (index, index);
+
+    var lo = index;
+    while (lo - 1 >= 0 && CommentKind(lines[lo - 1]) == kind) lo--;
+    var hi = index;
+    while (hi + 1 < lines.Length && CommentKind(lines[hi + 1]) == kind) hi++;
+    return (lo, hi);
+}
+
+static CommentLineKind CommentKind(string line)
+{
+    var trimmed = line.TrimStart();
+    if (trimmed.StartsWith("///", StringComparison.Ordinal)) return CommentLineKind.Doc;
+    if (trimmed.StartsWith("//", StringComparison.Ordinal)) return CommentLineKind.Line;
+    return CommentLineKind.NotComment;
+}
+
+// 块级取窗放宽了判据,所以必须证明它没被放宽到失去意义。四个反例每次运行都跑:
+// 块内无 EA 要照样报;隔着代码的另一个块里的 EA 不算数;旧邻域口径不能退化。
+static void SelfTest(string[] markers, Regex nativeEvidence)
+{
+    // (1) 真误报:EA 在同一 /// 块块首,距引用行 12 行 —— 旧邻域够不到,块级应判合规。
+    var farEvidenceSameBlock = new[]
+    {
+        "        /// <summary>",
+        "        /// 战神 TCreature.MarkDelete sub_768060",
+        "        /// filler 1", "        /// filler 2", "        /// filler 3",
+        "        /// filler 4", "        /// filler 5", "        /// filler 6",
+        "        /// filler 7", "        /// filler 8", "        /// filler 9",
+        "        /// 三条独立旁证之 (3):",
+        "        /// staging/ref-MirServer-Delphi/EM2Engine/ObjBase.pas:18605",
+        "        /// </summary>",
+    };
+    Expect(nativeEvidence.IsMatch(ContextBlock(farEvidenceSameBlock, 12)),
+        "块内 12 行开外的 sub_XXXXXX 应当算数");
+    Expect(!nativeEvidence.IsMatch(NeighbourhoodOnly(farEvidenceSameBlock, 12)),
+        "该反例必须是旧邻域口径抓不到的,否则它证明不了任何事");
+
+    // (2) 反例甲:整个 /// 块里既无 EA 也无来源标注 —— 必须仍然是违规。
+    var noEvidenceAnywhere = new[]
+    {
+        "        /// <summary>",
+        "        /// 仓库容量上限", "        /// filler 1", "        /// filler 2",
+        "        /// filler 3", "        /// filler 4", "        /// filler 5",
+        "        /// filler 6", "        /// filler 7", "        /// filler 8",
+        "        /// filler 9", "        /// 依据:",
+        "        /// staging/ref-MIR2/GameOfMir/M2Server/ObjBase.pas:15594",
+        "        /// </summary>",
+    };
+    var block2 = ContextBlock(noEvidenceAnywhere, 12);
+    Expect(!nativeEvidence.IsMatch(block2) &&
+           !markers.Any(m => block2.Contains(m, StringComparison.Ordinal)),
+        "块内无 EA 无标注的引用必须仍判违规");
+
+    // (3) 反例乙:EA 在【另一个】注释块里,中间隔着代码行 —— 不得被够到。
+    var evidenceInNeighbourBlock = new[]
+    {
+        "        // 战神 sub_4C8658 硬编码 4.0",
+        "        private const double Power = 4.0;",
+        "",
+        "        /// <summary>",
+        "        /// filler 1", "        /// filler 2", "        /// filler 3",
+        "        /// filler 4", "        /// filler 5", "        /// filler 6",
+        "        /// filler 7", "        /// filler 8",
+        "        /// staging/ref-MIR2/GameOfMir/M2Server/ObjBase.pas:15594",
+        "        /// </summary>",
+    };
+    Expect(!nativeEvidence.IsMatch(ContextBlock(evidenceInNeighbourBlock, 12)),
+        "隔着代码行的另一个注释块里的 EA 不得算数");
+
+    // (4) 旧邻域口径是下限,不能因为改块级就退化:引用写在代码行(字符串字面量)上时,
+    //     相邻代码里的 EA 仍应算数。
+    var citationOnCodeLine = new[]
+    {
+        "        var note = \"see ObjBase.pas:15594\";",
+        "        // sub_4C8658",
+    };
+    Expect(nativeEvidence.IsMatch(ContextBlock(citationOnCodeLine, 0)),
+        "非注释行的引用必须仍按 ±6 行邻域取证");
+}
+
+static void Expect(bool condition, string what)
+{
+    if (!condition)
+        throw new InvalidOperationException(
+            $"ProvenanceGuardCheck 自检失败 —— {what}。取窗逻辑已失效,拒绝扫描。");
+}
+
+internal enum CommentLineKind
+{
+    NotComment,
+    Doc,
+    Line,
 }
