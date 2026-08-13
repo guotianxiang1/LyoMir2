@@ -19,7 +19,7 @@ namespace GameSvr
 
             int now = HUtil32.GetTickCount();
             if (!IsNativeMotaeboTimingReady(now, m_dwDoMotaeboTick,
-                    m_dwHitTick))
+                    m_dwActionTick))
                 return false;
 
             m_dwDoMotaeboTick = now;
@@ -68,12 +68,31 @@ namespace GameSvr
             return m_nNativeForcedMoveRemaining != 0;
         }
 
+        // MOVE-21 — obj+0x6C is last successful walk/run arrival tick, not
+        // last-hit. The only GetTickCount stores into a Self[+0x6C] slot
+        // in the whole CODE image are the three arrival blocks:
+        //   006BBD4B  E8 F0 C5 D4 FF  call 0x408340   ; GetTickCount
+        //   006BBD50  89 43 6C        mov  [ebx+0x6C],eax  ; walk  sub_6BBCD8
+        //   006BC092  E8 A9 C2 D4 FF  call 0x408340
+        //   006BC097  89 43 6C        mov  [ebx+0x6C],eax  ; run   sub_6BBFBC
+        //   006BC1AA  E8 91 C1 D4 FF  call 0x408340
+        //   006BC1AF  89 43 6C        mov  [ebx+0x6C],eax  ; run3  sub_6BC0D4
+        // Report A's 8 other `mov [reg+0x6C]` hits (0x6BA23B..) write
+        // through `lea ebx,[edi+0x1E8]`, i.e. obj+0x254, after @ROUND —
+        // they are not this field. The 500 ms motaebo gate at 0x6BC94C
+        // (`sub eax,[esi+0x6C]` / `cmp eax,0x1F4` / `jbe`) therefore
+        // measures time since the last walk/run arrival. C# split that
+        // slot into m_dwMoveTick (invented MOVE-20 interval, written
+        // before the attempt) and m_dwActionTick (written on walk/run
+        // success in Message.cs / ClientNativeRun3). m_dwHitTick is the
+        // animal last-hit tick (TAnimalObject +0x35C) and TPlayObject
+        // never updates it. Feed m_dwActionTick.
         internal static bool IsNativeMotaeboTimingReady(int now,
-            int lastMotaeboTick, int lastHitTick)
+            int lastMotaeboTick, int lastWalkRunTick)
         {
             return unchecked((uint)(now - lastMotaeboTick)) >
                        NativeMotaeboCooldown &&
-                   unchecked((uint)(now - lastHitTick)) >
+                   unchecked((uint)(now - lastWalkRunTick)) >
                        NativeMotaeboHitCooldown;
         }
 

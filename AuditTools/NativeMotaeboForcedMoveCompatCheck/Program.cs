@@ -48,7 +48,7 @@ static void CheckState45ProducerGate()
     int now = HUtil32.GetTickCount();
     int oldTick = unchecked(now - 10000);
     player.m_dwDoMotaeboTick = oldTick;
-    player.m_dwHitTick = unchecked(now - 10000);
+        player.m_dwActionTick = unchecked(now - 10000);
     Assert(player.SetNativeActiveState(45), "state45 setup");
 
     Assert(!player.TryStartNativeMotaeboForcedMove(magic,
@@ -81,7 +81,7 @@ static void CheckRobotUsesNativeProducerGate()
     int now = HUtil32.GetTickCount();
     int oldTick = unchecked(now - 4000);
     robot.m_dwDoMotaeboTick = oldTick;
-    robot.m_dwHitTick = unchecked(now - 10000);
+    robot.m_dwActionTick = unchecked(now - 10000);
 
     var useSpell = typeof(RobotPlayObject).GetMethod("UseSpell",
         BindingFlags.Instance | BindingFlags.NonPublic)
@@ -149,7 +149,7 @@ static void CheckProductionStartAndMpTransaction()
     player.m_WAbil.MaxMP = 20;
     int now = HUtil32.GetTickCount();
     player.m_dwDoMotaeboTick = unchecked(now - 10000);
-    player.m_dwHitTick = unchecked(now - 10000);
+        player.m_dwActionTick = unchecked(now - 10000);
 
     Assert(player.TryStartNativeMotaeboForcedMove(magic,
         Grobal2.DR_RIGHT), "producer accepted");
@@ -165,7 +165,7 @@ static void CheckProductionStartAndMpTransaction()
     denied.m_WAbil.MaxMP = 9;
     now = HUtil32.GetTickCount();
     denied.m_dwDoMotaeboTick = unchecked(now - 10000);
-    denied.m_dwHitTick = unchecked(now - 10000);
+    denied.m_dwActionTick = unchecked(now - 10000);
     Assert(!denied.TryStartNativeMotaeboForcedMove(magic,
         Grobal2.DR_LEFT), "insufficient MP rejected");
     Equal((ushort)9, denied.m_WAbil.MP, "insufficient MP preserved");
@@ -184,7 +184,7 @@ static void CheckEffectiveLevelControlsSequence()
     promoted.m_WAbil.MaxMP = 20;
     int now = HUtil32.GetTickCount();
     promoted.m_dwDoMotaeboTick = unchecked(now - 10000);
-    promoted.m_dwHitTick = unchecked(now - 10000);
+    promoted.m_dwActionTick = unchecked(now - 10000);
 
     Assert(promoted.TryStartNativeMotaeboForcedMove(promotedMagic,
         Grobal2.DR_RIGHT), "effective level promoted start");
@@ -200,7 +200,7 @@ static void CheckEffectiveLevelControlsSequence()
     capped.m_WAbil.MaxMP = 20;
     now = HUtil32.GetTickCount();
     capped.m_dwDoMotaeboTick = unchecked(now - 10000);
-    capped.m_dwHitTick = unchecked(now - 10000);
+    capped.m_dwActionTick = unchecked(now - 10000);
 
     Assert(capped.TryStartNativeMotaeboForcedMove(cappedMagic,
         Grobal2.DR_RIGHT), "effective level capped start");
