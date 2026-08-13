@@ -268,6 +268,55 @@ namespace GameSvr
                     SendNativeStateArmMsg("你被定身了！",
                         NativeStateArmAlertColor, NativeStateArmAlertType);
                     break;
+                // 79..84 are the band-B Alert-pair "你处于…状态，持续" arms:
+                // same 3-part concat + `66 B9 FF 38 mov cx,0x38FF` shape as
+                // 85..88, re-derived from the gained index map @0x7418E2 and the
+                // arm table @0x74194D. NOTE the sibling gained arms 49/56/62/63/
+                // 71/76/77/78 are deliberately NOT added to this switch: they are
+                // already spoken on gain by OnNativeTimedStateGained (the state-b
+                // half of sub_741884, also on the live SendTimedAbilityState
+                // path), so repeating them here would send each line twice. Only
+                // 79..84 are missing from every sibling dispatcher, so only they
+                // land here.
+                case 79:
+                    // 0x741FEA  68 6C 2F 74 00 push 0x742F6C / movzx eax,di /
+                    //           call 0x40C89C / push 0x742C94 "秒" / mov edx,3 /
+                    //           call 0x405890 / 66 B9 FF 38 mov cx,0x38FF
+                    // 0x742F6C len 20 C4E3B4A6D3DAD7C6C9D5D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于灼烧状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 80:
+                    // 0x742031  68 8C 2F 74 00 push 0x742F8C / ... / cx=0x38FF
+                    // 0x742F8C len 20 C4E3B4A6D3DAC1D1BBEAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于裂魂状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 81:
+                    // 0x742078  68 AC 2F 74 00 push 0x742FAC / ... / cx=0x38FF
+                    // 0x742FAC len 20 C4E3B4A6D3DAC1F7D1AAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于流血状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 82:
+                    // 0x7420BF  68 CC 2F 74 00 push 0x742FCC / ... / cx=0x38FF
+                    // 0x742FCC len 20 C4E3B4A6D3DABEAABBEAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于惊魂状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 83:
+                    // 0x742106  68 EC 2F 74 00 push 0x742FEC / ... / cx=0x38FF
+                    // 0x742FEC len 20 C4E3B4A6D3DACCECEEB8D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于天罡状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 84:
+                    // 0x74214D  68 0C 30 74 00 push 0x74300C / ... / cx=0x38FF
+                    // 0x74300C len 32
+                    //   C4E3B4A6D3DABDF0D4AABBA4CCE5BBA4B6DCB1A3BBA4D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于金元护体护盾保护状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
                 // 85..88 share the 3-part concat shape of arms 21/22 (push
                 // prefix / movzx eax,di / call 0x40C89C IntToStr / push 0x742C94
                 // "秒" / mov edx,3 / call 0x405890) but load the Alert pair
