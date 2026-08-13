@@ -1935,5 +1935,20 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === ItemTransfer subsystem ===
+        // CM 4215（邻域对象交互，leaf 0x6DAFCA -> worker 0x6E8684）与 CM 4218（"物品转移
+        // 到本人"，leaf 0x6DB00C -> worker 0x6F3104）的镜像常量。两者的 CM ident 常量
+        // (CM_4215 / CM_4218) 已在上方 CM 尾段清单里定义，此处不重复。
+        //
+        // SM 4117 (0x1015)：CM 4215 唯一回包 ident。全镜像仅 worker 0x6E8684 内三处
+        // `66 BA 15 10 mov dx,0x1015`（0x6E86D0 / 0x6E86EF / 0x6E871F）发送，别无第二
+        // 发送点，故其客户端语义无法从镜像推导；回包体又取自邻居对象未建模的
+        // word[+0x608]，因此忠实实现里对该回包 fail-closed（扣留，绝不上线臆造字节）。
+        public const int SM_4117 = 4117; // 0x1015  CM4215 邻域交互唯一回包（withheld）
+
+        // CM 4218 的 1500ms 冷却门阈值：0x6F3118 `sub edx,[self+0xA6C]` /
+        // 0x6F311E `cmp edx,0x5DC` / 0x6F3124 `jbe`（无符号 <=）-> 静默丢弃。
+        public const int ItemTransferSelfThrottleMs = 0x5DC; // 1500
     }
 }
