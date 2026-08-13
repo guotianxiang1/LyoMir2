@@ -348,6 +348,18 @@ static void PrepareRuntimeConfig()
         "[String]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
         "[Command]" + Environment.NewLine);
+
+    // M2Share's static constructor also builds ExpsConfig and GlobalConfig from
+    // <BaseDirectory>\..\Share (M2Share.cs:1690/1692) and IniFile.Load throws on
+    // a missing or empty file, so the first touch of any M2Share member dies in
+    // the type initializer before a single assertion runs.
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }
 
 sealed class ProbeIni : IniFile

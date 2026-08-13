@@ -435,4 +435,11 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+
+    // TrySetNativeLevel notifies through TBaseObject.SendMsg, which takes
+    // M2Share.ProcessMsgCriticalSection. Only GameApp assigns it during a real
+    // boot, so Monitor.Enter(null) threw ArgumentNullException and the EXP-06
+    // set-level assertions never reported.
+    M2Share.ProcessMsgCriticalSection ??= new object();
+    M2Share.LogMsgCriticalSection ??= new object();
 }

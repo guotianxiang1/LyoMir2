@@ -10,6 +10,16 @@ File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "!Setup.txt"),
     "[Server]" + Environment.NewLine);
 File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "Command.conf"),
     "[Command]" + Environment.NewLine);
+// M2Share's static constructor also loads ExpsConfig and GlobalConfig from
+// <BaseDirectory>\..\Share (M2Share.cs:1690/1692); IniFile.Load throws when
+// they are missing, which kills the type initializer before any assertion.
+var shareConfigDirectory = Path.Combine(Path.GetFullPath(
+    Path.Combine(AppContext.BaseDirectory, "..")), "Share");
+Directory.CreateDirectory(shareConfigDirectory);
+File.WriteAllText(Path.Combine(shareConfigDirectory, "PlayerUpgradeExp.ini"),
+    "[PlayerLevelExp]" + Environment.NewLine);
+File.WriteAllText(Path.Combine(shareConfigDirectory, "ServerData.ini"),
+    "[Integer]" + Environment.NewLine);
 
 try
 {

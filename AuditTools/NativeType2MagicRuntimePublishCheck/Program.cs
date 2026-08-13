@@ -411,7 +411,7 @@ static void VerifyProductionWiringSourceBoundaries()
         "DBService.cs");
     var commonDb = ReadSource(repoRoot, "GameSvr", "DataStores",
         "CommonDB.cs");
-    var reloadCommand = ReadSource(repoRoot, "GameSvr", "Command",
+    var reloadCommand = ReadOptionalSource(repoRoot, "GameSvr", "Command",
         "Commands", "ReloadMagicDBCommand.cs");
 
     var decodeMagic = Slice(heroCodec,
@@ -553,11 +553,34 @@ static void VerifyProductionWiringSourceBoundaries()
             "return -1;",
             "select * from mir3.forcemagic"),
         "dormant forcemagic loader is not fail-closed after publication");
-    Assert(!reloadCommand.Contains(".LoadMagicDB(",
-               StringComparison.Ordinal)
-           && reloadCommand.Contains("拒绝运行期替换",
-               StringComparison.Ordinal),
-        "ReloadMagicDB command reopened the legacy definition path");
+    if (reloadCommand == null)
+    {
+        // d5198c6b deleted ReloadMagicDBCommand.cs with the other 62
+        // traditional-GOM commands. A command that does not exist cannot
+        // reopen the legacy loader, but the guarantee has to keep holding for
+        // the commands that remain, so the check widens instead of vanishing.
+        var commandsDirectory = Path.Combine(repoRoot, "GameSvr", "Command",
+            "Commands");
+        var reopened = Directory.Exists(commandsDirectory)
+            ? Directory.EnumerateFiles(commandsDirectory, "*.cs",
+                    SearchOption.AllDirectories)
+                .Where(file => File.ReadAllText(file)
+                    .Contains(".LoadMagicDB(", StringComparison.Ordinal))
+                .Select(Path.GetFileName)
+                .ToArray()
+            : Array.Empty<string>();
+        Assert(reopened.Length == 0,
+            "ReloadMagicDBCommand.cs is gone, but a surviving command still " +
+            "calls LoadMagicDB: " + string.Join(", ", reopened));
+    }
+    else
+    {
+        Assert(!reloadCommand.Contains(".LoadMagicDB(",
+                   StringComparison.Ordinal)
+               && reloadCommand.Contains("拒绝运行期替换",
+                   StringComparison.Ordinal),
+            "ReloadMagicDB command reopened the legacy definition path");
+    }
 
     var appInitializeEngine = Slice(appService,
         "public bool InitializeEngine()",
@@ -691,6 +714,14 @@ static void EqualSequence<T>(IEnumerable<T> expected,
             $"{description}: expected [{string.Join(",", expected)}], " +
             $"actual [{string.Join(",", actual)}]");
     }
+}
+
+// For a source file whose absence is itself a legitimate repository state; the
+// caller must then re-prove the contract some other way rather than skip it.
+static string ReadOptionalSource(string repoRoot, params string[] parts)
+{
+    var path = parts.Aggregate(repoRoot, Path.Combine);
+    return File.Exists(path) ? File.ReadAllText(path) : null;
 }
 
 static string ReadSource(string repoRoot, params string[] parts)

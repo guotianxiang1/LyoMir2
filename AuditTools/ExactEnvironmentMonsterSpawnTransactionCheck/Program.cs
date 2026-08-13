@@ -636,18 +636,47 @@ static TBaseObject InvokeOrdinaryAddBaseObject(Fixture fixture, short x, short y
     // identical to RegenMonsterByName) — its contract is transaction rollback, unchanged.
     // The exactPosition=true semantic (does 战神's magic-tower spawn place at exact coord,
     // no nudge?) is pending Tier-1 confirmation — see staging/idat_batch_queue_20260803.md.
-    var method = typeof(UserEngine).GetMethod("AddBaseObject",
-        BindingFlags.Instance | BindingFlags.NonPublic, null,
-        new[]
+    // Matching an exact 7-type signature broke the moment the product method
+    // grew a trailing optional ignoreCellBlockers parameter: GetMethod returned
+    // null and the whole audit died on MissingMethodException. Match on the
+    // seven parameter types this audit actually pins and let any further
+    // OPTIONAL parameter take its declared default; a new REQUIRED parameter
+    // still fails loudly.
+    var pinnedTypes = new[]
+    {
+        typeof(Envirnoment), typeof(short), typeof(short), typeof(int),
+        typeof(string), typeof(bool), typeof(bool)
+    };
+    var method = typeof(UserEngine)
+        .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic)
+        .Where(candidate => candidate.Name == "AddBaseObject")
+        .FirstOrDefault(candidate =>
         {
-            typeof(Envirnoment), typeof(short), typeof(short), typeof(int),
-            typeof(string), typeof(bool), typeof(bool)
-        }, null) ?? throw new MissingMethodException("AddBaseObject");
-    return (TBaseObject)method.Invoke(fixture.Engine, new object[]
+            var parameters = candidate.GetParameters();
+            if (parameters.Length < pinnedTypes.Length)
+                return false;
+            for (var i = 0; i < pinnedTypes.Length; i++)
+                if (parameters[i].ParameterType != pinnedTypes[i])
+                    return false;
+            for (var i = pinnedTypes.Length; i < parameters.Length; i++)
+                if (!parameters[i].IsOptional)
+                    return false;
+            return true;
+        }) ?? throw new MissingMethodException(
+            "UserEngine.AddBaseObject(Envirnoment, short, short, int, string, " +
+            "bool, bool[, optional...]) not found");
+
+    var pinnedArgs = new object[]
     {
         fixture.Environment, x, y, M2Share.MONSTER_OMA, fixture.MonsterName,
         true, false
-    });
+    };
+    var args = new object[method.GetParameters().Length];
+    Array.Copy(pinnedArgs, args, pinnedArgs.Length);
+    for (var i = pinnedArgs.Length; i < args.Length; i++)
+        args[i] = Type.Missing;
+    return (TBaseObject)method.Invoke(fixture.Engine,
+        BindingFlags.OptionalParamBinding, null, args, null);
 }
 
 static bool InvokeRegenMonsters(Fixture fixture, int count)

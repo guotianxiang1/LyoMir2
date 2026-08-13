@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using GameSvr;
@@ -26,8 +27,37 @@ class Program
         }
     }
 
+    // The bit-shift demonstration below constructs a TBaseObject, whose
+    // constructor runs M2Share's static constructor. That loads !Setup.txt,
+    // Command.conf and ..\Share\*.ini (M2Share.cs:1687..1693) and IniFile.Load
+    // throws when any of them is missing, so the process died before printing a
+    // single verdict.
+    static void PrepareRuntimeConfig()
+    {
+        var runtimeDirectory = AppContext.BaseDirectory;
+        File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+            "[Server]" + Environment.NewLine);
+        File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+            "[Command]" + Environment.NewLine);
+        var shareDirectory = Path.Combine(Path.GetFullPath(
+            Path.Combine(runtimeDirectory, "..")), "Share");
+        Directory.CreateDirectory(shareDirectory);
+        File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+            "[PlayerLevelExp]" + Environment.NewLine);
+        File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+            "[Integer]" + Environment.NewLine);
+
+        // Every TBaseObject constructor ends with
+        // M2Share.ObjectManager.RegisterConstructed(this) (TBaseObject.cs:903)
+        // and only GameApp assigns that singleton in a real boot.
+        M2Share.ObjectManager ??= new ObjectManager();
+        M2Share.ProcessMsgCriticalSection ??= new object();
+        M2Share.LogMsgCriticalSection ??= new object();
+    }
+
     static void Main()
     {
+        PrepareRuntimeConfig();
         Console.WriteLine("=== POIS-11 / POIS-30: Poison Index Divergence Check ===\n");
 
         // POIS-30: POISON_68 exceeds array bounds

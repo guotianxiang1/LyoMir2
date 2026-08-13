@@ -212,8 +212,22 @@ static void TestDormantBoundary()
     Reject(dispatch, "NativeYbDealPurchaseStateMachine",
         "PAS invokes dormant YBDeal state machine");
 
+    // The evidence corpus lives in D:\loym2\staging, one level above the MAIN
+    // checkout only. From an agent worktree (.claude\wt2\<name>) the parent is
+    // wt2, so a single GetParent hop lands on a directory with no staging at
+    // all and the run dies before any assertion. Walk ancestors until the
+    // corpus is actually there.
     var workspace = Directory.GetParent(root)?.FullName
         ?? throw new DirectoryNotFoundException("workspace root not found");
+    for (var probe = new DirectoryInfo(root); probe != null; probe = probe.Parent)
+    {
+        if (File.Exists(Path.Combine(probe.FullName, "staging",
+                "ida_ybdeal_632a14_deep.txt")))
+        {
+            workspace = probe.FullName;
+            break;
+        }
+    }
     var abiEvidence = File.ReadAllText(Path.Combine(workspace, "staging",
         "ida_ybdeal_632a14_deep.txt"));
     var classicEvidence = File.ReadAllText(Path.Combine(workspace, "staging",

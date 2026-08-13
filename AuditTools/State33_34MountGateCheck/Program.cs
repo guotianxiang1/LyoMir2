@@ -209,4 +209,13 @@ static void PrepareRuntimeConfig()
     File.WriteAllText(
         Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+
+    // Every TBaseObject constructor ends with
+    // M2Share.ObjectManager.RegisterConstructed(this) (TBaseObject.cs:903), and
+    // only GameApp assigns that singleton during a real boot. Without it the
+    // fixture's first `new TPlayObject()` threw NullReferenceException and the
+    // tool reported INCOMPLETE with zero assertions executed.
+    M2Share.ObjectManager ??= new ObjectManager();
+    M2Share.ProcessMsgCriticalSection ??= new object();
+    M2Share.LogMsgCriticalSection ??= new object();
 }

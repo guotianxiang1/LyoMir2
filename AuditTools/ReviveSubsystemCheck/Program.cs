@@ -371,8 +371,31 @@ static string Resolve(TMapFlag flag, bool equip, int lastTick, int tick,
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
         System.Reflection.BindingFlags.Public)
         ?? throw new MissingMethodException("NativeRevivePolicy.Resolve");
-    return m.Invoke(null, new object[]
-        { flag, equip, lastTick, tick, secondFlag, tier, cooldownActive }).ToString();
+    // MethodBase.Invoke does not apply C# optional-parameter defaults, so when
+    // the product method grew a trailing equipReviveCooldownMs parameter every
+    // call started throwing TargetParameterCountException and none of the
+    // assertions below this point ran. Pin the seven arguments this audit owns
+    // and let the runtime bind any further OPTIONAL parameter to its declared
+    // default; a new REQUIRED parameter is still a hard failure.
+    var pinned = new object[]
+        { flag, equip, lastTick, tick, secondFlag, tier, cooldownActive };
+    var parameters = m.GetParameters();
+    if (parameters.Length < pinned.Length)
+        throw new MissingMethodException(
+            "NativeRevivePolicy.Resolve now takes only " + parameters.Length +
+            " parameters; this audit pins " + pinned.Length);
+    var args = new object[parameters.Length];
+    Array.Copy(pinned, args, pinned.Length);
+    for (var i = pinned.Length; i < parameters.Length; i++)
+    {
+        if (!parameters[i].IsOptional)
+            throw new MissingMethodException(
+                "NativeRevivePolicy.Resolve grew a required parameter '" +
+                parameters[i].Name + "' this audit does not pin");
+        args[i] = Type.Missing;
+    }
+    return m.Invoke(null, System.Reflection.BindingFlags.OptionalParamBinding,
+        null, args, null).ToString();
 }
 
 static TMapFlag ParseToken(string token)

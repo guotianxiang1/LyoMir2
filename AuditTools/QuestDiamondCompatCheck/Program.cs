@@ -6,6 +6,23 @@ using SystemModule;
 using SystemModule.Packet;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+// M2Share's static constructor loads !Setup.txt / Command.conf from
+// AppContext.BaseDirectory and ExpsConfig / GlobalConfig from ..\Share
+// (M2Share.cs:1687..1693). IniFile.Load throws on a missing or empty file, so
+// the first M2Share touch (TestBountyDrawIsTheGlobalRandSeed) died in the type
+// initializer with every assertion still unrun.
+File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "!Setup.txt"),
+    "[Server]" + Environment.NewLine);
+File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "Command.conf"),
+    "[Command]" + Environment.NewLine);
+var shareConfigDirectory = Path.Combine(Path.GetFullPath(
+    Path.Combine(AppContext.BaseDirectory, "..")), "Share");
+Directory.CreateDirectory(shareConfigDirectory);
+File.WriteAllText(Path.Combine(shareConfigDirectory, "PlayerUpgradeExp.ini"),
+    "[PlayerLevelExp]" + Environment.NewLine);
+File.WriteAllText(Path.Combine(shareConfigDirectory, "ServerData.ini"),
+    "[Integer]" + Environment.NewLine);
+
 TestCompletionDecode();
 TestCompletionRejectsInvalidWire();
 TestFailureDialogsAndAck();
