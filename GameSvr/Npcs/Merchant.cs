@@ -2349,6 +2349,12 @@ namespace GameSvr
                             {
                                 PlayObject.SendAddItem(UserItem);
                                 PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
+                                // 0x63FF42 call 0x6C7D64（扣金核心）：0x6C7D75 sub [self+0x15c],edx 之后
+                                // 0x6C7D7B call 0x6C19B4，后者 0x6C19C3 mov cx,0x2798 / 0x6C19C9 call
+                                // 0x765E68 = SendMsg(self, RM_GOLDCHANGED)。原生每次成功扣金都自投这条
+                                // 金币刷新，且与 0x63FFCE 的 RM_MAKEDRUG_SUCCESS 同走 0x765E68 追加队列，
+                                // 故排在成功包之前。此处沿用同一 SendMsg 原语以保持相对顺序。
+                                PlayObject.SendMsg(PlayObject, Grobal2.RM_GOLDCHANGED, 0, 0, 0, 0, "");
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                                 // 0x63FF74 call 0x768BE0 无条件执行（不看 NeedIdentify），
                                 // 0x63FF6F xor edx,edx 给出 type = 0，末列 0x63FF53 add edx,0x106
