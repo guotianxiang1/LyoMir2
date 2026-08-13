@@ -651,6 +651,19 @@ namespace SystemModule
         public const int SM_SHANGMA_OK2 = 3418;
         public const int SM_XIAMA_2 = 3419;
         /// <summary>
+        /// 0xDE5. Broadcast when a caster teleports onto a cell: magic 266
+        /// (0x773FC6 `66 BA E5 0D` then VMT+0xE0) and magic 168 冲锋陷阵
+        /// (0x6EF206). Series carries the magic id, Param/Tag the destination.
+        /// VMT+0xE0 = 0x6DC0C0 -> sub_7651EC -> sub_5F7778 -> sub_5F6C24, the
+        /// `33 AA BB 77` gate multicast, so this is a real wire ident.
+        /// </summary>
+        public const int SM_NATIVE_BLINK_MOVE = 3557;
+        /// <summary>
+        /// 0xDE6. Same broadcast slot, emitted by magic 68 at 0x6EC8D4 with
+        /// Series = the charge direction rather than a magic id.
+        /// </summary>
+        public const int SM_NATIVE_CHARGE_MOVE = 3558;
+        /// <summary>
         /// 战神 CM opcode 3420 (0xD5C) — 定位石记录当前坐标 (TFixedCoordStone setter).
         /// Dispatch: M2Server.exe 0x6D873F `sub eax,0xD5C` / 0x6D8745 `je 0x6DADE3`.
         /// Handler body 0x6DADE3 -> setter sub_6E9BAC (call site 0x6DAE1B).
@@ -1425,6 +1438,18 @@ namespace SystemModule
         public const int RM_NATIVE_INVITE_HORSE = 15317;
         public const int RM_NATIVE_SHANGMA_OK2 = 15318;
         public const int RM_NATIVE_XIAMA_2 = 15319;
+        /// <summary>
+        /// In-process label for native ident 0x3043, the delayed self-message
+        /// magic 68 posts at 0x6EC896 (`66 B9 43 30` / sub_766060) and picks up
+        /// in TPlayObject.Operate at the 0x6B4391 table, slot 63 of base 0x3004
+        /// (0x6B437C `add eax,0xFFFFCFFC`), arm 0x6B6097 -> sub_6EC8E8.
+        /// Not a wire ident.
+        /// </summary>
+        public const int RM_NATIVE_CHARGE_LAND = 15320;
+        /// <summary>Carrier for <see cref="SM_NATIVE_CHARGE_MOVE"/>.</summary>
+        public const int RM_NATIVE_CHARGE_MOVE = 15321;
+        /// <summary>Carrier for <see cref="SM_NATIVE_BLINK_MOVE"/>.</summary>
+        public const int RM_NATIVE_BLINK_MOVE = 15322;
         public const int RM_WWJATTACK = 10017;
         public const int RM_WSJATTACK = 10018;
         public const int RM_WTJATTACK = 10019;

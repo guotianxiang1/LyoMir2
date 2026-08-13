@@ -933,6 +933,25 @@ namespace GameSvr
                 case Grobal2.RM_NATIVE_MOOTEBO_CONTINUE:
                     ContinueNativeMotaeboForcedMove(ProcessMsg);
                     break;
+                case Grobal2.RM_NATIVE_CHARGE_LAND:
+                    ProcessNativeSkill68ChargeLanding(ProcessMsg.nParam1,
+                        ProcessMsg.nParam2, ProcessMsg.wParam,
+                        ProcessMsg.Payload);
+                    break;
+                case Grobal2.RM_NATIVE_CHARGE_MOVE:
+                    m_DefMsg = Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_NATIVE_CHARGE_MOVE, ProcessMsg.BaseObject,
+                        ProcessMsg.nParam1, ProcessMsg.nParam2,
+                        ProcessMsg.wParam);
+                    SendSocket(m_DefMsg);
+                    break;
+                case Grobal2.RM_NATIVE_BLINK_MOVE:
+                    m_DefMsg = Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_NATIVE_BLINK_MOVE, ProcessMsg.BaseObject,
+                        ProcessMsg.nParam1, ProcessMsg.nParam2,
+                        ProcessMsg.wParam);
+                    SendSocket(m_DefMsg);
+                    break;
                 case Grobal2.RM_USERMOVE:
                     CompleteNativeUserMove(ProcessMsg);
                     break;
