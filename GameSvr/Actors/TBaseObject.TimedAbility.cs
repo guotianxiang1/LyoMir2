@@ -6,6 +6,7 @@ namespace GameSvr
     public partial class TBaseObject
     {
         private const int TimedAbilityMessage = 3555;
+        private const int TimedAbilityListMessage = 3554;
         private const uint TimedAbilityProcessInterval = 500;
         private const byte TimedAbilityValueGateState = 16;
         private const byte TimedAbilityGlobalBlockState = 52;
@@ -731,6 +732,55 @@ namespace GameSvr
             writer.Write((byte)0);
             writer.Write(remainingMilliseconds);
             writer.Write(value);
+            return (header, stream.ToArray());
+        }
+
+        // 战神 sub_6E99B8 @0x006E99B8 — the "send my whole timed-ability list" packet.
+        // It is one of the login-burst list packets dispatched by the login virtual
+        // sub_6E9A98 (dword refs at VMT slots 0x62F190 / 0x6ACACC), which runs exactly
+        // once per player login: srv_AppearTimes 3554 = 50,911 = the SM_LOGON count.
+        // Walks the timed-ability list head at [self+0xDC] (m_TimedAbilityHead — the
+        // same list 3555's node-getter sub_773B98 reads at 0x773BBA `mov eax,[esi+0xDC]`),
+        // emits one 10-byte record per node, then sends via [obj+0x254]:
+        //   0x6E99DE  mov eax,[eax+0xDC]                 ; list head
+        //   0x6E9A14  mov dl,[node+1] / 0x6E9A17 mov [buf+i*10],dl     ; +0 = InternalType
+        //   0x6E9A1D  mov byte [buf+i*10+1],0                          ; +1 = 0
+        //   0x6E9A28  mov edx,[node+2] / 0x6E9A2B mov [buf+i*10+2],edx ; +2 = RemainingMs
+        //   0x6E9A35  mov edx,[node+0xA]/0x6E9A38 mov [buf+i*10+6],edx ; +6 = Value
+        //   0x6E9A40  mov eax,[node+0xE]                               ; next
+        //   0x6E9A4C  push ebx                            ; Param  = record count
+        //   0x6E9A4D  push 0 / push 0                     ; Tag = Series = 0
+        //   0x6E9A54  push [ebp-0xC]                      ; Buf
+        //   0x6E9A55  mov eax,ebx / add eax,eax / lea eax,[eax+eax*4] ; Len = count*10
+        //   0x6E9A5D  xor ecx,ecx                         ; Recog = 0
+        //   0x6E9A5F  mov dx,0xDE2                        ; ident 3554
+        //   0x6E9A68  call [ebx+0x254]
+        // Each 10-byte record is byte-identical to the non-removed body produced by
+        // BuildTimedAbilityClientState above. An empty list still sends (je 0x6E9A4C
+        // skips the loop but not the count=0 / Len=0 send), matching how 4612 fires.
+        internal (ClientPacket Header, byte[] Body) BuildTimedAbilityListState()
+        {
+            var count = 0;
+            for (var node = m_TimedAbilityHead; node != null; node = node.Next)
+            {
+                count++;
+            }
+
+            var header = Grobal2.MakeDefaultMsg(TimedAbilityListMessage, 0, count, 0, 0);
+            if (count == 0)
+            {
+                return (header, Array.Empty<byte>());
+            }
+
+            using var stream = new MemoryStream(count * 10);
+            using var writer = new BinaryWriter(stream);
+            for (var node = m_TimedAbilityHead; node != null; node = node.Next)
+            {
+                writer.Write(node.InternalType);
+                writer.Write((byte)0);
+                writer.Write(node.RemainingMilliseconds);
+                writer.Write(node.Value);
+            }
             return (header, stream.ToArray());
         }
 

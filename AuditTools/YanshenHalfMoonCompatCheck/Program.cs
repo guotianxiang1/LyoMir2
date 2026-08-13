@@ -56,24 +56,24 @@ static void Run()
         const int power = 100;
         const int trainLevel = 3;
         const int skillLevel = 2;
-        // Native _Attack sub_769F90 half-moon branch: the divisor is the literal
-        // float32 at [0x0076A5C8] = 00 00 70 41 = 15.0
-        // (0x0076A160 D8 35 C8 A5 76 00 fdiv dword ptr [0x76A5C8]), never
+        // Player half moon is sub_771E9C (client dispatcher sub_6EC078 ->
+        // 0x006EC280 call 0x7707A8 with cx = 0x3ED). The divisor is the literal
+        // float32 at [0x00772148] = 00 00 70 41 = 15.0
+        // (0x00772050 D8 35 48 21 77 00 fdiv dword ptr [0x772148]), never
         // btTrainLv + 10. Expected values are written out so a re-introduced
         // train-level divisor cannot pass.
         const int nativeFallback = 27;      // Round(100 / 15.0 * (2 + 2))
         const int nativeFallbackNoCap = 13; // effective level clamped to 0
-        const int nativeFallbackAboveCap = power; // level > 3 swings unscaled
 
         Assert(!plugin.IsInitialized && !api.IsHalfMoon(),
             "uninitialized Yanshen plugin reported half-moon enabled");
         Equal(nativeFallback, InvokeHelper(power, trainLevel, skillLevel, api),
             "uninitialized plugin must use the native 15.0 divisor");
         Equal(nativeFallbackNoCap, InvokeHelper(power, 0, skillLevel, api),
-            "half-moon divisor must not depend on btTrainLv (0x0076A160)");
-        // 0x0076A13B 3C 03 cmp al,3 / 0x0076A13D 76 05 jbe / 0x0076A13F mov ebx,[ebp-8]
-        Equal(nativeFallbackAboveCap, InvokeHelper(power, 8, 4, api),
-            "effective level above 3 must swing at unscaled power");
+            "half-moon divisor must not depend on btTrainLv (0x00772050)");
+        // sub_4C896C clamps btLevel + bonus to btTrainLv (0x0077203A).
+        Equal(40, InvokeHelper(power, 8, 4, api),
+            "half-moon must scale by the effective level, not a capped 3");
 
         plugin.IsInitialized = true;
         Assert(api.IsHalfMoon() && api.HalfMoonA() == 2 && api.HalfMoonB() == 15,

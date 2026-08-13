@@ -57,16 +57,16 @@ static void Run()
         const int skillLevel = 2;
         const int nativeHitPlus = 19;
         const int nativeHitDouble = 3;
-        // Native _Attack sub_769F90 (the entry AttackDir sub_76A5D4 calls at
-        // 0x0076A76D). Stab divides by the literal float32 at [0x0076A5C4] =
-        // 00 00 A0 40 = 5.0 (0x0076A0EB D8 35 C4 A5 76 00), fire divides by
-        // [0x0076A5B4] = 00 00 20 41 = 10.0 before multiplying by hitDouble
-        // (0x0076A06F fdiv / 0x0076A083 fmulp / 0x0076A085 call @ROUND).
-        // Neither divisor comes from btTrainLv.
+        // Player warrior skills run through sub_7707A8, reached only from the
+        // client command dispatcher sub_6EC078 whose callers are the two
+        // attack-family CM handlers 0x006D9F06 and 0x006D9FA2. Stab divides by
+        // the literal float32 at [0x00771D24] = 00 00 A0 40 = 5.0
+        // (0x00771C5A D8 35 24 1D 77 00), never btTrainLv + 2. Fire is pure
+        // integer imul/idiv 10 (0x0077233C / 0x00772345) with no rounding.
         const int nativeStab = 80;          // Round(100 / 5.0 * (2 + 2))
         const int nativeStabNoCap = 40;     // effective level clamped to 0
         const int nativeStabLevel4 = 110;   // Round(100 * 1.05_80bit) + 5
-        const int nativeFire = 130;         // 100 + Round(100 / 10.0 * 3)
+        const int nativeFire = 130;         // 100 + 100 * 3 / 10
 
         Assert(!plugin.IsInitialized &&
             !api.IsStabSword() && !api.IsThrusting() && !api.IsFireSword(),
@@ -74,18 +74,17 @@ static void Run()
         Equal(nativeStab, InvokeStabSword(power, trainLevel, skillLevel, api),
             "uninitialized stab-sword must use the native 5.0 divisor");
         Equal(nativeStabNoCap, InvokeStabSword(power, 0, skillLevel, api),
-            "stab divisor must not depend on btTrainLv (0x0076A0EB)");
-        // 0x0076A0B4 3C 04 cmp al,4 / 0x0076A0BB fld tbyte[0x76A5B8] / 0x0076A0CA add ebx,5
+            "stab divisor must not depend on btTrainLv (0x00771C5A)");
+        // 0x00771C23 3C 04 cmp al,4 / 0x00771C2A fld tbyte[0x771D18] / 0x00771C39 add edi,5
         Equal(nativeStabLevel4, InvokeStabSword(power, 8, 4, api),
             "effective level 4 must take the 1.05x + 5 branch");
         Equal(nativeHitPlus, InvokeThrusting(nativeHitPlus, skillLevel, api),
             "uninitialized thrusting must retain the native value");
         Equal(nativeFire, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
             "uninitialized fire-sword must use the native formula");
-        // 7/100.0*(15*10) rounds to 11, 7/10.0*15 rounds to 10; only the second
-        // matches the x87 chain, so this pair pins the operation order.
+        // idiv truncates: 7 * 15 / 10 = 10, while Round(7/100.0*150) gives 11.
         Equal(17, InvokeFireSword(7, 15, skillLevel, api),
-            "fire-sword must divide by 10 before multiplying (0x0076A06F)");
+            "fire-sword must truncate, not round (0x00772345 F7 F9 idiv ecx)");
 
         plugin.IsInitialized = true;
         Assert(api.IsStabSword() && api.StabSwordA() == 2 && api.StabSwordB() == 5,

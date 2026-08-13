@@ -310,7 +310,7 @@ Check(nullGuard > 0 && equipDraw > 0 && nullGuard < equipDraw,
 //        three StdItem gates -> 0x740140 destroy-vs-drop split.  C# had the destroy branch
 //        FIRST and ungated, so 未验证/赠品 were destroyed 100% instead of 1/3 and bound /
 //        undroppable items were destroyed too.
-var bagDraw = bagSource.IndexOf("M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate)",
+var bagDraw = bagSource.IndexOf("M2Share.RandomNumber.Random(3)",
     StringComparison.Ordinal);
 var bagDestroy = bagSource.IndexOf("NativeItemDropDestroy.ShouldDestroy(", StringComparison.Ordinal);
 Check(bagDraw > 0 && bagDestroy > 0 && bagDraw < bagDestroy,
@@ -380,9 +380,12 @@ Check(cfg.nPKPunishPoint == 200,
     "[0x7D5FAC] -> 0x7DCF00 = 0xC8: PK 阈值 200");
 Check(cfg.nKillHumanAddPKPoint == 100,
     "[0x7D5AE8] -> 0x7DCF04 = 0x64: 0x6C10FE IncPkPoint 每次 +100");
-// F12. sub_740078 @0x7400F8 `mov eax,3` is a HARDCODED 3, so the config default must be 3.
-Check(cfg.nDieScatterBagRate == 3,
-    "0x7400F8 mov eax,3: 背包爆率分母硬编码 3");
+// F12. sub_740078 @0x7400F8 `mov eax,3` is a HARDCODED 3. There is no config knob:
+// "DieScatterBagRate" is 0-hit across GBK / ASCII / UTF-16LE in the image, so the
+// faithful C# hardcodes Random(3) and must NOT re-introduce a config field for it.
+Check(bagSource.Contains("M2Share.RandomNumber.Random(3)", StringComparison.Ordinal)
+      && !bagSource.Contains("nDieScatterBagRate", StringComparison.Ordinal),
+    "0x7400F8 mov eax,3: 背包爆率分母硬编码 3，不得引入配置旋钮");
 
 Console.WriteLine();
 if (failures.Count > 0)
