@@ -33,6 +33,22 @@ namespace GameSvr
                 }
             }
 
+            // Native sub_718724. Both loop bounds are confirmed byte-for-byte:
+            //   0x718735  33 FF                 xor edi,edi        removeCount = 0
+            //   0x71875E  2B 43 04              sub eax,[ebx+4]    now - closeTick
+            //   0x718761  3D E0 93 04 00        cmp eax,0x493E0    300000 ms
+            //   0x718766  73 0A                 jae -> reap; else fall through to
+            //   0x718770  EB 6E                 jmp 0x7187E0       BREAK
+            //   0x7187CD  47                    inc edi
+            //   0x7187CE  83 FF 0A              cmp edi,0xA
+            //   0x7187D1  74 0D                 je 0x7187E0        BREAK at 10
+            //   0x7187D3  83 78 20 00 / 0F 85   loop while head != nil
+            // So the ten-per-tick cap is real, and the retention test is
+            // `elapsed >= 300000` (jae), i.e. break on strictly less. Native
+            // increments then compares == 10 where this checks < 10 at the top;
+            // both process at most ten. Native also reads the close tick from the
+            // list NODE at [node+4] rather than from the event, which is the same
+            // value because the node is built at enqueue time.
             var removeCount = 0;
             while (removeCount < 10 && _closedEventList.Count > 0)
             {

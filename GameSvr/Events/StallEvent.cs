@@ -50,7 +50,7 @@ namespace GameSvr
             // 0x719A5E  80 38 00 / 75 14  only an already-walkable cell is taken
             var cell = new MapCellinfo();
             if (m_Envir != null &&
-                m_Envir.GetMapCellInfo(nX, nY, ref cell) &&
+                m_Envir.GetMapCellInfo(m_nX, m_nY, ref cell) &&
                 cell.Attribute == CellAttribute.Walk)
             {
                 m_boCellLocked = true;

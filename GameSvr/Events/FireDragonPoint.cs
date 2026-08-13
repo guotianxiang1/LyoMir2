@@ -54,8 +54,8 @@ namespace GameSvr
                 if (m_Envir != null)
                 {
                     // 0x718C70  6A 01  push 1
-                    if (m_Envir.GetMovingObject((short)m_nX, (short)m_nY, true) is TBaseObject
-                        occupant)
+                    if (m_Envir.GetMovingObject((short)m_nX, (short)m_nY, true)
+                        is TBaseObject occupant)
                     {
                         // 0x718C8F  FF 51 08  call [Self.VMT+8] = ApplyTo
                         ApplyTo(occupant);
