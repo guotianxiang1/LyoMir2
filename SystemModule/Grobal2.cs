@@ -179,6 +179,10 @@ namespace SystemModule
         // Native CM 4314 handler 0x6DB040: `66 8B 50 06 mov dx,[msg+6]` then
         // `E8 ED 78 01 00 call 0x6F293C`. Callee 0x6F293C is a single `C3 ret`.
         public const int CM_4314 = 4314;
+        // Native CM 4315 handler 0x6DB054: `66 8B 50 06 mov dx,[msg+6]` then
+        // `E8 DD 78 01 00 call 0x6F2940`. Callee 0x6F2940 is a single `C3 ret`
+        // (followed by `8D 40 00` alignment padding, not a second instruction).
+        public const int CM_4315 = 4315;
         public const int CM_TAKEONITEM = 1003;
         public const int CM_TAKEOFFITEM = 1004;
         public const int CM_1005 = 1005;
