@@ -1970,7 +1970,7 @@ namespace GameSvr
         /// margin, and had no LinkPoint fallback at all — none of which native has.
         /// MOVE-61/62: the loop is preceded by two independent per-axis seeders.
         /// MOVE-63: native keeps one body for all 11 callers, so this is the single
-        /// C# authority; <see cref="SpaceMove_GetRandXY"/> and TPlayObject's
+        /// C# authority; SpaceMove_GetRandXY and TPlayObject's
         /// TryResolveNativeUserMoveCoordinates are both adapters over it.
         /// <code>
         /// 7782E4  83 3F 00     cmp dword [edi],0    ; *pX, signed

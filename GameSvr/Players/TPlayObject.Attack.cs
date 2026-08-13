@@ -643,6 +643,16 @@ namespace GameSvr
             // and left this path with no weight rule, no paralysis rule and no
             // degrade. Sharing ClientNativeRun3Fallback mirrors native, where
             // both run primitives fall into the same walk primitive sub_6BBCD8.
+            //
+            // Gate 3 first. Native runs `call [edx+0xBC]` at 0x6D9D12, i.e. at
+            // handler level ahead of the primitive, so a blocked actor never
+            // reaches either the run mover or the degrade. C# carries that term
+            // (internal state 0x2D) inside RunTo/WalkTo, which the degrade would
+            // otherwise walk straight past.
+            if (HasTimedAbility(13))
+            {
+                return result;
+            }
             if (!IsNativeRunLadderAllowed())
             {
                 return ClientNativeRun3Fallback(nX, nY);
