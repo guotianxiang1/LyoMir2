@@ -1011,7 +1011,20 @@ namespace GameSvr
                     if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null
                         && m_nPkPoint <= M2Share.g_Config.nPKPunishPoint)
                     {
-                        if ((m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT) || (m_LastHiter.m_btRaceServer == Grobal2.RC_NPC))//允许NPC杀死人物
+                        // 原先这里还有一条 `|| m_LastHiter.m_btRaceServer == RC_NPC`
+                        // 「允许 NPC 杀死人物」。原生 0x6C081A..0x6C088C 这段里**一条
+                        // 种族比较都没有**，凶手身份完全由 `[LastHiter.vmt+0xB4]` 的
+                        // 责任玩家解析决定：
+                        //   6C0867  8B C3 / 8B 10 / FF 92 B4 00 00 00   call [vmt+0xB4]
+                        //   6C0871  85 C0 / 74 1C                       nil    -> 不惩罚
+                        //   6C0875  80 78 73 00 / 75 16                 幽灵   -> 不惩罚
+                        //   6C087B  3B 45 FC / 74 11                    自杀   -> 不惩罚
+                        // 该段全部 8 条比较是 `test ebx,ebx` / [+0x5F] / [+0x5D] / [+0x5E] /
+                        // PK 阈值 / `test eax,eax` / [+0x73] / 自杀，没有 [+0x178]。
+                        // 字节级零命中：`cmp byte [reg+0x178],0x0A`（race == RC_NPC=10）
+                        // 全镜像只有 6 处（0x62E76D / 0x62E80F / 0x62EA9F / 0x6E1D8E /
+                        // 0x6E8A82 / 0x6E9441），无一落在死亡链内。按 §3.1 删除。
+                        if (m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
                             boPK = true;
                         }
