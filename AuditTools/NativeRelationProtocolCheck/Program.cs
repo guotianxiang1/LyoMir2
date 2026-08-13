@@ -230,9 +230,9 @@ static void CheckWireRecords()
 static void CheckSourceContracts()
 {
     var root = FindRoot();
-    var player = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
+    var player = ReadSource(Path.Combine(root, "GameSvr", "Players",
         "TPlayObject.NativeRelationProtocol.cs"));
-    var store = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
+    var store = ReadSource(Path.Combine(root, "GameSvr", "Services",
         "NativeRelationStore.cs"));
 
     Require(player, "TryHandleNativeRelationProtocol(", "relation route");
@@ -249,8 +249,13 @@ static void CheckSourceContracts()
     Forbid(player, "case Grobal2.SM_ADD_RELATION_FRIEND_FAIL",
         "4434 is response-only");
 
-    Require(store, "BeginTransaction(\n                           IsolationLevel.Serializable)",
-        "serializable transaction");
+    Require(store, "BeginTransaction(", "relation mutations open a transaction");
+    Require(store, "IsolationLevel.Serializable",
+        "relation mutations use SERIALIZABLE isolation");
+    Forbid(store, "IsolationLevel.ReadCommitted",
+        "relation mutations dropped to read-committed");
+    Forbid(store, "IsolationLevel.ReadUncommitted",
+        "relation mutations dropped to read-uncommitted");
     Require(store, "FOR UPDATE", "locked relation rows");
     Require(store, "transaction.Commit()", "transaction commit");
     Require(store, "transaction.Rollback()", "transaction rollback");
@@ -260,6 +265,11 @@ static void CheckSourceContracts()
     Require(store, "MySqlDbType.VarBinary", "GBK binary parameters");
     Require(store, "SecFocusColor=@color", "first-owner target color");
     Require(store, "FirstFocusColor=@color", "second-owner target color");
+}
+
+static string ReadSource(string path)
+{
+    return File.ReadAllText(path).Replace("\r\n", "\n").Replace("\r", "\n");
 }
 
 static NativeRelationPlayer Player(long id, string name, ushort level,

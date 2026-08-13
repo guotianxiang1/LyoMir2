@@ -288,10 +288,24 @@ static void DormantProductionBoundary()
 
 static void NativeEvidenceAnchors()
 {
-    var root = FindRepositoryRoot();
-    var staging = Path.GetFullPath(Path.Combine(root, "..", "staging"));
-    var managers = File.ReadAllText(Path.Combine(staging,
-        "ida_self_corps_gild_managers_20260731.txt"));
+    var staging = FindAncestorStaging();
+    var managersPath = staging == null
+        ? null
+        : Path.Combine(staging, "ida_self_corps_gild_managers_20260731.txt");
+    var constantsPath = staging == null
+        ? null
+        : Path.Combine(staging, "ida_self_corps_gild_constants_20260731.txt");
+    if (managersPath == null || !File.Exists(managersPath)
+        || constantsPath == null || !File.Exists(constantsPath))
+    {
+        Console.WriteLine(
+            "SKIP NativeSelfCorpsGildExactStateCheck: IDA evidence files "
+            + "ida_self_corps_gild_{managers,constants}_20260731.txt were not "
+            + "found by walking ancestors for staging/.");
+        Environment.Exit(2);
+    }
+
+    var managers = File.ReadAllText(managersPath);
     foreach (var anchor in new[]
              {
                  "FUNCTION CreateCorpsManager 005EA28C-005EA3C8",
@@ -307,12 +321,24 @@ static void NativeEvidenceAnchors()
             "native manager evidence missing: " + anchor);
     }
 
-    var constants = File.ReadAllText(Path.Combine(staging,
-        "ida_self_corps_gild_constants_20260731.txt"));
+    var constants = File.ReadAllText(constantsPath);
     Require(constants.Contains(
             "INVALID_ASCII_BITMAP_004C70F0=ff ff ff ff ff ff 00 d4 00 00 00 10 00 00 00 10",
             StringComparison.Ordinal),
         "Corps name bitmap evidence missing");
+}
+
+static string FindAncestorStaging()
+{
+    var dir = new DirectoryInfo(FindRepositoryRoot());
+    while (dir != null)
+    {
+        var staging = Path.Combine(dir.FullName, "staging");
+        if (Directory.Exists(staging))
+            return staging;
+        dir = dir.Parent;
+    }
+    return null;
 }
 
 static int CreateCorps(FakeHost host, NativeSelfSocialActor actor,

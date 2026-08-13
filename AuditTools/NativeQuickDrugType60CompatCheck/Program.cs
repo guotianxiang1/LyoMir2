@@ -2,7 +2,7 @@ using System.Collections;
 using System.Reflection;
 using System.Runtime.Loader;
 
-var gameDirectory = args.Length > 0 ? Path.GetFullPath(args[0]) : FindGameSvrBuild();
+var gameDirectory = ResolveGameSvrBuild(args);
 if (gameDirectory == null)
 {
     Console.Error.WriteLine("INCOMPLETE: no GameSvr build directory was supplied and "
@@ -426,6 +426,29 @@ static void PrepareRuntimeConfig()
 // Falling back to the checkout's own build output keeps the assertions exactly as
 // they were; when no build exists the tool exits 2 (INCOMPLETE) rather than
 // pretending to have checked anything.
+static string ResolveGameSvrBuild(string[] args)
+{
+    if (args.Length > 0)
+    {
+        var candidate = Path.GetFullPath(args[0]);
+        if (IsGameSvrBuild(candidate)) return candidate;
+        var nested = FindGameSvrBuildUnder(candidate);
+        if (nested != null) return nested;
+    }
+    return FindGameSvrBuild();
+}
+
+static bool IsGameSvrBuild(string directory) =>
+    File.Exists(Path.Combine(directory, "GameSvr.dll"))
+    && File.Exists(Path.Combine(directory, "SystemModule.dll"));
+
+static string FindGameSvrBuildUnder(string root)
+{
+    var binRoot = Path.Combine(root, "GameSvr", "bin");
+    if (!Directory.Exists(binRoot)) return null;
+    return NewestGameSvrBuild(binRoot);
+}
+
 static string FindRepositoryRoot()
 {
     foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
@@ -446,19 +469,19 @@ static string FindGameSvrBuild()
     var repositoryRoot = FindRepositoryRoot();
     if (repositoryRoot == null)
         return null;
-    var binRoot = Path.Combine(repositoryRoot, "GameSvr", "bin");
-    if (!Directory.Exists(binRoot))
-        return null;
+    return FindGameSvrBuildUnder(repositoryRoot);
+}
+
+static string NewestGameSvrBuild(string binRoot)
+{
     var debug = $"{Path.DirectorySeparatorChar}Debug{Path.DirectorySeparatorChar}";
     foreach (var candidate in Directory
                  .EnumerateFiles(binRoot, "GameSvr.dll", SearchOption.AllDirectories)
-                 // run_audits.py builds -c Debug, so prefer that configuration and
-                 // then the freshest output within it.
                  .OrderByDescending(path => path.Contains(debug, StringComparison.OrdinalIgnoreCase))
                  .ThenByDescending(File.GetLastWriteTimeUtc))
     {
         var directory = Path.GetDirectoryName(candidate);
-        if (directory != null && File.Exists(Path.Combine(directory, "SystemModule.dll")))
+        if (directory != null && IsGameSvrBuild(directory))
             return directory;
     }
     return null;
