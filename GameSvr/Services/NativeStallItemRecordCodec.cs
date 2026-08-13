@@ -94,17 +94,20 @@ namespace GameSvr.Services
         }
 
         // Mirror of the shared codec's guard, re-scoped for the same reason (see
-        // LegacyUserItem208Codec): 0x18..0x55 is the 眼神 provenance block, not padding, so
-        // only 0x56..0xB7 and 0xB9..0xCF may be asserted zero. The old class-header claim
-        // that "a yanshen'd item's 208-byte tail is already clean, so it never fires on a
-        // legit item" is disproved by the golden corpus: 1232 of 1363 real items carry a
-        // non-zero byte at 0x1C alone.
+        // LegacyUserItem208Codec): 0x18..0x55 is the 眼神 provenance block and 0x58..0x6B
+        // is the ys1..ys17 element block, neither of which is padding, so only
+        // 0x56..0x57, 0x6C..0xB7 and 0xB9..0xCF may be asserted zero. The old
+        // class-header claim that "a yanshen'd item's 208-byte tail is already clean, so
+        // it never fires on a legit item" is disproved by the golden corpus: 1232 of 1363
+        // real items carry a non-zero byte at 0x1C alone, and it is doubly wrong for a
+        // genuinely yanshen'd item, whose ys values live inside the asserted span.
         private static bool ValidateUnownedSpans(byte[] record, out string error)
         {
             error = string.Empty;
             for (var i = LegacyUserItem208Codec.UnownedSpanStart; i < record.Length; i++)
             {
-                if (i == LegacyUserItem208Codec.BindOffset) continue;
+                if (i == LegacyUserItem208Codec.BindOffset
+                    || LegacyUserItem208Codec.HasKnownOwner(i)) continue;
                 if (record[i] != 0)
                 {
                     error = $"unmapped native item data at offset 0x{i:X2}";

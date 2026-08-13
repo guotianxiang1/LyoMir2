@@ -131,6 +131,16 @@ namespace DBSvr.Core
         private const int BagItemBase = 0x2BF6;
         private const int StorageBase = 0x52F6;
         private const int StorageSpaceCountOffset = 0x050E;
+        // 战神 gives the storage container a hard-coded count when it is constructed:
+        //   0x6AD8E5  89 b7 d0 06 00 00      mov [edi+0x6d0], esi     ; the container
+        //   0x6AD8EB  c7 46 08 30 00 00 00   mov dword [esi+8], 0x30  ; count = 48
+        // and the LOAD only overrides it when the stored word is STRICTLY GREATER:
+        //   0x6B0CB9  8b 45 f8               mov eax,[ebp-8]          ; the blob
+        //   0x6B0CBC  66 8b 80 16 05 00 00   mov ax,[eax+0x516]       ; == record 0x50E
+        //   0x6B0CC3  66 83 f8 30            cmp ax,0x30
+        //   0x6B0CC7  76 0f                  jbe 0x6B0CD8             ; <= 48 -> keep 48
+        //   0x6B0CD5  89 42 08               mov [container+8],eax
+        private const int DefaultStorageSpaceCount = 48;
         private const int ShengWanOffset = 0x00EC;
         private const int LingFuOffset = 0x00F0;         // obj+0xBD8; bidirectional LOAD/SAVE
         private const int UsedLingFuOffset = 0x00F4;     // obj+0xBDC MyUsedLfNum; bidirectional LOAD/SAVE
@@ -318,9 +328,18 @@ namespace DBSvr.Core
                     raw.AsSpan(SecHeroPracticeLevelOffset, 2));
                 var storedSpaceCount = BinaryPrimitives.ReadUInt16LittleEndian(
                     raw.AsSpan(StorageSpaceCountOffset, 2));
-                data.StorageSpaceCount = storedSpaceCount < 24
-                    ? 48
-                    : Math.Min((int)storedSpaceCount, StorageItemCount);
+                // The threshold is `> 48`, not `>= 24` (see DefaultStorageSpaceCount for
+                // the bytes).  The old `< 24 ? 48 : value` rule handed a character with a
+                // stored 24..48 a SMALLER storage than 战神 would: native keeps the
+                // constructor's 48 for every value at or below 48, so a stored 24 meant
+                // 48 slots natively and 24 slots here — pages of storage would vanish.
+                // No upper clamp either: native writes the raw word into the container.
+                // Every C# consumer already clamps to MAX_STORAGE_ITEM_COUNT before
+                // indexing (UsrEngn:3879, TPlayObject.Operate:2243, PileItems:246), so
+                // carrying the raw value cannot overrun the 192-slot array here.
+                data.StorageSpaceCount = storedSpaceCount > DefaultStorageSpaceCount
+                    ? storedSpaceCount
+                    : DefaultStorageSpaceCount;
 
                 for (var i = 0; i < MagicCount; i++)
                     data.Magic[i] = DecodeMagic(raw.AsSpan(MagicBase + i * MagicRecordSize, MagicRecordSize));
@@ -969,8 +988,17 @@ namespace DBSvr.Core
                 //   SetS 0x6DF26D  8D 93 04 08 00 00  lea edx,[ebx+0x804]
                 //   GetV 0x6DF225  8B 93 08 08 00 00  mov edx,[ebx+0x808]
                 //   SetV 0x6DF2CF  8D 93 08 08 00 00  lea edx,[ebx+0x808]
-                if ((type == 0 || type == 1) && !DecodeKeyValues(payload,
-                        type == 0 ? scriptS : scriptV, out error))
+                // A section whose payload is not a whole number of 8-byte pairs is
+                // SKIPPED, not fatal.  Both bank arms test it and branch to the logging
+                // tail, which then rejoins the section walk:
+                //   type0 0x6E4561 f7 7d ec       idiv dword [ebp-0x14]  ; = 8
+                //         0x6E4564 85 d2 / 75 4a  test edx,edx / jne 0x6E45B2
+                //   type1 0x6E4614 f7 7d ec / 0x6E4617 85 d2 / 75 49 -> 0x6E4664
+                //   both tails end 0x6E45F2 / 0x6E46A4  jmp 0x6E48B4 (next section)
+                // Returning false here refused the whole record — the character could
+                // not log in at all, where 战神 logs one line and loads them fine.
+                if ((type == 0 || type == 1) && length % 8 == 0 && length > 0
+                    && !DecodeKeyValues(payload, type == 0 ? scriptS : scriptV, out error))
                     return false;
                 offset += length;
             }
@@ -1013,20 +1041,29 @@ namespace DBSvr.Core
                 sections = new List<ScriptSection>();
             }
 
-            var foundV = false;
-            var foundS = false;
+            // 战神's encoder emits a section ONLY when its byte length is non-zero — the
+            // S and V arms are both guarded, and the same shape repeats for types 2/6/7/8:
+            //   0x6E4DCC  85 f6 / 7e 2e   test esi,esi / jle 0x6E4DFE   (skip type 0)
+            //   0x6E4DD3  c7 00 aa ef cd ab   mov [eax],0xABCDEFAA
+            //   0x6E4DDD  c6 40 06 00         mov byte [eax+6],0        ; type 0 = S bank
+            //   0x6E4DFE  85 ff / 7e 2e   test edi,edi / jle 0x6E4E30   (skip type 1)
+            //   0x6E4E0F  c6 40 06 01         mov byte [eax+6],1        ; type 1 = V bank
+            // Writing an empty type-0/type-1 header is therefore a byte the original
+            // never produces, and its own decoder treats a zero-length section as an
+            // error case (0x6E4553 cmp word [sec+4],0 / 0x6E4558 jbe 0x6E45B2 -> log).
+            // So an original M2Server reading a record this codec wrote would log a
+            // bogus warning line per empty bank on every single login.
             var foundYanshen = false;
             for (var i = 0; i < sections.Count; i++)
             {
-                if (sections[i].Type == 0)
+                if (sections[i].Type == 0 || sections[i].Type == 1)
                 {
-                    sections[i] = new ScriptSection(0, MergeKeyValues(sections[i].Payload, scriptS));
-                    foundS = true;
-                }
-                else if (sections[i].Type == 1)
-                {
-                    sections[i] = new ScriptSection(1, MergeKeyValues(sections[i].Payload, scriptV));
-                    foundV = true;
+                    var merged = MergeKeyValues(sections[i].Payload,
+                        sections[i].Type == 0 ? scriptS : scriptV);
+                    if (merged.Length == 0)
+                        sections.RemoveAt(i--);
+                    else
+                        sections[i] = new ScriptSection(sections[i].Type, merged);
                 }
                 else if (sections[i].Type == YanshenScriptSectionType)
                 {
@@ -1061,10 +1098,22 @@ namespace DBSvr.Core
             // 0x6E4558 `cmp word [eax+4],0 / 76 58 jbe 0x6E45B2` straight into the
             // log-and-skip branch (type 1 mirrors it at 0x6E4606 `76 57 jbe 0x6E4664`) --
             // so the record stopped being byte-identical to what the original writes.
-            if (!foundS && scriptS != null && scriptS.Count > 0)
-                sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptS)));
-            if (!foundV && scriptV != null && scriptV.Count > 0)
-                sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptV)));
+            //
+            // The presence test reads the surviving sections rather than a flag set
+            // inside the rewrite loop above, because that loop drops a bank whose merge
+            // came out empty; a flag would still claim the section is there.
+            var foundS = sections.Exists(section => section.Type == 0);
+            var foundV = sections.Exists(section => section.Type == 1);
+            if (!foundS)
+            {
+                var payload = MergeKeyValues(null, scriptS);
+                if (payload.Length > 0) sections.Add(new ScriptSection(0, payload));
+            }
+            if (!foundV)
+            {
+                var payload = MergeKeyValues(null, scriptV);
+                if (payload.Length > 0) sections.Add(new ScriptSection(1, payload));
+            }
             if (!foundYanshen && yanshenPayload.Length > 0)
                 sections.Add(new ScriptSection(YanshenScriptSectionType, yanshenPayload));
 
