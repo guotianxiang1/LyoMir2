@@ -165,6 +165,20 @@
   `expected=4, actual=3`；用 `-o` 隔离重建后立刻 `PASS ... scatter-range=4`。
   同理，`_run_audittools.ps1` 是从共享目录找 exe 的，其批量结果需按此法复核后再采信。
 
+- **AuditTool 夹具必须给 actor 起名、给地图起名 —— 这个坑已触发三次。**
+  SPWN-56 的有效性谓词（原生 `sub_765D64`）是三项短路合取：
+  `Length(CName) > 0 && PEnvir <> nil && PEnvir.MapName <> ''`。它已被接进
+  `SearchViewRange` / `CanWalk` / `GetMovObjCount` / `CreatureMoveTo` 等格子链扫描，
+  **不满足的 actor 会被当场摘链**。而夹具里两种失真态极常见：
+  - `var map = new Envirnoment();` —— `sMapName` 默认 `string.Empty`
+  - `new TBaseObject { m_PEnvir = …, m_nCurrX = …, … }` —— 不设 `m_sCharName`
+
+  症状是"挡路失效""计数为 0""同伴不在共享格上"这类看似业务逻辑的失败。
+  已因此打红过 `NativeHorsePairProtocolCheck`、`NativeRun3HorseProtocolCheck`、
+  `MovementCollisionCheck`、`NativeMoveGateCheck` 四把闸。
+  **一律修夹具、不要软化谓词**：原生 actor 必有名字（怪物取自 mongen、玩家取自
+  角色记录），正式地图经 `Maps.cs:77` 拒空名、动态房间取 `definition.RoomName`。
+
 - **文本匹配型断言会被注释误伤。** `DeathDropPolicyCheck` 断言源码不得含
   `nDieScatterBagRate`，但 `TPlayObject.Base.cs` 在**注释**里写了「这里原先读
   g_Config.nDieScatterBagRate」，实际代码是硬编码 `Random(3)` —— 判红属误报。
