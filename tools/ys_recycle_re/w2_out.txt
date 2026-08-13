@@ -1,0 +1,140 @@
+===== full routine around 0x10092207 (func_start 0x100921f4) =====
+0x100921f4  06                       push es
+0x100921f5  00 00                    add byte ptr [eax], al
+0x100921f7  E8 4D BA 19 00           call 0x1022dc49
+0x100921fc  8B 0D E0 C0 31 10        mov ecx, dword ptr [0x1031c0e0]
+0x10092202  83 C4 04                 add esp, 4
+0x10092205  89 81 38 09 00 00        mov dword ptr [ecx + 0x938], eax   <<<
+0x1009220b  B8 20 0D 2C 10           mov eax, 0x102c0d20   ; "全局循环函数(已启动)"   <<<
+0x10092210  EB 05                    jmp 0x10092217
+0x10092212  B8 38 0D 2C 10           mov eax, 0x102c0d38   ; "全局循环函数(未启动)"   <<<
+0x10092217  50                       push eax
+0x10092218  8D 8E 48 06 00 00        lea ecx, [esi + 0x648]
+0x1009221e  E8 69 DF 05 00           call 0x100f018c
+0x10092223  83 BE 50 07 00 00 00     cmp dword ptr [esi + 0x750], 0
+0x1009222a  74 11                    je 0x1009223d   ; "琚"
+0x1009222c  E8 B3 00 1A 00           call 0x102322e4
+0x10092231  BF E8 03 00 00           mov edi, 0x3e8
+0x10092236  99                       cdq 
+0x10092237  F7 FF                    idiv edi
+0x10092239  03 D7                    add edx, edi
+0x1009223b  EB 0D                    jmp 0x1009224a
+0x1009223d  E8 A2 00 1A 00           call 0x102322e4
+0x10092242  99                       cdq 
+0x10092243  BF E8 03 00 00           mov edi, 0x3e8
+0x10092248  F7 FB                    idiv ebx
+0x1009224a  8B 0D E0 C0 31 10        mov ecx, dword ptr [0x1031c0e0]
+0x10092250  B8 64 0D 2C 10           mov eax, 0x102c0d64   ; "高级回收(未启动)"
+0x10092255  89 91 54 09 00 00        mov dword ptr [ecx + 0x954], edx   <<<
+0x1009225b  BA 50 0D 2C 10           mov edx, 0x102c0d50   ; "高级回收(已启动)"
+0x10092260  81 B9 54 09 00 00 F4 01 00 00 cmp dword ptr [ecx + 0x954], 0x1f4
+0x1009226a  8D 8E D0 06 00 00        lea ecx, [esi + 0x6d0]
+0x10092270  0F 4F C2                 cmovg eax, edx
+0x10092273  50                       push eax
+0x10092274  E8 13 DF 05 00           call 0x100f018c
+0x10092279  83 BE D8 07 00 00 00     cmp dword ptr [esi + 0x7d8], 0
+0x10092280  74 10                    je 0x10092292   ; "鐼"
+0x10092282  E8 5D 00 1A 00           call 0x102322e4
+0x10092287  99                       cdq 
+0x10092288  F7 FF                    idiv edi
+0x1009228a  81 C2 E8 03 00 00        add edx, 0x3e8
+0x10092290  EB 08                    jmp 0x1009229a
+0x10092292  E8 4D 00 1A 00           call 0x102322e4
+0x10092297  99                       cdq 
+0x10092298  F7 FB                    idiv ebx
+0x1009229a  8B 0D E0 C0 31 10        mov ecx, dword ptr [0x1031c0e0]
+0x100922a0  B8 90 0D 2C 10           mov eax, 0x102c0d90   ; "眼神特殊函数(未启动)"
+0x100922a5  89 91 1C 01 00 00        mov dword ptr [ecx + 0x11c], edx
+0x100922ab  BA 78 0D 2C 10           mov edx, 0x102c0d78   ; "眼神特殊函数(已启动)"
+0x100922b0  81 B9 1C 01 00 00 F4 01 00 00 cmp dword ptr [ecx + 0x11c], 0x1f4
+0x100922ba  8D 8E 58 07 00 00        lea ecx, [esi + 0x758]
+0x100922c0  0F 4F C2                 cmovg eax, edx
+0x100922c3  50                       push eax
+0x100922c4  E8 C3 DE 05 00           call 0x100f018c
+0x100922c9  83 BE 60 08 00 00 00     cmp dword ptr [esi + 0x860], 0
+0x100922d0  74 10                    je 0x100922e2
+0x100922d2  E8 0D 00 1A 00           call 0x102322e4
+0x100922d7  99                       cdq 
+0x100922d8  F7 FF                    idiv edi
+0x100922da  81 C2 E8 03 00 00        add edx, 0x3e8
+0x100922e0  EB 08                    jmp 0x100922ea
+0x100922e2  E8 FD FF 19 00           call 0x102322e4
+0x100922e7  99                       cdq 
+0x100922e8  F7 FB                    idiv ebx
+0x100922ea  8B 0D E0 C0 31 10        mov ecx, dword ptr [0x1031c0e0]
+0x100922f0  B8 BC 0D 2C 10           mov eax, 0x102c0dbc   ; "攻击吸血(未启动)"
+0x100922f5  89 91 24 01 00 00        mov dword ptr [ecx + 0x124], edx
+0x100922fb  BA A8 0D 2C 10           mov edx, 0x102c0da8   ; "攻击吸血(已启动)"
+0x10092300  81 B9 24 01 00 00 F4 01 00 00 cmp dword ptr [ecx + 0x124], 0x1f4
+0x1009230a  8D 8E E0 07 00 00        lea ecx, [esi + 0x7e0]
+0x10092310  0F 4F C2                 cmovg eax, edx
+0x10092313  50                       push eax
+0x10092314  E8 73 DE 05 00           call 0x100f018c
+0x10092319  83 BE F8 09 00 00 00     cmp dword ptr [esi + 0x9f8], 0
+0x10092320  74 10                    je 0x10092332
+0x10092322  E8 BD FF 19 00           call 0x102322e4
+0x10092327  99                       cdq 
+0x10092328  F7 FF                    idiv edi
+
+
+===== disp 0x93c raw hits in .text =====
+  0x10002036  ctx=3110053c090000
+  0x1000a3b5  ctx=1881be3c090000
+  0x10092151  ctx=1089903c090000
+  0x100d7819  ctx=1089813c090000
+
+
+===== disp 0x938 raw hits in .text =====
+  0x10002086  ctx=31100538090000
+  0x10009c8a  ctx=ffffb638090000
+  0x10092207  ctx=04898138090000
+  0x100d7dbc  ctx=10898238090000
+  0x100d817d  ctx=208db738090000
+  0x100d86b0  ctx=108d8e38090000
+  0x100da553  ctx=008d8f38090000
+  0x100da5d0  ctx=ff8d8f38090000
+  0x100dbe9c  ctx=008d8738090000
+  0x1026c2f5  ctx=f081c138090000
+  0x1026c54d  ctx=f081c138090000
+
+
+===== xrefs to cached period pointer 0x1031c1fc =====
+  0x1000208b
+    0x10002085  05 38 09 00 00           add eax, 0x938
+    0x1000208a  A3 FC C1 31 10           mov dword ptr [0x1031c1fc], eax
+    0x1000208f  C3                       ret 
+    0x10002090  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+    0x10002095  05 50 09 00 00           add eax, 0x950
+    0x1000209a  A3 00 C2 31 10           mov dword ptr [0x1031c200], eax
+    0x1000209f  C3                       ret 
+    0x100020a0  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+    0x100020a5  05 84 00 00 00           add eax, 0x84
+    0x100020aa  A3 04 C2 31 10           mov dword ptr [0x1031c204], eax
+  0x1008c7e9
+    0x1008c7e3  0C 89                    or al, 0x89
+    0x1008c7e5  4D                       dec ebp
+    0x1008c7e6  F8                       clc 
+    0x1008c7e7  8B 0D FC C1 31 10        mov ecx, dword ptr [0x1031c1fc]
+    0x1008c7ed  8B 09                    mov ecx, dword ptr [ecx]
+    0x1008c7ef  89 4D F4                 mov dword ptr [ebp - 0xc], ecx
+    0x1008c7f2  8B 45 FC                 mov eax, dword ptr [ebp - 4]
+    0x1008c7f5  2B 45 F8                 sub eax, dword ptr [ebp - 8]
+    0x1008c7f8  99                       cdq 
+    0x1008c7f9  33 C2                    xor eax, edx
+
+
+===== @MyTimer occurrences =====
+  b'@MyTimer' @ 0x10310d1c prev=0x0 ctx=b'\x00\x00@MyTimer4\r1\x10'
+  b'MyTimer' @ 0x102b731b prev=0x27 ctx=b" 'MyTimer')\r\n\xd5"
+  b'MyTimer' @ 0x102b732b prev=0x27 ctx=b"\xf6'MyTimer'\xbe\xcd\xca\xc7"
+  b'MyTimer' @ 0x10310d1d prev=0x40 ctx=b'\x00@MyTimer4\r1\x10P'
+
+
+===== M2Server flat_image string hits =====
+  b'MyTimer' -> []
+  b'\xd1\xad\xbb\xb7\xca\xb1\xbc\xe4' -> []
+  b'\xc8\xab\xbe\xd6\xd1\xad\xbb\xb7' -> []
+  b'\xb6\xa8\xca\xb1' -> ['0x647744', '0x6b7802', '0x6b7a8e', '0x6d6660', '0x7bca42']
+  b'RunQuest' -> ['0x69a8b4', '0x69a8df', '0x69aff5']
+  b'@Main' -> ['0x602dee', '0x637f9a', '0x637fc5', '0x638929', '0x63895b', '0x63898d', '0x6389be', '0x638b6a']
+  b'@_Main' -> ['0x734014']

@@ -1,0 +1,121 @@
+===== tick function: func_start 0x1008c7c0, site 0x1008c7e7 =====
+0x1008c7c0  55                       push ebp
+0x1008c7c1  8B EC                    mov ebp, esp
+0x1008c7c3  83 EC 0C                 sub esp, 0xc
+0x1008c7c6  C7 45 FC 00 00 00 00     mov dword ptr [ebp - 4], 0
+0x1008c7cd  C7 45 F8 00 00 00 00     mov dword ptr [ebp - 8], 0
+0x1008c7d4  C7 45 F4 00 00 00 00     mov dword ptr [ebp - 0xc], 0
+0x1008c7db  8B 4D 08                 mov ecx, dword ptr [ebp + 8]
+0x1008c7de  89 4D FC                 mov dword ptr [ebp - 4], ecx
+0x1008c7e1  8B 4D 0C                 mov ecx, dword ptr [ebp + 0xc]
+0x1008c7e4  89 4D F8                 mov dword ptr [ebp - 8], ecx
+0x1008c7e7  8B 0D FC C1 31 10        mov ecx, dword ptr [0x1031c1fc]   <<<<< PERIOD READ
+0x1008c7ed  8B 09                    mov ecx, dword ptr [ecx]
+0x1008c7ef  89 4D F4                 mov dword ptr [ebp - 0xc], ecx
+0x1008c7f2  8B 45 FC                 mov eax, dword ptr [ebp - 4]
+0x1008c7f5  2B 45 F8                 sub eax, dword ptr [ebp - 8]
+0x1008c7f8  99                       cdq 
+0x1008c7f9  33 C2                    xor eax, edx
+0x1008c7fb  2B C2                    sub eax, edx
+0x1008c7fd  3B 45 F4                 cmp eax, dword ptr [ebp - 0xc]
+0x1008c800  7E 05                    jle 0x1008c807
+0x1008c802  8B 4D FC                 mov ecx, dword ptr [ebp - 4]
+0x1008c805  EB 02                    jmp 0x1008c809
+0x1008c807  33 C9                    xor ecx, ecx
+0x1008c809  8B E5                    mov esp, ebp
+0x1008c80b  5D                       pop ebp
+0x1008c80c  89 4C 24 24              mov dword ptr [esp + 0x24], ecx
+0x1008c810  C2 08 00                 ret 8
+0x1008c813  8B E5                    mov esp, ebp
+0x1008c815  5D                       pop ebp
+0x1008c816  C3                       ret 
+0x1008c817  CC                       int3 
+0x1008c818  CC                       int3 
+0x1008c819  CC                       int3 
+0x1008c81a  CC                       int3 
+0x1008c81b  CC                       int3 
+0x1008c81c  CC                       int3 
+0x1008c81d  CC                       int3 
+0x1008c81e  CC                       int3 
+0x1008c81f  CC                       int3 
+0x1008c820  55                       push ebp
+0x1008c821  8B EC                    mov ebp, esp
+0x1008c823  6A FF                    push -1
+0x1008c825  68 AA 47 26 10           push 0x102647aa
+0x1008c82a  64 A1 00 00 00 00        mov eax, dword ptr fs:[0]
+0x1008c830  50                       push eax
+0x1008c831  81 EC A8 00 00 00        sub esp, 0xa8
+0x1008c837  A1 80 FE 30 10           mov eax, dword ptr [0x1030fe80]
+0x1008c83c  33 C5                    xor eax, ebp
+0x1008c83e  89 45 EC                 mov dword ptr [ebp - 0x14], eax
+0x1008c841  53                       push ebx
+0x1008c842  56                       push esi
+0x1008c843  57                       push edi
+0x1008c844  50                       push eax
+0x1008c845  8D 45 F4                 lea eax, [ebp - 0xc]
+0x1008c848  64 A3 00 00 00 00        mov dword ptr fs:[0], eax
+0x1008c84e  89 65 F0                 mov dword ptr [ebp - 0x10], esp
+0x1008c851  89 95 64 FF FF FF        mov dword ptr [ebp - 0x9c], edx
+0x1008c857  8B F1                    mov esi, ecx
+0x1008c859  89 B5 58 FF FF FF        mov dword ptr [ebp - 0xa8], esi
+0x1008c85f  68 4C 08 2C 10           push 0x102c084c
+0x1008c864  E9 82 2F CA 00           jmp 0x10d2f7eb
+0x1008c869  39 BE B5 9F 94 6C        cmp dword ptr [esi + 0x6c949fb5], edi
+0x1008c86f  7A C6                    jp 0x1008c837
+0x1008c871  41                       inc ecx
+0x1008c872  3F                       aas 
+0x1008c873  ED                       in eax, dx
+0x1008c874  44                       inc esp
+0x1008c875  EE                       out dx, al
+0x1008c876  35 5B 80 34 9A           xor eax, 0x9a34805b
+0x1008c87b  60                       pushal 
+0x1008c87c  66 6D                    insw word ptr es:[edi], dx
+0x1008c87e  AF                       scasd eax, dword ptr es:[edi]
+0x1008c87f  27                       daa 
+0x1008c880  DB EB                    fucomi st(3)
+0x1008c882  95                       xchg ebp, eax
+0x1008c883  93                       xchg ebx, eax
+0x1008c884  FF CD                    dec ebp
+0x1008c886  D2 C8                    ror al, cl
+0x1008c888  83 4D ED B6              or dword ptr [ebp - 0x13], 0xffffffb6
+0x1008c88c  59                       pop ecx
+0x1008c88d  08 B8 90 EF 01 C6        or byte ptr [eax - 0x39fe1070], bh
+0x1008c893  0C 76                    or al, 0x76
+0x1008c895  8E A5 49 E2 E8 43        mov fs, word ptr [ebp + 0x43e8e249]
+0x1008c89b  6F                       outsd dx, dword ptr [esi]
+0x1008c89c  AA                       stosb byte ptr es:[edi], al
+0x1008c89d  B7 1C                    mov bh, 0x1c
+0x1008c89f  03 F5                    add esi, ebp
+0x1008c8a1  27                       daa 
+0x1008c8a2  18 95 F1 31 E7 DD        sbb byte ptr [ebp - 0x2218ce0f], dl
+0x1008c8a8  A3 4C 3A CF D7           mov dword ptr [0xd7cf3a4c], eax
+0x1008c8ad  2B A9 51 83 86 85        sub ebp, dword ptr [ecx - 0x7a797caf]
+0x1008c8b3  25 BC C7 72 DA           and eax, 0xda72c7bc
+0x1008c8b8  B4 5B                    mov ah, 0x5b
+0x1008c8ba  EB B1                    jmp 0x1008c86d
+0x1008c8bc  18 65 E9                 sbb byte ptr [ebp - 0x17], ah
+0x1008c8bf  AC                       lodsb al, byte ptr [esi]
+0x1008c8c0  97                       xchg edi, eax
+0x1008c8c1  6D                       insd dword ptr es:[edi], dx
+0x1008c8c2  21 11                    and dword ptr [ecx], edx
+0x1008c8c4  50                       push eax
+0x1008c8c5  0F 67 71 9C              packuswb mm6, qword ptr [ecx - 0x64]
+0x1008c8c9  D5 C1                    aad 0xc1
+0x1008c8cb  7A 56                    jp 0x1008c923
+0x1008c8cd  BE 74 F8 AF D1           mov esi, 0xd1aff874
+0x1008c8d2  1C 96                    sbb al, 0x96
+0x1008c8d4  C8 CC EA E4              enter -0x1534, -0x1c
+0x1008c8d8  78 9C                    js 0x1008c876
+0x1008c8da  7A A9                    jp 0x1008c885
+0x1008c8dc  7D 57                    jge 0x1008c935
+0x1008c8de  3E 8A 0A                 mov cl, byte ptr ds:[edx]
+0x1008c8e1  EE                       out dx, al
+0x1008c8e2  80 1C 37 24              sbb byte ptr [edi + esi], 0x24
+0x1008c8e6  C0 E6 DE                 shl dh, 0xde
+0x1008c8e9  15 7B 71 94 8D           adc eax, 0x8d94717b
+0x1008c8ee  AF                       scasd eax, dword ptr es:[edi]
+0x1008c8ef  E5 41                    in eax, 0x41
+
+
+===== rel32 callers of 0x1008c7c0 =====
+  abs refs to 0x1008c7c0: []
