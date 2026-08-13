@@ -8,38 +8,68 @@ namespace GameSvr
     internal static class NativeDropControlRuntime
     {
         /// <summary>
-        /// 战神 sub_71FA20 segment 3 (controlled world/map drop) scatters every item
-        /// returned by the drop-control lookup (sub_752CAC @0x71FEC8) through the single
-        /// scatter call at 0x71FF48, and the radius it loads is a hardcoded 3:
+        /// 本类的原生本体是 <c>sub_720278</c>（掉落控制派发器），**不是**
+        /// <c>sub_71FA20</c> 段3。归属由记录布局唯一确定：
+        /// <see cref="NativeDropControlRecord.ToNativeLayout"/> 的
+        /// ItemName@+0x29 / Quantity@+0x52 / PeriodOrRange@+0x54 / ItemIndex@+0x58 /
+        /// Counter@+0x5C / RandomThreshold@+0x5E / Tick@+0x60 逐字段对上
+        /// <c>sub_77C580</c>（Counted）与 <c>sub_77C738</c>（Timed）：
         /// <code>
-        /// 71FF32  6A 01 / 6A 00 / 6A 00 / 68 34 01 72 00  push 1 / 0 / 0 / &amp;name
-        /// 71FF3D  B9 03 00 00 00                          mov ecx,3     ; landing radius
-        /// 71FF42  8B 55 D8 / 8B 45 F4                      mov edx,item / mov eax,creator
-        /// 71FF48  E8 53 89 04 00                          call 0x7688A0 ; ecx -&gt; GetDropPosition
+        /// 77C5ED  66 FF 40 5C           inc word [rec+0x5C]        ; Counter++
+        /// 77C5F9  66 3B 42 5E           cmp ax,word [rec+0x5E]     ; == RandomThreshold ?
+        /// 77C608  89 50 60              mov [rec+0x60],edx         ; Tick := now
+        /// 77C62F  83 C2 29              add edx,0x29               ; ItemName
+        /// 77C639  8B 40 58              mov eax,[rec+0x58]         ; ItemIndex
+        /// 77C641  66 8B 40 52           mov ax,word [rec+0x52]     ; Quantity
+        /// 77C7A8  2B 50 60              sub edx,[rec+0x60]         ; elapsed
+        /// 77C7AD  69 40 54 E8 03 00 00  imul eax,[rec+0x54],0x3E8  ; PeriodOrRange*1000
         /// </code>
-        /// The own-table loop (segment 2, 0x71FDCF / 0x71FE46) and gold (0x768ADC) also
-        /// use 3; only the exclusive chain (segment 1, 0x71FC02 / 0x71FC79) uses 5.  The
-        /// value was previously 4 with no byte backing.
+        /// 而段3 走的是另一套：<c>0x71FEC8 call 0x752CAC</c>，单例
+        /// <c>[0x7D71F4]</c>，键是 <c>[PEnvir+0x44]</c>（地图名）加
+        /// <c>word[self+0x278]</c>，返回的表由 <c>0x71FF24 call 0x74DE54</c>
+        /// (MakeItemByName) 逐条造物 —— 与本类的四相 Select/Materialize 结构无关。
+        ///
+        /// <c>sub_720278</c> 的四相散落全部落到 <c>sub_72016C</c>
+        /// （= <see cref="Materialize"/>），它的半径是立即数 **4**：
+        /// <code>
+        /// 720209  6A 01 / 6A 00 / 8B 45 F8 50 / 6A 00   push 1 / 0 / &amp;creator / nil
+        /// 720213  B9 04 00 00 00                        mov ecx,4     ; landing radius
+        /// 720218  8B D3 / 8B 45 F4                      mov edx,item / mov eax,dropper
+        /// 72021D  E8 7E 86 04 00                        call 0x7688A0
+        /// </code>
+        /// ecx 在 <c>sub_7688A0</c> 序言 <c>0x7688B4 8B D9 mov ebx,ecx</c> 存活到
+        /// <c>0x768907 53 push ebx</c>，即 <c>sub_768688</c> 的 <c>[ebp+0x10]</c> ——
+        /// <c>0x7686B5 8B 45 10 / 0x7686BA 0F 8E A6 00 00 00 jle</c> 那圈求空地的环数界。
+        ///
+        /// 曾于 2026-08-14 被按「段3 = 本类」的误归属从 4 改成 3；
+        /// <c>AuditTools/NativeDropControlRuntimeCheck</c> 第 104 行
+        /// <c>Equal(4, failedRange, "native fixed scatter range")</c> 当场变红，
+        /// 该断言即本值的既有钉子。
         /// </summary>
-        internal const int ScatterRange = 3;
+        internal const int ScatterRange = 4;
 
         /// <summary>
-        /// 战神 sub_71FA20 runs the monster's own drop table (segment 2) before the
-        /// controlled world drop (segment 3).  Segment 2 occupies 0x71FCFF-0x71FEA1
-        /// and 0x71FEA7 is its fallthrough successor, which the empty-table shortcut
-        /// spells out:
+        /// ⚠️ 顺序未对齐 —— 本方法保留既有次序（ordinary 先、controlled 后），但那是
+        /// 建立在「controlled = <c>sub_71FA20</c> 段3」这个**已被推翻**的归属上的
+        /// （见 <see cref="ScatterRange"/>）。真实调用图是两个**兄弟**调用，掉落控制
+        /// 整个跑在 <c>sub_71FA20</c> 之前：
         /// <code>
-        /// 71FCFF  8B 45 FC / 8B 80 74 04 00 00  mov eax,[self+0x474]   ; segment 2 head
-        /// 71FD08  8B 58 08                      mov ebx,[eax+8]        ; Count
-        /// 71FD0B  4B / 85 DB
-        /// 71FD0E  0F 8C 93 01 00 00             jl 0x71FEA7            ; empty -> segment 3
-        /// ...
-        /// 71FEA1  0F 85 70 FE FF FF             jne 0x71FD17           ; segment 2 loop tail
-        /// 71FEA7  8D 45 E8 / 50                 lea eax,[ebp-0x18]     ; segment 3 head
-        /// 71FEC8  E8 DF 2D 03 00                call 0x752CAC          ; world-drop lookup
+        /// ; sub_71F46C —— 怪物 VMT 槽 +0x1FC（123 个怪物 VMT 持有它，每个都过
+        /// ;               Delphi 自指针自检 dword[VMT-0x4C]==VMT）
+        /// 71F47E  E8 F5 0D 00 00   call 0x720278   ; 掉落控制四相（本类）
+        /// 71F491  E8 8A 05 00 00   call 0x71FA20   ; 段1 专属链 / 段2 自有表 / 段3 / 金币
         /// </code>
-        /// Both segments feed the same RNG stream, so the order fixes which draw each
-        /// one gets.
+        /// <c>sub_71FA20</c> 全镜像只有 <c>0x71F491</c> 这一个 E8 调用点、0 个 dword
+        /// 引用，所以它不可能先于 <c>sub_720278</c> 跑；怪物 Die
+        /// <c>0x71E3D2 / 0x71E3EF FF 96 FC 01 00 00 call [esi+0x1FC]</c> 派发到的是
+        /// <c>sub_71F46C</c> 而不是 <c>sub_71FA20</c>。
+        ///
+        /// 未在本轮改正的原因：<c>sub_720278</c> 在 <c>sub_71FA20</c> **之外**，因此
+        /// 不受段内那几道门约束（<c>0x71FA6C</c> 一次性哨兵、<c>0x71FA8A</c> 空掉落表
+        /// 早退、<c>0x71FADA/0x71FAE3/0x71FAEC</c> 防沉迷三门），而 C# 把
+        /// <c>TryScatter</c> 放在 <c>scatterBlocked</c> 里边。单独搬次序而不同时处理
+        /// 门控，会落到「既不是原生也不是现状」的第三种状态。次序与门控要一并改，
+        /// 属独立契约，见 <c>docs/drop33_owntable_scatter_20260814.md</c>。
         /// </summary>
         internal static void RunInNativeOrder(Action ordinaryDrop,
             Action controlledDrop)
