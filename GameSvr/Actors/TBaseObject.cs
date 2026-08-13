@@ -4688,13 +4688,11 @@ namespace GameSvr
                     if (MonStatus == MonStatus.MonGen)
                     {
                         M2Share.UserEngine.SendBroadCastMsg(sMsg, MsgType.Mon);
-                        SendRefMsg(Grobal2.SM_MONSTERSAY, 0, 0, 0, 0, sMsg);
                         break;
                     }
                     if (MonSayMsg.Color == MsgColor.White)
                     {
                         ProcessSayMsg(sMsg);
-                        SendRefMsg(Grobal2.SM_MONSTERSAY, 0, 0, 0, 0, sMsg);
                     }
                     else
                     {
