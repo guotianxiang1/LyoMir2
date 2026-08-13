@@ -2145,5 +2145,19 @@ namespace SystemModule
         // Task-dispatch board refresh reply. Worker sub_699B68 answers via [player+0x254]
         // with Recog=Param=Tag=Series=0 and a fixed 873-byte (0x369) body.
         public const int SM_TASKBOARD_REFRESH = 3452; // 0xD7C
+
+        // === NewbieQuest/PageList subsystem ===
+        // Reply idents pinned off the two workers reversed for this subsystem.
+        // SM_4496 (0x1190): CM 4496 新手任务 worker sub_6FAC8C @0x6FAD13
+        //   `66 BA 90 11 mov dx,0x1190` before call [vmt+0x250]. Recog carries the
+        //   int returned by the FreshmanTaskCommand @Main script; that script entry
+        //   on the task-board admin object [[0x7D5D20]] (TTaskAdmin) is not modelled,
+        //   so nothing is sent (fail-closed) — the constant is documentation only.
+        // SM_4626 (0x1212): CM 4626 分页列表查询 worker sub_6AE260 @0x6AE35D
+        //   `66 BA 12 12 mov dx,0x1212` before call [vmt+0x254]. It is the paged
+        //   RECRUITING-corps list: TCorpsManager[+0x28] (sub_5EC0D8 mirrors the
+        //   master [+0x24] list, keeping only corps whose member count < 30 —
+        //   predicate sub_705690 `cmp [members+8],0x1E / setge`). Same 64-byte
+        //   TCorps description record + pagination frame as CM_CORPS_LIST/4520.
     }
 }
