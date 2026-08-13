@@ -353,7 +353,7 @@ namespace GameSvr.Services
                     case NativeGildSqlValueKind.DateTime:
                         command.Parameters.Add(parameter.Name,
                                 MySqlDbType.DateTime).Value =
-                            (DateTime)parameter.Value;
+                            TruncateToSecond((DateTime)parameter.Value);
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(
@@ -375,6 +375,26 @@ namespace GameSvr.Services
             connection.Open();
             return connection;
         }
+
+        // GILD-31. Native never binds a DateTime; it renders one into the SQL text
+        // with whole-second precision and lets MySQL parse the string back:
+        //   0x5E98D2  FF 73 1C / FF 73 18   push [ebx+0x1C] / push [ebx+0x18]
+        //   0x5E98DB  B8 70 99 5E 00        mov eax,0x5E9970   ; "YYYY-MM-DD hh:nn:ss"
+        //   0x5E98E0  E8 57 72 E2 FF        call 0x410B3C      ; FormatDateTime
+        //   0x5E98EB  C6 45 F8 0B           mov byte [ebp-8],0xB  ; TVarRec vtAnsiString
+        //   0x5E98F7  B8 8C 99 5E 00        mov eax,0x5E998C
+        //     -> Insert into gamedata.gildrelation(GildID1, GildID2, Relation,
+        //        CreateTime)   Values(%d, %d, %d, "%s");
+        // The format string carries no fractional field, so the sub-second part is
+        // dropped, not rounded. Binding a raw DateTime instead let MySQL apply its
+        // own rounding into a DATETIME(0) column (round-half-up since 5.6.4), so a
+        // war created at hh:mm:ss.700 persisted one second later than the original
+        // would have written it -- and since the war deadline is rebuilt from this
+        // column on restart (loader 0x5E8E8B calls sub_5E6D68 with the loaded
+        // CreateTime), that second carried straight into the expiry time.
+        private static DateTime TruncateToSecond(DateTime value) =>
+            new(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond,
+                value.Kind);
 
         private static NativeGildSqlParameter Id(string name, long value) =>
             new(name, NativeGildSqlValueKind.Id, value);

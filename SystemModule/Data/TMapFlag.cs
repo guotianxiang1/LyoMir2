@@ -1,7 +1,28 @@
+using System.Collections.Generic;
+
 namespace SystemModule;
 
 public class TMapFlag
 {
+    // The 战神 map-flag domain is the two parallel Delphi AnsiString pools at 0x775BFC
+    // (54 records / 52 flag names after the 2 separators) and 0x776B20 (60 records / 55
+    // flag names after the 5 separators). The following names are NOT in either pool and
+    // are not in the image at all -- each was scanned as a Delphi AnsiString record
+    // (FFFFFFFF + len32 + chars + NUL), as len32+chars+NUL, as len8+chars+NUL, as
+    // chars+NUL, bare, and UTF-16LE, all case-insensitive, and every form returned 0:
+    //
+    //   MINE2 NOHUMNOMON MUSIC EXPRATE PKWINLEVEL PKWINEXP PKLOSTLEVEL PKLOSTEXP
+    //   DECHP INCHP DECGAMEGOLD DECGAMEPOINT INCGAMEGOLD INCGAMEPOINT RUNHUMAN RUNMON
+    //   NOGUILDRECALL NODEARRECALL NOMASTERRECALL NOTHROWITEM NODROPITEM NOHORSE NOCHAT
+    //   KILLFUNC NEEDSET_ON NEEDSET_OFF
+    //
+    // (The three bare "EXPRATE" byte hits at 0x6AD5F6 / 0x72C759 / 0x7D0618 are the tails
+    // of "MultiTempExpRate" and "MonExpRate", not standalone tokens.) The parser no longer
+    // recognises any of them -- 战神 parser B silently ignores an unknown token
+    // (0x776AD3 falls straight into the next loop iteration) -- so the fields below that
+    // belong to those names stay at their zero/-1 defaults for the whole process lifetime.
+    // The declarations survive only because Envirnoment.cs's diagnostic map dump and a
+    // handful of now-unreachable gates still name them; do not re-wire the parser.
     public bool boSAFE;
     public int nL;
 
@@ -81,12 +102,10 @@ public class TMapFlag
     public bool boKILLFUNC;
     public int nKILLFUNCNO;
     /// <summary>
-    /// NOT A 战神 FLAG — permanently false. Kept only so the diagnostic map dump
-    /// in Envirnoment.cs keeps its column layout. 战神 has no NOHUMNOMON token:
-    /// 0 byte hits image-wide for every spelling, and the complete map-flag token
-    /// census (the two parallel blocks at 0x775BFC and 0x776B20, 46 tokens each)
-    /// has no equivalent. The parser no longer sets it and the monster-regen gate
-    /// in UsrEngn.cs no longer reads it. Do not re-wire it.
+    /// NOT A 战神 FLAG — permanently false; see the census note at the top of the class.
+    /// Kept only so the diagnostic map dump in Envirnoment.cs keeps its column layout.
+    /// The parser does not set it and the monster-regen gate in UsrEngn.cs does not read
+    /// it. Do not re-wire it.
     /// </summary>
     public bool boNOHUMNOMON;
 
@@ -180,9 +199,11 @@ public class TMapFlag
 
     // MFLG-12/MFLG-24: Additional map flags from 战神 token census
     /// <summary>
-    /// 战神 map flag <c>NOMAGIC</c>. DORMANT gate: 0 consumers in 战神 binary
-    /// (image-wide scan). Parser recognizes the token to match native domain,
-    /// but no runtime code reads this field.
+    /// 战神 map flag <c>NOMAGIC</c> -> native <c>[flag+0x81]</c>. The field has exactly ONE
+    /// reader, 0x6DA12B <c>80 B8 81 00 00 00 00  cmp byte [eax+0x81],0</c> / 0x6DA132 <c>jne</c>,
+    /// reached through the standard <c>mov eax,[actor+0x128]</c> map-pointer form at 0x6DA125.
+    /// C# parses the token but has no equivalent gate yet, so a NOMAGIC map does not block
+    /// anything here.
     /// </summary>
     public bool boNOMAGIC;
 
@@ -248,14 +269,50 @@ public class TMapFlag
     /// </summary>
     public int MapFireWallBurnMs;
 
-    // FLYDROPITEM -> native [flag+0xB4] is deliberately NOT modelled here. It is
-    // not a number: the arm lazily constructs a TMirStringList (classref
-    // [0x49EB3C] -> VMT 0x49EB88, vmtClassName 'TMirStringList'), splits the
-    // parenthesised argument on '/' (0x775492 mov cl,0x2F / 0x775497
-    // call 0x4C6AEC) and Adds each piece through TStrings.Add ([vtbl+0x38] at
-    // 0x7754B8), clearing via [vtbl+0x44] and FreeAndNil via 0x414C24 when the
-    // argument is empty. The element semantics are not yet established, so this
-    // stays BLOCKED rather than being guessed at as an int.
+    /// <summary>
+    /// 战神 map flag <c>FLYDROPITEM(a/b/c)</c> -> native <c>[flag+0xB4]</c>. NOT a number:
+    /// the arm lazily constructs a <c>TMirStringList</c> and fills it with the '/'-separated
+    /// pieces of the parenthesised argument.
+    /// <para>
+    /// Class identity is pinned through the VMT rather than inferred: classref
+    /// <c>[0x49EB3C] = 0x49EB88</c>, and vmtClassName at <c>VMT-0x2C = 0x49EC20</c> is the
+    /// ShortString <c>len=14 'TMirStringList'</c>.
+    /// </para>
+    /// <para>
+    /// Parser B, token compare <c>0x77651D B9 0B 00 00 00 mov ecx,0xB</c> /
+    /// <c>0x776522 BA 54 6D 77 00 mov edx,0x776D54</c> ("FLYDROPITEM", 11 chars) /
+    /// <c>0x77652A call 0x4C6E94</c>; argument pulled by <c>0x77654C call 0x4C6964</c> with
+    /// <c>ecx=0x776B30</c> (")") and <c>edx=0x776B3C</c> ("("). Then:
+    ///   <c>0x776551 cmp dword [ebp-0xC],0 / je 0x7765C2</c>  -- empty argument
+    ///   <c>0x776557 cmp dword [ebx+0xB4],0 / jne 0x776574</c>
+    ///   <c>0x776560 mov dl,1 / mov eax,[0x49EB3C] / call 0x404660 / 0x77656C
+    ///      mov [ebx+0xB4],eax</c>                            -- lazy create
+    ///   <c>0x776574 mov eax,[ebx+0xB4] / mov edx,[eax] / 0x77657C call [edx+0x44]</c> -- Clear
+    ///   <c>0x776581</c> loop: <c>0x776588 B1 2F mov cl,0x2F</c> ('/') /
+    ///      <c>0x77658D call 0x4C6AEC</c> split, remainder stored back at <c>0x776598</c>
+    ///   <c>0x77659D cmp dword [ebp-0x10],0 / je</c>          -- empty piece skipped
+    ///   <c>0x7765AE call [ecx+0x38]</c>                      -- TStrings.Add
+    ///   <c>0x7765B4 call 0x4057D0 / test eax,eax / 0x7765BB jg 0x776581</c> -- do..while Len&gt;0
+    /// The empty-argument arm <c>0x7765C2</c> clears via <c>[edx+0x44]</c> then
+    /// <c>0x7765DA lea eax,[ebx+0xB4] / 0x7765E0 call 0x414C24</c> (FreeAndNil) -> null.
+    /// Parser A is the same shape at 0x775452..0x7754C7.
+    /// </para>
+    /// <para>
+    /// ELEMENT SEMANTICS ARE ITEM NAMES -- this was previously left BLOCKED as "could be
+    /// names or ids", and the consumer settles it. sub_77BA38(eax=mapflag, edx=name):
+    ///   <c>0x77BA59 mov esi,[ebx+0xB4] / test esi,esi / je</c>   -- no list =&gt; false
+    ///   <c>0x77BA67 call [edx+0x14] / test eax,eax / jle</c>     -- Count &lt;= 0 =&gt; false
+    ///   <c>0x77BA71 mov eax,[ebx+0xB4] / 0x77BA79 call [ecx+0x54]</c> -- TStringList.IndexOf
+    ///   <c>0x77BA7C 40 inc eax / 0x77BA7D 0F 9F C0 setg al</c>   -- result = IndexOf &gt;= 0
+    /// Its one caller passes an item name: <c>0x6B73F9 mov eax,[edi+0x128]</c> (map) /
+    /// <c>0x6B73FF cmp dword [eax+0xB4],0 / je 0x6B74A3</c> presence gate, then
+    /// <c>0x6B740C lea edx,[ebp-8] / call 0x784568</c> -- and sub_784568 is
+    /// <c>0x784573 mov edx,[ebx+0x1C] / add edx,4</c>, i.e. it reads the item's StdItem
+    /// record and offsets to the Name field.
+    /// </para>
+    /// NOT WIRED beyond parsing: the 0x6B73FF gate has no C# counterpart yet.
+    /// </summary>
+    public List<string> FlyDropItemNames;
 
     /// <summary>
     /// 战神 map flag <c>TRIGGERBOMB</c>.
