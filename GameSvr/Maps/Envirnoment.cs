@@ -473,7 +473,18 @@ namespace GameSvr
                                 CellObj = Cert,
                                 dwAddTime = HUtil32.GetTickCount()
                             };
-                            MapCellInfo.ObjList.Add(OSObject);
+                            // MOVE-35(c) — dest cell is a native singly-linked list
+                            // whose head lives at destCell[8]. After unlinking, the
+                            // mover splices the same node onto the front:
+                            //   00779A80  8B 45 E0        mov eax,[ebp-0x20] ; dest cell
+                            //   00779A83  8B 40 08        mov eax,[eax+8]    ; old head
+                            //   00779A89  89 42 0C        mov [edx+0xC],eax  ; node.next = old head
+                            //   00779A92  89 50 08        mov [eax+8],edx    ; destCell[8] = node
+                            // C# stores the chain as List<T> and walks 0..Count-1, so
+                            // index 0 is the native head. Add() was tail-insert and
+                            // reversed every consumer that iterates the cell (pick-up,
+                            // target select, AOE). Insert(0) restores head order.
+                            MapCellInfo.ObjList.Insert(0, OSObject);
                             result = 1;
                         }
                     }
