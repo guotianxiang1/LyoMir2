@@ -222,5 +222,42 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1255, -1, 0, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        // SM 1256 (0x4E8) — @0x006F101D via [obj+0x250], no body.
+        //   006F100B  6A 00              push 0             ; #1 Param  = 0
+        //   006F100D  6A 00              push 0             ; #2 Tag    = 0
+        //   006F100F  6A 00              push 0             ; #3 Series = 0
+        //   006F1011  6A 00              push 0             ; #4 sMsg   = nil
+        //   006F1013  8B CF              mov ecx,edi        ; Recog     = edi (handle)
+        //   006F1015  66 BA E8 04        mov dx,0x4E8       ; ident 1256
+        //   006F101D  FF 93 50 02 00 00  call [obj+0x250]
+        // A second native site exists (sites=2 in the frame table) which this pass did
+        // not byte-verify; the frame here is the 0x006F101D form only.
+        internal static (ClientPacket Header, byte[] Body) BuildSm1256(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1256, recog, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        // SM 1253 (0x4E5) — @0x006F0F1C via [obj+0x250], no body. The one dword at
+        // [esi] is split into Tag(hi)/Series(lo):
+        //   006F0EFF  6A 00              push 0             ; #1 Param  = 0
+        //   006F0F01  8B 06              mov eax,[esi]      ; value dword
+        //   006F0F03  E8 60 7E D1 FF     call 0x00408D68    ; 0x408D68: return eax >> 16
+        //   006F0F08  50                 push eax           ; #2 Tag    = HiWord(value)
+        //   006F0F09  66 8B 06           mov ax,word[esi]   ; LoWord(value)
+        //   006F0F0C  50                 push eax           ; #3 Series = LoWord(value)
+        //   006F0F0D  6A 00              push 0             ; #4 sMsg   = nil
+        //   006F0F0F  B9 FE FF FF FF     mov ecx,0xFFFFFFFE ; Recog     = -2
+        //   006F0F14  66 BA E5 04        mov dx,0x4E5       ; ident 1253
+        //   006F0F1C  FF 93 50 02 00 00  call [obj+0x250]
+        // Trigger: guarded by cmp byte[ebx+0x18C8],0 / jne (0x6F0EF6). A second native
+        // site exists (sites=2) not byte-verified in this pass.
+        internal static (ClientPacket Header, byte[] Body) BuildSm1253(int value)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1253, -2, 0,
+                HUtil32.HiWord(value), HUtil32.LoWord(value));
+            return (header, Array.Empty<byte>());
+        }
     }
 }
