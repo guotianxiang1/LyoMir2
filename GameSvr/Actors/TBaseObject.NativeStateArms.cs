@@ -211,6 +211,36 @@ namespace GameSvr
                     SendNativeStateArmMsg("道术上下限瞬间提高" + seconds + "秒",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 35:
+                    // 0x741B83  push 0x742D2C
+                    // 0x742D2C len 16 B9A5BBF7CBD9B6C8CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("攻击速度瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 36:
+                    // 0x741BBE  push 0x742D48
+                    // 0x742D48 len 14 C9FAC3FCD6B5CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("生命值瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 37:
+                    // 0x741BF9  push 0x742D60
+                    // 0x742D60 len 14 C4A7B7A8D6B5CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("魔法值瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 38:
+                    // 0x741C6F  push 0x742D90
+                    // 0x742D90 len 12 C3F4BDDDCBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("敏捷瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 39:
+                    // 0x741CAA  push 0x742DA8
+                    // 0x742DA8 len 12 C4A7B6E3CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("魔躲瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 40:
                     // 0x741B0D  push 0x742CF4
                     // 0x742CF4 len 18 B7C0D3F9C9CFCFC2CFDECBB2BCE4CCE1B8DF
