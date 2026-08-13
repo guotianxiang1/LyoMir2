@@ -510,6 +510,10 @@ namespace GameSvr
                     TryActivateNativeSkill273DragonBreak(UserMagic,
                         skill273Target);
                     break;
+                case SpellsDef.SKILL_168:
+                    result = TryActivateNativeSkill168Charge(nTargetX,
+                        nTargetY);
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
