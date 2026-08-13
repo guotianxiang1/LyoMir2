@@ -402,7 +402,7 @@ static void CheckSkyDiamondWriter()
     Equal("50\tplayer-map\t10\t20\tplayer\t金刚宝石\t100\t1\t闯天关大奖",
         (string)M2Share.LogStringList[0]!, "diamond exact log");
     Equal(0, context.Player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED),
         "diamond writer refreshed capital");
 }
 

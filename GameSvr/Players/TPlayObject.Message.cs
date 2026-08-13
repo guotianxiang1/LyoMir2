@@ -927,7 +927,7 @@ namespace GameSvr
                 case NativeMagicProducerPushIdent:
                     TryHandleNativeMagicProducerMessage(ProcessMsg);
                     break;
-                case Grobal2.SM_LINGFU_CHANGED:
+                case Grobal2.RM_LINGFU_CHANGED:
                     SendNativeCapitalInfo();
                     break;
                 case Grobal2.RM_NATIVE_EXP_CONTINUE:

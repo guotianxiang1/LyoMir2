@@ -235,7 +235,7 @@ static void AssertDirectMessages(TPlayObject player, int amount, string scenario
     Equal(0, prompt.nParam3, scenario + " prompt nParam3");
     EqualText(amount + "点荣耀点增加", prompt.Buff, scenario + " prompt body");
     var refresh = player.m_MsgList[1];
-    Equal(Grobal2.SM_LINGFU_CHANGED, refresh.wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, refresh.wIdent,
         scenario + " native refresh Ident");
 }
 

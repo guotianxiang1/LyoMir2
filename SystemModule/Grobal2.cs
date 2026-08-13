@@ -1316,7 +1316,14 @@ namespace SystemModule
         public const int RM_ABILITY = 10051;
         public const int RM_HEALTHSPELLCHANGED = 10052;
         public const int RM_DAYCHANGING = 10053;
-        public const int SM_LINGFU_CHANGED = 10054;
+        // Internal queue tag, never a wire ident. The only immediate load of 10054
+        // (0x2746) in CODE is 0x6B99F3 `66 B9 46 27 mov cx,0x2746` feeding
+        // `0x6B99F9 call 0x765E68` -- the record-allocating ENQUEUE helper, which
+        // contains no [+0x250]/[+0x254] send-slot call. The wire packet is emitted by
+        // the RM handler: dispatcher 0x6B3F08 `jmp [eax*4+0x6B3F0F]` routes tag 10054
+        // to arm 0x6B4DED, which builds a 24-byte body and sends
+        // 0x6B4E3A `66 BA B2 04 mov dx,0x4B2` = 1202 = SM_GETDIAMNUM_EXT.
+        public const int RM_LINGFU_CHANGED = 10054;
         public const int RM_USERMOVE = 10056;
         public const int RM_NATIVE_CLEAROBJECTS = 10117;
         public const int RM_NATIVE_CHANGEMAP = 10118;
