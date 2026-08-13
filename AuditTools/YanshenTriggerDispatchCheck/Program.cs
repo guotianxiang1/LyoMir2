@@ -56,11 +56,11 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
     ("上线触发", "@initys", 0x10032CC0, new uint[] { 0x006548BD }, new uint[] { 0x006548C2 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("死亡触发", "@OnDie", 0x10032FD0, new uint[] { 0x006C09B5 }, new uint[] { 0x006C09BA },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("回城按钮触发", "@OnBackButton", 0x10032FD0, new uint[] { 0x006DBB80 }, new uint[] { 0x006DBB85 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("挖矿触发", "@OnDig", 0x10032FD0, new uint[] { 0x006EC111 }, new uint[] { 0x006EC116 },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("心灵启示触发", "@Revelation", 0x10032FD0, new uint[] { 0x006EDC2B }, new uint[] { 0x006EDC30 },
         YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Replace, false),
     ("复活触发脚本", "@OnDia", 0x10032CC0, new uint[] { 0x0073C484 }, new uint[] { 0x0073C48A },
@@ -75,7 +75,7 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
         YanshenTriggerDispatch.Slot.WithParams, 5, YanshenTriggerDispatch.HostAction.Notify, false),
     ("盘古穿戴触发", "@ChangeEquip", 0x10032FD0,
         new uint[] { 0x006D8E35, 0x006D8E4D }, new uint[] { 0x006D8E3A, 0x006D8E52 },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("盘古魔法攻击触发", "@MagicAttack", 0x10032FD0,
         new uint[] { 0x0076E1AF, 0x0076DEC0 }, new uint[] { 0x0076E1B6, 0x0076DEC7 },
         YanshenTriggerDispatch.Slot.WithParams, 3, YanshenTriggerDispatch.HostAction.Notify, false),
@@ -148,6 +148,10 @@ Assert(!YanshenTriggerDispatch.FireSummonSkele(dormantPlayer),
     "插件缺席时 FireSummonSkele 必须返回 false（原生骷髅照常产生）");
 YanshenTriggerDispatch.FireSlaveGainExp(dormantSlave);
 YanshenTriggerDispatch.FireSlaveDie(dormantSlave);
+// 本轮接通的三个纯通知触发，插件缺席时同样必须零派发。
+YanshenTriggerDispatch.FireOnDie(dormantPlayer);
+YanshenTriggerDispatch.FireOnDig(dormantPlayer);
+YanshenTriggerDispatch.FireChangeEquip(dormantPlayer);
 Assert(YanshenTriggerDispatch.DispatchCount == baseline,
     $"插件缺席时派发计数器必须不动，却从 {baseline} 变成 {YanshenTriggerDispatch.DispatchCount}");
 
@@ -161,7 +165,8 @@ try
     // 全部触发键写 0：这就是生产 config.json 里 召唤神兽触发/召唤骷髅触发/BB杀怪触发/
     // BB死亡触发 的实际取值。
     File.WriteAllText(Path.Combine(tempRoot, "config.json"),
-        "{\"召唤神兽触发\":0,\"召唤骷髅触发\":0,\"BB杀怪触发\":0,\"BB死亡触发\":0}",
+        "{\"召唤神兽触发\":0,\"召唤骷髅触发\":0,\"BB杀怪触发\":0,\"BB死亡触发\":0,"
+        + "\"死亡触发\":0,\"挖矿触发\":0,\"盘古穿戴触发\":0}",
         HUtil32.GbkEncoding);
     var pmOff = new PluginManager(envirPath);
     pmOff.RegisterBuiltinPlugins();
@@ -179,12 +184,16 @@ try
         "召唤骷髅触发=0 时必须返回 false");
     YanshenTriggerDispatch.FireSlaveGainExp(dormantSlave);
     YanshenTriggerDispatch.FireSlaveDie(dormantSlave);
+    YanshenTriggerDispatch.FireOnDie(dormantPlayer);
+    YanshenTriggerDispatch.FireOnDig(dormantPlayer);
+    YanshenTriggerDispatch.FireChangeEquip(dormantPlayer);
     Assert(YanshenTriggerDispatch.DispatchCount == beforeOff,
         "开关为 0 时派发计数器必须不动");
 
     // 开关打开
     File.WriteAllText(Path.Combine(tempRoot, "config.json"),
-        "{\"召唤神兽触发\":1,\"召唤骷髅触发\":1,\"BB杀怪触发\":1,\"BB死亡触发\":1}",
+        "{\"召唤神兽触发\":1,\"召唤骷髅触发\":1,\"BB杀怪触发\":1,\"BB死亡触发\":1,"
+        + "\"死亡触发\":1,\"挖矿触发\":1,\"盘古穿戴触发\":1}",
         HUtil32.GbkEncoding);
     var pmOn = new PluginManager(envirPath);
     pmOn.RegisterBuiltinPlugins();
@@ -210,6 +219,22 @@ try
         "BB死亡触发发出的标签必须是 @BBKill");
     Assert(YanshenTriggerDispatch.DispatchCount == beforeOn + 4,
         $"开关全开时应恰好派发 4 次，实为 {YanshenTriggerDispatch.DispatchCount - beforeOn}");
+
+    // 本轮接通的三个纯通知触发：死亡 / 挖矿 / 盘古穿戴。都走 Plain 槽、This_Player=self，
+    // 开关为 1 时各发一次，标签分别为 @OnDie / @OnDig / @ChangeEquip。
+    var beforeNotify = YanshenTriggerDispatch.DispatchCount;
+    YanshenTriggerDispatch.FireOnDie(dormantPlayer);
+    Assert(YanshenTriggerDispatch.LastDispatchedLabel == "@OnDie",
+        "死亡触发发出的标签必须是 @OnDie");
+    YanshenTriggerDispatch.FireOnDig(dormantPlayer);
+    Assert(YanshenTriggerDispatch.LastDispatchedLabel == "@OnDig",
+        "挖矿触发发出的标签必须是 @OnDig");
+    YanshenTriggerDispatch.FireChangeEquip(dormantPlayer);
+    Assert(YanshenTriggerDispatch.LastDispatchedLabel == "@ChangeEquip",
+        "盘古穿戴触发发出的标签必须是 @ChangeEquip");
+    Assert(YanshenTriggerDispatch.DispatchCount == beforeNotify + 3,
+        $"死亡/挖矿/盘古穿戴 开关全开时应恰好派发 3 次，实为 "
+        + $"{YanshenTriggerDispatch.DispatchCount - beforeNotify}");
 
     // 门：玩家自己死不算 BB死亡；无主的怪也不算。
     var beforeGate = YanshenTriggerDispatch.DispatchCount;

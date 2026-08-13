@@ -1131,9 +1131,18 @@ namespace GameSvr
                     break;
                 case Grobal2.CM_TAKEONITEM:
                     ClientTakeOnItems((byte)ProcessMsg.nParam2, ProcessMsg.nParam1, ProcessMsg.sMsg);
+                    // 盘古穿戴触发 @ChangeEquip：眼神 trampoline 挂在分发器 0x6D8E35，
+                    // 即 call ClientTakeOnItems(0x6B7E9C) 返回之后（该原生处理器唯一调用者），
+                    // 无条件（不论穿戴成功与否）派发一次再回默认标签。惰性门在 FireChangeEquip
+                    // 内（插件缺席时零派发）。见 YanshenTriggerDispatch。
+                    GameSvr.Plugins.YanshenTriggerDispatch.FireChangeEquip(this);
                     break;
                 case Grobal2.CM_TAKEOFFITEM:
                     ClientTakeOffItems((byte)ProcessMsg.nParam2, ProcessMsg.nParam1, ProcessMsg.sMsg);
+                    // 盘古穿戴触发 @ChangeEquip：眼神 trampoline 挂在分发器 0x6D8E4D，
+                    // 即 call ClientTakeOffItems(0x6B8188) 返回之后（该原生处理器唯一调用者），
+                    // 无条件派发一次再回默认标签。惰性门在 FireChangeEquip 内。
+                    GameSvr.Plugins.YanshenTriggerDispatch.FireChangeEquip(this);
                     break;
                 case Grobal2.CM_EAT:
                 case Grobal2.CM_1069:

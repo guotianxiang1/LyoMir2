@@ -103,6 +103,21 @@ namespace GameSvr
                 {
                     result = true;
                     m_dwAttackTick = HUtil32.GetTickCount();
+                    // 挖矿触发 @OnDig：眼神 trampoline 挂在 0x6EC111（挖矿臂的 Dura 门
+                    // `cmp word[item+0x26],0`）之上，桩体先派发 @OnDig 再重放该门。故原生发射
+                    // 条件 = CM_HEAVYHIT + boMINE + 武器非空 + StdItem.Shape==19，且**早于** Dura 门、
+                    // GetFrontPosition 与地形门（哪怕耐久为 0 或身前无墙也照发一次）。惰性门 Armed
+                    // 打头，插件缺席时不取 StdItem、主干零影响。见 YanshenTriggerDispatch。
+                    if (GameSvr.Plugins.YanshenTriggerDispatch.Armed
+                        && wIdent == Grobal2.CM_HEAVYHIT && m_PEnvir.Flag.boMINE
+                        && m_UseItems[Grobal2.U_WEAPON] != null)
+                    {
+                        GoodItem digStd = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_WEAPON].wIndex);
+                        if (digStd != null && digStd.Shape == 19)
+                        {
+                            GameSvr.Plugins.YanshenTriggerDispatch.FireOnDig(this);
+                        }
+                    }
                     // MINE-08: 原版在派发器里测 MINE 旗标，位置在一切之前——
                     // 紧跟 ident 判断之后、取工具之前：
                     //   0x6EC0F1  66 81 FF C7 0B     cmp di,0xBC7        ; CM_HEAVYHIT

@@ -207,8 +207,12 @@ namespace GameSvr.Plugins
                 ConfigKey = "死亡触发", ScriptLabel = "@OnDie",
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100AD427 },
                 HostTargets = new uint[] { 0x006C09B5 }, HostResumes = new uint[] { 0x006C09BA },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
-                Note = "This_Player = [ebp-4]。桩体尾部重放 `pop edi/pop esi/pop ebx/pop ecx/pop ecx`。",
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = true,
+                Note = "This_Player = [ebp-4]。桩体尾部重放 `pop edi/pop esi/pop ebx/pop ecx/pop ecx`。"
+                     + "宿主是 TPlayer.Die（起始 0x6C03F8，异常串 0x6C09C4/0x6C0A0C `[Exception]: "
+                     + "TPlayer.Die -2/-5`），钩子挂在其唯一 epilogue 0x6C09B5，即所有 SEH finally "
+                     + "汇合之后。[ebp-4] 就是死者自己（0x6C0883 `mov [[ebp-4]+0x354],凶手`）。"
+                     + "C# 落点：TPlayObject.Die override 末尾（base.Die() 之后）。",
             },
             new()
             {
@@ -223,8 +227,13 @@ namespace GameSvr.Plugins
                 ConfigKey = "挖矿触发", ScriptLabel = "@OnDig",
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100AE0E1 },
                 HostTargets = new uint[] { 0x006EC111 }, HostResumes = new uint[] { 0x006EC116 },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
-                Note = "This_Player = ebx。桩体尾部重放被覆盖的 `66 83 7E 26 00 cmp word [esi+0x26],0`。",
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = true,
+                Note = "This_Player = ebx。桩体尾部重放被覆盖的 `66 83 7E 26 00 cmp word [esi+0x26],0`。"
+                     + "宿主是 ClientHitXY(sub_6EC078) 的挖矿臂：0x6EC0F1 `cmp di,0xBC7`(CM_HEAVYHIT) → "
+                     + "0x6EC0FE `cmp [map+0x6A],0`(boMINE) → 0x6EC104 武器非空 → 0x6EC10B "
+                     + "`cmp [std+0x15],0x13`(Shape==19) → 【钩子】0x6EC111 `cmp word[weapon+0x26],0`(Dura>0)。"
+                     + "所以 @OnDig 在「重击落在自身格 + boMINE + 手持 shape-19 镐」时发射，早于 Dura 门与 "
+                     + "GetFrontPosition。C# 落点：TPlayObject.ClientHitXY 挖矿检测处，惰性门 Armed 打头。",
             },
             new()
             {
@@ -276,7 +285,13 @@ namespace GameSvr.Plugins
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100AD8D1, 0x100AD91D },
                 HostTargets = new uint[] { 0x006D8E35, 0x006D8E4D },
                 HostResumes = new uint[] { 0x006D8E3A, 0x006D8E52 },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = true,
+                Note = "This_Player = [ebp-4] = self。两个桩体挂在 TPlayObject 客户端命令分发器"
+                     + "（起始 0x6D7794）的两条臂的尾 jmp 上：0x6D8E30 `call 0x6B7E9C`(ClientTakeOnItems，"
+                     + "唯一调用者) 之后的 0x6D8E35；0x6D8E48 `call 0x6B8188`(ClientTakeOffItems，唯一调用者)"
+                     + "之后的 0x6D8E4D。两桩体都不重放（被覆盖的原指令本就是 `jmp 0x6DBC2C` 默认标签），"
+                     + "所以是「原生穿/脱执行完 → 发 @ChangeEquip → 回分发器默认流」。因两处理器各仅一个调用者，"
+                     + "C# 等价落点 = CM_TAKEONITEM / CM_TAKEOFFITEM 两个 case 调用之后（TPlayObject.Message.cs）。",
             },
             new()
             {
@@ -300,6 +315,19 @@ namespace GameSvr.Plugins
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D3BC4 },
                 HostTargets = new uint[] { 0x0076C88B }, HostResumes = new uint[] { 0x0076C890 },
                 DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
+                Note = "BLOCKED（本轮）。宿主 sub_76C804 已定案 = C# TBaseObject.GetAttackPower"
+                     + "(nBasePower,nPower)（幸运掷点，TBaseObject.cs:1634），三个调用者 0x767F13/"
+                     + "0x76F491(魔法 [ebx+0x294..0x298])/0x770B6A(物理 [esi+0x28c..0x290]) 逐字节印证。"
+                     + "但 464 字节桩体（site 0x100D3BC4）不是纯通知——它是【伤害倍率修改器】，完整解码："
+                     + "①守卫 cmp [ebx],0x6AC8C8 只对 TPlayer 攻击者生效（怪物/守卫不发）；"
+                     + "②读扩展块 [player+0x804] 的三组『标签+值』：标签 0x428→值 +0x1FC=倍攻%、"
+                     + "标签 0x42B/0x42C→值 +0x214/+0x21C=暴击%/暴击概率；"
+                     + "③先按倍攻% 把 esi 缩放为 esi*pct/100（含 >1000 防溢出分支与 INT_MAX 上钳）；"
+                     + "④仅当暴击标签在且 Random(100)<=概率 时，才 push 标签 call [ebx+0x44] 发 @baoji，"
+                     + "并再乘暴击% ；⑤把改写后的 esi 作为 GetAttackPower 返回值（0x76C88B mov eax,esi）。"
+                     + "→ 这会改写最热的伤害掷点返回值，且依赖一个尚未定位写入来源的插件扩展块 "
+                     + "[player+0x804]（0x804 非 M2Server TPlayer 原生字段，疑似插件另立的带标签属性表）。"
+                     + "在该扩展块的来源与取值域定案前不接（避免污染主干伤害）。解码见 _analysis/t06_out.txt。",
             },
             new()
             {
@@ -474,6 +502,46 @@ namespace GameSvr.Plugins
 
             DispatchWithParams(master, "@BBKill",
                 PasValue.FromString(dying.m_sCharName ?? string.Empty));
+        }
+
+        /// <summary>
+        /// 死亡触发（<c>@OnDie</c>，宿主 TPlayer.Die 的 epilogue 0x6C09B5）。
+        /// <para>纯通知。原生桩体重放被覆盖的 <c>pop edi/esi/ebx/ecx/ecx</c> 后 jmp 0x6C09BA，
+        /// 即在玩家 Die 的唯一 epilogue（所有 SEH finally 汇合之后）无条件发一次。
+        /// This_Player = [ebp-4] = 死者自己。C# 落点：<c>TPlayObject.Die</c> override 末尾。</para>
+        /// </summary>
+        public static void FireOnDie(TPlayObject player)
+        {
+            if (!Armed || player == null) return;
+            if (!Enabled("死亡触发")) return;
+            DispatchPlain(player, "@OnDie");
+        }
+
+        /// <summary>
+        /// 挖矿触发（<c>@OnDig</c>，宿主 ClientHitXY sub_6EC078 的挖矿臂 0x6EC111）。
+        /// <para>纯通知。原生在「重击 CM_HEAVYHIT + boMINE 图 + 手持 shape-19 镐」确认后、
+        /// 耐久门(<c>cmp word[weapon+0x26],0</c>)之前发射。前四道门（ident/boMINE/武器/Shape）
+        /// 属宿主上下文，由调用点判定；这里只做惰性门 + 开关 + 派发。This_Player = ebx = self。</para>
+        /// </summary>
+        public static void FireOnDig(TPlayObject player)
+        {
+            if (!Armed || player == null) return;
+            if (!Enabled("挖矿触发")) return;
+            DispatchPlain(player, "@OnDig");
+        }
+
+        /// <summary>
+        /// 盘古穿戴触发（<c>@ChangeEquip</c>，宿主分发器两条臂 0x6D8E35 / 0x6D8E4D）。
+        /// <para>纯通知。原生在 <c>ClientTakeOnItems</c>(0x6B7E9C) 与 <c>ClientTakeOffItems</c>(0x6B8188)
+        /// 执行完毕后无条件各发一次（不论穿/脱成功与否），随后回到分发器默认标签。两个原生
+        /// 处理器各只有一个调用者，故 C# 在 CM_TAKEONITEM / CM_TAKEOFFITEM 两个 case 调用之后
+        /// 各接一次。This_Player = [ebp-4] = self。</para>
+        /// </summary>
+        public static void FireChangeEquip(TPlayObject player)
+        {
+            if (!Armed || player == null) return;
+            if (!Enabled("盘古穿戴触发")) return;
+            DispatchPlain(player, "@ChangeEquip");
         }
     }
 }
