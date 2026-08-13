@@ -2117,5 +2117,28 @@ namespace SystemModule
         // CM 4218 的 1500ms 冷却门阈值：0x6F3118 `sub edx,[self+0xA6C]` /
         // 0x6F311E `cmp edx,0x5DC` / 0x6F3124 `jbe`（无符号 <=）-> 静默丢弃。
         public const int ItemTransferSelfThrottleMs = 0x5DC; // 1500
+        // === SM missing batch 4 (rank 71-105 + 顺延 tail 106-140) =====================
+        // Server->client idents that native M2Server (flat_image.bin, ImageBase
+        // 0x400000) sends through a real [obj+0x250]/[obj+0x254] slot but had no C#
+        // constant of any prefix. Census: staging/_sm1_work/reconcile.txt (140 class-c
+        // idents); this batch is the second-highest quarter (rank 71-105) plus the
+        // ascending 顺延 back-fill after skipping already-handled entries (sm-A / sm-1 /
+        // sm-2 / TimedAbility 3554-3555 / NativeScriptUiOpen 4331/4339/4340/4348/4351/
+        // 4361 / NativeYbCredit 3009 / slave-list 4469-4470 / social 4612 / SM_4034 /
+        // m_sm_d relation+YB 4441-4446). Builders decoded byte-for-byte live in
+        // GameSvr/Actors/TBaseObject.SmIdent_Sm4.cs. Idents whose BODY/FRAME is not
+        // evaluable at a mapped send slot are BLOCKED (fail-closed, no builder).
+        //   -- built (empty body unless noted) --
+        public const int SM_2969 = 2969;  // 0xB99  RM-forward -> [obj+0x250] @0x6B5F3D
+        public const int SM_2970 = 2970;  // 0xB9A  RM-forward -> [obj+0x250] @0x6B5F65 (0x254 serializer variant @0x6EB41C = gap)
+        public const int SM_4038 = 4038;  // 0xFC6  flag notify -> [obj+0x250] @0x746D3B/@0x746D56
+        public const int SM_4070 = 4070;  // 0xFE6  -> [obj+0x250] @0x649072
+        public const int SM_4205 = 4205;  // 0x106D SMS-auth reply -> [obj+0x250] (4 sites @0x654C3E..@0x6F023A)
+        public const int SM_4206 = 4206;  // 0x106E -> [obj+0x250] @0x6F0496 (Recog 0)/@0x6F04F7 (Recog -1)
+        //   -- fail-closed (BLOCKED, no builder; body/frame not evaluable at a mapped slot) --
+        public const int SM_3412 = 3412;  // 0xD54  BLOCKED: mov dx @0x6EE22C -> call [obj+0xE0] @0x6EE234 (non-slot virtual)
+        public const int SM_4032 = 4032;  // 0xFC0  BLOCKED: [obj+0x254] @0x746D18, Buf/Len = [[0x7D6014]] 43-byte table record (undefined)
+        public const int SM_4033 = 4033;  // 0xFC1  BLOCKED: [obj+0x254] @0x747362, 32-byte state-0x36 record from [self+0x5A8] (unmapped)
+        public const int SM_4037 = 4037;  // 0xFC5  BLOCKED: [obj+0x254] @0x6B71ED, 24-byte body [self+0x60C]+[self+0x5A8] (unmapped)
     }
 }

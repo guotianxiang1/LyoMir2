@@ -1,0 +1,19 @@
+SM batch 4/4: 26 send builders + 10 fail-closed for census rank 71-140 tail
+
+Adds TBaseObject.SmIdent_Sm4.cs (new file, no shared method body touched) with
+26 faithful send builders and appends 36 SM_ constants to Grobal2.cs (marker
+"SM missing batch 4"). Covers every genuinely-undone class-(c) census ident in
+rank 71-140 after skipping entries already handled by sm-A / sm-1 / sm-2 /
+TimedAbility / NativeScriptUiOpen / NativeYbCredit / slave-list / social /
+SM_4034 / m_sm_d (4441-4446).
+
+Built (empty/string body, frame proven byte-for-byte from flat_image.bin send
+slots): 2969 2970 4035 4038 4070 4117 4205 4206 4349 4350 4352 4407 4408 4409
+4410 4411 4455 4456 4457 4458 4459 4496 4499 4638 4649 4650.
+
+Fail-closed (constant + evidence gap only, no invented bytes): 3412 4363
+([obj+0xE0] non-slot), 4032 4033 4037 4626 4646 4647 ([obj+0x254] unmapped
+record/list bodies), 4480 4614 (wrapper-dispatched, not a direct slot).
+
+Evidence: _work/smscan.py (send-slot backtrack) + _work/ev_*.txt dumps +
+_work/sm4_targets.md manifest.

@@ -1,0 +1,515 @@
+=== SM 2969 (0xB99) : 1 send-site(s) ===
+  --- send @0x6B5F3D slot [+0x250] (mov dx @0x6B5F34) ---
+     0x6B5EF5  18 FF                  sbb bh, bh
+     0x6B5EF7  93                     xchg ebx, eax
+     0x6B5EF8  50                     push eax
+     0x6B5EF9  02 00                  add al, byte ptr [eax]
+     0x6B5EFB  00 E9                  add cl, ch
+     0x6B5EFD  4B                     dec ebx
+     0x6B5EFE  03 00                  add eax, dword ptr [eax]
+     0x6B5F00  00 66 8B               add byte ptr [esi - 0x75], ah
+     0x6B5F03  43                     inc ebx
+     0x6B5F04  04 50                  add al, 0x50
+     0x6B5F06  6A 00                  push 0
+     0x6B5F08  6A 00                  push 0
+     0x6B5F0A  6A 00                  push 0
+     0x6B5F0C  8B 4B 24               mov ecx, dword ptr [ebx + 0x24]
+     0x6B5F0F  66 BA 98 0B            mov dx, 0xb98
+     0x6B5F13  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6B5F16  8B 18                  mov ebx, dword ptr [eax]
+     0x6B5F18  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6B5F1E  E9 29 03 00 00         jmp 0x6b624c
+     0x6B5F23  66 8B 43 04            mov ax, word ptr [ebx + 4]
+     0x6B5F27  50                     push eax
+     0x6B5F28  66 8B 43 0C            mov ax, word ptr [ebx + 0xc]
+     0x6B5F2C  50                     push eax
+     0x6B5F2D  6A 00                  push 0
+     0x6B5F2F  6A 00                  push 0
+     0x6B5F31  8B 4B 08               mov ecx, dword ptr [ebx + 8]
+     0x6B5F34  66 BA 99 0B            mov dx, 0xb99
+     0x6B5F38  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6B5F3B  8B 18                  mov ebx, dword ptr [eax]
+     0x6B5F3D  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
+=== SM 2970 (0xB9A) : 2 send-site(s) ===
+  --- send @0x6B5F65 slot [+0x250] (mov dx @0x6B5F5C) ---
+     0x6B5F1D  00 E9                  add cl, ch
+     0x6B5F1F  29 03                  sub dword ptr [ebx], eax
+     0x6B5F21  00 00                  add byte ptr [eax], al
+     0x6B5F23  66 8B 43 04            mov ax, word ptr [ebx + 4]
+     0x6B5F27  50                     push eax
+     0x6B5F28  66 8B 43 0C            mov ax, word ptr [ebx + 0xc]
+     0x6B5F2C  50                     push eax
+     0x6B5F2D  6A 00                  push 0
+     0x6B5F2F  6A 00                  push 0
+     0x6B5F31  8B 4B 08               mov ecx, dword ptr [ebx + 8]
+     0x6B5F34  66 BA 99 0B            mov dx, 0xb99
+     0x6B5F38  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6B5F3B  8B 18                  mov ebx, dword ptr [eax]
+     0x6B5F3D  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6B5F43  E9 04 03 00 00         jmp 0x6b624c
+     0x6B5F48  66 8B 43 04            mov ax, word ptr [ebx + 4]
+     0x6B5F4C  50                     push eax
+     0x6B5F4D  66 8B 43 08            mov ax, word ptr [ebx + 8]
+     0x6B5F51  50                     push eax
+     0x6B5F52  66 8B 43 0C            mov ax, word ptr [ebx + 0xc]
+     0x6B5F56  50                     push eax
+     0x6B5F57  6A 00                  push 0
+     0x6B5F59  8B 4B 24               mov ecx, dword ptr [ebx + 0x24]
+     0x6B5F5C  66 BA 9A 0B            mov dx, 0xb9a
+     0x6B5F60  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6B5F63  8B 18                  mov ebx, dword ptr [eax]
+     0x6B5F65  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+  --- send @0x6EB41C slot [+0x254] (mov dx @0x6EB414) ---
+     0x6EB3D4  C0 74 20 8B D3         sal byte ptr [eax - 0x75], 0xd3
+     0x6EB3D9  8B C6                  mov eax, esi
+     0x6EB3DB  E8 E0 1C 05 00         call 0x73d0c0
+     0x6EB3E0  8B 45 F0               mov eax, dword ptr [ebp - 0x10]
+     0x6EB3E3  E8 30 6B 0A 00         call 0x791f18
+     0x6EB3E8  8B C3                  mov eax, ebx
+     0x6EB3EA  8B 10                  mov edx, dword ptr [eax]
+     0x6EB3EC  FF 52 34               call dword ptr [edx + 0x34]
+     0x6EB3EF  89 45 F0               mov dword ptr [ebp - 0x10], eax
+     0x6EB3F2  33 C0                  xor eax, eax
+     0x6EB3F4  89 45 EC               mov dword ptr [ebp - 0x14], eax
+     0x6EB3F7  8B 45 F0               mov eax, dword ptr [ebp - 0x10]
+     0x6EB3FA  E8 3D 6B 0A 00         call 0x791f3c
+     0x6EB3FF  8B F8                  mov edi, eax
+     0x6EB401  66 8B 45 08            mov ax, word ptr [ebp + 8]
+     0x6EB405  50                     push eax
+     0x6EB406  66 8B 45 EC            mov ax, word ptr [ebp - 0x14]
+     0x6EB40A  50                     push eax
+     0x6EB40B  6A 00                  push 0
+     0x6EB40D  8B 45 F0               mov eax, dword ptr [ebp - 0x10]
+     0x6EB410  50                     push eax
+     0x6EB411  57                     push edi
+     0x6EB412  8B CE                  mov ecx, esi
+     0x6EB414  66 BA 9A 0B            mov dx, 0xb9a
+     0x6EB418  8B C6                  mov eax, esi
+     0x6EB41A  8B 18                  mov ebx, dword ptr [eax]
+     0x6EB41C  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+
+=== SM 4032 (0xFC0) : 1 send-site(s) ===
+  --- send @0x746D18 slot [+0x254] (mov dx @0x746D0F) ---
+     0x746CD0  C0 5A 59 59            rcr byte ptr [edx + 0x59], 0x59
+     0x746CD4  64 89 10               mov dword ptr fs:[eax], edx
+     0x746CD7  68 F0 6C 74 00         push 0x746cf0
+     0x746CDC  A1 14 60 7D 00         mov eax, dword ptr [0x7d6014]
+     0x746CE1  8B 00                  mov eax, dword ptr [eax]
+     0x746CE3  E8 F4 83 D5 FF         call 0x49f0dc
+     0x746CE8  C3                     ret 
+     0x746CE9  E9 4A E1 CB FF         jmp 0x404e38
+     0x746CEE  EB EC                  jmp 0x746cdc
+     0x746CF0  6A 00                  push 0
+     0x746CF2  A1 EC 5A 7D 00         mov eax, dword ptr [0x7d5aec]
+     0x746CF7  66 8B 00               mov ax, word ptr [eax]
+     0x746CFA  50                     push eax
+     0x746CFB  6A 00                  push 0
+     0x746CFD  8B 45 F8               mov eax, dword ptr [ebp - 8]
+     0x746D00  50                     push eax
+     0x746D01  8B 45 F4               mov eax, dword ptr [ebp - 0xc]
+     0x746D04  50                     push eax
+     0x746D05  A1 14 60 7D 00         mov eax, dword ptr [0x7d6014]
+     0x746D0A  8B 00                  mov eax, dword ptr [eax]
+     0x746D0C  8B 48 18               mov ecx, dword ptr [eax + 0x18]
+     0x746D0F  66 BA C0 0F            mov dx, 0xfc0
+     0x746D13  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x746D16  8B 18                  mov ebx, dword ptr [eax]
+     0x746D18  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+
+=== SM 4033 (0xFC1) : 2 send-site(s) ===
+  --- send @0x747362 slot [+0x254] (mov dx @0x74735A) ---
+     0x74731A  00 89 45 E0 8B 83      add byte ptr [ecx - 0x7c741fbb], cl
+     0x747320  9C                     pushfd 
+     0x747321  05 00 00 89 45         add eax, 0x45890000
+     0x747326  E8 8B 83 A0 05         call 0x614f6b6
+     0x74732B  00 00                  add byte ptr [eax], al
+     0x74732D  89 45 E4               mov dword ptr [ebp - 0x1c], eax
+     0x747330  8D 55 EC               lea edx, [ebp - 0x14]
+     0x747333  8D 83 A8 05 00 00      lea eax, [ebx + 0x5a8]
+     0x747339  B9 14 00 00 00         mov ecx, 0x14
+     0x74733E  E8 1D BF CB FF         call 0x403260
+     0x747343  80 BB 78 01 00 00 36   cmp byte ptr [ebx + 0x178], 0x36
+     0x74734A  75 1E                  jne 0x74736a
+     0x74734C  6A 00                  push 0
+     0x74734E  6A 01                  push 1
+     0x747350  6A 00                  push 0
+     0x747352  8D 45 E0               lea eax, [ebp - 0x20]
+     0x747355  50                     push eax
+     0x747356  6A 20                  push 0x20
+     0x747358  33 C9                  xor ecx, ecx
+     0x74735A  66 BA C1 0F            mov dx, 0xfc1
+     0x74735E  8B C3                  mov eax, ebx
+     0x747360  8B 18                  mov ebx, dword ptr [eax]
+     0x747362  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+  --- send @0x747380 slot [+0x254] (mov dx @0x747378) ---
+     0x747338  00 B9 14 00 00 00      add byte ptr [ecx + 0x14], bh
+     0x74733E  E8 1D BF CB FF         call 0x403260
+     0x747343  80 BB 78 01 00 00 36   cmp byte ptr [ebx + 0x178], 0x36
+     0x74734A  75 1E                  jne 0x74736a
+     0x74734C  6A 00                  push 0
+     0x74734E  6A 01                  push 1
+     0x747350  6A 00                  push 0
+     0x747352  8D 45 E0               lea eax, [ebp - 0x20]
+     0x747355  50                     push eax
+     0x747356  6A 20                  push 0x20
+     0x747358  33 C9                  xor ecx, ecx
+     0x74735A  66 BA C1 0F            mov dx, 0xfc1
+     0x74735E  8B C3                  mov eax, ebx
+     0x747360  8B 18                  mov ebx, dword ptr [eax]
+     0x747362  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+     0x747368  EB 1C                  jmp 0x747386
+     0x74736A  6A 00                  push 0
+     0x74736C  6A 00                  push 0
+     0x74736E  6A 00                  push 0
+     0x747370  8D 45 E0               lea eax, [ebp - 0x20]
+     0x747373  50                     push eax
+     0x747374  6A 20                  push 0x20
+     0x747376  33 C9                  xor ecx, ecx
+     0x747378  66 BA C1 0F            mov dx, 0xfc1
+     0x74737C  8B C3                  mov eax, ebx
+     0x74737E  8B 18                  mov ebx, dword ptr [eax]
+     0x747380  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+
+=== SM 4038 (0xFC6) : 2 send-site(s) ===
+  --- send @0x746D3B slot [+0x250] (mov dx @0x746D32) ---
+     0x746CF3  EC                     in al, dx
+     0x746CF4  5A                     pop edx
+     0x746CF5  7D 00                  jge 0x746cf7
+     0x746CF7  66 8B 00               mov ax, word ptr [eax]
+     0x746CFA  50                     push eax
+     0x746CFB  6A 00                  push 0
+     0x746CFD  8B 45 F8               mov eax, dword ptr [ebp - 8]
+     0x746D00  50                     push eax
+     0x746D01  8B 45 F4               mov eax, dword ptr [ebp - 0xc]
+     0x746D04  50                     push eax
+     0x746D05  A1 14 60 7D 00         mov eax, dword ptr [0x7d6014]
+     0x746D0A  8B 00                  mov eax, dword ptr [eax]
+     0x746D0C  8B 48 18               mov ecx, dword ptr [eax + 0x18]
+     0x746D0F  66 BA C0 0F            mov dx, 0xfc0
+     0x746D13  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x746D16  8B 18                  mov ebx, dword ptr [eax]
+     0x746D18  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+     0x746D1E  A1 38 69 7D 00         mov eax, dword ptr [0x7d6938]
+     0x746D23  80 38 00               cmp byte ptr [eax], 0
+     0x746D26  74 1B                  je 0x746d43
+     0x746D28  6A 01                  push 1
+     0x746D2A  6A 00                  push 0
+     0x746D2C  6A 00                  push 0
+     0x746D2E  6A 00                  push 0
+     0x746D30  33 C9                  xor ecx, ecx
+     0x746D32  66 BA C6 0F            mov dx, 0xfc6
+     0x746D36  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x746D39  8B 18                  mov ebx, dword ptr [eax]
+     0x746D3B  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+  --- send @0x746D56 slot [+0x250] (mov dx @0x746D4D) ---
+     0x746D0E  18 66 BA               sbb byte ptr [esi - 0x46], ah
+     0x746D11  C0 0F 8B               ror byte ptr [edi], 0x8b
+     0x746D14  45                     inc ebp
+     0x746D15  FC                     cld 
+     0x746D16  8B 18                  mov ebx, dword ptr [eax]
+     0x746D18  FF 93 54 02 00 00      call dword ptr [ebx + 0x254]
+     0x746D1E  A1 38 69 7D 00         mov eax, dword ptr [0x7d6938]
+     0x746D23  80 38 00               cmp byte ptr [eax], 0
+     0x746D26  74 1B                  je 0x746d43
+     0x746D28  6A 01                  push 1
+     0x746D2A  6A 00                  push 0
+     0x746D2C  6A 00                  push 0
+     0x746D2E  6A 00                  push 0
+     0x746D30  33 C9                  xor ecx, ecx
+     0x746D32  66 BA C6 0F            mov dx, 0xfc6
+     0x746D36  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x746D39  8B 18                  mov ebx, dword ptr [eax]
+     0x746D3B  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x746D41  EB 19                  jmp 0x746d5c
+     0x746D43  6A 00                  push 0
+     0x746D45  6A 00                  push 0
+     0x746D47  6A 00                  push 0
+     0x746D49  6A 00                  push 0
+     0x746D4B  33 C9                  xor ecx, ecx
+     0x746D4D  66 BA C6 0F            mov dx, 0xfc6
+     0x746D51  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x746D54  8B 18                  mov ebx, dword ptr [eax]
+     0x746D56  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
+=== SM 4070 (0xFE6) : 1 send-site(s) ===
+  --- send @0x649072 slot [+0x250] (mov dx @0x649068) ---
+     0x64902A  00 E8                  add al, ch
+     0x64902C  38 41 01               cmp byte ptr [ecx + 1], al
+     0x64902F  00 5B 5D               add byte ptr [ebx + 0x5d], bl
+     0x649032  C3                     ret 
+     0x649033  90                     nop 
+     0x649034  55                     push ebp
+     0x649035  8B EC                  mov ebp, esp
+     0x649037  53                     push ebx
+     0x649038  56                     push esi
+     0x649039  8B F1                  mov esi, ecx
+     0x64903B  8B DA                  mov ebx, edx
+     0x64903D  8B CE                  mov ecx, esi
+     0x64903F  A1 6C 5D 7D 00         mov eax, dword ptr [0x7d5d6c]
+     0x649044  8B 00                  mov eax, dword ptr [eax]
+     0x649046  8B D3                  mov edx, ebx
+     0x649048  E8 0B CB 10 00         call 0x755b58
+     0x64904D  5E                     pop esi
+     0x64904E  5B                     pop ebx
+     0x64904F  5D                     pop ebp
+     0x649050  C3                     ret 
+     0x649051  8D 40 00               lea eax, [eax]
+     0x649054  55                     push ebp
+     0x649055  8B EC                  mov ebp, esp
+     0x649057  53                     push ebx
+     0x649058  56                     push esi
+     0x649059  57                     push edi
+     0x64905A  8B FA                  mov edi, edx
+     0x64905C  8B F0                  mov esi, eax
+     0x64905E  51                     push ecx
+     0x64905F  66 8B 45 08            mov ax, word ptr [ebp + 8]
+     0x649063  50                     push eax
+     0x649064  6A 00                  push 0
+     0x649066  6A 00                  push 0
+     0x649068  66 BA E6 0F            mov dx, 0xfe6
+     0x64906C  8B C7                  mov eax, edi
+     0x64906E  8B CE                  mov ecx, esi
+     0x649070  8B 18                  mov ebx, dword ptr [eax]
+     0x649072  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
+=== SM 4117 (0x1015) : 3 send-site(s) ===
+  --- send @0x6E86D8 slot [+0x250] (mov dx @0x6E86D0) ---
+     0x6E8690  08 50 8B               or byte ptr [eax - 0x75], dl
+     0x6E8693  4D                     dec ebp
+     0x6E8694  0C 8B                  or al, 0x8b
+     0x6E8696  D3 8B C6 E8 36 43      ror dword ptr [ebx + 0x4336e8c6], cl
+     0x6E869C  08 00                  or byte ptr [eax], al
+     0x6E869E  84 C0                  test al, al
+     0x6E86A0  0F 84 87 00 00 00      je 0x6e872d
+     0x6E86A6  8B C3                  mov eax, ebx
+     0x6E86A8  8B 15 E4 55 68 00      mov edx, dword ptr [0x6855e4]
+     0x6E86AE  E8 75 C1 D1 FF         call 0x404828
+     0x6E86B3  84 C0                  test al, al
+     0x6E86B5  74 48                  je 0x6e86ff
+     0x6E86B7  8B BB 8C 06 00 00      mov edi, dword ptr [ebx + 0x68c]
+     0x6E86BD  85 FF                  test edi, edi
+     0x6E86BF  74 1F                  je 0x6e86e0
+     0x6E86C1  6A 00                  push 0
+     0x6E86C3  6A 00                  push 0
+     0x6E86C5  6A 00                  push 0
+     0x6E86C7  6A 00                  push 0
+     0x6E86C9  0F B7 8F 08 06 00 00   movzx ecx, word ptr [edi + 0x608]
+     0x6E86D0  66 BA 15 10            mov dx, 0x1015
+     0x6E86D4  8B C6                  mov eax, esi
+     0x6E86D6  8B 18                  mov ebx, dword ptr [eax]
+     0x6E86D8  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+  --- send @0x6E86F7 slot [+0x250] (mov dx @0x6E86EF) ---
+     0x6E86AF  75 C1                  jne 0x6e8672
+     0x6E86B1  D1 FF                  sar edi, 1
+     0x6E86B3  84 C0                  test al, al
+     0x6E86B5  74 48                  je 0x6e86ff
+     0x6E86B7  8B BB 8C 06 00 00      mov edi, dword ptr [ebx + 0x68c]
+     0x6E86BD  85 FF                  test edi, edi
+     0x6E86BF  74 1F                  je 0x6e86e0
+     0x6E86C1  6A 00                  push 0
+     0x6E86C3  6A 00                  push 0
+     0x6E86C5  6A 00                  push 0
+     0x6E86C7  6A 00                  push 0
+     0x6E86C9  0F B7 8F 08 06 00 00   movzx ecx, word ptr [edi + 0x608]
+     0x6E86D0  66 BA 15 10            mov dx, 0x1015
+     0x6E86D4  8B C6                  mov eax, esi
+     0x6E86D6  8B 18                  mov ebx, dword ptr [eax]
+     0x6E86D8  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6E86DE  EB 4D                  jmp 0x6e872d
+     0x6E86E0  6A 00                  push 0
+     0x6E86E2  6A 00                  push 0
+     0x6E86E4  6A 00                  push 0
+     0x6E86E6  6A 00                  push 0
+     0x6E86E8  0F B7 8B 08 06 00 00   movzx ecx, word ptr [ebx + 0x608]
+     0x6E86EF  66 BA 15 10            mov dx, 0x1015
+     0x6E86F3  8B C6                  mov eax, esi
+     0x6E86F5  8B 18                  mov ebx, dword ptr [eax]
+     0x6E86F7  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+  --- send @0x6E8727 slot [+0x250] (mov dx @0x6E871F) ---
+     0x6E86DF  4D                     dec ebp
+     0x6E86E0  6A 00                  push 0
+     0x6E86E2  6A 00                  push 0
+     0x6E86E4  6A 00                  push 0
+     0x6E86E6  6A 00                  push 0
+     0x6E86E8  0F B7 8B 08 06 00 00   movzx ecx, word ptr [ebx + 0x608]
+     0x6E86EF  66 BA 15 10            mov dx, 0x1015
+     0x6E86F3  8B C6                  mov eax, esi
+     0x6E86F5  8B 18                  mov ebx, dword ptr [eax]
+     0x6E86F7  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6E86FD  EB 2E                  jmp 0x6e872d
+     0x6E86FF  8B C3                  mov eax, ebx
+     0x6E8701  8B 15 E8 BB 73 00      mov edx, dword ptr [0x73bbe8]
+     0x6E8707  E8 1C C1 D1 FF         call 0x404828
+     0x6E870C  84 C0                  test al, al
+     0x6E870E  74 1D                  je 0x6e872d
+     0x6E8710  6A 00                  push 0
+     0x6E8712  6A 00                  push 0
+     0x6E8714  6A 00                  push 0
+     0x6E8716  6A 00                  push 0
+     0x6E8718  0F B7 8B 08 06 00 00   movzx ecx, word ptr [ebx + 0x608]
+     0x6E871F  66 BA 15 10            mov dx, 0x1015
+     0x6E8723  8B C6                  mov eax, esi
+     0x6E8725  8B 18                  mov ebx, dword ptr [eax]
+     0x6E8727  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
+=== SM 4206 (0x106E) : 2 send-site(s) ===
+  --- send @0x6F0496 slot [+0x250] (mov dx @0x6F048E) ---
+     0x6F044E  E8 8D 87 07 00         call 0x768be0
+     0x6F0453  83 BB D4 18 00 00 00   cmp dword ptr [ebx + 0x18d4], 0
+     0x6F045A  74 7D                  je 0x6f04d9
+     0x6F045C  8B 83 D4 18 00 00      mov eax, dword ptr [ebx + 0x18d4]
+     0x6F0462  8B D6                  mov edx, esi
+     0x6F0464  E8 B3 54 D1 FF         call 0x40591c
+     0x6F0469  75 6E                  jne 0x6f04d9
+     0x6F046B  8D 83 D4 18 00 00      lea eax, [ebx + 0x18d4]
+     0x6F0471  E8 8A 50 D1 FF         call 0x405500
+     0x6F0476  C6 83 D1 18 00 00 01   mov byte ptr [ebx + 0x18d1], 1
+     0x6F047D  C6 83 D0 18 00 00 01   mov byte ptr [ebx + 0x18d0], 1
+     0x6F0484  6A 00                  push 0
+     0x6F0486  6A 00                  push 0
+     0x6F0488  6A 00                  push 0
+     0x6F048A  6A 00                  push 0
+     0x6F048C  33 C9                  xor ecx, ecx
+     0x6F048E  66 BA 6E 10            mov dx, 0x106e
+     0x6F0492  8B C3                  mov eax, ebx
+     0x6F0494  8B 30                  mov esi, dword ptr [eax]
+     0x6F0496  FF 96 50 02 00 00      call dword ptr [esi + 0x250]
+  --- send @0x6F04F7 slot [+0x250] (mov dx @0x6F04EF) ---
+     0x6F04AF  00 00                  add byte ptr [eax], al
+     0x6F04B1  8B C3                  mov eax, ebx
+     0x6F04B3  E8 A8 5F FE FF         call 0x6d6460
+     0x6F04B8  E9 9C 00 00 00         jmp 0x6f0559
+     0x6F04BD  33 C9                  xor ecx, ecx
+     0x6F04BF  8B 93 50 0A 00 00      mov edx, dword ptr [ebx + 0xa50]
+     0x6F04C5  8B C3                  mov eax, ebx
+     0x6F04C7  E8 B8 06 00 00         call 0x6f0b84
+     0x6F04CC  33 C0                  xor eax, eax
+     0x6F04CE  89 83 50 0A 00 00      mov dword ptr [ebx + 0xa50], eax
+     0x6F04D4  E9 80 00 00 00         jmp 0x6f0559
+     0x6F04D9  8D 83 D4 18 00 00      lea eax, [ebx + 0x18d4]
+     0x6F04DF  E8 1C 50 D1 FF         call 0x405500
+     0x6F04E4  6A 00                  push 0
+     0x6F04E6  6A 00                  push 0
+     0x6F04E8  6A 00                  push 0
+     0x6F04EA  6A 00                  push 0
+     0x6F04EC  83 C9 FF               or ecx, 0xffffffff
+     0x6F04EF  66 BA 6E 10            mov dx, 0x106e
+     0x6F04F3  8B C3                  mov eax, ebx
+     0x6F04F5  8B 30                  mov esi, dword ptr [eax]
+     0x6F04F7  FF 96 50 02 00 00      call dword ptr [esi + 0x250]
+
+=== SM 4349 (0x10FD) : 1 send-site(s) ===
+  --- send @0x6B5215 slot [+0x250] (mov dx @0x6B520C) ---
+     0x6B51CD  8B 43 02               mov eax, dword ptr [ebx + 2]
+     0x6B51D0  50                     push eax
+     0x6B51D1  66 8B 43 08            mov ax, word ptr [ebx + 8]
+     0x6B51D5  50                     push eax
+     0x6B51D6  8B 43 08               mov eax, dword ptr [ebx + 8]
+     0x6B51D9  C1 E8 10               shr eax, 0x10
+     0x6B51DC  50                     push eax
+     0x6B51DD  6A 00                  push 0
+     0x6B51DF  8B 4B 04               mov ecx, dword ptr [ebx + 4]
+     0x6B51E2  66 BA 82 02            mov dx, 0x282
+     0x6B51E6  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6B51E9  8B 18                  mov ebx, dword ptr [eax]
+     0x6B51EB  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6B51F1  E9 56 10 00 00         jmp 0x6b624c
+     0x6B51F6  66 8B 43 02            mov ax, word ptr [ebx + 2]
+     0x6B51FA  50                     push eax
+     0x6B51FB  66 8B 43 08            mov ax, word ptr [ebx + 8]
+     0x6B51FF  50                     push eax
+     0x6B5200  8B 43 08               mov eax, dword ptr [ebx + 8]
+     0x6B5203  C1 E8 10               shr eax, 0x10
+     0x6B5206  50                     push eax
+     0x6B5207  6A 00                  push 0
+     0x6B5209  8B 4B 04               mov ecx, dword ptr [ebx + 4]
+     0x6B520C  66 BA FD 10            mov dx, 0x10fd
+     0x6B5210  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6B5213  8B 18                  mov ebx, dword ptr [eax]
+     0x6B5215  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
+=== SM 4350 (0x10FE) : 1 send-site(s) ===
+  --- send @0x68980D slot [+0x250] (mov dx @0x689804) ---
+     0x6897C5  8B 43 02               mov eax, dword ptr [ebx + 2]
+     0x6897C8  50                     push eax
+     0x6897C9  66 8B 43 08            mov ax, word ptr [ebx + 8]
+     0x6897CD  50                     push eax
+     0x6897CE  8B 43 08               mov eax, dword ptr [ebx + 8]
+     0x6897D1  C1 E8 10               shr eax, 0x10
+     0x6897D4  50                     push eax
+     0x6897D5  6A 00                  push 0
+     0x6897D7  8B 4B 04               mov ecx, dword ptr [ebx + 4]
+     0x6897DA  66 BA 97 03            mov dx, 0x397
+     0x6897DE  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6897E1  8B 18                  mov ebx, dword ptr [eax]
+     0x6897E3  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6897E9  E9 14 01 00 00         jmp 0x689902
+     0x6897EE  66 8B 43 02            mov ax, word ptr [ebx + 2]
+     0x6897F2  50                     push eax
+     0x6897F3  66 8B 43 08            mov ax, word ptr [ebx + 8]
+     0x6897F7  50                     push eax
+     0x6897F8  8B 43 08               mov eax, dword ptr [ebx + 8]
+     0x6897FB  C1 E8 10               shr eax, 0x10
+     0x6897FE  50                     push eax
+     0x6897FF  6A 00                  push 0
+     0x689801  8B 4B 04               mov ecx, dword ptr [ebx + 4]
+     0x689804  66 BA FE 10            mov dx, 0x10fe
+     0x689808  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x68980B  8B 18                  mov ebx, dword ptr [eax]
+     0x68980D  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
+=== SM 4352 (0x1100) : 2 send-site(s) ===
+  --- send @0x6E616A slot [+0x250] (mov dx @0x6E6161) ---
+     0x6E6122  8B 45 DC               mov eax, dword ptr [ebp - 0x24]
+     0x6E6125  89 45 E0               mov dword ptr [ebp - 0x20], eax
+     0x6E6128  C6 45 E4 0B            mov byte ptr [ebp - 0x1c], 0xb
+     0x6E612C  8D 55 E0               lea edx, [ebp - 0x20]
+     0x6E612F  33 C9                  xor ecx, ecx
+     0x6E6131  B8 E0 61 6E 00         mov eax, 0x6e61e0
+     0x6E6136  E8 85 7B D2 FF         call 0x40dcc0
+     0x6E613B  8B 55 E8               mov edx, dword ptr [ebp - 0x18]
+     0x6E613E  66 B9 FF 38            mov cx, 0x38ff
+     0x6E6142  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6E6145  8B 30                  mov esi, dword ptr [eax]
+     0x6E6147  FF 96 D4 00 00 00      call dword ptr [esi + 0xd4]
+     0x6E614D  8B C3                  mov eax, ebx
+     0x6E614F  E8 3C E5 D1 FF         call 0x404690
+     0x6E6154  EB 36                  jmp 0x6e618c
+     0x6E6156  6A 00                  push 0
+     0x6E6158  6A 00                  push 0
+     0x6E615A  6A 00                  push 0
+     0x6E615C  6A 00                  push 0
+     0x6E615E  8B 4D FC               mov ecx, dword ptr [ebp - 4]
+     0x6E6161  66 BA 00 11            mov dx, 0x1100
+     0x6E6165  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6E6168  8B 18                  mov ebx, dword ptr [eax]
+     0x6E616A  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+  --- send @0x6E6186 slot [+0x250] (mov dx @0x6E617D) ---
+     0x6E613E  66 B9 FF 38            mov cx, 0x38ff
+     0x6E6142  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6E6145  8B 30                  mov esi, dword ptr [eax]
+     0x6E6147  FF 96 D4 00 00 00      call dword ptr [esi + 0xd4]
+     0x6E614D  8B C3                  mov eax, ebx
+     0x6E614F  E8 3C E5 D1 FF         call 0x404690
+     0x6E6154  EB 36                  jmp 0x6e618c
+     0x6E6156  6A 00                  push 0
+     0x6E6158  6A 00                  push 0
+     0x6E615A  6A 00                  push 0
+     0x6E615C  6A 00                  push 0
+     0x6E615E  8B 4D FC               mov ecx, dword ptr [ebp - 4]
+     0x6E6161  66 BA 00 11            mov dx, 0x1100
+     0x6E6165  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6E6168  8B 18                  mov ebx, dword ptr [eax]
+     0x6E616A  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+     0x6E6170  EB 1A                  jmp 0x6e618c
+     0x6E6172  6A 01                  push 1
+     0x6E6174  6A 00                  push 0
+     0x6E6176  6A 00                  push 0
+     0x6E6178  6A 00                  push 0
+     0x6E617A  8B 4D FC               mov ecx, dword ptr [ebp - 4]
+     0x6E617D  66 BA 00 11            mov dx, 0x1100
+     0x6E6181  8B 45 FC               mov eax, dword ptr [ebp - 4]
+     0x6E6184  8B 18                  mov ebx, dword ptr [eax]
+     0x6E6186  FF 93 50 02 00 00      call dword ptr [ebx + 0x250]
+
