@@ -275,9 +275,11 @@ namespace GameSvr
             new NativeSystemAdminCommand("Rest", 27, 0, 0x00623A42, "(inline)",
                 NativeSystemAdminOutcome.ExecutedWithGmMessage, SysMsgGmReply,
                 "设置宠物休息或攻击？",
-                "Only acts when the GM commands slaves (obj+0x4FC slave-count>0) or a hero (obj+0x18A8): if the current "
-                + "map forbids it ([map+5]!=0) refuse with a GM SysMsg (0xFFDB); otherwise toggle the rest flag "
-                + "(obj+0x1324 ^= 1) and report on/off (0xFFDB). No pets/hero => silent fall-through."),
+                "Only acts when the GM commands slaves (obj+0x4FC slave-count>0) or a hero (obj+0x18A8, a field with no "
+                + "non-zero writer in the image so that disjunct is dead): if the current map forbids it ([map+5]!=0, "
+                + "the DARE flag) refuse with a GM SysMsg (0xFFDB); otherwise toggle the rest flag "
+                + "(0x623A73 80 B0 C7 04 00 00 01 xor byte [obj+0x4C7],1) and report on/off (0xFFDB). "
+                + "No pets/hero => silent fall-through."),
             new NativeSystemAdminCommand("Reshuawolong", 156, 4, 0x00625846, "sub_606960",
                 NativeSystemAdminOutcome.ExecutedWithGmMessage, SysMsgGmReply,
                 "重载卧龙任务配置文件 卧龙山庄.ini",
