@@ -1,0 +1,257 @@
+=== sub_75F4F8 zero ===
+0075F4F8  55                     push ebp
+0075F4F9  8BEC                   mov ebp, esp
+0075F4FB  53                     push ebx
+0075F4FC  8BD8                   mov ebx, eax
+0075F4FE  66C783700300000000     mov word ptr [ebx + 0x370], 0
+0075F507  66C783720300000000     mov word ptr [ebx + 0x372], 0
+0075F510  8D4348                 lea eax, [ebx + 0x48]
+0075F513  33C9                   xor ecx, ecx
+0075F515  BAB0010000             mov edx, 0x1b0
+0075F51A  E80D46CAFF             call 0x403b2c
+0075F51F  8D83F8010000           lea eax, [ebx + 0x1f8]
+0075F525  33C9                   xor ecx, ecx
+0075F527  BA36000000             mov edx, 0x36
+0075F52C  E8FB45CAFF             call 0x403b2c
+0075F531  8D832E020000           lea eax, [ebx + 0x22e]
+0075F537  33C9                   xor ecx, ecx
+0075F539  BA3E010000             mov edx, 0x13e
+0075F53E  E8E945CAFF             call 0x403b2c
+0075F543  5B                     pop ebx
+0075F544  5D                     pop ebp
+0075F545  C3                     ret 
+0075F546  8BC0                   mov eax, eax
+
+=== sub_75F548 post ===
+0075F548  55                     push ebp
+0075F549  8BEC                   mov ebp, esp
+0075F54B  53                     push ebx
+0075F54C  56                     push esi
+0075F54D  57                     push edi
+0075F54E  8BF0                   mov esi, eax
+0075F550  33FF                   xor edi, edi
+0075F552  33DB                   xor ebx, ebx
+0075F554  668B849E75030000       mov ax, word ptr [esi + ebx*4 + 0x375]
+0075F55C  6685C0                 test ax, ax
+0075F55F  7613                   jbe 0x75f574
+0075F561  0FB78C9E77030000       movzx ecx, word ptr [esi + ebx*4 + 0x377]
+0075F569  0FB7D0                 movzx edx, ax
+0075F56C  8BC6                   mov eax, esi
+0075F56E  E815000000             call 0x75f588
+0075F573  47                     inc edi
+0075F574  A1EC5A7D00             mov eax, dword ptr [0x7d5aec]
+0075F579  3B38                   cmp edi, dword ptr [eax]
+0075F57B  7406                   je 0x75f583
+0075F57D  43                     inc ebx
+0075F57E  83FB0A                 cmp ebx, 0xa
+0075F581  75D1                   jne 0x75f554
+0075F583  5F                     pop edi
+0075F584  5E                     pop esi
+0075F585  5B                     pop ebx
+0075F586  5D                     pop ebp
+0075F587  C3                     ret 
+0075F588  55                     push ebp
+0075F589  8BEC                   mov ebp, esp
+0075F58B  51                     push ecx
+0075F58C  8D4848                 lea ecx, [eax + 0x48]
+0075F58F  05F8010000             add eax, 0x1f8
+0075F594  91                     xchg ecx, eax
+0075F595  87CA                   xchg edx, ecx
+0075F597  E894F20200             call 0x78e830
+0075F59C  5D                     pop ebp
+0075F59D  C3                     ret 
+0075F59E  8BC0                   mov eax, eax
+0075F5A0  55                     push ebp
+0075F5A1  8BEC                   mov ebp, esp
+0075F5A3  51                     push ecx
+0075F5A4  53                     push ebx
+0075F5A5  56                     push esi
+0075F5A6  57                     push edi
+
+=== sub_758AC0 (manager, ecx=agg1, edx=container) ===
+00758AC0  55                     push ebp
+00758AC1  8BEC                   mov ebp, esp
+00758AC3  51                     push ecx
+00758AC4  53                     push ebx
+00758AC5  56                     push esi
+00758AC6  57                     push edi
+00758AC7  894DFC                 mov dword ptr [ebp - 4], ecx
+00758ACA  8BFA                   mov edi, edx
+00758ACC  8BF0                   mov esi, eax
+00758ACE  8BC6                   mov eax, esi
+00758AD0  E89F000000             call 0x758b74
+00758AD5  33DB                   xor ebx, ebx
+00758AD7  8BD3                   mov edx, ebx
+00758AD9  8BC7                   mov eax, edi
+00758ADB  E840610000             call 0x75ec20
+00758AE0  85C0                   test eax, eax
+00758AE2  744B                   je 0x758b2f
+00758AE4  8BD3                   mov edx, ebx
+00758AE6  8BC7                   mov eax, edi
+00758AE8  E833610000             call 0x75ec20
+00758AED  8BD0                   mov edx, eax
+00758AEF  8BC6                   mov eax, esi
+00758AF1  E89EFFFFFF             call 0x758a94
+00758AF6  84C0                   test al, al
+00758AF8  7411                   je 0x758b0b
+00758AFA  33C0                   xor eax, eax
+00758AFC  6A01                   push 1
+00758AFE  8BCB                   mov ecx, ebx
+00758B00  8BD0                   mov edx, eax
+00758B02  8BC6                   mov eax, esi
+00758B04  E85B070000             call 0x759264
+00758B09  EB24                   jmp 0x758b2f
+00758B0B  8BD3                   mov edx, ebx
+00758B0D  8BC7                   mov eax, edi
+00758B0F  E80C610000             call 0x75ec20
+00758B14  8BD0                   mov edx, eax
+00758B16  8BC6                   mov eax, esi
+00758B18  E83FFFFFFF             call 0x758a5c
+00758B1D  6685C0                 test ax, ax
+00758B20  760D                   jbe 0x758b2f
+00758B22  6A00                   push 0
+00758B24  8BCB                   mov ecx, ebx
+00758B26  8BD0                   mov edx, eax
+00758B28  8BC6                   mov eax, esi
+00758B2A  E835070000             call 0x759264
+00758B2F  43                     inc ebx
+00758B30  83FB10                 cmp ebx, 0x10
+00758B33  75A2                   jne 0x758ad7
+00758B35  8B4604                 mov eax, dword ptr [esi + 4]
+00758B38  8B7808                 mov edi, dword ptr [eax + 8]
+00758B3B  4F                     dec edi
+00758B3C  85FF                   test edi, edi
+00758B3E  7C2A                   jl 0x758b6a
+00758B40  47                     inc edi
+00758B41  33DB                   xor ebx, ebx
+00758B43  8BD3                   mov edx, ebx
+00758B45  8B4604                 mov eax, dword ptr [esi + 4]
+00758B48  E8FFC1CCFF             call 0x424d4c
+00758B4D  85C0                   test eax, eax
+00758B4F  7415                   je 0x758b66
+00758B51  8BD3                   mov edx, ebx
+00758B53  8B4604                 mov eax, dword ptr [esi + 4]
+00758B56  E8F1C1CCFF             call 0x424d4c
+00758B5B  8B4D08                 mov ecx, dword ptr [ebp + 8]
+00758B5E  8B55FC                 mov edx, dword ptr [ebp - 4]
+00758B61  E8C2070000             call 0x759328
+00758B66  43                     inc ebx
+00758B67  4F                     dec edi
+00758B68  75D9                   jne 0x758b43
+00758B6A  5F                     pop edi
+00758B6B  5E                     pop esi
+00758B6C  5B                     pop ebx
+00758B6D  59                     pop ecx
+00758B6E  5D                     pop ebp
+00758B6F  C20400                 ret 4
+00758B72  8BC0                   mov eax, eax
+00758B74  55                     push ebp
+00758B75  8BEC                   mov ebp, esp
+00758B77  53                     push ebx
+00758B78  56                     push esi
+00758B79  57                     push edi
+00758B7A  8BF8                   mov edi, eax
+00758B7C  8B4704                 mov eax, dword ptr [edi + 4]
+00758B7F  8B5808                 mov ebx, dword ptr [eax + 8]
+00758B82  4B                     dec ebx
+00758B83  85DB                   test ebx, ebx
+00758B85  7C16                   jl 0x758b9d
+00758B87  43                     inc ebx
+00758B88  33F6                   xor esi, esi
+00758B8A  8B4704                 mov eax, dword ptr [edi + 4]
+00758B8D  8BD6                   mov edx, esi
+00758B8F  E8B8C1CCFF             call 0x424d4c
+00758B94  E877070000             call 0x759310
+00758B99  46                     inc esi
+00758B9A  4B                     dec ebx
+00758B9B  75ED                   jne 0x758b8a
+00758B9D  5F                     pop edi
+00758B9E  5E                     pop esi
+00758B9F  5B                     pop ebx
+00758BA0  5D                     pop ebp
+00758BA1  C3                     ret 
+00758BA2  8BC0                   mov eax, eax
+00758BA4  55                     push ebp
+00758BA5  8BEC                   mov ebp, esp
+00758BA7  53                     push ebx
+00758BA8  56                     push esi
+00758BA9  57                     push edi
+00758BAA  84D2                   test dl, dl
+00758BAC  7408                   je 0x758bb6
+00758BAE  83C4F0                 add esp, -0x10
+00758BB1  E852BECAFF             call 0x404a08
+00758BB6  8BDA                   mov ebx, edx
+00758BB8  8BF8                   mov edi, eax
+00758BBA  B201                   mov dl, 1
+00758BBC  A18C1E4200             mov eax, dword ptr [0x421e8c]
+00758BC1  E89ABACAFF             call 0x404660
+00758BC6  8BF0                   mov esi, eax
+00758BC8  897704                 mov dword ptr [edi + 4], esi
+00758BCB  B201                   mov dl, 1
+00758BCD  A170697500             mov eax, dword ptr [0x756970]
+00758BD2  E831090000             call 0x759508
+00758BD7  8BD0                   mov edx, eax
+00758BD9  8BC6                   mov eax, esi
+00758BDB  E8D8BECCFF             call 0x424ab8
+00758BE0  B201                   mov dl, 1
+00758BE2  A1D0697500             mov eax, dword ptr [0x7569d0]
+00758BE7  E8F80A0000             call 0x7596e4
+00758BEC  8BD0                   mov edx, eax
+00758BEE  8B4704                 mov eax, dword ptr [edi + 4]
+00758BF1  E8C2BECCFF             call 0x424ab8
+00758BF6  B201                   mov dl, 1
+00758BF8  A1306A7500             mov eax, dword ptr [0x756a30]
+00758BFD  E8CA0C0000             call 0x7598cc
+00758C02  8BD0                   mov edx, eax
+00758C04  8B4704                 mov eax, dword ptr [edi + 4]
+00758C07  E8ACBECCFF             call 0x424ab8
+00758C0C  B201                   mov dl, 1
+00758C0E  A1906A7500             mov eax, dword ptr [0x756a90]
+00758C13  E8400E0000             call 0x759a58
+00758C18  8BD0                   mov edx, eax
+00758C1A  8B4704                 mov eax, dword ptr [edi + 4]
+00758C1D  E896BECCFF             call 0x424ab8
+00758C22  B201                   mov dl, 1
+00758C24  A1F06A7500             mov eax, dword ptr [0x756af0]
+00758C29  E8920F0000             call 0x759bc0
+00758C2E  8BD0                   mov edx, eax
+00758C30  8B4704                 mov eax, dword ptr [edi + 4]
+00758C33  E880BECCFF             call 0x424ab8
+00758C38  B201                   mov dl, 1
+00758C3A  A1546B7500             mov eax, dword ptr [0x756b54]
+00758C3F  E810100000             call 0x759c54
+00758C44  8BD0                   mov edx, eax
+00758C46  8B4704                 mov eax, dword ptr [edi + 4]
+00758C49  E86ABECCFF             call 0x424ab8
+00758C4E  B201                   mov dl, 1
+00758C50  A1186C7500             mov eax, dword ptr [0x756c18]
+00758C55  E852110000             call 0x759dac
+00758C5A  8BD0                   mov edx, eax
+00758C5C  8B4704                 mov eax, dword ptr [edi + 4]
+00758C5F  E854BECCFF             call 0x424ab8
+00758C64  B201                   mov dl, 1
+00758C66  A17C6C7500             mov eax, dword ptr [0x756c7c]
+00758C6B  E8B8110000             call 0x759e28
+00758C70  8BD0                   mov edx, eax
+00758C72  8B4704                 mov eax, dword ptr [edi + 4]
+00758C75  E83EBECCFF             call 0x424ab8
+00758C7A  B201                   mov dl, 1
+00758C7C  A1E06C7500             mov eax, dword ptr [0x756ce0]
+00758C81  E81E120000             call 0x759ea4
+00758C86  8BD0                   mov edx, eax
+00758C88  8B4704                 mov eax, dword ptr [edi + 4]
+00758C8B  E828BECCFF             call 0x424ab8
+00758C90  B201                   mov dl, 1
+00758C92  A1446D7500             mov eax, dword ptr [0x756d44]
+00758C97  E884300000             call 0x75bd20
+00758C9C  8BD0                   mov edx, eax
+00758C9E  8B4704                 mov eax, dword ptr [edi + 4]
+00758CA1  E812BECCFF             call 0x424ab8
+00758CA6  B201                   mov dl, 1
+00758CA8  A1A86D7500             mov eax, dword ptr [0x756da8]
+00758CAD  E892120000             call 0x759f44
+00758CB2  8BD0                   mov edx, eax
+00758CB4  8B4704                 mov eax, dword ptr [edi + 4]
+00758CB7  E8FCBDCCFF             call 0x424ab8
+00758CBC  B201                   mov dl, 1
+

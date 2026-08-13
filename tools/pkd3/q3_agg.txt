@@ -1,0 +1,293 @@
+=== sub_75EE78 (aggregate rebuild) ===
+0075EE78  55                     push ebp
+0075EE79  8BEC                   mov ebp, esp
+0075EE7B  53                     push ebx
+0075EE7C  56                     push esi
+0075EE7D  57                     push edi
+0075EE7E  8BF0                   mov esi, eax
+0075EE80  8BC6                   mov eax, esi
+0075EE82  E871060000             call 0x75f4f8
+0075EE87  33DB                   xor ebx, ebx
+0075EE89  8B7C9E08               mov edi, dword ptr [esi + ebx*4 + 8]
+0075EE8D  85FF                   test edi, edi
+0075EE8F  7417                   je 0x75eea8
+0075EE91  8BC7                   mov eax, edi
+0075EE93  E808570200             call 0x7845a0
+0075EE98  6685C0                 test ax, ax
+0075EE9B  760B                   jbe 0x75eea8
+0075EE9D  8BCB                   mov ecx, ebx
+0075EE9F  8BD7                   mov edx, edi
+0075EEA1  8BC6                   mov eax, esi
+0075EEA3  E85CFFFFFF             call 0x75ee04
+0075EEA8  43                     inc ebx
+0075EEA9  83FB10                 cmp ebx, 0x10
+0075EEAC  75DB                   jne 0x75ee89
+0075EEAE  8BC6                   mov eax, esi
+0075EEB0  E893060000             call 0x75f548
+0075EEB5  8B4604                 mov eax, dword ptr [esi + 4]
+0075EEB8  50                     push eax
+0075EEB9  8D4E48                 lea ecx, [esi + 0x48]
+0075EEBC  A1E06C7D00             mov eax, dword ptr [0x7d6ce0]
+0075EEC1  8B00                   mov eax, dword ptr [eax]
+0075EEC3  8BD6                   mov edx, esi
+0075EEC5  E8F69BFFFF             call 0x758ac0
+0075EECA  8D86F8010000           lea eax, [esi + 0x1f8]
+0075EED0  80780107               cmp byte ptr [eax + 1], 7
+0075EED4  7507                   jne 0x75eedd
+0075EED6  83869800000032         add dword ptr [esi + 0x98], 0x32
+0075EEDD  80780207               cmp byte ptr [eax + 2], 7
+0075EEE1  7505                   jne 0x75eee8
+0075EEE3  6683465002             add word ptr [esi + 0x50], 2
+0075EEE8  5F                     pop edi
+0075EEE9  5E                     pop esi
+0075EEEA  5B                     pop ebx
+0075EEEB  5D                     pop ebp
+0075EEEC  C3                     ret 
+0075EEED  8D4000                 lea eax, [eax]
+0075EEF0  55                     push ebp
+0075EEF1  8BEC                   mov ebp, esp
+0075EEF3  83C4F8                 add esp, -8
+0075EEF6  53                     push ebx
+0075EEF7  56                     push esi
+0075EEF8  57                     push edi
+0075EEF9  8BF9                   mov edi, ecx
+0075EEFB  8955FC                 mov dword ptr [ebp - 4], edx
+0075EEFE  8BF0                   mov esi, eax
+0075EF00  8B45FC                 mov eax, dword ptr [ebp - 4]
+0075EF03  8945F8                 mov dword ptr [ebp - 8], eax
+0075EF06  33DB                   xor ebx, ebx
+0075EF08  3BFB                   cmp edi, ebx
+0075EF0A  7C1D                   jl 0x75ef29
+0075EF0C  8B449E08               mov eax, dword ptr [esi + ebx*4 + 8]
+0075EF10  85C0                   test eax, eax
+0075EF12  7408                   je 0x75ef1c
+0075EF14  8B55F8                 mov edx, dword ptr [ebp - 8]
+0075EF17  E8F8070000             call 0x75f714
+0075EF1C  8145F8D0000000         add dword ptr [ebp - 8], 0xd0
+0075EF23  43                     inc ebx
+0075EF24  83FB10                 cmp ebx, 0x10
+0075EF27  75DF                   jne 0x75ef08
+0075EF29  5F                     pop edi
+0075EF2A  5E                     pop esi
+0075EF2B  5B                     pop ebx
+0075EF2C  59                     pop ecx
+0075EF2D  59                     pop ecx
+0075EF2E  5D                     pop ebp
+0075EF2F  C3                     ret 
+0075EF30  55                     push ebp
+0075EF31  8BEC                   mov ebp, esp
+0075EF33  83C4F8                 add esp, -8
+0075EF36  53                     push ebx
+0075EF37  56                     push esi
+
+=== sub_75EE04 ===
+0075EE04  55                     push ebp
+0075EE05  8BEC                   mov ebp, esp
+0075EE07  51                     push ecx
+0075EE08  53                     push ebx
+0075EE09  56                     push esi
+0075EE0A  57                     push edi
+0075EE0B  884DFF                 mov byte ptr [ebp - 1], cl
+0075EE0E  8BF2                   mov esi, edx
+0075EE10  8BD8                   mov ebx, eax
+0075EE12  66C786020100000000     mov word ptr [esi + 0x102], 0
+0075EE1B  A074EE7500             mov al, byte ptr [0x75ee74]
+0075EE20  888604010000           mov byte ptr [esi + 0x104], al
+0075EE26  8A45FF                 mov al, byte ptr [ebp - 1]
+0075EE29  50                     push eax
+0075EE2A  8D8BF8010000           lea ecx, [ebx + 0x1f8]
+0075EE30  8D5348                 lea edx, [ebx + 0x48]
+0075EE33  8BC6                   mov eax, esi
+0075EE35  8B38                   mov edi, dword ptr [eax]
+0075EE37  FF575C                 call dword ptr [edi + 0x5c]
+0075EE3A  8D8BF8010000           lea ecx, [ebx + 0x1f8]
+0075EE40  8D5348                 lea edx, [ebx + 0x48]
+0075EE43  8BC6                   mov eax, esi
+0075EE45  E8D60F0000             call 0x75fe20
+0075EE4A  807DFF01               cmp byte ptr [ebp - 1], 1
+0075EE4E  7410                   je 0x75ee60
+0075EE50  8BC6                   mov eax, esi
+0075EE52  E859570200             call 0x7845b0
+0075EE57  66018370030000         add word ptr [ebx + 0x370], ax
+0075EE5E  EB0E                   jmp 0x75ee6e
+0075EE60  8BC6                   mov eax, esi
+0075EE62  E849570200             call 0x7845b0
+0075EE67  66898372030000         mov word ptr [ebx + 0x372], ax
+0075EE6E  5F                     pop edi
+0075EE6F  5E                     pop esi
+0075EE70  5B                     pop ebx
+0075EE71  59                     pop ecx
+0075EE72  5D                     pop ebp
+0075EE73  C3                     ret 
+0075EE74  0000                   add byte ptr [eax], al
+0075EE76  0000                   add byte ptr [eax], al
+0075EE78  55                     push ebp
+0075EE79  8BEC                   mov ebp, esp
+0075EE7B  53                     push ebx
+0075EE7C  56                     push esi
+0075EE7D  57                     push edi
+0075EE7E  8BF0                   mov esi, eax
+0075EE80  8BC6                   mov eax, esi
+
+=== sub_75FE20 head ===
+0075FE20  55                     push ebp
+0075FE21  8BEC                   mov ebp, esp
+0075FE23  83C4F0                 add esp, -0x10
+0075FE26  53                     push ebx
+0075FE27  56                     push esi
+0075FE28  57                     push edi
+0075FE29  894DF4                 mov dword ptr [ebp - 0xc], ecx
+0075FE2C  8955F8                 mov dword ptr [ebp - 8], edx
+0075FE2F  8945FC                 mov dword ptr [ebp - 4], eax
+0075FE32  8B45FC                 mov eax, dword ptr [ebp - 4]
+0075FE35  8B401C                 mov eax, dword ptr [eax + 0x1c]
+0075FE38  83C060                 add eax, 0x60
+0075FE3B  8945F0                 mov dword ptr [ebp - 0x10], eax
+0075FE3E  33F6                   xor esi, esi
+0075FE40  8B45F0                 mov eax, dword ptr [ebp - 0x10]
+0075FE43  8D1CB0                 lea ebx, [eax + esi*4]
+0075FE46  668B3B                 mov di, word ptr [ebx]
+0075FE49  8BC7                   mov eax, edi
+0075FE4B  48                     dec eax
+0075FE4C  662D9E00               sub ax, 0x9e
+0075FE50  734C                   jae 0x75fe9e
+0075FE52  6683FF5E               cmp di, 0x5e
+0075FE56  7526                   jne 0x75fe7e
+0075FE58  66BA5E00               mov dx, 0x5e
+0075FE5C  8B45FC                 mov eax, dword ptr [ebp - 4]
+0075FE5F  E8F8000000             call 0x75ff5c
+0075FE64  0FB7C0                 movzx eax, ax
+0075FE67  0FB75302               movzx edx, word ptr [ebx + 2]
+0075FE6B  03C2                   add eax, edx
+0075FE6D  50                     push eax
+0075FE6E  0FB7CF                 movzx ecx, di
+0075FE71  8B55F4                 mov edx, dword ptr [ebp - 0xc]
+0075FE74  8B45F8                 mov eax, dword ptr [ebp - 8]
+0075FE77  E8B4E90200             call 0x78e830
+0075FE7C  EB13                   jmp 0x75fe91
+0075FE7E  0FB74302               movzx eax, word ptr [ebx + 2]
+0075FE82  50                     push eax
+0075FE83  0FB7CF                 movzx ecx, di
+0075FE86  8B55F4                 mov edx, dword ptr [ebp - 0xc]
+0075FE89  8B45F8                 mov eax, dword ptr [ebp - 8]
+0075FE8C  E89FE90200             call 0x78e830
+0075FE91  668B13                 mov dx, word ptr [ebx]
+0075FE94  8B45FC                 mov eax, dword ptr [ebp - 4]
+0075FE97  E8F4000000             call 0x75ff90
+0075FE9C  EB27                   jmp 0x75fec5
+0075FE9E  6681FFFE00             cmp di, 0xfe
+0075FEA3  752A                   jne 0x75fecf
+0075FEA5  0FB74302               movzx eax, word ptr [ebx + 2]
+0075FEA9  50                     push eax
+0075FEAA  B9FE000000             mov ecx, 0xfe
+0075FEAF  8B55F4                 mov edx, dword ptr [ebp - 0xc]
+0075FEB2  8B45F8                 mov eax, dword ptr [ebp - 8]
+0075FEB5  E876E90200             call 0x78e830
+0075FEBA  8A5302                 mov dl, byte ptr [ebx + 2]
+0075FEBD  8B45FC                 mov eax, dword ptr [ebp - 4]
+
+=== callers of sub_75EE78 ===
+   0x60A3D0  (func 0x60A3B4)
+   0x688DF1  (func 0x6888FC)
+   0x6D13D6  (func 0x6D12A8)
+   0x73D1E3  (func 0x73D194)
+   0x73D2DA  (func 0x73D214)
+   0x73E85C  (func 0x73E804)
+   0x73EC8D  (func 0x73EC40)
+   0x741174  (func 0x7410D8)
+   0x746583  (func 0x746524)
+   0x74742B  (func 0x74738C)
+   0x747519  (func 0x747444)
+   0x75EC12  (func 0x75EBC0)
+   0x75ED9C  (func 0x75ED34)
+   0x75EF9A  (func 0x75EF30)
+   0x75F00E  (func 0x75EFD8)
+   0x75F0A3  (func 0x75F044)
+   0x75F272  (func 0x75F218)
+   0x75F2CF  (func 0x75F27C)
+   0x75F428  (func 0x75F3E8)
+   0x763D84  (func 0x763B64)
+   0x764040  (func 0x763E7C)
+   0x7898E2  (func 0x78988C)
+
+=== 0x762090 .. 0x762100 (attr dispatch head) ===
+00762090  6601464C               add word ptr [esi + 0x4c], ax
+00762094  668B4324               mov ax, word ptr [ebx + 0x24]
+00762098  6629464C               sub word ptr [esi + 0x4c], ax
+0076209C  EB3A                   jmp 0x7620d8
+0076209E  8B471C                 mov eax, dword ptr [edi + 0x1c]
+007620A1  807815D3               cmp byte ptr [eax + 0x15], 0xd3
+007620A5  7515                   jne 0x7620bc
+007620A7  0FB74320               movzx eax, word ptr [ebx + 0x20]
+007620AB  6BC064                 imul eax, eax, 0x64
+007620AE  0106                   add dword ptr [esi], eax
+007620B0  0FB74322               movzx eax, word ptr [ebx + 0x22]
+007620B4  6BC064                 imul eax, eax, 0x64
+007620B7  014604                 add dword ptr [esi + 4], eax
+007620BA  EB1C                   jmp 0x7620d8
+007620BC  0FB74322               movzx eax, word ptr [ebx + 0x22]
+007620C0  014610                 add dword ptr [esi + 0x10], eax
+007620C3  0FB74320               movzx eax, word ptr [ebx + 0x20]
+007620C7  01460C                 add dword ptr [esi + 0xc], eax
+007620CA  0FB74326               movzx eax, word ptr [ebx + 0x26]
+007620CE  014618                 add dword ptr [esi + 0x18], eax
+007620D1  0FB74324               movzx eax, word ptr [ebx + 0x24]
+007620D5  014614                 add dword ptr [esi + 0x14], eax
+007620D8  33C0                   xor eax, eax
+007620DA  8A4311                 mov al, byte ptr [ebx + 0x11]
+007620DD  83C0C7                 add eax, -0x39
+007620E0  3D97000000             cmp eax, 0x97
+007620E5  0F8725030000           ja 0x762410
+007620EB  8A80F8207600           mov al, byte ptr [eax + 0x7620f8]
+007620F1  FF248590217600         jmp dword ptr [eax*4 + 0x762190]
+007620F8  0100                   add dword ptr [eax], eax
+007620FA  0000                   add byte ptr [eax], al
+007620FC  0000                   add byte ptr [eax], al
+007620FE  0000                   add byte ptr [eax], al
+00762100  0000                   add byte ptr [eax], al
+00762102  0000                   add byte ptr [eax], al
+00762104  0000                   add byte ptr [eax], al
+00762106  0000                   add byte ptr [eax], al
+00762108  0000                   add byte ptr [eax], al
+0076210A  0000                   add byte ptr [eax], al
+0076210C  0000                   add byte ptr [eax], al
+0076210E  0000                   add byte ptr [eax], al
+
+=== function start containing 0x7620DA ===
+   0x76203C
+0076203C  55                     push ebp
+0076203D  8BEC                   mov ebp, esp
+0076203F  51                     push ecx
+00762040  53                     push ebx
+00762041  56                     push esi
+00762042  57                     push edi
+00762043  8BF1                   mov esi, ecx
+00762045  8955FC                 mov dword ptr [ebp - 4], edx
+00762048  8BF8                   mov edi, eax
+0076204A  8B5D0C                 mov ebx, dword ptr [ebp + 0xc]
+0076204D  53                     push ebx
+0076204E  8A4508                 mov al, byte ptr [ebp + 8]
+00762051  50                     push eax
+00762052  8BCE                   mov ecx, esi
+00762054  8B55FC                 mov edx, dword ptr [ebp - 4]
+00762057  8BC7                   mov eax, edi
+00762059  E81AD8FFFF             call 0x75f878
+0076205E  807B1017               cmp byte ptr [ebx + 0x10], 0x17
+00762062  753A                   jne 0x76209e
+00762064  807B1185               cmp byte ptr [ebx + 0x11], 0x85
+00762068  7512                   jne 0x76207c
+0076206A  668B4322               mov ax, word ptr [ebx + 0x22]
+0076206E  66014608               add word ptr [esi + 8], ax
+00762072  668B4326               mov ax, word ptr [ebx + 0x26]
+00762076  6601460A               add word ptr [esi + 0xa], ax
+0076207A  EB10                   jmp 0x76208c
+0076207C  668B4322               mov ax, word ptr [ebx + 0x22]
+00762080  6601463C               add word ptr [esi + 0x3c], ax
+00762084  668B4326               mov ax, word ptr [ebx + 0x26]
+00762088  6601463E               add word ptr [esi + 0x3e], ax
+0076208C  668B4320               mov ax, word ptr [ebx + 0x20]
+00762090  6601464C               add word ptr [esi + 0x4c], ax
+00762094  668B4324               mov ax, word ptr [ebx + 0x24]
+00762098  6629464C               sub word ptr [esi + 0x4c], ax
+
+=== callers of that function ===

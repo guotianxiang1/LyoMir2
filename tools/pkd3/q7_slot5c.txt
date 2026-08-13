@@ -1,0 +1,93 @@
+=== TRing VMT base 0x75D8CC ; slots ===
+   +0x54 -> 0x0075FE1C
+   +0x58 -> 0x0076203C
+   +0x5C -> 0x00761C30
+   +0x60 -> 0x0075F728
+
+=== 0x761C30 (the real [vmt+0x5C]) ===
+00761C30  55                     push ebp
+00761C31  8BEC                   mov ebp, esp
+00761C33  53                     push ebx
+00761C34  56                     push esi
+00761C35  57                     push edi
+00761C36  8BD8                   mov ebx, eax
+00761C38  33F6                   xor esi, esi
+00761C3A  8D7B20                 lea edi, [ebx + 0x20]
+00761C3D  8B431C                 mov eax, dword ptr [ebx + 0x1c]
+00761C40  80781417               cmp byte ptr [eax + 0x14], 0x17
+00761C44  751E                   jne 0x761c64
+00761C46  8A4F0A                 mov cl, byte ptr [edi + 0xa]
+00761C49  B21E                   mov dl, 0x1e
+00761C4B  8BC3                   mov eax, ebx
+00761C4D  E8B6DDFFFF             call 0x75fa08
+00761C52  03F0                   add esi, eax
+00761C54  8A4F0B                 mov cl, byte ptr [edi + 0xb]
+00761C57  B226                   mov dl, 0x26
+00761C59  8BC3                   mov eax, ebx
+00761C5B  E8A8DDFFFF             call 0x75fa08
+00761C60  03F0                   add esi, eax
+00761C62  EB1C                   jmp 0x761c80
+00761C64  8A4F0A                 mov cl, byte ptr [edi + 0xa]
+00761C67  B208                   mov dl, 8
+00761C69  8BC3                   mov eax, ebx
+00761C6B  E898DDFFFF             call 0x75fa08
+00761C70  03F0                   add esi, eax
+00761C72  8A4F0B                 mov cl, byte ptr [edi + 0xb]
+00761C75  B20A                   mov dl, 0xa
+00761C77  8BC3                   mov eax, ebx
+00761C79  E88ADDFFFF             call 0x75fa08
+00761C7E  03F0                   add esi, eax
+00761C80  8A4F0C                 mov cl, byte ptr [edi + 0xc]
+00761C83  B202                   mov dl, 2
+00761C85  8BC3                   mov eax, ebx
+00761C87  E87CDDFFFF             call 0x75fa08
+00761C8C  03F0                   add esi, eax
+00761C8E  8A4F0D                 mov cl, byte ptr [edi + 0xd]
+00761C91  B204                   mov dl, 4
+00761C93  8BC3                   mov eax, ebx
+00761C95  E86EDDFFFF             call 0x75fa08
+00761C9A  03F0                   add esi, eax
+00761C9C  8A4F0E                 mov cl, byte ptr [edi + 0xe]
+00761C9F  B206                   mov dl, 6
+00761CA1  8BC3                   mov eax, ebx
+00761CA3  E860DDFFFF             call 0x75fa08
+00761CA8  03F0                   add esi, eax
+00761CAA  8BC6                   mov eax, esi
+00761CAC  5F                     pop edi
+00761CAD  5E                     pop esi
+00761CAE  5B                     pop ebx
+00761CAF  5D                     pop ebp
+00761CB0  C3                     ret 
+00761CB1  8D4000                 lea eax, [eax]
+00761CB4  80FA07                 cmp dl, 7
+00761CB7  7408                   je 0x761cc1
+00761CB9  80FA08                 cmp dl, 8
+00761CBC  7403                   je 0x761cc1
+00761CBE  33C0                   xor eax, eax
+00761CC0  C3                     ret 
+00761CC1  B001                   mov al, 1
+00761CC3  C3                     ret 
+00761CC4  55                     push ebp
+00761CC5  8BEC                   mov ebp, esp
+00761CC7  53                     push ebx
+00761CC8  56                     push esi
+00761CC9  8BDA                   mov ebx, edx
+00761CCB  8BF0                   mov esi, eax
+00761CCD  8B461C                 mov eax, dword ptr [esi + 0x1c]
+00761CD0  8A4015                 mov al, byte ptr [eax + 0x15]
+00761CD3  047E                   add al, 0x7e
+00761CD5  2C03                   sub al, 3
+00761CD7  7309                   jae 0x761ce2
+00761CD9  8BC6                   mov eax, esi
+00761CDB  8B10                   mov edx, dword ptr [eax]
+00761CDD  FF5208                 call dword ptr [edx + 8]
+00761CE0  EB22                   jmp 0x761d04
+00761CE2  8BD3                   mov edx, ebx
+00761CE4  8BC6                   mov eax, esi
+00761CE6  E811220200             call 0x783efc
+00761CEB  84DB                   test bl, bl
+00761CED  7515                   jne 0x761d04
+
+=== every `call dword ptr [reg+0x58]` in 0x750000..0x790000 ===
+   0x773026  call dword ptr [edi + 0x58]
+   0x78FE33  call dword ptr [ecx + 0x58]

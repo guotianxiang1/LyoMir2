@@ -1,0 +1,123 @@
+=== sub_73D500 : 0x73D600 .. 0x73D6C0  (the two rep movsd) ===
+0073D600  FF8B86280100           dec dword ptr [ebx + 0x12886]
+0073D606  0085C0741666           add byte ptr [ebp + 0x661674c0], al
+0073D60C  83B8BC00000000         cmp dword ptr [eax + 0xbc], 0
+0073D613  760C                   jbe 0x73d621
+0073D615  8BC6                   mov eax, esi
+0073D617  E8FC0D0000             call 0x73e418
+0073D61C  E9560D0000             jmp 0x73e377
+0073D621  8B86C0040000           mov eax, dword ptr [esi + 0x4c0]
+0073D627  56                     push esi
+0073D628  57                     push edi
+0073D629  8D7048                 lea esi, [eax + 0x48]
+0073D62C  B96C000000             mov ecx, 0x6c
+0073D631  F3A5                   rep movsd dword ptr es:[edi], dword ptr [esi]
+0073D633  5F                     pop edi
+0073D634  5E                     pop esi
+0073D635  8B86C0040000           mov eax, dword ptr [esi + 0x4c0]
+0073D63B  56                     push esi
+0073D63C  57                     push edi
+0073D63D  8DBEB0010000           lea edi, [esi + 0x1b0]
+0073D643  8DB0F8010000           lea esi, [eax + 0x1f8]
+0073D649  B90D000000             mov ecx, 0xd
+0073D64E  F3A5                   rep movsd dword ptr es:[edi], dword ptr [esi]
+0073D650  66A5                   movsw word ptr es:[edi], word ptr [esi]
+0073D652  5F                     pop edi
+0073D653  5E                     pop esi
+0073D654  8B86C0040000           mov eax, dword ptr [esi + 0x4c0]
+0073D65A  0FB78070030000         movzx eax, word ptr [eax + 0x370]
+0073D661  8986CC020000           mov dword ptr [esi + 0x2cc], eax
+0073D667  8B86C0040000           mov eax, dword ptr [esi + 0x4c0]
+0073D66D  0FB78072030000         movzx eax, word ptr [eax + 0x372]
+0073D674  8986D4020000           mov dword ptr [esi + 0x2d4], eax
+0073D67A  0FB74774               movzx eax, word ptr [edi + 0x74]
+0073D67E  0186D0020000           add dword ptr [esi + 0x2d0], eax
+0073D684  668B87B8000000         mov ax, word ptr [edi + 0xb8]
+0073D68B  66018690010000         add word ptr [esi + 0x190], ax
+0073D692  8A87F0000000           mov al, byte ptr [edi + 0xf0]
+0073D698  88867A050000           mov byte ptr [esi + 0x57a], al
+0073D69E  8D8EB0010000           lea ecx, [esi + 0x1b0]
+0073D6A4  8BD7                   mov edx, edi
+0073D6A6  8B8614060000           mov eax, dword ptr [esi + 0x614]
+0073D6AC  E8EBBC0000             call 0x74939c
+0073D6B1  668B8712010000         mov ax, word ptr [edi + 0x112]
+0073D6B8  668986A4010000         mov word ptr [esi + 0x1a4], ax
+
+=== 0x73D520 .. 0x73D560  (prologue: locals + FillChar) ===
+0073D520  899544FEFFFF           mov dword ptr [ebp - 0x1bc], edx
+0073D526  899540FEFFFF           mov dword ptr [ebp - 0x1c0], edx
+0073D52C  8BF0                   mov esi, eax
+0073D52E  8DBD48FEFFFF           lea edi, [ebp - 0x1b8]
+0073D534  33C0                   xor eax, eax
+0073D536  55                     push ebp
+0073D537  6895E37300             push 0x73e395
+0073D53C  64FF30                 push dword ptr fs:[eax]
+0073D53F  648920                 mov dword ptr fs:[eax], esp
+0073D542  8D86B0010000           lea eax, [esi + 0x1b0]
+0073D548  33C9                   xor ecx, ecx
+0073D54A  BA36000000             mov edx, 0x36
+0073D54F  E8D865CCFF             call 0x403b2c
+0073D554  8BC7                   mov eax, edi
+0073D556  33C9                   xor ecx, ecx
+0073D558  BAB0010000             mov edx, 0x1b0
+0073D55D  E8CA65CCFF             call 0x403b2c
+0073D562  8BC6                   mov eax, esi
+0073D564  E87BFEFFFF             call 0x73d3e4
+0073D569  33C0                   xor eax, eax
+
+=== 0x73D8E0 .. 0x73D920  (the third lea per PKD-20) ===
+0073D8E0  E8EF0F0000             call 0x73e8d4
+0073D8E5  8986C4020000           mov dword ptr [esi + 0x2c4], eax
+0073D8EB  8B8600050000           mov eax, dword ptr [esi + 0x500]
+0073D8F1  50                     push eax
+0073D8F2  8D8EB0010000           lea ecx, [esi + 0x1b0]
+0073D8F8  8BD7                   mov edx, edi
+0073D8FA  8BC6                   mov eax, esi
+0073D8FC  8B18                   mov ebx, dword ptr [eax]
+0073D8FE  FF5338                 call dword ptr [ebx + 0x38]
+0073D901  668B470A               mov ax, word ptr [edi + 0xa]
+0073D905  66018666020000         add word ptr [esi + 0x266], ax
+0073D90C  668B4708               mov ax, word ptr [edi + 8]
+0073D910  66018664020000         add word ptr [esi + 0x264], ax
+0073D917  0FB78710010000         movzx eax, word ptr [edi + 0x110]
+
+=== 0x73DEA0 .. 0x73DEE8  (the [+0x1D5] gate) ===
+0073DEA0  8401                   test byte ptr [ecx], al
+0073DEA2  0000                   add byte ptr [eax], al
+0073DEA4  668B4758               mov ax, word ptr [edi + 0x58]
+0073DEA8  660186DC020000         add word ptr [esi + 0x2dc], ax
+0073DEAF  33C0                   xor eax, eax
+0073DEB1  8A8678050000           mov al, byte ptr [esi + 0x578]
+0073DEB7  660186DC020000         add word ptr [esi + 0x2dc], ax
+0073DEBE  80BED501000000         cmp byte ptr [esi + 0x1d5], 0
+0073DEC5  740F                   je 0x73ded6
+0073DEC7  668386DC02000014       add word ptr [esi + 0x2dc], 0x14
+0073DECF  C686790500000A         mov byte ptr [esi + 0x579], 0xa
+0073DED6  B22E                   mov dl, 0x2e
+0073DED8  8BC6                   mov eax, esi
+0073DEDA  E8814A0300             call 0x772960
+0073DEDF  84C0                   test al, al
+0073DEE1  741D                   je 0x73df00
+0073DEE3  B22E                   mov dl, 0x2e
+0073DEE5  8BC6                   mov eax, esi
+
+=== 0x73DAA0 .. 0x73DAD8  ([+0x18C] write) ===
+0073DAA0  B787                   mov bh, 0x87
+0073DAA2  06                     push es
+0073DAA3  0100                   add dword ptr [eax], eax
+0073DAA5  0001                   add byte ptr [ecx], al
+0073DAA7  86D0                   xchg al, dl
+0073DAA9  0300                   add eax, dword ptr [eax]
+0073DAAB  008B87080100           add byte ptr [ebx + 0x10887], cl
+0073DAB1  0001                   add byte ptr [ecx], al
+0073DAB3  86D4                   xchg ah, dl
+0073DAB5  0300                   add eax, dword ptr [eax]
+0073DAB7  000F                   add byte ptr [edi], cl
+0073DAB9  B747                   mov bh, 0x47
+0073DABB  5E                     pop esi
+0073DABC  B90A000000             mov ecx, 0xa
+0073DAC1  33D2                   xor edx, edx
+0073DAC3  F7F1                   div ecx
+0073DAC5  89868C010000           mov dword ptr [esi + 0x18c], eax
+0073DACB  0FB74760               movzx eax, word ptr [edi + 0x60]
+0073DACF  8986F4040000           mov dword ptr [esi + 0x4f4], eax

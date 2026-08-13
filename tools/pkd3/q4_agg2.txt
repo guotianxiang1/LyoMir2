@@ -1,0 +1,45 @@
+=== who references sub_76203C (vmt entry?) ===
+   dword @0x75D924
+
+=== sub_75F878 (the base handler 0x76203C forwards to) ===
+0075F878  55                     push ebp
+0075F879  8BEC                   mov ebp, esp
+0075F87B  83C4F8                 add esp, -8
+0075F87E  56                     push esi
+0075F87F  894DFC                 mov dword ptr [ebp - 4], ecx
+0075F882  8B75FC                 mov esi, dword ptr [ebp - 4]
+0075F885  8B550C                 mov edx, dword ptr [ebp + 0xc]
+0075F888  0FB6523B               movzx edx, byte ptr [edx + 0x3b]
+0075F88C  66015672               add word ptr [esi + 0x72], dx
+0075F890  8B501C                 mov edx, dword ptr [eax + 0x1c]
+0075F893  8B5250                 mov edx, dword ptr [edx + 0x50]
+0075F896  0116                   add dword ptr [esi], edx
+0075F898  8B501C                 mov edx, dword ptr [eax + 0x1c]
+0075F89B  8B5254                 mov edx, dword ptr [edx + 0x54]
+0075F89E  015604                 add dword ptr [esi + 4], edx
+0075F8A1  80B8BE00000000         cmp byte ptr [eax + 0xbe], 0
+0075F8A8  0F8602010000           jbe 0x75f9b0
+0075F8AE  33D2                   xor edx, edx
+0075F8B0  8A8C90C1000000         mov cl, byte ptr [eax + edx*4 + 0xc1]
+0075F8B7  80E1FF                 and cl, 0xff
+0075F8BA  884DFB                 mov byte ptr [ebp - 5], cl
+0075F8BD  668B8C90C1000000       mov cx, word ptr [eax + edx*4 + 0xc1]
+0075F8C5  66C1E908               shr cx, 8
+0075F8C9  884DFA                 mov byte ptr [ebp - 6], cl
+0075F8CC  8A8C90BF000000         mov cl, byte ptr [eax + edx*4 + 0xbf]
+0075F8D3  83E17F                 and ecx, 0x7f
+0075F8D6  83F90C                 cmp ecx, 0xc
+0075F8D9  0F87C7000000           ja 0x75f9a6
+0075F8DF  FF248DE6F87500         jmp dword ptr [ecx*4 + 0x75f8e6]
+0075F8E6  A6                     cmpsb byte ptr [esi], byte ptr es:[edi]
+0075F8E7  F9                     stc 
+0075F8E8  7500                   jne 0x75f8ea
+0075F8EA  1AF9                   sbb bh, cl
+0075F8EC  7500                   jne 0x75f8ee
+0075F8EE  2CF9                   sub al, 0xf9
+0075F8F0  7500                   jne 0x75f8f2
+0075F8F2  3EF9                   stc 
+0075F8F4  7500                   jne 0x75f8f6
+0075F8F6  50                     push eax
+0075F8F7  F9                     stc 
+0075F8F8  7500                   jne 0x75f8fa

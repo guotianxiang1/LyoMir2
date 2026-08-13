@@ -1,0 +1,126 @@
+=== dword 0x76203C lives at 0x75D924 ; probe the VMT around it ===
+   +-040  0x75D8E4 -> 0x00761BD8
+   +-03C  0x75D8E8 -> 0x00783D64
+   +-038  0x75D8EC -> 0x007842E4
+   +-034  0x75D8F0 -> 0x00783D70
+   +-030  0x75D8F4 -> 0x00784084
+   +-02C  0x75D8F8 -> 0x00761CC4
+   +-028  0x75D8FC -> 0x007839E8
+   +-024  0x75D900 -> 0x00761F8C
+   +-020  0x75D904 -> 0x0078446C
+   +-01C  0x75D908 -> 0x0075FFC0
+   +-018  0x75D90C -> 0x007845B8
+   +-014  0x75D910 -> 0x00784984
+   +-010  0x75D914 -> 0x007848BC
+   +-00C  0x75D918 -> 0x0075FFCC
+   +-008  0x75D91C -> 0x00760018
+   +-004  0x75D920 -> 0x0075FE1C
+   +0000  0x75D924 -> 0x0076203C
+   +0004  0x75D928 -> 0x00761C30
+   +0008  0x75D92C -> 0x0075F728
+   +000C  0x75D930 -> 0x00761CB4
+   +0010  0x75D934 -> 0x00761B04
+   +0014  0x75D938 -> 0x00761BA4
+   +0018  0x75D93C -> 0x00760014
+   +001C  0x75D940 -> 0x00760010
+   +0020  0x75D944 -> 0x0075F6C8
+   +0024  0x75D948 -> 0x69525405
+   +0028  0x75D94C -> 0xC08B676E
+   +002C  0x75D950 -> 0x0075D954
+   +0030  0x75D954 -> 0x52540507
+   +0034  0x75D958 -> 0xD0676E69
+   +0038  0x75D95C -> 0x4C0075D8
+   +003C  0x75D960 -> 0x070075CB
+
+=== assume it is VMT+0x5C -> vmt base 0x75D8C8 ; Delphi class name at vmt-0x38 ===
+   slot +0x58 -> vmt 0x75D8CC  name@0x75D954 = b'\x05TRing\xd0'
+
+=== the 33-arm jump table at 0x762190 ===
+   slot  0 -> 0x762410
+   slot  1 -> 0x762214
+   slot  2 -> 0x762232
+   slot  3 -> 0x76223E
+   slot  4 -> 0x76224A
+   slot  5 -> 0x762256
+   slot  6 -> 0x76227D
+   slot  7 -> 0x762289
+   slot  8 -> 0x762295
+   slot  9 -> 0x7622A1
+   slot 10 -> 0x7622AD
+   slot 11 -> 0x7622B9
+   slot 12 -> 0x7622C5
+   slot 13 -> 0x7622D1
+   slot 14 -> 0x7622DC
+   slot 15 -> 0x7622E8
+   slot 16 -> 0x7622F4
+   slot 17 -> 0x762300
+   slot 18 -> 0x76230C
+   slot 19 -> 0x762318
+   slot 20 -> 0x762324
+   slot 21 -> 0x762330
+   slot 22 -> 0x762346
+   slot 23 -> 0x76235C
+   slot 24 -> 0x76236F
+   slot 25 -> 0x762382
+   slot 26 -> 0x76238E
+   slot 27 -> 0x7623B0
+   slot 28 -> 0x7623BB
+   slot 29 -> 0x7623C6
+   slot 30 -> 0x7623E2
+   slot 31 -> 0x7623F2
+   slot 32 -> 0x762402
+
+=== 152-entry type->slot map at 0x7620F8 (type = index + 57) ===
+   type  57 (0x39) -> slot 1
+   type 111 (0x6F) -> slot 2
+   type 112 (0x70) -> slot 3
+   type 113 (0x71) -> slot 4
+   type 114 (0x72) -> slot 5
+   type 115 (0x73) -> slot 6
+   type 116 (0x74) -> slot 7
+   type 117 (0x75) -> slot 8
+   type 118 (0x76) -> slot 9
+   type 119 (0x77) -> slot 10
+   type 120 (0x78) -> slot 11
+   type 121 (0x79) -> slot 12
+   type 122 (0x7A) -> slot 13
+   type 123 (0x7B) -> slot 14
+   type 124 (0x7C) -> slot 15
+   type 125 (0x7D) -> slot 16
+   type 126 (0x7E) -> slot 17
+   type 127 (0x7F) -> slot 18
+   type 128 (0x80) -> slot 19
+   type 129 (0x81) -> slot 20
+   type 133 (0x85) -> slot 21
+   type 136 (0x88) -> slot 22
+   type 137 (0x89) -> slot 23
+   type 138 (0x8A) -> slot 24
+   type 140 (0x8C) -> slot 25
+   type 170 (0xAA) -> slot 26
+   type 171 (0xAB) -> slot 26
+   type 172 (0xAC) -> slot 26
+   type 173 (0xAD) -> slot 26
+   type 174 (0xAE) -> slot 26
+   type 201 (0xC9) -> slot 27
+   type 202 (0xCA) -> slot 28
+   type 205 (0xCD) -> slot 29
+   type 206 (0xCE) -> slot 30
+   type 207 (0xCF) -> slot 31
+   type 208 (0xD0) -> slot 32
+
+=== arm for slot 27 ===
+007623B0  33C0                   xor eax, eax
+007623B2  8A4313                 mov al, byte ptr [ebx + 0x13]
+007623B5  6601465E               add word ptr [esi + 0x5e], ax
+007623B9  EB55                   jmp 0x762410
+007623BB  33C0                   xor eax, eax
+007623BD  8A4313                 mov al, byte ptr [ebx + 0x13]
+007623C0  66014660               add word ptr [esi + 0x60], ax
+007623C4  EB4A                   jmp 0x762410
+007623C6  8B471C                 mov eax, dword ptr [edi + 0x1c]
+007623C9  0FB7504A               movzx edx, word ptr [eax + 0x4a]
+007623CD  8B45FC                 mov eax, dword ptr [ebp - 4]
+007623D0  0FB74028               movzx eax, word ptr [eax + 0x28]
+007623D4  E82B4CD6FF             call 0x4c7004
+007623D9  8B55FC                 mov edx, dword ptr [ebp - 4]
+007623DC  66894228               mov word ptr [edx + 0x28], ax

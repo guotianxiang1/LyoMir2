@@ -355,21 +355,21 @@ C# 已有 `GameSvr/Actors/NativeRevivePolicy.cs` + `TBaseObject.NativeRevive.cs`
 | 荣耀（`[+0x4D0]/[+0x4D8]/[+0x4DC]`） | `sub_6D2928` / `sub_6D29A4` / `sub_6D27C0` | 死亡不扣荣耀、PK 不加荣耀 |
 | 受害者等级保护 | `0x6C10E3 movzx eax,word [esi+0x278] / cmp eax,[[0x7D6B8C]] / 7C jl` | **默认无影响**：`[0x7D6B8C] -> 0x7DCEFC` 处的 dword 实测 **0**，等级永远不小于 0 |
 
-### INVENTED（已定位，**未删除**，理由见下）
+### INVENTED（**已全部删除**，2026-08-13 第二轮）
 
-| 项 | C# 位置 | 原生 |
-|---|---|---|
-| `boPKLevelProtect` / `nPKProtectLevel` 那整段「新人保护」 | `TBaseObject.Base.cs:1387-1406` | `sub_6C175C` 只有两条梯，门槛是同一个立即数 `0x14`，没有第二套配置 |
-| `m_boAngryRing` / `m_boNoDropItem` / `Flag.boNODROPITEM` 早退 | `TPlayObject.Base.cs:2148` | `sub_740078` 开头无任何早退 |
-| `m_boAngryRing` / `m_boNoDropUseItem` 早退 | `TPlayObject.Message.cs:2944` | `sub_73FC70` 开头无任何早退 |
-| `InDisableTakeOffList` | `TPlayObject.Message.cs:3029` | 装备 worker 无此表 |
-| `m_LastHiter.race == RC_NPC` 也算 PK | `TBaseObject.Base.cs:1033` | `0x6C086B` 只有 `[vmt+0xB4]` 一条路径 |
-| `boVentureServer` 门 | `TBaseObject.Base.cs:1027` | `TPlayer.Die` 无此项 |
+> 裁决结果是删。`REPLICATION_RULES.md` §3.1 已明确：「原版没有、但删掉玩家会当场吃亏的
+> 保护性代码属于 INVENTED，要删」。下表六项加上后来发现的基类那一半，逐项零命中取证后删除，
+> 每项一个提交。完整字节证据与扫描输出见 **`docs/pk_death_drop_invented_removals_20260813.md`**。
 
-**不删的理由**：前四条全部是**保护性**的——删掉会让玩家当场多掉装备/物品。
-按任务硬规矩 2「不确定一律 fail-closed」，我选择保留并在此登记，
-交主代理裁决（尤其 `m_boAngryRing` 不死戒指是玩家付费道具，删除属运营可见变更）。
-后两条不涉及资产直接损失，但会影响红名判定，同样交裁决。
+| 项 | C# 位置 | 原生 | 处置 |
+|---|---|---|---|
+| `boPKLevelProtect` / `nPKProtectLevel` 那整段「新人保护」 | `TBaseObject.Base.cs` `IsProtectTarget` | `sub_6C175C` 只有两条梯，门槛是同一个立即数 `0x14`，没有第二套配置 | 删，`45bdd75f` (PKD-12) |
+| `m_boAngryRing` / `m_boNoDropItem` / `Flag.boNODROPITEM` 早退 | `TPlayObject.Base.cs` `ScatterBagItems` | `sub_740078` 开头无任何早退，第一条条件跳转是 `0x7400D4` | 删，`2adfed89` (PKD-13) |
+| `m_boAngryRing` / `m_boNoDropUseItem` 早退 | `TPlayObject.Message.cs` `DropUseItems` | `sub_73FC70` 开头无任何早退，第一条条件跳转是 `0x73FCB6` | 删，`91be1220` (PKD-14) |
+| 同上，**基类那一半**（英雄与怪物走这条） | `TBaseObject.Base.cs` `DropUseItems` | 同上 | 删，`9f81902b` (PKD-14b) |
+| `InDisableTakeOffList` | `TPlayObject.Message.cs` `DropUseItems` | 装备 worker 循环体 `0x73FD29..0x73FF73` 无任何按物品编号查表 | 删，`3f1455f6` (PKD-15) |
+| `m_LastHiter.race == RC_NPC` 也算 PK | `TBaseObject.Base.cs` 谋杀门 | `0x6C081A..0x6C0891` 八条比较里没有种族比较；`cmp byte [reg+0x178],0x0A` 全镜像 6 处无一在死亡链内 | 删，`66ca8fda` (PKD-16) |
+| `boVentureServer` 门 | `TBaseObject.Base.cs` 谋杀门 | 只有三个地图旗标字节 + 一个阈值，无第四道全局门 | 删（仅此调用点），`06c12f7b` (PKD-17) |
 
 ### BLOCKED
 

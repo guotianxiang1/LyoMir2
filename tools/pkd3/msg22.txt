@@ -1,0 +1,54 @@
+PKD-22: [self+0x1D5] does have a writer - it is agg2[0x25], not a save field
+
+PKD-20 left the equipment drop denominator with two hooks pinned at 0/false and
+said [self+0x1D5] "has ONE reference in the entire image and no writer at all,
+so it can only arrive through a bulk record load".  That is wrong, and the write
+sits twelve instructions past the copy PKD-20 itself documented.
+
+sub_73D500 clears and refills self+0x1B0..+0x1E6 from the equipment container:
+
+  73D542  8D 86 B0 01 00 00 / BA 36 00 00 00 / E8 .. call 0x403B2C
+                                        FillChar(self+0x1B0, 0x36, 0)
+  73D63D  8D BE B0 01 00 00   lea edi,[self+0x1B0]
+  73D643  8D B0 F8 01 00 00   lea esi,[container+0x1F8]      ; agg2
+  73D649  B9 0D 00 00 00      mov ecx,0xD
+  73D64E  F3 A5               rep movsd
+  73D650  66 A5               movsw                          ; 0x36 = 54 bytes
+
+0x1D5 - 0x1B0 = 0x25, so [self+0x1D5] IS agg2[0x25].  agg2[0x25] has exactly four
+writers image-wide, all `C6 40 25 01` (store 1) inside the item extended-attribute
+dispatch arms: 0x76231B (sub_76203C slot 19 = attribute type 128), 0x762372
+(slot 24 = type 138), and 0x762B26 / 0x762B6A in the identically-shaped sibling
+dispatcher sub_762974.
+
+So [+0x1D5] is not persisted state at all.  It is a derived "wearing a piece that
+carries that attribute" flag, recomputed from scratch on every RecalcAbilitys,
+and it comes out of the same subsystem as [+0x18C].  The residual gap collapses
+from two unrelated unknowns to one: the equipment extended-attribute aggregation
+(StdItem+0x15 type 57..208 -> 33 arms -> agg1 container+0x48 0x1B0 bytes and
+agg2 container+0x1F8 0x36 bytes, rebuilt by sub_75EE78).
+
+Three wording fixes to PKD-20 found while re-deriving, each of which cost a wrong
+turn:
+
+  * The arm lives in [item.vmt+0x54], not +0x5C.  TRing's VMT base is 0x75D8D0
+    (SelfPtr test u32(vmt-0x4C)==vmt; class name at vmt-0x2C is 'TRing'), and
+    0x75D924 - 0x75D8D0 = 0x54.  [vmt+0x5C] is sub_75F728.
+  * sub_75EE04 passes agg2 in ecx and agg1 in edx (0x75EE2A / 0x75EE30), but
+    sub_75F728 SWAPS them before the +0x54 call (0x75F769 `mov ecx,esi` /
+    0x75F76B `mov edx,edi`).  Read only the first hop and `add word [esi+0x5E]`
+    looks like it lands on agg2+0x5E, which is past the end of a 0x36-byte block.
+    With the swap it lands on agg1+0x5E = container+0xA6, which is exactly what
+    0x73DAB8 reads.  PKD-20's conclusion was right; the route it gave was not.
+  * The attribute type/value the arm reads are [ebx+0x11] / [ebx+0x13] where ebx
+    is the stack copy sub_75F728 @0x75F74B takes of StdItem+4 (0x3C bytes), so
+    they are StdItem+0x15 and StdItem+0x17 - not a separate attribute table.
+
+Doc only; both hooks stay fail-closed.  Both residual errors point the same way
+(denominator too small => C# drops equipment slightly more often than native,
+never less), which is the safe side for a "does the player lose gear" decision.
+
+Scripts: tools/pkd3/{lib,q1_1d5,q2_copy,q3_agg,q4_agg2,q5_agg2b,q6_vmt,q7_slot5c,
+q8_vmt2,q9_5c,q10_agg2_25,q11_arms}.py
+
+Co-authored-by: Cursor <cursoragent@cursor.com>

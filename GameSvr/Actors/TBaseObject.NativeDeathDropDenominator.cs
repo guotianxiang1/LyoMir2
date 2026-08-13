@@ -54,18 +54,51 @@ namespace GameSvr
     // [item.vmt+0x5C] 与 sub_75FE20。
     //
     // 聚合块 +0x5E 的唯一喂养者是装备扩展属性分发的一条臂：
-    //   7620DA  8A 43 11              al := byte [attr+0x11]        ; 属性类型
+    //   7620DA  8A 43 11              al := byte [std+0x11]         ; 属性类型
     //   7620DD  83 C0 C7              eax += -0x39                  ; 偏置 57
     //   7620E0  3D 97 00 00 00 / 0F 87  cmp eax,0x97 / ja           ; 只认 57..208
     //   7620EB  8A 80 F8 20 76 00     al := byte [eax+0x7620F8]     ; 类型 -> 槽号表(152 项)
     //   7620F1  FF 24 85 90 21 76 00  jmp [eax*4+0x762190]          ; 槽号 -> 臂(33 条)
     //   槽 27 的臂 = 0x7623B0，表项在 0x7621FC：
-    //   7623B0  33 C0 / 8A 43 13      al := byte [attr+0x13]        ; 属性值
+    //   7623B0  33 C0 / 8A 43 13      al := byte [std+0x13]         ; 属性值
     //   7623B5  66 01 46 5E           add word [esi+0x5E], ax
     // 反查 152 项槽号表，落到槽 27 的**只有属性类型 201 (0xC9)**（邻居 202 落到 +0x60）。
     //
     // ⇒ [self+0x18C] = (身上所有装备的扩展属性 201 之和) / 10，无符号截断。
     //    分母 = 该值 + 90，所以属性 201 只会让装备**更不容易**掉，90 是地板。
+    //
+    // 【订正 PKD-20 的两处措辞】这条臂所在的函数是 **[item.vmt+0x54]**（TRing 的 VMT 基址
+    // 0x75D8D0 —— SelfPtr 判据 u32(vmt-0x4C)==vmt，类名在 vmt-0x2C = 'TRing'；
+    // 0x75D924 - 0x75D8D0 = 0x54），不是 +0x5C。链路是
+    //   sub_75EE78 -> sub_75EE04 -> [item.vmt+0x5C]=sub_75F728 -> [item.vmt+0x54]=sub_76203C
+    // 而 **agg1/agg2 在 sub_75F728 里被换了位置**，这一步不看会把结论读反：
+    //   75EE2A  8D 8B F8 01 00 00   lea ecx,[container+0x1F8]   ; agg2 进 ecx
+    //   75EE30  8D 53 48            lea edx,[container+0x48]    ; agg1 进 edx
+    //   75F731  8B F9 / 8B F2       sub_75F728: edi:=ecx(agg2) / esi:=edx(agg1)
+    //   75F769  8B CE               ecx := esi = agg1           ; ← 换回来
+    //   75F76B  8B D7               edx := edi = agg2
+    //   75F771  FF 53 54            call [vmt+0x54]
+    // 所以 sub_76203C 里 esi(=ecx)=agg1、[ebp-4](=edx)=agg2，`add word [esi+0x5E]` 确实落在
+    // agg1 = 容器+0x48 上，PKD-20 的**结论**是对的。另外那条臂读的 `[ebx+0x11]/[ebx+0x13]`
+    // 里的 ebx 是 [ebp+0xC]，即 sub_75F728 @0x75F74B 从 **StdItem+4 拷 0x3C 字节**的栈副本，
+    // 所以属性类型/值的真实位置是 **StdItem+0x15 / StdItem+0x17**，不是某张独立属性表。
+    //
+    // ── [self+0x1D5]：PKD-20 说"全镜像没有写入点"，那是漏读 ─────────────────────────────
+    // 它的写入点就在同一个 sub_73D500 里，在上面那次聚合拷贝的 12 条指令之后：
+    //   73D542  8D 86 B0 01 00 00 / BA 36 00 00 00 / call 0x403B2C   FillChar(self+0x1B0, 0x36, 0)
+    //   73D63D  8D BE B0 01 00 00   lea edi,[self+0x1B0]        ; 目的地
+    //   73D643  8D B0 F8 01 00 00   lea esi,[container+0x1F8]   ; 源 = agg2
+    //   73D649  B9 0D 00 00 00      mov ecx,0xD                 ; 13 dword
+    //   73D64E  F3 A5 / 73D650 66 A5  rep movsd / movsw          ; 共 0x36 = 54 字节
+    // 目的地区间 self+0x1B0..+0x1E6 **跨过 +0x1D5**（0x1D5-0x1B0 = 0x25），即
+    //   [self+0x1D5] == agg2[0x25]
+    // 而 agg2[0x25] 只有四个写入点，全是"置 1"，全在扩展属性分发的臂里：
+    //   0x76231B  C6 40 25 01   mov byte [agg2+0x25],1   （sub_76203C 槽 19 = 属性类型 128）
+    //   0x762372  C6 40 25 01                              （sub_76203C 槽 24 = 属性类型 138）
+    //   0x762B26  C6 40 25 01   （兄弟分发器 sub_762974，形状完全一致）
+    //   0x762B6A  C6 40 25 01   （同上，同时置 agg2[4]）
+    // ⇒ [+0x1D5] **不是存档字段**，是"身上穿了带该扩展属性的装备"这一派生标记，
+    //   每次 RecalcAbilitys 先清零再重算。它和 [+0x18C] 是同一个子系统的两个出口。
     //
     // ── [self+0x579] ──────────────────────────────────────────────────────────────────
     // 全镜像恰好三处引用，闭合：
@@ -80,14 +113,17 @@ namespace GameSvr
     // [+0x2DC] 是百分比减伤（sub_73F8E0 @0x73F903 `mov cx,[edi+0x2DC]` / `jle` 跳过 /
     // `imul` / `idiv 100` / 上钳 0x4E20 / `sub esi,eax`，另一处 sub_746130 @0x746177）。
     //
-    // ── 仍然 BLOCKED 的两件事，别当成 0 是"对的" ─────────────────────────────────────
-    // ① 装备扩展属性子系统（类型 57..208 → 33 个聚合槽）C# 整套没有，所以
-    //    NativeEquipDropRareAggregate() 现在恒返回 0，分母恒为 90。对**没有属性 201
-    //    装备**的玩家这就是原生值；对有的玩家 C# 会比原生**更容易**掉装备。
-    //    方向是单边的、有界的，不会比原生掉得少。
-    // ② [self+0x1D5] 在**全镜像只有一处引用**，就是 0x73DEBE 那次读，一个写入点都没有。
-    //    它只能来自人物存档记录的整块装载。在定位到那条装载路径之前
-    //    NativeDropRareKillerBonusGate() 恒 false，等于 [+0x579] 恒 0。
+    // ── 仍然 BLOCKED，但缺口已经收敛成同一件事 ───────────────────────────────────────
+    // 两个输入都出自**装备扩展属性聚合子系统**（StdItem+0x15 的类型 57..208 → 33 个臂 →
+    // agg1(容器+0x48, 0x1B0 字节) 与 agg2(容器+0x1F8, 0x36 字节)，由 sub_75EE78 重建），
+    // C# 整套没有，所以两个钩子都恒 0/false：
+    //   ① NativeEquipDropRareAggregate() ≡ 0  ⇒ 非红分母恒 90。对**没穿属性 201 装备**
+    //      的玩家这就是原生值；穿了的玩家 C# 会比原生**更容易**掉装备。
+    //   ② NativeDropRareKillerBonusGate() ≡ false ⇒ [+0x579] 恒 0，凶手侧减项不生效，
+    //      分母偏大 ⇒ 同样是**更容易掉**。
+    // 两个误差同向、有界（最坏 90 vs 90+N、21 vs 21-10），都不会让玩家比原生掉得少。
+    // 谁把聚合子系统补上，必须同时接这两个钩子，并把 NativeRecalcDropRareFields()
+    // 拆回原生顺序（清零 → 拷 agg1/agg2 → 算 [+0x18C] → 读 agg2[0x25] 定 [+0x579]）。
     // ------------------------------------------------------------------------------------------
     public partial class TBaseObject
     {
@@ -110,8 +146,10 @@ namespace GameSvr
         protected virtual int NativeEquipDropRareAggregate() => 0;
 
         /// <summary>
-        /// [self+0x1D5] != 0。全镜像唯一引用是 0x73DEBE 的读，没有写入点，
-        /// 只能来自存档整块装载（BLOCKED，见文件头 ②）。
+        /// [self+0x1D5] != 0，即 agg2[0x25]（装备容器 +0x1F8+0x25，经 0x73D64E 的
+        /// rep movsd 落到 self+0x1B0+0x25）。四个写入点全是扩展属性臂里的
+        /// `C6 40 25 01`（0x76231B / 0x762372 / 0x762B26 / 0x762B6A）。
+        /// C# 无该子系统，恒 false（BLOCKED，见文件头 ②）。
         /// </summary>
         protected virtual bool NativeDropRareKillerBonusGate() => false;
 

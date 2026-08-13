@@ -1,0 +1,95 @@
+=== TRing [vmt+0x5C] = 0x75F728 (what sub_75EE04 calls) ===
+0075F728  55                     push ebp
+0075F729  8BEC                   mov ebp, esp
+0075F72B  83C4C4                 add esp, -0x3c
+0075F72E  53                     push ebx
+0075F72F  56                     push esi
+0075F730  57                     push edi
+0075F731  8BF9                   mov edi, ecx
+0075F733  8BF2                   mov esi, edx
+0075F735  8BD8                   mov ebx, eax
+0075F737  8BC3                   mov eax, ebx
+0075F739  E8624E0200             call 0x7845a0
+0075F73E  6685C0                 test ax, ax
+0075F741  7631                   jbe 0x75f774
+0075F743  8B431C                 mov eax, dword ptr [ebx + 0x1c]
+0075F746  56                     push esi
+0075F747  57                     push edi
+0075F748  8D7004                 lea esi, [eax + 4]
+0075F74B  8D7DC4                 lea edi, [ebp - 0x3c]
+0075F74E  B90F000000             mov ecx, 0xf
+0075F753  F3A5                   rep movsd dword ptr es:[edi], dword ptr [esi]
+0075F755  5F                     pop edi
+0075F756  5E                     pop esi
+0075F757  8D55C4                 lea edx, [ebp - 0x3c]
+0075F75A  8BC3                   mov eax, ebx
+0075F75C  8B08                   mov ecx, dword ptr [eax]
+0075F75E  FF5130                 call dword ptr [ecx + 0x30]
+0075F761  8D45C4                 lea eax, [ebp - 0x3c]
+0075F764  50                     push eax
+0075F765  8A4508                 mov al, byte ptr [ebp + 8]
+0075F768  50                     push eax
+0075F769  8BCE                   mov ecx, esi
+0075F76B  8BD7                   mov edx, edi
+0075F76D  8BC3                   mov eax, ebx
+0075F76F  8B18                   mov ebx, dword ptr [eax]
+0075F771  FF5354                 call dword ptr [ebx + 0x54]
+0075F774  5F                     pop edi
+0075F775  5E                     pop esi
+0075F776  5B                     pop ebx
+0075F777  8BE5                   mov esp, ebp
+0075F779  5D                     pop ebp
+0075F77A  C20400                 ret 4
+0075F77D  8D4000                 lea eax, [eax]
+0075F780  53                     push ebx
+0075F781  56                     push esi
+0075F782  57                     push edi
+0075F783  55                     push ebp
+0075F784  8BD8                   mov ebx, eax
+0075F786  8BF2                   mov esi, edx
+0075F788  0FB77928               movzx edi, word ptr [ecx + 0x28]
+0075F78C  8BC7                   mov eax, edi
+0075F78E  0FB79302010000         movzx edx, word ptr [ebx + 0x102]
+0075F795  F7EA                   imul edx
+0075F797  BD64000000             mov ebp, 0x64
+0075F79C  33D2                   xor edx, edx
+0075F79E  F7F5                   div ebp
+0075F7A0  03C7                   add eax, edi
+0075F7A2  01461C                 add dword ptr [esi + 0x1c], eax
+0075F7A5  0FB7792A               movzx edi, word ptr [ecx + 0x2a]
+0075F7A9  8BC7                   mov eax, edi
+0075F7AB  0FB79302010000         movzx edx, word ptr [ebx + 0x102]
+0075F7B2  F7EA                   imul edx
+0075F7B4  BD64000000             mov ebp, 0x64
+0075F7B9  33D2                   xor edx, edx
+0075F7BB  F7F5                   div ebp
+0075F7BD  03C7                   add eax, edi
+0075F7BF  014620                 add dword ptr [esi + 0x20], eax
+0075F7C2  0FB7792C               movzx edi, word ptr [ecx + 0x2c]
+0075F7C6  8BC7                   mov eax, edi
+0075F7C8  0FB79302010000         movzx edx, word ptr [ebx + 0x102]
+0075F7CF  F7EA                   imul edx
+0075F7D1  BD64000000             mov ebp, 0x64
+0075F7D6  33D2                   xor edx, edx
+0075F7D8  F7F5                   div ebp
+0075F7DA  03C7                   add eax, edi
+0075F7DC  014624                 add dword ptr [esi + 0x24], eax
+0075F7DF  0FB7792E               movzx edi, word ptr [ecx + 0x2e]
+0075F7E3  8BC7                   mov eax, edi
+0075F7E5  0FB79302010000         movzx edx, word ptr [ebx + 0x102]
+0075F7EC  F7EA                   imul edx
+0075F7EE  BD64000000             mov ebp, 0x64
+0075F7F3  33D2                   xor edx, edx
+0075F7F5  F7F5                   div ebp
+0075F7F7  03C7                   add eax, edi
+0075F7F9  014628                 add dword ptr [esi + 0x28], eax
+0075F7FC  0FB77930               movzx edi, word ptr [ecx + 0x30]
+0075F800  8BC7                   mov eax, edi
+
+=== every `call dword ptr [reg+0x54]` in 0x750000..0x790000 ===
+   0x753184  call dword ptr [ecx + 0x54]
+   0x753DCE  call dword ptr [ecx + 0x54]
+   0x75F771  call dword ptr [ebx + 0x54]
+   0x763959  call dword ptr [ebx + 0x54]
+   0x7666BC  call dword ptr [edx + 0x54]
+   0x77BA79  call dword ptr [ecx + 0x54]

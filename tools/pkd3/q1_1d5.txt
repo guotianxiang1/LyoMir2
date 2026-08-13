@@ -1,0 +1,195 @@
+=== 0x1D5 direct : 1 refs ===
+   0x73DEBF   mov     esi, 0x1d5                                   BED5010000
+--- +0x1CC : 84
+     0x47BD03   mov     eax, dword ptr [ebx + 0x1cc]                 8B83CC010000
+     0x4A4108   mov     edx, dword ptr [ebx + 0x1cc]                 8B93CC010000
+     0x4A4124   mov     edx, dword ptr [ebx + 0x1cc]                 8B93CC010000
+     0x4A4259   mov     ecx, dword ptr [eax + 0x1cc]                 8B88CC010000
+     0x4A42A2   mov     dword ptr [ebx + 0x1cc], edx                 8993CC010000
+     0x4A42BA   mov     dword ptr [ebx + 0x1cc], eax                 8983CC010000
+     0x4A4311   mov     ecx, dword ptr [eax + 0x1cc]                 8B88CC010000
+     0x4A43A1   mov     edx, dword ptr [eax + 0x1cc]                 8B90CC010000
+     0x4A43F2   mov     dword ptr [ebx + 0x1cc], ecx                 898BCC010000
+     0x4A43F8   mov     edx, dword ptr [eax + 0x1cc]                 8B90CC010000
+     0x4A69E9   mov     edx, dword ptr [eax + 0x1cc]                 8B90CC010000
+     0x4A6B9C   mov     edx, dword ptr [eax + 0x1cc]                 8B90CC010000
+     0x4A6DAC   mov     edx, dword ptr [eax + 0x1cc]                 8B90CC010000
+     0x4A6E11   mov     ebx, dword ptr [eax + 0x1cc]                 8B98CC010000
+--- +0x1CD : 1
+     0x561EEC   ljmp    0:0x1cde9ff                                  EAFFE9CD010000
+--- +0x1D0 : 150
+     0x47BF7D   call    dword ptr [ebx + 0x1d0]                      FF93D0010000
+     0x4A1140   mov     ecx, 0x1d0                                   B9D0010000
+     0x4A1F12   mov     ecx, 0x1d0                                   B9D0010000
+     0x4A21BA   cmp     esi, 0x1d0                                   81FED0010000
+     0x4A21CB   mov     dword ptr [eax + 0x18], 0x1d0                C74018D0010000
+     0x4A21E0   push    0x1d0                                        68D0010000
+     0x530911   call    dword ptr [ecx + 0x1d0]                      FF91D0010000
+     0x541EE6   mov     eax, dword ptr [eax + 0x1d0]                 8B80D0010000
+     0x542ACE   mov     eax, dword ptr [eax + 0x1d0]                 8B80D0010000
+     0x5439DD   call    dword ptr [edx + 0x1d0]                      FF92D0010000
+     0x544971   call    dword ptr [edx + 0x1d0]                      FF92D0010000
+     0x5495E2   mov     eax, dword ptr [eax + 0x1d0]                 8B80D0010000
+     0x54D0C2   mov     eax, dword ptr [eax + 0x1d0]                 8B80D0010000
+     0x558FE6   call    dword ptr [edx + 0x1d0]                      FF92D0010000
+--- +0x1D1 : 3
+     0x46B713   sub     eax, 0x1d1                                   2DD1010000
+     0x4FA94D   imul    esi, dword ptr [edi + ecx*2 - 0x17], 0x1d1   69744FE9D1010000
+     0x746085   mov     eax, 0x1d1                                   B8D1010000
+--- +0x1D2 : 2
+     0x47BF5A   mov     eax, 0x1d2                                   B8D2010000
+     0x6BE27C   mov     ebx, 0x1d2                                   BBD2010000
+--- +0x1D3 : 3
+     0x73DD82   mov     esi, 0x1d3                                   BED3010000
+     0x767D6C   mov     ebx, 0x1d3                                   BBD3010000
+     0x76C8B6   mov     ebx, 0x1d3                                   BBD3010000
+--- +0x1D4 : 36
+     0x47BF77   mov     eax, dword ptr [ebx + 0x1d4]                 8B83D4010000
+     0x53030A   call    dword ptr [edx + 0x1d4]                      FF92D4010000
+     0x541EF6   mov     eax, dword ptr [eax + 0x1d4]                 8B80D4010000
+     0x542ADE   mov     eax, dword ptr [eax + 0x1d4]                 8B80D4010000
+     0x5495F2   mov     eax, dword ptr [eax + 0x1d4]                 8B80D4010000
+     0x54D0D2   mov     eax, dword ptr [eax + 0x1d4]                 8B80D4010000
+     0x568360   call    dword ptr [edx + 0x1d4]                      FF92D4010000
+     0x56BC9C   call    dword ptr [edx + 0x1d4]                      FF92D4010000
+     0x56CAFB   call    dword ptr [edx + 0x1d4]                      FF92D4010000
+     0x571D76   mov     dword ptr [esi + 0x1d4], eax                 8986D4010000
+     0x5730CE   mov     dword ptr [esi + 0x1d4], eax                 8986D4010000
+     0x5750E7   call    dword ptr [ebx + 0x1d4]                      FF93D4010000
+     0x575947   call    dword ptr [ebx + 0x1d4]                      FF93D4010000
+     0x5C807E   call    dword ptr [edx + 0x1d4]                      FF92D4010000
+--- +0x1D5 : 1
+     0x73DEBF   mov     esi, 0x1d5                                   BED5010000
+--- +0x1D8 : 29
+     0x443A3A   mov     dword ptr [eax + 0x1d8], 0x443538            C780D801000038354400
+     0x47C34C   call    dword ptr [ebx + 0x1d8]                      FF93D8010000
+     0x4CFC56   mov     edx, dword ptr [eax + 0x1d8]                 8B90D8010000
+     0x53114B   mov     eax, dword ptr [eax + 0x1d8]                 8B80D8010000
+     0x541F06   mov     eax, dword ptr [eax + 0x1d8]                 8B80D8010000
+     0x542AEE   mov     eax, dword ptr [eax + 0x1d8]                 8B80D8010000
+     0x549602   mov     eax, dword ptr [eax + 0x1d8]                 8B80D8010000
+     0x54D0E2   mov     eax, dword ptr [eax + 0x1d8]                 8B80D8010000
+     0x571D88   mov     dword ptr [esi + 0x1d8], eax                 8986D8010000
+     0x5730E0   mov     dword ptr [esi + 0x1d8], eax                 8986D8010000
+     0x5DAF21   call    dword ptr [edx + 0x1d8]                      FF92D8010000
+     0x5E02CA   mov     ecx, dword ptr [eax + 0x1d8]                 8B88D8010000
+     0x5E0927   mov     edx, dword ptr [ebx + 0x1d8]                 8B93D8010000
+     0x5E0941   mov     eax, dword ptr [ebx + 0x1d8]                 8B83D8010000
+--- +0x1D9 : 2
+     0x6B0630   mov     al, byte ptr [eax + 0x1d9]                   8A80D9010000
+     0x6B1403   mov     byte ptr [esi + 0x1d9], al                   8886D9010000
+--- +0x1DA : 5
+     0x47C331   mov     eax, 0x1da                                   B8DA010000
+     0x68F338   mov     al, byte ptr [ebx + 0x1da]                   8A83DA010000
+     0x6B0643   mov     eax, dword ptr [eax + 0x1da]                 8B80DA010000
+     0x6B1411   mov     dword ptr [esi + 0x1da], eax                 8986DA010000
+     0x73D87C   mov     bl, byte ptr [esi + 0x1da]                   8A9EDA010000
+--- +0x1DB : 2
+     0x611112   sub     eax, 0x1db                                   2DDB010000
+     0x76E33D   mov     ebx, 0x1db                                   BBDB010000
+--- +0x1DC : 25
+     0x443A34   mov     dword ptr [eax + 0x1dc], edx                 8990DC010000
+     0x47C346   mov     eax, dword ptr [ebx + 0x1dc]                 8B83DC010000
+     0x4C5B5C   mov     ecx, 0x1dc                                   B9DC010000
+     0x4CFC5F   mov     edx, dword ptr [eax + 0x1dc]                 8B90DC010000
+     0x5302F0   call    dword ptr [ecx + 0x1dc]                      FF91DC010000
+     0x541F16   mov     eax, dword ptr [eax + 0x1dc]                 8B80DC010000
+     0x542AFE   mov     eax, dword ptr [eax + 0x1dc]                 8B80DC010000
+     0x549612   mov     eax, dword ptr [eax + 0x1dc]                 8B80DC010000
+     0x54D0F2   mov     eax, dword ptr [eax + 0x1dc]                 8B80DC010000
+     0x571D9A   mov     dword ptr [esi + 0x1dc], eax                 8986DC010000
+     0x5730F2   mov     dword ptr [esi + 0x1dc], eax                 8986DC010000
+     0x5E0A45   lea     eax, [ebx + 0x1dc]                           8D83DC010000
+     0x5E19DE   mov     eax, 0x1dc                                   B8DC010000
+     0x5E1A10   mov     eax, dword ptr [eax + 0x1dc]                 8B80DC010000
+--- +0x1DD : 2
+     0x74608E   mov     eax, 0x1dd                                   B8DD010000
+     0x74609C   mov     al, byte ptr [eax + 0x1dd]                   8A80DD010000
+--- +0x1DE : 1
+     0x76CF04   mov     eax, 0x1de                                   B8DE010000
+--- +0x1E0 : 61
+     0x47C59D   call    dword ptr [ebx + 0x1e0]                      FF93E0010000
+     0x483341   sub     eax, 0x1e0                                   2DE0010000
+     0x53092F   call    dword ptr [ebx + 0x1e0]                      FF93E0010000
+     0x531027   call    dword ptr [ebx + 0x1e0]                      FF93E0010000
+     0x5310CC   call    dword ptr [ebx + 0x1e0]                      FF93E0010000
+     0x541F26   mov     eax, dword ptr [eax + 0x1e0]                 8B80E0010000
+     0x542B0E   mov     eax, dword ptr [eax + 0x1e0]                 8B80E0010000
+     0x549622   mov     eax, dword ptr [eax + 0x1e0]                 8B80E0010000
+     0x54A420   call    dword ptr [ecx + 0x1e0]                      FF91E0010000
+     0x54D102   mov     eax, dword ptr [eax + 0x1e0]                 8B80E0010000
+     0x54D834   call    dword ptr [ecx + 0x1e0]                      FF91E0010000
+     0x571DAC   mov     dword ptr [esi + 0x1e0], eax                 8986E0010000
+     0x573104   mov     dword ptr [esi + 0x1e0], eax                 8986E0010000
+     0x5A7229   sub     eax, 0x1e0                                   2DE0010000
+--- +0x1E1 : 3
+     0x49B949   sub     eax, 0x1e1                                   2DE1010000
+     0x5A7B96   push    0x1e1                                        68E1010000
+     0x611146   sub     eax, 0x1e1                                   2DE1010000
+--- +0x1E2 : 27
+     0x47C586   mov     eax, 0x1e2                                   B8E2010000
+     0x5A554A   cmp     eax, 0x1e2                                   3DE2010000
+     0x5A68DC   cmp     eax, 0x1e2                                   3DE2010000
+     0x5A6CAE   cmp     eax, 0x1e2                                   3DE2010000
+     0x5AA384   sub     eax, 0x1e2                                   2DE2010000
+     0x5AAA19   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C0FDB   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C11A6   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C1379   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C153C   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C16F3   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C18B7   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C1A97   cmp     eax, 0x1e2                                   3DE2010000
+     0x5C1C7B   cmp     eax, 0x1e2                                   3DE2010000
+--- +0x1E3 : 2
+     0x5A7E2E   push    0x1e3                                        68E3010000
+     0x750927   inc     dword ptr [ecx + 0x1e3]                      FF81E3010000
+
+=== lea edi,[reg+disp] with disp in 0x100..0x1D5, followed within 32 bytes by rep movs ===
+  0x43A931   lea edi, [edx + 0x18]   [8D7A18]
+  0x4A13C6   lea edi, [ebp - 0x298]   [8DBD68FDFFFF]
+  0x4A4938   lea edi, [ecx + 0x14]   [8D7914]
+  0x4A5CAA   lea edi, [ecx + 0x14]   [8D7914]
+  0x4B3876   lea edi, [esp + 0x14]   [8D7C2414]
+  0x5183DA   lea edi, [ebp - 0x2c]   [8D7DD4]
+  0x518F1E   lea edi, [ebp - 0x2e]   [8D7DD2]
+  0x51AE8E   lea edi, [ebp - 0x2a]   [8D7DD6]
+  0x52608E   lea edi, [ebp - 0x2c]   [8D7DD4]
+  0x5277B5   lea edi, [ebp - 0x2c]   [8D7DD4]
+  0x527F49   lea edi, [ebp - 0x2c]   [8D7DD4]
+  0x574B4E   lea edi, [ebx + 0x10]   [8D7B10]
+  0x5752E6   lea edi, [ebx + 0x10]   [8D7B10]
+  0x5753AE   lea edi, [ebx + 0x10]   [8D7B10]
+  0x575B46   lea edi, [ebx + 0x10]   [8D7B10]
+  0x5D60E7   lea edi, [ebp - 0x2c]   [8D7DD4]
+  0x60A620   lea edi, [ebx + 0x264]   [8DBB64020000]
+  0x60A670   lea edi, [ebp - 0x1b0]   [8DBD50FEFFFF]
+  0x60A689   lea edi, [ebx + 0x1b0]   [8DBBB0010000]
+  0x61DD35   lea edi, [ebx + 0x1f]   [8D7B1F]
+  0x620A07   lea edi, [ebp - 0x110]   [8DBDF0FEFFFF]
+  0x620B51   lea edi, [ebp - 0x110]   [8DBDF0FEFFFF]
+  0x621004   lea edi, [ebx + 0x1f]   [8D7B1F]
+  0x6524BF   lea edi, [edx + 0x264]   [8DBA64020000]
+  0x666967   lea edi, [esi + 0x264]   [8DBE64020000]
+  0x688A3B   lea edi, [edx + 0x264]   [8DBA64020000]
+  0x6892AF   lea edi, [ecx + edx*8 + 0x17ae]   [8DBCD1AE170000]
+  0x69C51F   lea edi, [ebp - 0x1a]   [8D7DE6]
+  0x6B1708   lea edi, [ecx + edx*8 + 0x1c8e]   [8DBCD18E1C0000]
+  0x6BD04F   lea edi, [ebp - 0x10]   [8D7DF0]
+  0x6FD332   lea edi, [ebp - 0x28]   [8D7DD8]
+  0x6FD36B   lea edi, [ebx + 0x28]   [8D7B28]
+  0x710A9B   lea edi, [ebx + 0x20]   [8D7B20]
+  0x7164E8   lea edi, [ebp + edx*8 - 0x104]   [8DBCD5FCFEFFFF]
+  0x71BA8B   lea edi, [esi + 0x1e8]   [8DBEE8010000]
+  0x71BAA4   lea edi, [esi + 0x264]   [8DBE64020000]
+  0x71D13D   lea edi, [ebx + 0x264]   [8DBB64020000]
+  0x71EB6E   lea edi, [ebx + 0x264]   [8DBB64020000]
+  0x720E5C   lea edi, [ebp - 0x18]   [8D7DE8]
+  0x727267   lea edi, [ebp + eax*2 - 0x262]   [8DBC459EFDFFFF]
+  0x7284BA   lea edi, [ebx + 0x28]   [8D7B28]
+  0x73D41E   lea edi, [eax + 0x264]   [8DB864020000]
+  0x73D63D   lea edi, [esi + 0x1b0]   [8DBEB0010000]
+  0x74DB3A   lea edi, [ebx + 0x20]   [8D7B20]
+  0x7671CD   lea edi, [eax + 0x264]   [8DB864020000]
+  0x77B08F   lea edi, [ebp - 0x20]   [8D7DE0]
+  0x7F797D   lea edi, [ebp - 0x20]   [8D7DE0]
