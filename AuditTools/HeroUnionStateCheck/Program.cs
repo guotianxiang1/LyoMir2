@@ -913,9 +913,12 @@ static (TPlayObject Owner, HeroObject Hero, Envirnoment Environment)
 
 static TBaseObject AddNativeUnionProbe(Envirnoment environment, int x, int y)
 {
+    // 名字同样是 sub_765D64 的一项（0x765D6D cmp byte [esi+0x106],0）：无名探针
+    // 会在下一次同格 AddToMap 时被摘链，「同格第二个目标被跳过」那条断言就失去被测对象。
     var probe = new TBaseObject
     {
         m_PEnvir = environment,
+        m_sCharName = $"UnionProbe{x}_{y}",
         m_nCurrX = (short)x,
         m_nCurrY = (short)y,
         m_btRaceServer = Grobal2.RC_MONSTER
@@ -933,6 +936,7 @@ static AnimalObject AddNativeUnionAnimalProbe(Envirnoment environment, int x,
     var probe = new AnimalObject
     {
         m_PEnvir = environment,
+        m_sCharName = $"UnionAnimal{x}_{y}",
         m_nCurrX = (short)x,
         m_nCurrY = (short)y,
         m_btRaceServer = Grobal2.RC_MONSTER
@@ -959,6 +963,11 @@ static Envirnoment CreateNativeUnionCombatEnvironment()
     var environment = new Envirnoment();
     Assert(environment.LoadMapData(mapPath),
         "native union combat map load");
+    // AddToMap 的节点循环带战神 sub_765D64 有效性谓词
+    // (0x7777EA call 0x765D64 / 0x7777F1 jne 0x777898)，其三项之一是
+    // PEnvir.MapName <> ''（0x765D85 83 78 44 00 cmp dword [eax+0x44],0）。
+    // 生产里地图对象一律带图名，夹具也必须给，否则格内已有的对象会被当悬挂项摘链。
+    environment.sMapName = "HeroUnionCombat";
     return environment;
 }
 

@@ -31,7 +31,7 @@ static void MonsterRemovalDoesNotTrustCoordinatesOrObjectId(
     var environment = NewEnvironment("ExactRemoveMonster");
     var actor = NewActor(environment, Grobal2.RC_ANIMAL, 2, 2);
     Place(environment, actor);
-    AddDuplicate(environment, actor, 2, 2);
+    AddDuplicate(environment, actor, 3, 3);
     AddDuplicate(environment, actor, 4, 4);
 
     Equal(3, MovingReferenceCount(environment, actor),
@@ -81,7 +81,7 @@ static void PlayerRemovalSettlesPresenceExactlyOnce(MethodInfo exactRemove)
     var environment = NewEnvironment("ExactRemovePlayer", true);
     var player = NewActor(environment, Grobal2.RC_PLAYOBJECT, 1, 1);
     Place(environment, player);
-    AddDuplicate(environment, player, 1, 1);
+    AddDuplicate(environment, player, 2, 2);
     AddDuplicate(environment, player, 3, 5);
 
     Equal(3, MovingReferenceCount(environment, player),
@@ -152,11 +152,15 @@ static Envirnoment NewEnvironment(string mapName, bool dynamicRoom = false)
     return environment;
 }
 
+// 必须带名字：AddToMap 的节点循环带战神 sub_765D64 的有效性谓词
+// (0x7777EA E8 75 E5 FE FF call 0x765D64 / 0x7777F1 0F 85 A1 00 00 00 jne 0x777898)，
+// 无名对象会被当作悬挂项摘链。生产入图路径一律先命名后 AddToMap。
 static TBaseObject NewActor(Envirnoment environment, byte race,
     short x, short y) =>
     new()
     {
         m_PEnvir = environment,
+        m_sCharName = $"ExactRemove{x}_{y}",
         m_sMapName = environment.sMapName,
         m_sMapFileName = environment.m_sMapFileName,
         m_btRaceServer = race,
@@ -173,6 +177,11 @@ static void Place(Envirnoment environment, TBaseObject actor)
         "place actor");
 }
 
+// 每个重复登记必须落在**不同**格：战神 sub_7776EC 的节点循环
+// (0x77789E 3B 45 0C cmp eax,[ebp+0xC] / 0x7778A1 75 47 jne / 0x7778A9 89 50 08
+//  mov [node+8],edx / 0x7778BC E9 D4 02 00 00 jmp 0x777B95) 在本格已有同一对象时
+// 只刷时间戳并返回 nil，同格重复登记在战神里不可能出现。跨格重复仍可出现，
+// 这正是 RemoveMovingObjectEverywhereExact 要覆盖的场景。
 static void AddDuplicate(Envirnoment environment, TBaseObject actor,
     int x, int y)
 {
