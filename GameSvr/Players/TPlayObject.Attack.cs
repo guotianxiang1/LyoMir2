@@ -518,6 +518,9 @@ namespace GameSvr
                     result = TryActivateNativeSkill68Charge(UserMagic,
                         nTargetX, nTargetY);
                     break;
+                case SpellsDef.SKILL_265:
+                    result = TryActivateNativeSkill265(UserMagic, nTargetX);
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
