@@ -59,10 +59,19 @@ namespace Drop39WeightPolarityCheck
                 return 1;
             }
 
-            // Must contain < comparison
-            if (!Regex.IsMatch(returnStatement, @"Weight\s*\+\s*nWeight\s*<\s*.*MaxWeight"))
+            // Native overwrites dx before the cmp, so the item-weight argument
+            // is unused. Adding nWeight rejects items native accepts (swallow
+            // on the pickup fail arm). Must be Weight < MaxWeight, not
+            // Weight + nWeight < MaxWeight.
+            if (Regex.IsMatch(returnStatement, @"Weight\s*\+\s*nWeight"))
             {
-                Console.WriteLine("FAIL: IsAddWeightAvailable must use: Weight + nWeight < MaxWeight");
+                Console.WriteLine("FAIL: IsAddWeightAvailable must ignore nWeight (native 0x73C950 overwrites dx)");
+                Console.WriteLine($"      Found: {returnStatement.Trim()}");
+                return 1;
+            }
+            if (!Regex.IsMatch(returnStatement, @"Weight\s*<\s*.*MaxWeight"))
+            {
+                Console.WriteLine("FAIL: IsAddWeightAvailable must use: Weight < MaxWeight");
                 Console.WriteLine($"      Found: {returnStatement.Trim()}");
                 return 1;
             }
@@ -81,7 +90,7 @@ namespace Drop39WeightPolarityCheck
                 return 1;
             }
 
-            Console.WriteLine("PASS: IsAddWeightAvailable correctly uses strict < (DROP-39)");
+            Console.WriteLine("PASS: IsAddWeightAvailable uses Weight < MaxWeight and ignores nWeight (DROP-39 / 0x73C950 setl)");
             return 0;
         }
     }
