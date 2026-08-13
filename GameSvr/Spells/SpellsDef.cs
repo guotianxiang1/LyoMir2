@@ -219,6 +219,10 @@ namespace GameSvr
         public const int SKILL_174 = 174;
         public const int SKILL_179 = 179;
         public const int SKILL_180 = 180;
+        /// <summary>凝冰. Dispatched at 0x6ED8BC `sub eax,0xBF` / 0x6ED8C1
+        /// `je 0x6EDFCF`. sub_6EF340 keys its cooldown with 0xBF at 0x6EF3AF and
+        /// 0x6EF420.</summary>
+        public const int SKILL_191 = 191;
         public const int SKILL_291 = 291;
         public const int SKILL_292 = 292;
         public const int SKILL_293 = 293;
