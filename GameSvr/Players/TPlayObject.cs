@@ -1579,20 +1579,6 @@ namespace GameSvr
             }
         }
 
-        private void SendGoldInfo(bool boSendName)
-        {
-            var sMsg = string.Empty;
-            if (m_nSoftVersionDateEx == 0)
-            {
-                return;
-            }
-            if (boSendName)
-            {
-                sMsg = M2Share.g_Config.sGameGoldName + '\r' + M2Share.g_Config.sGamePointName;
-            }
-            SendDefMessage(Grobal2.SM_GAMEGOLDNAME, m_nGameGold, HUtil32.LoWord(m_nGamePoint), HUtil32.HiWord(m_nGamePoint), 0, sMsg);
-        }
-
         private void SendServerStatus()
         {
             if (m_btPermission < 10)
