@@ -1654,7 +1654,31 @@ namespace GameSvr
             }
             if (n10 > 0)
             {
-                if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 && UserItem.DuraMax > 0)
+                // ✅ 战神字节证据 (Tier-1) — PRICE-04: 原生门集合是【liveMax>0 && cur>0 && StdMode>4】。
+                // EA: TBaseItem sub_783D70 @0x783D7D-0x783DA1:
+                //   00783D7D  0f b7 73 28        movzx esi,word [ebx+0x28]   ; liveMax = 实例 +0x28
+                //   00783D81  0f b7 43 26        movzx eax,word [ebx+0x26]   ; cur     = 实例 +0x26
+                //   00783D85  89 45 fc           mov   [ebp-4],eax
+                //   00783D88  85 f6              test  esi,esi
+                //   00783D8A  0f 8e 5b 01 00 00  jle   0x783EEB              ; liveMax<=0 -> 原价返回
+                //   00783D90  83 7d fc 00        cmp   dword [ebp-4],0
+                //   00783D94  0f 8e 51 01 00 00  jle   0x783EEB              ; cur<=0    -> 原价返回
+                //   00783D9A  8b 43 1c           mov   eax,[ebx+0x1c]
+                //   00783D9D  80 78 14 04        cmp   byte [eax+0x14],4
+                //   00783DA1  0f 86 44 01 00 00  jbe   0x783EEB              ; StdMode<=4 -> 原价返回
+                // 肉/矿的 override 各自也有同样的前两道门(sub_786208 @0x78621E `test edi,edi / jle`
+                // + @0x786222 `test esi,esi / jle`;sub_7862B4 @0x7862CA / @0x7862D2 同形),
+                // 三个函数在 C# 被折叠进本条 if,故这一道 UserItem.Dura > 0 同时覆盖三者。
+                // 缺 cur>0 门时,零耐久装备会误入 stage B:磨损项 n10/2/liveMax*(liveMax-0) = n10/2,
+                // 定价直接砍半;原生根本不进这段,直接原价返回。耐久打空是常态,可达性高。
+                //
+                // ⚠ StdItem.DuraMax > 0 是【有意保留的护栏,不是遗漏】—— 原生无此门:
+                // stage A 的除法 @0x783E9B `fdivp` 之前【没有任何零检查】,Delphi 默认 x87 控制字
+                // 未屏蔽 ZeroDivide,模板 DuraMax==0 时原生会抛 EZeroDivide;C# 保留此门则静默
+                // 跳过整段返回原价。方向上 C# 更安全但不等价,零模板 max 是否可达为 UNPROVEN。
+                // 本条契约已在台账里来回翻过一次,就地钉死:【不要再把它当成新 bug 删掉】。
+                if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 &&
+                    UserItem.DuraMax > 0 && UserItem.Dura > 0)
                 {
                     if (StdItem.StdMode == 40)// 肉
                     {
