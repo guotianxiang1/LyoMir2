@@ -528,6 +528,55 @@ namespace GameSvr
                     SendNativeStateArmMsg("定身状态结束！",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                // 49..84 lost arms: the plain Buff-pair shape
+                //   66 B9 DB FF mov cx,0xFFDB / mov edx,<str> / mov eax,esi /
+                //   mov ebx,[eax] / call [ebx+0xD4] / jmp 0x742C42
+                // with no second count (the lost path enters sub_741884 with
+                // ecx=0 @0x773388). None of these lost texts exist in any sibling
+                // dispatcher — OnNativeTimedStateLost now carries only the
+                // state-23/20 side-effect flags, and batch C owns 102/103/104/106
+                // — so this switch is their sole owner and there is no
+                // double-send. These pair with the gained arms 49/56/62/63/71/76/
+                // 77/78 (spoken by OnNativeTimedStateGained) and 79..84 (added to
+                // the gained switch above).
+                case 49:
+                    // 0x742985  C6 86 E1 02 00 00 00 mov byte [esi+0x2E1],0
+                    //           66 B9 DB FF / BA F0 33 74 00
+                    // 0x7433F0 len 14 CEDEB5D0D7B4CCACD2D1BDE1CAF8
+                    // The `[Self+0x2E1]=0` write mirrors the gained `=1` store.
+                    // As documented on the gained side (OnNativeTimedStateGained
+                    // case 49), that byte has ~16 unrelated image-wide writers and
+                    // no resolved reader/field, so no C# field is invented; only
+                    // the message is reproduced, the byte write left as a gap.
+                    SendNativeStateArmMsg("无敌状态已结束",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 56:
+                    // 0x7429BC  66 B9 DB FF / BA 20 34 74 00
+                    // 0x743420 len 17 CAC8D1AAC9B1C2BED7B4CCACBDE1CAF8 21
+                    // Trailing 0x21 is a single-byte '!', not the fullwidth ！
+                    // (A3A1) the sibling arms use — kept verbatim.
+                    SendNativeStateArmMsg("嗜血杀戮状态结束!",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 62:
+                    // 0x7429D4  66 B9 DB FF / BA 3C 34 74 00
+                    // 0x74343C len 14 C4FDB1F9D7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("凝冰状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 63:
+                    // 0x7429EC  C6 86 10 03 00 00 00 mov byte [esi+0x310],0
+                    //           66 B9 DB FF / BA 54 34 74 00
+                    // 0x743454 len 18 D5E6C1FABBA4CCE5D7B4CCACBDE1CAF8 A3A1
+                    // `[Self+0x310]=0` mirrors the gained `=1`. Per the state-63
+                    // note in OnNativeTimedStateGained it is a write-only mirror
+                    // of "state active" with no reader anywhere, so it is left
+                    // unmirrored (HasNativeActiveState already answers) and only
+                    // the message is reproduced.
+                    SendNativeStateArmMsg("真龙护体状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 85:
                     // 0x742AFB  66 B9 DB FF / BA 78 35 74 00
                     // 0x743578 len 18 C4BED4AABBA4CCE5D7B4CCACBDE1CAF8A3A1
