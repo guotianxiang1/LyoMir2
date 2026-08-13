@@ -1909,6 +1909,24 @@ namespace GameSvr
                         // 0x6C47A9 `call 0x783984`，而 0x783984 全文是
                         // `33 C0 xor eax,eax` / `C3 ret` —— 恒返回 0，所以 jne 永不成立，
                         // 日志必发。C# 原有的 IsCheapStuff / NeedIdentify 双重门在原生无对应。
+                        //
+                        // TRADE-53 数量字段 —— BLOCKED，保持现状的硬编码 1，勿改：
+                        //   0x6C47B2  80 7E 14 07     cmp byte [esi+0x14], 7   ; esi = 该 TUserItem
+                        //   0x6C47B6  75 3B           jne 0x6C47F3
+                        //   0x6C47BC  0F B7 46 26     movzx eax, word [esi+0x26]  ; ==7 → 数量 = Dura
+                        //   0x6C47F7  6A 01           push 1                      ; !=7 → 数量 = 1
+                        // +0x14 是 **item 自身**的字节，不是 StdItem 字段：同一函数用的
+                        // sub_784568 @0x784573 `8B 53 1C mov edx,[ebx+0x1C]` 才是取 StdItem。
+                        // 所以**不能**复用 NativeAccountStorageClient.GetGameDataLogQuantity
+                        // （那个用的是 stdItem.StdMode == 7）。
+                        // +0x14 目前无法映射到任何 C# 字段：物品基类构造器 sub_783788 在
+                        // 0x7837AE `C6 43 14 00` 把它写 0，且是在 0x7837BA 存 StdItem 指针
+                        // **之前**，全程不读 StdItem；各子类构造器各自硬写常量
+                        // （0x784D67→1、0x787CB5→4、0x788C01→7 且同时 `mov word [edi+0x26],1`、
+                        //  0x761A96→1）。它也不落盘：背包序列化 0x6B1712 `mov ecx,0x34` /
+                        // `rep movsd` 是从 item+0x20 起的 208 字节，+0x14 在其之前。
+                        // TUserItem 无对应字段，硬编码 1 = 原生 `!=7` 分支，fail-closed。
+                        // 要解锁需先钉死 +0x14 的语义，见 staging/m_trade2_20260813.md §5。
                         if (StdItem != null)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
@@ -1935,6 +1953,9 @@ namespace GameSvr
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                         // TRADE-53: 镜像方向同理，0x6C48D6 的 `test al,al / jne` 测的是
                         // 0x6C48D1 `call 0x783984`，同一个恒假桩，日志必发。
+                        // 数量字段同样 BLOCKED：0x6C48DA `80 7E 14 07 cmp byte [esi+0x14],7` /
+                        // 0x6C48E4 `0F B7 46 26 movzx eax,word [esi+0x26]` / 0x6C491D `6A 01`。
+                        // 理由与上一处相同，保持硬编码 1。
                         if (StdItem != null)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
