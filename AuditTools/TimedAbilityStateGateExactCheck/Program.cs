@@ -628,7 +628,7 @@ static void CheckSourceOrdering()
     var heroSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Actors",
         "HeroObject.cs"));
     var heroRelease = Between(heroSource, "internal void ReleaseRuntimeReferences()",
-        "private void DecideAction");
+        "private static int NativeGridDistance");
     Contains(heroRelease, "ClearTimedAbilitiesOnExit()",
         "hero release timed-state cleanup");
 
