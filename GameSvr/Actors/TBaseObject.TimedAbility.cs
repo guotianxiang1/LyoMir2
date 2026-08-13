@@ -681,6 +681,23 @@ namespace GameSvr
             m_boAbilityRecalcPending = false;
         }
 
+        /// <summary>
+        /// Native TPlayObject VMT+0x14 = 0x6D7628, which is: call the inherited
+        /// notifier 0x741884 (status broadcast + the gained/lost arm), then the
+        /// TPlayObject-only state-25 pair, then build the 3555 record. The three
+        /// steps below are those three, in that order.
+        /// <para>
+        /// The 0x741884 arm tables live in TBaseObject.NativeStateArms.cs. State
+        /// 75 predates them and is still spelled out here; it belongs to a later
+        /// batch and is deliberately left untouched. No state reaches both, since
+        /// 75 is absent from both switches.
+        /// </para>
+        /// <para>
+        /// Still MISSING: the TPlayObject-only state-25 arms of 0x6D7628
+        /// ("反外挂惩罚" @0x6D7754 gained / "反外挂惩罚时间结束" @0x6D7774 lost).
+        /// They are a separate override, not part of the 99-arm tables.
+        /// </para>
+        /// </summary>
         private void SendTimedAbilityState(TimedAbilityNode node, bool removed)
         {
             SendRefMsg(Grobal2.RM_CHARSTATUSCHANGED, 0,
@@ -705,6 +722,17 @@ namespace GameSvr
                     SendMsg(this, Grobal2.RM_SYSMESSAGE, 0,
                         0xDB, 0xFF, 0, text);
                 }
+            }
+            else if (removed)
+            {
+                DispatchNativeStateLostArm(node.InternalType);
+            }
+            else
+            {
+                // 0x77318C `mov ecx,0x3E8 / cdq / idiv ecx` then `movzx eax,di`
+                // in the arm: signed divide toward zero, low 16 bits printed.
+                DispatchNativeStateGainedArm(node.InternalType,
+                    unchecked((ushort)(node.RemainingMilliseconds / 1000)));
             }
 
             SendTimedAbilityClientState(node.InternalType,
