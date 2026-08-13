@@ -1957,7 +1957,6 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject::ClientGuildAlly";
             try
             {
-                var n8 = -1;
                 TBaseObject BaseObjectC = GetPoseCreate();
                 if (BaseObjectC != null && BaseObjectC.m_MyGuild != null && BaseObjectC.m_btRaceServer == Grobal2.RC_PLAYOBJECT && BaseObjectC.GetPoseCreate() == this)
                 {
@@ -1975,30 +1974,9 @@ namespace GameSvr
                                 BaseObjectC.m_MyGuild.RefMemberName();
                                 M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
                                 M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, BaseObjectC.m_MyGuild.sGuildName);
-                                n8 = 0;
-                            }
-                            else
-                            {
-                                n8 = -2;
                             }
                         }
-                        else
-                        {
-                            n8 = -3;
-                        }
                     }
-                    else
-                    {
-                        n8 = -4;
-                    }
-                }
-                if (n8 == 0)
-                {
-                    SendDefMessage(Grobal2.SM_GUILDMAKEALLY_OK, 0, 0, 0, 0, "");
-                }
-                else
-                {
-                    SendDefMessage(Grobal2.SM_GUILDMAKEALLY_FAIL, n8, 0, 0, 0, "");
                 }
             }
             catch (Exception e)
@@ -2010,7 +1988,6 @@ namespace GameSvr
 
         private void ClientGuildBreakAlly(string sGuildName)
         {
-            var n10 = -1;
             if (!IsGuildMaster())
             {
                 return;
@@ -2028,24 +2005,7 @@ namespace GameSvr
                     guild.RefMemberName();
                     M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
                     M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, guild.sGuildName);
-                    n10 = 0;
                 }
-                else
-                {
-                    n10 = -2;
-                }
-            }
-            else
-            {
-                n10 = -3;
-            }
-            if (n10 == 0)
-            {
-                SendDefMessage(Grobal2.SM_GUILDBREAKALLY_OK, 0, 0, 0, 0, "");
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_GUILDBREAKALLY_FAIL, n10, 0, 0, 0, "");
             }
         }
 
