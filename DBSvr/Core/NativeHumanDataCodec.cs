@@ -355,11 +355,13 @@ namespace DBSvr.Core
                 }
                 if (yanshenSections.Length == 1
                     && !YanshenItemSidecarCodec.TryApply(yanshenSections[0].Payload,
-                        data.HumItems, data.BagItems, data.StorageItems, out error))
+                        data.HumItems, data.BagItems, data.StorageItems,
+                        clearUnlisted: false, out error))
                 {
                     error = "native eye ScriptData: " + error;
                     return false;
                 }
+                YanshenNativeItemLayout.PackAll(data.HumItems, data.BagItems, data.StorageItems);
                 info.NativeScriptData = (byte[])scriptRaw.Clone();
                 info.NativeScriptDataCrc = scriptCrc;
             }
@@ -804,6 +806,7 @@ namespace DBSvr.Core
                 NativeRecord = record.ToArray()
             };
             record.Slice(10, 14).CopyTo(item.btValue);
+            YanshenNativeItemLayout.Unpack(item);
             return item;
         }
 
@@ -883,6 +886,7 @@ namespace DBSvr.Core
             item.btValue.AsSpan().CopyTo(destination.Slice(10, 14));
             destination[UpgradeFlagsOffset] = item.UpgradeFlags;
             destination[BindOffset] = item.Bind;
+            YanshenNativeItemLayout.Pack(item, destination);
             item.NativeRecord = destination.ToArray();
             return true;
         }
