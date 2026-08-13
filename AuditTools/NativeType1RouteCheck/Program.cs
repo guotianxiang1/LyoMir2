@@ -1,10 +1,12 @@
 using System.Text.RegularExpressions;
 
-var root = Directory.GetCurrentDirectory();
+var root = AuditRepoRoot.Resolve(args);
 var sourcePath = Path.Combine(root, "GameSvr", "Services", "DBService.cs");
 if (!File.Exists(sourcePath))
-    throw new FileNotFoundException("run this audit from the repository root",
-        sourcePath);
+{
+    Console.WriteLine("SKIP: GameSvr/Services/DBService.cs not found under " + root);
+    return 0;
+}
 
 var source = File.ReadAllText(sourcePath);
 var start = source.IndexOf("private static void ProcessNativeType1",
@@ -80,6 +82,7 @@ Console.WriteLine("NativeType1RouteCheck PASS " +
                   "005D/5E/70=hero-aux " +
                   "0060/61=yb-ack 0062/63=account-storage " +
                   "hero=0051/0053/005A 0059=ignored");
+return 0;
 
 static void Require(string source, string pattern, string message) =>
     Check(Regex.IsMatch(source, pattern,

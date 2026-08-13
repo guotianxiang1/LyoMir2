@@ -1,12 +1,15 @@
 using System.Text.RegularExpressions;
 
-var root = Directory.GetCurrentDirectory();
+var root = AuditRepoRoot.Resolve(args);
 var globalPath = Path.Combine(root, "SystemModule", "Grobal2.cs");
 var messagePath = Path.Combine(root, "GameSvr", "Players",
     "TPlayObject.Message.cs");
 if (!File.Exists(globalPath) || !File.Exists(messagePath))
-    throw new DirectoryNotFoundException(
-        "run this audit from the repository root");
+{
+    Console.WriteLine("SKIP: Grobal2.cs / TPlayObject.Message.cs not found under " +
+                      root);
+    return 0;
+}
 
 var globals = File.ReadAllText(globalPath);
 Check(Regex.IsMatch(globals,

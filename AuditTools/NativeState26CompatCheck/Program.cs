@@ -334,16 +334,7 @@ static void PrepareRuntimeConfig()
     File.WriteAllText(Path.Combine(share, "ServerData.ini"), "[Integer]");
 }
 
-static string FindRepoRoot()
-{
-    for (var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
-         directory != null; directory = directory.Parent)
-    {
-        if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
-            return directory.FullName;
-    }
-    throw new InvalidOperationException("repo root");
-}
+static string FindRepoRoot() => AuditRepoRoot.Resolve();
 
 static void Contains(string value, string needle, string label)
 {

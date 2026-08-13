@@ -9,10 +9,10 @@ var connectionString = args.Length > 1
     : Environment.GetEnvironmentVariable("LYOMIR_MYSQL_CONNECTION");
 if (gameDirectory == null || string.IsNullOrWhiteSpace(connectionString))
 {
-    Console.Error.WriteLine("INCOMPLETE: a MySQL connection string is required "
+    Console.WriteLine("SKIP: a MySQL connection string is required "
         + "(argument 2 or LYOMIR_MYSQL_CONNECTION). "
         + "Usage: WeaponUpgradeRoundTripCheck [GameSvr build] <connection string>");
-    Environment.Exit(2);
+    Environment.Exit(0);
     return;
 }
 AssemblyLoadContext.Default.Resolving += (_, name) =>

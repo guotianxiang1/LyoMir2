@@ -6,6 +6,15 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+if (args.Length == 0)
+{
+    // The .pas corpus is a runtime artifact that lives outside the repository,
+    // so an argument-less invocation has nothing to audit.
+    Console.WriteLine("SKIP: PasScriptAudit needs a script corpus. "
+        + "Usage: PasScriptAudit <GameSvr build dir> <Envir dir> <source root> <report.json> [parse-baseline.json]");
+    return 0;
+}
+
 if (args.Length is not 4 and not 5)
 {
     Console.Error.WriteLine("Usage: PasScriptAudit <GameSvr build dir> <Envir dir> <source root> <report.json> [parse-baseline.json]");
