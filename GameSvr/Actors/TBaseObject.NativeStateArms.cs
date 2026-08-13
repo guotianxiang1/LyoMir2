@@ -332,6 +332,20 @@ namespace GameSvr
                     SendNativeStateArmMsg("麻痹抗性瞬间提高" + seconds + "秒",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                // 95 gains nothing: index-map byte at 0x7418E2+95 is 0 (DEFAULT
+                // slot) — a silent hole, like 89.
+                case 96:
+                    // 0x742413  68 50 31 74 00  push 0x743150
+                    // 0x743150 len 16 C9F1CAA5B7C0D3F9CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("神圣防御瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 97:
+                    // 0x74245A  68 6C 31 74 00  push 0x74316C
+                    // 0x74316C len 14 C4A7D1AAD6B5CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("魔血值瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
             }
         }
 
@@ -499,6 +513,25 @@ namespace GameSvr
                     // 0x742BC6  BA 54 36 74 00
                     // 0x743654 len 16 C2E9B1D4BFB9D0D4BBD8B8B4D5FDB3A3
                     SendNativeStateArmMsg("麻痹抗性回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 95 loses nothing: lost target for state 95 is 0x742C42
+                // (DEFAULT) — a silent hole, matching its gained side.
+                case 96:
+                case 100:
+                    // Shared lost arm 0x742BDB for states 96 and 100 (gain sides
+                    // differ: 96 "神圣防御瞬间提高" vs 100 "神圣防御瞬间百分比提高").
+                    // 0x742BDB  66 B9 DB FF / BA 70 36 74 00
+                    // 0x743670 len 16 C9F1CAA5B7C0D3F9BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("神圣防御回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 97:
+                case 101:
+                    // Shared lost arm 0x742BF0 for states 97 and 101.
+                    // 0x742BF0  BA 8C 36 74 00
+                    // 0x74368C len 14 C4A7D1AAD6B5BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("魔血值回复正常",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
             }
