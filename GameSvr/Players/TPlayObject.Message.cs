@@ -1071,6 +1071,15 @@ namespace GameSvr
                     else if (ProcessMsg.nParam2 == 1)
                         m_boNativeHeroRecordShared = true;
                     break;
+                case Grobal2.CM_YB_CONSIGN_INBOX:
+                case Grobal2.CM_YB_CONSIGN_OUTBOX:
+                case Grobal2.CM_YB_DEAL_BUY_HISTORY:
+                case Grobal2.CM_YB_DEAL_SELL_HISTORY:
+                    // Four two-instruction arms that share one shape; the per-ident differences
+                    // (throttle slot, throttle comparison, row cap, SQL, reply ident) live in
+                    // NativeYbConsignmentQuery.Descriptors.
+                    ClientYbConsignmentQuery(ProcessMsg.wIdent);
+                    break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
                 //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051
