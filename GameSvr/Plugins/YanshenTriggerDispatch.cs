@@ -282,10 +282,19 @@ namespace GameSvr.Plugins
                      + "This_Player = ebx。两个 Variant 由桩体**就地手搓**（不走 0x41AFE4）："
                      + "+0x017 `mov [ebp-0x6C],3`(varInteger) / +0x01E 值 = 宿主帧的 `[ebp-4]`；"
                      + "+0x024 `mov [ebp-0x5C],3` / +0x02B 值 = 宿主帧的 `[ebp-0xC]`。"
-                     + "【缺口】这两个整数是**魔法分发器自己的两个局部**，不是 0x774424 的三个实参"
-                     + "（实参是 eax=ebx / edx=esi / ecx=[ebp+8]）。分发器起点未定名、其 [ebp-4] 与 [ebp-0xC] "
-                     + "的语义未逐字节反出来，改在 C# 生产函数入口取参数就是换了两个不同的量 —— 凑数即臆造，"
-                     + "故只留档不发射。补齐所需：反出 0x6ED2A4 起那个魔法分发器的完整帧布局。",
+                     + "本轮把分发器定名了：sub_6ED62C（全镜像唯一 rel32 调用者 0x6BCCB3），序言 "
+                     + "0x6ED635 `mov [ebp-4],ecx` / 0x6ED638 `mov esi,edx`(TUserMagic) / 0x6ED63A "
+                     + "`mov ebx,eax`(施法者)；0x6ED676 `call 0x78FE88(eax=[ebp-4], edx=[ebp+0xC], "
+                     + "ecx=[ebx+0x12C], push [ebx+0x130])` ⇒ **[ebp-4] = 目标 X、[ebp+0xC] = 目标 Y**。"
+                     + "0x6ED6FF `jmp dword [eax*4+0x6ED706]` 是按 wMagicID 的跳转表，表项 28 = 0x6EDC24 "
+                     + "正是本挂载点所在臂，而 C# 的 `SpellsDef.SKILL_SHOWHP == 28` —— 键名「心灵启示」对得上。"
+                     + "0x774424 的语义也解开了：`Random(100) < (magicLevel+1)*5+10` 命中则对目标 "
+                     + "`call 0x76B4D0(dl=0x1D)` 挂 state 29。"
+                     + "【仍缺口，但理由已收窄成一条硬事实】第二个 Variant 取的 `[ebp-0xC]` 在通往臂 28 的"
+                     + "整条路径上**从未被写过**：序言 0x6ED62C..0x6ED6FF 只写 [ebp-4] 与 [ebp-8] 那个 "
+                     + "dword 的四个字节（[ebp-5]/[ebp-6]/[ebp-7]/[ebp-8]），而 [ebp-0xC] 的唯一写点是 "
+                     + "0x6ED956（臂 6 的 `call 0x75EC20` 取物品），与臂 28 互斥。也就是说原生这里读的是"
+                     + "**未初始化的栈残值**，C# 侧不存在等价物，任何取值都是臆造 ⇒ 保持不发射。",
             },
             new()
             {
@@ -440,8 +449,25 @@ namespace GameSvr.Plugins
                      + "push 0 / xor ecx,ecx`（Plain 模板，无 array-of-Variant 构造），This_Player=edx="
                      + "攻击者，门为攻击者 S 银行 [edx+0x804+0x200]==0x429(键 S(1,65)) 且 [+0x204]==100。"
                      + "尾部重放被覆盖的 6 字节 `53 56 57 89 4D F8`(push ebx/esi/edi + mov [ebp-8],ecx) → "
-                     + "Notify。C# 落点是刀刀切割伤害就地计算处（YanshenApi 切割实现，非原生 StruckDamage 链），"
-                     + "属每刀热点，故留插桩点。",
+                     + "Notify（但**改写了 ecx**，是伤害修改器）。"
+                     + "**本轮更正 C# 落点**：0x767BAE 不是「YanshenApi 切割实现」处，而是 **sub_767BA8 的"
+                     + "函数入口**——序言 `55 8B EC 83 C4 EC` 占 0x767BA8..0x767BAD，钩子紧接其后，续跑点 "
+                     + "0x767BB4 就是 `mov [ebp-4],ecx`，所以被改写的 ecx 同时落进 [ebp-8] 与 [ebp-4]。"
+                     + "sub_767BA8 已由 `YanshenApi.cs:1083` 定名为「致命一击调制」，其 C# 端口就是 "
+                     + "`TBaseObject.ApplyNativePhysicalCritical(source, damage)`（逐槽吻合：[edx+0x194]="
+                     + "source.m_sNativeCriticalChance、[eax+0x19C]=m_sNativeAntiCriticalChance、"
+                     + "[eax+0x1A0]=m_sNativeCriticalDamageReduction、[edx+0x198]="
+                     + "source.m_nNativeCriticalDamageIncrease，常量 0x767CA4=100.0 / 0x767CA8=10000.0 / "
+                     + "0x767CAC=1.5 一一对上）。⇒ 切割加成加在**致命一击倍率之前**。"
+                     + "银行槽全部解出（银行布局：槽 i-1 在 (i-1)*8，key 在 +0、value 在 +4）："
+                     + "PvE 支 [+0x4C]=S(1,10) 千分比×[target+0x2B0](MaxHP)、[+0x19C]=S(1,52) 概率门、"
+                     + "[+0x54]=S(1,11) 定值、[+0x1EC]=S(1,62) 概率门；PvP 支 [+0x44]=S(1,9)（==100 则免疫）、"
+                     + "[+0x18C]=S(1,50) 千分比、[+0x1A4]=S(1,53) 概率门、[+0x194]=S(1,51) 定值、"
+                     + "[+0x1F4]=S(1,63) 概率门；派发门 key [+0x200]==0x429 且 value [+0x204]==100 = S(1,65)。"
+                     + "【仍缺口】①概率门用的是 `((([atk+0x18] & 0xFFF) + [atk+0x470]) & 0xFFF)` 这个"
+                     + "**由对象字段合成的伪随机数**（不是 Random），+0x18 与 +0x470 两个字段在 C# 无对应模型；"
+                     + "②整条链的前置是 S(1,65)==100，而 S(1,1..150) 播种（A6）时机不可证、至今未实现，"
+                     + "门永远不成立。两条任一未解就会把每刀伤害算错，故 fail-closed。",
             },
             new()
             {
