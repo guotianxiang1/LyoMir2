@@ -393,14 +393,7 @@ static void VerifyUserEngineAtomicPublication()
 
 static void VerifyProductionWiringSourceBoundaries()
 {
-    // args[0], reached through GetCommandLineArgs because this is a static local
-    // function. It outranks the environment variable and the default tree, which
-    // is not always sitting on the branch under test.
-    var cli = Environment.GetCommandLineArgs();
-    var repoRoot = cli.Length > 1 && !string.IsNullOrWhiteSpace(cli[1])
-        ? cli[1]
-        : Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-          ?? @"D:\loym2\LyoMir2-master";
+    var repoRoot = AuditRepoRoot.Resolve();
     var heroObject = ReadSource(repoRoot, "GameSvr", "Actors",
         "HeroObject.cs");
     var heroCodec = ReadSource(repoRoot, "GameSvr", "DataStores",

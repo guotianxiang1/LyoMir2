@@ -378,23 +378,7 @@ static PlayerSnapshot Snapshot(TPlayObject player, int slot) => new(
 
 static string FindRepositoryRoot()
 {
-    var current = new DirectoryInfo(AppContext.BaseDirectory);
-    while (current != null)
-    {
-        if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                "GameSvr.csproj")) &&
-            Directory.Exists(Path.Combine(current.FullName, "AuditTools")))
-            return current.FullName;
-
-        var nestedRoot = Path.Combine(current.FullName, "LyoMir2-master");
-        if (File.Exists(Path.Combine(nestedRoot, "GameSvr",
-                "GameSvr.csproj")) &&
-            Directory.Exists(Path.Combine(nestedRoot, "AuditTools")))
-            return nestedRoot;
-
-        current = current.Parent;
-    }
-    throw new InvalidOperationException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void PrepareRuntime()

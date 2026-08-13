@@ -582,17 +582,7 @@ static void WriteTowerConfigs(int minimumExperience = 1_800_000,
 
 static string FindRepositoryRoot()
 {
-    var current = new DirectoryInfo(AppContext.BaseDirectory);
-    while (current != null)
-    {
-        if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                "GameSvr.csproj"))) return current.FullName;
-        var nested = Path.Combine(current.FullName, "LyoMir2-master");
-        if (File.Exists(Path.Combine(nested, "GameSvr", "GameSvr.csproj")))
-            return nested;
-        current = current.Parent;
-    }
-    throw new InvalidOperationException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void PrepareRuntime()

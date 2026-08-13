@@ -78,12 +78,7 @@ using SystemModule;
 //     the visible-list scan.  C# having no pre-pass is EQUIVALENT, and adding a
 //     *populated* one would invent aggro stickiness the original does not have.
 
-var repoRoot = args.Length > 0 ? args[0] : @"D:\loym2\LyoMir2-master";
-if (!Directory.Exists(repoRoot))
-{
-    Console.WriteLine("Usage: MonsterDomainRaceAndDropCheck <repoRoot>");
-    return 2;
-}
+var repoRoot = AuditRepoRoot.Resolve(args);
 
 var failures = new List<string>();
 void Check(bool cond, string msg)
