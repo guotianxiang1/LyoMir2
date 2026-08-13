@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.RegularExpressions;
 using GameSvr;
+using SystemModule;
 using SystemModule.Packet;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -11,6 +12,7 @@ TestFailureDialogsAndAck();
 TestLevelTable();
 TestGrantCalculation();
 TestDelphiRandom();
+TestBountyDrawIsTheGlobalRandSeed();
 TestNativeEvidenceContract();
 TestDormantRuntimeBoundary();
 
@@ -19,7 +21,7 @@ Console.WriteLine(
     "level=exact experience=Delphi-overflow bounty=12 " +
     "BF0=unchecked-add ACK=state-matrix relog=name-current " +
     "rawGBK=51/comma runtime=closed " +
-    "blocker=global-Delphi-RandSeed");
+    "bounty-draw=global-Delphi-RandSeed");
 return;
 
 static void TestCompletionDecode()
@@ -191,6 +193,30 @@ static void TestDelphiRandom()
     EqualUInt(expected, actual, "Delphi random high product");
 }
 
+// POIS-26 closed the blocker this test used to describe. The bounty draw's default
+// injectable is `maximum => M2Share.RandomNumber.Random(maximum)`, and that facade now
+// IS the global Delphi RandSeed the native bounty path draws from - sub_403B4C
+// @0x00403B4C: imul [0x7A2008], 0x08088405 / inc / store / mul bound / keep the high
+// 32. So instead of describing which field RandomNumber declares, check that the
+// facade and this file's own NextDelphiRandom model produce the same values off the
+// same seed. That is the fact the blocker was waiting on.
+static void TestBountyDrawIsTheGlobalRandSeed()
+{
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+    Func<int, int> bountyDraw = maximum => M2Share.RandomNumber.Random(maximum);
+
+    var state = 0x12345678u;
+    DelphiRandom.Seed = state;
+    foreach (uint range in new uint[] { 91_200, 12, 1, 800 })
+    {
+        var expected = NativeQuestDiamondProtocol.NextDelphiRandom(ref state, range);
+        EqualUInt(expected, unchecked((uint)bountyDraw(unchecked((int)range))),
+            $"bounty draw range={range} left the global RandSeed");
+        EqualUInt(state, DelphiRandom.Seed,
+            $"bounty draw range={range} did not advance the shared RandSeed");
+    }
+}
+
 static void TestNativeEvidenceContract()
 {
     // These assertions pin conclusions from the Delphi disassembly. They are
@@ -312,11 +338,9 @@ static void TestDormantRuntimeBoundary()
     Require(bounty, "public bool TrySelectGbk(out byte[] descriptor)",
         "dormant bounty raw GBK selector is missing");
     Require(bounty, "maximum => M2Share.RandomNumber.Random(maximum)",
-        "diamond bounty no longer exposes the current random-owner blocker");
-    Require(random, "private static Random random",
-        "current global random owner is no longer System.Random; re-audit gate");
-    Require(random, "return random.Next(Value)",
-        "current bounded random path changed; re-audit the RandSeed gate");
+        "diamond bounty stopped drawing through the global random owner");
+    Reject(random, "private static Random random",
+        "global random owner left the Delphi RandSeed for System.Random");
 }
 
 static byte[] BuildPayload(string roleName, int firstCount, int secondCount)
