@@ -355,11 +355,12 @@ namespace GameSvr
                                 MapFlag.boMINE = true;
                                 continue;
                             }
-                            if (s34.Equals("MINE2", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boMINE2 = true;
-                                continue;
-                            }
+                            // MINE-01: MINE2 是凭空发明的，已移除。全镜像三种编码
+                            // 各 0 命中（Delphi AnsiString 记录 / 裸 ASCII 大小写
+                            // 不敏感 / UTF-16LE 大小写不敏感；同一扫描器对 MINE、
+                            // pickup、NORECALL 等真 token 各命中 2 条 Delphi 记录，
+                            // 即两个 token 池各一条）。配置里写 MINE2 在原版会被
+                            // 上面那条长度 4 的前缀比较命中成 MINE。不要重新接线。
                             if (s34.Equals("NOTHROWITEM", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNOTHROWITEM = true;

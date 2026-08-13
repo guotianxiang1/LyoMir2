@@ -3106,74 +3106,9 @@ namespace GameSvr
             }
         }
 
-        
-        
-        
-        private void MakeMine2()
-        {
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
-            {
-                return;
-            }
-            TUserItem mineItem = null;
-            var mineRate = M2Share.RandomNumber.Random(120);
-            if (HUtil32.RangeInDefined(mineRate, 1, 2))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone1, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else if (HUtil32.RangeInDefined(mineRate, 3, 20))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone2, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else if (HUtil32.RangeInDefined(mineRate, 21, 45))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone3, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone4, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-        }
+        // MINE-01: MakeMine2()（金刚石矿/绿宝石矿/红宝石矿/白宝石矿 四选一的第二
+        // 条宝石产线）已移除。原版没有 MINE2 旗标，也没有第二条产线：挖矿产出的
+        // 唯一入口是 0x6BC3CC，五个分支全是 金矿/银矿/铁矿/黑铁矿石/铜矿。
 
         public TUserItem QuestCheckItem(string sItemName, ref int nCount, ref int nParam, ref int nDura)
         {

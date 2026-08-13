@@ -58,7 +58,6 @@ public class TMapFlag
     public bool boFOXMAP;
     public bool boNODRUG;
     public bool boMINE;
-    public bool boMINE2;
     public bool boNOPOSITIONMOVE;
     public bool boPICKUP;
     public bool boNODROPITEM;

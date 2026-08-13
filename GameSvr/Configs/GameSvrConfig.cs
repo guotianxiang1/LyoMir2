@@ -102,10 +102,7 @@ namespace GameSvr
         public string sSteelStone;
         public string sCopperStone;
         public string sBlackStone;
-        public string sGemStone1;
-        public string sGemStone2;
-        public string sGemStone3;
-        public string sGemStone4;
+        // MINE-01: sGemStone1..4 已随发明的 MINE2 宝石产线一起移除。
         public string[] sZuma;
         public string sBee;
         public string sSpider;
@@ -1045,10 +1042,6 @@ namespace GameSvr
         // 3-character one zero times, so the short form would silently Dispose
         // every black-iron drop.
         sBlackStone = "黑铁矿石";
-            sGemStone1 = "金刚石矿";
-            sGemStone2 = "绿宝石矿";
-            sGemStone3 = "红宝石矿";
-            sGemStone4 = "白宝石矿";
             sZuma = new string[] { "祖玛卫士", "祖玛雕像", "祖玛弓箭手", "楔蛾" };
             sBee = "蝙蝠";
             sSpider = "爆裂蜘蛛";
