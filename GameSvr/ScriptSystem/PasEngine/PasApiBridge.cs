@@ -5559,11 +5559,31 @@ namespace GameSvr.PasEngine
                 case "addstdmode":
                     if (CurrentNpc is Merchant smMerchant && args.Count >= 1)
                     {
-                        int mode = args[0].AsInt();
-                        if (!smMerchant.m_ItemTypeList.Contains(mode))
-                            smMerchant.m_ItemTypeList.Add(mode);
-                        smMerchant.m_boBuy = true;
-                        smMerchant.m_boSell = true;
+                        // ✅ 战神字节证据 (Tier-1) — ECON-13: 商人许可表填充点 AddStdMode。
+                        // 原生处理函数 sub_6401E8(注册于 sub_738720 商人 PAS 面,名串 @0x739684
+                        // "AddStdMode", edx=handler @0x73887E):
+                        //   006401e8  xor   ecx,ecx                          ; i = 0
+                        //   006401ea  cmp   dword [eax+ecx*4+0x46c],-1       ; 找第一个 == -1 的空槽
+                        //   006401f2  jne   0x6401ff
+                        //   006401f4  movzx edx,dx                          ; nMode 只取【低 16 位】(Word)
+                        //   006401f7  mov   [eax+ecx*4+0x46c],edx           ; 写入该槽
+                        //   006401fe  ret
+                        //   006401ff  inc   ecx / cmp ecx,0x40 / jne 0x6401ea ; 【固定 64 槽上限】
+                        //   00640205  ret                                    ; 满槽 -> 静默忽略
+                        // 许可表结构 = 商人对象 +0x46C 处【64 项 int32 数组】;判定 CheckItemType
+                        // (sub_64029C, C# Merchant.CheckItemType) 全扫这 64 槽比对 StdMode。构造器
+                        // sub_63D888 `lea eax,[esi+0x46c] / ecx=-1 / edx=0x100 / call 0x403B2C`
+                        // 把整块填 -1 —— 即【未 AddStdMode 的类型不可交易 = fail-closed】。
+                        // 【关键】原生 AddStdMode 仅写数组,【绝无】任何买卖标志副作用:
+                        //   旧 C# 的 `m_boBuy=true; m_boSell=true` 是臆造。native 里"卖给商人"的开关
+                        //   本就是许可表自身(GetItemPrice @0x63F420 未命中价格表时,靠 CheckItemType
+                        //   决定回退价 ROUND(Price*1.1),不许可则价=-1 -> 卖出门 nPrice>0 失败);
+                        //   "买/卖窗"由 Click_Buy/Click_Sell(sub_6401B0 等)独立开启,不依赖这两个标志。
+                        // C# 用 List 复刻定长数组:LoadMerchantScript 会整表 Clear、且无移除路径,故
+                        //   Add(append) 等价于"写第一个空槽";不去重(原生同样不去重);Count<64 复刻满槽忽略;
+                        //   &0xFFFF 复刻 movzx dx 的 Word 截断。
+                        if (smMerchant.m_ItemTypeList.Count < 64)
+                            smMerchant.m_ItemTypeList.Add(args[0].AsInt() & 0xFFFF);
                     }
                     return true;
 
