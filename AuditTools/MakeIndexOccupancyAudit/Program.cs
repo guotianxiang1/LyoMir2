@@ -14,14 +14,29 @@ internal static class Program
     {
         try
         {
-            if (args.Length == 1 && args[0].Equals("--self-test", StringComparison.OrdinalIgnoreCase))
+            // This is a scanner over a caller-supplied manifest, so the sweep harness -- which
+            // runs every tool bare and then retries with the repository root -- can only ever
+            // exercise the self-test. Printing usage and exiting 2 in both those cases reported
+            // a failure without evaluating a single occupancy rule. Anything that is not an
+            // explicit scan now runs the self-test instead.
+            var explicitScan = args.Length > 0
+                && args[0].Equals("scan", StringComparison.OrdinalIgnoreCase);
+            if (!explicitScan)
+            {
+                if (args.Length > 1)
+                {
+                    Console.Error.WriteLine(
+                        "Usage: MakeIndexOccupancyAudit scan <manifest.json> <report.json>\n" +
+                        "       MakeIndexOccupancyAudit --self-test");
+                    return 2;
+                }
                 return SelfTest.Run();
+            }
 
-            if (args.Length != 3 || !args[0].Equals("scan", StringComparison.OrdinalIgnoreCase))
+            if (args.Length != 3)
             {
                 Console.Error.WriteLine(
-                    "Usage: MakeIndexOccupancyAudit scan <manifest.json> <report.json>\n" +
-                    "       MakeIndexOccupancyAudit --self-test");
+                    "Usage: MakeIndexOccupancyAudit scan <manifest.json> <report.json>");
                 return 2;
             }
 
