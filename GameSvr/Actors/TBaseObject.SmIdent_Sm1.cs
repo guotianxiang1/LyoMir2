@@ -234,5 +234,37 @@ namespace GameSvr
             }
             return (Grobal2.MakeDefaultMsg(Grobal2.SM_108, 0, param, 0, 0), body);
         }
+
+        // ---- Activity/ranking cluster 0x6F0Exx..0x6F17xx (all [obj+0x250], empty body) ----
+        // Each function gates on 0x6F0A24, may AddState via 0x6D3694 (state ids 0x139..0x143) into
+        // [self+0x18C8], then sends its SM. The bodies are empty; only the header 5-tuple varies.
+
+        // SM 1250 (0x4E2) — send @0x6F0A18. Recog hard -1, rest 0.
+        //   006F0A05 6A00x4 push ; 006F0A0D 83 C9 FF or ecx,-1 (Recog) ; 006F0A10 66 BA E2 04 mov dx,0x4E2
+        internal static (ClientPacket Header, byte[] Body) BuildSm1250()
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1250, -1, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 1251 (0x4E3) — send @0x6D1666. Param hard 6, Recog=[self+0xA54], rest 0.
+        //   006D1650 6A 06 push 6 (Param) ; 006D1658 8B 8E 54 0A 00 00 mov ecx,[self+0xA54] (Recog)
+        //   006D165E 66 BA E3 04 mov dx,0x4E3 ; 006D1666 FF 93 50 02 00 00 call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm1251(int recogA54)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1251, recogA54, 6, 0, 0), Array.Empty<byte>());
+
+        // SM 1252 (0x4E4) — send @0x654C10 (and @0x6D1604). Param hard 4, Recog=[self+0xA50], rest 0.
+        //   00654BFA 6A 04 push 4 (Param) ; 00654C02 8B 8E 50 0A 00 00 mov ecx,[self+0xA50] (Recog)
+        //   00654C08 66 BA E4 04 mov dx,0x4E4 ; 00654C10 FF 93 50 02 00 00 call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm1252(int recogA50)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1252, recogA50, 4, 0, 0), Array.Empty<byte>());
+
+        // SM 1253 (0x4E5) — send @0x6F0F1C. Recog hard -2, Param 0; Tag/Series come from one packed
+        // dword: Tag=HiWord (0x408D68 = shr eax,0x10), Series=LoWord.
+        //   006F0F01 8B 06 mov eax,[rec] / E8 ..(0x408D68=HiWord) / 50 push   ; Tag = HiWord(dword[rec])
+        //   006F0F09 66 8B 06 mov ax,word[rec] / 50 push                       ; Series = LoWord
+        //   006F0F0D 6A 00 push 0 (sMsg) ; 006F0F0F B9 FE FF FF FF mov ecx,-2 (Recog)
+        //   006F0F14 66 BA E5 04 mov dx,0x4E5 ; 006F0F1C FF 93 50 02 00 00 call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm1253(int packed)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1253, -2, 0,
+                    (ushort)(packed >> 16), (ushort)packed),
+                Array.Empty<byte>());
     }
 }
