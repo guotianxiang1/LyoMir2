@@ -823,14 +823,59 @@ namespace GameSvr.Plugins
             return value;
         }
 
-        /// <summary>装备持久操作: types 0=查询 1=增加 2=减少 3=设置</summary>
+        /// <summary>
+        /// ys_GiveDuar / 数字隧道 15 —— 装备持久（TUserItem.Dura，原生 item+0x26 的 word）。
+        /// 处理函数 0x10072650，字段顺序 (pis, val, types) = fields[2..4]。
+        /// types 0=查询 1=增加 2=减少 3=设置。全函数只 call vector::at / stoi / vector 析构，
+        /// 没有任何发包或引擎调用，所以四条支路都不刷新客户端。
+        /// </summary>
         public int EquipDura(int bodyPos, int value, int opType)
         {
             if (!Enabled("自定义元素")) return 0;
-            if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return 0;
-            var item = _player.m_UseItems[bodyPos];
-            if (item == null) return 0;
-            return opType switch { 0 => item.Dura, 1 => (item.Dura = (ushort)(item.Dura + value)), 2 => (item.Dura = (ushort)Math.Max(0, item.Dura - value)), 3 => (item.Dura = (ushort)value), _ => item.Dura };
+            // 10072722 83FE0F cmp esi,0xF / 10072725 0F8719010000 ja 0x10072844
+            //   -> 10072853 B819FCFFFF mov eax,0xFFFFFC19
+            if ((uint)bodyPos > 0xF) return -999;
+            // 1007272B 85FF test edi,edi / 1007272D 7909 jns -> 1007272F C745E800000000
+            // 10072738 81FFFFFF0000 cmp edi,0xFFFF / 1007273E 7E07 jle
+            //   -> 10072740 C745E8FFFF0000
+            if (value < 0) value = 0;
+            else if (value > 0xFFFF) value = 0xFFFF;
+            // 10072747 83F803 cmp eax,3 / 1007274A 0F87E8000000 ja 0x10072838
+            //   -> 10072838 C745EC19FCFFFF mov [ebp-0x14],0xFFFFFC19
+            if ((uint)opType > 3) return -999;
+            var item = bodyPos < _player.m_UseItems.Length ? _player.m_UseItems[bodyPos] : null;
+            // 100726C5 C745ECFFFFFFFF: 结果预置 -1。四条支路都在 `test eax,eax / je` 之后
+            // 才写 [ebp-0x14]，所以空槽位一律返回 -1 且不写任何东西。
+            if (item == null) return -1;
+            switch (opType)
+            {
+                case 0:                                     // 10072757 臂
+                    return item.Dura;                       // 1007276F 668B5826
+                case 1:                                     // 100727A5 臂
+                {
+                    var sum = item.Dura + value;
+                    // 100727C4 81FBFFFF0000 cmp ebx,0xFFFF / 100727CA 7E05 jle
+                    if (sum > 0xFFFF) sum = 0xFFFF;
+                    item.Dura = (ushort)sum;                // 100727D1 66895826
+                    return sum;                             // 100727D5 895DEC
+                }
+                case 2:                                     // 100727DC 臂
+                {
+                    var diff = item.Dura - value;
+                    // 100727FB 6683FB00 cmp bx,0 / 100727FF 7D02 jge —— 减法是 32 位的，
+                    // 但判负只看低 16 位并按有符号解释。照抄，因为它有两个可观测后果：
+                    //   Dura 在 32768..65535 之间时，减掉一小点得到的差仍落在 0x8000..0xFFFF，
+                    //   被判成负数而清零（持久 >32.767 的装备一减就归零）；
+                    //   反过来 val-Dura 超过 32768 时低 16 位又是正数，会被当成有效值写回
+                    //   （Dura=0、val=40000 -> 写入 25536，返回 -40000）。
+                    if ((short)diff < 0) diff = 0;          // 10072801 33DB xor ebx,ebx
+                    item.Dura = (ushort)diff;               // 10072803 66895826 只写低 16 位
+                    return diff;                            // 10072807 895DEC 存的是完整 32 位
+                }
+                default:                                    // 10072811 臂（types == 3）
+                    item.Dura = (ushort)value;              // 1007282A 66895826
+                    return value;                           // 1007282E 895DEC
+            }
         }
 
         /// <summary>装备投保</summary>

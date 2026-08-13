@@ -208,7 +208,11 @@ namespace GameSvr.Plugins
                         : cmd.Parameters.Length >= 9
                             ? _api.AddTempAttr(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8))
                             : _api.SubTempAttr(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7)),
-                    15 => _api.EquipDura(P(cmd,0),P(cmd,1),P(cmd,2)),
+                    // 10072650 处理器自带元数检查：1007269C 83F805 cmp eax,5 / 1007269F 7324 jae
+                    // 不足 5 段（前缀+id+3 参）走 100726B0 83C8FF or eax,-1。
+                    15 => cmd.Parameters.Length >= 3
+                        ? _api.EquipDura(P(cmd,0),P(cmd,1),P(cmd,2))
+                        : -1,
                     16 => _api.SendDirectMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),S(cmd,5)),
                     17 => _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     18 => _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
