@@ -691,6 +691,32 @@ namespace GameSvr
                 mapFlag.boTRIGGERBOMB = true;
                 return true;
             }
+            // PAODIAN (pool-B only, token literal 0x776E68 len 7; MFLG-06 / MOVE-92).
+            // 原生解析器 B @0x77685F 识别后调 sub_77BEDC，后者 @0x77BEE2
+            // `mov byte [ebx+0x91],1`（set-only，无视入参），并在 [ebx+0x94]==0 时
+            // 惰性 new 一个管理器对象（0x77BF04 call 0x77CD18，classref
+            // [0x774800]=0x77484C，600000ms 定时器 + 两张列表）存入 +0x94。
+            // 这里 1:1 复刻已证实的 +0x91 置位；管理器与其消费者（0x76A077 /
+            // 0x772336 / 0x777D6B->0x77CDD0）语义未证，效果层 fail-closed BLOCKED
+            // （详见 TMapFlag.boPAODIAN 文档）。不要凭 boPAODIAN 接线消费者。
+            if (token.Equals("PAODIAN", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boPAODIAN = true;
+                return true;
+            }
+            // GuildPK (pool-B only, token literal 0x776EF0 len 7; MFLG-06 / MOVE-93).
+            // 原生解析器 B @0x776969 识别后：0x77697A mov eax,[0x7D660C] / mov eax,[eax]
+            // 取全局管理器，0x776981 mov edx,Envir，0x776983 call sub_698484 —— 后者读
+            // Envir[+0x44]（图名串），非空则 0x6984B6 call 0x49F128 把 (图名->Envir)
+            // 注册进 manager[+0x54] 列表；随后以 0x776F0C '{' / 0x776F00 '}' 为定界符
+            // 抽参。原生**不在 Envir 上写任何字段**，且注册表的强制消费者（读
+            // manager[+0x54] 施加行会 PK 规则者）未定位。因此无对应 TMapFlag 字段：
+            // 识别该真 token（避免与凭空发明 token 混淆、避免落入 'L' 兜底臂），
+            // 但效果层 fail-closed BLOCKED —— 不臆造字段与消费者。
+            if (HUtil32.CompareLStr(token, "GuildPK", "GuildPK".Length))
+            {
+                return true;
+            }
             return false;
         }
 

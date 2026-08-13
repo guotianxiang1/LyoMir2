@@ -318,4 +318,28 @@ public class TMapFlag
     /// 战神 map flag <c>TRIGGERBOMB</c>.
     /// </summary>
     public bool boTRIGGERBOMB;
+
+    /// <summary>
+    /// 战神 map flag <c>PAODIAN</c> (token literal 0x776E68, len 7, pool-B only;
+    /// MFLG-06 / MOVE-92). The parser B arm proves the write is a SET-ONLY byte at
+    /// native <c>Envir[+0x91]</c>:
+    ///   <c>0x77685F mov edx,0x776E68 / 0x776867 call 0x4C6E94</c> (token compare) ->
+    ///   <c>0x776870 mov dl,1 / 0x776874 call 0x77BEDC</c>, and <c>sub_77BEDC</c> does
+    ///   <c>0x77BEE2 mov byte [ebx+0x91],1</c> (ignores <c>dl</c>, so it can never be
+    ///   cleared) and, if <c>[ebx+0x94]==0</c>, lazily constructs a manager object
+    ///   (<c>0x77BF04 call 0x77CD18</c>, classref <c>[0x774800]=0x77484C</c>; the ctor
+    ///   seeds a 600000 ms interval at obj+8 and two lists at obj+0x10/+0x14) and stores
+    ///   it at <c>[ebx+0x94]</c>.
+    /// <para>
+    /// This field 1:1 reproduces the PROVEN parse write (+0x91 set-only). Its EFFECT is
+    /// deliberately left unmodelled and is <b>BLOCKED</b> (fail-closed, so an unread flag
+    /// enables nothing): the +0x94 manager and its consumers are not attributed —
+    /// <c>0x76A077 mov al,[esi+0x91]</c> (byte-&gt;float multiplier), <c>0x772336 mov
+    /// al,[edi+0x91]</c> (<c>imul / idiv 10</c>), and <c>0x777D6B cmp byte [eax+0x91],0 /
+    /// cmp dword [eax+0x94],0 / call [+0x94 method] 0x77CDD0</c>. Modelling them without
+    /// resolving the +0x94 class (sub_77CD18) would be fabrication. Do not wire a consumer
+    /// off this field until that subsystem is reverse-engineered.
+    /// </para>
+    /// </summary>
+    public bool boPAODIAN;
 }
