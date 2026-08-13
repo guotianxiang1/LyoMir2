@@ -817,10 +817,25 @@ namespace GameSvr
             {
                 if (nGold <= m_nTotalGold)
                 {
-                    if (PlayObject.m_nGold + nGold <= PlayObject.m_nGoldMax)
+                    // ✅ 战神字节证据 (Tier-1) — ECON-33 / CGLD-10: 原生是【先信用、成功了才扣池】,
+                    // 且扣池是 IncGold 返回 TRUE 之后的唯一动作。EA: sub_65B3A8 @0x65B3E2-0x65B3FA:
+                    //   0065B3E2  3b b3 80 00 00 00  cmp  esi,[ebx+0x80]     ; 取款额 vs 池
+                    //   0065B3E8  7f 40              jg   0x65B42A           ; 超池 -> ret -2 (池不动)
+                    //   0065B3EA  8b d6              mov  edx,esi
+                    //   0065B3EC  8b c7              mov  eax,edi
+                    //   0065B3EE  8b 08              mov  ecx,[eax]
+                    //   0065B3F0  ff 91 8c 02 00 00  call dword [ecx+0x28C]  ; IncGold (= 0x6D791C)
+                    //   0065B3F6  84 c0              test al,al
+                    //   0065B3F8  74 27              je   0x65B421           ; 信用失败 -> ret -3, 【池不动】
+                    //   0065B3FA  29 b3 80 00 00 00  sub  [ebx+0x80],esi     ; 【只有到这里才扣池】
+                    // 原来的 C# 先 `m_nTotalGold -= nGold` 再 `IncGold(...)` 且丢弃返回值,顺序相反。
+                    // 当前不产生数值差(内联的 m_nGold+nGold<=m_nGoldMax 与 IncGold 内部判断同条件,
+                    // 单线程下必然成功),但那是【双权威】写法:同一个上限条件在两处独立实现,
+                    // 一旦 IncGold 将来增加任何拒绝条件(封号态/跨服态等),池已扣而玩家没收到,
+                    // 每次取款凭空销毁 nGold。改为直接以 IncGold 的返回值为准,消除双权威。
+                    if (PlayObject.IncGold(nGold))
                     {
                         m_nTotalGold -= nGold;
-                        PlayObject.IncGold(nGold);
                         if (M2Share.g_boGameLogGold)
                             M2Share.AddGameDataLog("22" + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX +
                                                    "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" +
