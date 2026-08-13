@@ -1,0 +1,31 @@
+### 其他.v1 门（isMember @0x1006BA52 之后）
+1006BA57  8B C8                      mov      ecx, eax
+1006BA59  E8 B2 57 07 00             call     0x100e1210
+1006BA5E  84 C0                      test     al, al
+1006BA60  74 44                      je       0x1006baa6
+1006BA62  68 C4 F7 2B 10             push     0x102bf7c4
+
+### 其他.v2 门（isMember @0x1006BAD1 之后）
+1006BAD6  8B C8                      mov      ecx, eax
+1006BAD8  E8 33 57 07 00             call     0x100e1210
+1006BADD  84 C0                      test     al, al
+1006BADF  74 44                      je       0x1006bb25
+1006BAE1  68 C4 F7 2B 10             push     0x102bf7c4
+
+### 每件循环头的重置块全量（0x1006B294..0x1006B310），确认哪些槽被重置
+1006B294  C7 45 9C 00 00 00 00       mov      dword ptr [ebp - 0x64], 0
+1006B29B  C7 85 74 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x8c], 0
+1006B2A5  C7 45 90 00 00 00 00       mov      dword ptr [ebp - 0x70], 0
+1006B2AC  C7 85 70 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x90], 0
+1006B2B6  C7 85 6C FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x94], 0
+1006B2C0  C7 45 8C 00 00 00 00       mov      dword ptr [ebp - 0x74], 0
+1006B2C7  C7 85 7C FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x84], 0
+1006B2D1  C7 85 78 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x88], 0
+1006B2DB  C7 85 68 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x98], 0
+1006B2E5  C7 85 64 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x9c], 0
+1006B2EF  33 C0                      xor      eax, eax
+1006B2F1  89 45 98                   mov      dword ptr [ebp - 0x68], eax
+1006B2F4  C7 45 84 FE FF FF FF       mov      dword ptr [ebp - 0x7c], 0xfffffffe
+1006B2FB  89 85 50 FF FF FF          mov      dword ptr [ebp - 0xb0], eax
+1006B301  89 85 4C FF FF FF          mov      dword ptr [ebp - 0xb4], eax
+1006B307  89 85 48 FF FF FF          mov      dword ptr [ebp - 0xb8], eax

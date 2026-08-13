@@ -77,6 +77,22 @@ try
            manager.IsRecycleItemConfigured("屠龙"),
         "unknown field dropped the sibling rules");
 
+    // 复合字段缺子键 ⇒ 该字段整段不解析、退回缺省（门失效 / 1 倍 / 不写 V），
+    // 而不是整份配置作废。总开关 四个门 0x1006B4A1 / 0x1006B4E2 / 0x1006B523 /
+    // 0x1006B564 全部 je 0x1006B633（紧接着就解析 回收倍率）；关闭值 停在
+    // 0x1006B2F4 C7 45 84 FE FF FF FF 预置的 -2，消费端 0x1006B787 jl 判 < -1 放行。
+    // 回收倍率 同形：0x1006B660 / 0x1006B69F / 0x1006B6DE 全部 je 0x1006B783。
+    WriteGbk(recyclePath,
+        "{\"物品种类\":{\"屠龙\":\"类型1\"}," +
+        "\"回收类型\":{\"类型1\":{\"金币\":1,\"总开关\":{\"v1\":10}," +
+        "\"回收倍率\":{\"v1\":10}}}}");
+    Assert(manager.ReloadRecycleConfig(out var partialError),
+        "a composite field missing a subkey must fall back to its default, " +
+        "not fail the document: " + partialError);
+    Assert(manager.RecycleConfigItemCount == 1 &&
+           manager.IsRecycleItemConfigured("屠龙"),
+        "partial composite field dropped the rule");
+
     WriteGbk(recyclePath,
         "{\"可叠材料\":{\"新材料\":\"类型2\"},\"物品种类\":{}," +
         "\"回收类型\":{\"类型2\":{\"元宝\":20}}}");
