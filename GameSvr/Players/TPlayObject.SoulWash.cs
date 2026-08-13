@@ -8,49 +8,54 @@ namespace GameSvr
     /// <summary>
     /// 洗灵石 / 祈福神佑袋 (灵佑点) subsystem — CM 4126 / 4127 / 4128.
     ///
-    /// This partial REPLACES the fail-closed stubs cm-4 wired in
-    /// TPlayObject.NativeCmTailProtocol.cs. The dispatcher (TPlayObject.Message.cs
-    /// default arm) now calls <see cref="TryHandleSoulWashCm"/> first; only the
-    /// idents this file cannot reproduce byte-for-byte fall through to the old
-    /// NativeCmTailFailClosed drop.
+    /// Replaces the fail-closed stubs cm-4 wired in TPlayObject.NativeCmTailProtocol.cs.
+    /// The dispatcher (TPlayObject.Message.cs default arm) calls
+    /// <see cref="TryHandleSoulWashCm"/> first; only the legs this file cannot
+    /// reproduce byte-for-byte fall through to NativeCmTailFailClosed.
     ///
-    /// ── Native data structure (base 0x400000, all offsets on TPlayObject / THumanKind)
-    /// The whole 灵佑点 state is four persisted source fields plus three derived
-    /// scalars that native recomputes on demand:
-    ///
-    ///   [+0x5A4] int   current 灵佑点        \ 24-byte "shenYou" window persisted
+    /// ── Native data structure (base 0x400000; obj = TPlayObject/THumanKind offsets)
+    ///   [+0x5A4] int      current 灵佑点     \ 24-byte "shenYou" window, persisted
     ///   [+0x5A8] word[10] slots (神佑属性)   / verbatim as ScriptData section 2
-    ///                                          -> C# m_NativeShenYouBlock[0..23]
+    ///                                          -> m_NativeShenYouBlock[0..23]
     ///                                             (TPlayObject.NativeScriptSections.cs)
-    ///   [+0x60C] dword bitmask -> cap        -> C# m_wNativeCommonInformationFlags (ushort)
-    ///   [+0x610] byte  mode / prereq (>0)    -> C# m_btNativeCommonInformationMode
-    ///                                          (both TPlayObject.NativeCommonInformation.cs)
-    ///   [+0x59C] int   cap    (DERIVED)      \ recomputed by 0x747CF4 from the
-    ///   [+0x5A0] int   base   (DERIVED)      / four fields above; never persisted
-    ///   [+0x5BC] byte  slot-count (DERIVED) /  -> computed on demand here
-    ///   [+0x178] byte  race (m_btRaceServer); player=0, hero=0x36
+    ///   [+0x60C] dword    cap bitmask        -> raw record rec+0x580 (see below)
+    ///   [+0x610] dword    prereq / mode      -> raw record rec+0x57C (see below)
+    ///   [+0x59C] int      cap    (DERIVED)   \ recomputed by 0x747CF4; never
+    ///   [+0x5A0] int      base   (DERIVED)   / persisted -> computed on demand
+    ///   [+0x5BC] byte     slot-count(DERIVED)/
+    ///   [+0x178] byte     race (m_btRaceServer); player=0, hero=0x36
+    ///
+    /// ── DB codec offsets — CRITICAL: the record offset is NOT the object offset.
+    /// The encoder sub_6B0FF0 / decoder sub_6AFD7C move these fields across:
+    ///   obj+0x60C (cap)   &lt;-&gt; rec+0x580  (enc 0x6B13DF, dec 0x6B05E9->0x6B05F2)
+    ///   obj+0x610 (prereq)&lt;-&gt; rec+0x57C  (enc 0x6B13EB, dec 0x6B05FB->0x6B0604)
+    /// The C# human-data codec models NEITHER rec+0x580 nor rec+0x57C, so both are
+    /// read straight out of the raw record m_NativeHumanData (the same mechanism
+    /// TPlayObject.NativeUnmappedScalars.cs uses). The decoder applies ONE fixup:
+    /// 0x6B060A `test eax,eax / jg` then 0x6B0611 `mov [obj+0x610],1` — a stored
+    /// prereq &lt;= 0 is forced to 1, so after login the prereq is ALWAYS &gt;= 1.
+    ///
+    /// NOTE: m_wNativeCommonInformationFlags / m_btNativeCommonInformationMode read
+    /// rec+0x60C / rec+0x610, which the codec fills from obj+0x608 (word) / obj+0x618
+    /// (byte) — a DIFFERENT "common information" feature, NOT these soul-wash fields.
+    /// They are deliberately NOT used here.
     ///
     /// ── cap formula, verbatim from 0x747CF4 (0x747D81..0x747DB9):
-    ///   cap = 20 * popcount([+0x60C] & 0x555555) + 40 * popcount([+0x60C] & 0xAAAAAA)
-    ///   ( even bits: `shl 2`*`lea *5` = *20 ; odd bits: `shl 3`*`lea *5` = *40 )
-    /// The native field is read as a dword and masked over bits 0..23, but the C#
-    /// port models [+0x60C] as a 16-bit field (NativeCommonInformation.cs), so this
-    /// port masks the 16-bit value — identical while bits 16..23 stay 0, which the
-    /// only writer (ClientCommonInformation case 4, bits 0/1/2) guarantees.
+    ///   cap = 20 * popcount([+0x60C] &amp; 0x555555) + 40 * popcount([+0x60C] &amp; 0xAAAAAA)
+    ///   (even bits `shl 2`·`lea *5` = *20; odd bits `shl 3`·`lea *5` = *40; the field
+    ///    is a full dword and the masks span bits 0..23; popcount is 0x4C7A34.)
     ///
     /// ── base formula (0x747B38): sum over the non-zero slots of
-    ///   [[0x7D6014]].lookup(slotId).[+4]. That fixed-length (0x2B-byte) record
-    ///   table is the SAME one CM 4125 rebuilds and is NOT modeled in this port
-    ///   (it is loaded from a server config file). When every slot is 0 the native
-    ///   recompute never calls 0x747B38 and base is exactly 0; that is the only
-    ///   case this port can reproduce, so a non-zero slot array is FAIL-CLOSED.
-    ///   All 34 golden DB blobs carry an all-zero shenYou window, so the reproducible
-    ///   path is the live path.
+    ///   [[0x7D6014]].lookup(slotId).[+4] — the fixed-length (0x2B-byte) record table
+    ///   CM 4125 rebuilds, NOT modeled in this port (loaded from a server config
+    ///   file). When every slot is 0 the recompute never calls 0x747B38 and base is
+    ///   exactly 0; a non-zero slot array is therefore FAIL-CLOSED. All 34 golden DB
+    ///   blobs carry an all-zero shenYou window, so the reproducible path is live.
     /// </summary>
     public partial class TPlayObject
     {
-        /// <summary>Each 灵气石 grants 5 灵佑点 (0x747530 `lea edx,[esi+esi*4]`;
-        /// the ceil divisor at 0x747CF0 is the float 5.0).</summary>
+        /// <summary>Each 灵气石 grants 5 灵佑点 (0x747530 `lea edx,[esi+esi*4]`; the
+        /// ceil divisor at 0x747CF0 is the float 5.0).</summary>
         private const int SoulWashPointsPerStone = 5;
 
         /// <summary>[+0x178] value that marks the hero race (0x747343 / 0x6B71B5
@@ -60,6 +65,12 @@ namespace GameSvr
         /// <summary>SM 4033/4037 body sizes (0x74735A push 0x20; 0x6B71E1 push 0x18).</summary>
         private const int SoulWashStateBodySize = 0x20;
         private const int SoulWashNeighbourBodySize = 0x18;
+
+        /// <summary>Raw record slot for obj+0x60C (cap bitmask), enc 0x6B13DF.</summary>
+        private const int SoulWashCapRecordOffset = 0x580;
+
+        /// <summary>Raw record slot for obj+0x610 (prereq/mode), enc 0x6B13EB.</summary>
+        private const int SoulWashPrereqRecordOffset = 0x57C;
 
         /// <summary>Population count, Brian-Kernighan, byte-identical to 0x4C7A34
         /// (`while (x) { x &= x - 1; ++c; }`).</summary>
@@ -75,11 +86,10 @@ namespace GameSvr
         }
 
         /// <summary>[+0x59C] cap from the [+0x60C] bitmask, verbatim from 0x747CF4.</summary>
-        private static int SoulWashCap(ushort flags)
+        private static int SoulWashCap(uint bitmask)
         {
-            uint bits = flags;
-            return SoulWashPopCount(bits & 0x555555u) * (4 * SoulWashPointsPerStone)
-                   + SoulWashPopCount(bits & 0xAAAAAAu) * (8 * SoulWashPointsPerStone);
+            return SoulWashPopCount(bitmask & 0x555555u) * (4 * SoulWashPointsPerStone)
+                   + SoulWashPopCount(bitmask & 0xAAAAAAu) * (8 * SoulWashPointsPerStone);
         }
 
         /// <summary>[+0x5A4] read out of the shenYou window (its first dword).</summary>
@@ -93,9 +103,9 @@ namespace GameSvr
             return BinaryPrimitives.ReadInt32LittleEndian(block.AsSpan(0, sizeof(int)));
         }
 
-        /// <summary>Persist a clamped [+0x5A4] back into the shenYou window. Only
-        /// called after a valid window exists; native mutates this field in the
-        /// recompute (0x747DDC / 0x747E58) and it rides out on the next save.</summary>
+        /// <summary>Persist a clamped [+0x5A4] back into the shenYou window; native
+        /// mutates this field in the recompute (0x747E58) and it rides out on the
+        /// next save through ScriptData section 2.</summary>
         private void SetSoulWashCurrent(int value)
         {
             var block = m_NativeShenYouBlock;
@@ -123,34 +133,37 @@ namespace GameSvr
             return false;
         }
 
-        /// <summary>
-        /// Reproduce the reachable part of 0x747CF4 as a read-only query: derive
-        /// cap and base from the persisted source fields WITHOUT mutating anything.
-        /// Returns false when the result depends on the unmodeled [[0x7D6014]]
-        /// table (i.e. a slot is set), so callers fail-closed instead of guessing.
-        /// </summary>
-        private bool TrySoulWashState(out int cap, out int baseValue, out int current)
+        /// <summary>Read the cap bitmask (obj+0x60C) out of a player's raw record,
+        /// with no fixup. Returns false when the record is unavailable.</summary>
+        private static bool TryReadSoulWashCapBitmask(byte[] raw, out uint bitmask)
         {
-            cap = 0;
-            baseValue = 0;
-            current = GetSoulWashCurrent();
-
-            // 0x747CFF `cmp [+0x610],0 / jg`: mode<=0 zeroes cap+base and returns
-            // without touching current -> reproducible.
-            if (m_btNativeCommonInformationMode <= 0)
-            {
-                return true;
-            }
-
-            // mode>0: a non-zero slot needs 0x747B38 over [[0x7D6014]] -> not modeled.
-            if (SoulWashHasAnySlot(m_NativeShenYouBlock))
+            bitmask = 0;
+            if (raw == null || raw.Length < SoulWashCapRecordOffset + sizeof(int))
             {
                 return false;
             }
+            bitmask = BinaryPrimitives.ReadUInt32LittleEndian(
+                raw.AsSpan(SoulWashCapRecordOffset, sizeof(uint)));
+            return true;
+        }
 
-            // zero slots -> [+0x5BC]=0, 0x747B38 skipped, base=0, cap from bitmask.
-            cap = SoulWashCap(m_wNativeCommonInformationFlags);
-            baseValue = 0;
+        /// <summary>
+        /// Read the two persisted source fields (cap bitmask obj+0x60C, prereq
+        /// obj+0x610) out of self's raw record and apply the decoder's prereq fixup
+        /// (0x6B060A: a stored value &lt;= 0 becomes 1). Returns false when the record
+        /// is unavailable, so callers fail-closed instead of guessing.
+        /// </summary>
+        private bool TrySoulWashSource(out uint capBitmask, out int prereq)
+        {
+            prereq = 0;
+            var raw = m_NativeHumanData;
+            if (!TryReadSoulWashCapBitmask(raw, out capBitmask))
+            {
+                return false;
+            }
+            var stored = BinaryPrimitives.ReadInt32LittleEndian(
+                raw.AsSpan(SoulWashPrereqRecordOffset, sizeof(int)));
+            prereq = stored > 0 ? stored : 1; // decoder 0x6B060A..0x6B0611
             return true;
         }
 
@@ -180,12 +193,12 @@ namespace GameSvr
 
         /// <summary>
         /// CM 4127, native leaf 0x6DAE8D -> 0x747CF4 (recompute) + 0x74730C (send),
-        /// both on SELF. The leaf runs the pair when Tag==0, or when Tag==1 while a
-        /// hero exists; every other Tag is a silent drop (0x6DAEBE `jne 0x6DBC2C`).
-        /// The hero is only a gate — 战神 reloads EAX=[ebp-4]=self before both calls,
-        /// so the work never runs on the hero object.
+        /// both on SELF. The pair runs when Tag==0, or when Tag==1 while a hero
+        /// exists; every other Tag is a silent drop (0x6DAEBE `jne 0x6DBC2C`). The
+        /// hero is only a gate — 战神 reloads EAX=[ebp-4]=self before both calls, so
+        /// the work never runs on the hero.
         ///
-        /// 0x747CF4 recomputes cap/base and clamps [+0x5A4] to [0, cap] (base=0 here);
+        /// 0x747CF4 recomputes cap/base and clamps [+0x5A4] to [0, cap-base];
         /// 0x74730C answers SM 4033 (0xFC1) through [vmt+0x254] with the 32-byte body
         /// {int cur; int base; int cap; word[10] slots} and Tag = ([+0x178]==0x36).
         /// </summary>
@@ -197,18 +210,31 @@ namespace GameSvr
                 return;
             }
 
-            if (!TrySoulWashState(out var cap, out var baseValue, out var current))
+            if (!TrySoulWashSource(out var capBitmask, out var prereq))
             {
-                // slot array set -> base needs [[0x7D6014]]; withhold rather than invent.
                 NativeCmTailFailClosed.Drop(Grobal2.CM_4127, m_sCharName);
                 return;
             }
 
-            // 0x747E2D..0x747E58: when mode>0 native clamps current into [0,cap-base]
-            // and writes it back. mode<=0 returns before the clamp (cap==base==0), so
-            // current is sent untouched.
-            if (m_btNativeCommonInformationMode > 0)
+            var current = GetSoulWashCurrent();
+            int cap;
+            const int baseValue = 0;
+            if (prereq <= 0)
             {
+                // 0x747D08: cap=base=0, current untouched (dead after the login fixup).
+                cap = 0;
+            }
+            else
+            {
+                // 0x747DBF..0x747E29: a non-zero slot needs 0x747B38 over the unmodeled
+                // [[0x7D6014]] table -> withhold rather than invent the base.
+                if (SoulWashHasAnySlot(m_NativeShenYouBlock))
+                {
+                    NativeCmTailFailClosed.Drop(Grobal2.CM_4127, m_sCharName);
+                    return;
+                }
+                cap = SoulWashCap(capBitmask);
+                // 0x747E2D..0x747E58: clamp current into [0, cap-base] and persist.
                 if (current < 0)
                 {
                     current = 0;
@@ -252,9 +278,9 @@ namespace GameSvr
         /// After the sweep 0x6B71AB requires the target race in {0, 0x36}; anything
         /// else is silent. The surviving path answers SM 4037 (0xFC5) TO SELF through
         /// [vmt+0x254] with the 24-byte body {int [T+0x60C]; byte[20] [T+0x5A8]}.
-        /// A race-0x36 (hero) target keeps its shenYou window on the native hero
-        /// object, which this port's HeroObject does not model, so that leg is
-        /// fail-closed; player targets are answered in full.
+        /// A race-0x36 (hero) target keeps its state on the native hero object, which
+        /// HeroObject does not model, so that leg is fail-closed; player targets are
+        /// answered in full.
         /// </summary>
         private void SoulWashNeighbourQuery(int nRecog, int nX, int nY)
         {
@@ -283,10 +309,16 @@ namespace GameSvr
                 return;
             }
 
+            if (!TryReadSoulWashCapBitmask(tp.m_NativeHumanData, out var capBitmask))
+            {
+                // target record unavailable -> cannot build the [T+0x60C] field.
+                NativeCmTailFailClosed.Drop(Grobal2.CM_4128, m_sCharName);
+                return;
+            }
+
             var body = new byte[SoulWashNeighbourBodySize];
-            // [T+0x60C] read as a dword; the C# model is a 16-bit field, zero-extended.
-            BinaryPrimitives.WriteInt32LittleEndian(body.AsSpan(0, sizeof(int)),
-                tp.m_wNativeCommonInformationFlags);
+            // [T+0x60C] read as a dword (no fixup); it is obj+0x60C = rec+0x580.
+            BinaryPrimitives.WriteUInt32LittleEndian(body.AsSpan(0, sizeof(uint)), capBitmask);
             var block = tp.m_NativeShenYouBlock;
             if (block != null && block.Length >= NativeShenYouBlockSize)
             {
@@ -301,14 +333,14 @@ namespace GameSvr
 
         /// <summary>
         /// CM 4126, native leaf 0x6DAE74 -> 0x6BF75C. REPLACES cm-4's fail-closed
-        /// ClientNativeSoulWashApply (unreachable now that this hook wins the
-        /// dispatch): reproduces the bare reply and every provable reply code, and
-        /// only fail-closes the one leg that actually burns a 灵气石.
+        /// ClientNativeSoulWashApply (now unreachable, kept in their file untouched):
+        /// reproduces the bare reply and every provable reply code, and only
+        /// fail-closes the one leg that actually burns a 灵气石.
         ///
         /// 0x6BF75C selector: Tag==1 with a hero runs on the hero, Tag==0 runs on
-        /// self, and everything else (incl. Tag==1 with no hero) is the bare all-zero
-        /// SM 4034 at 0x6BF8E9. Both real bodies then answer SM 4034 (0xFC2), whose
-        /// result code rides in the Tag slot (0x6BF7C5 push 0/1/0/0 -> Tag=1 etc.):
+        /// self, everything else (incl. Tag==1 with no hero) is the bare all-zero SM
+        /// 4034 at 0x6BF8E9. Both real bodies answer SM 4034 (0xFC2), whose result
+        /// code rides in the Tag slot (0x6BF7C5 push 0/1/0/0 -> Tag=1 etc.):
         ///   Tag=0  [+0x610]&lt;=0 or [+0x59C]&lt;=0     目标不具备洗灵状态
         ///   Tag=3  [+0x5A4]+[+0x5A0] &gt;= [+0x59C]    已洗到上限
         ///   Tag=2  0x746F10 &lt;= 0                    没有可用的洗灵石
@@ -318,8 +350,8 @@ namespace GameSvr
         /// item at Recog, require its name == 灵气石, decrement [+0x26], delete /
         /// client-update it and add 5·n 灵佑点 with tier broadcasts (SM 0x38FF). That
         /// is item-subsystem machinery this port does not model, and it is
-        /// destructive, so it is withheld rather than fabricated. The gate replies —
-        /// which are exactly the legs where native does NOT consume — are faithful.
+        /// destructive, so it is withheld. The gate replies — exactly the legs where
+        /// native does NOT consume — are faithful.
         /// </summary>
         private void SoulWashApply(int nTag, int nRecog)
         {
@@ -331,7 +363,7 @@ namespace GameSvr
                 return;
             }
 
-            // 0x6BF76C..0x6BF834: the hero leg reads the hero's [+0x610]/[+0x59C]/
+            // 0x6BF76C..0x6BF834: the hero leg reads the hero's own [+0x610]/[+0x59C]/
             // [+0x5A0]/[+0x5A4] window, which HeroObject does not model -> fail-closed.
             if (nTag != 0)
             {
@@ -340,15 +372,26 @@ namespace GameSvr
             }
 
             // Tag==0: self leg.
-            if (!TrySoulWashState(out var cap, out var baseValue, out var current))
+            if (!TrySoulWashSource(out var capBitmask, out var prereq))
             {
-                // slot array set -> base needs [[0x7D6014]] -> withhold.
                 NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
                 return;
             }
 
+            // A non-zero slot array makes the base ([+0x5A0]) depend on [[0x7D6014]],
+            // so the cap/maxed gates below cannot be evaluated faithfully -> withhold.
+            if (SoulWashHasAnySlot(m_NativeShenYouBlock))
+            {
+                NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
+                return;
+            }
+
+            var cap = prereq > 0 ? SoulWashCap(capBitmask) : 0;
+            const int baseValue = 0; // zero slots -> 0x747B38 never runs.
+            var current = GetSoulWashCurrent();
+
             // 0x6BF841 `jle` and 0x6BF84E `jle`: prereq or cap not positive -> Tag=0.
-            if (m_btNativeCommonInformationMode <= 0 || cap <= 0)
+            if (prereq <= 0 || cap <= 0)
             {
                 SendDefMessage(Grobal2.SM_4034, 0, 0, 0, 0, string.Empty);
                 return;
@@ -361,9 +404,9 @@ namespace GameSvr
                 return;
             }
 
-            // 0x6BF86B onwards: would consume a 灵气石 and add points. Item find /
-            // name-match / delete / client-update (0x746F10) and the point apply with
-            // tier broadcasts (0x747530) are unmodeled and destructive -> fail-closed.
+            // 0x6BF86B onwards: would consume a 灵气石 (0x746F10) and add points
+            // (0x747530). Item find / name-match / delete / client-update and the
+            // tier broadcasts are unmodeled and destructive -> fail-closed.
             NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
         }
     }
