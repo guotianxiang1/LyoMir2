@@ -1587,11 +1587,17 @@ namespace GameSvr
             {
                 return;
             }
-            if ((HUtil32.GetTickCount() - m_DealLastTick) < M2Share.g_Config.dwTryDealTime)
-            {
-                SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sPleaseTryDealLaterMsg);
-                return;
-            }
+            // 【四道门裁决 B / INVENTED-已删】dwTryDealTime 三秒节流门。
+            // 原生 sub_6C3F00 内对 tick 的引用数为 0：0x6C3F00..0x6C4055 全函数没有
+            // 任何 GetTickCount 调用、没有任何 `sub` 时间差比较。真正存在的 tick 门是
+            // 提交阶段的 dwDealOKTime（sub_6C4580，C# ClientDealEnd 内 dwDealOKTime，
+            // TRADE-20 已判 FAITHFUL），那道保留不动。
+            // 消息「请稍候再交易」GBK/裸/UTF-16LE 全镜像 0 命中（「稍候再交易」与
+            // 「再交易」两个子串各 0），对照组「交易取消」@0x6C4448 命中。
+            // 这是四道门里唯一有活运行期效果的一道（dwTryDealTime = 3000，
+            // GameSvrConfig.cs:1241），故单独成一次提交以便独立回退。
+            // m_DealLastTick 字段保留：它还供 dwDealOKTime 门与 ClientDropItem
+            // （Operate.cs 内 `> 3000` 那处）使用。
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
