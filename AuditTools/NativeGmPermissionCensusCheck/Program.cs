@@ -153,6 +153,16 @@ Census("SetNickLF", 4);
 Census("SetNoSkillZone", 5);
 Census("SignInAct", 4);
 Census("TempSetMapParam", 5);
+Census("LesCoin", 5);
+Census("IncSelfLv", 4);
+Census("拒绝私聊", 0);
+Census("允许私聊", 0);
+Census("拒绝喊话", 0);
+Census("接受喊话", 0);
+Census("拒绝交易", 0);
+Census("允许交易", 0);
+Census("允许行会聊天", 0);
+Census("拒绝行会聊天", 0);
 
 // ============================================================
 // Name-drift aliases (#17b). OpenMir2 names (KickHuman/Shutup/...) were

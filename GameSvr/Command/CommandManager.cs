@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using SystemModule;
 
 namespace GameSvr.CommandSystem
@@ -73,6 +74,7 @@ namespace GameSvr.CommandSystem
                 var originalName = string.IsNullOrEmpty(groupAttribute.Command) ? groupAttribute.Name : groupAttribute.Command;
                 OriginalCommandMaps[originalName] = commandGroup;
             }
+            ApplyNativeFormGmCommandIni();
         }
 
         public void RegisterCommand(string command, string commandName)
@@ -105,6 +107,55 @@ namespace GameSvr.CommandSystem
                 }
                 if (!CommandMaps.ContainsKey(effectiveName))
                     CommandMaps[effectiveName] = cmd;
+            }
+            ApplyNativeFormGmCommandIni();
+        }
+
+        /// <summary>
+        /// Native init 0x0062255E..0x0062258A: IntToStr(record+0x18) then
+        /// TStringList.IndexOf on FormGMCommand.ini (long string at 0x006225FC,
+        /// lenpfx 17). Hit → UpperCase(value) replaces the hash key; miss keeps
+        /// the table ShortString. Production Gs1/FormGMCommand.ini overlays 12
+        /// names (gowgo→sdgo, CallMan→拉, SuperGm→gm, ReLoadGmFile→shuagm, …).
+        /// </summary>
+        private static void ApplyNativeFormGmCommandIni()
+        {
+            var path = Path.Combine(M2Share.sConfigPath ?? string.Empty, "FormGMCommand.ini");
+            if (!File.Exists(path))
+                return;
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(path, Encoding.GetEncoding("GBK"));
+            }
+            catch
+            {
+                return;
+            }
+            foreach (var raw in lines)
+            {
+                var line = raw?.Trim();
+                if (string.IsNullOrEmpty(line) || line[0] == ';' || line[0] == '#')
+                    continue;
+                var eq = line.IndexOf('=');
+                if (eq <= 0)
+                    continue;
+                if (!int.TryParse(line.Substring(0, eq).Trim(), out var idx))
+                    continue;
+                var overlay = line.Substring(eq + 1).Trim();
+                if (string.IsNullOrEmpty(overlay))
+                    continue;
+                if (!NativeGmCommandRegistry.DefaultNameByIndex.TryGetValue(idx, out var defaultName))
+                    continue;
+                if (!OriginalCommandMaps.TryGetValue(defaultName, out var cmd))
+                    continue;
+                if (string.Equals(overlay, cmd.GameCommand.Name, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var previous = cmd.GameCommand.Name;
+                if (!string.IsNullOrEmpty(previous))
+                    CommandMaps.Remove(previous);
+                cmd.GameCommand.Name = overlay;
+                CommandMaps[overlay] = cmd;
             }
         }
 
