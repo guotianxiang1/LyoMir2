@@ -4,9 +4,15 @@ public class TMapFlag
 {
     public bool boSAFE;
     public int nL;
-    public int nNEEDSETONFlag;
-    public int nNeedONOFF;
-    public int nMUSICID;
+
+    // NEEDSET_ON / NEEDSET_OFF / MUSIC 是凭空发明的 token，解析臂已移除
+    // （见 Maps.cs 的 §INVENTED）。这三个字段还留着是因为消费点尚未清理；
+    // 种子值必须是 -1（关闭哨兵），否则默认 0 会让
+    // TBaseObject.cs 的 `if (Envir.Flag.nNEEDSETONFlag >= 0)` 在所有不走
+    // LoadMapInfo 的构造路径（动态地图房间、Envirnoment.Initialize）上误触发。
+    public int nNEEDSETONFlag = -1;
+    public int nNeedONOFF = -1;
+    public int nMUSICID = -1;
     public bool boDarkness;
     public bool boDayLight;
     public bool boFightZone;
