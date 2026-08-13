@@ -1,0 +1,186 @@
+### 总开关：0x1006B45E..0x1006B57A（存在性 + v1 + v2 + 关闭值，四个 je 的目标）
+1006B45E  6E                         outsb    dx, byte ptr [esi]
+1006B45F  5A                         pop      edx
+1006B460  07                         pop      es
+1006B461  00 80 78 08 00 75          add      byte ptr [eax + 0x75000878], al
+1006B467  0C C6                      or       al, 0xc6
+1006B469  45                         inc      ebp
+1006B46A  FC                         cld      
+1006B46B  01 8D 4D A4 E9 B2          add      dword ptr [ebp - 0x4d165bb3], ecx
+1006B471  19 00                      sbb      dword ptr [eax], eax
+1006B473  00 68 C4                   add      byte ptr [eax - 0x3c], ch
+1006B476  F7 2B                      imul     dword ptr [ebx]
+1006B478  10 68 BC                   adc      byte ptr [eax - 0x44], ch
+1006B47B  F7 2B                      imul     dword ptr [ebx]
+1006B47D  10 B9 10 C2 31 10          adc      byte ptr [ecx + 0x1031c210], bh
+1006B483  E8 58 57 07 00             call     0x100e0be0
+1006B488  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B48B  51                         push     ecx
+1006B48C  8B C8                      mov      ecx, eax
+1006B48E  E8 3D 5A 07 00             call     0x100e0ed0
+1006B493  68 C8 F7 2B 10             push     0x102bf7c8
+1006B498  8B C8                      mov      ecx, eax
+1006B49A  E8 71 5D 07 00             call     0x100e1210
+1006B49F  84 C0                      test     al, al
+1006B4A1  0F 84 8C 01 00 00          je       0x1006b633
+1006B4A7  68 C4 F7 2B 10             push     0x102bf7c4
+1006B4AC  68 BC F7 2B 10             push     0x102bf7bc
+1006B4B1  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B4B6  E8 25 57 07 00             call     0x100e0be0
+1006B4BB  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B4BE  51                         push     ecx
+1006B4BF  8B C8                      mov      ecx, eax
+1006B4C1  E8 0A 5A 07 00             call     0x100e0ed0
+1006B4C6  68 C8 F7 2B 10             push     0x102bf7c8
+1006B4CB  8B C8                      mov      ecx, eax
+1006B4CD  E8 CE 59 07 00             call     0x100e0ea0
+1006B4D2  68 D0 F7 2B 10             push     0x102bf7d0
+1006B4D7  8B C8                      mov      ecx, eax
+1006B4D9  E8 C2 59 07 00             call     0x100e0ea0
+1006B4DE  80 78 08 00                cmp      byte ptr [eax + 8], 0
+1006B4E2  0F 84 4B 01 00 00          je       0x1006b633
+1006B4E8  68 C4 F7 2B 10             push     0x102bf7c4
+1006B4ED  68 BC F7 2B 10             push     0x102bf7bc
+1006B4F2  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B4F7  E8 E4 56 07 00             call     0x100e0be0
+1006B4FC  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B4FF  51                         push     ecx
+1006B500  8B C8                      mov      ecx, eax
+1006B502  E8 C9 59 07 00             call     0x100e0ed0
+1006B507  68 C8 F7 2B 10             push     0x102bf7c8
+1006B50C  8B C8                      mov      ecx, eax
+1006B50E  E8 8D 59 07 00             call     0x100e0ea0
+1006B513  68 D4 F7 2B 10             push     0x102bf7d4
+1006B518  8B C8                      mov      ecx, eax
+1006B51A  E8 81 59 07 00             call     0x100e0ea0
+1006B51F  80 78 08 00                cmp      byte ptr [eax + 8], 0
+1006B523  0F 84 0A 01 00 00          je       0x1006b633
+1006B529  68 C4 F7 2B 10             push     0x102bf7c4
+1006B52E  68 BC F7 2B 10             push     0x102bf7bc
+1006B533  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B538  E8 A3 56 07 00             call     0x100e0be0
+1006B53D  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B540  51                         push     ecx
+1006B541  8B C8                      mov      ecx, eax
+1006B543  E8 88 59 07 00             call     0x100e0ed0
+1006B548  68 C8 F7 2B 10             push     0x102bf7c8
+1006B54D  8B C8                      mov      ecx, eax
+1006B54F  E8 4C 59 07 00             call     0x100e0ea0
+1006B554  68 D8 F7 2B 10             push     0x102bf7d8
+1006B559  8B C8                      mov      ecx, eax
+1006B55B  E8 40 59 07 00             call     0x100e0ea0
+1006B560  80 78 08 00                cmp      byte ptr [eax + 8], 0
+1006B564  0F 84 C9 00 00 00          je       0x1006b633
+1006B56A  68 C4 F7 2B 10             push     0x102bf7c4
+1006B56F  68 BC F7 2B 10             push     0x102bf7bc
+1006B574  B9 10 C2 31 10             mov      ecx, 0x1031c210
+
+### 回收倍率：0x1006B65E..0x1006B770
+1006B65E  84 C0                      test     al, al
+1006B660  0F 84 1D 01 00 00          je       0x1006b783
+1006B666  68 C4 F7 2B 10             push     0x102bf7c4
+1006B66B  68 BC F7 2B 10             push     0x102bf7bc
+1006B670  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B675  E8 66 55 07 00             call     0x100e0be0
+1006B67A  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B67D  51                         push     ecx
+1006B67E  8B C8                      mov      ecx, eax
+1006B680  E8 4B 58 07 00             call     0x100e0ed0
+1006B685  68 E0 F7 2B 10             push     0x102bf7e0
+1006B68A  8B C8                      mov      ecx, eax
+1006B68C  E8 0F 58 07 00             call     0x100e0ea0
+1006B691  68 D0 F7 2B 10             push     0x102bf7d0
+1006B696  8B C8                      mov      ecx, eax
+1006B698  E8 73 5B 07 00             call     0x100e1210
+1006B69D  84 C0                      test     al, al
+1006B69F  0F 84 DE 00 00 00          je       0x1006b783
+1006B6A5  68 C4 F7 2B 10             push     0x102bf7c4
+1006B6AA  68 BC F7 2B 10             push     0x102bf7bc
+1006B6AF  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B6B4  E8 27 55 07 00             call     0x100e0be0
+1006B6B9  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B6BC  51                         push     ecx
+1006B6BD  8B C8                      mov      ecx, eax
+1006B6BF  E8 0C 58 07 00             call     0x100e0ed0
+1006B6C4  68 E0 F7 2B 10             push     0x102bf7e0
+1006B6C9  8B C8                      mov      ecx, eax
+1006B6CB  E8 D0 57 07 00             call     0x100e0ea0
+1006B6D0  68 D4 F7 2B 10             push     0x102bf7d4
+1006B6D5  8B C8                      mov      ecx, eax
+1006B6D7  E8 34 5B 07 00             call     0x100e1210
+1006B6DC  84 C0                      test     al, al
+1006B6DE  0F 84 9F 00 00 00          je       0x1006b783
+1006B6E4  68 C4 F7 2B 10             push     0x102bf7c4
+1006B6E9  68 BC F7 2B 10             push     0x102bf7bc
+1006B6EE  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B6F3  E8 E8 54 07 00             call     0x100e0be0
+1006B6F8  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B6FB  51                         push     ecx
+1006B6FC  8B C8                      mov      ecx, eax
+1006B6FE  E8 CD 57 07 00             call     0x100e0ed0
+1006B703  68 E0 F7 2B 10             push     0x102bf7e0
+1006B708  8B C8                      mov      ecx, eax
+1006B70A  E8 91 57 07 00             call     0x100e0ea0
+
+### 其他：0x1006B995..0x1006BA20
+1006B995  84 C0                      test     al, al
+1006B997  0F 84 88 01 00 00          je       0x1006bb25
+1006B99D  68 C4 F7 2B 10             push     0x102bf7c4
+1006B9A2  68 BC F7 2B 10             push     0x102bf7bc
+1006B9A7  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B9AC  E8 2F 52 07 00             call     0x100e0be0
+1006B9B1  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B9B4  51                         push     ecx
+1006B9B5  8B C8                      mov      ecx, eax
+1006B9B7  E8 14 55 07 00             call     0x100e0ed0
+1006B9BC  68 EC F7 2B 10             push     0x102bf7ec
+1006B9C1  8B C8                      mov      ecx, eax
+1006B9C3  E8 D8 54 07 00             call     0x100e0ea0
+1006B9C8  68 F4 F7 2B 10             push     0x102bf7f4
+1006B9CD  8B C8                      mov      ecx, eax
+1006B9CF  E8 3C 58 07 00             call     0x100e1210
+1006B9D4  84 C0                      test     al, al
+1006B9D6  0F 84 49 01 00 00          je       0x1006bb25
+1006B9DC  68 C4 F7 2B 10             push     0x102bf7c4
+1006B9E1  68 BC F7 2B 10             push     0x102bf7bc
+1006B9E6  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B9EB  E8 F0 51 07 00             call     0x100e0be0
+1006B9F0  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B9F3  51                         push     ecx
+1006B9F4  8B C8                      mov      ecx, eax
+1006B9F6  E8 D5 54 07 00             call     0x100e0ed0
+1006B9FB  68 EC F7 2B 10             push     0x102bf7ec
+1006BA00  8B C8                      mov      ecx, eax
+1006BA02  E8 99 54 07 00             call     0x100e0ea0
+1006BA07  68 F4 F7 2B 10             push     0x102bf7f4
+1006BA0C  8B C8                      mov      ecx, eax
+1006BA0E  E8 8D 54 07 00             call     0x100e0ea0
+1006BA13  8B C8                      mov      ecx, eax
+1006BA15  E8 26 44 07 00             call     0x100dfe40
+1006BA1A  8B C8                      mov      ecx, eax
+1006BA1C  89 4D 98                   mov      dword ptr [ebp - 0x68], ecx
+1006BA1F  85 C9                      test     ecx, ecx
+
+### 元宝/灵符/金币/经验 四个标量键的缺失处理（元宝为例 0x1006B7E5..0x1006B830）
+1006B7E5  C8 E8 25 5A                enter    0x25e8, 0x5a
+1006B7E9  07                         pop      es
+1006B7EA  00 84 C0 74 39 68 C4       add      byte ptr [eax + eax*8 - 0x3b97c68c], al
+1006B7F1  F7 2B                      imul     dword ptr [ebx]
+1006B7F3  10 68 BC                   adc      byte ptr [eax - 0x44], ch
+1006B7F6  F7 2B                      imul     dword ptr [ebx]
+1006B7F8  10 B9 10 C2 31 10          adc      byte ptr [ecx + 0x1031c210], bh
+1006B7FE  E8 DD 53 07 00             call     0x100e0be0
+1006B803  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B806  51                         push     ecx
+1006B807  8B C8                      mov      ecx, eax
+1006B809  E8 C2 56 07 00             call     0x100e0ed0
+1006B80E  68 44 F6 2B 10             push     0x102bf644
+1006B813  8B C8                      mov      ecx, eax
+1006B815  E8 86 56 07 00             call     0x100e0ea0
+1006B81A  8B C8                      mov      ecx, eax
+1006B81C  E8 1F 46 07 00             call     0x100dfe40
+1006B821  8B F8                      mov      edi, eax
+1006B823  89 7D 90                   mov      dword ptr [ebp - 0x70], edi
+1006B826  EB 03                      jmp      0x1006b82b
+1006B828  8B 7D 90                   mov      edi, dword ptr [ebp - 0x70]
+1006B82B  68 C4 F7 2B 10             push     0x102bf7c4
