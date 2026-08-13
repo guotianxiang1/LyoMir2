@@ -1,0 +1,73 @@
+# 眼神(Yanshen)逆向底本索引
+
+> 目的：本仓 `staging` 树极大，递归搜索屡屡超时（实测全盘找 `AllFuc.pas` 会直接超时失败，
+> 按名过滤+读内容的扫描也要 ~46 秒）。多个子代理在定位底本上反复浪费时间且各自得出过
+> 不一致的结论。此表为实测结果，后续直接查表，不要再全盘搜。
+
+## 1. 插件 DLL 转储（反汇编用）
+
+| 用途 | 路径 | 说明 |
+|---|---|---|
+| 2.0.8 主用 | `staging\yanshen208_strparam_runtime_dump_20260719\` | `manifest.json` 写 base `0x57C40000`，但**绝对操作数未重定位**（如 `push 0x102b02e4`）。按 `0x10000000` 基读 `.rdata` 引用即可。 |
+| 2.0.8 delayed | `staging\..._delayed_...\` | **已重定位**（同处为 `push 0x57ef02e4`，差 `0x47C40000`）。**被 Themida 搬到远端的函数体只在这份里有内容**，另一份是全零。 |
+| 2.0.7 运行期 | `staging\questinfo_runtime_dump\yanshen2_0_7_dll.memory.bin` | 28.4 MB。配置结构体布局与 2.0.8 不同（偏移全变），但键名逐条相同 —— **跨版本复算的利器**。 |
+
+两份 2.0.8 的 RVA 布局相同。涉及远端代码时用 delayed，并对落在 `[0x57C40000, +size)` 的
+操作数减去 `0x47C40000`，即等于装载器重定位。
+
+## 2. 宿主底本
+
+| 用途 | 路径 |
+|---|---|
+| M2Server | `staging\_reunpack_work\flat_image.bin`（ImageBase `0x400000`，file_off = VA − 0x400000） |
+| GameGate | `staging\_gg_reunpack_work\dump_gg2025\flat_image.bin` |
+
+注：M2 主底本对 `施毒术` / `眼神` / `盘古` / `AllFuc` / `集成函数` 等特征串**全部 0 命中** ——
+眼神的证据不在宿主里，别在这儿找。
+
+## 3. AllFuc.pas（脚本 API 源码）
+
+眼神的 `ys_*` 脚本 API 不是原生导出符号，而是把实参拼成 `!!!!` 魔法串、再走宿主
+`GetBagItemCount` / `Give` 等 API 递进插件的**薄包装**。要看语义就读这个文件。
+
+| 类别 | 路径 | 大小 | `!!!!` 数 |
+|---|---|---|---|
+| **加密原件（不可直接读）** | `staging\_ysprod\PROD_AllFuc.pas.txt`<br>`staging\_cfgdump\SCR_allfuc.txt`<br>`staging\_mnpc_prod_utf8\CommonScripts__眼神专用__AllFuc.pas.txt` | 32204 B | 0 |
+| **2.0.8 解密本（推荐）** | `staging\_ys208_plain\Envir__CommonScripts__眼神专用__AllFuc.pas`<br>`staging\_ys_out\AllFuc_208_DECRYPTED.txt` | 32635 B | 88 |
+| 2.0.8 解密本（另一份） | `staging\_prodrecon\plain\PROD_AllFuc_DECRYPTED.pas` | 31766 B | 88 |
+| **原始捕获（明文）** | `staging\ys208_original_capture\Mir200\Envir\CommonScripts\眼神专用\AllFuc.pas`<br>`staging\ys207_original_capture\...\AllFuc.pas`<br>`staging\pas-include-context-20260714\Envir\CommonScripts\眼神专用\AllFuc.pas`<br>`staging\m2_type2_probe_20260726\Mir200\...\AllFuc.pas` | 29870 B | 87 |
+| 使用例子文档 | `staging\_cfgdump\DOC_allfuc_ex.txt` | 65036 B | 0（含 65 处 `ys_` 引用） |
+
+三份 32204 B 的是加密原件，文件头为二进制乱码，**不要拿它做证据**。
+
+## 4. 已建立的分析方法（勿重复造轮子）
+
+- **trampoline 安装器 ABI**：两个 builder `0x10032CC0` / `0x10032FD0`（另有裸 memcpy
+  `0x10033340`）。模板是「一 dword 装一字节」数组；`0xE8`/`0xE9` 元素后紧跟 `>0xFF` 的
+  dword 时由 `0x10032DE2` 改写成 rel32；末元素的 rel32 由调用方补。详见
+  `docs/ys_aclass_surgical_20260814.md`。
+- **状态标签归属法**：每条 apply/revert 臂以
+  `call 0x100F018C(labelObject, "<键名>(已启动)|(未启动)")` 收尾，从安装点向前走到下一个
+  标签即可把补丁站点归属到 GUI 键。全量 407 站点 → 107 特性，见
+  `docs/ys_patch_label_atlas.tsv`。
+- **配置键名解法**：配置序列化器两段 run（`0x10005E10..`、`0x10009EB3..`）**严格 CMP→KEY
+  交替** —— 每个 `cmp dword [esi+off],0x1F4` 配它**后面**那个 `push <键串VA>`。该性质已被
+  证明而非假设：全镜像 75 条 CMP 按地址排序后，相邻键串在 `.rdata` 里首尾相接、4 字节
+  对齐、缺口数 0。2.0.7 偏移不同但键名逐条相同。
+- **可达性**：用 `tools/ys_key_reachability.py`，**不要**用旧矩阵 —— 旧矩阵只给「键名字面量
+  持有者」播种，会漏掉经中继方法接线的键（曾误报 10 条）。
+- **消费者普查**：要用 `cmp dword [reg+OFF],0x1F4` 字节模式，**不要**沿
+  `mov reg,[0x1031C0E0]` 跟踪指针 —— apply 臂是把配置对象当 `this` 收的，指针跟踪法在
+  已落地键的对照组上会全军覆没。
+- 配置单例：`[0x1031BEFC]` 与 `[0x1031C0E0]` 是同一对象 `0x10319DA8`，故 `cfg+off` 与
+  `cfg2+off` 是同一套坐标。
+
+## 5. 环境陷阱
+
+- `dotnet run --project X -- <arg>` 在本环境**不转发 argv**；需要传参的 AuditTool 要直接
+  执行生成的 exe。
+- `HeroLifecycleCheck` 不传构建目录时退出码 2 是**空跑**而非断言失败；有效目录
+  `D:\loym2\.claude\wt2\Build\Mir200`。
+- 仓库真身在 `D:\loym2\LyoMir2-master`（`D:\loym2\.git` 已被改名为 `.git.broken-20260810`）。
+- PowerShell 不支持 heredoc；提交信息用 `git commit -F <临时文件>`。反汇编脚本别命名为
+  `dis.py`（与标准库 `dis` 冲突）。
