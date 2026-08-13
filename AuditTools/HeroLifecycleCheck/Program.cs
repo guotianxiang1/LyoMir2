@@ -3,7 +3,14 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.Loader;
 
-var gameDirectory = args.Length > 0 ? Path.GetFullPath(args[0]) : FindGameSvrBuild();
+// The sweep harness passes a repository root to every tool uniformly, so argv[0] is a
+// hint, not a promise: accept it as a build directory only when the assemblies are
+// actually there, otherwise treat it as a root to search under.
+var gameDirectory = args.Length > 0
+    ? (IsGameSvrBuild(Path.GetFullPath(args[0]))
+        ? Path.GetFullPath(args[0])
+        : FindGameSvrBuildUnder(Path.GetFullPath(args[0])))
+    : FindGameSvrBuild();
 if (gameDirectory == null)
 {
     Console.Error.WriteLine("INCOMPLETE: no GameSvr build directory was supplied and "
@@ -430,9 +437,19 @@ static string FindRepositoryRoot()
     return null;
 }
 
+static bool IsGameSvrBuild(string directory)
+{
+    return File.Exists(Path.Combine(directory, "GameSvr.dll"))
+           && File.Exists(Path.Combine(directory, "SystemModule.dll"));
+}
+
 static string FindGameSvrBuild()
 {
-    var repositoryRoot = FindRepositoryRoot();
+    return FindGameSvrBuildUnder(FindRepositoryRoot());
+}
+
+static string FindGameSvrBuildUnder(string repositoryRoot)
+{
     if (repositoryRoot == null)
         return null;
     var binRoot = Path.Combine(repositoryRoot, "GameSvr", "bin");

@@ -4,13 +4,13 @@ using System.Text;
 
 var repositoryRoot = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
 var gameDirectory = args.Length > 2 ? Path.GetFullPath(args[2]) : FindGameSvrBuild();
-// The plaintext client tree is not part of this repository and has no canonical
-// location, so it is the one argument that cannot be recovered.
-var clientRoot = args.Length > 1 ? Path.GetFullPath(args[1]) : null;
+var clientRoot = args.Length > 1 ? Path.GetFullPath(args[1]) : FindClientRoot(repositoryRoot);
 if (repositoryRoot == null || gameDirectory == null || clientRoot == null)
 {
-    Console.Error.WriteLine("INCOMPLETE: the plaintext client root must be supplied. "
-        + "Usage: MovementReliveCheck [repository root] <plaintext client root> [GameSvr build]");
+    Console.Error.WriteLine("INCOMPLETE: repository root=" + (repositoryRoot ?? "<not found>")
+        + " client root=" + (clientRoot ?? "<not found>")
+        + " GameSvr build=" + (gameDirectory ?? "<not found>") + ". "
+        + "Usage: MovementReliveCheck [repository root] [plaintext client root] [GameSvr build]");
     Environment.Exit(2);
 }
 
@@ -271,6 +271,22 @@ static string FindRepositoryRoot()
                 return current.FullName;
             current = current.Parent;
         }
+    }
+    return null;
+}
+
+// The extracted client tree lives beside the repository rather than inside it, and the
+// repository is routinely checked out through `git worktree` several levels deeper, so
+// the anchor has to be searched for instead of computed from the root.
+static string FindClientRoot(string repositoryRoot)
+{
+    const string clientTree = "白猪G2.5_0518_lua_plain_readable_20260710_014719";
+    for (var directory = repositoryRoot == null ? null : new DirectoryInfo(repositoryRoot);
+         directory != null; directory = directory.Parent)
+    {
+        var candidate = Path.Combine(directory.FullName, clientTree);
+        if (File.Exists(Path.Combine(candidate, "core", "mir2.scenes.main.ground_hk.lua")))
+            return candidate;
     }
     return null;
 }
