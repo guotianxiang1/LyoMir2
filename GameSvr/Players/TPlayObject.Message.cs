@@ -1968,6 +1968,11 @@ namespace GameSvr
                     SendLogon();
                     ClientQueryUserName(ObjectId, m_nCurrX, m_nCurrY);
                     RefUserState();
+                    // MOVE-85: 原生 sub_6B6BEC 在发完 0x2C4(SM_MYSTATUS) 特征字后，紧接着发
+                    // 进图通告（超负重 @0x6B6D10 + 三档巅峰状态 @0x6B6D40/0x6B6D7C/0x6B6DB4，
+                    // 按 byte[Envir+0xB8](BreakLevel)+word[Envir+0xBA](CrazyBreakLevel) 分档
+                    // 0x96/0x32/0x0A）。本调用点 = 原生进图 caller 0x6B954D（SM_LOGON=50 之后）。
+                    SendNativeMapEntryStateMessages();
                     SendMapDescription();
                     break;
                 case Grobal2.RM_HEAR:
@@ -2123,6 +2128,9 @@ namespace GameSvr
                 case Grobal2.RM_NATIVE_CHANGEMAP:
                     SendDefMessage(Grobal2.SM_CHANGEMAP, ObjectId, m_nCurrX, m_nCurrY, DayBright(), ProcessMsg.sMsg);
                     RefUserState();
+                    // MOVE-85: 原生换图 caller 0x6B96C2（SM_CHANGEMAP=634 之后）同样调 sub_6B6BEC，
+                    // 特征字之后紧跟进图通告。详见 TPlayObject.NativeMapEntryStatus.cs 字节表。
+                    SendNativeMapEntryStateMessages();
                     SendMapDescription();
                     break;
                 case Grobal2.RM_BUTCH:
