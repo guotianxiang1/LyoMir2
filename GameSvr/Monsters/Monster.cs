@@ -78,10 +78,16 @@ namespace GameSvr
             }
             if (m_boDupMode)
             {
-                int nOldX = m_nCurrX;
-                int nOldY = m_nCurrY;
-                WalkTo((byte)M2Share.RandomNumber.Random(8), false);
-                if (nOldX != m_nCurrX || nOldY != m_nCurrY)
+                // MONAI-11 — TMonster.Think sub_666184 叠格走开走的是 WalkTo(Random(8), TRUE)：
+                //   006661FF  B8 08 00 00 00     mov  eax,8
+                //   00666204  E8 43 D9 D9 FF     call 0x403B4C        ; Random(8)
+                //   00666209  8B D0              mov  edx,eax         ; dir
+                //   0066620B  B1 01              mov  cl,1            ; boFlag = 1
+                //   00666211  FF 56 30           call [esi+0x30]      ; WalkTo
+                //   00666214  84 C0              test al,al
+                //   00666216  74 0B              je   0x666223        ; 假则仍留在 dup
+                // 原先 C# 传 false 且用坐标差当成功，叠格时不能走进已占用格，解不开。
+                if (WalkTo((byte)M2Share.RandomNumber.Random(8), true))
                 {
                     m_boDupMode = false;
                     result = true;
