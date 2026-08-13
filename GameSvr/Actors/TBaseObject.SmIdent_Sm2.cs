@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using SystemModule;
 
@@ -38,27 +38,6 @@ namespace GameSvr
     /// </summary>
     public partial class TBaseObject
     {
-        // SM 689 (0x2B1) — RM 10035 dispatcher arm @0x006B4BA1 via [obj+0x250], no body.
-        //   006B4B84  66 8B 43 02        mov ax,[ebx+2]     ; #1 Param  = wParam
-        //   006B4B88  50                 push eax
-        //   006B4B89  66 8B 43 08        mov ax,[ebx+8]     ; #2 Tag    = LoWord(nParam2)
-        //   006B4B8D  50                 push eax
-        //   006B4B8E  66 8B 43 0C        mov ax,[ebx+0xC]   ; #3 Series = LoWord(nParam3)
-        //   006B4B92  50                 push eax
-        //   006B4B93  6A 00              push 0             ; #4 sMsg   = nil
-        //   006B4B95  8B 4B 04           mov ecx,[ebx+4]    ; Recog     = nParam1
-        //   006B4B98  66 BA B1 02        mov dx,0x2B1       ; ident 689
-        //   006B4BA1  FF 93 50 02 00 00  call [ebx+0x250]
-        // Trigger: reached from the shared RM dispatcher (jmp 0x6B624C tail); the arm
-        // itself is unconditional once the RM tag selects it.
-        internal static (ClientPacket Header, byte[] Body) BuildSm689(
-            int nParam1, ushort wParam, ushort nParam2, ushort nParam3)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_689,
-                nParam1, wParam, nParam2, nParam3);
-            return (header, Array.Empty<byte>());
-        }
-
         // SM 924 (0x39C, SM_HERO_SPLITSHADOW) — RM 10036 arm @0x006B4BC9 via [obj+0x250],
         // no body.
         //   006B4BAC  66 8B 43 04        mov ax,[ebx+4]     ; #1 Param  = LoWord(nParam1)
@@ -100,43 +79,6 @@ namespace GameSvr
             return (header, Array.Empty<byte>());
         }
 
-        // SM 1201 (0x4B1) — RM 10039 arm @0x006B4C41 via [obj+0x250], no body. Same
-        // field mapping as SM 689/1109:
-        //   006B4C24  66 8B 43 02        mov ax,[ebx+2]     ; #1 Param  = wParam
-        //   006B4C28  50                 push eax
-        //   006B4C29  66 8B 43 08        mov ax,[ebx+8]     ; #2 Tag    = LoWord(nParam2)
-        //   006B4C2D  50                 push eax
-        //   006B4C2E  66 8B 43 0C        mov ax,[ebx+0xC]   ; #3 Series = LoWord(nParam3)
-        //   006B4C32  50                 push eax
-        //   006B4C33  6A 00              push 0             ; #4 sMsg   = nil
-        //   006B4C35  8B 4B 04           mov ecx,[ebx+4]    ; Recog     = nParam1
-        //   006B4C38  66 BA B1 04        mov dx,0x4B1       ; ident 1201
-        //   006B4C41  FF 93 50 02 00 00  call [ebx+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm1201(
-            int nParam1, ushort wParam, ushort nParam2, ushort nParam3)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1201,
-                nParam1, wParam, nParam2, nParam3);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 959 (0x3BF) — RM arm @0x006B5761 via [obj+0x250], no body.
-        //   006B5748  66 8B 43 02        mov ax,[ebx+2]     ; #1 Param  = wParam
-        //   006B574C  50                 push eax
-        //   006B574D  66 8B 43 04        mov ax,[ebx+4]     ; #2 Tag    = LoWord(nParam1)
-        //   006B5751  50                 push eax
-        //   006B5752  6A 00              push 0             ; #3 Series = 0
-        //   006B5754  6A 00              push 0             ; #4 sMsg   = nil
-        //   006B5756  33 C9              xor ecx,ecx        ; Recog     = 0
-        //   006B5758  66 BA BF 03        mov dx,0x3BF       ; ident 959
-        //   006B5761  FF 93 50 02 00 00  call [ebx+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm959(
-            ushort wParam, ushort nParam1)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_959, 0, wParam, nParam1, 0);
-            return (header, Array.Empty<byte>());
-        }
-
         // SM 1107 (0x453) — RM 10501 arm @0x006B5CF1 via [obj+0x250], no body. Same
         // field mapping as SM 924 (Recog=BaseObject, Param=nParam1, Tag=nParam2,
         // Series=wParam):
@@ -155,140 +97,6 @@ namespace GameSvr
         {
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1107,
                 baseObjectRecog, nParam1, nParam2, wParam);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 951 (0x3B7) — @0x006CF5EF via [obj+0x250], no body.
-        //   006CF5DC  6A 00              push 0             ; #1 Param  = 0
-        //   006CF5DE  6A 00              push 0             ; #2 Tag    = 0
-        //   006CF5E0  6A 00              push 0             ; #3 Series = 0
-        //   006CF5E2  6A 00              push 0             ; #4 sMsg   = nil
-        //   006CF5E4  8B 4D F4           mov ecx,[ebp-0xC]  ; Recog     = [ebp-0xC]
-        //   006CF5E7  66 BA B7 03        mov dx,0x3B7       ; ident 951
-        //   006CF5EF  FF 93 50 02 00 00  call [ebx+0x250]
-        // Trigger: [ebp-0xC] is the result of the loop's `call 0x600F6C`
-        // (0x6CF5CB mov [ebp-0xC],eax); the send is gated by `cmp [ebp-0xC],1 / je`
-        // (0x6CF5D6), i.e. it fires only when that result != 1. Recog carries it.
-        internal static (ClientPacket Header, byte[] Body) BuildSm951(int recog)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_951, recog, 0, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 965 (0x3C5, SM_965) — @0x0072737B via [obj+0x250], no body.
-        //   00727368  6A 00              push 0             ; #1 Param  = 0
-        //   0072736A  6A 00              push 0             ; #2 Tag    = 0
-        //   0072736C  6A 00              push 0             ; #3 Series = 0
-        //   0072736E  6A 00              push 0             ; #4 sMsg   = nil
-        //   00727370  8B C8              mov ecx,eax        ; Recog = eax (= [ebx+0x40])
-        //   00727372  66 BA C5 03        mov dx,0x3C5       ; ident 965
-        //   0072737B  FF 97 50 02 00 00  call [edi+0x250]
-        // Trigger: guarded by `mov eax,[ebx+0x40] / test eax,eax / je` (0x727361);
-        // fires only when [ebx+0x40] is non-nil, and that handle is the Recog.
-        internal static (ClientPacket Header, byte[] Body) BuildSm965(int recog)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_965, recog, 0, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 1250/1254/1255 — three sibling sends in the same activity subsystem, all
-        // via [obj+0x250] with Recog=-1 and every stack arg 0 (no body). Verbatim, e.g.
-        // 1250 @0x006F0A18:
-        //   006F0A05  6A 00              push 0             ; #1 Param  = 0
-        //   006F0A07  6A 00              push 0             ; #2 Tag    = 0
-        //   006F0A09  6A 00              push 0             ; #3 Series = 0
-        //   006F0A0B  6A 00              push 0             ; #4 sMsg   = nil
-        //   006F0A0D  83 C9 FF           or  ecx,0xFFFFFFFF ; Recog     = -1
-        //   006F0A10  66 BA E2 04        mov dx,0x4E2       ; ident 1250
-        //   006F0A18  FF 93 50 02 00 00  call [obj+0x250]
-        // 1254 @0x006F0F72 (dx=0x4E6) and 1255 @0x006F0EAE (dx=0x4E7) are byte-identical
-        // apart from the ident immediate. Trigger for all three: `call 0x6D3694` result
-        // is stored to byte[self+0x18C8] and the send fires only when it is 0
-        // (test bl,bl / jne skip).
-        internal static (ClientPacket Header, byte[] Body) BuildSm1250()
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1250, -1, 0, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        internal static (ClientPacket Header, byte[] Body) BuildSm1254()
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1254, -1, 0, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        internal static (ClientPacket Header, byte[] Body) BuildSm1255()
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1255, -1, 0, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 1256 (0x4E8) — @0x006F101D via [obj+0x250], no body.
-        //   006F100B  6A 00              push 0             ; #1 Param  = 0
-        //   006F100D  6A 00              push 0             ; #2 Tag    = 0
-        //   006F100F  6A 00              push 0             ; #3 Series = 0
-        //   006F1011  6A 00              push 0             ; #4 sMsg   = nil
-        //   006F1013  8B CF              mov ecx,edi        ; Recog     = edi (handle)
-        //   006F1015  66 BA E8 04        mov dx,0x4E8       ; ident 1256
-        //   006F101D  FF 93 50 02 00 00  call [obj+0x250]
-        // A second native site exists (sites=2 in the frame table) which this pass did
-        // not byte-verify; the frame here is the 0x006F101D form only.
-        internal static (ClientPacket Header, byte[] Body) BuildSm1256(int recog)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1256, recog, 0, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 1253 (0x4E5) — @0x006F0F1C via [obj+0x250], no body. The one dword at
-        // [esi] is split into Tag(hi)/Series(lo):
-        //   006F0EFF  6A 00              push 0             ; #1 Param  = 0
-        //   006F0F01  8B 06              mov eax,[esi]      ; value dword
-        //   006F0F03  E8 60 7E D1 FF     call 0x00408D68    ; 0x408D68: return eax >> 16
-        //   006F0F08  50                 push eax           ; #2 Tag    = HiWord(value)
-        //   006F0F09  66 8B 06           mov ax,word[esi]   ; LoWord(value)
-        //   006F0F0C  50                 push eax           ; #3 Series = LoWord(value)
-        //   006F0F0D  6A 00              push 0             ; #4 sMsg   = nil
-        //   006F0F0F  B9 FE FF FF FF     mov ecx,0xFFFFFFFE ; Recog     = -2
-        //   006F0F14  66 BA E5 04        mov dx,0x4E5       ; ident 1253
-        //   006F0F1C  FF 93 50 02 00 00  call [obj+0x250]
-        // Trigger: guarded by cmp byte[ebx+0x18C8],0 / jne (0x6F0EF6). A second native
-        // site exists (sites=2) not byte-verified in this pass.
-        internal static (ClientPacket Header, byte[] Body) BuildSm1253(int value)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1253, -2, 0,
-                HUtil32.HiWord(value), HUtil32.LoWord(value));
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 1251 (0x4E3) — @0x006D1666 via [obj+0x250], no body. Param is the constant 6.
-        //   006D1650  6A 06              push 6             ; #1 Param  = 6
-        //   006D1652  6A 00              push 0             ; #2 Tag    = 0
-        //   006D1654  6A 00              push 0             ; #3 Series = 0
-        //   006D1656  6A 00              push 0             ; #4 sMsg   = nil
-        //   006D1658  8B 8E 54 0A 00 00  mov ecx,[esi+0xA54]; Recog     = [esi+0xA54]
-        //   006D165E  66 BA E3 04        mov dx,0x4E3       ; ident 1251
-        //   006D1666  FF 93 50 02 00 00  call [obj+0x250]
-        // (Native has additional 1251 sites with a different Recog/Param; only the
-        // Param=6 form at 0x006D1666 is byte-verified here.)
-        internal static (ClientPacket Header, byte[] Body) BuildSm1251(int recog)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1251, recog, 6, 0, 0);
-            return (header, Array.Empty<byte>());
-        }
-
-        // SM 1252 (0x4E4) — @0x00654C10 via [obj+0x250], no body. Param is the constant 4.
-        //   00654BFA  6A 04              push 4             ; #1 Param  = 4
-        //   00654BFC  6A 00              push 0             ; #2 Tag    = 0
-        //   00654BFE  6A 00              push 0             ; #3 Series = 0
-        //   00654C00  6A 00              push 0             ; #4 sMsg   = nil
-        //   00654C02  8B 8E 50 0A 00 00  mov ecx,[esi+0xA50]; Recog     = [esi+0xA50]
-        //   00654C08  66 BA E4 04        mov dx,0x4E4       ; ident 1252
-        //   00654C10  FF 93 50 02 00 00  call [obj+0x250]
-        // (Native has additional 1252 sites with other Recog/Param; only the Param=4
-        // form at 0x00654C10 is byte-verified here.)
-        internal static (ClientPacket Header, byte[] Body) BuildSm1252(int recog)
-        {
-            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1252, recog, 4, 0, 0);
             return (header, Array.Empty<byte>());
         }
 
