@@ -225,7 +225,25 @@ namespace GameSvr
                     continue;
 
                 var player = M2Share.UserEngine?.GetPlayObject(playerName);
-                if (player == null || IsNativeGroupRestricted(player)
+                // 族 B 的「整段放弃」变体（je 而非 jne，无日志、无删表）——
+                // 战神 sub_6F4790 的候选过滤链，逐条：
+                //   6F4844  A1 50 6D 7D 00        eax := [[0x7D6D50]]      ; UserEngine 单例
+                //   6F484B  E8 34 DF F5 FF        call 0x652784            ; GetPlayObject(name)
+                //   6F4850  8B D8 / 85 DB
+                //   6F4854  0F 84 09 01 00 00     je  0x6F4963             ; nil -> 放弃候选
+                //   6F485A  80 7B 73 00 / 0F 85.. cmp byte [ebx+0x73],0    ; 幽灵 -> 放弃
+                //   6F4866  E8 4D E6 07 00        call 0x772EB8            ; [+0x2E2] || HasState(0x3C)
+                //   6F486D  0F 85 F0 00 00 00     jne 0x6F4963
+                //   6F4873  80 BB E3 02 00 00 00  cmp byte [ebx+0x2E3],0 / jne 0x6F4963
+                //   6F4882  E8 DD 14 07 00        call 0x765D64            ; ★ 有效性谓词
+                //   6F4889  0F 84 D4 00 00 00     je  0x6F4963             ; 无效 -> 放弃候选
+                //   6F4893  E8 F0 F9 07 00        call 0x774288            ; 潜行/隐身
+                //   6F48A0  8B 87 28 01 00 00 / 3B 83 28 01 00 00 / 74 15  ; 同图才收
+                // 函数身份：sub_6D7D68 大 switch 的跳表 0x6D8867 第 3 项（[0x6D8873] =
+                // 0x6DB19A），索引式 0x6D8852 add eax,-0x113B / 0x6D8857 cmp eax,0x33
+                // ⇒ ident = 0x113B+3 = 4414 = CM_QUERY_NEARBYPLAYER。
+                if (player == null || !IsNativeCellObjectValid(player)
+                    || IsNativeGroupRestricted(player)
                     || !ReferenceEquals(player.m_PEnvir, m_PEnvir))
                     continue;
 
@@ -256,7 +274,22 @@ namespace GameSvr
             var groups = new List<(TPlayObject Leader, long Distance)>();
             for (var i = 0; i < m_VisibleHumanList.Count; i++)
             {
+                // 同一条「整段放弃」变体，战神 sub_6F43C8 的候选过滤链
+                // （遍历的正是本函数用的这张表：0x6F442F mov eax,[self+0x380] /
+                //   0x6F4435 mov esi,[eax+8] 取 Count，0x6F4455 call 0x424D4C = TList.Get）：
+                //   6F445C  85 DB / 0F 84 BC 01.. je  0x6F4620             ; nil -> 放弃候选
+                //   6F4464  80 BB 78 01 00 00 00  cmp byte [ebx+0x178],0   ; m_btRaceServer
+                //   6F446B  0F 85 AF 01 00 00     jne 0x6F4620             ; 非玩家 -> 放弃
+                //   6F4471  80 7B 73 00 / 0F 85.. cmp byte [ebx+0x73],0    ; 幽灵 -> 放弃
+                //   6F447D  E8 36 EA 07 00        call 0x772EB8 / jne 0x6F4620
+                //   6F448A  80 BB E3 02 00 00 00  cmp byte [ebx+0x2E3],0 / jne 0x6F4620
+                //   6F4499  E8 C6 18 07 00        call 0x765D64            ; ★ 有效性谓词
+                //   6F44A0  0F 84 7A 01 00 00     je  0x6F4620             ; 无效 -> 放弃候选
+                //   6F44AB  E8 D8 FD 07 00        call 0x774288            ; 潜行/隐身
+                // 函数身份：跳表 0x6D8867 第 4 项（[0x6D8877] = 0x6DB1B2）
+                // ⇒ ident = 0x113B+4 = 4415 = CM_QUERY_NEARBYGROUP。
                 if (m_VisibleHumanList[i] is not TPlayObject candidate
+                    || !IsNativeCellObjectValid(candidate)
                     || IsNativeGroupRestricted(candidate)
                     || !ReferenceEquals(candidate.m_PEnvir, m_PEnvir))
                     continue;
