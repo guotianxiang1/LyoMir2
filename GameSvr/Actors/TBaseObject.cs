@@ -6222,8 +6222,19 @@ namespace GameSvr
                 // owns the refresh rule - 0x773117 `cmp edi,eax / jle` takes the
                 // higher value, 0x773140 `cmp eax,[ebp-4] / jge` extends only to
                 // a longer duration - and native MakePosion adds nothing on top.
-                if (!AddTimedAbilityInternal((byte)(31 - nType), nPoint,
-                        unchecked(nTime * 1000), 0))
+                //
+                // STATE-19 — this used to call AddTimedAbilityInternal directly,
+                // which skipped the VMT+0xC8 slot itself. Native never reaches
+                // AddState from a poison source without passing through
+                // MakePosion, and for a player or hero target that slot is
+                // THumanKind's 0x746604, not TCreature's 0x76B3C8. Going through
+                // NativeMakePosion restores the override (state-29 resist roll)
+                // and the unconditional `0x12 -> RemoveState(0x1A)` companion at
+                // 0x76B3EE. The word casts are native's own truncation:
+                // 0x76B410 `movzx eax,di` on the seconds and 0x76B409
+                // `movzx eax,word [ebp+8]` on the value.
+                if (!NativeMakePosion((byte)(31 - nType),
+                        unchecked((ushort)nTime), unchecked((ushort)nPoint)))
                 {
                     return false;
                 }
