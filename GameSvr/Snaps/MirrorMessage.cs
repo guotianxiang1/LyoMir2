@@ -12,8 +12,91 @@ namespace GameSvr
 
         }
 
+        // ===================================================================
+        // 传输层第三个整型参数 (native 帧头 dword @ ISM+0x08)
+        //
+        // native 线格式 (收发两侧字节级复核, 底本 flat_image.bin):
+        //   传输帧  magic dword 0x33AABB77 @+0 | kind word @+4 | payload len
+        //           dword @+8 | payload @+0xC
+        //           —— 解析器 0x713467 `cmp dword[edi],0x33AABB77`, 0x713475
+        //           `mov eax,[edi+8]` (len), 0x7134B0 `mov dx,word[edi+4]` (kind),
+        //           0x71346F `lea eax,[esi+0xC]` (payload 起点)。
+        //   kind=2 的 payload 即 ISM 帧, 定长 12 字节头:
+        //           word route @+0 | word ident @+2 | dword P1 @+4 | dword P2 @+8
+        //           | body @+0xC
+        //           —— 0x712EF6 `movzx edx,word[ebx]` (route; 0x6F=111 走
+        //           ProcessOthGsMsg), 0x712F52 `mov dx,word[ebx+2]` (ident),
+        //           0x712F4F `mov ecx,[ebx+4]` (P1, 派发器不读),
+        //           0x712F3F `mov eax,[ebx+8]` + push -> handler 的 [ebp+0x10] (P2)。
+        //   发送侧 sub_713890 @0x713890 编组出的正是同一组形参:
+        //           0x7138A2 push [ebp+0xC](整型) / 0x7138AD push PChar(body) /
+        //           0x7138B5 push Length(body) -> 0x7138CC(len, bodyPtr, nParam)
+        //           —— 与 handler 的 [ebp+8]/[ebp+0xC]/[ebp+0x10] 逐槽对齐。
+        //           (0x7138CC 在本 build 是空桩 `55 8B EC 5D C2 0C 00`, 故 native
+        //            自身发不出 ISM 帧; 全部 26 个 sub_713890 调用点均编组后丢弃。
+        //            route 111 亦无任何构造者 —— 0x713094/0x7130E8 两个 kind=2
+        //            帧构造器的 13 个调用点用的是 60/62/66/375/384..391/401 这批
+        //            DBServer 路由, 无一为 111。所以本仓不新增 C# 发送侧。)
+        //
+        // C# 线格式: `nCode/nServerIdx/sMsg`, 收侧 SnapsmService.DecodeSocStr /
+        // SnapsmClient.DecodeSocStr 恰好按 '/' 拆两次, 余下整串即 Body。
+        // 扩展方式: 对**native handler 确实读 [ebp+0x10] 且本仓已落地**的 ident,
+        // 线格式变为 `nCode/nServerIdx/nParam/sMsg` —— 第三个字段就是 native 的
+        // P2。两个 socket 类不需要改动 (它们只拆两次), 中转 hub
+        // (SnapsmService.DecodeSocStr_SendOtherServer) 原样转发整串, 亦无需改动。
+        // 见 CarriesNativeParam 的取用集合与其向后兼容论证。
+        // ===================================================================
+
+        /// <summary>
+        /// 该 ident 的线上 Body 是否以「native 帧头第三个 dword」开头。
+        ///
+        /// 仅收录**跳表 stub 确实把 [ebp+0x10] 转给 handler、且本仓已按 native
+        /// 落地**的 ident。native 侧读 [ebp+0x10] 的 stub 共 9 个 (202 0x657208 /
+        /// 203 0x65721C / 207 0x657230 / 209 0x65723D / 214 0x657287 /
+        /// 219 0x6572C4 / 224 0x65730A / 228 0x65733E / 249 0x657385), 但其余 7 个
+        /// 要么仍 BLOCKED (202/207/214/228), 要么本仓另有在用的三字段发送方
+        /// (203 私聊 / 207 信用卡开关 / 249 昵称灵符), 给它们加字段会改变现有
+        /// 行为, 故不纳入 —— 见 docs/sgrp_transport_third_param_20260814.md。
+        /// </summary>
+        private static bool CarriesNativeParam(int ident)
+        {
+            switch (ident)
+            {
+                // 209 stub 0x65723D `mov ecx,[ebp+0x10]` -> sub_6580B8 -> 禁言秒数
+                case Grobal2.ISM_CHATPROHIBITION:
+                // 224 stub 0x65730A `mov ecx,[ebp+0x10]` -> sub_6574B4 -> 声望点数
+                case Grobal2.ISM_MENTOR_REPUTATION:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// 剥掉 Body 前面的整型字段。首字段不是整数时判定为「老三字段帧」,
+        /// 原样返回并给 nParam = 0 —— 这样即使对端还在发旧格式也不会误拆。
+        /// </summary>
+        private static string TakeNativeParam(string body, out int nParam)
+        {
+            var head = string.Empty;
+            var rest = HUtil32.GetValidStr3(body ?? string.Empty, ref head,
+                HUtil32.Backslash);
+            if (int.TryParse(head, NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out nParam))
+            {
+                return rest;
+            }
+            nParam = 0;
+            return body ?? string.Empty;
+        }
+
         public void ProcessData(int Ident, int serverNum, string Body)
         {
+            var nParam = 0;
+            if (CarriesNativeParam(Ident))
+            {
+                Body = TakeNativeParam(Body, out nParam);
+            }
             switch (Ident)
             {
                 case Grobal2.ISM_GROUPSERVERHEART:
@@ -123,10 +206,13 @@ namespace GameSvr
                         .ResetOnlineAll();
                     break;
                 case Grobal2.ISM_CHATPROHIBITION:
-                    MsgGetChatProhibition(serverNum, Body);
+                    // 战神 209 (stub @0x65723D -> sub_6580B8): body 是**裸角色名**
+                    // (0x6580D1 _LStrFromPChar 后不拆分), 第三个 dword 是禁言秒数。
+                    MsgGetChatProhibition(Body, nParam);
                     break;
                 case Grobal2.ISM_CHATPROHIBITIONCANCEL:
-                    MsgGetChatProhibitionCancel(serverNum, Body);
+                    // 战神 210 (stub @0x65724D -> sub_657FF8): body 是裸角色名, 无参。
+                    MsgGetChatProhibitionCancel(Body);
                     break;
                 case Grobal2.ISM_CHANGECASTLEOWNER:
                     MsgGetChangeCastleOwner(serverNum, Body);
@@ -138,10 +224,15 @@ namespace GameSvr
                     MsgGetReloadAdmin();
                     break;
                 case Grobal2.ISM_MENTOR_REPUTATION:
-                    MsgGetMarketOpen(true);
+                    // 战神 224 (stub @0x65730A -> sub_6574B4) = 徒弟升级给师父加声望,
+                    // 不是"开市场"。常量名 ISM_MARKETOPEN 系旧命名。
+                    // body="师父名/徒弟名", 第三个 dword = 声望点数。
+                    MsgGetMentorReputation(Body, nParam);
                     break;
                 case Grobal2.ISM_MARKETCLOSE:
-                    MsgGetMarketOpen(false);
+                    // 225 在 native 是 SINK (索引表 @0x657160[23]=0)。C# 扩展保留
+                    // 空处理; 此前它与 224 共用 MsgGetMarketOpen(bool), 224 改按
+                    // native 落地后该共用方法只剩这一个空调用方, 已就地内联。
                     break;
                 case Grobal2.ISM_RELOADCHATLOG:
                     MsgGetReloadChatLog();
@@ -505,27 +596,22 @@ namespace GameSvr
             }
         }
 
-        private void MsgGetChatProhibition(int sNum, string Body)
+        private void MsgGetChatProhibition(string Body, int nParam)
         {
-            var whostr = string.Empty;
-            var minstr = string.Empty;
-            string Str = Body;
-            Str = HUtil32.GetValidStr3(Str, ref whostr, HUtil32.Backslash);
-            Str = HUtil32.GetValidStr3(Str, ref minstr, HUtil32.Backslash);
-            if (whostr != "")
-            {
-                
-                M2Share.CommandSystem.ExecCmd("Shutup", null);
-            }
+            // 战神 sub_6580B8: 0x6580D1 _LStrFromPChar(&s, body) -> 0x6580DE
+            // eax=[[0x7D7104]] (BlockUsers.Dat 禁言管理器单例) -> 0x6580E7
+            // sub_621B14(mgr, edx=s, ecx=[ebp+0x10])。native 无任何前置守卫
+            // (序言只有 `mov esi,ecx / mov ebx,edx`), 空名交给管理器自己处理。
+            NativeMirrorChatBan.Add(Body, nParam);
         }
 
-        private void MsgGetChatProhibitionCancel(int sNum, string Body)
+        private void MsgGetChatProhibitionCancel(string Body)
         {
-            var whostr = Body;
-            if (whostr != "")
-            {
-                
-            }
+            // 战神 sub_657FF8: 0x658013 _LStrFromPChar(&s, body) -> 0x65801B
+            // eax=[[0x7D7104]] -> 0x658022 sub_621CE4(mgr, edx=s)。stub 0x65724D
+            // 虽然把 [ebp+8](长度) 送进 ecx, 但 sub_657FF8 序言只有 `mov ebx,edx`,
+            // 从不读 ecx —— 故 210 无长度门、无第三参。
+            NativeMirrorChatBan.Remove(Body);
         }
 
         private void MsgGetChangeCastleOwner(int sNum, string Body)
@@ -807,9 +893,17 @@ namespace GameSvr
             }
         }
 
-        private void MsgGetMarketOpen(bool WantOpen)
+        private void MsgGetMentorReputation(string Body, int nParam)
         {
-            
+            // 战神 sub_6574B4 (ident 224): body="师父名/徒弟名"。
+            // 0x6574DA _LStrFromPChar; 0x6574EB sub_4C6AEC(cl=0x2F='/') 拆首段/余段;
+            // 0x6574F6 _LStrAsg(s := 余段)。native 用的分隔符就是 '/', 与 C# 顶层
+            // 分隔同字符 —— 逐级左剥即可, 与 217/218/226/240 同构。
+            var masterName = string.Empty;
+            var studentName = HUtil32.GetValidStr3(Body, ref masterName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorMentorReputation(masterName, studentName,
+                nParam);
         }
     }
 }
