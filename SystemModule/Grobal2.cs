@@ -380,9 +380,13 @@ namespace SystemModule
         public const int SM_BAGITEMDURACHG = 641;
         public const int SM_STORAGE_ADDITEM = 717;
         public const int SM_STORAGEITEMDURACHG = 790;
-        
-        
-        
+
+        // MINE-50: Mining success self-notification
+        // EA=0x006BC2F8: 66 BA 74 02 (mov dx, 0x274)
+        public const int SM_MINESUCCESS = 628;
+
+
+
         public const int SM_CERTIFICATION_SUCCESS = 500;
         
         
