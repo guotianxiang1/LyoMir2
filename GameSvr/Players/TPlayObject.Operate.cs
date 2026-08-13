@@ -243,7 +243,9 @@ namespace GameSvr
                         Merchant = (Merchant)M2Share.UserEngine.FindMerchant(nParam1);
                         if (Merchant != null && Merchant.m_boSell && Merchant.m_PEnvir == m_PEnvir && Math.Abs(Merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(Merchant.m_nCurrY - m_nCurrY) < 15)
                         {
-                            if (Merchant.ClientSellItem(this, UserItem))
+                            // 原生 0x6B92EA 调的是【卖分派器 sub_63F35C】而不是 ClientSellItem
+                            // 本体:property-9(AddNpcProp(9))商人走 sub_644488 的 GM 免费寄存路径。
+                            if (Merchant.ClientSellItemDispatch(this, UserItem))
                             {
                                 if (UserItem.btValue[13] == 1)
                                 {
@@ -277,7 +279,9 @@ namespace GameSvr
                 switch (nIdent)
                 {
                     case Grobal2.CM_USERBUYITEM:
-                        merchant.ClientBuyItem(this, sMsg, nInt);
+                        // 原生 0x6BAE21 调的是【买分派器 sub_63EDE8】而不是 ClientBuyItem
+                        // 本体:property-9(AddNpcProp(9))商人走 sub_644244 的 GM 免费取回路径。
+                        merchant.ClientBuyItemDispatch(this, sMsg, nInt);
                         break;
                     case Grobal2.CM_USERGETDETAILITEM:
                         merchant.ClientGetDetailGoodsList(this, sMsg, nZz);
