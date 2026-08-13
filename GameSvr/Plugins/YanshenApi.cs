@@ -1427,7 +1427,71 @@ namespace GameSvr.Plugins
         // 6.3 控制技能 — 12 functions
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>麻痹: timer秒, rand概率(100=100%), round范围</summary>
+        /// <summary>
+        /// 施毒/麻痹共用的掷点。两个实现体都是 `mov eax,0x64 / call [0x1031BCC4]`
+        /// 后 `cmp eax,概率 / jge 不中`，即命中条件 `Random(100) &lt; 概率`。
+        /// </summary>
+        private static bool NativeRollHit(int probability) =>
+            M2Share.RandomNumber.Random(100) < probability;
+
+        /// <summary>
+        /// 群体路径按**格**枚举，因为 `isqun == 1` 的掷点是逐格一次、格内共享
+        /// （麻痹 0x1006D911 与施毒 0x100709F8 的 `Random(100)` 都在 x 外 y 内的双重
+        /// 循环体内、取对象 `sub_1006CF80` 之前）。逐目标掷点会多消耗随机数、
+        /// 也会改变命中分布。
+        /// <para>
+        /// 格内只做 `obj != nil`；**不做** `IsProperTarget`、不看 HP，与两个伤害函数
+        /// 的取目标条件不同。自身排除只有施毒有（0x10070A6C `cmp edx,edi / je`），
+        /// 麻痹的格内循环 0x1006D97D 只判 `test edx,edx`，会把施法者自己也麻痹掉。
+        /// </para>
+        /// </summary>
+        private IEnumerable<List<TBaseObject>> NativeEnumerateAreaCells(int cx, int cy,
+            int round, bool excludeSelf)
+        {
+            var envir = _player.m_PEnvir;
+            if (envir == null) yield break;
+            for (int x = cx - round; x <= cx + round; x++)
+            {
+                for (int y = cy - round; y <= cy + round; y++)
+                {
+                    var raw = new List<TBaseObject>();
+                    envir.GetBaseObjects(x, y, true, raw);
+                    var cell = new List<TBaseObject>();
+                    foreach (var t in raw)
+                    {
+                        if (t == null) continue;
+                        if (excludeSelf && t == _player) continue;
+                        cell.Add(t);
+                    }
+                    yield return cell;
+                }
+            }
+        }
+
+        /// <summary>
+        /// `Ys_Mymabi(Player; timer, rand, round, TargetX, TargetY, Canl, isqun)`
+        /// = 操作码 2 = <c>sub_1006D690</c>。
+        /// <code>
+        /// 1006D6CB  C7 45 D0 00 00 00 00       返回槽初值 0
+        /// 1006D7F2  85 C9 / 7E 3F              Canl &gt; 0 才做距离门
+        /// 1006D804  C7 45 D0 19 FC FF FF       越界 → -999
+        /// 1006D835  85 F6 / 0F 8F 9E 00 00 00  round &lt;= 0 → 单体；否则群体
+        /// 1006D83E  B8 64 / FF 15 C4 BC 31 10  Random(100)
+        /// 1006D849  3B 45 CC / 7D 55           rnd &gt;= rand → 不中
+        /// 1006D865  FF 55 A0                   GetMovingObject(Envir, TargetX, TargetY)
+        /// 1006D877  FF 55 9C                   IsProperTarget
+        /// 1006D87E  6A 00                      value/强度 = 0
+        /// 1006D883  66 8B 8B A4 01 00 00       cx = word[caster+0x1A4]   ← 施法者「麻痹时间增加」
+        /// 1006D88A  8B 45 C0 / 66 03 C8        cx += timer               ← 16 位加法
+        /// 1006D890  B2 1A                      dl = 26 = 麻痹状态
+        /// 1006D897  FF 97 C8 00 00 00          call [vmt+0xC8] MakeStatus(26, cx 秒, 0)
+        /// 1006D8A0  8B 45 C0 / 89 45 D0        返回值 = timer
+        /// ; 群体 1006D8DB `83 FA 01 / 0F 85 …` isqun==1 → 逐格掷点；否则 1006D9C1 整片一次，
+        /// ;      掷不中就 `jne 0x1006D8A4` 整体返回
+        /// </code>
+        /// 本仓 `MakePosion(nType,…)` 的 `nType = 31 - state`，`POISON_STONE = 5` → 状态 26，
+        /// 映射正确。返回值不是命中个数，是 `timer`（一个都没中返回 0，越界 -999）。
+        /// </summary>
         /// <remarks>
         /// 无开关门。原生 2 号臂 0x100769B9 的第一条指令就是 `8B 4D 08` mov ecx,[ebp+8]，
         /// 紧接 0x100769EA `E8 A1 6C FF FF` call 0x1006D690 直接进正文；臂内没有
@@ -1436,20 +1500,70 @@ namespace GameSvr.Plugins
         /// </remarks>
         public int Paralysis(int timerSec, int probability, int range, int tx, int ty, int canl, bool isAoe)
         {
-            int count = 0;
-            foreach (var t in FindTargets(tx, ty, range, canl != 0))
+            if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
+
+            // F-2：word[caster+0x1A4]（施法者「麻痹时间增加」）在本仓只有物品属性名，
+            // 没有 TBaseObject 上的聚合字段，凭空加字段就是造状态。这里按 0 计。
+            const int paralysisTimeBonus = 0;
+            // MakeStatus 的 wSecs 是 Word（0x76B409 `0F B7 45 08` 零扩展），
+            // 而 0x1006D88D `66 03 C8` 是 16 位加法，所以按无符号 16 位回绕
+            int seconds = unchecked((ushort)(paralysisTimeBonus + timerSec));
+
+            if (range <= 0)
             {
-                if (M2Share.RandomNumber.Random(100) < probability)
+                if (!NativeRollHit(probability)) return 0;
+                var one = _player.m_PEnvir?.GetMovingObject(
+                    (short)tx, (short)ty, true) as TBaseObject;
+                if (one == null || !_player.IsProperTarget(one)) return 0;
+                one.MakePosion(Grobal2.POISON_STONE, seconds, 0);
+                return timerSec;
+            }
+
+            // isqun != 1：整片只掷一次，掷不中整体返回
+            if (!isAoe && !NativeRollHit(probability)) return 0;
+            int result = 0;
+            foreach (var cell in NativeEnumerateAreaCells(tx, ty, range, false))
+            {
+                // isqun == 1：**逐格**掷点（不是逐目标），格内所有对象共用这一次
+                if (isAoe && !NativeRollHit(probability)) continue;
+                foreach (var t in cell)
                 {
-                    // Use Stone status (POISON_STONE=5) for paralysis effect — duration in seconds
-                    t.MakePosion(Grobal2.POISON_STONE, timerSec, 0);
-                    count++;
+                    t.MakePosion(Grobal2.POISON_STONE, seconds, 0);
+                    result = timerSec;
                 }
             }
-            return count;
+            return result;
         }
 
-        /// <summary>施毒: leix 0=红毒 1=绿毒, hp每跳伤害, gailv概率</summary>
+        /// <summary>
+        /// `ys_ShiDu(Player; shijian, leix, hp, gailv, fanwei, TargetX, TargetY, Canl, isqun[, effect])`
+        /// = 操作码 5 = <c>sub_100706A0</c>。
+        /// <code>
+        /// 100706DE  C7 45 B4 00 00 00 00       返回槽初值 0
+        /// 10070859  83 C3 1E                   leix += 30                ← 原生状态号
+        /// 100708BB  85 C9 / 7E 35              Canl &gt; 0 才做距离门；越界 100708DC → -999
+        /// 100708FB  85 F6 / 0F 8F BB 00 00 00  fanwei &lt;= 0 → 单体
+        /// 10070904  B8 64 / FF 15 C4 BC 31 10  Random(100) &lt; gailv 才命中
+        /// 1007092B  FF 55 94                   GetMovingObject(Envir, TargetX, TargetY)
+        /// 10070933  3B 45 DC / 74 4E           target == caster → 跳过
+        /// 10070942  FF 55 90                   IsProperTarget
+        /// 10070949..10070963                   SendDelayMsg(target, 10300,
+        ///                                        wParam = leix+30, p1 = shijian,
+        ///                                        p2 = caster, p3 = hp, nil, 0x3E8 ms)
+        /// 10070966  8B 45 B8 / 89 45 B4        返回值 = shijian
+        /// ; 群体 100709BE `83 7D BC 01 / 0F 85 …` isqun==1 → 逐格掷点（100709F8）；
+        /// ;      否则 10070AC3 起整片只掷一次
+        /// </code>
+        /// 1000 ms 之后 ident 10300 的处理器 <c>0x766E9F</c> 才真正上毒：
+        /// <c>766F78 8A 56 02</c>(状态号) / <c>766F74 66 8B 4E 04</c>(秒) /
+        /// <c>766F6F 0F B7 46 0C</c>(强度) → <c>call [vmt+0xC8]</c>，与麻痹同一个 MakeStatus。
+        /// M2 自身武器带毒 <c>0x76E620</c> 用 `push 0x1E`(绿) / <c>0x76E561</c> 用 `push 0x1F`(红)
+        /// 给出独立佐证，故 `leix+30` 就是状态号，本仓 `nType = 31 - state` 的既有映射正确
+        /// （leix 0 → nType 1 = POISON_DAMAGEARMOR，leix 1 → nType 0 = POISON_DECHEALTH；
+        /// leix ≥ 2 会落到 31 号之外的 body state，超出本仓状态表，维持既有二分映射）。
+        /// <para>F-1：本仓 <c>ProcessMsg</c> 没有 10300 分支，硬发延迟消息会让施毒彻底失效，
+        /// 所以这里仍是立即上毒；1000 ms 延迟与随之而来的仇恨/LastHiter 副作用记为 fail-closed。</para>
+        /// </summary>
         /// <remarks>5 号臂 0x10076AD9 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int Poison(int duration, int type, int hpPerTick, int probability, int range, int tx, int ty, int canl, int isAoe)
         {
@@ -1460,24 +1574,42 @@ namespace GameSvr.Plugins
         private int PoisonCore(int duration, int type, int hpPerTick, int probability,
             int range, int tx, int ty, int canl, int isAoe)
         {
-            int count = 0;
-            // type: 0=red(POISON_DAMAGEARMOR), 1=green(POISON_DECHEALTH)
+            if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
+
             int poisonType = type == 0 ? Grobal2.POISON_DAMAGEARMOR : Grobal2.POISON_DECHEALTH;
-            foreach (var t in FindTargets(tx, ty, range, canl != 0))
+
+            if (range <= 0)
             {
-                if (M2Share.RandomNumber.Random(100) < probability)
+                if (!NativeRollHit(probability)) return 0;
+                var one = _player.m_PEnvir?.GetMovingObject(
+                    (short)tx, (short)ty, true) as TBaseObject;
+                if (one == null || one == _player || !_player.IsProperTarget(one))
+                    return 0;
+                one.MakePosion(poisonType, duration, hpPerTick);
+                return duration;
+            }
+
+            bool perCell = isAoe == 1;
+            if (!perCell && !NativeRollHit(probability)) return 0;
+            int result = 0;
+            foreach (var cell in NativeEnumerateAreaCells(tx, ty, range, true))
+            {
+                if (perCell && !NativeRollHit(probability)) continue;
+                foreach (var t in cell)
                 {
                     t.MakePosion(poisonType, duration, hpPerTick);
-                    count++;
+                    result = duration;
                 }
             }
-            return count;
+            return result;
         }
+
         public int PoisonEffect(int duration, int type, int hpPerTick, int probability,
             int range, int tx, int ty, int canl, int isAoe, int effect)
         {
             // effect 变体与 ys_ShiDu 共走 5 号臂，门只有 0x10076AD9 这一道。
             if (!TunnelGate()) return 0;
+            _ = effect; // F-6：特效广播 0x76920C 未移植
             return PoisonCore(duration, type, hpPerTick, probability, range, tx, ty, canl, isAoe);
         }
 
