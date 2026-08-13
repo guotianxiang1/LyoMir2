@@ -56,32 +56,44 @@ static void Run()
         const int power = 100;
         const int trainLevel = 3;
         const int skillLevel = 2;
-        var legacy = LegacyPower(power, trainLevel, skillLevel);
+        // Native _Attack sub_769F90 half-moon branch: the divisor is the literal
+        // float32 at [0x0076A5C8] = 00 00 70 41 = 15.0
+        // (0x0076A160 D8 35 C8 A5 76 00 fdiv dword ptr [0x76A5C8]), never
+        // btTrainLv + 10. Expected values are written out so a re-introduced
+        // train-level divisor cannot pass.
+        const int nativeFallback = 27;      // Round(100 / 15.0 * (2 + 2))
+        const int nativeFallbackNoCap = 13; // effective level clamped to 0
+        const int nativeFallbackAboveCap = power; // level > 3 swings unscaled
 
         Assert(!plugin.IsInitialized && !api.IsHalfMoon(),
             "uninitialized Yanshen plugin reported half-moon enabled");
-        Equal(legacy, InvokeHelper(power, trainLevel, skillLevel, api),
-            "uninitialized plugin must retain the legacy formula");
+        Equal(nativeFallback, InvokeHelper(power, trainLevel, skillLevel, api),
+            "uninitialized plugin must use the native 15.0 divisor");
+        Equal(nativeFallbackNoCap, InvokeHelper(power, 0, skillLevel, api),
+            "half-moon divisor must not depend on btTrainLv (0x0076A160)");
+        // 0x0076A13B 3C 03 cmp al,3 / 0x0076A13D 76 05 jbe / 0x0076A13F mov ebx,[ebp-8]
+        Equal(nativeFallbackAboveCap, InvokeHelper(power, 8, 4, api),
+            "effective level above 3 must swing at unscaled power");
 
         plugin.IsInitialized = true;
         Assert(api.IsHalfMoon() && api.HalfMoonA() == 2 && api.HalfMoonB() == 15,
             "GBK half-moon configuration did not reach YanshenApi");
-        Equal(HUtil32.Round(power * (api.HalfMoonA() + skillLevel) / api.HalfMoonB()),
-            InvokeHelper(power, trainLevel, skillLevel, api),
-            "enabled half-moon formula");
+        // Plugin GUI control 0x00030B2C: 默认系数A=2,B=15,伤害倍数=(A+Level)/B
+        Equal(27, InvokeHelper(power, trainLevel, skillLevel, api),
+            "enabled half-moon formula A=2 B=15 level=2");
 
         manager.SetNativeConfigValue("半月弯刀", 0L);
         Assert(!api.IsHalfMoon(), "disabled half-moon switch remained enabled");
-        Equal(legacy, InvokeHelper(power, trainLevel, skillLevel, api),
-            "disabled half-moon switch must retain the legacy formula");
+        Equal(nativeFallback, InvokeHelper(power, trainLevel, skillLevel, api),
+            "disabled half-moon switch must fall back to the native formula");
 
         manager.SetNativeConfigValue("半月弯刀", 1L);
         foreach (var invalidB in new[] { "0", "-1" })
         {
             manager.SetNativeConfigValue("半月弯刀_B值", invalidB);
             Assert(api.HalfMoonB() <= 0, "invalid B value did not reach YanshenApi");
-            Equal(legacy, InvokeHelper(power, trainLevel, skillLevel, api),
-                "non-positive half-moon B must retain the legacy formula: " + invalidB);
+            Equal(nativeFallback, InvokeHelper(power, trainLevel, skillLevel, api),
+                "non-positive half-moon B must fall back to the native formula: " + invalidB);
         }
     }
     finally
@@ -104,9 +116,6 @@ static int InvokeHelper(int power, int trainLevel, int skillLevel, YanshenApi ap
     return (int)(helper.Invoke(null, new object[] { power, trainLevel, skillLevel, api })
         ?? throw new InvalidOperationException("half-moon helper returned null"));
 }
-
-static int LegacyPower(int power, int trainLevel, int skillLevel) =>
-    HUtil32.Round(power / (trainLevel + 10) * (skillLevel + 2));
 
 static void WriteGbk(string path, string content)
 {

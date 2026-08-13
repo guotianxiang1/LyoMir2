@@ -2943,31 +2943,54 @@ namespace GameSvr
                 UserMagic = m_MagicList[i];
                 if (UserMagic.wMagIdx < m_MagicArr.Length)
                     m_MagicArr[UserMagic.wMagIdx] = UserMagic;
+                // Native recalc sub_76ADA0 feeds every one of these arms from
+                // sub_4C896C (`mov dl,[eax+0x0C]; add dl,[eax+0x18];
+                // mov cl,[[eax]+0x1A]; cmp dl,cl; jbe`), never from the raw
+                // btLevel: 0x0076AF81, 0x0076AFC6, 0x0076B009, 0x0076B027,
+                // 0x0076B036, 0x0076B0E7.
+                int effectiveLevel = UserMagic.MagicInfo == null
+                    ? UserMagic.btLevel
+                    : Math.Min(
+                        unchecked((byte)(UserMagic.btLevel + UserMagic.NativeLevelBonus)),
+                        UserMagic.MagicInfo.btTrainLv);
                 switch (UserMagic.wMagIdx)
                 {
                     case SpellsDef.SKILL_ONESWORD:// 基本剑法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076AF96 8D 04 40 lea eax,[eax+eax*2] then
+                        // 0x0076AF99 66 01 83 64 02 00 00 add word[ebx+0x264],ax
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(9 / 3 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + 3 * effectiveLevel));
+                        }
+                        // 0x0076AFA7 3C 04 cmp al,4 /
+                        // 0x0076AFAF 83 83 90 02 00 00 02 add dword[ebx+0x290],2
+                        if (effectiveLevel == 4)
+                        {
+                            m_WAbil.DC = HUtil32.MakeLong(HUtil32.LoWord(m_WAbil.DC),
+                                HUtil32.HiWord(m_WAbil.DC) + 2);
                         }
                         break;
                     case SpellsDef.SKILL_ILKWANG:// 精神力战法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076AFE5 DB 2D 14 B3 76 00 fld tbyte[0x76B314] = 8/3
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(8.0 / 3.0 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + HUtil32.Round(8.0 / 3.0 * effectiveLevel)));
                         }
                         break;
                     case SpellsDef.SKILL_YEDO:// 攻杀剑法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076B01E adds the level itself, then
+                        // 0x0076B02C 04 05 add al,5 / 0x0076B02E mov [ebx+0x90],al
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(3 / 3 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + effectiveLevel));
                         }
-                        m_nHitPlus = (byte)(M2Share.DEFHIT + UserMagic.btLevel);
-                        m_btAttackSkillCount = (byte)(7 - UserMagic.btLevel);
+                        m_nHitPlus = unchecked((byte)(M2Share.DEFHIT + effectiveLevel));
+                        m_btAttackSkillCount = unchecked((byte)(7 - effectiveLevel));
                         m_btAttackSkillPointCount = (byte)M2Share.RandomNumber.Random(m_btAttackSkillCount);
                         break;
                     case SpellsDef.SKILL_FIRESWORD:// 烈火剑法
-                        m_nHitDouble = (byte)(4 + UserMagic.btLevel * 4);
+                        // 0x0076B0EC C1 E0 02 shl eax,2 / 0x0076B0EF 04 04 add al,4
+                        m_nHitDouble = unchecked((byte)(4 + effectiveLevel * 4));
                         break;
                 }
             }

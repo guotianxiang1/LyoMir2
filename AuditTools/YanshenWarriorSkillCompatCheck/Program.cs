@@ -57,18 +57,35 @@ static void Run()
         const int skillLevel = 2;
         const int nativeHitPlus = 19;
         const int nativeHitDouble = 3;
-        var legacyStab = LegacyStabSwordPower(power, trainLevel, skillLevel);
-        var legacyFire = LegacyFireSwordPower(power, nativeHitDouble);
+        // Native _Attack sub_769F90 (the entry AttackDir sub_76A5D4 calls at
+        // 0x0076A76D). Stab divides by the literal float32 at [0x0076A5C4] =
+        // 00 00 A0 40 = 5.0 (0x0076A0EB D8 35 C4 A5 76 00), fire divides by
+        // [0x0076A5B4] = 00 00 20 41 = 10.0 before multiplying by hitDouble
+        // (0x0076A06F fdiv / 0x0076A083 fmulp / 0x0076A085 call @ROUND).
+        // Neither divisor comes from btTrainLv.
+        const int nativeStab = 80;          // Round(100 / 5.0 * (2 + 2))
+        const int nativeStabNoCap = 40;     // effective level clamped to 0
+        const int nativeStabLevel4 = 110;   // Round(100 * 1.05_80bit) + 5
+        const int nativeFire = 130;         // 100 + Round(100 / 10.0 * 3)
 
         Assert(!plugin.IsInitialized &&
             !api.IsStabSword() && !api.IsThrusting() && !api.IsFireSword(),
             "uninitialized Yanshen plugin reported a warrior skill enabled");
-        Equal(legacyStab, InvokeStabSword(power, trainLevel, skillLevel, api),
-            "uninitialized stab-sword must retain the legacy formula");
+        Equal(nativeStab, InvokeStabSword(power, trainLevel, skillLevel, api),
+            "uninitialized stab-sword must use the native 5.0 divisor");
+        Equal(nativeStabNoCap, InvokeStabSword(power, 0, skillLevel, api),
+            "stab divisor must not depend on btTrainLv (0x0076A0EB)");
+        // 0x0076A0B4 3C 04 cmp al,4 / 0x0076A0BB fld tbyte[0x76A5B8] / 0x0076A0CA add ebx,5
+        Equal(nativeStabLevel4, InvokeStabSword(power, 8, 4, api),
+            "effective level 4 must take the 1.05x + 5 branch");
         Equal(nativeHitPlus, InvokeThrusting(nativeHitPlus, skillLevel, api),
-            "uninitialized thrusting must retain the legacy value");
-        Equal(legacyFire, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
-            "uninitialized fire-sword must retain the legacy formula");
+            "uninitialized thrusting must retain the native value");
+        Equal(nativeFire, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
+            "uninitialized fire-sword must use the native formula");
+        // 7/100.0*(15*10) rounds to 11, 7/10.0*15 rounds to 10; only the second
+        // matches the x87 chain, so this pair pins the operation order.
+        Equal(17, InvokeFireSword(7, 15, skillLevel, api),
+            "fire-sword must divide by 10 before multiplying (0x0076A06F)");
 
         plugin.IsInitialized = true;
         Assert(api.IsStabSword() && api.StabSwordA() == 2 && api.StabSwordB() == 5,
@@ -82,15 +99,15 @@ static void Run()
             "enabled stab-sword formula A=2 B=5 level=2");
         manager.SetNativeConfigValue("刺杀剑术", 0L);
         Assert(!api.IsStabSword(), "disabled stab-sword switch remained enabled");
-        Equal(legacyStab, InvokeStabSword(power, trainLevel, skillLevel, api),
-            "disabled stab-sword must retain the legacy formula");
+        Equal(nativeStab, InvokeStabSword(power, trainLevel, skillLevel, api),
+            "disabled stab-sword must fall back to the native formula");
         manager.SetNativeConfigValue("刺杀剑术", 1L);
         foreach (var invalidB in new[] { "0", "-1" })
         {
             manager.SetNativeConfigValue("刺杀剑术_B值", invalidB);
             Assert(api.StabSwordB() <= 0, "invalid stab-sword B value did not reach YanshenApi");
-            Equal(legacyStab, InvokeStabSword(power, trainLevel, skillLevel, api),
-                "non-positive stab-sword B must retain the legacy formula: " + invalidB);
+            Equal(nativeStab, InvokeStabSword(power, trainLevel, skillLevel, api),
+                "non-positive stab-sword B must fall back to the native formula: " + invalidB);
         }
         manager.SetNativeConfigValue("刺杀剑术_B值", "5");
 
@@ -102,7 +119,7 @@ static void Run()
         manager.SetNativeConfigValue("攻杀剑术", 0L);
         Assert(!api.IsThrusting(), "disabled thrusting switch remained enabled");
         Equal(nativeHitPlus, InvokeThrusting(nativeHitPlus, skillLevel, api),
-            "disabled thrusting must retain the legacy value");
+            "disabled thrusting must retain the native m_nHitPlus value");
 
         Equal(220, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
             "enabled fire-sword formula A=4 B=4 level=2");
@@ -112,8 +129,8 @@ static void Run()
             "fire-sword multiplier must be capped at 25.5");
         manager.SetNativeConfigValue("烈火剑法", 0L);
         Assert(!api.IsFireSword(), "disabled fire-sword switch remained enabled");
-        Equal(legacyFire, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
-            "disabled fire-sword must retain the legacy formula");
+        Equal(nativeFire, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
+            "disabled fire-sword must fall back to the native formula");
     }
     finally
     {
@@ -148,12 +165,6 @@ static int InvokeHelper(string name, Type[] parameterTypes, params object[] argu
     return (int)(helper.Invoke(null, arguments)
         ?? throw new InvalidOperationException(name + " returned null"));
 }
-
-static int LegacyStabSwordPower(int power, int trainLevel, int skillLevel) =>
-    HUtil32.Round(power / (trainLevel + 2) * (skillLevel + 2));
-
-static int LegacyFireSwordPower(int power, int nativeHitDouble) =>
-    power + HUtil32.Round(power / 100 * (nativeHitDouble * 10));
 
 static void WriteGbk(string path, string content)
 {

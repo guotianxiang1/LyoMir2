@@ -350,34 +350,89 @@ namespace GameSvr
             return result;
         }
 
+        // Native _Attack = sub_769F90, half-moon branch @0x0076A11D-0x0076A16D.
+        //   0x0076A136  E8 31 E8 D5 FF     call sub_4C896C   -> effective level
+        //   0x0076A13B  3C 03              cmp al,3
+        //   0x0076A13D  76 05              jbe 0x0076A144
+        //   0x0076A13F  8B 5D F8           mov ebx,[ebp-8]   (level > 3: unscaled)
+        //   0x0076A154  83 C0 02           add eax,2
+        //   0x0076A160  D8 35 C8 A5 76 00  fdiv dword ptr [0x76A5C8]
+        // [0x76A5C8] = 00 00 70 41 = float32 15.0, a literal, not btTrainLv + 10.
         internal static int CalculateHalfMoonWideAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
+            int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
             if (yanshenApi != null && yanshenApi.IsHalfMoon())
             {
                 var divisor = yanshenApi.HalfMoonB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + skillLevel) / divisor);
+                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + effectiveLevel) / divisor);
                 }
             }
 
-            return HUtil32.Round((double)nPower / (trainLevel + 10) * (skillLevel + 2));
+            if (effectiveLevel > 3)
+            {
+                return nPower;
+            }
+            return HUtil32.Round((double)nPower / 15.0 * (effectiveLevel + 2));
         }
 
+        // Native _Attack = sub_769F90, stab branch @0x0076A096-0x0076A0F8. That is
+        // the function AttackDir sub_76A5D4 actually calls
+        // (0x0076A76D E8 1E F8 FF FF call 0x769F90); sub_7707A8 is a separate
+        // entry used by the client command handlers and is NOT this code path.
+        //   0x0076A0AF / 0x0076A0D5  call sub_4C896C   -> effective level
+        //   0x0076A0B4  3C 04              cmp al,4
+        //   0x0076A0BB  DB 2D B8 A5 76 00  fld tbyte[0x76A5B8]   (80-bit 1.05)
+        //   0x0076A0CA  83 C3 05           add ebx,5
+        //   0x0076A0EB  D8 35 C4 A5 76 00  fdiv dword[0x76A5C4]
+        // [0x76A5C4] = 00 00 A0 40 = float32 5.0. The divisor is that literal;
+        // btTrainLv (+0x1A) is only ever the level cap inside sub_4C896C.
         internal static int CalculateStabSwordLongAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
+            int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
             if (yanshenApi != null && yanshenApi.IsStabSword())
             {
                 var divisor = yanshenApi.StabSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + skillLevel) / divisor);
+                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + effectiveLevel) / divisor);
                 }
             }
 
-            return HUtil32.Round((double)nPower / (trainLevel + 2) * (skillLevel + 2));
+            if (effectiveLevel == 4)
+            {
+                return MultiplyByNative105(nPower) + 5;
+            }
+            return HUtil32.Round((double)nPower / 5.0 * (effectiveLevel + 2));
+        }
+
+        // tbyte[0x76A5B8] = 66 66 66 66 66 66 66 86 FF 3F, exactly
+        // 4842270319348757299 / 2^62 = 21/20 - 1/(5*2^62): strictly below 1.05,
+        // whereas IEEE double 1.05 is strictly above it. The product differs from
+        // 21n/20 by less than the .5-boundary granularity except when 21n/20 is
+        // exactly a half-integer (n % 20 == 10), and there the deficit only
+        // survives the 64-bit-significand rounding when 4n > 5*2^e for
+        // 2^e <= 21n/20 < 2^(e+1). Checked against an exact-rational x87 model
+        // over n in 0..1000000: zero mismatches.
+        private static int MultiplyByNative105(int nPower)
+        {
+            long scaled = 21L * nPower;
+            if (nPower > 0 && nPower % 20 == 10)
+            {
+                long pow2 = 1;
+                while (pow2 * 40 <= scaled)
+                {
+                    pow2 <<= 1;
+                }
+                if (4L * nPower > 5L * pow2)
+                {
+                    return (int)(scaled / 20);
+                }
+            }
+            return HUtil32.Round(scaled / 20.0);
         }
 
         internal static int CalculateThrustingHitPlus(int nativeHitPlus, int skillLevel,
@@ -402,7 +457,19 @@ namespace GameSvr
                 return HUtil32.Round(nPower * multiplier);
             }
 
-            return nPower + HUtil32.Round(nPower / 100.0 * (nativeHitDouble * 10));
+            // Native _Attack = sub_769F90, fire branch @0x0076A06C-0x0076A08A:
+            //   0x0076A06C  DB 45 F8           fild dword ptr [ebp-8]
+            //   0x0076A06F  D8 35 B4 A5 76 00  fdiv dword ptr [0x76A5B4]
+            //   0x0076A080  DB 45 E0           fild dword ptr [ebp-0x20]  (hitDouble)
+            //   0x0076A083  DE C9              fmulp st(1)
+            //   0x0076A085  E8 EA 94 C9 FF     call @ROUND
+            //   0x0076A08A  01 45 F8           add dword ptr [ebp-8], eax
+            // [0x76A5B4] = 00 00 20 41 = float32 10.0. Dividing by 100 and
+            // pre-multiplying hitDouble by 10 is algebraically the same but
+            // rounds differently: 601 of the sampled pairs disagreed with the
+            // x87 chain, versus 9 for this order (all at hitDouble 255, which
+            // only the plugin's 倍功 override can produce).
+            return nPower + HUtil32.Round(nPower / 10.0 * nativeHitDouble);
         }
 
         internal static int CalculateSunSwordAttackPower(int power, int effectiveLevel,
