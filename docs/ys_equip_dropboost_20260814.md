@@ -1,7 +1,10 @@
 # 眼神 盘古3 ·「装备提升人物爆率 + _A值 + _B值」落地报告
 
 - 日期：2026-08-14
-- 工作树：`D:\loym2\.claude\wt2\ys-droprate`　分支：`w/ys-droprate`　基线：`38c5f107`
+- 工作树：`D:\loym2\.claude\wt2\ys-droprate`　分支：`w/ys-droprate`
+- 建树基线 `38c5f107`（下文所有对跑数字都以它为准）；成文时 master 已推进，
+  已 `git rebase master` 到 `eec4b571`，**无冲突**，rebase 后 `dotnet build GameSvr` 0 错、
+  `AuditTools/Yanshen*` 仍 19/19 PASS
 - 底本：
   - M2Server 平坦镜像 `D:/loym2/staging/_reunpack_work/flat_image.bin`，ImageBase `0x400000`
   - 眼神 2.0.8 转储 `D:/loym2/staging/yanshen208_strparam_runtime_dump_20260719/yanshen2_0_8_dll.memory.bin`，基址 `0x10000000`
@@ -282,7 +285,9 @@ C# 里唯一表达这个位置的表达式就是 `UsrEngn.cs:2499`。逐条排�
 
 **文件**：`GameSvr/UsrSystem/UsrEngn.cs`
 **方法**：`UserEngine.MonGetRandomItems(TBaseObject mon, TBaseObject killer = null)`
-**行**：`2499`（`38c5f107` 基线；就是循环体内唯一那行 `Random(...) <= MonItem.SelPoint`）
+**行**：`2499`（就是 `MonGetRandomItems` 循环体内唯一那行
+`Random(...) <= MonItem.SelPoint`；行号按 `38c5f107`/`eec4b571` 都是 2499，
+但认表达式比认行号可靠）
 
 现状：
 
