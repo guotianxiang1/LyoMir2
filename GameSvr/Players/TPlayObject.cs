@@ -310,7 +310,7 @@ namespace GameSvr
         
         public bool IsEnoughBag()
         {
-            return m_ItemList.Count < Grobal2.MAXBAGITEM;
+            return m_ItemList.Count < BagCapacity.Of(this);
         }
 
         
@@ -2992,7 +2992,7 @@ namespace GameSvr
         private void MakeMine()
         {
             TUserItem UserItem;
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count >= BagCapacity.Of(this))
             {
                 return;
             }
