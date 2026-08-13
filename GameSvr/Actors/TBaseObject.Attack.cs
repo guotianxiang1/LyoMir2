@@ -455,15 +455,30 @@ namespace GameSvr
             return nativeHitPlus;
         }
 
+        // The plugin rewrites the two instructions that build m_nHitDouble and
+        // nothing else -- the damage arithmetic below is untouched native code,
+        // so the override changes only the byte fed into it:
+        //   host   0x0076B0EC  C1 E0 02        shl eax,2   <- A picks the shift
+        //   host   0x0076B0EF  04 04           add al,4    <- imm8 becomes B
+        //   plugin 0x100B45A3  blob patch 3 bytes @0x0076B0EC
+        //   plugin 0x100B4550  A2 F0 B0 76 00  mov byte[0x0076B0F0],al
+        // `shl eax,k` cannot encode an arbitrary A, so FireSwordLevelFactor
+        // holds the five representable multipliers; and because the addend is
+        // 8-bit the result wraps at 256 rather than stopping at the 25.5x the
+        // dialog text advertises (that number is just 255/10).
+        //
+        // The plugin also kills the btLevel==4 arm outright:
+        //   host   0x0077231D  75 15   jne 0x00772334
+        //   plugin 0x100B45DA  blob patch 2 bytes @0x0077231D with EB 15 (jmp)
+        // so the fixed 1.8x tier is unreachable while the override is on.
         internal static int CalculateFireSwordAttackPower(int nPower, int nativeHitDouble,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             if (yanshenApi != null && yanshenApi.IsFireSword())
             {
-                var multiplier = Math.Min(
-                    (yanshenApi.FireSwordA() * skillLevel + yanshenApi.FireSwordB()) / 10 + 1,
-                    25.5);
-                return HUtil32.Round(nPower * multiplier);
+                var factor = Plugins.YanshenApi.FireSwordLevelFactor(yanshenApi.FireSwordA());
+                nativeHitDouble = unchecked((byte)(
+                    unchecked((byte)(skillLevel * factor)) + yanshenApi.FireSwordB()));
             }
 
             // Native _Attack = sub_769F90, fire branch @0x0076A06C-0x0076A08A:
