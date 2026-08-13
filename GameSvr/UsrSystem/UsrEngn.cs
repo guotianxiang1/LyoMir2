@@ -2504,8 +2504,20 @@ namespace GameSvr
                 Item.MakeIndex = makeIndex == 0
                     ? M2Share.GetItemNumber()
                     : makeIndex;
-                Item.Dura = StdItem.DuraMax;
                 Item.DuraMax = StdItem.DuraMax;
+                // Native constructs a pile item through a subclass whose body runs
+                // the root constructor and then overwrites Dura unconditionally:
+                //   0x78810D  E8 76 B6 FF FF     call 0x783788          ; root ctor,
+                //                                                       ; sets Dura = DuraMax
+                //   0x788112  66 C7 46 26 01 00  mov word [esi+0x26], 1 ; Dura = 1
+                //   0x788118  C6 46 14 07        mov byte [esi+0x14], 7 ; mark as pile
+                // For a pile item Dura IS the stack count, so seeding it from DuraMax
+                // hands out DuraMax units where native hands out one - a duplication
+                // path shared by crafting, NPC grants, drops and script gives, since
+                // they all construct through here.
+                Item.Dura = NativeItemFactory.IsPileItem(StdItem)
+                    ? (ushort)1
+                    : StdItem.DuraMax;
                 return true;
             }
             return false;
