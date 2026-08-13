@@ -132,5 +132,61 @@ namespace GameSvr
             int recogParam1, ushort wParam, ushort loParam2, ushort series0C)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_1201, recogParam1, wParam, loParam2, series0C),
                 Array.Empty<byte>());
+
+        // SM 539 (0x21B) — send [obj+0x250] @0x638A12 to a player looked up by name
+        // ([0x7D6D50] global user manager -> 0x652784 find-by-name). The whole frame is 0 except
+        // Recog, which is the caller's int argument (esi):
+        //   00638A00 6A 00 6A 00 6A 00 6A 00   push 0 x4   ; Param=Tag=Series=0 ; sMsg=nil (empty body)
+        //   00638A08 8B CE                      mov ecx,esi ; Recog = caller int arg
+        //   00638A0C 66 BA 1B 02                mov dx,0x21B
+        //   00638A12 FF 93 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm539(int recog)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_539, recog, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 543 (0x21F) — send [obj+0x250] @0x654BCD. Recog is the hard constant -6 (0xFFFFFFFA);
+        // gated on [self+0xF4C]!=0. Empty body.
+        //   00654BB8 6A 00 6A 00 6A 00 6A 00   push 0 x4   ; Param=Tag=Series=0 ; sMsg=nil
+        //   00654BC0 B9 FA FF FF FF             mov ecx,0xFFFFFFFA ; Recog = -6
+        //   00654BC5 66 BA 1F 02                mov dx,0x21F
+        //   00654BCD FF 93 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm543()
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_543, -6, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 546 (0x222) — send [obj+0x250] @0x6E0B9D. Recog is the hard constant -2 (0xFFFFFFFE);
+        // this is the else-branch of a duration handler. Empty body.
+        //   006E0B88 6A 00 6A 00 6A 00 6A 00   push 0 x4   ; Param=Tag=Series=0 ; sMsg=nil
+        //   006E0B90 B9 FE FF FF FF             mov ecx,0xFFFFFFFE ; Recog = -2
+        //   006E0B95 66 BA 22 02                mov dx,0x222
+        //   006E0B9D FF 93 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm546()
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_546, -2, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 551 (0x227) — send [obj+0x250] @0x786610. Param is the hard constant 2; Recog is the
+        // caller-computed value (esi = imul eax,0xE10 @0x7865EE, the time delta added to [self+0xBD0]).
+        //   007865FE 6A 02                      push 2      ; Param = 2
+        //   00786600 6A 00 6A 00 6A 00          push 0 x3   ; Tag=Series=0 ; sMsg=nil (empty body)
+        //   00786606 66 BA 27 02                mov dx,0x227
+        //   0078660C 8B CE                      mov ecx,esi ; Recog = computed delta
+        //   00786610 FF 93 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm551(int recogDelta)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_551, recogDelta, 2, 0, 0), Array.Empty<byte>());
+
+        // SM 951 (0x3B7) — send [obj+0x250] @0x6CF5EF. Recog is the caller-computed relationship id
+        // ([ebp-0xC] = return of 0x600F6C); sent only when that value != 1. Empty body.
+        //   006CF5DC 6A 00 6A 00 6A 00 6A 00   push 0 x4   ; Param=Tag=Series=0 ; sMsg=nil
+        //   006CF5E4 8B 4D F4                   mov ecx,[ebp-0xC] ; Recog = computed id
+        //   006CF5E7 66 BA B7 03                mov dx,0x3B7
+        //   006CF5EF FF 93 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm951(int recog)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_951, recog, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 965 (0x3C5) — send [obj+0x250] @0x72737B. Recog is [group+0x40] (dword); rest 0.
+        // Constant SM_965 already exists in Grobal2.cs. Empty body.
+        //   00727368 6A 00 6A 00 6A 00 6A 00   push 0 x4   ; Param=Tag=Series=0 ; sMsg=nil
+        //   00727370 8B C8                      mov ecx,eax ; Recog = [ebx+0x40]
+        //   00727372 66 BA C5 03                mov dx,0x3C5
+        //   0072737B FF 97 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm965(int recog)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_965, recog, 0, 0, 0), Array.Empty<byte>());
     }
 }
