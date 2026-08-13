@@ -95,5 +95,42 @@ namespace GameSvr
             int recogBaseObject, ushort loParam1, ushort loParam2, ushort wParam)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_73, recogBaseObject, loParam1, loParam2, wParam),
                 Array.Empty<byte>());
+
+        // SM 689 (0x2B1) — RM-dispatch forwarding arm, send [obj+0x250] @0x6B4BA1. This arm reads a
+        // different field set than SM 35: Recog is nParam1 [rec+4] and Series is word[rec+0xC].
+        //   006B4B84 66 8B 43 02           mov ax,[rec+2]   / 50 push  ; Param  = wParam
+        //   006B4B88 66 8B 43 08           mov ax,[rec+8]   / 50 push  ; Tag    = LoWord(nParam2)
+        //   006B4B8E 66 8B 43 0C           mov ax,[rec+0xC] / 50 push  ; Series = word[rec+0xC]
+        //   006B4B93 6A 00                 push 0                       ; sMsg   = nil -> empty body
+        //   006B4B95 8B 4B 04              mov ecx,[rec+4]              ; Recog  = nParam1
+        //   006B4B98 66 BA B1 02           mov dx,0x2B1
+        //   006B4BA1 FF 93 50 02 00 00     call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm689(
+            int recogParam1, ushort wParam, ushort loParam2, ushort series0C)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_689, recogParam1, wParam, loParam2, series0C),
+                Array.Empty<byte>());
+
+        // SM 959 (0x3BF) — RM-dispatch forwarding arm, send [obj+0x250] @0x6B5761. Recog and Series
+        // are hard 0 at this arm; only Param (wParam) and Tag (LoWord nParam1) come from the record.
+        //   006B5748 66 8B 43 02           mov ax,[rec+2] / 50 push    ; Param  = wParam
+        //   006B574D 66 8B 43 04           mov ax,[rec+4] / 50 push    ; Tag    = LoWord(nParam1)
+        //   006B5752 6A 00 / 006B5754 6A 00  push 0 ; push 0           ; Series = 0 ; sMsg = nil
+        //   006B5756 33 C9                 xor ecx,ecx                  ; Recog  = 0
+        //   006B5758 66 BA BF 03           mov dx,0x3BF
+        //   006B5761 FF 93 50 02 00 00     call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm959(ushort wParam, ushort loParam1)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_959, 0, wParam, loParam1, 0),
+                Array.Empty<byte>());
+
+        // SM 1201 (0x4B1) — RM-dispatch forwarding arm, send [obj+0x250] @0x6B4C41 (same field set as
+        // SM 689: Recog=nParam1 [rec+4], Param=wParam, Tag=LoWord(nParam2), Series=word[rec+0xC]).
+        //   006B4C24 66 8B 43 02 push wParam / 006B4C28 66 8B 43 08 push LoWord(nParam2)
+        //   006B4C2E 66 8B 43 0C push word[rec+0xC] / 006B4C33 6A 00 push nil (empty body)
+        //   006B4C35 8B 4B 04 mov ecx,[rec+4] (Recog) / 006B4C38 66 BA B1 04 mov dx,0x4B1
+        //   006B4C41 FF 93 50 02 00 00 call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm1201(
+            int recogParam1, ushort wParam, ushort loParam2, ushort series0C)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1201, recogParam1, wParam, loParam2, series0C),
+                Array.Empty<byte>());
     }
 }
