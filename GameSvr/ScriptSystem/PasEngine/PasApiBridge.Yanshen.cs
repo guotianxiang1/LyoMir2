@@ -397,6 +397,62 @@ namespace GameSvr.PasEngine
         }
 
         /// <summary>
+        /// 眼神「读取英雄装备」把 GetItemNameOnBody 的 50..65 号身上格改读英雄身上格 0..15。
+        ///
+        /// 宿主 sub_6E04CC 就是脚本函数 GetItemNameOnBody —— 注册处
+        /// <c>0x0073176B mov edx,0x006E04CC</c> / <c>0x00731771 mov ecx,0x007328C8</c>，
+        /// <c>0x007328C8</c> 的 Delphi 长度前缀是 17，串即 "GetItemNameOnBody"。函数体：
+        /// <code>
+        ///   0x006E04E1  mov  eax,[player+0x4C0]        ; 身上格容器
+        ///   0x006E04E7  call sub_75EC20                ; ← 补丁点
+        ///   0x006E04EC  mov  ebx,eax / test ebx,ebx / je
+        ///   0x006E04F6  call sub_784568                ; out := StdItem([item+0x1C]+4).Name
+        /// </code>
+        /// 开关打开时装 95 字节桩（安装点 <c>0x100D533D call 0x10032CC0</c>，
+        /// 目标 <c>0x006E04E7</c>，续跑点 <c>0x006E04EC</c>，
+        /// 门控 <c>0x100D50A6</c> 那一组之后的 <c>cmp [ebx+0x1030],0</c>）：
+        /// <code>
+        ///   81 7D 04 0B F2 4E 00  cmp dword [ebp+4],0x004EF20B   ; 必须经脚本引擎
+        ///   0F 85 ..              jne  orig                      ;   调用桩 0x004EF208 进来
+        ///   83 FA 32 / 0F 8C ..   cmp edx,0x32 / jl  orig        ; 有符号下界 50
+        ///   83 FA 41 / 0F 8F ..   cmp edx,0x41 / jg  orig        ; 有符号上界 65
+        ///   8B B3 B0 0B 00 00     mov esi,[player+0xBB0]         ; 英雄对象
+        ///   81 FE 00 00 40 00     cmp esi,0x400000 / jb orig
+        ///   8B B6 C0 04 00 00     mov esi,[hero+0x4C0]           ; 英雄身上格容器
+        ///   8B FA / 83 EF 32      mov edi,edx / sub edi,0x32
+        ///   8B 74 BE 08           mov esi,[esi+edi*4+8]          ; 与 sub_75EC20 的
+        ///   81 FE 00 00 40 00     cmp esi,0x400000 / jb orig     ;   [esi+eax*4+8] 同步长
+        ///   8B C6 / E9 ..         mov eax,esi / jmp resume       ; 命中则整条 call 不执行
+        ///  orig:  E8 &lt;0x0075EC20&gt;  call sub_75EC20
+        /// </code>
+        /// 四条回退路径（非脚本调用 / 越界 / 无英雄 / 该格为空）都落回原生调用，而原生
+        /// <c>sub_75EC48</c> 的 <c>sub dl,0x10 / setb al</c> 让 50..65 恒返回 nil，
+        /// 所以回退等价于返回空串——与下面玩家格分支的 else 分支同结果。
+        /// 还原支 <c>0x100D53E8 call 0x10033340(src,5,0x6E04E7,0x6E04E7)</c> 写回
+        /// <c>E8 34 E7 07 00</c>，与转储一致。
+        /// </summary>
+        private bool TryReadHeroEquipName(int pos, out string name)
+        {
+            name = null;
+            if (pos < 0x32 || pos > 0x41) return false;
+
+            var api = GetYanshenApi();
+            if (api == null || !api.IsHeroReadEquip()) return false;
+
+            var slots = CurrentPlayer?.m_HeroObject?.m_UseItems;
+            if (slots == null) return false;
+
+            var slot = pos - 0x32;
+            if (slot >= slots.Length) return false;
+
+            var item = slots[slot];
+            if (item == null) return false;
+
+            name = M2Share.UserEngine.GetStdItem(item.wIndex)?.Name ?? string.Empty;
+            return true;
+        }
+
+        /// <summary>
         /// `#$$#` is the plugin's second command prefix, carried on PlayerNotice.
         /// 2.08 AllFuc.pas has exactly one live user:
         ///   procedure Ys_XiGuai(Player:TPlayer);

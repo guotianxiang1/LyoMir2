@@ -4462,6 +4462,14 @@ namespace GameSvr.PasEngine
                             result = PasValue.FromString(castleName);
                             return true;
                         }
+                        // 眼神「读取英雄装备」把 50..65 号格改读英雄身上格 0..15
+                        // （桩 0x006E04E7，安装点 0x100D533D）。不命中就落回下面的
+                        // 原生路径，原生对 >= 16 的格恒返回 nil。
+                        if (TryReadHeroEquipName(pos, out var heroEquipName))
+                        {
+                            result = PasValue.FromString(heroEquipName);
+                            return true;
+                        }
                         if (pos >= 0 && pos < CurrentPlayer.m_UseItems.Length && CurrentPlayer.m_UseItems[pos] != null)
                         {
                             var stdItem = M2Share.UserEngine.GetStdItem(CurrentPlayer.m_UseItems[pos].wIndex);
