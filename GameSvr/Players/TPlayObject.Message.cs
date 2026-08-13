@@ -2951,9 +2951,26 @@ namespace GameSvr
                 //   0x100B9C5E A2 C9 FC 73 00 -> imm8  of 0x73FCC7 83 C0 5A             (non-red K)
                 //   0x100B9D3A A2 6C FF 73 00 -> imm8  of 0x73FF69 83 7D F4 02          (max-1)
                 // Off leaves C#'s existing 15/30 path (host 21/90 is a separate BLOCKED).
+                // PKD-01 红名判据。战神 sub_73FC70 @0x73FCA9:
+                //   73FCA9  A1 AC 5F 7D 00     mov eax,[0x7D5FAC]   ; -> 0x7DCF00 = 200
+                //   73FCAE  8B 00              mov eax,[eax]
+                //   73FCB0  3B 86 60 01 00 00  cmp eax,[esi+0x160]  ; 阈值 vs MyPKpoint
+                //   73FCB6  7D 09              jge 0x73FCC1         ; 阈值 >= PK -> 非红名
+                //   73FCB8  C7 45 F8 15 …      mov [ebp-8],0x15     ; 红名分母 21
+                // `jge` 只在 阈值 < PK 时不跳，所以红名判据是**严格** PK > 200。
+                // 旧写法 `PKLevel()>2` 等价于 PK >= 300，PK 落在 201..299 的玩家整段判错。
+                // 注意与背包 worker sub_740078 @0x7400BE `setle` (PK >= 200) 差一点，
+                // 原生这两处本来就不一致，不能统一。
                 var dropCount = 0;
+                var nativeRedName = m_nPkPoint > M2Share.g_Config.nPKPunishPoint;
                 var deathDropPatched = new YanshenApi(this, null, M2Share.PluginManager)
-                    .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out var patchedCap);
+                    .TryGetDeathEquipDropPatch(nativeRedName, out var patchedRate, out var patchedCap);
+                // PKD-02 落地件数上限。战神 0x73FF69 `83 7D F4 02  cmp [ebp-0xC],2` /
+                // 0x73FF6D `7F 0A  jg 0x73FF79` —— 这条**无条件存在**，不是眼神补丁加的；
+                // 眼神只改了那个立即数 (0x100B9D3A A2 6C FF 73 00 -> imm8 of 0x73FF69)。
+                // C# 之前只在补丁生效时才计数并 break，没插件的服务器 16 个装备位全过筛，
+                // 一次死亡最多能爆 16 件而原生最多 3 件。
+                var nativeDropCap = deathDropPatched ? patchedCap : 2;
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     if (m_UseItems[i] == null)
@@ -2981,20 +2998,35 @@ namespace GameSvr
                             m_UseItems[i].wIndex = 0;
                             // native 0x73FD74 FF 45 F4 inc [ebp-0xc] then jmp 0x73FF6F
                             // (Reserved&8 skips the cap check, but the count still eats the budget)
-                            if (deathDropPatched) dropCount++;
+                            dropCount++;
                         }
                     }
                 }
                 var nRate = deathDropPatched
                     ? patchedRate
-                    : (PKLevel() > 2 ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
+                    : (nativeRedName ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
+                    // PKD-03 抽签次数对齐。战神一次循环走 16 个装备位:
+                    //   73FD2D  8B 86 C0 04 00 00  mov eax,[esi+0x4C0]   ; 装备容器
+                    //   73FD33  E8 …               call sub_75EC20       ; 取第 ebx 格
+                    //   73FD3A  85 FF              test edi,edi
+                    //   73FD3C  0F 84 2D 02 00 00  je 0x73FF6F           ; 空格 -> 直接下一格
+                    //   …                                               ; Reserved&8 走销毁支，也不抽
+                    //   73FD96  8B 45 F8           mov eax,[ebp-8]
+                    //   73FD99  E8 AE 3D CC FF     call sub_403B4C       ; ← 抽签在这里
+                    // 即**只有非空且不带 Reserved&8 的格子才消耗一次 Random**。
+                    // C# 原来把 Random 放在循环第一句，空格、以及上面刚被清成 wIndex=0
+                    // 的格子也各抽一次，整条 LCG 序列相对原生错位，后续所有掉落判定全歪。
+                    if (m_UseItems[i] == null || m_UseItems[i].wIndex <= 0)
+                    {
+                        continue;
+                    }
                     if (M2Share.RandomNumber.Random(nRate) != 0)
                     {
                         continue;
                     }
-                    if (m_UseItems[i] != null && M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
+                    if (M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
                     {
                         continue;
                     }
@@ -3022,12 +3054,10 @@ namespace GameSvr
                                 m_UseItems[i].wIndex = 0;
                             }
                         }
-                        // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 xx / 7F 0A jg
-                        if (deathDropPatched)
-                        {
-                            dropCount++;
-                            if (dropCount > patchedCap) break;
-                        }
+                        // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 02 / 7F 0A jg
+                        // 上限恒定生效（见 PKD-02）；眼神补丁只替换那个立即数。
+                        dropCount++;
+                        if (dropCount > nativeDropCap) break;
                     }
                 }
                 if (delList != null)
