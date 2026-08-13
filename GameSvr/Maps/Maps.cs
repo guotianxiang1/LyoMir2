@@ -190,7 +190,21 @@ namespace GameSvr
                                 MapFlag.boNORANDOMMOVE = true;
                                 continue;
                             }
-                            if (s34.Equals("LimitItemMove", StringComparison.OrdinalIgnoreCase))
+                            // LimitItemMove 是一个 token 写四个字节的复合开关，
+                            // 四个偏移里三个与别的 token 共享：
+                            //   0x775A5C  C6 43 67 01  mov byte [ebx+0x67],1  ; NORECALL
+                            //   0x775A60  C6 43 68 01  mov byte [ebx+0x68],1  ; NORANDOMMOVE
+                            //   0x775A64  C6 43 6B 01  mov byte [ebx+0x6B],1  ; NOPOSITIONMOVE
+                            //   0x775A68  C6 43 6C 01  mov byte [ebx+0x6C],1  ; 自有字节
+                            //   0x775A79/7D/81/85     同四址写 0（GM toggle=0 臂）
+                            //   parser B 0x7769E8/EC/F0/F4 同样四址置 1
+                            // 四路联动已经在 3d23493 落地；这里补最后一处差异：
+                            // 原版用的是**长度 13 的前缀比较**，不是全等——
+                            //   0x7769D2  B9 0D 00 00 00  mov ecx,0xD
+                            //   0x7769D7  BA 2C 6F 77 00  mov edx,0x776F2C  ; "LimitItemMove"
+                            //   0x7769DF  E8 B0 04 D5 FF  call 0x4C6E94
+                            // 与 parser A 的 0x775A42/47/4E 同形。
+                            if (HUtil32.CompareLStr(s34, "LimitItemMove", "LimitItemMove".Length))
                             {
                                 MapFlag.boLIMITITEMMOVE = true;
                                 MapFlag.boNORECALL = true;
