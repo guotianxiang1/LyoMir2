@@ -1847,15 +1847,13 @@ namespace GameSvr
                         (m_DealCreat as TPlayObject)?.ReassignClientItemId(UserItem);
                         (m_DealCreat as TPlayObject).SendAddItem(UserItem);
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        // TRADE-53: 原生 0x6C47AE 的 `test al,al / jne` 测的是
+                        // 0x6C47A9 `call 0x783984`，而 0x783984 全文是
+                        // `33 C0 xor eax,eax` / `C3 ret` —— 恒返回 0，所以 jne 永不成立，
+                        // 日志必发。C# 原有的 IsCheapStuff / NeedIdentify 双重门在原生无对应。
                         if (StdItem != null)
                         {
-                            if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                            {
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
-                                }
-                            }
+                            M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
                         }
                     }
                     if (m_nDealGolds > 0)
@@ -1877,15 +1875,11 @@ namespace GameSvr
                         ReassignClientItemId(UserItem);
                         this.SendAddItem(UserItem);
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        // TRADE-53: 镜像方向同理，0x6C48D6 的 `test al,al / jne` 测的是
+                        // 0x6C48D1 `call 0x783984`，同一个恒假桩，日志必发。
                         if (StdItem != null)
                         {
-                            if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                            {
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                }
-                            }
+                            M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
                         }
                     }
                     if (m_DealCreat.m_nDealGolds > 0)
