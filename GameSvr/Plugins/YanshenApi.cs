@@ -499,6 +499,22 @@ namespace GameSvr.Plugins
             return true;
         }
 
+        /// <summary>
+        /// `!!!!集成函数` 隧道的共用门。原生 41 路臂里有 32 个读同一个全局
+        /// 0x1031C244，例如 5 号施毒臂 0x10076AD9 `A1 44 C2 31 10` /
+        /// 0x10076ADE `81 38 F4 01 00 00` cmp dword[eax],0x1F4 / 0x10076AE4 `7E 07` jle。
+        /// 该全局由 accessor 桩 0x100021E0
+        /// (`A1 E0 C0 31 10` / `05 1C 01 00 00` / `A3 44 C2 31 10`) 解成 cfg2+0x11C。
+        ///
+        /// cfg2+0x11C 的配置键名取自配置序列化器：两段 run（0x10005E10.. 与
+        /// 0x10009EB3..）严格 CMP→KEY 交替且都以 CMP 开头，故每个
+        /// `cmp [esi+off],0x1F4` 配它后面那个键。0x1000642A `cmp [esi+0x11c],0x1F4`
+        /// 之后是 0x10006456 `push 0x102BE2E4` = "眼神特殊函数"。
+        /// 同法三处盲验通过：cfg2+0x538→毫秒级cd记录、cfg2+0x664→自定义元素、
+        /// cfg2+0x954→高级回收，与派发器 sub_1005E4D0 给这三条中文隧道的门逐一对上。
+        /// </summary>
+        private bool TunnelGate() => Enabled("眼神特殊函数");
+
         // ═══════════════════════════════════════════════════════════════
         // 6.1 元素系统 (17元素) — 14 functions
         // ═══════════════════════════════════════════════════════════════
@@ -628,7 +644,8 @@ namespace GameSvr.Plugins
         /// </summary>
         public int NpcGiveItemYs(int clientItemId, int[] ys)
         {
-            if (!Enabled("自定义元素")) return 0;
+            // 24 号臂 0x100772A6 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。
+            if (!TunnelGate()) return 0;
             if (ys == null) return -2;
             TUserItem found = null;
             foreach (var item in _player.m_ItemList)
@@ -879,9 +896,10 @@ namespace GameSvr.Plugins
         /// types 0=查询 1=增加 2=减少 3=设置。全函数只 call vector::at / stoi / vector 析构，
         /// 没有任何发包或引擎调用，所以四条支路都不刷新客户端。
         /// </summary>
+        /// <remarks>15 号臂 0x10076EF5 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int EquipDura(int bodyPos, int value, int opType)
         {
-            if (!Enabled("自定义元素")) return 0;
+            if (!TunnelGate()) return 0;
             // 10072722 83FE0F cmp esi,0xF / 10072725 0F8719010000 ja 0x10072844
             //   -> 10072853 B819FCFFFF mov eax,0xFFFFFC19
             if ((uint)bodyPos > 0xF) return -999;
@@ -955,9 +973,17 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>ys_MyJn_plus — 基础版自定义伤害</summary>
+        /// <remarks>
+        /// 3 号臂 0x10076A07 读的是另一个全局 0x1031C240（accessor 桩 0x100021D0
+        /// `05 24 05 00 00` ⇒ cfg2+0x524），不是 32 个臂共用的 cfg2+0x11C。
+        /// 序列化器 0x1000A183 `cmp [esi+0x524],0x1F4` 后面跟的键是
+        /// 0x1000A1B5 `push 0x102B15B0` = "自定义伤害_plus"。
+        /// 五个变体（plus2/effect/undead/super/delay）在原生是同一个实现体
+        /// 0x1006DAB0 的五种实参长度，因此共用这一把门。
+        /// </remarks>
         public int CustomDamage(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV)
         {
-            if (!Enabled("刀刀切割")) return 0;
+            if (!Enabled("自定义伤害_plus")) return 0;
             return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV);
         }
 
@@ -980,7 +1006,10 @@ namespace GameSvr.Plugins
         public int CustomDamageEffect(int magicLv, int baseHp, int range, int tx, int ty,
             int canl, int types, int cuttingV, int lei, int effect)
         {
-            if (!EnabledAll("眼神特殊函数", "自定义伤害_plus", "super攻击触发")) return 0;
+            // 原生的门在臂上，与实参个数无关：3 号臂只有 0x10076A07 这一道
+            // cfg2+0x524。effect 变体只是同一实现体 0x1006DAB0 多读一个可选参
+            // （0x1006DC8C `83 F8 0C` cmp eax,0xC），不会多一道门。
+            if (!Enabled("自定义伤害_plus")) return 0;
             return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV);
         }
 
@@ -994,9 +1023,10 @@ namespace GameSvr.Plugins
         public int CustomDamageDelay(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead, int mgId, int attId, int double_, int delayMs) { return CustomDamageSuper(magicLv, baseHp, range, tx, ty, canl, types, cuttingV, lei, effect, undead, mgId, attId) * double_ / 1000; }
 
         /// <summary>ys_Cutting — 神圣伤害(无视防御)</summary>
+        /// <remarks>34 号臂 0x100776C0 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int HolyDamage(int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int attId, int delayMs)
         {
-            if (!Enabled("刀刀切割")) return 0;
+            if (!TunnelGate()) return 0;
             int total = 0;
             foreach (var t in FindTargets(tx, ty, range, canl != 0))
             {
@@ -1006,7 +1036,14 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>Ys_MyYsJn — 14参数超级伤害(含ys_id元素ID, Doubling翻倍, lei字符串类型)</summary>
-        public int SuperDamage14(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int ysId, int v1, int doubling, string lei) { return CustomDamage(magicLv, baseHp, range, tx, ty, canl, types, cuttingV) * doubling / 1000; }
+        /// <remarks>
+        /// 无开关门。1 号臂 0x1007670A 首指令是 `8B 15 E4 C0 31 10` mov edx,[0x1031C0E4]
+        /// 后接 0x10076710 `83 BA 04 01 00 00 64` cmp [edx+0x104],0x64 —— 那是版本/授权
+        /// 判定，不是 `cmp dword[eax],0x1F4` 的开关门；1、2 号是全表仅有的两个无门臂。
+        /// 故这里走未加门的 CustomDamageCore。实现体本身落在 Themida 段（0x1007673E
+        /// `E8 4E D3 D7 00` → 0x10DF3A91），公式层仍不可证。
+        /// </remarks>
+        public int SuperDamage14(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int ysId, int v1, int doubling, string lei) { return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV) * doubling / 1000; }
 
         /// <summary>Ys_Attact — 直接攻击指定RoleId造成hp伤害</summary>
         public void DirectAttack(int roleId, int hp)
@@ -1056,9 +1093,10 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>施毒: leix 0=红毒 1=绿毒, hp每跳伤害, gailv概率</summary>
+        /// <remarks>5 号臂 0x10076AD9 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int Poison(int duration, int type, int hpPerTick, int probability, int range, int tx, int ty, int canl, int isAoe)
         {
-            if (!Enabled("施毒术")) return 0;
+            if (!TunnelGate()) return 0;
             return PoisonCore(duration, type, hpPerTick, probability, range, tx, ty, canl, isAoe);
         }
 
@@ -1081,7 +1119,8 @@ namespace GameSvr.Plugins
         public int PoisonEffect(int duration, int type, int hpPerTick, int probability,
             int range, int tx, int ty, int canl, int isAoe, int effect)
         {
-            if (!EnabledAll("眼神特殊函数", "super攻击触发")) return 0;
+            // effect 变体与 ys_ShiDu 共走 5 号臂，门只有 0x10076AD9 这一道。
+            if (!TunnelGate()) return 0;
             return PoisonCore(duration, type, hpPerTick, probability, range, tx, ty, canl, isAoe);
         }
 
@@ -1155,9 +1194,10 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>推开: juli距离, fangxiang 0=后退 1=拉进</summary>
+        /// <remarks>4 号臂 0x10076A70 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int PushEnemy(int distance, int direction, int probability, int range, int tx, int ty, int canl, int isAoe)
         {
-            if (!Enabled("野蛮麻痹")) return 0;
+            if (!TunnelGate()) return 0;
             int count = 0;
             foreach (var t in FindTargets(tx, ty, range, canl != 0))
             {
@@ -1186,9 +1226,14 @@ namespace GameSvr.Plugins
         public int PushEnemy2(int distance, int direction, int probability, int range, int tx, int ty, int canl, int isAoe, int roleId) { return PushEnemy(distance, direction, probability, range, tx, ty, canl, isAoe); }
 
         /// <summary>拉人/定身: why 0=拉人 1=拉回</summary>
+        /// <remarks>
+        /// 9 号臂 0x10076C7D `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。
+        /// ys_TuiTui / ys_TuiTui2 / ys_DingShen 三者都编码成 9 号，共用这一把门与
+        /// 同一个实现体 0x10070FD0，原生不存在「一函一门」。
+        /// </remarks>
         public int PullEnemy(int why, int level, int probability, int range, int tx, int ty, int canl, int isAoe)
         {
-            if (!EnabledAll("眼神特殊函数", "super攻击触发")) return 0;
+            if (!TunnelGate()) return 0;
             return PullEnemyCore(why, level, probability, range, tx, ty, canl, isAoe);
         }
 
@@ -1229,13 +1274,13 @@ namespace GameSvr.Plugins
         public int PullEnemy2(int why, int level, int probability, int range, int tx,
             int ty, int canl, int isAoe, int roleId)
         {
-            if (!Enabled("野蛮麻痹")) return 0;
+            if (!TunnelGate()) return 0;
             return PullEnemyCore(why, level, probability, range, tx, ty, canl, isAoe);
         }
         /// <summary>定身: duration秒, 使用LockRun状态冻结</summary>
         public int RootTarget(int duration)
         {
-            if (!Enabled("野蛮麻痹")) return 0;
+            if (!TunnelGate()) return 0;
             // Freeze position by locking movement
             _player.m_wStatusTimeArr[Grobal2.STATE_LOCKRUN] = (ushort)duration;
             _player.m_nCharStatus = _player.GetCharStatus();
@@ -1244,9 +1289,10 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>吸血: fixedHp固定, percentHp千分比</summary>
+        /// <remarks>8 号臂 0x10076C14 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int LifeSteal(int fixedHp, int percentHp)
         {
-            if (!Enabled("攻击吸血")) return 0;
+            if (!TunnelGate()) return 0;
             var steal = TBaseObject.ClampAbility((long)fixedHp
                 + (long)_player.m_WAbil.MaxHP * percentHp / 1000);
             _player.m_WAbil.HP = (int)Math.Min(_player.m_WAbil.MaxHP,
@@ -1254,9 +1300,10 @@ namespace GameSvr.Plugins
             return steal;
         }
 
+        /// <remarks>27 号臂 0x100773E1 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int VacuumMonstersEx(int range, int levelLimit, int maxCount)
         {
-            if (!Enabled("全屏吸怪")) return 0;
+            if (!TunnelGate()) return 0;
             var envir = _player.m_PEnvir; if (envir == null) return 0;
             var list = new List<TBaseObject>();
             M2Share.UserEngine.GetMapMonster(envir, list);
@@ -1283,9 +1330,10 @@ namespace GameSvr.Plugins
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>自愈术: oneHp单人治疗, allHp全体治疗, isStack叠加</summary>
+        /// <remarks>13 号臂 0x10076E22 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int Healing(int range, int tx, int ty, int oneHp, int allHp, int isStack, int roleId, int effect)
         {
-            if (!Enabled("刀刀切割")) return 0;
+            if (!TunnelGate()) return 0;
             int totalHeal = 0;
             if (range > 0)
             {
@@ -1316,9 +1364,14 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>减少目标临时属性: attrId 0=DC 1=MC 2=SC 3=AC 4=MAC 5=HP 6=MP</summary>
+        /// <remarks>
+        /// 14 号臂 0x10076E8C `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。
+        /// SubTempAttr / AddTempAttr / AddTempAttrPro 三者都编码成 14 号，共用同一实现体
+        /// 0x10071F10 与这一把门，靠实参个数（8/9/10）区分。
+        /// </remarks>
         public int SubTempAttr(int range, int tx, int ty, int value, int duration, int attrId, int roleId, int effect)
         {
-            if (!Enabled("刀刀切割")) return 0;
+            if (!TunnelGate()) return 0;
             foreach (var t in FindTargets(tx, ty, range, true))
                 ModifyStat(t, attrId, -value, duration);
             return value;
@@ -1327,7 +1380,7 @@ namespace GameSvr.Plugins
         /// <summary>增加临时属性: isOther 0=敌人 1=队友 2=自己</summary>
         public int AddTempAttr(int range, int tx, int ty, int value, int duration, int attrId, int roleId, int effect, int isOther)
         {
-            if (!Enabled("刀刀切割")) return 0;
+            if (!TunnelGate()) return 0;
             foreach (var t in FindTargets(tx, ty, range, true))
                 ModifyStat(t, attrId, value, duration);
             return value;
@@ -1336,7 +1389,7 @@ namespace GameSvr.Plugins
         /// <summary>增加临时属性Pro: types 0=不限 1=只怪物 2=只人物</summary>
         public int AddTempAttrPro(int range, int tx, int ty, int value, int duration, int attrId, int roleId, int effect, int isOther, int types)
         {
-            if (!Enabled("刀刀切割")) return 0;
+            if (!TunnelGate()) return 0;
             foreach (var t in FindTargets(tx, ty, range, true))
             {
                 // types filter: 0=all, 1=monster only, 2=player only
@@ -1389,16 +1442,17 @@ namespace GameSvr.Plugins
 
         /// <summary>设置技能免伤倍数: key标识, id技能ID, value倍数</summary>
         private static readonly ConcurrentDictionary<(string key, int id), int> _skillDmgReduction = new();
+        /// <remarks>40 号臂 0x10077927 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C，只有这一道。</remarks>
         public int SetSkillDmgReduction(string key, int id, int value)
         {
-            if (!EnabledAll("眼神特殊函数", "指定技能id免伤")) return 0;
+            if (!TunnelGate()) return 0;
             _skillDmgReduction[(key, id)] = value;
             return value;
         }
 
         public int GetSkillDmgReduction(string key, int id)
         {
-            if (!EnabledAll("眼神特殊函数", "指定技能id免伤")) return 0;
+            if (!TunnelGate()) return 0;
             return _skillDmgReduction.TryGetValue((key, id), out var v) ? v : 0;
         }
 
@@ -2107,9 +2161,10 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>全屏拾取: round范围, gbv网关绕过值, isMy仅拾取自己的</summary>
+        /// <remarks>19 号臂 0x10077099 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C，只有这一道。</remarks>
         public int AutoPickup(int range, int v1, int gbv, int isMy)
         {
-            if (!EnabledAll("眼神特殊函数", "全屏拾取")) return 0;
+            if (!TunnelGate()) return 0;
             var envir = _player.m_PEnvir; if (envir == null) return 0;
             int picked = 0;
             // Scan all map cells within range for items
@@ -2182,7 +2237,8 @@ namespace GameSvr.Plugins
         /// </summary>
         public int BindUnbindItem(int itemId, int flag)
         {
-            if (!Enabled("屏蔽自动绑定")) return 0;
+            // 33 号臂 0x10077657 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。
+            if (!TunnelGate()) return 0;
             TUserItem found = null;
             foreach (var item in _player.m_ItemList)
             {
@@ -3253,9 +3309,10 @@ namespace GameSvr.Plugins
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>播放特效 — 在指定位置播放WIL特效(SendRefMsg)</summary>
+        /// <remarks>12 号臂 0x10076DB8 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int PlayEffect(int range, int tx, int ty, int all, int effectId)
         {
-            if (!Enabled("自定义伤害")) return 0;
+            if (!TunnelGate()) return 0;
             if (all == 1)
             {
                 // Broadcast to all visible
@@ -3348,7 +3405,8 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>强制玩家下线</summary>
-        public int KickPlayer() { if (!Enabled("踢玩家下线")) return 0; _player.m_boEmergencyClose = true; return 1; }
+        /// <remarks>41 号臂 0x1007798D `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
+        public int KickPlayer() { if (!TunnelGate()) return 0; _player.m_boEmergencyClose = true; return 1; }
 
         /// <summary>
         /// 数字隧道 20 / <c>ys_CheckMapMonByName</c>。处理函数 <c>0x10073210</c>：

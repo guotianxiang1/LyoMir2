@@ -20,27 +20,55 @@ namespace GameSvr.Plugins
         public long TotalCommands, TotalErrors;
 
         /// <summary>
-        /// 原生 41 路臂里没有开关门的操作码。2 号麻痹臂 0x100769B9 首指令即
-        /// `8B 4D 08` mov ecx,[ebp+8]，直落 0x100769EA call 0x1006D690，
-        /// 臂内无 `81 38 F4 01 00 00` cmp …,0x1F4 序列。
+        /// 原生 41 路臂里没有开关门的操作码。1 号臂 0x1007670A 起手是
+        /// `8B 15 E4 C0 31 10` + `83 BA 04 01 00 00 64`（版本判定，非开关门）；
+        /// 2 号麻痹臂 0x100769B9 首指令即 `8B 4D 08` mov ecx,[ebp+8]，直落
+        /// 0x100769EA call 0x1006D690。两臂内都没有 `81 38 F4 01 00 00`
+        /// cmp dword[eax],0x1F4 序列。
         /// </summary>
-        static readonly HashSet<int> _ungatedCommands = new() { 2 };
+        static readonly HashSet<int> _ungatedCommands = new() { 1, 2 };
+
+        /// <summary>
+        /// 每个操作码的门 = 它在 41 路表 0x10077A78 里那条臂读的配置字段，
+        /// 与实参个数无关（原生「一族一门」，不是「一函一门」）。
+        ///
+        /// 32 个臂读同一个全局 0x1031C244 = cfg2+0x11C（accessor 桩 0x100021E0
+        /// `A1 E0 C0 31 10` / `05 1C 01 00 00` / `A3 44 C2 31 10`），
+        /// 键名由配置序列化器给出：0x1000642A `cmp [esi+0x11c],0x1F4` 之后是
+        /// 0x10006456 `push 0x102BE2E4` = "眼神特殊函数"。
+        /// 3 号单独读 0x1031C240 = cfg2+0x524（桩 0x100021D0），
+        /// 序列化器 0x1000A183 之后是 0x1000A1B5 `push 0x102B15B0` = "自定义伤害_plus"。
+        ///
+        /// 6 个臂各有专用门，但它们的字段在两段序列化 run 里都没有条目，
+        /// 键名静态不可证，故保留现值并在此登记 —— 仍属 fail-closed：
+        ///   25 → cfg2+0x084（桩 0x100020A0）   26 → cfg2+0x0FC（桩 0x100020B0）
+        ///   28 → cfg2+0x940（桩 0x10001F90）   30/31 → cfg2+0x1B4（桩 0x10002230）
+        ///   37 → cfg2+0x6E0（桩 0x10001D00）
+        /// </summary>
+        const string SharedTunnelGate = "眼神特殊函数";     // cfg2+0x11C
 
         static readonly Dictionary<int, string> _toggles = new()
         {
-            [1]="刀刀切割",[3]="刀刀切割",
-            [4]="野蛮麻痹",[5]="施毒术",[7]="高级回收",
-            [8]="攻击吸血",[9]="野蛮麻痹",[10]="火墙设置时间上限",
-            [11]="刀刀切割",[12]="自定义伤害",[13]="刀刀切割",
-            [14]="刀刀切割",[15]="自定义元素",[17]="自定义元素",
-            [16]="眼神特殊函数",[18]="自定义元素",[19]="全屏拾取",[20]="行会显示",
-            [21]="屏蔽自动绑定",[22]="眼神特殊函数",[23]="眼神特殊函数",
-            [24]="自定义元素",[25]="全局循环函数",[26]="自定义伤害",
-            [27]="全屏吸怪",[28]="指定英雄放技能",[29]="刀刀切割",
-            [30]="怪物伤害触发技能特效",[31]="怪物伤害触发技能特效",[32]="自定义元素",
-            [33]="屏蔽自动绑定",[34]="刀刀切割",[35]="眼神特殊函数",
-            [36]="眼神特殊函数",[37]="火墙修改",[38]="眼神特殊函数",
-            [39]="眼神特殊函数",[40]="眼神特殊函数",[41]="踢玩家下线",
+            [3]="自定义伤害_plus",                            // cfg2+0x524
+            [4]=SharedTunnelGate,[5]=SharedTunnelGate,[6]=SharedTunnelGate,
+            [7]=SharedTunnelGate,[8]=SharedTunnelGate,[9]=SharedTunnelGate,
+            [10]=SharedTunnelGate,[11]=SharedTunnelGate,[12]=SharedTunnelGate,
+            [13]=SharedTunnelGate,[14]=SharedTunnelGate,[15]=SharedTunnelGate,
+            [16]=SharedTunnelGate,[17]=SharedTunnelGate,[18]=SharedTunnelGate,
+            [19]=SharedTunnelGate,[20]=SharedTunnelGate,[21]=SharedTunnelGate,
+            [22]=SharedTunnelGate,[23]=SharedTunnelGate,[24]=SharedTunnelGate,
+            [25]="全局循环函数",                              // cfg2+0x084，键名未证
+            [26]="自定义伤害",                                // cfg2+0x0FC，键名未证
+            [27]=SharedTunnelGate,
+            [28]="指定英雄放技能",                            // cfg2+0x940，键名未证
+            [29]=SharedTunnelGate,
+            [30]="怪物伤害触发技能特效",                      // cfg2+0x1B4，键名未证
+            [31]="怪物伤害触发技能特效",                      // cfg2+0x1B4，键名未证
+            [32]=SharedTunnelGate,[33]=SharedTunnelGate,[34]=SharedTunnelGate,
+            [35]=SharedTunnelGate,[36]=SharedTunnelGate,
+            [37]="火墙修改",                                  // cfg2+0x6E0，键名未证
+            [38]=SharedTunnelGate,[39]=SharedTunnelGate,[40]=SharedTunnelGate,
+            [41]=SharedTunnelGate,
         };
 
         // Caret command toggles (^1^ ~ ^37^)
@@ -97,24 +125,13 @@ namespace GameSvr.Plugins
 
         private static string[] GetStandardCommandFeatures(TunnelCommand cmd)
         {
+            // 原生的门挂在臂上，与实参个数无关 —— 41 路表里没有任何一条臂会因为
+            // 段数不同而换一把门（段数只被实现体首部的元数检查用，见 _nativeArity）。
+            // 因此这里不能再按 Parameters.Length 分流出「多键门」。
             if (_ungatedCommands.Contains(cmd.CommandId)) return Array.Empty<string>();
-            switch (cmd.CommandId)
-            {
-                case 3 when cmd.Parameters.Length == 10:
-                    return new[] { "眼神特殊函数", "自定义伤害_plus", "super攻击触发" };
-                case 5 when cmd.Parameters.Length >= 10:
-                    return new[] { "眼神特殊函数", "super攻击触发" };
-                case 9 when cmd.Parameters.Length > 1 && cmd.Parameters.Length < 9:
-                    return new[] { "眼神特殊函数", "super攻击触发" };
-                case 19:
-                    return new[] { "眼神特殊函数", "全屏拾取" };
-                case 40:
-                    return new[] { "眼神特殊函数", "指定技能id免伤" };
-                default:
-                    return _toggles.TryGetValue(cmd.CommandId, out var featureName)
-                        ? new[] { featureName }
-                        : null;
-            }
+            return _toggles.TryGetValue(cmd.CommandId, out var featureName)
+                ? new[] { featureName }
+                : null;
         }
 
         public bool IsFeatureEnabled(int cmdId)
