@@ -79,7 +79,10 @@ namespace GameSvr
             m_dwOpenStartTick = HUtil32.GetTickCount();
             m_nEventType = nType;
             m_nEventParam = 0;
-            m_dwContinueTime = dwETime;
+            // Native TMapEvent.Create @0x717352: `81 FE 80 FC 0A 00 cmp esi,0xAFC80`
+            // / `7E 05 jle` / `BE 80 FC 0A 00 mov esi,0xAFC80` then `mov [ebx+0x20],esi`.
+            // Signed jle: durations > 720000 ms (12 min) are clamped; negatives are kept.
+            m_dwContinueTime = dwETime > 0xAFC80 ? 0xAFC80 : dwETime;
             m_boVisible = boVisible;
             m_boClosed = false;
             m_Envir = envir;
