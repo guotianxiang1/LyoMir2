@@ -41,6 +41,20 @@ namespace GameSvr
             const bool NativeSecondPathFlag = false;   // [self+0x1D1] — unmodelled
             const byte NativeSecondPathTier = 0;       // [self+0x1DD] — unmodelled
 
+            // 复活戒指重设: plugin 0x100B3472 test of [edi+0x5B8], then A3 over
+            // host 0x743758 / 0x73C4FA (cmp imm32 0xEA60) and 66 A3 over 0x743913
+            // (mov cx,2). Off = the unpatched immediates. Global host write, so
+            // heroes share the patched constants with players.
+            var yanshenRevive = new Plugins.YanshenApi(this as TPlayObject, null,
+                M2Share.PluginManager);
+            var reviveResetOn = yanshenRevive.IsReviveResetPatchOn();
+            var equipReviveCooldownMs = reviveResetOn
+                ? yanshenRevive.ReviveResetCooldownMs()
+                : NativeRevivePolicy.EquipReviveCooldownMilliseconds;
+            var postReviveImmuneSeconds = reviveResetOn
+                ? yanshenRevive.ReviveResetImmuneSeconds()
+                : NativeRevivePolicy.PostReviveStateSeconds;
+
             var outcome = NativeRevivePolicy.Resolve(
                 m_PEnvir?.Flag,
                 hasEquipRevive: m_boRevival && !suppressed,
@@ -48,7 +62,8 @@ namespace GameSvr
                 tick: tick,
                 secondPathFlag: NativeSecondPathFlag,
                 secondPathTier: NativeSecondPathTier,
-                secondPathCooldownActive: secondPathCooldownActive);
+                secondPathCooldownActive: secondPathCooldownActive,
+                equipReviveCooldownMs: equipReviveCooldownMs);
 
             switch (outcome)
             {
@@ -96,7 +111,7 @@ namespace GameSvr
                 AddNativeTimedAbilitySeconds(
                     NativeRevivePolicy.PostReviveStateType,
                     NativeRevivePolicy.PostReviveStateValue,
-                    NativeRevivePolicy.PostReviveStateSeconds);
+                    postReviveImmuneSeconds);
             }
 
             var flag = m_PEnvir?.Flag;

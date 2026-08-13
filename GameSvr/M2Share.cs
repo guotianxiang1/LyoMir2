@@ -1948,6 +1948,60 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// sub_764BC4, the second and quite different heading helper. Where
+        /// <see cref="GetNextDirection"/> (sub_764A90) buckets the two axis
+        /// signs, this one takes the ratio
+        /// <c>(|dy| * dy) / (dx*dx + dy*dy)</c> — dx = tx-sx at 0x764BCD,
+        /// dy = sy-ty at 0x764BD1 — rounds it to float32 (0x764C05
+        /// `D9 5D FC fstp dword [ebp-4]`) and compares it against four 80-bit
+        /// thresholds, picking the right or left fan from the sign of dx
+        /// (0x764C09 `85 DB / 7E 4F`, so dx == 0 takes the left fan).
+        ///
+        ///   0x764CB0  9A 99 99 99 99 99 99 D9 FE BF  = -0.85
+        ///   0x764CBC  9A 99 99 99 99 99 99 99 FC BF  = -0.15
+        ///   0x764CC8  9A 99 99 99 99 99 99 99 FC 3F  = +0.15
+        ///   0x764CD4  9A 99 99 99 99 99 99 D9 FE 3F  = +0.85
+        ///
+        /// Each test is `fld const / fcomp ratio / jbe`, so the arm fires on
+        /// <c>ratio &lt; const</c>. Same source and target gives 0 (0x764BDC).
+        /// </summary>
+        public static byte GetNextDirectionByRatio(int sx, int sy, int dx, int dy)
+        {
+            int deltaX = dx - sx;
+            int deltaY = sy - dy;
+            if (deltaX == 0 && deltaY == 0)
+            {
+                return Grobal2.DR_UP;
+            }
+
+            int numerator = unchecked(Math.Abs(deltaY) * deltaY);
+            int denominator = unchecked(deltaX * deltaX + deltaY * deltaY);
+            float ratio = (float)((double)numerator / denominator);
+
+            if (ratio < -0.85f)
+            {
+                return Grobal2.DR_DOWN;
+            }
+            if (deltaX > 0)
+            {
+                if (ratio < -0.15f)
+                    return Grobal2.DR_DOWNRIGHT;
+                if (ratio < 0.15f)
+                    return Grobal2.DR_RIGHT;
+                if (ratio < 0.85f)
+                    return Grobal2.DR_UPRIGHT;
+                return Grobal2.DR_UP;
+            }
+            if (ratio < -0.15f)
+                return Grobal2.DR_DOWNLEFT;
+            if (ratio < 0.15f)
+                return Grobal2.DR_LEFT;
+            if (ratio < 0.85f)
+                return Grobal2.DR_UPLEFT;
+            return Grobal2.DR_UP;
+        }
+
         public static bool CheckUserItems(int nIdx, GoodItem StdItem)
         {
             var result = false;

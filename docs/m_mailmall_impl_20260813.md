@@ -335,3 +335,275 @@ const IsUseGloryPoint: Boolean)` 逐个对上，其中 **NeedNum 是引擎算好
 - P1「邮件类型 2/3 被拒」：三处 `IsSupportedTag` 现均为 `tag is >= 1 and <= 6`。
 
 这两条不要再当待办。
+
+---
+
+## 3. 邮件：逐项对账（全部自行反出，未采信前人结论）
+
+生产流量里邮件族 4462/4463/4468/4495/4496 **一次都没出现**，所以这部分是忠实度维护，不是上线阻塞。
+
+### 3.1 【MAIL-01 · FAITHFUL】领取阶梯 `sub_70B664`
+
+```
+0070B68A  83 ce ff              or  esi, -1              ; result := -1
+0070B68D  80 7b 4d 02           cmp byte [mail+0x4D], 2  ; AttachStatus 已领
+0070B693  be fe ff ff ff        mov esi, -2              ;   -> -2 直接返回
+0070B6A2  ff 52 14              call [attachList vmt+0x14]  ; 附件条数 -> edi
+0070B6AA  e8 45 cb 03 00        call 0x7481F4            ; 背包空格数
+0070B6AF  3b f8 / 0f 8f         cmp edi, eax / jg 0x70B874 ; 条数 > 空格 -> 返回 -1
+0070B6B7  83 cf ff              or  edi, -1              ; orderId := -1
+0070B6BA  83 7b 54 00 / 7e      cmp [mail+0x54],0 / jle  ; MoneyCount > 0 才 INSERT Money_order
+0070B6C4  e8 eb 09 00 00        call 0x70C0B4
+0070B6CB  83 7b 50 01 / 75      cmp [mail+0x50],1 / jne  ; MoneyType == 1（元宝）
+0070B6D5  83 7b 54 00 / 0f 8e   cmp [mail+0x54],0 / jle  ;   且 MoneyCount > 0
+0070B79A  e8 45 5d 00 00        call 0x7114E4            ;   -> 异步入队
+0070B79F  33 f6                 xor esi, esi             ;   -> result := 0（不同步回包）
+0070B7A6  83 7b 50 00 / 0f 85   cmp [mail+0x50],0 / jne 0x70B83E
+0070B7C0  e8 83 c1 fc ff        call 0x6D7948            ; 金币溢出测试
+0070B7C9  be fd ff ff ff        mov esi, -3              ;   溢出 -> -3
+0070B7DB  ff 91 8c 02 00 00     call [player vmt+0x28C]  ; IncGold
+0070B83E  83 7b 50 00 / 75 30   cmp [mail+0x50],0 / jne 0x70B874   ; <<< 关键
+0070B84A  e8 35 0c 00 00        call 0x70C484            ; Money_order.moneyStatus := 1
+0070B84F  80 7b 08 04 / 75      cmp byte [mail+8],4      ; MailType == 4
+0070B85F  e8 c0 12 00 00        call 0x70CB24 (dl=2)     ;   AttachStatus := 2
+0070B864  be 01 00 00 00        mov esi, 1               ;   result := 1
+0070B86D  e8 e6 fb ff ff        call 0x70B458            ; 否则走附件发放循环
+```
+
+`0x70B83E` 那条 `jne` 是全函数最容易读反的一处：**只有 `MoneyType == 0` 才会走到发货**。
+`MoneyType >= 2` 与「`MoneyType == 1` 但 `MoneyCount <= 0`」两种情况都在这里被弹回，
+带着开头的 `esi = -1` 返回。C# `FetchNativeMailAttachments` 的
+`if (record.MoneyCount <= 0) return -1;` 与 `if (record.MoneyType != 0) return -1;`
+正是这两条，判定 **FAITHFUL**。
+
+`orderId` 在 MoneyType 校验**之前**就 INSERT 了（`0x70B6BA`），所以 MoneyType >= 2 时
+Money_order 留下孤儿行——这是原生行为，C# 一致，**不要"修"**。
+
+### 3.2 【MAIL-02 · FAITHFUL】背包门：原生把 48 写死在指令里
+
+```
+007481F4  e8 dc bf ff ff  call 0x7441D8        ; 纯 thunk
+007441D8  8b 80 08 05 00 00  mov eax, [player+0x508]   ; 背包列表
+007441DE  ba 30 00 00 00     mov edx, 0x30             ; 48，立即数
+007441E3  2b 50 08           sub edx, [list+8]         ; 48 - Count
+```
+
+空格数就是 `48 - 件数`，48 是 `ba 30 00 00 00` 的立即数，不是任何容量查询。
+C# 用 `BagCapacity.Of(this) - m_ItemList.Count`，在没有大背包时 `Of` 返回 `NativeSlots = 48`，
+逐字节等价；装上大背包时按项目既定的单一权威扩容。判 **FAITHFUL**。
+
+### 3.3 【MAIL-03 · FAITHFUL，附一条已知差异】金币溢出 `sub_6D7948`
+
+```
+006D7948  85 d2                 test edx, edx
+006D794A  7c 11                 jl 0x6D795D                ; amount < 0  -> TRUE（拒绝）
+006D794C  03 90 5c 01 00 00     add edx, [player+0x15C]    ; gold + amount
+006D7952  3b 90 8c 06 00 00     cmp edx, [player+0x68C]    ; vs 金币上限
+006D7958  7f 03                 jg 0x6D795D                ; >  上限 -> TRUE
+006D795A  33 c0 / c3            xor eax,eax / ret          ; 否则 FALSE
+```
+
+比较方向是 `>`（`jg`），C# `(long)m_nGold + record.MoneyCount > m_nGoldMax` 一致。
+`amount < 0` 那条臂在上游 `0x70B7B0 cmp [mail+0x54],0 / jle` 已经挡掉，不可达。
+
+**已知差异（不建议改）**：原生 `add edx,[+0x15C]` 是 32 位加法，会回绕；回绕成负数时
+`jg` 不成立，等于放行。C# 提到 64 位算，不会回绕。要触发差异需要 `gold + moneyCount`
+接近 2^31，而 `gold <= [+0x68C]` 恒成立，所以只能由数据库里一个接近 2^31 的 moneyCount 触发。
+C# 这一侧更严，且严的方向是**拒绝**而不是发放，不构成刷子。
+
+### 3.4 【MAIL-04 · FAITHFUL】tag 闸就是 1..6
+
+```
+0070DBCC  80 fa 07              cmp dl, 7
+0070DBCF  77 0a                 ja 0x70DBDB            ; > 7 -> CF=0 -> 拒
+0070DBD1  83 e2 7f              and edx, 0x7F
+0070DBD4  0f a3 15 e8 3d 7d 00  bt dword [0x7D3DE8], edx
+0070DBDB  0f 92 c0              setb al
+```
+
+`0x7D3DE8` 实读 `7e 8d 40 00`，低字节 `0x7E` = bit 1..6；bit 0 与 bit 7 为 0，
+所以 tag 0 与 tag 7 都被拒。**全镜像对 `0x7D3DE8` 只有 `0x70DBD7` 这一处引用**（自行复扫确认），
+没有任何代码写这个掩码。名字表 `0x7D3DEC` 实读：
+`[1]系统 [2]任务奖励 [3]离线补偿 [4]物品售卖 [5]过期返还 [6]摊位留言 [7]用户邮件`。
+tag 7 有名字但 bit 是 0，仍然被拒。三处 `IsSupportedTag(tag) => tag is >= 1 and <= 6` **FAITHFUL**。
+
+### 3.5 【MAIL-05 · FAITHFUL】过期清理的四个常量与比较方向全部对得上
+
+`sub_70D0F4`：
+
+```
+0070D107  e8 c0 0a 00 00        call 0x70DBCC            ; 先过 tag 闸
+0070D114  c7 45 fc 1e 00 00 00  mov [ebp-4], 0x1E        ; 上限 30 封
+0070D11B  c7 45 f8 07 00 00 00  mov [ebp-8], 7           ; 保留 7 天
+0070D122  80 fb 06 / 75 0e      cmp bl, 6 / jne          ; tag == 6
+0070D127  c7 45 fc 14 00 00 00  mov [ebp-4], 0x14        ;   上限 20 封
+0070D12E  c7 45 f8 03 00 00 00  mov [ebp-8], 3           ;   保留 3 天
+```
+
+C# `DefaultMaximumMails=30 / DefaultRetentionDays=7 / SystemMaximumMails=20 /
+SystemRetentionDays=3`，且都按 `tag == 6` 分档 —— 四个数、一个分档条件全中。
+
+天数换秒再比：
+
+```
+0070D183  c1 e0 03 / 8d 04 40   shl eax,3 / lea eax,[eax+eax*2]  ; days * 24
+0070D189  6b c0 3c              imul eax, eax, 0x3C              ; * 60
+0070D18C  6b c0 3c              imul eax, eax, 0x3C              ; * 60 -> 秒
+0070D19B  77 24                 ja 0x70D1C1                      ; 保留期 >  年龄 -> 跳过
+0070D1A1  7f 1e                 jg 0x70D1C1
+```
+
+跳过条件是「保留期 > 年龄」，所以**删除条件是 `年龄 >= 保留期`**。
+C# 写的是 `if (age.TotalDays < retentionDays) continue;`，同为 `>=`。
+这正是 §4.7 最容易写成严格 `>` 的地方，现有代码是对的。
+
+条数超限的裁剪：`0x70D1DB cmp eax,[ebp-4] / 0x70D1DE jle 0x70D265`，
+即 `count <= max` 就收工，与 C# `if (category.Count <= maximumMails) return;` 一致。
+
+### 3.6 【MAIL-06 · FAITHFUL】清理资格判定 `sub_70D0CC` 与 C# 逐条相同
+
+```
+0070D0CC  80 78 4c 02  cmp byte [mail+0x4C], 2   ; MailStatus == 2
+0070D0D2  8a 50 4d     mov dl, [mail+0x4D]
+0070D0D5  80 c2 fe     add dl, 0xFE              ; -2
+0070D0D8  80 ea 02     sub dl, 2
+0070D0DB  72 04        jb  -> dl := 1            ; 借位 => AttachStatus ∈ {2,3}
+0070D0E3  8a 40 08     mov al, [mail+8]          ; MailType
+0070D0E6  2c 04 / 74   sub al,4 / je  -> dl := 1 ; MailType == 4
+0070D0EA  2c 02 / 75   sub al,2 / jne            ; MailType == 6
+```
+
+即 `(MailStatus==2 && AttachStatus ∈ {2,3}) || MailType ∈ {4,6}`，
+与 `NativeMailCacheService.IsCleanupEligible` 一字不差。
+
+### 3.7 【MAIL-07 · FAITHFUL】清空 `sub_70D2D0`：逆序 + 首个非 1 立即中止
+
+```
+0070D2DD  c7 45 f8 ff ff ff ff  mov [ebp-8], -1          ; result := -1
+0070D2E9  e8 de 08 00 00        call 0x70DBCC / je 0x70D344  ; tag 不合法 -> 返回 -1
+0070D302  4b                    dec ebx                  ; 从 count-1 起**逆序**
+0070D318  80 78 4c 02 / 75 20   cmp [mail+0x4C],2 / jne  ; MailStatus == 2
+0070D31E  add dl,0xFE / sub dl,2 / 73 15 jae             ; AttachStatus ∈ {2,3}
+0070D330  e8 1b 00 00 00        call 0x70D350            ; 删除
+0070D338  83 7d f8 01 / 75 06   cmp [ebp-8],1 / jne 0x70D344 ; 返回值 != 1 -> 中止
+```
+
+`ClientClearAllNativeMail` 的逆序循环、同一资格判定、`result` 默认 -1、
+非 1 立即 `break` —— 全部对上。
+
+### 3.8 【MAIL-08 · FAITHFUL】排序比较器 `sub_709648`
+
+先比 `[+0x4C]`（MailStatus）：1 在 2 之前；同状态再按 `sub_49E40C([+0x40], Now)` 的
+年龄**升序**（越新越前）。C# `SortCategory` 是 MailStatus 升序 + CreateDate 秒级降序，
+两者同义。
+
+---
+
+## 4. 守恒论证（逐处）
+
+### 4.1 商城购买
+
+改动后的顺序是：数量合法性 → 售罄 → 解析标准物品 → 背包空间 → 限购 → 总价
+→ **结算闸（恒失败）** → 建物品 → 入包 → 写限购 → 扣库存 → 写日志。
+
+- **不会「扣钱不给物」**：唯一的扣款入口 `TrySettleYuanbaoPayment` 在返回 false 之前
+  没有任何写操作（余额判定是只读的 `m_nGameGold <` 比较），也不存在别的扣款点——
+  `MallManager.cs` 已无 `m_nGold -=` / `m_nGameGold -=` / `SetShengWan` / `SetPlayerVariable(…,'V',…)`。
+- **不会「给物不扣钱」**：物品对象在结算闸**之后**才创建，入包更在其后；
+  闸恒 false，所以 `player.m_ItemList.Add` 不可达。
+- 移除的三条本地扣款（金币/声望/充值点）本身就是「给物不扣钱（对原生而言）」：
+  原生只收元宝且在外部结算，用金币换到的物品在原生侧凭空产生。
+- 限购计数只在结算成功后写（脚本第 10 步），闸恒 false 时不写，不会出现
+  「限购扣了但没买到」。
+
+**残余风险：零。** 代价是商城在 C# GameSvr 上买不了东西——这是 fail-closed 的既定代价，
+而不是回归：在此之前它同样买不了（商品表加载 0 条，见 §1.5），只是失败得更晚、
+而且对 1/3/4 三种货币会真的发货。
+
+### 4.2 商城列表渲染
+
+`ClientQueryWhitePigMall` / `ClientRefreshWhitePigMall` 只读。去掉
+`ResetDailyLimitIfNeeded` 之后这条路径**不再有任何写**，包括脚本变量写。
+原生 `sub_63A254` / `sub_63CD0C` 同样只读玩家状态。守恒上无风险。
+
+### 4.3 邮件领取
+
+- 背包门（`0x70B6AF cmp edi,eax / jg`）在**任何**副作用之前，附件装不下就整件拒绝，
+  不会出现「发了一半」。
+- 金币溢出门（`0x70B7C0`）在 `IncGold` 之前，返回 -3 时金币未动、附件未发、
+  `AttachStatus` 未改，邮件仍可领 —— 与原生一致。
+- 发放循环 `sub_70B458` 之后**无条件**写 `AttachStatus := 2`（`0x70B5E3`），
+  这是「附件最多发一次」的全部保证。单件 `AddItemToBag` 失败时原生丢弃那一件
+  （损失窗口），但绝不重复发放。C# 现状与之一致。
+- 元宝分支是异步的，原生自己就带一个崩溃窗口（`yb_user_data` 已提交而 `attachStatus`
+  仍为 1 → 重领可重复得元宝）。这是原生设计，C# 复刻，**不要修**。
+  这条与回收系统「有元宝产出就整件不回收」的判断同源：元宝无法与同步删除同事务。
+
+### 4.4 邮件清理
+
+`sub_70D0F4` 的删除对象必须同时满足资格判定（§3.6），即要么已读且附件已领/已弃，
+要么是 `MailType 4/6`（售卖、摊位留言，本就无附件）。所以清理不会吞掉
+未领取的附件。C# 一致。
+
+---
+
+## 5. 判定汇总
+
+| 判定 | 数量 | 条目 |
+|---|---:|---|
+| `FAITHFUL` | 10 | MAIL-01..08、MALL-03(+44)、MALL-07 现状阶梯已核 |
+| `DIVERGENT` | 5 | MALL-01 商品表契约、MALL-02 记录 +46/+48、MALL-09 分类号、MALL-10 总价用原价、MALL-11 数量静默夹取 |
+| `MISSING` | 2 | MALL-04 生产脚本形状不被解析（导致整表为空）、MALL-06 灵符发放 |
+| `INVENTED` | 3 | MALL-05 货币类型 1/3/4 本地扣款、MALL-08 S(300/301/302) 限购坐标、MALL-12 固定分类名表 |
+| `BLOCKED` | 4 | 见 §6 |
+
+`DIVERGENT` / `MISSING` / `INVENTED` 已全部落地修复，除 MALL-04 只能部分修（见 §6.1）。
+
+---
+
+## 6. BLOCKED
+
+### 6.1 商城商品表的最终形态：必须由 PAS 引擎调 `@GetYBShopConfig`
+
+原生不解析脚本文本。任何静态正则都是替身，替身注定覆盖不全（这次就是跟错了脚本变体）。
+本次把替身对齐到了原生的 10 字段契约，并让它认识生产脚本的 `case` 形状，
+但仍**无法**处理：`Execute` 里按日期在 `_001`/`_002` 之间切换、
+`IsUsingGoodsName` 的运行期过滤、以及分支里带表达式的赋值。
+
+缺什么：把 `YBShopScript.pas` 接进 C# 的 PasEngine，按 `sub_636D68` 的形状
+（8 个 variant 实参、返回串）调用 `@GetYBShopConfig`。
+
+### 6.2 `EverydayClearLimitValue` 需要真正的 PAS 解释器
+
+`for I := 1 to 50 do begin SetV(91,I,0); if GetV(89,I) < 0 then SetV(89,I,0); end;`
+是变址循环，不能用正则还原。生产脚本的 `GetLimitValue`/`SetLimitValue` 是空桩，
+限购恒 0，所以当前不实现无可观测影响。
+
+### 6.3 元宝结算 `PsYBConsumEx` 的外部链路
+
+`This_Player.PsYBConsumEx(2, 'YBShopBuy_YB', …)` 走外部元宝库，
+属既有的 6108 externally-blocked 结论范围。没有它，商城购买无法忠实完成，
+只能 fail-closed。
+
+### 6.4 `1101` 处理器里 Looks 解析失败时的回退
+
+前人文档称 `sub_639D24` 在标准物品查不到时用记录 `+48` 的低字（即 `vEffectImg`）
+当 Looks 回退。若属实，C# `BuildWhitePigMallBody` 里
+`if (stdItem == null || stdItem.Looks == 0) continue;` 会**丢掉原生仍然展示的商品**
+（生产脚本的 `vEffectImg` = 520/410/380 正是像 Looks 的值）。
+本次未逐字节复核 `sub_639D24`，不下判定。
+
+缺什么：反 `sub_639D24 @0x639D24` 的查表失败臂，确认回退源是不是 `+48` 低字。
+
+---
+
+## 7. 建议的优先级
+
+1. **MALL-04 / 6.1**：商城是 29 万次/周期的最热写路径，目前商品表为空。
+   接 PAS 引擎是唯一的终局解，本次的替身修复只是把它从「必然为空」变成「生产脚本能解析」。
+2. **MALL-05 已落地**：三条 INVENTED 扣款是本次唯一的真实经济风险，已 fail-closed。
+3. **MALL-08 已落地**：每次开商城面板往存档写一个原生没有的键（1046 线上 50,039 次），
+   属 §1.4 存档布局问题，已移除。
+4. **MALL-02 已落地**：+46/+48 字段错位是协议问题，影响客户端商品展示。
+5. **6.4**：复核 `sub_639D24` 的 Looks 回退，决定 `stdItem.Looks == 0` 那条 `continue` 该不该留。
+6. 邮件族：线上零流量，全部 FAITHFUL，无需动作。

@@ -72,6 +72,14 @@ namespace GameSvr
         private bool TryExecuteNativeStallBoothSetup(NativeStallOp op, TProcessMessage msg,
             short responseIdent, NativeStallManager manager)
         {
+            // 眼神 关闭摆摊 memcpys a single C3 over sub_6E7C38's prologue (0x100AD0EE payload,
+            // 0x100AD113 push 0x6E7C38 / len 1 -> 0x10033340), so START returns before the map
+            // gate, before the ladder and before any reply. Bail ahead of GetOrCreate so no
+            // record is created either: Δgold = Δitems = Δrecords = 0.
+            if (op == NativeStallOp.StartStall
+                && new Plugins.YanshenApi(this, null, M2Share.PluginManager).IsStallClosed())
+                return true;
+
             var tier = SelectBoothTier();
             var record = manager.GetOrCreate(m_sCharName, GetCachedNativeUserId());
             long gold = m_nGold;
@@ -246,6 +254,10 @@ namespace GameSvr
                 if (record.Status == StallRecordStatus.Running && record.Items.Count == 0)
                     record.Status = StallRecordStatus.PausedClosed;    // auto-pause a now-empty running booth
                 PersistStallHeader(record, store);                     // itemcnt (+ status) -> UpdateStall
+                // sub_61BECC @0x61BF43: after the stall-item lookup succeeds,
+                // edx=[ebp-8] (the DelItem ecx item-id) / eax=[ebp-4] (player)
+                // call 0x6E7D94 -> SendDefMessage(4427, Recog=itemId, 0,0,0,"").
+                SendDefMessage(Grobal2.SM_UPT_DEL_STALLITEM, clientItemId, 0, 0, 0, "");
             }
             SendDefMessage(responseIdent, code, 0, 0, 0, "");
             return true;

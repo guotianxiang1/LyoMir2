@@ -241,7 +241,8 @@ public class TMapFlag
     /// 战神 map flag <c>MAPFIREWALLBURN(n)</c> -> native <c>[flag+0x88]</c> DWORD,
     /// stored in MILLISECONDS: both parsers multiply the parsed argument by 1000
     /// before storing (<c>0x7753A4</c> / <c>0x7764C9</c>
-    /// <c>69 C0 E8 03 00 00  imul eax,eax,0x3E8</c>), so the配置 value is seconds.
+    /// <c>69 C0 E8 03 00 00  imul eax,eax,0x3E8</c>), so the configured value is
+    /// in seconds.
     /// Writers <c>0x7753AA</c> (and <c>0x7753BD/BF</c> writes 0 on toggle-off),
     /// <c>0x7764CF</c>. No read point anchored yet.
     /// </summary>

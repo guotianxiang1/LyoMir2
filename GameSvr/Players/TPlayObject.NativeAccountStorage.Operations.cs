@@ -18,8 +18,21 @@ namespace GameSvr
         {
             if (m_boPasswordLocked)
             {
+                // 战神 sub_6C1860, mode-2 arm (mode 1 is the 仓库 twin at 0x6C189F):
+                //   006C18BF  6A 17              push 0x17        ; Param  = 23
+                //   006C18C1  6A 00              push 0           ; Tag    = 0
+                //   006C18C3  6A 00              push 0           ; Series = 0
+                //   006C18C5  68 9C 19 6C 00     push 0x6C199C    ; sMsg
+                //   006C18CA  8B CB              mov ecx,ebx      ; nRecog = Self
+                //   006C18CC  66 BA 0F 0B        mov dx,0xB0F     ; ident  = 2831
+                //   006C18D4  FF 93 50 02 00 00  call [ebx+0x250]
+                // 23 was going out in Series with Param zero. And the literal at 0x6C199C
+                // has declen 20 = ten GBK chars,
+                //   c7eb cae4 c8eb c3dc b1a6 bfaa c6f4 b6b7 d7aa cfe4
+                // = 请输入密宝开启斗转箱. There is no 码 in it; the eleven-char version
+                // here was one character too long.
                 SendDefMessage(Grobal2.SM_MERCHANT_QUERY,
-                    ObjectId, 0, 0, 23, "请输入密码宝开启斗转箱");
+                    ObjectId, 23, 0, 0, "请输入密宝开启斗转箱");
                 return;
             }
 

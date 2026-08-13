@@ -1,5 +1,6 @@
 using System;
 using GameSvr.CommandSystem;
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -62,6 +63,11 @@ namespace GameSvr
                         hero.RecalcAbilitys();
                         hero.SendMsg(hero, Grobal2.RM_MAGIC_LVEXP, 0, magic.wMagicID,
                             userMagic.btLevel, userMagic.nTranPoint, string.Empty);
+                        // sub_73F500 SysMsg is to the actor (hero) whose skill changed,
+                        // not the GM. The GM confirmation below is the shim, unpatched.
+                        if (!new YanshenApi(target, null, M2Share.PluginManager).IsUpSkillSilentPatchOn())
+                            hero.SysMsg(sSkillName + " 技能等级变更为：" + userMagic.btLevel,
+                                MsgColor.Green, MsgType.Hint);
                         PlayObject.SysMsg(
                             $"{sHumName} 的英雄技能 {sSkillName} 已调整为 {userMagic.btLevel} 级",
                             MsgColor.Green, MsgType.Hint);

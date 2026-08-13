@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using SystemModule;
 using GameSvr;
@@ -3150,6 +3150,37 @@ namespace GameSvr.Plugins
         public bool IsOneSword() => PatchToggleOn("基本剑术");
         public int OneSwordN() => ParamAtoi("基本剑术_n值", 3);
 
+        // 复活戒指重设 is a host-code patch, same primitive as the six warrior
+        // skills. Plugin 0x100B3472 `83 BF B8 05 00 00 00 cmp [edi+0x5B8],0`
+        // (loader lag puts 复活戒指重设 at +0x5B8) / je 0x100B36D2 skips the
+        // writes when the toggle is off. On: atoi(重设时间) then
+        // `69 C0 E8 03 00 00 imul 0x3E8` is stored over the two `0xEA60`
+        // immediates, and atoi(无敌时间) `0F B7 C0 movzx eax,ax` is stored
+        // over `66 B9 02 00` at 0x743911.
+        //   0x100B3501 A3 FA C4 73 00 -> host 0x73C4FA of `81 FE 60 EA 00 00`
+        //   0x100B357B A3 58 37 74 00 -> host 0x743758 of `81 FA 60 EA 00 00`
+        //   0x100B35E9 A3 80 C4 73 00 -> host 0x73C480 of `B8 3C 00 00 00`
+        //   0x100B3657 66 A3 13 39 74 00 -> host 0x743913 of `mov cx,2`
+        // 0x7CC on the cfg struct is the already-applied latch (written 0x64
+        // after the patch, 0 when the toggle is off) — C# rereads the config
+        // each revive, which is the player-visible result of uncheck/recheck.
+        public bool IsReviveResetPatchOn() => PatchToggleOn("复活戒指重设");
+
+        /// <summary>
+        /// Milliseconds written over the two <c>cmp …,0xEA60</c> sites.
+        /// Native default 60000; plugin <c>imul eax,0x3E8</c> is 32-bit wrap.
+        /// </summary>
+        public int ReviveResetCooldownMs() =>
+            unchecked(ParamAtoi("复活戒指重设_重设时间", 60) * 1000);
+
+        /// <summary>
+        /// Seconds written over <c>mov cx,2</c> @0x743911. Plugin
+        /// <c>0x100B34B7 0F B7 C0 movzx eax,ax</c> keeps the low 16 bits of
+        /// atoi, including the zero-extended negative case (atoi -1 → 65535).
+        /// </summary>
+        public int ReviveResetImmuneSeconds() =>
+            ParamAtoi("复活戒指重设_无敌时间", 2) & 0xFFFF;
+
         /// <summary>
         /// Toggle read for a code-patch override. Unlike a script API, "off"
         /// here is not a failure: it is simply the unpatched native
@@ -3205,9 +3236,68 @@ namespace GameSvr.Plugins
         public bool IsSummonShenShou() => Enabled("召唤神兽");
         public bool IsSummonKuLou() => Enabled("召唤骷髅");
         public bool IsModifyShenShou() => Enabled("修改召唤神兽");
-        public bool IsShenShouCount() => Enabled("神兽_数量");
-        public bool IsKuLouCount() => Enabled("召唤骷髅_数量");
-        public int ShenShouIdx() => GetParamInt("神兽_序号", -1);
+        public int ShenShouIdx() => GetParamInt("神兽_序号", 0);
+
+        /// <summary>
+        /// 眼神写进宿主 imm8 的从宠数量。取值域由「被改写的那条指令能编码什么」决定：
+        /// 插件只做上钳 127（<c>0x100A9DE9 83 F8 7F cmp eax,0x7F</c> /
+        /// <c>0x100A9DEC 7E 07 jle</c> / <c>0x100A9DEE B8 7F000000 mov eax,0x7F</c>），
+        /// 没有下钳，随后写入的是 <c>al</c>（<c>0x100A9E0F 88 85 2A EF FF FF</c>）。
+        ///
+        /// 被改写的那条是 <c>6A xx</c>（<c>push imm8</c>），x86 定义它**符号扩展**成
+        /// dword，而 callee <c>sub_6CB070</c> 是按 dword 读这个槽的
+        /// （<c>0x006CB1F0 FF 45 14 inc dword [ebp+0x14]</c> /
+        /// <c>0x006CB297 3B 45 14 cmp eax,dword [ebp+0x14]</c>，`ret 0x10` 共 4 个栈参）。
+        /// 所以负配置值是 <c>(sbyte)</c> 截断后**保持负数**，不是回绕成 0..255：
+        /// <c>神兽_数量 = -1</c> → atoi 得 -1 → 不大于 0x7F → al = 0xFF →
+        /// <c>push 0xFF</c> → <c>[ebp+0x14] = -1</c>（一只都不造），
+        /// 用 <c>(byte)</c> 会算成 255（造 255 只）。
+        /// </summary>
+        static int NativeSlaveCountImm8(int v) => (sbyte)(v > 0x7F ? 0x7F : v);
+
+        /// <summary>
+        /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
+        /// 改写宿主 <c>0x0076EE98 6A 01</c> 的 imm8（目标 <c>0x0076EE99</c>，原字节 <c>01</c>），
+        /// 即 <c>0x0076EEB6 call [esi+0xEC]</c> 造宠调用的第一个栈参。
+        /// 补丁点 <c>0x100A9E9B call 0x10033340(src, 1, 0x0076EE99, 0x0076EE99)</c>；
+        /// 还原支 <c>0x100A9F33 C6 85 2B EF FF FF 01</c> 写回 <c>01</c>，即关闭态宿主就是 1。
+        /// </summary>
+        public int ShenShouSlaveCount() => IsSummonShenShou()
+            ? NativeSlaveCountImm8(GetParamInt("神兽_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤骷髅的从宠数量。同构：宿主 <c>0x0076EE1E 6A 01</c> 的 imm8
+        /// （目标 <c>0x0076EE1F</c>，原字节 <c>01</c>），补丁点
+        /// <c>0x100AA04B call 0x10033340(src, 1, 0x0076EE1F, 0x0076EE1F)</c>，
+        /// 上钳同样在 <c>0x100A9FED cmp eax,0x7F</c>；还原支 <c>0x100AA0BC</c> 写回 <c>01</c>。
+        /// 注意名字常量 <c>0x0076EE70</c>「变异骷髅」全镜像没有任何补丁指向它，
+        /// 所以骷髅只能改数量、不能改名字。
+        /// </summary>
+        public int KuLouSlaveCount() => IsSummonKuLou()
+            ? NativeSlaveCountImm8(GetParamInt("召唤骷髅_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤神兽的怪物名。眼神按 <c>神兽_序号</c> 覆盖宿主 <c>0x0076EEEC</c> 处的
+        /// 4 字节 GBK 串（原字节 <c>C9 F1 CA DE</c> =「神兽」）。Delphi 长度前缀
+        /// <c>[0x0076EEE8] = 4</c> 不在补丁范围内，所以候选名恒为两个汉字。
+        /// 选择链 <c>0x100A9E3E..0x100A9E5F</c>（sub/je 逐级比较）：
+        /// 0 →「神兽」（<c>0x100A9DD7</c> 预置 <c>C9F1CADE</c>）、
+        /// 1 →「月灵」（<c>0x100A9E59</c> 写 <c>D4C2C1E9</c>）、
+        /// 2 →「白虎」（<c>0x100A9E4D</c> 写 <c>A2BBD7B0</c> → 内存序 <c>B0D7BBA2</c>）、
+        /// 其余落回预置值。
+        /// </summary>
+        public string ShenShouName()
+        {
+            if (!IsSummonShenShou()) return "神兽";
+            return ShenShouIdx() switch
+            {
+                1 => "月灵",
+                2 => "白虎",
+                _ => "神兽",
+            };
+        }
 
         // ── Mage skill toggle checks ──
         public bool IsFireBallSwitch() => Enabled("火球主属性切换");
@@ -3266,7 +3356,10 @@ namespace GameSvr.Plugins
         public bool IsLuckBlock() => Enabled("格位刺杀免伤a");
         public bool IsProbBlock() => Enabled("概率格挡a");
         public bool IsFixStabParalysis() => Enabled("修复刺杀位麻痹");
-        public bool IsFixDefense() => Enabled("修复卡防御");
+        // Code patch at host 0x00767910 (jle → jmp), not a script API.
+        // Off means the unpatched luck-max armour roll, so this must not
+        // raise inside a strict yanshen call the way Enabled() does.
+        public bool IsFixDefense() => PatchToggleOn("修复卡防御");
         public bool IsZeroDefSplit() => Enabled("防0拆分");
         public bool IsMagicShieldFix() => Enabled("魔法盾修正");
         public bool IsHolyShieldMsg() => Enabled("护身触发报文a");
@@ -3380,7 +3473,11 @@ namespace GameSvr.Plugins
         public bool IsPortableStorage() => Enabled("随身仓库");
         public bool IsRandomExtreme() => Enabled("随机极品");
         public bool IsGiveExtreme() => Enabled("give极品");
-        public int MaxEquipCount() { var v = ParamS("最大装备数量"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // 0x100B9D3A `A2 6C FF 73 00` overwrites the imm8 of host
+        // 0x0073FF69 `83 7D F4 02 cmp dword [ebp-0xc],2`. Plugin does
+        // `atoi(最大装备数量); dec eax` then writes al, so the compare
+        // immediate is the low 8 bits of (N-1), sign-extended by `cmp`.
+        public int MaxEquipCount() => ParamAtoi("最大装备数量", 3);
 
         // ── Equipment stat param readers (武器/衣服/头盔/项链/手镯/戒指) ──
         // 武器
@@ -3499,15 +3596,28 @@ namespace GameSvr.Plugins
         public bool IsHideGoldMsg() => Enabled("屏蔽元宝增减信息");
         public bool IsHideAttrUp() => Enabled("屏蔽属性提升提示");
         public bool IsHideRank() => Enabled("屏蔽排行榜");
-        public bool IsBlockSpam() => Enabled("屏蔽发言频繁禁言功能");
+        // 屏蔽发言频繁禁言功能 is a host-code patch, same primitive as 复活戒指重设.
+        // Plugin 0x100AC678 / 0x100AC6B2 memcpy 6×90 over the two flood-counter
+        // increments in ProcessSayMsg (sub_6BB2F8):
+        //   0x6BB56A  FF 83 74 0A 00 00  inc dword [ebx+0xA74]  → m_nSayMsgCount++
+        //   0x6BB579  FE 83 82 06 00 00  inc byte  [ebx+0x682]  → m_btSayRapidCount++
+        // Restore arm 0x100AC75D / 0x100AC797 writes the incs back. Thresholds
+        // (>=2 / >=5), the 60 s mute, and the decay decs are not patched.
+        public bool IsBlockSpamPatchOn() => PatchToggleOn("屏蔽发言频繁禁言功能");
+        public bool IsBlockSpam() => IsBlockSpamPatchOn();
         public bool IsDelSkillSilent() => Enabled("删除技能不提示");
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
-        public bool IsUpSkillSilent() => Enabled("升级技能不提示");
+        // 升级技能不提示 is a host-code patch: plugin 0x100DB61C memcpy EB 3A 90 90
+        // over 0x73F5EE in sub_73F500 (ChgSelfSkillLv / UpUserSkill worker), jumping
+        // from the LStrCatN of "{name} 技能等级变更为：{level}" + SysMsg 0xFFDB
+        // straight to RecalcAbilitys at 0x73F62A. Restore arm writes 57 68 7C F6 73 00.
+        public bool IsUpSkillSilentPatchOn() => PatchToggleOn("升级技能不提示");
+        public bool IsUpSkillSilent() => IsUpSkillSilentPatchOn();
         public bool IsBanChatSilent() => Enabled("禁止发言不提示");
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");
-        public bool IsPlayerDropRate() => Enabled("人物爆率调整");
+        public bool IsPlayerDropRate() => PatchToggleOn("人物爆率调整");
         public int PlayerLv1() => GetParamInt("人物等级1_值", 35);
         public int PlayerLv2() => GetParamInt("人物等级2_值", 40);
         public int PlayerLv3() => GetParamInt("人物等级3_值", 48);
@@ -3515,7 +3625,13 @@ namespace GameSvr.Plugins
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
         public bool IsNewMonsterDrop() => Enabled("新怪物爆率");
         public bool IsGetCastle() => Enabled("获取沙城归属");
-        public bool IsGuildShow() => Enabled("行会显示");
+        // 行会显示 is a host-code patch: plugin 0x100AACD8 / 0x100AAD29 memcpy
+        // 90 90 over both skip-jumps in GetShowName's non-castle guild branch
+        //   0x6C5BCB  74 49  je 0x6C5C16   (after cmp g_Config.boShowGuildName)
+        //   0x6C5BF7  74 1D  je 0x6C5C16   (after castle-war-area test)
+        // Restore arm 0x100AADC0 / 0x100AADFA writes 74 49 / 74 1D back.
+        // Both je gone ⇒ every path reaches 0x6C5BF9 and emits %guildname/%rankname.
+        public bool IsGuildShow() => PatchToggleOn("行会显示");
         public bool IsMultiFaction() => Enabled("角色多阵营");
         public bool IsSiegeScript() => Enabled("攻沙脚本控制");
         public bool IsSiegeModify() => Enabled("攻城修改");
@@ -3532,7 +3648,11 @@ namespace GameSvr.Plugins
 
         // ── Trade/Stall toggle checks ──
         public bool IsStallPass() => Enabled("摆摊穿人");
-        public bool IsCloseStall() => Enabled("关闭摆摊");
+        // 关闭摆摊 is a host-code patch: plugin 0x100AD12A memcpy C3 over the
+        // first byte of CM_START_STALL (4424) at 0x6E7C38 (native 55 = push ebp).
+        // Restore arm 0x100AD1AE writes 55 back. SetTimeLevel (4419) is a
+        // different function and is not patched.
+        public bool IsCloseStall() => PatchToggleOn("关闭摆摊");
         public bool IsTuChengStall() => Enabled("土城摆摊");
         public bool IsLimitStall() => Enabled("限制摆摊");
         public int LimitStall_LeftX() => GetParamInt("限制摆摊_左x", 280);
@@ -3586,19 +3706,42 @@ namespace GameSvr.Plugins
         public bool IsCustomDmgPlus() => Enabled("自定义伤害_plus");
 
         // ── Monster toggle checks ──
+        //
+        // 怪物名字1..3_值 / 怪物数量1..3_值 是「修改召唤神兽」的三档参数。
+        // 六个键在同一个配置加载器里连续读出，名字走 asString、数量走 asInt：
+        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA0B call 0x100DFCF0 (asString)
+        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC57 mov [ecx+0x8C0],eax  (asInt 0x100DFE40)
+        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBCF2 mov [ecx+0x8C4],eax
+        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBD86 mov [ecx+0x8C8],eax
+        // 三个数量键用的是同一个 asInt 转换器、同一段连续偏移，语义完全相同。
         public string MonsterName1() => ParamS("怪物名字1_值", "强化神兽");
         public string MonsterName2() => ParamS("怪物名字2_值", "强化神兽");
         public string MonsterName3() => ParamS("怪物名字3_值", "白虎");
-        public bool IsMonsterCount1() => Enabled("怪物数量1_值");
+
+        /// <summary>
+        /// 「怪物数量1_值」是数量，不是开关。原先的 <c>Enabled("怪物数量1_值")</c>
+        /// 方向就是错的：数量 0 会被读成「关」，任何非 0 数量都读成「开」，
+        /// 而它的兄弟键 <c>怪物数量2_值</c>/<c>怪物数量3_值</c> 在同一段加载器里
+        /// 走的是同一个 <c>asInt</c>（<c>0x100DFE40</c>），C# 侧已经按 int 建模。
+        /// 生产 <c>config.json</c> 三档实测是 1 / 2 / 1。
+        /// 与 YS-SW-C1 修掉的 <c>IsShenShouCount()</c>/<c>IsKuLouCount()</c> 同一类缺陷。
+        /// </summary>
+        public int MonsterCount1() => GetParamInt("怪物数量1_值", 1);
         public int MonsterCount2() => GetParamInt("怪物数量2_值", 2);
         public int MonsterCount3() => GetParamInt("怪物数量3_值", 2);
         public bool IsMonsterDropA() => Enabled("怪物爆率A_值");
         public bool IsMonsterDropB() => Enabled("怪物爆率B_值");
         public bool IsMonsterDropK() => Enabled("怪物爆率K_值");
 
-        // ── Red/Green name K值 params ──
-        public int RedNameK() { var v = ParamS("红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
-        public int NormalK() { var v = ParamS("非红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // ── Red/Green name K值 params (patch immediates, not locale parse) ──
+        // 0x100B9CCC `A3 BB FC 73 00` -> imm32 of 0x0073FCB8
+        // `C7 45 F8 15 00 00 00 mov dword [ebp-8],0x15`. Full dword, no wrap.
+        public int RedNameK() => ParamAtoi("红名K值", 21);
+        // 0x100B9C5E `A2 C9 FC 73 00` -> imm8 of 0x0073FCC7
+        // `83 C0 5A add eax,0x5A`. `add eax,imm8` sign-extends, so A
+        // survives only as a signed byte. No `cmp 0x7F` clamp before the write.
+        public int NormalK() =>
+            unchecked((sbyte)ParamAtoi("非红名K值", 90));
 
         // ── Loop time ──
         public bool IsLoopTimeVal() => Enabled("循环时间_值");
@@ -3705,11 +3848,34 @@ namespace GameSvr.Plugins
             return _player?.m_PEnvir?.sMapName?.Length == 15;
         }
 
-        /// <summary>禁止长度为 15 的地图内切换宝宝到休息状态。</summary>
+        /// <summary>
+        /// 禁止在地图名满 15 字的地图里切换宝宝休息状态。
+        ///
+        /// 眼神在宿主 <c>0x00623A73</c>（原字节 <c>80 B0 C7 04 00 00 01</c>
+        /// = <c>xor byte [eax+0x4C7],1</c>，即休息标志的翻转）装 trampoline，
+        /// 续跑点 <c>0x00623A7A</c>，安装点 <c>0x100AABB6 call 0x10032FD0</c>，
+        /// 门控 <c>0x100AAB35 cmp [edi+0x948],0 / je</c>。
+        /// 桩体模板存在 .rdata，每个 dword 存一个码字节
+        /// （<c>0x102D1700 / 0x102D2940 / 0x102D33B0 / 0x102D16C0</c> 各 4 个 +
+        /// <c>0x100AAB6C mov dword [ebp-0x4A4],0xE9</c>），拼出 17 字节：
+        /// <code>
+        ///   80 B8 15 01 00 00 0F   cmp byte [eax+0x115], 0x0F
+        ///   74 07                  je  skip
+        ///   80 B0 C7 04 00 00 01   xor byte [eax+0x4C7], 1     ← 原指令
+        ///   E9 &lt;rel32&gt;             jmp 0x00623A7A
+        /// </code>
+        /// <c>[obj+0x115]</c> 是 <c>m_sMapName: string[15]</c>（Delphi ShortString，
+        /// 长度字节就在 +0x115）：<c>0x006AFD1E lea eax,[ebx+0x115]</c> /
+        /// <c>0x006AFD27 mov cl,0x0F</c> / <c>0x006AFD29 call 0x004039E4</c> 之后
+        /// 紧接着写 <c>[ebx+0x12C]=CurrX</c>、<c>[ebx+0x130]=CurrY</c>。
+        ///
+        /// 因为赋值时按 <c>cl = 15</c> 截断，长度字节等于 15 的充要条件是
+        /// **原地图名长度 &gt;= 15**，不是恰好等于 15。
+        /// </summary>
         public bool IsPetRestBlocked()
         {
             if (!Enabled("禁止宝宝休息")) return false;
-            return _player?.m_PEnvir?.sMapName?.Length == 15;
+            return _player?.m_PEnvir?.sMapName?.Length >= 15;
         }
 
         /// <summary>限制摆摊区域检查 (返回true=允许摆摊)</summary>
@@ -3724,7 +3890,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>关闭摆摊检查</summary>
-        public bool IsStallClosed() => Enabled("关闭摆摊");
+        public bool IsStallClosed() => IsCloseStall();
 
         /// <summary>指定地图编号摆摊</summary>
         public int GetStallMapId() => GetParamInt("摆摊地图", 3);
@@ -3743,9 +3909,13 @@ namespace GameSvr.Plugins
         public bool TryGetFloorItemTimeout(out int timeoutMilliseconds)
         {
             timeoutMilliseconds = 0;
-            if (!Enabled("地面物品消失时间")) return false;
+            if (!PatchToggleOn("地面物品消失时间")) return false;
 
-            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 600));
+            // 600 was the M2Server constant (0x77A3FD cmp edx,0x927C0), not the plugin's
+            // fallback: when the key is absent the loader seeds 300 seconds
+            // (0x100B01AA C7 80 00 0D 00 00 2C 01 00 00 -> mov [cfg+0xD00],0x12C).
+            // Enable arm 0x100AAF86 imul edx,eax,0x3E8 then memcpy 4 bytes to 0x77A3FF.
+            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 300));
             timeoutMilliseconds = seconds > int.MaxValue / 1000
                 ? int.MaxValue
                 : seconds * 1000;
@@ -3777,11 +3947,29 @@ namespace GameSvr.Plugins
         // 效果无字节证据（插件加壳），按 fail-closed 不实现。
         // 开关本身仍可由 IsLevelMute() 读取。
 
-        /// <summary>人物爆率调整 — 获取爆率倍率</summary>
-        public double GetPlayerDropRateMultiplier()
+        /// <summary>
+        /// 人物爆率调整 is a code-patch override of THumanKind's equip-drop
+        /// worker <c>sub_73FC70</c>, not a runtime multiplier. Gated by
+        /// <c>[edi+0x5D0]</c> at 0x100B9BBA (that slot is 人物爆率调整:
+        /// loader 0x100BABEC stores the converted toggle there). Off means
+        /// the host immediates stay at stock 21 / 90 / 2.
+        /// </summary>
+        public bool TryGetDeathEquipDropPatch(bool redName, out int denominator, out int capImm)
         {
-            if (!Enabled("人物爆率调整")) return 1.0;
-            return 1.0; // Default multiplier, overridden by script
+            denominator = 0;
+            capImm = 2;
+            if (!PatchToggleOn("人物爆率调整")) return false;
+            // Red path is a bare imm32 (0x73FCB8). Non-red is
+            // `[esi+0x18c] + imm8` (0x73FCC1/0x73FCC7). The addend is the
+            // patched byte; the +0x18c dword is a native field this switch
+            // does not rewrite and is not identified in C# — treated as 0.
+            // LastHiter[+0x579] subtract at 0x73FD08 is likewise unpatched
+            // native and omitted here.
+            denominator = redName ? RedNameK() : NormalK();
+            // 0x73FD0B cmp [ebp-8],0 / jge / xor — native floors before Random.
+            if (denominator < 0) denominator = 0;
+            capImm = unchecked((sbyte)(MaxEquipCount() - 1));
+            return true;
         }
 
         /// <summary>脚本控制人物爆率</summary>

@@ -371,23 +371,26 @@ static void SetCriticalTarget(TBaseObject actor, short antiChance,
     SetField(actor, "m_sNativeCriticalDamageReduction", reduction);
 }
 
+// The draw probe hangs off M2Share.RandomNumber, the field the server itself
+// assigns. It used to hang off RandomNumber's private `random` field, which
+// POIS-26 deleted when the facade moved onto the Delphi LCG sub_403B4C
+// (@0x403B4C: imul [0x7A2008],0x08088405 / inc / mul / take EDX). That deletion
+// silently turned this probe into a MissingFieldException, so none of the draw
+// assertions below were being evaluated at all. Every expected value, bound and
+// ordinal below is unchanged; only where the recorder is installed moved.
 static void WithRandom(IEnumerable<int> values,
     Action<RecordingRandom> action)
 {
-    FieldInfo field = typeof(RandomNumber).GetField("random",
-        BindingFlags.Static | BindingFlags.NonPublic) ??
-        throw new MissingFieldException(typeof(RandomNumber).FullName,
-            "random");
-    object original = field.GetValue(null);
+    RandomNumber original = M2Share.RandomNumber;
     var random = new RecordingRandom(values);
-    field.SetValue(null, random);
+    M2Share.RandomNumber = random;
     try
     {
         action(random);
     }
     finally
     {
-        field.SetValue(null, original ?? new Random());
+        M2Share.RandomNumber = original ?? RandomNumber.GetInstance();
     }
 }
 
@@ -498,7 +501,7 @@ static void Assert(bool condition, string label)
         throw new InvalidOperationException(label);
 }
 
-sealed class RecordingRandom : Random
+sealed class RecordingRandom : RandomNumber
 {
     private readonly Queue<int> _values;
 
@@ -509,16 +512,30 @@ sealed class RecordingRandom : Random
 
     internal List<int> MaxValues { get; } = new();
 
-    public override int Next(int maxValue)
+    public override int Random(int Value)
     {
-        MaxValues.Add(maxValue);
+        MaxValues.Add(Value);
         if (_values.Count == 0)
             throw new InvalidOperationException("unexpected RNG call");
         int value = _values.Dequeue();
-        if (value < 0 || value >= maxValue)
+        if (value < 0 || value >= Value)
             throw new ArgumentOutOfRangeException(nameof(value));
         return value;
     }
+
+    // No routine the resolver reaches advances RandSeed without a bound, and
+    // none draws through the min/max entries: the only three parameterless
+    // advances in GameSvr are the magic-tower prize, the magic producers and
+    // the state-26 effects. Any of these arriving here is a new draw the
+    // ordinal assertions could not see, so refuse rather than absorb it.
+    public override int Random() => throw new InvalidOperationException(
+        "unexpected parameterless RandSeed advance");
+
+    public override int Random(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected Random(min,max) draw");
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected GetRandomNumber draw");
 
     internal void AssertExhausted(string label)
     {

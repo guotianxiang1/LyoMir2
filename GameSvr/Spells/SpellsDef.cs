@@ -1,4 +1,4 @@
-namespace GameSvr
+﻿namespace GameSvr
 {
     public class SpellsDef
     {
@@ -226,8 +226,7 @@ namespace GameSvr
         public const int SKILL_180 = 180;
         /// <summary>凝冰. Dispatched at 0x6ED8BC `sub eax,0xBF` / 0x6ED8C1
         /// `je 0x6EDFCF`. sub_6EF340 keys its cooldown with 0xBF at 0x6EF3AF and
-        /// 0x6EF420, and 0x6EF4CC holds the 22-byte GBK literal
-        /// "[凝冰]技能冷却时间还有".</summary>
+        /// 0x6EF420.</summary>
         public const int SKILL_191 = 191;
         /// <summary>Dispatched at 0x6ED8E2 `sub eax,0xE8` / 0x6ED8E7
         /// `je 0x6EDEA7`.</summary>

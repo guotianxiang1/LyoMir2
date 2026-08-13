@@ -1315,10 +1315,13 @@ static void RunGroupFlyRegressions()
             break;
         seed++;
     }
-    typeof(RandomNumber).GetField("random",
-            System.Reflection.BindingFlags.Static |
-            System.Reflection.BindingFlags.NonPublic)!
-        .SetValue(null, new Random(seed));
+    // The searched sequence is installed on M2Share.RandomNumber, the field the
+    // server assigns at startup. It used to be installed by reflecting
+    // RandomNumber's private `random` field, which POIS-26 removed when the
+    // facade moved onto the Delphi LCG sub_403B4C; the `!` then dereferenced
+    // null and this threw before the group-fly assertions ran. The seed search
+    // above is unchanged - the wrapper replays the very same System.Random.
+    M2Share.RandomNumber = new SeededProbeRandom(seed);
 
     const string sourceText = """
         program GroupFlyProbe;
@@ -2393,6 +2396,25 @@ static void Assert(bool condition, string message)
 sealed class RecalcProbePlayer : TPlayObject
 {
     public void ConsumePendingRecalc() => ConsumeAbilityRecalcPending();
+}
+
+// Replays a seeded System.Random through the RandomNumber facade, so the
+// group-fly seed search keeps predicting the exact draws the product will take.
+sealed class SeededProbeRandom : RandomNumber
+{
+    private readonly Random _inner;
+
+    internal SeededProbeRandom(int seed) => _inner = new Random(seed);
+
+    public override int Random(int Value) => _inner.Next(Value);
+
+    public override int Random() => 0;
+
+    public override int Random(int minValue, int maxValue) =>
+        minValue + _inner.Next(maxValue - minValue);
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        minValue + _inner.Next(maxValue - minValue + 1);
 }
 
 sealed record PlayerSnapshot(

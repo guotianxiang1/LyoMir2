@@ -1,4 +1,4 @@
-using GameSvr;
+﻿using GameSvr;
 using SystemModule;
 
 // NativeMagic191Check — audit for magic id 191 (凝冰), sub_6EF340.
@@ -28,9 +28,24 @@ using SystemModule;
 
 class Program
 {
-    static void Main()
+    static int Main()
     {
-        PrepareRuntimeConfig();
+        try
+        {
+            Diagnose("enter-main");
+            Diagnose("prepare-runtime-config");
+            PrepareRuntimeConfig();
+            Diagnose("before-new-TPlayObject");
+            _ = new TPlayObject();
+            Diagnose("after-new-TPlayObject");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                "INCOMPLETE: TPlayObject construction/type-init failed before magic-191 assertions.");
+            Console.Error.WriteLine(ex.ToString());
+            return 2;
+        }
 
         Console.WriteLine("=== NativeMagic191Check ===");
         int passCount = 0;
@@ -156,6 +171,43 @@ class Program
         Assert(TBaseObject.NativeMagic191StateValue == 0, "state node value = 0");
 
         Console.WriteLine($"PASS: {passCount}/{totalCount} assertions");
+        return 0;
+    }
+
+    static void Diagnose(string step)
+    {
+        Console.WriteLine("DIAG step=" + step);
+        Console.Out.Flush();
+        Console.Error.Flush();
+    }
+
+    // The fixture players are online, so every notice and every cooldown
+    // notification reaches TPlayObject.SendSocket, which dereferences
+    // M2Share.GateManager. The singleton has no gate registered, so
+    // AddGateBuffer returns false and nothing leaves the process.
+    static void PrepareRuntimeConfig()
+    {
+        var runtimeDirectory = AppContext.BaseDirectory;
+        File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+            "[Server]" + Environment.NewLine);
+        File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+            "[String]" + Environment.NewLine);
+        File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+            "[Command]" + Environment.NewLine);
+
+        var shareDirectory = Path.Combine(Path.GetFullPath(
+            Path.Combine(runtimeDirectory, "..")), "Share");
+        Directory.CreateDirectory(shareDirectory);
+        File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+            "[PlayerLevelExp]" + Environment.NewLine);
+        File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+            "[Integer]" + Environment.NewLine);
+
+        Diagnose("before-GateManager.Instance");
+        M2Share.GateManager ??= GateManager.Instance;
+        Diagnose("after-GateManager.Instance");
+        M2Share.ProcessMsgCriticalSection ??= new object();
+        M2Share.LogMsgCriticalSection ??= new object();
     }
 
     // The fixture players are online, so every notice and every cooldown

@@ -1,5 +1,6 @@
-using SystemModule;
+﻿using SystemModule;
 using GameSvr.PasEngine;
+using GameSvr.Plugins;
 
 namespace GameSvr
 {
@@ -176,7 +177,7 @@ namespace GameSvr
 
         private static byte[] BuildShowEventBody(Event mapEvent, int packedEventParam)
         {
-            var isStall = mapEvent.m_nEventType == 41;
+            var isStall = mapEvent.m_nEventType == Grobal2.ET_STALL;
             var body = new byte[isStall ? 64 : 12];
             var elapsed = unchecked((uint)(HUtil32.GetTickCount() - mapEvent.OpenStartTick));
             System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
@@ -273,7 +274,11 @@ namespace GameSvr
                 {
                     m_boFireHitSkill = false;
                     SysMsg(M2Share.sSpiritsGone, MsgColor.Red, MsgType.Hint);
-                    SendSocket("+UFIR");
+                    // 0x6B2F33 mov byte [eax+0x96],0 / 6A00 x4 /
+                    // B9 01000000 mov ecx,1 / 66 BA 72 02 mov dx,0x272 /
+                    // FF 93 50 02 00 00.  "+UFIR" is absent from the image.
+                    SendSocket(Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_FIREHITSKILL, 1, 0, 0, 0));
                 }
                 if (m_boTwinHitSkill && (HUtil32.GetTickCount() - m_dwLatestTwinHitTick) > 60 * 1000)
                 {
@@ -932,6 +937,36 @@ namespace GameSvr
                 case Grobal2.RM_NATIVE_MOOTEBO_CONTINUE:
                     ContinueNativeMotaeboForcedMove(ProcessMsg);
                     break;
+                case Grobal2.RM_NATIVE_CHARGE_LAND:
+                    ProcessNativeSkill68ChargeLanding(ProcessMsg.nParam1,
+                        ProcessMsg.nParam2, ProcessMsg.wParam,
+                        ProcessMsg.Payload);
+                    break;
+                case Grobal2.RM_NATIVE_CHARGE_MOVE:
+                    m_DefMsg = Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_NATIVE_CHARGE_MOVE, ProcessMsg.BaseObject,
+                        ProcessMsg.nParam1, ProcessMsg.nParam2,
+                        ProcessMsg.wParam);
+                    SendSocket(m_DefMsg);
+                    break;
+                case Grobal2.RM_NATIVE_BLINK_MOVE:
+                    m_DefMsg = Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_NATIVE_BLINK_MOVE, ProcessMsg.BaseObject,
+                        ProcessMsg.nParam1, ProcessMsg.nParam2,
+                        ProcessMsg.wParam);
+                    SendSocket(m_DefMsg);
+                    break;
+                // 0x6B6065: gate on sub_774288 first, then `66 BA 1E 00` +
+                // `6A 01 / 6A 00 / 6A 00 / 6A 00` through the unicast slot
+                // VMT+0x250, with the caster as Recog.
+                case Grobal2.RM_NATIVE_STEALTH_VANISH:
+                    if (BaseObject != null &&
+                        BaseObject.IsNativeStealthedFrom(this))
+                    {
+                        SendDefMessage(Grobal2.SM_DISAPPEAR,
+                            ProcessMsg.BaseObject, 0, 0, 0, "");
+                    }
+                    break;
                 case Grobal2.RM_USERMOVE:
                     CompleteNativeUserMove(ProcessMsg);
                     break;
@@ -1003,6 +1038,38 @@ namespace GameSvr
                     break;
                 case Grobal2.CM_QUERYUSERSTATE:
                     ClientQueryUserState(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3);
+                    break;
+                case Grobal2.CM_205:
+                    ClientNativeCheatSelfReport(ProcessMsg.wParam, ProcessMsg.nParam2);
+                    break;
+                case Grobal2.CM_1239:
+                    // Native 0x6DA3A2, whole handler:
+                    //   0x6DA3A5  66 83 78 06 00        cmp  word [msg+6],0   ; Param
+                    //   0x6DA3AA  75 0F                 jne  0x6DA3BB
+                    //   0x6DA3AF  C6 80 98 18 00 00 01  mov  byte [self+0x1898],1
+                    //   0x6DA3B6  E9 71 18 00 00        jmp  0x6DBC2C
+                    //   0x6DA3BE  C6 80 98 18 00 00 00  mov  byte [self+0x1898],0
+                    // No callee, no packet, no other field. Param is the DEFAULT-case
+                    // nParam2 (ProcessUserMessage maps Recog/Param/Tag/Series onto
+                    // nParam1/nParam2/nParam3/wParam), and the wire field is a ushort so
+                    // the native `jne` against a word is a plain equality test.
+                    m_boNativeHeroCapHintEnabled = ProcessMsg.nParam2 == 0;
+                    break;
+                case Grobal2.CM_1281:
+                    // Native 0x6DA9C8, whole handler:
+                    //   0x6DA9CB  66 8B 40 06           mov  ax, word [msg+6]  ; Param
+                    //   0x6DA9CF  66 85 C0 / 75 0F      test ax,ax / jne 0x6DA9E3
+                    //   0x6DA9D7  C6 80 AC 18 00 00 00  mov  byte [self+0x18AC],0
+                    //   0x6DA9E3  66 83 F8 01           cmp  ax,1
+                    //   0x6DA9E7  0F 85 3F 12 00 00     jne  0x6DBC2C          ; leave as-is
+                    //   0x6DA9F0  C6 80 AC 18 00 00 01  mov  byte [self+0x18AC],1
+                    // Unlike CM 1239 this is a THREE-way test: only 0 and 1 write, every
+                    // other Param falls through to the default label without touching the
+                    // flag, so it must not be written as a boolean assignment.
+                    if (ProcessMsg.nParam2 == 0)
+                        m_boNativeHeroRecordShared = false;
+                    else if (ProcessMsg.nParam2 == 1)
+                        m_boNativeHeroRecordShared = true;
                     break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
@@ -1119,6 +1186,20 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_CLICKNPC:
+                    // Native handler 0x6D8EE9 opens with a two-seat-mount gate that C#
+                    // was missing, so a player riding pillion could still open NPC
+                    // dialogs here while 战神 drops the click outright:
+                    //   0x6D8EE9  B2 34              mov  dl,0x34
+                    //   0x6D8EEB  8B 45 FC           mov  eax,[ebp-4]
+                    //   0x6D8EEE  E8 6D 9A 09 00     call 0x772960   ; HasNativeActiveState
+                    //   0x6D8EF3  84 C0              test al,al
+                    //   0x6D8EF5  0F 85 31 2D 00 00  jne  0x6DBC2C   ; mounted -> silent drop
+                    // State 0x34 is the two-seat mount (SET 0x6EE8AF/0x6EE8B3, CLEAR
+                    // 0x6EEBC2-0x6EEBC6), the same one the group prechecks read at
+                    // 0x6BBEA0. Only after the gate does native call 0x6B8B28 with
+                    // edx = Recog (the NPC id) and ecx = Tag.
+                    if (HasNativeActiveState(0x34))
+                        break;
                     ClientClickNPC(ProcessMsg.nParam1);
                     break;
                 case Grobal2.CM_MERCHANTDLGSELECT:
@@ -1156,6 +1237,21 @@ namespace GameSvr
                     // sends CM_LOGINNOTICEOK when the player acknowledges the login notice/MOTD dialog;
                     // the server does not need to take any action in response. This explicit no-op case
                     // documents the native behavior (silent acknowledgment, no server-side state change).
+                    break;
+                case Grobal2.CM_1325:
+                    // Unlike CM_LOGINNOTICEOK above, 1325 DOES have a real dispatch arm -
+                    // jump-table slot 0x6D8482[0] points at handler 0x6DAC1C:
+                    //   0x6DAC1F  66 8B 50 06  mov dx, word [msg+6]   ; Param
+                    //   0x6DAC23  8B 45 FC     mov eax,[ebp-4]        ; Self
+                    //   0x6DAC26  E8 F1 34 01 00  call 0x6EE11C
+                    //   0x6DAC2B  E9 FC 0F 00 00  jmp 0x6DBC2C
+                    // but 0x6EE11C is an empty procedure in full:
+                    //   55 8B EC 51 89 45 FC 59 5D C3
+                    //   push ebp / mov ebp,esp / push ecx / mov [ebp-4],eax / pop ecx / pop ebp / ret
+                    // It never reads dx and returns nothing. A whole-image scan finds
+                    // exactly one caller (0x6DAC26), so there is no other body that could
+                    // give the routine meaning. Param is therefore discarded and the
+                    // opcode has no server-side effect at all.
                     break;
                 case Grobal2.CM_GROUPMODE:
                     if (ProcessMsg.nParam2 == 0)
@@ -1394,19 +1490,19 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_RUN:
-                    // Native 0x6D9CE4: CM_RUN(3013) shares the run ladder with CM_RUN3(4108).
-                    // Try the native run path first (includes mount/state gates at 0x6BBFBC/0x6BC0D4).
-                    // If refused by state-51 absence (not mounted), fall back to legacy ClientRunXY.
-                    // EA evidence: movement_native_rulings_20260810.md lines 176-313 prove both
-                    // primitives are byte-identical twins and 3013 must route through the ladder.
-                    if (ClientNativeRun3(ProcessMsg.nParam1, ProcessMsg.nParam2))
-                    {
-                        m_dwActionTick = HUtil32.GetTickCount();
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
-                        SendSocket(M2Share.GetGoodTick);
-                    }
-                    else if (!HasNativeActiveState(51) &&
-                             ClientRunXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ref dwDelayTime))
+                    // Native 0x6D9CE4: CM_RUN(3013) shares the WEIGHT/RUNFLAG/CanRun
+                    // ladder with CM_RUN3(4108) but NOT the inner mover. The twins
+                    // differ in two places, not one:
+                    //   3013 sub_76756C  0x7675E0 add edi,edi        ×2
+                    //                    0x76763F mov dx,0x0D        ident 13
+                    //   4108 sub_767694  0x767708 lea edi,[edi+edi*2] ×3
+                    //                    0x767769 mov dx,0xD58       ident 3416
+                    // Handler 0x6D9CE4 never tests bodyState 0x33; only 4108 does
+                    // (0x6D9D99 mov dl,0x33 / call 0x772960 / je fail). Routing
+                    // 3013 through ClientNativeRun3 made a mounted runner take
+                    // the 3-step mover and broadcast 3416. HasNativeActiveState(51)
+                    // therefore must not select the mover — opcode does.
+                    if (ClientRunXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
@@ -1576,7 +1672,6 @@ namespace GameSvr
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
-                        SendDefMessage(Grobal2.SM_SITDOWN, m_nCurrX, m_nCurrY, m_btDirection, 0, "");
                     }
                     else
                     {
@@ -1815,19 +1910,13 @@ namespace GameSvr
                         horseDismountBody.Length, ProcessMsg.nParam3);
                     SendSocket(m_DefMsg, horseDismountBody);
                     break;
+                // RM_41 (9041) and RM_43 (9043) are below the dispatcher's window: native
+                // does 0x6B3EF8 `add eax,0xFFFFD8F0` then 0x6B3EFD `cmp eax,0x86` /
+                // 0x6B3F02 `ja 0x6B6241`, so both wrap to a huge unsigned value and land on
+                // the default label without sending anything. The labels stay because this
+                // switch's own default is not silent.
                 case Grobal2.RM_41:
-                    if (ProcessMsg.BaseObject != this.ObjectId)
-                    {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_41, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
-                        SendSocket(m_DefMsg);
-                    }
-                    break;
                 case Grobal2.RM_43:
-                    if (ProcessMsg.BaseObject != this.ObjectId)
-                    {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_43, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
-                        SendSocket(m_DefMsg);
-                    }
                     break;
                 case Grobal2.RM_TURN:
                 case Grobal2.RM_PUSH:
@@ -2000,6 +2089,11 @@ namespace GameSvr
                     if (ProcessMsg.wIdent == Grobal2.RM_GUILDMESSAGE
                         && (m_dwChatShieldMask & 0x08u) != 0)
                         break;
+                    // Native tag 10099 owns jump-table slot 99 at 0x6B3F0F+99*4, and that
+                    // slot points at the default label 0x6B6241 - the arm discards the
+                    // message without sending anything.
+                    if (ProcessMsg.wIdent == Grobal2.RM_MOVEMESSAGE)
+                        break;
                     switch (ProcessMsg.wIdent)
                     {
                         case Grobal2.RM_HEAR:
@@ -2021,10 +2115,19 @@ namespace GameSvr
                                 ProcessMsg.BaseObject, 0x9700, 0, 1);
                             break;
                         case Grobal2.RM_CATTLE_SYSMESSAGE:
+                            // 0x743B70 mov ax,[ebx+2] / push eax => Param <- wParam, then
+                            // 6A 00 / 6A 00 => Tag = Series = 0, 0x743B88 mov ecx,[ebx+4]
+                            // => Recog <- nParam1, 0x743B8B mov dx,0xB0C.
+                            // The enqueue helper sub_743C34 puts its ecx in the wParam slot
+                            // ([ebp+0x1C] -> word[rec+2]) and Self in nParam1, and both
+                            // native callers load `mov cx,0xFB` (0x7159D6, 0x715D4E) - the
+                            // same 0xFB this tree's producer passes. So the colour byte
+                            // belongs in Param; it was going out in Series, which native
+                            // leaves at zero. Recog was already right: nParam1 == Self.
                             m_DefMsg = Grobal2.MakeDefaultMsg(
                                 Grobal2.SM_CATTLE_SYSMESSAGE,
-                                ProcessMsg.BaseObject, 0, 0,
-                                ProcessMsg.wParam);
+                                ProcessMsg.BaseObject, ProcessMsg.wParam,
+                                0, 0);
                             break;
                         case Grobal2.RM_SYSMESSAGE:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
@@ -2037,9 +2140,6 @@ namespace GameSvr
                             break;
                         case Grobal2.RM_MERCHANTSAY:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MERCHANTSAY, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
-                            break;
-                        case Grobal2.RM_MOVEMESSAGE:
-                            this.m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MOVEMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), ProcessMsg.nParam3, ProcessMsg.wParam);
                             break;
                     }
                     if (ProcessMsg.wIdent == Grobal2.RM_MERCHANTSAY &&
@@ -2185,9 +2285,11 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_MERCHANTDLGCLOSE, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_SENDGOODSLIST:
+                    // 0x6B5277 push word[rec+8] (Param) / 0x6B527C push 0 (Tag) /
+                    // 0x6B527E push 1 (Series): Param carries LoWord(nParam2) and Series
+                    // is the literal 1, not the other way round.
                     m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SENDGOODSLIST,
-                        ProcessMsg.nParam1, 1, 0,
-                        HUtil32.LoWord(ProcessMsg.nParam2));
+                        ProcessMsg.nParam1, HUtil32.LoWord(ProcessMsg.nParam2), 0, 1);
                     var goodsBody = GetQueuedPayloadBytes(ProcessMsg);
                     SendSocket(m_DefMsg, goodsBody);
                     break;
@@ -2210,9 +2312,12 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_BUYITEM_FAIL, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_SENDDETAILGOODSLIST:
+                    // 0x6B538F push word[rec+8] (Param) / 0x6B5394 push word[rec+0xC] (Tag)
+                    // / 0x6B5399 push 0 (Series): Param carries LoWord(nParam2) and Series
+                    // is zero.
                     m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SENDDETAILGOODSLIST,
-                        ProcessMsg.nParam1, 0, HUtil32.LoWord(ProcessMsg.nParam3),
-                        HUtil32.LoWord(ProcessMsg.nParam2));
+                        ProcessMsg.nParam1, HUtil32.LoWord(ProcessMsg.nParam2),
+                        HUtil32.LoWord(ProcessMsg.nParam3), 0);
                     var detailGoodsBody = GetQueuedPayloadBytes(ProcessMsg);
                     SendSocket(m_DefMsg, detailGoodsBody);
                     break;
@@ -2337,7 +2442,8 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_BUILDGUILD_FAIL, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_DONATE_OK:
-                    SendDefMessage(Grobal2.SM_DONATE_OK, ProcessMsg.nParam1, 0, 0, 0, "");
+                    // Native CODE has zero 16-bit dx/cx loads of 764 (0x02FC)
+                    // reaching a send slot. srv_AppearTimes.ini 764=0.
                     break;
                 case Grobal2.RM_MYSTATUS:
                     SendDefMessage(Grobal2.SM_MYSTATUS, 0, (short)GetMyStatus(), 0, 0, "");
@@ -2377,7 +2483,8 @@ namespace GameSvr
                     break;
                 case Grobal2.RM_RECONNECTION:
                     m_boReconnection = true;
-                    SendDefMessage(Grobal2.SM_RECONNECT, 0, 0, 0, 0, ProcessMsg.sMsg);
+                    // Native CODE has zero 16-bit dx/cx loads of 802 (0x0322)
+                    // reaching a send slot. srv_AppearTimes.ini 802=0.
                     break;
                 case Grobal2.RM_HIDEEVENT:
                     SendDefMessage(Grobal2.SM_HIDEEVENT, ProcessMsg.nParam1, ProcessMsg.wParam, ProcessMsg.nParam2, ProcessMsg.nParam3, "");
@@ -2394,7 +2501,21 @@ namespace GameSvr
                     SendAdjustBonus();
                     break;
                 case Grobal2.RM_10401:
-                    if (ProcessMsg.Payload is TSlaveInfo slaveInfo)
+                    // 眼神「下线宝宝死亡」就打在这一条分支的守卫上：
+                    //   0x006B5B9D  83 7B 04 00        cmp dword [ebx+4], 0
+                    //   0x006B5BA1  0F 84 A5 06 00 00  je  0x006B624C
+                    //   0x006B5BA7  8B 53 04           mov edx,[ebx+4]
+                    //   0x006B5BAD  E8 12 5B 01 00     call 0x006CB6C4   ← 恢复从宠
+                    // 开关打开时 0x0076...→ 0x006B5BA1 被换成
+                    //   E9 A6 06 00 00 90  jmp 0x006B624C + nop
+                    // （安装点 0x100AB10B，还原支 0x100AB19B 写回 0F 84 A5 06 00 00，
+                    //   门控 0x100AB0AA cmp [edi+0xBF0],0 / je 0x100AB13D），
+                    // 也就是这条分支恒不执行、存档里的从宠不再被重建。
+                    // 0x006CB6C4 全镜像只有 0x006B5BAD 一个调用者，与 C# 侧
+                    // ChangeServerMakeSlave 只被这里调用一一对应；两者形状一致
+                    //（0x006CB6E7 cmp byte[eax+0x72],2 → 1 : 5 == m_btJob==jTaos → 1 : 5）。
+                    if (ProcessMsg.Payload is TSlaveInfo slaveInfo &&
+                        !new YanshenApi(this, null, M2Share.PluginManager).IsPetDieOffline())
                     {
                         ChangeServerMakeSlave(slaveInfo);
                     }
@@ -2728,6 +2849,33 @@ namespace GameSvr
                     }
                     break;
 
+                // Native CM 4314 handler 0x6DB040 loads Param into DX and calls
+                // 0x6F293C, whose entire body is `C3 ret` (bytes at 0x6F293C).
+                // No SM, no field write. Explicit case so Operate does not fall
+                // through to base.Operate.
+                case Grobal2.CM_4314:
+                    break;
+                // Native CM 4315 handler 0x6DB054 loads Param into DX and calls
+                // 0x6F2940, whose entire body is `C3 ret` (bytes at 0x6F2940).
+                // No SM, no field write. Same empty-callee shape as 4314.
+                case Grobal2.CM_4315:
+                    break;
+                case Grobal2.CM_3290:
+                    ClientNativeCm3290ClockSnapshot();
+                    break;
+                case Grobal2.CM_4629:
+                    ClientNativeCm4629GroupPositions();
+                    break;
+                case Grobal2.SM_CHANNEL_MAGIC_CANCEL:
+                    SendDefMessage(Grobal2.SM_CHANNEL_MAGIC_CANCEL,
+                        ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0, "");
+                    break;
+
+                case Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL:
+                    SendDefMessage(Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL,
+                        ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0, "");
+                    break;
+
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:
                 case Grobal2.CM_CHANGEPASSWORD:
@@ -2798,6 +2946,14 @@ namespace GameSvr
                     return;
                 }
                 GoodItem StdItem;
+                // 人物爆率调整 patches sub_73FC70, not a runtime multiplier:
+                //   0x100B9CCC A3 BB FC 73 00 -> imm32 of 0x73FCB8 C7 45 F8 15 00 00 00 (red K)
+                //   0x100B9C5E A2 C9 FC 73 00 -> imm8  of 0x73FCC7 83 C0 5A             (non-red K)
+                //   0x100B9D3A A2 6C FF 73 00 -> imm8  of 0x73FF69 83 7D F4 02          (max-1)
+                // Off leaves C#'s existing 15/30 path (host 21/90 is a separate BLOCKED).
+                var dropCount = 0;
+                var deathDropPatched = new YanshenApi(this, null, M2Share.PluginManager)
+                    .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out var patchedCap);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     if (m_UseItems[i] == null)
@@ -2823,10 +2979,15 @@ namespace GameSvr
                                 M2Share.AddGameDataLog("16" + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[i].MakeIndex + "\t" + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
                             }
                             m_UseItems[i].wIndex = 0;
+                            // native 0x73FD74 FF 45 F4 inc [ebp-0xc] then jmp 0x73FF6F
+                            // (Reserved&8 skips the cap check, but the count still eats the budget)
+                            if (deathDropPatched) dropCount++;
                         }
                     }
                 }
-                var nRate = PKLevel() > 2 ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate;
+                var nRate = deathDropPatched
+                    ? patchedRate
+                    : (PKLevel() > 2 ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     if (M2Share.RandomNumber.Random(nRate) != 0)
@@ -2860,6 +3021,12 @@ namespace GameSvr
                                 }
                                 m_UseItems[i].wIndex = 0;
                             }
+                        }
+                        // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 xx / 7F 0A jg
+                        if (deathDropPatched)
+                        {
+                            dropCount++;
+                            if (dropCount > patchedCap) break;
                         }
                     }
                 }

@@ -1,4 +1,5 @@
 using GameSvr.CommandSystem;
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -68,6 +69,14 @@ namespace GameSvr
                         }
                         m_PlayObject.SendAddMagic(UserMagic);
                         m_PlayObject.RecalcAbilitys();
+                        // sub_73F500 0x73F5EE: LStrCatN(edi=skillName, " 技能等级变更为：",
+                        // IntToStr(level)) then SysMsg cx=0xFFDB to the TARGET. 眼神
+                        // 升级技能不提示 writes EB 3A 90 90 over that site, landing on
+                        // RecalcAbilitys at 0x73F62A; the shim's own "改变角色技能等级命令被执行"
+                        // is not patched.
+                        if (!new YanshenApi(m_PlayObject, null, M2Share.PluginManager).IsUpSkillSilentPatchOn())
+                            m_PlayObject.SysMsg(sSkillName + " 技能等级变更为：" + UserMagic.btLevel,
+                                MsgColor.Green, MsgType.Hint);
                         break;
                     }
                 }
