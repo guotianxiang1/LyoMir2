@@ -1141,7 +1141,11 @@ namespace GameSvr
 
         public void HasLevelUp(int nLevel)
         {
-            m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
+            // VMT+0x240 (sub_6BA140): caller 0x6C053C `mov dx,[level]; dec edx`
+            // passes the *previous* level in edx; 0x6BA14D `mov esi,edx` /
+            // 0x6BA15C `call 0x6AFCC8` looks up that, not the already-incremented
+            // word. HP/MP formulas use ecx = current level (`0x6BA149 mov [ebp-2],cx`).
+            m_Abil.MaxExp = GetLevelExp(nLevel);
             RecalcLevelAbilitys();
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_LEVELUP, 0, m_Abil.Exp, 0, 0, "");
@@ -3446,18 +3450,24 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// Native OOB return of player GetLevelExp (sub_6AFCC8 @ 0x6AFCF5
+        /// <c>B8 80 DA 51 FD</c>) and hero GetLevelExp (sub_6884C0 @ 0x688520
+        /// <c>BE 80 DA 51 FD</c>). Unsigned 4250000000; signed -44967296.
+        /// </summary>
+        public const int NativeNeedExpSentinel = unchecked((int)0xFD51DA80);
+
         public int GetLevelExp(int nLevel)
         {
-            int result;
-            if (nLevel <= Grobal2.MAXLEVEL)
-            {
-                result = M2Share.g_Config.dwNeedExps[nLevel];
-            }
-            else
-            {
-                result = M2Share.g_Config.dwNeedExps[M2Share.g_Config.dwNeedExps.GetUpperBound(0)];
-            }
-            return result;
+            var table = M2Share.g_Config.dwNeedExps;
+            // Player path 0x6AFCC8: `cmp ebx, Count / ja` then sentinel.
+            // Negative nLevel becomes a huge uint and takes the same arm.
+            if ((uint)nLevel >= (uint)table.Length)
+                return NativeNeedExpSentinel;
+            var value = table[nLevel];
+            if (value == 0 && nLevel > M2Share.g_Config.nNeedExpMaxLevel)
+                return NativeNeedExpSentinel;
+            return value;
         }
 
         private byte GetNamecolor()
