@@ -1963,7 +1963,7 @@ namespace GameSvr
         {
             var result = true;
             var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-            if (StdItem != null && (StdItem.StdMode == 25 || StdItem.StdMode == 30))
+            if (StdItem != null && StdItem.StdMode == 25)
             {
                 if (UserItem.Dura < 4000)
                 {
