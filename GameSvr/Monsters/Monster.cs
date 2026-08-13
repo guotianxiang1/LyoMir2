@@ -12,6 +12,14 @@ namespace GameSvr
         {
             m_boDupMode = false;
             bo554 = false;
+            // MONAI-02 — TMonster.Create sub_66610C 的构造默认 race 是 80(RC_MONSTER)：
+            //   00666162  C6 86 78 01 00 00 50   mov byte [esi+0x178],0x50
+            // （父类 TAnimal.Create 0071D851 C6 87 78 01 00 00 32 = 50/RC_ANIMAL）
+            // [+0x178] 是 race 而不是 Level：工厂 sub_679F8C 用 `movzx eax,byte [edi+0x14]`
+            // 分派同一个字段，MonInitialize 把它写进 [mon+0x178]。
+            // MonInitialize 之后会被 DB 记录覆盖（UsrEngn.cs MonInitialize），所以只有
+            // 不经 MonInitialize 创建的怪物看得到这个默认值。
+            m_btRaceServer = Grobal2.RC_MONSTER;
             m_dwThinkTick = HUtil32.GetTickCount();
             m_nViewRange = 5;
             m_nRunTime = 250;
@@ -116,7 +124,23 @@ namespace GameSvr
 
         public override void Run()
         {
-            if (!m_boGhost && !m_boDeath && !m_boFixedHideMode && !m_boStoneMode && m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
+            // MONAI-10 — 原生 TMonster.Run sub_66622C 的入口闸是三段，第一段是虚派发的
+            // can-act 谓词，不是裸 m_boDeath：
+            //   0066626A  B2 01                 mov  dl,1
+            //   0066626F  8B 08                 mov  ecx,[eax]
+            //   00666271  FF 51 40              call [ecx+0x40]        ; = sub_76B354
+            //   00666276  0F 84 64 04 00 00     je   0x6666E0          ; 假 -> 只跑 inherited
+            //   0066627F  80 B8 E3 02 00 00 00  cmp  byte [eax+0x2E3],0 ; m_boFixedHideMode
+            //   00666286  0F 85 54 04 00 00     jne  0x6666E0
+            //   0066628F  80 B8 E5 02 00 00 00  cmp  byte [eax+0x2E5],0 ; m_boStoneMode
+            //   00666296  0F 85 44 04 00 00     jne  0x6666E0
+            // sub_76B354 = m_boDeath | bodyState{0x1D,0x01,0x1A,0x18(仅当实参非0),0x3E}，
+            // C# 已有等价实现 IsNativeCanActBlocked。原先只判 m_boDeath 时，处在那 5 个
+            // 状态里的怪照常搜敌/移动/出手。
+            // m_boGhost 与 m_wStatusTimeArr[POISON_STONE] 两项原生此处没有；保留是因为
+            // C# 的状态层与 native bodyState 层尚未收敛（REPLICATION_RULES §4.18），
+            // 删掉会让旧石化路径失效。收敛后应只留 IsNativeCanActBlocked(1)。
+            if (!IsNativeCanActBlocked(1) && !m_boGhost && !m_boFixedHideMode && !m_boStoneMode && m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
             {
                 if (Think())
                 {
