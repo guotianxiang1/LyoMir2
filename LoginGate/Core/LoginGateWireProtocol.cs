@@ -319,6 +319,12 @@ namespace LoginGate.Core
             return true;
         }
 
+        // GDM_PING ack. uDBListen.pas:306-312 builds this from a stack local and
+        // only assigns Sign/Cmd/DataLength, so native ships whatever garbage is in
+        // rSocketHandle (+4) and Ident (+8) -- LoginCenterAuth_Spec, the only writer
+        // of Ident here, is off in this build (no LoginCenterAuthLogin in
+        // LoginGate.map). The DBServer reads neither field, so sending deterministic
+        // zeroes is compatible; do not reproduce the uninitialised bytes.
         public static YbDbLegacy77Frame CreateNativeRegistrationAck() =>
             new(0, 0, NativeRegistrationAckIdent, Array.Empty<byte>());
 
