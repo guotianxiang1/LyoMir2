@@ -806,9 +806,10 @@ namespace GameSvr
         public int WithDrawalGolds(TPlayObject PlayObject, int nGold)
         {
             var result = -1;
+            // 0x65B3B5 mov [ebp-4],-1 ; 0x65B3BC test esi,esi / 0x65B3BE jle 0x65B431
+            // nGold<=0 returns -1. sub_65B3A8 never writes -4 (0xFFFFFFFC).
             if (nGold <= 0)
             {
-                result = -4;
                 return result;
             }
             if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1)
