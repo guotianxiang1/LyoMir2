@@ -2041,6 +2041,14 @@ namespace SystemModule
         public const int CM_3179 = 3179;  // 0x6DA3F3 -> 0x6E320C  商人物品字节查询
         // === end CM missing Q2 ===
 
+        // === HorseToken subsystem ===
+        // SM 0x50A: reply built by the CM 1376 (坐骑马牌) worker 0x6F2E44 at
+        // 0x6F2E8C `mov dx,0x50A` through [player+0x250] SendDefMessage; Recog is
+        // [item+0x18] (ClientItemID, 0x6F2E89), wParam is the request Param
+        // (0x6F2E82 push edi), Tag/Series 0, empty body. No prior C# SM constant
+        // held 0x50A (CM_YANHUA_TEXT reuses 1290 in the CM direction).
+        public const int SM_HORSETOKEN_SETMOUNT = 0x50A; // 1290
+
         // === SM missing batch 5 (rank 106-140) ===========================================
         // Highest 35 by value of the 140 class-(c) native wire-SM idents
         // (staging/_sm1_work/classes.txt) that fire through a real send slot in
