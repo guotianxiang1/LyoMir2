@@ -1109,55 +1109,40 @@ namespace GameSvr
         
         public object AddToMapMineEvent(int nX, int nY, CellType nType, StoneMineEvent stoneMineEvent)
         {
-            MapCellinfo Mc = default;
             const string sExceptionMsg = "[Exception] TEnvirnoment::AddToMapMineEvent ";
             var mapCell = false;
             try
             {
+                // Native sub_777D8C gates on three things and nothing else:
+                //   0x777DA2  85 F6           test esi, esi          ; event object
+                //   0x777DA4  74 4A           je   0x777DF0          ;   null -> FALSE
+                //   0x777DB2  E8 F1 F8 FF FF  call 0x7776A8          ; GetMapCellInfo
+                //   0x777DB7  84 C0 / 74 35   test al,al / je        ;   miss -> FALSE
+                //   0x777DBE  80 38 00        cmp  byte [eax], 0     ; cell attribute
+                //   0x777DC1  74 2D           je   0x777DF0          ;   zero -> FALSE
+                // then allocates and links the node unconditionally.
+                //
+                // The 3x3 walkability scan that used to sit here has no native
+                // counterpart, and its failure path returned null, leaving the ore
+                // unplaced. The caller treats an absent ore node as "no ore here" and
+                // builds a fresh StoneMineEvent with a fresh Random(200) count on the
+                // next swing, so a cell that fails the scan yields ore forever.
+                if (stoneMineEvent == null) return null;
                 MapCellinfo MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
-                var bo1A = false;
                 if (mapCell && MapCellInfo.Attribute != 0)
                 {
-                    var isSpace = false;// 人物可以走到的地方才放上矿藏
-                    for (var X = nX - 1; X <= nX + 1; X++)
+                    if (MapCellInfo.ObjList == null)
                     {
-                        for (var Y = nY - 1; Y <= nY + 1; Y++)
-                        {
-                            if (GetMapCellInfo(X, Y, ref Mc))
-                            {
-                                if ((Mc.Valid))
-                                {
-                                    isSpace = true;
-                                }
-                            }
-                            if (isSpace)
-                            {
-                                break;
-                            }
-                        }
-                        if (isSpace)
-                        {
-                            break;
-                        }
+                        MapCellInfo.ObjList = EnsureCellObjectList(nX, nY);
                     }
-                    if (isSpace)
+                    var OSObject = new CellObject
                     {
-                        if (MapCellInfo.ObjList == null)
-                        {
-                            MapCellInfo.ObjList = EnsureCellObjectList(nX, nY);
-                        }
-                        if (!bo1A)
-                        {
-                            var OSObject = new CellObject
-                            {
-                                CellType = nType,
-                                CellObj = stoneMineEvent,
-                                dwAddTime = HUtil32.GetTickCount()
-                            };
-                            MapCellInfo.ObjList.Add(OSObject);
-                            return stoneMineEvent;
-                        }
-                    }
+                        CellType = nType,
+                        CellObj = stoneMineEvent,
+                        dwAddTime = HUtil32.GetTickCount()
+                    };
+                    MapCellInfo.ObjList.Add(OSObject);
+                    return stoneMineEvent;
                 }
             }
             catch (Exception ex)
