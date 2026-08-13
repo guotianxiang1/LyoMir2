@@ -134,6 +134,11 @@ namespace GameSvr
                     cert = new BaiHu();
                     break;
 
+                // race 233 TItemAttMon : Monster —— 见 Monster/ItemAttMon.cs
+                case 233:
+                    cert = new ItemAttMon();
+                    break;
+
                 // race 236 TWorldCupPreMatchMon : AnimalObject —— 见 Monster/WorldCupPreMatchMon.cs
                 case 236:
                     cert = new WorldCupPreMatchMon();
