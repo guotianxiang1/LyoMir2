@@ -159,7 +159,16 @@ static void CheckQueryUserStateHeader(TUserItem equippedItem)
         nParam2 = 6,
         nParam3 = 5
     }), "CM_QUERYUSERSTATE dispatcher result");
-    Packet(requester.m_DefMsg, Grobal2.SM_SENDUSERSTATE, 0, 1, 0, 0,
+    // Delphi's register convention pushes the stack tail left-to-right
+    // (Param, Tag, Series, Buf, Len), so the literal 1 is Series:
+    //   0x6B7119 6A 00 push 0            ; Param
+    //   0x6B711B 6A 00 push 0            ; Tag
+    //   0x6B711D 6A 01 push 1            ; Series
+    //   0x6B711F 8B 45 F8 / 50 push [ebp-8]   ; Buf
+    //   0x6B712D 50   push eax           ; Len
+    //   0x6B712E 33 C9 xor ecx,ecx       ; Recog = 0
+    //   0x6B7130 66 BA EF 02 mov dx,0x2EF ; 751
+    Packet(requester.m_DefMsg, Grobal2.SM_SENDUSERSTATE, 0, 0, 0, 1,
         "SM_SENDUSERSTATE");
     Equal(751, Grobal2.SM_SENDUSERSTATE, "SM_SENDUSERSTATE ident");
 }
@@ -184,8 +193,9 @@ static void CheckExactSourceContracts()
     var queryBlock = Between(operateSource, "private void ClientQueryUserState",
         "internal static byte[] EncodeClientUserState");
     var normalizedQuery = Normalize(queryBlock);
+    // 0x6B7119 push 0 (Param) / 0x6B711B push 0 (Tag) / 0x6B711D push 1 (Series)
     Contains(normalizedQuery,
-        "MakeDefaultMsg(Grobal2.SM_SENDUSERSTATE, 0, 1, 0, 0)",
+        "MakeDefaultMsg(Grobal2.SM_SENDUSERSTATE, 0, 0, 0, 1)",
         "SM_SENDUSERSTATE fixed header");
     NotContains(queryBlock, "TOUserStateInfo", "legacy 989B user-state path");
     NotContains(queryBlock, "EDcode.EncodeBuffer", "legacy user-state serializer");
@@ -226,10 +236,19 @@ static void Packet(ClientPacket packet, int ident, int recog, int param, int tag
     Equal(unchecked((ushort)series), packet.Series, label + " series");
 }
 
-static string FindRepoRoot()
+// The sweep harness runs the exe out of a shared Build tree OUTSIDE the checkout
+// (OutputPath ..\..\..\Build\AuditTools\...), so neither the CWD nor the base directory has
+// the solution above it. Fall back to where this file was compiled from.
+static string FindRepoRoot([System.Runtime.CompilerServices.CallerFilePath] string sourcePath = "")
 {
-    foreach (var startPath in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+    foreach (var startPath in new[]
+             {
+                 Directory.GetCurrentDirectory(),
+                 AppContext.BaseDirectory,
+                 string.IsNullOrEmpty(sourcePath) ? null : Path.GetDirectoryName(sourcePath)
+             })
     {
+        if (string.IsNullOrEmpty(startPath)) continue;
         for (var directory = new DirectoryInfo(startPath);
              directory != null; directory = directory.Parent)
         {

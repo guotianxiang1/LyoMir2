@@ -284,8 +284,20 @@ static void CheckThirdBatchDispatcher()
         wIdent = Grobal2.RM_10414,
         BaseObject = gaugeActor.ObjectId
     }), "RM_10414 dispatcher result");
+    // Delphi's register convention pushes the stack tail LEFT-to-right, which the sibling
+    // SM_OPENHEALTH arm pins: it pushes HP.lo, MaxHP.lo, 0, 0 into (wParam, wTag, wSeries,
+    // sMsg) — read right-to-left the string parameter would receive an HP value. The RM
+    // 10414 arm at 0x6B5C23 therefore reads Param=HP.lo / Tag=MaxHP.lo / Series=1:
+    //   0x6B5C38 66 8B 86 AC 02 00 00  mov ax,[esi+0x2AC] ; HP.lo
+    //   0x6B5C3F 50                    push eax           ; wParam
+    //   0x6B5C40 66 8B 86 B0 02 00 00  mov ax,[esi+0x2B0] ; MaxHP.lo
+    //   0x6B5C47 50                    push eax           ; wTag
+    //   0x6B5C48 6A 01                 push 1             ; wSeries
+    //   0x6B5C4A 8D 45 F0 / 50         lea eax,[ebp-0x10] ; Buf (HP,MaxHP dwords)
+    //   0x6B5C4E 6A 08                 push 8             ; Len
+    //   0x6B5C53 66 BA 4F 04           mov dx,0x44F       ; 1103
     Packet(player.m_DefMsg, Grobal2.SM_INSTANCEHEALGUAGE,
-        gaugeActor.ObjectId, 1, 0x3210, 0xCDEF, "RM_10414");
+        gaugeActor.ObjectId, 0xCDEF, 0x3210, 1, "RM_10414");
 
     var gaugeBodyMethod = typeof(TPlayObject).GetMethod(
         "BuildInstanceHealGaugeBody", BindingFlags.Static | BindingFlags.NonPublic);
@@ -310,8 +322,15 @@ static void CheckThirdBatchDispatcher()
         nParam2 = unchecked((int)0x89ABCDEF),
         Payload = goodsBody
     }), "RM_SENDGOODSLIST dispatcher result");
+    // Same left-to-right (Param, Tag, Series, Buf, Len) tail as RM_10414:
+    //   0x6B5277 66 8B 43 08 mov ax,[ebx+8] / 0x6B527B 50 push eax  ; Param = LoWord(nParam2)
+    //   0x6B527C 6A 00       push 0                                 ; Tag
+    //   0x6B527E 6A 01       push 1                                 ; Series
+    //   0x6B5280 8B 43 10 / 50  push [ebx+0x10]                     ; Buf
+    //   0x6B5284 0F B7 C6 / 50  push si                             ; Len
+    //   0x6B528B 66 BA 85 02    mov dx,0x285                        ; 645
     Packet(player.m_DefMsg, Grobal2.SM_SENDGOODSLIST, 0x10203040,
-        1, 0, 0xCDEF, "RM_SENDGOODSLIST");
+        0xCDEF, 0, 1, "RM_SENDGOODSLIST");
 
     Assert(player.Operate(new TProcessMessage
     {
@@ -321,8 +340,12 @@ static void CheckThirdBatchDispatcher()
         nParam3 = unchecked((int)0xE5F60718),
         Payload = goodsBody
     }), "RM_SENDDETAILGOODSLIST dispatcher result");
+    //   0x6B538F 66 8B 43 08 mov ax,[ebx+8]    / push  ; Param  = LoWord(nParam2)
+    //   0x6B5394 66 8B 43 0C mov ax,[ebx+0x0C] / push  ; Tag    = LoWord(nParam3)
+    //   0x6B5399 6A 00       push 0                    ; Series
+    //   0x6B53A6 66 BA 8C 02 mov dx,0x28C              ; 652
     Packet(player.m_DefMsg, Grobal2.SM_SENDDETAILGOODSLIST, 0x12345678,
-        0, 0x0718, 0xC3D4, "RM_SENDDETAILGOODSLIST");
+        0xC3D4, 0x0718, 0, "RM_SENDDETAILGOODSLIST");
 
     var queuedBodyMethod = typeof(TPlayObject).GetMethod(
         "GetQueuedPayloadBytes", BindingFlags.Static | BindingFlags.NonPublic);
@@ -431,10 +454,10 @@ static void CheckExactSequenceSource()
         "TPlayObject.Message.cs"));
 
     var goodsBlock = CaseBlock(source, "RM_SENDGOODSLIST", "RM_SENDUSERSELL");
-    Contains(goodsBlock, "ProcessMsg.nParam1, 1, 0,",
-        "RM_SENDGOODSLIST fixed Param/Tag");
-    Contains(goodsBlock, "HUtil32.LoWord(ProcessMsg.nParam2)",
-        "RM_SENDGOODSLIST Series");
+    // 0x6B5277 push word[rec+8] (Param) / 0x6B527C push 0 (Tag) / 0x6B527E push 1 (Series)
+    Contains(goodsBlock,
+        "ProcessMsg.nParam1, HUtil32.LoWord(ProcessMsg.nParam2), 0, 1)",
+        "RM_SENDGOODSLIST Param/Tag/Series");
     Contains(goodsBlock, "GetQueuedPayloadBytes(ProcessMsg)",
         "RM_SENDGOODSLIST queued body");
     NotContains(goodsBlock, "ProcessMsg.sMsg", "RM_SENDGOODSLIST string body");
@@ -442,20 +465,23 @@ static void CheckExactSequenceSource()
 
     var detailGoodsBlock = CaseBlock(source, "RM_SENDDETAILGOODSLIST",
         "RM_GOLDCHANGED");
+    // 0x6B538F push word[rec+8] (Param) / 0x6B5394 push word[rec+0xC] (Tag) /
+    // 0x6B5399 push 0 (Series)
     Contains(detailGoodsBlock,
-        "ProcessMsg.nParam1, 0, HUtil32.LoWord(ProcessMsg.nParam3)",
-        "RM_SENDDETAILGOODSLIST Param/Tag");
-    Contains(detailGoodsBlock, "HUtil32.LoWord(ProcessMsg.nParam2)",
-        "RM_SENDDETAILGOODSLIST Series");
+        "ProcessMsg.nParam1, HUtil32.LoWord(ProcessMsg.nParam2)",
+        "RM_SENDDETAILGOODSLIST Param");
+    Contains(detailGoodsBlock, "HUtil32.LoWord(ProcessMsg.nParam3), 0)",
+        "RM_SENDDETAILGOODSLIST Tag/Series");
     Contains(detailGoodsBlock, "GetQueuedPayloadBytes(ProcessMsg)",
         "RM_SENDDETAILGOODSLIST queued body");
     NotContains(detailGoodsBlock, "ProcessMsg.sMsg",
         "RM_SENDDETAILGOODSLIST string fallback");
 
     var gaugeBlock = CaseBlock(source, "RM_10414", "RM_CHANGEFACE");
-    Contains(gaugeBlock, "ProcessMsg.BaseObject, 1, HUtil32.LoWord(gaugeMaxHp)",
-        "RM_10414 fixed header");
-    Contains(gaugeBlock, "HUtil32.LoWord(gaugeHp)", "RM_10414 Series");
+    // 0x6B5C38 push HP.lo (Param) / 0x6B5C40 push MaxHP.lo (Tag) / 0x6B5C48 push 1 (Series)
+    Contains(gaugeBlock, "ProcessMsg.BaseObject, HUtil32.LoWord(gaugeHp)",
+        "RM_10414 Param");
+    Contains(gaugeBlock, "HUtil32.LoWord(gaugeMaxHp), 1)", "RM_10414 Tag/Series");
     Contains(gaugeBlock, "BuildInstanceHealGaugeBody(gaugeHp, gaugeMaxHp)",
         "RM_10414 8-byte body");
 
@@ -606,14 +632,19 @@ static void Packet(ClientPacket packet, int ident, int recog, int param, int tag
     Equal(unchecked((ushort)series), packet.Series, label + " series");
 }
 
-static string FindRepoRoot()
+// The sweep harness runs the exe out of a shared Build tree that sits OUTSIDE the checkout
+// (OutputPath ..\..\..\Build\AuditTools\...), so neither the CWD nor the base directory has
+// the solution above it. Fall back to where this file was compiled from.
+static string FindRepoRoot([System.Runtime.CompilerServices.CallerFilePath] string sourcePath = "")
 {
     foreach (var startPath in new[]
              {
                  Directory.GetCurrentDirectory(),
-                 AppContext.BaseDirectory
+                 AppContext.BaseDirectory,
+                 string.IsNullOrEmpty(sourcePath) ? null : Path.GetDirectoryName(sourcePath)
              })
     {
+        if (string.IsNullOrEmpty(startPath)) continue;
         for (var directory = new DirectoryInfo(startPath);
              directory != null; directory = directory.Parent)
         {
