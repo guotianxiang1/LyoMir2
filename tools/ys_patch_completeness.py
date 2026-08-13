@@ -33,6 +33,10 @@ Verdicts
   NATIVE_GAP            plugin patches M2Server, this repo has no engine-tier
                         consumer -> a real hole, ranked by patch surface
   NATIVE_OK             plugin patches M2Server, repo implements it
+  PARAM_OF_PATCHED      no patch of its own, but the key is `<feature>_<param>`
+                        and <feature> is patched -- these are the numbers baked
+                        into that feature's payload, so they belong to it and
+                        are not independently portable
   PLUGIN_SIDE_ONLY      no M2Server patch, but plugin code reads the key
   EQUIVALENT_BY_ABSENCE no patch and no read anywhere in 45 MB -> nothing to port
 
@@ -116,6 +120,12 @@ def main():
     for r in sites:
         by_label[r["label"]].append(r)
     extreme = mx.load_extreme_map(repo)
+    # the authoritative union (label atlas + extreme map + g11 immediate writes);
+    # g11's `mov [abs], imm` patches have no installer call, so the label atlas
+    # cannot reach them and they must be carried over rather than dropped.
+    union = {r["key"] for r in csv.DictReader(
+        open(os.path.join(repo, "docs", "ys_patch_target_vas.tsv"), encoding="utf-8"),
+        delimiter="\t")}
 
     # ---- the C#-side verdict already computed by the matrix
     matrix = {r["key"]: r for r in csv.DictReader(
@@ -123,6 +133,10 @@ def main():
         delimiter="\t")}
 
     cfg, _ = mx.load_config(mx.DEFAULT_CONFIG)
+
+    def patched(key):
+        return key in union or key.rstrip("a") in union
+
     rows = []
     for key in sorted(cfg):
         m = matrix.get(key, {})
@@ -134,12 +148,14 @@ def main():
         for tag, table in cmps.items():
             cons[tag] = [v for v in table.get(off, ()) if outside(v)] if off else []
 
-        patched = bool(srows) or bool(ext)
         state = m.get("state", "?")
-        if patched:
+        owner = key.split("_", 1)[0]
+        if srows or ext or patched(key):
             verdict = "NATIVE_OK" if state == "IMPLEMENTED" else "NATIVE_GAP"
         elif cons["delayed"]:
             verdict = "PLUGIN_SIDE_ONLY"
+        elif owner != key and patched(owner):
+            verdict = "PARAM_OF_PATCHED"
         else:
             verdict = "EQUIVALENT_BY_ABSENCE"
 
@@ -158,17 +174,26 @@ def main():
                                  | {"%#08x" % v for v in ext}),
             "cfg_field": ("%#05x" % off) if off else "?",
             "consumers": cons["delayed"],
+            "owner": owner if verdict == "PARAM_OF_PATCHED" else "",
+            "patch_src": "+".join(
+                s for s, ok in (("label-atlas", bool(srows)),
+                                ("extreme-map", bool(ext)),
+                                ("g11-immediate", not srows and not ext
+                                 and patched(key))) if ok),
         })
 
     path = os.path.join(out_dir, "ys_patch_completeness.tsv")
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("key\tpage\tprod_on\tvalue\tmatrix_state\tverdict\tapply_sites\t"
-                 "revert_sites\tpatch_bytes\tcfg_field\tn_consumers\ttarget_vas\n")
+        fh.write("key\tpage\tprod_on\tvalue\tmatrix_state\tverdict\towner\t"
+                 "patch_source\tapply_sites\trevert_sites\tpatch_bytes\t"
+                 "cfg_field\tn_consumers\ttarget_vas\n")
         for r in rows:
-            fh.write("%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\t%d\t%s\n" % (
+            fh.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\t%d\t%s\n" % (
                 r["key"], r["page"], r["prod_on"], r["value"], r["matrix_state"],
-                r["verdict"], r["apply_sites"], r["revert_sites"], r["patch_bytes"],
-                r["cfg_field"], len(r["consumers"]), " ".join(r["target_vas"])))
+                r["verdict"], r["owner"], r["patch_src"] or "-",
+                r["apply_sites"], r["revert_sites"],
+                r["patch_bytes"], r["cfg_field"], len(r["consumers"]),
+                " ".join(r["target_vas"])))
     print("wrote", path)
 
     print("\nverdict x matrix_state")
