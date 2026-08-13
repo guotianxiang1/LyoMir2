@@ -438,8 +438,11 @@ static PasInterpreter ParseInterpreter(string path, PasApiBridge bridge)
 
 static PasProgram LoadThroughHost(PasScriptHost host, string scriptPath)
 {
+    // PasScriptHost.cs:2333/2336 declare a (string) and a (string, out string)
+    // overload, so a name-only lookup is ambiguous.
     var method = typeof(PasScriptHost).GetMethod("GetOrLoadProgram",
-        BindingFlags.Instance | BindingFlags.NonPublic);
+        BindingFlags.Instance | BindingFlags.NonPublic, null,
+        new[] { typeof(string) }, null);
     Require(method != null, "PasScriptHost.GetOrLoadProgram reflection target missing");
     var program = method.Invoke(host, new object[] { scriptPath }) as PasProgram;
     return program ?? throw new InvalidOperationException(
