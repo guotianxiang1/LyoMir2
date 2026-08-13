@@ -115,6 +115,21 @@ Assert(GetCallOffset(sendHeroLogon, sendHeroBornEffect) < GetCallOffset(sendHero
     "hero logon does not emit SM897 before SM899");
 Assert(ContainsCall(playerOperate, removeHeroMethod),
     "CM_HERO_LOGOUT no longer removes the server hero object");
+
+// THeroAct.Run 的回收门（sub_689FDC @0x68A048-0x68A057）在尸体满 60 秒或主人 ghost 时
+// 调 sub_6CCA1C(主人)，而 sub_6CCA1C 会 MarkDelete 英雄、清 [master+0xBB0]、下发
+// SM_HERO_LOGOUT(0x6CCAE7 mov dx,0x396 -> [master_vmt+0x250]) 并排一次 DB 存档
+// (0x6CCAF7 call 0x6CC9A8 = 0x194)。只 MakeGhost 会让主人的 m_HeroObject 永远非空，
+// CM_HERO_LOGON 的 `m_HeroObject == null` 门再也打不开。
+var runMasterGoneReap = heroType.GetMethod("RunNativeMasterGoneReap",
+    BindingFlags.Instance | BindingFlags.NonPublic)!;
+var sendDefMessage = playerType.GetMethod("SendDefMessage")!;
+Assert(ContainsCall(runMasterGoneReap, removeHeroMethod),
+    "hero corpse/owner-gone reap no longer performs the native sub_6CCA1C recall "
+    + "(owner keeps a dangling m_HeroObject and can never re-summon)");
+Assert(ContainsCall(runMasterGoneReap, sendDefMessage),
+    "hero corpse/owner-gone reap no longer sends SM_HERO_LOGOUT to the owner "
+    + "(native 0x6CCAE7 mov dx,0x396 through the +0x250 send slot)");
 Assert(ContainsCall(queueForFree, queueHeroSave),
     "hero retirement releases runtime state before queuing a native save");
 Assert(ContainsCall(processHeroesMethod, processHeroData),
