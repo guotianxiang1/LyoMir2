@@ -1,7 +1,28 @@
+using System.Collections.Generic;
+
 namespace SystemModule;
 
 public class TMapFlag
 {
+    // The 战神 map-flag domain is the two parallel Delphi AnsiString pools at 0x775BFC
+    // (54 records / 52 flag names after the 2 separators) and 0x776B20 (60 records / 55
+    // flag names after the 5 separators). The following names are NOT in either pool and
+    // are not in the image at all -- each was scanned as a Delphi AnsiString record
+    // (FFFFFFFF + len32 + chars + NUL), as len32+chars+NUL, as len8+chars+NUL, as
+    // chars+NUL, bare, and UTF-16LE, all case-insensitive, and every form returned 0:
+    //
+    //   MINE2 NOHUMNOMON MUSIC EXPRATE PKWINLEVEL PKWINEXP PKLOSTLEVEL PKLOSTEXP
+    //   DECHP INCHP DECGAMEGOLD DECGAMEPOINT INCGAMEGOLD INCGAMEPOINT RUNHUMAN RUNMON
+    //   NOGUILDRECALL NODEARRECALL NOMASTERRECALL NOTHROWITEM NODROPITEM NOHORSE NOCHAT
+    //   KILLFUNC NEEDSET_ON NEEDSET_OFF
+    //
+    // (The three bare "EXPRATE" byte hits at 0x6AD5F6 / 0x72C759 / 0x7D0618 are the tails
+    // of "MultiTempExpRate" and "MonExpRate", not standalone tokens.) The parser no longer
+    // recognises any of them -- 战神 parser B silently ignores an unknown token
+    // (0x776AD3 falls straight into the next loop iteration) -- so the fields below that
+    // belong to those names stay at their zero/-1 defaults for the whole process lifetime.
+    // The declarations survive only because Envirnoment.cs's diagnostic map dump and a
+    // handful of now-unreachable gates still name them; do not re-wire the parser.
     public bool boSAFE;
     public int nL;
     public int nNEEDSETONFlag;
@@ -76,12 +97,10 @@ public class TMapFlag
     public bool boKILLFUNC;
     public int nKILLFUNCNO;
     /// <summary>
-    /// NOT A 战神 FLAG — permanently false. Kept only so the diagnostic map dump
-    /// in Envirnoment.cs keeps its column layout. 战神 has no NOHUMNOMON token:
-    /// 0 byte hits image-wide for every spelling, and the complete map-flag token
-    /// census (the two parallel blocks at 0x775BFC and 0x776B20, 46 tokens each)
-    /// has no equivalent. The parser no longer sets it and the monster-regen gate
-    /// in UsrEngn.cs no longer reads it. Do not re-wire it.
+    /// NOT A 战神 FLAG — permanently false; see the census note at the top of the class.
+    /// Kept only so the diagnostic map dump in Envirnoment.cs keeps its column layout.
+    /// The parser does not set it and the monster-regen gate in UsrEngn.cs does not read
+    /// it. Do not re-wire it.
     /// </summary>
     public bool boNOHUMNOMON;
 
@@ -175,9 +194,11 @@ public class TMapFlag
 
     // MFLG-12/MFLG-24: Additional map flags from 战神 token census
     /// <summary>
-    /// 战神 map flag <c>NOMAGIC</c>. DORMANT gate: 0 consumers in 战神 binary
-    /// (image-wide scan). Parser recognizes the token to match native domain,
-    /// but no runtime code reads this field.
+    /// 战神 map flag <c>NOMAGIC</c> -> native <c>[flag+0x81]</c>. The field has exactly ONE
+    /// reader, 0x6DA12B <c>80 B8 81 00 00 00 00  cmp byte [eax+0x81],0</c> / 0x6DA132 <c>jne</c>,
+    /// reached through the standard <c>mov eax,[actor+0x128]</c> map-pointer form at 0x6DA125.
+    /// C# parses the token but has no equivalent gate yet, so a NOMAGIC map does not block
+    /// anything here.
     /// </summary>
     public bool boNOMAGIC;
 
@@ -197,9 +218,64 @@ public class TMapFlag
     public bool boMONATTACK;
 
     /// <summary>
-    /// 战神 map flag <c>LIMITHEROLEVEL</c>.
+    /// 战神 map flag <c>LIMITHEROLEVEL(n)</c> -> native <c>word [flag+0xC0]</c>, a THRESHOLD,
+    /// not a switch. Parser B @0x77682C <c>66 89 83 C0 00 00 00  mov word [ebx+0xC0],ax</c>
+    /// (parser A @0x775869 same, else-arm @0x77587D writes 0); ax comes from StrToIntDef with
+    /// <c>33D2 xor edx,edx</c> @0x776824, i.e. default 0. Constructor never writes it, so
+    /// TObject.InitInstance leaves 0 = no limit.
+    /// <para>
+    /// Consumer sub_690300 clamps the hero's reported level:
+    ///   0x690315 <c>cmp word [edx+0xC0],0</c> / <c>jbe</c>  -- 0 means unlimited
+    ///   0x69032C <c>cmp cx,word [edx+0xBE]</c> / <c>jbe</c>  -- owner level vs LIMITPLAYERLEVEL
+    ///   0x690339 <c>cmp cx,word [edx+0xC0]</c> / <c>jbe</c>  -- hero level vs this threshold
+    ///   0x690342 <c>mov cx,word [edx+0xC0]</c>               -- clamp to the threshold
+    /// All three are unsigned word compares. NOT WIRED in C# yet.
+    /// </para>
     /// </summary>
-    public bool boLIMITHEROLEVEL;
+    public ushort nLIMITHEROLEVEL;
+
+    /// <summary>
+    /// 战神 map flag <c>LIMITPLAYERLEVEL(n)</c> -> native <c>word [flag+0xBE]</c>.
+    /// Parser B @0x7767E6 <c>66 89 83 BE 00 00 00</c>, parser A @0x77580A (else-arm @0x77581E
+    /// writes 0). Paired with <see cref="nLIMITHEROLEVEL"/> in sub_690300 @0x69032C. NOT WIRED.
+    /// </summary>
+    public ushort nLIMITPLAYERLEVEL;
+
+    /// <summary>
+    /// 战神 map flag <c>UNIFIEDLEVEL(n)</c> -> native <c>word [flag+0xBC]</c>.
+    /// Parser B @0x7767A0 <c>66 89 83 BC 00 00 00</c>, parser A @0x7757AB (else-arm @0x7757BF
+    /// writes 0). Read at 0x6BA0D0 <c>cmp word [edx+0xBC],0</c>, 0x6BA0DA, 0x73D60B. NOT WIRED.
+    /// </summary>
+    public ushort nUNIFIEDLEVEL;
+
+    /// <summary>
+    /// 战神 map flag <c>MapSign(n)</c> -> native <c>word [flag+0x62]</c>.
+    /// Parser B @0x776514 <c>66 89 43 62</c>, parser A @0x775407 (else-arm @0x775418 writes 0).
+    /// </summary>
+    public ushort nMapSign;
+
+    /// <summary>
+    /// 战神 map flag <c>MAPFIREWALLBURN(n)</c> -> native <c>dword [flag+0x88]</c>.
+    /// The parsed value is scaled by 1000 before the store: parser B @0x7764C9
+    /// <c>69 C0 E8 03 00 00  imul eax,eax,0x3E8</c> then @0x7764CF
+    /// <c>89 83 88 00 00 00  mov dword [ebx+0x88],eax</c> (parser A @0x7753AA / @0x7753BF).
+    /// So the config unit is seconds and the stored unit is milliseconds.
+    /// </summary>
+    public int nMAPFIREWALLBURN;
+
+    /// <summary>
+    /// 战神 map flag <c>FLYDROPITEM(a/b/c)</c> -> native <c>[flag+0xB4]</c>, which is a
+    /// <c>TMirStringList</c> POINTER (classref [0x49EB3C] -> VMT 0x49EB88, vmtClassName
+    /// "TMirStringList"), not a number: parser B @0x776562 <c>mov eax,[0x49EB3C]</c> /
+    /// <c>call 0x404660</c> creates it, @0x77657C <c>call [edx+0x44]</c> clears an existing one,
+    /// and the @0x776581 loop splits the parenthesised argument on '/' (0x776588
+    /// <c>B1 2F  mov cl,0x2F</c>) appending each non-empty piece via <c>call [ecx+0x38]</c>.
+    /// An EMPTY argument takes the @0x7765C2 branch instead: clear then
+    /// <c>lea eax,[ebx+0xB4] / call 0x414C24</c> (FreeAndNil), i.e. back to null.
+    /// The only anchored reader 0x6B73FF <c>cmp dword [eax+0xB4],0</c> is a presence test.
+    /// NOT WIRED beyond parsing.
+    /// </summary>
+    public List<string> FlyDropItemNames;
 
     /// <summary>
     /// 战神 map flag <c>TRIGGERBOMB</c>.

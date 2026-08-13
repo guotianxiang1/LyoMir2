@@ -160,118 +160,8 @@ namespace GameSvr
                                 QuestNPC = LoadMapInfo_LoadMapQuest(s38);
                                 continue;
                             }
-                            if (HUtil32.CompareLStr(s34, "NEEDSET_ON", "NEEDSET_ON".Length))
+                            if (TryApplyNumericFlag(MapFlag, s34, ref s38))
                             {
-                                MapFlag.nNeedONOFF = 1;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nNEEDSETONFlag = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "NEEDSET_OFF", "NEEDSET_OFF".Length))
-                            {
-                                MapFlag.nNeedONOFF = 0;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nNEEDSETONFlag = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "MUSIC", "MUSIC".Length))
-                            {
-                                MapFlag.boMUSIC = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nMUSICID = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "EXPRATE", "EXPRATE".Length))
-                            {
-                                MapFlag.boEXPRATE = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nEXPRATE = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKWINLEVEL", "PKWINLEVEL".Length))
-                            {
-                                MapFlag.boPKWINLEVEL = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKWINLEVEL = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKWINEXP", "PKWINEXP".Length))
-                            {
-                                MapFlag.boPKWINEXP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKWINEXP = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKLOSTLEVEL", "PKLOSTLEVEL".Length))
-                            {
-                                MapFlag.boPKLOSTLEVEL = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKLOSTLEVEL = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKLOSTEXP", "PKLOSTEXP".Length))
-                            {
-                                MapFlag.boPKLOSTEXP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKLOSTEXP = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "DECHP", "DECHP".Length))
-                            {
-                                MapFlag.boDECHP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nDECHPPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nDECHPTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "INCHP", "INCHP".Length))
-                            {
-                                MapFlag.boINCHP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nINCHPPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nINCHPTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "DECGAMEGOLD", "DECGAMEGOLD".Length))
-                            {
-                                MapFlag.boDECGAMEGOLD = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nDECGAMEGOLD = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nDECGAMEGOLDTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "DECGAMEPOINT", "DECGAMEPOINT".Length))
-                            {
-                                MapFlag.boDECGAMEPOINT = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nDECGAMEPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nDECGAMEPOINTTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "INCGAMEGOLD", "INCGAMEGOLD".Length))
-                            {
-                                MapFlag.boINCGAMEGOLD = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nINCGAMEGOLD = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nINCGAMEGOLDTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "INCGAMEPOINT", "INCGAMEPOINT".Length))
-                            {
-                                MapFlag.boINCGAMEPOINT = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nINCGAMEPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nINCGAMEPOINTTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (s34.Equals("RUNHUMAN", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boRUNHUMAN = true;
-                                continue;
-                            }
-                            if (s34.Equals("RUNMON", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boRUNMON = true;
                                 continue;
                             }
                             if (s34.Equals("NEEDHOLE", StringComparison.OrdinalIgnoreCase))
@@ -282,21 +172,6 @@ namespace GameSvr
                             if (s34.Equals("NORECALL", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNORECALL = true;
-                                continue;
-                            }
-                            if (s34.Equals("NOGUILDRECALL", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOGUILDRECALL = true;
-                                continue;
-                            }
-                            if (s34.Equals("NODEARRECALL", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNODEARRECALL = true;
-                                continue;
-                            }
-                            if (s34.Equals("NOMASTERRECALL", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOMASTERRECALL = true;
                                 continue;
                             }
                             if (s34.Equals("NORANDOMMOVE", StringComparison.OrdinalIgnoreCase))
@@ -327,24 +202,13 @@ namespace GameSvr
                                 MapFlag.boNODRUG = true;
                                 continue;
                             }
-                            if (s34.Equals("MINE", StringComparison.OrdinalIgnoreCase))
+                            // 0x775249 / 0x7763D6 `call 0x4C6E94` with `B9 04 00 00 00
+                            // mov ecx,4`, i.e. a 4-character prefix test: every token
+                            // beginning with "MINE" -- including the "MINE2" that used to
+                            // have its own invented arm here -- sets this one flag.
+                            if (HUtil32.CompareLStr(s34, "MINE", "MINE".Length))
                             {
                                 MapFlag.boMINE = true;
-                                continue;
-                            }
-                            if (s34.Equals("MINE2", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boMINE2 = true;
-                                continue;
-                            }
-                            if (s34.Equals("NOTHROWITEM", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOTHROWITEM = true;
-                                continue;
-                            }
-                            if (s34.Equals("NODROPITEM", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNODROPITEM = true;
                                 continue;
                             }
                             if (s34.Equals("NOPOSITIONMOVE", StringComparison.OrdinalIgnoreCase))
@@ -352,26 +216,9 @@ namespace GameSvr
                                 MapFlag.boNOPOSITIONMOVE = true;
                                 continue;
                             }
-                            if (s34.Equals("NOHORSE", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOHORSE = true;
-                                continue;
-                            }
                             if (s34.Equals("NORIDE", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNORIDE = true;
-                                continue;
-                            }
-                            if (s34.Equals("NOCHAT", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOCHAT = true;
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "KILLFUNC", "KILLFUNC".Length))
-                            {
-                                MapFlag.boKILLFUNC = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nKILLFUNCNO = HUtil32.Str_ToInt(s38, -1);
                                 continue;
                             }
                             if (s34.Equals("NOC2C", StringComparison.OrdinalIgnoreCase))
@@ -392,18 +239,10 @@ namespace GameSvr
                                 MapFlag.boRUNFLAG = HUtil32.Str_ToInt(s38, 0) != 0;
                                 continue;
                             }
-                            // NOHUMNOMON REMOVED (2026-08-09, Tier-1 negative
-                            // evidence). 战神 has no such map flag: an image-wide
-                            // byte scan for NOHUMNOMON / NOHUMNOMONSTER / NOHUM /
-                            // NOMON / NoHumNoMon / NOHUMANNOMON / NOHUM_NOMON
-                            // returns 0 hits, and the complete map-flag token
-                            // census -- the two parallel literal blocks at
-                            // 0x775BFC and 0x776B20, 46 tokens each (SAFE,
-                            // NOTHROUGH, DARK, FIGHT, FIGHT3, FREEPK, DAY, QUIZ,
-                            // DARE, MONATTACK, ... LIMITHEROLEVEL, NOMAGIC,
-                            // TRIGGERBOMB, FOXMAP, ...) -- contains no equivalent.
-                            // Parsing it let a map file silently suppress monster
-                            // regeneration in a way native never does.
+                            // Tokens outside the two 战神 pools are silently ignored,
+                            // exactly like parser B's 0x776AD3 loop-continue. The
+                            // removed set and its 0-hit scan are documented on
+                            // TMapFlag itself.
                             if (!string.IsNullOrEmpty(s34) && s34[0] == 'L')
                             {
                                 MapFlag.nL = HUtil32.Str_ToInt(s34.Substring(1, s34.Length - 1), 1);
@@ -591,13 +430,6 @@ namespace GameSvr
                 mapFlag.boMONATTACK = true;
                 return true;
             }
-            if (token.Equals("LIMITHEROLEVEL", StringComparison.OrdinalIgnoreCase))
-            {
-                mapFlag.boLIMITHEROLEVEL = true;
-                return true;
-            }
-            // DORMANT gate: 0 consumers in 战神 binary (image-wide scan). Parser recognizes
-            // the token to match native domain, but no runtime code reads this field.
             if (token.Equals("NOMAGIC", StringComparison.OrdinalIgnoreCase))
             {
                 mapFlag.boNOMAGIC = true;
@@ -606,6 +438,90 @@ namespace GameSvr
             if (token.Equals("TRIGGERBOMB", StringComparison.OrdinalIgnoreCase))
             {
                 mapFlag.boTRIGGERBOMB = true;
+                return true;
+            }
+            return false;
+        }
+
+        // The 战神 tokens whose parenthesised argument carries a value rather than acting as
+        // a switch. All of them are matched with sub_4C6E94, whose body (0x4C6EC5 n<=0 guard,
+        // 0x4C6ECC/0x4C6ED8 both-lengths >= n guards, then a per-character UpCase compare via
+        // 0x4034D4) is HUtil32.CompareLStr instruction for instruction -- a length-limited
+        // case-insensitive PREFIX test, which is what lets the still-parenthesised token match.
+        // Each arm then pulls "(...)" with sub_4C6964 and converts with sub_40CA18, whose edx
+        // is zeroed at every call site, so the default is 0 and never -1.
+        internal static bool TryApplyNumericFlag(TMapFlag mapFlag, string token,
+            ref string capture)
+        {
+            if (mapFlag == null || string.IsNullOrEmpty(token)) return false;
+
+            // 0x77649C prefix(15) -> 0x7764C9 `69 C0 E8 03 00 00 imul eax,eax,0x3E8`
+            // -> 0x7764CF `89 83 88 00 00 00 mov dword [ebx+0x88],eax`. Seconds in, ms out.
+            if (HUtil32.CompareLStr(token, "MAPFIREWALLBURN", "MAPFIREWALLBURN".Length))
+            {
+                HUtil32.ArrestStringEx(token, '(', ')', ref capture);
+                mapFlag.nMAPFIREWALLBURN =
+                    unchecked(HUtil32.Str_ToInt(capture, 0) * 1000);
+                return true;
+            }
+            // 0x7764E7 prefix(7) -> 0x776514 `66 89 43 62 mov word [ebx+0x62],ax`.
+            if (HUtil32.CompareLStr(token, "MapSign", "MapSign".Length))
+            {
+                HUtil32.ArrestStringEx(token, '(', ')', ref capture);
+                mapFlag.nMapSign = unchecked((ushort)HUtil32.Str_ToInt(capture, 0));
+                return true;
+            }
+            // 0x776773 prefix(12) -> 0x7767A0 `66 89 83 BC 00 00 00`.
+            if (HUtil32.CompareLStr(token, "UNIFIEDLEVEL", "UNIFIEDLEVEL".Length))
+            {
+                HUtil32.ArrestStringEx(token, '(', ')', ref capture);
+                mapFlag.nUNIFIEDLEVEL = unchecked((ushort)HUtil32.Str_ToInt(capture, 0));
+                return true;
+            }
+            // 0x7767B9 prefix(16) -> 0x7767E6 `66 89 83 BE 00 00 00`.
+            if (HUtil32.CompareLStr(token, "LIMITPLAYERLEVEL", "LIMITPLAYERLEVEL".Length))
+            {
+                HUtil32.ArrestStringEx(token, '(', ')', ref capture);
+                mapFlag.nLIMITPLAYERLEVEL =
+                    unchecked((ushort)HUtil32.Str_ToInt(capture, 0));
+                return true;
+            }
+            // 0x7767FF prefix(14) -> 0x77682C `66 89 83 C0 00 00 00`.
+            if (HUtil32.CompareLStr(token, "LIMITHEROLEVEL", "LIMITHEROLEVEL".Length))
+            {
+                HUtil32.ArrestStringEx(token, '(', ')', ref capture);
+                mapFlag.nLIMITHEROLEVEL =
+                    unchecked((ushort)HUtil32.Str_ToInt(capture, 0));
+                return true;
+            }
+            // 0x77652A prefix(11). [flag+0xB4] is a TMirStringList pointer, so an empty
+            // argument frees the list (0x7765C2 arm: clear via [vmt+0x44] then FreeAndNil
+            // 0x414C24) and a non-empty one creates-or-clears it and appends every '/'
+            // separated piece (0x776588 `B1 2F mov cl,0x2F`, empty pieces skipped at
+            // 0x77659D, loop while the remainder still has length at 0x7765B9).
+            if (HUtil32.CompareLStr(token, "FLYDROPITEM", "FLYDROPITEM".Length))
+            {
+                HUtil32.ArrestStringEx(token, '(', ')', ref capture);
+                if (string.IsNullOrEmpty(capture))
+                {
+                    mapFlag.FlyDropItemNames = null;
+                    return true;
+                }
+                if (mapFlag.FlyDropItemNames == null)
+                {
+                    mapFlag.FlyDropItemNames = new List<string>();
+                }
+                else
+                {
+                    mapFlag.FlyDropItemNames.Clear();
+                }
+                var remaining = capture;
+                var piece = string.Empty;
+                do
+                {
+                    remaining = HUtil32.GetValidStr3(remaining, ref piece, "/");
+                    if (piece != "") mapFlag.FlyDropItemNames.Add(piece);
+                } while (remaining.Length > 0);
                 return true;
             }
             return false;
