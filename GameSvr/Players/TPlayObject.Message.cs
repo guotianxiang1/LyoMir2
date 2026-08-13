@@ -2470,9 +2470,21 @@ namespace GameSvr
                     break;
                 case Grobal2.RM_SPACEMOVE_SHOW:
                 case Grobal2.RM_SPACEMOVE_SHOW2:
+                    // Series is wParam verbatim, no light byte.  RM 10331 arm 0x006B59E6:
+                    //   006B59E6  66 8B 43 04  mov ax,[ebx+4]  / push   ; Param  = nParam1
+                    //   006B59EB  66 8B 43 08  mov ax,[ebx+8]  / push   ; Tag    = nParam2
+                    //   006B59F0  66 8B 43 02  mov ax,[ebx+2]  / push   ; Series = wParam
+                    //   006B59F8  66 B9 21 03  mov cx,0x321    / call 0x006BCE54
+                    // The sole producer of RM 10331/10336 is 0x00768ED6, and it zero-extends
+                    // the direction into the wParam slot:
+                    //   00768EEE  33 C9              xor ecx,ecx
+                    //   00768EF0  8A 8B 54 01 00 00  mov cl,[ebx+0x154]   ; direction
+                    //   00768EFC  FF 96 D8 00 00 00  call [esi+0xD8] (=0x0076533C)
+                    // 0x0076533C forwards it unchanged (0x00765501 mov ax,[ebp-6] / push) to
+                    // 0x00765E68, which stores it at 0x00765E9D mov [rec+2],ax.  High byte 0.
                     if (ProcessMsg.wIdent == Grobal2.RM_SPACEMOVE_SHOW)
                     {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, HUtil32.MakeWord(ProcessMsg.wParam, BaseObject.m_nLight));
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
                     }
                     else
                     {
