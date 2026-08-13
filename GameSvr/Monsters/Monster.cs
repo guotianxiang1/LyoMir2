@@ -215,7 +215,16 @@ namespace GameSvr
                             }
                             if (!m_Master.m_boSlaveRelax && (m_PEnvir != m_Master.m_PEnvir || Math.Abs(m_nCurrX - m_Master.m_nCurrX) > 20 || Math.Abs(m_nCurrY - m_Master.m_nCurrY) > 20))
                             {
-                                SpaceMove(m_Master.m_PEnvir.sMapName, m_nTargetX, m_nTargetY, 1);
+                                // MONAI-15 — TMonster.Run 召回传送 sub_66622C @0x6665AF：
+                                //   B8 04 / E8 Random / 03 83 30 01 00 00  ; Y = masterY + Random(4) 先抽
+                                //   50 / 6A 01 / 6A 00                     ; push Y, 1, 0
+                                //   B8 04 / E8 Random / 03 8B 2C 01 00 00  ; X = masterX + Random(4) 后抽
+                                //   8B 93 28 01 00 00 / FF 93 C0 01 00 00  ; edx=master.envir, vcall +0x1C0
+                                // 旧 C# 传到 GetBackPosition 写下的 m_nTargetX/Y，抽签次数为 0。
+                                // push 0 那一档 C# SpaceMove 没有对应形参，标 BLOCKED，nInt 仍传 1。
+                                var nRecallY = (short)(m_Master.m_nCurrY + M2Share.RandomNumber.Random(4));
+                                var nRecallX = (short)(m_Master.m_nCurrX + M2Share.RandomNumber.Random(4));
+                                SpaceMove(m_Master.m_PEnvir, nRecallX, nRecallY, 1);
                             }
                         }
                     }
