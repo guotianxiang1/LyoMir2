@@ -1259,7 +1259,9 @@ namespace GameSvr
                     ClientAdjustBonus(ProcessMsg.nParam1, ProcessMsg.sMsg);
                     break;
                 case Grobal2.CM_TURN:
-                    if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam, ref dwDelayTime))
+                    // 0x6D9B76 `8A 40 0A mov al,[msg+0x0A]` / 0x6D9B79 `24 07 and al,7`
+                    // before sub_6BBC60; same masking gap as CM_SITDOWN below.
+                    if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam & 7, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
@@ -1558,7 +1560,13 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_SITDOWN:
-                    if (ClientSitDownHit(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam, ref dwDelayTime))
+                    // 0x6D9CAC `8A 40 0A mov al,[msg+0x0A]` / 0x6D9CAF `24 07 and al,7`
+                    // masks the direction before sub_6BBF9C, exactly like the hit family
+                    // at 0x6D9EF4 and CM_TURN at 0x6D9B79. The mask was only being applied
+                    // up in the UsrEngn mapping layer, so anything reaching this arm by
+                    // another route - the `default` forward, or a re-delivered delay
+                    // message - could still carry a 0..65535 direction.
+                    if (ClientSitDownHit(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam & 7, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
