@@ -212,8 +212,9 @@ void RunCorpsLifecycle()
         + $"corps.OwnerId={corps.OwnerId} (former vice slot cleared={corps.ViceOwner1Id})");
     Assert(FirstResult(r6) == 0 && corps.OwnerId == 2, "real TransferCaptain set corps.OwnerId=p2");
 
-    // 7. Exit — former owner p1 (now a plain member) leaves the corps (real CM_CORPS_EXIT dispatch)
-    var r7 = Drive(service, miCorpsAdmin, 1, Grobal2.CM_CORPS_EXIT, Array.Empty<byte>());
+    // 7. Exit — former owner p1 (now a plain member) leaves the corps (real CM_CORPS_EXIT dispatch).
+    //    Driven in a safe zone: sub_6F57A4 refuses with 37 outside one (see Drive's inSafeZone note).
+    var r7 = Drive(service, miCorpsAdmin, 1, Grobal2.CM_CORPS_EXIT, Array.Empty<byte>(), inSafeZone: true);
     bool exited = !service.TryGetPlayerCorps(1, out _);
     Log($"CORPS Exit [real CM_CORPS_EXIT dispatch] p1 leaves: result={FirstResult(r7)}; p1 removed={exited} "
         + $"(corps.Members={corps.Members.Count})");
@@ -293,8 +294,9 @@ void RunGildLifecycle()
         + $"result={FirstResult(g6)}; gild.ViceOwnerId={GildById(service, 200).ViceOwnerId}");
     Assert(FirstResult(g6) == 0 && viceCleared, "real vice-dismiss cleared gild.ViceOwnerId");
 
-    // 7. Exit (4583) — member corps 500 (p5) leaves the gild (real relation dispatch)
-    var g7 = Drive(service, miGuildRelation, 5, Grobal2.CM_GILD_EXIT, Array.Empty<byte>());
+    // 7. Exit (4583) — member corps 500 (p5) leaves the gild (real relation dispatch).
+    //    Driven in a safe zone: sub_6F6BF8 refuses with 38 outside one (see Drive's inSafeZone note).
+    var g7 = Drive(service, miGuildRelation, 5, Grobal2.CM_GILD_EXIT, Array.Empty<byte>(), inSafeZone: true);
     bool exited500 = !GildById(service, 200).CorpsIds.Contains(500) && !service.TryGetGildForCorps(500, out _);
     Log($"GILD Exit [real CM_GILD_EXIT dispatch] p5/corps500 leaves gild200: result={FirstResult(g7)}; "
         + $"corps500 removed from gild + reverse index={exited500}");
@@ -447,15 +449,31 @@ NativeCorpsService BuildService(NativeCorpsDataSnapshot snapshot)
 
 // Drives ONE real dispatch entry against the shared live service with a fresh offline operator player.
 // Returns the packets the dispatcher emitted (via the test sink) plus the operator's gold after the call.
+// inSafeZone: both EXIT ops are gated on sub_76858C (InSafeZone) in the original and reply with a
+// refusal code instead of leaving when it is false -- corps 4538 sub_6F57A4 (006F57AE e8d92d0700
+// call 0x76858C / 006F57B3 84c0 test al,al / 006F57B5 750a jne / 006F57B7 be25000000 mov esi,0x25 => 37)
+// and gild 4583 sub_6F6BF8 (006F6C02 e885190700 call 0x76858C / 006F6C07 84c0 / 006F6C09 7507 jne /
+// 006F6C0B be26000000 mov esi,0x26 => 38), both verified byte-for-byte against flat_image.bin. A bare
+// offline TPlayObject has m_PEnvir == null, which InSafeZone maps to FALSE (TBaseObject.cs:5455), so the
+// leaver must be given a boSAFE map to reach the removal path those steps assert on -- the same fixture
+// shape NativeCorpsProtocolCheck.BuildExitPlayer already uses. No other op in this harness reads it.
 (List<(ClientPacket Header, byte[] Body)> Packets, int GoldAfter) Drive(
     NativeCorpsService service, MethodInfo dispatch, long operatorId, int ident,
-    byte[] payload, int nParam2 = 0, int gold = 0, Func<TPlayObject> resolver = null)
+    byte[] payload, int nParam2 = 0, int gold = 0, Func<TPlayObject> resolver = null,
+    bool inSafeZone = false)
 {
     var packets = new List<(ClientPacket Header, byte[] Body)>();
     var player = new TPlayObject
     {
         m_boOffLineFlag = true, m_sCharName = "op" + operatorId, m_nGold = gold
     };
+    if (inSafeZone)
+    {
+        // boFightZone/boFight3Zone stay false so the 28 gate cannot fire.
+        var environment = new Envirnoment { sMapName = "CORPSGUILD_EXIT_TEST" };
+        environment.Flag.boSAFE = true;
+        player.m_PEnvir = environment;
+    }
     player.LoadNativeMailRecipientId(operatorId);
     player.SetNativeCorpsServiceForTests(service, (header, body) => packets.Add((header, body)), resolver);
 
