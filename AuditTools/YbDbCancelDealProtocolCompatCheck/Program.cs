@@ -191,11 +191,47 @@ static void CheckRuntimeFailClosed(string root)
     Reject(service, "RequestCancelYbDeal",
         "live 124 sender exists without 6108 authority");
 
-    var commandSources = string.Join("\n", Directory.EnumerateFiles(
+    // "CancelYBDeal" occurs once under GameSvr/Command, in the auto-generated
+    // NativeGmCommandRegistry, and that occurrence is a transcribed native fact rather
+    // than an exposure. The image carries the ShortString `0C 'CancelYBDeal'` at
+    // 0x7BBB54, exactly one 0x120 stride after DelSelfSkill (index 95, 0x7BBA34) and one
+    // before ChgmanKind (index 97, 0x7BBC74), matching the registry's indices; the case
+    // body sits at 0x00624FF8 and forwards to sub_6D731C. The registry is consulted only
+    // to map a FormGMCommand.ini index onto an ALREADY REGISTERED command -- see
+    // CommandManager.ApplyNativeFormGmCommandIni, which does
+    // `OriginalCommandMaps.TryGetValue(defaultName, out var cmd)` and `continue`s when
+    // the name is not registered -- so a table entry for a command nobody implemented
+    // reaches no runtime path. Rejecting the bare string could only be satisfied by
+    // deleting a fact read off the image, which is the wrong direction entirely.
+    //
+    // Exposure means a registered handler under that name, or the command surface
+    // touching the 124 codec. Both are still rejected, per file so the report names the
+    // offender.
+    var commandFiles = Directory.EnumerateFiles(
         Path.Combine(root, "GameSvr", "Command"), "*.cs",
-        SearchOption.AllDirectories).Select(File.ReadAllText));
-    Reject(commandSources, "CancelYBDeal",
-        "admin command exposes dormant 124 at runtime");
+        SearchOption.AllDirectories).ToArray();
+    var commandSources = string.Join("\n", commandFiles.Select(File.ReadAllText));
+
+    foreach (var path in commandFiles)
+    {
+        var text = File.ReadAllText(path);
+        if (!text.Contains("CancelYBDeal", StringComparison.Ordinal)) continue;
+        if (Path.GetFileName(path) != "NativeGmCommandRegistry.cs")
+            throw new InvalidOperationException(
+                "admin command exposes dormant 124 at runtime: " +
+                Path.GetFileName(path));
+
+        Require(text, "[96] = \"CancelYBDeal\", // perm 4 IMPL @00624FF8",
+            "the CancelYBDeal name-table entry no longer matches the image " +
+            "(0x7BBB54 ShortString, case body 0x00624FF8)");
+        Reject(text, "[GameCommand(",
+            "the GM name table started registering command handlers");
+    }
+
+    Reject(commandSources, "YbDbCancelDealProtocol",
+        "command surface references the dormant 124/1124 codec");
+    Reject(commandSources, "RequestCancelYbDeal",
+        "command surface has a live 124 sender");
 
     var bridge = Read(root, "GameSvr", "ScriptSystem", "PasEngine",
         "PasApiBridge.cs");
