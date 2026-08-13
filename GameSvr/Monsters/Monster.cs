@@ -12,6 +12,14 @@ namespace GameSvr
         {
             m_boDupMode = false;
             bo554 = false;
+            // MONAI-02 — TMonster.Create sub_66610C 的构造默认 race 是 80(RC_MONSTER)：
+            //   00666162  C6 86 78 01 00 00 50   mov byte [esi+0x178],0x50
+            // （父类 TAnimal.Create 0071D851 C6 87 78 01 00 00 32 = 50/RC_ANIMAL）
+            // [+0x178] 是 race 而不是 Level：工厂 sub_679F8C 用 `movzx eax,byte [edi+0x14]`
+            // 分派同一个字段，MonInitialize 把它写进 [mon+0x178]。
+            // MonInitialize 之后会被 DB 记录覆盖（UsrEngn.cs MonInitialize），所以只有
+            // 不经 MonInitialize 创建的怪物看得到这个默认值。
+            m_btRaceServer = Grobal2.RC_MONSTER;
             m_dwThinkTick = HUtil32.GetTickCount();
             m_nViewRange = 5;
             m_nRunTime = 250;
