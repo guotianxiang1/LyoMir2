@@ -1,0 +1,54 @@
+==============================================================================
+BROADCAST PUSH @0x71315C
+------------------------------------------------------------------------------
+0071315C  55                     push ebp
+0071315D  8BEC                   mov ebp, esp
+0071315F  83C4F4                 add esp, -0xc
+00713162  53                     push ebx
+00713163  56                     push esi
+00713164  57                     push edi
+00713165  894DF4                 mov dword ptr [ebp - 0xc], ecx
+00713168  8955F8                 mov dword ptr [ebp - 8], edx
+0071316B  8945FC                 mov dword ptr [ebp - 4], eax
+0071316E  8B7508                 mov esi, dword ptr [ebp + 8]
+00713171  83C654                 add esi, 0x54
+00713174  8BC6                   mov eax, esi
+00713176  E825FECEFF             call 0x402fa0
+0071317B  8BD8                   mov ebx, eax
+0071317D  8BC3                   mov eax, ebx
+0071317F  33C9                   xor ecx, ecx
+00713181  8BD6                   mov edx, esi
+00713183  E8A409CFFF             call 0x403b2c
+00713188  8BC3                   mov eax, ebx
+0071318A  C70077BBAA33           mov dword ptr [eax], 0x33aabb77
+00713190  66C740040100           mov word ptr [eax + 4], 1
+00713196  8B5508                 mov edx, dword ptr [ebp + 8]
+00713199  83C248                 add edx, 0x48
+0071319C  895008                 mov dword ptr [eax + 8], edx
+0071319F  8B45F8                 mov eax, dword ptr [ebp - 8]
+007131A2  8D530C                 lea edx, [ebx + 0xc]
+007131A5  56                     push esi
+007131A6  8BF0                   mov esi, eax
+007131A8  8BFA                   mov edi, edx
+007131AA  B912000000             mov ecx, 0x12
+007131AF  F3A5                   rep movsd dword ptr es:[edi], dword ptr [esi]
+007131B1  5E                     pop esi
+007131B2  837D0800               cmp dword ptr [ebp + 8], 0
+007131B6  7E14                   jle 0x7131cc
+007131B8  837DF400               cmp dword ptr [ebp - 0xc], 0
+007131BC  740E                   je 0x7131cc
+007131BE  8D5354                 lea edx, [ebx + 0x54]
+007131C1  8B45F4                 mov eax, dword ptr [ebp - 0xc]
+007131C4  8B4D08                 mov ecx, dword ptr [ebp + 8]
+007131C7  E89400CFFF             call 0x403260
+007131CC  8BCE                   mov ecx, esi
+007131CE  8BD3                   mov edx, ebx
+007131D0  8B45FC                 mov eax, dword ptr [ebp - 4]
+007131D3  E8E40A0000             call 0x713cbc  ; 'U嬱QSVW孂嬺塃鼖E鼆xL'
+007131D8  5F                     pop edi
+007131D9  5E                     pop esi
+007131DA  5B                     pop ebx
+007131DB  8BE5                   mov esp, ebp
+007131DD  5D                     pop ebp
+007131DE  C20400                 ret 4
+

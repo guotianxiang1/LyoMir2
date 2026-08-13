@@ -1,0 +1,124 @@
+=== writers/readers of slot 0x7D62DC ===
+  0061A069  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0062407F  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00625643  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00625D1B  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00625DB4  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0062608F  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00626119  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006279DC  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00627A20  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00628ACA  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00628C60  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00628CA5  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006293F5  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0062944C  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00629492  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00629778  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0062E1C8  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0062E944  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0062EBB3  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0063BC7C  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0063BE92  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00641A0E  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006484CE  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00650E93  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00651E08  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00652DCF  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00654AA9  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006561D2  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00656852  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00656E33  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00656F49  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0065702A  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00657ED0  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00658263  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0065B6C0  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0065BCD0  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0065BFDE  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006888E3  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0069946F  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00699489  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006B6691  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006B7C95  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BD6F7  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BDEB5  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BE81B  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BEFA3  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BF2AB  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BF365  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006BF569  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C245C  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C2703  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C4F09  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C5325  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C5420  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C5511  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C6029  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006C917C  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006CBCCA  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006CC990  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006CCA0A  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006CD2D5  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006D22A7  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006D269F  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006D4A95  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006E5608  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006E58DC  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006E73D9  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006F01AD  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006F0366  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  006FB4CD  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00714F5D  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0072577F  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0072903B  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0072910C  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00793025  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00793059  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00793063  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  007932CF  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00793342  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0079391E  15DC627D00           adc eax, 0x7d62dc
+  00793925  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00793936  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00795197  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  0079543E  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+  00795448  A1DC627D00           mov eax, dword ptr [0x7d62dc]
+
+=== resting value & RTTI probe ===
+  [0x7D62DC] = 0x007DC7D4
+  obj@0x007DC7D4  vtbl=0x00000000
+
+=== does quiz POSER region (0x6D6400..0x6D6700) reference [0x7D62DC] or call 0x71315C? ===
+
+=== quiz POSER  0x6D6600..0x6D6660 (sets 0x7c3=1) ===
+  006D6600  6A00                 push 0
+  006D6602  6A00                 push 0
+  006D6604  6A00                 push 0
+  006D6606  66B91027             mov cx, 0x2710
+  006D660A  8BD3                 mov edx, ebx
+  006D660C  8BC3                 mov eax, ebx
+  006D660E  E855F80800           call 0x765e68
+  006D6613  EB36                 jmp 0x6d664b  ; '^[]Ã'
+  006D6615  80BBC307000000       cmp byte ptr [ebx + 0x7c3], 0
+  006D661C  752D                 jne 0x6d664b  ; '^[]Ã'
+  006D661E  6A01                 push 1
+  006D6620  6A00                 push 0
+  006D6622  6A00                 push 0
+  006D6624  6880666D00           push 0x6d6680  ; '请更新到最新的客户端'
+  006D6629  B834080000           mov eax, 0x834
+  006D662E  2BC6                 sub eax, esi
+  006D6630  69C8E8030000         imul ecx, eax, 0x3e8
+  006D6636  66BAC603             mov dx, 0x3c6
+  006D663A  8BC3                 mov eax, ebx
+  006D663C  8B30                 mov esi, dword ptr [eax]
+  006D663E  FF9650020000         call dword ptr [esi + 0x250]
+  006D6644  C683C307000001       mov byte ptr [ebx + 0x7c3], 1
+  006D664B  5E                   pop esi
+  006D664C  5B                   pop ebx
+  006D664D  5D                   pop ebp
+  006D664E  C3                   ret 
+  006D664F  00FF                 add bh, bh
+
+=== answer-window driver 0x6DCF00..0x6DCF60 (sets 0x7c4=1) ===
+  006DCF00  45                   inc ebp

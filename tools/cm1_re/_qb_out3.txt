@@ -1,0 +1,97 @@
+==============================================================================
+BROADCAST DISPATCH @0x713cbc
+------------------------------------------------------------------------------
+00713CBC  55                     push ebp
+00713CBD  8BEC                   mov ebp, esp
+00713CBF  51                     push ecx
+00713CC0  53                     push ebx
+00713CC1  56                     push esi
+00713CC2  57                     push edi
+00713CC3  8BF9                   mov edi, ecx
+00713CC5  8BF2                   mov esi, edx
+00713CC7  8945FC                 mov dword ptr [ebp - 4], eax
+00713CCA  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713CCD  80784C00               cmp byte ptr [eax + 0x4c], 0
+00713CD1  7416                   je 0x713ce9
+00713CD3  6A01                   push 1
+00713CD5  8BD6                   mov edx, esi
+00713CD7  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713CDA  8B4038                 mov eax, dword ptr [eax + 0x38]
+00713CDD  8BCF                   mov ecx, edi
+00713CDF  E81457DBFF             call 0x4c93f8
+00713CE4  E982000000             jmp 0x713d6b  ; '_^[Y]脥@'
+00713CE9  B810000000             mov eax, 0x10
+00713CEE  E8ADF2CEFF             call 0x402fa0
+00713CF3  8BD8                   mov ebx, eax
+00713CF5  33C0                   xor eax, eax
+00713CF7  89430C                 mov dword ptr [ebx + 0xc], eax
+00713CFA  8933                   mov dword ptr [ebx], esi
+00713CFC  897B04                 mov dword ptr [ebx + 4], edi
+00713CFF  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713D02  05C8000000             add eax, 0xc8
+00713D07  50                     push eax
+00713D08  E80345CFFF             call 0x408210
+00713D0D  33D2                   xor edx, edx
+00713D0F  55                     push ebp
+00713D10  68643D7100             push 0x713d64
+00713D15  64FF32                 push dword ptr fs:[edx]
+00713D18  648922                 mov dword ptr fs:[edx], esp
+00713D1B  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713D1E  8B80E4000000           mov eax, dword ptr [eax + 0xe4]
+00713D24  85C0                   test eax, eax
+00713D26  7405                   je 0x713d2d  ; '婨鼔樴'
+00713D28  89580C                 mov dword ptr [eax + 0xc], ebx
+00713D2B  EB09                   jmp 0x713d36  ; '婨鼔樹'
+00713D2D  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713D30  8998E0000000           mov dword ptr [eax + 0xe0], ebx
+00713D36  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713D39  8998E4000000           mov dword ptr [eax + 0xe4], ebx
+00713D3F  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713D42  FF80E8000000           inc dword ptr [eax + 0xe8]
+00713D48  33C0                   xor eax, eax
+00713D4A  5A                     pop edx
+00713D4B  59                     pop ecx
+00713D4C  59                     pop ecx
+00713D4D  648910                 mov dword ptr fs:[eax], edx
+00713D50  686B3D7100             push 0x713d6b  ; '_^[Y]脥@'
+00713D55  8B45FC                 mov eax, dword ptr [ebp - 4]
+00713D58  05C8000000             add eax, 0xc8
+00713D5D  50                     push eax
+00713D5E  E84546CFFF             call 0x4083a8
+00713D63  C3                     ret 
+
+==============================================================================
+RELOAD/CTOR @0x713094
+------------------------------------------------------------------------------
+00713094  55                     push ebp
+00713095  8BEC                   mov ebp, esp
+00713097  51                     push ecx
+00713098  53                     push ebx
+00713099  56                     push esi
+0071309A  57                     push edi
+0071309B  66894DFE               mov word ptr [ebp - 2], cx
+0071309F  8BFA                   mov edi, edx
+007130A1  8BF0                   mov esi, eax
+007130A3  BB18000000             mov ebx, 0x18
+007130A8  8BC3                   mov eax, ebx
+007130AA  E8F1FECEFF             call 0x402fa0
+007130AF  8BD0                   mov edx, eax
+007130B1  8BC2                   mov eax, edx
+007130B3  C70077BBAA33           mov dword ptr [eax], 0x33aabb77
+007130B9  66C740040200           mov word ptr [eax + 4], 2
+007130BF  C740080C000000         mov dword ptr [eax + 8], 0xc
+007130C6  6689780C               mov word ptr [eax + 0xc], di
+007130CA  0FB74DFE               movzx ecx, word ptr [ebp - 2]
+007130CE  894810                 mov dword ptr [eax + 0x10], ecx
+007130D1  8B4D08                 mov ecx, dword ptr [ebp + 8]
+007130D4  894814                 mov dword ptr [eax + 0x14], ecx
+007130D7  8BCB                   mov ecx, ebx
+007130D9  8BC6                   mov eax, esi
+007130DB  E8DC0B0000             call 0x713cbc  ; 'U嬱QSVW孂嬺塃鼖E鼆xL'
+007130E0  5F                     pop edi
+007130E1  5E                     pop esi
+007130E2  5B                     pop ebx
+007130E3  59                     pop ecx
+007130E4  5D                     pop ebp
+007130E5  C20400                 ret 4
+
