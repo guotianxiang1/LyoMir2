@@ -2369,8 +2369,35 @@ namespace GameSvr
             }
         }
 
+        /// <summary>
+        /// Native sub_768CEC, the by-name SpaceMove wrapper. Its first act,
+        /// ahead of the map lookup, is the stealth reveal:
+        /// <code>
+        /// 00768CF2  89 4D FC              mov  [ebp-4],ecx       ; nX
+        /// 00768CF5  8B F2                 mov  esi,edx           ; sMap
+        /// 00768CF7  8B D8                 mov  ebx,eax           ; Self
+        /// 00768CF9  8B C3                 mov  eax,ebx
+        /// 00768CFB  E8 C0 B5 00 00        call 0x7742C0          ; ★ break stealth
+        /// 00768D00  A1 0C 66 7D 00        mov  eax,[0x7D660C]    ; envir list
+        /// 00768D09  E8 C2 D5 F2 FF        call 0x6962D0          ; find map by name
+        /// 00768D42  FF 93 C0 01 00 00     call [vmt+0x1C0]       ; SpaceMove(envir,...)
+        /// </code>
+        /// The by-envir overload behind [vmt+0x1C0] (TPlayer 0x6BD294) does
+        /// not carry the call — the rel32 census of sub_7742C0 has exactly
+        /// four sites and 0x768CFB is the only one in this family — so the
+        /// reveal belongs to the name-taking wrapper, which is what this
+        /// overload is. The correspondence is pinned by a literal: at
+        /// 0x64D203 native passes `edx = 0x64D22C` (AnsiString len 7,
+        /// "D5071~0"), `ecx = 0xB`, `push 0xD`, i.e. SpaceMove("D5071~0",
+        /// 11, 13) — the same call this port makes in
+        /// TPlayObject.NativeMagicTower.cs. The script arm is in as well:
+        /// 0x743BB9 feeds it a record's map/X/Y with the second-lookup flag
+        /// set (`6A 01` at 0x743BA4).
+        /// </summary>
         public void SpaceMove(string sMap, short nX, short nY, int nInt)
         {
+            // 0x768CFB
+            BreakNativeStealthOnAction();
             SpaceMove(M2Share.MapManager.FindMap(sMap), nX, nY, nInt);
         }
 
