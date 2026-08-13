@@ -2160,6 +2160,26 @@ namespace GameSvr
                 SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
                 return;
             }
+            // TRADE-39（收紧半）：原生用玩家自己缓存的 NPC 指针，不做全局查找。
+            //   0x6C2AB9  8B B3 D8 0C 00 00     mov esi, [ebx+0xCD8]   ; player.m_NPC
+            //   0x6C2ABF  85 F6                 test esi, esi
+            //   0x6C2AC1  0F 84 2D 02 00 00     je  0x6C2CF4
+            //   0x6C2AC7  8B 83 D8 0C 00 00     mov eax, [ebx+0xCD8]
+            //   0x6C2ACD  3B 45 FC              cmp eax, [ebp-4]       ; 包里的 NPC 标识
+            //   0x6C2AD0  0F 85 1E 02 00 00     jne 0x6C2CF4
+            // [ebp-4] 由分派桩 0x6D91ED `8B 10 mov edx,[eax]` 装入，即 msg.Recog。
+            // 语义是「必须先点过、且点的正是这一个 NPC」。C# 原先只有
+            // FindMerchant 全局查找 + 同图 + 距离，缺这条绑定，伪造包在从未点过
+            // 任何 NPC 时也能开仓库。形状照抄已判正确的账号仓库路径
+            // （TPlayObject.NativeAccountStorage.Operations.cs:196-200）。
+            // 注意 ObjectId 在本方法内是**参数**（遮蔽同名实例属性），比对的是包里的值。
+            // 本次只补这条收紧；原生 sub_6C2A34 内**没有** m_boStorage 测试，
+            // 删掉它是放宽，超出本轮授权，另案裁决（staging/m_trade2_20260813.md §3）。
+            if (m_NPC == null || m_NPC.ObjectId != ObjectId)
+            {
+                SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
             Merchant merchant = (Merchant)M2Share.UserEngine.FindMerchant(ObjectId);
             for (var i = m_ItemList.Count - 1; i >= 0; i--)
             {
@@ -2251,6 +2271,21 @@ namespace GameSvr
             if (m_boDealing)
             {
                 SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, -2, 0, 0, 0, "");
+                return;
+            }
+            // TRADE-39（收紧半）：取仓侧与存仓同形，同样是玩家自持的 NPC 指针。
+            //   0x6C2DC9  8B BB D8 0C 00 00     mov edi, [ebx+0xCD8]
+            //   0x6C2DCF  85 FF                 test edi, edi
+            //   0x6C2DD1  0F 84 09 02 00 00     je  0x6C2FE0
+            //   0x6C2DD7  8B 83 D8 0C 00 00     mov eax, [ebx+0xCD8]
+            //   0x6C2DDD  3B 45 FC              cmp eax, [ebp-4]       ; msg.Recog
+            //   0x6C2DE0  0F 85 FA 01 00 00     jne 0x6C2FE0
+            // 0x6C2FE0 处 esi 仍是入口的 `33 F6 xor esi,esi`（0x6C2DA6），
+            // 故这两条走 Recog = 0，与已有失败出口一致（不是 -2、也不是 -3）。
+            // 同样只补收紧半；原生无 m_boGetback 测试，删它属放宽，另案裁决。
+            if (m_NPC == null || m_NPC.ObjectId != NPC)
+            {
+                SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, 0, 0, 0, 0, "");
                 return;
             }
             for (var i = 0; i < m_StorageItemList.Count; i++)
