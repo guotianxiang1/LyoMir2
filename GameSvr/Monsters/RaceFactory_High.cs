@@ -139,6 +139,11 @@ namespace GameSvr
                     cert = new ItemAttMon();
                     break;
 
+                // race 242 TElementMon : Monster —— 见 Monster/ElementMon.cs
+                case 242:
+                    cert = new ElementMon();
+                    break;
+
                 // race 236 TWorldCupPreMatchMon : AnimalObject —— 见 Monster/WorldCupPreMatchMon.cs
                 case 236:
                     cert = new WorldCupPreMatchMon();
