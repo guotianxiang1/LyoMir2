@@ -1687,6 +1687,21 @@ namespace GameSvr
         private void ClientChangeDealGold(int nGold)
         {
             bool bo09;
+            // TRADE-13: 战神 sub_6C4454 的第一条判断 —— 押金只能升不能降，降就整单作废。
+            //   0x6C445F  C6 45 FF 00        mov byte [ebp-1], 0     ; bo09 := false
+            //   0x6C4463  3B B3 E0 06 00 00  cmp esi, [ebx+0x6E0]    ; 新值 vs 现押金
+            //   0x6C4469  7D 0C              jge 0x6C4477            ; >= 才继续往下
+            //   0x6C446B  8B C3              mov eax, ebx
+            //   0x6C446D  E8 52 FF FF FF     call 0x6C43C4           ; DealCancel
+            //   0x6C4472  E9 02 01 00 00     jmp 0x6C4579
+            // 0x6C4579 是 pop/pop/pop/pop/pop/ret 的收尾，**越过**了 0x6C4547 那段
+            // `cmp byte [ebp-1],0 / jne` + `mov dx,0x2AD` 的失败回包，所以取消这条路
+            // 不发 SM_DEALCHGGOLD_FAIL。此判断排在 nGold<=0 门（0x6C4477 test/jle）之前。
+            if (nGold < m_nDealGolds)
+            {
+                DealCancel();
+                return;
+            }
             if (nGold < 0)
             {
                 SendDefMessage(Grobal2.SM_DEALCHGGOLD_FAIL, m_nDealGolds, HUtil32.LoWord(m_nGold), HUtil32.HiWord(m_nGold), 0, "");
