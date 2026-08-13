@@ -58,7 +58,7 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
     ("死亡触发", "@OnDie", 0x10032FD0, new uint[] { 0x006C09B5 }, new uint[] { 0x006C09BA },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("回城按钮触发", "@OnBackButton", 0x10032FD0, new uint[] { 0x006DBB80 }, new uint[] { 0x006DBB85 },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Replace, false),
     ("挖矿触发", "@OnDig", 0x10032FD0, new uint[] { 0x006EC111 }, new uint[] { 0x006EC116 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("心灵启示触发", "@Revelation", 0x10032FD0, new uint[] { 0x006EDC2B }, new uint[] { 0x006EDC30 },
@@ -80,7 +80,7 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
         new uint[] { 0x0076E1AF, 0x0076DEC0 }, new uint[] { 0x0076E1B6, 0x0076DEC7 },
         YanshenTriggerDispatch.Slot.WithParams, 3, YanshenTriggerDispatch.HostAction.Notify, false),
     ("刀刀切割", "@Cutting", 0x10032CC0, new uint[] { 0x00767BAE }, new uint[] { 0x00767BB4 },
-        YanshenTriggerDispatch.Slot.WithParams, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("新倍攻和暴击", "@baoji", 0x10032CC0, new uint[] { 0x0076C88B }, new uint[] { 0x0076C890 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("英雄倍攻和暴击", "@Herobaoji", 0x10032CC0, new uint[] { 0x0076C816 }, new uint[] { 0x0076C81D },
@@ -122,13 +122,15 @@ foreach (var e in expected)
     }
 }
 
-// 「顶掉原生动作」的三条：两个召唤 + 心灵启示。原生桩体都没有重放被覆盖的 call。
+// 「顶掉原生动作」的四条：两个召唤 + 心灵启示 + 回城按钮。原生桩体都没有重放被覆盖的 call。
+// 回城按钮触发（0x6DBB80）本轮亲验并入：其 33 字节桩体不重放 `E8 …… call 0x6F926C`（真实回城处理器），
+// 与两个召唤逐字节同形，故按 Replace 归类（原注册表记 Notify 系未核 replay 的笔误）。
 var replacing = YanshenTriggerDispatch.Registry
     .Where(d => d.Action == YanshenTriggerDispatch.HostAction.Replace)
     .Select(d => d.ConfigKey).OrderBy(k => k, StringComparer.Ordinal).ToArray();
-Assert(replacing.SequenceEqual(new[] { "召唤神兽触发", "召唤骷髅触发", "心灵启示触发" }
+Assert(replacing.SequenceEqual(new[] { "召唤神兽触发", "召唤骷髅触发", "心灵启示触发", "回城按钮触发" }
         .OrderBy(k => k, StringComparer.Ordinal)),
-    "只有 召唤神兽触发/召唤骷髅触发/心灵启示触发 三条会顶掉原生动作，实际为 "
+    "只有 召唤神兽触发/召唤骷髅触发/心灵启示触发/回城按钮触发 四条会顶掉原生动作，实际为 "
     + string.Join("/", replacing));
 
 // ── B. 插件缺席 = 完全惰性 ──────────────────────────────────────────────────

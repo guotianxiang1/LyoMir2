@@ -219,8 +219,16 @@ namespace GameSvr.Plugins
                 ConfigKey = "回城按钮触发", ScriptLabel = "@OnBackButton",
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100AD628 },
                 HostTargets = new uint[] { 0x006DBB80 }, HostResumes = new uint[] { 0x006DBB85 },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
-                Note = "This_Player = eax（`8B D0 mov edx,eax`）。",
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Replace, Wired = false,
+                Note = "This_Player = eax（`8B D0 mov edx,eax`）。**动作语义已由本轮亲验更正：Replace(顶掉型)，"
+                     + "不是 Notify**——33 字节桩体（q06 site 0x100AD628）是 `pushal / mov edx,eax / 取 "
+                     + "TSTDScript / push 标签 / push 0 / call [ebx+0x44] / popal / jmp 0x6DBB85`，**没有重放"
+                     + "被覆盖的 5 字节 `E8 E7 D6 01 00 call 0x6F926C`**。0x6F926C 是 SEH 包裹的真实回城处理器"
+                     + "（0x6F926C push ebp…检查 [player+0x128] 标志位 + call 0x772960 门 + 传送），"
+                     + "开关打开后原生回城被脚本 @OnBackButton 顶替。宿主 0x6DBB80 是 TPlayObject 客户端命令"
+                     + "分发器的一条臂（尾 `jmp 0x6DBC2C`，与盘古穿戴同一分发器=TPlayObject.Message.cs，禁改文件）。"
+                     + "C# 插桩点：回城命令 case 里，在调用原生回城之前 `if (Armed && Enabled(\"回城按钮触发\")) "
+                     + "{ Dispatch @OnBackButton; return; }` 顶掉原生。",
             },
             new()
             {
@@ -306,8 +314,15 @@ namespace GameSvr.Plugins
                 ConfigKey = "刀刀切割", ScriptLabel = "@Cutting",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100CF36E },
                 HostTargets = new uint[] { 0x00767BAE }, HostResumes = new uint[] { 0x00767BB4 },
-                DispatchSlot = Slot.WithParams, ParamCount = 0, Action = HostAction.Notify, Wired = false,
-                Note = "703 dword 的大桩体，主体是就地算伤害，标签注册点 0x100CF401。",
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
+                Note = "703 dword 的大桩体（.rdata 0x102CA2D8 x703），主体是就地算刀刀切割加成，"
+                     + "标签注册点 0x100CF401。**槽已由本轮亲验更正：Plain(0x44)，不是 0x48**——"
+                     + "整个 703 字节桩体只有一处派发 `FF 53 44`（偏移 0x2B1），前置 `push 标签 / "
+                     + "push 0 / xor ecx,ecx`（Plain 模板，无 array-of-Variant 构造），This_Player=edx="
+                     + "攻击者，门为攻击者 S 银行 [edx+0x804+0x200]==0x429(键 S(1,65)) 且 [+0x204]==100。"
+                     + "尾部重放被覆盖的 6 字节 `53 56 57 89 4D F8`(push ebx/esi/edi + mov [ebp-8],ecx) → "
+                     + "Notify。C# 落点是刀刀切割伤害就地计算处（YanshenApi 切割实现，非原生 StruckDamage 链），"
+                     + "属每刀热点，故留插桩点。",
             },
             new()
             {
