@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace SystemModule
 {
@@ -1935,5 +1935,36 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+        // === CM missing Q1 (idents 1054..1260) — lowest 25 of the 99-item CM dispatch gap.
+        // These are the wIdent selectors for TryHandleNativeCmQ1 (see
+        // GameSvr/Players/TPlayObject.NativeCmProtocol_Q1.cs). Every value is the CM opcode
+        // read as word[record+4] by sub_6D7D68 @0x6D805C; none had a prior CM_/same-value
+        // constant, so each is defined once here. All are fail-closed (see
+        // GameSvr/Services/NativeCmQ1FailClosed.cs for per-ident image evidence). ===
+        public const int CM_1054 = 1054;   // 商城/mall submit, leaf 0x6D942F
+        public const int CM_1055 = 1055;   // 商城/mall submit, leaf 0x6D9492
+        public const int CM_1056 = 1056;   // 商城/mall submit, leaf 0x6D953A
+        public const int CM_1057 = 1057;   // 商城/mall submit, leaf 0x6D9547
+        public const int CM_1059 = 1059;   // 限时活动确认, leaf 0x6D9554
+        public const int CM_1061 = 1061;   // 技能石复制, leaf 0x6D9579
+        public const int CM_1068 = 1068;   // 装备密码锁输入, leaf 0x6D959B
+        public const int CM_1080 = 1080;   // 强化/物品表, leaf 0x6D95D6
+        public const int CM_1084 = 1084;   // 装备密码锁计时, leaf 0x6D95C9
+        public const int CM_1090 = 1090;   // 答题/广播, leaf 0x6D9732
+        public const int CM_1200 = 1200;   // 答题/广播, leaf 0x6DA21F
+        public const int CM_1210 = 1210;   // 摆摊交易, leaf 0x6DA418
+        public const int CM_1211 = 1211;   // 摆摊交易, leaf 0x6DA45D
+        public const int CM_1212 = 1212;   // 摆摊交易, leaf 0x6DA49B
+        public const int CM_1213 = 1213;   // 摆摊交易, leaf 0x6DA4BF
+        public const int CM_1214 = 1214;   // 摆摊交易, leaf 0x6DA529
+        public const int CM_1217 = 1217;   // 广播提交, leaf 0x6DA372
+        public const int CM_1248 = 1248;   // 碎片拼合, leaf 0x6DA58E
+        public const int CM_1250 = 1250;   // 任务发布板, leaf 0x6DA5A1
+        public const int CM_1251 = 1251;   // 元宝寄售, leaf 0x6DA66A
+        public const int CM_1254 = 1254;   // 元宝寄售(成交), leaf 0x6DA69F
+        public const int CM_1255 = 1255;   // 元宝寄售, leaf 0x6DA6B1
+        public const int CM_1258 = 1258;   // 元宝寄售, leaf 0x6DA6C3
+        public const int CM_1259 = 1259;   // 元宝寄售(开启提交), leaf 0x6DA6EF
+        public const int CM_1260 = 1260;   // 设置元宝交易金额, leaf 0x6DA6FC
     }
 }
