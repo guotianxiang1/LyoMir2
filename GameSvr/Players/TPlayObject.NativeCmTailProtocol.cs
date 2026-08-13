@@ -58,6 +58,12 @@ namespace GameSvr
                 case Grobal2.CM_4151:
                     ClientNativeTaskBoardAction();
                     return true;
+                case Grobal2.CM_4173:
+                    ClientNativeFreeRecycleEquip();
+                    return true;
+                case Grobal2.CM_4204:
+                    ClientNativeSmsAuthVerify();
+                    return true;
                 default:
                     return false;
             }
@@ -231,6 +237,37 @@ namespace GameSvr
         private void ClientNativeTaskBoardAction()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4151, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4173, native leaf 0x6DB068, worker 0x6E600C.
+        ///
+        /// The leaf folds Param (word[record+6]) and Tag (word[record+8]) into a
+        /// single dword through 0x408D40 — that helper is exactly MakeLong(lo=ax,
+        /// hi=dx), i.e. HUtil32.MakeLong(Param, Tag) — and calls 0x6E600C(Self,
+        /// that dword). 0x6E600C is the free equipment-recycle worker; it resolves
+        /// the referenced bag item, deletes it and settles reputation. The item
+        /// selection and the recycle payout table are not modelled here, so the
+        /// deletion and the SM it would answer are withheld rather than guessed.
+        /// </summary>
+        private void ClientNativeFreeRecycleEquip()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4173, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4204, native leaf 0x6DAF87, worker 0x6F03E8.
+        ///
+        /// The leaf copies the packet body string ([ebp-8], via 0x405708) into a
+        /// local and calls 0x6F03E8(Self, code=that string, Param=word[record+6]).
+        /// 0x6F03E8 is the SMS verification-code CHECK: it compares the client's
+        /// code against one issued through the operator's SMS gateway. That gateway
+        /// is external to the image, so neither the stored code nor the pass/fail
+        /// result can be derived — the check is failed closed.
+        /// </summary>
+        private void ClientNativeSmsAuthVerify()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4204, m_sCharName);
         }
     }
 }
