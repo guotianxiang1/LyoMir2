@@ -775,21 +775,22 @@ namespace GameSvr.Mall
             return variables != null && variables.TryGetValue(key, out var value) ? value : 0;
         }
 
+        /// <summary>
+        /// Stores 0 like any other value. The native upsert sub_6E4140 has no zero test
+        /// and no removal branch at all - its four value stores 0x6E4187 `mov [eax+4],edx`,
+        /// 0x6E41C2 `mov [eax+ebx*8+4],edx`, 0x6E4231 `mov [eax+ebx*8+0xC],edx` and
+        /// 0x6E4260 `mov [eax+ebx*8+4],edx` all run unconditionally. Deleting the key
+        /// instead was not merely untidy: a keyed miss seeds -1 (0x6E427A
+        /// `mov [ebp-4],0xFFFFFFFF`), so a counter the mall drove down to 0 read back as
+        /// -1 from a script's GetS, not as 0.
+        /// </summary>
         private static void SetPlayerVariable(Dictionary<int, int> variables, int group, int index, int value)
         {
             if (variables == null)
             {
                 return;
             }
-            var key = group * 1000 + index;
-            if (value == 0)
-            {
-                variables.Remove(key);
-            }
-            else
-            {
-                variables[key] = value;
-            }
+            variables[group * 1000 + index] = value;
         }
 
         private static void ResetDailyLimitIfNeeded(TPlayObject player)
