@@ -3067,7 +3067,9 @@ namespace GameSvr
                     break;  // 客户端处理，服务端仅 ack
 
                 default:
-                    if (!TryHandleNativeSocialProtocol(ProcessMsg)
+                    if (!TryHandleInlayCm(ProcessMsg)
+                        && !TryHandleQiankunCm(ProcessMsg)
+                        && !TryHandleNativeSocialProtocol(ProcessMsg)
                         && !TryHandleNativeCmTailProtocol(ProcessMsg)
                         && !TryHandleNativeCmQ1(ProcessMsg)
                         && !TryHandleNativeCmQ2(ProcessMsg)

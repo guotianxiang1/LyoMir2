@@ -2798,6 +2798,7 @@ namespace GameSvr
             // 代理争抢这个 switch 造成合并冲突）。命中即认领，未命中落回下面的 switch，
             // 对既有 race 行为零影响。
             TryCreateRaceA(nMonRace, out Cert);
+            if (Cert == null) TryCreateRaceBase(nMonRace, out Cert);
 
             if (Cert == null)
             switch (nMonRace)
