@@ -1485,7 +1485,7 @@ namespace GameSvr.Plugins
                     var itemName = M2Share.UserEngine.GetStdItemName(item.wIndex);
                     if (!recycleConfig.TryGetItemRule(itemName, out var rule, out var stackable))
                         continue;
-                    if (!RecycleTypeOpen(rule)) continue;
+                    if (!RecycleTypeOpen(rule, stackable)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
                     if (TryRecycleOne(item, itemName, rule, stackable)) recycled++;
                 }
@@ -1515,10 +1515,25 @@ namespace GameSvr.Plugins
                 manager.GetItemConfigValue("无限背包_是否固定")) as string == "固定格子";
         }
 
-        /// <summary>总开关：GetV(v1,v2)==关闭值 时该类型停止回收；省略则失去开关效果。</summary>
-        private bool RecycleTypeOpen(RecycleRule rule)
+        /// <summary>
+        /// 总开关：GetV(v1,v2)==关闭值 时该类型停止回收；省略则失去开关效果。
+        ///
+        /// 生效还有两个原生前置条件，两条分支不一样。可叠材料在 0x1006B783：
+        /// <code>
+        /// 1006B783  83 7D 84 FF  cmp dword [ebp-0x7C], -1   ; 关闭值，缺省 -2
+        /// 1006B787  7C 23        jl  0x1006B7AC             ; &lt; -1 ⇒ 整道门失效
+        /// </code>
+        /// 缺省值 -2 由每件重置 0x1006B2F4 <c>C7 45 84 FE FF FF FF</c> 写入，
+        /// 所以配置里把 关闭值 写成 -2 或更小等同于关掉这道门。
+        /// 物品种类在 0x1006C0BE 多两条：0x1006C0CB / 0x1006C0D4 两个 jle 要求
+        /// v1 和 v2 都为正，否则同样失效。
+        /// </summary>
+        private bool RecycleTypeOpen(RecycleRule rule, bool stackable)
         {
             if (!rule.HasMasterSwitch) return true;
+            if (rule.MasterSwitchClosedValue < -1) return true;
+            if (!stackable &&
+                (rule.MasterSwitchGroup <= 0 || rule.MasterSwitchIndex <= 0)) return true;
             return ReadPlayerV(rule.MasterSwitchGroup, rule.MasterSwitchIndex)
                    != rule.MasterSwitchClosedValue;
         }
