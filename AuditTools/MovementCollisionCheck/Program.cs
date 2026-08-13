@@ -148,8 +148,8 @@ Assert(playerCountRooms.TryGetActiveRoom("PlayerCountLifecycle", playerCountInde
 
 playerCountPlayer.Die();
 Assert(playerCountPlayer.m_boDeath, "player death did not set the death state");
-Equal(0, playerCountSource.HumCount,
-    "player death changed legacy active-player accounting");
+Equal(1, playerCountSource.HumCount,
+    "player death must not change legacy active-player accounting (death != logout; native Die 0x766351 calls map vmt+8 0x5FD4D4, which does not touch map+0xD8 HumCount)");
 Equal(1, playerCountSource.DynamicRoomPlayerCount,
     "player death decremented dynamic physical occupancy");
 Assert(playerCountRooms.TryGetActiveRoom("PlayerCountLifecycle", playerCountIndex,
@@ -162,8 +162,8 @@ Equal(0, playerCountCleanupCount,
 typeof(TBaseObject).GetMethod("ReAlive", BindingFlags.Instance | BindingFlags.NonPublic)!
     .Invoke(playerCountPlayer, null);
 Assert(!playerCountPlayer.m_boDeath, "player revive did not clear the death state");
-Equal(0, playerCountSource.HumCount,
-    "player revive changed legacy active-player accounting");
+Equal(1, playerCountSource.HumCount,
+    "player revive must not change legacy active-player accounting");
 Equal(1, playerCountSource.DynamicRoomPlayerCount,
     "player revive changed dynamic physical occupancy");
 
@@ -171,9 +171,9 @@ playerCountPlayer.Die();
 playerCountTick++;
 playerCountPlayer.SpaceMove(playerCountTarget.sMapName, 4, 4, 0);
 Equal(0, playerCountSource.HumCount,
-    "dead player map change changed source active-player accounting");
-Equal(0, playerCountTarget.HumCount,
-    "dead player map change changed target active-player accounting");
+    "dead player map change must decrement source HumCount (DeleteFromMap, same as live transfer)");
+Equal(1, playerCountTarget.HumCount,
+    "dead player map change must increment target HumCount (AddToMap, death did not unpublish)");
 Equal(0, playerCountSource.DynamicRoomPlayerCount,
     "dead player map change did not decrement source physical occupancy");
 Equal(1, playerCountTarget.DynamicRoomPlayerCount,
