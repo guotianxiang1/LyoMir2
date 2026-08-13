@@ -94,11 +94,32 @@ PinClass(247, "ParalyzationMon", "GasMothMonster", "0x665C18",
     "native parent TGasMothMonster; ctor forwards to GasMoth ctor; only VMT override is "
     + "an empty Attack(+0x204) forwarder, so behaviour == GasMothMonster");
 
+// ---------------------------------------------------------------------------
+// race 144 TIceDoor  VMT 0x66E6AC  parent TAnimal(0x71D51C)  ZERO VMT overrides.
+//   ctor sub_674BF0 = TAnimal.Create + m_boStickMode=1 / m_wEffectResistance=250 /
+//   m_btDirection=0 / m_nViewRange=0.  Behaviour is pure AnimalObject (a static,
+//   immovable, blind ice-door obstacle).  C# parent for native TAnimal is AnimalObject.
+Console.WriteLine("== race 144 TIceDoor ==");
+PinClass(144, "IceDoor", "AnimalObject", "0x66E6AC",
+    "native parent TAnimal == C# AnimalObject; zero VMT overrides; ctor only sets "
+    + "m_boStickMode/m_wEffectResistance/m_btDirection/m_nViewRange");
+{
+    var src = ClassSrc("IceDoor");
+    Check(Regex.IsMatch(src, @"m_boStickMode\s*=\s*true"),
+        "IceDoor sets m_boStickMode=true  [native +0x75=1]");
+    Check(Regex.IsMatch(src, @"m_wEffectResistance\s*=\s*250"),
+        "IceDoor sets m_wEffectResistance=250  [native word +0x26C=0xFA]");
+    Check(Regex.IsMatch(src, @"m_nViewRange\s*=\s*0"),
+        "IceDoor sets m_nViewRange=0  [native +0x78=0; never searches]");
+    Check(!Regex.IsMatch(src, @"public\s+override"),
+        "IceDoor has NO override  [native VMT is byte-identical to TAnimal]");
+}
+
 Console.WriteLine();
 if (failures.Count == 0)
 {
     Console.WriteLine("NativeMissingMonsterClassCheck: PASS "
-        + "race247=ParalyzationMon<GasMothMonster");
+        + "race247=ParalyzationMon<GasMothMonster race144=IceDoor<AnimalObject");
     return 0;
 }
 Console.WriteLine($"NativeMissingMonsterClassCheck: FAIL ({failures.Count})");

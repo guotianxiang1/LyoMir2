@@ -3006,6 +3006,13 @@ namespace GameSvr
                 case 134:
                     Cert = new BoneKingMonster();
                     break;
+                // ✅ 战神字节证据 (Tier-1)：race 144 = TIceDoor(VMT 0x66E6AC, parent TAnimal)，
+                // **零 VMT 覆写**。工厂 jt[62]=0x67A90D → classref [0x66E660] → ctor 0x674BF0：
+                // 纯 TAnimal.Create + 写 m_boStickMode=1 / m_wEffectResistance=250 /
+                // m_btDirection=0 / m_nViewRange=0。详见 IceDoor.cs。原先落 default → nil。
+                case 144:
+                    Cert = new IceDoor();
+                    break;
                 case 200:
                     Cert = new ElectronicScolpionMon();
                     break;
