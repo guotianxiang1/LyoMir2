@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -256,6 +257,11 @@ namespace LoginGate.Core
             Equal(12, shortFrame.Payload.Length, "native 1003 short length");
             Equal(LoginGateWireProtocol.NativeAuthResponseIdent,
                 shortFrame.Ident, "native 1003 short ident");
+            // On the LoginCenterAuth path success is nResult = LC_AUTH_SUCCESS = 0
+            // (uSDKAuth.pas:549 + :565), so +8 must be an explicit zero.
+            Equal(LoginGateWireProtocol.NativeLcAuthSuccess,
+                BinaryPrimitives.ReadInt32LittleEndian(shortFrame.Payload.AsSpan(8, 4)),
+                "native 1003 nResult");
 
             Check(LoginGateWireProtocol.TryCreateNativeAuthResponse20(
                 6, 1, 2359, Enumerable.Range(1, 8).Select(i => (byte)i).ToArray(),
@@ -280,22 +286,37 @@ namespace LoginGate.Core
 
         private static void TestNativeAuthFailureBounds()
         {
+            const byte authType = LoginGateWireProtocol.NativeAuthTypeLoginCenter;
+            const int failed = LoginGateWireProtocol.NativeLcAuthFailed;
+
             Check(LoginGateWireProtocol.TryCreateNativeAuthFailure(
-                0, 1, 2359, null, out var noText, out var error), error);
+                authType, 1, 2359, failed, null, out var noText, out var error), error);
             Equal(12, noText.Payload.Length, "native 1004 no-text length");
             Equal(LoginGateWireProtocol.NativeAuthFailureIdent,
                 noText.Ident, "native 1004 ident");
+            // wAuthType stays atLoginCenterAuth on the failure reply
+            // (uSDKAuth.pas:1476 sets it, :1624 ships the stored head).
+            Equal(authType, noText.Payload[0], "native 1004 wAuthType");
+            Equal((byte)1, noText.Payload[1], "native 1004 GateIdx echo");
+            Equal(2359, BinaryPrimitives.ReadInt32LittleEndian(
+                noText.Payload.AsSpan(2, 4)), "native 1004 handle/dyn-ident echo");
+            Equal(failed, BinaryPrimitives.ReadInt32LittleEndian(
+                noText.Payload.AsSpan(8, 4)), "native 1004 nResult");
+
+            // uSDKAuth.pas:1128 gates the tail on StrLen+1 in [2..100], so an empty
+            // message is dropped entirely rather than becoming a 13th NUL byte.
+            Check(LoginGateWireProtocol.TryCreateNativeAuthFailure(
+                authType, 1, 2359, failed, string.Empty,
+                out var emptyText, out error), error);
+            Equal(12, emptyText.Payload.Length, "native 1004 empty-text length");
 
             Check(LoginGateWireProtocol.TryCreateNativeAuthFailure(
-                0, 1, 2359, string.Empty, out var emptyText, out error), error);
-            Equal(13, emptyText.Payload.Length, "native 1004 empty-text length");
-
-            Check(LoginGateWireProtocol.TryCreateNativeAuthFailure(
-                0, 1, 2359, new string('x', 99), out var maximum, out error), error);
+                authType, 1, 2359, failed, new string('x', 99),
+                out var maximum, out error), error);
             Equal(112, maximum.Payload.Length, "native 1004 maximum length");
             Equal((byte)0, maximum.Payload[^1], "native 1004 terminator");
             Check(!LoginGateWireProtocol.TryCreateNativeAuthFailure(
-                0, 1, 2359, new string('x', 100), out _, out _),
+                authType, 1, 2359, failed, new string('x', 100), out _, out _),
                 "native 1004 accepted 100 text bytes");
         }
 

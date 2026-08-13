@@ -5,8 +5,17 @@ using System.Collections.Generic;
 namespace SystemModule
 {
     /// <summary>
-    /// Stores an eye-item sidecar in native hero type-7 records. Native M2 keeps records whose
-    /// selector byte (+12) does not match the current hero; 0xFF is outside the supported jobs.
+    /// Stores an eye-item sidecar in native hero type-7 records.
+    ///
+    /// Native sub_68AE28 walks the 0xFAFA array in 16-byte steps (0x68AEDF add ebx,0x10) and
+    /// compares the whole DWORD at record+12 (0x68AE73 mov eax,[eax+0x0C]) against the
+    /// zero-extended Job byte at obj+0x72 (0x68AE7C movzx edx,byte[edx+0x72]). Records that
+    /// differ are copied out verbatim (0x68AEC8 mov ecx,0x10) and re-appended on save
+    /// (0x68AC7A/0x68AC8A), which is what lets a carrier survive a native round trip.
+    ///
+    /// The comparison is a DWORD, not a byte: bytes 13..15 must therefore stay nonzero so the
+    /// selector can never fall into the 0..255 Job range. The 'HDR'/'D'/'END' tags carry that
+    /// invariant — do not zero them.
     /// </summary>
     public static class YanshenHeroDynamicCodec
     {

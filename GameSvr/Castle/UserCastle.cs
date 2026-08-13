@@ -24,6 +24,7 @@ namespace GameSvr
         
         public bool m_boStartWar;
         public bool m_boUnderWar;
+        public bool m_boForceWar;
         public TObjUnit m_CenterWall;
         public DateTime m_ChangeDate;
         
@@ -34,6 +35,7 @@ namespace GameSvr
         
         
         private int m_dwSaveTick;
+        private int m_dwRunTick;
         public int m_dwStartCastleWarTick;
         public IList<string> m_EnvirList;
         public TObjUnit[] m_Guard = new TObjUnit[4];
@@ -129,7 +131,9 @@ namespace GameSvr
             m_DoorStatus = null;
             m_boStartWar = false;
             m_boUnderWar = false;
+            m_boForceWar = false;
             m_boShowOverMsg = false;
+            m_dwRunTick = 0;
             m_AttackWarList = new List<TAttackerInfo>();
             m_AttackGuildList = new List<Association>();
             m_dwSaveTick = 0;
@@ -371,59 +375,61 @@ namespace GameSvr
 
         public void Run()
         {
-            string s20;
-            const string sWarStartMsg = "[{0} 攻城战已经开始]";
-            const string sWarStopTimeMsg = "[{0} 攻城战离结束还有{1}分钟]";
             const string sExceptionMsg = "[Exception] TUserCastle::Run";
             try
             {
+                var nowTick = HUtil32.GetTickCount();
+                // 0x65BB58 sub eax,[ebx+0x10] / 0x65BB5B cmp eax,0x2710 / jb ret
+                if ((nowTick - m_dwRunTick) < 0x2710) return;
+                m_dwRunTick = nowTick;
                 if (M2Share.nServerIndex != M2Share.MapManager.GetMapOfServerIndex(m_sMapName)) return;
-                var Year = DateTime.Now.Year;
-                var Month = DateTime.Now.Month;
-                var Day = DateTime.Now.Day;
-                var wYear = m_IncomeToday.Year;
-                var wMonth = m_IncomeToday.Month;
-                var wDay = m_IncomeToday.Day;
-                if (Year != wYear || Month != wMonth || Day != wDay)
+                var now = DateTime.Now;
+                var today = now.Date;
+                if (m_IncomeToday.Date != today)
                 {
                     m_nTodayIncome = 0;
-                    m_IncomeToday = DateTime.Now;
+                    m_IncomeToday = now;
                     m_boStartWar = false;
                 }
+                // 0x49E39C: DecodeTime then hour*3600+min*60+sec. Stored at [ebx+8].
+                var timeSec = now.Hour * 3600 + now.Minute * 60 + now.Second;
                 if (!m_boStartWar && !m_boUnderWar)
                 {
-                    var hour = DateTime.Now.Hour;
-                    if (hour == M2Share.g_Config.nStartCastlewarTime) 
+                    // start window [0x11940, 0x12E58) unless +0x2B force skips it
+                    if (m_boForceWar || (timeSec >= 0x11940 && timeSec < 0x12E58))
                     {
                         m_boStartWar = true;
                         m_AttackGuildList.Clear();
                         for (var i = m_AttackWarList.Count - 1; i >= 0; i--)
                         {
                             var attackerInfo = m_AttackWarList[i];
-                            wYear = attackerInfo.AttackDate.Year;
-                            wMonth = attackerInfo.AttackDate.Month;
-                            wDay = attackerInfo.AttackDate.Day;
-                            if (Year == wYear && Month == wMonth && Day == wDay)
+                            var attackDay = attackerInfo.AttackDate.Date;
+                            if (attackDay == today)
                             {
-                                m_boUnderWar = true;
-                                m_boShowOverMsg = false;
-                                m_WarDate = DateTime.Now;
-                                m_dwStartCastleWarTick = HUtil32.GetTickCount();
                                 m_AttackGuildList.Add(attackerInfo.Guild);
-                                attackerInfo = null;
+                            }
+                            else if (attackDay < today)
+                            {
                                 m_AttackWarList.RemoveAt(i);
                             }
+                        }
+                        if (m_boForceWar || m_AttackGuildList.Count > 0)
+                        {
+                            m_boUnderWar = true;
+                            m_boShowOverMsg = false;
+                            m_WarDate = now;
+                            m_dwStartCastleWarTick = nowTick;
                         }
                         if (m_boUnderWar)
                         {
                             m_AttackGuildList.Add(m_MasterGuild);
                             StartWallconquestWar();
-                            SaveAttackSabukWall();
                             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_212, M2Share.nServerIndex, "");
-                            s20 = string.Format(sWarStartMsg, m_sName);
-                            M2Share.UserEngine.SendBroadCastMsgExt(s20, MsgType.System);
-                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s20);
-                            M2Share.MainOutMessage(s20);
+                            // 0x65BE7C len=22, no %s
+                            const string sWarStartMsg = "[沙巴克攻城战已经开始]";
+                            M2Share.UserEngine.SendBroadCastMsgExt(sWarStartMsg, MsgType.System);
+                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, sWarStartMsg);
+                            M2Share.MainOutMessage(sWarStartMsg);
                             MainDoorControl(true);
                         }
                     }
@@ -447,18 +453,18 @@ namespace GameSvr
                     if (m_LeftWall.BaseObject != null) m_LeftWall.BaseObject.m_boStoneMode = false;
                     if (m_CenterWall.BaseObject != null) m_CenterWall.BaseObject.m_boStoneMode = false;
                     if (m_RightWall.BaseObject != null) m_RightWall.BaseObject.m_boStoneMode = false;
-                    if (!m_boShowOverMsg)
+                    if (!m_boShowOverMsg && timeSec >= 0x12C00)
                     {
-                        if ((HUtil32.GetTickCount() - m_dwStartCastleWarTick) > (M2Share.g_Config.dwCastleWarTime - M2Share.g_Config.dwShowCastleWarEndMsgTime)) 
-                        {
-                            m_boShowOverMsg = true;
-                            s20 = string.Format(sWarStopTimeMsg, m_sName, M2Share.g_Config.dwShowCastleWarEndMsgTime / (60 * 1000));
-                            M2Share.UserEngine.SendBroadCastMsgExt(s20, MsgType.System);
-                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s20);
-                            M2Share.MainOutMessage(s20);
-                        }
+                        m_boShowOverMsg = true;
+                        // 0x65BE9C len=33, hardcoded 10 minutes
+                        const string sWarStopTimeMsg = "[沙巴克城攻城战离结束还有10分钟.]";
+                        M2Share.UserEngine.SendBroadCastMsgExt(sWarStopTimeMsg, MsgType.System);
+                        M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, sWarStopTimeMsg);
+                        M2Share.MainOutMessage(sWarStopTimeMsg);
                     }
-                    if ((HUtil32.GetTickCount() - m_dwStartCastleWarTick) > M2Share.g_Config.dwCastleWarTime)
+                    // 0x65BE1B cmp [ebx+0x2B],0 / jne skip;
+                    // cmp [ebx+8],0x11940 / jb Stop; cmp 0x12E58 / jbe stay
+                    if (!m_boForceWar && (timeSec < 0x11940 || timeSec > 0x12E58))
                     {
                         StopWallconquestWar();
                     }
@@ -590,15 +596,13 @@ namespace GameSvr
                     attackerInfo.sGuildName = oldGuild.sGuildName;
                     break;
                 }
-                oldGuild.RefMemberName();//刷新旧的行会信息
-                // 0x65BF80 `call 0x65A3B8` is LoadAttackSabukWall, not Save.
-                // Identified by its literals: 0x65A3B8 references both
-                // 'AttackSabukWall.txt' (0x65A4FC) and the 'YYYY-MM-DD' parse
-                // format (0x65A4DC), while the writer 0x65B22C references only the
-                // filename. So native RE-READS the list from disk here, discarding
-                // the in-memory reassignment done in the loop above. Calling Save
-                // instead would persist the reassignment native throws away.
-                LoadAttackSabukWall();
+                oldGuild.RefMemberName();
+                // 0x65BF80 call 0x65A3B8 is SAVE, not load.
+                // 0x65A3B8 walks [ebx+0x8C], formats '       "'+YYYY-MM-DD+'"\r\n'
+                // (0x65A4C8 / 0x65A4DC / 0x65A4F0) and writes AttackSabukWall.txt.
+                // The loader is 0x65B22C (FileExists + TStringList + 0x65C908 parse),
+                // xref only from init 0x65AAD6. StopWall also saves via 0x65C1AC.
+                SaveAttackSabukWall();
             }
             m_MasterGuild.RefMemberName();//刷新新的行会信息
             var s10 = string.Format(sGetCastleMsg, m_sName, m_sOwnGuild);
@@ -617,7 +621,7 @@ namespace GameSvr
         {
             TPlayObject PlayObject;
             var ListC = new List<TBaseObject>();
-            M2Share.UserEngine.GetMapRageHuman(m_MapPalace, m_nHomeX, m_nHomeY, 100, ListC);
+            M2Share.UserEngine.GetMapRageHuman(m_MapCastle, m_nHomeX, m_nHomeY, 0xC8, ListC);
             for (var i = 0; i < ListC.Count; i++)
             {
                 PlayObject = (TPlayObject)ListC[i];
@@ -631,8 +635,9 @@ namespace GameSvr
         public void StopWallconquestWar()
         {
             TPlayObject PlayObject;
-            const string sWallWarStop = "[{0} 攻城战已经结束]";
+            const string sWallWarStop = "[沙巴克攻城战已经结束]";
             m_boUnderWar = false;
+            m_boForceWar = false;
             m_AttackGuildList.Clear();
             // ✅ 已按战神二进制点验为【忠实】(2026-08-03, Tier-1)：战神 sub_65C080(持有 GBK
             // "[沙巴克攻城战已经结束]" @dword_65C354) 清战争状态字节 + 清攻方行会表后，于
@@ -652,10 +657,19 @@ namespace GameSvr
                     PlayObject.MapRandomMove(PlayObject.m_sHomeMap, 0);
                 }
             }
-            var s14 = string.Format(sWallWarStop, m_sName);
+            var s14 = sWallWarStop;
             M2Share.UserEngine.SendBroadCastMsgExt(s14, MsgType.System);
             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s14);
             M2Share.MainOutMessage(s14);
+            // 0x65C13E..0x65C1AC: Trunc(WarDate) vs Trunc(attackDate); delete
+            // when attackDay >= warDay (jl/jb keep), then call 0x65A3B8 save.
+            var warDay = m_WarDate.Date;
+            for (var i = m_AttackWarList.Count - 1; i >= 0; i--)
+            {
+                if (m_AttackWarList[i].AttackDate.Date < warDay) continue;
+                m_AttackWarList.RemoveAt(i);
+            }
+            SaveAttackSabukWall();
         }
 
         public int InPalaceGuildCount()
@@ -808,19 +822,35 @@ namespace GameSvr
         public int WithDrawalGolds(TPlayObject PlayObject, int nGold)
         {
             var result = -1;
+            // 0x65B3B5 mov [ebp-4],-1 ; 0x65B3BC test esi,esi / 0x65B3BE jle 0x65B431
+            // nGold<=0 returns -1. sub_65B3A8 never writes -4 (0xFFFFFFFC).
             if (nGold <= 0)
             {
-                result = -4;
                 return result;
             }
             if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1)
             {
                 if (nGold <= m_nTotalGold)
                 {
-                    if (PlayObject.m_nGold + nGold <= PlayObject.m_nGoldMax)
+                    // ✅ 战神字节证据 (Tier-1) — ECON-33 / CGLD-10: 原生是【先信用、成功了才扣池】,
+                    // 且扣池是 IncGold 返回 TRUE 之后的唯一动作。EA: sub_65B3A8 @0x65B3E2-0x65B3FA:
+                    //   0065B3E2  3b b3 80 00 00 00  cmp  esi,[ebx+0x80]     ; 取款额 vs 池
+                    //   0065B3E8  7f 40              jg   0x65B42A           ; 超池 -> ret -2 (池不动)
+                    //   0065B3EA  8b d6              mov  edx,esi
+                    //   0065B3EC  8b c7              mov  eax,edi
+                    //   0065B3EE  8b 08              mov  ecx,[eax]
+                    //   0065B3F0  ff 91 8c 02 00 00  call dword [ecx+0x28C]  ; IncGold (= 0x6D791C)
+                    //   0065B3F6  84 c0              test al,al
+                    //   0065B3F8  74 27              je   0x65B421           ; 信用失败 -> ret -3, 【池不动】
+                    //   0065B3FA  29 b3 80 00 00 00  sub  [ebx+0x80],esi     ; 【只有到这里才扣池】
+                    // 原来的 C# 先 `m_nTotalGold -= nGold` 再 `IncGold(...)` 且丢弃返回值,顺序相反。
+                    // 当前不产生数值差(内联的 m_nGold+nGold<=m_nGoldMax 与 IncGold 内部判断同条件,
+                    // 单线程下必然成功),但那是【双权威】写法:同一个上限条件在两处独立实现,
+                    // 一旦 IncGold 将来增加任何拒绝条件(封号态/跨服态等),池已扣而玩家没收到,
+                    // 每次取款凭空销毁 nGold。改为直接以 IncGold 的返回值为准,消除双权威。
+                    if (PlayObject.IncGold(nGold))
                     {
                         m_nTotalGold -= nGold;
-                        PlayObject.IncGold(nGold);
                         if (M2Share.g_boGameLogGold)
                             M2Share.AddGameDataLog("22" + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX +
                                                    "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" +
@@ -844,12 +874,12 @@ namespace GameSvr
         public int ReceiptGolds(TPlayObject PlayObject, int nGold)
         {
             var result = -1;
+            // 0x65B465 mov [ebp-4],-1 ; 0x65B46C test esi,esi / 0x65B46E jle 0x65B4E5
             if (nGold <= 0)
             {
-                result = -4;
                 return result;
             }
-            if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1 && nGold > 0)
+            if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1)
             {
                 if (nGold <= PlayObject.m_nGold)
                 {

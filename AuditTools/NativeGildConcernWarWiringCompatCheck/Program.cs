@@ -556,10 +556,12 @@ static NativeCorpsDataSnapshot BuildSnapshot()
 
     snapshot.GildRelations.Add(
         NativeCorpsDataSnapshot.GildRelationKey(200, 400),
-        NativeCorpsService.GildUnion);
+        (NativeCorpsService.GildUnion, DateTime.MinValue));
+    // DateTime.MinValue reads as "declared infinitely long ago": any test added here
+    // that calls ExpireGildWars will see this war as already expired.
     snapshot.GildRelations.Add(
         NativeCorpsDataSnapshot.GildRelationKey(200, 700),
-        NativeCorpsService.GildHostile);
+        (NativeCorpsService.GildHostile, DateTime.MinValue));
     snapshot.GildConcerns[200] = new List<long> { 400 };
     return snapshot;
 }

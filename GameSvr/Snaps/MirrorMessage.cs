@@ -162,6 +162,11 @@ namespace GameSvr
                 case Grobal2.ISM_MAKE_CATTLE_CRAZY:
                     NativeFireKingEventState.ForceLocally();
                     break;
+                default:
+                    // native 0x6573A0: IntToStr(ident) + dword_65745C
+                    // "[Error]: ProcessOthGsMsg Ident=" (len-prefix 31 @ 0x657458)
+                    M2Share.MainOutMessage("[Error]: ProcessOthGsMsg Ident=" + Ident);
+                    break;
             }
         }
 

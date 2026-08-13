@@ -2,17 +2,20 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Text;
 
-if (args.Length != 3)
+var repositoryRoot = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+var gameDirectory = args.Length > 2 ? Path.GetFullPath(args[2]) : FindGameSvrBuild();
+var clientRoot = args.Length > 1 ? Path.GetFullPath(args[1]) : FindClientRoot(repositoryRoot);
+if (repositoryRoot == null || gameDirectory == null || clientRoot == null)
 {
-    throw new ArgumentException(
-        "Usage: MovementReliveCheck <repository root> <plaintext client root> <GameSvr build>");
+    Console.Error.WriteLine("INCOMPLETE: repository root=" + (repositoryRoot ?? "<not found>")
+        + " client root=" + (clientRoot ?? "<not found>")
+        + " GameSvr build=" + (gameDirectory ?? "<not found>") + ". "
+        + "Usage: MovementReliveCheck [repository root] [plaintext client root] [GameSvr build]");
+    Environment.Exit(2);
 }
 
 PrepareRuntimeConfig();
 
-var repositoryRoot = Path.GetFullPath(args[0]);
-var clientRoot = Path.GetFullPath(args[1]);
-var gameDirectory = Path.GetFullPath(args[2]);
 
 var coreGround = Read(Path.Combine(clientRoot, "core", "mir2.scenes.main.ground_hk.lua"));
 var core64Ground = Read(Path.Combine(clientRoot, "core64", "mir2.scenes.main.ground_hk.lua"));
@@ -250,4 +253,63 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// a GameSvr build directory reported FAIL without evaluating a single assertion.
+// Falling back to the checkout's own build output keeps the assertions exactly as
+// they were; when no build exists the tool exits 2 (INCOMPLETE) rather than
+// pretending to have checked anything.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
+}
+
+// The extracted client tree lives beside the repository rather than inside it, and the
+// repository is routinely checked out through `git worktree` several levels deeper, so
+// the anchor has to be searched for instead of computed from the root.
+static string FindClientRoot(string repositoryRoot)
+{
+    const string clientTree = "白猪G2.5_0518_lua_plain_readable_20260710_014719";
+    for (var directory = repositoryRoot == null ? null : new DirectoryInfo(repositoryRoot);
+         directory != null; directory = directory.Parent)
+    {
+        var candidate = Path.Combine(directory.FullName, clientTree);
+        if (File.Exists(Path.Combine(candidate, "core", "mir2.scenes.main.ground_hk.lua")))
+            return candidate;
+    }
+    return null;
+}
+
+static string FindGameSvrBuild()
+{
+    var repositoryRoot = FindRepositoryRoot();
+    if (repositoryRoot == null)
+        return null;
+    var binRoot = Path.Combine(repositoryRoot, "GameSvr", "bin");
+    if (!Directory.Exists(binRoot))
+        return null;
+    var debug = $"{Path.DirectorySeparatorChar}Debug{Path.DirectorySeparatorChar}";
+    foreach (var candidate in Directory
+                 .EnumerateFiles(binRoot, "GameSvr.dll", SearchOption.AllDirectories)
+                 // run_audits.py builds -c Debug, so prefer that configuration and
+                 // then the freshest output within it.
+                 .OrderByDescending(path => path.Contains(debug, StringComparison.OrdinalIgnoreCase))
+                 .ThenByDescending(File.GetLastWriteTimeUtc))
+    {
+        var directory = Path.GetDirectoryName(candidate);
+        if (directory != null && File.Exists(Path.Combine(directory, "SystemModule.dll")))
+            return directory;
+    }
+    return null;
 }

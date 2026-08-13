@@ -95,10 +95,25 @@ static void CheckState20AndLegacyWordAuthority()
     Assert(actor.HasNativeActiveState(20),
         "slot11 overlay did not restore cleared state20 carrier");
 
+    // Native keeps one flat bitset at [obj+0x168] and reaches it through three
+    // primitives that share a single domain guard and split ownership nowhere:
+    //   test   0x772960  80 FA 6F              cmp dl, 0x6F
+    //          0x772963  77 0A                 ja
+    //          0x772965  83 E2 7F              and edx, 0x7F
+    //          0x772968  0F A3 90 68 01 00 00  bt  dword [eax+0x168], edx
+    //   set    0x772993  80 FB 6F / 77 0A / 83 E3 7F
+    //          0x77299B  0F AB 9E 68 01 00 00  bts dword [esi+0x168], ebx
+    //   clear  0x7729B1  80 FB 6F / 77 0A / 83 E3 7F
+    //          0x7729B9  0F B3 9E 68 01 00 00  btr dword [esi+0x168], ebx
+    // Sweeping the function turns up no comparison against 20 or 21 at all, so a
+    // state above 20 is exactly as durable as one below it and must survive the
+    // rebuild. This assertion used to demand the opposite, pinning a
+    // `stateIndex <= 20` fork that native does not have; it now fails if that
+    // fork comes back.
     Assert(actor.SetNativeActiveState(21), "raw legacy state 21 set");
     actor.m_nCharStatus = actor.GetCharStatus();
-    Assert(!actor.HasNativeActiveState(21),
-        "raw state 21 became a second lifetime authority");
+    Assert(actor.HasNativeActiveState(21),
+        "state 21 dropped by the rebuild - the invented stateIndex<=20 fork is back");
     Assert(actor.HasNativeActiveState(16),
         "legacy rebuild lost state 0..19 authority");
     Assert(actor.HasNativeActiveState(32),
@@ -593,8 +608,16 @@ static void CheckSourceOrdering()
         "TBaseObject.cs"));
     var setBody = Between(baseSource, "public bool SetBodyState",
         "public void AbilCopyToWAbil");
-    Contains(setBody, "if (stateIndex <= 20)",
-        "state20 carrier and legacy21 authority split");
+    // The `stateIndex <= 20` fork this used to require is invented. Native reaches
+    // one flat bitset at [obj+0x168] through three primitives that share a single
+    // domain guard and split ownership nowhere - 0x772960 / 0x772993 / 0x7729B1 all
+    // do `cmp ..,0x6F` then `and ..,0x7F` before bt / bts / btr - and the function
+    // compares against 20 or 21 at no point. Demanding the fork here preserved an
+    // ownership split native does not have, so the inverse is what needs guarding.
+    // Keep the `if (` prefix: the region carries a comment explaining why the fork
+    // was removed, and the bare phrase matches that prose too.
+    NotContains(setBody, "if (stateIndex <= 20)",
+        "the invented stateIndex<=20 ownership split is back");
     NotContains(setBody, "m_wStatusTimeArr[",
         "native helper mutated legacy timer authority");
     var disappear = Between(baseSource, "public virtual void Disappear()",
@@ -605,7 +628,7 @@ static void CheckSourceOrdering()
     var heroSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Actors",
         "HeroObject.cs"));
     var heroRelease = Between(heroSource, "internal void ReleaseRuntimeReferences()",
-        "private void DecideAction");
+        "private static int NativeGridDistance");
     Contains(heroRelease, "ClearTimedAbilitiesOnExit()",
         "hero release timed-state cleanup");
 
@@ -678,7 +701,11 @@ static ProbePlayer Place(Envirnoment map, ProbePlayer player, short x, short y)
     player.m_nCurrX = x;
     player.m_nCurrY = y;
     player.m_boFixedHideMode = false;
-    Equal(1, map.MoveToMovingObject(x, y, player, x, y, true),
+    // MoveToMovingObject is a move, not a placement. It now refuses when the actor
+    // is not already registered in the source cell, and this fixture never added
+    // the player to the map at all, so the self-move it used to perform returned 0.
+    // AddToMap is the placement primitive and echoes the actor back on success.
+    Assert(ReferenceEquals(player, map.AddToMap(x, y, CellType.OS_MOVINGOBJECT, player)),
         $"place {player.m_sCharName}");
     return player;
 }

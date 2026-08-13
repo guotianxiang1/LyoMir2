@@ -142,10 +142,15 @@ static void CheckQueryUserStateHeader(TUserItem equippedItem)
         m_sCharName = "target"
     };
     target.m_UseItems[6] = equippedItem;
-    Equal(1, map.MoveToMovingObject(5, 5, requester, 5, 5, true),
-        "place requester");
-    Equal(1, map.MoveToMovingObject(6, 5, target, 6, 5, true),
-        "place target");
+    // AddToMap, not MoveToMovingObject: the original's mover sub_7797CC only reports
+    // success from 0x779A95, which is reached after unlinking the actor from the
+    // SOURCE cell. Asking it to move an actor out of a cell it was never in walks the
+    // empty list and falls through to `xor eax,eax` @0x779AAD, i.e. FALSE. A first
+    // placement has no source cell, so the mover is the wrong primitive for it.
+    Assert(ReferenceEquals(requester, map.AddToMap(5, 5,
+        CellType.OS_MOVINGOBJECT, requester)), "place requester");
+    Assert(ReferenceEquals(target, map.AddToMap(6, 5,
+        CellType.OS_MOVINGOBJECT, target)), "place target");
 
     Assert(requester.Operate(new TProcessMessage
     {

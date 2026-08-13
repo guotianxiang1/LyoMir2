@@ -25,9 +25,15 @@ public class TMapFlag
     // handful of now-unreachable gates still name them; do not re-wire the parser.
     public bool boSAFE;
     public int nL;
-    public int nNEEDSETONFlag;
-    public int nNeedONOFF;
-    public int nMUSICID;
+
+    // NEEDSET_ON / NEEDSET_OFF / MUSIC 是凭空发明的 token，解析臂已移除
+    // （见 Maps.cs 的 §INVENTED）。这三个字段还留着是因为消费点尚未清理；
+    // 种子值必须是 -1（关闭哨兵），否则默认 0 会让
+    // TBaseObject.cs 的 `if (Envir.Flag.nNEEDSETONFlag >= 0)` 在所有不走
+    // LoadMapInfo 的构造路径（动态地图房间、Envirnoment.Initialize）上误触发。
+    public int nNEEDSETONFlag = -1;
+    public int nNeedONOFF = -1;
+    public int nMUSICID = -1;
     public bool boDarkness;
     public bool boDayLight;
     public bool boFightZone;
@@ -79,7 +85,6 @@ public class TMapFlag
     public bool boFOXMAP;
     public bool boNODRUG;
     public bool boMINE;
-    public bool boMINE2;
     public bool boNOPOSITIONMOVE;
     public bool boPICKUP;
     public bool boNODROPITEM;
@@ -218,62 +223,94 @@ public class TMapFlag
     public bool boMONATTACK;
 
     /// <summary>
-    /// 战神 map flag <c>LIMITHEROLEVEL(n)</c> -> native <c>word [flag+0xC0]</c>, a THRESHOLD,
-    /// not a switch. Parser B @0x77682C <c>66 89 83 C0 00 00 00  mov word [ebx+0xC0],ax</c>
-    /// (parser A @0x775869 same, else-arm @0x77587D writes 0); ax comes from StrToIntDef with
-    /// <c>33D2 xor edx,edx</c> @0x776824, i.e. default 0. Constructor never writes it, so
-    /// TObject.InitInstance leaves 0 = no limit.
+    /// 战神 map flag <c>LIMITHEROLEVEL(n)</c> -> native <c>[flag+0xC0]</c>, a WORD
+    /// threshold (0 = no limit, which is also the InitInstance zero-fill default).
+    /// Writers: parser A <c>0x775869 mov word [ebx+0xC0],ax</c> (and
+    /// <c>0x77587D</c> writes 0 on the GM toggle-off arm), parser B
+    /// <c>0x77682C</c>. Readers <c>sub_690300</c>:
+    /// <c>0x690315 cmp word [edx+0xC0],0 / jbe skip</c>,
+    /// <c>0x690339 cmp cx,word [edx+0xC0] / jbe skip</c>,
+    /// <c>0x690342 mov cx,word [edx+0xC0]</c> -- a numeric comparison against the
+    /// hero level, then a clamp. Was a bool, which discarded the threshold.
+    /// </summary>
+    public ushort LimitHeroLevel;
+
+    /// <summary>
+    /// 战神 map flag <c>LIMITPLAYERLEVEL(n)</c> -> native <c>[flag+0xBE]</c> WORD.
+    /// Parser A <c>0x77580A</c> / <c>0x77581E</c>=0, parser B <c>0x7767E6</c>.
+    /// Read by <c>sub_690300</c> @<c>0x69032C cmp cx,word [edx+0xBE]</c>
+    /// alongside LimitHeroLevel, plus <c>0x6BA0FD</c> / <c>0x6BA107</c> /
+    /// <c>0x6BA114</c>.
+    /// </summary>
+    public ushort LimitPlayerLevel;
+
+    /// <summary>
+    /// 战神 map flag <c>UNIFIEDLEVEL(n)</c> -> native <c>[flag+0xBC]</c> WORD.
+    /// Parser A <c>0x7757AB</c> / <c>0x7757BF</c>=0, parser B <c>0x7767A0</c>.
+    /// Readers <c>0x6BA0D0</c>, <c>0x6BA0DA</c>, <c>0x73D60B</c>.
+    /// </summary>
+    public ushort UnifiedLevel;
+
+    /// <summary>
+    /// 战神 map flag <c>MapSign(n)</c> -> native <c>[flag+0x62]</c> WORD.
+    /// Parser A <c>0x775407 mov word [ebx+0x62],ax</c> / <c>0x775418</c>=0,
+    /// parser B <c>0x776514</c>. No read point anchored yet.
+    /// </summary>
+    public ushort MapSign;
+
+    /// <summary>
+    /// 战神 map flag <c>MAPFIREWALLBURN(n)</c> -> native <c>[flag+0x88]</c> DWORD,
+    /// stored in MILLISECONDS: both parsers multiply the parsed argument by 1000
+    /// before storing (<c>0x7753A4</c> / <c>0x7764C9</c>
+    /// <c>69 C0 E8 03 00 00  imul eax,eax,0x3E8</c>), so the configured value is
+    /// in seconds.
+    /// Writers <c>0x7753AA</c> (and <c>0x7753BD/BF</c> writes 0 on toggle-off),
+    /// <c>0x7764CF</c>. No read point anchored yet.
+    /// </summary>
+    public int MapFireWallBurnMs;
+
+    /// <summary>
+    /// 战神 map flag <c>FLYDROPITEM(a/b/c)</c> -> native <c>[flag+0xB4]</c>. NOT a number:
+    /// the arm lazily constructs a <c>TMirStringList</c> and fills it with the '/'-separated
+    /// pieces of the parenthesised argument.
     /// <para>
-    /// Consumer sub_690300 clamps the hero's reported level:
-    ///   0x690315 <c>cmp word [edx+0xC0],0</c> / <c>jbe</c>  -- 0 means unlimited
-    ///   0x69032C <c>cmp cx,word [edx+0xBE]</c> / <c>jbe</c>  -- owner level vs LIMITPLAYERLEVEL
-    ///   0x690339 <c>cmp cx,word [edx+0xC0]</c> / <c>jbe</c>  -- hero level vs this threshold
-    ///   0x690342 <c>mov cx,word [edx+0xC0]</c>               -- clamp to the threshold
-    /// All three are unsigned word compares. NOT WIRED in C# yet.
+    /// Class identity is pinned through the VMT rather than inferred: classref
+    /// <c>[0x49EB3C] = 0x49EB88</c>, and vmtClassName at <c>VMT-0x2C = 0x49EC20</c> is the
+    /// ShortString <c>len=14 'TMirStringList'</c>.
     /// </para>
-    /// </summary>
-    public ushort nLIMITHEROLEVEL;
-
-    /// <summary>
-    /// 战神 map flag <c>LIMITPLAYERLEVEL(n)</c> -> native <c>word [flag+0xBE]</c>.
-    /// Parser B @0x7767E6 <c>66 89 83 BE 00 00 00</c>, parser A @0x77580A (else-arm @0x77581E
-    /// writes 0). Paired with <see cref="nLIMITHEROLEVEL"/> in sub_690300 @0x69032C. NOT WIRED.
-    /// </summary>
-    public ushort nLIMITPLAYERLEVEL;
-
-    /// <summary>
-    /// 战神 map flag <c>UNIFIEDLEVEL(n)</c> -> native <c>word [flag+0xBC]</c>.
-    /// Parser B @0x7767A0 <c>66 89 83 BC 00 00 00</c>, parser A @0x7757AB (else-arm @0x7757BF
-    /// writes 0). Read at 0x6BA0D0 <c>cmp word [edx+0xBC],0</c>, 0x6BA0DA, 0x73D60B. NOT WIRED.
-    /// </summary>
-    public ushort nUNIFIEDLEVEL;
-
-    /// <summary>
-    /// 战神 map flag <c>MapSign(n)</c> -> native <c>word [flag+0x62]</c>.
-    /// Parser B @0x776514 <c>66 89 43 62</c>, parser A @0x775407 (else-arm @0x775418 writes 0).
-    /// </summary>
-    public ushort nMapSign;
-
-    /// <summary>
-    /// 战神 map flag <c>MAPFIREWALLBURN(n)</c> -> native <c>dword [flag+0x88]</c>.
-    /// The parsed value is scaled by 1000 before the store: parser B @0x7764C9
-    /// <c>69 C0 E8 03 00 00  imul eax,eax,0x3E8</c> then @0x7764CF
-    /// <c>89 83 88 00 00 00  mov dword [ebx+0x88],eax</c> (parser A @0x7753AA / @0x7753BF).
-    /// So the config unit is seconds and the stored unit is milliseconds.
-    /// </summary>
-    public int nMAPFIREWALLBURN;
-
-    /// <summary>
-    /// 战神 map flag <c>FLYDROPITEM(a/b/c)</c> -> native <c>[flag+0xB4]</c>, which is a
-    /// <c>TMirStringList</c> POINTER (classref [0x49EB3C] -> VMT 0x49EB88, vmtClassName
-    /// "TMirStringList"), not a number: parser B @0x776562 <c>mov eax,[0x49EB3C]</c> /
-    /// <c>call 0x404660</c> creates it, @0x77657C <c>call [edx+0x44]</c> clears an existing one,
-    /// and the @0x776581 loop splits the parenthesised argument on '/' (0x776588
-    /// <c>B1 2F  mov cl,0x2F</c>) appending each non-empty piece via <c>call [ecx+0x38]</c>.
-    /// An EMPTY argument takes the @0x7765C2 branch instead: clear then
-    /// <c>lea eax,[ebx+0xB4] / call 0x414C24</c> (FreeAndNil), i.e. back to null.
-    /// The only anchored reader 0x6B73FF <c>cmp dword [eax+0xB4],0</c> is a presence test.
-    /// NOT WIRED beyond parsing.
+    /// <para>
+    /// Parser B, token compare <c>0x77651D B9 0B 00 00 00 mov ecx,0xB</c> /
+    /// <c>0x776522 BA 54 6D 77 00 mov edx,0x776D54</c> ("FLYDROPITEM", 11 chars) /
+    /// <c>0x77652A call 0x4C6E94</c>; argument pulled by <c>0x77654C call 0x4C6964</c> with
+    /// <c>ecx=0x776B30</c> (")") and <c>edx=0x776B3C</c> ("("). Then:
+    ///   <c>0x776551 cmp dword [ebp-0xC],0 / je 0x7765C2</c>  -- empty argument
+    ///   <c>0x776557 cmp dword [ebx+0xB4],0 / jne 0x776574</c>
+    ///   <c>0x776560 mov dl,1 / mov eax,[0x49EB3C] / call 0x404660 / 0x77656C
+    ///      mov [ebx+0xB4],eax</c>                            -- lazy create
+    ///   <c>0x776574 mov eax,[ebx+0xB4] / mov edx,[eax] / 0x77657C call [edx+0x44]</c> -- Clear
+    ///   <c>0x776581</c> loop: <c>0x776588 B1 2F mov cl,0x2F</c> ('/') /
+    ///      <c>0x77658D call 0x4C6AEC</c> split, remainder stored back at <c>0x776598</c>
+    ///   <c>0x77659D cmp dword [ebp-0x10],0 / je</c>          -- empty piece skipped
+    ///   <c>0x7765AE call [ecx+0x38]</c>                      -- TStrings.Add
+    ///   <c>0x7765B4 call 0x4057D0 / test eax,eax / 0x7765BB jg 0x776581</c> -- do..while Len&gt;0
+    /// The empty-argument arm <c>0x7765C2</c> clears via <c>[edx+0x44]</c> then
+    /// <c>0x7765DA lea eax,[ebx+0xB4] / 0x7765E0 call 0x414C24</c> (FreeAndNil) -> null.
+    /// Parser A is the same shape at 0x775452..0x7754C7.
+    /// </para>
+    /// <para>
+    /// ELEMENT SEMANTICS ARE ITEM NAMES -- this was previously left BLOCKED as "could be
+    /// names or ids", and the consumer settles it. sub_77BA38(eax=mapflag, edx=name):
+    ///   <c>0x77BA59 mov esi,[ebx+0xB4] / test esi,esi / je</c>   -- no list =&gt; false
+    ///   <c>0x77BA67 call [edx+0x14] / test eax,eax / jle</c>     -- Count &lt;= 0 =&gt; false
+    ///   <c>0x77BA71 mov eax,[ebx+0xB4] / 0x77BA79 call [ecx+0x54]</c> -- TStringList.IndexOf
+    ///   <c>0x77BA7C 40 inc eax / 0x77BA7D 0F 9F C0 setg al</c>   -- result = IndexOf &gt;= 0
+    /// Its one caller passes an item name: <c>0x6B73F9 mov eax,[edi+0x128]</c> (map) /
+    /// <c>0x6B73FF cmp dword [eax+0xB4],0 / je 0x6B74A3</c> presence gate, then
+    /// <c>0x6B740C lea edx,[ebp-8] / call 0x784568</c> -- and sub_784568 is
+    /// <c>0x784573 mov edx,[ebx+0x1C] / add edx,4</c>, i.e. it reads the item's StdItem
+    /// record and offsets to the Name field.
+    /// </para>
+    /// NOT WIRED beyond parsing: the 0x6B73FF gate has no C# counterpart yet.
     /// </summary>
     public List<string> FlyDropItemNames;
 

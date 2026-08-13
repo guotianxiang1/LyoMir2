@@ -237,7 +237,8 @@ void RunGildLifecycle()
     AddGild(snapshot, 400, 410, "盟友行会", vice: 0, members: new long[] { 410 });
     AddGild(snapshot, 600, 610, "路人行会", vice: 0, members: new long[] { 610 });
     snapshot.GildRelations.Add(
-        NativeCorpsDataSnapshot.GildRelationKey(200, 400), NativeCorpsService.GildUnion);   // 200<->400 allied
+        NativeCorpsDataSnapshot.GildRelationKey(200, 400),
+        (NativeCorpsService.GildUnion, DateTime.MinValue));   // 200<->400 allied
 
     var service = BuildService(snapshot);
     Log("GILD service built from fake stores (gild 200 owner-corps=100/vice-corps=300/members{500,550}; allied "

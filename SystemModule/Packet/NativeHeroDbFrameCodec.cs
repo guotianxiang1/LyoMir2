@@ -80,7 +80,10 @@ namespace SystemModule
         public const int NormalMagicCount = 55;
         public const int SpecialMagicCount = 3;
 
-        private static readonly byte[] DynamicSectionTypes = { 2, 4, 6, 7, 0x0C };
+        // Native encoder sub_68ACA4 emits only {2,6,7} (0x68AD4F / 0x68AD78 / 0x68ADA3
+        // `mov byte [eax+6], 2/6/7`). Decoder jump table 0x68B0E5: 2→0x68B1A9, 6→0x68B215,
+        // 7→0x68B281; types 3/4/5 and >7 share 0x68B2EA (log then skip via 0x68B349).
+        private static readonly byte[] DynamicSectionTypes = { 2, 6, 7 };
         private static readonly Encoding Gbk;
 
         static NativeHeroDbFrameCodec()
@@ -140,41 +143,37 @@ namespace SystemModule
 
             var sections = new List<NativeHeroDynamicSection>(3);
             var offset = 4;
-            var expectedTypeIndex = 0;
+            // Native decoder 0x68B0D5 `cmp eax,7 / ja 0x68B2EA` then
+            // `jmp dword [eax*4+0x68B0E5]` — dispatch by type, no order test.
+            // A blob that is 7 then 2 is therefore legal on the read path.
+            // The encoder below still emits only {2,6,7} in that order
+            // (0x68AD4F / 0x68AD78 / 0x68ADA3).
             while (offset < data.Length)
             {
+                // Truncated header / bad magic / short payload: native leaves the
+                // already-parsed sections in place and exits the loop.
+                // Bad magic 0x68B0B9 `jne 0x68B396` logs then falls to 0x68B3F3.
+                // Short payload 0x68B0C9 `jl 0x68B354` logs then `jmp 0x68B3F3`.
+                // C# used to `return false` here; TryDecodeLoadResponse then
+                // replaced DynamicData with an empty list and dropped 2/6/7.
                 if (data.Length - offset < DynamicHeaderSize)
-                {
-                    error = "truncated native hero dynData section header";
-                    return false;
-                }
+                    break;
                 if (BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4)) != DynamicSectionMagic)
-                {
-                    error = $"invalid native hero dynData section magic at 0x{offset:X}";
-                    return false;
-                }
+                    break;
 
                 var payloadLength = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset + 4, 2));
                 var type = data[offset + 6];
+                var nextOffset = offset + DynamicHeaderSize + payloadLength;
+                if (nextOffset > data.Length)
+                    break;
+                if (type is not (2 or 6 or 7))
+                {
+                    offset = nextOffset;
+                    continue;
+                }
                 if (payloadLength == 0)
                 {
                     error = $"empty native hero dynData section type {type}";
-                    return false;
-                }
-                while (expectedTypeIndex < DynamicSectionTypes.Length
-                       && DynamicSectionTypes[expectedTypeIndex] != type)
-                    expectedTypeIndex++;
-                if (expectedTypeIndex >= DynamicSectionTypes.Length)
-                {
-                    error = $"unknown or out-of-order native hero dynData section type {type}";
-                    return false;
-                }
-                expectedTypeIndex++;
-
-                var nextOffset = offset + DynamicHeaderSize + payloadLength;
-                if (nextOffset > data.Length)
-                {
-                    error = $"truncated native hero dynData section type {type}";
                     return false;
                 }
                 sections.Add(new NativeHeroDynamicSection(type,

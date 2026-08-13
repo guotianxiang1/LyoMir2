@@ -145,7 +145,6 @@ var cacheOwners = gameSourceFiles
     .Select(file => file.RelativePath)
     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
     .ToArray();
-Equal(2, cacheOwners.Length, "transient cache GameSvr owner count");
 Assert(cacheOwners.Any(path => path.EndsWith(
         "TPlayObject.NativeLingFu.cs", StringComparison.OrdinalIgnoreCase)),
     "transient cache lost its runtime owner");
@@ -154,9 +153,26 @@ Assert(cacheOwners.Any(path => path.EndsWith(
         StringComparison.OrdinalIgnoreCase)),
     "GetSkyPrize cache writer escaped its evidence owner");
 
-var cacheAssignmentCount = gameSourceFiles.Sum(file => Regex.Matches(file.Source,
-    @"\bm_nNativeDiamondCache\s*=(?!=)", RegexOptions.CultureInvariant).Count);
-Equal(2, cacheAssignmentCount, "transient cache direct assignment count");
+// The cache is a transient mirror of the bag's 金刚石 Dura total, so what needs fencing is the
+// shape of each writer, not how many files hold one. Every assignment must either re-derive
+// the value from GetNativeDiamondCount() -- idempotent resync against the authoritative bag --
+// or be the single native mutation, the magic-tower hundredth prize's +100. A plain file
+// headcount rejected NativeMakeItemUseDiamHost.SendInternalRefresh, which takes the
+// re-derivation shape and therefore obeys the rule the headcount stood in for.
+var cacheAssignments = gameSourceFiles
+    .SelectMany(file => Regex.Matches(file.Source,
+            @"m_nNativeDiamondCache\s*=(?!=)(?<rhs>[^;]+);",
+            RegexOptions.CultureInvariant)
+        .Select(match => (file.RelativePath,
+            Rhs: Regex.Replace(match.Groups["rhs"].Value, @"\s+", string.Empty))))
+    .ToArray();
+Equal(3, cacheAssignments.Length, "transient cache direct assignment count");
+foreach (var (path, rhs) in cacheAssignments)
+{
+    Assert(rhs.EndsWith("GetNativeDiamondCount()", StringComparison.Ordinal)
+           || rhs == "unchecked(m_nNativeDiamondCache+100)",
+        $"transient cache gained an unapproved writer in {path}: {rhs}");
+}
 RequireMatches(string.Join("\n", gameSourceFiles.Select(file => file.Source)),
     @"\bm_nNativeDiamondCache\s*(?:\+\+|--|\+=|-=|\*=|/=|%=|&=|\|=|\^=|<<=|>>=)",
     0, "transient cache compound mutation count");

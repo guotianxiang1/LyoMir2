@@ -40,8 +40,22 @@ namespace GameSvr
             m_nNotProcessCount = 0;
             m_nTargetX = -1;
             this.m_btRaceServer = Grobal2.RC_ANIMAL;
-            this.m_dwHitTick = HUtil32.GetTickCount() - M2Share.RandomNumber.Random(3000);
-            this.m_dwWalkTick = HUtil32.GetTickCount() - M2Share.RandomNumber.Random(3000);
+            // MONAI-01 — 原生 TAnimal.Create sub_71D828 是 tick **加** Random(3000)，不是减：
+            //   0071D880  E8 BB AA CE FF        call 0x408340        ; GetTickCount -> esi
+            //   0071D88D  B8 B8 0B 00 00        mov  eax,0xBB8       ; 3000
+            //   0071D892  E8 B5 62 CE FF        call 0x403B4C        ; Random
+            //   0071D897  03 C6                 add  eax,esi         ; <-- 加
+            //   0071D899  89 87 5C 03 00 00     mov  [edi+0x35C],eax ; m_dwHitTick
+            //   0071D89F  B8 B8 0B 00 00        mov  eax,0xBB8
+            //   0071D8A4  E8 A3 62 CE FF        call 0x403B4C
+            //   0071D8A9  03 C6                 add  eax,esi         ; <-- 加
+            //   0071D8AB  89 87 84 03 00 00     mov  [edi+0x384],eax ; m_dwWalkTick
+            // 消费端都是有符号比较（TMonster.Run 0x66632D `cmp ecx,[edx+0x324]` + `jle`；
+            // AttackTarget 0x71E94B `cmp edx,[ebx+0x320]` + `jle`），所以 tick 在未来会让
+            // elapsed 为负、比较恒不成立 —— 原版靠这个给每只新怪 0..3000ms 的随机出生错峰。
+            // 写成减号则错峰消失，全服怪物出生即可走可打。
+            this.m_dwHitTick = HUtil32.GetTickCount() + M2Share.RandomNumber.Random(3000);
+            this.m_dwWalkTick = HUtil32.GetTickCount() + M2Share.RandomNumber.Random(3000);
             this.m_dwSearchEnemyTick = HUtil32.GetTickCount();
             m_boRunAwayMode = false;
             m_dwRunAwayStart = HUtil32.GetTickCount();
@@ -103,7 +117,13 @@ namespace GameSvr
                 nOldY = this.m_nCurrY;
                 this.WalkTo(nDir, false);
                 n20 = M2Share.RandomNumber.Random(3);
-                for (var i = Grobal2.DR_UP; i <= Grobal2.DR_UPLEFT; i++)
+                // MONAI-12 — GotoTargetXY sub_71DDD0 的转向重试是 7 次，不是 8：
+                //   0071DE93  C7 45 F4 07 00 00 00  mov  [ebp-0xC],7
+                //   0071DE9A  ...（循环体：仍在原地才改向再 WalkTo）
+                //   0071DEDB  FF 4D F4              dec  [ebp-0xC]
+                //   0071DEDE  75 BA                 jne  0x71DE9A
+                // C# 原先 `for i = DR_UP..DR_UPLEFT`（0..7 含）多试一次方向。
+                for (var i = 0; i < 7; i++)
                 {
                     if (nOldX == this.m_nCurrX && nOldY == this.m_nCurrY)
                     {
@@ -223,7 +243,7 @@ namespace GameSvr
             m_nTargetY = -1;
         }
 
-        protected virtual void SearchTarget()
+        protected virtual bool SearchTarget()
         {
             TBaseObject BaseObject = null;
             TBaseObject BaseObject18 = null;
@@ -232,6 +252,8 @@ namespace GameSvr
             for (var i = 0; i < this.m_VisibleActors.Count; i++)
             {
                 BaseObject = this.m_VisibleActors[i].BaseObject;
+                // MONAI-13 — sub_71DA70 扫描臂用 sub_772DA8 = `mov al,[eax+0x74]; ret`
+                // （TBaseObject.cs 已钉 +0x74 = m_boDeath），不是 +0x73 ghost。
                 if (!BaseObject.m_boDeath)
                 {
                     if (this.IsProperTarget(BaseObject) && (!BaseObject.m_boHideMode || this.m_boCoolEye))
@@ -254,7 +276,10 @@ namespace GameSvr
             if (BaseObject18 != null)
             {
                 this.SetTargetCreat(BaseObject18);
+                // 0071DC04  C6 45 FB 01  mov byte [ebp-5],1  then 0071DCA8  8A 45 FB  mov al,[ebp-5]
+                return true;
             }
+            return false;
         }
 
         protected void sub_4C959C()

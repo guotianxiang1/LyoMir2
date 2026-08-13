@@ -7,8 +7,12 @@ using System.Text;
 namespace SystemModule
 {
     /// <summary>
-    /// Versioned storage for eye-plugin fields that are not mapped to the native 208-byte item.
-    /// Bind remains in the proven native byte at +0xB8 and is intentionally excluded here.
+    /// Dual-write overlay for eye-plugin fields that also live in the native 208-byte item
+    /// (see <see cref="YanshenNativeItemLayout"/>). Bind remains in the proven native byte
+    /// at +0xB8 and is intentionally excluded here. Do not delete this sidecar until every
+    /// HumanRcd has been packed into the 208-byte blob at least once — native ScriptData
+    /// type 0x79 is skipped on load and dropped on save
+    /// (<c>0x6E4510 cmp eax,8 / 0x6E4DD3</c> rebuilds only six sections).
     /// </summary>
     public static class YanshenItemSidecarCodec
     {
@@ -95,10 +99,21 @@ namespace SystemModule
         public static bool TryApply(byte[] payload, TUserItem[] equipment, TUserItem[] bag,
             TUserItem[] storage, out string error)
         {
+            return TryApply(payload, equipment, bag, storage, clearUnlisted: true, out error);
+        }
+
+        /// <param name="clearUnlisted">
+        /// Native load must pass false: fields already unpacked from the 208-byte blob
+        /// have to survive when this sidecar has no entry for that item. Passing true
+        /// keeps the old "sidecar is the only authority" tests working.
+        /// </param>
+        public static bool TryApply(byte[] payload, TUserItem[] equipment, TUserItem[] bag,
+            TUserItem[] storage, bool clearUnlisted, out string error)
+        {
             error = string.Empty;
             if (payload == null || payload.Length == 0)
             {
-                ClearAll(equipment, bag, storage);
+                if (clearUnlisted) ClearAll(equipment, bag, storage);
                 return true;
             }
             if (payload.Length > MaximumPayloadLength)
@@ -228,8 +243,9 @@ namespace SystemModule
                 entry.Target = item;
             }
 
-            ClearAll(equipment, bag, storage);
-            foreach (var entry in entries) Apply(entry.Target, entry);
+            if (clearUnlisted) ClearAll(equipment, bag, storage);
+            foreach (var entry in entries)
+                Apply(entry.Target, entry, overlay: !clearUnlisted);
             return true;
         }
 
@@ -399,23 +415,48 @@ namespace SystemModule
             writer.Write(item.jp4); writer.Write(item.jp5); writer.Write(item.jp6);
         }
 
-        private static void Apply(TUserItem item, Entry entry)
+        private static void Apply(TUserItem item, Entry entry, bool overlay)
         {
-            item.ys1 = entry.Ys1;
-            item.ys2 = entry.Ys[0]; item.ys3 = entry.Ys[1]; item.ys4 = entry.Ys[2];
-            item.ys5 = entry.Ys[3]; item.ys6 = entry.Ys[4]; item.ys7 = entry.Ys[5];
-            item.ys8 = entry.Ys[6]; item.ys9 = entry.Ys[7]; item.ys10 = entry.Ys[8];
-            item.ys11 = entry.Ys[9]; item.ys12 = entry.Ys[10]; item.ys13 = entry.Ys[11];
-            item.ys14 = entry.Ys[12]; item.ys15 = entry.Ys[13]; item.ys16 = entry.Ys[14];
-            item.ys17 = entry.Ys[15];
-            item.jp1 = entry.Jp[0]; item.jp2 = entry.Jp[1]; item.jp3 = entry.Jp[2];
-            item.jp4 = entry.Jp[3]; item.jp5 = entry.Jp[4]; item.jp6 = entry.Jp[5];
-            item.pname = entry.PName;
-            item.desc1 = entry.Desc1;
-            item.desc2 = entry.Desc2;
-            item.sourceTime = entry.SourceTime;
-            item.killerName = entry.KillerName;
-            item.mapName = entry.MapName;
+            var hasYs = entry.Ys1 != 0;
+            for (var i = 0; i < entry.Ys.Length && !hasYs; i++)
+                if (entry.Ys[i] != 0) hasYs = true;
+            var hasJp = false;
+            for (var i = 0; i < entry.Jp.Length && !hasJp; i++)
+                if (entry.Jp[i] != 0) hasJp = true;
+            var hasOrigin = !string.IsNullOrEmpty(entry.PName)
+                            || !string.IsNullOrEmpty(entry.Desc1)
+                            || !string.IsNullOrEmpty(entry.Desc2)
+                            || !string.IsNullOrEmpty(entry.SourceTime)
+                            || !string.IsNullOrEmpty(entry.KillerName)
+                            || !string.IsNullOrEmpty(entry.MapName);
+
+            // Overlay keeps blob-unpacked jp/ys when the sidecar stored zeros for
+            // that group — otherwise a ys-only sidecar would wipe native 极品 in
+            // btValue[0..5] (plugin jp slots at item+0x2A..0x2F).
+            if (!overlay || hasYs)
+            {
+                item.ys1 = entry.Ys1;
+                item.ys2 = entry.Ys[0]; item.ys3 = entry.Ys[1]; item.ys4 = entry.Ys[2];
+                item.ys5 = entry.Ys[3]; item.ys6 = entry.Ys[4]; item.ys7 = entry.Ys[5];
+                item.ys8 = entry.Ys[6]; item.ys9 = entry.Ys[7]; item.ys10 = entry.Ys[8];
+                item.ys11 = entry.Ys[9]; item.ys12 = entry.Ys[10]; item.ys13 = entry.Ys[11];
+                item.ys14 = entry.Ys[12]; item.ys15 = entry.Ys[13]; item.ys16 = entry.Ys[14];
+                item.ys17 = entry.Ys[15];
+            }
+            if (!overlay || hasJp)
+            {
+                item.jp1 = entry.Jp[0]; item.jp2 = entry.Jp[1]; item.jp3 = entry.Jp[2];
+                item.jp4 = entry.Jp[3]; item.jp5 = entry.Jp[4]; item.jp6 = entry.Jp[5];
+            }
+            if (!overlay || hasOrigin)
+            {
+                item.pname = entry.PName;
+                item.desc1 = entry.Desc1;
+                item.desc2 = entry.Desc2;
+                item.sourceTime = entry.SourceTime;
+                item.killerName = entry.KillerName;
+                item.mapName = entry.MapName;
+            }
         }
 
         private static void ClearAll(params TUserItem[][] containers)

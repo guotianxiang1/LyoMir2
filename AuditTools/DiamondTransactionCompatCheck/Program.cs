@@ -198,12 +198,23 @@ var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
     "TPlayObject.NativeDiamond.cs"));
 var bridgeSource = File.ReadAllText(Path.Combine(root, "GameSvr", "ScriptSystem",
     "PasEngine", "PasApiBridge.cs"));
-RequireMatches(source,
-    "for \\(var index = m_ItemList\\.Count - 1;[\\s\\S]{0,260}?available",
-    1, "TakeDiamond preflight tail-to-head pass");
+// Native sub_74054C has exactly one pass, and it is the consuming one: 0x740596
+// `mov esi,[eax+8]` takes the bag count, 0x740599 `dec esi` starts at Count-1, and the tail
+// at 0x7406E8 is `dec esi / cmp esi,-1 / jne 0x7405A3`. Atomicity is achieved by staging the
+// removed items in a temp list (0x424B30 delete + 0x424AB8 add) and restoring them at
+// 0x7406F5 `cmp eax,[ebp-0xc] / jl 0x740804` when the total came up short.
+//
+// So "the commit walks tail to head" is a byte fact and stays pinned. There is no native
+// preflight pass at all, which means its direction is not a native fact and must not be
+// pinned -- the C# preflight only sums and breaks early, so its verdict is order-independent
+// either way. What has to hold is the all-or-nothing outcome native reaches by rollback.
 RequireMatches(source,
     "for \\(var index = m_ItemList\\.Count - 1;[\\s\\S]{0,260}?consumed",
     1, "TakeDiamond commit tail-to-head pass");
+RequireMatches(source, "if \\(available >= amount\\) break;", 1,
+    "TakeDiamond preflight stops once the requested quantity is reachable");
+RequireMatches(source, "if \\(available < amount\\) return false;", 1,
+    "TakeDiamond preflight is not all-or-nothing (native rolls back at 0x7406F5)");
 RequireMatches(source,
     "stdItem\\.StdMode == 7 \\|\\| NativeItemFactory\\.IsPileItem\\(stdItem\\)",
     1, "TakeDiamond runtime pile classification");
@@ -232,7 +243,7 @@ Assert(!functionSource.Contains("args[1]", StringComparison.Ordinal),
     "TakeDiamond CallPlayerFunc reads its required Npc argument");
 
 Console.WriteLine(
-    "PASS TakeDiamond invalid=silent positive=10054 preflight=atomic passes=tail-to-head " +
+    "PASS TakeDiamond invalid=silent positive=10054 preflight=atomic commit=tail-to-head " +
     "ordinary=count pile=StdMode7/runtime logs=type10/Cardinal/NPC WeightChanged=once " +
     "dispatch=CallPlayerFunc/exact2/Npc-unread method=closed");
 return;

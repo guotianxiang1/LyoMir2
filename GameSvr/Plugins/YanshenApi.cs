@@ -1,4 +1,5 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
+using System.Globalization;
 using SystemModule;
 using GameSvr;
 
@@ -274,6 +275,74 @@ namespace GameSvr.Plugins
             ["投保报文"] = "投保报文",         ["give极品"] = "give极品",
         };
 
+        // ── C-runtime number parsing, for the parameters the plugin feeds
+        // straight into a memory patch. yanshen2.0.8 @0x10000000 reads the six
+        // warrior-skill A/B strings out of its config struct and converts them
+        // with the CRT, not with a locale-aware parser:
+        //   0x1022DC49  atoi   (strtol base 10: 0x1022DC61 `push 0xA`)
+        //   0x10234345  atof   (strtod: 0x1023434F `call 0x102342E1`)
+        // So "3.5" becomes 3 on every A, and "1e3" becomes 1, not 1000.
+
+        /// <summary>C `atoi`: optional sign, decimal digits, stop at the first non-digit.</summary>
+        internal static int NativeAtoi(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int i = 0;
+            while (i < text.Length && (text[i] == ' ' || (text[i] >= '\t' && text[i] <= '\r'))) i++;
+            bool negative = false;
+            if (i < text.Length && (text[i] == '+' || text[i] == '-'))
+            {
+                negative = text[i] == '-';
+                i++;
+            }
+            long value = 0;
+            for (; i < text.Length && text[i] >= '0' && text[i] <= '9'; i++)
+            {
+                value = value * 10 + (text[i] - '0');
+                if (value > 0x7FFFFFFFL) { value = negative ? 0x80000000L : 0x7FFFFFFFL; break; }
+            }
+            return negative ? unchecked((int)-value) : unchecked((int)value);
+        }
+
+        string RawParam(string chineseKey)
+        {
+            if (_pluginManager == null) return null;
+            var val = _pluginManager.GetNativeConfigValue(chineseKey);
+            if (val == null) return null;
+            if (val is string s) return s;
+            try
+            {
+                if (val is System.Text.Json.JsonElement je)
+                {
+                    return je.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? je.GetString()
+                        : je.ToString();
+                }
+            }
+            catch { }
+            return val.ToString();
+        }
+
+        /// <summary>Read a parameter the way the plugin does: CRT atoi over the raw config string.</summary>
+        int ParamAtoi(string chineseKey, int defaultValue)
+        {
+            var raw = RawParam(chineseKey);
+            return raw == null ? defaultValue : NativeAtoi(raw);
+        }
+
+        /// <summary>
+        /// Read a divisor the way the plugin does: CRT atof, then narrowed to
+        /// float32 by the `fstp dword` that stages the patch word
+        /// (0x100B406C for 刺杀, 0x100B42A3 for 半月).
+        /// </summary>
+        float ParamAtof32(string chineseKey, float defaultValue)
+        {
+            var raw = RawParam(chineseKey);
+            if (raw == null) return defaultValue;
+            return double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? (float)d : 0f;
+        }
+
         /// <summary>Get a native config parameter value as float. Returns defaultValue if not found.</summary>
         double GetParam(string chineseKey, double defaultValue = 0)
         {
@@ -350,6 +419,16 @@ namespace GameSvr.Plugins
                  settings.TryGetValue(key, out settingValue)))
             {
                 return IsEnabledValue(settingValue)
+                    ? true
+                    : RejectUnavailable(lookupKey, $"开关未开启（{lookupKey}）");
+            }
+
+            // 火墙修改 / 指定英雄放技能 / 怪物伤害触发技能特效 are not written to config.json;
+            // native keeps them in MyJson/{skills,roles}/config.json as "<key>_是否勾选".
+            var subsystemValue = _pluginManager.GetSubsystemToggleValue(lookupKey);
+            if (subsystemValue != null)
+            {
+                return IsEnabledValue(subsystemValue)
                     ? true
                     : RejectUnavailable(lookupKey, $"开关未开启（{lookupKey}）");
             }
@@ -1057,23 +1136,6 @@ namespace GameSvr.Plugins
             return steal;
         }
 
-        /// <summary>吸怪 — 全屏拉怪到玩家身边</summary>
-        public void VacuumMonsters()
-        {
-            if (!Enabled("全屏吸怪")) return;
-            var envir = _player.m_PEnvir; if (envir == null) return;
-            var list = new List<TBaseObject>();
-            M2Share.UserEngine.GetMapMonster(envir, list);
-            foreach (var m in list)
-            {
-                if (m != null && !m.m_boDeath)
-                {
-                    m.m_nCurrX = _player.m_nCurrX;
-                    m.m_nCurrY = _player.m_nCurrY;
-                }
-            }
-        }
-
         public int VacuumMonstersEx(int range, int levelLimit, int maxCount)
         {
             if (!Enabled("全屏吸怪")) return 0;
@@ -1443,34 +1505,321 @@ namespace GameSvr.Plugins
         // 6.6 物品/背包 — 13 functions
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>自动回收 — 按JSON配置回收背包物品, -999=JSON语法错误</summary>
+        /// <summary>GetV/SetV 拒绝参数时的返回值，与 PasApiBridge 同一常量（0x6DF1F1 预置）。</summary>
+        private const int NativeScriptVarMiss = -1;
+
+        /// <summary>
+        /// 极品位 1-6。作者原文只给了 This_player.GetV(N,1~6) 一句，现由插件字节定案：
+        /// 脱壳转储（基址 0x10000000）里 <c>极品开关</c>（VA 0x102BF804）取到变量组号后，
+        /// <c>0x1006C222</c> 起是恰好六次 <c>GetV(组号, N)</c>，N 由
+        /// <c>0x1006C232 B9 01 00 00 00</c> 到 <c>0x1006C2D2 B9 06 00 00 00</c> 连续取 1..6，
+        /// 第七次不存在（<c>0x1006C2E3 popal</c> 收尾）。物品侧对应
+        /// <c>0x1006C10A..0x1006C137</c> 读 <c>item+0x2A..0x2F</c> 六个字节。
+        /// </summary>
+        private const int RecycleExtremeSlots = 6;
+
+        /// <summary>
+        /// 元素位 1-17。原先按 Ys_GetOther(types=1) 的公布范围推断，现由插件字节确证：
+        /// 脱壳转储 <c>staging/yanshen208_strparam_runtime_dump_20260719/</c>
+        /// <c>yanshen2_0_8_dll.memory.bin</c>（基址 0x10000000）里，读到配置键
+        /// <c>元素开关</c>（VA 0x102BF810）并通过 <c>0x1006C532 cmp byte [eax+8],0</c>
+        /// 判开关之后，是一段完全展开的取值序列：<c>0x1006C579</c> 起连续 17 次
+        /// <c>push N / call 0x10065F00</c>，N 恰为 1..17 连续无缺口，末次在 <c>0x1006C68F</c>。
+        /// </summary>
+        private const int RecycleElementSlots = 17;
+
+        /// <summary>
+        /// 回收的灵符 reason 是 0，不是 NPC 给予那套 23001。插件在 0x1006CE65 直接调
+        /// M2Server 的加灵符 0x6DE7BC，并在 0x1006CE68 用 <c>33 D2 xor edx,edx</c>
+        /// 把 reason 参数清零。23001 出自另一条路 —— NPC Give 派发器
+        /// <c>0x6C88FB BA D9 59 00 00 mov edx,0x59D9</c>。
+        /// </summary>
+        private const int RecycleLingFuReason = 0;
+
+        /// <summary>回收功能不可用（配置缺根键、解析失败或结算中途抛异常）。</summary>
+        private const int RecycleUnusable = -999;
+
+        /// <summary>回收跑完，与件数无关。</summary>
+        private const int RecycleDone = 1;
+
+        /// <summary>
+        /// 自动回收 — 按 JSON 配置回收背包物品。
+        ///
+        /// 返回值只有两种，原生不返回件数：入口 0x1006CF10 在有效位
+        /// <c>0x1031B8C5</c> 为 0 时 <c>0x1006CF20 B8 19 FC FF FF</c> 返回 -999；
+        /// 正常出口 <c>0x1006CECC B8 01 00 00 00</c> 恒返回 1
+        /// （前一条 <c>0x1006CEC6 mov eax,0x3E7</c> 是作者留下的死代码，被这条盖掉）；
+        /// 异常臂 <c>0x1006CEEA B8 19 FC FF FF</c> 同样是 -999。
+        /// </summary>
         public int AutoRecycle()
         {
-            if (!Enabled("高级回收")) return 0;
+            // 原生入口不查这个键，只查配置有效位；保留它是因为生产 config.json 里
+            // 高级回收 = 1，该门在目标部署上零差异，而拆掉它等于对所有部署同时打开删除闸门。
+            if (!Enabled("高级回收")) return RecycleUnusable;
             try
             {
                 var recycleConfig = _pluginManager?.GetRecycleConfigSnapshot();
-                if (recycleConfig == null) return -999;
+                if (recycleConfig == null) return RecycleUnusable;
+                if (!RecycleBagModelResolved()) return RecycleUnusable;
 
-                var recycled = 0;
                 for (int i = _player.m_ItemList.Count - 1; i >= 0; i--)
                 {
                     var item = _player.m_ItemList[i];
                     if (item == null) continue;
                     var itemName = M2Share.UserEngine.GetStdItemName(item.wIndex);
-                    if (recycleConfig.ContainsItem(itemName))
-                    {
-                        _player.DelBagItem(item.MakeIndex, itemName);
-                        recycled++;
-                    }
+                    if (!recycleConfig.TryGetItemRule(itemName, out var rule, out var stackable))
+                        continue;
+                    if (!RecycleTypeOpen(rule, stackable)) continue;
+                    if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
+                    TryRecycleOne(item, itemName, rule, stackable);
                 }
-                return recycled;
+                return RecycleDone;
             }
             catch (Exception ex)
             {
                 M2Share.MainOutMessage("[异常] AutoRecycle " + ex.Message);
-                return -999;
+                return RecycleUnusable;
             }
+        }
+
+        /// <summary>
+        /// 无限背包 把额外格子存在 M2 背包之外（Gs1\MyJson\bags\&lt;角色名&gt;.bin），C# 还没有
+        /// 复刻那个容器，所以回收只能看见 m_ItemList。生产 items\config.json 用的是
+        /// "无限背包_是否固定":"固定格子"（额外格子=144，变量v1=10/变量v2=1 在这条分支下不参与
+        /// 计算——V(10,1) 在生产里是"商店装备"回收开关，拿它算格子数显然不是本意）。
+        /// "V变量控制格子" 那条分支的格子数取自 GetV(变量v1,变量v2)，没有任何字节证据，
+        /// 保持关闭：宁可一件不回收，也不能对着一个没复刻的容量模型删东西。
+        /// </summary>
+        private bool RecycleBagModelResolved()
+        {
+            var manager = _pluginManager;
+            if (manager == null) return true;
+            if (!IsEnabledValue(manager.GetItemConfigValue("无限背包_是否勾选"))) return true;
+            return PluginManager.NormalizeConfigValue(
+                manager.GetItemConfigValue("无限背包_是否固定")) as string == "固定格子";
+        }
+
+        /// <summary>
+        /// 总开关：GetV(v1,v2)==关闭值 时该类型停止回收；省略则失去开关效果。
+        ///
+        /// 生效还有两个原生前置条件，两条分支不一样。可叠材料在 0x1006B783：
+        /// <code>
+        /// 1006B783  83 7D 84 FF  cmp dword [ebp-0x7C], -1   ; 关闭值，缺省 -2
+        /// 1006B787  7C 23        jl  0x1006B7AC             ; &lt; -1 ⇒ 整道门失效
+        /// </code>
+        /// 缺省值 -2 由每件重置 0x1006B2F4 <c>C7 45 84 FE FF FF FF</c> 写入，
+        /// 所以配置里把 关闭值 写成 -2 或更小等同于关掉这道门。
+        /// 物品种类在 0x1006C0BE 多两条：0x1006C0CB / 0x1006C0D4 两个 jle 要求
+        /// v1 和 v2 都为正，否则同样失效。
+        /// </summary>
+        private bool RecycleTypeOpen(RecycleRule rule, bool stackable)
+        {
+            if (!rule.HasMasterSwitch) return true;
+            if (rule.MasterSwitchClosedValue < -1) return true;
+            if (!stackable &&
+                (rule.MasterSwitchGroup <= 0 || rule.MasterSwitchIndex <= 0)) return true;
+            return ReadPlayerV(rule.MasterSwitchGroup, rule.MasterSwitchIndex)
+                   != rule.MasterSwitchClosedValue;
+        }
+
+        /// <summary>
+        /// 极品开关 / 元素开关。两道门的判定在插件里逐字节同构，首段分别是 0x1006C2E4
+        /// 与 0x1006C699：
+        /// <code>
+        /// 1006C2EA  85 C0              test eax, eax        ; eax = GetV(组号, 槽)
+        /// 1006C2EC  7E 14              jle  放行            ; 阈值 &lt;= 0 ⇒ 该槽不过滤
+        /// 1006C2EE  3B 85 50 FF FF FF  cmp  eax, 物品值
+        /// 1006C2F4  7F 0C              jg   放行            ; 阈值 &gt; 物品值 ⇒ 放行
+        /// 1006C2F6  C7 45 9C 64 …      mov  拦下标志, 0x64
+        /// </code>
+        /// 即拦下的充要条件是 <c>0 &lt; 阈值 ≤ 物品值</c>。GetV 未命中返回的 -1 落在
+        /// "阈值 ≤ 0" 这一侧，所以是不过滤，不是全挡 —— 生产 V(126,*) 从没写过，
+        /// 按全挡实现会让回收整体静默失效。
+        /// </summary>
+        private bool RecycleQualityAllowed(TUserItem item, RecycleRule rule)
+        {
+            if (rule.ExtremeGroup > 0)
+                for (var slot = 1; slot <= RecycleExtremeSlots; slot++)
+                {
+                    var threshold = ReadPlayerV(rule.ExtremeGroup, slot);
+                    if (threshold > 0 && threshold <= GetExtremeValue(item, slot - 1))
+                        return false;
+                }
+
+            if (rule.ElementGroup > 0)
+                for (var slot = 1; slot <= RecycleElementSlots; slot++)
+                {
+                    var threshold = ReadPlayerV(rule.ElementGroup, slot);
+                    if (threshold > 0 && threshold <= GetElementValue(item, slot))
+                        return false;
+                }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 结算一件物品。产出与删除必须一起成立：任何一路产出算不出来、落不了账，
+        /// 或者物品删不掉，都整件放弃，绝不出现删了不给的中间态。
+        /// </summary>
+        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule,
+            bool stackable)
+        {
+            // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
+            var rate = rule.HasRate ? ReadPlayerV(rule.RateGroup, rule.RateIndex) : 0;
+
+            // 可叠材料整堆结算，件数取 word[item+0x26]（= Dura，本仓另有 0x63F454 商人基础价
+            // 与 0x740914 背包计数两处同址判例）。0x1006BB2F 66 8B 58 26 读它，
+            // 0x1006BC07 / 0x1006BC44 / 0x1006BC76 / 0x1006BCAE / 0x1006BCD6 五路各乘一次。
+            // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
+            // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
+            var count = stackable ? (int)item.Dura : 1;
+
+            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
+                !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
+                !TryScaleRecyclePrice(rule.LingFu, rate, count, out var lingFu) ||
+                !TryScaleRecyclePrice(rule.Exp, rate, count, out var exp) ||
+                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, count,
+                    out var other))
+                return false;
+
+            // 至少一路产出为正才允许删除：0x1006BB3B..0x1006BB57 是五连 test/cmp，
+            // 元宝 灵符 金币 其他值 经验 全部 <= 0 就 jle 0x1006BD2D 结束本件，不进删除段。
+            // 原生判的是缩放前的单价，于是 单价=1、倍率=50 这种配置会过门却只入账
+            // ⌊1*50/100⌋=0，删了不给。这里改判缩放后的金额，比原生紧一档。
+            if (yuanbao <= 0 && gold <= 0 && lingFu <= 0 && exp <= 0 && other <= 0)
+                return false;
+
+            // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
+            // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
+            if (yuanbao > 0) return false;
+
+            // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
+            if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
+
+            // 其他 走 0x1006BCB7（可叠材料）/ 0x1006CDB4（物品种类）两段同构代码：
+            //   0x1006BCBC 7E 6F        jle  —— 缩放后 <= 0 就整段不写 SetV
+            //   0x1006BCC2 0F AF F8     imul —— 和其余四路一样吃倍率
+            //   0x1006BCFD 7D 02 / 0x1006BCFF 33 C0  —— 累加基数的负值钳到 0
+            var otherStored = 0;
+            var otherTotal = 0;
+            var otherPays = other > 0;
+            if (otherPays)
+            {
+                if (!PlayerVarWritable(rule.OtherGroup, rule.OtherIndex)) return false;
+                // 回滚要还原真实旧值，所以钳位只用于累加，不覆盖 otherStored。
+                otherStored = ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex);
+                var accumulated = (long)Math.Max(0, otherStored) + other;
+                if (accumulated > int.MaxValue) return false;
+                otherTotal = (int)accumulated;
+            }
+
+            var goldPaid = 0;
+            var lingFuPaid = 0;
+            var otherWritten = false;
+
+            if (gold > 0)
+            {
+                if (!_player.IncGold(gold)) return false;
+                goldPaid = gold;
+            }
+
+            if (lingFu > 0)
+            {
+                if (!_player.AddNativeLingFu(RecycleLingFuReason, lingFu))
+                {
+                    RollbackRecycleGold(goldPaid);
+                    return false;
+                }
+                lingFuPaid = lingFu;
+            }
+
+            if (otherPays)
+            {
+                WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherTotal);
+                otherWritten = true;
+            }
+
+            // GainExp 没有返回值也撤不回来，所以放在删除之前：删除万一失败，玩家是多拿了经验
+            // 又留下了物品，方向上只会多给，不会少给。
+            if (exp > 0) _player.GainExp(exp);
+
+            if (_player.DelBagItem(item.MakeIndex, itemName)) return true;
+
+            if (otherWritten) WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherStored);
+            RollbackRecycleLingFu(lingFuPaid);
+            RollbackRecycleGold(goldPaid);
+            return false;
+        }
+
+        /// <summary>
+        /// 单价 → 实付。先按倍率缩放再乘件数，与 0x1006BBE9（缩放）后接 0x1006BC07（乘件数）
+        /// 的次序一致。原生两步都是 32 位 imul，溢出静默截断；这里放宽到 64 位并在越界时
+        /// 整件放弃，方向上只会少删不会错付。
+        /// </summary>
+        private static bool TryScaleRecyclePrice(int unitPrice, int rate, int count,
+            out int amount)
+        {
+            amount = 0;
+            if (unitPrice <= 0) return true;
+            var scaled = (rate > 0 ? (long)unitPrice * rate / 100 : unitPrice) * count;
+            if (scaled < 0 || scaled > int.MaxValue) return false;
+            amount = (int)scaled;
+            return true;
+        }
+
+        private void RollbackRecycleGold(int amount)
+        {
+            if (amount <= 0) return;
+            _player.m_nGold -= amount;
+            _player.GoldChanged();
+        }
+
+        private void RollbackRecycleLingFu(int amount)
+        {
+            if (amount <= 0) return;
+            _player.m_nLingFu = unchecked(_player.m_nLingFu - amount);
+            _player.RefreshNativeLingFu();
+        }
+
+        /// <summary>
+        /// GetV 语义，与 PasApiBridge.GetPlayerVar 同源：0x6DF203 test esi,esi 判组号，
+        /// 组 0 走 0x6DF20F mov eax,[ebx+eax*4+0x808] 的内联槽（0x6DF20A sub edx,0x64 +
+        /// 0x6DF20D jae ⇒ 只收 1..100，没写过的槽读 0），其余走键控字典，
+        /// 未命中保留 0x6DF1F1 预置的 -1。
+        /// </summary>
+        private int ReadPlayerV(int group, int index)
+        {
+            var player = _player;
+            if (player == null) return NativeScriptVarMiss;
+            // Flat group*1000+index into m_ScriptVVars silently reads 0 for
+            // group 0: those slots live in m_ScriptVGroup0, not the dictionary.
+            if (!player.TryGetScriptVar('V', group, index, out var value))
+                return NativeScriptVarMiss;
+            return value;
+        }
+
+        /// <summary>
+        /// 其他 是个累加器（生产 NPC 装备回收-3.pas 把 GetV(10,200) 加进 MyShengwan 再清零），
+        /// 累加基数要读真实存储：GetV 把"从没写过"和"存的就是 -1"都折叠成 -1，拿 -1 当基数会
+        /// 让第一件物品少给一点，甚至把 值=0 的类型写成 -1 让 NPC 反扣一点声望。
+        /// </summary>
+        private int ReadStoredPlayerV(int group, int index)
+        {
+            var player = _player;
+            if (player == null) return 0;
+            return player.TryGetScriptVar('V', group, index, out var value) ? value : 0;
+        }
+
+        /// <summary>SetV 的收参门：0x6DF2B3/0x6DF2B7 两个 test 拒掉非正参数，组 0 只收 1..100。</summary>
+        private static bool PlayerVarWritable(int group, int index) =>
+            group == 0 ? index >= 1 && index <= 100 : group > 0 && index > 0;
+
+        private void WritePlayerV(int group, int index, int value)
+        {
+            var player = _player;
+            if (player == null || !PlayerVarWritable(group, index)) return;
+            // SetScriptVar stores 0 as 0 (sub_6E4140 has no zero test).
+            player.SetScriptVar('V', group, index, value);
         }
 
         /// <summary>全屏拾取: round范围, gbv网关绕过值, isMy仅拾取自己的</summary>
@@ -1936,6 +2285,225 @@ namespace GameSvr.Plugins
             return created;
         }
 
+        public const string NpcCreatMonsSentinel = "yanshen2.0.7";
+        public const int NpcCreatMonsFieldCount = 19;
+
+        /// <summary>
+        /// NpcFuc.pas serializes
+        /// <c>0^x^y^num^round^Ac^Mac^Dc^DcMax^Mc^Sc^Speed^Hit^hp^Maxhp^AttackSpd^WalkSpd^MonName^Map</c>
+        /// and smuggles it through <c>CheckMapMonByName('yanshen2.0.7', res)</c>.
+        /// Attribute writes follow plugin JSON apply at <c>0x100884f0</c>
+        /// (<c>0x100889D7..0x10088B56</c>): each field is skipped unless &gt; 0
+        /// (<c>test/cmp ; jle</c>).
+        /// JSON key <c>Speed</c> @ <c>0x102BA7EC</c> writes word actor+0x1E8/+0x264
+        /// (<c>0x10088ABB 66 89 83 e8 01 00 00</c>), the same word native 基本剑术
+        /// adds 准确 into (<c>0x76AF99 66 01 83 64 02 00 00</c>). JSON <c>Hit</c>
+        /// @ <c>0x102BA7F4</c> writes +0x1EA/+0x266.
+        /// Opcode-0 scatter was not found in the dump; round uses the same formula
+        /// as <see cref="CreateMon"/>'s ranger.
+        /// </summary>
+        public int NpcCreateMonsFromPayload(string payload)
+        {
+            if (!TryParseNpcCreatMonsPayload(payload, out var spec, out var error))
+                throw new YanshenApiUnavailableException("NPC_CreatMons", "npc自定义函数", error);
+
+            return NpcCreateMons(spec.X, spec.Y, spec.Num, spec.Round,
+                spec.Ac, spec.Mac, spec.Dc, spec.DcMax, spec.Mc, spec.Sc,
+                spec.Speed, spec.Hit, spec.Hp, spec.MaxHp, spec.AttackSpd, spec.WalkSpd,
+                spec.MonName, spec.Map);
+        }
+
+        public int NpcCreateMons(int x, int y, int num, int round,
+            int ac, int mac, int dc, int dcMax, int mc, int sc,
+            int speed, int hit, int hp, int maxHp, int attackSpd, int walkSpd,
+            string monName, string mapName)
+        {
+            var map = M2Share.MapManager.FindMap(mapName);
+            if (map == null || num <= 0) return 0;
+
+            int created = 0;
+            for (var i = 0; i < num; i++)
+            {
+                var spawnX = x;
+                var spawnY = y;
+                if (round > 0)
+                {
+                    spawnX += M2Share.RandomNumber.Random(round * 2 + 1) - round;
+                    spawnY += M2Share.RandomNumber.Random(round * 2 + 1) - round;
+                }
+
+                var mon = M2Share.UserEngine.RegenMonsterByName(mapName, (short)spawnX, (short)spawnY, monName);
+                if (mon == null) continue;
+
+                ApplyYanshenMonsterAttrs(mon, ac, mac, dc, dcMax, mc, sc,
+                    speed, hit, hp, maxHp, attackSpd, walkSpd);
+                mon.StatusChanged();
+                created++;
+            }
+            return created;
+        }
+
+        internal static void ApplyYanshenMonsterAttrs(TBaseObject mon,
+            int ac, int mac, int dc, int dcMax, int mc, int sc,
+            int speed, int hit, int hp, int maxHp, int attackSpd, int walkSpd)
+        {
+            if (mon == null) return;
+
+            if (ac > 0)
+            {
+                var packed = HUtil32.MakeLong(ac, ac);
+                if (mon.m_Abil != null) mon.m_Abil.AC = packed;
+                mon.m_WAbil.AC = packed;
+            }
+
+            if (mac > 0)
+            {
+                var packed = HUtil32.MakeLong(mac, mac);
+                if (mon.m_Abil != null) mon.m_Abil.MAC = packed;
+                mon.m_WAbil.MAC = packed;
+            }
+
+            if (dc > 0)
+            {
+                if (mon.m_Abil != null)
+                    mon.m_Abil.DC = HUtil32.MakeLong(dc, HUtil32.HiWord(mon.m_Abil.DC));
+                mon.m_WAbil.DC = HUtil32.MakeLong(dc, HUtil32.HiWord(mon.m_WAbil.DC));
+            }
+
+            if (dcMax > 0)
+            {
+                if (mon.m_Abil != null)
+                    mon.m_Abil.DC = HUtil32.MakeLong(HUtil32.LoWord(mon.m_Abil.DC), dcMax);
+                mon.m_WAbil.DC = HUtil32.MakeLong(HUtil32.LoWord(mon.m_WAbil.DC), dcMax);
+            }
+
+            if (mc > 0)
+            {
+                var packed = HUtil32.MakeLong(mc, mc);
+                if (mon.m_Abil != null) mon.m_Abil.MC = packed;
+                mon.m_WAbil.MC = packed;
+            }
+
+            if (sc > 0)
+            {
+                var packed = HUtil32.MakeLong(sc, sc);
+                if (mon.m_Abil != null) mon.m_Abil.SC = packed;
+                mon.m_WAbil.SC = packed;
+            }
+
+            if (speed > 0)
+                mon.m_btHitPoint = unchecked((ushort)speed);
+
+            if (hit > 0)
+            {
+                mon.m_wSpeedPoint = unchecked((ushort)hit);
+                mon.m_btSpeedPoint = unchecked((byte)hit);
+            }
+
+            if (hp > 0)
+            {
+                if (mon.m_Abil != null) mon.m_Abil.HP = hp;
+                mon.m_WAbil.HP = hp;
+            }
+
+            if (maxHp > 0)
+            {
+                if (mon.m_Abil != null) mon.m_Abil.MaxHP = maxHp;
+                mon.m_WAbil.MaxHP = maxHp;
+            }
+
+            if (attackSpd > 0)
+                mon.m_nNextHitTime = attackSpd;
+
+            if (walkSpd > 0)
+                mon.m_nWalkSpeed = walkSpd;
+        }
+
+        internal static bool TryParseNpcCreatMonsPayload(string payload,
+            out NpcCreatMonsSpec spec, out string error)
+        {
+            spec = default;
+            if (string.IsNullOrEmpty(payload))
+            {
+                error = "NPC_CreatMons 载荷为空";
+                return false;
+            }
+
+            var fields = payload.Split('^');
+            if (fields.Length != NpcCreatMonsFieldCount)
+            {
+                error = $"NPC_CreatMons 载荷必须是 {NpcCreatMonsFieldCount} 段（生产 NpcFuc 含 Hit），实际 {fields.Length}";
+                return false;
+            }
+
+            if (!string.Equals(fields[0], "0", StringComparison.Ordinal))
+            {
+                error = $"NPC_CreatMons 载荷首段必须是 opcode 0，实际 '{fields[0]}'";
+                return false;
+            }
+
+            if (!TryParseNpcCreatMonsInt(fields[1], "x", out var x, out error)
+                || !TryParseNpcCreatMonsInt(fields[2], "y", out var y, out error)
+                || !TryParseNpcCreatMonsInt(fields[3], "num", out var num, out error)
+                || !TryParseNpcCreatMonsInt(fields[4], "round", out var round, out error)
+                || !TryParseNpcCreatMonsInt(fields[5], "Ac", out var ac, out error)
+                || !TryParseNpcCreatMonsInt(fields[6], "Mac", out var mac, out error)
+                || !TryParseNpcCreatMonsInt(fields[7], "Dc", out var dc, out error)
+                || !TryParseNpcCreatMonsInt(fields[8], "DcMax", out var dcMax, out error)
+                || !TryParseNpcCreatMonsInt(fields[9], "Mc", out var mc, out error)
+                || !TryParseNpcCreatMonsInt(fields[10], "Sc", out var sc, out error)
+                || !TryParseNpcCreatMonsInt(fields[11], "Speed", out var speed, out error)
+                || !TryParseNpcCreatMonsInt(fields[12], "Hit", out var hit, out error)
+                || !TryParseNpcCreatMonsInt(fields[13], "hp", out var hp, out error)
+                || !TryParseNpcCreatMonsInt(fields[14], "Maxhp", out var maxHp, out error)
+                || !TryParseNpcCreatMonsInt(fields[15], "AttackSpd", out var attackSpd, out error)
+                || !TryParseNpcCreatMonsInt(fields[16], "WalkSpd", out var walkSpd, out error))
+                return false;
+
+            spec = new NpcCreatMonsSpec
+            {
+                X = x,
+                Y = y,
+                Num = num,
+                Round = round,
+                Ac = ac,
+                Mac = mac,
+                Dc = dc,
+                DcMax = dcMax,
+                Mc = mc,
+                Sc = sc,
+                Speed = speed,
+                Hit = hit,
+                Hp = hp,
+                MaxHp = maxHp,
+                AttackSpd = attackSpd,
+                WalkSpd = walkSpd,
+                MonName = fields[17],
+                Map = fields[18],
+            };
+            error = null;
+            return true;
+        }
+
+        private static bool TryParseNpcCreatMonsInt(string text, string name, out int value, out string error)
+        {
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                error = null;
+                return true;
+            }
+
+            value = 0;
+            error = $"NPC_CreatMons 字段 {name} 不是整数: '{text}'";
+            return false;
+        }
+
+        internal struct NpcCreatMonsSpec
+        {
+            public int X, Y, Num, Round, Ac, Mac, Dc, DcMax, Mc, Sc, Speed, Hit, Hp, MaxHp, AttackSpd, WalkSpd;
+            public string MonName, Map;
+        }
+
         public int AttackPlayer(TPlayObject player, int hp, int effectId)
         {
             if (player == null || hp <= 0 || player.m_boDeath
@@ -2396,8 +2964,21 @@ namespace GameSvr.Plugins
             return count;
         }
 
-        /// <summary>无限定时器: timer=0清理所有, >0设置间隔(ms)</summary>
-        public int SetLoopTimer(int interval, string funcName) { if (!Enabled("全局循环函数")) return 0; return interval; }
+        /// <summary>
+        /// 无限定时器。插件面板说明：timer&gt;0 按毫秒间隔反复调用 RunQuest.pas 里
+        /// 的同名无参过程，timer=0 清理该名字的定时器，名字给 'ClearAll' 清理全部。
+        ///
+        /// 注册未实现：本工程没有回调派发层，注册成功也永远不会回调 funcName。
+        /// 旧实现直接 return interval，脚本拿到非零值会当成注册成功。
+        /// 清理路径本就是空操作，如实返回 0；注册路径必须报错而不是假装成功。
+        /// </summary>
+        public int SetLoopTimer(int interval, string funcName)
+        {
+            if (!Enabled("全局循环函数")) return 0;
+            if (interval <= 0) return 0;
+            throw new YanshenApiUnavailableException("Ys_SetTimerByName", "全局循环函数",
+                $"定时器注册未实现，'{funcName}' 不会被回调");
+        }
 
         /// <summary>沙巴克城主行会名</summary>
         public string GetCastleGuildName()
@@ -2406,13 +2987,14 @@ namespace GameSvr.Plugins
             return castle?.m_sOwnGuild ?? "";
         }
 
-        /// <summary>沙巴克城主角色名</summary>
-        public string GetCastleLordName()
+        /// <summary>
+        /// 沙巴克城主角色名。AllFuc.pas 的拼写是 Ys_GetCastleLoadName（Load 不是
+        /// Lord），与原生 M2 脚本函数 GetCastleLoadName 同名同义。
+        /// </summary>
+        public string GetCastleLoadName()
         {
             var castle = M2Share.CastleManager.GetCastle(0);
-            if (castle?.m_MasterGuild != null)
-                return castle.m_MasterGuild.sGuildName ?? "";
-            return "";
+            return castle?.m_MasterGuild?.GetChiefName() ?? "";
         }
 
         private static bool SetElementValue(TUserItem item, int elementType, int value)
@@ -2517,23 +3099,135 @@ namespace GameSvr.Plugins
         /// <summary>Get string param value by Chinese config key</summary>
         public string ParamS(string chineseKey, string def = "") { if (_pluginManager == null) return def; var v = _pluginManager.GetNativeConfigValue(chineseKey); if (v is string s && !string.IsNullOrEmpty(s)) return s; try { if (v is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.String) return je.GetString() ?? def; } catch { } return v?.ToString() ?? def; }
 
-        // ── Skill toggle checks ──
+        // ── Warrior skill overrides ──
+        // These six are not interpreted by the plugin at attack time: the config
+        // dialog rewrites M2Server code bytes once and the native formula then
+        // runs unchanged. Every clamp below is the clamp the plugin applies
+        // before the write, and every factor table is the set of values the
+        // rewritten instruction can actually encode.
+
         public bool IsStabSword() => Enabled("刺杀剑术");
-        public double StabSwordA() => GetParam("刺杀剑术_A值", 2);
-        public double StabSwordB() => GetParam("刺杀剑术_B值", 5);
+        // 0x100B40BB `A2 50 1C 77 00` stores A over the imm8 of host
+        // 0x00771C4E `83 C0 02 add eax,2`. That `add` is 32-bit with a
+        // sign-extended imm8, hence 0x100B404E `cmp eax,0x7F` + 0x100B4069
+        // `cmovg eax,ecx`, and hence the signed reading of the stored byte.
+        public int StabSwordA() =>
+            unchecked((sbyte)Math.Min(ParamAtoi("刺杀剑术_A值", 2), 127));
+        // 0x100B4129 `A3 24 1D 77 00` overwrites [0x00771D24], the float32 the
+        // host divides by at 0x00771C5A `D8 35 24 1D 77 00`. Stock value there
+        // is `00 00 A0 40` = 5.0f.
+        public float StabSwordB() => ParamAtof32("刺杀剑术_B值", 5f);
+
         public bool IsHalfMoon() => Enabled("半月弯刀");
-        public double HalfMoonA() => GetParam("半月弯刀_A值", 2);
-        public double HalfMoonB() => GetParam("半月弯刀_B值", 15);
+        // 0x100B42F2 `A2 46 20 77 00` -> imm8 of 0x00772044 `83 C0 02`, same
+        // 32-bit `add` with a sign-extended imm8, same cap at 0x100B428E.
+        public int HalfMoonA() =>
+            unchecked((sbyte)Math.Min(ParamAtoi("半月弯刀_A值", 2), 127));
+        // 0x100B4360 `A3 48 21 77 00` -> [0x00772148], read by 0x00772050
+        // `D8 35 48 21 77 00`. Stock value `00 00 70 41` = 15.0f.
+        public float HalfMoonB() => ParamAtof32("半月弯刀_B值", 15f);
+
         public bool IsFireSword() => Enabled("烈火剑法");
-        public double FireSwordA() => GetParam("烈火剑法_A值", 4);
-        public double FireSwordB() => GetParam("烈火剑法_B值", 4);
+        public int FireSwordA() => ParamAtoi("烈火剑法_A值", 4);
+        // 0x100B4550 `A2 F0 B0 76 00` -> imm8 of 0x0076B0EF `04 04 add al,4`,
+        // capped to 255 at 0x100B4491.
+        public int FireSwordB() => Math.Min(ParamAtoi("烈火剑法_B值", 4), 255);
+
         public bool IsThrusting() => Enabled("攻杀剑术");
-        public double ThrustingA() => GetParam("攻杀剑术_A值", 5);
+        // 0x100B3F5A `A2 2D B0 76 00` -> imm8 of 0x0076B02C `04 05 add al,5`,
+        // capped to 255 at 0x100B3F04.
+        public int ThrustingA() => Math.Min(ParamAtoi("攻杀剑术_A值", 5), 255);
+
         public bool IsSunSword() => Enabled("逐日剑法");
-        public double SunSwordA() => GetParam("逐日剑法_A值", 7);
-        public double SunSwordB() => GetParam("逐日剑法_B值", 6);
-        public bool IsOneSword() => Enabled("基本剑术");
-        public int OneSwordN() => GetParamInt("基本剑术_n值", 3);
+        // 0x100B47D9 `A2 4D B1 76 00` -> imm8 of the `04 07 add al,7` that
+        // 0x100B4750 splices over host 0x0076B14C, capped to 255 at 0x100B46F6.
+        public int SunSwordA() => Math.Min(ParamAtoi("逐日剑法_A值", 7), 255);
+        // 0x100B4847 `A3 A4 1D 77 00` -> imm32 of 0x00771DA3 `B9 0A 00 00 00
+        // mov ecx,0xA`, the divisor of the `idiv ecx` at 0x00771DA9. Integer,
+        // not float: this one goes through atoi, not atof.
+        public int SunSwordB() => ParamAtoi("逐日剑法_B值", 6);
+
+        public bool IsOneSword() => PatchToggleOn("基本剑术");
+        public int OneSwordN() => ParamAtoi("基本剑术_n值", 3);
+
+        // 复活戒指重设 is a host-code patch, same primitive as the six warrior
+        // skills. Plugin 0x100B3472 `83 BF B8 05 00 00 00 cmp [edi+0x5B8],0`
+        // (loader lag puts 复活戒指重设 at +0x5B8) / je 0x100B36D2 skips the
+        // writes when the toggle is off. On: atoi(重设时间) then
+        // `69 C0 E8 03 00 00 imul 0x3E8` is stored over the two `0xEA60`
+        // immediates, and atoi(无敌时间) `0F B7 C0 movzx eax,ax` is stored
+        // over `66 B9 02 00` at 0x743911.
+        //   0x100B3501 A3 FA C4 73 00 -> host 0x73C4FA of `81 FE 60 EA 00 00`
+        //   0x100B357B A3 58 37 74 00 -> host 0x743758 of `81 FA 60 EA 00 00`
+        //   0x100B35E9 A3 80 C4 73 00 -> host 0x73C480 of `B8 3C 00 00 00`
+        //   0x100B3657 66 A3 13 39 74 00 -> host 0x743913 of `mov cx,2`
+        // 0x7CC on the cfg struct is the already-applied latch (written 0x64
+        // after the patch, 0 when the toggle is off) — C# rereads the config
+        // each revive, which is the player-visible result of uncheck/recheck.
+        public bool IsReviveResetPatchOn() => PatchToggleOn("复活戒指重设");
+
+        /// <summary>
+        /// Milliseconds written over the two <c>cmp …,0xEA60</c> sites.
+        /// Native default 60000; plugin <c>imul eax,0x3E8</c> is 32-bit wrap.
+        /// </summary>
+        public int ReviveResetCooldownMs() =>
+            unchecked(ParamAtoi("复活戒指重设_重设时间", 60) * 1000);
+
+        /// <summary>
+        /// Seconds written over <c>mov cx,2</c> @0x743911. Plugin
+        /// <c>0x100B34B7 0F B7 C0 movzx eax,ax</c> keeps the low 16 bits of
+        /// atoi, including the zero-extended negative case (atoi -1 → 65535).
+        /// </summary>
+        public int ReviveResetImmuneSeconds() =>
+            ParamAtoi("复活戒指重设_无敌时间", 2) & 0xFFFF;
+
+        /// <summary>
+        /// Toggle read for a code-patch override. Unlike a script API, "off"
+        /// here is not a failure: it is simply the unpatched native
+        /// instruction. Reading it must therefore never raise, because the
+        /// recalc path that consults it can run inside a strict direct-call
+        /// scope opened by some unrelated yanshen script function.
+        /// </summary>
+        public bool PatchToggleOn(string chineseKey)
+        {
+            if (_pluginManager == null) return false;
+            var plugin = _pluginManager.GetPlugin("YanshenCompat");
+            if (plugin?.State != PluginState.Running) return false;
+            if (!plugin.IsInitialized && !IsInitializing(plugin)) return false;
+            var lookupKey = _keyMap.TryGetValue(chineseKey, out var mapped) ? mapped : chineseKey;
+            var nativeVal = _pluginManager.GetNativeConfigValue(lookupKey);
+            return nativeVal != null && IsEnabledValue(nativeVal);
+        }
+
+        /// <summary>
+        /// 烈火 multiplies the level with `shl eax,k`, so A survives only as a
+        /// power of two. 0x100B44BB-0x100B44FD picks k for 0/2/4/8/16; the
+        /// staged default at 0x100B4488/0x100B44B3 is `C1 E0 02` = shl eax,2,
+        /// which every other A silently falls back to.
+        /// </summary>
+        public static int FireSwordLevelFactor(int a) => a switch
+        {
+            0 => 1,
+            2 => 2,
+            4 => 4,
+            8 => 8,
+            16 => 16,
+            _ => 4,
+        };
+
+        /// <summary>
+        /// 基本剑术 multiplies with `lea eax,[eax+eax*s]`, so n survives only as
+        /// an encodable LEA scale. 0x100B4967-0x100B49A1 picks the SIB byte for
+        /// 1/2/5/9; the staged default at 0x100B4946 is `8D 04 40` = x3.
+        /// </summary>
+        public static int OneSwordLevelFactor(int n) => n switch
+        {
+            1 => 1,
+            2 => 2,
+            5 => 5,
+            9 => 9,
+            _ => 3,
+        };
         public bool IsZhenQi() => Enabled("无极真气");
         public double ZhenQiA() => GetParam("无极真气_A值", 10);
         public int ZhenQiTime() => GetParamInt("无极真气_时间", 6);
@@ -2542,9 +3236,60 @@ namespace GameSvr.Plugins
         public bool IsSummonShenShou() => Enabled("召唤神兽");
         public bool IsSummonKuLou() => Enabled("召唤骷髅");
         public bool IsModifyShenShou() => Enabled("修改召唤神兽");
-        public bool IsShenShouCount() => Enabled("神兽_数量");
-        public bool IsKuLouCount() => Enabled("召唤骷髅_数量");
-        public int ShenShouIdx() => GetParamInt("神兽_序号", -1);
+        public int ShenShouIdx() => GetParamInt("神兽_序号", 0);
+
+        /// <summary>
+        /// 眼神写进宿主 imm8 的从宠数量。取值域由「被改写的那条指令能编码什么」决定：
+        /// 插件只做上钳 127（<c>0x100A9DE9 83 F8 7F cmp eax,0x7F</c> /
+        /// <c>0x100A9DEC 7E 07 jle</c> / <c>0x100A9DEE B8 7F000000 mov eax,0x7F</c>），
+        /// 没有下钳，随后写入的是 <c>al</c>（<c>0x100A9E0F 88 85 2A EF FF FF</c>），
+        /// 所以负数按 8 位回绕而不是饱和到 0。
+        /// </summary>
+        static int NativeSlaveCountImm8(int v) => (byte)(v > 0x7F ? 0x7F : v);
+
+        /// <summary>
+        /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
+        /// 改写宿主 <c>0x0076EE98 6A 01</c> 的 imm8（目标 <c>0x0076EE99</c>，原字节 <c>01</c>），
+        /// 即 <c>0x0076EEB6 call [esi+0xEC]</c> 造宠调用的第一个栈参。
+        /// 补丁点 <c>0x100A9E9B call 0x10033340(src, 1, 0x0076EE99, 0x0076EE99)</c>；
+        /// 还原支 <c>0x100A9F33 C6 85 2B EF FF FF 01</c> 写回 <c>01</c>，即关闭态宿主就是 1。
+        /// </summary>
+        public int ShenShouSlaveCount() => IsSummonShenShou()
+            ? NativeSlaveCountImm8(GetParamInt("神兽_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤骷髅的从宠数量。同构：宿主 <c>0x0076EE1E 6A 01</c> 的 imm8
+        /// （目标 <c>0x0076EE1F</c>，原字节 <c>01</c>），补丁点
+        /// <c>0x100AA04B call 0x10033340(src, 1, 0x0076EE1F, 0x0076EE1F)</c>，
+        /// 上钳同样在 <c>0x100A9FED cmp eax,0x7F</c>；还原支 <c>0x100AA0BC</c> 写回 <c>01</c>。
+        /// 注意名字常量 <c>0x0076EE70</c>「变异骷髅」全镜像没有任何补丁指向它，
+        /// 所以骷髅只能改数量、不能改名字。
+        /// </summary>
+        public int KuLouSlaveCount() => IsSummonKuLou()
+            ? NativeSlaveCountImm8(GetParamInt("召唤骷髅_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤神兽的怪物名。眼神按 <c>神兽_序号</c> 覆盖宿主 <c>0x0076EEEC</c> 处的
+        /// 4 字节 GBK 串（原字节 <c>C9 F1 CA DE</c> =「神兽」）。Delphi 长度前缀
+        /// <c>[0x0076EEE8] = 4</c> 不在补丁范围内，所以候选名恒为两个汉字。
+        /// 选择链 <c>0x100A9E3E..0x100A9E5F</c>（sub/je 逐级比较）：
+        /// 0 →「神兽」（<c>0x100A9DD7</c> 预置 <c>C9F1CADE</c>）、
+        /// 1 →「月灵」（<c>0x100A9E59</c> 写 <c>D4C2C1E9</c>）、
+        /// 2 →「白虎」（<c>0x100A9E4D</c> 写 <c>A2BBD7B0</c> → 内存序 <c>B0D7BBA2</c>）、
+        /// 其余落回预置值。
+        /// </summary>
+        public string ShenShouName()
+        {
+            if (!IsSummonShenShou()) return "神兽";
+            return ShenShouIdx() switch
+            {
+                1 => "月灵",
+                2 => "白虎",
+                _ => "神兽",
+            };
+        }
 
         // ── Mage skill toggle checks ──
         public bool IsFireBallSwitch() => Enabled("火球主属性切换");
@@ -2603,7 +3348,10 @@ namespace GameSvr.Plugins
         public bool IsLuckBlock() => Enabled("格位刺杀免伤a");
         public bool IsProbBlock() => Enabled("概率格挡a");
         public bool IsFixStabParalysis() => Enabled("修复刺杀位麻痹");
-        public bool IsFixDefense() => Enabled("修复卡防御");
+        // Code patch at host 0x00767910 (jle → jmp), not a script API.
+        // Off means the unpatched luck-max armour roll, so this must not
+        // raise inside a strict yanshen call the way Enabled() does.
+        public bool IsFixDefense() => PatchToggleOn("修复卡防御");
         public bool IsZeroDefSplit() => Enabled("防0拆分");
         public bool IsMagicShieldFix() => Enabled("魔法盾修正");
         public bool IsHolyShieldMsg() => Enabled("护身触发报文a");
@@ -2717,7 +3465,11 @@ namespace GameSvr.Plugins
         public bool IsPortableStorage() => Enabled("随身仓库");
         public bool IsRandomExtreme() => Enabled("随机极品");
         public bool IsGiveExtreme() => Enabled("give极品");
-        public int MaxEquipCount() { var v = ParamS("最大装备数量"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // 0x100B9D3A `A2 6C FF 73 00` overwrites the imm8 of host
+        // 0x0073FF69 `83 7D F4 02 cmp dword [ebp-0xc],2`. Plugin does
+        // `atoi(最大装备数量); dec eax` then writes al, so the compare
+        // immediate is the low 8 bits of (N-1), sign-extended by `cmp`.
+        public int MaxEquipCount() => ParamAtoi("最大装备数量", 3);
 
         // ── Equipment stat param readers (武器/衣服/头盔/项链/手镯/戒指) ──
         // 武器
@@ -2836,15 +3588,28 @@ namespace GameSvr.Plugins
         public bool IsHideGoldMsg() => Enabled("屏蔽元宝增减信息");
         public bool IsHideAttrUp() => Enabled("屏蔽属性提升提示");
         public bool IsHideRank() => Enabled("屏蔽排行榜");
-        public bool IsBlockSpam() => Enabled("屏蔽发言频繁禁言功能");
+        // 屏蔽发言频繁禁言功能 is a host-code patch, same primitive as 复活戒指重设.
+        // Plugin 0x100AC678 / 0x100AC6B2 memcpy 6×90 over the two flood-counter
+        // increments in ProcessSayMsg (sub_6BB2F8):
+        //   0x6BB56A  FF 83 74 0A 00 00  inc dword [ebx+0xA74]  → m_nSayMsgCount++
+        //   0x6BB579  FE 83 82 06 00 00  inc byte  [ebx+0x682]  → m_btSayRapidCount++
+        // Restore arm 0x100AC75D / 0x100AC797 writes the incs back. Thresholds
+        // (>=2 / >=5), the 60 s mute, and the decay decs are not patched.
+        public bool IsBlockSpamPatchOn() => PatchToggleOn("屏蔽发言频繁禁言功能");
+        public bool IsBlockSpam() => IsBlockSpamPatchOn();
         public bool IsDelSkillSilent() => Enabled("删除技能不提示");
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
-        public bool IsUpSkillSilent() => Enabled("升级技能不提示");
+        // 升级技能不提示 is a host-code patch: plugin 0x100DB61C memcpy EB 3A 90 90
+        // over 0x73F5EE in sub_73F500 (ChgSelfSkillLv / UpUserSkill worker), jumping
+        // from the LStrCatN of "{name} 技能等级变更为：{level}" + SysMsg 0xFFDB
+        // straight to RecalcAbilitys at 0x73F62A. Restore arm writes 57 68 7C F6 73 00.
+        public bool IsUpSkillSilentPatchOn() => PatchToggleOn("升级技能不提示");
+        public bool IsUpSkillSilent() => IsUpSkillSilentPatchOn();
         public bool IsBanChatSilent() => Enabled("禁止发言不提示");
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");
-        public bool IsPlayerDropRate() => Enabled("人物爆率调整");
+        public bool IsPlayerDropRate() => PatchToggleOn("人物爆率调整");
         public int PlayerLv1() => GetParamInt("人物等级1_值", 35);
         public int PlayerLv2() => GetParamInt("人物等级2_值", 40);
         public int PlayerLv3() => GetParamInt("人物等级3_值", 48);
@@ -2852,7 +3617,13 @@ namespace GameSvr.Plugins
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
         public bool IsNewMonsterDrop() => Enabled("新怪物爆率");
         public bool IsGetCastle() => Enabled("获取沙城归属");
-        public bool IsGuildShow() => Enabled("行会显示");
+        // 行会显示 is a host-code patch: plugin 0x100AACD8 / 0x100AAD29 memcpy
+        // 90 90 over both skip-jumps in GetShowName's non-castle guild branch
+        //   0x6C5BCB  74 49  je 0x6C5C16   (after cmp g_Config.boShowGuildName)
+        //   0x6C5BF7  74 1D  je 0x6C5C16   (after castle-war-area test)
+        // Restore arm 0x100AADC0 / 0x100AADFA writes 74 49 / 74 1D back.
+        // Both je gone ⇒ every path reaches 0x6C5BF9 and emits %guildname/%rankname.
+        public bool IsGuildShow() => PatchToggleOn("行会显示");
         public bool IsMultiFaction() => Enabled("角色多阵营");
         public bool IsSiegeScript() => Enabled("攻沙脚本控制");
         public bool IsSiegeModify() => Enabled("攻城修改");
@@ -2869,7 +3640,11 @@ namespace GameSvr.Plugins
 
         // ── Trade/Stall toggle checks ──
         public bool IsStallPass() => Enabled("摆摊穿人");
-        public bool IsCloseStall() => Enabled("关闭摆摊");
+        // 关闭摆摊 is a host-code patch: plugin 0x100AD12A memcpy C3 over the
+        // first byte of CM_START_STALL (4424) at 0x6E7C38 (native 55 = push ebp).
+        // Restore arm 0x100AD1AE writes 55 back. SetTimeLevel (4419) is a
+        // different function and is not patched.
+        public bool IsCloseStall() => PatchToggleOn("关闭摆摊");
         public bool IsTuChengStall() => Enabled("土城摆摊");
         public bool IsLimitStall() => Enabled("限制摆摊");
         public int LimitStall_LeftX() => GetParamInt("限制摆摊_左x", 280);
@@ -2923,19 +3698,42 @@ namespace GameSvr.Plugins
         public bool IsCustomDmgPlus() => Enabled("自定义伤害_plus");
 
         // ── Monster toggle checks ──
+        //
+        // 怪物名字1..3_值 / 怪物数量1..3_值 是「修改召唤神兽」的三档参数。
+        // 六个键在同一个配置加载器里连续读出，名字走 asString、数量走 asInt：
+        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA0B call 0x100DFCF0 (asString)
+        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC57 mov [ecx+0x8C0],eax  (asInt 0x100DFE40)
+        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBCF2 mov [ecx+0x8C4],eax
+        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBD86 mov [ecx+0x8C8],eax
+        // 三个数量键用的是同一个 asInt 转换器、同一段连续偏移，语义完全相同。
         public string MonsterName1() => ParamS("怪物名字1_值", "强化神兽");
         public string MonsterName2() => ParamS("怪物名字2_值", "强化神兽");
         public string MonsterName3() => ParamS("怪物名字3_值", "白虎");
-        public bool IsMonsterCount1() => Enabled("怪物数量1_值");
+
+        /// <summary>
+        /// 「怪物数量1_值」是数量，不是开关。原先的 <c>Enabled("怪物数量1_值")</c>
+        /// 方向就是错的：数量 0 会被读成「关」，任何非 0 数量都读成「开」，
+        /// 而它的兄弟键 <c>怪物数量2_值</c>/<c>怪物数量3_值</c> 在同一段加载器里
+        /// 走的是同一个 <c>asInt</c>（<c>0x100DFE40</c>），C# 侧已经按 int 建模。
+        /// 生产 <c>config.json</c> 三档实测是 1 / 2 / 1。
+        /// 与 YS-SW-C1 修掉的 <c>IsShenShouCount()</c>/<c>IsKuLouCount()</c> 同一类缺陷。
+        /// </summary>
+        public int MonsterCount1() => GetParamInt("怪物数量1_值", 1);
         public int MonsterCount2() => GetParamInt("怪物数量2_值", 2);
         public int MonsterCount3() => GetParamInt("怪物数量3_值", 2);
         public bool IsMonsterDropA() => Enabled("怪物爆率A_值");
         public bool IsMonsterDropB() => Enabled("怪物爆率B_值");
         public bool IsMonsterDropK() => Enabled("怪物爆率K_值");
 
-        // ── Red/Green name K值 params ──
-        public int RedNameK() { var v = ParamS("红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
-        public int NormalK() { var v = ParamS("非红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // ── Red/Green name K值 params (patch immediates, not locale parse) ──
+        // 0x100B9CCC `A3 BB FC 73 00` -> imm32 of 0x0073FCB8
+        // `C7 45 F8 15 00 00 00 mov dword [ebp-8],0x15`. Full dword, no wrap.
+        public int RedNameK() => ParamAtoi("红名K值", 21);
+        // 0x100B9C5E `A2 C9 FC 73 00` -> imm8 of 0x0073FCC7
+        // `83 C0 5A add eax,0x5A`. `add eax,imm8` sign-extends, so A
+        // survives only as a signed byte. No `cmp 0x7F` clamp before the write.
+        public int NormalK() =>
+            unchecked((sbyte)ParamAtoi("非红名K值", 90));
 
         // ── Loop time ──
         public bool IsLoopTimeVal() => Enabled("循环时间_值");
@@ -3042,11 +3840,34 @@ namespace GameSvr.Plugins
             return _player?.m_PEnvir?.sMapName?.Length == 15;
         }
 
-        /// <summary>禁止长度为 15 的地图内切换宝宝到休息状态。</summary>
+        /// <summary>
+        /// 禁止在地图名满 15 字的地图里切换宝宝休息状态。
+        ///
+        /// 眼神在宿主 <c>0x00623A73</c>（原字节 <c>80 B0 C7 04 00 00 01</c>
+        /// = <c>xor byte [eax+0x4C7],1</c>，即休息标志的翻转）装 trampoline，
+        /// 续跑点 <c>0x00623A7A</c>，安装点 <c>0x100AABB6 call 0x10032FD0</c>，
+        /// 门控 <c>0x100AAB35 cmp [edi+0x948],0 / je</c>。
+        /// 桩体模板存在 .rdata，每个 dword 存一个码字节
+        /// （<c>0x102D1700 / 0x102D2940 / 0x102D33B0 / 0x102D16C0</c> 各 4 个 +
+        /// <c>0x100AAB6C mov dword [ebp-0x4A4],0xE9</c>），拼出 17 字节：
+        /// <code>
+        ///   80 B8 15 01 00 00 0F   cmp byte [eax+0x115], 0x0F
+        ///   74 07                  je  skip
+        ///   80 B0 C7 04 00 00 01   xor byte [eax+0x4C7], 1     ← 原指令
+        ///   E9 &lt;rel32&gt;             jmp 0x00623A7A
+        /// </code>
+        /// <c>[obj+0x115]</c> 是 <c>m_sMapName: string[15]</c>（Delphi ShortString，
+        /// 长度字节就在 +0x115）：<c>0x006AFD1E lea eax,[ebx+0x115]</c> /
+        /// <c>0x006AFD27 mov cl,0x0F</c> / <c>0x006AFD29 call 0x004039E4</c> 之后
+        /// 紧接着写 <c>[ebx+0x12C]=CurrX</c>、<c>[ebx+0x130]=CurrY</c>。
+        ///
+        /// 因为赋值时按 <c>cl = 15</c> 截断，长度字节等于 15 的充要条件是
+        /// **原地图名长度 &gt;= 15**，不是恰好等于 15。
+        /// </summary>
         public bool IsPetRestBlocked()
         {
             if (!Enabled("禁止宝宝休息")) return false;
-            return _player?.m_PEnvir?.sMapName?.Length == 15;
+            return _player?.m_PEnvir?.sMapName?.Length >= 15;
         }
 
         /// <summary>限制摆摊区域检查 (返回true=允许摆摊)</summary>
@@ -3061,7 +3882,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>关闭摆摊检查</summary>
-        public bool IsStallClosed() => Enabled("关闭摆摊");
+        public bool IsStallClosed() => IsCloseStall();
 
         /// <summary>指定地图编号摆摊</summary>
         public int GetStallMapId() => GetParamInt("摆摊地图", 3);
@@ -3080,9 +3901,13 @@ namespace GameSvr.Plugins
         public bool TryGetFloorItemTimeout(out int timeoutMilliseconds)
         {
             timeoutMilliseconds = 0;
-            if (!Enabled("地面物品消失时间")) return false;
+            if (!PatchToggleOn("地面物品消失时间")) return false;
 
-            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 600));
+            // 600 was the M2Server constant (0x77A3FD cmp edx,0x927C0), not the plugin's
+            // fallback: when the key is absent the loader seeds 300 seconds
+            // (0x100B01AA C7 80 00 0D 00 00 2C 01 00 00 -> mov [cfg+0xD00],0x12C).
+            // Enable arm 0x100AAF86 imul edx,eax,0x3E8 then memcpy 4 bytes to 0x77A3FF.
+            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 300));
             timeoutMilliseconds = seconds > int.MaxValue / 1000
                 ? int.MaxValue
                 : seconds * 1000;
@@ -3104,19 +3929,39 @@ namespace GameSvr.Plugins
         /// <summary>Email防刷检查</summary>
         public bool IsMailAntiSpamEnabled() => Enabled("邮件防刷");
 
-        /// <summary>等级禁言检查 (返回禁言所需等级, 0=不启用)</summary>
-        public int LevelMuteThreshold()
-        {
-            if (!Enabled("等级禁言")) return 0;
-            // Default: mute players below level 7
-            return 7;
-        }
+        // 等级禁言没有"等级阈值"这个量。开关本身是 config.json 顶层的单个整数键
+        // "等级禁言"（生产 D:\光头卧龙\mud2.0\Mir200\Gs1\config.json 取 1，全表 380 键
+        // 里没有任何 "等级禁言_*" 参数键），禁言状态整个落在 S(1,1) 上：7=禁言、
+        // 8=解除禁言（面板原文见 YanshenLegacy23ReplicaPanels.cs 的说明）。生产
+        // LogonQuest.pas 的 49 处调用只写 7 和 8，等级判断由脚本自己做（注释
+        // 「已升至[15]级解除禁言」用的是 15）。此前这里把 SetS(1,1,7) 里的 7 读成
+        // 了"7 级以下禁言"的等级阈值并硬编码返回，属凭空发明；S(1,1) 各模式的实际
+        // 效果无字节证据（插件加壳），按 fail-closed 不实现。
+        // 开关本身仍可由 IsLevelMute() 读取。
 
-        /// <summary>人物爆率调整 — 获取爆率倍率</summary>
-        public double GetPlayerDropRateMultiplier()
+        /// <summary>
+        /// 人物爆率调整 is a code-patch override of THumanKind's equip-drop
+        /// worker <c>sub_73FC70</c>, not a runtime multiplier. Gated by
+        /// <c>[edi+0x5D0]</c> at 0x100B9BBA (that slot is 人物爆率调整:
+        /// loader 0x100BABEC stores the converted toggle there). Off means
+        /// the host immediates stay at stock 21 / 90 / 2.
+        /// </summary>
+        public bool TryGetDeathEquipDropPatch(bool redName, out int denominator, out int capImm)
         {
-            if (!Enabled("人物爆率调整")) return 1.0;
-            return 1.0; // Default multiplier, overridden by script
+            denominator = 0;
+            capImm = 2;
+            if (!PatchToggleOn("人物爆率调整")) return false;
+            // Red path is a bare imm32 (0x73FCB8). Non-red is
+            // `[esi+0x18c] + imm8` (0x73FCC1/0x73FCC7). The addend is the
+            // patched byte; the +0x18c dword is a native field this switch
+            // does not rewrite and is not identified in C# — treated as 0.
+            // LastHiter[+0x579] subtract at 0x73FD08 is likewise unpatched
+            // native and omitted here.
+            denominator = redName ? RedNameK() : NormalK();
+            // 0x73FD0B cmp [ebp-8],0 / jge / xor — native floors before Random.
+            if (denominator < 0) denominator = 0;
+            capImm = unchecked((sbyte)(MaxEquipCount() - 1));
+            return true;
         }
 
         /// <summary>脚本控制人物爆率</summary>

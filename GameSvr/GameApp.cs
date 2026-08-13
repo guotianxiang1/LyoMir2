@@ -304,6 +304,11 @@ namespace GameSvr
             M2Share.MainOutMessage("正加载怪物说话配置信息...");
             M2Share.LoadMonSayMsg();
             M2Share.MainOutMessage($"加载怪物说话配置信息成功({M2Share.g_MonSayMsgList.Count})...");
+            // 战神 boot init sub_792838 loads MonItemsTree.txt alongside the other engine
+            // tables: 0x792906 `call 0x67AEC0` with eax = [[0x7D5D9C]] (g_UserEngine),
+            // the same loader the @ReloadMonitemsTreeCfg command re-runs at 0x624009.
+            // Without this the chain would only ever populate after a manual GM reload.
+            M2Share.UserEngine.ReloadMonItemsTree();
             M2Share.LoadDisableTakeOffList();
             M2Share.LoadMonDropLimitList();
             M2Share.LoadDisableMakeItem();

@@ -614,14 +614,48 @@ namespace GameSvr
                     break;
                 }
             }
-            if (result < 0)
+            // ✅ 战神字节证据 (Tier-1) — ECON-02: 价格表未命中(或表值 <= 0)时,回退价是
+            // 【ROUND(模板Price * 1.1)】,不是裸模板 Price。EA: sub_63F3B4 @0x63F40D-0x63F43F:
+            //   0063F40D  837df800        cmp   dword [ebp-8],0
+            //   0063F411  7f2f            jg    0x63F442          ; 【只有 >0】才直接用表价
+            //   0063F413  8b45fc          mov   eax,[ebp-4]
+            //   0063F416  8b401c          mov   eax,[eax+0x1c]    ; 模板
+            //   0063F41B  8a5014          mov   dl,[eax+0x14]     ; StdMode
+            //   0063F41E  8bc7            mov   eax,edi
+            //   0063F420  e8770e0000      call  0x64029C          ; 许可表 (= CheckItemType)
+            //   0063F425  84c0            test  al,al
+            //   0063F427  7419            je    0x63F442          ; 不许可 -> 保持哨兵值
+            //   0063F429  8b45fc          mov   eax,[ebp-4]
+            //   0063F42C  8b401c          mov   eax,[eax+0x1c]
+            //   0063F42F  db403c          fild  dword [eax+0x3c]  ; 【dword】有符号读,不是 word
+            //   0063F432  db2d68f46300    fld   xword [0x63F468]  ; 1.1 (10 字节 extended)
+            //   0063F438  dec9            fmulp st(1)
+            //   0063F43A  e83541dcff      call  0x403574          ; @ROUND (半偶入)
+            //   0063F43F  8945f8          mov   [ebp-8],eax
+            // 常量 @0x63F468 原始 10 字节 = cd cc cc cc cc cc cc 8c ff 3f = 1.1(exp 0x3FFF);
+            // 该地址全镜像仅 1 处引用(0x63F434),即本回退分支专用。
+            //
+            // 【无二次放大】: 表命中分支上面已 break 且【原样返回表值】,从不再乘 1.1;本回退分支
+            // 只在表值 <= 0 时进入,两条路径互斥。表内存的值本来就已经是 ROUND(Price*1.1) ——
+            // 原生建表点 sub_63EA1C @0x63EAC2-0x63EAD8 逐字为
+            //   mov eax,[edi+0x1c] / fild dword [eax+0x3c] / fld xword [0x63EB28] / fmulp /
+            //   call 0x403574 / mov [edx+4],eax
+            // (0x63EB28 亦为 1.1 extended),故 ×1.1 在原生【本就同时存在于建表点与回退点】,
+            // C# 的 EnsureItemPrice(:185) 对应前者、本处对应后者,不是重复放大。
+            // 【无 .Sav 迁移问题】: NpcSave/*.Sav 只序列化 TUserItem 记录(208 字节/条,见
+            // NativeMerchantGoodsCodec),【不含任何价格字段】;m_ItemPriceList 纯内存,每次
+            // LoadNPCData 由 EnsureGoodsPrices() 从 StdItem.Price 重建,改本处不影响存量存档。
+            //
+            // 回退条件用 <= 0 复刻 `jg`: 价格表里显式写 0 的条目,原生回落到模板价,
+            // 旧 C# 的 `result < 0` 会保留 0,使该物品因上层 `nPrice > 0` 门既不能买也不能卖。
+            if (result <= 0)
             {
                 StdItem = M2Share.UserEngine.GetStdItem(nIndex);
                 if (StdItem != null)
                 {
                     if (CheckItemType(StdItem.StdMode))
                     {
-                        result = StdItem.Price;
+                        result = HUtil32.Round(StdItem.Price * 1.1);
                     }
                 }
             }
@@ -909,9 +943,16 @@ namespace GameSvr
 
             var queuedItem = new TUserItem(weapon);
             var useSureSuccessOre = noBreak && user.CheckItems(sureSuccessOre) != null;
-            queuedItem.UpgradeFlags = noBreak
-                ? (byte)(0x80 | (useSureSuccessOre ? 0x40 : 0))
-                : (byte)0;
+            // sub_6CA020 (the 不破碎 submit) ORs the flags in and never touches the rest of
+            // the byte: @0x6CA0F3 `or byte [esi+0x47],0x80`, @0x6CA10D `or byte [esi+0x47],0x40`.
+            // The plain submit has no writer at all for item+0x47. Assigning the whole byte
+            // wiped the low six bits, which in production carry the GBK trail byte of the
+            // 眼神 provenance map title at record 0x20..0x2B.
+            if (noBreak)
+            {
+                queuedItem.UpgradeFlags |= 0x80;
+                if (useSureSuccessOre) queuedItem.UpgradeFlags |= 0x40;
+            }
             if (!LegacyUserItem208Codec.TryEncode(queuedItem, out _, out var codecError))
             {
                 M2Share.ErrorMessage($"WeaponUpg submit rejected for {user.m_sCharName}: {codecError}");
@@ -1115,7 +1156,34 @@ namespace GameSvr
             {
                 result = HUtil32.Round(nPrice / 100 * m_nPriceRate);
             }
-            // Apply rebate: scale buy price by m_nRebate/100
+            // ⚠ ECON-06 — 这一阶段在原生【不存在】,但【不要直接删】,理由见下。
+            // 本次新增字节证据,推翻"原生根本没有 rebate 概念"的旧表述:
+            //  1) 原生【确实有】PAS API `SetRebate`:
+            //     帮助文本 @0x736B55 "procedure SetRebate(nRebate : Word);"
+            //     名字串 @0x739EF4,注册点 @0x738E34:
+            //       00738E34  ba 38 74 64 00  mov  edx,0x647438  ; 处理器
+            //       00738E39  b9 f4 9e 73 00  mov  ecx,0x739EF4  ; 名字 "SetRebate"
+            //       00738E40  e8 3b b3 db ff  call 0x4F4180      ; 注册
+            //  2) 处理器 sub_647438 写的字段是【+0x468】,并带输入校验:
+            //       00647450  66 85 db              test  bx,bx
+            //       00647453  76 12                 jbe   0x647467     ; <=0     -> 非法
+            //       00647455  66 81 fb ff ff        cmp   bx,0xFFFF
+            //       0064745A  73 0b                 jae   0x647467     ; >=65535 -> 非法
+            //       0064745C  0f b7 d3              movzx edx,bx
+            //       0064745F  89 90 68 04 00 00     mov   [eax+0x468],edx
+            //       00647467  c7 80 68 04 00 00 64 00 00 00  mov dword [eax+0x468],100
+            //                 非法值复位 100 并格式化 "[Rebate Err]:" (@0x6474CD) 报错
+            //     构造器默认值 @0x63D888  c7 86 68 04 00 00 64 00 00 00  mov [esi+0x468],100
+            //  3) 而费率阶段 sub_640208 读的【也是 +0x468】,全函数只有这一个费率字段:
+            //       00640232  db 83 68 04 00 00  fild dword [ebx+0x468]  ; 城堡会员臂
+            //       00640278  db 83 68 04 00 00  fild dword [ebx+0x468]  ; 普通臂
+            // => 原生只有【一个】费率字段,SetRebate 就是它的 PAS 设置器。C# 把它拆成了
+            //    m_nPriceRate 与 m_nRebate 【两个权威】(规则 §4.18 明令禁止的形态),
+            //    本阶段这一次多出来的 Round 正是拆分的产物,而不是凭空多加的一步。
+            // 正确修法【不是删本段】,而是:让 PAS `setrebate`(PasApiBridge.cs:5551)改写
+            // m_nPriceRate、补上 <=0 与 >=0xFFFF 复位 100 的校验,然后整体删除本段。
+            // 只删本段会让 setrebate 变成空操作 —— 比现状更糟。该改动跨 PasApiBridge
+            // 且会改变既有脚本语义,须单列任务处理,本批不动。
             if (m_nRebate != 100)
                 result = HUtil32.Round(result * m_nRebate / 100.0);
             return result;
@@ -1620,7 +1688,31 @@ namespace GameSvr
             }
             if (n10 > 0)
             {
-                if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 && UserItem.DuraMax > 0)
+                // ✅ 战神字节证据 (Tier-1) — PRICE-04: 原生门集合是【liveMax>0 && cur>0 && StdMode>4】。
+                // EA: TBaseItem sub_783D70 @0x783D7D-0x783DA1:
+                //   00783D7D  0f b7 73 28        movzx esi,word [ebx+0x28]   ; liveMax = 实例 +0x28
+                //   00783D81  0f b7 43 26        movzx eax,word [ebx+0x26]   ; cur     = 实例 +0x26
+                //   00783D85  89 45 fc           mov   [ebp-4],eax
+                //   00783D88  85 f6              test  esi,esi
+                //   00783D8A  0f 8e 5b 01 00 00  jle   0x783EEB              ; liveMax<=0 -> 原价返回
+                //   00783D90  83 7d fc 00        cmp   dword [ebp-4],0
+                //   00783D94  0f 8e 51 01 00 00  jle   0x783EEB              ; cur<=0    -> 原价返回
+                //   00783D9A  8b 43 1c           mov   eax,[ebx+0x1c]
+                //   00783D9D  80 78 14 04        cmp   byte [eax+0x14],4
+                //   00783DA1  0f 86 44 01 00 00  jbe   0x783EEB              ; StdMode<=4 -> 原价返回
+                // 肉/矿的 override 各自也有同样的前两道门(sub_786208 @0x78621E `test edi,edi / jle`
+                // + @0x786222 `test esi,esi / jle`;sub_7862B4 @0x7862CA / @0x7862D2 同形),
+                // 三个函数在 C# 被折叠进本条 if,故这一道 UserItem.Dura > 0 同时覆盖三者。
+                // 缺 cur>0 门时,零耐久装备会误入 stage B:磨损项 n10/2/liveMax*(liveMax-0) = n10/2,
+                // 定价直接砍半;原生根本不进这段,直接原价返回。耐久打空是常态,可达性高。
+                //
+                // ⚠ StdItem.DuraMax > 0 是【有意保留的护栏,不是遗漏】—— 原生无此门:
+                // stage A 的除法 @0x783E9B `fdivp` 之前【没有任何零检查】,Delphi 默认 x87 控制字
+                // 未屏蔽 ZeroDivide,模板 DuraMax==0 时原生会抛 EZeroDivide;C# 保留此门则静默
+                // 跳过整段返回原价。方向上 C# 更安全但不等价,零模板 max 是否可达为 UNPROVEN。
+                // 本条契约已在台账里来回翻过一次,就地钉死:【不要再把它当成新 bug 删掉】。
+                if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 &&
+                    UserItem.DuraMax > 0 && UserItem.Dura > 0)
                 {
                     if (StdItem.StdMode == 40)// 肉
                     {
@@ -1631,7 +1723,26 @@ namespace GameSvr
                         }
                         else
                         {
-                            n10 = n10 + HUtil32.Round(n10 / UserItem.DuraMax * 2.0 * (UserItem.DuraMax - UserItem.Dura));
+                            // ✅ 战神字节证据 (Tier-1) — PRICE-13: 超上限奖励的差值是
+                            // 【cur - liveMax】(正数),不是 liveMax - cur。EA: TMeatItem
+                            // sub_786208 的 over 臂 @0x78627B-0x78629B(edi=cur[+0x26],
+                            // esi=liveMax[+0x28],本臂由 @0x78623C `cmp edi,esi / jge` 进入,
+                            // 即 cur > liveMax):
+                            //   0078627B  db 45 fc           fild  dword [ebp-4]      ; price
+                            //   0078627E  89 75 ec           mov   [ebp-0x14],esi     ; liveMax
+                            //   00786281  db 45 ec           fild  dword [ebp-0x14]
+                            //   00786284  de f9              fdivp st(1)              ; price/liveMax
+                            //   00786286  d8 0d b0 62 78 00  fmul  dword [0x7862B0]   ; * 2.0f
+                            //   0078628C  2b fe              sub   edi,esi            ; 【cur - liveMax】
+                            //   0078628E  89 7d e8           mov   [ebp-0x18],edi
+                            //   00786291  db 45 e8           fild  dword [ebp-0x18]
+                            //   00786294  de c9              fmulp st(1)
+                            //   00786296  e8 d9 d2 c7 ff     call  0x403574           ; @ROUND
+                            //   0078629B  01 45 fc           add   [ebp-4],eax        ; 累加,本臂无 _MAX 钳位
+                            // 写反后差值恒为负(本分支的进入条件就是 Dura > DuraMax),负的 n10
+                            // 继续流入下方 StdMode>4 段被逐级放大,最后被 :1721 的 _MAX(2,…) 兜到 2 ——
+                            // 不崩不报错,只静默给出荒谬低价。
+                            n10 = n10 + HUtil32.Round(n10 / UserItem.DuraMax * 2.0 * (UserItem.Dura - UserItem.DuraMax));
                         }
                     }
                     if (StdItem.StdMode == 43)
@@ -1653,7 +1764,26 @@ namespace GameSvr
                         }
                         else
                         {
-                            n10 = n10 + HUtil32.RoundOrePriceBonus((long)n10, oreDuraMax, oreDuraMax - UserItem.Dura);
+                            // ✅ 战神字节证据 (Tier-1) — PRICE-16: 与肉同形,超上限差值是
+                            // 【cur - liveMaxF】(liveMaxF = 已按 10000 下限钳位的局部值),
+                            // 不是 liveMaxF - cur。EA: TOreItem sub_7862B4 的 over 臂
+                            // @0x78633C-0x78635E(edi=cur[+0x26],ebx=liveMaxF,本臂由
+                            // @0x7862FD `cmp edi,ebx / jge` 进入,即 cur > liveMaxF):
+                            //   0078633C  db 45 fc           fild  dword [ebp-4]      ; price
+                            //   0078633F  89 5d ec           mov   [ebp-0x14],ebx     ; liveMaxF
+                            //   00786342  db 45 ec           fild  dword [ebp-0x14]
+                            //   00786345  de f9              fdivp st(1)              ; price/liveMaxF
+                            //   00786347  db 2d 78 63 78 00  fld   xword [0x786378]   ; 1.3 (10 字节 extended)
+                            //   0078634D  de c9              fmulp st(1)
+                            //   0078634F  2b fb              sub   edi,ebx            ; 【cur - liveMaxF】
+                            //   00786351  89 7d e8           mov   [ebp-0x18],edi
+                            //   00786354  db 45 e8           fild  dword [ebp-0x18]
+                            //   00786357  de c9              fmulp st(1)
+                            //   00786359  e8 16 d2 c7 ff     call  0x403574           ; @ROUND
+                            //   0078635E  01 45 fc           add   [ebp-4],eax        ; 累加,本臂无 _MAX 钳位
+                            // RoundOrePriceBonus 第三参就是这个 delta;换成正值后走其主路径,
+                            // 内部对负分子的 floor 修正(HUtil32.cs:212-216)不再被触发。
+                            n10 = n10 + HUtil32.RoundOrePriceBonus((long)n10, oreDuraMax, UserItem.Dura - oreDuraMax);
                         }
                     }
                     if (StdItem.StdMode > 4)
@@ -1765,7 +1895,22 @@ namespace GameSvr
                                     {
                                         if (PlayObject.AddItemToBag(UserItem))
                                         {
-                                            PlayObject.m_nGold -= nPrice;
+                                            // ✅ 战神字节证据 (Tier-1) — ECON-34: 买入扣款走的是
+                                            // 【DecGold(0x6C7D64)】,不是裸减字段。EA: sub_63EB34 @0x63EC7A-0x63EC8E:
+                                            //   0063EC7A  ff 97 48 02 00 00  call dword [edi+0x248]  ; AddItemToBag
+                                            //   0063EC80  84 c0              test al,al
+                                            //   0063EC82  0f 84 ae 00 00 00  je   0x63ED36           ; 入包失败 -> 不扣款
+                                            //   0063EC88  8b 55 ec           mov  edx,[ebp-0x14]     ; nPrice
+                                            //   0063EC8B  8b 45 f8           mov  eax,[ebp-8]        ; player
+                                            //   0063EC8E  e8 d1 90 08 00     call 0x6C7D64           ; DecGold(返回值丢弃)
+                                            // DecGold 体内 @0x6C7D7B `call 0x6C19B4` 就是客户端金币刷新
+                                            // (RM_GOLDCHANGED 10136),裸 `m_nGold -= nPrice` 会把它漏掉 ——
+                                            // 卖出路径由 IncGold 内联触发、修理路径由 DecGold 内联触发,唯独买入没有,
+                                            // 表现为买完金币显示不刷新,直到下一次任意金币变动。
+                                            // 金额本身不差:上面 :1860 的 `m_nGold >= nPrice && nPrice > 0` 已使
+                                            // DecGold 的两道门(@0x6C7D6B `jl` 负数、@0x6C7D73 `jg` 余额不足)必然通过。
+                                            // 与原生一致地忽略返回值(0x63EC8E 之后没有 test al,al)。
+                                            PlayObject.DecGold(nPrice);
                                             // ✅ 战神字节证据 (Tier-1)。买入税点 sub_63EB34 @0x63ECDC-0x63ECF2:
                                             //   mov eax,[ebp-4] ; cmp byte [eax+0x578],0 ; je 0x63ECF7   <== 唯一门,无 else
                                             //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,[ebp-0x14]  ; <== 本次成交价 nPrice
@@ -1951,8 +2096,13 @@ namespace GameSvr
             // 每笔卖出都走这条路,故是全服系统性偏高。改为整数截断除 2。
             // 另: 原生卖出侧【不经】 sub_640208(GetUserPrice),即卖价不吃 PriceRate —— 与本函数一致。
             // m_nRebate 缩放: 整个 sub_63F200(300 字节全扫)无任何 fdiv/fmul/fild,也不读 rebate 形状字段;
-            // 但 m_nRebate 默认 100 且只由 PAS `setrebate`(PasApiBridge.cs) 设置,默认配置下该分支不执行。
-            // 战神 PAS 侧有无 setrebate 未核 → INCONCLUSIVE,按证据规则【保留不动】,不作为背离处理。
+            // 但 m_nRebate 默认 100 且只由 PAS `setrebate`(PasApiBridge.cs:5551) 设置,默认配置下该分支不执行。
+            // 【已定案,原"战神 PAS 侧有无 setrebate 未核 → INCONCLUSIVE"作废】: 原生 PAS 确有
+            // `SetRebate`(名字串 @0x739EF4,注册点 @0x738E34 `mov edx,0x647438 / mov ecx,0x739EF4`),
+            // 但它写的是费率字段 +0x468 —— 与费率阶段 sub_640208 @0x640232/@0x640278
+            // `fild dword [ebx+0x468]` 读的是【同一个字段】。即原生只有一个费率权威,
+            // C# 拆成了 m_nPriceRate + m_nRebate 两个(规则 §4.18)。完整证据与修法见
+            // GetUserPrice() 内 ECON-06 注释;卖价侧同样【保留不动】,须与买价侧一并整改。
             var result = (int)nPrice / 2;
             if (m_nRebate != 100)
                 result = HUtil32.Round(result * m_nRebate / 100.0);
@@ -2037,8 +2187,37 @@ namespace GameSvr
             return result;
         }
 
+        // 原生 sub_74089C -> sub_7408D0：按 stdIdx 数背包，堆叠物加整堆数量而不是加 1。
+        //   0x74090E  80 78 14 07  cmp byte [eax+0x14], 7
+        //   0x740914  0FB74026     movzx eax, word [eax+0x26]   ; 堆叠：加 Dura
+        //   0x74091D  FF45F8       inc [ebp-8]                  ; 非堆叠：加 1
+        private static int NativeCountOwnedByStdIdx(TPlayObject PlayObject, int nStdIdx)
+        {
+            var result = 0;
+            for (var i = 0; i < PlayObject.m_ItemList.Count; i++)
+            {
+                var UserItem = PlayObject.m_ItemList[i];
+                if (UserItem == null || UserItem.wIndex != nStdIdx)
+                {
+                    continue;
+                }
+                if (NativeItemFactory.IsPileItem(M2Share.UserEngine.GetStdItem(UserItem.wIndex)))
+                {
+                    result += UserItem.Dura;
+                }
+                else
+                {
+                    result += 1;
+                }
+            }
+            return result;
+        }
+
         private bool ClientMakeDrugItem_sub_4A28FC(TPlayObject PlayObject, string sItemName)
         {
+            // 原生 sub_6C4BCC。ok 标志 0x6C4BEE mov byte [ebp-0x19],0 在两趟循环【之前】置 0，
+            // 0x6C4C28 才在 pass1 循环体【顶部】置 1 —— 配方节为空时 0x6C4C1B jl 0x6C4C64
+            // 直接跳过循环，ok 保持 0，返回失败。
             bool result = false;
             IList<TMakeItem> List10 = M2Share.GetMakeItemInfo(sItemName);
             TUserItem UserItem = null;
@@ -2049,19 +2228,13 @@ namespace GameSvr
             {
                 return result;
             }
-            result = true;
             for (var i = 0; i < List10.Count; i++)
             {
+                result = true;
                 s20 = List10[i].ItemName;
                 n1C = List10[i].ItemCount;
-                for (var j = 0; j < PlayObject.m_ItemList.Count; j++)
-                {
-                    if (M2Share.UserEngine.GetStdItemName(PlayObject.m_ItemList[j].wIndex) == s20)
-                    {
-                        n1C -= 1;
-                    }
-                }
-                if (n1C > 0)
+                // 0x6C4C52 cmp edi,eax / 0x6C4C54 jle：need > have 才失败并 break
+                if (n1C > NativeCountOwnedByStdIdx(PlayObject, M2Share.UserEngine.GetStdItemIdx(s20)))
                 {
                     result = false;
                     break;
@@ -2074,6 +2247,9 @@ namespace GameSvr
                 {
                     s20 = List10[i].ItemName;
                     n1C = List10[i].ItemCount;
+                    // 0x6C4CC1 call 0x74C1E0：每条配方行把名字解析成一个 stdIdx，
+                    // 0x6C4CF1 movzx eax,word[esi+0x24] / 0x6C4CF5 cmp 只比索引不比名字。
+                    var nStdIdx = M2Share.UserEngine.GetStdItemIdx(s20);
                     for (var j = PlayObject.m_ItemList.Count - 1; j >= 0; j--)
                     {
                         if (n1C <= 0)
@@ -2081,7 +2257,7 @@ namespace GameSvr
                             break;
                         }
                         UserItem = PlayObject.m_ItemList[j];
-                        if (M2Share.UserEngine.GetStdItemName(UserItem.wIndex) == s20)
+                        if (UserItem.wIndex == nStdIdx)
                         {
                             if (List28 == null)
                             {
@@ -2098,8 +2274,15 @@ namespace GameSvr
                             n1C -= 1;
                         }
                     }
+                    // 0x6C4D2C mov byte [ebp-0x19],0 后落到 0x6C4D30 inc [ebp-8]：置失败但【不 break】，
+                    // 后续配方行照样被消耗。
+                    if (n1C > 0)
+                    {
+                        result = false;
+                    }
                 }
-                if (List28 != null)
+                // 0x6C4D3C cmp byte [ebp-0x19],0 / 0x6C4D40 je 0x6C4D6B：缺料时删除包不发。
+                if (result && List28 != null)
                 {
                     PlayObject.SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
                         List28.Count, 0, 0, "", List28);
@@ -2126,6 +2309,13 @@ namespace GameSvr
             for (var i = 0; i < m_GoodsList.Count; i++)
             {
                 List1C = m_GoodsList[i];
+                // 0x63FE93 cmp [ebp-0x14],0 / je 0x63FFA2、0x63FEA0 cmp [group+0x10],0 / je、
+                // 0x63FEB0 cmp [inner+8],0 / jle —— 三道守卫都跳到 0x63FFA2 继续扫下一条货，
+                // 不是中止整个 1034。C# 把 group 与 inner 合并成一层，两道并成一道。
+                if (List1C == null || List1C.Count <= 0)
+                {
+                    continue;
+                }
                 MakeItem = List1C[0];
                 StdItem = M2Share.UserEngine.GetStdItem(MakeItem.wIndex);
                 if (StdItem != null && StdItem.Name == sItemName)
@@ -2141,10 +2331,10 @@ namespace GameSvr
                                 PlayObject.SendAddItem(UserItem);
                                 PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('2' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                }
+                                // 0x63FF74 call 0x768BE0 无条件执行（不看 NeedIdentify），
+                                // 0x63FF6F xor edx,edx 给出 type = 0，末列 0x63FF53 add edx,0x106
+                                // 取的是【玩家自己】的 ShortString 名字。
+                                M2Share.AddGameDataLog('0' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + PlayObject.m_sCharName);
                                 n14 = 0;
                                 break;
                             }

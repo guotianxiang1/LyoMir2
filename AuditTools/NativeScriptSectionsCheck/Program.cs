@@ -604,8 +604,6 @@ static List<(string name, byte[] blob)> GoldenBlobs()
     var result = new List<(string, byte[])>();
     foreach (var path in Directory.GetFiles(directory, "*.bin").OrderBy(p => p))
     {
-        // The DB blob is an 8-byte wrapper followed by a zlib stream, same as the
-        // Data column.
         var stored = File.ReadAllBytes(path);
         using var input = new MemoryStream(stored, 8, stored.Length - 8);
         using var inflate = new ZLibStream(input, CompressionMode.Decompress);
@@ -613,6 +611,9 @@ static List<(string name, byte[] blob)> GoldenBlobs()
         inflate.CopyTo(output);
         result.Add((Path.GetFileName(path), output.ToArray()));
     }
+    if (result.Count != 34)
+        throw new GoldensUnavailableException(
+            $"golden ScriptData corpus is incomplete: expected 34 *.bin, found {result.Count} at {directory}");
     return result;
 }
 
@@ -863,9 +864,25 @@ static string FindRepositoryRoot([CallerFilePath] string sourcePath = "")
 // D:/loym2/staging/golden_scriptdata. Reported verbatim in the SKIP message.
 static string CanonicalGoldenDirectory()
 {
+    var staging = FindAncestorStaging();
+    if (staging != null)
+        return Path.Combine(staging, "golden_scriptdata");
     var root = FindRepositoryRoot();
     var parent = Directory.GetParent(root)?.FullName ?? root;
     return Path.Combine(parent, "staging", "golden_scriptdata");
+}
+
+static string FindAncestorStaging()
+{
+    var dir = new DirectoryInfo(FindRepositoryRoot());
+    while (dir != null)
+    {
+        var staging = Path.Combine(dir.FullName, "staging");
+        if (Directory.Exists(staging))
+            return staging;
+        dir = dir.Parent;
+    }
+    return null;
 }
 
 // Probe order: explicit M2_GOLDEN_SCRIPTDATA override, then the in-repo staging
@@ -877,17 +894,12 @@ static string GoldenDirectoryCandidates(out string[] candidates)
 {
     var root = FindRepositoryRoot();
     var parent = Directory.GetParent(root)?.FullName ?? root;
+    var ancestorStaging = FindAncestorStaging();
     var fromEnvironment = Environment.GetEnvironmentVariable(
         "M2_GOLDEN_SCRIPTDATA");
     var probes = new List<string>();
     if (!string.IsNullOrWhiteSpace(fromEnvironment))
     {
-        // The override is AUTHORITATIVE, not merely first in line. Falling
-        // through to the default locations when an explicit override turns out
-        // to be empty or missing is a false-green generator: the run reports
-        // goldens=34/34 from a corpus the operator did not select, so pointing
-        // this variable at the wrong path looks like a pass. If it is set, it is
-        // the only candidate, and an empty/absent directory yields SKIP+exit 2.
         candidates = new[] { Path.GetFullPath(fromEnvironment) };
         return Directory.Exists(candidates[0])
                && Directory.GetFiles(candidates[0], "*.bin").Length > 0
@@ -896,10 +908,12 @@ static string GoldenDirectoryCandidates(out string[] candidates)
     }
     probes.Add(Path.Combine(root, "staging", "golden_scriptdata"));
     probes.Add(Path.Combine(parent, "staging", "golden_scriptdata"));
+    if (ancestorStaging != null)
+        probes.Add(Path.Combine(ancestorStaging, "golden_scriptdata"));
     probes.Add(Path.Combine(root, "AuditTools", "NativeScriptSectionsCheck",
         "goldens"));
-    candidates = probes.ToArray();
-    foreach (var probe in probes)
+    candidates = probes.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    foreach (var probe in candidates)
         if (Directory.Exists(probe) && Directory.GetFiles(probe, "*.bin").Length > 0)
             return probe;
     return null;

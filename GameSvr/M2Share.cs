@@ -1590,7 +1590,8 @@ namespace GameSvr
         public const string g_sGameCommandShutupReleaseHelpMsg = "人物名称";
         public const string g_sGameCommandShutupReleaseCanSendMsg = "你已经恢复聊天功?!!!";
         public const string g_sGameCommandShutupReleaseHumanCanSendMsg = "{0} 已经恢复聊天?";
-        public const string g_sGameCommandShutupListIsNullMsg = "禁言列表为空!!!";
+        // 0x0062BB24（长度前缀 12 = 六个汉字），由 @LookOutSay 的 0x006242CC 引用
+        public const string g_sGameCommandShutupListIsNullMsg = "禁言名单为空";
         public const string g_sGameCommandLevelConsoleMsg = "[等级调整] {0} ({1} -> {2})";
         public const string g_sGameCommandSbkGoldHelpMsg = "城堡名称 控制?(=?-?+) 金币?(1-100000000)";
         public const string g_sGameCommandSbkGoldCastleNotFoundMsg = "城堡{0}未找?!!!";
@@ -1858,11 +1859,14 @@ namespace GameSvr
             return result;
         }
 
+        // 战神 sub_764A90(eax=sx, edx=sy, ecx=dx, [ebp+8]=dy), ret 4.
+        // MOVE-47: the no-match sink is 0x764BB6 `33 C0 xor eax,eax`, i.e. 0
+        // (DR_UP), not 4. GetNextDirection(x,y,x,y) must answer "up".
         public static byte GetNextDirection(int sx, int sy, int dx, int dy)
         {
             int flagx;
             int flagy;
-            byte result = Grobal2.DR_DOWN;
+            byte result = Grobal2.DR_UP;
             if (sx < dx)
             {
                 flagx = 1;
@@ -1896,7 +1900,15 @@ namespace GameSvr
             }
             if (Math.Abs(sx - dx) > 2)
             {
-                if (sy > dy - 1 && sy <= dy + 1)
+                // MOVE-47: the Y suppressor is asymmetric with the X one above.
+                //   0x764B10  3B F0  cmp esi,eax   ; sy vs dy-1
+                //   0x764B12  7E 0A  jle  skip     ; run only when sy >  dy-1
+                //   0x764B14  47     inc edi       ; dy+1
+                //   0x764B15  3B F7  cmp esi,edi
+                //   0x764B17  7D 05  jge  skip     ; run only when sy <  dy+1
+                // `jge` makes the upper bound strict; `<=` let sy == dy+1 in and
+                // flattened diagonals (dir 1/7) into pure horizontals (dir 2/6).
+                if (sy > dy - 1 && sy < dy + 1)
                 {
                     flagy = 0;
                 }
@@ -1936,6 +1948,60 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// sub_764BC4, the second and quite different heading helper. Where
+        /// <see cref="GetNextDirection"/> (sub_764A90) buckets the two axis
+        /// signs, this one takes the ratio
+        /// <c>(|dy| * dy) / (dx*dx + dy*dy)</c> — dx = tx-sx at 0x764BCD,
+        /// dy = sy-ty at 0x764BD1 — rounds it to float32 (0x764C05
+        /// `D9 5D FC fstp dword [ebp-4]`) and compares it against four 80-bit
+        /// thresholds, picking the right or left fan from the sign of dx
+        /// (0x764C09 `85 DB / 7E 4F`, so dx == 0 takes the left fan).
+        ///
+        ///   0x764CB0  9A 99 99 99 99 99 99 D9 FE BF  = -0.85
+        ///   0x764CBC  9A 99 99 99 99 99 99 99 FC BF  = -0.15
+        ///   0x764CC8  9A 99 99 99 99 99 99 99 FC 3F  = +0.15
+        ///   0x764CD4  9A 99 99 99 99 99 99 D9 FE 3F  = +0.85
+        ///
+        /// Each test is `fld const / fcomp ratio / jbe`, so the arm fires on
+        /// <c>ratio &lt; const</c>. Same source and target gives 0 (0x764BDC).
+        /// </summary>
+        public static byte GetNextDirectionByRatio(int sx, int sy, int dx, int dy)
+        {
+            int deltaX = dx - sx;
+            int deltaY = sy - dy;
+            if (deltaX == 0 && deltaY == 0)
+            {
+                return Grobal2.DR_UP;
+            }
+
+            int numerator = unchecked(Math.Abs(deltaY) * deltaY);
+            int denominator = unchecked(deltaX * deltaX + deltaY * deltaY);
+            float ratio = (float)((double)numerator / denominator);
+
+            if (ratio < -0.85f)
+            {
+                return Grobal2.DR_DOWN;
+            }
+            if (deltaX > 0)
+            {
+                if (ratio < -0.15f)
+                    return Grobal2.DR_DOWNRIGHT;
+                if (ratio < 0.15f)
+                    return Grobal2.DR_RIGHT;
+                if (ratio < 0.85f)
+                    return Grobal2.DR_UPRIGHT;
+                return Grobal2.DR_UP;
+            }
+            if (ratio < -0.15f)
+                return Grobal2.DR_DOWNLEFT;
+            if (ratio < 0.15f)
+                return Grobal2.DR_LEFT;
+            if (ratio < 0.85f)
+                return Grobal2.DR_UPLEFT;
+            return Grobal2.DR_UP;
+        }
+
         public static bool CheckUserItems(int nIdx, GoodItem StdItem)
         {
             var result = false;
@@ -1968,8 +2034,29 @@ namespace GameSvr
                         result = true;
                     }
                     break;
+                // 槽位资格在原生是每个物品类的 VMT+0x60 谓词，配合 0x74C338 的
+                // StdMode 派发表（byte 表 0x74C374 + 跳表 0x74C414）决定 StdMode 走哪个类：
+                //   0x7639D4 test dl,dl        TManClothes/TWomanClothes  -> 10,11
+                //   0x7608CC cmp dl,1          TLWeapon/TBrokenWeapon/TSpade -> 5,6
+                //   0x760488 cmp dl,2          TRWeapon    -> 30
+                //   0x761784 cmp dl,3          TNecklace   -> 19,20,21
+                //   0x7611C0 cmp dl,4          THelmet     -> 15
+                //   0x7625AC dl==5||dl==6      TArmRing    -> 24,26
+                //   0x761CB4 dl==7||dl==8      TRing       -> 22,23
+                //   0x762C64 cmp dl,9          TEquipBujuk 族 -> 25
+                //   0x762D30 cmp dl,0xA        TBelt       -> 27
+                //   0x7630CC cmp dl,0xB        TBoots      -> 28
+                //   0x763390 cmp dl,0xC        TCharm 族    -> 7
+                //   0x760F3C cmp dl,0xD        THeadMask   -> 16
+                //   0x7610C0 cmp dl,0xE        TWarDrum    -> 29
+                //   0x763254 cmp dl,0xF        TMaPai      -> 34
+                // StdMode 51/52/53/54/63/64 落到默认臂 0x74D67E（0x74D680 cmp al,0x96
+                // 之下即 TBaseItem），62 走 TAnimalMascot，两者的父链都是
+                // TBaseItem<TBaseObj<TObject —— 不是 TEquipItem，VMT 里根本没有 +0x60
+                // 这一格（TBasePileItem VMT 0x781C24 的 +0x60 落在类名串 0x781C88 上，
+                // TAnimalMascot VMT 0x782614 的 +0x60 落在 0x782678 同理），原生穿不上。
                 case Grobal2.U_ARMRINGL:
-                    if (StdItem.StdMode == 24 || StdItem.StdMode == 25 || StdItem.StdMode == 26)
+                    if (StdItem.StdMode == 24 || StdItem.StdMode == 26)
                     {
                         result = true;
                     }
@@ -1988,25 +2075,25 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.U_BUJUK:
-                    if (StdItem.StdMode == 25 || StdItem.StdMode == 51)
+                    if (StdItem.StdMode == 25)
                     {
                         result = true;
                     }
                     break;
                 case Grobal2.U_BELT:
-                    if (StdItem.StdMode == 27 || StdItem.StdMode == 54 || StdItem.StdMode == 64)
+                    if (StdItem.StdMode == 27)
                     {
                         result = true;
                     }
                     break;
                 case Grobal2.U_BOOTS:
-                    if (StdItem.StdMode == 28 || StdItem.StdMode == 52 || StdItem.StdMode == 62)
+                    if (StdItem.StdMode == 28)
                     {
                         result = true;
                     }
                     break;
                 case Grobal2.U_CHARM:
-                    if (StdItem.StdMode == 7 || StdItem.StdMode == 53 || StdItem.StdMode == 63)
+                    if (StdItem.StdMode == 7)
                     {
                         result = true;
                     }

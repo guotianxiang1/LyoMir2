@@ -292,15 +292,30 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// SM 0x3026. Argument order is fixed by the six pushes at
-        /// 0x6E9CD4-0x6E9CFC feeding sub_765E68 (ret 0x18): the slots land as
-        /// [ebp+0x14]=X, [ebp+0x10]=Y, [ebp+0x0C]=map name, the rest 0.
+        /// SM 3420. Two hops, and the field order changes between them - reading only the
+        /// enqueue is what shifted this packet by one slot.
+        /// <para>
+        /// Hop 1, enqueue tag 12326. The six pushes at 0x6E9CD4-0x6E9CFC feed sub_765E68,
+        /// whose stores (0x765E99-0x765EB0) name the slots:
+        /// [ebp+0x1C]-&gt;rec+2 = wParam = 0, [ebp+0x18]-&gt;rec+4 = nParam1 = 0,
+        /// [ebp+0x14]-&gt;rec+8 = nParam2 = X, [ebp+0x10]-&gt;rec+0xC = nParam3 = Y,
+        /// [ebp+0x0C] = sMsg = map name (rec+0x10 data, rec+0x14 = Length+1).
         /// The login replay at 0x6B23EC-0x6B2414 repeats them byte-identically.
+        /// </para>
+        /// <para>
+        /// Hop 2, the RM handler at 0x6B6036 rebuilds the wire frame in a DIFFERENT order:
+        /// 0x6B6036 <c>mov ax,[ebx+2] / push eax</c> = Param &lt;- wParam,
+        /// 0x6B603C <c>mov eax,[ebx+8] / push eax</c> = Tag &lt;- nParam2,
+        /// 0x6B6040 <c>mov ax,[ebx+0xC] / push eax</c> = Series &lt;- nParam3,
+        /// 0x6B6045/0x6B6049 push Buf and Len, 0x6B604E <c>mov ecx,[ebx+4]</c> = nRecog &lt;- nParam1,
+        /// 0x6B6051 <c>66 BA 5C 0D mov dx,0xD5C</c>, 0x6B605A <c>call [ebx+0x254]</c>.
+        /// </para>
+        /// So on the wire it is Recog=0, Param=0, Tag=X, Series=Y - not Param=X, Tag=Y.
         /// </summary>
         internal void SendNativeFixedCoordAck()
         {
-            SendDefMessage(Grobal2.SM_FIXEDCOORD, 0,
-                m_nNativeFixedCoordX, m_nNativeFixedCoordY, 0,
+            SendDefMessage(Grobal2.SM_FIXEDCOORD, 0, 0,
+                m_nNativeFixedCoordX, m_nNativeFixedCoordY,
                 GetNativeFixedCoordMapName());
         }
 

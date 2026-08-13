@@ -15,6 +15,7 @@ namespace GameSvr
         private byte _nativeAuthStatus1;
         private byte _nativeAuthStatus2;
         private byte _nativeAuthStatus3;
+        private string _lastMapDescription = string.Empty;
         public int m_nHonorValue;
         public bool m_boHonorValueLoaded;
 
@@ -173,6 +174,20 @@ namespace GameSvr
         private bool ClientPickUpItem(MapItem mapItem, int pickupX, int pickupY)
         {
             var result = false;
+            // sub_6B74D8 opens with this, before it even looks at the item
+            // (0x6B7500 GetTickCount / 0x6B7505 `2B 83 E4 03 00 00` /
+            // 0x6B750B `3D 58 1B 00 00` + `77 28`, then the two coordinate
+            // `jne`s at 0x6B7512 and 0x6B751A). Magic 266 stamps those three
+            // fields at 0x773FF0..0x774003, so for 7 s after a blink the
+            // caster cannot pick anything up off the cell it landed on.
+            if (IsNativeBlinkPickupLocked(pickupX, pickupY,
+                    HUtil32.GetTickCount()))
+            {
+                // 0x6B7522 `66 B9 FF 38` + string 0x6B7800, GBK length
+                // prefix 26 = 13 characters.
+                SysMsg("一定时间范围内，不能拾取。", MsgColor.Red, MsgType.Hint);
+                return false;
+            }
             if (mapItem == null)
             {
                 return false;
@@ -310,7 +325,7 @@ namespace GameSvr
         
         public bool IsEnoughBag()
         {
-            return m_ItemList.Count < Grobal2.MAXBAGITEM;
+            return m_ItemList.Count < BagCapacity.Of(this);
         }
 
         
@@ -767,8 +782,20 @@ namespace GameSvr
                 }
             }
 
+            // 战神 sub_6F05D8 (@0x6F05E0 mov ebx,eax => ebx IS Self) always answers, and
+            // always with nRecog = Self:
+            //   empty  0x6F0697 cmp [ebp-4],0 / je 0x6F06D8 and 0x6F06A5 test eax,eax /
+            //          0x6F06A7 jle 0x6F06D8 -> 0x6F06D8 push 0 x5 / 8B CB mov ecx,ebx /
+            //          66 BA 86 10 mov dx,0x1086 / FF 93 54 02 00 00 call [ebx+0x254]
+            //   filled 0x6F06B1 push eax(count) / push 0 / push 0 / push list /
+            //          0x6F06C2 6B C0 16 imul eax,eax,0x16 push (count*22) /
+            //          0x6F06C6 8B CB mov ecx,ebx / mov dx,0x1086 / call [ebx+0x254]
+            // Both were wrong here: nRecog was 0, and an empty list returned without
+            // sending, so a client that waits for 4230 during the login burst never got it.
             if (records.Count == 0)
             {
+                m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, ObjectId, 0, 0, 0);
+                SendSocket(m_DefMsg);
                 return;
             }
 
@@ -783,7 +810,7 @@ namespace GameSvr
                 writer.Write(records[i].Range);
             }
 
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, 0, records.Count, 0, 0);
+            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, ObjectId, records.Count, 0, 0);
             SendSocket(m_DefMsg, memoryStream.ToArray());
         }
 
@@ -918,6 +945,25 @@ namespace GameSvr
             return m_PEnvir.MoveToMovingObjectForRun(m_nCurrX, m_nCurrY, this, nX, nY, ignoreObjects) > 0;
         }
 
+        // Walk() returning false means EnterAnotherMap failed after the run
+        // mover already committed the actor into the new cell. Native
+        // sub_741224 / sub_76756C / sub_767694 all ignore 0x778EC0's return
+        // (next insn is `mov dl,0x33`) and never roll back; C# still does.
+        // The rollback must name the COMMITTED cell as the source: MOVE-35(b)
+        // only succeeds from 0x779A95 after unlinking the actor from nCX/nCY,
+        // so passing the already-restored old coords looks up an empty list
+        // and returns 0, leaving the actor registered only at the new cell
+        // while CurrXY says the old one.
+        protected void RollbackCommittedRunMove(int oldX, int oldY)
+        {
+            var committedX = m_nCurrX;
+            var committedY = m_nCurrY;
+            m_nCurrX = (short)oldX;
+            m_nCurrY = (short)oldY;
+            m_PEnvir.MoveToMovingObject(committedX, committedY, this,
+                m_nCurrX, m_nCurrY, true);
+        }
+
         private bool RunTo(byte btDir, bool boFlag, int nDestX, int nDestY)
         {
             const string sExceptionMsg = "[Exception] TBaseObject::RunTo";
@@ -995,9 +1041,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)nOldX;
-                        m_nCurrY = (short)nOldY;
-                        m_PEnvir.MoveToMovingObject(nOldX, nOldY, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(nOldX, nOldY);
                     }
                 }
             }
@@ -1087,9 +1131,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)n10;
-                        m_nCurrY = (short)n14;
-                        m_PEnvir.MoveToMovingObject(n10, n14, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(n10, n14);
                     }
                 }
             }
@@ -1201,6 +1243,17 @@ namespace GameSvr
         private void ClientClickNPC(int npcId)
         {
             // PERF: diagnostic write removed from hot path (per-click)
+            // TRADE-62: 战神 sub_6B8B28 的第一条可执行语句（SEH 序言之后）就是
+            //   0x6B8B4D  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6B8B54  0F 85 2A 01 00 00     jne 0x6B8C84
+            // 0x6B8C84 是 `33 C0 xor eax,eax` + SEH 拆除 + `C3 ret`，即**静默返回**，
+            // 不发任何消息。交易进行中点 NPC 会被整体忽略。
+            // 注意：紧随其后的 `!m_boCanDeal` 占的正是这道门的位置，但它不是原生门
+            // （见下），原生在此只测 +0x461。
+            if (m_boDealing)
+            {
+                return;
+            }
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
@@ -1217,6 +1270,14 @@ namespace GameSvr
                 if (normNpc != null && normNpc.m_PEnvir == m_PEnvir && Math.Abs(normNpc.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(normNpc.m_nCurrY - m_nCurrY) <= 15)
                 {
                     normNpc.Click(this);
+                    // Native sub_6B8B28 stores the NPC into player+0xCD8 AFTER the
+                    // talk vcall returns, with no test of the script result:
+                    //   0x6B8BA2 call 0x720444 / 0x6B8BA7 mov [ebx+0xCD8],esi
+                    //   0x6B8C43 call 0x63DC74 / 0x6B8C48 mov [ebx+0xCD8],esi
+                    // Exhaustive disp 0xCD8 scan: those two plus setter 0x63DFAF.
+                    // There is no write of 0 anywhere. Bind here so @main itself
+                    // still sees the previous/nil field (Give audit 0x6DF341).
+                    m_NPC = normNpc;
                 }
             }
         }
@@ -1302,11 +1363,6 @@ namespace GameSvr
             }
             if (m_nGold >= nGold)
             {
-                // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                if (m_DealCreat != null)
-                {
-                    DealCancel();
-                }
                 m_nGold -= nGold;
                 // 0x6C7D7B `call 0x6C19B4` -- sub_6C19B4 is SendMsg with
                 // cx=0x2798 (RM_GOLDCHANGED, 10136) and six zero slots, i.e.
@@ -1536,12 +1592,17 @@ namespace GameSvr
 
         private void SendMapDescription()
         {
-            var nMUSICID = -1;
-            if (m_PEnvir.Flag.boMUSIC)
+            // sub_6E37C4: the description is compared against the per-player cache at
+            // [Self+0x9B4] (0x6E380A CompareStr / 0x6E380F je 0x6E383F) and only a change
+            // sends the packet; nRecog is the literal 1 (0x6E382C B901000000 mov ecx,1),
+            // not a music id.
+            var description = m_PEnvir.sMapDesc ?? string.Empty;
+            if (string.CompareOrdinal(_lastMapDescription, description) == 0)
             {
-                nMUSICID = m_PEnvir.Flag.nMUSICID;
+                return;
             }
-            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, nMUSICID, 0, 0, 0, m_PEnvir.sMapDesc);
+            _lastMapDescription = description;
+            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, 1, 0, 0, 0, description);
         }
 
         private void SendWhisperMsg(TPlayObject PlayObject)
@@ -1577,20 +1638,6 @@ namespace GameSvr
                 m_MagicList.Add(UserMagic);
                 SendAddMagic(UserMagic);
             }
-        }
-
-        private void SendGoldInfo(bool boSendName)
-        {
-            var sMsg = string.Empty;
-            if (m_nSoftVersionDateEx == 0)
-            {
-                return;
-            }
-            if (boSendName)
-            {
-                sMsg = M2Share.g_Config.sGameGoldName + '\r' + M2Share.g_Config.sGamePointName;
-            }
-            SendDefMessage(Grobal2.SM_GAMEGOLDNAME, m_nGameGold, HUtil32.LoWord(m_nGamePoint), HUtil32.HiWord(m_nGamePoint), 0, sMsg);
         }
 
         private void SendServerStatus()
@@ -1858,21 +1905,9 @@ namespace GameSvr
 
         private void SendAdjustBonus()
         {
-            var sSendMsg = string.Empty;
-            switch (m_btJob)
-            {
-                case M2Share.jWarr:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofWarr) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofWarr);
-                    break;
-                case M2Share.jWizard:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofWizard) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofWizard);
-                    break;
-                case M2Share.jTaos:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofTaos) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofTaos);
-                    break;
-            }
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ADJUST_BONUS, m_nBonusPoint, 0, 0, 0);
-            SendSocket(m_DefMsg, sSendMsg);
+            // Native CODE 0x401000..0x7A10D0 has zero 16-bit dx/cx loads of 811
+            // (0x032B) reaching a send slot. srv_AppearTimes.ini ident 811 = 0.
+            // Keep the RM_ADJUST_BONUS consumer so routing stays, but do not emit.
         }
 
         private void ShowMapInfo(string sMap, string sX, string sY)
@@ -2117,65 +2152,82 @@ namespace GameSvr
 
             var result = false;
             var s1C = string.Empty;
-            var mineEvent = (StoneMineEvent)m_PEnvir.GetEvent(nX, nY);
-            if (mineEvent != null && mineEvent.m_nEventType == Grobal2.ET_MINE)
+            // MINE-15: 原版取不到矿点就地创建，挖矿是唯一创建点（类引用单元
+            // 0x71683C 在全镜像只有 0x6BC277 一处代码引用）：
+            //   0x6BC25E  E8 15 ED 0B 00  call 0x77AF78     ; 按格取矿点
+            //   0x6BC263  8B F0           mov esi,eax
+            //   0x6BC265  85 F6           test esi,esi
+            //   0x6BC267  75 19           jne 0x6BC282      ; 已存在则直接用
+            //   0x6BC276  A1 3C 68 71 00  mov eax,[0x71683C]; TStoneMineEvent
+            //   0x6BC27B  E8 D8 B3 05 00  call 0x717658     ; ctor
+            // 创建点落在格子门之后、MineCount 判定之前，抽签序不变。
+            // 取矿点走带类型的重载而不是类强转：原版 0x77AF78 只认节点种类
+            // 字节 8（0x77AFB0 cmp byte[node],8），格上挂着别的 Event 时
+            // 原版走链继续、最终返回 null，不会当成矿点。
+            var mineEvent =
+                m_PEnvir.GetEvent(nX, nY, Grobal2.ET_MINE) as StoneMineEvent
+                ?? new StoneMineEvent(m_PEnvir, nX, nY, Grobal2.ET_MINE);
+            if (mineEvent.MineCount > 0)
             {
-                if (mineEvent.MineCount > 0)
+                mineEvent.MineCount -= 1;
+                // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
+                if (M2Share.RandomNumber.Random(4) == 0)
                 {
-                    mineEvent.MineCount -= 1;
-                    // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
-                    if (M2Share.RandomNumber.Random(4) == 0)
+                    // MINE-55: 原版按 kind 判别取石堆，不做类判定；不匹配就继续
+                    // 走链、最终返回 null：
+                    //   0x717723  6A 03              push 3               ; 期望的 kind
+                    //   0x717737  E8 54 1A 06 00     call 0x779190
+                    //     0x7791CD  80 38 03         cmp byte [node],3    ; 节点种类
+                    //     0x7791E1  3A 58 0C         cmp bl,byte [obj+0xC]; 事件类型
+                    //     0x7791E4  75 04            jne next             ; 不匹配继续走链
+                    //   0x71773C  85 C0              test eax,eax
+                    //   0x71773E  75 33              jne 0x717773         ; 命中 → AddEventParam
+                    // C# 原来用 (PileStones) 强转 GetEvent(x,y) 的返回值，而
+                    // Envirnoment.GetEvent(x,y) 返回该格**最后一个**
+                    // OS_EVENTOBJECT、不区分类型，所以格上放过火墙/圣言术屏障
+                    // 等任何别的 Event 子类时会抛 InvalidCastException。
+                    // 强转在类型判断之前就炸了，下面那个 m_nEventType 判断因此
+                    // 是不可达的死代码；改成带类型的重载后它也不再需要。
+                    var pileEvent =
+                        m_PEnvir.GetEvent(m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES)
+                            as PileStones;
+                    if (pileEvent == null)
                     {
-                        var pileEvent = (PileStones)m_PEnvir.GetEvent(m_nCurrX, m_nCurrY);
-                        if (pileEvent == null)
-                        {
-                            pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
-                            M2Share.EventManager.AddEvent(pileEvent);
-                        }
-                        else
-                        {
-                            if (pileEvent.m_nEventType == Grobal2.ET_PILESTONES)
-                            {
-                                pileEvent.AddEventParam();
-                            }
-                        }
-                        // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
-                        // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
-                        // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
-                        int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
-                        // MINE-08: Native @0x6BC24A tests the map flag BEFORE drawing the
-                        // rate roll, so a non-mine map consumes no RNG at all.
-                        if (m_PEnvir.Flag.boMINE)
-                        {
-                            if (M2Share.RandomNumber.Random(mineRate) == 0)
-                            {
-                                MakeMine();
-                            }
-                        }
-                        else if (m_PEnvir.Flag.boMINE2)
-                        {
-                            if (M2Share.RandomNumber.Random(mineRate) == 0)
-                            {
-                                MakeMine2();
-                            }
-                        }
-                        // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
-                        //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
-                        //   0x6BC2E4  83 C2 05        add edx,5      ; +5
-                        //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
-                        //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
-                        //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
-                        DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
-                        SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
-                        result = true;
+                        pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
+                        M2Share.EventManager.AddEvent(pileEvent);
                     }
+                    else
+                    {
+                        pileEvent.AddEventParam();
+                    }
+                    // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
+                    // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
+                    // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
+                    int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
+                    // MINE-08: MINE 旗标由派发器在 0x6EC0FE 测过了（非 MINE 图
+                    // 根本到不了这里），产出卷因此无条件抽。原来这里的注释把
+                    // 旗标地址写成 0x6BC24A —— 那是格子地形门 cmp byte[cell],0，
+                    // 不是旗标，以字节为准。
+                    if (M2Share.RandomNumber.Random(mineRate) == 0)
+                    {
+                        MakeMine();
+                    }
+                    // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
+                    //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
+                    //   0x6BC2E4  83 C2 05        add edx,5      ; +5
+                    //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
+                    //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
+                    //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
+                    DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
+                    SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
+                    result = true;
                 }
-                else
+            }
+            else
+            {
+                if ((HUtil32.GetTickCount() - mineEvent.AddStoneMineTick) > 10 * 60 * 1000)
                 {
-                    if ((HUtil32.GetTickCount() - mineEvent.AddStoneMineTick) > 10 * 60 * 1000)
-                    {
-                        mineEvent.AddStoneMine();
-                    }
+                    mineEvent.AddStoneMine();
                 }
             }
             // MINE-51: Native @0x6BC306 broadcast RM_HEAVYHIT (0x2715) payload:
@@ -2215,14 +2267,9 @@ namespace GameSvr
 
         private void SendChangeGuildName()
         {
-            if (m_MyGuild != null)
-            {
-                SendDefMessage(Grobal2.SM_CHANGEGUILDNAME, 0, 0, 0, 0, m_MyGuild.sGuildName + '/' + m_sGuildRankName);
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_CHANGEGUILDNAME, 0, 0, 0, 0, "");
-            }
+            // Native RM 10301 handler 0x6B624C is the dispatcher finally, not a
+            // send. CODE has zero 16-bit dx/cx loads of 750 (0x02EE) reaching a
+            // send slot. srv_AppearTimes.ini 750=0. Constant kept.
         }
 
         private static byte[] BuildDelItemListBody(IList<TDeleteItem> ItemList)
@@ -2633,11 +2680,6 @@ namespace GameSvr
                             result = true;
                             break;
                     }
-                    // Notify 战神 client: drug consumed (case 0 consumable)
-                    if (result)
-                    {
-                        SendDefMessage(Grobal2.SM_DRINK_DRUG_STATUS, StdItem.Shape, StdItem.Ac, StdItem.Mac, 0, "");
-                    }
                     break;
                 case 1:
                     var nOldStatus = GetMyStatus();
@@ -2647,8 +2689,6 @@ namespace GameSvr
                     {
                         RefMyStatus();
                     }
-                    // Notify 战神 client: drink status changed
-                    SendDefMessage(Grobal2.SM_DRINK_STATUS, 0, m_nHungerStatus, StdItem.Ac, StdItem.Mac, "");
                     result = true;
                     break;
                 case 2:
@@ -2707,16 +2747,9 @@ namespace GameSvr
                                 SendMsg(this, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
                                 result = true;
                             }
-                            // Notify 战神 client: buff drug applied
-                            if (result)
-                            {
-                                SendDefMessage(Grobal2.SM_DRINK_DRUG_STATUS, 12, StdItem.Dc, StdItem.Mac2, StdItem.Mc, "");
-                            }
                             break;
                         case 13:
                             GetExp(StdItem.DuraMax);
-                            // Notify 战神 client: EXP drink consumed
-                            SendDefMessage(Grobal2.SM_DRINKEXP_STATUS, StdItem.DuraMax, 0, 0, 0, "");
                             result = true;
                             break;
                         default:
@@ -2980,7 +3013,7 @@ namespace GameSvr
         private void MakeMine()
         {
             TUserItem UserItem;
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count >= BagCapacity.Of(this))
             {
                 return;
             }
@@ -3089,74 +3122,9 @@ namespace GameSvr
             }
         }
 
-        
-        
-        
-        private void MakeMine2()
-        {
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
-            {
-                return;
-            }
-            TUserItem mineItem = null;
-            var mineRate = M2Share.RandomNumber.Random(120);
-            if (HUtil32.RangeInDefined(mineRate, 1, 2))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone1, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else if (HUtil32.RangeInDefined(mineRate, 3, 20))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone2, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else if (HUtil32.RangeInDefined(mineRate, 21, 45))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone3, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone4, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-        }
+        // MINE-01: MakeMine2()（金刚石矿/绿宝石矿/红宝石矿/白宝石矿 四选一的第二
+        // 条宝石产线）已移除。原版没有 MINE2 旗标，也没有第二条产线：挖矿产出的
+        // 唯一入口是 0x6BC3CC，五个分支全是 金矿/银矿/铁矿/黑铁矿石/铜矿。
 
         public TUserItem QuestCheckItem(string sItemName, ref int nCount, ref int nParam, ref int nDura)
         {
@@ -3331,8 +3299,8 @@ namespace GameSvr
             HumData.QuestUnit = m_QuestUnit == null ? Array.Empty<byte>() : (byte[])m_QuestUnit.Clone();
             HumData.QuestFlag = m_QuestFlag == null ? Array.Empty<byte>() : (byte[])m_QuestFlag.Clone();
             HumData.IntVar = Array.Empty<int>();
-            HumData.ScriptV = new Dictionary<int, int>(m_ScriptVVars);
-            HumData.ScriptS = new Dictionary<int, int>(m_ScriptSVars);
+            HumData.ScriptV = CopyKeyedScriptVars(m_ScriptVVars);
+            HumData.ScriptS = CopyKeyedScriptVars(m_ScriptSVars);
             var HumItems = new TUserItem[Grobal2.HUMAN_EQUIPPED_ITEM_COUNT];
             HumanRcd.Data.HumItems = HumItems;
             var equippedCount = Math.Min(HumItems.Length, m_UseItems?.Length ?? 0);
@@ -3340,9 +3308,16 @@ namespace GameSvr
                 if (m_UseItems[i] != null && m_UseItems[i].wIndex > 0)
                     HumItems[i] = new TUserItem(m_UseItems[i]);
 
-            var BagItems = new TUserItem[Grobal2.MAXBAGITEM];
+            var BagItems = new TUserItem[BagCapacity.NativeSlots];
             HumanRcd.Data.BagItems = BagItems;
-            for (var i = 0; i < m_ItemList.Count; i++)
+            // 0x6B171B `cmp edi,0x30 / jne 0x6B16E9`: 原生循环在写满 48 槽后停止，
+            // 第 49 件起静默丢弃。背包可经 GetBackDealItems 无余量退还而超过 48。
+            //
+            // 这里是**记录槽位数**不是容量：装了无限背包也仍然只有 48 槽，48 格以后
+            // 的物品走 bags\<角色名>.bin。绝不能改成 BagCapacity.Of —— 那会改存档
+            // 记录布局（REPLICATION_RULES §1.4）。越界那部分由 SaveHumanRcd 的
+            // BagCapacity.PersistableOf 闸门在到达这里之前拦下。
+            for (var i = 0; i < m_ItemList.Count && i < BagCapacity.NativeSlots; i++)
                 if (m_ItemList[i] != null && m_ItemList[i].wIndex > 0)
                     BagItems[i] = new TUserItem(m_ItemList[i]);
 
@@ -3368,6 +3343,24 @@ namespace GameSvr
             for (var i = 0; i < m_StorageItemList.Count; i++)
                 if (m_StorageItemList[i] != null && m_StorageItemList[i].wIndex > 0)
                     StorageItems[i] = new TUserItem(m_StorageItemList[i]);
+        }
+
+        /// <summary>
+        /// Keyed V/S banks only. group*1000+index is >= 1001 whenever both
+        /// arguments are positive (sub_6E42CC). Keys below that are group 0,
+        /// which native keeps in the inline table and never writes to the
+        /// type0/type1 sections (encoder 0x6E4DE7 / 0x6E4E19).
+        /// </summary>
+        private static Dictionary<int, int> CopyKeyedScriptVars(Dictionary<int, int> source)
+        {
+            var copy = new Dictionary<int, int>();
+            if (source == null) return copy;
+            foreach (var pair in source)
+            {
+                if (pair.Key < 1001) continue;
+                copy[pair.Key] = pair.Value;
+            }
+            return copy;
         }
 
         public void RefRankInfo(int nRankNo, string sRankName)

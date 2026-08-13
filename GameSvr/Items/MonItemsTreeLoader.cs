@@ -94,8 +94,12 @@ namespace GameSvr
             if (!int.TryParse(parts[3], out int repeatCount))
                 return;
 
-            // Lookup item by name (EA 0x67b1ff-0x67b20e: call 0x74c2d4)
-            // Returns null for gold entries or items not found
+            // Lookup item by name (EA 0x67b1ff-0x67b20e: call 0x74c2d4).  Native is a
+            // plain hash lookup with no index exclusion, so "金币" must resolve to the
+            // index-0 sentinel rather than to null — the traversal recognises a gold row
+            // by NativeWireIndex == 0, not by a null template.  GetStdItem(string) scans
+            // from index 0 and does exactly that; do NOT switch it to GetStdItemIdx,
+            // which skips the sentinel.
             var stdItem = userEngine.GetStdItem(itemName);
 
             // Create node (EA 0x67b16d-0x67b182: alloc 0x24 bytes + zerofill)

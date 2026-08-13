@@ -14,11 +14,11 @@ using System.Linq;
 
 class Program
 {
-    static void Main()
+    static void Main(string[] args)
     {
         try
         {
-            var repoRoot = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..");
+            var repoRoot = FindRepositoryRoot(args);
             var operatePath = Path.Combine(repoRoot, "GameSvr", "Players", "TPlayObject.Operate.cs");
             var m2sharePath = Path.Combine(repoRoot, "GameSvr", "M2Share.cs");
 
@@ -113,5 +113,28 @@ class Program
             Console.Error.WriteLine("FAIL DealValidationFailureSemanticsCheck: " + ex);
             Environment.Exit(1);
         }
+    }
+
+    // Platforms=x64 puts the binary at bin/x64/Debug/net8.0-windows, so a
+    // fixed five-parent climb lands inside the project folder, not the repo.
+    static string FindRepositoryRoot(string[] args)
+    {
+        foreach (var seed in new[]
+                 {
+                     args != null && args.Length > 0 ? args[0] : null,
+                     Directory.GetCurrentDirectory(),
+                     AppContext.BaseDirectory
+                 })
+        {
+            if (string.IsNullOrEmpty(seed)) continue;
+            for (var directory = new DirectoryInfo(Path.GetFullPath(seed));
+                 directory != null; directory = directory.Parent)
+            {
+                if (File.Exists(Path.Combine(directory.FullName,
+                        "GameSvr", "GameSvr.csproj")))
+                    return directory.FullName;
+            }
+        }
+        throw new DirectoryNotFoundException("repository root not found");
     }
 }

@@ -83,24 +83,17 @@ namespace GameSvr
         /// <summary>Tick for periodic master search/view refresh.</summary>
         private int m_dwSearchMasterTick;
 
-        /// <summary>Tick for AI decision interval.</summary>
-        private int m_dwAITick;
-
         /// <summary>Tick for hero skill casting cooldown.</summary>
         private int m_dwHeroMagicTick;
 
         private int m_dwNativeHealthSpellDirtyTick;
 
-        /// <summary>Current action state for the hero AI state machine.</summary>
-        private HeroAction m_Action;
-
-        private enum HeroAction
-        {
-            Idle,
-            FollowMaster,
-            AttackTarget,
-            ReturnToMaster
-        }
+        /// <summary>
+        /// 原版跟随锚 <c>[hero+0x63C]/[+0x640]</c>。sub_68BAD4 @0x68BB6F 与主人当前格比较，
+        /// 变了才写回并 <c>call 0x68B838</c>。
+        /// </summary>
+        private int m_nNativeGuardAnchorX;
+        private int m_nNativeGuardAnchorY;
 
         /// <summary>
         /// 原版英雄模式字节 <c>[hero+0x6A1]</c>。三值循环 0/1/2，由 sub_688650 维护：
@@ -129,10 +122,8 @@ namespace GameSvr
             m_UseItems = new TUserItem[NativeHeroDbFrameCodec.EquippedItemCount];
             m_HeroMagicList = m_MagicList;
             m_dwSearchMasterTick = HUtil32.GetTickCount();
-            m_dwAITick = HUtil32.GetTickCount();
             m_dwHeroMagicTick = HUtil32.GetTickCount();
             m_dwNativeHealthSpellDirtyTick = HUtil32.GetTickCount();
-            m_Action = HeroAction.Idle;
             // 原版 ctor sub_6864C4 @0x6865A6: mov byte [edi+0x6A1], 1 → 英雄出生即"跟随"。
             m_btNativeHeroMode = NativeHeroMode.Follow;
             m_btRaceServer = Grobal2.RC_HEROOBJECT;
@@ -387,27 +378,27 @@ namespace GameSvr
             // entering the profession-specific action routine.
             TryReleaseNativeUnionMagic(master);
 
-            // 原版 0x68A1F5 `cmp byte [eax+0x6A1],0 / jne 0x68A4CF`：只有"攻击"模式跑战斗分支。
-            // 非攻击模式走 0x68A4CF：`call sub_6885DC`(清目标)，模式 2(休息) 再额外做地图比较。
-            // sub_6885DC 逐字节（0x6885DC-0x68860C）：
-            //   [+0x6CA]=0, [+0x6CB]=0（守护标志），[+0x344]=0（自己的目标），
-            //   [+0x67C]=0，最后若 [+0x6C4]!=0 则清联动英雄的 [+0x344]。
-            // 注意它**不**清主人的目标——那只发生在 sub_688650 的模式切换尾巴里。
+            // 0x68A1F5 `cmp byte [eax+0x6A1],0 / jne 0x68A4CF`：非攻击先清目标。
+            // 休息 0x68A4DA `cmp byte [eax+0x6A1],2` 再比主人/自己 [+0x128] 地图指针，
+            // `setne bl` 后只有地图不同才 `call 0x68BAD4`。跟随模式 bl 保持 1，必跟。
+            // 攻击模式走职业 AttackTarget，无目标时仍走跟随（尾部 0x68A524）。
             if (m_btNativeHeroMode != NativeHeroMode.Attack)
             {
                 ClearNativeHeroTargets();
+                var restNeedsFollow = m_btNativeHeroMode == NativeHeroMode.Rest
+                    && !ReferenceEquals(master.m_PEnvir, m_PEnvir);
+                if (m_btNativeHeroMode == NativeHeroMode.Follow || restNeedsFollow)
+                    FollowMasterNative(master);
                 return;
             }
 
-            // Periodic AI decisions (every 500ms)
-            if ((dwCurTick - m_dwAITick) > 500)
-            {
-                m_dwAITick = dwCurTick;
-                DecideAction(master);
-            }
+            if (master.m_TargetCret != null && !master.m_TargetCret.m_boDeath)
+                SetTargetCreat(master.m_TargetCret);
 
-            // Execute current action
-            ExecuteAction(master, dwCurTick);
+            if (m_TargetCret != null && !m_TargetCret.m_boDeath)
+                AttackTarget(master, dwCurTick);
+            else
+                FollowMasterNative(master);
         }
 
         /// <summary>
@@ -579,104 +570,45 @@ namespace GameSvr
             return Math.Max(Math.Abs(x1 - x2), Math.Abs(y1 - y2));
         }
 
-        private void DecideAction(TPlayObject master)
+        /// <summary>
+        /// 原版 <c>sub_68BAD4</c> 跟随。已落地的门：
+        /// 地图指针不同 → SpaceMove；切比雪夫 <c>0x68BB49 83 FF 0C / 7C</c> 即 ≥12 过远；
+        /// <c>0x68BB54 83 FF 03 / 7D</c> 即 &lt;3 贴身（已在主人格则停）；
+        /// 锚 <c>+0x63C/+0x640</c> 随主人格更新。
+        /// 附近 5×4 搜格 <c>0x777EF8</c> 与 VMT+0xBC 门未跟完，不臆造，同图只走 <c>GotoTargetXY</c>。
+        /// </summary>
+        private void FollowMasterNative(TPlayObject master)
         {
-            // 原版 sub_76B4A4 = 切比雪夫；旧代码用曼哈顿和是发明。见 NativeGridDistance。
-            int distToMaster = NativeGridDistance(m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
+            if (master == null || master.m_PEnvir == null)
+                return;
 
-            // If master has a target, attack it
-            if (master.m_TargetCret != null && !master.m_TargetCret.m_boDeath)
+            if (!ReferenceEquals(master.m_PEnvir, m_PEnvir))
             {
-                SetTargetCreat(master.m_TargetCret);
-                m_Action = HeroAction.AttackTarget;
+                SpaceMove(master.m_PEnvir, master.m_nCurrX, master.m_nCurrY, 0);
+                m_nNativeGuardAnchorX = master.m_nCurrX;
+                m_nNativeGuardAnchorY = master.m_nCurrY;
                 return;
             }
 
-            // If we're far from master, warp back
-            if (distToMaster > 12)
-            {
-                m_Action = HeroAction.ReturnToMaster;
+            var dist = NativeGridDistance(m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
+            if (dist < 3
+                && m_nCurrX == master.m_nCurrX
+                && m_nCurrY == master.m_nCurrY)
                 return;
-            }
 
-            // If we're moderately far, follow
-            if (distToMaster > 4)
+            if (m_nNativeGuardAnchorX != master.m_nCurrX
+                || m_nNativeGuardAnchorY != master.m_nCurrY)
             {
-                m_Action = HeroAction.FollowMaster;
-                return;
+                m_nNativeGuardAnchorX = master.m_nCurrX;
+                m_nNativeGuardAnchorY = master.m_nCurrY;
             }
 
-            // Stay near master and attack if target exists
-            m_Action = HeroAction.Idle;
-            if (m_TargetCret != null && !m_TargetCret.m_boDeath)
-            {
-                m_Action = HeroAction.AttackTarget;
-            }
-        }
-
-        private void ExecuteAction(TPlayObject master, int dwCurTick)
-        {
-            switch (m_Action)
-            {
-                case HeroAction.FollowMaster:
-                    FollowMaster(master);
-                    break;
-
-                case HeroAction.AttackTarget:
-                    AttackTarget(master, dwCurTick);
-                    break;
-
-                case HeroAction.ReturnToMaster:
-                    ReturnToMaster(master);
-                    break;
-
-                case HeroAction.Idle:
-                default:
-                    // Stand near master. 原版 Run 0x68A4A0 也用 sub_76B4A4（切比雪夫）比守护锚点，
-                    // 阈值 `cmp eax,2 / jle skip` → 大于 2 才走动。
-                    int dist = NativeGridDistance(m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
-                    if (dist > 2)
-                    {
-                        SetTargetXY(master.m_nCurrX, master.m_nCurrY);
-                        GotoTargetXY();
-                    }
-                    if (master.m_TargetCret != null && !master.m_TargetCret.m_boDeath)
-                    {
-                        SetTargetCreat(master.m_TargetCret);
-                    }
-                    else
-                    {
-                        TryCastSkill(master, dwCurTick);
-                    }
-                    break;
-            }
-        }
-
-        private void FollowMaster(TPlayObject master)
-        {
+            // ≥12 过远、3..11 跟随、&lt;3 但不在主人格：都走向主人。
+            // 同格贴身已在上面 return。不发明 dist>20 传送（H-B6，sub_68BAD4 无此 cmp）。
             SetTargetXY(master.m_nCurrX, master.m_nCurrY);
             GotoTargetXY();
-
-            // Face toward master
-            m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
-        }
-
-        private void ReturnToMaster(TPlayObject master)
-        {
-            // 原版跟随 sub_68BAD4 @0x68BB35 也用 sub_76B4A4（切比雪夫）。
-            int dist = NativeGridDistance(m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
-            if (dist > 20 && m_PEnvir == master.m_PEnvir)
-            {
-                // Teleport near master — move within map cell structure
-                m_PEnvir.MoveToMovingObject(m_nCurrX, m_nCurrY, this, (short)(master.m_nCurrX + 1), master.m_nCurrY, false);
-                m_nCurrX = (short)(master.m_nCurrX + 1);
-                m_nCurrY = master.m_nCurrY;
-                SendRefMsg(Grobal2.RM_SPACEMOVE_FIRE, 0, m_nCurrX, m_nCurrY, 0, "");
-            }
-            else
-            {
-                FollowMaster(master);
-            }
+            m_btDirection = M2Share.GetNextDirection(
+                m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
         }
 
         private void AttackTarget(TPlayObject master, int dwCurTick)
@@ -688,19 +620,37 @@ namespace GameSvr
             }
 
             // 原版目标有效性清扫 sub_68A610 @0x68A660 用 sub_76B4A4（切比雪夫）。
+            // 0x68A665 83 F8 0F / 0x68A668 72 0A jb — 仅 dist<15 保留。
             int dist = NativeGridDistance(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
 
-            if (dist > 10)
+            if (dist >= 15)
             {
                 DelTargetCreat();
                 return;
             }
 
-            if (dist > 1)
+            // Job engagement radius. These are the AttackTarget predicates, not
+            // the invented universal melee-1 walk:
+            //   TWarHero 0x6931B0 `cmp eax,1 / ja` → walk when dist > 1
+            //   TMagHero 0x69502A `cmp edi,8 / setle` → act when dist <= 8
+            //   TTaosHero 0x694268 `cmp edi,9 / jg` and `cmp [ebp-8],9 / jg`
+            //     (per-axis box = Chebyshev 9)
+            var approach = m_btJob switch
             {
-                // Move toward target
+                1 => 8,
+                2 => 9,
+                _ => 1
+            };
+            if (dist > approach)
+            {
                 SetTargetXY(m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
                 GotoTargetXY();
+                return;
+            }
+
+            if (m_btJob != 0 && dist > 1)
+            {
+                TryCastSkill(master, dwCurTick);
                 return;
             }
 
@@ -1931,15 +1881,9 @@ namespace GameSvr
             master.SendSocket(BuildHeroAbilityHeader(m_Abil.Exp, m_btJob), body);
         }
 
-        /// <summary>Send SM_HERO_SUBABILITY — hero secondary stats (AC/MAC/DC/MC/SC/Hit/Speed/etc).</summary>
+        /// <summary>Native has no SM 901 (16-bit dx/cx ident load 0 in CODE).</summary>
         public void SendHeroSubAbility()
         {
-            SendToMaster(Grobal2.SM_HERO_SUBABILITY,
-                HUtil32.MakeLong(HUtil32.MakeWord(m_nAntiMagic, 0), 0),
-                HUtil32.MakeWord(m_btHitPoint, m_btSpeedPoint),
-                HUtil32.MakeWord(m_btAntiPoison, m_nPoisonRecover),
-                HUtil32.MakeWord(m_nHealthRecover, m_nSpellRecover),
-                "");
         }
 
         /// <summary>Send SM_HERO_BAGITEMS — hero full bag contents.</summary>
@@ -2103,12 +2047,12 @@ namespace GameSvr
             var currentMp = m_WAbil.MP;
             m_Abil.Level = (ushort)level;
             HeroLevel = (ushort)level;
-            // EXP-06: Native B.MaxExp is pinned at 100 for hero's entire life.
-            // sub_6521BC @0x652479 sets A.MaxExp=100; @0x6524CA copies A→B (0x1F dword block).
-            // Level-up handler sub_6871E0 writes only A.MaxExp (+0x244); the exp-gain loop reads
-            // B.MaxExp (+0x2C0), so B.MaxExp remains 100 forever.
-            // A GM-forced level change must NOT pull MaxExp from the config table.
-            m_Abil.MaxExp = 100;
+            // EXP-06: the 100 at 0x652479 / 0x6B1A3E is a fresh-object default, not a pin --
+            // 0x6B1988 only runs it when B.Level is still 0, and the level-up loop refreshes the
+            // threshold from the level table every iteration (0x687930 call [vtbl+0x240] ->
+            // 0x6BDBD3 B.MaxExp = table[B.Level]). A.MaxExp likewise tracks the level at
+            // 0x68720E (call 0x6884C0 GetLevelExp(A.Level) -> [obj+0x244]).
+            m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
             RecalcLevelAbilitys();
             m_Abil.HP = Math.Min(currentHp, m_Abil.MaxHP);
             m_Abil.MP = Math.Min(currentMp, m_Abil.MaxMP);
@@ -2803,10 +2747,7 @@ namespace GameSvr
             var targetId = ProcessMsg.nParam1;
             var targetObj = M2Share.ObjectManager.Get(targetId);
             if (targetObj != null)
-            {
                 SetTargetCreat(targetObj);
-                m_Action = HeroAction.AttackTarget;
-            }
         }
 
         /// <summary>Handle CM_HERO_DROPITEM — hero drop an item from bag.</summary>
@@ -2894,7 +2835,7 @@ namespace GameSvr
         /// </summary>
         public void ClientHeroChgState(TProcessMessage ProcessMsg)
         {
-            // 原版无 handler：不改 m_Action，不改 m_btNativeHeroMode，不回包。
+            // 原版无 handler：不改 m_btNativeHeroMode，不回包。
         }
 
         /// <summary>

@@ -378,7 +378,7 @@ namespace GameSvr
                                         BaseObject = (TBaseObject)MapCellInfo.ObjList[i].CellObj;
                                         if (BaseObject != null)
                                         {
-                                            if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                            if (BaseObject.IsNativeCellBlocking())
                                             {
                                                 bo1A = false;
                                                 break;
@@ -403,6 +403,22 @@ namespace GameSvr
                     }
                     else
                     {
+                        // MOVE-35(a) — 原版 sub_7797CC 在摘链之前还要校验**旧**坐标，
+                        // C# 只校验了新坐标（:353）：
+                        //   007799F5  0F B7 45 FA     movzx eax,word [ebp-6]  ; 旧 X
+                        //   007799FC  3B 42 3C        cmp   eax,[edx+0x3C]    ; Width
+                        //   007799FF  0F 8D A8 00..   jge   0x779AAD          ; -> FALSE
+                        //   00779A05  0F B7 55 F8     movzx edx,word [ebp-8]  ; 旧 Y
+                        //   00779A0C  3B 51 40        cmp   edx,[ecx+0x40]    ; Height
+                        //   00779A0F  0F 8D 98 00..   jge   0x779AAD          ; -> FALSE
+                        // movzx 让旧坐标恒为非负，所以只有上界；TryGetMapCellIndex 的
+                        // 下界对原版能产出的取值域是恒真的。怪物 mover 放宽到 x==Width
+                        // （MOVE-42）之后，旧坐标同样可能落在界外。
+                        if (!TryGetMapCellIndex(nCX, nCY, out _))
+                        {
+                            return 0;
+                        }
+                        var boUnlinkedFromSource = false;
                         if (GetMapCellInfo(nCX, nCY, ref MapCellInfo) && MapCellInfo.ObjList != null)
                         {
                             var i = 0;
@@ -417,6 +433,7 @@ namespace GameSvr
                                 {
                                     if ((TBaseObject)OSObject.CellObj == Cert)
                                     {
+                                        boUnlinkedFromSource = true;
                                         MapCellInfo.Remove(i);
                                         OSObject = null;
                                         if (MapCellInfo.Count > 0)
@@ -430,6 +447,20 @@ namespace GameSvr
                                 i++;
                             }
                         }
+                        // MOVE-35(b) — 原版只有找到自己并摘链之后才会置 TRUE：
+                        //   00779A4C  83 7D EC 00  cmp dword [ebp-0x14],0 ; 旧格表头
+                        //   00779A50  74 5B        je  0x779AAD           ; 空表 -> FALSE
+                        //   00779A5B  8B 45 EC ..  mov eax,[node+4]
+                        //   00779A61  3B 45 0C     cmp eax,[ebp+0xC]      ; 是不是自己
+                        //   00779A64  75 35        jne 0x779A9B           ; 不是 -> 下一个
+                        //   00779A95  C6 45 F7 01  mov byte [ebp-9],1     ; 唯一置 TRUE 处
+                        //   00779AAD  33 C0        xor eax,eax            ; 遍历完 -> FALSE
+                        // C# 无论找没找到都 Add 并返回 1，于是"从一个自己并不在的格子
+                        // 搬走"会在目标格凭空多出一份登记 —— 旧格的幽灵占位就是这么来的。
+                        if (!boUnlinkedFromSource)
+                        {
+                            return 0;
+                        }
                         if (GetMapCellInfo(nX, nY, ref MapCellInfo))
                         {
                             if (MapCellInfo.ObjList == null)
@@ -442,7 +473,18 @@ namespace GameSvr
                                 CellObj = Cert,
                                 dwAddTime = HUtil32.GetTickCount()
                             };
-                            MapCellInfo.ObjList.Add(OSObject);
+                            // MOVE-35(c) — dest cell is a native singly-linked list
+                            // whose head lives at destCell[8]. After unlinking, the
+                            // mover splices the same node onto the front:
+                            //   00779A80  8B 45 E0        mov eax,[ebp-0x20] ; dest cell
+                            //   00779A83  8B 40 08        mov eax,[eax+8]    ; old head
+                            //   00779A89  89 42 0C        mov [edx+0xC],eax  ; node.next = old head
+                            //   00779A92  89 50 08        mov [eax+8],edx    ; destCell[8] = node
+                            // C# stores the chain as List<T> and walks 0..Count-1, so
+                            // index 0 is the native head. Add() was tail-insert and
+                            // reversed every consumer that iterates the cell (pick-up,
+                            // target select, AOE). Insert(0) restores head order.
+                            MapCellInfo.ObjList.Insert(0, OSObject);
                             result = 1;
                         }
                     }
@@ -487,7 +529,7 @@ namespace GameSvr
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
-                                if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                if (BaseObject.IsNativeCellBlocking())
                                 {
                                     result = false;
                                     break;
@@ -532,7 +574,7 @@ namespace GameSvr
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
-                                if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                if (BaseObject.IsNativeCellBlocking())
                                 {
                                     result = false;
                                     break;
@@ -552,7 +594,7 @@ namespace GameSvr
 
         private bool IsRunBlockingObject(TBaseObject baseObject)
         {
-            if (baseObject == null || baseObject.m_boGhost || !baseObject.bo2B9 || baseObject.m_boDeath || baseObject.m_boFixedHideMode || baseObject.m_boObMode)
+            if (baseObject == null || !baseObject.IsNativeCellBlocking())
             {
                 return false;
             }
@@ -1078,55 +1120,40 @@ namespace GameSvr
         
         public object AddToMapMineEvent(int nX, int nY, CellType nType, StoneMineEvent stoneMineEvent)
         {
-            MapCellinfo Mc = default;
             const string sExceptionMsg = "[Exception] TEnvirnoment::AddToMapMineEvent ";
             var mapCell = false;
             try
             {
+                // Native sub_777D8C gates on three things and nothing else:
+                //   0x777DA2  85 F6           test esi, esi          ; event object
+                //   0x777DA4  74 4A           je   0x777DF0          ;   null -> FALSE
+                //   0x777DB2  E8 F1 F8 FF FF  call 0x7776A8          ; GetMapCellInfo
+                //   0x777DB7  84 C0 / 74 35   test al,al / je        ;   miss -> FALSE
+                //   0x777DBE  80 38 00        cmp  byte [eax], 0     ; cell attribute
+                //   0x777DC1  74 2D           je   0x777DF0          ;   zero -> FALSE
+                // then allocates and links the node unconditionally.
+                //
+                // The 3x3 walkability scan that used to sit here has no native
+                // counterpart, and its failure path returned null, leaving the ore
+                // unplaced. The caller treats an absent ore node as "no ore here" and
+                // builds a fresh StoneMineEvent with a fresh Random(200) count on the
+                // next swing, so a cell that fails the scan yields ore forever.
+                if (stoneMineEvent == null) return null;
                 MapCellinfo MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
-                var bo1A = false;
                 if (mapCell && MapCellInfo.Attribute != 0)
                 {
-                    var isSpace = false;// 人物可以走到的地方才放上矿藏
-                    for (var X = nX - 1; X <= nX + 1; X++)
+                    if (MapCellInfo.ObjList == null)
                     {
-                        for (var Y = nY - 1; Y <= nY + 1; Y++)
-                        {
-                            if (GetMapCellInfo(X, Y, ref Mc))
-                            {
-                                if ((Mc.Valid))
-                                {
-                                    isSpace = true;
-                                }
-                            }
-                            if (isSpace)
-                            {
-                                break;
-                            }
-                        }
-                        if (isSpace)
-                        {
-                            break;
-                        }
+                        MapCellInfo.ObjList = EnsureCellObjectList(nX, nY);
                     }
-                    if (isSpace)
+                    var OSObject = new CellObject
                     {
-                        if (MapCellInfo.ObjList == null)
-                        {
-                            MapCellInfo.ObjList = EnsureCellObjectList(nX, nY);
-                        }
-                        if (!bo1A)
-                        {
-                            var OSObject = new CellObject
-                            {
-                                CellType = nType,
-                                CellObj = stoneMineEvent,
-                                dwAddTime = HUtil32.GetTickCount()
-                            };
-                            MapCellInfo.ObjList.Add(OSObject);
-                            return stoneMineEvent;
-                        }
-                    }
+                        CellType = nType,
+                        CellObj = stoneMineEvent,
+                        dwAddTime = HUtil32.GetTickCount()
+                    };
+                    MapCellInfo.ObjList.Add(OSObject);
+                    return stoneMineEvent;
                 }
             }
             catch (Exception ex)
@@ -1395,11 +1422,62 @@ namespace GameSvr
                         BaseObject = (TBaseObject)OSObject.CellObj;
                         if (BaseObject != null)
                         {
-                            if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                            if (BaseObject.IsNativeCellBlocking())
                             {
                                 result++;
                             }
                         }
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// sub_778858, named by its own exception text at 0x778A7C:
+        /// "[Exception]: TEnvironment.GetMovObjCount". Distinct from
+        /// <see cref="GetXYObjCount"/>: it walks the raw cell chain, drops
+        /// entries whose actor fails the liveness probe sub_765D64 (logging
+        /// each one), and counts the survivors that pass
+        ///   0x7789AA  80 7E 73 00  !m_boGhost
+        ///   0x7789B0  80 BE E6 02 00 00 00 / 74   bo2B9 must be set
+        ///   0x7789BB  sub_772DA8 / 75              !m_boDeath
+        ///   0x7789C4  80 BE E3 02 00 00 00 / 75    !m_boFixedHideMode
+        ///   0x7789CD  80 BE E0 02 00 00 00 / 75    BLOCKED, see below
+        /// It deliberately does NOT carry the ObMode / state-0x3C exclusion
+        /// that IsNativeCellBlocking applies, which is why GetXYObjCount is
+        /// not reused here.
+        ///
+        /// BLOCKED: the +0x2E0 term has no C# field. That byte is written only
+        /// by the constructor at 0x609038 (`C6 86 E0 02 00 00 01`), reached
+        /// from 0x605048, i.e. it is a fixed per-class marker rather than
+        /// runtime state; sub_767498 IsProperTarget rejects on the same byte at
+        /// 0x7674BA. Objects of that class are counted here where native would
+        /// skip them.
+        /// </summary>
+        public int GetNativeMovObjCount(int nX, int nY)
+        {
+            var result = 0;
+            var mapCell = false;
+            MapCellinfo MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
+            if (mapCell && MapCellInfo.ObjList != null)
+            {
+                for (var i = 0; i < MapCellInfo.Count; i++)
+                {
+                    CellObject OSObject = MapCellInfo.ObjList[i];
+                    if (OSObject.CellType != CellType.OS_MOVINGOBJECT)
+                    {
+                        continue;
+                    }
+                    if (!(OSObject.CellObj is TBaseObject BaseObject))
+                    {
+                        continue;
+                    }
+                    if (!BaseObject.m_boGhost && BaseObject.bo2B9 &&
+                        !BaseObject.m_boDeath &&
+                        !BaseObject.m_boFixedHideMode)
+                    {
+                        result++;
                     }
                 }
             }
@@ -1879,7 +1957,7 @@ namespace GameSvr
         {
             string sMsg;
             sMsg = "Map:%s(%s) DAY:%s DARK:%s SAFE:%s FIGHT:%s FIGHT3:%s QUIZ:%s NORECONNECT:%s(%s) MUSIC:%s(%d) EXPRATE:%s(%f) PKWINLEVEL:%s(%d) PKLOSTLEVEL:%s(%d) PKWINEXP:%s(%d) PKLOSTEXP:%s(%d) DECHP:%s(%d/%d) INCHP:%s(%d/%d)";
-            sMsg = sMsg + " DECGAMEGOLD:%s(%d/%d) INCGAMEGOLD:%s(%d/%d) INCGAMEPOINT:%s(%d/%d) RUNHUMAN:%s RUNMON:%s NEEDHOLE:%s NORECALL:%s NOGUILDRECALL:%s NODEARRECALL:%s NOMASTERRECALL:%s NODRUG:%s MINE:%s MINE2:%s NODROPITEM:%s";
+            sMsg = sMsg + " DECGAMEGOLD:%s(%d/%d) INCGAMEGOLD:%s(%d/%d) INCGAMEPOINT:%s(%d/%d) RUNHUMAN:%s RUNMON:%s NEEDHOLE:%s NORECALL:%s NOGUILDRECALL:%s NODEARRECALL:%s NOMASTERRECALL:%s NODRUG:%s MINE:%s NODROPITEM:%s";
             sMsg = sMsg + " NOTHROWITEM:%s NOPOSITIONMOVE:%s NOHORSE:%s NOHUMNOMON:%s NOCHAT:%s ";
             var result = string.Format(sMsg, sMapName, sMapDesc, HUtil32.BoolToStr(Flag.boDayLight), HUtil32.BoolToStr(Flag.boDarkness), HUtil32.BoolToStr(Flag.boSAFE), HUtil32.BoolToStr(Flag.boFightZone),
                 HUtil32.BoolToStr(Flag.boFight3Zone), HUtil32.BoolToStr(Flag.boQUIZ), HUtil32.BoolToStr(Flag.boNORECONNECT), Flag.sNoReConnectMap, HUtil32.BoolToStr(Flag.boMUSIC), Flag.nMUSICID, HUtil32.BoolToStr(Flag.boEXPRATE),
@@ -1887,7 +1965,7 @@ namespace GameSvr
                 Flag.nPKLOSTEXP, HUtil32.BoolToStr(Flag.boDECHP), Flag.nDECHPTIME, Flag.nDECHPPOINT, HUtil32.BoolToStr(Flag.boINCHP), Flag.nINCHPTIME, Flag.nINCHPPOINT, HUtil32.BoolToStr(Flag.boDECGAMEGOLD), Flag.nDECGAMEGOLDTIME,
                 Flag.nDECGAMEGOLD, HUtil32.BoolToStr(Flag.boINCGAMEGOLD), Flag.nINCGAMEGOLDTIME, Flag.nINCGAMEGOLD, HUtil32.BoolToStr(Flag.boINCGAMEPOINT), Flag.nINCGAMEPOINTTIME, Flag.nINCGAMEPOINT, HUtil32.BoolToStr(Flag.boRUNHUMAN),
                 HUtil32.BoolToStr(Flag.boRUNMON), HUtil32.BoolToStr(Flag.boNEEDHOLE), HUtil32.BoolToStr(Flag.boNORECALL), HUtil32.BoolToStr(Flag.boNOGUILDRECALL), HUtil32.BoolToStr(Flag.boNODEARRECALL), HUtil32.BoolToStr(Flag.boNOMASTERRECALL),
-                HUtil32.BoolToStr(Flag.boNODRUG), HUtil32.BoolToStr(Flag.boMINE), HUtil32.BoolToStr(Flag.boMINE2), HUtil32.BoolToStr(Flag.boNODROPITEM), HUtil32.BoolToStr(Flag.boNOTHROWITEM), HUtil32.BoolToStr(Flag.boNOPOSITIONMOVE),
+                HUtil32.BoolToStr(Flag.boNODRUG), HUtil32.BoolToStr(Flag.boMINE), HUtil32.BoolToStr(Flag.boNODROPITEM), HUtil32.BoolToStr(Flag.boNOTHROWITEM), HUtil32.BoolToStr(Flag.boNOPOSITIONMOVE),
                 HUtil32.BoolToStr(Flag.boNOHORSE), HUtil32.BoolToStr(Flag.boNOHUMNOMON), HUtil32.BoolToStr(Flag.boNOCHAT));
             return result;
         }

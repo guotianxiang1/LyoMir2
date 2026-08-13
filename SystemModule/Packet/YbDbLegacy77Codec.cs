@@ -7,6 +7,23 @@ namespace SystemModule.Packet
     /// <summary>
     /// Codec for the legacy 16-byte 77 control frame used by YBDB and the
     /// original DBServer's 5100/5600 links. Business payloads remain separate.
+    ///
+    /// On the LoginGate link this frame is the Delphi record TServerMessage
+    /// (LG source uTypes.pas:124-131). The property names here do NOT line up
+    /// with the Delphi field names, and two of them are outright swapped:
+    ///
+    ///   +0  Sign: Cardinal        -> FrameMagic  ($33AABB77, uTypes.pas:70)
+    ///   +4  rSocketHandle: integer-> QueryId
+    ///   +8  Ident: integer        -> Param    &lt;-- Delphi "Ident" is Param here
+    ///   +12 Cmd: Word             -> Ident    &lt;-- Delphi "Cmd" is Ident here
+    ///   +14 DataLength: Word      -> payload length
+    ///
+    /// The byte layout is correct; only the names diverge. Do not "fix" the
+    /// names by moving values between fields.
+    ///
+    /// Param (+8) is not dead weight: uPigListen.pas:197-199 and
+    /// uDBListen.pas:111 put LM_PIG_MULTI_MSG/222/224 there while Cmd stays
+    /// GDM_PIG_MESSAGE (1002), so a PIG implementation has to populate it.
     /// </summary>
     public static class YbDbLegacy77Codec
     {

@@ -1,11 +1,13 @@
 using System.Text.RegularExpressions;
 
-if (args.Length != 1)
+var root = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (root == null)
 {
-    throw new ArgumentException("Usage: CommandAuditCheck <repository root>");
+    Console.Error.WriteLine("INCOMPLETE: repository root was not supplied and could "
+        + "not be located from the working directory. "
+        + "Usage: CommandAuditCheck [repository root]");
+    Environment.Exit(2);
 }
-
-var root = Path.GetFullPath(args[0]);
 var commandDirectory = Path.Combine(root, "GameSvr", "Command", "Commands");
 if (!Directory.Exists(commandDirectory))
 {
@@ -13,7 +15,7 @@ if (!Directory.Exists(commandDirectory))
 }
 
 // NOTE (2026-08-03): 25 former protected-file entries whose NATIVE @name is ABSENT from the 430-row
-// 战神 registry were moved OUT of this list into silentAbsentCommandFiles below (class-1 unknown-command
+// 战神 registry were moved OUT of this list into absentCommandsMustNotBeRegistered below (class-1 unknown-command
 // silent-sink correction, idat_pass_C §Item D). Their names were confirmed absent by exact-match scan of
 // staging/ida_award_case584_command_registry_20260720.txt (the direct TABLE=0x7B4654 count=430 extraction).
 // The entries retained here are commands that ARE present in the native registry (real known handlers) and
@@ -41,7 +43,6 @@ var protectedFiles = new[]
     "MapCellFreeCommand.cs",
     "NpcHitCommand.cs",
     "ReloadC2CItemsCommand.cs",
-    "ReloadMonitemsTreeCfgCommand.cs",
     "ReloadPromptFileCommand.cs",
     "ReloadRndItemCommand.cs",
     "ReloadSmsUserListCommand.cs",
@@ -152,48 +153,34 @@ foreach (var fileName in silentNativeSinkFiles)
 // the class-1 name. These files are now faithful SILENT no-ops: they must emit NO player-facing output
 // (no NativeCommandFailure.Report / SysMsg / SendDefMessage / MsgColor.Green) while keeping the
 // [GameCommand registration so the @command stays recognized by the C# dispatcher.
-var silentAbsentCommandFiles = new[]
+// 2026-08-13 分裂：原来这张表要求「保留 [GameCommand 注册 + 命令体静默」。那个契约是错的。
+// 注册本身就是发散：BaseCommond.Handle 在调用命令体【之前】就用 nPermissionMin 短路，
+// 权限不足者收到 M2Share.g_sGameCommandPermissionTooLow("权限不够!!!") 红字。这批命令的
+// cs_perm 全是 10，而原生权限上限是 5，所以任何真实调用者都走短路分支——它们从来不是
+// 「静默 no-op」，而是稳定回一句红字。原生对表外 @命令 一个字都不回（0x00621F4F 把所需权限
+// 出参清 0 -> 0x00622AC2 `jbe 0x622B09` 跳过唯一失败回复 -> jt[0]=0x0062B648 静默收尾）。
+// 因此忠实做法是【不注册】。下表的命令必须在 GameSvr 全树查无 [GameCommand("名字" 注册。
+// 2026-08-13 第二批：原先这 10 个走「保留注册 + 命令体静默」，与上一段同样的理由改成
+// 「不注册」，并已由 d5198c6b / 13ef4953 删除文件。名字在 430 行注册表里 exact 0 命中，
+// 全镜像也 0 命中（ASCII 大小写不敏感 + UTF-16LE 双编码，纯 ASCII 名无需 GBK）。
+var absentCommandsMustNotBeRegistered = new[]
 {
-    "AdjustExpCommand.cs",
-    "AnnouncementCommand.cs",
-    "DelDenyAccountLogonCommand.cs",
-    "DelDenyCharNameLogonCommand.cs",
-    "DelDenyIPaddrLogonCommand.cs",
-    "DeleteCharCommand.cs",
-    "DenyAccountLogonCommand.cs",
-    "DenyCharNameLogonCommand.cs",
-    "DenyIPaddrLogonCommand.cs",
-    "DisableSendMsgCommand.cs",
-    "DisableSendMsgListCommand.cs",
-    "EnableSendMsgCommand.cs",
-    "EndContestCommand.cs",
-    "GameDiaMondCommand.cs",
-    "GameGloryCommand.cs",
-    "GuildWarCommand.cs",
-    "ReloadAbuseCommand.cs",
-    "SbkDoorControlCommand.cs",
-    "ShowDenyAccountLogonCommand.cs",
-    "ShowDenyCharNameLogonCommand.cs",
-    "ShowDenyIPaddrLogonCommand.cs",
-    "SignMapMoveCommand.cs",
-    "TestGetBagItemsCommand.cs",
-    "TrainingCommand.cs",
-    "UserCmdCommand.cs",
+    "AdjustExp", "Announcement", "DelDenyAccountLogon", "DelDenyCharNameLogon",
+    "DelDenyIPaddrLogon", "DeleteChar", "DenyAccountLogon", "DenyCharNameLogon",
+    "DenyIPaddrLogon", "DisableSendMsg", "DisableSendMsgList", "EnableSendMsg",
+    "EndContest", "GameDiaMond", "GameGlory", "GuildWar",
+    "ReloadAbuse", "RestartServer", "SbkDoorControl", "ShowDenyAccountLogon",
+    "ShowDenyCharNameLogon", "ShowDenyIPaddrLogon", "SignMapMove",
+    "TestGetBagItems", "Training", "UserCmd",
 };
 
-foreach (var fileName in silentAbsentCommandFiles)
+var gameSvrSources = Directory.GetFiles(Path.Combine(root, "GameSvr"), "*.cs",
+    SearchOption.AllDirectories).Select(File.ReadAllText).ToArray();
+foreach (var command in absentCommandsMustNotBeRegistered)
 {
-    var source = Read(fileName);
-    Assert(!source.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
-        $"{fileName} must stay a silent no-op (native @name absent from the 430-row table -> silent def sink)");
-    Assert(!source.Contains("SysMsg", StringComparison.Ordinal),
-        $"{fileName} reintroduced player-facing output (native is silent for an absent @command)");
-    Assert(!source.Contains("SendDefMessage", StringComparison.Ordinal),
-        $"{fileName} reintroduced player-facing output (native is silent for an absent @command)");
-    Assert(!source.Contains("MsgColor.Green", StringComparison.Ordinal),
-        $"{fileName} reintroduced a success response");
-    Assert(source.Contains("[GameCommand", StringComparison.Ordinal),
-        $"{fileName} lost its GM command registration");
+    var needle = $"[GameCommand(\"{command}\"";
+    Assert(!gameSvrSources.Any(s => s.Contains(needle, StringComparison.OrdinalIgnoreCase)),
+        $"@{command} is absent from the 430-row native registry and must not be registered");
 }
 
 foreach (var implementedFile in new[]
@@ -215,6 +202,12 @@ foreach (var implementedFile in new[]
              // (no x3 fast-train) via a CheckMagicLevelup cascade.
              "SetAPCommand.cs", "AddAPCommand.cs", "ClearAPCommand.cs",
              "Dec30APCommand.cs", "GetAPCommand.cs", "AddSkillExpCommand.cs",
+             // c5338f8e wired @ReloadMonitemsTreeCfg (present in the 430-row registry) to
+             // 0x624002: `mov eax,[0x7D5D9C] / call 0x67AEC0` then an unconditional
+             // `mov cx,0xFFDB / mov edx,0x62BA3C` reply -- 0x62BA3C is a length-25 Delphi
+             // string "MonItemsTree.txt重载成功!" (D6 D8 D4 D8 B3 C9 B9 A6 in GBK). Native
+             // never tests the loader result, so the green success is faithful, not invented.
+             "ReloadMonitemsTreeCfgCommand.cs",
              // 2026-08-08: @LeaveTech (125, perm 4, case@0x006252B0) wired once
              // sub_6C5E08's body was reversed. It delegates to the one shared
              // dissolve core sub_6C5EC8 with edx = 0 (自行离开师门) -- the same
@@ -238,6 +231,11 @@ var allSources = Directory.GetFiles(commandDirectory, "*.cs")
 foreach (var (path, source) in allSources)
 {
     var name = Path.GetFileName(path);
+    // @RestartServer joined the absent list above, so its former "durable shutdown" contract
+    // is gone with the command. What must not come back is a host-killing exit reachable from
+    // any GM command, since native has no such verb at all.
+    Assert(!source.Contains("Environment.Exit", StringComparison.Ordinal),
+        $"{name} kills the host process from a GM command");
     Assert(!source.Contains("[TODO]", StringComparison.Ordinal), $"{name} contains TODO output");
     Assert(!source.Contains("已触发", StringComparison.Ordinal), $"{name} contains fake triggered output");
     Assert(!source.Contains("暂未实现", StringComparison.Ordinal), $"{name} contains placeholder output");
@@ -287,13 +285,7 @@ Assert(Read("ShutupListCommand.cs").Contains("foreach (var item in M2Share.g_Den
         StringComparison.Ordinal),
     "temporary mute list does not enumerate entries");
 
-var restart = Read("RestartServerCommand.cs");
-Assert(restart.Contains("RequestShutdown", StringComparison.Ordinal)
-       && !restart.Contains("Environment.Exit", StringComparison.Ordinal)
-       && !restart.Contains("你的数据已保存", StringComparison.Ordinal),
-    "RestartServer bypasses durable host shutdown or reports an unconfirmed save");
-
-Console.WriteLine($"PASS protected={protectedFiles.Length} silentNativeSink={silentNativeSinkFiles.Length} silentAbsent={silentAbsentCommandFiles.Length} commandFiles={allSources.Length}");
+Console.WriteLine($"PASS protected={protectedFiles.Length} silentNativeSink={silentNativeSinkFiles.Length} absentUnregistered={absentCommandsMustNotBeRegistered.Length} commandFiles={allSources.Length}");
 return;
 
 string Read(string fileName) => File.ReadAllText(Path.Combine(commandDirectory, fileName));
@@ -304,4 +296,23 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// its repository root reported FAIL without evaluating a single assertion. Falling
+// back to the enclosing checkout keeps the assertions exactly as they were and only
+// removes the "never ran" outcome.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

@@ -24,7 +24,9 @@ try
     var plugin = manager.GetPlugin("YanshenCompat");
     plugin.IsInitialized = true;
     var api = new YanshenApi(new TPlayObject(), null, manager);
-    Assert(api.AutoRecycle() == 0,
+    // 原生 AutoRecycle 不返回件数：入口 0x1006CF10 在配置无效时 0x1006CF20 返回 -999，
+    // 正常出口 0x1006CECC mov eax,1 恒返回 1。
+    Assert(api.AutoRecycle() == 1,
         "valid cached config did not execute against an empty bag");
 
     WriteGbk(recyclePath, "{bad json");
@@ -34,16 +36,40 @@ try
     Assert(manager.RecycleConfigItemCount == 3 &&
            manager.IsRecycleItemConfigured("屠龙"),
         "malformed reload replaced the last valid snapshot");
-    Assert(api.AutoRecycle() == 0,
+    Assert(api.AutoRecycle() == 1,
         "AutoRecycle stopped consuming the last valid snapshot after a failed reload");
 
+    // 生产 recycle.json 的 可叠材料 指向出厂模板遗留的 "类型2"，而它的 回收类型 段里没有
+    // 这个名字。整份判废等于那台服务器一件都回收不了，所以只有那件物品失去结算规则，
+    // 其余照常加载；没有结算规则就永远不回收，删不掉也就付不了。
     WriteGbk(recyclePath,
-        "{\"物品种类\":{\"屠龙\":\"不存在\"}," +
+        "{\"物品种类\":{\"屠龙\":\"不存在\",\"怒斩\":\"类型1\"}," +
         "\"回收类型\":{\"类型1\":{\"金币\":1}}}");
+    Assert(manager.ReloadRecycleConfig(out var danglingError),
+        "undefined recycle type rejected the whole document: " + danglingError);
+    Assert(manager.RecycleConfigItemCount == 1 &&
+           manager.IsRecycleItemConfigured("怒斩") &&
+           !manager.IsRecycleItemConfigured("屠龙"),
+        "undefined recycle type did not drop exactly the unresolvable item");
+    Assert(api.AutoRecycle() == 1,
+        "an item without a settlement rule must never be recycled");
+
+    // 装载校验 0x1009103E / 0x10091056 两键缺一就把有效位 0x1031B8C5 置 0，
+    // 而入口 0x1006CF16 一读到 0 就 -999 收工。可叠材料 不算数。
+    WriteGbk(recyclePath,
+        "{\"可叠材料\":{\"新材料\":\"类型2\"}," +
+        "\"回收类型\":{\"类型2\":{\"金币\":1}}}");
+    Assert(!manager.ReloadRecycleConfig(out var rootKeyError) &&
+           rootKeyError.Contains("物品种类", StringComparison.Ordinal),
+        "config without 物品种类 was accepted");
+
+    WriteGbk(recyclePath,
+        "{\"物品种类\":{\"屠龙\":\"类型1\"}," +
+        "\"回收类型\":{\"类型1\":{\"金币\":1,\"没这个键\":1}}}");
     Assert(!manager.ReloadRecycleConfig(out var schemaError) &&
-           schemaError.Contains("unknown recycle type", StringComparison.Ordinal),
-        "unknown recycle type was not rejected");
-    Assert(manager.RecycleConfigItemCount == 3,
+           schemaError.Contains("回收类型", StringComparison.Ordinal),
+        "unknown 回收类型 field was not rejected");
+    Assert(manager.RecycleConfigItemCount == 1,
         "schema failure replaced the last valid snapshot");
 
     WriteGbk(recyclePath,
@@ -74,7 +100,8 @@ try
         "missing initial recycle config did not return -999");
 
     Console.WriteLine(
-        "YanshenRecycleConfigCheck PASS startup=GBK schema=validated reload=atomic lastValid=preserved autoRecycle=-999");
+        "YanshenRecycleConfigCheck PASS startup=GBK schema=validated rootKeys=物品种类+回收类型 " +
+        "reload=atomic lastValid=preserved autoRecycle=1/-999");
 }
 finally
 {

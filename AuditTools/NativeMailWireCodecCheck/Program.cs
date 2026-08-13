@@ -329,7 +329,7 @@ void CheckNativeMailClaimDeleteSourceContract()
     Require(player, "if (record.AttachStatus == 2) return -2;",
         "4462 must reject already-claimed mail");
     Require(player,
-        "entry.Attachments.Count > Grobal2.MAXBAGITEM - m_ItemList.Count",
+        "entry.Attachments.Count > BagCapacity.Of(this) - m_ItemList.Count",
         "4462 must reserve one bag slot per attachment before granting");
     Require(player, "(long)m_nGold + record.MoneyCount > m_nGoldMax",
         "4462 must enforce the player's native gold ceiling");

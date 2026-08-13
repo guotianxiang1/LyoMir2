@@ -1,13 +1,20 @@
 using System.Reflection;
 using System.Runtime.Loader;
 
-if (args.Length != 2)
+var gameDirectory = args.Length > 0 ? Path.GetFullPath(args[0]) : FindGameSvrBuild();
+// Every assertion below round-trips through a live MySQL instance, so without a
+// connection string there is nothing this tool can honestly report.
+var connectionString = args.Length > 1
+    ? args[1]
+    : Environment.GetEnvironmentVariable("LYOMIR_MYSQL_CONNECTION");
+if (gameDirectory == null || string.IsNullOrWhiteSpace(connectionString))
 {
-    throw new ArgumentException("Usage: WeaponUpgradeRoundTripCheck <GameSvr build> <connection string>");
+    Console.Error.WriteLine("INCOMPLETE: a MySQL connection string is required "
+        + "(argument 2 or LYOMIR_MYSQL_CONNECTION). "
+        + "Usage: WeaponUpgradeRoundTripCheck [GameSvr build] <connection string>");
+    Environment.Exit(2);
+    return;
 }
-
-var gameDirectory = Path.GetFullPath(args[0]);
-var connectionString = args[1];
 AssemblyLoadContext.Default.Resolving += (_, name) =>
 {
     var dependency = Path.Combine(gameDirectory, $"{name.Name}.dll");
@@ -124,4 +131,47 @@ static void SetField(Type type, object instance, string name, object value) =>
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// a GameSvr build directory reported FAIL without evaluating a single assertion.
+// Falling back to the checkout's own build output keeps the assertions exactly as
+// they were; when no build exists the tool exits 2 (INCOMPLETE) rather than
+// pretending to have checked anything.
+static string? FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
+}
+
+static string? FindGameSvrBuild()
+{
+    var repositoryRoot = FindRepositoryRoot();
+    if (repositoryRoot == null)
+        return null;
+    var binRoot = Path.Combine(repositoryRoot, "GameSvr", "bin");
+    if (!Directory.Exists(binRoot))
+        return null;
+    var debug = $"{Path.DirectorySeparatorChar}Debug{Path.DirectorySeparatorChar}";
+    foreach (var candidate in Directory
+                 .EnumerateFiles(binRoot, "GameSvr.dll", SearchOption.AllDirectories)
+                 // run_audits.py builds -c Debug, so prefer that configuration and
+                 // then the freshest output within it.
+                 .OrderByDescending(path => path.Contains(debug, StringComparison.OrdinalIgnoreCase))
+                 .ThenByDescending(File.GetLastWriteTimeUtc))
+    {
+        var directory = Path.GetDirectoryName(candidate);
+        if (directory != null && File.Exists(Path.Combine(directory, "SystemModule.dll")))
+            return directory;
+    }
+    return null;
 }

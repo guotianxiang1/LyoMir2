@@ -357,21 +357,25 @@ Assert(!NativeHeroRuntimeCodec.TryCreateSnapshot(magicOverflow, out _, out _, ou
        && error.Contains("magic capacity exceeded", StringComparison.Ordinal),
     "hero magic overflow ignored the reserved unknown record");
 
-// EXP-06: TrySetNativeLevel (GM @UpUserHeroLv / PAS setlevel) must preserve the B.MaxExp=100 pin.
-// Native sub_6521BC @0x652479 seeds A.MaxExp=100; @0x6524CA copies A→B. The level-up handler
-// sub_6871E0 updates only A.MaxExp (+0x244); the exp-gain loop reads B.MaxExp (+0x2C0), which
-// is permanently 100. A GM-forced level change must NOT read from the config exp table.
+// EXP-06: the exp threshold tracks the level, it is not pinned at 100. The 100 written by
+// 0x652479 (A block, ctor) and 0x6B1A3E (B block) is a fresh-object default -- 0x6B1988 guards
+// it with `cmp word [obj+0x278],0 / jne`, so it only lands while the level is still 0. Both
+// copies are then rewritten from the level table: 0x68720E stores GetLevelExp(A.Level) into
+// A.MaxExp (+0x244), and the level-up loop calls [vtbl+0x240] at 0x687930 -- implemented at
+// 0x6BDBD3 as B.MaxExp (+0x2C0) = table[B.Level] -- before 0x687936 re-reads it.
+// A GM-forced level change therefore has to re-derive the threshold from the config table.
 var setLevelHero = new HeroObject();
 Assert(NativeHeroRuntimeCodec.TryApply(setLevelHero, snapshot, snapshotDyn, out error), error);
-Equal(100, setLevelHero.m_Abil.MaxExp, "set-level precondition: MaxExp=100 after load");
-M2Share.g_Config.dwNeedExps[50] = 12345678;  // populate config so GetLevelExp(50) != 100
+Equal(34567890, setLevelHero.m_Abil.MaxExp,
+    "set-level precondition: load derives MaxExp from the level-77 table entry");
+M2Share.g_Config.dwNeedExps[50] = 12345678;
 Assert(setLevelHero.TrySetNativeLevel(50, out error), error);
-Equal(100, setLevelHero.m_Abil.MaxExp,
-    "EXP-06: TrySetNativeLevel must preserve B.MaxExp pinned at 100, not read config table");
+Equal(12345678, setLevelHero.m_Abil.MaxExp,
+    "EXP-06: TrySetNativeLevel must re-derive MaxExp from the config table for the new level");
 Equal((ushort)50, setLevelHero.m_Abil.Level, "TrySetNativeLevel applied the level");
 
 Console.WriteLine(
-    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-pin");
+    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-rederives");
 
 void WriteShortString(byte[] destination, int offset, int maximumLength, string value)
 {

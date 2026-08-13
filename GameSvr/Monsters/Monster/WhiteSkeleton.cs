@@ -19,10 +19,11 @@ namespace GameSvr
         // sub_667D48 逐字节：
         //   667D50  E8 1B 62 0B 00  call sub_71DF70   ; TAnimal.SearchTarget(基类)
         //   667D57  E8 04 00 00 00  call sub_667D60   ; = 本文件的 sub_4AAD54
-        protected override void SearchTarget()
+        protected override bool SearchTarget()
         {
-            base.SearchTarget();
+            var result = base.SearchTarget();
             sub_4AAD54();
+            return result;
         }
 
         public override void Run()

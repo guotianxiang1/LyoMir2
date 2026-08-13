@@ -500,13 +500,20 @@ static void Assert(bool condition, string message)
 
 static string FindRepositoryRoot()
 {
+    // args[0], reached through GetCommandLineArgs because this is a static local
+    // function. It must outrank the working directory: the default tree below is
+    // not always sitting on the branch under test.
+    var cli = Environment.GetCommandLineArgs();
     foreach (var start in new[]
              {
+                 cli.Length > 1 ? cli[1] : null,
                  Environment.CurrentDirectory,
                  AppContext.BaseDirectory,
                  @"D:\loym2\LyoMir2-master"
              })
     {
+        if (string.IsNullOrWhiteSpace(start))
+            continue;
         var current = new DirectoryInfo(start);
         while (current != null)
         {

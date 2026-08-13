@@ -266,6 +266,30 @@ namespace GameSvr
         public bool bo2BA = false;
         public bool m_boAnimal = false;
         public bool m_boNoItem = false;
+        /// <summary>
+        /// 战神 byte[self+0x47F].  Two consumers share it and each one both tests and
+        /// arms it, so the monster's drop table can be consumed exactly once per
+        /// instance no matter which of them runs first:
+        /// <code>
+        /// ; sub_71FA20 @AfterScatterItems
+        /// 71FA50  80 B8 7F 04 00 00 00  cmp byte [eax+0x47F],0
+        /// 71FA57  0F 85 35 06 00 00     jne 0x720092          ; whole function exits
+        /// 71FA6C  C6 80 7F 04 00 00 01  mov byte [eax+0x47F],1
+        /// ; sub_71EC88 (deliver-to-killer path)
+        /// 71ECB1  80 BB 7F 04 00 00 00  cmp byte [ebx+0x47F],0
+        /// 71ECB8  0F 85 B8 00 00 00     jne 0x71ED76
+        /// 71ECBE  C6 83 7F 04 00 00 01  mov byte [ebx+0x47F],1
+        /// </code>
+        /// Full-image scan of disp32 0x47F finds exactly these two writes, both
+        /// storing 1, and no clear site: the monster constructor's zero-fill at
+        /// 0x71D840.. is the only thing that ever puts it back to 0, so the flag is
+        /// per-instance and one-way.
+        ///
+        /// The two <c>call [esi+0x1FC]</c> sites in monster Die (0x71E3D2 / 0x71E3EF)
+        /// are the if/else arms of <c>0x71E3C2 je 0x71E3DA</c> and cannot both run,
+        /// so they are NOT what this guards; sub_71EC88 and any later re-entry are.
+        /// </summary>
+        public bool m_boNativeScatterConsumed = false;
         public bool m_boFixedHideMode = false;
         public bool m_boStickMode = false;
         public bool bo2BF = false;
@@ -591,6 +615,53 @@ namespace GameSvr
             if (HasNativeActiveState(0x18) && callerArg != 0) return true; // MOVE-14
             if (HasNativeActiveState(0x3E)) return true;
             return false;
+        }
+
+        /// <summary>
+        /// Native sub_765D94 (TPlayer VMT+0x00), the single predicate every cell
+        /// scan reaches when it asks "does this actor block the cell?". Native
+        /// defaults to passable and only zeroes the answer at the bottom, so the
+        /// blocking case is the whole conjunction:
+        /// <code>
+        /// 00765D9B  B3 01                 mov  bl,1               ; default passable
+        /// 00765D9D  80 7E 73 00           cmp  byte [esi+0x73],0  ; m_boGhost
+        /// 00765DA1  75 2A                 jne  0x765DCD
+        /// 00765DA3  80 BE E6 02 00 00 00  cmp  byte [esi+0x2E6],0 ; bo2B9
+        /// 00765DAA  74 21                 je   0x765DCD
+        /// 00765DAE  E8 F5 CF 00 00        call 0x772DA8           ; byte [eax+0x74] death
+        /// 00765DB5  75 16                 jne  0x765DCD
+        /// 00765DB7  80 BE E3 02 00 00 00  cmp  byte [esi+0x2E3],0 ; m_boFixedHideMode
+        /// 00765DBE  75 0D                 jne  0x765DCD
+        /// 00765DC2  E8 F1 D0 00 00        call 0x772EB8           ; pass-through grant
+        /// 00765DC9  75 02                 jne  0x765DCD
+        /// 00765DCB  33 DB                 xor  ebx,ebx            ; blocks
+        /// </code>
+        /// MOVE-33: the sixth term was missing in C#, which had inlined only the
+        /// m_boObMode half of 0x772EB8 and dropped the bodyState 0x3C half. The
+        /// expression was also copied five times inside Envirnoment.cs, so the
+        /// term is added here once instead.
+        /// </summary>
+        internal bool IsNativeCellBlocking()
+        {
+            return !m_boGhost && bo2B9 && !m_boDeath && !m_boFixedHideMode
+                   && !HasNativeCellPassThroughGrant();
+        }
+
+        /// <summary>
+        /// Native sub_772EB8, the unconditional pass-through grant consumed by
+        /// sub_765D94 at 0x765DC2. It is a disjunction of two terms:
+        /// <code>
+        /// 00772EBE  80 BB E2 02 00 00 00  cmp  byte [ebx+0x2E2],0 ; m_boObMode
+        /// 00772EC5  75 12                 jne  0x772ED9           ; -> TRUE
+        /// 00772EC7  B2 3C                 mov  dl,0x3C
+        /// 00772ECB  E8 90 FA FF FF        call 0x772960           ; InBodyState(0x3C)
+        /// 00772ED2  75 05                 jne  0x772ED9           ; -> TRUE
+        /// 00772ED4  33 C0                 xor  eax,eax            ; FALSE
+        /// </code>
+        /// </summary>
+        internal bool HasNativeCellPassThroughGrant()
+        {
+            return m_boObMode || HasNativeActiveState(0x3C);
         }
 
         public bool m_boAutoChangeColor = false;
@@ -1709,6 +1780,23 @@ namespace GameSvr
             {
                 m_btDirection = olddir;
             }
+            // TPlayer overrides CharPushed and cancels an open trade, but only when
+            // the player actually moved. VMT [0x6AC8C8+0xA4] holds 0x6BFD1C, and the
+            // override reads:
+            //   0x6BFD28  B2 34              mov dl, 0x34
+            //   0x6BFD2C  E8 2F 2C 0B 00     call 0x772960       ; state 0x34 set?
+            //   0x6BFD33  74 04              je  0x6BFD39
+            //   0x6BFD35  33 F6 / EB 18      xor esi,esi / jmp   ; blocked, no cancel
+            //   0x6BFD3F  E8 08 86 0A 00     call 0x76834C       ; inherited, eax=steps
+            //   0x6BFD46  85 F6              test esi, esi
+            //   0x6BFD48  7E 07              jle 0x6BFD51        ; 0 steps -> no cancel
+            //   0x6BFD4C  E8 73 46 00 00     call 0x6C43C4       ; DealCancel
+            // So the gate is "moved at least one cell", not "took damage": a push that
+            // was fully blocked leaves the trade standing.
+            if (result > 0 && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+            {
+                (this as TPlayObject)?.DealCancel();
+            }
             return result;
         }
 
@@ -1774,6 +1862,22 @@ namespace GameSvr
             if ((nHP < 0) || (nMP < 0))
             {
                 return;
+            }
+            // POIS-18 — native IncHealthSpell @0x769DB4 halves both amounts while
+            // bodyState 0x66 is held, between the negative guard and the clamped adds:
+            //   769DC9  85 F6 / 7C 74      test esi,esi / jl  return    ; nHP < 0
+            //   769DCF  85 FF / 7C 70      test edi,edi / jl  return    ; nMP < 0
+            //   769DD1  B2 66              mov  dl, 0x66
+            //   769DD3  8B C3 / E8 86 8B 00 00  call 0x772960           ; HasState(0x66)
+            //   769DDA  84 C0 / 74 14      test al,al / je 0x769DF2
+            //   769DDE  D1 FE / 79 03 / 83 D6 00   sar esi,1 (toward zero)
+            //   769DE8  D1 FF / 79 03 / 83 D7 00   sar edi,1
+            // Both operands are already non-negative here, so the sar/adc pair is
+            // plain integer division by two.
+            if (HasNativeActiveState(0x66))
+            {
+                nHP /= 2;
+                nMP /= 2;
             }
             m_WAbil.HP = (int)Math.Min((long)m_WAbil.HP + nHP,
                 Math.Max(0, m_WAbil.MaxHP));
@@ -1921,9 +2025,32 @@ namespace GameSvr
         /// here. This body previously used step 3/10 at Width&lt;80, margin 50/15/2 at
         /// Height 150/50, a retry count of 201 and a reseed of Random(Width) with no
         /// margin, and had no LinkPoint fallback at all — none of which native has.
-        private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
+        /// MOVE-61/62: the loop is preceded by two independent per-axis seeders.
+        /// MOVE-63: native keeps one body for all 11 callers, so this is the single
+        /// C# authority; SpaceMove_GetRandXY and TPlayObject's
+        /// TryResolveNativeUserMoveCoordinates are both adapters over it.
+        /// <code>
+        /// 7782E4  83 3F 00     cmp dword [edi],0    ; *pX, signed
+        /// 7782E7  7F 0B        jg  0x7782F4         ; only >0 keeps the caller value
+        /// 7782E9  8B 43 3C     mov eax,[ebx+0x3C]   ; Width
+        /// 7782EC  E8 5B B8 C8 FF call 0x403B4C      ; Random(Width)
+        /// 7782F1  40           inc eax              ; 1..Width (X==Width is possible)
+        /// 7782F2  89 07        mov [edi],eax
+        /// 7782F4..778308        the same against Height (+0x40) for *pY
+        /// </code>
+        /// The X seeder runs before the Y seeder, which fixes the RNG call order.
+        internal static bool NativeGetRandomXY(Envirnoment Envir,
+            ref int nX, ref int nY)
         {
-            var nStep = (short)(Envir.wWidth < 50 ? 2 : 3);
+            if (nX <= 0)
+            {
+                nX = M2Share.RandomNumber.Random(Envir.wWidth) + 1;
+            }
+            if (nY <= 0)
+            {
+                nY = M2Share.RandomNumber.Random(Envir.wHeight) + 1;
+            }
+            var nStep = Envir.wWidth < 50 ? 2 : 3;
             var nMargin = Envir.wHeight < 30
                 ? 2
                 : Envir.wHeight < 250 ? 20 : 50;
@@ -1939,16 +2066,16 @@ namespace GameSvr
                 }
                 else
                 {
-                    nX = (short)(M2Share.RandomNumber.Random(Envir.wWidth / 2)
-                        + nMargin);
+                    nX = M2Share.RandomNumber.Random(Envir.wWidth / 2)
+                        + nMargin;
                     if (nY < (Envir.wHeight - nMargin - 1))
                     {
                         nY += nStep;
                     }
                     else
                     {
-                        nY = (short)(M2Share.RandomNumber.Random(Envir.wHeight / 2)
-                            + nMargin);
+                        nY = M2Share.RandomNumber.Random(Envir.wHeight / 2)
+                            + nMargin;
                     }
                 }
             }
@@ -1958,15 +2085,34 @@ namespace GameSvr
             }
             var Point = Envir.m_PointList[
                 M2Share.RandomNumber.Random(Envir.m_PointList.Count)];
-            nX = Point.nX;
-            nY = Point.nY;
+            // 0x7783EC / 0x7783F4 read the record with movzx, so the word is
+            // zero-extended into the caller's Int32 slot.
+            nX = unchecked((ushort)Point.nX);
+            nY = unchecked((ushort)Point.nY);
             return true;
         }
 
+        private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
+        {
+            int nWideX = nX;
+            int nWideY = nY;
+            var result = NativeGetRandomXY(Envir, ref nWideX, ref nWideY);
+            nX = unchecked((short)nWideX);
+            nY = unchecked((short)nWideY);
+            return result;
+        }
+
+        // MOVE-52 — both space-move arms load the internal idents as immediates:
+        //   006BD3AA  66 B9 85 27  mov cx,0x2785 -> 006BD3B2 call 0x765E68
+        //   006BD3D3  66 B9 86 27  mov cx,0x2786 -> 006BD3DB call 0x765F6C
+        // and the cross-map arm repeats them at 0x6BD51B / 0x6BD544. Only
+        // ExecuteNativeUserMove used to ask for those; every other teleport took
+        // the default and queued the legacy 8097/8098 instead. The default is
+        // now the native pair, so all teleports agree.
         internal bool TrySpaceMoveToEnvironment(Envirnoment targetEnvironment,
             short nX, short nY, int showMode,
             bool coordinatesAlreadyResolved = false,
-            bool useNativeInternalMessages = false)
+            bool useNativeInternalMessages = true)
         {
             if (targetEnvironment == null
                 || M2Share.nServerIndex != targetEnvironment.nServerIndex)
@@ -2287,11 +2433,14 @@ namespace GameSvr
         /// VMT slot <c>+0x244</c> (<c>sub_6D0AE8</c>: <c>Count + 1 &lt;= 48</c>, i.e.
         /// <c>Count &lt; 48</c>) then <c>sub_73CEA8</c> = TList.Add and the weight refresh
         /// <c>sub_73CEE4</c>.
+        ///
+        /// 这是全树的主入包门。<see cref="BagCapacity.Of"/> 对非 <c>TPlayObject</c>
+        /// 返回 48，所以英雄/怪物走的仍是原生那条 <c>sub_6D0AE8</c>。
         /// </summary>
         public bool AddItemToBag(TUserItem UserItem)
         {
             bool result = false;
-            if (m_ItemList.Count < Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count < BagCapacity.Of(this))
             {
                 m_ItemList.Add(UserItem);
                 WeightChanged();
@@ -2747,6 +2896,23 @@ namespace GameSvr
         
         
         
+        // The 基本剑术 override is a code patch on the recalc arm below, so it is
+        // not scoped to any one actor: whoever reaches 0x0076AF96 runs the
+        // rewritten lea. Only the plugin manager is consulted here.
+        private static bool NativeOneSwordOverrideActive()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsOneSword();
+        }
+
+        private static int NativeOneSwordAccuracyFactor()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsOneSword()
+                ? Plugins.YanshenApi.OneSwordLevelFactor(api.OneSwordN())
+                : 3;
+        }
+
         private void RecalcHitSpeed()
         {
             TUserMagic UserMagic;
@@ -2794,31 +2960,73 @@ namespace GameSvr
                 UserMagic = m_MagicList[i];
                 if (UserMagic.wMagIdx < m_MagicArr.Length)
                     m_MagicArr[UserMagic.wMagIdx] = UserMagic;
+                // Native recalc sub_76ADA0 feeds every one of these arms from
+                // sub_4C896C (`mov dl,[eax+0x0C]; add dl,[eax+0x18];
+                // mov cl,[[eax]+0x1A]; cmp dl,cl; jbe`), never from the raw
+                // btLevel: 0x0076AF81, 0x0076AFC6, 0x0076B009, 0x0076B027,
+                // 0x0076B036, 0x0076B0E7.
+                int effectiveLevel = UserMagic.MagicInfo == null
+                    ? UserMagic.btLevel
+                    : Math.Min(
+                        unchecked((byte)(UserMagic.btLevel + UserMagic.NativeLevelBonus)),
+                        UserMagic.MagicInfo.btTrainLv);
                 switch (UserMagic.wMagIdx)
                 {
                     case SpellsDef.SKILL_ONESWORD:// 基本剑法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076AF96 8D 04 40 lea eax,[eax+eax*2] then
+                        // 0x0076AF99 66 01 83 64 02 00 00 add word[ebx+0x264],ax
+                        // yanshen rewrites that lea's SIB byte (plugin
+                        // 0x100B49D9, 3 bytes @0x0076AF96) so n replaces the 3.
+                        // Only LEA-encodable scales exist; see OneSwordLevelFactor.
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(9 / 3 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint
+                                + NativeOneSwordAccuracyFactor() * effectiveLevel));
+                        }
+                        // 0x0076AFA7 3C 04 cmp al,4 /
+                        // 0x0076AFA9 0F 85 4F 03 00 00 jne 0x0076B2FE /
+                        // 0x0076AFAF 83 83 90 02 00 00 02 add dword[ebx+0x290],2
+                        // The same override deletes this tier: plugin 0x100B4A10
+                        // splices `E9 50 03 00 00 90` over 0x0076AFA9, turning the
+                        // conditional skip into an unconditional one.
+                        if (effectiveLevel == 4 && !NativeOneSwordOverrideActive())
+                        {
+                            m_WAbil.DC = HUtil32.MakeLong(HUtil32.LoWord(m_WAbil.DC),
+                                HUtil32.HiWord(m_WAbil.DC) + 2);
                         }
                         break;
                     case SpellsDef.SKILL_ILKWANG:// 精神力战法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076AFE5 DB 2D 14 B3 76 00 fld tbyte[0x76B314] = 8/3
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(8.0 / 3.0 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + HUtil32.Round(8.0 / 3.0 * effectiveLevel)));
                         }
                         break;
                     case SpellsDef.SKILL_YEDO:// 攻杀剑法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076B01E adds the level itself, then
+                        // 0x0076B02C 04 05 add al,5 / 0x0076B02E mov [ebx+0x90],al
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(3 / 3 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + effectiveLevel));
                         }
-                        m_nHitPlus = (byte)(M2Share.DEFHIT + UserMagic.btLevel);
-                        m_btAttackSkillCount = (byte)(7 - UserMagic.btLevel);
+                        m_nHitPlus = unchecked((byte)(M2Share.DEFHIT + effectiveLevel));
+                        m_btAttackSkillCount = unchecked((byte)(7 - effectiveLevel));
                         m_btAttackSkillPointCount = (byte)M2Share.RandomNumber.Random(m_btAttackSkillCount);
                         break;
                     case SpellsDef.SKILL_FIRESWORD:// 烈火剑法
-                        m_nHitDouble = (byte)(4 + UserMagic.btLevel * 4);
+                        // 0x0076B0EC C1 E0 02 shl eax,2 / 0x0076B0EF 04 04 add al,4
+                        m_nHitDouble = unchecked((byte)(4 + effectiveLevel * 4));
+                        break;
+                    // Native sub_76ADA0 reaches 0x76B16D through
+                    // `add eax,-7` / `sub eax,4` / `jb` at 0x76AF2B, i.e.
+                    // unsigned (id - 65) < 4, and stores the record with
+                    // 0x76B170 `mov [ebx+0xC4],eax`. Last one in list order
+                    // wins, and nothing ever clears the field.
+                    case 65:
+                    case SpellsDef.SKILL_66:
+                    case SpellsDef.SKILL_67:
+                    case 68:
+                        m_NativeChargedCounterMagic = UserMagic;
                         break;
                 }
             }
@@ -4028,20 +4236,21 @@ namespace GameSvr
             switch (wordIndex)
             {
                 case 0:
-                    if (stateIndex <= 20)
-                    {
-                        m_nCharStatusEx = enabled
-                            ? m_nCharStatusEx | (uint)mask
-                            : m_nCharStatusEx & ~(uint)mask;
-                        m_nCharStatus = GetCharStatus();
-                    }
-                    else
-                    {
-                        // States 21..31 remain owned by m_wStatusTimeArr. Raw writes
-                        // affect the current body word only and the next status tick
-                        // deliberately rebuilds them from that legacy authority.
-                        m_nCharStatus = newValue;
-                    }
+                    // Native `bts dword [esi+0x168], ebx` @0x77299B writes one flat
+                    // bitset with no per-index ownership split. The former
+                    // `stateIndex <= 20` branch made 21..31 write only the cached
+                    // body word, so every later `m_nCharStatus = GetCharStatus()`
+                    // (Run tick, MakePosion, Initialize, ...) rebuilt those bits from
+                    // m_wStatusTimeArr alone and silently dropped anything the timed
+                    // layer had set: the TimedAbilityNode stayed on the list counting
+                    // down while HasNativeActiveState reported false, so
+                    // FindTimedAbilityInternal returned null and the effect died
+                    // without expiring. Durable store for the whole low word, with
+                    // NativePersistentLowStateMask widened to match.
+                    m_nCharStatusEx = enabled
+                        ? m_nCharStatusEx | (uint)mask
+                        : m_nCharStatusEx & ~(uint)mask;
+                    m_nCharStatus = GetCharStatus();
                     break;
                 case 1:
                     m_nCharStatus2 = newValue;
@@ -4688,13 +4897,11 @@ namespace GameSvr
                     if (MonStatus == MonStatus.MonGen)
                     {
                         M2Share.UserEngine.SendBroadCastMsg(sMsg, MsgType.Mon);
-                        SendRefMsg(Grobal2.SM_MONSTERSAY, 0, 0, 0, 0, sMsg);
                         break;
                     }
                     if (MonSayMsg.Color == MsgColor.White)
                     {
                         ProcessSayMsg(sMsg);
-                        SendRefMsg(Grobal2.SM_MONSTERSAY, 0, 0, 0, 0, sMsg);
                     }
                     else
                     {
@@ -4769,20 +4976,89 @@ namespace GameSvr
         
         
         
+        /// <summary>
+        /// <c>cmp dword [ebp-0x14],0xBB8</c> @0x71FFBD — the gold cap is a literal 3000,
+        /// not a config key ("MonOneDropGoldCount" and friends are 0-hit in the image
+        /// under GBK, bare ASCII and UTF-16LE).
+        /// </summary>
+        private const int NativeScatterGoldCap = 0xBB8;
+
+        /// <summary>
+        /// <c>cmp dword [ebp-0x14],0x7D0</c> @0x71FFDC with the matching
+        /// <c>mov ebx,0x7D0</c> @0x71FFE5 and <c>sub dword [ebp-0x14],0x7D0</c> @0x71FFEA
+        /// — the per-pile amount is a literal 2000, not the operator-tunable
+        /// <c>nMonOneDropGoldCount</c> (whose key name is 0-hit in the image).
+        /// </summary>
+        private const int NativeScatterGoldPile = 0x7D0;
+
         private void ScatterGolds(TBaseObject GoldOfCreat,
-            IList<KeyValuePair<string, string>> scatteredItems = null)
+            IList<KeyValuePair<string, string>> scatteredItems = null,
+            bool nativeMonsterScatter = false)
         {
             int I;
             int nGold;
             if (m_nGold > 0)
             {
+                // 战神 sub_71FA20 @0x71FFAD-0x71FFD4 — the settlement that runs between
+                // "is there any gold" and the pile loop.  C# went straight from
+                // `m_nGold > 0` into the piles, so both steps were missing:
+                //
+                //   71FFAD  cmp dword [ebp-0x14],0    / jle 0x720049  ; == `m_nGold > 0`
+                //   71FFB7  cmp byte [ebp+8],0        / je  0x71FFCD  ; cap switch off
+                //   71FFBD  cmp dword [ebp-0x14],0xBB8/ jle 0x71FFCD
+                //   71FFC6  mov dword [ebp-0x14],0xBB8               ; <== cap FIRST
+                //   71FFCD  mov eax,[ebp-0x14] / cdq
+                //   71FFD1  idiv dword [ebp-0x2C]                    ; <== divide SECOND
+                //   71FFD4  mov [ebp-0x14],eax
+                //
+                // 0x71FFC6 < 0x71FFD1 and the idiv sits on the 0x71FFCD merge point, so
+                // the divide runs whether or not the cap fired.  Order matters: capping
+                // after dividing would let a 20000-gold monster pay out 3000 at tier 2
+                // instead of 1500.
+                //
+                // The cap switch [ebp+8] is 1 on the monster-death path.  It threads
+                // through two thin forwarders and both call sites in monster Die push it
+                // literally:
+                //   71E3C4  6A 00 push 0 / 71E3C6  6A 01 push 1 / 71E3D2 call [esi+0x1FC]
+                //   71E3DA  6A 00 push 0 / 71E3DC  6A 01 push 1 / 71E3EF call [esi+0x1FC]
+                // slot +0x1FC holds sub_71F46C in 123 monster VMTs (every one verified by
+                // the Delphi self-pointer test dword[VMT-0x4C]==VMT); sub_71F46C @0x71F483
+                // re-pushes [ebp+0xC] then [ebp+8] and tail-calls sub_71FA20 @0x71F491, so
+                // the last-pushed 1 lands in sub_71FA20's [ebp+8].  (The 0 that goes with
+                // it is [ebp+0xC], the second-arm switch tested at 0x71FBD8 / 0x71FDA5.)
+                //
+                // [ebp-0x2C] is the same anti-fatigue multiplier MonGetRandomItems folds
+                // into its gate modulus: 1 at 0x71FA62, 2 at 0x71FB27 when
+                // byte[killer+0x1828]==2, and only reachable for a non-nil killer of race
+                // RC_PLAYOBJECT (0x71FAB4 / 0x71FACE).  HeroObject derives from
+                // AnimalObject, not TPlayObject, so the cast reproduces the race gate.
+                //
+                // Uncapped and undivided this was a straight money printer: the overshoot
+                // is (raw gold / 3000) with no ceiling, i.e. 6.7x on a 20 000-gold monster
+                // and 33x on a 100 000-gold boss, doubled again for a tier-2 account.
+                if (nativeMonsterScatter)
+                {
+                    if (m_nGold > NativeScatterGoldCap)
+                    {
+                        m_nGold = NativeScatterGoldCap;
+                    }
+                    var goldDivisor =
+                        (GoldOfCreat as TPlayObject)?.m_btNativeFatigueTier == 2 ? 2 : 1;
+                    m_nGold = m_nGold / goldDivisor;
+                }
+                // The monster path takes the literal from 0x71FFDC; the player-death
+                // path is a different native worker whose per-pile constant has not been
+                // read, so it keeps the config value it has always used.
+                var pileAmount = nativeMonsterScatter
+                    ? NativeScatterGoldPile
+                    : M2Share.g_Config.nMonOneDropGoldCount;
                 I = 0;
                 while (true)
                 {
-                    if (m_nGold > M2Share.g_Config.nMonOneDropGoldCount)
+                    if (m_nGold > pileAmount)
                     {
-                        nGold = M2Share.g_Config.nMonOneDropGoldCount;
-                        m_nGold = m_nGold - M2Share.g_Config.nMonOneDropGoldCount;
+                        nGold = pileAmount;
+                        m_nGold = m_nGold - pileAmount;
                     }
                     else
                     {
@@ -5683,7 +5959,34 @@ namespace GameSvr
             bool result = false;
             if (nType < Grobal2.MAX_STATUS_ATTRIBUTE)
             {
-                var nOldCharStatus = m_nCharStatus;
+                // POIS-08 / STATE-52 — native MakePosion is VMT+0xC8 @0x76B3C8 and owns
+                // no storage of its own; it is a seconds->milliseconds wrapper around the
+                // one and only state authority, AddState (VMT+0x1EC @0x7730D0):
+                //   76B3D8  E8 67 88 00 00        call 0x773C44          ; ImmuneCheck -> abort
+                //   76B3E1  B2 34 / E8 76 75 00 00 HasState(0x34)        ; global veto -> abort
+                //   76B3EE  80 FB 12 / 75 16      if id==0x12 && HasState(0x1A) -> RemoveState(0x1A)
+                //   76B409  0F B7 45 08 / 50      push word [ebp+8]      ; value/level
+                //   76B40E  6A 00                 push 0                 ; flag
+                //   76B413  69 C8 E8 03 00 00     imul ecx, eax, 0x3E8   ; seconds -> ms
+                //   76B41F  FF 93 EC 01 00 00     call [ebx+0x1EC]       ; AddState
+                // C# had grown a second authority (m_wStatusTimeArr, seconds) that
+                // AddTimedAbilityInternal never saw, so no code ever built a
+                // TimedAbilityNode for bodyStates 0x06/0x01/0x1C/0x1F and the four
+                // poison-tick tiers @0x76BD4F-0x76BDF5 were unreachable, while
+                // HasNativeActiveState(26) stayed false for a target the client was
+                // already drawing as petrified. Route through the native authority.
+                // GetCharStatus maps slot i to bit 31-i, so bodyState = 31 - nType.
+                // CanAddNativeTimedAbility inside AddTimedAbilityInternal already covers
+                // the ImmuneCheck and the 0x34 veto, and the 0x12 -> remove 0x1A companion
+                // lives in the same method.
+                // The legacy array stays as the save-record projection and as the carrier
+                // the ~300 existing m_wStatusTimeArr readers still depend on; it is not
+                // native, and collapsing it is a separate change.
+                if (!AddTimedAbilityInternal((byte)(31 - nType), nPoint,
+                        unchecked(nTime * 1000), 0))
+                {
+                    return false;
+                }
                 if (m_wStatusTimeArr[nType] > 0)
                 {
                     if (m_wStatusTimeArr[nType] < nTime)
@@ -5719,10 +6022,14 @@ namespace GameSvr
                 {
                     RecordNativeRedPoisonLevel(nPoint);
                 }
-                if (nOldCharStatus != m_nCharStatus)
-                {
-                    StatusChanged();
-                }
+                // STATE-16 — native MakePosion (0x76B3C8 / TPlayObject override
+                // 0x746604) does not broadcast 657 itself. AddState @0x77318C
+                // notifies through VMT+0x14, which for the default class is
+                // 0x76B42C -> 0x7729C4 (`66 8B 90 74 02 00 00` word [Self+0x274]
+                // then ident 0x291). C# SendTimedAbilityState already sends that
+                // packet (nParam1 = m_nHitSpeed). The extra StatusChanged() here
+                // was a second 657 with wParam=m_nHitSpeed / nParam1=m_nCharStatus,
+                // a shape 0x7729C4 never uses.
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
                     SysMsg(format(M2Share.sYouPoisoned, nTime, nPoint), MsgColor.Red, MsgType.Hint);

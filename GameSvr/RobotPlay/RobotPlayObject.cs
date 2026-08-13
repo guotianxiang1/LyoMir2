@@ -434,7 +434,7 @@ namespace GameSvr
                         }
                         if (!m_PEnvir.Flag.boQUIZ) 
                         {
-                            if ((HUtil32.GetTickCount() - m_dwShoutMsgTick) > 10 * 1000)
+                            if ((HUtil32.GetTickCount() - m_dwShoutMsgTick) >= 15 * 1000)
                             {
                                 if (m_Abil.Level <= M2Share.g_Config.nCanShoutMsgLevel)
                                 {
@@ -454,7 +454,7 @@ namespace GameSvr
                                 }
                                 return;
                             }
-                            SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new object[] { 10 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
+                            SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new object[] { 15 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
                             return;
                         }
                         SysMsg(M2Share.g_sThisMapDisableSendCyCyMsg, MsgColor.Red, MsgType.Hint);
@@ -2629,9 +2629,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)nOldX;
-                        m_nCurrY = (short)nOldY;
-                        m_PEnvir.MoveToMovingObject(nOldX, nOldY, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(nOldX, nOldY);
                     }
                 }
             }

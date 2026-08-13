@@ -13,6 +13,22 @@ namespace DBSvr.Core
     {
         public const int DataRecordSize = 0xEEF8;
         public const ushort DataSizeMarker = 0xEF00;
+
+        // The persisted blob is NOT reproduced verbatim on the wire.  The native load
+        // reply sub_5986CC blits all 0xEF00 bytes (0x598810 rep movsd, ecx=0x3BC0) and
+        // then overwrites exactly one word inside them:
+        //   0x598819 mov edx,[ebp-8]            ; the account name
+        //   0x59881C call 0x5AD608               ; [mgr+0x14] lookup, 0 when absent
+        //   0x598824 mov word ptr [rec+0x53C],ax
+        // rec is the blob start (frame+0x54), so this is record-proper 0x53C-8 = 0x534.
+        // The value comes from the in-memory account object's +0x1C, whose meaning is
+        // UNPROVEN: its only two writers are 0x426436 and 0x5AD676, neither expanded.
+        // Do not synthesise a value here.  The constant exists so that nobody "cleans
+        // up" the codec on the assumption that blob and wire round-trip byte for byte;
+        // they do not, at this one offset.  A DBSvr swap is still migration-free because
+        // the field is recomputed at load time rather than persisted.
+        public const int AccountScopedWordOffset = 0x0534;
+
         public const int ItemRecordSize = 208;
         public const int NativeEquippedItemCount = Grobal2.HUMAN_EQUIPPED_ITEM_COUNT;
         public const int EquippedItemCount = NativeEquippedItemCount;
@@ -339,11 +355,13 @@ namespace DBSvr.Core
                 }
                 if (yanshenSections.Length == 1
                     && !YanshenItemSidecarCodec.TryApply(yanshenSections[0].Payload,
-                        data.HumItems, data.BagItems, data.StorageItems, out error))
+                        data.HumItems, data.BagItems, data.StorageItems,
+                        clearUnlisted: false, out error))
                 {
                     error = "native eye ScriptData: " + error;
                     return false;
                 }
+                YanshenNativeItemLayout.PackAll(data.HumItems, data.BagItems, data.StorageItems);
                 info.NativeScriptData = (byte[])scriptRaw.Clone();
                 info.NativeScriptDataCrc = scriptCrc;
             }
@@ -788,6 +806,7 @@ namespace DBSvr.Core
                 NativeRecord = record.ToArray()
             };
             record.Slice(10, 14).CopyTo(item.btValue);
+            YanshenNativeItemLayout.Unpack(item);
             return item;
         }
 
@@ -867,6 +886,7 @@ namespace DBSvr.Core
             item.btValue.AsSpan().CopyTo(destination.Slice(10, 14));
             destination[UpgradeFlagsOffset] = item.UpgradeFlags;
             destination[BindOffset] = item.Bind;
+            YanshenNativeItemLayout.Pack(item, destination);
             item.NativeRecord = destination.ToArray();
             return true;
         }
@@ -1066,31 +1086,26 @@ namespace DBSvr.Core
 
         private static byte[] MergeKeyValues(byte[] original, Dictionary<int, int> current)
         {
-            // The emitted array has to be globally ascending by key, because native
-            // looks entries up with a binary search over it (sub_6E4270):
-            //   0x6E428C  33 D2        xor edx, edx              ; lo = 0
-            //   0x6E428E  8B C8 / 49   mov ecx, eax / dec ecx    ; hi = len - 1
-            //   0x6E4295  8B C1 / 2B C2 / D1 F8   mid = lo + (hi - lo) >> 1
-            //   0x6E42A2  3B 3C C6     cmp edi, [esi+eax*8]      ; hit -> take value
-            //   0x6E42B3  7E 05        jle -> hi = mid - 1
-            //   0x6E42B5  8D 50 01     lea edx,[eax+1]           ; else lo = mid + 1
-            // with the result seeded to -1 at 0x6E427A. Appending new keys after the
-            // pre-existing ones, as this did, leaves the array unsorted as soon as a
-            // script introduces a key smaller than one already on disk; the search
-            // then silently misses it on the next load and the variable reads back
-            // as -1.
+            // Encoder 0x6E4DE7 / 0x6E4E19  8B 80 xx 08 00 00  mov eax,[eax+0x804/0x808]
+            //                       0x6E4DEF / 0x6E4E21  E8 … call 0x403260 (Move)
+            // bulk-Moves the CURRENT dynarray (ecx = DynArrayLength*8). Keys that
+            // are not in the live array are simply absent, not rewritten as 0 —
+            // the next keyed GetV/GetS then returns -1 (0x6E427A), not 0.
+            // Merging disk-only keys back as 0 inverted that miss.
+            //
+            // Keys below 1001 cannot be produced by SetV/SetS: group 0 lives in
+            // the inline table and is never persisted (decoder sub_6E448C only
+            // touches +0x804/+0x808), and the keyed path requires group>0 so
+            // key = group*1000+index >= 1001. Old C# blobs that filed group-0
+            // as flat keys 1..100 must not be round-tripped.
+            _ = original;
             current ??= new Dictionary<int, int>();
             var merged = new SortedDictionary<int, int>();
-            if (original != null)
-            {
-                for (var offset = 0; offset + 8 <= original.Length; offset += 8)
-                {
-                    var key = BinaryPrimitives.ReadInt32LittleEndian(original.AsSpan(offset, 4));
-                    merged[key] = current.TryGetValue(key, out var value) ? value : 0;
-                }
-            }
             foreach (var pair in current)
+            {
+                if (pair.Key < 1001) continue;
                 merged[pair.Key] = pair.Value;
+            }
 
             using var output = new MemoryStream();
             using var writer = new BinaryWriter(output);

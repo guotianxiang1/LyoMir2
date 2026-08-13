@@ -744,14 +744,17 @@ static void AssertDelay(SendMessage message, int before, int expected,
         $"{label}: expected {expected}ms, actual {delay}ms");
 }
 
+// The recorder rides M2Share.RandomNumber, the field the server assigns at
+// startup. It used to ride RandomNumber's private `random` field, which
+// POIS-26 removed when the facade moved onto the Delphi LCG sub_403B4C
+// (@0x403B4C imul [0x7A2008],0x08088405 / inc / mul / take EDX); GetField then
+// returned null and the tool's own catch reported that MissingFieldException
+// as its failure, so none of the producer draw ledgers were being evaluated.
+// The expected values, bounds and ordinals below are unchanged.
 static FixedRandom UseRandom(params int[] values)
 {
     var random = new FixedRandom(values);
-    var field = typeof(RandomNumber).GetField("random",
-        BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException(typeof(RandomNumber).FullName,
-            "random");
-    field.SetValue(null, random);
+    M2Share.RandomNumber = random;
     return random;
 }
 
@@ -917,7 +920,7 @@ sealed class ProducerPlayerProbe : TPlayObject
     }
 }
 
-sealed class FixedRandom : Random
+sealed class FixedRandom : RandomNumber
 {
     private readonly Queue<int> _values;
 
@@ -928,20 +931,32 @@ sealed class FixedRandom : Random
 
     internal List<int?> MaxValues { get; } = new();
 
-    public override int Next()
+    // NextNativeMagicProducerRandom(0) takes the deliberate seed advance at
+    // TPlayObject.NativeMagicProducers.cs `_ = M2Share.RandomNumber.Random()`,
+    // which is the original Random(0) (sub_403B4C still steps RandSeed and
+    // returns 0). A null ordinal marks it apart from a bounded draw.
+    public override int Random()
     {
         MaxValues.Add(null);
         return Dequeue();
     }
 
-    public override int Next(int maxValue)
+    public override int Random(int Value)
     {
-        MaxValues.Add(maxValue);
+        MaxValues.Add(Value);
         int value = Dequeue();
-        if (maxValue <= 0 || value < 0 || value >= maxValue)
+        if (Value <= 0 || value < 0 || value >= Value)
             throw new ArgumentOutOfRangeException(nameof(value));
         return value;
     }
+
+    // The producers reach neither the min/max draw nor the inclusive
+    // GetRandomNumber entry; either arriving here is an unrecorded call.
+    public override int Random(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected Random(min,max) draw");
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected GetRandomNumber draw");
 
     private int Dequeue()
     {
