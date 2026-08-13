@@ -524,13 +524,11 @@ namespace GameSvr
                 return;
             }
             var Castle = M2Share.CastleManager.IsCastleEnvir(m_PEnvir);
+            // The locked-gate branch answers nothing: ident 613 has zero immediate-load
+            // sites in the whole code segment, so no native path can put it on the wire.
             if (Castle == null || Castle.m_DoorStatus != door.Status || m_btRaceServer != Grobal2.RC_PLAYOBJECT || Castle.CheckInPalace(m_nCurrX, m_nCurrY, this))
             {
                 M2Share.UserEngine.OpenDoor(m_PEnvir, nX, nY);
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_OPENDOOR_LOCK, nX, nY, 0, 0, "");
             }
         }
 
