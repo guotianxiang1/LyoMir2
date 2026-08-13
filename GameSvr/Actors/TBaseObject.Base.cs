@@ -1329,10 +1329,11 @@ namespace GameSvr
                 }
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
-                    if (m_GroupOwner != null)
-                    {
-                        m_GroupOwner.DelMember(this);// 人物死亡立即退组，以防止组队刷经验
-                    }
+                    // 战神死亡不退组。sub_726E68 (group.DelMember) 全镜像只有两处
+                    // E8：0x6C3181（CM_GROUPMODE 关组，非队长自退）和 0x6C3D73
+                    // （CM_DELGROUPMEMBER）。经验收集轮 0x726C84 call 0x772DA8
+                    // 只跳过 IsDead([+0x74])，尸体仍留在队里，复活后还在。
+                    // 旧 C# 死亡立刻 DelMember 是 INVENTED，玩家每次死亡都要重新组队。
                     if (m_LastHiter != null)
                     {
                         if (m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
