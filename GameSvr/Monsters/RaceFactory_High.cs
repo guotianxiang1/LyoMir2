@@ -107,6 +107,11 @@ namespace GameSvr
                 case 159:
                     cert = new TimerBombMon();
                     break;
+
+                // race 174 TFoxBossMon : AnimalObject —— 见 Monster/FoxBossMon.cs
+                case 174:
+                    cert = new FoxBossMon();
+                    break;
             }
             return cert != null;
         }
