@@ -76,8 +76,24 @@ namespace GameSvr
 
             if (abilityChanged)
             {
-                if (node.InternalType == 45 && this is TPlayObject player)
+                if ((node.InternalType == 0 || node.InternalType == 45) &&
+                    this is TPlayObject player)
                 {
+                    // STATE-26(a) — SetState @0x772974 pre-hook, bytes verified:
+                    //   77297F  84 C0                 test al, al     ; id==0 ?
+                    //   772981  74 04                 je   0x772987   ; yes -> hook
+                    //   772983  2C 2D                 sub  al, 0x2D   ; id==0x2D ?
+                    //   772985  75 0C                 jne  0x772993
+                    //   772987  33 D2                 xor  edx, edx
+                    //   77298D  FF 91 D8 01 00 00     call [ecx+0x1D8]
+                    // edx is always 0, so both ids run the same virtual.
+                    // TPlayObject VMT 0x6AC8C8+0x1D8 = 0x6EE2AC (cmp byte
+                    // [self+0x1914],0 / clear pending / SM 0xD57=3415), which
+                    // is CancelNativeType51PendingForTimedAbility. Default
+                    // VMT+0x1D8 is 0x772A98 `ret`. The hook lives inside
+                    // abilityChanged because native SetState is only reached
+                    // from VMT+0x60 (0x77327C), which AddState calls only on
+                    // a new node or a higher value (0x773131 / 0x773189).
                     player.CancelNativeType51PendingForTimedAbility();
                 }
                 SetNativeActiveState(node.InternalType);
@@ -103,6 +119,31 @@ namespace GameSvr
                     // so every consumer that tiers on state 0x13's level fell to the
                     // bottom tier, and set Flag=1 on a record native leaves at 0.
                     AddTimedAbilityInternal(19, 1, -1, 0);
+                }
+                if (node.InternalType == 50)
+                {
+                    // STATE-30 — gained mutation @0x77332E, bytes verified:
+                    //   77328F  8A 46 01 / 2C 12 / 74 7F   id==0x12
+                    //   773297  2C 02 / 74 11              id==0x14
+                    //   77329B  2C 06 / 74 2F              id==0x1A
+                    //   77329F  2C 18 / 0F 84 87 00 00 00  id==0x32 -> 0x77332E
+                    //   77332E  8A 43 72                   mov  al, byte [ebx+0x72] ; m_btJob
+                    //   773331  3C 01 / 75 15              cmp  al,1 / jne job2
+                    //   773335  6A 01 / 6A 00 / 83 C9 FF   value=1, flag=0, ecx=-1
+                    //   77333C  B2 07                      mov  dl, 7
+                    //   773342  FF 97 EC 01 00 00          call [edi+0x1EC] AddState
+                    //   77334A  3C 02 / 75 13              cmp  al,2 / jne skip
+                    //   773355  B2 08                      mov  dl, 8
+                    //   77335B  FF 97 EC 01 00 00          call [edi+0x1EC]
+                    // Job 0 and any other value do nothing. Permanent (ecx=-1).
+                    if (m_btJob == 1)
+                    {
+                        AddTimedAbilityInternal(7, 1, -1, 0);
+                    }
+                    else if (m_btJob == 2)
+                    {
+                        AddTimedAbilityInternal(8, 1, -1, 0);
+                    }
                 }
             }
 
@@ -614,6 +655,46 @@ namespace GameSvr
                     case 2:
                         m_WAbil.SC = AddTimedRange(m_WAbil.SC, value);
                         break;
+                    case 3:
+                        // STATE-47 — band handler for 0x23 @0x77357F, bytes verified:
+                        //   77357F  66 8B 43 0A            mov  ax, word [ebx+0xA]
+                        //   773583  66 01 46 10            add  word [esi+0x10], ax
+                        //   773587  E9 91 05 00 00         jmp  0x773B1D
+                        // esi = Self+0x264 (callers `lea edx,[ebx+0x264]` @0x60A8B9 /
+                        // 0x73DD6B / 0x73E43E), so esi+0x10 = Self+0x274.
+                        // 0x7729C4 broadcasts that word on SM_CHARSTATUSCHANGED 657
+                        // (`66 8B 90 74 02 00 00  mov dx, word [eax+0x274]`), which
+                        // C# SendTimedAbilityState already sends as m_nHitSpeed.
+                        m_nHitSpeed = unchecked((ushort)(m_nHitSpeed +
+                            (ushort)value));
+                        break;
+                    case 10:
+                        // STATE-37 — band handler for 0x2A @0x773636, bytes verified:
+                        //   773636  83 7B 0A 01            cmp  dword [ebx+0xA], 1
+                        //   77363A  0F 85 DD 04 00 00      jne  default (0x773B1D)
+                        //   773640  8D 87 64 02 00 00      lea  eax, [edi+0x264]
+                        // ×1.2 six dwords esi+0x28/2C/30/34/38/3C (DC/MC/SC lo+hi):
+                        //   fild dword / fld tbyte [0x773B5C] / fmulp / call 0x403580 @TRUNC
+                        //   0x773B5C = 9A 99 99 99 99 99 99 99 FF 3F  (80-bit extended 1.2)
+                        // ×1.5 six dwords esi+0x18/1C/20/24/4C/54 (AC/MAC lo+hi, MaxHP, MaxMP):
+                        //   fild dword / fmul dword [0x773B68] / call 0x403580 @TRUNC
+                        //   0x773B68 = 00 00 C0 3F  (float32 1.5)
+                        // @TRUNC @0x403580: `66 81 4C 24 02 00 0F` or word [esp+2],0x0F00
+                        // then fistp — toward-zero, not @ROUND 0x403574.
+                        // 0..50000 integer scan: trunc(n*1.2) agrees between the 80-bit
+                        // constant and IEEE double, so double 1.2 is used here.
+                        if (value != 1)
+                        {
+                            break;
+                        }
+                        m_WAbil.DC = ScaleTimedRange(m_WAbil.DC, 1.2);
+                        m_WAbil.MC = ScaleTimedRange(m_WAbil.MC, 1.2);
+                        m_WAbil.SC = ScaleTimedRange(m_WAbil.SC, 1.2);
+                        m_WAbil.AC = ScaleTimedRange(m_WAbil.AC, 1.5);
+                        m_WAbil.MAC = ScaleTimedRange(m_WAbil.MAC, 1.5);
+                        m_WAbil.MaxHP = TruncMulNative(m_WAbil.MaxHP, 1.5);
+                        m_WAbil.MaxMP = TruncMulNative(m_WAbil.MaxMP, 1.5);
+                        break;
                     case 4:
                         m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value);
                         break;
@@ -701,6 +782,26 @@ namespace GameSvr
             return HUtil32.MakeLong(
                 unchecked((ushort)(HUtil32.LoWord(ability) + value)),
                 unchecked((ushort)(HUtil32.HiWord(ability) + value)));
+        }
+
+        /// <summary>
+        /// STATE-37: toward-zero multiply matching @TRUNC (0x403580).
+        /// <c>(int)(value * factor)</c> truncates toward zero for both signs.
+        /// </summary>
+        private static int TruncMulNative(int value, double factor)
+        {
+            return unchecked((int)(value * factor));
+        }
+
+        /// <summary>
+        /// STATE-37: native stores AC/DC/MC/SC as two dwords at Self+0x264+off;
+        /// C# packs each pair as LoWord/HiWord of one int, same as AddTimedRange.
+        /// </summary>
+        private static int ScaleTimedRange(int ability, double factor)
+        {
+            return HUtil32.MakeLong(
+                unchecked((ushort)TruncMulNative(HUtil32.LoWord(ability), factor)),
+                unchecked((ushort)TruncMulNative(HUtil32.HiWord(ability), factor)));
         }
 
         /// <summary>
