@@ -594,17 +594,48 @@ namespace GameSvr.Plugins
             _player.SendAddItem(restored);
         }
 
-        /// <summary>NPCOK框给物品加17元素, ClientItemID=OK框物品ID</summary>
+        /// <summary>
+        /// Ys_NpcGiveItemYs / 数字隧道 24 —— 给 ClientItemID 指定的那件物品写 17 个元素值。
+        /// 处理函数 0x10073B40，字段 2 = ClientItemID，字段 3..19 = ys1..ys17。
+        ///
+        /// 寻址：10073BEA mov eax,[eax+0x508] 只遍历背包 m_ItemList，比 [item+0x18]
+        /// （= ClientItemID），取**第一个**命中的；身上装备和英雄容器都不在范围内。
+        /// 空背包或找不到走 10073BB5 BEFEFFFFFF mov esi,-2。
+        ///
+        /// 负值跳过而不是当 0 写：10073C8F 85C0 test eax,eax / 10073C91 0F88E0000000 js
+        /// 直接跳到 10073D77 inc edi，本轮什么都不写。官方文档同一句：
+        /// 「ys1~ys17：大于等于0表示设置这个元素值，小于0表示这个元素值不修改」。
+        ///
+        /// ys1 是 dword 且不夹取（10073CA4 89707C mov [eax+0x7C],esi），ys2..ys17 先
+        /// 夹到 255（10073CAC 3DFF000000 cmp eax,0xFF / 7E07 jle / C745E4FF000000）
+        /// 再按字节写。函数里没有任何发包调用，刷新是脚本自己的活（caret 29）。
+        /// </summary>
         public int NpcGiveItemYs(int clientItemId, int[] ys)
         {
             if (!Enabled("自定义元素")) return 0;
-            if (ys == null || ys.Length < 1) return 0;
-            var found = FindOwnedItemByClientId(clientItemId);
-            if (found == null) return 0;
-            for (int i = 0; i < Math.Min(ys.Length, 17); i++)
-                SetElementValue(found, i + 1, ys[i]);
-            RefreshOwnedItem(found);
-            return 1;
+            if (ys == null) return -2;
+            TUserItem found = null;
+            foreach (var item in _player.m_ItemList)
+            {
+                if (item == null || item.wIndex == 0) continue;
+                if (_player.EnsureClientItemId(item) != clientItemId) continue;
+                found = item;
+                break;
+            }
+            if (found == null) return -2;
+            // 10073C69 83FF12 cmp edi,0x12 / 0F8D0B010000 jge —— 循环 edi = 1..17，
+            // 每轮 10073C7B call 0x10018460 取 vector::at(edi+2)。处理器入口只要求
+            // 19 段（10073B8C 83F813 cmp eax,0x13），但 edi=17 要读第 20 段，所以
+            // 正好 19 段时 at() 抛 out_of_range，被 10073D9A 的 SEH 收成 -3。
+            for (var i = 0; i < 17; i++)
+            {
+                if (i >= ys.Length) return -3;
+                var value = ys[i];
+                if (value < 0) continue;
+                if (i == 0) found.ys1 = value;
+                else SetElementValue(found, i + 1, value);
+            }
+            return 1;                                   // 10073D7D BE01000000
         }
 
         private TUserItem FindOwnedItemByClientId(int clientItemId, bool allowMakeIndexFallback = true)
@@ -2003,16 +2034,49 @@ namespace GameSvr.Plugins
             return 1;
         }
 
-        /// <summary>在地面丢弃物品</summary>
+        /// <summary>
+        /// ys_DropItem / 数字隧道 7 —— 在角色周围地面上**新产生** count 件 itemName。
+        /// 官方文档原话：「此函数是在角色周围地面上新产生物品，和角色背包有不有物品
+        /// 毫无关系」（AllFuc使用例子.pas:309）。原来的实现方向正好反了：它用
+        /// DelBagItem 把玩家背包里的同名物品删掉。
+        ///
+        /// 处理函数 0x10070D20，字段顺序 (num, range, name) = fields[2..4]；它把
+        /// (self, name, range, num) 交给宿主 0x0064E6F4（10070D98 mov [ebp-0x2C],0x64E6F4
+        /// / 10070E0A call [ebp-0x2C]），返回值是原样回传的 num（10070DB7 mov [ebp-0x1C],eax，
+        /// 之后再没被改过）。
+        ///
+        /// 宿主 0x0064E6F4 的阶梯：
+        ///   0064E71E 83FB01 cmp ebx,1 / 7D05 jge / BB01000000  —— num &lt; 1 提到 1
+        ///   0064E72B mov edx,0x64E7E0 / call 0x0040591C / 753D jne —— 名字等于「金币」
+        ///       （0x64E7DC 处的长度前缀是 4，正好两个汉字）走金币分支，每次最多 2000
+        ///   否则每轮 0064E784 call 0x0074DE54 造一件新物品，造不出来就跳出循环，
+        ///       造出来就 0064E79D call 0x007688A0 扔地上，扔失败 0064E7A8 call 0x00404690 释放
+        /// </summary>
         public int DropItem(int count, int range, string itemName)
         {
-            if (_npc == null) return 0;
-            // Drop items from bag to ground — uses DelBagItem to remove, item appears on ground via map system
-            for (int i = 0; i < count; i++)
+            if (string.IsNullOrEmpty(itemName)) return count;
+            var n = count < 1 ? 1 : count;
+
+            if (string.Equals(itemName, "金币", StringComparison.Ordinal))
             {
-                var userItem = _player.CheckItems(itemName);
-                if (userItem == null) break;
-                _player.DelBagItem(userItem.MakeIndex, M2Share.UserEngine.GetStdItemName(userItem.wIndex));
+                // 0064E737..0064E770 的三段判定原样转写：先切 2000，再补尾数。
+                do
+                {
+                    if (n > 2000) { _player.YanshenTunnelDropGold(2000); n -= 2000; }
+                    if (n <= 2000) _player.YanshenTunnelDropGold(n);
+                } while (n > 2000);
+                return count;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var userItem = new TUserItem();
+                if (!M2Share.UserEngine.CopyToUserItemFromName(itemName, ref userItem)) break;
+                // 宿主 0x007688A0 的第 3 个寄存器参就是 range；第 6 个栈参（[ebp+0xC]）
+                // 是 self，对应 C# 的 DropCreat。另外两个字节旗标（[ebp+0x14]=1 跳过
+                // 0x0078389C 的可丢弃校验、[ebp+0x10]=0）在 C# 的 DropItemDown 里没有
+                // 对应形参，本工程的模型只有 (boDieDrop, ItemOfCreat, DropCreat)。
+                _player.DropItemDown(userItem, range, false, null, _player);
             }
             return count;
         }
