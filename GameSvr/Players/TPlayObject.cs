@@ -2138,7 +2138,24 @@ namespace GameSvr
                 // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
                 if (M2Share.RandomNumber.Random(4) == 0)
                 {
-                    var pileEvent = (PileStones)m_PEnvir.GetEvent(m_nCurrX, m_nCurrY);
+                    // MINE-55: 原版按 kind 判别取石堆，不做类判定；不匹配就继续
+                    // 走链、最终返回 null：
+                    //   0x717723  6A 03              push 3               ; 期望的 kind
+                    //   0x717737  E8 54 1A 06 00     call 0x779190
+                    //     0x7791CD  80 38 03         cmp byte [node],3    ; 节点种类
+                    //     0x7791E1  3A 58 0C         cmp bl,byte [obj+0xC]; 事件类型
+                    //     0x7791E4  75 04            jne next             ; 不匹配继续走链
+                    //   0x71773C  85 C0              test eax,eax
+                    //   0x71773E  75 33              jne 0x717773         ; 命中 → AddEventParam
+                    // C# 原来用 (PileStones) 强转 GetEvent(x,y) 的返回值，而
+                    // Envirnoment.GetEvent(x,y) 返回该格**最后一个**
+                    // OS_EVENTOBJECT、不区分类型，所以格上放过火墙/圣言术屏障
+                    // 等任何别的 Event 子类时会抛 InvalidCastException。
+                    // 强转在类型判断之前就炸了，下面那个 m_nEventType 判断因此
+                    // 是不可达的死代码；改成带类型的重载后它也不再需要。
+                    var pileEvent =
+                        m_PEnvir.GetEvent(m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES)
+                            as PileStones;
                     if (pileEvent == null)
                     {
                         pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
@@ -2146,10 +2163,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        if (pileEvent.m_nEventType == Grobal2.ET_PILESTONES)
-                        {
-                            pileEvent.AddEventParam();
-                        }
+                        pileEvent.AddEventParam();
                     }
                     // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
                     // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
