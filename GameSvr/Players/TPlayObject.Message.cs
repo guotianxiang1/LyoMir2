@@ -2020,10 +2020,19 @@ namespace GameSvr
                                 ProcessMsg.BaseObject, 0x9700, 0, 1);
                             break;
                         case Grobal2.RM_CATTLE_SYSMESSAGE:
+                            // 0x743B70 mov ax,[ebx+2] / push eax => Param <- wParam, then
+                            // 6A 00 / 6A 00 => Tag = Series = 0, 0x743B88 mov ecx,[ebx+4]
+                            // => Recog <- nParam1, 0x743B8B mov dx,0xB0C.
+                            // The enqueue helper sub_743C34 puts its ecx in the wParam slot
+                            // ([ebp+0x1C] -> word[rec+2]) and Self in nParam1, and both
+                            // native callers load `mov cx,0xFB` (0x7159D6, 0x715D4E) - the
+                            // same 0xFB this tree's producer passes. So the colour byte
+                            // belongs in Param; it was going out in Series, which native
+                            // leaves at zero. Recog was already right: nParam1 == Self.
                             m_DefMsg = Grobal2.MakeDefaultMsg(
                                 Grobal2.SM_CATTLE_SYSMESSAGE,
-                                ProcessMsg.BaseObject, 0, 0,
-                                ProcessMsg.wParam);
+                                ProcessMsg.BaseObject, ProcessMsg.wParam,
+                                0, 0);
                             break;
                         case Grobal2.RM_SYSMESSAGE:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);

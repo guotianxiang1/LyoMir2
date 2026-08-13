@@ -767,8 +767,20 @@ namespace GameSvr
                 }
             }
 
+            // 战神 sub_6F05D8 (@0x6F05E0 mov ebx,eax => ebx IS Self) always answers, and
+            // always with nRecog = Self:
+            //   empty  0x6F0697 cmp [ebp-4],0 / je 0x6F06D8 and 0x6F06A5 test eax,eax /
+            //          0x6F06A7 jle 0x6F06D8 -> 0x6F06D8 push 0 x5 / 8B CB mov ecx,ebx /
+            //          66 BA 86 10 mov dx,0x1086 / FF 93 54 02 00 00 call [ebx+0x254]
+            //   filled 0x6F06B1 push eax(count) / push 0 / push 0 / push list /
+            //          0x6F06C2 6B C0 16 imul eax,eax,0x16 push (count*22) /
+            //          0x6F06C6 8B CB mov ecx,ebx / mov dx,0x1086 / call [ebx+0x254]
+            // Both were wrong here: nRecog was 0, and an empty list returned without
+            // sending, so a client that waits for 4230 during the login burst never got it.
             if (records.Count == 0)
             {
+                m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, ObjectId, 0, 0, 0);
+                SendSocket(m_DefMsg);
                 return;
             }
 
@@ -783,7 +795,7 @@ namespace GameSvr
                 writer.Write(records[i].Range);
             }
 
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, 0, records.Count, 0, 0);
+            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, ObjectId, records.Count, 0, 0);
             SendSocket(m_DefMsg, memoryStream.ToArray());
         }
 
