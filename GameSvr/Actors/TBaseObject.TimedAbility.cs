@@ -482,6 +482,15 @@ namespace GameSvr
         // 3. @ 0x772FB8: ImmuneCheck (sub_773C44) → refuse if immune
         internal virtual bool CanAddNativeTimedAbility(byte internalType)
         {
+            return CanAddNativeTimedAbilityCreature(internalType);
+        }
+
+        // The 0x772F84 body itself, reachable non-virtually so the THumanKind
+        // override @0x7465D4 can express its `call 0x772F84` at 0x7465E6 without
+        // re-entering the virtual slot. See CanAddNativeTimedAbilityHumanKind in
+        // TBaseObject.NativeMakePosion.cs.
+        protected bool CanAddNativeTimedAbilityCreature(byte internalType)
+        {
         // STATE-11: Apply gate (VMT+0x1E8 @ EA 0x772F84 base implementation).
         // Called inside the native add function at 0x7730E9. If this returns false,
         // the entire application aborts SILENTLY with no messages, no bitset changes,
