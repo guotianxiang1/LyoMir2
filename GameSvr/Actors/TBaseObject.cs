@@ -2896,6 +2896,23 @@ namespace GameSvr
         
         
         
+        // The 基本剑术 override is a code patch on the recalc arm below, so it is
+        // not scoped to any one actor: whoever reaches 0x0076AF96 runs the
+        // rewritten lea. Only the plugin manager is consulted here.
+        private static bool NativeOneSwordOverrideActive()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsOneSword();
+        }
+
+        private static int NativeOneSwordAccuracyFactor()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsOneSword()
+                ? Plugins.YanshenApi.OneSwordLevelFactor(api.OneSwordN())
+                : 3;
+        }
+
         private void RecalcHitSpeed()
         {
             TUserMagic UserMagic;
@@ -2958,13 +2975,21 @@ namespace GameSvr
                     case SpellsDef.SKILL_ONESWORD:// 基本剑法
                         // 0x0076AF96 8D 04 40 lea eax,[eax+eax*2] then
                         // 0x0076AF99 66 01 83 64 02 00 00 add word[ebx+0x264],ax
+                        // yanshen rewrites that lea's SIB byte (plugin
+                        // 0x100B49D9, 3 bytes @0x0076AF96) so n replaces the 3.
+                        // Only LEA-encodable scales exist; see OneSwordLevelFactor.
                         if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + 3 * effectiveLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint
+                                + NativeOneSwordAccuracyFactor() * effectiveLevel));
                         }
                         // 0x0076AFA7 3C 04 cmp al,4 /
+                        // 0x0076AFA9 0F 85 4F 03 00 00 jne 0x0076B2FE /
                         // 0x0076AFAF 83 83 90 02 00 00 02 add dword[ebx+0x290],2
-                        if (effectiveLevel == 4)
+                        // The same override deletes this tier: plugin 0x100B4A10
+                        // splices `E9 50 03 00 00 90` over 0x0076AFA9, turning the
+                        // conditional skip into an unconditional one.
+                        if (effectiveLevel == 4 && !NativeOneSwordOverrideActive())
                         {
                             m_WAbil.DC = HUtil32.MakeLong(HUtil32.LoWord(m_WAbil.DC),
                                 HUtil32.HiWord(m_WAbil.DC) + 2);
