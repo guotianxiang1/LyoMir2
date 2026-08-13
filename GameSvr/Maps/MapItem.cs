@@ -30,25 +30,13 @@ namespace GameSvr
         public int CanPickUpTick;
         public TUserItem UserItem;
 
-        /// <summary>
-        /// 战神 map-item <c>+0x0D</c> — the "expirable" byte tested at the head of every
-        /// branch of the ground-item cleanup <c>sub_77A178</c> (@0x77A4A2 for StdMode 37,
-        /// @0x77A54B for StdMode 41, @0x77A5D4 for everything else), each doing
-        /// <c>cmp byte [item+0x0D],0; je &lt;skip&gt;</c>.  ZERO MEANS NEVER EXPIRES: the
-        /// permanent ground-item class (quest/event props placed on the map).  C# had no
-        /// counterpart, so it aged those out after its flat timeout and destroyed them.
-        /// Defaults to 1 (expirable) so ordinary drops behave exactly as before.
-        /// </summary>
-        public byte NativeExpirable = 1;
-
-        /// <summary>
-        /// 战神 map-item <c>+0x20</c> — the per-item lifetime dword used ONLY by the
-        /// StdMode-41 branch (@0x77A560 <c>cmp edx,dword [eax+0x20]</c>), where the age is
-        /// compared against this stored value instead of the 15-minute constant.  Zero
-        /// means "no per-item lifetime recorded"; the resolver then falls back to
-        /// <see cref="NativeMapItemExpiry.DefaultLifetimeMs"/>.
-        /// </summary>
-        public int NativeLifetimeMs;
+        // NativeExpirable (+0x0D) and NativeLifetimeMs (+0x20) used to live here.  They
+        // are fields of 战神's EVENT object (cell tag 3, constructed by sub_717300 which
+        // writes `mov byte [ebx+4],3` @0x717322), not of a ground item (cell tag 2,
+        // sub_783788 `mov byte [ebx+4],2` @0x7837AA).  The ground-item branch @0x77A3D9
+        // reads neither.  They were only ever read — nothing in the tree assigned them —
+        // so keeping them here just invited the tag-2/tag-3 confusion to recur.  See
+        // NativeMapItemExpiry for the ladder they really belong to.
 
         public MapItem()
         {

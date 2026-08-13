@@ -1644,9 +1644,9 @@ namespace GameSvr
                                     {
                                         if (OSObject.CellType == CellType.OS_ITEMOBJECT)
                                         {
-                                            // 战神 sub_77A178: `cmp byte [item+0x0D],0; je`
-                                            // (never-expire class) then `cmp edx,0xDBBA0`
-                                            // (15 min), or the per-item dword for StdMode 41.
+                                            // 战神 sub_77A178 cell tag 2 @0x77A3D9:
+                                            // `cmp edx,0x927C0 / jb keep` @0x77A3FD — one
+                                            // flat 600_000 ms, no StdMode ladder.
                                             if (HasFloorItemExpired(OSObject.CellObj,
                                                     HUtil32.GetTickCount() - OSObject.dwAddTime,
                                                     floorItemClearTimeout))
