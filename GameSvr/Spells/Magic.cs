@@ -25,15 +25,16 @@ namespace GameSvr
             //   (该 ref 分支源码内部的地址标注已删除:那是 ref 自己的地址,不是战神 EA,曾有被当成
             //    Tier-1 引用的风险;战神真实 EA 就是上面的 0x4C8665。)
             // 此前多了 "+1"，把随机域从 [0, max-pow) 放宽成 [0, max-pow]，威力上限比原版高一点。
-            // Math.Max(1,...) 保留：C# Random(0) 会抛异常，而 Delphi Random(0) 返回 0——
-            // 该守卫只在 max==pow 时生效,此时原生 Random(0)=0、C# Random(1) 取 [0,1) 整数亦为 0,等价。
-            // ⚠️ 注意 sub_4C8658 把 MPow 这一掷【融合】在同一函数里,且外层除数是硬编码 float 4.0
-            // 而非 (btTrainLv+1) —— 该项已于 2026-08-03 判定并落地(见下方 GetPower、
-            // staging/discovery_spellapply_20260803.md #18 与 spellpower_formula_exact_20260803.md);
-            // 本 MPow 保留仅供仍单独取基础威力的调用方。
-            // ⚠️ 同时作废: staging/scan_skill_magic_20260802.md 第 1 行"除数应为 (double)(btTrainLv+1)"
-            // 的提案 —— 那是 ref-only 结论,已被 sub_4C8658 的 4.0 常量推翻,勿再照它改。
-            return UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(Math.Max(1, UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower));
+            // wMax < wPower 时原生 `sub eax,esi` 得到负数，直接 `call Random`：
+            //   4C866C  2B C6              sub eax, esi
+            //   4C866E  E8 D9 B4 F3 FF     call 0x403B4C
+            // 无 test/jle。返回值按无符号高 32 位，随后 `add eax,esi` 再作为
+            // **有符号** 32 位参与 `imul (btLevel+1)` @0x4C868E、`fild` @0x4C8693、
+            // `fdiv dword [0x4C86B8]` (=4.0f)、`call 0x403574` ROUND，加上
+            // defRoll+btDefPower 后以 32 位 EAX 返回。全程没有钳位。
+            // 活路径是 CalculateNativeMagicProducerSkillPower（同一函数）。
+            // Math.Max(1,...) 是发明的守卫：负数时 C# 抽 Random(1)=0 而原生抽大数。
+            return unchecked(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower));
         }
 
         // Native sub_4C8658 via wrapper sub_4C8648 (raw btLevel). The MPow roll is
