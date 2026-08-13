@@ -49,33 +49,49 @@ namespace GameSvr
         internal const int ScatterRange = 4;
 
         /// <summary>
-        /// ⚠️ 顺序未对齐 —— 本方法保留既有次序（ordinary 先、controlled 后），但那是
-        /// 建立在「controlled = <c>sub_71FA20</c> 段3」这个**已被推翻**的归属上的
-        /// （见 <see cref="ScatterRange"/>）。真实调用图是两个**兄弟**调用，掉落控制
-        /// 整个跑在 <c>sub_71FA20</c> 之前：
+        /// 复刻 <c>sub_71F46C</c>（怪物 VMT 槽 +0x1FC）的**整个函数体**：两个兄弟调用，
+        /// 掉落控制在前、<c>sub_71FA20</c>（段1 专属链 / 段2 自有表 / 段3 世界掉落 /
+        /// 金币 / <c>@AfterScatterItems</c>）在后。
         /// <code>
-        /// ; sub_71F46C —— 怪物 VMT 槽 +0x1FC（123 个怪物 VMT 持有它，每个都过
-        /// ;               Delphi 自指针自检 dword[VMT-0x4C]==VMT）
-        /// 71F47E  E8 F5 0D 00 00   call 0x720278   ; 掉落控制四相（本类）
-        /// 71F491  E8 8A 05 00 00   call 0x71FA20   ; 段1 专属链 / 段2 自有表 / 段3 / 金币
+        /// 0071F46C  55 8B EC 53 56 57      push ebp / mov ebp,esp / push ebx,esi,edi
+        /// 0071F472  8B F9 / 8B F2 / 8B D8  edi:=ecx / esi:=edx / ebx:=eax
+        /// 0071F478  8B CF / 8B D6 / 8B C3  原样转发
+        /// 0071F47E  E8 F5 0D 00 00         call 0x720278   ; ① 掉落控制四相（本类）
+        /// 0071F483  8A 45 0C 50 8A 45 08 50                ; 两个栈参再压一遍
+        /// 0071F491  E8 8A 05 00 00         call 0x71FA20   ; ② 段1/段2/段3/金币/回调
+        /// 0071F49A  C2 08 00               ret 8
         /// </code>
-        /// <c>sub_71FA20</c> 全镜像只有 <c>0x71F491</c> 这一个 E8 调用点、0 个 dword
-        /// 引用，所以它不可能先于 <c>sub_720278</c> 跑；怪物 Die
+        /// <c>sub_71FA20</c> 与 <c>sub_720278</c> 全镜像各只有一个 E8 调用点
+        /// （分别是 <c>0x71F491</c> 与 <c>0x71F47E</c>）、0 个 dword 引用，所以两者的
+        /// 先后由这一处字节唯一确定；怪物 Die
         /// <c>0x71E3D2 / 0x71E3EF FF 96 FC 01 00 00 call [esi+0x1FC]</c> 派发到的是
-        /// <c>sub_71F46C</c> 而不是 <c>sub_71FA20</c>。
+        /// <c>sub_71F46C</c> 而不是 <c>sub_71FA20</c>。曾于 <c>62478ccf</c> 按
+        /// 「controlled = <c>sub_71FA20</c> 段3」的误归属改成 ordinary 先，本方法即该
+        /// 回归的修正点。
         ///
-        /// 未在本轮改正的原因：<c>sub_720278</c> 在 <c>sub_71FA20</c> **之外**，因此
-        /// 不受段内那几道门约束（<c>0x71FA6C</c> 一次性哨兵、<c>0x71FA8A</c> 空掉落表
-        /// 早退、<c>0x71FADA/0x71FAE3/0x71FAEC</c> 防沉迷三门），而 C# 把
-        /// <c>TryScatter</c> 放在 <c>scatterBlocked</c> 里边。单独搬次序而不同时处理
-        /// 门控，会落到「既不是原生也不是现状」的第三种状态。次序与门控要一并改，
-        /// 属独立契约，见 <c>docs/drop33_owntable_scatter_20260814.md</c>。
+        /// **门控必须与次序一起搬**：<c>sub_720278</c> 在 <c>sub_71FA20</c> 之外，
+        /// 段内那三道门一个都管不到它 ——
+        /// <c>0x71FA50/0x71FA6C</c> 一次性哨兵、<c>0x71FA8A</c> 空掉落表早退、
+        /// <c>0x71FADA/0x71FAE3/0x71FAEC</c> 防沉迷三门，三者的失败臂全部
+        /// <c>jmp 0x720092</c>，那是 <c>sub_71FA20</c> 自己的框架出口，管不着已经返回的
+        /// <c>0x71F47E</c>。而 <c>sub_720278</c> 自序言到第一相
+        /// （<c>0x720278..0x7202B2</c>）逐条无条件跳转。故本方法把 ordinary 一侧的门
+        /// 收成 <paramref name="ordinaryBlocked"/>，并**在 controlled 跑完之后**才求值 ——
+        /// 哨兵置位（<c>0x71FA6C</c>）本来就发生在 <c>0x720278</c> 返回以后。
         /// </summary>
-        internal static void RunInNativeOrder(Action ordinaryDrop,
-            Action controlledDrop)
+        /// <returns><paramref name="ordinaryBlocked"/> 的取值，即 <c>sub_71FA20</c>
+        /// 是否从那三道门之一提前退出 —— 调用方后续的金币结算与
+        /// <c>@AfterScatterItems</c> 回调同受此门约束（同一个 <c>0x720092</c>）。</returns>
+        internal static bool RunInNativeOrder(Action controlledDrop,
+            Func<bool> ordinaryBlocked, Action ordinaryDrop)
         {
-            ordinaryDrop?.Invoke();
             controlledDrop?.Invoke();
+            var blocked = ordinaryBlocked == null || ordinaryBlocked();
+            if (!blocked)
+            {
+                ordinaryDrop?.Invoke();
+            }
+            return blocked;
         }
 
         internal static void TryScatter(TBaseObject dyingObject,

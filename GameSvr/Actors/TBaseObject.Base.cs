@@ -1211,51 +1211,68 @@ namespace GameSvr
                     if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
-                        // All three exits land on 0x720092, which is past the
-                        // @AfterScatterItems callback at 0x720062, so one boolean
-                        // covers segments 1-4 and the callback alike.  Order matters:
-                        // 0x71FA50 runs before 0x71FA8A and 0x71FAD7 and arms
-                        // unconditionally, so TryEnterNativeScatter must be leftmost.
-                        //
-                        //   71FA8A  83 B8 74 04 00 00 00  cmp dword [eax+0x474],0
-                        //   71FA91  0F 84 FB 05 00 00     je 0x720092
-                        //
-                        // A monster with no drop table leaves the function before
-                        // segment 1, so the exclusive chain, the world drop and the
-                        // gold settlement never run for it either — C# had this gate on
-                        // segment 2 alone.  A null UserEngine fails closed because the
-                        // three segments would fault on it anyway.
-                        //
-                        // m_boNoItem joins them because monster Die gates the whole
-                        // scatter on it one level up, immediately before the virtual
-                        // call, rather than on the gold segment alone:
+                        // 0x71E3B7 is the ONE gate that covers both siblings, because it
+                        // sits in monster Die one level above the virtual dispatch:
                         //   71E3B7  80 B8 7D 04 00 00 00  cmp byte [eax+0x47D],0
-                        //   71E3BE  75 35                 jne 0x71E3F5   ; skips both
+                        //   71E3BE  75 35                 jne 0x71E3F5   ; skips the call
                         //   71E3C4  6A 00 / 6A 01         push 0 / push 1
-                        //   71E3D2  FF 96 FC 01 00 00     call [esi+0x1FC]
-                        var scatterBlocked = !TryEnterNativeScatter()
-                            || M2Share.UserEngine == null
-                            || !M2Share.UserEngine.NativeHasMonsterDropTable(m_sCharName)
-                            || m_boNoItem
-                            || NativeAfterScatterItemsBlocked(AttackBaseObject);
-                        if (!scatterBlocked)
-                        {
-                            // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
-                            // MonItemsTree exclusive chain runs FIRST, before the
-                            // monster's own drop table at 0x71FCFF.  The C# code for it
-                            // existed but had no caller in the whole tree, so every
-                            // MonItemsTree.txt row produced nothing.
-                            M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
-                                AttackBaseObject, this, scatteredItems);
-                            NativeDropControlRuntime.RunInNativeOrder(
-                                () =>
+                        //   71E3D2  FF 96 FC 01 00 00     call [esi+0x1FC]  -> sub_71F46C
+                        // Everything else lives inside sub_71FA20 and therefore reaches
+                        // only the second sibling.
+                        var nativeDieDropSuppressed = m_boNoItem;
+                        var scatterBlocked = NativeDropControlRuntime.RunInNativeOrder(
+                            // sub_71F46C @0x71F47E `E8 F5 0D 00 00 call 0x720278`.
+                            // The drop-control dispatcher is sub_71FA20's SIBLING and
+                            // runs before it, so none of the three sub_71FA20 gates
+                            // apply.  It also gets no scatter log: sub_72016C takes
+                            // three register arguments and ends on a bare `ret`
+                            // (0x720274) — eax=pending list, edx=item creator,
+                            // ecx=dropper — while the TStringList that feeds
+                            // @AfterScatterItems is not constructed until 0x71FA9E,
+                            // long after 0x720278 has returned.
+                            controlledDrop: () =>
+                            {
+                                if (!nativeDieDropSuppressed)
                                 {
-                                    if (this is not HeroObject)
-                                        M2Share.UserEngine.MonGetRandomItems(this, AttackBaseObject);
-                                },
-                                () => NativeDropControlRuntime.TryScatter(this,
-                                    AttackBaseObject, scatteredItems));
-                        }
+                                    NativeDropControlRuntime.TryScatter(this,
+                                        AttackBaseObject, null);
+                                }
+                            },
+                            // sub_71F46C @0x71F491 `E8 8A 05 00 00 call 0x71FA20`.
+                            // All three exits land on 0x720092, which is past the
+                            // @AfterScatterItems callback at 0x720062, so one boolean
+                            // covers segments 1-4 and the callback alike.  Order
+                            // matters: 0x71FA50 runs before 0x71FA8A and 0x71FAD7 and
+                            // arms unconditionally, so TryEnterNativeScatter is
+                            // leftmost — except for m_boNoItem, which precedes the
+                            // whole dispatch and so keeps 0x71FA6C from ever firing.
+                            //
+                            //   71FA8A  83 B8 74 04 00 00 00  cmp dword [eax+0x474],0
+                            //   71FA91  0F 84 FB 05 00 00     je 0x720092
+                            //
+                            // A monster with no drop table leaves the function before
+                            // segment 1, so the exclusive chain, the world drop and the
+                            // gold settlement never run for it either.  A null
+                            // UserEngine fails closed because the segments would fault
+                            // on it anyway.
+                            ordinaryBlocked: () => nativeDieDropSuppressed
+                                || !TryEnterNativeScatter()
+                                || M2Share.UserEngine == null
+                                || !M2Share.UserEngine.NativeHasMonsterDropTable(m_sCharName)
+                                || NativeAfterScatterItemsBlocked(AttackBaseObject),
+                            ordinaryDrop: () =>
+                            {
+                                // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
+                                // MonItemsTree exclusive chain runs FIRST, before the
+                                // monster's own drop table at 0x71FCFF.
+                                M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
+                                    AttackBaseObject, this, scatteredItems);
+                                if (this is not HeroObject)
+                                {
+                                    M2Share.UserEngine.MonGetRandomItems(this,
+                                        AttackBaseObject);
+                                }
+                            });
                         DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {

@@ -58,17 +58,44 @@ var chain = SelectMapCounted(chainState, _ => 0);
 Equal(new[] { 10, 30, 20 }, chain.Select(x => x.ItemIndex).ToArray(),
     "same-key native head insertion order");
 
-// sub_71FA20 runs the monster's own table (segment 2, 0x71FCFF-0x71FEA1) before
-// the controlled world drop (segment 3, head 0x71FEA7).  0x71FD0E `jl 0x71FEA7`
-// is the empty-table shortcut and names segment 3 as segment 2's successor, so
-// the ordinary drop takes the earlier draw off the shared stream.
+// The order is fixed by sub_71F46C, the monster VMT slot +0x1FC, which is
+// nothing but two sibling calls:
+//   0071F47E  E8 F5 0D 00 00  call 0x720278  ; drop control, this class
+//   0071F491  E8 8A 05 00 00  call 0x71FA20  ; segments 1-4 + @AfterScatterItems
+// sub_720278 and sub_71FA20 each have exactly one E8 caller in the whole image
+// and zero dword references, so this single site settles it and the controlled
+// drop takes the earlier draw off the shared stream.  This assertion previously
+// read ordinary-first on the strength of "controlled = sub_71FA20 segment 3",
+// an attribution the record layout disproves: segment 3 queries singleton
+// [0x7D71F4] through sub_752CAC, while this class's records match sub_77C580 /
+// sub_77C738 field for field and materialise through sub_72016C.
 var sharedRandom = new Queue<int>(new[] { 11, 22 });
 var generationOrder = new List<string>();
-NativeDropControlRuntime.RunInNativeOrder(
-    () => generationOrder.Add("ordinary:" + sharedRandom.Dequeue()),
-    () => generationOrder.Add("controlled:" + sharedRandom.Dequeue()));
-Equal(new[] { "ordinary:11", "controlled:22" },
+var gateEvaluatedAfter = -1;
+var orderBlocked = NativeDropControlRuntime.RunInNativeOrder(
+    () => generationOrder.Add("controlled:" + sharedRandom.Dequeue()),
+    () =>
+    {
+        gateEvaluatedAfter = generationOrder.Count;
+        return false;
+    },
+    () => generationOrder.Add("ordinary:" + sharedRandom.Dequeue()));
+Equal(new[] { "controlled:11", "ordinary:22" },
     generationOrder.ToArray(), "shared RNG generation order");
+Equal(false, orderBlocked, "ordinary gate result reaches the caller");
+// 0x71FA6C arms the sentinel inside sub_71FA20, i.e. after 0x720278 returned.
+Equal(1, gateEvaluatedAfter, "ordinary gate evaluated after the controlled arm");
+
+// The three sub_71FA20 exits all jump to 0x720092, its own frame exit, so they
+// cannot reach back into the sibling that already returned at 0x71F47E.
+var blockedOrder = new List<string>();
+Equal(true, NativeDropControlRuntime.RunInNativeOrder(
+        () => blockedOrder.Add("controlled"),
+        () => true,
+        () => blockedOrder.Add("ordinary")),
+    "blocked ordinary gate reported to the caller");
+Equal(new[] { "controlled" }, blockedOrder.ToArray(),
+    "sub_71FA20 gates do not cover sub_720278");
 
 var failedCreates = 0;
 var failedPlacements = 0;
@@ -145,7 +172,8 @@ Equal(new ushort[] { 777, 777 }, pileDurabilities.ToArray(),
 Console.WriteLine(
     "NativeDropControlRuntimeCheck PASS timed-uint-rollover " +
     "map-equality-reset world-greater-reset bucket-isolation chain=A,C,B " +
-    "rng-order=ordinary,controlled scatter-range=3 failure-lossy=true " +
+    "rng-order=controlled,ordinary gate-scope=ordinary-only " +
+    "scatter-range=4 failure-lossy=true " +
     "type7-final-dura=virtual pile-init=noop");
 
 static TUserItem Item(ushort index, ushort duraMax)
