@@ -1067,23 +1067,6 @@ namespace GameSvr.Plugins
             return steal;
         }
 
-        /// <summary>吸怪 — 全屏拉怪到玩家身边</summary>
-        public void VacuumMonsters()
-        {
-            if (!Enabled("全屏吸怪")) return;
-            var envir = _player.m_PEnvir; if (envir == null) return;
-            var list = new List<TBaseObject>();
-            M2Share.UserEngine.GetMapMonster(envir, list);
-            foreach (var m in list)
-            {
-                if (m != null && !m.m_boDeath)
-                {
-                    m.m_nCurrX = _player.m_nCurrX;
-                    m.m_nCurrY = _player.m_nCurrY;
-                }
-            }
-        }
-
         public int VacuumMonstersEx(int range, int levelLimit, int maxCount)
         {
             if (!Enabled("全屏吸怪")) return 0;
@@ -2626,8 +2609,21 @@ namespace GameSvr.Plugins
             return count;
         }
 
-        /// <summary>无限定时器: timer=0清理所有, >0设置间隔(ms)</summary>
-        public int SetLoopTimer(int interval, string funcName) { if (!Enabled("全局循环函数")) return 0; return interval; }
+        /// <summary>
+        /// 无限定时器。插件面板说明：timer&gt;0 按毫秒间隔反复调用 RunQuest.pas 里
+        /// 的同名无参过程，timer=0 清理该名字的定时器，名字给 'ClearAll' 清理全部。
+        ///
+        /// 注册未实现：本工程没有回调派发层，注册成功也永远不会回调 funcName。
+        /// 旧实现直接 return interval，脚本拿到非零值会当成注册成功。
+        /// 清理路径本就是空操作，如实返回 0；注册路径必须报错而不是假装成功。
+        /// </summary>
+        public int SetLoopTimer(int interval, string funcName)
+        {
+            if (!Enabled("全局循环函数")) return 0;
+            if (interval <= 0) return 0;
+            throw new YanshenApiUnavailableException("Ys_SetTimerByName", "全局循环函数",
+                $"定时器注册未实现，'{funcName}' 不会被回调");
+        }
 
         /// <summary>沙巴克城主行会名</summary>
         public string GetCastleGuildName()
@@ -2636,13 +2632,14 @@ namespace GameSvr.Plugins
             return castle?.m_sOwnGuild ?? "";
         }
 
-        /// <summary>沙巴克城主角色名</summary>
-        public string GetCastleLordName()
+        /// <summary>
+        /// 沙巴克城主角色名。AllFuc.pas 的拼写是 Ys_GetCastleLoadName（Load 不是
+        /// Lord），与原生 M2 脚本函数 GetCastleLoadName 同名同义。
+        /// </summary>
+        public string GetCastleLoadName()
         {
             var castle = M2Share.CastleManager.GetCastle(0);
-            if (castle?.m_MasterGuild != null)
-                return castle.m_MasterGuild.sGuildName ?? "";
-            return "";
+            return castle?.m_MasterGuild?.GetChiefName() ?? "";
         }
 
         private static bool SetElementValue(TUserItem item, int elementType, int value)

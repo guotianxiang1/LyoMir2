@@ -2166,6 +2166,8 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "playernotice":
+                    if (args.Count >= 2 && TryExecuteNoticeTunnel(args[0].AsString()))
+                        return true;
                     if (args.Count >= 2 && !string.IsNullOrEmpty(args[0].AsString()))
                     {
                         var packedColor = args[1].AsInt() switch
@@ -3880,6 +3882,7 @@ namespace GameSvr.PasEngine
                 case "checkmapmonbyname":
                     if (args.Count >= 2)
                     {
+                        RejectUnimplementedNpcCreatMonsTunnel(args[0].AsString());
                         var map = M2Share.MapManager.FindMap(args[0].AsString());
                         if (map != null)
                         {
@@ -4448,6 +4451,11 @@ namespace GameSvr.PasEngine
                     if (args.Count >= 1)
                     {
                         int pos = args[0].AsInt();
+                        if (TryExecuteCastleNameTunnel(pos, out var castleName))
+                        {
+                            result = PasValue.FromString(castleName);
+                            return true;
+                        }
                         if (pos >= 0 && pos < CurrentPlayer.m_UseItems.Length && CurrentPlayer.m_UseItems[pos] != null)
                         {
                             var stdItem = M2Share.UserEngine.GetStdItem(CurrentPlayer.m_UseItems[pos].wIndex);
@@ -7121,6 +7129,7 @@ namespace GameSvr.PasEngine
                 case "checkmapmonbyname":
                     if (args.Count >= 2)
                     {
+                        RejectUnimplementedNpcCreatMonsTunnel(args[0].AsString());
                         var map = M2Share.MapManager.FindMap(args[0].AsString());
                         if (map != null)
                         {
