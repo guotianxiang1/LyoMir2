@@ -8236,12 +8236,30 @@ namespace GameSvr.PasEngine
         /// The shared entry gate of GetV/SetV/GetS/SetS. False = native rejects the call
         /// outright (getter returns -1, setter writes nothing).
         /// </summary>
-        private static bool NativeScriptVarArgsAccepted(int group, int index)
+        private static bool NativeScriptVarArgsAccepted(char type, int group, int index)
         {
-            // Group 0 -> fast path, bounded 1..100 (0x6DF20A `sub edx,0x64` / `jae`).
-            if (group == 0) return index >= 1 && index <= 100;
+            // Group 0 reaches the inline slots, and only V has them. GetV/SetV test the
+            // group first and branch to the inline region when it is zero:
+            //   GetV 0x6DF203  85 F6        test esi, esi   ; group
+            //        0x6DF205  75 14        jne 0x6DF21B    ; != 0 -> keyed path
+            //        0x6DF209  4A           dec edx         ; index - 1
+            //        0x6DF20A  83 EA 64     sub edx, 0x64
+            //        0x6DF20D  73 0C        jae 0x6DF21B    ; unsigned >= 100 -> keyed
+            // so the accepted inline window is index 1..100.
+            //
+            // GetS/SetS have no such branch at all - they open by rejecting either
+            // argument being non-positive, which excludes group 0 before anything else:
+            //   GetS 0x6DF1BE  85 C9  test ecx,ecx / 0x6DF1C0  7E 1C  jle -> return -1
+            //        0x6DF1C2  85 D2  test edx,edx / 0x6DF1C4  7E 18  jle -> return -1
+            //   SetS 0x6DF251  85 FF  test edi,edi / 0x6DF253  7E 28  jle -> return false
+            //        0x6DF255  85 F6  test esi,esi / 0x6DF257  7E 24  jle -> return false
+            // A group-0 S access used to be accepted here and served out of the keyed
+            // dictionary, which native never does.
+            if (group == 0 && char.ToUpperInvariant(type) == 'V')
+                return index >= 1 && index <= 100;
             // Keyed path (0x6DF21B/0x6DF21F, 0x6DF2B3/0x6DF2B7, 0x6DF1BE/0x6DF1C2,
-            // 0x6DF251/0x6DF255): both arguments must be strictly positive.
+            // 0x6DF251/0x6DF255): both arguments must be strictly positive. Group 0
+            // falls in here for S, and for a V index outside 1..100, and is rejected.
             return group > 0 && index > 0;
         }
 
@@ -8252,8 +8270,17 @@ namespace GameSvr.PasEngine
         public PasValue GetPlayerVar(char type, int group, int index)
         {
             if (CurrentPlayer == null) return PasValue.FromInt(NativeScriptVarMiss);
-            if (!NativeScriptVarArgsAccepted(group, index))
+            if (!NativeScriptVarArgsAccepted(type, group, index))
                 return PasValue.FromInt(NativeScriptVarMiss);
+            // Group-0 V reads come straight out of the inline slots, and an untouched
+            // slot yields 0 rather than the -1 a dictionary miss gives:
+            //   0x6DF20F  8B 84 83 08 08 00 00  mov eax, [ebx+eax*4+0x808]
+            //   0x6DF216  89 45 FC              mov [ebp-4], eax
+            // overwriting the -1 seeded at 0x6DF1F1. Serving these from the keyed
+            // dictionary inverted every downstream `= 0` quest test on a fresh
+            // character.
+            if (group == 0)
+                return PasValue.FromInt(CurrentPlayer.m_ScriptVGroup0[index]);
             int flat = group * 1000 + index;
             var variables = char.ToUpperInvariant(type) switch
             {
@@ -8310,7 +8337,19 @@ namespace GameSvr.PasEngine
             int index, PasValue value)
         {
             if (player == null) return false;
-            if (!NativeScriptVarArgsAccepted(group, index)) return false;
+            if (!NativeScriptVarArgsAccepted(type, group, index)) return false;
+            // Group-0 V writes land in the inline slots and report success without
+            // touching the dictionary:
+            //   0x6DF2A8  89 84 B3 08 08 00 00  mov [ebx+esi*4+0x808], eax
+            //   0x6DF2AF  B0 01                 mov al, 1
+            // Because the region lives in the object and not in the +0x808 dictionary,
+            // it is also absent from the save record - the decoder sub_6E448C touches
+            // +0x804 and +0x808 and nothing in +0x80C..+0x99B.
+            if (group == 0)
+            {
+                player.m_ScriptVGroup0[index] = value.AsInt();
+                return true;
+            }
             int flat = group * 1000 + index;
             var variables = char.ToUpperInvariant(type) switch
             {

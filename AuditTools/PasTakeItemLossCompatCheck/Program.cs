@@ -374,7 +374,7 @@ Reject(bridgeSource, "while (TakeItems(args[0].AsString(), 1)) { }",
     "delallthisitem was reverted to an O(n^2) Take loop");
 Require(bridgeSource, "private const int NativeScriptVarMiss = -1;",
     "the -1 V/S miss sentinel (0x6DF1BB / 0x6DF1F1 / 0x6E427A) was removed");
-Require(bridgeSource, "if (!NativeScriptVarArgsAccepted(group, index)) return;",
+Require(bridgeSource, "if (!NativeScriptVarArgsAccepted(type, group, index)) return false;",
     "the SetV/SetS arg<=0 reject (0x6DF2B3 / 0x6DF251) was removed");
 // AddTaskToUIList must send mode 2 (0x6E1304 `push 2`), the same mode as UpdateTaskDetail
 // (sub_6E131C @0x6E133C). Slice the method body so an identical line in a NEIGHBOURING

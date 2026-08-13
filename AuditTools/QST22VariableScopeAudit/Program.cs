@@ -29,7 +29,9 @@ namespace QST22VariableScopeAudit
     {
         static int Main(string[] args)
         {
-            var repoRoot = @"D:\loym2\LyoMir2-master";
+            // The default is the main worktree, but that one is not always sitting on
+            // the branch under test, so allow the tree to be named explicitly.
+            var repoRoot = args.Length > 0 ? args[0] : @"D:\loym2\LyoMir2-master";
             var pasApiBridgePath = Path.Combine(repoRoot, "GameSvr", "ScriptSystem", "PasEngine", "PasApiBridge.cs");
 
             if (!File.Exists(pasApiBridgePath))
@@ -95,26 +97,28 @@ namespace QST22VariableScopeAudit
                 assertionCount++;
             }
 
-            // Assertion 4: GetPlayerVar returns 0 for V-type group=0 miss, -1 for keyed miss
+            // Assertion 4: group-0 V is served from the inline slots, not the dictionary.
+            // Reading a never-written slot must therefore yield 0 (Delphi zero-init at
+            // 0x6DF20F) rather than the -1 a dictionary miss produces.
             var getPlayerVarMatch = Regex.Match(content,
                 @"public\s+PasValue\s+GetPlayerVar\s*\([^)]+\).*?" +
-                @"return\s+PasValue\.FromInt\s*\(\s*group\s*==\s*0\s*&&\s*char\.ToUpperInvariant\s*\(\s*type\s*\)\s*==\s*'V'\s*\?\s*0\s*:\s*NativeScriptVarMiss\s*\)",
+                @"if\s*\(\s*group\s*==\s*0\s*\)\s*return\s+PasValue\.FromInt\s*\(\s*CurrentPlayer\.m_ScriptVGroup0\s*\[\s*index\s*\]\s*\)",
                 RegexOptions.Singleline);
 
             if (!getPlayerVarMatch.Success)
             {
-                Console.WriteLine("[FAIL] Assertion 4: GetPlayerVar conditional return (0 for V group=0, -1 otherwise) not found");
+                Console.WriteLine("[FAIL] Assertion 4: GetPlayerVar does not read group-0 from the inline slots");
                 failCount++;
             }
             else
             {
-                Console.WriteLine("[PASS] Assertion 4: GetPlayerVar returns 0 for V-type group=0 miss, -1 for keyed miss");
+                Console.WriteLine("[PASS] Assertion 4: GetPlayerVar reads group-0 V from the inline slots (0 default)");
                 assertionCount++;
             }
 
             // Assertion 5: SetPlayerVar stores 0 unconditionally (QST-07)
             var setPlayerVarMatch = Regex.Match(content,
-                @"private\s+static\s+void\s+SetPlayerVar\s*\([^)]+\).*?variables\s*\[\s*flat\s*\]\s*=\s*value\.AsInt\s*\(\s*\)",
+                @"private\s+static\s+bool\s+SetPlayerVar\s*\([^)]+\).*?variables\s*\[\s*flat\s*\]\s*=\s*value\.AsInt\s*\(\s*\)",
                 RegexOptions.Singleline);
 
             if (!setPlayerVarMatch.Success)
@@ -133,15 +137,37 @@ namespace QST22VariableScopeAudit
                 assertionCount++;
             }
 
-            // Assertion 6: Comment references QST-22 or QST-17 (documentation)
-            if (!Regex.IsMatch(content, @"QST-2[27]|QST-1[17]"))
+            // Assertion 6: the inline slots are 101 wide so the native index 1..100 can
+            // address them directly (0x6DF2A8 `mov [ebx+esi*4+0x808], eax`).
+            var basePath = Path.Combine(repoRoot, "GameSvr", "Players", "TPlayObject.Base.cs");
+            var baseSource = File.Exists(basePath) ? File.ReadAllText(basePath) : string.Empty;
+            if (!Regex.IsMatch(baseSource, @"m_ScriptVGroup0\s*=\s*new\s+int\s*\[\s*101\s*\]"))
             {
-                Console.WriteLine("[FAIL] Assertion 6: No QST-22/QST-17/QST-07/QST-11 documentation found");
+                Console.WriteLine("[FAIL] Assertion 6: m_ScriptVGroup0 is not allocated as int[101]");
                 failCount++;
             }
             else
             {
-                Console.WriteLine("[PASS] Assertion 6: QST documentation present");
+                Console.WriteLine("[PASS] Assertion 6: m_ScriptVGroup0 allocated as int[101]");
+                assertionCount++;
+            }
+
+            // Assertion 7: the inline slots must stay session-scoped. The save decoder
+            // sub_6E448C touches +0x804 and +0x808, the two dictionaries, and makes no
+            // reference to the +0x80C..+0x99B region, so nothing may copy the array into
+            // the character record on the way out.
+            var playObjectPath = Path.Combine(repoRoot, "GameSvr", "Players", "TPlayObject.cs");
+            var playObjectSource = File.Exists(playObjectPath)
+                ? File.ReadAllText(playObjectPath) : string.Empty;
+            var persisters = Regex.Matches(playObjectSource, @"HumData\.\w+\s*=[^;]*m_ScriptVGroup0");
+            if (persisters.Count > 0)
+            {
+                Console.WriteLine($"[FAIL] Assertion 7: m_ScriptVGroup0 is copied into HumData ({persisters.Count} site(s)) - native never saves it");
+                failCount++;
+            }
+            else
+            {
+                Console.WriteLine("[PASS] Assertion 7: m_ScriptVGroup0 is not persisted into HumData");
                 assertionCount++;
             }
 

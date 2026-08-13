@@ -285,6 +285,34 @@ namespace GameSvr
         public Dictionary<int, int> m_ScriptVVars;
         public Dictionary<int, int> m_ScriptSVars;
 
+        /// <summary>
+        /// The group-0 V slots, which native keeps inside the object rather than in
+        /// the +0x808 V dictionary. GetV/SetV address them as
+        /// <c>[self + index*4 + 0x808]</c> for index 1..100, i.e. the 100 dwords at
+        /// +0x80C..+0x99B packed immediately behind the dictionary pointer:
+        /// <code>
+        ///   SetV 0x6DF299  85 FF                 test edi, edi      ; group
+        ///        0x6DF29B  75 16                 jne  0x6DF2B3      ; != 0 -> keyed
+        ///        0x6DF29F  4A                    dec  edx           ; index - 1
+        ///        0x6DF2A0  83 EA 64              sub  edx, 0x64
+        ///        0x6DF2A3  73 0E                 jae  0x6DF2B3      ; outside 1..100
+        ///        0x6DF2A8  89 84 B3 08 08 00 00  mov [ebx+esi*4+0x808], eax
+        ///   GetV 0x6DF20F  8B 84 83 08 08 00 00  mov eax, [ebx+eax*4+0x808]
+        /// </code>
+        /// Two consequences follow from it being plain object memory. A slot that was
+        /// never written reads back as 0, because Delphi's InitInstance zero-fills the
+        /// instance - not the -1 that a dictionary miss produces. And the region is
+        /// session-scoped: the save decoder sub_6E448C references +0x804 and +0x808
+        /// (the two dictionaries) and nothing in +0x80C..+0x99B, so these slots are
+        /// never written to the character record. Index 0 is unused, kept so the array
+        /// can be indexed by the native index directly.
+        /// <para>
+        /// S has no counterpart. GetS/SetS reject group 0 outright and own no inline
+        /// region - see NativeScriptVarArgsAccepted.
+        /// </para>
+        /// </summary>
+        public int[] m_ScriptVGroup0;
+
 
 
         public int[] m_nMval;
@@ -809,6 +837,7 @@ namespace GameSvr
             m_nVal = new int[20000];  // Delphi 战神: nTaskNo*1000+nFieldNo
             m_ScriptVVars = new Dictionary<int, int>();
             m_ScriptSVars = new Dictionary<int, int>();
+            m_ScriptVGroup0 = new int[101];
             m_nMval = new int[100];
             m_DyVal = new int[100];
             m_nSval = new string[100];
