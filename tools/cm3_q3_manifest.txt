@@ -1,0 +1,37 @@
+# native arms      : 311
+# C# covered       : 397
+# missing total    : 99
+# DEFAULT_VA       : 0x6DBC2C
+# bounds           : [0, 25, 50, 74, 99]
+
+## quarter 1: 25 items  (1054..1260)
+
+## quarter 2: 25 items  (1265..3179)
+
+## quarter 3: 24 items  (3180..4124)  <== MINE (Q3)
+ 3180  0x6DA405
+ 3190  0x6DA5AE
+ 3191  0x6DA5C0
+ 3208  0x6DA54C
+ 3209  0x6DA56D
+ 3282  0x6DA600
+ 3283  0x6DA626
+ 3284  0x6DA650
+ 3285  0x6DA638
+ 3286  0x6DA65D
+ 3287  0x6DA895
+ 3288  0x6DA8C4
+ 3294  0x6DA613
+ 3295  0x6DAA99
+ 3306  0x6DAB39
+ 3307  0x6DABEA
+ 3340  0x6DAC30
+ 3344  0x6DADD6
+ 3410  0x6DAED9
+ 3503  0x6DAF44
+ 4102  0x6DABFC
+ 4105  0x6DA005
+ 4123  0x6DAE32
+ 4124  0x6DAE53
+
+## quarter 4: 25 items  (4125..4651)

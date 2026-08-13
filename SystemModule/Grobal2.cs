@@ -1815,6 +1815,41 @@ namespace SystemModule
 
         public const int LA_UNDEAD = 1;
 
+        // === CM missing Q3 (dispatcher sub_6D7D68 @0x6D805C reads word[record+4]) ===
+        // The ascending-sorted native-arm/no-C#-case gap is 99 idents, quartered
+        // 25/25/24/25 by cm-2's authoritative tooling. This third quarter (items
+        // 51..74, idents 3180..4124) is restored in TPlayObject.NativeCmProtocol_Q3.cs.
+        // Every ident below resolves to a REAL tree leaf, never the shared exit
+        // 0x6DBC2C. Values verified against flat_image.bin.
+        public const int CM_3180 = 0x0C6C;   // leaf 0x6DA405 -> worker 0x6E3280
+        public const int CM_3190 = 0x0C76;   // leaf 0x6DA5AE -> worker 0x6E590C
+        public const int CM_3191 = 0x0C77;   // leaf 0x6DA5C0 -> worker 0x6E5BA8
+        public const int CM_3208 = 0x0C88;   // leaf 0x6DA54C -> worker 0x6EA5E0
+        public const int CM_3209 = 0x0C89;   // leaf 0x6DA56D -> worker 0x6EA858
+        public const int CM_3282 = 0x0CD2;   // leaf 0x6DA600 -> worker 0x6E64BC
+        public const int CM_3283 = 0x0CD3;   // leaf 0x6DA626 -> worker 0x6E67B0
+        public const int CM_3284 = 0x0CD4;   // leaf 0x6DA650 -> worker 0x6E6EA4
+        public const int CM_3285 = 0x0CD5;   // leaf 0x6DA638 -> worker 0x6E6DE8
+        public const int CM_3286 = 0x0CD6;   // leaf 0x6DA65D -> worker 0x6E6B54
+        public const int CM_3287 = 0x0CD7;   // leaf 0x6DA895 -> worker 0x6E8734
+        public const int CM_3288 = 0x0CD8;   // leaf 0x6DA8C4 -> worker 0x6E8820
+        public const int CM_3294 = 0x0CDE;   // leaf 0x6DA613 -> worker 0x6EB190
+        public const int CM_3295 = 0x0CDF;   // leaf 0x6DAA99 -> worker 0x6EB8E4
+        public const int CM_3306 = 0x0CEA;   // leaf 0x6DAB39 -> worker 0x6EFD54
+        public const int CM_3307 = 0x0CEB;   // leaf 0x6DABEA -> worker 0x6CBD78
+        public const int CM_3340 = 0x0D0C;   // leaf 0x6DAC30 -> worker 0x79E78C
+        public const int CM_3344 = 0x0D10;   // leaf 0x6DADD6 -> worker 0x6EC5D8
+        public const int CM_3410 = 0x0D52;   // leaf 0x6DAED9 -> worker 0x6EBE50
+        public const int CM_3503 = 0x0DAF;   // leaf 0x6DAF44 -> worker 0x6EF970
+        public const int CM_4102 = 0x1006;   // leaf 0x6DABFC -> worker 0x6B7BCC
+        public const int CM_4105 = 0x1009;   // leaf 0x6DA005 -> workers 0x7742C0/0x6BCE2C/0x6EE174
+        public const int CM_4123 = 0x101B;   // leaf 0x6DAE32 -> worker 0x6BF908
+        public const int CM_4124 = 0x101C;   // leaf 0x6DAE53 -> worker 0x6BFA88
+        // Reply idents emitted by the evaluable pre-gate legs restored in Q3.
+        public const int SM_1727 = 0x06BF;   // CM 3180 short-body status reply (all-zero body)
+        public const int SM_4035 = 0x0FC3;   // CM 4123/4124 soul-wash invalid-target reply
+        // === end CM missing Q3 ===
+
         public static ClientPacket MakeDefaultMsg(int msg, int Recog, int param, int tag, int series)
         {
             var result = new ClientPacket();
