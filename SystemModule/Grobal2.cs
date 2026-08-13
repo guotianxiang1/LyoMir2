@@ -553,6 +553,14 @@ namespace SystemModule
         public const int SM_TOHEROBAG_FAIL = 818;
         public const int SM_TOHUMBAG_OK = 819;
         public const int SM_TOHUMBAG_FAIL = 820;
+        /// <summary>
+        /// GP 禁售物品名表 (config\GPForbidItems.txt). Native sub_63C194
+        /// <c>0x63C1C3 66 BA 35 03 mov dx,0x335</c> via [obj+0x254].
+        /// Recog=player, Param=count, Tag=0, Series=0, body N×16 ShortString[15].
+        /// After SM_SHOPITEMS (0x63A2D4) and SM_RESHOPITEMS_OK (0x63A38A);
+        /// skipped when count&lt;=0 (0x63C1A4 jle).
+        /// </summary>
+        public const int SM_GPFORBIDITEMS = 821;
         public const int SM_OPENHEALTH = 1100;
         public const int SM_CLOSEHEALTH = 1101;
         public const int SM_CHANGEFACE = 1104;
@@ -747,6 +755,21 @@ namespace SystemModule
         public const int SM_HERO_RUSHKUNG = 5;
         public const int SM_HERO_LONGHIT = 25;
         public const int SM_HERO_LASTHIT = 26;
+        /// <summary>
+        /// Login version handshake. Native UserLogon sub_6B1D64 @0x6B23C6
+        /// calls sub_6F05D8, which at <c>0x6F05F2 66 BA 78 03 mov dx,0x378</c>
+        /// sends via [obj+0x250]: Recog=0x3EA (1002), Param=0x3E7 (999),
+        /// Tag=0, Series=0, empty body. Always paired with SM_LOGIN_NOW (889).
+        /// </summary>
+        public const int SM_LOGIN_VER = 888;
+        /// <summary>
+        /// Login clock/now extension. Same sender sub_6F05D8 immediately after 888:
+        /// <c>0x6F063A 66 BA 79 03 mov dx,0x379</c> via [obj+0x254].
+        /// Recog=0x3F1 (1009), Param=0x3E7 (999), Tag=word at [[0x7D5FA0]]
+        /// (image snapshot 0x1009), Series=0, 24-byte body:
+        /// word 0x14, word 0x2E, 4 pad, TDateTime Now (0x40F0A4), dword [[0x7D6558]], 4 pad.
+        /// </summary>
+        public const int SM_LOGIN_NOW = 889;
         public const int SM_HERO_QUITMAGIC = 896;
         public const int SM_HERO_LOGMAGIC = 897;
         public const int SM_HERO_NAME = 898;

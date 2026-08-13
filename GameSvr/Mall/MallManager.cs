@@ -91,6 +91,9 @@ namespace GameSvr.Mall
         private DateTime _lastHotLoadTime;
         private readonly MallRefreshScheduler _refreshScheduler;
         private readonly int _cacheMinutes = 5; // 缓存5分钟
+        private byte[] _gpForbidBody = Array.Empty<byte>();
+        private int _gpForbidCount;
+        private bool _gpForbidLoaded;
 
         private static readonly Dictionary<byte, string> _categoryNames = new Dictionary<byte, string>
         {
@@ -126,6 +129,62 @@ namespace GameSvr.Mall
                     }
                 }
                 return _instance;
+            }
+        }
+
+        public bool TryGetGpForbidBody(out int count, out byte[] body)
+        {
+            EnsureGpForbidLoaded();
+            count = _gpForbidCount;
+            body = _gpForbidBody;
+            return count > 0 && body != null && body.Length == count * 16;
+        }
+
+        private void EnsureGpForbidLoaded()
+        {
+            lock (_lock)
+            {
+                if (_gpForbidLoaded)
+                {
+                    return;
+                }
+                _gpForbidLoaded = true;
+                var path = Path.Combine(
+                    M2Share.sConfigPath ?? string.Empty,
+                    M2Share.g_Config?.sEnvirDir ?? string.Empty,
+                    "config", "GPForbidItems.txt");
+                if (!File.Exists(path))
+                {
+                    return;
+                }
+                var text = HUtil32.GbkEncoding.GetString(File.ReadAllBytes(path));
+                var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                var records = new List<byte[]>();
+                foreach (var line in lines)
+                {
+                    var name = line.Trim();
+                    if (name.Length == 0)
+                    {
+                        continue;
+                    }
+                    var gbk = HUtil32.GbkEncoding.GetBytes(name);
+                    var n = Math.Min(gbk.Length, 15);
+                    var rec = new byte[16];
+                    rec[0] = (byte)n;
+                    Buffer.BlockCopy(gbk, 0, rec, 1, n);
+                    records.Add(rec);
+                }
+                if (records.Count == 0)
+                {
+                    return;
+                }
+                var body = new byte[records.Count * 16];
+                for (var i = 0; i < records.Count; i++)
+                {
+                    Buffer.BlockCopy(records[i], 0, body, i * 16, 16);
+                }
+                _gpForbidCount = records.Count;
+                _gpForbidBody = body;
             }
         }
 
