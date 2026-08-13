@@ -2541,12 +2541,35 @@ namespace GameSvr
             return result;
         }
 
+        // TRADE-52: 游戏数据日志缓冲上限。战神 AddGameDataLog(0x79d3d8) 把每条日志编码成
+        // 196 字节二进制记录（magic 0x33AABB77 @0x79D40D，头8+体0xBC=188；发送长度 ecx=0xC4=196
+        // @0x79D4D3 call 0x4a0684）**立即经 socket 发往 LogServer（[self+0x44]，配置
+        // LogServerAddr/LogServerPort 默认 127.0.0.1:10000），原生不保留任何缓冲列表**。
+        // 本 C# 重写把日志暂存进 LogStringList/LogonCostLogList，却从无 drain（运行期只有
+        // AddGameDataLog/AddLogonCostLog 写入，无任何消费点）——列表无界增长即内存泄漏。
+        // 196 字节记录 + LogServer 传输属 77BBAA33 内部转发协议（CMD 0xC4/0xBC 等），协议规范
+        // 明列为「不需要实现的服务端内部CMD……C#重写版不需要」，属 DBSVR 依赖、out-of-scope，
+        // 见 docs/m_trade52_logserver_20260813.md。
+        // 本轮：以 FIFO 上限封顶消除无界泄漏（原生该缓冲概念长度为 0，此处封顶是最贴近的
+        // 本地建模）。审计工具把这两个列表当日志探针（每次 Clear 后断言个位数条目），上限
+        // 远高于其用量，不受影响。摊销裁剪：越过上限即裁到 3/4，避免逐条 RemoveAt 的 O(n^2)。
+        public const int LogRecordBufferCap = 20000;
+
+        private static void AppendBoundedLog(ArrayList list, string sMsg)
+        {
+            list.Add(sMsg);
+            if (list.Count > LogRecordBufferCap)
+            {
+                list.RemoveRange(0, list.Count - LogRecordBufferCap * 3 / 4);
+            }
+        }
+
         public static void AddGameDataLog(string sMsg)
         {
             HUtil32.EnterCriticalSection(LogMsgCriticalSection);
             try
             {
-                LogStringList.Add(sMsg);
+                AppendBoundedLog(LogStringList, sMsg);
             }
             finally
             {
@@ -2559,7 +2582,7 @@ namespace GameSvr
             HUtil32.EnterCriticalSection(LogMsgCriticalSection);
             try
             {
-                LogonCostLogList.Add(sMsg);
+                AppendBoundedLog(LogonCostLogList, sMsg);
             }
             finally
             {
