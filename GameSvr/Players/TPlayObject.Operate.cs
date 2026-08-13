@@ -77,8 +77,10 @@ namespace GameSvr
                 PlayObject.m_MyGuild?.sGuildName,
                 PlayObject.m_sGuildRankName,
                 PlayObject.m_UseItems);
+            // Both native emitters push Param=0, Tag=0, Series=1 (0x006B7119 and
+            // 0x006B715C); the literal 1 is the Series slot, not Param.
             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SENDUSERSTATE,
-                0, 1, 0, 0);
+                0, 0, 0, 1);
             SendSocket(m_DefMsg, userState);
         }
 
