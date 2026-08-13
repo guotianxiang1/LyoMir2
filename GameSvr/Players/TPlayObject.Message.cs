@@ -2097,7 +2097,9 @@ namespace GameSvr
                     switch (ProcessMsg.wIdent)
                     {
                         case Grobal2.RM_HEAR:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_HEAR, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // 0x6B4A70 68 00 FF 00 00 push 0xFF00 — Param is hardcoded.
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_HEAR,
+                                ProcessMsg.BaseObject, 0xFF00, 0, 1);
                             break;
                         case Grobal2.RM_COLORHEAR:
                             // 0x6C9485 mov cx,0x69 -- same payload shape as
@@ -2133,7 +2135,10 @@ namespace GameSvr
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
                             break;
                         case Grobal2.RM_GROUPMESSAGE:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // 0x6B4EA0 68 C4 FF 00 00 / 0x6B4EB5 66 BA 64 00
+                            // Group wire ident is SM 100, Param=0xFFC4 hardcoded.
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE,
+                                ProcessMsg.BaseObject, 0xFFC4, 0, 1);
                             break;
                         case Grobal2.RM_GUILDMESSAGE:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_GUILDMESSAGE, ProcessMsg.BaseObject, 0xFFD4, 0, 1);
