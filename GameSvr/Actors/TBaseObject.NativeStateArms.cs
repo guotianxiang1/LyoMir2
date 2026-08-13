@@ -346,6 +346,34 @@ namespace GameSvr
                     SendNativeStateArmMsg("魔血值瞬间提高" + seconds + "秒",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                // 98..101 are the percent-scaled twins of 90/91/96/97: same
+                // Buff-pair concat shape, only the prefix literal inserts 百分比.
+                // Their lost sides share arms with 90/91/96/97 (see the grouped
+                // lost cases above), so only the gained halves live here.
+                case 98:
+                    // 0x7424A1  68 84 31 74 00  push 0x743184
+                    // 0x743184 len 28 C9F1CAA5D6F7CAF4D0D4C9CFCFDECBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("神圣主属性上限瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 99:
+                    // 0x7424E8  68 AC 31 74 00  push 0x7431AC
+                    // 0x7431AC len 24 D6F7CAF4D0D4C9CFCFDECBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("主属性上限瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 100:
+                    // 0x74252F  68 D0 31 74 00  push 0x7431D0
+                    // 0x7431D0 len 22 C9F1CAA5B7C0D3F9CBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("神圣防御瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 101:
+                    // 0x742576  68 F0 31 74 00  push 0x7431F0
+                    // 0x7431F0 len 20 C4A7D1AAD6B5CBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("魔血值瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
             }
         }
 
