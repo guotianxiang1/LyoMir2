@@ -1,4 +1,5 @@
 using System.Collections;
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -1612,6 +1613,18 @@ namespace GameSvr
                 {
                     nRate = 30;
                 }
+                // Heroes share THumanKind.Die -> sub_73FC70 with players. The
+                // plugin rewrite is a process-wide patch, so HeroObject must
+                // honour it too. Monsters do not enter this worker natively.
+                var dropCount = 0;
+                var deathDropPatched = false;
+                var patchedCap = 2;
+                if (this is HeroObject)
+                {
+                    deathDropPatched = new YanshenApi(null, null, M2Share.PluginManager)
+                        .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out patchedCap);
+                    if (deathDropPatched) nRate = patchedRate;
+                }
                 nC = 0;
                 // 战神 sub_73FC70 @0x73FDAF-0x73FEC9 — the auth + gift DESTROY branch for
                 // EQUIPPED gear (the high-value tier), absent from C# until now:
@@ -1658,6 +1671,8 @@ namespace GameSvr
                                 MsgColor.Red, MsgType.Hint);
                         }
                         Dispose(destroyed);                 // 0x73FEC4 sub_404690
+                        // native 0x73FE4E inc [ebp-0xc] then jmp 0x73FF6F (destroy skips cap)
+                        if (deathDropPatched) dropCount++;
                         nC++;
                         if (nC >= 9) break;
                         continue;                           // 0x73FEC9 jmp 0x73FF6F
@@ -1693,6 +1708,12 @@ namespace GameSvr
                                     }
                                     m_UseItems[nC].wIndex = 0;
                                 }
+                            }
+                            // native 0x73FF66 inc [ebp-0xc] / 0x73FF69 cmp / jg exit
+                            if (deathDropPatched)
+                            {
+                                dropCount++;
+                                if (dropCount > patchedCap) break;
                             }
                         }
                     }

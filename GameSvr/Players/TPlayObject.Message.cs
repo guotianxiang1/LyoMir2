@@ -1,5 +1,6 @@
 using SystemModule;
 using GameSvr.PasEngine;
+using GameSvr.Plugins;
 
 namespace GameSvr
 {
@@ -2816,6 +2817,14 @@ namespace GameSvr
                     return;
                 }
                 GoodItem StdItem;
+                // 人物爆率调整 patches sub_73FC70, not a runtime multiplier:
+                //   0x100B9CCC A3 BB FC 73 00 -> imm32 of 0x73FCB8 C7 45 F8 15 00 00 00 (red K)
+                //   0x100B9C5E A2 C9 FC 73 00 -> imm8  of 0x73FCC7 83 C0 5A             (non-red K)
+                //   0x100B9D3A A2 6C FF 73 00 -> imm8  of 0x73FF69 83 7D F4 02          (max-1)
+                // Off leaves C#'s existing 15/30 path (host 21/90 is a separate BLOCKED).
+                var dropCount = 0;
+                var deathDropPatched = new YanshenApi(this, null, M2Share.PluginManager)
+                    .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out var patchedCap);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     if (m_UseItems[i] == null)
@@ -2841,10 +2850,15 @@ namespace GameSvr
                                 M2Share.AddGameDataLog("16" + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[i].MakeIndex + "\t" + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
                             }
                             m_UseItems[i].wIndex = 0;
+                            // native 0x73FD74 FF 45 F4 inc [ebp-0xc] then jmp 0x73FF6F
+                            // (Reserved&8 skips the cap check, but the count still eats the budget)
+                            if (deathDropPatched) dropCount++;
                         }
                     }
                 }
-                var nRate = PKLevel() > 2 ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate;
+                var nRate = deathDropPatched
+                    ? patchedRate
+                    : (PKLevel() > 2 ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     if (M2Share.RandomNumber.Random(nRate) != 0)
@@ -2878,6 +2892,12 @@ namespace GameSvr
                                 }
                                 m_UseItems[i].wIndex = 0;
                             }
+                        }
+                        // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 xx / 7F 0A jg
+                        if (deathDropPatched)
+                        {
+                            dropCount++;
+                            if (dropCount > patchedCap) break;
                         }
                     }
                 }
