@@ -26,8 +26,9 @@ namespace GameSvr
         private const int NativeSkill167CellMilliseconds = 0x1388;
 
         /// <summary>0x7198E4 `push 0x1D` inside the constructor at 0x7198BC,
-        /// and the same literal is the search key at 0x6EEF64.</summary>
-        private const int NativeSkill167CellEventType = 0x1D;
+        /// and the same literal is the search key at 0x6EEF64.
+        /// Exposed as <see cref="Grobal2.ET_PRISON"/>.</summary>
+        private const int NativeSkill167CellEventType = Grobal2.ET_PRISON;
 
         /// <summary>Required: 0x6EEF7F `mov dl,0x33`.</summary>
         private const byte NativeSkill167RequiredState = 0x33;

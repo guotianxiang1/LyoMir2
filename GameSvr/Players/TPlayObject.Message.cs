@@ -176,7 +176,7 @@ namespace GameSvr
 
         private static byte[] BuildShowEventBody(Event mapEvent, int packedEventParam)
         {
-            var isStall = mapEvent.m_nEventType == 41;
+            var isStall = mapEvent.m_nEventType == Grobal2.ET_STALL;
             var body = new byte[isStall ? 64 : 12];
             var elapsed = unchecked((uint)(HUtil32.GetTickCount() - mapEvent.OpenStartTick));
             System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
