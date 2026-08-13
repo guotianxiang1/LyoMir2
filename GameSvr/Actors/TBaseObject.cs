@@ -3524,7 +3524,7 @@ namespace GameSvr
         }
 
         public void SendMsg(TBaseObject BaseObject, int wIdent, int wParam, int nParam1, int nParam2, int nParam3,
-            string sMsg, object payload = null)
+            string sMsg, object payload = null, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             try
@@ -3542,7 +3542,8 @@ namespace GameSvr
                         dwDeliveryTime = 0,
                         BaseObject = BaseObject,
                         boLateDelivery = false,
-                        Payload = payload
+                        Payload = payload,
+                        nBodyLen = nBodyLen
                     };
                     if (!string.IsNullOrEmpty(sMsg))
                     {
@@ -3683,7 +3684,7 @@ namespace GameSvr
             SendDelayMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, dwDelay);
         }
 
-        public void SendUpdateMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, object payload = null)
+        public void SendUpdateMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, object payload = null, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             int i;
@@ -3712,10 +3713,10 @@ namespace GameSvr
 
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
-            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, payload);
+            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, payload, nBodyLen);
         }
 
-        public void SendActionMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg)
+        public void SendActionMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             int i;
@@ -3743,7 +3744,7 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
-            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg);
+            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, null, nBodyLen);
         }
 
         protected virtual bool GetMessage(ref TProcessMessage Msg)
@@ -3785,6 +3786,7 @@ namespace GameSvr
                     Msg.dwDeliveryTime = SendMessage.dwDeliveryTime;
                     Msg.boLateDelivery = SendMessage.boLateDelivery;
                     Msg.Payload = SendMessage.Payload;
+                    Msg.nBodyLen = SendMessage.nBodyLen;
                     if (!string.IsNullOrEmpty(SendMessage.Buff))
                     {
                         Msg.sMsg = SendMessage.Buff;
