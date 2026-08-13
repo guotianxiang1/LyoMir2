@@ -268,6 +268,55 @@ namespace GameSvr
                     SendNativeStateArmMsg("你被定身了！",
                         NativeStateArmAlertColor, NativeStateArmAlertType);
                     break;
+                // 79..84 are the band-B Alert-pair "你处于…状态，持续" arms:
+                // same 3-part concat + `66 B9 FF 38 mov cx,0x38FF` shape as
+                // 85..88, re-derived from the gained index map @0x7418E2 and the
+                // arm table @0x74194D. NOTE the sibling gained arms 49/56/62/63/
+                // 71/76/77/78 are deliberately NOT added to this switch: they are
+                // already spoken on gain by OnNativeTimedStateGained (the state-b
+                // half of sub_741884, also on the live SendTimedAbilityState
+                // path), so repeating them here would send each line twice. Only
+                // 79..84 are missing from every sibling dispatcher, so only they
+                // land here.
+                case 79:
+                    // 0x741FEA  68 6C 2F 74 00 push 0x742F6C / movzx eax,di /
+                    //           call 0x40C89C / push 0x742C94 "秒" / mov edx,3 /
+                    //           call 0x405890 / 66 B9 FF 38 mov cx,0x38FF
+                    // 0x742F6C len 20 C4E3B4A6D3DAD7C6C9D5D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于灼烧状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 80:
+                    // 0x742031  68 8C 2F 74 00 push 0x742F8C / ... / cx=0x38FF
+                    // 0x742F8C len 20 C4E3B4A6D3DAC1D1BBEAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于裂魂状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 81:
+                    // 0x742078  68 AC 2F 74 00 push 0x742FAC / ... / cx=0x38FF
+                    // 0x742FAC len 20 C4E3B4A6D3DAC1F7D1AAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于流血状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 82:
+                    // 0x7420BF  68 CC 2F 74 00 push 0x742FCC / ... / cx=0x38FF
+                    // 0x742FCC len 20 C4E3B4A6D3DABEAABBEAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于惊魂状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 83:
+                    // 0x742106  68 EC 2F 74 00 push 0x742FEC / ... / cx=0x38FF
+                    // 0x742FEC len 20 C4E3B4A6D3DACCECEEB8D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于天罡状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 84:
+                    // 0x74214D  68 0C 30 74 00 push 0x74300C / ... / cx=0x38FF
+                    // 0x74300C len 32
+                    //   C4E3B4A6D3DABDF0D4AABBA4CCE5BBA4B6DCB1A3BBA4D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于金元护体护盾保护状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
                 // 85..88 share the 3-part concat shape of arms 21/22 (push
                 // prefix / movzx eax,di / call 0x40C89C IntToStr / push 0x742C94
                 // "秒" / mov edx,3 / call 0x405890) but load the Alert pair
@@ -477,6 +526,119 @@ namespace GameSvr
                     // 0x7429A4  BA 08 34 74 00
                     // 0x743408 len 14 B6A8C9EDD7B4CCACBDE1CAF8 A3A1
                     SendNativeStateArmMsg("定身状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 49..84 lost arms: the plain Buff-pair shape
+                //   66 B9 DB FF mov cx,0xFFDB / mov edx,<str> / mov eax,esi /
+                //   mov ebx,[eax] / call [ebx+0xD4] / jmp 0x742C42
+                // with no second count (the lost path enters sub_741884 with
+                // ecx=0 @0x773388). None of these lost texts exist in any sibling
+                // dispatcher — OnNativeTimedStateLost now carries only the
+                // state-23/20 side-effect flags, and batch C owns 102/103/104/106
+                // — so this switch is their sole owner and there is no
+                // double-send. These pair with the gained arms 49/56/62/63/71/76/
+                // 77/78 (spoken by OnNativeTimedStateGained) and 79..84 (added to
+                // the gained switch above).
+                case 49:
+                    // 0x742985  C6 86 E1 02 00 00 00 mov byte [esi+0x2E1],0
+                    //           66 B9 DB FF / BA F0 33 74 00
+                    // 0x7433F0 len 14 CEDEB5D0D7B4CCACD2D1BDE1CAF8
+                    // The `[Self+0x2E1]=0` write mirrors the gained `=1` store.
+                    // As documented on the gained side (OnNativeTimedStateGained
+                    // case 49), that byte has ~16 unrelated image-wide writers and
+                    // no resolved reader/field, so no C# field is invented; only
+                    // the message is reproduced, the byte write left as a gap.
+                    SendNativeStateArmMsg("无敌状态已结束",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 56:
+                    // 0x7429BC  66 B9 DB FF / BA 20 34 74 00
+                    // 0x743420 len 17 CAC8D1AAC9B1C2BED7B4CCACBDE1CAF8 21
+                    // Trailing 0x21 is a single-byte '!', not the fullwidth ！
+                    // (A3A1) the sibling arms use — kept verbatim.
+                    SendNativeStateArmMsg("嗜血杀戮状态结束!",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 62:
+                    // 0x7429D4  66 B9 DB FF / BA 3C 34 74 00
+                    // 0x74343C len 14 C4FDB1F9D7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("凝冰状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 63:
+                    // 0x7429EC  C6 86 10 03 00 00 00 mov byte [esi+0x310],0
+                    //           66 B9 DB FF / BA 54 34 74 00
+                    // 0x743454 len 18 D5E6C1FABBA4CCE5D7B4CCACBDE1CAF8 A3A1
+                    // `[Self+0x310]=0` mirrors the gained `=1`. Per the state-63
+                    // note in OnNativeTimedStateGained it is a write-only mirror
+                    // of "state active" with no reader anywhere, so it is left
+                    // unmirrored (HasNativeActiveState already answers) and only
+                    // the message is reproduced.
+                    SendNativeStateArmMsg("真龙护体状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 71:
+                    // 0x742A53  66 B9 DB FF / BA C4 34 74 00
+                    // 0x7434C4 len 14 C8BCD1AAC6C6BFD5B9D8B1D5 A3A1
+                    // Gained side is "燃血破空开启！"; lost is the 关闭 twin
+                    // (B9D8B1D5 关闭 vs BFAAC6F4 开启). Both verbatim.
+                    SendNativeStateArmMsg("燃血破空关闭！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 76:
+                    // 0x742A23  66 B9 DB FF / BA 8C 34 74 00
+                    // 0x74348C len 16 BACFBBF7BFB9D0D4BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("合击抗性回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 77:
+                    // 0x742A3B  66 B9 DB FF / BA A8 34 74 00
+                    // 0x7434A8 len 16 BDFCD5BDBFB9D0D4BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("近战抗性回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 78:
+                    // 0x74281D  66 B9 DB FF / BA 78 32 74 00
+                    // 0x743278 len 12 B4CCCAF5BBD8B8B4D5FDB3A3
+                    // Gained "刺术上下限瞬间提高" drops 上下限 on loss — verbatim.
+                    SendNativeStateArmMsg("刺术回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 79:
+                    // 0x742A6B  66 B9 DB FF / BA DC 34 74 00
+                    // 0x7434DC len 14 D7C6C9D5D7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("灼烧状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 80:
+                    // 0x742A83  66 B9 DB FF / BA F4 34 74 00
+                    // 0x7434F4 len 14 C1D1BBEAD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("裂魂状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 81:
+                    // 0x742A9B  66 B9 DB FF / BA 0C 35 74 00
+                    // 0x74350C len 14 C1F7D1AAD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("流血状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 82:
+                    // 0x742AB3  66 B9 DB FF / BA 24 35 74 00
+                    // 0x743524 len 14 BEAABBEAD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("惊魂状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 83:
+                    // 0x742ACB  66 B9 DB FF / BA 3C 35 74 00
+                    // 0x74353C len 14 CCECEEB8D7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("天罡状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 84:
+                    // 0x742AE3  66 B9 DB FF / BA 54 35 74 00
+                    // 0x743554 len 26
+                    //   BDF0D4AABBA4CCE5BBA4B6DCB1A3BBA4D7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("金元护体护盾保护状态结束！",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
                 case 85:
