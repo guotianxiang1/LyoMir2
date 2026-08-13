@@ -489,6 +489,9 @@ namespace GameSvr
                 {
                     if (m_SlaveList[i].m_boDeath || m_SlaveList[i].m_boGhost || (m_SlaveList[i].m_Master != this))
                     {
+                        // sub_6B3993: TList.Get [player+0x4FC] then SM 4470 (0x6F78B4)
+                        // before the slot is dropped.
+                        NotifyNativeSlaveListChanged(joining: false, m_SlaveList[i]);
                         m_SlaveList.RemoveAt(i);
                     }
                 }
@@ -556,6 +559,9 @@ namespace GameSvr
                             {
                                 if (m_Master.m_SlaveList[i] == this)
                                 {
+                                    // Royalty-expire drop: 0x71E6C4 call 0x6F78B4 -> SM 4470,
+                                    // then TList.Remove from [master+0x4FC].
+                                    m_Master.NotifyNativeSlaveListChanged(joining: false, this);
                                     m_Master.m_SlaveList.RemoveAt(i);
                                     break;
                                 }

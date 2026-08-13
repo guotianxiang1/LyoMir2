@@ -1264,6 +1264,9 @@ namespace GameSvr
                                             }
                                             TargeTBaseObject.RefShowName();
                                             BaseObject.m_SlaveList.Add(TargeTBaseObject);
+                                            // MagTamming sub_6ED2A4 @0x6ED528: RecalcAbilitys then
+                                            // TList.Add [master+0x4FC] then SM 4469 (0x6F784C).
+                                            BaseObject.NotifyNativeSlaveListChanged(joining: true, TargeTBaseObject);
                                         }
                                         else
                                         {

@@ -1039,6 +1039,13 @@ namespace SystemModule
         public const int CM_SYSTEM_NEWMAIL = 4464;
         public const int CM_FETCH_ATTACH_OFFTM = 4468;
         public const int SM_FETCH_ATTACH_OFFTM = 4468;
+        // Native slave-list name notify. Recog=Param=Tag=Series=0, sMsg=[obj+0x106].
+        // JOIN  4469: 0x6F7883 66 BA 75 11 then [obj+0x250].
+        //   MakeSlave sub_6CB070 @0x6CB357, MakeSlaveEx sub_6BFC20 @0x6BFD02,
+        //   MagTamming sub_6ED2A4 @0x6ED528. srv_AppearTimes 261804.
+        // LEAVE 4470: 0x6F78EB 66 BA 76 11, same frame. srv_AppearTimes 123532.
+        public const int SM_SLAVE_JOIN = 4469;
+        public const int SM_SLAVE_LEAVE = 4470;
         public const int CM_CLEAR_ALLMAIL = 4495;
         public const int SM_CLEAR_ALLMAIL = 4495;
 
@@ -1194,6 +1201,11 @@ namespace SystemModule
 
         public const int CM_GILD_ACCEPT_REQUEST = 4611;
         public const int SM_GILD_ACCEPT_REQUEST = 4611;
+        // Login dump of offline social-request notices. UserLogon @0x6B24EE
+        // always calls sub_6F772C; even the empty-list arm (je 0x6F77EB) still
+        // sends via [obj+0x254]: 0x6F7813 66 BA 04 12, Recog=Param=Tag=Series=0,
+        // Len=count*17. srv_AppearTimes 50911.
+        public const int SM_PENDING_NOTICE = 4612;
         public const int SM_PENDING_REQUEST = 4613;
         public const int SM_CLEAR_PENDING_REQUEST = 4615;
         public const int CM_FIND_CORPS_BYNAME = 4616;
