@@ -740,6 +740,13 @@ namespace SystemModule
         public const int SM_HERO_RUSHKUNG = 5;
         public const int SM_HERO_LONGHIT = 25;
         public const int SM_HERO_LASTHIT = 26;
+        /// <summary>
+        /// Login version handshake. Native UserLogon sub_6B1D64 @0x6B23C6
+        /// calls sub_6F05D8, which at <c>0x6F05F2 66 BA 78 03 mov dx,0x378</c>
+        /// sends via [obj+0x250]: Recog=0x3EA (1002), Param=0x3E7 (999),
+        /// Tag=0, Series=0, empty body. Always paired with SM_LOGIN_NOW (889).
+        /// </summary>
+        public const int SM_LOGIN_VER = 888;
         public const int SM_HERO_QUITMAGIC = 896;
         public const int SM_HERO_LOGMAGIC = 897;
         public const int SM_HERO_NAME = 898;
