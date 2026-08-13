@@ -1440,16 +1440,23 @@ namespace GameSvr
                     {
                         if (dwDelayTime == 0)
                         {
-                            SendMoveActionFail();
+                            // MOVE-25: native turn(3010) refusal 0x6D9B94 pushes FOUR
+                            // ZEROS before `mov dx,0x276` (0x6D9B9E) / call [ebx+0x250]
+                            // — the turn correction carries NO coordinates, unlike
+                            // walk/run (0x6D9C26/0x6D9D42) which send X/+0x12C, Y/+0x130,
+                            // Dir/+0x154. SendMoveActionFail() emits the walk/run shape,
+                            // so turn must issue the four-zero SM_ACT_FAIL(0x276) directly.
+                            SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0, 0, "");
                         }
                         else
                         {
                             nMsgCount = GetTurnMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxTurnMsgCount)
                             {
-                                // MOVE-22: Native never disconnects, kicks or logs a fast client.
-                                // Simply send correction back to client.
-                                SendMoveActionFail();
+                                // MOVE-22: Native never disconnects, kicks or logs a fast
+                                // client. MOVE-25: the turn correction is unconditionally
+                                // four-zero (0x6D9B94), so this shares the same shape.
+                                SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0, 0, "");
                             }
                             else
                             {
