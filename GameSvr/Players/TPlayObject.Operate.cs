@@ -1960,6 +1960,11 @@ namespace GameSvr
                 }
                 if (bo11)
                 {
+                    // TRADE-50: 战神 sub_6C4580 @0x6C4758 `inc dword [0x7D3A90]` —— 四道
+                    // 容量检查全过之后、变异块之前对全局成交计数器自增一次（见
+                    // TPlayObject.NativeDealCompleteCounter.cs 的地址证据；0x7D3A90 全镜像
+                    // 只写不读）。放在此处与原生 0x6C4758 的相对位置一致。
+                    g_nCompletedDealCount++;
                     for (var i = 0; i < m_DealItemList.Count; i++)
                     {
                         UserItem = m_DealItemList[i];
