@@ -751,6 +751,7 @@ namespace GameSvr
             else if (removed)
             {
                 DispatchNativeStateLostArm(node.InternalType);
+                DispatchNativeStateLostTextBatchC(node.InternalType);
             }
             else
             {
@@ -758,6 +759,8 @@ namespace GameSvr
                 // in the arm: signed divide toward zero, low 16 bits printed.
                 DispatchNativeStateGainedArm(node.InternalType,
                     unchecked((ushort)(node.RemainingMilliseconds / 1000)));
+                DispatchNativeStateGainedTextBatchC(node.InternalType,
+                    node.RemainingMilliseconds);
             }
 
             SendTimedAbilityClientState(node.InternalType,
