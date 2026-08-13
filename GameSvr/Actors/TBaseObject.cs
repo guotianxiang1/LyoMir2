@@ -1487,7 +1487,6 @@ namespace GameSvr
             int nX = 0;
             int nY = 0;
             string s20;
-            int DropWide = HUtil32._MIN(M2Share.g_Config.nDropItemRage, 7);
             MapItem MapItem = new MapItem
             {
                 Name = Grobal2.sSTRING_GOLDNAME,
@@ -1497,6 +1496,9 @@ namespace GameSvr
                 CanPickUpTick = HUtil32.GetTickCount(),
                 DropBaseObject = DropGoldCreat
             };
+            // 金币半径是立即数：sub_768AAC @0x768ADC `6A 03 push 3` 直接压给
+            // 0x768AF4 call sub_768688。这里原先还算了个 _MIN(nDropItemRage,7)
+            // 的局部，从未被用过，且那个旋钮全镜像零命中，已删。
             GetDropPosition(m_nCurrX, m_nCurrY, 3, ref nX, ref nY);
             MapItem MapItemA = (MapItem)m_PEnvir.AddToMap(nX, nY, CellType.OS_ITEMOBJECT, MapItem);
             if (MapItemA != null)

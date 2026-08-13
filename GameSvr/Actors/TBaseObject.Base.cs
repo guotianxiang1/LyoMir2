@@ -1579,31 +1579,11 @@ namespace GameSvr
         
         
         
-        /// <summary>
-        /// 战神 <c>sub_71FA20</c> 段2（怪物自有掉落表）的散落半径。表里每中一件就地落地，
-        /// 两条臂各自把半径压进 ecx：
-        ///   71FDC2  6A 01 / 6A 00 / 50 / 68 00 01 72 00   ; 绕过否决 / "(爆天赐)"
-        ///   71FDCF  B9 03 00 00 00        mov ecx,3
-        ///   71FDDA  E8 C1 8A 04 00        call sub_7688A0
-        ///   71FE46  B9 03 00 00 00        mov ecx,3       ; "怪物死亡:" 臂
-        ///   71FE51  E8 4A 8A 04 00        call sub_7688A0
-        /// ecx 在 <c>sub_7688A0</c> 序言 <c>0x7688B4 mov ebx,ecx</c> 存活到
-        /// <c>0x768907 push ebx</c>，即 <c>sub_768688</c> 的 <c>[ebp+0x10]</c> ——
-        /// <c>0x7686B5 mov eax,[ebp+0x10] / 0x7686BA jle</c> 那圈求空地的半径界。
-        ///
-        /// C# 把段2 的物件先攒进 <c>m_ItemList</c>（<c>UserEngine.MonGetRandomItems</c>）
-        /// 再由 <c>ScatterBagItems</c> 统一落地，所以半径要在这个调用点上给死。原先走的
-        /// <c>_MIN(nDropItemRage,7)</c> 无原生依据：DropItemRage / nDropItemRage /
-        /// DropItemRange 三个名字在全镜像 ASCII（大小写不敏感）与 UTF-16LE 两路皆 0 命中，
-        /// 且全镜像 15 个 <c>sub_7688A0</c> 调用点里只有 <c>0x64E79D</c>（脚本按名掉物
-        /// <c>sub_64E6F4</c>）的半径来自调用方，其余全是立即数。
-        /// </summary>
-        private const int NativeMonsterOwnTableScatterRange = 3;
-
+        // 半径常量与全镜像 sub_7688A0 调用点取值全表见
+        // TBaseObject.NativeScatterRange.cs。
         protected virtual void ScatterBagItems(TBaseObject ItemOfCreat)
         {
-            ScatterBagItems(ItemOfCreat, null,
-                HUtil32._MIN(M2Share.g_Config.nDropItemRage, 7));
+            ScatterBagItems(ItemOfCreat, null, NativePlayerDeathScatterRange);
         }
 
         private void ScatterBagItems(TBaseObject ItemOfCreat,
