@@ -2159,10 +2159,14 @@ namespace GameSvr
                                 MakeMine2();
                             }
                         }
-                        // MINE-50: Native @0x6BC2F8 sends ident 0x274 (SM_MINESUCCESS).
-                        SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
-
+                        // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
+                        //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
+                        //   0x6BC2E4  83 C2 05        add edx,5      ; +5
+                        //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
+                        //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
+                        //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
                         DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
+                        SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
                         result = true;
                     }
                 }
@@ -2980,7 +2984,8 @@ namespace GameSvr
             {
                 return;
             }
-            var nRandom = M2Share.RandomNumber.Random(M2Share.g_Config.nStoneTypeRate);
+            // MINE-61: Native @0x6BC3F7 hardcodes Random(120) for weight ladder, not config-driven.
+            var nRandom = M2Share.RandomNumber.Random(120);
             if (nRandom >= M2Share.g_Config.nGoldStoneMin && nRandom <= M2Share.g_Config.nGoldStoneMax)
             {
                 UserItem = new TUserItem();
