@@ -3541,7 +3541,12 @@ namespace GameSvr.Plugins
         public bool IsBlockSpam() => IsBlockSpamPatchOn();
         public bool IsDelSkillSilent() => Enabled("删除技能不提示");
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
-        public bool IsUpSkillSilent() => Enabled("升级技能不提示");
+        // 升级技能不提示 is a host-code patch: plugin 0x100DB61C memcpy EB 3A 90 90
+        // over 0x73F5EE in sub_73F500 (ChgSelfSkillLv / UpUserSkill worker), jumping
+        // from the LStrCatN of "{name} 技能等级变更为：{level}" + SysMsg 0xFFDB
+        // straight to RecalcAbilitys at 0x73F62A. Restore arm writes 57 68 7C F6 73 00.
+        public bool IsUpSkillSilentPatchOn() => PatchToggleOn("升级技能不提示");
+        public bool IsUpSkillSilent() => IsUpSkillSilentPatchOn();
         public bool IsBanChatSilent() => Enabled("禁止发言不提示");
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
