@@ -18,12 +18,6 @@ namespace GameSvr
         public int m_nHonorValue;
         public bool m_boHonorValueLoaded;
 
-        // Native pickup spam-check fields (player+0x3E4/0x3E8/0x3EC)
-        // sub_6B74D8 @0x6B7500: prevents picking from same coordinates within 7 seconds
-        private uint m_dwLastPickUpTick;
-        private short m_nLastPickUpX;
-        private short m_nLastPickUpY;
-
         internal int MerchantDialogSeq => _merchantDialogSeq;
 
         /// <summary>The cooldown table lives on THumanKind (created at 0x73BFF2
@@ -1243,7 +1237,7 @@ namespace GameSvr
 
         }
 
-        private void DealCancel()
+        internal void DealCancel()
         {
             if (!m_boDealing)
             {
@@ -2132,13 +2126,18 @@ namespace GameSvr
                         // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
                         // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
                         int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
-                        if (M2Share.RandomNumber.Random(mineRate) == 0)
+                        // MINE-08: Native @0x6BC24A tests the map flag BEFORE drawing the
+                        // rate roll, so a non-mine map consumes no RNG at all.
+                        if (m_PEnvir.Flag.boMINE)
                         {
-                            if (m_PEnvir.Flag.boMINE)
+                            if (M2Share.RandomNumber.Random(mineRate) == 0)
                             {
                                 MakeMine();
                             }
-                            else if (m_PEnvir.Flag.boMINE2)
+                        }
+                        else if (m_PEnvir.Flag.boMINE2)
+                        {
+                            if (M2Share.RandomNumber.Random(mineRate) == 0)
                             {
                                 MakeMine2();
                             }
