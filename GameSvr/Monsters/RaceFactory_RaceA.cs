@@ -48,6 +48,12 @@ namespace GameSvr
                     cert = new ArmLightGuard();
                     break;
 
+                // race 128 group 50 handler 0x67A81D  classref 0x663D08  ctor 0x66AFE8  TPigKingMonster
+                //   case body 无 ctor 后逻辑（爪牙 AI 见 PigKingMonster.cs，fail-closed）。
+                case 128:
+                    cert = new PigKingMonster();
+                    break;
+
                 // race 135 group 53 handler 0x67A859  classref 0x663F9C  ctor 0x66B288  TFireDragon
                 //   case body 无 ctor 后逻辑。构造器 sub_66B288 已核验（见 FireDragon.cs）。
                 case 135:
