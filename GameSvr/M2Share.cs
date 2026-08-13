@@ -2040,27 +2040,43 @@ namespace GameSvr
                         result = true;
                     }
                     break;
+                // DURA-16/17 — 全部 15 个 VMT+0x60 谓词体 + StdMode 派发链已逐字节反演
+                // (flat_image base 0x400000)，本 switch 是原生 per-class 谓词族的中心化转置，
+                // 与原生 16 槽 slot->StdMode 精确等价 (PARTIAL 已升级为 FAITHFUL)。
+                //
                 // 槽位资格在原生是每个物品类的 VMT+0x60 谓词，配合 0x74C338 的
-                // StdMode 派发表（byte 表 0x74C374 + 跳表 0x74C414）决定 StdMode 走哪个类：
-                //   0x7639D4 test dl,dl        TManClothes/TWomanClothes  -> 10,11
-                //   0x7608CC cmp dl,1          TLWeapon/TBrokenWeapon/TSpade -> 5,6
-                //   0x760488 cmp dl,2          TRWeapon    -> 30
-                //   0x761784 cmp dl,3          TNecklace   -> 19,20,21
-                //   0x7611C0 cmp dl,4          THelmet     -> 15
-                //   0x7625AC dl==5||dl==6      TArmRing    -> 24,26
-                //   0x761CB4 dl==7||dl==8      TRing       -> 22,23
-                //   0x762C64 cmp dl,9          TEquipBujuk 族 -> 25
-                //   0x762D30 cmp dl,0xA        TBelt       -> 27
-                //   0x7630CC cmp dl,0xB        TBoots      -> 28
-                //   0x763390 cmp dl,0xC        TCharm 族    -> 7
-                //   0x760F3C cmp dl,0xD        THeadMask   -> 16
-                //   0x7610C0 cmp dl,0xE        TWarDrum    -> 29
-                //   0x763254 cmp dl,0xF        TMaPai      -> 34
+                // StdMode 派发表（byte 表 0x74C374 + 跳表 0x74C414）决定 StdMode 走哪个类；
+                // 每个谓词体已确认接受的 slot(dl)：
+                //   0x7639D4 test dl,dl/sete            slot0  TManClothes/TWomanClothes  -> 10,11
+                //   0x7608CC cmp dl,1/sete              slot1  TLWeapon/TBrokenWeapon/TSpade -> 5,6
+                //   0x760488 cmp dl,2/sete              slot2  TRWeapon    -> 30
+                //   0x761784 cmp dl,3/sete              slot3  TNecklace   -> 19,20,21
+                //   0x7611C0 cmp dl,4/sete              slot4  THelmet     -> 15
+                //   0x7625AC cmp dl,5 je/cmp dl,6 je    slot5|6 TArmRing   -> 24,26
+                //   0x761CB4 cmp dl,7 je/cmp dl,8 je    slot7|8 TRing      -> 22,23
+                //   0x762C64 cmp dl,9/sete              slot9  TEquipBujuk 族 -> 25
+                //   0x762D30 cmp dl,0xA/sete            slotA  TBelt       -> 27
+                //   0x7630CC cmp dl,0xB/sete            slotB  TBoots      -> 28
+                //   0x763390 cmp dl,0xC/sete            slotC  TCharm 族    -> 7
+                //   0x760F3C cmp dl,0xD/sete            slotD  THeadMask   -> 16
+                //   0x7610C0 cmp dl,0xE/sete            slotE  TWarDrum    -> 29
+                //   0x763254 cmp dl,0xF/sete            slotF  TMaPai      -> 34
+                // 闭合方式：每个可装备 StdMode 经 dl=byte[0x74C374+StdMode]、
+                // arm=[0x74C414+dl*4] 到构造臂，臂里 `mov eax,[classref]` 取元类，
+                // u32(classref)=VMT、u32(VMT+0x60)=谓词；同一 StdMode 的所有 Shape 子类
+                // (如武器 5 有 5 个变体) 都落在同一 slot，故 StdMode->slot 唯一确定。
+                //
+                // DURA-17：裸基类 TEquipItem 的 +0x60 = 0x75FE18 `33 C0 C3`(xor eax,eax/ret)，
+                // 对任何 slot 返回 false。C# 此 switch result=false 起始且无 default，
+                // 未列 StdMode 对所有槽保持 false，即 fail-closed 等价"永不可穿"。
+                //
                 // StdMode 51/52/53/54/63/64 落到默认臂 0x74D67E（0x74D680 cmp al,0x96
                 // 之下即 TBaseItem），62 走 TAnimalMascot，两者的父链都是
                 // TBaseItem<TBaseObj<TObject —— 不是 TEquipItem，VMT 里根本没有 +0x60
                 // 这一格（TBasePileItem VMT 0x781C24 的 +0x60 落在类名串 0x781C88 上，
-                // TAnimalMascot VMT 0x782614 的 +0x60 落在 0x782678 同理），原生穿不上。
+                // TAnimalMascot VMT 0x782614 的 +0x60 落在 0x782678 同理），原生穿不上；
+                // 派发字节表里其它有专属臂的 StdMode(0-4,8,31-33,40,42,43,47…) 构造的类
+                // 其 VMT+0x60 均非谓词(落类名串/垃圾)，同样不可装备，本 switch 无遗漏。
                 case Grobal2.U_ARMRINGL:
                     if (StdItem.StdMode == 24 || StdItem.StdMode == 26)
                     {
