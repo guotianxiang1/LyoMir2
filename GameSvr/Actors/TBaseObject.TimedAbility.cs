@@ -287,9 +287,28 @@ namespace GameSvr
                         result = unchecked(result + node.Value);
                         break;
                     case 100:
-                        var percent = unchecked((int)(long)Math.Round(
-                            unchecked((uint)result) * (double)node.Value / 100.0,
-                            MidpointRounding.ToEven));
+                        // STATE-40 — band handler for 0x64 @0x773A45, bytes verified:
+                        //   773A45  8B 87 14 03 00 00  mov  eax, [edi+0x314]
+                        //   773A4B  89 45 C4           mov  [ebp-0x3C], eax
+                        //   773A4E  33 C0 / 89 45 C8   mov  [ebp-0x38], 0     ; zero-extend
+                        //   773A53  DF 6D C4           fild qword [ebp-0x3C]  ; hence (uint)
+                        //   773A56  DB 43 0A           fild dword [ebx+0xA]   ; node value
+                        //   773A59  D8 35 94 3B 77 00  fdiv dword [0x773B94]  ; = 100.0f
+                        //   773A5F  DE C9              fmulp st(1)
+                        //   773A61  E8 1A FB C8 FF     call 0x403580          ; @TRUNC
+                        //   773A66  01 87 14 03 00 00  add  [edi+0x314], eax
+                        // 0x403580 sets RC=11 (`66 81 4C 24 02 00 0F  or word [esp+2],0xF00`)
+                        // before fistp, so it truncates toward zero. The sibling helper
+                        // 0x403574 is a bare fistp on the default control word, which is
+                        // round-half-to-even - that is what MidpointRounding.ToEven modelled,
+                        // and this recompute never calls it.
+                        // Operand order is left as-is: native evaluates
+                        // current * (value / 100) in x87 extended precision, C# evaluates
+                        // (current * value) / 100 in double. Those can disagree in the last
+                        // bit right at an integer boundary; establishing which way needs a
+                        // measurement, so only the rounding mode is corrected here.
+                        var percent = unchecked((int)(long)(
+                            unchecked((uint)result) * (double)node.Value / 100.0));
                         result = unchecked(result + percent);
                         break;
                 }
