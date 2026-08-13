@@ -24,6 +24,7 @@ namespace GameSvr
         
         public bool m_boStartWar;
         public bool m_boUnderWar;
+        public bool m_boForceWar;
         public TObjUnit m_CenterWall;
         public DateTime m_ChangeDate;
         
@@ -34,6 +35,7 @@ namespace GameSvr
         
         
         private int m_dwSaveTick;
+        private int m_dwRunTick;
         public int m_dwStartCastleWarTick;
         public IList<string> m_EnvirList;
         public TObjUnit[] m_Guard = new TObjUnit[4];
@@ -129,7 +131,9 @@ namespace GameSvr
             m_DoorStatus = null;
             m_boStartWar = false;
             m_boUnderWar = false;
+            m_boForceWar = false;
             m_boShowOverMsg = false;
+            m_dwRunTick = 0;
             m_AttackWarList = new List<TAttackerInfo>();
             m_AttackGuildList = new List<Association>();
             m_dwSaveTick = 0;
@@ -371,59 +375,61 @@ namespace GameSvr
 
         public void Run()
         {
-            string s20;
-            const string sWarStartMsg = "[{0} 攻城战已经开始]";
-            const string sWarStopTimeMsg = "[{0} 攻城战离结束还有{1}分钟]";
             const string sExceptionMsg = "[Exception] TUserCastle::Run";
             try
             {
+                var nowTick = HUtil32.GetTickCount();
+                // 0x65BB58 sub eax,[ebx+0x10] / 0x65BB5B cmp eax,0x2710 / jb ret
+                if ((nowTick - m_dwRunTick) < 0x2710) return;
+                m_dwRunTick = nowTick;
                 if (M2Share.nServerIndex != M2Share.MapManager.GetMapOfServerIndex(m_sMapName)) return;
-                var Year = DateTime.Now.Year;
-                var Month = DateTime.Now.Month;
-                var Day = DateTime.Now.Day;
-                var wYear = m_IncomeToday.Year;
-                var wMonth = m_IncomeToday.Month;
-                var wDay = m_IncomeToday.Day;
-                if (Year != wYear || Month != wMonth || Day != wDay)
+                var now = DateTime.Now;
+                var today = now.Date;
+                if (m_IncomeToday.Date != today)
                 {
                     m_nTodayIncome = 0;
-                    m_IncomeToday = DateTime.Now;
+                    m_IncomeToday = now;
                     m_boStartWar = false;
                 }
+                // 0x49E39C: DecodeTime then hour*3600+min*60+sec. Stored at [ebx+8].
+                var timeSec = now.Hour * 3600 + now.Minute * 60 + now.Second;
                 if (!m_boStartWar && !m_boUnderWar)
                 {
-                    var hour = DateTime.Now.Hour;
-                    if (hour == M2Share.g_Config.nStartCastlewarTime) 
+                    // start window [0x11940, 0x12E58) unless +0x2B force skips it
+                    if (m_boForceWar || (timeSec >= 0x11940 && timeSec < 0x12E58))
                     {
                         m_boStartWar = true;
                         m_AttackGuildList.Clear();
                         for (var i = m_AttackWarList.Count - 1; i >= 0; i--)
                         {
                             var attackerInfo = m_AttackWarList[i];
-                            wYear = attackerInfo.AttackDate.Year;
-                            wMonth = attackerInfo.AttackDate.Month;
-                            wDay = attackerInfo.AttackDate.Day;
-                            if (Year == wYear && Month == wMonth && Day == wDay)
+                            var attackDay = attackerInfo.AttackDate.Date;
+                            if (attackDay == today)
                             {
-                                m_boUnderWar = true;
-                                m_boShowOverMsg = false;
-                                m_WarDate = DateTime.Now;
-                                m_dwStartCastleWarTick = HUtil32.GetTickCount();
                                 m_AttackGuildList.Add(attackerInfo.Guild);
-                                attackerInfo = null;
+                            }
+                            else if (attackDay < today)
+                            {
                                 m_AttackWarList.RemoveAt(i);
                             }
+                        }
+                        if (m_boForceWar || m_AttackGuildList.Count > 0)
+                        {
+                            m_boUnderWar = true;
+                            m_boShowOverMsg = false;
+                            m_WarDate = now;
+                            m_dwStartCastleWarTick = nowTick;
                         }
                         if (m_boUnderWar)
                         {
                             m_AttackGuildList.Add(m_MasterGuild);
                             StartWallconquestWar();
-                            SaveAttackSabukWall();
                             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_212, M2Share.nServerIndex, "");
-                            s20 = string.Format(sWarStartMsg, m_sName);
-                            M2Share.UserEngine.SendBroadCastMsgExt(s20, MsgType.System);
-                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s20);
-                            M2Share.MainOutMessage(s20);
+                            // 0x65BE7C len=22, no %s
+                            const string sWarStartMsg = "[沙巴克攻城战已经开始]";
+                            M2Share.UserEngine.SendBroadCastMsgExt(sWarStartMsg, MsgType.System);
+                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, sWarStartMsg);
+                            M2Share.MainOutMessage(sWarStartMsg);
                             MainDoorControl(true);
                         }
                     }
@@ -447,18 +453,18 @@ namespace GameSvr
                     if (m_LeftWall.BaseObject != null) m_LeftWall.BaseObject.m_boStoneMode = false;
                     if (m_CenterWall.BaseObject != null) m_CenterWall.BaseObject.m_boStoneMode = false;
                     if (m_RightWall.BaseObject != null) m_RightWall.BaseObject.m_boStoneMode = false;
-                    if (!m_boShowOverMsg)
+                    if (!m_boShowOverMsg && timeSec >= 0x12C00)
                     {
-                        if ((HUtil32.GetTickCount() - m_dwStartCastleWarTick) > (M2Share.g_Config.dwCastleWarTime - M2Share.g_Config.dwShowCastleWarEndMsgTime)) 
-                        {
-                            m_boShowOverMsg = true;
-                            s20 = string.Format(sWarStopTimeMsg, m_sName, M2Share.g_Config.dwShowCastleWarEndMsgTime / (60 * 1000));
-                            M2Share.UserEngine.SendBroadCastMsgExt(s20, MsgType.System);
-                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s20);
-                            M2Share.MainOutMessage(s20);
-                        }
+                        m_boShowOverMsg = true;
+                        // 0x65BE9C len=33, hardcoded 10 minutes
+                        const string sWarStopTimeMsg = "[沙巴克城攻城战离结束还有10分钟.]";
+                        M2Share.UserEngine.SendBroadCastMsgExt(sWarStopTimeMsg, MsgType.System);
+                        M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, sWarStopTimeMsg);
+                        M2Share.MainOutMessage(sWarStopTimeMsg);
                     }
-                    if ((HUtil32.GetTickCount() - m_dwStartCastleWarTick) > M2Share.g_Config.dwCastleWarTime)
+                    // 0x65BE1B cmp [ebx+0x2B],0 / jne skip;
+                    // cmp [ebx+8],0x11940 / jb Stop; cmp 0x12E58 / jbe stay
+                    if (!m_boForceWar && (timeSec < 0x11940 || timeSec > 0x12E58))
                     {
                         StopWallconquestWar();
                     }
