@@ -134,7 +134,7 @@ namespace GameSvr
         {
             var record = entry.Record;
             if (record.AttachStatus == 2) return -2;
-            if (entry.Attachments.Count > Grobal2.MAXBAGITEM - m_ItemList.Count) return -1;
+            if (entry.Attachments.Count > BagCapacity.Of(this) - m_ItemList.Count) return -1;
 
             var orderId = record.MoneyCount > 0
                 ? NativeMailStore.CreateMoneyOrderBestEffort(record, m_sCharName)

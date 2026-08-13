@@ -245,7 +245,7 @@ namespace GameSvr
             {
                 PileItemContainer.Storage => itemCount < Math.Clamp(m_nStorageSpaceCount,
                     MIN_STORAGE_ITEM_COUNT, MAX_STORAGE_ITEM_COUNT),
-                PileItemContainer.HumanBag => itemCount < Grobal2.MAXBAGITEM,
+                PileItemContainer.HumanBag => itemCount < BagCapacity.Of(this),
                 PileItemContainer.HeroBag => m_HeroObject != null &&
                     itemCount < HeroObject.GetHeroBagCapacity(m_HeroObject.m_Abil.Level),
                 _ => false
