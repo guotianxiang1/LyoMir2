@@ -1865,8 +1865,17 @@ namespace GameSvr
                     }
                     if (m_nDealGolds > 0)
                     {
-                        m_DealCreat.m_nGold += m_nDealGolds;
-                        m_DealCreat.GoldChanged();
+                        // 战神 sub_6C4580 @0x6C4835 走的是虚调用而不是裸加：
+                        //   0x6C4835  mov edx,[ebx+0x6E0]   ; self.m_nDealGolds
+                        //   0x6C483D  jle 0x6C487E          ; <=0 跳过
+                        //   0x6C483F  mov eax,[ebx+0xBAC]   ; self.m_DealCreat
+                        //   0x6C4845  mov ecx,[eax]         ; 对方 VMT
+                        //   0x6C4847  call [ecx+0x28C]      ; = 0x6D791C IncGold
+                        // [0x6AC8C8+0x28C] == 0x6D791C，即带上限的 IncGold。裸 += 会
+                        // 绕过 `cmp ebx,[eax+0x68C] / jg` 这道 m_nGoldMax 门，且 IncGold
+                        // 只在**成功**分支里 `call 0x6C19B4`(GoldChanged)，所以刷新也
+                        // 不能在外面无条件发。
+                        (m_DealCreat as TPlayObject).IncGold(m_nDealGolds);
                         if (M2Share.g_boGameLogGold)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + Grobal2.sSTRING_GOLDNAME + "\t" + m_nGold + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
@@ -1891,8 +1900,13 @@ namespace GameSvr
                     }
                     if (m_DealCreat.m_nDealGolds > 0)
                     {
-                        m_nGold += m_DealCreat.m_nDealGolds;
-                        GoldChanged();
+                        // 镜像方向，战神 sub_6C4580 @0x6C4959 同样是虚调用：
+                        //   0x6C4959  mov eax,[ebx+0xBAC]   ; self.m_DealCreat
+                        //   0x6C495F  mov edx,[eax+0x6E0]   ; 对方 m_nDealGolds
+                        //   0x6C4967  jle 0x6C49A4
+                        //   0x6C4969  mov eax,ebx           ; 收款方 = self
+                        //   0x6C496D  call [ecx+0x28C]      ; = 0x6D791C IncGold
+                        IncGold(m_DealCreat.m_nDealGolds);
                         if (M2Share.g_boGameLogGold)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + Grobal2.sSTRING_GOLDNAME + "\t" + m_DealCreat.m_nGold + "\t" + '1' + "\t" + m_sCharName);
