@@ -1,0 +1,414 @@
+===== config key strings + abs xrefs =====
+
+== '全局循环函数' @ ['0x102b163c', '0x102c0d20', '0x102c0d38']
+   xrefs -> ['0x1000a436', '0x100d7813']
+   xrefs -> ['0x1009220c']
+   xrefs -> ['0x10092213']
+
+== '循环时间_值' @ ['0x102b1488']
+   xrefs -> ['0x10009c9e', '0x100d7d89', '0x100d7da1']
+
+== '循环时间' @ ['0x102b1488']
+   xrefs -> ['0x10009c9e', '0x100d7d89', '0x100d7da1']
+
+== '自定义循环函数' @ ['0x102b5274', '0x102b7254', '0x102b8ecc', '0x102b97f8', '0x102b9810']
+   xrefs -> []
+   xrefs -> []
+   xrefs -> []
+   xrefs -> []
+   xrefs -> []
+
+== '高级回收' @ ['0x102b164c', '0x102c0d50', '0x102c0d64']
+   xrefs -> ['0x1000a486', '0x100d7838']
+   xrefs -> ['0x1009225c']
+   xrefs -> ['0x10092251']
+
+== '眼神特殊函数' @ ['0x102b02e4', '0x102c0d78', '0x102c0d90']
+   xrefs -> ['0x10006457', '0x100d78cc']
+   xrefs -> ['0x100922ac']
+   xrefs -> ['0x100922a1']
+
+
+===== parse windows =====
+
+----- around 0x100d7813 (func_start 0x100d75ca) -----
+0x100d77d3  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d77d6  E8 05 94 00 00           call 0x100e0be0
+0x100d77db  8B C8                    mov ecx, eax
+0x100d77dd  E8 5E 86 00 00           call 0x100dfe40
+0x100d77e2  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+0x100d77e8  68 3A 16 2B 10           push 0x102b163a
+0x100d77ed  68 30 16 2B 10           push 0x102b1630   ; "新怪物爆率"
+0x100d77f2  89 81 40 05 00 00        mov dword ptr [ecx + 0x540], eax
+0x100d77f8  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d77fb  E8 E0 93 00 00           call 0x100e0be0
+0x100d7800  8B C8                    mov ecx, eax
+0x100d7802  E8 39 86 00 00           call 0x100dfe40
+0x100d7807  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+0x100d780d  68 48 16 2B 10           push 0x102b1648
+0x100d7812  68 3C 16 2B 10           push 0x102b163c   ; "全局循环函数"
+0x100d7817  89 81 3C 09 00 00        mov dword ptr [ecx + 0x93c], eax
+0x100d781d  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7820  E8 BB 93 00 00           call 0x100e0be0
+0x100d7825  8B C8                    mov ecx, eax
+0x100d7827  E8 14 86 00 00           call 0x100dfe40
+0x100d782c  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+0x100d7832  68 54 16 2B 10           push 0x102b1654
+0x100d7837  68 4C 16 2B 10           push 0x102b164c   ; "高级回收"
+0x100d783c  89 81 50 09 00 00        mov dword ptr [ecx + 0x950], eax
+0x100d7842  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7845  E8 96 93 00 00           call 0x100e0be0
+0x100d784a  8B C8                    mov ecx, eax
+0x100d784c  E8 EF 85 00 00           call 0x100dfe40
+0x100d7851  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+0x100d7857  68 74 16 2B 10           push 0x102b1674
+0x100d785c  68 68 16 2B 10           push 0x102b1668   ; "获取沙城归属"
+0x100d7861  89 81 54 09 00 00        mov dword ptr [ecx + 0x954], eax
+0x100d7867  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d786a  E8 71 93 00 00           call 0x100e0be0
+0x100d786f  8B C8                    mov ecx, eax
+0x100d7871  E8 CA 85 00 00           call 0x100dfe40
+0x100d7876  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+
+----- around 0x100d7d89 (func_start 0x100d7c89) -----
+0x100d7d49  2B 10                    sub edx, dword ptr [eax]
+0x100d7d4b  68 78 14 2B 10           push 0x102b1478   ; "怪物爆率K_值"
+0x100d7d50  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7d53  E8 88 8E 00 00           call 0x100e0be0
+0x100d7d58  80 78 08 00              cmp byte ptr [eax + 8], 0
+0x100d7d5c  74 25                    je 0x100d7d83
+0x100d7d5e  68 84 14 2B 10           push 0x102b1484
+0x100d7d63  68 78 14 2B 10           push 0x102b1478   ; "怪物爆率K_值"
+0x100d7d68  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7d6b  E8 70 8E 00 00           call 0x100e0be0
+0x100d7d70  8B C8                    mov ecx, eax
+0x100d7d72  E8 C9 80 00 00           call 0x100dfe40
+0x100d7d77  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+0x100d7d7d  89 81 34 09 00 00        mov dword ptr [ecx + 0x934], eax
+0x100d7d83  68 93 14 2B 10           push 0x102b1493
+0x100d7d88  68 88 14 2B 10           push 0x102b1488   ; "循环时间_值"
+0x100d7d8d  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7d90  E8 4B 8E 00 00           call 0x100e0be0
+0x100d7d95  80 78 08 00              cmp byte ptr [eax + 8], 0
+0x100d7d99  74 25                    je 0x100d7dc0
+0x100d7d9b  68 93 14 2B 10           push 0x102b1493
+0x100d7da0  68 88 14 2B 10           push 0x102b1488   ; "循环时间_值"
+0x100d7da5  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7da8  E8 33 8E 00 00           call 0x100e0be0
+0x100d7dad  8B C8                    mov ecx, eax
+0x100d7daf  E8 8C 80 00 00           call 0x100dfe40
+0x100d7db4  8B 15 E0 C5 31 10        mov edx, dword ptr [0x1031c5e0]
+0x100d7dba  89 82 38 09 00 00        mov dword ptr [edx + 0x938], eax
+0x100d7dc0  6A 00                    push 0
+0x100d7dc2  8B CF                    mov ecx, edi
+0x100d7dc4  E8 41 5F 01 00           call 0x100edd0a
+0x100d7dc9  C6 45 FC 01              mov byte ptr [ebp - 4], 1
+0x100d7dcd  8D 4D C0                 lea ecx, [ebp - 0x40]
+0x100d7dd0  E8 3B 39 F3 FF           call 0x1000b710
+0x100d7dd5  C6 45 FC 00              mov byte ptr [ebp - 4], 0
+0x100d7dd9  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7ddc  E8 0F 7D 00 00           call 0x100dfaf0
+0x100d7de1  C7 45 FC FF FF FF FF     mov dword ptr [ebp - 4], 0xffffffff
+0x100d7de8  8D 8D 4C FF FF FF        lea ecx, [ebp - 0xb4]
+0x100d7dee  E8 CD 7E F3 FF           call 0x1000fcc0
+
+----- around 0x100d7da1 (func_start 0x100d7ca1) -----
+0x100d7d61  2B 10                    sub edx, dword ptr [eax]
+0x100d7d63  68 78 14 2B 10           push 0x102b1478   ; "怪物爆率K_值"
+0x100d7d68  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7d6b  E8 70 8E 00 00           call 0x100e0be0
+0x100d7d70  8B C8                    mov ecx, eax
+0x100d7d72  E8 C9 80 00 00           call 0x100dfe40
+0x100d7d77  8B 0D E0 C5 31 10        mov ecx, dword ptr [0x1031c5e0]
+0x100d7d7d  89 81 34 09 00 00        mov dword ptr [ecx + 0x934], eax
+0x100d7d83  68 93 14 2B 10           push 0x102b1493
+0x100d7d88  68 88 14 2B 10           push 0x102b1488   ; "循环时间_值"
+0x100d7d8d  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7d90  E8 4B 8E 00 00           call 0x100e0be0
+0x100d7d95  80 78 08 00              cmp byte ptr [eax + 8], 0
+0x100d7d99  74 25                    je 0x100d7dc0
+0x100d7d9b  68 93 14 2B 10           push 0x102b1493
+0x100d7da0  68 88 14 2B 10           push 0x102b1488   ; "循环时间_值"
+0x100d7da5  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7da8  E8 33 8E 00 00           call 0x100e0be0
+0x100d7dad  8B C8                    mov ecx, eax
+0x100d7daf  E8 8C 80 00 00           call 0x100dfe40
+0x100d7db4  8B 15 E0 C5 31 10        mov edx, dword ptr [0x1031c5e0]
+0x100d7dba  89 82 38 09 00 00        mov dword ptr [edx + 0x938], eax
+0x100d7dc0  6A 00                    push 0
+0x100d7dc2  8B CF                    mov ecx, edi
+0x100d7dc4  E8 41 5F 01 00           call 0x100edd0a
+0x100d7dc9  C6 45 FC 01              mov byte ptr [ebp - 4], 1
+0x100d7dcd  8D 4D C0                 lea ecx, [ebp - 0x40]
+0x100d7dd0  E8 3B 39 F3 FF           call 0x1000b710
+0x100d7dd5  C6 45 FC 00              mov byte ptr [ebp - 4], 0
+0x100d7dd9  8D 4D D8                 lea ecx, [ebp - 0x28]
+0x100d7ddc  E8 0F 7D 00 00           call 0x100dfaf0
+0x100d7de1  C7 45 FC FF FF FF FF     mov dword ptr [ebp - 4], 0xffffffff
+0x100d7de8  8D 8D 4C FF FF FF        lea ecx, [ebp - 0xb4]
+0x100d7dee  E8 CD 7E F3 FF           call 0x1000fcc0
+0x100d7df3  8B 4D F4                 mov ecx, dword ptr [ebp - 0xc]
+0x100d7df6  64 89 0D 00 00 00 00     mov dword ptr fs:[0], ecx
+0x100d7dfd  59                       pop ecx
+0x100d7dfe  5F                       pop edi
+0x100d7dff  5E                       pop esi
+0x100d7e00  8B 4D F0                 mov ecx, dword ptr [ebp - 0x10]
+0x100d7e03  33 CD                    xor ecx, ebp
+
+
+===== [X+0x938] use sites (period reads) =====
+
+----- around 0x10002086 -----
+0x10002068  00 00                    add byte ptr [eax], al
+0x1000206a  A3 F4 C1 31 10           mov dword ptr [0x1031c1f4], eax
+0x1000206f  C3                       ret 
+0x10002070  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+0x10002075  05 5C 01 00 00           add eax, 0x15c
+0x1000207a  A3 F8 C1 31 10           mov dword ptr [0x1031c1f8], eax
+0x1000207f  C3                       ret 
+0x10002080  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+0x10002085  05 38 09 00 00           add eax, 0x938
+0x1000208a  A3 FC C1 31 10           mov dword ptr [0x1031c1fc], eax
+0x1000208f  C3                       ret 
+0x10002090  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+0x10002095  05 50 09 00 00           add eax, 0x950
+0x1000209a  A3 00 C2 31 10           mov dword ptr [0x1031c200], eax
+0x1000209f  C3                       ret 
+0x100020a0  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+0x100020a5  05 84 00 00 00           add eax, 0x84
+0x100020aa  A3 04 C2 31 10           mov dword ptr [0x1031c204], eax
+0x100020af  C3                       ret 
+0x100020b0  A1 E0 C0 31 10           mov eax, dword ptr [0x1031c0e0]
+0x100020b5  05 FC 00 00 00           add eax, 0xfc
+0x100020ba  A3 08 C2 31 10           mov dword ptr [0x1031c208], eax
+0x100020bf  C3                       ret 
+0x100020c0  6A 00                    push 0
+0x100020c2  B9 10 C2 31 10           mov ecx, 0x1031c210
+0x100020c7  E8 94 D5 0D 00           call 0x100df660
+0x100020cc  68 70 BF 27 10           push 0x1027bf70
+0x100020d1  E8 3C E8 21 00           call 0x10220912
+0x100020d6  59                       pop ecx
+0x100020d7  C3                       ret 
+0x100020d8  CC                       int3 
+0x100020d9  CC                       int3 
+0x100020da  CC                       int3 
+0x100020db  CC                       int3 
+
+----- around 0x10092207 -----
+0x100921e9  81 FA F4 01 00 00        cmp edx, 0x1f4
+0x100921ef  7E 21                    jle 0x10092212
+0x100921f1  FF B6 CC 06 00 00        push dword ptr [esi + 0x6cc]
+0x100921f7  E8 4D BA 19 00           call 0x1022dc49
+0x100921fc  8B 0D E0 C0 31 10        mov ecx, dword ptr [0x1031c0e0]
+0x10092202  83 C4 04                 add esp, 4
+0x10092205  89 81 38 09 00 00        mov dword ptr [ecx + 0x938], eax
+0x1009220b  B8 20 0D 2C 10           mov eax, 0x102c0d20   ; "全局循环函数(已启动)"
+0x10092210  EB 05                    jmp 0x10092217
+0x10092212  B8 38 0D 2C 10           mov eax, 0x102c0d38   ; "全局循环函数(未启动)"
+0x10092217  50                       push eax
+0x10092218  8D 8E 48 06 00 00        lea ecx, [esi + 0x648]
+0x1009221e  E8 69 DF 05 00           call 0x100f018c
+0x10092223  83 BE 50 07 00 00 00     cmp dword ptr [esi + 0x750], 0
+0x1009222a  74 11                    je 0x1009223d   ; "琚"
+0x1009222c  E8 B3 00 1A 00           call 0x102322e4
+0x10092231  BF E8 03 00 00           mov edi, 0x3e8
+0x10092236  99                       cdq 
+0x10092237  F7 FF                    idiv edi
+0x10092239  03 D7                    add edx, edi
+0x1009223b  EB 0D                    jmp 0x1009224a
+0x1009223d  E8 A2 00 1A 00           call 0x102322e4
+0x10092242  99                       cdq 
+0x10092243  BF E8 03 00 00           mov edi, 0x3e8
+0x10092248  F7 FB                    idiv ebx
+0x1009224a  8B 0D E0 C0 31 10        mov ecx, dword ptr [0x1031c0e0]
+0x10092250  B8 64 0D 2C 10           mov eax, 0x102c0d64   ; "高级回收(未启动)"
+0x10092255  89 91 54 09 00 00        mov dword ptr [ecx + 0x954], edx
+0x1009225b  BA 50 0D 2C 10           mov edx, 0x102c0d50   ; "高级回收(已启动)"
+0x10092260  81 B9 54 09 00 00 F4 01 00 00 cmp dword ptr [ecx + 0x954], 0x1f4
+0x1009226a  8D 8E D0 06 00 00        lea ecx, [esi + 0x6d0]
+0x10092270  0F 4F C2                 cmovg eax, edx
+0x10092273  50                       push eax
+0x10092274  E8 13 DF 05 00           call 0x100f018c
+
+----- around 0x100d817d -----
+0x100d815f  00 00                    add byte ptr [eax], al
+0x100d8161  00 00                    add byte ptr [eax], al
+0x100d8163  00 00                    add byte ptr [eax], al
+0x100d8165  89 75 B0                 mov dword ptr [ebp - 0x50], esi
+0x100d8168  E8 09 0C 01 00           call 0x100e8d76   ; "U嬱QV嬹j"
+0x100d816d  C6 45 FC 1F              mov byte ptr [ebp - 4], 0x1f
+0x100d8171  C7 06 4C 13 28 10        mov dword ptr [esi], 0x1028134c
+0x100d8177  C6 45 FC 20              mov byte ptr [ebp - 4], 0x20
+0x100d817b  8D B7 38 09 00 00        lea esi, [edi + 0x938]
+0x100d8181  8B CE                    mov ecx, esi
+0x100d8183  C7 87 30 09 00 00 00 00 00 00 mov dword ptr [edi + 0x930], 0
+0x100d818d  89 75 AC                 mov dword ptr [ebp - 0x54], esi
+0x100d8190  E8 E1 0B 01 00           call 0x100e8d76   ; "U嬱QV嬹j"
+0x100d8195  C6 45 FC 21              mov byte ptr [ebp - 4], 0x21
+0x100d8199  C7 06 4C 13 28 10        mov dword ptr [esi], 0x1028134c
+0x100d819f  C6 45 FC 22              mov byte ptr [ebp - 4], 0x22
+0x100d81a3  8D B7 C0 09 00 00        lea esi, [edi + 0x9c0]
+0x100d81a9  8B CE                    mov ecx, esi
+0x100d81ab  C7 87 B8 09 00 00 00 00 00 00 mov dword ptr [edi + 0x9b8], 0
+0x100d81b5  89 75 A8                 mov dword ptr [ebp - 0x58], esi
+0x100d81b8  E8 B9 0B 01 00           call 0x100e8d76   ; "U嬱QV嬹j"
+0x100d81bd  C6 45 FC 23              mov byte ptr [ebp - 4], 0x23
+0x100d81c1  C7 06 4C 13 28 10        mov dword ptr [esi], 0x1028134c
+0x100d81c7  C6 45 FC 24              mov byte ptr [ebp - 4], 0x24
+0x100d81cb  8D B7 48 0A 00 00        lea esi, [edi + 0xa48]
+0x100d81d1  8B CE                    mov ecx, esi
+0x100d81d3  C7 87 40 0A 00 00 00 00 00 00 mov dword ptr [edi + 0xa40], 0
+0x100d81dd  89 75 A4                 mov dword ptr [ebp - 0x5c], esi
+0x100d81e0  E8 91 0B 01 00           call 0x100e8d76   ; "U嬱QV嬹j"
+0x100d81e5  C6 45 FC 25              mov byte ptr [ebp - 4], 0x25
+0x100d81e9  C7 06 4C 13 28 10        mov dword ptr [esi], 0x1028134c
+0x100d81ef  C6 45 FC 26              mov byte ptr [ebp - 4], 0x26
+0x100d81f3  8D B7 D0 0A 00 00        lea esi, [edi + 0xad0]
+0x100d81f9  8B CE                    mov ecx, esi
+
+----- around 0x100d86b0 -----
+0x100d8692  48                       dec eax
+0x100d8693  0A 00                    or al, byte ptr [eax]
+0x100d8695  00 E8                    add al, ch
+0x100d8697  AE                       scasb al, byte ptr es:[edi]
+0x100d8698  10 02                    adc byte ptr [edx], al
+0x100d869a  00 C6                    add dh, al
+0x100d869c  45                       inc ebp
+0x100d869d  FC                       cld 
+0x100d869e  11 8D 8E C0 09 00        adc dword ptr [ebp + 0x9c08e], ecx
+0x100d86a4  00 E8                    add al, ch
+0x100d86a6  9F                       lahf 
+0x100d86a7  10 02                    adc byte ptr [edx], al
+0x100d86a9  00 C6                    add dh, al
+0x100d86ab  45                       inc ebp
+0x100d86ac  FC                       cld 
+0x100d86ad  10 8D 8E 38 09 00        adc byte ptr [ebp + 0x9388e], cl
+0x100d86b3  00 E8                    add al, ch
+0x100d86b5  90                       nop 
+0x100d86b6  10 02                    adc byte ptr [edx], al
+0x100d86b8  00 C6                    add dh, al
+0x100d86ba  45                       inc ebp
+0x100d86bb  FC                       cld 
+0x100d86bc  0F 8D 8E B0 08 00        jge 0x10163750
+0x100d86c2  00 E8                    add al, ch
+0x100d86c4  81 10 02 00 C6 45        adc dword ptr [eax], 0x45c60002
+0x100d86ca  FC                       cld 
+0x100d86cb  0E                       push cs
+0x100d86cc  8D 8E 28 08 00 00        lea ecx, [esi + 0x828]
+0x100d86d2  E8 72 10 02 00           call 0x100f9749
+0x100d86d7  C6 45 FC 0D              mov byte ptr [ebp - 4], 0xd
+0x100d86db  8D 8E A0 07 00 00        lea ecx, [esi + 0x7a0]
+0x100d86e1  E8 63 10 02 00           call 0x100f9749
+0x100d86e6  C6 45 FC 0C              mov byte ptr [ebp - 4], 0xc
+0x100d86ea  8D 8E 20 07 00 00        lea ecx, [esi + 0x720]
+
+----- around 0x100da553 -----
+0x100da535  F3 FF A1 F0 C5 31 10     jmp dword ptr [ecx + 0x1031c5f0]
+0x100da53c  8B BD 80 D4 FF FF        mov edi, dword ptr [ebp - 0x2b80]
+0x100da542  68 44 7A 2C 10           push 0x102c7a44   ; "嗜血术倍数(已启动)"
+0x100da547  C7 80 D8 04 00 00 64 00 00 00 mov dword ptr [eax + 0x4d8], 0x64
+0x100da551  8D 8F 38 09 00 00        lea ecx, [edi + 0x938]
+0x100da557  E8 30 5C 01 00           call 0x100f018c
+0x100da55c  8B 15 F0 C5 31 10        mov edx, dword ptr [0x1031c5f0]
+0x100da562  83 BF B8 09 00 00 00     cmp dword ptr [edi + 0x9b8], 0
+0x100da569  75 79                    jne 0x100da5e4   ; "兛@
+"
+0x100da56b  83 BA D8 04 00 00 64     cmp dword ptr [edx + 0x4d8], 0x64
+0x100da572  75 70                    jne 0x100da5e4   ; "兛@
+"
+0x100da574  83 EC 0C                 sub esp, 0xc
+0x100da577  C7 82 D8 04 00 00 00 00 00 00 mov dword ptr [edx + 0x4d8], 0
+0x100da581  8D 82 1C 06 00 00        lea eax, [edx + 0x61c]
+0x100da587  89 A5 C4 D3 FF FF        mov dword ptr [ebp - 0x2c3c], esp
+0x100da58d  8B CC                    mov ecx, esp
+0x100da58f  C7 85 70 FF FF FF FF 93 CC 00 mov dword ptr [ebp - 0x90], 0xcc93ff
+0x100da599  66 C7 85 74 FF FF FF 00 00 mov word ptr [ebp - 0x8c], 0
+0x100da5a2  50                       push eax
+0x100da5a3  E8 08 A4 F8 FF           call 0x100649b0
+0x100da5a8  C6 45 FC 23              mov byte ptr [ebp - 4], 0x23
+0x100da5ac  8D 85 70 FF FF FF        lea eax, [ebp - 0x90]
+0x100da5b2  68 2B FC 76 00           push 0x76fc2b
+0x100da5b7  68 2B FC 76 00           push 0x76fc2b
+0x100da5bc  6A 06                    push 6
+0x100da5be  50                       push eax
+0x100da5bf  C6 45 FC 01              mov byte ptr [ebp - 4], 1
+0x100da5c3  8D 8D 54 D4 FF FF        lea ecx, [ebp - 0x2bac]
+0x100da5c9  E8 72 8D F5 FF           call 0x10033340
+0x100da5ce  8D 8F 38 09 00 00        lea ecx, [edi + 0x938]
+0x100da5d4  68 58 7A 2C 10           push 0x102c7a58   ; "嗜血术倍数(未启动)"
+0x100da5d9  E8 AE 5B 01 00           call 0x100f018c
+0x100da5de  8B 15 F0 C5 31 10        mov edx, dword ptr [0x1031c5f0]
+0x100da5e4  83 BF 40 0A 00 00 00     cmp dword ptr [edi + 0xa40], 0
+
+----- around 0x100da5d0 -----
+0x100da5b2  68 2B FC 76 00           push 0x76fc2b
+0x100da5b7  68 2B FC 76 00           push 0x76fc2b
+0x100da5bc  6A 06                    push 6
+0x100da5be  50                       push eax
+0x100da5bf  C6 45 FC 01              mov byte ptr [ebp - 4], 1
+0x100da5c3  8D 8D 54 D4 FF FF        lea ecx, [ebp - 0x2bac]
+0x100da5c9  E8 72 8D F5 FF           call 0x10033340
+0x100da5ce  8D 8F 38 09 00 00        lea ecx, [edi + 0x938]
+0x100da5d4  68 58 7A 2C 10           push 0x102c7a58   ; "嗜血术倍数(未启动)"
+0x100da5d9  E8 AE 5B 01 00           call 0x100f018c
+0x100da5de  8B 15 F0 C5 31 10        mov edx, dword ptr [0x1031c5f0]
+0x100da5e4  83 BF 40 0A 00 00 00     cmp dword ptr [edi + 0xa40], 0
+0x100da5eb  0F 84 04 04 00 00        je 0x100da9f5
+0x100da5f1  83 BA E0 04 00 00 00     cmp dword ptr [edx + 0x4e0], 0
+0x100da5f8  0F 8F EA 03 00 00        jg 0x100da9e8   ; "兛@
+"
+0x100da5fe  6A 0C                    push 0xc
+0x100da600  8D 8D 24 D4 FF FF        lea ecx, [ebp - 0x2bdc]
+0x100da606  C7 85 08 D4 FF FF EB 76 90 90 mov dword ptr [ebp - 0x2bf8], 0x909076eb
+0x100da610  C7 85 68 FF FF FF 90 90 90 90 mov dword ptr [ebp - 0x98], 0x90909090
+0x100da61a  66 C7 85 6C FF FF FF 90 90 mov word ptr [ebp - 0x94], 0x9090
+0x100da623  C7 85 18 FF FF FF 90 90 90 90 mov dword ptr [ebp - 0xe8], 0x90909090
+0x100da62d  C7 85 1C FF FF FF 90 90 90 90 mov dword ptr [ebp - 0xe4], 0x90909090
+0x100da637  66 C7 85 20 FF FF FF 90 90 mov word ptr [ebp - 0xe0], 0x9090
+0x100da640  66 C7 85 44 D4 FF FF 90 90 mov word ptr [ebp - 0x2bbc], 0x9090
+0x100da649  66 C7 85 40 D4 FF FF 90 90 mov word ptr [ebp - 0x2bc0], 0x9090
+0x100da652  66 C7 85 3C D4 FF FF 90 90 mov word ptr [ebp - 0x2bc4], 0x9090
+0x100da65b  C7 45 E0 90 90 90 90     mov dword ptr [ebp - 0x20], 0x90909090
+0x100da662  66 C7 45 E4 90 90        mov word ptr [ebp - 0x1c], 0x9090
+0x100da668  66 C7 85 38 D4 FF FF 90 90 mov word ptr [ebp - 0x2bc8], 0x9090
+0x100da671  66 C7 85 34 D4 FF FF 90 90 mov word ptr [ebp - 0x2bcc], 0x9090
+0x100da67a  66 C7 85 30 D4 FF FF 90 90 mov word ptr [ebp - 0x2bd0], 0x9090
+0x100da683  66 C7 85 4C D4 FF FF 90 90 mov word ptr [ebp - 0x2bb4], 0x9090
+0x100da68c  66 C7 85 48 D4 FF FF 90 90 mov word ptr [ebp - 0x2bb8], 0x9090
+0x100da695  E8 36 B9 F4 FF           call 0x10025fd0
+
+----- around 0x100dbe9c -----
+0x100dbe7e  0C 04                    or al, 4
+0x100dbe80  00 00                    add byte ptr [eax], al
+0x100dbe82  56                       push esi
+0x100dbe83  E8 1E 7A 01 00           call 0x100f38a6
+0x100dbe88  8D 87 30 09 00 00        lea eax, [edi + 0x930]
+0x100dbe8e  50                       push eax
+0x100dbe8f  68 0C 04 00 00           push 0x40c
+0x100dbe94  56                       push esi
+0x100dbe95  E8 D6 9E 01 00           call 0x100f5d70
+0x100dbe9a  8D 87 38 09 00 00        lea eax, [edi + 0x938]
+0x100dbea0  50                       push eax
+0x100dbea1  68 0D 04 00 00           push 0x40d
+0x100dbea6  56                       push esi
+0x100dbea7  E8 FA 79 01 00           call 0x100f38a6
+0x100dbeac  8D 87 B8 09 00 00        lea eax, [edi + 0x9b8]
+0x100dbeb2  50                       push eax
+0x100dbeb3  68 0D 04 00 00           push 0x40d
+0x100dbeb8  56                       push esi
+0x100dbeb9  E8 B2 9E 01 00           call 0x100f5d70
+0x100dbebe  8D 87 C0 09 00 00        lea eax, [edi + 0x9c0]
+0x100dbec4  50                       push eax
+0x100dbec5  68 0E 04 00 00           push 0x40e
+0x100dbeca  56                       push esi
+0x100dbecb  E8 D6 79 01 00           call 0x100f38a6
+0x100dbed0  8D 87 40 0A 00 00        lea eax, [edi + 0xa40]
+0x100dbed6  50                       push eax
+0x100dbed7  68 0E 04 00 00           push 0x40e
+0x100dbedc  56                       push esi
+0x100dbedd  E8 8E 9E 01 00           call 0x100f5d70
+0x100dbee2  8D 87 48 0A 00 00        lea eax, [edi + 0xa48]
+0x100dbee8  50                       push eax
+0x100dbee9  68 0F 04 00 00           push 0x40f
+0x100dbeee  56                       push esi
+0x100dbeef  E8 B2 79 01 00           call 0x100f38a6
