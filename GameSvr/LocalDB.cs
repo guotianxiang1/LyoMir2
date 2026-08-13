@@ -165,7 +165,7 @@ namespace GameSvr
                     {
                         if (List28 != null)
                         {
-                            M2Share.g_MakeItemList.Add(sItemName, List28);
+                            AddMakeItemSection(sItemName, List28);
                         }
                         List28 = new List<TMakeItem>();
                         HUtil32.ArrestStringEx(sLine, '[', ']', ref sItemName);
@@ -182,8 +182,22 @@ namespace GameSvr
                 }
                 if (List28 != null)
                 {
-                    M2Share.g_MakeItemList.Add(sItemName, List28);
+                    AddMakeItemSection(sItemName, List28);
                 }
+            }
+        }
+
+        // 原生解析器 sub_74D8C4 只调 AddObject（VMT+0x3C @0x74D997 提交上一节、
+        // @0x74DA4F 提交最后一节），函数体内没有任何 Clear，所以重名的 [节] 会共存；
+        // 查找 sub_74E0F8 从索引 0 线性扫、0x74E14A call 0x40591C 比中就
+        // 0x74E14F jne 之外直接返回（0x74E161 jmp 出循环），即【第一条命中】。
+        // Dictionary.Add 对重复 key 抛 ArgumentException，会把加载打断在半路，
+        // MsgGetReloadMakeItemList 触发的重载更是必炸。
+        private static void AddMakeItemSection(string sItemName, IList<TMakeItem> List28)
+        {
+            if (!M2Share.g_MakeItemList.ContainsKey(sItemName))
+            {
+                M2Share.g_MakeItemList.Add(sItemName, List28);
             }
         }
 
