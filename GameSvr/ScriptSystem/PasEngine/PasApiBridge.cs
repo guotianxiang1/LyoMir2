@@ -4640,8 +4640,12 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "getguildwargold":
-                    // GetGuildWarGold: get war gold amount (V23:3)
-                    result = PasValue.FromInt(GetPlayerVarOrZero('V', 23, 3));
+                    // 原生不是变量，是个常量桩：注册运 0x739043 把 handler 0x6468C0 与名字串
+                    // 0x73A200 "GetGuildWarGold" 配对，而 0x6468C0 全函数只有六个字节
+                    // B8 30 75 00 00 C3 —— mov eax,0x7530 / ret，即恒返回 30000，
+                    // 且全镜像对 0x6468C0 的引用就只有那处注册。此前读 V(23,3) 是影子实现，
+                    // 会跟运营脚本自己的 V 坐标抢地方。
+                    result = PasValue.FromInt(30000);
                     return true;
 
                 case "getlistofwar":
