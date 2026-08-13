@@ -326,9 +326,14 @@ namespace GameSvr.Plugins
             switch (cmd.ChineseCommand)
             {
                 case "plus伤害": return _api.CustomDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,4),P(cmd,3),P(cmd,5),P(cmd,6),P(cmd,7));
+                // 两条隧道的第一个字段是元素类型、第二个才是装备位，而
+                // Set/GetEquipElement 的形参顺序是 (装备位, 元素类型)，所以这里要交换。
+                // 给与元素 1005E8DD 把字段0 拿去和 1/0x11 比（类型），1005E8B2 拿字段1
+                // 去索引 [[Self+0x4C0]+idx*4+8]（装备位）；获取元素 1005EB9B 把字段1
+                // 限制在 0xF 以内（装备位），1005EBA4 把字段0 限制在 1..17（类型）。
                 case "给与元素":
-                case "给予元素": return _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2));
-                case "获取元素": return _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2));
+                case "给予元素": return _api.SetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
+                case "获取元素": return _api.GetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
                 case "定义伤害":
                 case "攻击伤害": _api.DirectAttack(P(cmd,0),P(cmd,1)); return 0;
                 case "英雄极品": return _api.GetHeroExtreme(P(cmd,0),P(cmd,1));

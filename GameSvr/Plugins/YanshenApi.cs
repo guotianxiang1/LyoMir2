@@ -408,14 +408,15 @@ namespace GameSvr.Plugins
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>设置身体部位装备元素值。id:1-5元素类型(6=投保), pis:部位0-15, val:值</summary>
-        public void GivePis(int elementType, int bodyPos, int value)
+        /// <returns>写入的值；任何一道门没过都返回 0（1005E519 把结果槽初始化成 0）。</returns>
+        public int GivePis(int elementType, int bodyPos, int value)
         {
-            if (!Enabled("自定义元素")) return;
-            if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return;
+            if (!Enabled("自定义元素")) return 0;
+            if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return 0;
             var item = _player.m_UseItems[bodyPos];
-            if (item == null) return;
+            if (item == null) return 0;
             // 负值在写入前就被拒掉，旧值保持不变：1005E8D5 85FF test edi,edi / 0F884601 js。
-            if (value < 0) return;
+            if (value < 0) return 0;
             // 类型 <1 走 ys1 的 dword 槽，>17 夹到 17 而不是拒绝：
             // 1005E8DD 83FE01 cmp esi,1 / 0F8C2201 jl；1005E8E6 83FE11 cmp esi,0x11 /
             // 7E07 jle / BE11000000 mov esi,0x11；1005E8F2 83FE01 / 0F840D01 je。
@@ -423,6 +424,7 @@ namespace GameSvr.Plugins
             else if (elementType > 17) elementType = 17;
             // 2..17 是单字节槽，原生 1005E9FA 880C10 mov byte[eax+edx],cl 直接截断低位。
             SetElementValue(item, elementType, elementType == 1 ? value : (byte)value);
+            return value;
         }
 
         /// <summary>获取身体部位装备元素值</summary>
@@ -682,7 +684,7 @@ namespace GameSvr.Plugins
         public void GiveItem5El(string itemName, int ys1, int ys2, int ys3, int ys4, int ys5) { GiveNewItem(itemName, 0, new[] { ys1, ys2, ys3, ys4, ys5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); }
 
         /// <summary>设置装备元素</summary>
-        public int SetEquipElement(int bodyPos, int elemId, int value) { GivePis(elemId, bodyPos, value); return value; }
+        public int SetEquipElement(int bodyPos, int elemId, int value) { return GivePis(elemId, bodyPos, value); }
 
         /// <summary>获取装备元素</summary>
         public int GetEquipElement(int bodyPos, int elemId, int isHero) { return GetPis(elemId, bodyPos); }
