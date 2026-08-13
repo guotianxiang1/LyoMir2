@@ -1161,12 +1161,23 @@ namespace GameSvr
                     if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
-                        // Both exits land on 0x720092, which is past the
+                        // All three exits land on 0x720092, which is past the
                         // @AfterScatterItems callback at 0x720062, so one boolean
                         // covers segments 1-4 and the callback alike.  Order matters:
-                        // 0x71FA50 runs before 0x71FAD7 and arms unconditionally, so
-                        // TryEnterNativeScatter must be the left operand.
+                        // 0x71FA50 runs before 0x71FA8A and 0x71FAD7 and arms
+                        // unconditionally, so TryEnterNativeScatter must be leftmost.
+                        //
+                        //   71FA8A  83 B8 74 04 00 00 00  cmp dword [eax+0x474],0
+                        //   71FA91  0F 84 FB 05 00 00     je 0x720092
+                        //
+                        // A monster with no drop table leaves the function before
+                        // segment 1, so the exclusive chain, the world drop and the
+                        // gold settlement never run for it either — C# had this gate on
+                        // segment 2 alone.  A null UserEngine fails closed because the
+                        // three segments would fault on it anyway.
                         var scatterBlocked = !TryEnterNativeScatter()
+                            || M2Share.UserEngine == null
+                            || !M2Share.UserEngine.NativeHasMonsterDropTable(m_sCharName)
                             || NativeAfterScatterItemsBlocked(AttackBaseObject);
                         if (!scatterBlocked)
                         {

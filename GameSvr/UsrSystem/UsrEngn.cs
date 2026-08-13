@@ -398,6 +398,22 @@ namespace GameSvr
             return false;
         }
 
+        /// <summary>
+        /// 战神 <c>dword[self+0x474]</c>, the monster's own drop table.  It is a straight
+        /// copy of the template's list pointer — <c>0x71EB5E mov eax,[esi+0x48] /
+        /// 0x71EB61 mov [ebx+0x474],eax</c> in the template-to-instance blit, whose
+        /// neighbours (<c>[esi+0x3A]→[ebx+0x24E]</c>, <c>[esi+0x3C]→[ebx+0x244]</c>)
+        /// identify esi as the TMonInfo record — so the C# equivalent is the shared
+        /// <c>TMonInfo.ItemList</c> reference, and a nil pointer is a null list, not an
+        /// empty one.  The constructor leaves it nil (<c>0x71D870 mov [edi+0x474],eax</c>
+        /// with eax just zeroed at 0x71D86E).
+        /// </summary>
+        public bool NativeHasMonsterDropTable(string monsterName)
+        {
+            return TryGetMonsterInfo(monsterName, out var monster)
+                   && monster.ItemList != null;
+        }
+
         private static void ReleaseUnpublishedObject(TBaseObject baseObject)
         {
             if (baseObject != null)
