@@ -1402,27 +1402,23 @@ namespace GameSvr
             }
             if (!BaseObject.m_boInFreePKArea)
             {
-                if (M2Share.g_Config.boPKLevelProtect)// 新人保护
-                {
-                    if (m_Abil.Level > M2Share.g_Config.nPKProtectLevel)// 如果大于指定等级
-                    {
-                        if (!BaseObject.m_boPKFlag && BaseObject.m_Abil.Level <= M2Share.g_Config.nPKProtectLevel &&
-                            BaseObject.PKLevel() < 2)// 被攻击的人物小指定等级没有红名，则不可以攻击。
-                        {
-                            result = false;
-                            return result;
-                        }
-                    }
-                    if (m_Abil.Level <= M2Share.g_Config.nPKProtectLevel)// 如果小于指定等级
-                    {
-                        if (!BaseObject.m_boPKFlag && BaseObject.m_Abil.Level > M2Share.g_Config.nPKProtectLevel && BaseObject.PKLevel() < 2)
-                        {
-                            result = false;
-                            return result;
-                        }
-                    }
-                }
-                
+                // 战神 sub_6C175C 从 0x6C17B1 的免战门到 0x6C182C 的三秒门之间**只有两条**
+                // 等级梯，就是下面这两段：
+                //   6C17BA  A1 AC 5F 7D 00 / 8B 00      eax := [[0x7D5FAC]] = 200
+                //   6C17C1  3B 83 60 01 00 00 / 7F 2A   cmp eax,[self+0x160] / jg  -> 第二梯
+                //   6C17C9  66 83 BB 78 02 00 00 14 / 76 20  self.Level <= 20      -> 第二梯
+                //   6C17D3  66 83 BF 78 02 00 00 14 / 77 16  target.Level > 20     -> 第二梯
+                //   6C17DD  3B 02 / 7D 06                    target.PK >= 200      -> 第二梯
+                //   6C17ED  C6 45 FF 00                      受保护
+                //   6C17F3  66 83 BB 78 02 00 00 14 / 77 2F  self.Level > 20       -> 三秒门
+                //   6C1804  3B 83 60 01 00 00 / 7E 20        self.PK >= 200        -> 三秒门
+                //   6C180C  3B 02 / 7C 10                    target.PK < 200       -> 三秒门
+                //   6C181C  66 83 BF 78 02 00 00 14 / 76 06  target.Level <= 20    -> 三秒门
+                //   6C1826  C6 45 FF 00                      受保护
+                // 原先这里还有一段 `boPKLevelProtect` / `nPKProtectLevel` 的「新人保护」，
+                // 在原生无任何对应：`sub_6C175C` 全函数 255 字节里没有第三条梯，
+                // 也从不读 `[+0x4B9]`（m_boPKFlag）。全镜像多编码零命中已确认那两个配置名
+                // 不存在（GBK / 裸 ASCII 大小写不敏感 / UTF-16LE 三路皆 0）。按 §3.1 删除。
                 if (PKLevel() >= 2 && m_Abil.Level > M2Share.g_Config.nRedPKProtectLevel)
                 {
                     if (BaseObject.m_Abil.Level <= M2Share.g_Config.nRedPKProtectLevel && BaseObject.PKLevel() < 2)

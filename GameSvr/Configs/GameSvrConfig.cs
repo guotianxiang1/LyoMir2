@@ -376,8 +376,6 @@ namespace GameSvr
         public int nMasterOKLevel;
         public int nMasterOKCreditPoint;
         public int nMasterOKBonusPoint;
-        public bool boPKLevelProtect;
-        public int nPKProtectLevel;
         public int nRedPKProtectLevel;
         public int nItemPowerRate;
         public int nItemExpRate;
@@ -1241,8 +1239,6 @@ namespace GameSvr
             nMasterOKLevel = 500;
             nMasterOKCreditPoint = 0;
             nMasterOKBonusPoint = 0;
-            boPKLevelProtect = false;
-            nPKProtectLevel = 10;
             nRedPKProtectLevel = 10;
             nItemPowerRate = 10000;
             nItemExpRate = 10000;
