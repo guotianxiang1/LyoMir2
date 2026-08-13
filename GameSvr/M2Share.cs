@@ -1979,8 +1979,29 @@ namespace GameSvr
                         result = true;
                     }
                     break;
+                // 槽位资格在原生是每个物品类的 VMT+0x60 谓词，配合 0x74C338 的
+                // StdMode 派发表（byte 表 0x74C374 + 跳表 0x74C414）决定 StdMode 走哪个类：
+                //   0x7639D4 test dl,dl        TManClothes/TWomanClothes  -> 10,11
+                //   0x7608CC cmp dl,1          TLWeapon/TBrokenWeapon/TSpade -> 5,6
+                //   0x760488 cmp dl,2          TRWeapon    -> 30
+                //   0x761784 cmp dl,3          TNecklace   -> 19,20,21
+                //   0x7611C0 cmp dl,4          THelmet     -> 15
+                //   0x7625AC dl==5||dl==6      TArmRing    -> 24,26
+                //   0x761CB4 dl==7||dl==8      TRing       -> 22,23
+                //   0x762C64 cmp dl,9          TEquipBujuk 族 -> 25
+                //   0x762D30 cmp dl,0xA        TBelt       -> 27
+                //   0x7630CC cmp dl,0xB        TBoots      -> 28
+                //   0x763390 cmp dl,0xC        TCharm 族    -> 7
+                //   0x760F3C cmp dl,0xD        THeadMask   -> 16
+                //   0x7610C0 cmp dl,0xE        TWarDrum    -> 29
+                //   0x763254 cmp dl,0xF        TMaPai      -> 34
+                // StdMode 51/52/53/54/63/64 落到默认臂 0x74D67E（0x74D680 cmp al,0x96
+                // 之下即 TBaseItem），62 走 TAnimalMascot，两者的父链都是
+                // TBaseItem<TBaseObj<TObject —— 不是 TEquipItem，VMT 里根本没有 +0x60
+                // 这一格（TBasePileItem VMT 0x781C24 的 +0x60 落在类名串 0x781C88 上，
+                // TAnimalMascot VMT 0x782614 的 +0x60 落在 0x782678 同理），原生穿不上。
                 case Grobal2.U_ARMRINGL:
-                    if (StdItem.StdMode == 24 || StdItem.StdMode == 25 || StdItem.StdMode == 26)
+                    if (StdItem.StdMode == 24 || StdItem.StdMode == 26)
                     {
                         result = true;
                     }
@@ -1999,25 +2020,25 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.U_BUJUK:
-                    if (StdItem.StdMode == 25 || StdItem.StdMode == 51)
+                    if (StdItem.StdMode == 25)
                     {
                         result = true;
                     }
                     break;
                 case Grobal2.U_BELT:
-                    if (StdItem.StdMode == 27 || StdItem.StdMode == 54 || StdItem.StdMode == 64)
+                    if (StdItem.StdMode == 27)
                     {
                         result = true;
                     }
                     break;
                 case Grobal2.U_BOOTS:
-                    if (StdItem.StdMode == 28 || StdItem.StdMode == 52 || StdItem.StdMode == 62)
+                    if (StdItem.StdMode == 28)
                     {
                         result = true;
                     }
                     break;
                 case Grobal2.U_CHARM:
-                    if (StdItem.StdMode == 7 || StdItem.StdMode == 53 || StdItem.StdMode == 63)
+                    if (StdItem.StdMode == 7)
                     {
                         result = true;
                     }

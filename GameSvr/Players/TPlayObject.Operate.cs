@@ -1941,12 +1941,31 @@ namespace GameSvr
 
         private void ClientMakeDrugItem(int NPC, string nItemName)
         {
-            var Merchant = (Merchant)M2Share.UserEngine.FindMerchant(NPC);
-            if (Merchant == null || !Merchant.m_boMakeDrug)
+            // 原生 sub_6C4B14 的门，一道不多一道不少：
+            //   0x6C4B2D  83 7D 08 00           cmp dword [ebp+8],0        ; 物品名为空
+            //   0x6C4B33  83 BB D8 0C 00 00 00  cmp dword [ebx+0xCD8],0    ; 没有会话中的 NPC
+            //   0x6C4B3C  3B B3 D8 0C 00 00     cmp esi,[ebx+0xCD8]        ; 包里的 Recog 必须【就是】它
+            //   0x6C4B4D/0x6C4B5F 两个查找器都拒绝 byte[obj+0x73]<>0 的 ghost
+            //     (0x649A64 / 0x64A873 各一条 cmp byte [eax+0x73],0)
+            //   0x6C4B74  3B 83 28 01 00 00     cmp eax,[ebx+0x128]        ; 同地图
+            //   0x6C4B7C  66 B9 0F 00           mov cx,0xF  -> sub_7743E0  ; 半径 15
+            // 半径是【闭区间】：0x774402 jg 只在 |dx|>r 时失败，0x774417 jl 只在 r<|dy| 时失败。
+            // 原生【没有】任何「该商人开了合成」的标志位；0x6C4BA3 传给 sub_63FE2C 的 self
+            // 也是 [ebx+0xCD8] 本身，不是按 id 查回来的对象。C# 这里原本查全局商人表并要求
+            // m_boMakeDrug，而 m_boMakeDrug 全仓库无任何赋 true 的地方，整条 1034 通道恒不可达。
+            if (string.IsNullOrEmpty(nItemName))
             {
                 return;
             }
-            if (Merchant.m_PEnvir == m_PEnvir && Math.Abs(Merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(Merchant.m_nCurrY - m_nCurrY) < 15)
+            if (m_NPC == null || m_NPC.ObjectId != NPC || m_NPC.m_boGhost)
+            {
+                return;
+            }
+            if (m_NPC is not Merchant Merchant)
+            {
+                return;
+            }
+            if (Merchant.m_PEnvir == m_PEnvir && Math.Abs(Merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(Merchant.m_nCurrY - m_nCurrY) <= 15)
             {
                 Merchant.ClientMakeDrugItem(this, nItemName);
             }

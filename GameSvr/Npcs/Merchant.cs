@@ -2180,8 +2180,37 @@ namespace GameSvr
             return result;
         }
 
+        // 原生 sub_74089C -> sub_7408D0：按 stdIdx 数背包，堆叠物加整堆数量而不是加 1。
+        //   0x74090E  80 78 14 07  cmp byte [eax+0x14], 7
+        //   0x740914  0FB74026     movzx eax, word [eax+0x26]   ; 堆叠：加 Dura
+        //   0x74091D  FF45F8       inc [ebp-8]                  ; 非堆叠：加 1
+        private static int NativeCountOwnedByStdIdx(TPlayObject PlayObject, int nStdIdx)
+        {
+            var result = 0;
+            for (var i = 0; i < PlayObject.m_ItemList.Count; i++)
+            {
+                var UserItem = PlayObject.m_ItemList[i];
+                if (UserItem == null || UserItem.wIndex != nStdIdx)
+                {
+                    continue;
+                }
+                if (NativeItemFactory.IsPileItem(M2Share.UserEngine.GetStdItem(UserItem.wIndex)))
+                {
+                    result += UserItem.Dura;
+                }
+                else
+                {
+                    result += 1;
+                }
+            }
+            return result;
+        }
+
         private bool ClientMakeDrugItem_sub_4A28FC(TPlayObject PlayObject, string sItemName)
         {
+            // 原生 sub_6C4BCC。ok 标志 0x6C4BEE mov byte [ebp-0x19],0 在两趟循环【之前】置 0，
+            // 0x6C4C28 才在 pass1 循环体【顶部】置 1 —— 配方节为空时 0x6C4C1B jl 0x6C4C64
+            // 直接跳过循环，ok 保持 0，返回失败。
             bool result = false;
             IList<TMakeItem> List10 = M2Share.GetMakeItemInfo(sItemName);
             TUserItem UserItem = null;
@@ -2192,19 +2221,13 @@ namespace GameSvr
             {
                 return result;
             }
-            result = true;
             for (var i = 0; i < List10.Count; i++)
             {
+                result = true;
                 s20 = List10[i].ItemName;
                 n1C = List10[i].ItemCount;
-                for (var j = 0; j < PlayObject.m_ItemList.Count; j++)
-                {
-                    if (M2Share.UserEngine.GetStdItemName(PlayObject.m_ItemList[j].wIndex) == s20)
-                    {
-                        n1C -= 1;
-                    }
-                }
-                if (n1C > 0)
+                // 0x6C4C52 cmp edi,eax / 0x6C4C54 jle：need > have 才失败并 break
+                if (n1C > NativeCountOwnedByStdIdx(PlayObject, M2Share.UserEngine.GetStdItemIdx(s20)))
                 {
                     result = false;
                     break;
@@ -2217,6 +2240,9 @@ namespace GameSvr
                 {
                     s20 = List10[i].ItemName;
                     n1C = List10[i].ItemCount;
+                    // 0x6C4CC1 call 0x74C1E0：每条配方行把名字解析成一个 stdIdx，
+                    // 0x6C4CF1 movzx eax,word[esi+0x24] / 0x6C4CF5 cmp 只比索引不比名字。
+                    var nStdIdx = M2Share.UserEngine.GetStdItemIdx(s20);
                     for (var j = PlayObject.m_ItemList.Count - 1; j >= 0; j--)
                     {
                         if (n1C <= 0)
@@ -2224,7 +2250,7 @@ namespace GameSvr
                             break;
                         }
                         UserItem = PlayObject.m_ItemList[j];
-                        if (M2Share.UserEngine.GetStdItemName(UserItem.wIndex) == s20)
+                        if (UserItem.wIndex == nStdIdx)
                         {
                             if (List28 == null)
                             {
@@ -2241,8 +2267,15 @@ namespace GameSvr
                             n1C -= 1;
                         }
                     }
+                    // 0x6C4D2C mov byte [ebp-0x19],0 后落到 0x6C4D30 inc [ebp-8]：置失败但【不 break】，
+                    // 后续配方行照样被消耗。
+                    if (n1C > 0)
+                    {
+                        result = false;
+                    }
                 }
-                if (List28 != null)
+                // 0x6C4D3C cmp byte [ebp-0x19],0 / 0x6C4D40 je 0x6C4D6B：缺料时删除包不发。
+                if (result && List28 != null)
                 {
                     PlayObject.SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
                         List28.Count, 0, 0, "", List28);
@@ -2284,10 +2317,10 @@ namespace GameSvr
                                 PlayObject.SendAddItem(UserItem);
                                 PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('2' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                }
+                                // 0x63FF74 call 0x768BE0 无条件执行（不看 NeedIdentify），
+                                // 0x63FF6F xor edx,edx 给出 type = 0，末列 0x63FF53 add edx,0x106
+                                // 取的是【玩家自己】的 ShortString 名字。
+                                M2Share.AddGameDataLog('0' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + PlayObject.m_sCharName);
                                 n14 = 0;
                                 break;
                             }

@@ -238,7 +238,13 @@ namespace GameSvr.PasEngine
                 }
 
                 var quantity = 1;
-                if (stdItem.StdMode == 7)
+                // 原生 sub_6C87B4 @0x6C89C6 `80 78 14 07 cmp byte [eax+0x14],7` 读的是
+                // 【物品实例】的运行时 KIND 字节（基类构造器 sub_783788 @0x7837AE 写 0、
+                // 堆叠基类 sub_7880F0 @0x788118 写 7），不是模板 +0x14 的 StdMode。
+                // 随后 0x6C89CF movzx 用的也是实例 +0x28(DuraMax) / +0x26(Dura)。
+                // 按 StdMode==7 判会把护身符族（派发表 mode 7 -> TCharm 族）当成堆叠，
+                // 又漏掉真正的堆叠物，导致「给 100 个金条」占 100 个背包格。
+                if (NativeItemFactory.IsPileItem(stdItem))
                 {
                     if (item.DuraMax == 0)
                     {

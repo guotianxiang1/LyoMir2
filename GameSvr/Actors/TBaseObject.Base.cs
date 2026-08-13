@@ -1989,12 +1989,17 @@ namespace GameSvr
             SeedNativeFixedAbility(ref m_AddAbil);
             var oldHp = m_WAbil.HP;
             var oldMp = m_WAbil.MP;
+            // 原生的重算全程不碰 Weight(player+0x2C4)：它唯一的写者是
+            // 0x73CEF1 mov [ebx+0x2C4],eax（WeightChanged 里 0x73CEEC call 0x73E8D4
+            // 遍历背包求和之后）。容器侧 sub_75EE78 只重置并重算 +0x370/+0x372，
+            // 也就是 WearWeight / HandWeight 两项。
+            var oldWeight = m_WAbil.Weight;
             // Bug1 fix 2026-04-22: deep copy so m_WAbil no longer aliases m_Abil,
             // otherwise every call accumulates equipment bonuses onto the base.
             m_WAbil.CopyFrom(m_Abil);
             m_WAbil.HP = oldHp;
             m_WAbil.MP = oldMp;
-            m_WAbil.Weight = 0;
+            m_WAbil.Weight = oldWeight;
             m_WAbil.WearWeight = 0;
             m_WAbil.HandWeight = 0;
             m_btAntiPoison = 0;
@@ -2123,13 +2128,19 @@ namespace GameSvr
                 ApplyNativeEffectItemParameters(m_UseItems[i], StdItem, ref m_AddAbil);
                 if ((i == Grobal2.U_WEAPON) || (i == Grobal2.U_RIGHTHAND) || (i == Grobal2.U_DRESS))
                 {
-                    if (i == Grobal2.U_DRESS)
+                    // 0x75EE4A  80 7D FF 01  cmp byte [ebp-1],1   ; 槽号
+                    // 0x75EE4E  74 10        je  0x75EE60
+                    // 0x75EE57  66 01 83 70 03 00 00  add word [ebx+0x370],ax  ; 其余槽累加
+                    // 0x75EE67  66 89 83 72 03 00 00  mov word [ebx+0x372],ax  ; 只有槽 1 是赋值
+                    // 两个容器字段随后被 0x73D661 / 0x73D674 原样搬进 WearWeight / HandWeight。
+                    // 槽 2（U_RIGHTHAND）在原生属于「其余槽」，进的是 +0x370。
+                    if (i == Grobal2.U_WEAPON)
                     {
-                        m_WAbil.WearWeight += StdItem.Weight;
+                        m_WAbil.HandWeight = StdItem.Weight;
                     }
                     else
                     {
-                        m_WAbil.HandWeight += StdItem.Weight;
+                        m_WAbil.WearWeight += StdItem.Weight;
                     }
                     
                     if (StdItem.AniCount == 120)
@@ -2327,7 +2338,6 @@ namespace GameSvr
                 {
                     m_WAbil.WearWeight += StdItem.Weight;
                 }
-                m_WAbil.Weight += StdItem.Weight;
                 if (i == Grobal2.U_WEAPON)
                 {
                     if ((StdItem.Source - 1 - 10) < 0)
