@@ -186,7 +186,6 @@ static void VerifyForwarders()
     Assert(!get.ShimSendsSysMsg, "get: shim silent");
 
     // GiveUserItem: 3 forwarded args (charName, itemId, bindTime)
-    // NOTE drift: live GiveUserItemCommand.cs uses (charName, itemName, count) — different param 2/3 semantics
     var give = NativeGmItemForwarders.GiveUserItem();
     Equal(give.CoreEa, 0x006C253Cu, "give: core ea");
     Equal(give.ForwardedArgCount, 3, "give: 3 args (charName, itemId, bindTime)");
