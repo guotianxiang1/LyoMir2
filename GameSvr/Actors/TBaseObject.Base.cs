@@ -774,6 +774,21 @@ namespace GameSvr
         }
 
         /// <summary>
+        /// 战神 sub_71FA20 @0x71FA50 / @0x71FA6C.  The arm-and-test sits at the very
+        /// top of @AfterScatterItems, ahead of both the drop-table gate (0x71FA8A) and
+        /// the anti-fatigue ladder (0x71FAD7), and the store at 0x71FA6C is
+        /// unconditional — a monster that goes on to scatter nothing still burns the
+        /// flag, which is what stops the sibling consumer sub_71EC88 from re-running
+        /// the same table.
+        /// </summary>
+        private bool TryEnterNativeScatter()
+        {
+            if (m_boNativeScatterConsumed) return false;
+            m_boNativeScatterConsumed = true;
+            return true;
+        }
+
+        /// <summary>
         /// 战神 <c>sub_71FA20</c> (@AfterScatterItems) @0x71FAD7-0x71FB19 — the three
         /// abort tests the whole scatter routine opens with.  Any one of them takes the
         /// 0x71FAF7 branch which ends in <c>jmp 0x720092</c>, and 0x720092 is the outer
@@ -1146,8 +1161,33 @@ namespace GameSvr
                     if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
-                        var scatterBlocked =
-                            NativeAfterScatterItemsBlocked(AttackBaseObject);
+                        // All three exits land on 0x720092, which is past the
+                        // @AfterScatterItems callback at 0x720062, so one boolean
+                        // covers segments 1-4 and the callback alike.  Order matters:
+                        // 0x71FA50 runs before 0x71FA8A and 0x71FAD7 and arms
+                        // unconditionally, so TryEnterNativeScatter must be leftmost.
+                        //
+                        //   71FA8A  83 B8 74 04 00 00 00  cmp dword [eax+0x474],0
+                        //   71FA91  0F 84 FB 05 00 00     je 0x720092
+                        //
+                        // A monster with no drop table leaves the function before
+                        // segment 1, so the exclusive chain, the world drop and the
+                        // gold settlement never run for it either — C# had this gate on
+                        // segment 2 alone.  A null UserEngine fails closed because the
+                        // three segments would fault on it anyway.
+                        //
+                        // m_boNoItem joins them because monster Die gates the whole
+                        // scatter on it one level up, immediately before the virtual
+                        // call, rather than on the gold segment alone:
+                        //   71E3B7  80 B8 7D 04 00 00 00  cmp byte [eax+0x47D],0
+                        //   71E3BE  75 35                 jne 0x71E3F5   ; skips both
+                        //   71E3C4  6A 00 / 6A 01         push 0 / push 1
+                        //   71E3D2  FF 96 FC 01 00 00     call [esi+0x1FC]
+                        var scatterBlocked = !TryEnterNativeScatter()
+                            || M2Share.UserEngine == null
+                            || !M2Share.UserEngine.NativeHasMonsterDropTable(m_sCharName)
+                            || m_boNoItem
+                            || NativeAfterScatterItemsBlocked(AttackBaseObject);
                         if (!scatterBlocked)
                         {
                             // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
@@ -1158,20 +1198,30 @@ namespace GameSvr
                             M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
                                 AttackBaseObject, this, scatteredItems);
                             NativeDropControlRuntime.RunInNativeOrder(
-                                () => NativeDropControlRuntime.TryScatter(this,
-                                    AttackBaseObject, scatteredItems),
                                 () =>
                                 {
                                     if (this is not HeroObject)
                                         M2Share.UserEngine.MonGetRandomItems(this, AttackBaseObject);
-                                });
+                                },
+                                () => NativeDropControlRuntime.TryScatter(this,
+                                    AttackBaseObject, scatteredItems));
                         }
                         DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {
                             ScatterBagItems(AttackBaseObject, scatteredItems);
                         }
-                        if (!scatterBlocked && m_btRaceServer >= Grobal2.RC_ANIMAL && m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
+                        // 战神 sub_71FA20 @0x71FFAD `cmp dword [ebp-0x14],0 / jle
+                        // 0x720049` is the whole entry condition for the gold
+                        // settlement — one test against the accumulator, which
+                        // ScatterGolds already makes as `m_nGold > 0`.  The race /
+                        // pet / map-flag terms that used to sit here have no
+                        // counterpart in either sub_71FA20 or monster Die sub_71E2BC
+                        // (which reads no map flag at all), and they left the gold of
+                        // anything below RC_ANIMAL, and of every pet, stranded in
+                        // m_nGold forever.  m_boNoItem moved up to scatterBlocked,
+                        // where 0x71E3B7 puts it.
+                        if (!scatterBlocked)
                         {
                             ScatterGolds(AttackBaseObject, scatteredItems,
                                 nativeMonsterScatter: true);

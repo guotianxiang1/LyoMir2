@@ -52,10 +52,9 @@ namespace GameSvr
             // 0071FA91  0F 84 FB 05 00 00     je  0x720092
             // A monster with no drop table exits the WHOLE scatter routine before
             // segment 1, so the chain must not fire for it.  ([self+0x474] is the drop
-            // table, the same field loop 2 walks at 0x71FCFF.)  Note this gate covers
-            // segments 3 and 4 in native too; only segment 1 is honoured here, because
-            // that is the segment being introduced — the other two keep their existing
-            // behaviour rather than being silently restricted by this commit.
+            // table, the same field loop 2 walks at 0x71FCFF.)  The Die call site now
+            // applies the same gate to segments 3 and 4 as well; this copy stays
+            // because the method is public and reachable from elsewhere.
             if (!TryGetMonsterInfo(monster.m_sCharName, out var monsterInfo)
                 || monsterInfo.ItemList == null)
             {
