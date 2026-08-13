@@ -1742,11 +1742,19 @@ namespace GameSvr
                         // (0x67A008-0x67A01F) with edi = ecx = [gen+0x1C], while the
                         // coordinate jitter uses [gen+0x20] instead.  nRace is what
                         // Initialize() resolves that pointer into.
+                        // SPWN-04: 原生 ProcessMonsters sub_67C150 的生成器门只有四条比较，
+                        // 全部是记录字段相对寻址，无任何全局开关读：
+                        //   0x67C27D cmp eax,[esi+0x2C]   ; nCount > 存活数
+                        //   0x67C282 cmp byte [esi+0x0C],0 ; sMonName 长度字节非零
+                        //   0x67C288 cmp dword [esi+0x1C],0 ; 模板指针已解析
+                        //   0x67C294 cmp eax,[esi+0x30]   ; now-dwStartTick > dwZenTime
+                        // 全镜像多编码扫描 "VentureServer"/"boVenture"/"冒险模式"/"冒险" 均 0 命中，
+                        // 故此前多出的 `&& !boVentureServer` 是自造门（默认 false 时恒真、行为等价），
+                        // 按 §3.1 与同名门的既有裁定删除。
                         if (MonGen != null
                             && MonGen.nCount > MonGen.nActiveCount
                             && !string.IsNullOrEmpty(MonGen.sMonName)
                             && MonGen.nRace > 0
-                            && !M2Share.g_Config.boVentureServer
                             && (MonGen.dwStartTick == 0
                                 || dwCurrentTick - MonGen.dwStartTick > MonGen.dwZenTime))
                         {
@@ -3378,6 +3386,17 @@ namespace GameSvr
                 monGen.sMonName, ignoreCellBlockers: ignoreCellBlockers,
                 initializeMonsterScript: false);
             if (cert == null) return null;
+            // SPWN-13: 战神 worker sub_67C9E0 @0x67CA49 `cmp dword [ebx+0x28],0` / je 跳过 →
+            //   0x67CA52 `mov dx,word [ebx+0x28]` / 0x67CA56 `mov word [eax+0x38],dx`。
+            //   门看整型全宽、落地只取低 16 位；[gen+0x28] = mongen.txt 第 8 列 = 尸体存留秒数
+            //   （怪物侧 word[obj+0x38] 构造默认 60 @0x764E9E，唯一消费点 0x766682 movsx 后 ×1000
+            //   与 now-m_dwDeathTick 比，到期调 sub_768060 = TCreature.MarkDelete）。
+            cert.ApplyNativeMonGenCorpseSeconds(monGen);
+            // SPWN-14: 紧跟字段搬运之后、挂 CertList(0x67CA92) 之前 —— 0x67CA5A..0x67CA8D：
+            //   _DynArrayLength([gen+0x40]) > 0 才发，wIdent=0x64(SM_SYSMESSAGE)、wParam=0x38FF，
+            //   经 sub_5F6F9C 走 0x33AABB77 type-18 帧广播。[gen+0x40] = 第 9 列 BOSS 生成播报。
+            //   两者互相独立：+0x28 为 0 只跳过拷贝、不跳过播报。
+            NativeMonGenAnnounceSpawn(monGen);
             var mapPublication = CaptureMapPublication(cert);
 
             var oldCanReAlive = cert.m_boCanReAlive;
