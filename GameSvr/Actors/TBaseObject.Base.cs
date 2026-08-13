@@ -680,6 +680,10 @@ namespace GameSvr
             }
             try
             {
+                // POIS-38: 战神 sub_76B6F0 中段 1000ms 独立节拍块(0x76B905..0x76BD33)在尾段
+                // 2500ms 毒块(0x76BD39)之前结算 11 个额外毒系状态索引;传入本 Run 的 tick 快照,
+                // 与下方 2500ms 闸同一时基。详见 TBaseObject.NativePoisonSecondTick.cs 字节表。
+                ProcessNativePoisonSecondTick(HUtil32.GetTickCount());
                 // POIS-05: 战神 sub_76B6F0 @0x76BD39: cmp eax,0x9C4 / 0x76BD3E: jb skip
                 // jb = jump if below (unsigned <), so tick fires when elapsed >= 2500.
                 // C# used strict >, missing boundary tick when elapsed == 2500.
