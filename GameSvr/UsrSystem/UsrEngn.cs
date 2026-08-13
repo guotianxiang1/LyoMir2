@@ -3013,6 +3013,16 @@ namespace GameSvr
                 case 144:
                     Cert = new IceDoor();
                     break;
+                // ✅ 战神字节证据 (Tier-1)：race 145 = TAttackIceTower(VMT 0x66E938,
+                // parent TAnimal)。工厂索引表[145-0xB=0x86]=0x3F=63 → jt[63]=0x67A921 →
+                // classref [0x66E8EC] → ctor 0x674C44。case body 20 字节，无额外 RNG：
+                //   67A921 B2 01 / A1 EC E8 66 00 / E8 17 A3 FF FF / 89 45 F8 / E9 0A 04 00 00
+                // 归属唯一：classref 全 CODE 段 1 个加载点、ctor 1 个 E8 调用者。
+                // 详见 AttackIceTower.cs（含 Die/Run/+0xC8 三处 fail-closed 说明）。
+                // 原先落 default(0x67AE5E) → nil，攻击冰塔不出现。
+                case 145:
+                    Cert = new AttackIceTower();
+                    break;
                 case 200:
                     Cert = new ElectronicScolpionMon();
                     break;
@@ -3062,6 +3072,18 @@ namespace GameSvr
                 //     @0x682399，RM_HIT=0x2714=10004 @0x68242F)，只有挂的 race 号错了。
                 case 150:
                     Cert = new FireKingMonster();
+                    break;
+                // ✅ 战神字节证据 (Tier-1)：race 152 = TNoWinerAnimal(VMT 0x664F58,
+                // parent TATMonster，size 与父类同为 1256 → 自身零新增字段)。
+                // 工厂索引表[152-0xB=0x8D]=0x46=70 → jt[70]=0x67A9AD → classref [0x664F0C]
+                // → ctor 0x66C93C。case body 20 字节，无额外 RNG：
+                //   67A9AD B2 01 / A1 0C 4F 66 00 / E8 83 1F FF FF / 89 45 F8 / E9 7E 03 00 00
+                // 归属唯一：classref 全 CODE 段 1 个加载点、ctor 1 个 E8 调用者。
+                // ctor = TATMonster.Create(0x666A98) + `mov byte [esi+0x178],0x98` (race=152)。
+                // 两处 VMT 覆写(+0x1B4/+0x1FC)在 C# 无可覆写入口，已在 NoWinerAnimal.cs
+                // 逐字节记录并 fail-closed。原先落 default(0x67AE5E) → nil，该怪不出现。
+                case 152:
+                    Cert = new NoWinerAnimal();
                     break;
                 // ✅ 战神字节证据 (Tier-1)：race 247 = TParalyzationMon(VMT 0x665C18,
                 // parent TGasMothMonster)。工厂 jt[115]=0x67AD0E → classref [0x665BCC]。
