@@ -177,4 +177,14 @@ static void PrepareConfig()
     File.WriteAllText(Path.Combine(baseDir, "!Setup.txt"), "[Server]\r\n");
     File.WriteAllText(Path.Combine(baseDir, "String.ini"), "[String]\r\n");
     File.WriteAllText(Path.Combine(baseDir, "Command.conf"), "[Command]\r\n");
+    // M2Share's static ctor also builds ExpsConfig from ..\Share\PlayerUpgradeExp.ini.
+    // Leaving those out only looked harmless: IniFile.Load creates a 0-byte file and
+    // returns when the file is missing (IniFile.cs:203-206), so the FIRST run passed
+    // and every run after it threw on the now-present-but-empty file (IniFile.cs:281,
+    // ConfigCount <= 0). Write them the way every other in-process audit does.
+    var shareDir = Path.GetFullPath(Path.Combine(baseDir, "..", "Share"));
+    Directory.CreateDirectory(shareDir);
+    File.WriteAllText(Path.Combine(shareDir, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]\r\n");
+    File.WriteAllText(Path.Combine(shareDir, "ServerData.ini"), "[Integer]\r\n");
 }
