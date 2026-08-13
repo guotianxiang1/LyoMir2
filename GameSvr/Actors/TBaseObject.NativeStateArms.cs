@@ -268,6 +268,112 @@ namespace GameSvr
                     SendNativeStateArmMsg("你被定身了！",
                         NativeStateArmAlertColor, NativeStateArmAlertType);
                     break;
+                // 85..88 share the 3-part concat shape of arms 21/22 (push
+                // prefix / movzx eax,di / call 0x40C89C IntToStr / push 0x742C94
+                // "秒" / mov edx,3 / call 0x405890) but load the Alert pair
+                // `66 B9 FF 38 mov cx,0x38FF` instead of Buff — they speak in
+                // the alert colour yet still print the second count.
+                case 85:
+                    // 0x742194  68 38 30 74 00  push 0x743038 / ... / mov cx,0x38FF
+                    // 0x743038 len 24 C4E3B4A6D3DAC4BED4AABBA4CCE5D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于木元护体状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 86:
+                    // 0x7421DB  68 5C 30 74 00  push 0x74305C / ... / mov cx,0x38FF
+                    // 0x74305C len 20 C4E3B4A6D3DACBAED4AAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于水元状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 87:
+                    // 0x742222  68 7C 30 74 00  push 0x74307C / ... / mov cx,0x38FF
+                    // 0x74307C len 20 C4E3B4A6D3DABBF0D4AAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于火元状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 88:
+                    // 0x742269  68 9C 30 74 00  push 0x74309C / ... / mov cx,0x38FF
+                    // 0x74309C len 20 C4E3B4A6D3DAB1E4C9EDD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于变身状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                // 89 gains nothing: index-map byte at 0x7418E2+89 is 0 (DEFAULT
+                // slot), so state 89 converges on 0x742C42 — a silent hole.
+                // 90..101 are the Buff-pair (mov cx,0xFFDB) 3-part concat arms,
+                // same shape as 21/22/32..41: push prefix / IntToStr(di) / push
+                // 0x742C94 "秒" / concat 3 / mov cx,0xFFDB.
+                case 90:
+                    // 0x7422B0  68 BC 30 74 00  push 0x7430BC
+                    // 0x7430BC len 22 C9F1CAA5D6F7CAF4D0D4C9CFCFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("神圣主属性上限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 91:
+                    // 0x7422F7  68 DC 30 74 00  push 0x7430DC
+                    // 0x7430DC len 18 D6F7CAF4D0D4C9CFCFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("主属性上限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 92:
+                    // 0x74233E  68 F8 30 74 00  push 0x7430F8
+                    // 0x7430F8 len 22 D2A9C6B7C4A7D1AAD6B5BBD8B8B4CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("药品魔血值回复瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 93:
+                    // 0x742385  68 18 31 74 00  push 0x743118
+                    // 0x743118 len 16 C2E9B1D4C7BFBBAFCBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("麻痹强化瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 94:
+                    // 0x7423CC  68 34 31 74 00  push 0x743134
+                    // 0x743134 len 16 C2E9B1D4BFB9D0D4CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("麻痹抗性瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 95 gains nothing: index-map byte at 0x7418E2+95 is 0 (DEFAULT
+                // slot) — a silent hole, like 89.
+                case 96:
+                    // 0x742413  68 50 31 74 00  push 0x743150
+                    // 0x743150 len 16 C9F1CAA5B7C0D3F9CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("神圣防御瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 97:
+                    // 0x74245A  68 6C 31 74 00  push 0x74316C
+                    // 0x74316C len 14 C4A7D1AAD6B5CBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("魔血值瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 98..101 are the percent-scaled twins of 90/91/96/97: same
+                // Buff-pair concat shape, only the prefix literal inserts 百分比.
+                // Their lost sides share arms with 90/91/96/97 (see the grouped
+                // lost cases above), so only the gained halves live here.
+                case 98:
+                    // 0x7424A1  68 84 31 74 00  push 0x743184
+                    // 0x743184 len 28 C9F1CAA5D6F7CAF4D0D4C9CFCFDECBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("神圣主属性上限瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 99:
+                    // 0x7424E8  68 AC 31 74 00  push 0x7431AC
+                    // 0x7431AC len 24 D6F7CAF4D0D4C9CFCFDECBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("主属性上限瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 100:
+                    // 0x74252F  68 D0 31 74 00  push 0x7431D0
+                    // 0x7431D0 len 22 C9F1CAA5B7C0D3F9CBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("神圣防御瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 101:
+                    // 0x742576  68 F0 31 74 00  push 0x7431F0
+                    // 0x7431F0 len 20 C4A7D1AAD6B5CBB2BCE4B0D9B7D6B1C8CCE1B8DF
+                    SendNativeStateArmMsg("魔血值瞬间百分比提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
             }
         }
 
@@ -371,6 +477,89 @@ namespace GameSvr
                     // 0x7429A4  BA 08 34 74 00
                     // 0x743408 len 14 B6A8C9EDD7B4CCACBDE1CAF8 A3A1
                     SendNativeStateArmMsg("定身状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 85:
+                    // 0x742AFB  66 B9 DB FF / BA 78 35 74 00
+                    // 0x743578 len 18 C4BED4AABBA4CCE5D7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("木元护体状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 86:
+                    // 0x742B13  BA 94 35 74 00
+                    // 0x743594 len 14 CBAED4AAD7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("水元状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 87:
+                    // 0x742B2B  BA AC 35 74 00
+                    // 0x7435AC len 14 BBF0D4AAD7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("火元状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 88:
+                    // 0x742B43  BA C4 35 74 00
+                    // 0x7435C4 len 14 B1E4C9EDD7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("变身状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 89 loses nothing: lost target for state 89 is 0x742C42
+                // (DEFAULT) — a silent hole, matching its gained side.
+                case 90:
+                case 98:
+                    // One native arm, two states: lost 90 and lost 98 both
+                    // target 0x742B69 (they differ only on gain — 90 "…瞬间提高"
+                    // vs 98 "…瞬间百分比提高" — but share this lost text).
+                    // 0x742B69  66 B9 DB FF / BA DC 35 74 00
+                    // 0x7435DC len 22 C9F1CAA5D6F7CAF4D0D4C9CFCFDEBBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("神圣主属性上限回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 91:
+                case 99:
+                    // Shared lost arm 0x742B81 for states 91 and 99.
+                    // 0x742B81  BA FC 35 74 00
+                    // 0x7435FC len 18 D6F7CAF4D0D4C9CFCFDEBBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("主属性上限回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 92:
+                    // 0x742B99  BA 18 36 74 00
+                    // 0x743618 len 22 D2A9C6B7C4A7D1AAD6B5BBD8B8B4BBD8B8B4D5FDB3A3
+                    // Native literal doubles 回复 ("…回复回复正常"); kept verbatim,
+                    // mirroring the gained "药品魔血值回复瞬间提高".
+                    SendNativeStateArmMsg("药品魔血值回复回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 93:
+                    // 0x742BB1  BA 38 36 74 00
+                    // 0x743638 len 16 C2E9B1D4C7BFBBAFBBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("麻痹强化回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 94:
+                    // 0x742BC6  BA 54 36 74 00
+                    // 0x743654 len 16 C2E9B1D4BFB9D0D4BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("麻痹抗性回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 95 loses nothing: lost target for state 95 is 0x742C42
+                // (DEFAULT) — a silent hole, matching its gained side.
+                case 96:
+                case 100:
+                    // Shared lost arm 0x742BDB for states 96 and 100 (gain sides
+                    // differ: 96 "神圣防御瞬间提高" vs 100 "神圣防御瞬间百分比提高").
+                    // 0x742BDB  66 B9 DB FF / BA 70 36 74 00
+                    // 0x743670 len 16 C9F1CAA5B7C0D3F9BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("神圣防御回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 97:
+                case 101:
+                    // Shared lost arm 0x742BF0 for states 97 and 101.
+                    // 0x742BF0  BA 8C 36 74 00
+                    // 0x74368C len 14 C4A7D1AAD6B5BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("魔血值回复正常",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
             }
