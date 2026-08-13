@@ -1861,7 +1861,22 @@ namespace GameSvr
                                     {
                                         if (PlayObject.AddItemToBag(UserItem))
                                         {
-                                            PlayObject.m_nGold -= nPrice;
+                                            // ✅ 战神字节证据 (Tier-1) — ECON-34: 买入扣款走的是
+                                            // 【DecGold(0x6C7D64)】,不是裸减字段。EA: sub_63EB34 @0x63EC7A-0x63EC8E:
+                                            //   0063EC7A  ff 97 48 02 00 00  call dword [edi+0x248]  ; AddItemToBag
+                                            //   0063EC80  84 c0              test al,al
+                                            //   0063EC82  0f 84 ae 00 00 00  je   0x63ED36           ; 入包失败 -> 不扣款
+                                            //   0063EC88  8b 55 ec           mov  edx,[ebp-0x14]     ; nPrice
+                                            //   0063EC8B  8b 45 f8           mov  eax,[ebp-8]        ; player
+                                            //   0063EC8E  e8 d1 90 08 00     call 0x6C7D64           ; DecGold(返回值丢弃)
+                                            // DecGold 体内 @0x6C7D7B `call 0x6C19B4` 就是客户端金币刷新
+                                            // (RM_GOLDCHANGED 10136),裸 `m_nGold -= nPrice` 会把它漏掉 ——
+                                            // 卖出路径由 IncGold 内联触发、修理路径由 DecGold 内联触发,唯独买入没有,
+                                            // 表现为买完金币显示不刷新,直到下一次任意金币变动。
+                                            // 金额本身不差:上面 :1860 的 `m_nGold >= nPrice && nPrice > 0` 已使
+                                            // DecGold 的两道门(@0x6C7D6B `jl` 负数、@0x6C7D73 `jg` 余额不足)必然通过。
+                                            // 与原生一致地忽略返回值(0x63EC8E 之后没有 test al,al)。
+                                            PlayObject.DecGold(nPrice);
                                             // ✅ 战神字节证据 (Tier-1)。买入税点 sub_63EB34 @0x63ECDC-0x63ECF2:
                                             //   mov eax,[ebp-4] ; cmp byte [eax+0x578],0 ; je 0x63ECF7   <== 唯一门,无 else
                                             //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,[ebp-0x14]  ; <== 本次成交价 nPrice
