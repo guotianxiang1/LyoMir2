@@ -4784,6 +4784,14 @@ namespace GameSvr
         /// </summary>
         private const int NativeScatterGoldCap = 0xBB8;
 
+        /// <summary>
+        /// <c>cmp dword [ebp-0x14],0x7D0</c> @0x71FFDC with the matching
+        /// <c>mov ebx,0x7D0</c> @0x71FFE5 and <c>sub dword [ebp-0x14],0x7D0</c> @0x71FFEA
+        /// — the per-pile amount is a literal 2000, not the operator-tunable
+        /// <c>nMonOneDropGoldCount</c> (whose key name is 0-hit in the image).
+        /// </summary>
+        private const int NativeScatterGoldPile = 0x7D0;
+
         private void ScatterGolds(TBaseObject GoldOfCreat,
             IList<KeyValuePair<string, string>> scatteredItems = null,
             bool nativeMonsterScatter = false)
@@ -4839,13 +4847,19 @@ namespace GameSvr
                         (GoldOfCreat as TPlayObject)?.m_btNativeFatigueTier == 2 ? 2 : 1;
                     m_nGold = m_nGold / goldDivisor;
                 }
+                // The monster path takes the literal from 0x71FFDC; the player-death
+                // path is a different native worker whose per-pile constant has not been
+                // read, so it keeps the config value it has always used.
+                var pileAmount = nativeMonsterScatter
+                    ? NativeScatterGoldPile
+                    : M2Share.g_Config.nMonOneDropGoldCount;
                 I = 0;
                 while (true)
                 {
-                    if (m_nGold > M2Share.g_Config.nMonOneDropGoldCount)
+                    if (m_nGold > pileAmount)
                     {
-                        nGold = M2Share.g_Config.nMonOneDropGoldCount;
-                        m_nGold = m_nGold - M2Share.g_Config.nMonOneDropGoldCount;
+                        nGold = pileAmount;
+                        m_nGold = m_nGold - pileAmount;
                     }
                     else
                     {
