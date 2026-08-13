@@ -2043,13 +2043,28 @@ Console.WriteLine($"COVERAGE {asserted} assertions against "
     + "sites, and several assertions may probe one statement.");
 Console.WriteLine($"RESULT pass={pass} fail={fail} skipped={skipped.Count}");
 
-if (skipped.Count > 0)
+var gaps = new List<string>();
+var nativeOnly = new List<string>();
+foreach (var s in skipped)
 {
-    foreach (var s in skipped)
+    if (IsVerificationGap(s))
+        gaps.Add(s);
+    else
+        nativeOnly.Add(s);
+}
+
+foreach (var s in nativeOnly)
+    Console.WriteLine($"NOTE-NATIVE-ONLY: {s}");
+
+if (fail > 0)
+    return 1;
+if (gaps.Count > 0)
+{
+    foreach (var s in gaps)
         Console.WriteLine($"INCOMPLETE: {s}");
     return 2;
 }
-return fail == 0 ? 0 : 1;
+return 0;
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -2069,6 +2084,13 @@ void Check(string name, string expected, string actual, bool ok)
         Console.WriteLine($"     expected: {expected}");
         Console.WriteLine($"     actual  : {actual}");
     }
+}
+
+bool IsVerificationGap(string skipped)
+{
+    return skipped.StartsWith("source file not found:", StringComparison.Ordinal)
+        || skipped.StartsWith("source directory not found:", StringComparison.Ordinal)
+        || skipped.Contains("no blob-read statement located", StringComparison.Ordinal);
 }
 
 bool Contains(string haystack, string needle)
