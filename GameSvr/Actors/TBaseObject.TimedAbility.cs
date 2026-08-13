@@ -964,6 +964,12 @@ namespace GameSvr
                         m_wEffectResistance = unchecked((ushort)(m_wEffectResistance +
                             (ushort)value));
                         break;
+                    case 65:
+                        // STATE-32 H1A — state 0x61 (internalType 97): job-scaled
+                        // MaxHP/MaxMP (@0x773A71). Body/evidence in
+                        // TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState61_JobMaxHpMp(value);
+                        break;
                     case 71:
                         // STATE-32 H1B — state 0x67 (internalType 103): DC/MC/SC
                         // HIGH word += value (@0x773ADC). Body/evidence in

@@ -130,5 +130,38 @@ namespace GameSvr
             m_WAbil.AC = AddTimedRange(m_WAbil.AC, value);
             m_WAbil.MAC = AddTimedRange(m_WAbil.MAC, value);
         }
+
+        // STATE-32 H1A — band handler for state 0x61 @0x773A71, byte-verified,
+        // dispatched on the job byte edi+0x72 (sub al,1 ladder):
+        //   job 0 (0x773A87)  imul eax,[ebx+0xA],0x64   ; value*100
+        //                     add  [edi+0x2B0],eax       ; MaxHP  (no MaxMP write)
+        //   job 1 (0x773A96)  mov  eax,[ebx+0xA]/add eax,eax/lea eax,[eax+eax*4]
+        //                     add  [edi+0x2B0],eax       ; MaxHP += value*10
+        //                     imul eax,[ebx+0xA],0x5A    ; value*90
+        //                     add  [edi+0x2B8],eax       ; MaxMP += value*90
+        //   job 2 (0x773AB0)  imul eax,[ebx+0xA],0x32 -> MaxHP += value*50
+        //                     imul eax,[ebx+0xA],0x32 -> MaxMP += value*50
+        //   job 3 (0x773AC6)  identical to job 2 (value*50 / value*50)
+        //   else              nothing
+        // edi+0x2B0/0x2B8 == esi+0x4C/0x54 = MaxHP/MaxMP (case 4/5). Plain 32-bit
+        // adds, no clamp — same unchecked add the MaxHP/MaxMP arms already use.
+        private void ApplyRecomputeState61_JobMaxHpMp(int value)
+        {
+            switch (m_btJob)
+            {
+                case 0:
+                    m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value * 100);
+                    break;
+                case 1:
+                    m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value * 10);
+                    m_WAbil.MaxMP = unchecked(m_WAbil.MaxMP + value * 90);
+                    break;
+                case 2:
+                case 3:
+                    m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value * 50);
+                    m_WAbil.MaxMP = unchecked(m_WAbil.MaxMP + value * 50);
+                    break;
+            }
+        }
     }
 }
