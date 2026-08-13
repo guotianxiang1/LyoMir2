@@ -363,9 +363,23 @@ static void TestDormantRuntimeBoundary()
         "dormant bounty raw GBK selector is missing");
     Require(bounty, "maximum => M2Share.RandomNumber.Random(maximum)",
         "diamond bounty stopped drawing through the global random owner");
-    Reject(random, "private static Random random",
+    // 这条断言的字面串 "private static Random random" 现在只出现在
+    // RandomNumber.cs 的注释里（解释这个字段已经不属于本类），Contains 命中的
+    // 是散文不是代码。改成剥掉行注释后再查真实的 System.Random 构造，并正面
+    // 要求 owner 就是 Delphi RandSeed：
+    //   0x00403B4C 53 / 31 db / 69 93 08 20 7a 00 05 84 08 08
+    //              imul edx,[0x7A2008],0x08088405 / 42 inc edx /
+    //              89 93 08 20 7a 00 mov [0x7A2008],edx / f7 e2 mul edx /
+    //              89 d0 mov eax,edx / 5b c3
+    var randomCode = StripLineComments(random);
+    Reject(randomCode, "new Random(",
         "global random owner left the Delphi RandSeed for System.Random");
+    Require(randomCode, "DelphiRandomNumberFacade",
+        "global random owner is no longer the Delphi RandSeed facade");
 }
+
+static string StripLineComments(string source) =>
+    Regex.Replace(source, @"//[^\n]*", string.Empty);
 
 static byte[] BuildPayload(string roleName, int firstCount, int secondCount)
 {

@@ -95,17 +95,50 @@ namespace QST22VariableScopeAudit
                 assertionCount++;
             }
 
+            // Assertions 4/5 used to pin the old shape, where the bridge inlined both
+            // banks itself (`if (group == 0) return ...m_ScriptVGroup0[index]` and
+            // `variables[flat] = ...`). The two banks now live behind the single
+            // resolver pair TPlayObject.TryGetScriptVar / SetScriptVar, so the shape
+            // check moved with them. The contract is unchanged and is checked on both
+            // halves: the bridge must delegate and must not recompute the flat key,
+            // and the resolver must serve/write group-0 V from the inline slots.
+            var basePathForResolver = Path.Combine(repoRoot, "GameSvr", "Players",
+                "TPlayObject.Base.cs");
+            var resolverSource = File.Exists(basePathForResolver)
+                ? File.ReadAllText(basePathForResolver) : string.Empty;
+
             // Assertion 4: group-0 V is served from the inline slots, not the dictionary.
             // Reading a never-written slot must therefore yield 0 (Delphi zero-init at
             // 0x6DF20F) rather than the -1 a dictionary miss produces.
-            var getPlayerVarMatch = Regex.Match(content,
-                @"public\s+PasValue\s+GetPlayerVar\s*\([^)]+\).*?" +
-                @"if\s*\(\s*group\s*==\s*0\s*\)\s*return\s+PasValue\.FromInt\s*\(\s*CurrentPlayer\.m_ScriptVGroup0\s*\[\s*index\s*\]\s*\)",
+            var getPlayerVarBody = Regex.Match(content,
+                @"internal\s+static\s+PasValue\s+GetPlayerVar\s*\([^)]*TPlayObject[^)]*\)\s*\{.*?\n        \}",
                 RegexOptions.Singleline);
-
-            if (!getPlayerVarMatch.Success)
+            var resolverRead = Regex.Match(resolverSource,
+                @"public\s+bool\s+TryGetScriptVar\s*\([^)]+\)\s*\{.*?\n        \}",
+                RegexOptions.Singleline);
+            if (!getPlayerVarBody.Success)
             {
-                Console.WriteLine("[FAIL] Assertion 4: GetPlayerVar does not read group-0 from the inline slots");
+                Console.WriteLine("[FAIL] Assertion 4: GetPlayerVar(TPlayObject, ...) not found");
+                failCount++;
+            }
+            else if (!Regex.IsMatch(getPlayerVarBody.Value,
+                         @"TryGetScriptVar\s*\(\s*type\s*,\s*group\s*,\s*index\s*,"))
+            {
+                Console.WriteLine("[FAIL] Assertion 4: GetPlayerVar does not go through TryGetScriptVar");
+                failCount++;
+            }
+            else if (Regex.IsMatch(StripComments(getPlayerVarBody.Value),
+                         @"group\s*\*\s*1000"))
+            {
+                Console.WriteLine("[FAIL] Assertion 4: GetPlayerVar recomputes the flat key - group 0 is never in the dictionary");
+                failCount++;
+            }
+            else if (!resolverRead.Success ||
+                     !Regex.IsMatch(resolverRead.Value,
+                         @"group\s*==\s*0.*?m_ScriptVGroup0\s*\[\s*index\s*\]",
+                         RegexOptions.Singleline))
+            {
+                Console.WriteLine("[FAIL] Assertion 4: TryGetScriptVar does not read group-0 V from the inline slots");
                 failCount++;
             }
             else
@@ -114,19 +147,38 @@ namespace QST22VariableScopeAudit
                 assertionCount++;
             }
 
-            // Assertion 5: SetPlayerVar stores 0 unconditionally (QST-07)
-            var setPlayerVarMatch = Regex.Match(content,
-                @"private\s+static\s+bool\s+SetPlayerVar\s*\([^)]+\).*?variables\s*\[\s*flat\s*\]\s*=\s*value\.AsInt\s*\(\s*\)",
+            // Assertion 5: SetPlayerVar stores 0 unconditionally (QST-07). Native SetV
+            // has no zero test on either arm - 0x6DF2A5 `mov eax,[ebp+8]` /
+            // 0x6DF2A8 `mov [ebx+esi*4+0x808],eax` for group 0, and the keyed upsert
+            // sub_6E4140 writes the value straight through.
+            var setPlayerVarBody = Regex.Match(content,
+                @"private\s+static\s+bool\s+SetPlayerVar\s*\([^)]*TPlayObject[^)]*\)\s*\{.*?\n        \}",
                 RegexOptions.Singleline);
-
-            if (!setPlayerVarMatch.Success)
+            var resolverWrite = Regex.Match(resolverSource,
+                @"public\s+void\s+SetScriptVar\s*\([^)]+\)\s*\{.*?\n        \}",
+                RegexOptions.Singleline);
+            if (!setPlayerVarBody.Success)
+            {
+                Console.WriteLine("[FAIL] Assertion 5: SetPlayerVar(TPlayObject, ...) not found");
+                failCount++;
+            }
+            else if (!Regex.IsMatch(setPlayerVarBody.Value,
+                         @"SetScriptVar\s*\(\s*type\s*,\s*group\s*,\s*index\s*,\s*value\.AsInt\s*\(\s*\)\s*\)"))
             {
                 Console.WriteLine("[FAIL] Assertion 5: SetPlayerVar unconditional store not found");
                 failCount++;
             }
-            else if (Regex.IsMatch(content, @"if\s*\([^)]*value[^)]*==\s*0[^)]*\).*?variables\s*\[\s*flat\s*\]\s*=", RegexOptions.Singleline))
+            else if (Regex.IsMatch(StripComments(setPlayerVarBody.Value),
+                         @"value[^;]*==\s*0|group\s*\*\s*1000"))
             {
-                Console.WriteLine("[FAIL] Assertion 5: SetPlayerVar has zero-value conditional (violates QST-07)");
+                Console.WriteLine("[FAIL] Assertion 5: SetPlayerVar has a zero-value conditional or recomputes the flat key (violates QST-07)");
+                failCount++;
+            }
+            else if (!resolverWrite.Success ||
+                     !Regex.IsMatch(resolverWrite.Value,
+                         @"m_ScriptVGroup0\s*\[\s*index\s*\]\s*=\s*value\s*;"))
+            {
+                Console.WriteLine("[FAIL] Assertion 5: SetScriptVar does not write group-0 V into the inline slots");
                 failCount++;
             }
             else
@@ -214,5 +266,10 @@ namespace QST22VariableScopeAudit
             Console.WriteLine("\n[AUDIT PASSED] QST-22 implementation is correct");
             return 0;
         }
+
+        // The forbidden-pattern checks describe code, not prose: the byte-evidence
+        // comments in the production sources name the very shapes being banned.
+        static string StripComments(string source) =>
+            Regex.Replace(source, @"//[^\n]*", string.Empty);
     }
 }

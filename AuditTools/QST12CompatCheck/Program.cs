@@ -129,11 +129,19 @@ namespace QST12CompatCheck
         {
             var (bridge, player) = CreateContext();
             bridge.SetPlayerVar('V', 0, 5, PasValue.FromInt(0));
-            // Native sub_6E4140 has NO zero test (0x6E4187: mov [eax], edx unconditional)
+            // group=0 的写落在内联区，不在 keyed 字典里 —— 这条断言原来查错了库。
+            // SetV sub_6DF288:
+            //   0x006DF299  85 ff                 test edi,edi      ; edi = group
+            //   0x006DF29B  75 16                 jne 0x6DF2B3      ; !=0 走 keyed
+            //   0x006DF29F  4a / 83 ea 64 / 73 0e dec/sub 0x64/jae  ; index 必须 1..100
+            //   0x006DF2A5  8b 45 08              mov eax,[ebp+8]   ; 值（无零值判定）
+            //   0x006DF2A8  89 84 b3 08 08 00 00  mov [ebx+esi*4+0x808],eax
+            //   0x006DF2B1  eb 2c                 jmp 0x6DF2DF      ; 直接返回
+            // 0x006DF2DA 的 keyed 存储调用在这条臂上根本不可达。
             int flat = 0 * 1000 + 5;
-            bool stored = player.m_ScriptVVars.ContainsKey(flat);
-            return Verify(stored && player.m_ScriptVVars[flat] == 0,
-                "SetV(0,5,0) must store 0 as real value (QST-07)");
+            return Verify(player.m_ScriptVGroup0[5] == 0
+                          && !player.m_ScriptVVars.ContainsKey(flat),
+                "SetV(0,5,0) must store 0 as real value in the inline region (QST-07)");
         }
 
         static int Test_SetV_Group0_ZeroThenRead()

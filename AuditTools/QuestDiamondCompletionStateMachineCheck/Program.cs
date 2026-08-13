@@ -255,8 +255,19 @@ static void TestDormantIntegrationBoundary()
         @"return RejectUnsupportedNativeApi\(out result\);",
         RegexOptions.CultureInvariant).Count,
         "ClientQuestGetDiam fail-closed PAS count");
-    Reject(random, "DelphiRandom",
-        "process-wide RandomNumber was switched without consumer closure");
+    // 原断言要求 RandomNumber.cs 里不许出现 DelphiRandom —— 那是切换尚未收口
+    // 时期的护栏。切换已经收口并且有字节：sub_403B4C @0x00403B4C
+    //   53 / 31 db / 69 93 08 20 7a 00 05 84 08 08 (imul edx,[0x7A2008],0x08088405)
+    //   42 / 89 93 08 20 7a 00 / f7 e2 (mul edx) / 89 d0 / 5b c3
+    // 即 result = high32(bound * (seed*0x08088405 + 1))，种子在 0x007A2008。
+    // 专用闸 DelphiRandomNumberFacadeCompatCheck / NativePasRandomContractCompatCheck
+    // / RngTraceSinkOffIdenticalCheck 三把均 PASS。这里保留的仍是「进程级 owner
+    // 只能有一个」这个契约，只是方向反过来：必须是 Delphi 门面，且不得再 new 一个
+    // System.Random。
+    Require(random, "DelphiRandomNumberFacade",
+        "process-wide RandomNumber is no longer the Delphi RandSeed facade");
+    Reject(Regex.Replace(random, @"//[^\n]*", string.Empty), "new Random(",
+        "process-wide RandomNumber took a System.Random back");
 }
 
 static YbDbLegacy77Frame Frame(int result, int first, int second)
