@@ -2174,10 +2174,10 @@ namespace GameSvr
                                 PlayObject.SendAddItem(UserItem);
                                 PlayObject.m_nGold -= M2Share.g_Config.nMakeDurgPrice;
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('2' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                }
+                                // 0x63FF74 call 0x768BE0 无条件执行（不看 NeedIdentify），
+                                // 0x63FF6F xor edx,edx 给出 type = 0，末列 0x63FF53 add edx,0x106
+                                // 取的是【玩家自己】的 ShortString 名字。
+                                M2Share.AddGameDataLog('0' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + PlayObject.m_sCharName);
                                 n14 = 0;
                                 break;
                             }
