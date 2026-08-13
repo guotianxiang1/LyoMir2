@@ -1182,13 +1182,11 @@ namespace GameSvr
                         }
                     }
                 }
-                for (var i = m_dwStatusArrTick.GetLowerBound(0); i <= m_dwStatusArrTick.GetUpperBound(0); i++)
-                {
-                    if (m_wStatusTimeArr[i] > 0)
-                    {
-                        m_dwStatusArrTick[i] = HUtil32.GetTickCount();
-                    }
-                }
+                // The per-slot tick stamps this used to re-base belonged to the
+                // deleted seconds countdown. The node list carries its own
+                // LastTick, set by AddState @0x7731AB (`call 0x408340` then
+                // `mov [edx+6],eax`), so the CopyFrom during load already
+                // stamped every restored node with the current tick.
                 m_nCharStatus = GetCharStatus();
                 logonStage = "before-recalc";
                 RecalcLevelAbilitys();

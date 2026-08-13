@@ -227,6 +227,7 @@ namespace GameSvr
             {
                 var next = node.Next;
                 SendTimedAbilityState(node, true);
+                OnNativeTimedStateLost(node.InternalType);
                 RemoveTimedAbilityCompanion(node.InternalType);
                 if (RequiresTimedAbilityRecalc(node.InternalType))
                 {
@@ -271,6 +272,7 @@ namespace GameSvr
                     }
 
                     SendTimedAbilityState(node, true);
+                    OnNativeTimedStateLost(node.InternalType);
                     RemoveTimedAbilityCompanion(node.InternalType);
                     if (RequiresTimedAbilityRecalc(node.InternalType))
                     {
@@ -290,6 +292,59 @@ namespace GameSvr
             if (internalType == 20)
             {
                 RemoveTimedAbilityInternal(19);
+            }
+        }
+
+        /// <summary>
+        /// Per-state work on expiry. Native runs this from the state-lost
+        /// virtual (base 0x77337C, TPlayObject override 0x741578) and dispatches
+        /// on the record's type byte at 0x742692:
+        ///   0x742692  33 C0                 xor eax, eax
+        ///   0x742694  8A C3                 mov al, bl          ; node type
+        ///   0x742696  83 C0 F2              add eax, -0xE
+        ///   0x742699  83 F8 5C              cmp eax, 0x5C
+        ///   0x74269C  0F 87 A0 05 00 00     ja  0x742C42        ; silent default
+        ///   0x7426A2  FF 24 85 A9 26 74 00  jmp [eax*4+0x7426A9]
+        /// so the message domain is state 14..106 and everything outside is
+        /// silent. Each speaking arm is `mov cx,0xFFDB / mov edx,&lt;str&gt; /
+        /// call [vmt+0xD4]`, i.e. colour 0xDB, type 0xFF - the same pair the
+        /// state-75 arm already uses.
+        ///
+        /// Only the arms the legacy per-second loop used to own are wired up
+        /// here; the rest of the 46-arm table is catalogued in
+        /// docs/m_state2_20260813.md and is still MISSING.
+        /// </summary>
+        private void OnNativeTimedStateLost(byte internalType)
+        {
+            switch (internalType)
+            {
+                case 23:
+                    // Legacy slot 8. Native has no separate hide flag - 0x76B438
+                    // derives it as `[self+0x2E4] != 0 || HasState(0x17)` - but
+                    // C# still carries m_boHideMode, so it has to be cleared
+                    // where the state dies.
+                    m_boHideMode = false;
+                    break;
+                case 22:
+                    // Legacy slot 9 (STATE_DEFENCEUP). Arm 0x74296D:
+                    //   74296D  66 B9 DB FF           mov cx, 0xFFDB
+                    //   742971  BA D8 33 74 00        mov edx, 0x7433D8
+                    //   74297A  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x7433D8 is "防御力回复正常", Delphi length prefix 14.
+                    SysMsg("防御力回复正常", MsgColor.Green, MsgType.Hint);
+                    break;
+                case 21:
+                    // Legacy slot 10 (STATE_MAGDEFENCEUP). Arm 0x742955 points at
+                    // 0x7433BC "抗魔法力回复正常" (length prefix 16). C# said
+                    // "魔法防御力回复正常", which is a 0-hit string in the image
+                    // under GBK, raw ASCII and UTF-16LE.
+                    SysMsg("抗魔法力回复正常", MsgColor.Green, MsgType.Hint);
+                    break;
+                case 20:
+                    // Legacy slot 11 (STATE_BUBBLEDEFENCEUP). Silent in the
+                    // native table (index 20 - 14 = 6 maps to the default arm).
+                    m_boAbilMagBubbleDefence = false;
+                    break;
             }
         }
 

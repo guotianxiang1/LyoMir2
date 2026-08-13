@@ -86,7 +86,6 @@ class Program
         // Verify m_wStatusTimeArr size
         Console.WriteLine("\nVerify m_wStatusTimeArr array size...");
         var actor = new TBaseObject();
-        Assert(actor.m_wStatusTimeArr != null, "m_wStatusTimeArr should be initialized");
         Assert(actor.m_wStatusTimeArr.Length == 12,
             $"m_wStatusTimeArr.Length should be 12, got {actor.m_wStatusTimeArr.Length}");
         Console.WriteLine($"  ✓ m_wStatusTimeArr has {actor.m_wStatusTimeArr.Length} slots (indices 0-11)");
@@ -117,7 +116,8 @@ class Program
         Console.WriteLine("\nPOIS-30: Verify POISON_68 is unsafe for array indexing...");
         Assert(Grobal2.POISON_68 >= actor.m_wStatusTimeArr.Length,
             $"POISON_68 ({Grobal2.POISON_68}) exceeds array length ({actor.m_wStatusTimeArr.Length})");
-        Console.WriteLine($"  ✓ POISON_68={Grobal2.POISON_68} would throw IndexOutOfRangeException");
+        Console.WriteLine($"  ✓ POISON_68={Grobal2.POISON_68} is outside the 12 legacy slots"
+            + " (the forwarding view ignores it, matching native's `cmp dl,0x6F / ja` skip)");
         Console.WriteLine("  ✓ Use HasNativeActiveState(68) / SetNativeActiveState(68) instead");
 
         // Summary

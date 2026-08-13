@@ -624,40 +624,16 @@ namespace GameSvr
             }
             try
             {
-                bool boChg = false;
+                // The once-per-second `m_wStatusTimeArr[i] -= 1` countdown that
+                // used to sit here was the second half of the 4.18 dual
+                // authority: it expired the legacy slots on its own clock while
+                // the node list expired the same states on the native 500 ms
+                // clock (0x772FE4 `sub eax,[ebx+0xE0] / cmp eax,0x1F4 / jb`).
+                // The slots are now a view onto those nodes, so a countdown here
+                // would double-decrement them. Expiry lives in
+                // ProcessTimedAbilities, and the four per-slot side effects moved
+                // to OnNativeTimedStateLost.
                 bool boNeedRecalc = false;
-                for (var i = m_dwStatusArrTick.GetLowerBound(0); i <= m_dwStatusArrTick.GetUpperBound(0); i++)
-                {
-                    if ((m_wStatusTimeArr[i] > 0) && (m_wStatusTimeArr[i] < 60000))
-                    {
-                        if ((HUtil32.GetTickCount() - m_dwStatusArrTick[i]) > 1000)
-                        {
-                            m_wStatusTimeArr[i] -= 1;
-                            m_dwStatusArrTick[i] += 1000;
-                            if (m_wStatusTimeArr[i] == 0)
-                            {
-                                boChg = true;
-                                switch (i)
-                                {
-                                    case Grobal2.STATE_TRANSPARENT:
-                                        m_boHideMode = false;
-                                        break;
-                                    case Grobal2.STATE_DEFENCEUP:
-                                        boNeedRecalc = true;
-                                        SysMsg("防御力回复正常", MsgColor.Green, MsgType.Hint);
-                                        break;
-                                    case Grobal2.STATE_MAGDEFENCEUP:
-                                        boNeedRecalc = true;
-                                        SysMsg("魔法防御力回复正常", MsgColor.Green, MsgType.Hint);
-                                        break;
-                                    case Grobal2.STATE_BUBBLEDEFENCEUP:
-                                        m_boAbilMagBubbleDefence = false;
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                }
                 for (var i = m_wStatusArrValue.GetLowerBound(0); i <= m_wStatusArrValue.GetUpperBound(0); i++)
                 {
                     if (m_wStatusArrValue[i] > 0)
@@ -689,11 +665,6 @@ namespace GameSvr
                             }
                         }
                     }
-                }
-                if (boChg)
-                {
-                    m_nCharStatus = GetCharStatus();
-                    StatusChanged();
                 }
                 if (boNeedRecalc)
                 {
