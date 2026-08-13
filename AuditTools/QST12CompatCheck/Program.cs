@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Diagnostics;
 using GameSvr;
 using GameSvr.PasEngine;
@@ -25,6 +26,8 @@ namespace QST12CompatCheck
     {
         static int Main()
         {
+            PrepareRuntimeConfig();
+
             int failures = 0;
 
             // Test group=0 boundary checks
@@ -174,5 +177,30 @@ namespace QST12CompatCheck
                 return 1;
             }
         }
+
+        /// <summary>
+        /// The M2Share static constructor (M2Share.cs:1682) resolves !Setup.txt
+        /// against AppContext.BaseDirectory, i.e. this audit's own bin directory,
+        /// and IniFile.Load throws when it is absent. The first `new TPlayObject()`
+        /// therefore aborted the run with TypeInitializationException before any
+        /// assertion executed. Same minimal skeleton the other audits lay down.
+        /// </summary>
+        static void PrepareRuntimeConfig()
+        {
+            var runtimeDirectory = AppContext.BaseDirectory;
+            File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+                "[Server]" + Environment.NewLine);
+            File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+                "[Command]" + Environment.NewLine);
+
+            var shareDirectory = Path.Combine(Path.GetFullPath(
+                Path.Combine(runtimeDirectory, "..")), "Share");
+            Directory.CreateDirectory(shareDirectory);
+            File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+                "[PlayerLevelExp]" + Environment.NewLine);
+            File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+                "[Integer]" + Environment.NewLine);
+        }
+
     }
 }
