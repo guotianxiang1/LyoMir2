@@ -344,6 +344,35 @@ namespace GameSvr
                     SendNativeStateArmMsg("魔躲回复正常",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 40:
+                    // 0x74287D  BA D8 32 74 00
+                    // 0x7432D8 len 12 B7C0D3F9BBD8B8B4D5FDB3A3
+                    // Note the asymmetry with gained 40 "防御上下限瞬间提高":
+                    // the lost text drops 上下限. Both literals are verbatim.
+                    SendNativeStateArmMsg("防御回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 41:
+                    // 0x742895  BA F0 32 74 00
+                    // 0x7432F0 len 12 C4A7B7C0BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("魔防回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 43:
+                    // 0x7428F5  BA 54 33 74 00
+                    // 0x743354 len 16 CEDEBCABD5E6C6F8D7B4CCACBDE1CAF8
+                    // 43 is the mirror of 44: silent on gain (index-map byte
+                    // at 0x7418E2+43 is 0, the DEFAULT slot), speaking on loss.
+                    // No trailing ！ on this one, unlike 45.
+                    SendNativeStateArmMsg("无极真气状态结束",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 45:
+                    // 0x7429A4  BA 08 34 74 00
+                    // 0x743408 len 14 B6A8C9EDD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("定身状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
             }
         }
     }
