@@ -5071,106 +5071,59 @@ namespace GameSvr
 
         public bool InSafeZone()
         {
-            int nSafeX;
-            int nSafeY;
-            if (m_PEnvir == null)
-            {
-                return true;
-            }
-            var result = m_PEnvir.Flag.boSAFE;
-            if (result)
-            {
-                return true;
-            }
-            if ((m_PEnvir.sMapName != M2Share.g_Config.sRedHomeMap) || (Math.Abs(m_nCurrX - M2Share.g_Config.nRedHomeX) > M2Share.g_Config.nSafeZoneSize) || (Math.Abs(m_nCurrY - M2Share.g_Config.nRedHomeY) > M2Share.g_Config.nSafeZoneSize))
-            {
-                result = false;
-            }
-            else
-            {
-                result = true;
-            }
-            if (result)
-            {
-                return result;
-            }
-            for (int i = 0; i < M2Share.StartPointList.Count; i++)
-            {
-                if (M2Share.StartPointList[i].m_sMapName == m_PEnvir.sMapName)
-                {
-                    if (M2Share.StartPointList[i] != null)
-                    {
-                        nSafeX = M2Share.StartPointList[i].m_nCurrX;
-                        nSafeY = M2Share.StartPointList[i].m_nCurrY;
-                        if ((Math.Abs(m_nCurrX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) && (Math.Abs(m_nCurrY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
-                        {
-                            result = true;
-                        }
-                    }
-                }
-            }
-            if (!result && M2Share.SafeZoneList != null)
-            {
-                for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
-                {
-                    if (M2Share.SafeZoneList[i].Contains(m_PEnvir.sMapName, m_nCurrX, m_nCurrY))
-                    {
-                        result = true;
-                        break;
-                    }
-                }
-            }
-            return result;
+            return InSafeZone(m_PEnvir, m_nCurrX, m_nCurrY);
         }
 
+        // MFLG-17: faithful port of sub_76858C. Gate order is boSAFE, then
+        // StartPointList, then RedHomeMap, then the SafeZoneList polygons.
+        // A null map returns FALSE (0x7684AD `xor eax,eax` before the `test edi,edi / je`),
+        // and the RedHomeMap arm only applies when nSafeZoneSize > 0 (0x76850E `test edi,edi / jle`).
         public bool InSafeZone(Envirnoment Envir, int nX, int nY)
         {
-            int nSafeX;
-            int nSafeY;
             if (Envir == null)
             {
-                return true;
+                return false;
             }
-            bool result = Envir.Flag.boSAFE;
-            if (result)
-            {
-                return true;
-            }
-            if ((Envir.sMapName != M2Share.g_Config.sRedHomeMap) || (Math.Abs(nX - M2Share.g_Config.nRedHomeX) > M2Share.g_Config.nSafeZoneSize) || (Math.Abs(nY - M2Share.g_Config.nRedHomeY) > M2Share.g_Config.nSafeZoneSize))
-            {
-                result = false;
-            }
-            else
+            if (Envir.Flag.boSAFE)
             {
                 return true;
             }
             for (int i = 0; i < M2Share.StartPointList.Count; i++)
             {
-                if (M2Share.StartPointList[i].m_sMapName == Envir.sMapName)
+                var startPoint = M2Share.StartPointList[i];
+                if (startPoint != null && startPoint.m_sMapName == Envir.sMapName)
                 {
-                    if (M2Share.StartPointList[i] != null)
+                    int nSafeX = startPoint.m_nCurrX;
+                    int nSafeY = startPoint.m_nCurrY;
+                    if ((Math.Abs(nX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) &&
+                        (Math.Abs(nY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
                     {
-                        nSafeX = M2Share.StartPointList[i].m_nCurrX;
-                        nSafeY = M2Share.StartPointList[i].m_nCurrY;
-                        if ((Math.Abs(nX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) && (Math.Abs(nY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
-                        {
-                            result = true;
-                        }
+                        return true;
                     }
                 }
             }
-            if (!result && M2Share.SafeZoneList != null)
+            if (M2Share.g_Config.nSafeZoneSize > 0 &&
+                !string.IsNullOrEmpty(M2Share.g_Config.sRedHomeMap) &&
+                string.Equals(Envir.sMapName, M2Share.g_Config.sRedHomeMap,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                if ((Math.Abs(nX - M2Share.g_Config.nRedHomeX) <= M2Share.g_Config.nSafeZoneSize) &&
+                    (Math.Abs(nY - M2Share.g_Config.nRedHomeY) <= M2Share.g_Config.nSafeZoneSize))
+                {
+                    return true;
+                }
+            }
+            if (M2Share.SafeZoneList != null)
             {
                 for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
                 {
                     if (M2Share.SafeZoneList[i].Contains(Envir.sMapName, nX, nY))
                     {
-                        result = true;
-                        break;
+                        return true;
                     }
                 }
             }
-            return result;
+            return false;
         }
 
         public void OpenHolySeizeMode(int dwInterval)
