@@ -230,7 +230,11 @@ namespace GameSvr.Plugins
                     30 => _api.GivePetSkill(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),S(cmd,4)),
                     31 => _api.GivePetSpecialAttr(P(cmd,1),P(cmd,2),PetAttrType(P(cmd,0)),S(cmd,3)),
                     32 => _api.GetItemExtreme(P(cmd,0),P(cmd,1),P(cmd,2)),
-                    33 => _api.BindUnbindItem(P(cmd,0),P(cmd,1)),
+                    // 100760AB 83F804 cmp eax,4 / 100760AE 7324 jae —— 不足 4 段返回 -1
+                    // （100760BF 83C8FF or eax,-1）。
+                    33 => cmd.Parameters.Length >= 2
+                        ? _api.BindUnbindItem(P(cmd,0),P(cmd,1))
+                        : -1,
                     34 => _api.HolyDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9)),
                     35 => _api.PetFollowAttack(P(cmd,0)),
                     36 => _api.GetBagWeight(P(cmd,0)),

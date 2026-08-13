@@ -659,7 +659,9 @@ namespace GameSvr.Plugins
         private static void EnsureBindByteSlot(TUserItem item)
         {
             if (item == null) return;
-            if (item.btValue != null && item.btValue.Length >= 9) return;
+            // 14 是 TUserItem.btValue 的原生宽度；绑定隧道写的是 btValue[10]
+            // （item+0x34），所以门槛不能停在 9。
+            if (item.btValue != null && item.btValue.Length >= 14) return;
 
             var replacement = new byte[14];
             if (item.btValue != null)
@@ -1939,33 +1941,40 @@ namespace GameSvr.Plugins
             return flag == 0 ? _player.m_WAbil.Weight : _player.m_WAbil.MaxWeight;
         }
 
-        /// <summary>物品绑定/解绑: flag 0=绑定 >0=解绑</summary>
+        /// <summary>
+        /// Ys_GiveBind / 数字隧道 33 —— flag==0 绑定，flag!=0 解绑。
+        /// 处理函数 0x10076060，字段顺序 (itemid, flag) = fields[2..3]。
+        ///
+        /// 寻址：0x10076110 call 0x10075AE0，那个查找器只遍历 [player+0x508]（= m_ItemList），
+        /// 逐项和入参比较后原样返回命中的对象；身上装备和英雄容器都不在范围内。
+        /// 入参在原生是「服务端物品 id」，即 TUserItem 对象指针本身（caret 20
+        /// 的 Ys_GetClientItemIDByItemid 在 0x1005AE06 用同样的指针相等判定，
+        /// 命中后返回 [item+0x18] = ClientItemID）。C# 没有指针，本工程一贯用
+        /// MakeIndex 代表「服务端物品 id」，这里沿用同一约定。
+        ///
+        /// 绑定位是 item+0x34：10076124 C6403401 / 1007613A C6403400。换算到
+        /// TUserItem 就是 btValue[10]（记录偏移 0x14），与本仓库其余地方
+        /// （NativeStallItemMove、MailService、TryGetNativePileCompatibility）
+        /// 用的 btValue[10..11] 绑定/锁定字是同一个字节。原生只写低字节，
+        /// btValue[11] 保持不动。
+        ///
+        /// 全函数没有任何发包调用，返回值恒为 1（10076129 / 1007613F BE01000000），
+        /// 找不到物品也是 1。
+        /// </summary>
         public int BindUnbindItem(int itemId, int flag)
         {
             if (!Enabled("屏蔽自动绑定")) return 0;
-            // Find item by MakeIndex in bag
+            TUserItem found = null;
             foreach (var item in _player.m_ItemList)
             {
-                if (item != null && item.MakeIndex == itemId)
-                {
-                    // Use btValue[8] as bind flag: 0=unbound, 1+=bound
-                    item.btValue[8] = flag == 0 ? (byte)1 : (byte)0;
-                    _player.SendUpdateItem(item);
-                    return flag;
-                }
+                if (item != null && item.MakeIndex == itemId) { found = item; break; }
             }
-            // Also check equipped items
-            for (int i = 0; i < _player.m_UseItems.Length; i++)
+            if (found != null)
             {
-                var item = _player.m_UseItems[i];
-                if (item != null && item.MakeIndex == itemId)
-                {
-                    item.btValue[8] = flag == 0 ? (byte)1 : (byte)0;
-                    _player.SendUpdateItem(item);
-                    return flag;
-                }
+                EnsureBindByteSlot(found);
+                found.btValue[10] = flag == 0 ? (byte)1 : (byte)0;
             }
-            return flag;
+            return 1;
         }
 
         /// <summary>在地面丢弃物品</summary>
