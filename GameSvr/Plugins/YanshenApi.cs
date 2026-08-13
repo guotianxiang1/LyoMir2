@@ -954,13 +954,153 @@ namespace GameSvr.Plugins
         // 6.2 技能伤害系统 — 9 functions
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>核心伤害公式: (maxDC - targetMaxAC) + (baseHp * (magicLv+1))/10 + cuttingV</summary>
-        int CalcDamage(int magicLv, int baseHp, int cuttingV, TBaseObject target)
+        // ─── 战斗五项共用的原生错误码 ───────────────────────────────────
+        // 三个实现体（0x1006DAB0 自定义伤害 / 0x1006E8D0 切割 / 0x100706A0 施毒）
+        // 用同一组哨兵，脚本侧靠它们判失败：
+        //   -999 超出 Canl 距离   0x1006DED0 / 0x1006EB42 / 0x100708DC  B8 19 FC FF FF
+        //   -777 目标类不匹配     0x1006E167 / 0x1006ECAB              B8 F7 FC FF FF
+        //   -666 一个目标都没取到 0x1006E12F / 0x1006EC74              B8 66 FD FF FF
+        // -888（段数不足）不在这一层，由派发器 YanshenCommands 的元数闸复刻。
+        internal const int YsErrRange = -999;
+        internal const int YsErrClass = -777;
+        internal const int YsErrNoTarget = -666;
+
+        /// <summary>
+        /// `Canl` 是「离施法者的最大距离」，不是"是否包含玩家"。三个实现体同一形状，
+        /// 0x100708BB / 0x1006EB10 / 0x1006D7F2 都是 `test ecx,ecx / jle` 先看 Canl&gt;0，
+        /// 再 `sub / cdq / xor / sub` 取绝对值与 Canl 比，X 或 Y 任一超出就返回 -999。
+        /// </summary>
+        private bool NativeCanlGateFails(int canl, int tx, int ty)
         {
-            var atk = (int)_player.m_WAbil.DC;
-            var def = (int)target.m_WAbil.AC;
-            var raw = Math.Max(0, atk - def) + (baseHp * (magicLv + 1)) / 10 + cuttingV;
-            return Math.Max(0, raw);
+            if (canl <= 0) return false;
+            return Math.Abs(_player.m_nCurrX - tx) > canl
+                || Math.Abs(_player.m_nCurrY - ty) > canl;
+        }
+
+        /// <summary>
+        /// `types` 的目标类过滤位。两个实现体的跳表逐项相同：
+        /// 自定义伤害 0x1006E8B0 = {1006DF1D, 1006DF2E, 1006DF2E, 1006DF35, 1006DF46, 1006DF46}，
+        /// 切割 0x1006F0BC = {1006EB6E, 1006EB78, 1006EB78, 1006EB7F, 1006EB7F, 1006EB7F}，
+        /// 两张表都把 3/4/5 置 1、6/7/8 置 2，其余 `types` 落在跳表外保持 0。
+        /// 1 = 排除玩家，2 = 只打玩家，0 = 不过滤（0x6AC8C8 是玩家类 VMT）。
+        /// </summary>
+        private static int NativeTypeClassFilter(int types)
+        {
+            if (types >= 3 && types <= 5) return 1;
+            if (types >= 6 && types <= 8) return 2;
+            return 0;
+        }
+
+        private static bool NativeClassFilterAccepts(int filter, TBaseObject target)
+        {
+            if (filter == 0) return true;
+            bool isPlayer = target.m_btRaceServer == Grobal2.RC_PLAYOBJECT;
+            // 1006E14F `cmp [ebp-0x4C],0x6AC8C8 / jne 继续` → filter 1 拒玩家
+            // 1006E184 `cmp [ebp-0x4C],0x6AC8C8 / jne -777` → filter 2 只收玩家
+            return filter == 1 ? !isPlayer : isPlayer;
+        }
+
+        /// <summary>
+        /// 每格的链表遍历上限。单格路径 0x1006DFBB / 0x1006EB9D、方框路径
+        /// 0x1006E6xx / 0x1006EF36 都是 `B8 1E 00 00 00` mov eax,0x1E，
+        /// 计数器在循环头先 `dec` 再处理、循环尾 `test/jg` 判正，故实际处理 30 个节点。
+        /// </summary>
+        private const int NativeChainWalkCap = 30;
+
+        /// <summary>
+        /// 走一格的对象链表并施加两个原生前置条件：
+        /// `cmp [eax+0x2AC],0 / jle`（HP&gt;0，0x1006E02D / 0x1006EBFC）与
+        /// `IsProperTarget`（0x767498，0x1006E041 / 0x1006EC10）。
+        /// 自身排除不用另写 —— 原生 `sub_767498` 的第 4 道门 0x7674B8 就是
+        /// `目标 == self → false`，本仓 `NativeProperTargetPreGate` 已逐字节移植。
+        /// </summary>
+        private List<TBaseObject> NativeWalkCell(int x, int y)
+        {
+            var picked = new List<TBaseObject>();
+            var envir = _player.m_PEnvir;
+            if (envir == null) return picked;
+            var chain = new List<TBaseObject>();
+            envir.GetBaseObjects(x, y, true, chain);
+            int budget = NativeChainWalkCap;
+            foreach (var t in chain)
+            {
+                if (budget-- <= 0) break;
+                if (t == null || t.m_WAbil.HP <= 0) continue;
+                if (!_player.IsProperTarget(t)) continue;
+                picked.Add(t);
+            }
+            return picked;
+        }
+
+        /// <summary>
+        /// 方框取目标。`round &gt; 0` 时原生是
+        /// `[cx-round, cx+round] × [cy-round, cy+round]` 的**方框**（不是圆），x 外 y 内，
+        /// 与 <c>Envirnoment.GetRangeBaseObject</c> 的双重 for 同形；每格各自享有 30 的链表上限。
+        /// </summary>
+        private List<TBaseObject> NativeCollectAreaTargets(int cx, int cy, int round)
+        {
+            var list = new List<TBaseObject>();
+            for (int x = cx - round; x <= cx + round; x++)
+                for (int y = cy - round; y <= cy + round; y++)
+                    list.AddRange(NativeWalkCell(x, y));
+            return list;
+        }
+
+        /// <summary>
+        /// F-3：原生 0x1006DFCE / 0x1006EBB0 判 `AttactId != 0` 后，0x1006E0A8 /
+        /// 0x1006EC2D 直接把 `AttactId` 当 <c>TBaseObject*</c> 用（不是 RoleId），
+        /// 并且**只过 IsProperTarget、不看 HP**。C# 不能把 int 当对象引用，这里按
+        /// ObjectId 解析，复刻的是「指定单一目标 + 命中后只打这一个」两个可观测行为；
+        /// 指针数值本身不可复刻，`AllFuc.pas` 侧也从未传过合法指针。
+        /// </summary>
+        private TBaseObject ResolveNativeAttactTarget(int attId)
+        {
+            if (attId == 0) return null;
+            return M2Share.ObjectManager?.Get(attId);
+        }
+
+        /// <summary>
+        /// 攻防 lo/hi 表在对象 +0x27C 起、步长 8：
+        /// 0x27C=AC 0x284=MAC 0x28C=DC 0x294=MC 0x29C=SC。
+        /// 攻击项以 0x28C 为基（0x1006E05D / 0x1006E0D0 `8B 9C FA 8C 02 00 00`），
+        /// 防御项以 0x27C 为基（0x1006E085 / 0x1006E0F8 `8B 9C FA 7C 02 00 00`），
+        /// 所以「基 + 索引×8」落在同一张表上，负索引会读到表里更靠前的那一项。
+        /// </summary>
+        private static int NativeAbilitySlot(TAbility abil, int slot) => slot switch
+        {
+            0 => abil.AC,
+            1 => abil.MAC,
+            2 => abil.DC,
+            3 => abil.MC,
+            4 => abil.SC,
+            _ => 0,
+        };
+
+        /// <summary>
+        /// 两个伤害实现体共用的落地三级管线，逐调用对上字节：
+        /// <code>
+        /// 1006E2C9/1006ECE4  83 B8 4C 03 00 00 00   LastHiter(+0x34C) 为空 → 设成施法者
+        /// 1006E2F8/1006ED10  call 0x767BA8          致命一击调制（x87，两次 @ROUND 就近取偶）
+        /// 1006E311/1006ED23  call [vmt+0x1B0]       DamageHealth：0x3F 减半 / +0x3DF 百分比减免 /
+        ///                                            三档魔法盾吸 MP / 落 HP / 置脏位 / 返回 Max(n,1)
+        /// 1006E325/1006ED34  call 0x76B4F8          → 0x766060
+        /// </code>
+        /// 0x76B4F8 自身的六个栈参已逐 push 对上（`push ecx; push ecx; push 0; push edx;
+        /// push 0; push [ebp+8]`，随后 `mov edx,0x2724` / `mov cx,0x2775`）：
+        /// BaseObject = 0x2724 = <c>RM_STRUCK</c> 哨兵、wIdent = 0x2775 = <c>RM_10101</c>、
+        /// wParam = nParam1 = 落地伤害、nParam2 = 0、nParam3 = 施法者、sMsg = nil、delay = 入参。
+        /// 旧实现三级全无，直接 `HP -= min(HP, dmg)`，0x3F 减半、+0x3DF 减免、魔法盾全绕过。
+        /// </summary>
+        private int NativeLandDamage(TBaseObject target, int damage, int delay)
+        {
+            if (target.m_LastHiter == null) target.m_LastHiter = _player;
+            int hit = target.ApplyNativePhysicalCritical(_player, damage);
+            int applied = target.DamageHealth(hit);
+            // 0x766091 `mov ax,word[ebp+0x1C] / mov word[ebx+2],ax` —— wParam 只留低 16 位
+            target.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101,
+                unchecked((short)applied), applied, 0, _player.ObjectId,
+                string.Empty, delay);
+            return applied;
         }
 
         /// <summary>寻找范围内目标, includePlayers控制是否包含玩家</summary>
@@ -985,25 +1125,182 @@ namespace GameSvr.Plugins
         public int CustomDamage(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV)
         {
             if (!Enabled("自定义伤害_plus")) return 0;
-            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV);
+            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types,
+                cuttingV, 0, 0, -1, 0, 0, 0, 200);
         }
 
+        /// <summary>
+        /// <c>sub_1006DAB0</c> 的完整数值语义。`types` 一个参数管三件事，
+        /// 跳表 0x1006E8B0 与 0x1006DF55 的除 3 一起决定：
+        /// <code>
+        /// 1006DEFD  83 FB 01 / 74 05 / 83 FB 02 / 75 07 / C7 45 CC 01 00 00 00
+        ///                                types ∈ {1,2} → 防御索引 = 1
+        /// 1006DF0E  8D 43 FD / 83 F8 05 / 77 3F / FF 24 85 B0 E8 06 10   types-3 跳表
+        /// 1006DF55  B8 55 55 55 55 / F7 EB / 2B D3 / D1 FA / …
+        ///           / 8D 04 19 / 8D 04 48                 攻击索引 = types mod 3（截断除，逐值验算）
+        /// </code>
+        /// ⇒ 防御索引 1 命中 types ∈ {1,2,4,5,7,8}，其余 0；类过滤见
+        /// <see cref="NativeTypeClassFilter"/>。攻击索引查 `caster[0x28C + i*8]`
+        /// （0=DC 1=MC 2=SC），防御索引查 `target[0x27C + i*8]`（0=AC 1=MAC）。
+        /// <para>公式（0x1006E18D..0x1006E2C6）：</para>
+        /// <code>
+        /// t    = 攻高 − 攻低                      ; 1006E195（命中档位 &lt; 9 分支，见 F-4）
+        /// t   -= 命中档位                         ; 1006E1A3
+        /// atk  = 攻高 − (t &lt; 0 ? 0 : Random(t))   ; 1006E1A8 jns / 1006E1B4 / 1006E1C0
+        /// (防高 − 防低 也掷一次 Random，结果写 [ebp-0x40] 后再无读者 ;
+        ///  1006E1C3..1006E1DE —— 掷点本身要照掷，否则随机数序列会错位)
+        /// raw  = (baseHP*(magicLV+1)) div 10      ; 1006E266 imul + 0x66666667 magic div
+        ///      − 防高                             ; 1006E27E 2B 45 B8   ← 减的是防高，不掷点
+        ///      + atk                              ; 1006E281 03 45 D4
+        /// dmg  = trunc(raw × mUndead × mDouble)   ; 1006E28C/E290 mulsd + 1006E294 cvttsd2si
+        /// dmg  = BubbleDefence(MgId, dmg)         ; 1006E2A1 → 0x76FFE8
+        /// dmg  = max(dmg + cuttingV, 1)           ; 1006E2AB / 1006E2B7  ← cuttingV 在护盾之后
+        /// </code>
+        /// 旧实现的 `max(0, DC-AC) + baseHp*(magicLv+1)/10 + cuttingV` 只有中间那一项是对的：
+        /// 原生既不做 `max(0,…)`，也不掷防御，且 DC/AC 是打包 lo/hi 而不是可直接相减的标量。
+        /// <para>
+        /// 返回值：单格路径一个目标都没取到 → -666（0x1006E12F）、类不匹配 → -777（0x1006E167）；
+        /// 命中则是**最后一个目标**的 dmg。方框路径两者都只是跳过该格，
+        /// 一格没打中就返回槽位初值 0（0x1006DAE8 `33 F6` / `89 75 9C`）。
+        /// </para>
+        /// </summary>
         private int CustomDamageCore(int magicLv, int baseHp, int range, int tx, int ty,
-            int canl, int types, int cuttingV)
+            int canl, int types, int cuttingV, int lei, int effect, int mgId,
+            int undead, int doubling, int attId, int delay)
         {
-            int total = 0;
-            foreach (var t in FindTargets(tx, ty, range, canl != 0))
+            _ = lei;    // D-17：本实现体不读 lei，防御属性由 types 决定
+            _ = effect; // F-6：特效广播 0x76920C 未移植
+            if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
+
+            int atkSlot = 2 + types % 3;
+            int defSlot = (types >= 1 && types <= 2) || (types >= 4 && types <= 5)
+                || (types >= 7 && types <= 8) ? 1 : 0;
+            int filter = NativeTypeClassFilter(types);
+
+            if (range > 0)
             {
-                var dmg = CalcDamage(magicLv, baseHp, cuttingV, t);
-                if (dmg > 0) { t.m_WAbil.HP -= Math.Min(t.m_WAbil.HP, dmg); total += dmg; }
+                // 方框路径 0x1006E38E 起：`[ebp-0x3C]` 在 0x1006E534 被清 0 挪作它用，
+                // 所以 AttactId 在这条路上根本不参与。
+                int last = 0;
+                foreach (var t in NativeCollectAreaTargets(tx, ty, range))
+                {
+                    // 0x1006E5E3 / 0x1006E5ED 都是 `je/jne 下一个`，不返回错误码
+                    if (!NativeClassFilterAccepts(filter, t)) continue;
+                    last = CustomDamageOne(t, magicLv, baseHp, atkSlot, defSlot,
+                        cuttingV, mgId, undead, doubling, delay);
+                }
+                return last;
             }
-            return total;
+
+            if (attId != 0)
+            {
+                var one = ResolveNativeAttactTarget(attId);
+                // 0x1006E0B4 只调 IsProperTarget，没有 HP 门；失败即落到 0x1006E12F
+                if (one == null || !_player.IsProperTarget(one)) return YsErrNoTarget;
+                if (!NativeClassFilterAccepts(filter, one)) return YsErrClass;
+                return CustomDamageOne(one, magicLv, baseHp, atkSlot, defSlot,
+                    cuttingV, mgId, undead, doubling, delay);
+            }
+
+            return NativeChainDamage(tx, ty, filter,
+                t => CustomDamageOne(t, magicLv, baseHp, atkSlot, defSlot,
+                    cuttingV, mgId, undead, doubling, delay));
         }
 
-        /// <summary>ys_MyJn_plus2 — 带半径类型(lei:0=圆形 1=直线)</summary>
-        public int CustomDamage2(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei) { return CustomDamage(magicLv, baseHp, range, tx, ty, canl, types, cuttingV); }
+        /// <summary>
+        /// 两个实现体单格链表路径的公共骨架（0x1006DFC0..0x1006E378 /
+        /// 0x1006EBA5..0x1006ED6D）。要点是 `-666` 的判定位置：
+        /// 0x1006E112 / 0x1006EC57 先看这一轮有没有取到目标，没取到再看
+        /// **链表还有没有下一个节点**，两者皆空才返回 -666 —— 也就是说
+        /// 「链表最后一个节点被 HP/IsProperTarget 挡掉」会盖掉前面已经打出的伤害。
+        /// </summary>
+        private int NativeChainDamage(int x, int y, int filter, Func<TBaseObject, int> hit)
+        {
+            var chain = new List<TBaseObject>();
+            _player.m_PEnvir?.GetBaseObjects(x, y, true, chain);
+            if (chain.Count == 0) return YsErrNoTarget;
 
-        /// <summary>ys_MyJn_effect — 带特效ID</summary>
+            int last = 0;
+            int budget = NativeChainWalkCap;
+            for (int i = 0; i < chain.Count; i++)
+            {
+                if (budget-- <= 0) break;
+                var t = chain[i];
+                bool hasNext = i + 1 < chain.Count;
+                if (t == null || t.m_WAbil.HP <= 0 || !_player.IsProperTarget(t))
+                {
+                    if (!hasNext) return YsErrNoTarget;
+                    continue;
+                }
+                // 单格路径首个类不匹配即整体返回 -777（0x1006E158 / 0x1006EC9C 之后
+                // 直接 `mov eax,0xFFFFFCF7; ret`）
+                if (!NativeClassFilterAccepts(filter, t)) return YsErrClass;
+                last = hit(t);
+                // 0x1006E36C / 0x1006ED64：链表走到头就收工
+                if (!hasNext) break;
+            }
+            return last;
+        }
+
+        private int CustomDamageOne(TBaseObject target, int magicLv, int baseHp,
+            int atkSlot, int defSlot, int cuttingV, int mgId, int undead,
+            int doubling, int delay)
+        {
+            int atkPacked = NativeAbilitySlot(_player.m_WAbil, atkSlot);
+            int defPacked = NativeAbilitySlot(target.m_WAbil, defSlot);
+            int atkLo = HUtil32.LoWord(atkPacked);
+            int atkHi = HUtil32.HiWord(atkPacked);
+            int defLo = HUtil32.LoWord(defPacked);
+            int defHi = HUtil32.HiWord(defPacked);
+
+            // F-4：caster[+0x84]（命中档位）在 M2 里被 12 个类共用，本仓无法唯一归属，
+            // 取未被写入时的 0 值走 `< 9` 分支（t = 攻高 − 攻低）。`>= 9` 分支读的是
+            // [ebp-0x1C] 里上一个目标的残值，无法在不造字段的前提下复刻。
+            const int hitPoint = 0;
+            int spread = atkHi - atkLo - hitPoint;
+            // 1006E1A8 `jns` → 负数不掷点；非负走 Random（Random(0) 也推进一次种子）
+            int roll = spread < 0 ? 0 : M2Share.RandomNumber.Random(spread);
+            int atk = atkHi - roll;
+
+            // 1006E1C3..1006E1DE：防御差值同样掷一次点，[ebp-0x40] 之后无读者。
+            // 结果不用，但这一次随机数消耗是可观测的，必须照掷。
+            int defSpread = defHi - defLo;
+            if (defSpread < 0) defSpread = 0;
+            M2Share.RandomNumber.Random(defSpread);
+
+            // 1006DF94 movsd xmm0,[0x102C8910] = 1.0 / 1006DFA4 xmm3,[0x102C8950] = 1000.0
+            double mUndead = 1.0d;
+            // 1006E1F6 `cmp [ebp-0x4C],0x6AC8C8 / je` 先排除玩家类，
+            // 1006E20D `8A 98 EE 02 00 00` 再要求 byte[target+0x2EE] == 1
+            // （本仓把 +0x2EE 落成 m_btLifeAttrib，LA_UNDEAD = 1）。
+            if (undead > 0 && target.m_btRaceServer != Grobal2.RC_PLAYOBJECT
+                && target.m_btLifeAttrib == Grobal2.LA_UNDEAD)
+            {
+                mUndead = undead / 1000.0d;
+            }
+            double mDouble = 1.0d;
+            // 1006E247 `3D E8 03 00 00 / 74 14` —— double == 1000 视同不缩放
+            if (doubling > 0 && doubling != 1000) mDouble = doubling / 1000.0d;
+
+            int raw = unchecked(baseHp * (magicLv + 1)) / 10 - defHi + atk;
+            int dmg = unchecked((int)(raw * mUndead * mDouble));   // cvttsd2si：向零截断
+            dmg = target.ApplyNativeBubbleDefence(mgId, dmg);      // 0x76FFE8
+            dmg = unchecked(dmg + cuttingV);
+            if (dmg <= 0) dmg = 1;                                 // 1006E2BB mov eax,1
+
+            NativeLandDamage(target, dmg, delay);
+            return dmg;                                            // 1006E386 返回钳后的 dmg
+        }
+
+        /// <summary>ys_MyJn_plus2 — 第 10 参 lei（本实现体不读，见 D-17）</summary>
+        public int CustomDamage2(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei)
+        {
+            if (!Enabled("自定义伤害_plus")) return 0;
+            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types,
+                cuttingV, lei, 0, -1, 0, 0, 0, 200);
+        }
+
+        /// <summary>ys_MyJn_effect — 第 11 参 effect</summary>
         public int CustomDamageEffect(int magicLv, int baseHp, int range, int tx, int ty,
             int canl, int types, int cuttingV, int lei, int effect)
         {
@@ -1011,29 +1308,88 @@ namespace GameSvr.Plugins
             // cfg2+0x524。effect 变体只是同一实现体 0x1006DAB0 多读一个可选参
             // （0x1006DC8C `83 F8 0C` cmp eax,0xC），不会多一道门。
             if (!Enabled("自定义伤害_plus")) return 0;
-            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV);
+            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types,
+                cuttingV, lei, effect, -1, 0, 0, 0, 200);
         }
 
-        /// <summary>ys_MyJn_undead — 对不死族额外伤害(千分比, 1500=1.5倍)</summary>
-        public int CustomDamageUndead(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead) { int d = CustomDamage(magicLv, baseHp, range, tx, ty, canl, types, cuttingV); return d * undead / 1000; }
+        /// <summary>ys_MyJn_undead — 第 12 参 undead（千分比，只对不死族怪，在魔法护盾之前）</summary>
+        public int CustomDamageUndead(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead)
+        {
+            if (!Enabled("自定义伤害_plus")) return 0;
+            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types,
+                cuttingV, lei, effect, -1, undead, 0, 0, 200);
+        }
 
-        /// <summary>ys_MyJn_super — 完整版(MgId魔法ID, AttactId攻击ID)</summary>
-        public int CustomDamageSuper(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead, int mgId, int attId) { return CustomDamageUndead(magicLv, baseHp, range, tx, ty, canl, types, cuttingV, lei, effect, undead); }
+        /// <summary>ys_MyJn_super — 第 13/14 参 MgId(缺省 -1，0x1006DB38 `C7 45 A4 FF FF FF FF`) / AttactId</summary>
+        public int CustomDamageSuper(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead, int mgId, int attId)
+        {
+            if (!Enabled("自定义伤害_plus")) return 0;
+            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types,
+                cuttingV, lei, effect, mgId, undead, 0, attId, 200);
+        }
 
-        /// <summary>ys_MyJn_delay — 终极版(含延迟ms, 翻倍千分比)</summary>
-        public int CustomDamageDelay(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead, int mgId, int attId, int double_, int delayMs) { return CustomDamageSuper(magicLv, baseHp, range, tx, ty, canl, types, cuttingV, lei, effect, undead, mgId, attId) * double_ / 1000; }
+        /// <summary>ys_MyJn_delay — 第 15/16 参 double(千分比) / delay(缺省 200，0x1006DC61 `C8 00 00 00`)</summary>
+        public int CustomDamageDelay(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int undead, int mgId, int attId, int double_, int delayMs)
+        {
+            if (!Enabled("自定义伤害_plus")) return 0;
+            return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types,
+                cuttingV, lei, effect, mgId, undead, double_, attId, delayMs);
+        }
 
-        /// <summary>ys_Cutting — 神圣伤害(无视防御)</summary>
+        /// <summary>
+        /// `ys_Cutting` = <c>sub_1006E8D0</c>。本函数**不掷攻击、不看防御**，伤害就是
+        /// `cuttingV`（&lt;=0 钳成 1，0x1006ECDA `C7 45 D4 01 00 00 00`），但仍然要走
+        /// 完整的落地三级管线，所以"无视防御"只对 AC/MAC 成立 ——
+        /// <c>DamageHealth</c> 的 0x3F 减半、`+0x3DF` 百分比减免和魔法护盾照样吃。
+        /// <para>
+        /// `lei == 1` 时圆心换成施法者坐标（0x1006ED9E `83 7D A8 01 / 75 0C`），
+        /// 并且还会按 `byte[caster+0x154]` 的朝向做 8 向筛格 —— 筛格部分见 F-5，未移植。
+        /// </para>
+        /// 返回值是 `max(cuttingV,1)`（0x1006ED89 `8B 45 D4`），不是伤害总和；
+        /// 方框路径一格没打中则是返回槽初值 0（0x1006E907 `33 C0` / `89 45 D4`）。
+        /// </summary>
         /// <remarks>34 号臂 0x100776C0 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int HolyDamage(int range, int tx, int ty, int canl, int types, int cuttingV, int lei, int effect, int attId, int delayMs)
         {
             if (!TunnelGate()) return 0;
-            int total = 0;
-            foreach (var t in FindTargets(tx, ty, range, canl != 0))
+            _ = effect; // F-6
+            if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
+
+            int dmg = cuttingV > 0 ? cuttingV : 1;
+            int filter = NativeTypeClassFilter(types);
+
+            if (range > 0)
             {
-                if (cuttingV > 0) { t.m_WAbil.HP -= Math.Min(t.m_WAbil.HP, cuttingV); total += cuttingV; }
+                // lei==1 → 以施法者为中心；否则以 (tx,ty) 为中心。F-5：朝向筛格未移植，
+                // 所以 lei==1 时打满方框，比原生**多打**几格。
+                int cx = lei == 1 ? _player.m_nCurrX : tx;
+                int cy = lei == 1 ? _player.m_nCurrY : ty;
+                int last = 0;
+                foreach (var t in NativeCollectAreaTargets(cx, cy, range))
+                {
+                    // 0x1006EFB0 / 0x1006EFBA 是 `je/jne 下一个`，方框路径只跳过该格
+                    if (!NativeClassFilterAccepts(filter, t)) continue;
+                    NativeLandDamage(t, dmg, delayMs);
+                    last = dmg;
+                }
+                return last;
             }
-            return total;
+
+            if (attId != 0)
+            {
+                var one = ResolveNativeAttactTarget(attId);
+                // 0x1006EC39 同样只过 IsProperTarget，没有 HP 门
+                if (one == null || !_player.IsProperTarget(one)) return YsErrNoTarget;
+                if (!NativeClassFilterAccepts(filter, one)) return YsErrClass;
+                NativeLandDamage(one, dmg, delayMs);
+                return dmg;
+            }
+
+            return NativeChainDamage(tx, ty, filter, t =>
+            {
+                NativeLandDamage(t, dmg, delayMs);
+                return dmg;
+            });
         }
 
         /// <summary>Ys_MyYsJn — 14参数超级伤害(含ys_id元素ID, Doubling翻倍, lei字符串类型)</summary>
@@ -1044,7 +1400,7 @@ namespace GameSvr.Plugins
         /// 故这里走未加门的 CustomDamageCore。实现体本身落在 Themida 段（0x1007673E
         /// `E8 4E D3 D7 00` → 0x10DF3A91），公式层仍不可证。
         /// </remarks>
-        public int SuperDamage14(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int ysId, int v1, int doubling, string lei) { return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV) * doubling / 1000; }
+        public int SuperDamage14(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int ysId, int v1, int doubling, string lei) { return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV, 0, 0, -1, 0, 0, 0, 200) * doubling / 1000; }
 
         /// <summary>Ys_Attact — 直接攻击指定RoleId造成hp伤害</summary>
         public void DirectAttack(int roleId, int hp)
