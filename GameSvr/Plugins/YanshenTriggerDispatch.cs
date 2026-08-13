@@ -232,7 +232,7 @@ namespace GameSvr.Plugins
                 ConfigKey = "回城按钮触发", ScriptLabel = "@OnBackButton",
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100AD628 },
                 HostTargets = new uint[] { 0x006DBB80 }, HostResumes = new uint[] { 0x006DBB85 },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Replace, Wired = false,
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Replace, Wired = true,
                 Note = "This_Player = eax（`8B D0 mov edx,eax`）。**动作语义已由本轮亲验更正：Replace(顶掉型)，"
                      + "不是 Notify**——33 字节桩体（q06 site 0x100AD628）是 `pushal / mov edx,eax / 取 "
                      + "TSTDScript / push 标签 / push 0 / call [ebx+0x44] / popal / jmp 0x6DBB85`，**没有重放"
@@ -240,8 +240,20 @@ namespace GameSvr.Plugins
                      + "（0x6F926C push ebp…检查 [player+0x128] 标志位 + call 0x772960 门 + 传送），"
                      + "开关打开后原生回城被脚本 @OnBackButton 顶替。宿主 0x6DBB80 是 TPlayObject 客户端命令"
                      + "分发器的一条臂（尾 `jmp 0x6DBC2C`，与盘古穿戴同一分发器=TPlayObject.Message.cs，禁改文件）。"
-                     + "C# 插桩点：回城命令 case 里，在调用原生回城之前 `if (Armed && Enabled(\"回城按钮触发\")) "
-                     + "{ Dispatch @OnBackButton; return; }` 顶掉原生。",
+                     + "安装参数在 0x100AD5BB..0x100AD628 逐条可读：push 0x21(=33 个模板元素) / "
+                     + "push lea[ebp-0x7F4](模板) / push 0x6DBB85(resume) / push 0x6DBB80 ×2(patch+target) / "
+                     + "push lea[ebp-0xC4](出参)。模板由 8 条 movaps 常量(0x102D1520/0x102D37A0/0x102D2830/"
+                     + "0x102D18D0/0x102D3450/0x102D1E40/0x102D2780 + 一次 xorps 清零)加一条 "
+                     + "`mov dword[ebp-0x774],0xE9` 拼成，33 个元素按「一 dword 装一字节」展开成 37 字节："
+                     + "`60 pushal / 8B D0 mov edx,eax / A1 20 5D 7D 00 / 8B 00 / 8B F0 / 8B 7E 08 / "
+                     + "68 <@OnBackButton> / 6A 00 / 33 C9 / 8B C7 / 8B 18 / FF 53 44 / 61 popal / "
+                     + "E9 -> 0x6DBB85`（末元素 0xE9 的 rel32 由后段用 [ebp+0x14] 补）。"
+                     + "C# 插桩点不在分发器：sub_6F926C 全镜像**只有 1 个 rel32 调用者**（就是被顶掉的 "
+                     + "0x6DBB80），且作为绝对 dword 出现 0 次（不在任何虚表里）。故「在唯一调用点跳过这次 "
+                     + "call」与「进 ClientClickBackHome 就返回」严格同义，门放在 "
+                     + "TPlayObject.ClientClickBackHome 的第一条语句即可，无需改禁改的 TPlayObject.Message.cs。"
+                     + "宿主 sub_6F926C 与 C# ClientClickBackHome 的对应由三道门互证："
+                     + "[map+0x7C]/[map+0x6C] 两个 bool、状态 0x33 配 [player+0x3C0]、状态 0x34。",
             },
             new()
             {
@@ -656,6 +668,21 @@ namespace GameSvr.Plugins
             if (!Armed || player == null) return;
             if (!Enabled("死亡触发")) return;
             DispatchPlain(player, "@OnDie");
+        }
+
+        /// <summary>
+        /// 回城按钮触发（<c>@OnBackButton</c>，宿主分发器臂 0x6DBB80）。
+        /// <para><b>顶掉型</b>：37 字节桩体不重放被覆盖的 <c>E8 E7 D6 01 00 call 0x6F926C</c>，
+        /// 续跑点 0x6DBB85 就是分发器的默认 <c>jmp 0x6DBC2C</c>。返回 true 表示原生回城被顶掉，
+        /// 调用方必须立刻返回。</para>
+        /// </summary>
+        public static bool FireOnBackButton(TPlayObject player)
+        {
+            if (!Armed || player == null) return false;
+            if (!Enabled("回城按钮触发")) return false;
+            // 桩体 +0x001 `8B D0 mov edx,eax`：This_Player = 分发器 [ebp-4] = self。
+            DispatchPlain(player, "@OnBackButton");
+            return true;
         }
 
         /// <summary>

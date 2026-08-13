@@ -58,8 +58,10 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("死亡触发", "@OnDie", 0x10032FD0, new uint[] { 0x006C09B5 }, new uint[] { 0x006C09BA },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
+    // 顶掉型：33 元素模板展开成的 37 字节桩体里没有 `E8 -> 0x6F926C`，被覆盖的
+    // 那条 call 不重放，续跑点 0x6DBB85 就是分发器默认的 `jmp 0x6DBC2C`。
     ("回城按钮触发", "@OnBackButton", 0x10032FD0, new uint[] { 0x006DBB80 }, new uint[] { 0x006DBB85 },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Replace, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Replace, true),
     ("挖矿触发", "@OnDig", 0x10032FD0, new uint[] { 0x006EC111 }, new uint[] { 0x006EC116 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("心灵启示触发", "@Revelation", 0x10032FD0, new uint[] { 0x006EDC2B }, new uint[] { 0x006EDC30 },
@@ -162,6 +164,8 @@ YanshenTriggerDispatch.FirePickPre(dormantPlayer, "惰性物品");
 YanshenTriggerDispatch.FireMyKill(dormantVictim);
 Assert(YanshenTriggerDispatch.FireHerobaoji(dormantPlayer, 100) == 100,
     "插件缺席时 FireHerobaoji 必须原样返回 nBasePower");
+Assert(!YanshenTriggerDispatch.FireOnBackButton(dormantPlayer),
+    "插件缺席时 FireOnBackButton 必须返回 false（原生回城照常执行）");
 Assert(YanshenTriggerDispatch.DispatchCount == baseline,
     $"插件缺席时派发计数器必须不动，却从 {baseline} 变成 {YanshenTriggerDispatch.DispatchCount}");
 
@@ -176,7 +180,7 @@ try
     // BB死亡触发 的实际取值。
     File.WriteAllText(Path.Combine(tempRoot, "config.json"),
         "{\"召唤神兽触发\":0,\"召唤骷髅触发\":0,\"BB杀怪触发\":0,\"BB死亡触发\":0,"
-        + "\"死亡触发\":0,\"挖矿触发\":0,\"盘古穿戴触发\":0,"
+        + "\"死亡触发\":0,\"挖矿触发\":0,\"盘古穿戴触发\":0,\"回城按钮触发\":0,"
         + "\"捡物触发\":0,\"被击杀触发\":0,\"英雄倍攻和暴击\":0}",
         HUtil32.GbkEncoding);
     var pmOff = new PluginManager(envirPath);
@@ -200,13 +204,15 @@ try
     YanshenTriggerDispatch.FireChangeEquip(dormantPlayer);
     YanshenTriggerDispatch.FirePickPre(dormantPlayer, "关闭态物品");
     YanshenTriggerDispatch.FireMyKill(dormantVictim);
+    Assert(!YanshenTriggerDispatch.FireOnBackButton(dormantPlayer),
+        "回城按钮触发=0 时必须返回 false（原生回城照常执行）");
     Assert(YanshenTriggerDispatch.DispatchCount == beforeOff,
         "开关为 0 时派发计数器必须不动");
 
     // 开关打开
     File.WriteAllText(Path.Combine(tempRoot, "config.json"),
         "{\"召唤神兽触发\":1,\"召唤骷髅触发\":1,\"BB杀怪触发\":1,\"BB死亡触发\":1,"
-        + "\"死亡触发\":1,\"挖矿触发\":1,\"盘古穿戴触发\":1,"
+        + "\"死亡触发\":1,\"挖矿触发\":1,\"盘古穿戴触发\":1,\"回城按钮触发\":1,"
         + "\"捡物触发\":1,\"被击杀触发\":1,\"英雄倍攻和暴击\":1}",
         HUtil32.GbkEncoding);
     var pmOn = new PluginManager(envirPath);
@@ -249,6 +255,15 @@ try
     Assert(YanshenTriggerDispatch.DispatchCount == beforeNotify + 3,
         $"死亡/挖矿/盘古穿戴 开关全开时应恰好派发 3 次，实为 "
         + $"{YanshenTriggerDispatch.DispatchCount - beforeNotify}");
+
+    // 回城按钮：顶掉型，开关为 1 时必须返回 true（宿主 call 0x6F926C 被跳过）。
+    var beforeBack = YanshenTriggerDispatch.DispatchCount;
+    Assert(YanshenTriggerDispatch.FireOnBackButton(dormantPlayer),
+        "回城按钮触发=1 时必须返回 true（原生 call 0x6F926C 被顶掉）");
+    Assert(YanshenTriggerDispatch.LastDispatchedLabel == "@OnBackButton",
+        "回城按钮触发发出的标签必须是 @OnBackButton");
+    Assert(YanshenTriggerDispatch.DispatchCount == beforeBack + 1,
+        "回城按钮触发 开关打开时应恰好派发 1 次");
 
     // 第二批接通的三条：捡物 / 被击杀 / 英雄倍攻和暴击。
     var beforeWave2 = YanshenTriggerDispatch.DispatchCount;

@@ -1,3 +1,4 @@
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -10,6 +11,15 @@ namespace GameSvr
 
         internal void ClientClickBackHome()
         {
+            // 回城按钮触发 @OnBackButton（眼神桩体挂 0x6DBB80，续跑 0x6DBB85）。
+            // 那 5 字节正是 `E8 E7 D6 01 00 call 0x6F926C`，桩体不重放它 —— 顶掉型。
+            // sub_6F926C 全镜像只有这一个 rel32 调用者，所以「在唯一调用点跳过这次 call」
+            // 与「进函数就返回」同义；放在这里可以不动 TPlayObject.Message.cs 的分发臂。
+            if (YanshenTriggerDispatch.FireOnBackButton(this))
+            {
+                return;
+            }
+
             if (!TryResolveClientClickBackHome(out var mapName, out var x,
                     out var y, out var showFoxMapMessage))
             {
