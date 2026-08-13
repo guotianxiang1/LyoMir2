@@ -2832,16 +2832,40 @@ namespace GameSvr
 
                 case Grobal2.CM_COMMIT_ITEM:
                 {
-                    if (m_boDeath || m_boGhost || M2Share.PasEngine == null)
+                    // Native handler 0x6DBB8A -> sub_6F9648(eax=self, edx=Recog,
+                    // ecx=MakeLong(Tag,Param), [ebp+8]=Series). The gate chain is
+                    // exactly these seven steps, every failure falling to the silent
+                    // exit at 0x6F9711:
+                    //   0x6F9672  E8 E1 03 F5 FF  call 0x649A58   ; esi = object by Recog
+                    //   0x6F9679  85 F6 / 0F 84   test esi,esi    ; null -> out
+                    //   0x6F9681  8B 8B D8 0C 00 00  mov ecx,[self+0xCD8]
+                    //   0x6F9687  85 C9 / 0F 84   test ecx,ecx    ; no open NPC -> out
+                    //   0x6F968F  3B BB D8 0C 00 00  cmp edi,[self+0xCD8]
+                    //   0x6F9695  75 7A              jne             ; not the open NPC -> out
+                    //   0x6F969D  3B 83 28 01 00 00  cmp [npc+0x128],[self+0x128]
+                    //   0x6F96BA  83 F8 0F / 7F 52   cmp abs(dX),0xF / jg  ; reject only when > 15
+                    //   0x6F96D0  83 F8 0F / 7F 3C   cmp abs(dY),0xF / jg
+                    //   0x6F96DA  E8 29 38 04 00     call 0x73CF08   ; item by id, null -> out
+                    // sub_6F9648 reads neither [self+0x73] nor [self+0x74], and an
+                    // exhaustive scan of the dispatcher body 0x6D7D68..0x6DBC2C finds
+                    // zero references to either offset, so there is no death/ghost gate
+                    // on this path at any level -- CM 4629's callee 0x6F7C40 does its own
+                    // test at 0x6F7C8D/0x6F7C9A precisely because the dispatcher has none.
+                    // The handler also never pushes the body string, so the native item
+                    // match at 0x73CF40 `cmp [item+0x18],id` is by id alone.
+                    if (M2Share.PasEngine == null)
                     {
                         break;
                     }
 
                     var npc = GetMerchantQueryNpc(ProcessMsg.nParam1);
-                    if (npc == null ||
-                        !(npc.m_boIsHide || npc.m_PEnvir == m_PEnvir &&
-                            Math.Abs(npc.m_nCurrX - m_nCurrX) < 15 &&
-                            Math.Abs(npc.m_nCurrY - m_nCurrY) < 15))
+                    if (npc == null || m_NPC == null || !ReferenceEquals(npc, m_NPC))
+                    {
+                        break;
+                    }
+                    if (npc.m_PEnvir != m_PEnvir ||
+                        Math.Abs(npc.m_nCurrX - m_nCurrX) > 15 ||
+                        Math.Abs(npc.m_nCurrY - m_nCurrY) > 15)
                     {
                         break;
                     }
@@ -2849,8 +2873,7 @@ namespace GameSvr
                     var clientItemId = HUtil32.MakeLong(ProcessMsg.nParam2, ProcessMsg.nParam3);
                     var commitItem = FindClientItemIn(m_ItemList, clientItemId, false)
                                      ?? FindClientItemIn(m_ItemList, clientItemId, true);
-                    if (commitItem == null || !string.Equals(ItmUnit.GetItemName(commitItem),
-                            ProcessMsg.sMsg, StringComparison.OrdinalIgnoreCase))
+                    if (commitItem == null)
                     {
                         break;
                     }
