@@ -480,17 +480,42 @@ namespace GameSvr.PasEngine
                 case "ys_getpis":
                     if (args.Count >= 2) { result = PasValue.FromInt(api.GetPis(args[0].AsInt(), args[1].AsInt())); return true; }
                     return false;
+                // Ys_GiveNewItem(Player;ItemName:string;isbind,ys1..ys17:integer)
+                // — isbind sits between the name and ys1, so the element block
+                // starts at args[2] and the bind flag is a real argument.
                 case "ys_givenewitem":
-                    if (args.Count >= 2) { var ysArr = new int[17]; for (int i = 1; i < args.Count && i <= 17; i++) ysArr[i - 1] = args[i].AsInt(); api.GiveNewItem(args[0].AsString(), 0, ysArr); return true; }
+                    if (args.Count >= 19)
+                    {
+                        var ysArr = new int[17];
+                        for (int i = 0; i < 17; i++) ysArr[i] = args[i + 2].AsInt();
+                        api.GiveNewItem(args[0].AsString(), args[1].AsInt(), ysArr);
+                        return true;
+                    }
                     return false;
+                // Ys_GiveItemYS_JP(Player;ItemName:string;isbind,ys1..ys17,jp1..jp5,yjp6:integer)
                 case "ys_giveitemys_jp":
-                    if (args.Count >= 2) { var ysJp = new int[17]; var jpJp = new int[6]; for (int i = 1; i < args.Count && i <= 17; i++) ysJp[i - 1] = args[i].AsInt(); for (int i = 18; i < args.Count && i <= 23; i++) jpJp[i - 18] = args[i].AsInt(); api.GiveItemYS_JP(args[0].AsString(), 0, ysJp, jpJp); return true; }
+                    if (args.Count >= 25)
+                    {
+                        var ysJp = new int[17];
+                        var jpJp = new int[6];
+                        for (int i = 0; i < 17; i++) ysJp[i] = args[i + 2].AsInt();
+                        for (int i = 0; i < 6; i++) jpJp[i] = args[i + 19].AsInt();
+                        api.GiveItemYS_JP(args[0].AsString(), args[1].AsInt(), ysJp, jpJp);
+                        return true;
+                    }
                     return false;
                 case "ys_givedataitem":
                     if (args.Count >= 2) { api.GiveDataItem(args[0].AsString(), args[1].AsString()); return true; }
                     return false;
+                // Ys_NpcGiveItemYs(Player;ClientItemID,ys1..ys17:integer):integer
                 case "ys_npcgiveitemys":
-                    if (args.Count >= 1) { var ysNpc = new int[17]; for (int i = 1; i < args.Count && i <= 17; i++) ysNpc[i - 1] = args[i].AsInt(); result = PasValue.FromInt(api.NpcGiveItemYs(args[0].AsInt(), ysNpc)); return true; }
+                    if (args.Count >= 18)
+                    {
+                        var ysNpc = new int[17];
+                        for (int i = 0; i < 17; i++) ysNpc[i] = args[i + 1].AsInt();
+                        result = PasValue.FromInt(api.NpcGiveItemYs(args[0].AsInt(), ysNpc));
+                        return true;
+                    }
                     return false;
                 case "ys_giveitem":
                     if (args.Count >= 6) { api.GiveItem5El(args[0].AsString(), args[1].AsInt(), args[2].AsInt(), args[3].AsInt(), args[4].AsInt(), args[5].AsInt()); return true; }
@@ -660,8 +685,10 @@ namespace GameSvr.PasEngine
                 case "ys_chgbigbag":
                     if (args.Count >= 2) { result = PasValue.FromInt(api.ChangeBigBag(args[0].AsString(), args[1].AsString())); return true; }
                     return false;
+                // ys_CheckWupinIsBind(...):boolean — the wrapper turns the tunnel's
+                // int into a Boolean, so the built-in must hand back a Boolean too.
                 case "ys_checkwupinisbind":
-                    if (args.Count >= 1) { result = PasValue.FromInt(api.CheckItemBind(args[0].AsString()) ? 1 : 0); return true; }
+                    if (args.Count >= 1) { result = PasValue.FromBool(api.CheckItemBind(args[0].AsString())); return true; }
                     return false;
 
                 // ═══ 6.7 物品数据操作 ═══
