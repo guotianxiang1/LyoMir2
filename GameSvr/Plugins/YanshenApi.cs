@@ -2406,13 +2406,14 @@ namespace GameSvr.Plugins
             return castle?.m_sOwnGuild ?? "";
         }
 
-        /// <summary>沙巴克城主角色名</summary>
-        public string GetCastleLordName()
+        /// <summary>
+        /// 沙巴克城主角色名。AllFuc.pas 的拼写是 Ys_GetCastleLoadName（Load 不是
+        /// Lord），与原生 M2 脚本函数 GetCastleLoadName 同名同义。
+        /// </summary>
+        public string GetCastleLoadName()
         {
             var castle = M2Share.CastleManager.GetCastle(0);
-            if (castle?.m_MasterGuild != null)
-                return castle.m_MasterGuild.sGuildName ?? "";
-            return "";
+            return castle?.m_MasterGuild?.GetChiefName() ?? "";
         }
 
         private static bool SetElementValue(TUserItem item, int elementType, int value)

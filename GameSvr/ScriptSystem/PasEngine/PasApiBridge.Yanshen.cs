@@ -371,6 +371,30 @@ namespace GameSvr.PasEngine
             }
         }
 
+        /// <summary>
+        /// AllFuc.pas reaches the two sabak lookups through out-of-range body
+        /// slots rather than a !!!! payload:
+        ///   Ys_GetCastleGuildName() = This_Player.GetItemNameOnBody(10000)
+        ///   Ys_GetCastleLoadName()  = This_Player.GetItemNameOnBody(10001)
+        /// Every login runs the second one — the shipped initys() gates on
+        /// `Length(Ys_GetCastleLoadName()) &lt; 1`.
+        /// </summary>
+        private bool TryExecuteCastleNameTunnel(int pos, out string name)
+        {
+            name = null;
+            if (pos != 10000 && pos != 10001) return false;
+
+            const string apiName = "GetItemNameOnBody";
+            YanshenApi.EnsureDirectCallReady(M2Share.PluginManager, apiName);
+            var api = GetYanshenApi();
+            if (api == null) return false;
+            using var directCall = YanshenApi.BeginStrictDirectCall(apiName);
+            api.EnsureFeatureEnabled("获取沙城归属");
+
+            name = pos == 10000 ? api.GetCastleGuildName() : api.GetCastleLoadName();
+            return true;
+        }
+
         internal static bool IsYanshenSignInTunnelCall(List<PasValue> args)
         {
             if (args.Count != 2) return false;

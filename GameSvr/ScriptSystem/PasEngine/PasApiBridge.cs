@@ -4431,6 +4431,11 @@ namespace GameSvr.PasEngine
                     if (args.Count >= 1)
                     {
                         int pos = args[0].AsInt();
+                        if (TryExecuteCastleNameTunnel(pos, out var castleName))
+                        {
+                            result = PasValue.FromString(castleName);
+                            return true;
+                        }
                         if (pos >= 0 && pos < CurrentPlayer.m_UseItems.Length && CurrentPlayer.m_UseItems[pos] != null)
                         {
                             var stdItem = M2Share.UserEngine.GetStdItem(CurrentPlayer.m_UseItems[pos].wIndex);
