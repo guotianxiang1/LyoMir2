@@ -3068,7 +3068,10 @@ namespace GameSvr
 
                 default:
                     if (!TryHandleNativeSocialProtocol(ProcessMsg)
-                        && !TryHandleNativeCmTailProtocol(ProcessMsg))
+                        && !TryHandleNativeCmTailProtocol(ProcessMsg)
+                        && !TryHandleNativeCmQ1(ProcessMsg)
+                        && !TryHandleNativeCmQ2(ProcessMsg)
+                        && !TryHandleNativeCmQ3(ProcessMsg))
                     {
                         result = base.Operate(ProcessMsg);
                     }

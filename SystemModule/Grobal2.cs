@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace SystemModule
 {
@@ -1938,7 +1938,6 @@ namespace SystemModule
         public const int SM_1264 = 1264; // 0x4F0  [obj+0x250] empty; Recog=0 Param=1 @0x6F0A73
         public const int SM_1265 = 1265; // 0x4F1  [obj+0x250] empty; Recog=ecx(arg) Param/Tag=word args @0x6F1794
         public const int SM_1726 = 1726; // 0x6BE  [obj+0x250] empty; Recog=edi(runtime) @0x6E3273
-        public const int SM_1727 = 1727; // 0x6BF  [obj+0x250] empty; Recog=1 @0x6E343A
         public const int SM_1729 = 1729; // 0x6C1  BLOCKED: [obj+0x254] Buf=&local[ebp-0xFC] Len=0xE0; 8x28-byte records built by loop @0x613788; body not resolvable at slot @0x613925
         public const int SM_1730 = 1730; // 0x6C2  [obj+0x250] empty; Recog=edx(runtime) @0x6E39BC
         public const int SM_1731 = 1731; // 0x6C3  [obj+0x250] empty; Recog=esi(runtime) @0x6E3A0D
