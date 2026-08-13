@@ -64,6 +64,10 @@ static void Run()
         // train-level divisor cannot pass.
         const int nativeFallback = 27;      // Round(100 / 15.0 * (2 + 2))
         const int nativeFallbackNoCap = 13; // effective level clamped to 0
+        // effectiveLevel = min((byte)4, 8) = 4 > 3, so the override branch at
+        // TBaseObject.Attack.cs:376 is skipped and the native 15.0 arm wins:
+        // Round(100 / 15.0 * (4 + 2)) = 40. A/B never enter above the cap.
+        const int nativeFallbackAboveCap = 40;
 
         Assert(!plugin.IsInitialized && !api.IsHalfMoon(),
             "uninitialized Yanshen plugin reported half-moon enabled");
