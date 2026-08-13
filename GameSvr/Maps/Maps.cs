@@ -510,11 +510,86 @@ namespace GameSvr
                 mapFlag.boMONATTACK = true;
                 return true;
             }
-            if (token.Equals("LIMITHEROLEVEL", StringComparison.OrdinalIgnoreCase))
+            // MFLG-27: 数值型地图标记。原版这一族的形状完全一致——
+            //   mov ecx,<literal len> / mov edx,<literal> / call 0x4C6E94  ; 前缀比较
+            //   push &out2 / push &out1 / mov ecx,')' / mov edx,'(' /
+            //   call 0x4C6964                                             ; 取括号参数
+            //   xor edx,edx / call 0x40CA18                               ; StrToIntDef(...,0)
+            //   mov word/dword [ebx+off], ax/eax
+            // 注意比较器必须是**前缀**：token 串本身带着 "(30)" 后缀，
+            // 全等比较对 LIMITHEROLEVEL(30) 一次都匹配不上——所以旧代码
+            // 不只是丢了阈值，带参数的写法根本没被识别过。
+            //   LIMITHEROLEVEL   len 14  +0xC0 word
+            //     A 0x775831 mov edx,0x775F10 / 0x775838 call 0x4C6E94
+            //       0x775869 66 89 83 C0 00 00 00  mov word [ebx+0xC0],ax
+            //       0x77587D                       mov word [ebx+0xC0],0   (toggle=0)
+            //     B 0x77682C 66 89 83 C0 00 00 00  mov word [ebx+0xC0],ax
+            //     读取点 0x690315 cmp word[edx+0xC0],0 / jbe 跳过；
+            //            0x690339 cmp cx,word[edx+0xC0] / jbe 跳过；
+            //            0x690342 mov cx,word[edx+0xC0]  ——数值比较无疑。
+            if (HUtil32.CompareLStr(token, "LIMITHEROLEVEL", "LIMITHEROLEVEL".Length))
             {
-                mapFlag.boLIMITHEROLEVEL = true;
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.LimitHeroLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
                 return true;
             }
+            //   LIMITPLAYERLEVEL len 16  +0xBE word
+            //     A 0x77580A 66 89 83 BE 00 00 00 / 0x77581E 写 0
+            //     B 0x7767E6 66 89 83 BE 00 00 00
+            //     读取点 0x69032C cmp cx,word[edx+0xBE]（与 +0xC0 同一函数）
+            if (HUtil32.CompareLStr(token, "LIMITPLAYERLEVEL", "LIMITPLAYERLEVEL".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.LimitPlayerLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+            //   UNIFIEDLEVEL     len 12  +0xBC word
+            //     A 0x7757AB 66 89 83 BC 00 00 00 / 0x7757BF 写 0
+            //     B 0x7767A0 66 89 83 BC 00 00 00
+            if (HUtil32.CompareLStr(token, "UNIFIEDLEVEL", "UNIFIEDLEVEL".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.UnifiedLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+            //   MapSign          len 7   +0x62 word
+            //     A 0x775407 66 89 43 62 / 0x775418 写 0
+            //     B 0x776514 66 89 43 62
+            if (HUtil32.CompareLStr(token, "MapSign", "MapSign".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.MapSign = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+            //   MAPFIREWALLBURN  len 15  +0x88 dword，**参数要乘 1000**：
+            //     A 0x7753A4 69 C0 E8 03 00 00  imul eax,eax,0x3E8
+            //       0x7753AA 89 83 88 00 00 00  mov dword [ebx+0x88],eax
+            //       0x7753BD xor eax,eax / 0x7753BF 同址写 0（toggle=0）
+            //     B 0x7764C9 imul eax,eax,0x3E8 / 0x7764CF mov dword[ebx+0x88],eax
+            //   即配置写的是秒，字段存的是毫秒。MFLG 报告漏了这次 imul。
+            if (HUtil32.CompareLStr(token, "MAPFIREWALLBURN", "MAPFIREWALLBURN".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.MapFireWallBurnMs =
+                    unchecked(HUtil32.Str_ToInt(value, 0) * 1000);
+                return true;
+            }
+            // FLYDROPITEM(+0xB4) 故意不加字段：它**不是数值标记**。
+            //   0x775464 mov esi,[ebx+0xB4] / test esi,esi
+            //   0x775470 mov eax,[0x49EB3C] / 0x775475 call 0x404660  ; 惰性 new
+            //   0x49EB3C -> VMT 0x49EB88，vmtClassName（VMT-0x2C）= 'TMirStringList'
+            //   0x775492 mov cl,0x2F ('/') / 0x775497 call 0x4C6AEC   ; 按 '/' 切分
+            //   0x7754B8 call [ecx+0x38]                              ; TStrings.Add
+            //   0x775486 / 0x7754DE call [edx+0x44]                   ; Clear
+            //   0x7754E7 / 0x775514 call 0x414C24                     ; FreeAndNil
+            // 也就是说 FLYDROPITEM(a/b/c) 存的是一张斜杠分隔的字符串表。
+            // MFLG 报告把它归进「5 个数值 flag」是错的。表项语义（物品名？
+            // 编号？）尚未取证，按规矩标 BLOCKED，不臆造字段类型。
             // DORMANT gate: 0 consumers in 战神 binary (image-wide scan). Parser recognizes
             // the token to match native domain, but no runtime code reads this field.
             if (token.Equals("NOMAGIC", StringComparison.OrdinalIgnoreCase))
