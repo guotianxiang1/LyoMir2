@@ -90,9 +90,20 @@ Assert(heroDataServiceType.GetMethod("FlushPendingSavesAndWait",
     "hero save native FIFO barrier is missing");
 Assert(ContainsCall(pasApiBridgeType.GetMethod("CallPlayerFunc")!, requestHeroCreate),
     "PAS CreateHero no longer enters the native 0x162 path");
-Assert(ContainsCall(pasApiBridgeType.GetMethod("CallStandaloneFunction")!, requestHeroRename)
-       && ContainsCall(pasApiBridgeType.GetMethod("CallPlayerFunc")!, requestHeroRename),
-    "PAS HeroRename no longer enters the native 0x164 path");
+// HeroRename is a TPsNpc method, not a global or a TPlayer method: the compile-time class
+// is built at 0x734672-0x73468C (mov ebx,[esi+0x1C] / FindClass 'TCreature' @0x7352B4 /
+// AddClassN 'TPsNpc' @0x7352C8 / mov ebx,eax) and ebx is never re-seated before
+//   0x734E89 BA A0 7A 73 00  mov edx,0x737AA0  ; 'function HeroRename(player: TPlayer;
+//                                              ;  const oldName, newName: string): Integer;'
+//   0x734E8E 8B C3           mov eax,ebx
+//   0x734E90 E8 6B C0 DD FF  call 0x510F00     ; RegisterMethod on the TPsNpc class
+// The runtime half is the single name binding at 0x739213 (mov ecx,0x73A4AC 'HeroRename').
+// So the rename must be reachable from the NPC surface and only from there.
+Assert(ContainsCall(pasApiBridgeType.GetMethod("CallNpcFunc")!, requestHeroRename),
+    "PAS HeroRename no longer enters the native 0x164 path from the TPsNpc surface");
+Assert(!ContainsCall(pasApiBridgeType.GetMethod("CallStandaloneFunction")!, requestHeroRename)
+       && !ContainsCall(pasApiBridgeType.GetMethod("CallPlayerFunc")!, requestHeroRename),
+    "HeroRename was re-exported outside the native TPsNpc registration");
 Assert(ContainsCall(delHeroCommandType.GetMethod("DelHero")!, requestHeroDelete),
     "@DelHero does not enter the native 0x163 path");
 var delHeroCommandAttribute = delHeroCommandType.GetCustomAttributes(false)

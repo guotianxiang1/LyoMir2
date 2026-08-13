@@ -18,7 +18,7 @@ CheckGateHasNoSyntheticConfig();
 
 Console.WriteLine(
     "ChatShieldExactCheck PASS CM3032 categories=1/2/3/4 masks=2/4/8/1 " +
-    "native-offset=0x500 RM_HEAR-mask=2 SM2953=full-dword gate=no-zero-injection");
+    "native-offset=0x4F8 RM_HEAR-mask=2 SM2953=full-dword gate=no-zero-injection");
 
 static void CheckConstantsAndClientMapping()
 {
@@ -34,7 +34,12 @@ static void CheckConstantsAndClientMapping()
 
 static void CheckNativePersistence()
 {
-    const int offset = 0x500;
+    // HumanRcd + 0x4F8 <-> player + 0xB9C:
+    //   save 0x6B12A0 8B 83 9C 0B 00 00 mov eax,[ebx+0xB9C]
+    //        0x6B12A6 89 86 F8 04 00 00 mov [esi+0x4F8],eax
+    //   load 0x6B029C 8B 80 F8 04 00 00 mov eax,[eax+0x4F8]
+    //        0x6B02A5 89 82 9C 0B 00 00 mov [edx+0xB9C],eax
+    const int offset = 0x4F8;
     var player = NewPlayer();
     player.m_NativeHumanData = new byte[offset + sizeof(uint)];
     BinaryPrimitives.WriteUInt32LittleEndian(

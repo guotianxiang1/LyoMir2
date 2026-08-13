@@ -47,16 +47,53 @@ Require(localDb, "MaxPoint = n1C", "native MonItems denominator mapping changed"
 // What matters here is the roll's shape, not its exact text: MaxPoint is the denominator
 // handed to Random, SelPoint is the threshold, and the comparison is inclusive `<=`. Pinning
 // the literal made the audit fail the moment the anti-addiction tier-2 factor (obj+0x1828,
-// set to 1/2/3 at 0x6D2631 / 0x6D2628 / 0x6D2617) was folded into the denominator.
-Assert(Regex.IsMatch(userEngine,
-        @"Random\(MonItem\.MaxPoint\b[^)]*\)\s*<=\s*MonItem\.SelPoint"),
-    "native monster drop selection changed: the roll must stay "
-    + "Random(<MaxPoint-derived denominator>) <= MonItem.SelPoint");
+// set to 1/2/3 at 0x6D2631 / 0x6D2628 / 0x6D2617) was folded into the denominator, and again
+// when the 眼神 equip-drop-boost trampoline wrapped it. The denominator therefore has to be
+// matched with balanced parentheses instead of a flat `[^)]*`. Native (sub_71FBxx loop):
+//   0071FD34 8B 45 E4           mov eax,[ebp-0x1C]      ; MonItem
+//   0071FD37 8B 40 14           mov eax,[eax+0x14]      ; MonItem.MaxPoint
+//   0071FD3A F7 6D D4           imul dword [ebp-0x2C]   ; x fatigue factor
+//   0071FD3D E8 0A 3E CE FF     call 0x403B4C           ; Random(eax)
+//   0071FD42 8B 55 E4           mov edx,[ebp-0x1C]
+//   0071FD45 3B 42 10           cmp eax,[edx+0x10]      ; MonItem.SelPoint
+//   0071FD48 0F 8F 51 01 00 00  jg  0x71FE9F            ; keep only Random(..) <= SelPoint
+AssertNativeDropRoll(userEngine);
 
 Console.WriteLine(
     "ChgMonItemPercentStaticCheck PASS dispatch=fail-closed " +
     "substitute=none native-drop-shape=verified");
 return;
+
+// The drop gate must remain `M2Share.RandomNumber.Random(<expr mentioning MonItem.MaxPoint>)
+// <= MonItem.SelPoint`. Anything else — a different RNG, a denominator that stopped being
+// derived from MaxPoint, an exclusive `<`, or a different threshold — is a regression.
+void AssertNativeDropRoll(string source)
+{
+    const string call = "M2Share.RandomNumber.Random(";
+    for (var at = source.IndexOf(call, StringComparison.Ordinal); at >= 0;
+         at = source.IndexOf(call, at + call.Length, StringComparison.Ordinal))
+    {
+        var open = at + call.Length - 1;
+        var depth = 0;
+        var close = -1;
+        for (var i = open; i < source.Length; i++)
+        {
+            if (source[i] == '(') depth++;
+            else if (source[i] == ')' && --depth == 0) { close = i; break; }
+        }
+        if (close < 0) continue;
+
+        var denominator = source[(open + 1)..close];
+        if (!denominator.Contains("MonItem.MaxPoint", StringComparison.Ordinal))
+            continue;
+        if (Regex.IsMatch(source[(close + 1)..], @"\A\s*<=\s*MonItem\.SelPoint\b"))
+            return;
+    }
+
+    Assert(false,
+        "native monster drop selection changed: the roll must stay "
+        + "M2Share.RandomNumber.Random(<MaxPoint-derived denominator>) <= MonItem.SelPoint");
+}
 
 string Slice(string source, string startMarker, string endMarker)
 {
