@@ -567,8 +567,6 @@ namespace GameSvr
         public bool boDieScatterBag;
         public int nDieScatterBagRate;
         public bool boDieRedScatterBagAll;
-        public int nDieDropUseItemRate;
-        public int nDieRedDropUseItemRate;
         public bool boKillByHumanDropUseItem;
         public bool boKillByMonstDropUseItem;
         public bool boKickExpireHuman;
@@ -1417,8 +1415,6 @@ namespace GameSvr
             boDieScatterBag = true;
             nDieScatterBagRate = 3;
             boDieRedScatterBagAll = true;
-            nDieDropUseItemRate = 30;
-            nDieRedDropUseItemRate = 15;
             boKillByHumanDropUseItem = false;
             boKillByMonstDropUseItem = true;
             boKickExpireHuman = false;
