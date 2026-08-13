@@ -1243,7 +1243,7 @@ namespace GameSvr
 
         }
 
-        internal void DealCancel()
+        private void DealCancel()
         {
             if (!m_boDealing)
             {

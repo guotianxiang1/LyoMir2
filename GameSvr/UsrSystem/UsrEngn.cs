@@ -2437,16 +2437,18 @@ namespace GameSvr
         
         
         
-        public void MonGetRandomItems(TBaseObject mon)
+        public void MonGetRandomItems(TBaseObject mon, TBaseObject killer = null)
         {
             IList<TMonItem> ItemList = TryGetMonsterInfo(mon.m_sCharName,
                 out var monster) ? monster.ItemList : null;
             if (ItemList != null)
             {
+                // native obj+0x1828: anti-addiction fatigue tier 2 = half-drop probability
+                int penalty = (killer as TPlayObject)?.m_btNativeFatigueTier == 2 ? 2 : 1;
                 for (var i = 0; i < ItemList.Count; i++)
                 {
                     var MonItem = ItemList[i];
-                    if (M2Share.RandomNumber.Random(MonItem.MaxPoint) <= MonItem.SelPoint)
+                    if (M2Share.RandomNumber.Random(MonItem.MaxPoint * penalty) <= MonItem.SelPoint)
                     {
                         if (string.Compare(MonItem.ItemName, Grobal2.sSTRING_GOLDNAME, StringComparison.OrdinalIgnoreCase) == 0)
                         {
