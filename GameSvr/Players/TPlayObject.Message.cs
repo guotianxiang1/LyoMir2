@@ -1004,9 +1004,20 @@ namespace GameSvr
                 case Grobal2.CM_QUERYUSERSTATE:
                     ClientQueryUserState(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3);
                     break;
-                case Grobal2.CM_QUERYUSERSET:
-                    ClientQueryUserSet(ProcessMsg);
-                    break;
+                // CM_QUERYUSERSET (3040) is not dispatched, because native does not
+                // dispatch it. The subtree that owns this range is
+                //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051
+                //   0x6D85E8  7F 31              jg  0x6D861B
+                //   0x6D85EA  0F 84 CE 1C 00 00  je  0x6DA2BE
+                //   0x6D85F0  2D D4 0B 00 00     sub eax,0xBD4     ; 3028 -> 0x6D9EAF
+                //   0x6D85FB  83 E8 02           sub eax,2         ; 3030 -> 0x6DA1B1
+                //   0x6D8604  83 E8 02           sub eax,2         ; 3032 -> 0x6DA1D5
+                //   0x6D860D  83 E8 03           sub eax,3         ; 3035 -> 0x6D9EAF
+                //   0x6D8616  E9 11 36 00 00     jmp 0x6DBC2C      ; everything else
+                // 3040 has no arm in that chain, and no encoding of 3040 appears anywhere
+                // in CODE as an instruction immediate: the single byte-pattern hit at
+                // 0x6D2465 has zero converging decode starts because those bytes are the
+                // tail of `FF 84 BE E0 0B 00 00 inc [esi+edi*4+0xBE0]`.
                 case Grobal2.CM_DROPITEM:
                     if (ClientDropItem(ProcessMsg.sMsg, ProcessMsg.nParam1))
                     {
@@ -1233,41 +1244,30 @@ namespace GameSvr
                 case Grobal2.CM_USERMAKEDRUGITEM:
                     ClientMakeDrugItem(ProcessMsg.nParam1, ProcessMsg.sMsg);
                     break;
-                case Grobal2.CM_OPENGUILDDLG:
-                    ClientOpenGuildDlg();
-                    break;
-                case Grobal2.CM_GUILDHOME:
-                    ClientGuildHome();
-                    break;
-                case Grobal2.CM_GUILDMEMBERLIST:
-                    ClientGuildMemberList();
-                    break;
-                case Grobal2.CM_GUILDADDMEMBER:
-                    ClientGuildAddMember(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDDELMEMBER:
-                    ClientGuildDelMember(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDUPDATENOTICE:
-                    ClientGuildUpdateNotice(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDUPDATERANKINFO:
-                    ClientGuildUpdateRankInfo(ProcessMsg.sMsg);
-                    break;
+                // 1035-1041 and 1044/1045 (the pre-GILD guild protocol) are not part of
+                // this engine's wire surface and are no longer dispatched here. The
+                // 1016-based jump table at 0x6D8159 covers 19 entries only
+                // (0x6D8144 `05 08 FC FF FF add eax,-0x3F8`, 0x6D8149 `83 F8 12
+                // cmp eax,0x12`, 0x6D814C `ja 0x6DBC2C`), so 1035-1041 fall off the end
+                // into the default arm; the 1043-based table at 0x6D81BA has entries for
+                // 1044/1045 but both hold 0x6DBC2C, the default label itself
+                // (`xor eax,eax; pop edx; pop ecx; pop ecx; mov fs:[eax],edx; jmp exit`).
+                // A CODE-wide scan for every immediate encoding of 1035/1036/1037/1040/
+                // 1041/1044/1045 returns zero hits, and 1038/1039 hit only RTL constants
+                // (0x462A75 `push 0x40E` in an exception path, 0x40E021 `mov ecx,0x40F`
+                // in float digit clamping). The guild wire protocol this engine really
+                // uses is CM_GILD_* 4560-4588, all of which have live handlers
+                // (0x6DB5DE..0x6DB9AC) and live C# arms.
                 case Grobal2.CM_SPEEDHACKUSER:
                     M2Share.MainOutMessage("[Warning]: [使用加速外挂程序(客户端)] ");
                     break;
                 case Grobal2.CM_ADJUST_BONUS:
                     ClientAdjustBonus(ProcessMsg.nParam1, ProcessMsg.sMsg);
                     break;
-                case Grobal2.CM_GUILDALLY:
-                    ClientGuildAlly();
-                    break;
-                case Grobal2.CM_GUILDBREAKALLY:
-                    ClientGuildBreakAlly(ProcessMsg.sMsg);
-                    break;
                 case Grobal2.CM_TURN:
-                    if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam, ref dwDelayTime))
+                    // 0x6D9B76 `8A 40 0A mov al,[msg+0x0A]` / 0x6D9B79 `24 07 and al,7`
+                    // before sub_6BBC60; same masking gap as CM_SITDOWN below.
+                    if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam & 7, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
@@ -1488,6 +1488,7 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_FIREHIT:
                 case Grobal2.CM_SWORD_HIT:
+                case Grobal2.CM_3037:
                     // Native masks the wire direction to 3 bits before handing it
                     // to the shared attack handler sub_6EC078. Both dispatch arms
                     // do it, byte-identically:
@@ -1498,7 +1499,17 @@ namespace GameSvr
                     // Without the mask a forged packet can drive the direction to
                     // 0..255 and index past the 8-entry direction tables. Same
                     // defect class as the CM_RUN direction fix (MOVE-19).
-                    if (ClientHitXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)(ProcessMsg.wParam & 7), ProcessMsg.boLateDelivery, ref dwDelayTime))
+                    //
+                    // 3027's arm 0x6D9F4B differs from the shared arm in exactly one
+                    // instruction - 0x6D9F9B `mov dx,[msg+8]` (Tag) against 0x6D9EFF
+                    // `mov dx,[msg+4]` (Ident) - so for 3027 the client names the
+                    // action in Tag and sub_6EC078 range-checks that value instead.
+                    // UsrEngn carries it here in nParam3.
+                    if (ClientHitXY(
+                            ProcessMsg.wIdent == Grobal2.CM_3037
+                                ? ProcessMsg.nParam3
+                                : ProcessMsg.wIdent,
+                            ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)(ProcessMsg.wParam & 7), ProcessMsg.boLateDelivery, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
@@ -1555,7 +1566,13 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_SITDOWN:
-                    if (ClientSitDownHit(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam, ref dwDelayTime))
+                    // 0x6D9CAC `8A 40 0A mov al,[msg+0x0A]` / 0x6D9CAF `24 07 and al,7`
+                    // masks the direction before sub_6BBF9C, exactly like the hit family
+                    // at 0x6D9EF4 and CM_TURN at 0x6D9B79. The mask was only being applied
+                    // up in the UsrEngn mapping layer, so anything reaching this arm by
+                    // another route - the `default` forward, or a re-delivered delay
+                    // message - could still carry a 0..65535 direction.
+                    if (ClientSitDownHit(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam & 7, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
@@ -2726,7 +2743,6 @@ namespace GameSvr
 
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:
-                case Grobal2.CM_3037:
                 case Grobal2.CM_CHANGEPASSWORD:
                 case Grobal2.CM_CHECKTIME:
                     break;  // 客户端处理，服务端仅 ack

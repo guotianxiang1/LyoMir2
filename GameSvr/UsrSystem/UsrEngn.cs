@@ -2575,7 +2575,6 @@ namespace GameSvr
                 case Grobal2.CM_DROPITEM:
                 case Grobal2.CM_TAKEONITEM:
                 case Grobal2.CM_TAKEOFFITEM:
-                case Grobal2.CM_1005:
                 case Grobal2.CM_MERCHANTDLGSELECT:
                 case Grobal2.CM_MERCHANT_QUERY:
                 case Grobal2.CM_PILEUPITEM:
@@ -2595,10 +2594,6 @@ namespace GameSvr
                 case Grobal2.CM_USERSTORAGEITEM:
                 case Grobal2.CM_USERTAKEBACKSTORAGEITEM:
                 case Grobal2.CM_USERMAKEDRUGITEM:
-                case Grobal2.CM_GUILDADDMEMBER:
-                case Grobal2.CM_GUILDDELMEMBER:
-                case Grobal2.CM_GUILDUPDATENOTICE:
-                case Grobal2.CM_GUILDUPDATERANKINFO:
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series, DefMsg.Recog, DefMsg.Param, DefMsg.Tag,
                             sMsg, payload);
                     break;
@@ -2626,6 +2621,7 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_WIDEHIT:
                 case Grobal2.CM_FIREHIT:
+                case Grobal2.CM_3037:
                     // The shared native action handler at 0x6D9EAF takes X, Y and the
                     // direction from three separate header fields:
                     //   0x6D9EE9  0F B7 40 06  movzx eax, word [eax+6]   ; Param  -> Y
@@ -2639,15 +2635,24 @@ namespace GameSvr
                     // This used to read Y out of the high word of Recog and the
                     // direction out of Tag, which only worked because GameGate-CS
                     // repacked the header to suit; that repack is gone.
+                    //
+                    // CM_3037 (3027) has its own native arm at 0x6D9F4B which is
+                    // byte-identical to 0x6D9EAF apart from one instruction: where
+                    // 0x6D9EFF `66 8B 50 04 mov dx,[msg+4]` hands 0x6EC078 the Ident,
+                    // 0x6D9F9B `66 8B 50 08 mov dx,[msg+8]` hands it the Tag. Tag is
+                    // therefore the action selector for 3027 and has to survive the
+                    // hop into the player message queue.
                     if (M2Share.g_Config.boActionSendActionMsg)
                     {
                         PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
-                            DefMsg.Recog, DefMsg.Param, 0, "");
+                            DefMsg.Recog, DefMsg.Param,
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
                     }
                     else
                     {
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
-                            DefMsg.Recog, DefMsg.Param, 0, "");
+                            DefMsg.Recog, DefMsg.Param,
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
                     }
                     break;
                 case Grobal2.CM_SAY:

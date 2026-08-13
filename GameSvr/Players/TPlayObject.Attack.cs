@@ -173,15 +173,34 @@ namespace GameSvr
                             AttackDir(null, 7, nDir);
                             break;
                         case Grobal2.CM_CRSHIT:
-                            AttackDir(null, 8, nDir);
+                            // 3026 reaches sub_7707A8 with action code 1018
+                            // (0x6EC178[24] = 0x0A -> slot 0x6EC2B1 -> `mov cx,0x3FA`),
+                            // whose arm 0x77092A ends in `call 0x771BB8` — and 0x771BB8
+                            // is an empty stub: `55 8B EC 33 C0 5D C2 04 00`
+                            // (push ebp; mov ebp,esp; xor eax,eax; pop ebp; ret 4).
+                            // The only lasting effect is 0x7707E3
+                            // `88 86 54 01 00 00  mov [esi+0x154],al`, i.e. the facing
+                            // update ([+0x154] is m_btDirection: 0x771BE6 feeds it to
+                            // GetNextPosition alongside [+0x12C]/[+0x130] CurrX/CurrY).
+                            // No attack of any kind is performed.
+                            m_btDirection = nDir;
                             break;
-                        case Grobal2.CM_TWINHIT:
-                            AttackDir(null, 9, nDir);
-                            break;
-                        case Grobal2.CM_42HIT:
-                            AttackDir(null, 10, nDir);
-                            AttackDir(null, 11, nDir);
-                            break;
+                        // CM_TWINHIT (3028) has no arm on purpose: 0x6EC178[26] = 0x0B
+                        // selects jump-table slot 11 = 0x6EC2D7, which is the tail of
+                        // sub_6EC078 itself, so 3028 never even reaches sub_7707A8 and
+                        // does not update the facing either. It still runs the shared
+                        // position check, the SKILL_YEDO counter and the health/spell
+                        // tick block below, and still answers SM_ACT_GOOD.
+                        //
+                        // CM_42HIT (42) is gone from here as well. sub_6EC078 selects the
+                        // action with `0F B7 C7 movzx eax,di` / `05 46 F4 FF FF add
+                        // eax,-0xBBA` / `83 F8 21 cmp eax,0x21` / `0F 87 .. ja 0x6EC2C6`
+                        // at 0x6EC15A, so 42 underflows the 3002..3035 window and lands on
+                        // the default arm, which forwards 42 unchanged to sub_7707A8 -
+                        // where `05 18 FC FF FF add eax,-0x3E8` / `83 F8 21 cmp eax,0x21` /
+                        // `0F 87 AF 04 00 00 ja 0x770CC4` at 0x770803 rejects it again.
+                        // Native performs no swing for 42 by either route, and hit modes
+                        // 10/11 are not reachable from any client opcode.
                         case Grobal2.CM_SWORD_HIT:
                             if (!ReleaseSunSword(nDir))
                             {
