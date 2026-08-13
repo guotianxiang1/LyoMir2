@@ -200,8 +200,8 @@ try
     {
         ExpectDiagnostic(
             () => interpreter.ExecuteProcedure("NestedCall"),
-            directSource, directPath, "YS_GetG", "NestedCall",
-            "YS_GetG('nested-input'", "开关未开启（眼神特殊函数）");
+            directSource, directPath, "YSGetG", "NestedCall",
+            "YSGetG('nested-input'", "开关未开启（眼神特殊函数）");
     });
 
     Check("Pascal try/except receives one structured diagnostic", () =>
@@ -313,7 +313,7 @@ try
             "expression result for an unset key");
         interpreter.ExecuteProcedure("BareZeroArgument");
         Equal(82, interpreter.ExecuteProcedure("AliasRoundTrip").AsInt(),
-            "YS_SetG/YSGetG/YS_GetG aliases");
+            "YSSetG/YSGetG round trip");
         Equal(41, interpreter.ExecuteProcedure("NestedCall").AsInt(),
             "nested parameter evaluation");
     });
@@ -322,7 +322,7 @@ try
     {
         using var context = bridge.PushContext(player, null);
         Equal(46, interpreter.ExecuteProcedure("PlayerAliases").AsInt(),
-            "YS_GetFZhong/GetBagWeight aliases");
+            "YS_GetFZhong player-context call");
     });
 
     Check("enabled main and host-preprocessed include execute", () =>
@@ -578,7 +578,7 @@ static string BuildDirectSource(string keyPrefix) => $$"""
 
     function NestedCall: Integer;
     begin
-      Result := YSSetG('{{keyPrefix}}-nested-result', YS_GetG('nested-input'));
+      Result := YSSetG('{{keyPrefix}}-nested-result', YSGetG('nested-input'));
     end;
 
     function CatchDenied: string;
@@ -593,13 +593,13 @@ static string BuildDirectSource(string keyPrefix) => $$"""
 
     function AliasRoundTrip: Integer;
     begin
-      YS_SetG('nested-input', 41);
-      Result := YSGetG('nested-input') + YS_GetG('nested-input');
+      YSSetG('nested-input', 41);
+      Result := YSGetG('nested-input') + YSGetG('nested-input');
     end;
 
     function PlayerAliases: Integer;
     begin
-      Result := YS_GetFZhong(0) + GetBagWeight(1);
+      Result := YS_GetFZhong(0) + YS_GetFZhong(1);
     end;
 
     function ReadMainValue: Integer;
