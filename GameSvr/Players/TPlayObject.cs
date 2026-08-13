@@ -2074,7 +2074,9 @@ namespace GameSvr
         public bool CancelGroup()
         {
             var result = true;
-            const string sCanceGrop = "你的小组被解散了.";
+            // 战神 sub_7270F8 @0x727158 push 0x7271BC，AnsiString 前缀 dword=19，
+            // 正文「-你的小组被解散了。」（含全角句号）。旧 C# 用 ASCII 句号且缺前导 '-'。
+            const string sCanceGrop = "-你的小组被解散了。";
             if (m_GroupMembers.Count <= 1)
             {
                 SendGroupText(sCanceGrop);
