@@ -129,6 +129,11 @@ namespace GameSvr
                     cert = new QingLong();
                     break;
 
+                // race 179 TBaiHu : AtMonster —— 见 Monster/BaiHu.cs
+                case 179:
+                    cert = new BaiHu();
+                    break;
+
                 // race 236 TWorldCupPreMatchMon : AnimalObject —— 见 Monster/WorldCupPreMatchMon.cs
                 case 236:
                     cert = new WorldCupPreMatchMon();
