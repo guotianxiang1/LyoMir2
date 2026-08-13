@@ -50,6 +50,18 @@ namespace GameSvr
             foreach (var player in players)
             {
                 if (player == null) continue;
+                // TRADE-29: 关服 save-all 必须先 DealCancelA()，否则处于交易中的玩家会丢押金。
+                // 押金物在放物时已 m_ItemList.RemoveAt / m_DealItemList.Add（Operate.cs:1705-1707，
+                // 对齐战神放物 0x6C427F m_ItemList.Delete），只存在于 escrow 列表；SaveHumanRcd 只
+                // 序列化 m_ItemList，escrow 不入档，重登即丢。
+                // 原生契约：DealCancelA(sub_6B2C7C) 是每次玩家存档前的固定前置，全镜像仅 2 个调用点——
+                //   0x6B1C17 周期存盘（随后 0x6b6510 存档）、0x6518C8 登出清理——两处都在存档前取消交易。
+                //   DealCancelA→DealCancel(0x6C43C4)→GetBackDealItems(0x6c4114) 把押金倒序退回背包并裸退押金。
+                //   而析构 0x6AFB49-0x6AFB76 只是对残留 escrow 逐个 0x424d4c 取 + 0x404690 Free（不回退、丢物），
+                //   是最后兜底而非退物路径——所以退物必须发生在存档之前。
+                // C# 另外 3 条存档路径（UsrEngn.cs:1414/1533/1544）都遵守；唯独本处关服 save-all 漏掉，
+                // 恰是「异常退出丢物」窗口（关服时双方仍在交易）。补齐以对齐原生契约与其余三路径。
+                player.DealCancelA();
                 M2Share.UserEngine.SaveHumanRcd(player, 3);
             }
             foreach (var player in players)
