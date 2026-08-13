@@ -1,5 +1,6 @@
 using SystemModule;
 using GameSvr.PasEngine;
+using GameSvr.Plugins;
 
 namespace GameSvr
 {
@@ -2394,7 +2395,21 @@ namespace GameSvr
                     SendAdjustBonus();
                     break;
                 case Grobal2.RM_10401:
-                    if (ProcessMsg.Payload is TSlaveInfo slaveInfo)
+                    // 眼神「下线宝宝死亡」就打在这一条分支的守卫上：
+                    //   0x006B5B9D  83 7B 04 00        cmp dword [ebx+4], 0
+                    //   0x006B5BA1  0F 84 A5 06 00 00  je  0x006B624C
+                    //   0x006B5BA7  8B 53 04           mov edx,[ebx+4]
+                    //   0x006B5BAD  E8 12 5B 01 00     call 0x006CB6C4   ← 恢复从宠
+                    // 开关打开时 0x0076...→ 0x006B5BA1 被换成
+                    //   E9 A6 06 00 00 90  jmp 0x006B624C + nop
+                    // （安装点 0x100AB10B，还原支 0x100AB19B 写回 0F 84 A5 06 00 00，
+                    //   门控 0x100AB0AA cmp [edi+0xBF0],0 / je 0x100AB13D），
+                    // 也就是这条分支恒不执行、存档里的从宠不再被重建。
+                    // 0x006CB6C4 全镜像只有 0x006B5BAD 一个调用者，与 C# 侧
+                    // ChangeServerMakeSlave 只被这里调用一一对应；两者形状一致
+                    //（0x006CB6E7 cmp byte[eax+0x72],2 → 1 : 5 == m_btJob==jTaos → 1 : 5）。
+                    if (ProcessMsg.Payload is TSlaveInfo slaveInfo &&
+                        !new YanshenApi(this, null, M2Share.PluginManager).IsPetDieOffline())
                     {
                         ChangeServerMakeSlave(slaveInfo);
                     }
