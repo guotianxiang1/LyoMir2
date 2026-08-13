@@ -893,7 +893,8 @@ namespace GameSvr
                 }
             }
             LoadList = null;
-            SendDefMessage(Grobal2.SM_SENDNOTICE, 2000, 0, 0, 0, sNoticeMsg.Replace("/r/n/r/n ", ""));
+            // 0x6B2CFE `33 C9 xor ecx,ecx` - nRecog is zero, not a duration.
+            SendDefMessage(Grobal2.SM_SENDNOTICE, 0, 0, 0, 0, sNoticeMsg.Replace("/r/n/r/n ", ""));
         }
 
         public void RunNotice()
