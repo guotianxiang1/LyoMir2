@@ -195,51 +195,7 @@ namespace GameSvr
         
         
         
-        /// <summary>
-        /// 原生 <c>TEnvironment.AddToMap</c> = <c>sub_7776EC</c>（虚方法，槽位
-        /// <c>VMT+0x28</c>；<c>TEnvironment</c> VMT 基址 0x77477C，
-        /// <c>[0x7747A4] = 0x007776EC</c>）。栈参只有两个（<c>0x777BC0 C2 08 00 ret 8</c>）：
-        /// <c>[ebp+0xC]</c> = 待登记对象、<c>[ebp+8]</c> = <b>存活秒数</b>
-        /// （<c>0x77770C 8B 5D 08 mov ebx,[ebp+8]</c>）。原生没有独立的 btType 入参，
-        /// 节点类型直接取自对象自己的类型字节 <c>0x777A82 8A 40 04 mov al,[AObject+4]</c>；
-        /// 移植期把它提成了显式参数，此处沿用。
-        ///
-        /// 存活秒数 → 时间戳（<c>0x777744</c>–<c>0x777775</c>）：
-        /// <code>
-        /// 777744  85 DB                 test ebx,ebx
-        /// 777746  7E 25                 jle 0x77776D               ; sec &lt;= 0
-        /// 777748  E8 F3 0B C9 FF        call 0x408340              ; GetTickCount
-        /// 77774D  69 D3 E8 03 00 00     imul edx,ebx,0x3E8         ; sec * 1000
-        /// 777753  81 EA C0 27 09 00     sub  edx,0x927C0           ; − 600000
-        /// 777759  03 C2                 add  eax,edx
-        /// 77775B  8B D8                 mov  ebx,eax
-        /// 77775D  85 DB / 7E 05         test ebx,ebx / jle 0x777766
-        /// 777761  89 5D D8              [ebp-0x28] := ebx
-        /// 777766  33 C0 / 89 45 D8      否则 [ebp-0x28] := 0
-        /// 77776D  E8 CE 0B C9 FF        call 0x408340              ; sec &lt;= 0 分支
-        /// 777772  89 45 D8              [ebp-0x28] := now
-        /// </code>
-        /// 即倒填时间戳：0x927C0 = 600000 正是地面物的过期阈值
-        /// （<c>0x77A3FD 81 FA C0 27 09 00 cmp edx,0x927C0</c> / <c>0x77A403 72 35 jb</c>，
-        /// 过期则 <c>0x77A422 call 0x404690</c> 释放对象 + <c>0x77A42E call 0x402FD0</c>
-        /// 释放 16 字节节点），所以「存活 sec 秒」= 让节点一出生就只剩 sec 秒寿命。
-        ///
-        /// 调用点普查（<c>call [reg+0x28]</c> 全镜像扫描 + Delphi 虚调用序言过滤）：
-        /// 除 <c>0x612B65</c>（<c>sub_61268C</c>，TArenaRoom 单元的阵型刷怪，
-        /// <c>0x612B4F 8B 43 18 mov eax,[ebx+0x18] / 0x612B52 50 push eax</c>）之外，
-        /// 全部站点都是 <c>6A 00 push 0</c>：0x64F7CC / 0x68F012 / 0x6BD285 / 0x6BD568 /
-        /// 0x6BD622 / 0x717388 / 0x7173AD / 0x7174AB / 0x717B2A / 0x719BE7 / 0x71F0E2 /
-        /// 0x765134 / 0x765C0A / 0x768934 / 0x768B1F / 0x768EC7 / 0x768F41。
-        /// 唯一的直接 <c>E8</c> 调用 <c>0x5FD693</c> 是 <c>TDynEnvir.AddToMap</c> 的
-        /// <c>inherited</c>，原样转发自己的入参。故本重载（不带秒数）= 原生 <c>push 0</c>。
-        /// </summary>
         public object AddToMap(int nX, int nY, CellType btType, object pRemoveObject)
-        {
-            return AddToMap(nX, nY, btType, pRemoveObject, 0);
-        }
-
-        public object AddToMap(int nX, int nY, CellType btType, object pRemoveObject,
-            int nAliveSeconds)
         {
             object result = null;
             MapCellinfo MapCellInfo;
@@ -251,14 +207,7 @@ namespace GameSvr
             {
                 var bo1E = false;
                 var mapCell = false;
-                var dwAddTime = GetNativeAddToMapStamp(nAliveSeconds);
                 MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
-                if (mapCell && ScanNativeAddToMapChain(MapCellInfo, pRemoveObject, dwAddTime))
-                {
-                    // 0x7778A9 / 0x7778D2 命中即刷时间戳；0x7778BC / 0x7778E5 拆两层 SEH 后
-                    // jmp 0x777B95 直接走返回路径，[ebp-0x10] 从未被赋值 ⇒ 返回 nil。
-                    return null;
-                }
                 if (mapCell && MapCellInfo.Valid)
                 {
                     if (MapCellInfo.ObjList == null)
@@ -307,9 +256,7 @@ namespace GameSvr
                         {
                             CellType = btType,
                             CellObj = pRemoveObject,
-                            // 0x777A96 8B 55 D8 / 0x777A99 89 50 08 —— 插入用的也是同一个
-                            // [ebp-0x28]，不是重新取一次 GetTickCount。
-                            dwAddTime = dwAddTime
+                            dwAddTime = HUtil32.GetTickCount()
                         };
                         MapCellInfo.ObjList.Add(OSObject);
                         result = pRemoveObject;
@@ -336,107 +283,6 @@ namespace GameSvr
                 M2Share.ErrorMessage(sExceptionMsg + " " + ex.Message);
             }
             return result;
-        }
-
-        /// <summary>
-        /// <c>sub_7776EC</c> 第 3 步（0x777744–0x777775）算出的 <c>[ebp-0x28]</c>，
-        /// 后面插入节点（0x777A96）与去重命中刷新（0x7778A9 / 0x7778D2）用的都是它。
-        /// 两处 <c>jle</c> 都是有符号比较，故此处也用有符号 <c>&gt; 0</c>。
-        /// </summary>
-        private static int GetNativeAddToMapStamp(int nAliveSeconds)
-        {
-            if (nAliveSeconds > 0)
-            {
-                // 0x77774D imul edx,ebx,0x3E8 / 0x777753 sub edx,0x927C0 / 0x777759 add eax,edx
-                var stamp = HUtil32.GetTickCount() + nAliveSeconds * 1000 - 600000;
-                return stamp > 0 ? stamp : 0;   // 0x77775D test ebx,ebx / jle -> 0x777766 xor eax,eax
-            }
-            return HUtil32.GetTickCount();      // 0x77776D
-        }
-
-        /// <summary>
-        /// <c>sub_7776EC</c> 的节点循环（0x7777B9–0x7778FE），移植期漏掉的一整段。
-        /// 它做两件事，<b>都在属性闸（0x777967）与插入路径之前</b>：
-        ///
-        /// <para>① 清道夫（族 A，与 <c>CanWalk</c> / <c>GetMovObjCount</c> /
-        /// <c>CreatureMoveTo</c> 逐字节同形）：</para>
-        /// <code>
-        /// 7777C3  8B 45 E8 / 8B 40 0C   next := Curr^.Next        ; 先存 next
-        /// 7777CC  33 DB                 bl := 0                   ; 「本轮已摘链」
-        /// 7777CE  8B 45 E8 / 80 38 01   cmp byte [Curr],1         ; CellType = 战神 OS_MOVINGOBJECT
-        /// 7777D4  0F 85 E7 00 00 00     jne 0x7778C1              ; 非 actor -> 直接去重判定
-        /// 7777DA  8B 45 E8 / 8B 70 04   esi := Curr^.POject
-        /// 7777E0  85 F6 / 0F 84 02 01.. je  0x7778EA              ; POject = nil -> 只跳过，不摘链
-        /// 7777E8  8B C6
-        /// 7777EA  E8 75 E5 FE FF        call 0x765D64             ; ★ 有效性谓词
-        /// 7777EF  84 C0
-        /// 7777F1  0F 85 A1 00 00 00     jne 0x777898              ; 有效 -> 去重判定
-        /// 7777F7-777806                 摘链：prev^.Next := next / cell^.head := next
-        /// 777811  B3 01                 bl := 1（抑制 prev 前进）
-        /// 777813  68 00 7C 77 00        push "[Exception]: TEnvironment.AddToMap Pt.POject.CName = 空 Pt = "
-        /// 777891  E8 DE 66 02 00        call 0x79DF74             ; 记异常
-        /// 777896  EB 52                 jmp 0x7778EA              ; continue，不是 break
-        /// 7778EA  84 DB / 75 06         摘过链 -> prev 不前进
-        /// </code>
-        ///
-        /// <para>② 去重 / 续期（本函数独有，其余族 A 站点没有）：</para>
-        /// <code>
-        /// 777898  8B 45 E8 / 8B 40 04   eax := Curr^.POject       ; actor 臂
-        /// 77789E  3B 45 0C              cmp eax,[ebp+0xC]         ; 正是要加的这个对象？
-        /// 7778A1  75 47                 jne 0x7778EA              ; 不是 -> 下一节点
-        /// 7778A3  8B 45 E8 / 8B 55 D8
-        /// 7778A9  89 50 08              mov [Curr+8],edx          ; 只刷 dwAddTime
-        /// 7778AC-7778BC                 拆两层 SEH 后 jmp 0x777B95 —— 直接返回，不插入
-        /// 7778C1  8B 45 E8 / 8B 40 04   非 actor 臂（0x7778C7 cmp / 0x7778CA jne 0x7778EA /
-        /// 7778D2  89 50 08              0x7778D2 mov [Curr+8],edx / 0x7778E5 jmp 0x777B95）——同一件事
-        /// </code>
-        ///
-        /// 两条臂的去重都比较<b>节点载荷</b>与入参对象是否同一实例，故 C# 用
-        /// <see cref="object.ReferenceEquals"/>（全部载荷类型 <c>MapItem</c> /
-        /// <c>TDoorInfo</c> / <c>Event</c> / <c>TBaseObject</c> 都是 class，无装箱）。
-        ///
-        /// 命中返回 true，调用方立即返回 <c>null</c>（原生 <c>[ebp-0x10]</c> 在这条路径上
-        /// 从未被赋值，<c>0x777BB7 8B 45 F0</c> 取到的就是 0x77771F 写进去的 0）。
-        ///
-        /// 摘链后<b>不</b>调 <see cref="ReleaseCellObjectList"/>：原生这里只改链指针、
-        /// 不释放格子；而且本函数后面还要往同一张表里插入，提前把表从
-        /// <c>MapCellObjectLists</c> 上摘下来会让插入落进一张已经无人引用的表。
-        ///
-        /// 热路径约束：单趟 O(链长)、零分配（无 LINQ / 无闭包 / 无装箱），与原生同量级。
-        /// </summary>
-        private static bool ScanNativeAddToMapChain(MapCellinfo mapCellInfo,
-            object pRemoveObject, int dwAddTime)
-        {
-            IList<CellObject> objList = mapCellInfo.ObjList;
-            if (objList == null)
-            {
-                return false;   // 0x7777B9 cmp [ebp-0x18],0 / je 0x777904 —— 空链
-            }
-            var i = 0;
-            while (i < objList.Count)
-            {
-                CellObject OSObject = objList[i];
-                if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
-                {
-                    if (OSObject.CellObj == null)
-                    {
-                        i++;    // 0x7777E0 test esi,esi / je 0x7778EA —— 跳过但不摘链
-                        continue;
-                    }
-                    if (TBaseObject.IsNativeStaleCellActor(OSObject.CellObj))
-                    {
-                        objList.RemoveAt(i);   // 0x7777F7–0x777806 摘链，0x777811 bl := 1
-                        continue;              // 0x777896 continue，prev 不前进
-                    }
-                }
-                if (ReferenceEquals(OSObject.CellObj, pRemoveObject))
-                {
-                    OSObject.dwAddTime = dwAddTime;
-                    return true;
-                }
-                i++;
-            }
-            return false;
         }
 
         public void AddDoorToMap()
