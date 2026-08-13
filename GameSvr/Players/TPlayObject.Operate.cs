@@ -1780,34 +1780,41 @@ namespace GameSvr
                 DealCancel();
                 return;
             }
-            // TRADE-22: Authentication verification script (战神 sub_6C4580 Phase C authority gates)
-            // Self gate @0x6C4650: call sub_617A38(cfg, self, cl=2) tests bit 2 in obj+0x193C bitset
-            // Partner gate @0x6C4693: call sub_617A38(cfg, partner, cl=2) on partner's bitset
-            // On failure with escrow: runs @PlayerActiveValidate script (@0x69B254) then DealCancel
-            // When boAuthOpen=false (default): CheckNativeAuthentication returns true (bypassed)
-            if (M2Share.g_Config.boAuthOpen)
-            {
-                // Self authority gate @0x6C4650
-                bool selfAuthenticated = CheckNativeAuthentication(1, 2) || CheckNativeAuthentication(2, 2);
-                if (!selfAuthenticated && (m_DealItemList.Count > 0 || m_nDealGolds > 0))
-                {
-                    M2Share.g_FunctionNPC?.GotoLable(this, "@PlayerActiveValidate", false);
-                    DealCancel();
-                    return;
-                }
-                // Partner authority gate @0x6C4693
-                var partner = m_DealCreat as TPlayObject;
-                bool partnerAuthenticated = partner != null &&
-                    (partner.CheckNativeAuthentication(1, 2) || partner.CheckNativeAuthentication(2, 2));
-                if (!partnerAuthenticated && (m_DealCreat.m_DealItemList.Count > 0 || m_DealCreat.m_nDealGolds > 0))
-                {
-                    M2Share.g_FunctionNPC?.GotoLable(partner, "@PlayerActiveValidate", false);
-                    DealCancel();
-                    return;
-                }
-            }
+            // TRADE-21: 对端确认门必须排在权限门之前。
+            //   0x6C463D  8B 83 AC 0B 00 00     mov eax, [ebx+0xBAC]
+            //   0x6C4643  80 B8 84 06 00 00 00  cmp byte [eax+0x684], 0   ; partner.m_boDealOK
+            //   0x6C464A  0F 84 71 03 00 00     je  0x6C49C1              ; 未确认 → 两条消息、不取消、返回
+            //   0x6C4650  权限门（自己）
+            //   0x6C4693  权限门（对端）
+            //   0x6C46E4  phase D 四道容量检查
             if (m_DealCreat.m_boDealOK)
             {
+                // TRADE-22: Authentication verification script (战神 sub_6C4580 Phase C authority gates)
+                // Self gate @0x6C4650: call sub_617A38(cfg, self, cl=2) tests bit 2 in obj+0x193C bitset
+                // Partner gate @0x6C4693: call sub_617A38(cfg, partner, cl=2) on partner's bitset
+                // On failure with escrow: runs @PlayerActiveValidate script (@0x69B254) then DealCancel
+                // When boAuthOpen=false (default): CheckNativeAuthentication returns true (bypassed)
+                if (M2Share.g_Config.boAuthOpen)
+                {
+                    // Self authority gate @0x6C4650
+                    bool selfAuthenticated = CheckNativeAuthentication(1, 2) || CheckNativeAuthentication(2, 2);
+                    if (!selfAuthenticated && (m_DealItemList.Count > 0 || m_nDealGolds > 0))
+                    {
+                        M2Share.g_FunctionNPC?.GotoLable(this, "@PlayerActiveValidate", false);
+                        DealCancel();
+                        return;
+                    }
+                    // Partner authority gate @0x6C4693
+                    var partner = m_DealCreat as TPlayObject;
+                    bool partnerAuthenticated = partner != null &&
+                        (partner.CheckNativeAuthentication(1, 2) || partner.CheckNativeAuthentication(2, 2));
+                    if (!partnerAuthenticated && (m_DealCreat.m_DealItemList.Count > 0 || m_DealCreat.m_nDealGolds > 0))
+                    {
+                        M2Share.g_FunctionNPC?.GotoLable(partner, "@PlayerActiveValidate", false);
+                        DealCancel();
+                        return;
+                    }
+                }
                 // 战神 sub_6C4580 四道检查：
                 //   @0x6C46E4-0x6C46FF: remote.CanAcceptItems(self.DealItemList.Count) → jmp 0x6C49B8
                 //   @0x6C4705-0x6C471A: remote.CanAcceptGold(self.m_nDealGolds)       → jmp 0x6C49B8
