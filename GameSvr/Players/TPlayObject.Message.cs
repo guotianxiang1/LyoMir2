@@ -1004,6 +1004,9 @@ namespace GameSvr
                 case Grobal2.CM_QUERYUSERSTATE:
                     ClientQueryUserState(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3);
                     break;
+                case Grobal2.CM_205:
+                    ClientNativeCheatSelfReport(ProcessMsg.wParam, ProcessMsg.nParam2);
+                    break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
                 //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051

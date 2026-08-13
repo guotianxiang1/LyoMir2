@@ -157,6 +157,15 @@ namespace SystemModule
         public const int CM_QUERYUSERSTATE = 82;
         public const int CM_QUERYUSERNAME = 80;
         public const int CM_QUERYBAGITEMS = 81;
+        /// <summary>
+        /// Native handler 0x6D8CA2 (dispatch arm <c>0x6D80DB</c>). The client's own
+        /// cheat self-report: header gate is <c>Series == 0xFF</c>
+        /// (<c>0x6D8CA5 66 81 78 0A FF 00 cmp word[msg+0xA],0xFF / 0x6D8CAB jne default</c>)
+        /// plus <c>Param &gt; 0</c> unsigned
+        /// (<c>0x6D8CB4 66 83 78 06 00 / 0x6D8CB9 jbe default</c>).
+        /// 战神 has no symbolic name for it, so it keeps the numeric form.
+        /// </summary>
+        public const int CM_205 = 205;
         public const int CM_QUERYCHR = 100;
         public const int CM_NEWCHR = 101;
         public const int CM_DELCHR = 102;
