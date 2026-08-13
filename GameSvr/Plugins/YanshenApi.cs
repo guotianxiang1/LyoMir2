@@ -3756,11 +3756,34 @@ namespace GameSvr.Plugins
             return _player?.m_PEnvir?.sMapName?.Length == 15;
         }
 
-        /// <summary>禁止长度为 15 的地图内切换宝宝到休息状态。</summary>
+        /// <summary>
+        /// 禁止在地图名满 15 字的地图里切换宝宝休息状态。
+        ///
+        /// 眼神在宿主 <c>0x00623A73</c>（原字节 <c>80 B0 C7 04 00 00 01</c>
+        /// = <c>xor byte [eax+0x4C7],1</c>，即休息标志的翻转）装 trampoline，
+        /// 续跑点 <c>0x00623A7A</c>，安装点 <c>0x100AABB6 call 0x10032FD0</c>，
+        /// 门控 <c>0x100AAB35 cmp [edi+0x948],0 / je</c>。
+        /// 桩体模板存在 .rdata，每个 dword 存一个码字节
+        /// （<c>0x102D1700 / 0x102D2940 / 0x102D33B0 / 0x102D16C0</c> 各 4 个 +
+        /// <c>0x100AAB6C mov dword [ebp-0x4A4],0xE9</c>），拼出 17 字节：
+        /// <code>
+        ///   80 B8 15 01 00 00 0F   cmp byte [eax+0x115], 0x0F
+        ///   74 07                  je  skip
+        ///   80 B0 C7 04 00 00 01   xor byte [eax+0x4C7], 1     ← 原指令
+        ///   E9 &lt;rel32&gt;             jmp 0x00623A7A
+        /// </code>
+        /// <c>[obj+0x115]</c> 是 <c>m_sMapName: string[15]</c>（Delphi ShortString，
+        /// 长度字节就在 +0x115）：<c>0x006AFD1E lea eax,[ebx+0x115]</c> /
+        /// <c>0x006AFD27 mov cl,0x0F</c> / <c>0x006AFD29 call 0x004039E4</c> 之后
+        /// 紧接着写 <c>[ebx+0x12C]=CurrX</c>、<c>[ebx+0x130]=CurrY</c>。
+        ///
+        /// 因为赋值时按 <c>cl = 15</c> 截断，长度字节等于 15 的充要条件是
+        /// **原地图名长度 &gt;= 15**，不是恰好等于 15。
+        /// </summary>
         public bool IsPetRestBlocked()
         {
             if (!Enabled("禁止宝宝休息")) return false;
-            return _player?.m_PEnvir?.sMapName?.Length == 15;
+            return _player?.m_PEnvir?.sMapName?.Length >= 15;
         }
 
         /// <summary>限制摆摊区域检查 (返回true=允许摆摊)</summary>
