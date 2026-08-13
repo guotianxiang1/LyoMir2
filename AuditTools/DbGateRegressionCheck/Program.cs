@@ -2069,19 +2069,35 @@ static Task TestDatabase(string iniPath)
                     "selected-human ScriptData bytes " + name);
             if (loaded.NativeScriptData != null)
             {
-                const int heroStateOffset = 0x52;
-                Check(loaded.NativeScriptData.Length > heroStateOffset,
-                    "native ScriptData contains hero state " + name);
-                var expectedState = (byte)(loaded.NativeScriptData[heroStateOffset] ^ 0x03);
-                loaded.NativeScriptData[heroStateOffset] = expectedState;
+                // This probe used to poke ScriptData file-offset 0x52, calling it
+                // a "hero state byte". Measured against the 31 real records the
+                // original Delphi DBServer wrote (2026-08-13): section 0 starts at
+                // file offset 4 and its payload at 11, and DecodeKeyValues proves
+                // that payload is a strict array of 8-byte (int32 key, int32 value)
+                // records. 0x52 = 82, so 82-11 = 71 = record 8, byte 7, i.e. the
+                // MOST-SIGNIFICANT BYTE OF VALUE for key 1009 - not a state byte.
+                // Every record has it as 0. Poking 0x03 there means "set script
+                // variable 1009 to 0x03000000", which the encoder legitimately
+                // canonicalises away when it rebuilds section 0 from ScriptV, so
+                // the old assertion could only ever fail. There is no hero-state
+                // byte at a fixed ScriptData offset; hero state lives in the
+                // structured sections. Assert what the codec actually contracts:
+                // the ScriptV key/value set survives an encode/decode round trip.
+                var probeKey = loaded.Data.ScriptV != null && loaded.Data.ScriptV.Count > 0
+                    ? loaded.Data.ScriptV.Keys.First()
+                    : -1;
                 Check(NativeHumanDataCodec.TryEncode(loaded,
                         out var stateData, out var stateScript, out var stateError),
-                    "encode hero state " + name + ": " + stateError);
+                    "encode ScriptV round trip " + name + ": " + stateError);
                 Check(NativeHumanDataCodec.TryDecode(stateData, stateScript,
                         out var stateRoundTrip, out stateError),
-                    "decode hero state " + name + ": " + stateError);
-                Equal(expectedState, stateRoundTrip.NativeScriptData[heroStateOffset],
-                    "hero state byte roundtrip " + name);
+                    "decode ScriptV round trip " + name + ": " + stateError);
+                if (probeKey != -1)
+                    Equal(loaded.Data.ScriptV[probeKey],
+                        stateRoundTrip.Data.ScriptV[probeKey],
+                        "ScriptV value preserved for key " + probeKey + " " + name);
+                Check(stateRoundTrip.NativeScriptData.SequenceEqual(loaded.NativeScriptData),
+                    "ScriptData bytes preserved across round trip " + name);
             }
             loadedCount++;
         }
