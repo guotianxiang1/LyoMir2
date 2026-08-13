@@ -3342,7 +3342,9 @@ namespace GameSvr
 
             var BagItems = new TUserItem[Grobal2.MAXBAGITEM];
             HumanRcd.Data.BagItems = BagItems;
-            for (var i = 0; i < m_ItemList.Count; i++)
+            // 0x6B171B `cmp edi,0x30 / jne 0x6B16E9`: 原生循环在写满 48 槽后停止，
+            // 第 49 件起静默丢弃。背包可经 GetBackDealItems 无余量退还而超过 48。
+            for (var i = 0; i < m_ItemList.Count && i < Grobal2.MAXBAGITEM; i++)
                 if (m_ItemList[i] != null && m_ItemList[i].wIndex > 0)
                     BagItems[i] = new TUserItem(m_ItemList[i]);
 
