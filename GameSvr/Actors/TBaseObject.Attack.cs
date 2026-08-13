@@ -350,19 +350,32 @@ namespace GameSvr
             return result;
         }
 
+        // Native _Attack = sub_769F90, half-moon branch @0x0076A11D-0x0076A16D.
+        //   0x0076A136  E8 31 E8 D5 FF     call sub_4C896C   -> effective level
+        //   0x0076A13B  3C 03              cmp al,3
+        //   0x0076A13D  76 05              jbe 0x0076A144
+        //   0x0076A13F  8B 5D F8           mov ebx,[ebp-8]   (level > 3: unscaled)
+        //   0x0076A154  83 C0 02           add eax,2
+        //   0x0076A160  D8 35 C8 A5 76 00  fdiv dword ptr [0x76A5C8]
+        // [0x76A5C8] = 00 00 70 41 = float32 15.0, a literal, not btTrainLv + 10.
         internal static int CalculateHalfMoonWideAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
+            int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
             if (yanshenApi != null && yanshenApi.IsHalfMoon())
             {
                 var divisor = yanshenApi.HalfMoonB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + skillLevel) / divisor);
+                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + effectiveLevel) / divisor);
                 }
             }
 
-            return HUtil32.Round((double)nPower / (trainLevel + 10) * (skillLevel + 2));
+            if (effectiveLevel > 3)
+            {
+                return nPower;
+            }
+            return HUtil32.Round((double)nPower / 15.0 * (effectiveLevel + 2));
         }
 
         // Native _Attack = sub_769F90, stab branch @0x0076A096-0x0076A0F8. That is
