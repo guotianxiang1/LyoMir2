@@ -117,14 +117,17 @@ namespace GameSvr.Plugins.BigBag
         public byte[] BtValue = new byte[BtValueSize];
 
         /// <summary>
-        /// <c>0x18</c> — four bytes of unknown purpose, zero in all 1399 sampled
-        /// records. Carried through verbatim.
+        /// <c>0x18</c> — four bytes, zero in all 1399 sampled records. Unpacked
+        /// <c>.text</c> has no write to record+0x18 in the bags range; new records
+        /// leave it 0. Carried through so an unexpected non-zero would survive.
         /// </summary>
         public byte[] Reserved18 = new byte[Reserved18Size];
 
         /// <summary>
-        /// <c>0x1C</c> — acquisition date as a Delphi <c>TDate</c>, i.e. days since
-        /// <see cref="DelphiDateEpoch"/>. Zero means the record carries no date.
+        /// <c>0x1C</c> — acquisition date as days since <see cref="DelphiDateEpoch"/>.
+        /// Dump has 0 hits for <c>COleDateTime</c> / <c>SystemTimeToVariantTime</c> /
+        /// 25569 / 109205, so the epoch is the Delphi TDate / OLE DATE convention,
+        /// not a conversion site. Zero means the record carries no date.
         /// </summary>
         public ushort DateDays;
 
@@ -142,9 +145,10 @@ namespace GameSvr.Plugins.BigBag
         public byte[] MapTitleBytes = new byte[MapTitleSize];
 
         /// <summary>
-        /// <c>0x2C</c> — unidentified 32-bit value. It is constant per (file, map) pair
-        /// across the whole sample set but its meaning is unknown, so it is carried
-        /// through verbatim rather than recomputed.
+        /// <c>0x2C</c> — unidentified 32-bit value. Sampled values are 16-byte
+        /// aligned and constant per (file, map), 0 when the record has no map.
+        /// Unpacked <c>.text</c> has no write-site; new records leave it 0 and
+        /// loaded records must keep the original bits.
         /// </summary>
         public uint Dword2C;
 
@@ -160,15 +164,16 @@ namespace GameSvr.Plugins.BigBag
         public byte[] SourceNameBytes = new byte[SourceNameSize];
 
         /// <summary>
-        /// <c>0x38</c> — the four-byte hole that interrupts the source name. Zero in all
-        /// 1399 sampled records; its cause is unknown, so it is carried through verbatim.
+        /// <c>0x38</c> — four-byte hole in the source name. Zero in all 1399
+        /// samples; unpacked <c>.text</c> has no write to record+0x38. New records
+        /// leave it 0. Carried through verbatim.
         /// </summary>
         public byte[] Hole38 = new byte[Hole38Size];
 
         /// <summary>
-        /// <c>0x43</c> — byte length of the map's <b>code</b> (mapinfo column 1, e.g.
-        /// <c>D717~1</c>), not of the display name. The code itself is never stored, only
-        /// its length, so a writer needs the map code and not just the title.
+        /// <c>0x43</c> — GBK byte length of <c>Envirnoment.sMapName</c> (mapinfo
+        /// column 1, e.g. <c>D717~1</c>), not of the display name at <c>0x20</c>.
+        /// 21/21 production maps match. The code string itself is never stored.
         /// </summary>
         public byte MapCodeLength;
 
@@ -263,6 +268,36 @@ namespace GameSvr.Plugins.BigBag
             if (!TryWriteFixedBlock(value, CharNameBytes, CharNameSize, "character name", out var length, out error))
                 return false;
             CharNameLength = (byte)length;
+            return true;
+        }
+
+        /// <summary>
+        /// Store the GBK byte length of mapinfo column 1 (<c>Envirnoment.sMapName</c>).
+        /// Passing the display name (<c>sMapDesc</c>) produces the wrong <c>0x43</c>
+        /// (沙巴克藏宝阁 is 7 as <c>F002~01</c>, 12 as the title).
+        /// </summary>
+        public bool TrySetMapCodeLengthFromMapCode(string mapCode, out string error)
+        {
+            byte[] bytes;
+            try
+            {
+                bytes = Gbk.GetBytes(mapCode ?? string.Empty);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                error = $"extra-bag map code is not representable in GBK: {ex.Message}";
+                return false;
+            }
+
+            if (bytes.Length > byte.MaxValue)
+            {
+                error = $"extra-bag map code is {bytes.Length} GBK bytes, length field is one byte";
+                return false;
+            }
+
+            MapCodeLength = (byte)bytes.Length;
+            ApplyMapCodeLengthCopyRule();
+            error = null;
             return true;
         }
 
