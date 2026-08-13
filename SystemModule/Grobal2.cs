@@ -1322,7 +1322,7 @@ namespace SystemModule
         public const int SM_PLAYER_AUTHEN = 4636;
 
         // === 元宝寄售 (YB consignment) list queries ===
-        // Jump table 0x6D8315 entries 52/53/56/57 (base ident 1200, 0x6D82FF `add eax,-1200`).
+        // Jump table 0x6D8315 entries 52/53/56/57 (base ident 1200, 0x6D8300 `add eax,-1200`).
         // Each arm is `mov eax,[ebp-4] / call <thunk>`; the thunk takes self+0x106 (the char
         // name) and calls one method on the manager at [[0x7D6ABC]]. No packet field is read.
         //   1252 0x6DA685 -> 0x6E7E3C -> 0x632A14   1253 0x6DA692 -> 0x6E7E90 -> 0x632E7C

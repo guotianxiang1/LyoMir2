@@ -10,7 +10,7 @@ namespace GameSvr.Services
     /// 1256 / 1257. These are the only four members of the whole 62-item BLOCKED backlog that
     /// carry real production traffic (64-96 hits each in the live gate counters).
     ///
-    /// Dispatch is a jump table: 0x6D82FF `05 50 FB FF FF add eax,-1200` / 0x6D8305
+    /// Dispatch is a jump table: 0x6D8300 `05 50 FB FF FF add eax,-1200` / 0x6D8305
     /// `83 F8 3A cmp eax,0x3A` / 0x6D830E `FF 24 85 15 83 6D 00 jmp [eax*4+0x6D8315]`, so table
     /// index 52/53/56/57 are idents 1252/1253/1256/1257. All four arms are two instructions:
     ///   0x6DA685  8B 45 FC / E8 AF D7 00 00   mov eax,[ebp-4] / call 0x6E7E3C     ; 1252
