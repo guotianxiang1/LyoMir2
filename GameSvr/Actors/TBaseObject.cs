@@ -3040,32 +3040,24 @@ namespace GameSvr
             {
                 nDura = 0;
                 m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
-                // 原版 slot 1 (sub_73E804) 到此为止：0x73E850 mov word [ebx+0x26],0
-                // 全函数无 0x75F27C(清槽)/0x404690(释放) ⇒ 武器留在身上，0 耐久。
-                // 下面的销毁分支是【非原版行为】，仅在运营方显式开启时执行。
-                if (M2Share.g_Config.boDeleteWeaponOnZeroDura && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                {
-                    var PlayObject = this as TPlayObject;
-                    PlayObject.SendDelItems(m_UseItems[Grobal2.U_WEAPON]);
-                    var StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_WEAPON].wIndex);
-                    if (StdItem.NeedIdentify == 1)
-                    {
-                        M2Share.AddGameDataLog('3' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[Grobal2.U_WEAPON].MakeIndex + "\t" + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
-                    }
-                    // 发包必须先于清空 wIndex：原先的顺序在 wIndex=0 之后才读
-                    // m_UseItems[U_WEAPON].DuraMax，属 use-after-clear。
-                    SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, nDura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
-                    m_UseItems[Grobal2.U_WEAPON].wIndex = 0;
-                }
-                else
-                {
-                    SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, nDura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
-                }
+                // 原版零耐久分支 0x73E850..0x73E88A 逐条：
+                //   0x73E850  66 C7 43 26 00 00   mov word [ebx+0x26],0   ; Dura = 0
+                //   0x73E856  8B 87 C0 04 00 00   mov eax,[edi+0x4C0]     ; 装备容器
+                //   0x73E85C  E8 17 06 02 00      call 0x75EE78           ; 容器 RecalcAbilitys
+                //   0x73E863  8B 10               mov edx,[eax]
+                //   0x73E865  FF 92 8C 00 00 00   call [edx+0x8C]         ; 角色 RecalcAbilitys
+                //   0x73E86B  6A 01 …             cx=0x278D 发包（无条件）
+                //   0x73E88A  EB 3C               jmp 0x73E8C8            ; 直接返回
+                // 本仓库既定映射：0x75EE78 + VMT+0x8C 这一对写成一次 RecalcAbilitys()
+                // （见 Magic.cs UseAmulet）。少了它，武器打到 0 耐久后攻击力仍按有效
+                // 武器计算，直到别处偶然触发重算为止。
+                RecalcAbilitys();
+                SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, nDura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
+                // 原版这里是 jmp 0x73E8C8，**跳过**下面那段显示值比较。落到下面会在
+                // nDuraPoint >= 1 时把同一个 0x278D 包再发一遍。
+                return;
             }
-            else
-            {
-                m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
-            }
+            m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
             // MINE-44: 原版两侧都取 ROUND(dura/1000.0)，再判「显示值是否变小」：
             //   0x73E838  DB 45 F4 / D8 35 D0 E8 73 00 / E8 2E 4D CC FF  旧值 fild,fdiv,ROUND
             //   0x73E893  DB 45 F4 / D8 35 D0 E8 73 00 / E8 D3 4C CC FF  新值 fild,fdiv,ROUND

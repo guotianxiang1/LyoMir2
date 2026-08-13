@@ -29,16 +29,6 @@ namespace GameSvr
         public bool boServiceMode;
         public bool boNonPKServer;
         public bool boPetSwitch = true;
-        /// <summary>
-        /// 【非原版行为·眼神扩展】武器耐久归零时是否销毁武器。
-        /// 原版 战神 slot 1 (sub_73E804) 只把实例 +0x26 归零并保留装备：
-        ///   0x73E850  66 C7 43 26 00 00   mov word ptr [ebx+0x26], 0
-        /// 整个函数内没有 0x75F27C(清槽) 也没有 0x404690(释放)，
-        /// 所以武器停在 0 耐久、仍然装备着、属性失效但物品不丢。
-        /// (对比 slot 9 的 sub_73E93C 才真的销毁：0x73E9DE call 0x75F27C。)
-        /// 默认 false = 忠实原版。运营方需要"零耐久掉装"时才置 true。
-        /// </summary>
-        public bool boDeleteWeaponOnZeroDura;
         public int nTestLevel;
         public int nTestGold;
         public int nTestUserLimit;
