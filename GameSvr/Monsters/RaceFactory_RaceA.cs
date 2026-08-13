@@ -36,6 +36,12 @@ namespace GameSvr
                     cert = new FriendAnimal();
                     break;
 
+                // race 99  group 28 handler 0x67A63F  classref 0x67F21C  ctor 0x681958  TSkyArcher
+                //   case body 无 ctor 后逻辑。ctor + IsAttackTarget 已核验（见 SkyArcher.cs）。
+                case 99:
+                    cert = new SkyArcher();
+                    break;
+
                 // race 121 group 49 handler 0x67A809  classref 0x662858  ctor 0x66ADC4  TArmLightGuard
                 //   case body 无 ctor 后逻辑。ctor 已核验（见 ArmLightGuard.cs）。
                 case 121:
