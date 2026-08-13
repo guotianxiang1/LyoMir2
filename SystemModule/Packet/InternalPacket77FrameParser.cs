@@ -61,15 +61,18 @@ namespace SystemModule.Packet
                     KeepPossibleMarkerSuffix(scan);
                     return true;
                 }
-                if (_length - marker < InternalPacket77.ACK_FRAME_LEN)
+                if (_length - marker < InternalPacket77.HEADER_SIZE)
                 {
                     Compact(marker);
                     return true;
                 }
 
-                var frameLength = BitConverter.ToUInt16(_buffer, marker + 12);
-                if (frameLength != InternalPacket77.ACK_FRAME_LEN
-                    && (frameLength < InternalPacket77.HEADER_SIZE || frameLength > _maximumFrameLength))
+                // 原版 16 字节头: total = 0x10 + word[+0x0E](BodyLen)。+0x0C 是 Cmd 而非长度。
+                // 证据: 解析器 0x5F666A/0x63A66C 均 `lea eax,[pos+0x10]; add eax,word[+0x0E]`;
+                //       接收器 0x63B258 `movsd`x4 拷 16 字节头, body 自 frame+0x10 (M2 flat_image.bin)。
+                var bodyLength = BitConverter.ToUInt16(_buffer, marker + 14);
+                var frameLength = InternalPacket77.HEADER_SIZE + bodyLength;
+                if (frameLength > _maximumFrameLength)
                 {
                     scan = marker + 1;
                     continue;

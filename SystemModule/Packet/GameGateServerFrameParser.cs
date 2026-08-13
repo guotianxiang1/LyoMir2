@@ -141,10 +141,12 @@ namespace SystemModule.Packet
                     continue;
                 }
 
-                var frameLength = BitConverter.ToUInt16(_buffer, marker + 12);
-                if (frameLength != InternalPacket77.ACK_FRAME_LEN
-                    && (frameLength < InternalPacket77.HEADER_SIZE
-                        || frameLength > _maximumInternalFrameLength))
+                // 通用 16 字节头 InternalPacket77: total = 0x10 + word[+0x0E](BodyLen)。
+                // discriminator(=word[+0x0C]) 是 Cmd, 已在上方读取; 帧长取 +0x0E 的 BodyLen。
+                // 证据: 0x5F666A/0x63A66C (total=pos+0x10+word[+0x0E]), 接收器 0x63B258。
+                var bodyLength = BitConverter.ToUInt16(_buffer, marker + 14);
+                var frameLength = InternalPacket77.HEADER_SIZE + bodyLength;
+                if (frameLength > _maximumInternalFrameLength)
                 {
                     scan = marker + 1;
                     continue;
