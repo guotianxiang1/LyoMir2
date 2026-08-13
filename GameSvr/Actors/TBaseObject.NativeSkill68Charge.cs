@@ -54,7 +54,10 @@ namespace GameSvr
                 return false;
             }
 
-            m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY,
+            // 0x6EC7A7 calls sub_764BC4, the ratio helper, NOT the sign helper
+            // sub_764A90 that M2Share.GetNextDirection ports. The two disagree
+            // on most off-axis headings.
+            m_btDirection = M2Share.GetNextDirectionByRatio(m_nCurrX, m_nCurrY,
                 targetX, targetY);
 
             int clearSteps = 0;
