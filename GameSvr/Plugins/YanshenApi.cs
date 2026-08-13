@@ -1816,10 +1816,8 @@ namespace GameSvr.Plugins
             // 1006CE49  7E 11                 jle  0x1006CE5C
             // 1006CE4B  8B 45 A0 / 33 C9      mov  eax,self / xor ecx,ecx
             // 1006CE50  8B 95 60 FF FF FF     mov  edx,[ebp-0xA0]
-            // 1006CE56  FF 15 64 BC 31 10     call [0x1031BC64]          ; 元宝
-            // 这一路还没落地（D4）：会产元宝的物品目前在 RecycleOne 里被整件拒收，
-            // 所以 totals.Yuanbao 恒为 0。累加器先摆在这里，别以为是漏了落账。
-            if (totals.Yuanbao > 0) { }
+            // 1006CE56  FF 15 64 BC 31 10     call [0x1031BC64] = 0x6F8730  ; 元宝
+            if (totals.Yuanbao > 0) CreditRecycleYuanbao(totals.Yuanbao);
 
             // 1006CE65  8B 45 A0              mov  eax,self
             // 1006CE68  33 D2                 xor  edx,edx               ; reason = 0
@@ -1838,6 +1836,35 @@ namespace GameSvr.Plugins
             // 1006CEB0  B1 01                 mov  cl,1
             // 1006CEB7  FF 15 50 BC 31 10     call [0x1031BC50]          ; 经验
             if (totals.Exp > 0) _player.GainExp(totals.Exp);
+        }
+
+        /// <summary>
+        /// 元宝落账。原生 <c>0x6F8730</c> 不是就地改字段，而是拼一条请求丢进异步链：
+        /// <code>
+        /// 006F8749  8B F2                 mov  esi,edx               ; 金额
+        /// 006F874B  8B D8                 mov  ebx,eax               ; Self
+        /// 006F8777  8D 93 06 01 00 00     lea  edx,[ebx+0x106]       ; 角色名
+        /// 006F87D7  A1 B0 68 7D 00        mov  eax,[0x7D68B0]        ; 全局服务单例
+        /// 006F87E0  E8 C3 95 01 00        call 0x711DA8
+        /// 006F881B  8B CE                 mov  ecx,esi
+        /// 006F881D  E8 5A 8F 01 00        call 0x71177C
+        /// </code>
+        /// <c>sub_711DA8</c> 在本仓已定性为「外部/异步的元宝通道，不是进程内改值」
+        /// （见 NativeStallBuyExecutor.cs 的同址判例），所以 C# 侧的等价物就是
+        /// <c>NativeYuanbaoManager</c> 的入队。
+        ///
+        /// 关键在于**不要等它的结果**：0x1006CE56 之后没有 test/cmp，插件把返回值丢掉，
+        /// 后面照样接着结算灵符/金币/经验。此前 C# 因为「结算成败要等回调」而把
+        /// 会产元宝的物品整件拒收（D4），那是 C# 自己加的门，原生没有。
+        ///
+        /// 仍未解开的部分（不影响本条）：0x6F8730 拼的那两条 GBK 字面量
+        /// （0x6F8854 / 0x6F885C）与它写进日志的确切文案。它在 M2Server 里 rel32 调用者
+        /// 为 0，只有插件硬编码调用它。
+        /// </summary>
+        private void CreditRecycleYuanbao(int amount)
+        {
+            _player.ScriptRequestNativeYuanbao(amount,
+                GameSvr.Services.NativeYuanbaoManager.AddOperation);
         }
 
         /// <summary>
@@ -1906,11 +1933,6 @@ namespace GameSvr.Plugins
                 otherUnit <= 0 && rule.Exp <= 0)
                 return;
 
-            // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
-            // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
-            // （这是 D4 的分歧，仍未复刻；放在删除之前，免得它变成又一个只删不给的窗口。）
-            if (rule.Yuanbao > 0) return;
-
             // ── 删除段。此行之后不允许再出现任何 return，见方法头。 ──
             if (!_player.DelBagItem(item.MakeIndex, itemName)) return;
 
@@ -1919,6 +1941,8 @@ namespace GameSvr.Plugins
             // 累加次序照 0x1006BBD8（元宝）→ 0x1006BC1B（灵符）→ 0x1006BC4D（金币）
             // → 0x1006BC7F（经验），四条 add 分别是
             // 0x1006BC0A / 0x1006BC47 / 0x1006BC79 / 0x1006BCB1，全是 32 位回绕的 add。
+            totals.Yuanbao = unchecked(
+                totals.Yuanbao + ScaleRecyclePrice(rule.Yuanbao, rate, count));
             totals.LingFu = unchecked(
                 totals.LingFu + ScaleRecyclePrice(rule.LingFu, rate, count));
             totals.Gold = unchecked(
