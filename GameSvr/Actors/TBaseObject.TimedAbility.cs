@@ -699,6 +699,32 @@ namespace GameSvr
                 unchecked((ushort)m_nHitSpeed), 0, 0, string.Empty,
                 GetBodyStateBuffer());
 
+            if (!removed)
+            {
+                // Native VMT+0x14 (sub_741884) runs the GAINED dispatch table
+                // immediately after the inherited broadcast at 0x7418B9, and the
+                // only site that pushes the gained flag is 0x77318C — the tail of
+                // the add routine, one instruction before the GetTickCount that
+                // becomes node.LastTick. That is exactly this call, so the table
+                // belongs here. ecx there is
+                // `node.RemainingMilliseconds / 1000` (signed idiv @0x773191).
+                OnNativeTimedStateGained(node.InternalType,
+                    node.RemainingMilliseconds / 1000);
+            }
+
+            // State 75 is dispatch band B's gained arm 0x741EFD and lost arm
+            // 0x742A0B, both already reproduced here. Verified against the
+            // literals: gained is 0x742F00 (declen 16, BB F0 C7 BD BF B9 D0 D4
+            // CB B2 BC E4 CC E1 B8 DF = "火墙抗性瞬间提高") + IntToStr(di) +
+            // 0x742C94 ("秒"), lost is 0x743470 (declen 16, BB F0 C7 BD BF B9
+            // D0 D4 BB D8 B8 B4 D5 FD B3 A3 = "火墙抗性回复正常"), and both
+            // carry cx=0xFFDB. It is therefore deliberately absent from
+            // OnNativeTimedStateGained / OnNativeTimedStateLost — adding it
+            // there would send the text twice.
+            // The hero branch below has no counterpart in sub_741884 (the hero
+            // VMTs share TPlayer's +0xD4 = sub_73C8F4, which posts to self with
+            // no "(英雄) " prefix); it predates this reversing pass and is left
+            // untouched.
             if (node.InternalType == 75)
             {
                 var text = removed
