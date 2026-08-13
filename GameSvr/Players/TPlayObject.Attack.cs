@@ -540,16 +540,23 @@ namespace GameSvr
                         if (!m_boUseHalfMoon)
                         {
                             HalfMoonOnOff(true);
-                            SendSocket("+WID");
+                            // 0x6BE036 xor ecx,ecx / 66 BA 71 02 mov dx,0x271
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_HALFMOON, 0, 0, 0, 0));
                         }
                         else
                         {
                             HalfMoonOnOff(false);
-                            SendSocket("+UWID");
+                            // 0x6BE049 mov ecx,1 / 66 BA 71 02 mov dx,0x271
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_HALFMOON, 1, 0, 0, 0));
                         }
                     }
                     result = true;
                     break;
+                // SKILL_REDBANWOL (56) keeps the text markers: the native magic table
+                // at 0x6BC6AF only covers ids 3..27 (after `add eax,-3`) plus a separate
+                // `je` for 58, so 56 reaches the default arm 0x6BCCA6 and sends nothing.
                 case SpellsDef.SKILL_REDBANWOL:
                     if (m_MagicArr[SpellsDef.SKILL_REDBANWOL] != null)
                     {

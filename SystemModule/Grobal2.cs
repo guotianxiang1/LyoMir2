@@ -863,6 +863,18 @@ namespace SystemModule
         // Production srv_AppearTimes: 626 = 56,720.
         public const int SM_FIREHITSKILL = 626;
 
+        // 半月弯刀 (SKILL_BANWOL) toggle notify = ident 625 (0x271).
+        // Native sub_6BE018, the only producer, reached only from the magic-dispatcher
+        // arm 0x6BC809 (`cmp dword [esi+0xAC],0 / je / call 0x6BE018`):
+        //   006BE01E  80B29500000001  xor byte [edx+0x95],1   ; m_boUseHalfMoon
+        //   006BE025  80BA9500000000  cmp byte [edx+0x95],0
+        //   006BE02C  741B            je 0x6BE049
+        //   006BE036  33C9 / 66BA7102 xor ecx,ecx ; mov dx,0x271   ; now ON  -> Recog 0
+        //   006BE049  B901000000 / 66BA7102                        ; now OFF -> Recog 1
+        // Same shape as SM_THRUSTING (0x270) in sub_6BDFC8 on [obj+0x94].
+        // Production srv_AppearTimes: 625 = 405,926.
+        public const int SM_HALFMOON = 625;
+
         // NOT a 战神 ident: `mov dx,781` occurs ZERO times in the native image and no
         // native call site ever loads 781 into the SendDefMessage ident register.
         // The real native thrusting toggle is SM_THRUSTING=624 (@0x6B225B) above.
