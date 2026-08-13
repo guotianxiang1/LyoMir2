@@ -90,6 +90,10 @@ namespace GameSvr
             m_wNativeHorseCallDelay = 0;
         }
 
+        // CM_RUN3 (4108) only. Handler 0x6D9D99 requires bodyState 0x33
+        // before it ever reaches sub_6BC0D4; the inner mover is always
+        // sub_767694 (×3 + ident 0xD58). CM_RUN (3013) must not call this:
+        // it has no mount gate and uses sub_76756C (×2 + ident 0x0D).
         private bool ClientNativeRun3(int destinationX, int destinationY)
         {
             if (!HasNativeActiveState(NativeHorseMountedState) ||
@@ -198,6 +202,19 @@ namespace GameSvr
 
         private bool NativeRun3FallbackWalk(byte direction)
         {
+            // This is the human 1-step mover sub_741224, which both run
+            // primitives fall into via sub_6BBCD8 `call [edi+0x30]` at
+            // 0x6BBD16 (degrade 0x6BC02F / 0x6BC147). It is NOT WalkTo:
+            //   007412C8  call 0x7797cc          ; MoveToMovingObject
+            //   007412E8  mov  dl,0x17 / call 0x76b4d0
+            //   0074130D  mov  dx,0x2712         ; RM_WALK = 10002
+            //   00741315  call [edi+0xD8]        ; broadcast FIRST
+            //   00741323  call 0x778ec0          ; doors/events AFTER
+            //   00741328  mov  dl,0x33 / call InBodyState ; then partner
+            // 0x778EC0's return is discarded (next insn is mov dl,0x33).
+            // WalkTo would reverse broadcast/door order (MOVE-39) and add
+            // gates sub_741224 does not have. CompleteNativeRun3Move
+            // already matches this tail.
             if (direction >= 8 || m_PEnvir == null)
             {
                 return false;
@@ -291,6 +308,9 @@ namespace GameSvr
 
             m_nCurrX = (short)destinationX;
             m_nCurrY = (short)destinationY;
+            // 0x767769 mov dx,0xD58 — broadcast ident is bound to this mover,
+            // not to HasNativeActiveState(51). The 2-step twin at 0x76763F
+            // sends 0x0D via RunTo → RM_RUN.
             CompleteNativeRun3Move(Grobal2.RM_RUN3);
             return true;
         }

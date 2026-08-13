@@ -1395,19 +1395,19 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_RUN:
-                    // Native 0x6D9CE4: CM_RUN(3013) shares the run ladder with CM_RUN3(4108).
-                    // Try the native run path first (includes mount/state gates at 0x6BBFBC/0x6BC0D4).
-                    // If refused by state-51 absence (not mounted), fall back to legacy ClientRunXY.
-                    // EA evidence: movement_native_rulings_20260810.md lines 176-313 prove both
-                    // primitives are byte-identical twins and 3013 must route through the ladder.
-                    if (ClientNativeRun3(ProcessMsg.nParam1, ProcessMsg.nParam2))
-                    {
-                        m_dwActionTick = HUtil32.GetTickCount();
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
-                        SendSocket(M2Share.GetGoodTick);
-                    }
-                    else if (!HasNativeActiveState(51) &&
-                             ClientRunXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ref dwDelayTime))
+                    // Native 0x6D9CE4: CM_RUN(3013) shares the WEIGHT/RUNFLAG/CanRun
+                    // ladder with CM_RUN3(4108) but NOT the inner mover. The twins
+                    // differ in two places, not one:
+                    //   3013 sub_76756C  0x7675E0 add edi,edi        ×2
+                    //                    0x76763F mov dx,0x0D        ident 13
+                    //   4108 sub_767694  0x767708 lea edi,[edi+edi*2] ×3
+                    //                    0x767769 mov dx,0xD58       ident 3416
+                    // Handler 0x6D9CE4 never tests bodyState 0x33; only 4108 does
+                    // (0x6D9D99 mov dl,0x33 / call 0x772960 / je fail). Routing
+                    // 3013 through ClientNativeRun3 made a mounted runner take
+                    // the 3-step mover and broadcast 3416. HasNativeActiveState(51)
+                    // therefore must not select the mover — opcode does.
+                    if (ClientRunXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
