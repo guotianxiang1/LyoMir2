@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Globalization;
 using SystemModule;
 using GameSvr;
@@ -1324,7 +1325,7 @@ namespace GameSvr.Plugins
         /// <summary>召唤带属性的宝宝 — 生成怪物并设置指定属性</summary>
         public int SummonPet(string monName, int count, int level, int ac, int dc, int dcMax, int mac, int mc, int sc, int gs, int ys, int hp, int maxHp)
         {
-            if (!EnabledAll("眼神特殊函数", "怪物伤害触发技能特效")) return 0;
+            if (!Enabled("眼神特殊函数")) return 0;
             return SummonPetCore(monName, count, level, ac, dc, dcMax, mac, mc, sc,
                 gs, ys, hp, maxHp);
         }
@@ -1367,29 +1368,54 @@ namespace GameSvr.Plugins
                 gs, ys, hp, maxHp);
         }
 
-        /// <summary>设置宝宝属性</summary>
+        /// <summary>
+        /// 数字隧道 23 / <c>ys_SetPetV</c>。处理函数 <c>0x100735B0</c>（唯一调用
+        /// <c>0x10077289</c>）。向量长度 <c>0x100735FF 83 F8 0E cmp eax,0xE / jb</c>
+        /// 要求 ≥14 个 <c>std::string</c>（含 <c>!!!!集成函数</c> 与命令号）。
+        /// 字段 <c>at(2)=id … at(0xC)=Maxhp at(0xD)=MonName</c>。
+        /// 从宠表是宿主 <c>[player+0x4FC]</c>（<c>0x10073760 8B 83 FC 04 00 00</c>）。
+        /// 名字长度在 <c>[ebp-0x1C]</c>（MSVC string.size，<c>0x10073778 8B 55 E4</c>）：
+        /// 空名走 1-based 槽（<c>0x10073799 85 F6 / jle</c>、<c>0x100737A1 3B F0 / jg</c>、
+        /// <c>0x100737AC 8D 04 B5 FC FF FF FF lea eax,[esi*4-4]</c>）；
+        /// 非空名按名扫描全表（<c>0x10073970 3B F0 / 0x10073B15 46 inc esi</c>）。
+        /// 每项 <c>test/cmp ; jle</c> 仅 <c>&gt;0</c> 才写，偏移与 JSON 应用点相同。
+        /// 成功失败都 <c>0x10073936 83 C8 FF or eax,0xffffffff</c> 返回 -1。
+        /// gs/ys 的「怪物伤害触发技能特效」约束的是消费端，不挡写入。
+        /// </summary>
         public int SetPetAttr(string monName, int id, int ac, int dc, int dcMax, int mac, int mc, int sc, int gs, int ys, int hp, int maxHp)
         {
-            if (!EnabledAll("眼神特殊函数", "怪物伤害触发技能特效")) return 0;
-            int count = 0;
-            foreach (var slave in _player.m_SlaveList)
+            if (!Enabled("眼神特殊函数")) return 0;
+            return ApplySetPetV(_player?.m_SlaveList, monName, id, ac, dc, dcMax,
+                mac, mc, sc, gs, ys, hp, maxHp);
+        }
+
+        internal static int ApplySetPetV(IList<TBaseObject> slaves, string monName,
+            int id, int ac, int dc, int dcMax, int mac, int mc, int sc,
+            int gs, int ys, int hp, int maxHp)
+        {
+            if (slaves == null || slaves.Count <= 0)
+                return -1;
+
+            if (string.IsNullOrEmpty(monName))
+            {
+                if (id <= 0 || id > slaves.Count)
+                    return -1;
+                var slave = slaves[id - 1];
+                if (slave == null)
+                    return -1;
+                ApplyYanshenMonsterAttrs(slave, ac, mac, dc, dcMax, mc, sc,
+                    speed: 0, hit: 0, hp, maxHp, gs, ys);
+                return -1;
+            }
+
+            foreach (var slave in slaves)
             {
                 if (slave == null) continue;
-                if (string.IsNullOrEmpty(monName) || slave.m_sCharName == monName)
-                {
-                    slave.m_WAbil.AC = HUtil32.MakeLong(ac, ac);
-                    slave.m_WAbil.DC = HUtil32.MakeLong(dc, dcMax);
-                    slave.m_WAbil.MAC = HUtil32.MakeLong(mac, mac);
-                    slave.m_WAbil.MC = HUtil32.MakeLong(mc, mc);
-                    slave.m_WAbil.SC = HUtil32.MakeLong(sc, sc);
-                    slave.m_WAbil.HP = Math.Max(0, hp);
-                    slave.m_WAbil.MaxHP = Math.Max(0, maxHp);
-                    if (slave.m_WAbil.HP > slave.m_WAbil.MaxHP) slave.m_WAbil.HP = slave.m_WAbil.MaxHP;
-                    slave.RecalcAbilitys();
-                    count++;
-                }
+                if (slave.m_sCharName == monName)
+                    ApplyYanshenMonsterAttrs(slave, ac, mac, dc, dcMax, mc, sc,
+                        speed: 0, hit: 0, hp, maxHp, gs, ys);
             }
-            return count;
+            return -1;
         }
 
         /// <summary>给宝宝技能: magicId技能, gailv概率, shanghai伤害, del删除(1=删除)</summary>
@@ -2312,7 +2338,8 @@ namespace GameSvr.Plugins
         /// and smuggles it through <c>CheckMapMonByName('yanshen2.0.7', res)</c>.
         /// Attribute writes follow plugin JSON apply at <c>0x100884f0</c>
         /// (<c>0x100889D7..0x10088B56</c>): each field is skipped unless &gt; 0
-        /// (<c>test/cmp ; jle</c>).
+        /// (<c>test/cmp ; jle</c>). The same writer is reused by digital tunnel 23
+        /// / <c>ys_SetPetV</c> (<c>0x100735B0</c>) with Speed/Hit left 0.
         /// JSON key <c>Speed</c> @ <c>0x102BA7EC</c> writes word actor+0x1E8/+0x264
         /// (<c>0x10088ABB 66 89 83 e8 01 00 00</c>), the same word native 基本剑术
         /// adds 准确 into (<c>0x76AF99 66 01 83 64 02 00 00</c>). JSON <c>Hit</c>
@@ -2970,15 +2997,32 @@ namespace GameSvr.Plugins
         /// <summary>强制玩家下线</summary>
         public int KickPlayer() { if (!Enabled("踢玩家下线")) return 0; _player.m_boEmergencyClose = true; return 1; }
 
-        /// <summary>地图怪物数量查询</summary>
+        /// <summary>
+        /// 数字隧道 20 / <c>ys_CheckMapMonByName</c>。处理函数 <c>0x10073210</c>：
+        /// 向量 <c>0x1007325F 83 F8 04 cmp eax,4 / jae</c>，不足返回 -1
+        /// （<c>0x10073273 83 C8 FF</c>）。<c>at(2)=MapName at(3)=MonName</c>。
+        /// 空地图名与 <c>0x102B2918</c> 空串比较后 <c>edx=0</c>
+        /// （<c>0x100733AA BA 00000000</c>），转调宿主 CheckMapMonByName，
+        /// 宿主 <c>0x646B79 85 F6 / je</c> 时读 <c>[this+0x128]</c> 当前图。
+        /// </summary>
         public int CheckMapMonByName(string mapName, string monName)
         {
-            var map = M2Share.MapManager.FindMap(mapName);
+            Envirnoment map;
+            if (string.IsNullOrEmpty(mapName))
+                map = _player?.m_PEnvir ?? _npc?.m_PEnvir;
+            else
+                map = M2Share.MapManager?.FindMap(mapName);
             if (map == null) return 0;
             int count = 0;
             var list = new List<TBaseObject>();
             M2Share.UserEngine.GetMapMonster(map, list);
-            foreach (var m in list) if (m?.m_sCharName?.IndexOf(monName, StringComparison.OrdinalIgnoreCase) >= 0) count++;
+            foreach (var m in list)
+            {
+                if (m?.m_sCharName == null) continue;
+                if (string.IsNullOrEmpty(monName)
+                    || m.m_sCharName.IndexOf(monName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    count++;
+            }
             return count;
         }
 
@@ -3271,7 +3315,7 @@ namespace GameSvr.Plugins
         /// <c>push 0xFF</c> → <c>[ebp+0x14] = -1</c>（一只都不造），
         /// 用 <c>(byte)</c> 会算成 255（造 255 只）。
         /// </summary>
-        static int NativeSlaveCountImm8(int v) => (sbyte)(v > 0x7F ? 0x7F : v);
+        internal static int NativeSlaveCountImm8(int v) => (sbyte)(v > 0x7F ? 0x7F : v);
 
         /// <summary>
         /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
