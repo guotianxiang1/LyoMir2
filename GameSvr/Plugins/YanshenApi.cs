@@ -1299,16 +1299,45 @@ namespace GameSvr.Plugins
             return duration;
         }
 
-        /// <summary>吸血: fixedHp固定, percentHp千分比</summary>
+        /// <summary>
+        /// `ys_XiXue(Player; hp, bf_hp)` = 操作码 8 = <c>sub_10070E70</c>。
+        /// 整个实现体只有十余条有效指令，逐条对上：
+        /// <code>
+        /// 10070EC8  83 F8 04 / 73 27             token 数 &lt; 4 → 10070EDC B8 88 FC FF FF = -888
+        /// 10070EF4  6A 0A / 6A 02 …              esi = token2 = hp
+        /// 10070F11  6A 0A / 6A 03 …              eax = token3 = bf_hp
+        /// 10070F30  C7 45 DC B4 9D 76 00         [ebp-0x24] = 0x769DB4 = IncHealthSpell
+        /// 10070F37  89 75 EC                     返回值初值 = hp
+        /// 10070F3A  85 C0 / 7E 37                bf_hp &lt;= 0 → 跳过百分比项
+        /// 10070F42  8B 9B B0 02 00 00            ebx = [caster+0x2B0] = MaxHP
+        /// 10070F4C  66 0F 6E C8 / F3 0F E6 C9    xmm1 = (double)bf_hp
+        /// 10070F54  F2 0F 5E 0D 40 89 2C 10      xmm1 /= [0x102C8940]  ← 常量是 100.0
+        /// 10070F5C  66 0F 6E 45 E8 / F3 0F E6 C0 xmm0 = (double)MaxHP
+        /// 10070F65  F2 0F 59 C8                  xmm1 *= xmm0
+        /// 10070F69  F2 0F 2C C1                  cvttsd2si            ← 向零截断
+        /// 10070F6D  03 F0                        esi = hp + 上式
+        /// 10070F76  8B 45 E4 / 8B 55 EC / 33 C9  eax=caster, edx=总量, ecx=0
+        /// 10070F7E  FF 55 DC                     call 0x769DB4 = IncHealthSpell(总量, 0)
+        /// 10070FB8  8B C6                        返回 总量
+        /// </code>
+        /// 常量原始字节 <c>0x102C8940 = 00 00 00 00 00 00 59 40</c> = <b>100.0</b>，
+        /// 所以 <c>bf_hp</c> 是<b>百分比</b>不是千分比。除法在乘法之前，且中间量始终留在
+        /// double 域，只在最后一次 <c>cvttsd2si</c> 截断 —— 整数乘除会在别处丢精度。
+        /// 落地必须走 <c>IncHealthSpell</c>：它带 bodyState 0x66 的减半、负值直接 return
+        /// 与 <c>HealthSpellChanged()</c>，直接写 <c>m_WAbil.HP</c> 三样都丢了。
+        /// </summary>
         /// <remarks>8 号臂 0x10076C14 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int LifeSteal(int fixedHp, int percentHp)
         {
             if (!TunnelGate()) return 0;
-            var steal = TBaseObject.ClampAbility((long)fixedHp
-                + (long)_player.m_WAbil.MaxHP * percentHp / 1000);
-            _player.m_WAbil.HP = (int)Math.Min(_player.m_WAbil.MaxHP,
-                (long)_player.m_WAbil.HP + steal);
-            return steal;
+            int total = fixedHp;
+            if (percentHp > 0)
+            {
+                total = unchecked(fixedHp + (int)((double)percentHp / 100.0d
+                    * _player.m_WAbil.MaxHP));
+            }
+            _player.IncHealthSpell(total, 0);
+            return total;
         }
 
         /// <remarks>27 号臂 0x100773E1 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
