@@ -167,7 +167,11 @@ static TBaseObject NewObject(Envirnoment environment, byte race, short x, short 
         m_btRaceServer = race,
         m_nCurrX = x,
         m_nCurrY = y,
-        bo2B9 = true
+        bo2B9 = true,
+        // SPWN-56 的有效性谓词（原生 sub_765D64）要求 Length(CName)>0，否则
+        // 该 actor 会在格子链扫描时被判失效并摘链，GetMovObjCount 会返回 0。
+        // 原生 actor 一律带名字，无名 actor 是夹具特有的失真态。
+        m_sCharName = "probe-" + race + "-" + x + "-" + y
     };
 }
 

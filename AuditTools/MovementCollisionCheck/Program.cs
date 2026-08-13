@@ -12,7 +12,10 @@ M2Share.LogMsgCriticalSection = new object();
 M2Share.LogStringList = new System.Collections.ArrayList();
 M2Share.g_MonSayMsgList = new Dictionary<string, IList<TMonSayMsg>>();
 
-var environment = new Envirnoment();
+// sMapName 必须非空：SPWN-56 的有效性谓词第三项对应原生
+// 0x765D85 `cmp dword [eax+0x44],0`（PEnvir.MapName <> ''），空名地图上的
+// actor 会在格子链扫描时被判失效摘链，于是"玩家挡路"整个失效。
+var environment = new Envirnoment { sMapName = "collision" };
 typeof(Envirnoment).GetMethod("Initialize", BindingFlags.Instance | BindingFlags.NonPublic)!
     .Invoke(environment, new object[] { (short)10, (short)10 });
 
@@ -953,7 +956,11 @@ static TBaseObject NewObject(Envirnoment environment, byte race, short x, short 
         m_PEnvir = environment,
         m_btRaceServer = race,
         m_nCurrX = x,
-        m_nCurrY = y
+        m_nCurrY = y,
+        // SPWN-56 的有效性谓词（原生 sub_765D64）要求 Length(CName)>0，否则
+        // 该 actor 会在格子链扫描时被判失效并摘链。原生 actor 一律带名字
+        // （怪物取自 mongen、玩家取自角色记录），无名 actor 是夹具特有的失真态。
+        m_sCharName = "probe-" + race + "-" + x + "-" + y
     };
 }
 
