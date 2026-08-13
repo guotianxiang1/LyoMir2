@@ -98,6 +98,15 @@ TransportResult DispatchThroughGate(ushort ident, byte[] expectedBody,
     var player = new TPlayObject();
     var gate = new TGateInfo
     {
+        // GateService hands TGateInfo.Socket straight to SendQueue, which
+        // rejects null (SendQueue.cs:18). A real gate always has one; the
+        // fixture did not, so construction threw before any transport
+        // assertion ran. An unconnected socket satisfies the guard and is
+        // never written to: StartQueueService is not called here.
+        Socket = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.InterNetwork,
+            System.Net.Sockets.SocketType.Stream,
+            System.Net.Sockets.ProtocolType.Tcp),
         UserList = new List<TGateUserInfo>
         {
             new()
