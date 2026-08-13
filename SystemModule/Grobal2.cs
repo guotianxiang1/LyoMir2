@@ -145,6 +145,25 @@ namespace SystemModule
         public const int STATE_OPENHEATH = 0x00000002;
         public const int STATE_CELEBRITY = 105;
         public const int ET_DIGOUTZOMBI = 1;
+        /// <summary>
+        /// INVENTED, kept deliberately. Native mine points are TStoneMineEvent
+        /// (self-pointer 0x71683C, VMT 0x716888, size 36), whose parent is
+        /// TBaseObj — a sibling of TMapEvent, not a subclass — so a mine has no
+        /// event-type byte at all: its <c>[+0x0C]</c> is the ore count
+        /// (<c>0x71769F mov eax,0xC8 / Random -> [ebx+0x0C]</c>) and its
+        /// <c>[+0x04]</c> is 8, not the 3 that TMapEvent's constructor writes at
+        /// 0x717322. Nothing native ever stamps 2.
+        /// <para>
+        /// No collision with a real type 2: the engine factory sub_7189DC routes
+        /// only 5, 8, 15 and 21 to dedicated classes (cumulative chain
+        /// 0x718A27 sub dl,5 / 0x718A2C sub dl,3 / 0x718A31 sub dl,7 /
+        /// 0x718A36 sub dl,6) and would build a plain TMapEvent for 2, while the
+        /// single C# consumer — TPlayObject.cs:2168 — casts the lookup with
+        /// <c>as StoneMineEvent</c>, so a genuine type-2 TMapEvent on the same
+        /// cell is filtered out rather than mistaken for a mine. Removing the
+        /// constant would mean inventing a different lookup key, which is worse.
+        /// </para>
+        /// </summary>
         public const int ET_MINE = 2;
         public const int ET_PILESTONES = 3;
         public const int ET_HOLYCURTAIN = 4;
@@ -593,7 +612,39 @@ namespace SystemModule
         public const int SM_SPACEMOVE_SHOW = 801;
         public const int SM_RECONNECT = 802;
         public const int SM_GHOST = 803;
+        /// <summary>
+        /// Pinned to the byte by walking the RM pump forward to its send slot,
+        /// per REPLICATION_RULES 4.20 — searching for the 0x324 immediate
+        /// directly is the noisy direction and finds nothing usable.
+        /// <para>
+        /// RM_SHOWEVENT = 10334 = 0x285E resolves through the ident dispatcher:
+        /// <c>0x6B3EE4 movzx eax,word [ebx]</c>, <c>0x6B3EEC jg 0x6B412B</c>,
+        /// <c>0x6B4130 jg 0x6B42AB</c> is not taken (0x285E &lt; 0x28A1),
+        /// <c>0x6B4141 jg 0x6B41B2</c>, <c>0x6B41B7 jg 0x6B421E</c>, then
+        /// <c>0x6B421E add eax,0xFFFFD7BD</c> (= -0x2843, base ident 10307),
+        /// <c>0x6B4223 cmp eax,0x1D</c>, <c>0x6B422C jmp [0x6B4233 + eax*4]</c>.
+        /// Index 27 holds 0x6B5A09.
+        /// </para>
+        /// <para>
+        /// That arm splits on the event type byte at
+        /// <c>0x6B5A16 cmp byte [esi+0x0C],0x29</c> and both halves end in the
+        /// same wire ident: stall <c>0x6B5AB3 66 BA 24 03 mov dx,0x324</c> with
+        /// body length <c>0x6B5AAE 6A 40</c> = 64, normal
+        /// <c>0x6B5B1F 66 BA 24 03</c> with <c>0x6B5B1A 6A 0C</c> = 12, both
+        /// through the body-carrying send slot <c>call [VMT+0x254]</c>.
+        /// The 12/64 split and the ShortString capacities (3 for the normal
+        /// owner name at <c>0x6B5AED mov cl,3</c>, 14 and 30 for the stall's two
+        /// at <c>0x6B5A49 mov cl,0x0E</c> / <c>0x6B5A91 mov cl,0x1E</c>) are the
+        /// same numbers PacketRoundTripCheck already asserts.
+        /// </para>
+        /// </summary>
         public const int SM_SHOWEVENT = 804;
+        /// <summary>
+        /// Same dispatcher, index 26 -> 0x6B5B33, which loads
+        /// <c>0x6B5B47 66 BA 25 03 mov dx,0x325</c> and sends through the plain
+        /// slot <c>call [VMT+0x250]</c> with a zero body length
+        /// (<c>0x6B5B42 6A 00</c>).
+        /// </summary>
         public const int SM_HIDEEVENT = 805;
         public const int SM_SPACEMOVE_HIDE2 = 806;
         public const int SM_SPACEMOVE_SHOW2 = 807;
