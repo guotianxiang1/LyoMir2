@@ -41,5 +41,13 @@ namespace SystemModule
 
         // 0xCF0 default Series substituted at 0x64F125 when the flag argument is 0.
         public const int SM_3312_DefaultSeries = 4;
+
+        // 0xD0C @0x6B46DD slot 0x254 - full-dword variant of the visible-entity
+        // refresh record (sibling of the word-split idents 0xF/0x10/0x11 sent from
+        // the same record). Header from record offsets, 8-byte body from +0xC/+0x8.
+        public const int SM_3340 = 3340;
+
+        // 0xD0C body length pushed at 0x6B46CF.
+        public const int SM_3340_BodyLength = 8;
     }
 }

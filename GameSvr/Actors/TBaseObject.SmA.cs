@@ -139,5 +139,50 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3312, recog, 0, 0, series);
             return (header, Array.Empty<byte>());
         }
+
+        /// <summary>
+        /// SM 3340 (0xD0C) - full-dword variant of the visible-entity refresh
+        /// record. slot 0x254 (SendSocket), 8-byte body. The same record is also
+        /// sent as idents 0xF/0x10/0x11 with word-split fields; this arm sends the
+        /// full 32-bit values at record +0xC and +0x8. Native send site @0x006B46DD:
+        /// <code>
+        /// 006B46AE  8B 43 0C             mov  eax, [ebx+0xC]
+        /// 006B46B1  89 45 F0             mov  [ebp-0x10], eax   ; body[0..3] = [ebx+0xC]
+        /// 006B46B4  8B 43 08             mov  eax, [ebx+8]
+        /// 006B46B7  89 45 F4             mov  [ebp-0xC], eax    ; body[4..7] = [ebx+8]
+        /// 006B46BA  66 8B 43 04          mov  ax, [ebx+4]
+        /// 006B46BE  50                   push eax               ; Param  = loword[ebx+4]
+        /// 006B46BF  8B 43 04             mov  eax, [ebx+4]
+        /// 006B46C2  C1 E8 10             shr  eax, 0x10
+        /// 006B46C5  50                   push eax               ; Tag    = hiword[ebx+4]
+        /// 006B46C6  66 8B 43 02          mov  ax, [ebx+2]
+        /// 006B46CA  50                   push eax               ; Series = word[ebx+2]
+        /// 006B46CB  8D 45 F0             lea  eax, [ebp-0x10]
+        /// 006B46CE  50                   push eax               ; Buf    = &body
+        /// 006B46CF  6A 08                push 8                 ; Len    = 8
+        /// 006B46D1  8B 4B 24             mov  ecx, [ebx+0x24]    ; Recog  = [ebx+0x24]
+        /// 006B46D4  66 BA 0C 0D          mov  dx, 0xD0C          ; Ident  = 3340
+        /// 006B46D8  8B 45 FC             mov  eax, [ebp-4]       ; self
+        /// 006B46DB  8B 18                mov  ebx, [eax]
+        /// 006B46DD  FF 93 54 02 00 00    call [ebx+0x254]        ; SendSocket
+        /// </code>
+        /// Parameters map to the source record: <paramref name="recog"/>=[ebx+0x24],
+        /// <paramref name="packedParamTag"/>=[ebx+4] (low word = Param, high word =
+        /// Tag), <paramref name="series"/>=word[ebx+2], and the body dwords
+        /// <paramref name="bodyLow"/>=[ebx+0xC], <paramref name="bodyHigh"/>=[ebx+8].
+        /// </summary>
+        internal static (ClientPacket Header, byte[] Body) BuildSm3340(
+            int recog, int packedParamTag, ushort series, int bodyLow, int bodyHigh)
+        {
+            var param = unchecked((ushort)packedParamTag);
+            var tag = unchecked((ushort)(packedParamTag >> 16));
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3340, recog, param, tag, series);
+
+            using var stream = new MemoryStream(SmIdentConstsA.SM_3340_BodyLength);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(bodyLow);
+            writer.Write(bodyHigh);
+            return (header, stream.ToArray());
+        }
     }
 }
