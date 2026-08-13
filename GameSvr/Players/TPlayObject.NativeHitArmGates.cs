@@ -75,8 +75,13 @@ namespace GameSvr
     ///   0x6D8610  0F 84 99 18 00 00  je 0x6D9EAF   after the running
     ///             `sub eax,0xBD4 / sub eax,2 / sub eax,2 / sub eax,3`     3035
     /// 3035 = Grobal2.CM_HORSERUN in this port, which routes it to
-    /// ClientHorseRunXY instead and therefore never reaches here. That
-    /// mismatch predates this change and is left alone — see the report.
+    /// ClientHorseRunXY instead and therefore never reaches here. ID3035
+    /// re-derived the whole tree by emulation (tools/id3035_dispatch_map.py)
+    /// and confirmed the leaf: 3035 is an attack ident and the mount run is
+    /// CM_RUN3 (4108). Rewiring it is a TPlayObject.Message.cs edit, so it is
+    /// still pending — see docs/ident3035_arm_conflict_20260814.md. Note that
+    /// RunNativeHitArmGates already classifies 3035 correctly once it does
+    /// arrive: boCase2 only fires for CM_3037, so 3035 takes the CASE1 ladder.
     ///
     /// == the can-act gate ==
     /// `call [ecx+0x40]` with dl = 1. TPlayer VMT 0x6AC8C8+0x40 = 0x6E6700,

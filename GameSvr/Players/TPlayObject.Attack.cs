@@ -207,6 +207,45 @@ namespace GameSvr
                             // No attack of any kind is performed.
                             m_btDirection = nDir;
                             break;
+                        case Grobal2.CM_HORSERUN:
+                            // ID3035 — 3035 is an attack ident, not a mount run.
+                            // The dispatcher sends it to HIT CASE1 alongside the
+                            // other ten hit opcodes:
+                            //   0x6D85F0  2D D4 0B 00 00     sub eax,0xBD4   ; 3028
+                            //   0x6D85FB  83 E8 02           sub eax,2       ; 3030
+                            //   0x6D8604  83 E8 02           sub eax,2       ; 3032
+                            //   0x6D860D  83 E8 03           sub eax,3       ; 3035
+                            //   0x6D8610  0F 84 99 18 00 00  je 0x6D9EAF
+                            // and sub_6EC078's own window ends exactly on it
+                            // (0x6EC15D `add eax,-0xBBA` / 0x6EC162 `cmp eax,0x21`
+                            // = 3002..3035), byte table 0x6EC178[33] = 0x09,
+                            // slot 0x6EC19A[9] = 0x6EC29C:
+                            //   0x6EC29C  33 C0 / 8A 45 08 / 50   ; push direction
+                            //   0x6EC2A2  66 B9 F9 03             ; mov cx,0x3F9 = 1017
+                            //   0x6EC2AA  E8 F9 44 08 00          ; call 0x7707A8
+                            // The native mount run is CM_RUN3 (4108) at 0x6D9D99,
+                            // which opens with `B2 33 mov dl,0x33` / `call 0x772960`
+                            // and refuses with 0x276 when the rider is not mounted.
+                            //
+                            // Only the facing update is ported here. It is the one
+                            // unconditional effect of sub_7707A8 for every code in
+                            // the 1000..1033 window (0x7707E3 `88 86 54 01 00 00
+                            // mov [esi+0x154],al`, [+0x154] = m_btDirection).
+                            //
+                            // The swing itself is NOT modelled: action 1017 runs
+                            // 0x770ABF -> `call 0x772388`, a worker with exactly one
+                            // caller that resolves a target two cells ahead
+                            // (0x7723A5 `push 2` into GetNextPosition 0x778BE8),
+                            // computes damage through VMT+0x4C = 0x744388 — itself
+                            // keyed on the same [Self+0xC4] skill record, written
+                            // only by 0x76B170 for magic ids 65/66/67/68 — applies
+                            // it via 0x76E268, sends ident 0x2740 to the target and
+                            // trains the skill by Random(3)+1 through VMT+0x3C.
+                            // None of 0x744388 has been transcribed, so emitting a
+                            // swing here would be invention; fail closed instead and
+                            // leave the damage half to a dedicated task.
+                            m_btDirection = nDir;
+                            break;
                         // CM_TWINHIT (3028) has no arm on purpose: 0x6EC178[26] = 0x0B
                         // selects jump-table slot 11 = 0x6EC2D7, which is the tail of
                         // sub_6EC078 itself, so 3028 never even reaches sub_7707A8 and
