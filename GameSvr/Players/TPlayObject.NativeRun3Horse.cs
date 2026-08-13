@@ -220,6 +220,10 @@ namespace GameSvr
             // WalkTo would reverse broadcast/door order (MOVE-39) and add
             // gates sub_741224 does not have. CompleteNativeRun3Move
             // already matches this tail.
+            // boFlag 来源：sub_741224 在 0x74122D `mov [ebp-5],cl` 收第三参，
+            // 0x7412B0 `mov al,[ebp-5] / push eax` 转给 0x7797CC。调用方
+            // 0x6BBD0C `mov cl,[ebx+0x3FE]` 直接喂穿透缓存 —— 读缓存，不重算。
+            // 改前这里误读 m_boInSafeArea（那条只在行会战 tick 里被赋值）。
             if (direction >= 8 || m_PEnvir == null)
             {
                 return false;
@@ -250,7 +254,7 @@ namespace GameSvr
             if (nextX <= 0 || nextX >= m_PEnvir.wWidth ||
                 nextY <= 0 || nextY >= m_PEnvir.wHeight ||
                 m_PEnvir.MoveToMovingObject(oldX, oldY, this, nextX, nextY,
-                    m_boInSafeArea) <= 0)
+                    m_boThroughOccupancyCache) <= 0)
             {
                 return false;
             }
