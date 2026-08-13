@@ -83,6 +83,22 @@ namespace GameSvr
                     continue;
                 }
 
+                // 180-byte TClientShop, filled by native sub_636D68 at esi = record+0x58:
+                //   +0   0x637157 cl=0x0F   商品名 ShortString[15]
+                //   +16  0x63717A cl=0x0F   分类名 ShortString[15]
+                //   +32  0x637187 66 c7 46 20 00 00   Looks, zero here; the 1101 handler
+                //                                     patches in the canonical std-item Looks
+                //   +34  0x637181 66 c7 46 22 00 00   page/category, zero here; set on send
+                //   +36  0x637191 66 89 46 24         vSrcPrice
+                //   +38  0x637199 66 89 46 26         vCurPrice
+                //   +40  0x6371A1 66 89 46 28         vLimitType
+                //   +42  0x6371A9 66 89 46 2a         vLimitCount
+                //   +44  0x6371AD 66 c7 46 2c 00 00   zero here; sub_63CD0C backfills the
+                //                                     per-player limit at 0x63CDC3 before
+                //                                     every 812/813/815
+                //   +46  0x6371BD 66 89 46 2e         vEffectCount   (WORD)
+                //   +48  0x6371B6 89 46 30            vEffectImg     (DWORD)
+                //   +52  0x6371DF cl=0x7F             描述 ShortString[127]
                 var recordStart = stream.Position;
                 WriteClientFixedGbkString(writer, item.ItemName, 15);
                 WriteClientFixedGbkString(writer, item.CategoryName, 15);
@@ -93,8 +109,8 @@ namespace GameSvr
                 writer.Write(ClampToShort(item.LimitType));
                 writer.Write(ClampToShort(item.LimitCount));
                 writer.Write(ClampToShort(MallManager.Instance.GetCurrentLimitValue(this, item)));
-                AlignWriter(writer, 4);
-                writer.Write((uint)item.CurrencyType);
+                writer.Write(ClampToShort(item.EffectCount));
+                writer.Write(item.EffectImg);
                 WriteClientFixedGbkString(writer, item.Description, 127);
 
                 if (stream.Position - recordStart != WhitePigMallRecordSize)
