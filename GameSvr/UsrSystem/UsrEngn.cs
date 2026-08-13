@@ -2947,9 +2947,14 @@ namespace GameSvr
                 case M2Share.MONSTER_WHITESKELETON:
                     Cert = new WhiteSkeleton();
                     break;
-                case TPlayObject.NativeMagicTowerArcherRace:
-                    Cert = new MagicTowerArcherMonster();
-                    break;
+                // race 99 已由上方 TryCreateRaceA 按字节证据认领为 SkyArcher(=TSkyArcher)：
+                // 工厂 sub_679F8C 的 (99-0xB)=0x58 -> idx 28 -> jt[28]=0x67A63F，
+                // 0x67A641 mov eax,[0x67F21C] (classref TSkyArcher) / 0x67A646 call 0x681958，
+                // case body 无额外逻辑。此处原有的 `case NativeMagicTowerArcherRace:
+                // Cert = new MagicTowerArcherMonster();` 因 TryCreateRaceA 先手认领而**恒不可达**，
+                // 且那个类三处与原生不符：基类取 Monster（原生父类是 TAnimal = AnimalObject）、
+                // 不设 m_btRaceServer、缺有字节证据的 IsAttackTarget 覆写，另凭空设
+                // m_boWantRefMsg=true（无出处）。已连同类文件一并删除。
                 case M2Share.MONSTER_SCULTURE:
                     Cert = new ScultureMonster
                     {
