@@ -274,7 +274,11 @@ namespace GameSvr
                 {
                     m_boFireHitSkill = false;
                     SysMsg(M2Share.sSpiritsGone, MsgColor.Red, MsgType.Hint);
-                    SendSocket("+UFIR");
+                    // 0x6B2F33 mov byte [eax+0x96],0 / 6A00 x4 /
+                    // B9 01000000 mov ecx,1 / 66 BA 72 02 mov dx,0x272 /
+                    // FF 93 50 02 00 00.  "+UFIR" is absent from the image.
+                    SendSocket(Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_FIREHITSKILL, 1, 0, 0, 0));
                 }
                 if (m_boTwinHitSkill && (HUtil32.GetTickCount() - m_dwLatestTwinHitTick) > 60 * 1000)
                 {
@@ -2270,9 +2274,11 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_MERCHANTDLGCLOSE, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_SENDGOODSLIST:
+                    // 0x6B5277 push word[rec+8] (Param) / 0x6B527C push 0 (Tag) /
+                    // 0x6B527E push 1 (Series): Param carries LoWord(nParam2) and Series
+                    // is the literal 1, not the other way round.
                     m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SENDGOODSLIST,
-                        ProcessMsg.nParam1, 1, 0,
-                        HUtil32.LoWord(ProcessMsg.nParam2));
+                        ProcessMsg.nParam1, HUtil32.LoWord(ProcessMsg.nParam2), 0, 1);
                     var goodsBody = GetQueuedPayloadBytes(ProcessMsg);
                     SendSocket(m_DefMsg, goodsBody);
                     break;
@@ -2295,9 +2301,12 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_BUYITEM_FAIL, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_SENDDETAILGOODSLIST:
+                    // 0x6B538F push word[rec+8] (Param) / 0x6B5394 push word[rec+0xC] (Tag)
+                    // / 0x6B5399 push 0 (Series): Param carries LoWord(nParam2) and Series
+                    // is zero.
                     m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SENDDETAILGOODSLIST,
-                        ProcessMsg.nParam1, 0, HUtil32.LoWord(ProcessMsg.nParam3),
-                        HUtil32.LoWord(ProcessMsg.nParam2));
+                        ProcessMsg.nParam1, HUtil32.LoWord(ProcessMsg.nParam2),
+                        HUtil32.LoWord(ProcessMsg.nParam3), 0);
                     var detailGoodsBody = GetQueuedPayloadBytes(ProcessMsg);
                     SendSocket(m_DefMsg, detailGoodsBody);
                     break;

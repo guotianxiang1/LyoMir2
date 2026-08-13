@@ -15,6 +15,7 @@ namespace GameSvr
         private byte _nativeAuthStatus1;
         private byte _nativeAuthStatus2;
         private byte _nativeAuthStatus3;
+        private string _lastMapDescription = string.Empty;
         public int m_nHonorValue;
         public bool m_boHonorValueLoaded;
 
@@ -1577,12 +1578,17 @@ namespace GameSvr
 
         private void SendMapDescription()
         {
-            var nMUSICID = -1;
-            if (m_PEnvir.Flag.boMUSIC)
+            // sub_6E37C4: the description is compared against the per-player cache at
+            // [Self+0x9B4] (0x6E380A CompareStr / 0x6E380F je 0x6E383F) and only a change
+            // sends the packet; nRecog is the literal 1 (0x6E382C B901000000 mov ecx,1),
+            // not a music id.
+            var description = m_PEnvir.sMapDesc ?? string.Empty;
+            if (string.CompareOrdinal(_lastMapDescription, description) == 0)
             {
-                nMUSICID = m_PEnvir.Flag.nMUSICID;
+                return;
             }
-            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, nMUSICID, 0, 0, 0, m_PEnvir.sMapDesc);
+            _lastMapDescription = description;
+            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, 1, 0, 0, 0, description);
         }
 
         private void SendWhisperMsg(TPlayObject PlayObject)
