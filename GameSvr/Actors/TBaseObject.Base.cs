@@ -822,6 +822,10 @@ namespace GameSvr
 
         public virtual void Die()
         {
+            // 眼神「BB死亡触发」改写的是本函数的【序言】0x76631C `55 8B EC 53 56`，
+            // 桩体先派发 @BBKill 再重放那五个字节并 jmp 0x766321 —— 也就是说它跑在
+            // 死亡处理的最前面，早于任何早退门。四道原生门见 YanshenTriggerDispatch。
+            GameSvr.Plugins.YanshenTriggerDispatch.FireSlaveDie(this);
             int tExp;
             const string sExceptionMsg1 = "[Exception] TBaseObject::Die 1";
             const string sExceptionMsg2 = "[Exception] TBaseObject::Die 2";
