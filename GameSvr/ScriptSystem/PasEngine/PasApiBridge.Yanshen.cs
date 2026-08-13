@@ -302,6 +302,7 @@ namespace GameSvr.PasEngine
                 "ysbinditem" => true,
                 "ys_getitemdbdata" => true,
                 "getitemdbdata" => true,
+                "npc_creatmons" => true,
                 _ => false
             };
         }
@@ -430,19 +431,26 @@ namespace GameSvr.PasEngine
         /// with res = '0^x^y^num^round^Ac^Mac^Dc^DcMax^Mc^Sc^Speed^Hit^hp^Maxhp^
         /// AttackSpd^WalkSpd^MonName^Map'.
         ///
-        /// Not implemented: the 12 per-monster stats have no equivalent spawn
-        /// path here (YSCreateMon carries only HP/AC/MAC/DC/YS/GS — no DcMax,
-        /// Mc, Sc, Speed, Hit, AttackSpd or WalkSpd), and the plugin body is
-        /// inside the Themida-packed DLL. Rather than guess, reject loudly:
-        /// no such map exists, so the count path would otherwise return 0 and
-        /// the script would read that as "spawned nothing, all fine".
+        /// Attribute writes are the plugin JSON apply at 0x100884f0. A malformed
+        /// payload throws rather than returning 0, because 0 is what the count
+        /// path would report for a map that does not exist.
         /// </summary>
-        private static void RejectUnimplementedNpcCreatMonsTunnel(string mapName)
+        private bool TryNpcCreatMonsTunnel(string mapName, string payload, out int spawned)
         {
-            if (!string.Equals(mapName, "yanshen2.0.7", StringComparison.OrdinalIgnoreCase))
-                return;
-            throw new YanshenApiUnavailableException("NPC_CreatMons", "npc自定义函数",
-                "NpcFuc.pas 造怪隧道未实现（12 项怪物属性无等价生成路径）");
+            spawned = 0;
+            if (!string.Equals(mapName, YanshenApi.NpcCreatMonsSentinel, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            const string apiName = "NPC_CreatMons";
+            YanshenApi.EnsureDirectCallReady(M2Share.PluginManager, apiName);
+            var api = GetYanshenApi(allowWithoutPlayer: true);
+            if (api == null)
+                throw new YanshenApiUnavailableException(apiName, "npc自定义函数", "无法构造 API");
+
+            using var directCall = YanshenApi.BeginStrictDirectCall(apiName);
+            api.EnsureFeatureEnabled("npc自定义函数");
+            spawned = api.NpcCreateMonsFromPayload(payload);
+            return true;
         }
 
         internal static bool IsYanshenSignInTunnelCall(List<PasValue> args)
