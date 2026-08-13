@@ -203,9 +203,7 @@ void CheckSourceContracts()
 
     Require(timed, @"\b17\s+or\s+27\s+or\s+43\b",
         "type27 admission is missing");
-    Require(timed,
-        @"internalType\s*!=\s*NativeSkill153ShieldState",
-        "internal59 incorrectly requests ability recalc");
+    CheckInternal59RequestsNoRecalc();
     Reject(timed, @"case\s+27\s*:",
         "type27 incorrectly mutates working ability fields");
     Require(shield, @"m_wNativeSkill153ShieldCharges",
@@ -231,6 +229,39 @@ void CheckSourceContracts()
     Reject(string.Join(Environment.NewLine, persistedSources),
         @"m_TimedAbilityHead",
         "timed list entered persistence codecs");
+}
+
+// The recalc decision used to be an exclusion list, and this audit grepped for
+// its `internalType != NativeSkill153ShieldState` literal. The STATE-41 rewrite
+// replaced the list with the native bitmap at 0x77326C, so the literal is gone
+// and the text expectation went stale. Assert the decision instead of its
+// spelling, straight off the leaf at 0x773254:
+//   0x773254  80 C2 F8              add dl,0xF8   ; index = internalType - 8
+//   0x773257  80 FA 67              cmp dl,0x67
+//   0x77325A  77 0A                 ja  0x773266  ; out of range -> false
+//   0x77325F  0F A3 15 6C 32 77 00  bt  [0x77326C],edx
+// 44 and 76 are in the native set and 59 is not. Including 44 and 76 is what
+// gives this teeth: both go false if the -8 bias is ever dropped again, whereas
+// 59 reads false under either indexing and cannot detect the regression alone.
+static void CheckInternal59RequestsNoRecalc()
+{
+    var decide = typeof(TBaseObject).GetMethod("RequiresTimedAbilityRecalc",
+        BindingFlags.NonPublic | BindingFlags.Static);
+    Assert(decide != null,
+        "RequiresTimedAbilityRecalc (sub_773254) reflection target missing");
+
+    bool Requires(byte internalType) =>
+        (bool)decide.Invoke(null, new object[] { internalType })!;
+
+    Assert(!Requires(59), "internal59 incorrectly requests ability recalc");
+    Assert(Requires(44),
+        "internal44 lost its recalc: bit index must be internalType - 8 "
+        + "(0x773254 add dl,0xF8)");
+    Assert(Requires(76),
+        "internal76 lost its recalc: bit index must be internalType - 8");
+    Assert(!Requires(7),
+        "internal7 is below the biased domain and must be refused "
+        + "(0x77325A ja, unsigned)");
 }
 
 static Type27ProbePlayer NewPlayer(string name) => new()
