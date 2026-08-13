@@ -614,6 +614,19 @@ namespace GameSvr
                     case 2:
                         m_WAbil.SC = AddTimedRange(m_WAbil.SC, value);
                         break;
+                    case 3:
+                        // STATE-47 — band handler for 0x23 @0x77357F, bytes verified:
+                        //   77357F  66 8B 43 0A            mov  ax, word [ebx+0xA]
+                        //   773583  66 01 46 10            add  word [esi+0x10], ax
+                        //   773587  E9 91 05 00 00         jmp  0x773B1D
+                        // esi = Self+0x264 (callers `lea edx,[ebx+0x264]` @0x60A8B9 /
+                        // 0x73DD6B / 0x73E43E), so esi+0x10 = Self+0x274.
+                        // 0x7729C4 broadcasts that word on SM_CHARSTATUSCHANGED 657
+                        // (`66 8B 90 74 02 00 00  mov dx, word [eax+0x274]`), which
+                        // C# SendTimedAbilityState already sends as m_nHitSpeed.
+                        m_nHitSpeed = unchecked((ushort)(m_nHitSpeed +
+                            (ushort)value));
+                        break;
                     case 10:
                         // STATE-37 — band handler for 0x2A @0x773636, bytes verified:
                         //   773636  83 7B 0A 01            cmp  dword [ebx+0xA], 1
