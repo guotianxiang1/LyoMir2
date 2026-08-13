@@ -1977,16 +1977,49 @@ namespace GameSvr.Plugins
             return 1;
         }
 
-        /// <summary>在地面丢弃物品</summary>
+        /// <summary>
+        /// ys_DropItem / 数字隧道 7 —— 在角色周围地面上**新产生** count 件 itemName。
+        /// 官方文档原话：「此函数是在角色周围地面上新产生物品，和角色背包有不有物品
+        /// 毫无关系」（AllFuc使用例子.pas:309）。原来的实现方向正好反了：它用
+        /// DelBagItem 把玩家背包里的同名物品删掉。
+        ///
+        /// 处理函数 0x10070D20，字段顺序 (num, range, name) = fields[2..4]；它把
+        /// (self, name, range, num) 交给宿主 0x0064E6F4（10070D98 mov [ebp-0x2C],0x64E6F4
+        /// / 10070E0A call [ebp-0x2C]），返回值是原样回传的 num（10070DB7 mov [ebp-0x1C],eax，
+        /// 之后再没被改过）。
+        ///
+        /// 宿主 0x0064E6F4 的阶梯：
+        ///   0064E71E 83FB01 cmp ebx,1 / 7D05 jge / BB01000000  —— num &lt; 1 提到 1
+        ///   0064E72B mov edx,0x64E7E0 / call 0x0040591C / 753D jne —— 名字等于「金币」
+        ///       （0x64E7DC 处的长度前缀是 4，正好两个汉字）走金币分支，每次最多 2000
+        ///   否则每轮 0064E784 call 0x0074DE54 造一件新物品，造不出来就跳出循环，
+        ///       造出来就 0064E79D call 0x007688A0 扔地上，扔失败 0064E7A8 call 0x00404690 释放
+        /// </summary>
         public int DropItem(int count, int range, string itemName)
         {
-            if (_npc == null) return 0;
-            // Drop items from bag to ground — uses DelBagItem to remove, item appears on ground via map system
-            for (int i = 0; i < count; i++)
+            if (string.IsNullOrEmpty(itemName)) return count;
+            var n = count < 1 ? 1 : count;
+
+            if (string.Equals(itemName, "金币", StringComparison.Ordinal))
             {
-                var userItem = _player.CheckItems(itemName);
-                if (userItem == null) break;
-                _player.DelBagItem(userItem.MakeIndex, M2Share.UserEngine.GetStdItemName(userItem.wIndex));
+                // 0064E737..0064E770 的三段判定原样转写：先切 2000，再补尾数。
+                do
+                {
+                    if (n > 2000) { _player.YanshenTunnelDropGold(2000); n -= 2000; }
+                    if (n <= 2000) _player.YanshenTunnelDropGold(n);
+                } while (n > 2000);
+                return count;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var userItem = new TUserItem();
+                if (!M2Share.UserEngine.CopyToUserItemFromName(itemName, ref userItem)) break;
+                // 宿主 0x007688A0 的第 3 个寄存器参就是 range；第 6 个栈参（[ebp+0xC]）
+                // 是 self，对应 C# 的 DropCreat。另外两个字节旗标（[ebp+0x14]=1 跳过
+                // 0x0078389C 的可丢弃校验、[ebp+0x10]=0）在 C# 的 DropItemDown 里没有
+                // 对应形参，本工程的模型只有 (boDieDrop, ItemOfCreat, DropCreat)。
+                _player.DropItemDown(userItem, range, false, null, _player);
             }
             return count;
         }

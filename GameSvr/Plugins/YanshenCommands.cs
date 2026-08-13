@@ -191,7 +191,11 @@ namespace GameSvr.Plugins
                     5 => cmd.Parameters.Length >= 10
                         ? _api.PoisonEffect(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9))
                         : _api.Poison(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8)),
-                    7 => _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2)),
+                    // 10070D7A 83F805 cmp eax,5 / 10070D7D 7319 jae —— 不足 5 段返回 -888
+                    // （10070D8E B888FCFFFF），和 15/24/33 的 -1 不是一个值。
+                    7 => cmd.Parameters.Length >= 3
+                        ? _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2))
+                        : -888,
                     8 => _api.LifeSteal(P(cmd,0),P(cmd,1)),
                     9 => cmd.Parameters.Length == 1
                         ? _api.RootTarget(P(cmd,0))
