@@ -1197,14 +1197,40 @@ namespace GameSvr
                     ClientChangeMagicKey(ProcessMsg.nParam1, ProcessMsg.nParam2);
                     break;
                 case Grobal2.CM_SOFTCLOSE:
+                    // Handler 0x6D8ED0 is four instructions and reads NO packet field:
+                    //   0x6D8ED0  8B 45 FC              mov  eax,[ebp-4]
+                    //   0x6D8ED3  C6 80 10 07 00 00 01  mov  byte [self+0x710],1
+                    //   0x6D8EDA  8B 45 FC              mov  eax,[ebp-4]
+                    //   0x6D8EDD  C6 80 BB 04 00 00 01  mov  byte [self+0x4BB],1
+                    //   0x6D8EE4  E9 43 2D 00 00        jmp  0x6DBC2C
+                    // so the `wParam == 1 -> m_boEmergencyClose` arm that used to sit here had
+                    // no native counterpart, and it let the client pick the close mode.
+                    //
+                    // Both offsets are now pinned, which is what previously blocked the call.
+                    // The run loop at 0x651969 guards logout with the same three flags C# does
+                    // and then relocates exactly the same three fields:
+                    //   0x651969  cmp byte[p+0x4BB],0 / 75 1C jne 0x65198E
+                    //   0x651975  cmp byte[p+0x4BD],0 / 75 10 jne 0x65198E
+                    //   0x651981  cmp byte[p+0x4BC],0 / 0F 84 .. je (not logging out)
+                    //   0x651991  cmp byte[p+0x4BA],0 / 74 41 je            ; m_boSwitchData
+                    //   0x65199A  add eax,0x115 / 0x6519A5 add edx,0xC28    ; map name
+                    //   0x6519B5  [p+0xC38] -> [p+0x12C]                    ; CurrX
+                    //   0x6519C7  [p+0xC3C] -> [p+0x130]                    ; CurrY
+                    // which is line-for-line the `m_boEmergencyClose || m_boKickFlag ||
+                    // m_boSoftClose` guard and the m_boSwitchData block above at 463-470.
+                    // m_boEmergencyClose therefore lives in {0x4BB, 0x4BC, 0x4BD}, and 0x4BB is
+                    // already fixed as m_boSoftClose (RM 10000 writes it at 0x6B44A8).
+                    //
+                    // 0x710 is outside that trio. It has two writers — this handler and the
+                    // switch-server setter 0x6BD0AE, which also stores the target name/x/y and
+                    // raises 0x4BA and 0x4BB — and one reader, 0x6B64E4, choosing disconnect
+                    // reason 1 over 3 for sub_6B6510. C#'s m_boReconnection has the same two
+                    // writers (here and the GetMultiServerAddrPort path in UsrEngn) and is
+                    // likewise outside the trio. The mapping is no longer an inference.
                     if (!m_boOffLineFlag)
                     {
                         m_boReconnection = true;
                         m_boSoftClose = true;
-                        if (ProcessMsg.wParam == 1)
-                        {
-                            m_boEmergencyClose = true;
-                        }
                     }
                     break;
                 case Grobal2.CM_CLICKNPC:
