@@ -56,8 +56,8 @@ namespace GameSvr
         public static int Of(TBaseObject actor)
         {
             var persistable = _persistableExtraSlots;
-            if (persistable <= 0 || actor is not TPlayObject player)
-                return NativeSlots;
+            if (persistable <= 0) return NativeSlots;
+            if (actor is not TPlayObject player) return NativeSlots;
             return NativeSlots + Math.Min(ConfiguredExtraSlots(player), persistable);
         }
 
