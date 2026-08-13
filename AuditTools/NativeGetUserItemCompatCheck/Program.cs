@@ -55,8 +55,13 @@ Task CommandPermissionAndHelp()
     Equal("<PlayerName> <ItemID>", metadata.Help, "command attribute help");
     Equal((byte)4, metadata.nPermissionMin, "minimum permission");
 
+    // The refusal is built from two image literals — 0x62B768 (len 10,
+    // B8 C3 C3 FC C1 EE D0 E8 D2 AA = "该命令需要") and 0x62B77C (len 12,
+    // BC B6 47 4D B2 C5 C4 DC CA B9 D3 C3 = "级GM才能使用") — with IntToStr(N)
+    // spliced between them. M2Share.g_sGameCommandPermissionTooLow ("权限不够!!!")
+    // is 0 hits in the whole image, so it cannot be what native replies here.
     var denied = NewPlayer("Denied", permission: 3);
-    Equal(M2Share.g_sGameCommandPermissionTooLow,
+    Equal("该命令需要4级GM才能使用",
         command.Handle("Target 7", denied), "permission 3 result");
     Equal(0, db.Value.PendingNativeSendCount,
         "permission 3 queued native request");
@@ -793,8 +798,13 @@ sealed class GateCapture : IAsyncDisposable
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         var header = new byte[InternalPacket77.HEADER_SIZE];
         await ReadExactly(header, timeout.Token);
-        var frameLength = BitConverter.ToUInt16(header, 12);
-        Require(frameLength >= InternalPacket77.HEADER_SIZE,
+        // 16-byte transport header: +0x0C is Cmd (0x637AC7 `66 89 78 0C`
+        // mov [eax+0xC],di) and +0x0E is BodyLen (0x637AD7 `66 89 58 0E`
+        // mov [eax+0xE],bx); the sender advances by 0x10 at 0x637ADE. Total frame
+        // length is therefore 0x10 + word[+0x0E], not word[+0x0C].
+        var bodyLength = BitConverter.ToUInt16(header, 14);
+        var frameLength = InternalPacket77.HEADER_SIZE + bodyLength;
+        Require(frameLength <= InternalPacket77.MAX_FRAME_SIZE,
             "invalid gate frame length " + frameLength);
         var bytes = new byte[frameLength];
         header.CopyTo(bytes, 0);

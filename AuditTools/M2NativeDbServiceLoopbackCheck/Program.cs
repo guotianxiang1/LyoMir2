@@ -740,6 +740,13 @@ static void VerifyMonsterProductionPublication(
         M2Share.LocalDB = new LocalDB();
         M2Share.UserEngine = new UserEngine();
         M2Share.ObjectManager = new ObjectManager();
+        // LoadMonitems keeps a row only when its item name resolves in the
+        // standard-item table -- native sub_6799E0 @0x679BB4 `call sub_74C2D4`,
+        // @0x679BC1 `cmp [ebp-0x2C],0 / je 0x679BDD` (no record allocated) and
+        // @0x679BDD `cmp [ebp-8],0 / je 0x679C4E` (row skipped). A fresh
+        // UserEngine has an empty table, so LoopbackDrop has to be registered or
+        // the MonItems row below is legitimately dropped.
+        M2Share.UserEngine.StdItemList.Add(new GoodItem { Name = "LoopbackDrop" });
 
         Assert(M2Share.UserEngine.TryPublishNativeMonsterDefinitions(
                 catalog, out var error),

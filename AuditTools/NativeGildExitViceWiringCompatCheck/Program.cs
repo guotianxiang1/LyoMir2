@@ -361,10 +361,16 @@ static (ClientPacket Header, byte[] Body) Drive(NativeCorpsService service,
     long operatorId, int ident, byte[] payload, string dispatcher)
 {
     var packets = new List<(ClientPacket Header, byte[] Body)>();
+    // 4583's first handler gate is the safe-zone probe, so a player standing on
+    // no map at all can only ever come back as NotAllowed(38) and the success
+    // ladder below it is never reached. Production leavers stand in town; model
+    // that with a boSAFE map. The three zone rejections are still pinned
+    // directly through service.ApplyGildExit in ExitZoneGatesRejectViaService.
     var player = new TPlayObject
     {
         m_boOffLineFlag = true,
-        m_sCharName = "会长"
+        m_sCharName = "会长",
+        m_PEnvir = new Envirnoment { sMapName = "0", Flag = { boSAFE = true } }
     };
     player.LoadNativeMailRecipientId(operatorId);
     player.SetNativeCorpsServiceForTests(service,
