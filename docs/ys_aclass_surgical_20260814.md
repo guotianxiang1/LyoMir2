@@ -451,8 +451,31 @@ loop:
 
 ### 7.1 S(1,82) 激光命中概率 —— 已接线
 
-见提交 `801944bb`。要点：**所有 fallback 落到 `mov eax,1`，不是还原 `mov eax,3`**，
+要点：**所有 fallback 落到 `mov eax,1`，不是还原 `mov eax,3`**，
 所以开关一开就再也回不到原生的 `Random(3)+1`。
+
+落点（2026-08-14 复核补记）：本条的接线在 `master` 上是由并行分支落的，读取器是
+`GameSvr/Plugins/YanshenLaserSlots.cs` 的 `TrainRandomArg`，消费在
+`GameSvr/Spells/MagicManager.cs`：`laserTrainRandomArg` 在 `DoMagic` 开头默认取
+`NativeTrainRandom`(=3)，**只在 `SKILL_SHOOTLIGHTEN` 段**被改写，尾部共享的
+`TrainSkill` 处执行 `Random(laserTrainRandomArg)+1`。
+（本文早先写的「见提交 `801944bb`」是另一条分支上的等价实现，那个提交没有进 `master`，
+按提交号找不到东西 —— 以上面两个文件为准。）
+
+宿主那道 `cmp [ebp+4],0x6EDA54` 的门**等价于「这条法术是激光」**，因此「按 magicId 收窄」
+与「只认那一个调用点」严格同义，证明如下：`0x6ED6FF` 的
+`FF 24 85 06 D7 6E 00  jmp dword [eax*4+0x6ED706]` 直接拿 `wMagicID` 当下标
+（`0x6ED6E3 0F B7 40 10 movzx eax,word [eax+0x10]`，**没有减基**，
+上游只有 `cmp eax,0x25/jg`、`je`、`cmp eax,0x24/ja` 三道范围门），
+下标 10 的表项在 `0x6ED72E`，值正是 `0x6EDA41`；而 `0x6EDA41` 在全镜像作为 dword
+**只出现这一次**，其块尾 `0x6EDA4E ff 97 20 01 00 00 call [edi+0x120]` 的返回地址
+就是 `0x6EDA54`。C# 侧 `SpellsDef.SKILL_SHOOTLIGHTEN == 10`。
+
+键编码也对得上：C# 的 `group*1000+index` 使 S(1,82) → 1082 = `0x43A`，
+正是桩体 `+03F cmp edx,0x43A` 比对的 tag。
+
+审计：`AuditTools/YanshenLaserSlotsCheck`（本轮新增）把两槽的分支逐条钉住，
+尤其是「开且 S≤0 / 缺键 → 1 而非 3」这三条 fallback。PASS。
 
 ### 7.2 S(1,81) —— 已证实，但 C# 无对应槽
 
