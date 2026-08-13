@@ -23,12 +23,48 @@ namespace GameSvr
                     MsgGetUserServerChange(serverNum, Body);
                     break;
                 case Grobal2.ISM_CHANGESERVERRECIEVEOK:
+                    // 战神 222 (跳表 EA 0x6572FA -> sub_657700) = 唯一显式长度门 handler。
+                    // native 语义 (字节级已证): ecx=[ebp+8]=len, edx=[ebp+0xc]=二进制帧。
+                    //   0x65771C cmp ecx,0x24 / jl 退出 (len>=0x24=36); 0x405774 从 body[0]
+                    //   取 pascal 串(名) -> GetPlayObject(0x652784); byte[body+0x10]!=0 门;
+                    //   SendMsg 虚调 dx=0x285A (vtbl+0xD8); 再 0x768CEC(玩家, ecx=word
+                    //   [body+0x20], edx=body+0x10 pascal 串(图), 栈: 1,0,word[body+0x22]) —
+                    //   即按 名+目标图+x/y 定点召回/移动。
+                    // fail-closed: native 222 读定长二进制结构 (名@0, 图@0x10, x@0x20,
+                    // y@0x22); C# 跨服为文本协议, 本 ident 的 body 是换服握手文件名字符串
+                    // (live 发送方 MsgGetUserServerChange 行 192 SendServerGroupMsg(
+                    // ISM_CHANGESERVERRECIEVEOK, ..., ufilename)), 无二进制坐标载体, 表示不
+                    // 兼容。保留 C# 换服握手接收 (与其 live 发送方匹配), 不以不可达的二进制
+                    // 召回覆盖在用握手。
                     MsgGetUserChangeServerRecieveOk(serverNum, Body);
                     break;
                 case Grobal2.ISM_USERLOGON:
                     MsgGetUserLogon(serverNum, Body);
                     break;
                 case Grobal2.ISM_USERLOGOUT:
+                    // 战神 202 = 反作弊惩罚 (跳表 sub_657110 EA 0x657208 -> wrapper
+                    // sub_658384 -> core sub_653ED0)。native 语义 (字节级已证):
+                    //   * wrapper: 若 [ebp+8]=len>0, 从 body 提名单串, 调 core, 第三参
+                    //     ecx=[ebp+0x10]=帧 dword[ebx+8]=惩罚"时长/秒" (0x658384)。
+                    //   * core sub_653ED0: sub_653cc4 遍历玩家表[+0x2c], 对 byte[+0x73]==0
+                    //     且 CompareText(player.[+0xb33], body)==0 的每个玩家 (可多个,
+                    //     同账号/IP), 施罚:
+                    //       time>0 -> byte[+0x1829]=3 (惩罚档位); [+0x180c]=trunc(Now-
+                    //         [+0x780])+7-time (0x653F6B/0x653F7F, 到期天数); SendMsg
+                    //         cx=0x1D "设置外挂惩罚"(0x65403C)。
+                    //       time<=0 -> byte[+0x1829]=0; [+0x180c]=0; "清除外挂惩罚"
+                    //         (0x654054)。 'SD000'@0x65402C 经 0x696228/0x696528 查表。
+                    // fail-closed (缺字段+缺载体+捏造风险, 遵铁律不改运行行为):
+                    //   (1) 时长来自帧第三 dword (native arg3); C# 跨服为文本协议,
+                    //       ProcessData(ident,serverNum,body) 无此载体 (serverNum 是发送
+                    //       服索引, 见各 handler 的 sNum==nServerIndex 守卫), 无法定 set/
+                    //       clear 亦无法算到期。
+                    //   (2) [+0x1829]=m_btNativeCheatPenaltyTier 已存在, 但到期字段
+                    //       [+0x180c] 全仓无对应成员 (缺字段); 日期基址 [+0x780] 亦未映射。
+                    //   (3) 唯一 live 发送方是 UsrEngn.cs:1568 的登出广播 (charname, 无
+                    //       时长), 全仓无反作弊形态的 202 发送方 -> 反作弊 core 不可达。
+                    // 保留 C#-自洽的登出接收 (与其 live 发送方匹配); 反作弊语义待补齐
+                    // [+0x180c]/日期基址字段 + 传输第三参后再接线。
                     MsgGetUserLogout(serverNum, Body);
                     break;
                 case Grobal2.ISM_WHISPER:
@@ -50,6 +86,19 @@ namespace GameSvr
                     MsgGetDelGuild(serverNum, Body);
                     break;
                 case Grobal2.ISM_RELOADGUILD:
+                    // 战神 207 = 服务器全局字符位图切换 (跳表 EA 0x657230 -> sub_658114)。
+                    // native 语义 (字节级已证): 叶子只传 edx=[ebp+0x10]=帧 dword[ebx+8]=
+                    // 新 37-bit 掩码; sub_658114 读全局对象 [0x7D7038], 保存旧 [+0]/[+4]
+                    // (dword+byte=37 位), 写入新掩码, 然后对字符码 bl=0..0x24(36) 逐位比
+                    // 较新旧 (0x65813F cmp al,0x27 是 bt 范围守卫, 0x65818A cmp bl,0x25 是
+                    // 循环上界): 旧置新清 -> sub_658110(char,0); 旧清新置 -> sub_658110
+                    // (char,1); 末尾 [0x7D5A68]->0x794F30 刷新。
+                    // fail-closed: (1) 新掩码来自帧第三 dword (native arg3), C# 文本协议无
+                    // 载体; (2) 全局 [0x7D7038] 位图对象与逐位回调 sub_658110/0x794F30 在
+                    // C# 无对应模型 (缺全局状态); (3) 该 32-bit 掩码非文本可表示。故不移植
+                    // native 位图 swap。 保留 C# 现有语义 (数字 body -> 信用卡 switchWord,
+                    // live 发送方 CreditCardCommand.cs:31 SendServerGroupMsg(ISM_SERVERSWITCH
+                    // =207); 非数字 -> 重载行会), 二者均有 live 发送方, 移除会破坏在用功能。
                     if (uint.TryParse(Body, NumberStyles.Integer,
                         CultureInfo.InvariantCulture, out var switchWord))
                     {
@@ -98,6 +147,13 @@ namespace GameSvr
                     MsgGetReloadChatLog();
                     break;
                 case Grobal2.ISM_DIVORCE:
+                    // 战神 216 (跳表 EA 0x657294 -> sub_6579D8) = 离婚。本次逐字节复核:
+                    // 提名 -> GetPlayObject -> 若 byte[+0xB94]!=0(已婚): 清 [+0xB94];
+                    // SendMsg cx=0x278E(RM_MASTERRELATION)+7+dearName([+0xC48]); 清 [+0xC48];
+                    // SysMsg cx=0xFFDB "你的配偶与你离婚了"@0x657AAC(len 0x12); RefShowName
+                    // (0x7685E0)。C# MsgGetDivorce 已逐条对应 (顺序/串/参数一致), 忠实。
+                    // (C# 多一道 serverNum==nServerIndex 守卫: native 路由下恒真, 已由
+                    // AuditTools/MarryClusterCompatCheck 固化, 勿改。)
                     MsgGetDivorce(serverNum, Body);
                     break;
                 case Grobal2.ISM_MENTOR_STUDENT_1:
@@ -151,6 +207,20 @@ namespace GameSvr
                 case Grobal2.ISM_CREDITCARD_CLEARMONTHLY:
                     (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
                         .ResetOnlineMonthly();
+                    break;
+                case Grobal2.ISM_IDENT_247:
+                    // 战神 247 (跳表 EA 0x657378 -> sub_65805C) = 真实 handler (非 sink)。
+                    // native 语义 (字节级已证): ecx=[ebp+8]=len, edx=[ebp+0xc]=二进制帧。
+                    //   0x658067 call 0x78FE80 (恒返回 al=1, 使能桩) / test;
+                    //   0x658070 dec ebx / cmp ebx,0xC / jne 退出 (门: len==0xD=13);
+                    //   读 body 三 dword: eax=[body+0], ecx=[body+4], 栈=[body+8];
+                    //   0x65808A call 0x699310(global[0x7D5D20], d0, d4, d8) —— 0x699310 用
+                    //   IntToStr(0x40C89C)+0x405890 把两整数格式化, 读 [0x7D5C40] 写日志/DB。
+                    // fail-closed: native body 是定长二进制帧 (三 dword); C# 跨服为文本协议
+                    // (ProcessData 只有 serverNum+string body, 无二进制 dword 载体), 且全仓无
+                    // 247 发送方 (SGRP-41: 无 M2Server 对 202..257 的发送侧)。无法忠实表示。
+                    // 空操作而非落默认 error sink —— 因 native 247 是真实 handler, 落 sink 会
+                    // 打印 "[Error] ProcessOthGsMsg Ident=247" 与 native 不符; 此处显式吞掉。
                     break;
                 case Grobal2.ISM_SETNICKLF:
                     if (int.TryParse(Body, NumberStyles.Integer,
