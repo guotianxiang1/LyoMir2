@@ -299,13 +299,24 @@ static void CheckValueGate()
 
 static void CheckPlayerType45SideEffect()
 {
+    // 只数 3415，不数整条队列：state 45 的 gained 臂本来就要对自己发一句
+    // SysMsg，而且它不经地图 ——
+    //   0x00741E38  66 b9 ff 38        mov cx,0x38FF
+    //   0x00741E3C  ba 88 2e 74 00     mov edx,0x742E88
+    //                                  (refcnt FF FF FF FF / len 0C /
+    //                                   c4 e3 b1 bb b6 a8 c9 ed c1 cb a3 a1
+    //                                   = "你被定身了！")
+    //   0x00741E45  ff 93 d4 00 00 00  call [ebx+0xD4]
+    // 该臂是后来补齐的，整队列计数于是把它误判成 3415 广播。
     var detached = NewPlayer("type45-detached");
     SetField(detached, "m_boNativeHorseCallPending", true);
-    var detachedMessages = detached.m_MsgList.Count;
+    var detachedMessages = CountMessages(detached,
+        Grobal2.RM_NATIVE_HORSE_CALL_STOP);
     detached.AddTimedAbility(13, 1, 10);
     Assert(!GetField<bool>(detached, "m_boNativeHorseCallPending"),
         "detached internal45 did not clear pending flag");
-    Equal(detachedMessages, detached.m_MsgList.Count,
+    Equal(detachedMessages, CountMessages(detached,
+            Grobal2.RM_NATIVE_HORSE_CALL_STOP),
         "detached internal45 broadcast 3415 without an environment");
 
     var map = NewMap(64, 64);
@@ -316,11 +327,13 @@ static void CheckPlayerType45SideEffect()
     var ghost = Place(map, NewPlayer("type45-ghost"), 22, 20);
     ghost.m_boGhost = true;
     SetField(ghost, "m_boNativeHorseCallPending", true);
-    var ghostMessages = ghost.m_MsgList.Count;
+    var ghostMessages = CountMessages(ghost,
+        Grobal2.RM_NATIVE_HORSE_CALL_STOP);
     ghost.AddTimedAbility(13, 1, 10);
     Assert(!GetField<bool>(ghost, "m_boNativeHorseCallPending"),
         "ghost internal45 did not clear pending flag");
-    Equal(ghostMessages, ghost.m_MsgList.Count,
+    Equal(ghostMessages, CountMessages(ghost,
+            Grobal2.RM_NATIVE_HORSE_CALL_STOP),
         "ghost internal45 broadcast 3415");
 
     SetField(player, "m_boNativeHorseCallPending", true);
@@ -550,7 +563,10 @@ static void CheckSourceOrdering()
     var root = FindRepoRoot();
     var timed = File.ReadAllText(Path.Combine(root, "GameSvr", "Actors",
         "TBaseObject.TimedAbility.cs"));
-    var add = Between(timed, "private bool AddTimedAbilityInternal",
+    // AddTimedAbilityInternal 已由 private 改成 internal（原生 AddState 是虚槽
+    // VMT+0x1EC @0x7730D0，直接调用点遍布引擎，子类需要能直接调），标记串因此
+    // 不能再钉可见性。
+    var add = Between(timed, "bool AddTimedAbilityInternal(",
         "internal bool AddNativeBubbleTimedAbility");
     Before(add, "CanAddNativeTimedAbility(internalType)",
         "FindTimedAbilityInternal(internalType)", "gate before node lookup");
@@ -847,19 +863,7 @@ static void NotContains(string source, string value, string label) =>
 static string Compact(string source) =>
     string.Concat(source.Where(value => !char.IsWhiteSpace(value)));
 
-static string FindRepoRoot()
-{
-    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
-    {
-        for (var directory = new DirectoryInfo(start);
-             directory != null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
-                return directory.FullName;
-        }
-    }
-    throw new InvalidOperationException("Repository root not found");
-}
+static string FindRepoRoot() => AuditRepoRoot.Resolve();
 
 static void InitializeRuntime()
 {
