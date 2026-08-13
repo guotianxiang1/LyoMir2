@@ -121,8 +121,7 @@ namespace GameSvr.PasEngine
                 "ys_pick");
             AddYanshenFeature(features, "怪物伤害触发技能特效",
                 "ys_givebbskill", "ys_givebb_sx");
-            AddYanshenFeatures(features,
-                new[] { "眼神特殊函数", "怪物伤害触发技能特效" },
+            AddYanshenFeature(features, "眼神特殊函数",
                 "ys_setpetv", "ys_makeslaveex");
             AddYanshenFeatures(features,
                 new[] { "眼神特殊函数", "自定义伤害_plus", "super攻击触发" },

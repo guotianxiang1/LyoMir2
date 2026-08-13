@@ -100,8 +100,6 @@ namespace GameSvr.Plugins
                     return new[] { "眼神特殊函数", "super攻击触发" };
                 case 19:
                     return new[] { "眼神特殊函数", "全屏拾取" };
-                case 23:
-                    return new[] { "眼神特殊函数", "怪物伤害触发技能特效" };
                 case 40:
                     return new[] { "眼神特殊函数", "指定技能id免伤" };
                 default:
@@ -213,7 +211,9 @@ namespace GameSvr.Plugins
                     17 => _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     18 => _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     19 => _api.AutoPickup(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3)),
-                    20 => _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
+                    20 => cmd.Parameters.Length < 2
+                        ? -1
+                        : _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
                     21 => _api.CheckItemBind(S(cmd,0))?1:0,
                     22 => _api.SendGroundMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),S(cmd,6)),
                     23 => _api.SetPetAttr(S(cmd,11),P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9),P(cmd,10)),
