@@ -321,6 +321,13 @@ namespace GameSvr
             {
                 store[group * 1000 + index] = value;
             }
+            if (upper == 'V' && index > 0)
+            {
+                // 眼神「脚本控制人物爆率」在 keyed SetV 的 0x6DF2CC 装 trampoline，
+                // index 2/3 旁路写 [self+0x579] / [self+0x18C]。桩体只比 index、
+                // 不比 group，且 group 0 的快支够不到它。见 YanshenScriptDropRate。
+                Plugins.YanshenScriptDropRate.OnKeyedSetV(this, index, value);
+            }
         }
 
 

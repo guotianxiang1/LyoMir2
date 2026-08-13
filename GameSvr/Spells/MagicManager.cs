@@ -326,11 +326,15 @@ namespace GameSvr
                                 switch (StdItem.Shape)
                                 {
                                     case 1:
-                                        nPower = (ushort)(DoSpell_GetPower13(UserMagic, 40) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
+                                        // 眼神「中毒时间上限」：绿毒施加器 sub_76E540 在 0x76E5CE
+                                        // 装 trampoline，把这个 nParam1 上钳到 atoi(中毒时间上限_秒)。
+                                        // 只钳时长，不动 nParam3。见 YanshenPoisonTimeCap。
+                                        nPower = (ushort)YanshenPoisonTimeCap.Cap(DoSpell_GetPower13(UserMagic, 40) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
                                         TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
                                         break;
                                     case 2:
-                                        nPower = (ushort)(DoSpell_GetPower13(UserMagic, 30) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
+                                        // 红毒施加器 sub_76E620 的同名钳位在 0x76E675。
+                                        nPower = (ushort)YanshenPoisonTimeCap.Cap(DoSpell_GetPower13(UserMagic, 30) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
                                         TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
                                         break;
                                 }
@@ -1463,11 +1467,14 @@ namespace GameSvr
                                 switch (StdItem.Shape)
                                 {
                                     case 1:
-                                        nPower = Magic.GetPower13(40, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2;// 中毒类型 - 绿毒
+                                        // 同 sub_76E540 @0x76E5CE 的钳位（本函数是群体施毒变体，
+                                        // 走的是同一对施加器 VMT+0x110 / +0x114）。
+                                        nPower = YanshenPoisonTimeCap.Cap(Magic.GetPower13(40, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
                                         BaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
                                         break;
                                     case 2:
-                                        nPower = Magic.GetPower13(30, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2;// 中毒类型 - 红毒
+                                        // 同 sub_76E620 @0x76E675 的钳位。
+                                        nPower = YanshenPoisonTimeCap.Cap(Magic.GetPower13(30, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
                                         BaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
                                         break;
                                 }

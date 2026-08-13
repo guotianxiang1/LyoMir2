@@ -166,10 +166,17 @@ namespace GameSvr
         /// </summary>
         internal void NativeRecalcDropRareFields()
         {
-            m_btNativeDropRareKillerBonus = 0;                       // 0x73D578
-            var aggregate = NativeEquipDropRareAggregate();
-            if (aggregate < 0) aggregate = 0;
-            m_nNativeDropRareBase = (int)((uint)aggregate / 10u);    // 0x73DAC1 div ecx，无符号
+            // 眼神「脚本控制人物爆率」把 0x73D578（7 字节）与 0x73DAC5（6 字节）整条
+            // NOP 掉，重算不再复位这两个字段，改由脚本 SetV(g>0,2/3,·) 设定。
+            // 0x73DECF 那次「[+0x1D5] 门下置 10」不在补丁范围，照常执行。
+            var suppressed = Plugins.YanshenScriptDropRate.RecalcResetSuppressed();
+            if (!suppressed)
+            {
+                m_btNativeDropRareKillerBonus = 0;                   // 0x73D578
+                var aggregate = NativeEquipDropRareAggregate();
+                if (aggregate < 0) aggregate = 0;
+                m_nNativeDropRareBase = (int)((uint)aggregate / 10u); // 0x73DAC1 div ecx，无符号
+            }
             if (NativeDropRareKillerBonusGate())                     // 0x73DEBE
             {
                 m_btNativeDropRareKillerBonus = 10;                  // 0x73DECF

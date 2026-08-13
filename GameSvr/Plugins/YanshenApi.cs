@@ -3781,7 +3781,10 @@ namespace GameSvr.Plugins
         public bool IsHolyShieldMsg() => Enabled("护身触发报文a");
         public bool IsHolyShieldChance() => Enabled("护身触发概率a");
         public bool IsPoisonTimeLimit() => Enabled("中毒时间上限");
-        public int PoisonTimeLimitSec() => GetParamInt("中毒时间上限_秒", 60);
+        // 缺省值来自页面对象构造函数 [edi+0x284] = "120"（生产 config 填的是 60）。
+        // 之前写 60 是把这台服务器的实测值当成了原生缺省。桩体语义见
+        // YanshenPoisonTimeCap（0x76E5CE / 0x76E675 两条 trampoline）。
+        public int PoisonTimeLimitSec() => GetParamInt("中毒时间上限_秒", 120);
         public bool IsPoisonBleed() => Enabled("中毒飘血");
         public int DualPoisonMin() => GetParamInt("双毒时间_最低", 5);
         public bool IsRedPoisonA() => Enabled("红毒_A");
