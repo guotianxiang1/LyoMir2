@@ -482,8 +482,8 @@ void RunShop(Envirnoment map)
 //       FIRST and UNCONDITIONALLY, before any recursion (whose own `!m_boDealing` early-return would
 //       otherwise leave the remote pointing back at self = one-sided dangling pointer).
 //   1b  sub_6C4580 @0x6C45A2..0x6C45E9 — SIX preconditions, all `je/jne 0x6C49EB` (silent return),
-//       in this order: self dealing / m_DealCreat!=nil / self death / remote dealing / remote death /
-//       remote.m_DealCreat==self (mutual consistency). Only then @0x6C45EF m_boDealOK:=1.
+//       in this order: self dealing / m_DealCreat!=nil / self ghost[+0x73] / remote dealing /
+//       remote ghost[+0x73] / remote.m_DealCreat==self (mutual consistency). Only then @0x6C45EF m_boDealOK:=1.
 //   1c  sub_6B3EAC @0x6B3B73..0x6B3B87 — the sweep clears m_DealCreat on ghost **OR** death.
 // The invariant these enforce: escrow may be released ONLY when both sides are alive, both flagged
 // dealing, and the two pointers agree — so it can never be released twice.
@@ -541,13 +541,13 @@ void RunDealEscrowSafety(Envirnoment map)
 
     MustNotRelease("self m_boDealing=false (native @0x6C45A2)", (s, r) => s.m_boDealing = false);
     MustNotRelease("m_DealCreat=null (native @0x6C45AF)", (s, r) => s.m_DealCreat = null);
-    MustNotRelease("self m_boDeath=true (native @0x6C45BC)", (s, r) => s.m_boDeath = true);
+    MustNotRelease("self m_boGhost=true (native @0x6C45BC cmp [ebx+0x73])", (s, r) => s.m_boGhost = true);
     MustNotRelease("remote m_boDealing=false (native @0x6C45CC)", (s, r) => r.m_boDealing = false);
-    MustNotRelease("remote m_boDeath=true (native @0x6C45D9)", (s, r) => r.m_boDeath = true);
+    MustNotRelease("remote m_boGhost=true (native @0x6C45D9 cmp [eax+0x73])", (s, r) => r.m_boGhost = true);
     MustNotRelease("remote.m_DealCreat != self (native @0x6C45E3 mutual consistency)",
         (s, r) => r.m_DealCreat = null);
     Log($"DEAL 1b ClientDealEnd preconditions: {blocked}/6 native gates each independently BLOCK the "
-        + "escrow release (self dealing / m_DealCreat!=nil / self death / remote dealing / remote death / "
+        + "escrow release (self dealing / m_DealCreat!=nil / self ghost / remote dealing / remote ghost / "
         + "remote.m_DealCreat==self), in native order sub_6C4580 @0x6C45A2..0x6C45E9, all silent returns");
     Assert(blocked == 6, "not all six native ClientDealEnd preconditions were exercised");
 

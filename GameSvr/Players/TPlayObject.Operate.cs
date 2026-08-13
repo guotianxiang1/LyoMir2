@@ -1806,7 +1806,7 @@ namespace GameSvr
             {
                 return;
             }
-            if (m_boDeath)
+            if (m_boGhost)
             {
                 return;
             }
@@ -1814,7 +1814,7 @@ namespace GameSvr
             {
                 return;
             }
-            if (m_DealCreat.m_boDeath)
+            if (m_DealCreat.m_boGhost)
             {
                 return;
             }
