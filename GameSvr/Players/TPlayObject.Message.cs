@@ -3083,6 +3083,7 @@ namespace GameSvr
                         && !TryHandleHeroSpiritBeadCm(ProcessMsg)
                         && !TryHandleRewardCm(ProcessMsg)
                         && !TryHandleMessageBoardCm(ProcessMsg)
+                        && !TryHandleFreeRecycleCm(ProcessMsg)
                         && !TryHandleNativeSocialProtocol(ProcessMsg)
                         && !TryHandleNativeCmTailProtocol(ProcessMsg)
                         && !TryHandleNativeCmQ1(ProcessMsg)
