@@ -1576,7 +1576,6 @@ namespace GameSvr
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
-                        SendDefMessage(Grobal2.SM_SITDOWN, m_nCurrX, m_nCurrY, m_btDirection, 0, "");
                     }
                     else
                     {
