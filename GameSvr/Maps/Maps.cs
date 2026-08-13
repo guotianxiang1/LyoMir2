@@ -327,7 +327,30 @@ namespace GameSvr
                                 MapFlag.boNODRUG = true;
                                 continue;
                             }
-                            if (s34.Equals("MINE", StringComparison.OrdinalIgnoreCase))
+                            // MINE-12: 原版 MINE 走的是**长度 4 的前缀比较**，不是全等。
+                            //   0x7763C9  B9 04 00 00 00     mov ecx,4
+                            //   0x7763CE  BA A4 6C 77 00     mov edx,0x776CA4   ; "MINE"
+                            //   0x7763D6  E8 B9 0A D5 FF     call 0x4C6E94
+                            //   0x7763DF  C6 43 6A 01        mov byte [ebx+0x6A],1
+                            // 比较器 0x4C6E94 只比前 ecx 个字符，且要求
+                            // ecx <= Len(两侧)，逐字符过 UpCase：
+                            //   0x4C6EC9  Length(a); cmp esi,eax; jg  fail   ; N <= Len(a)
+                            //   0x4C6ED5  Length(b); cmp esi,eax; jg  fail   ; N <= Len(b)
+                            //   0x4C6EE1  B3 01              mov bl,1
+                            //   0x4C6EEF  8A 44 38 FF        mov al,[a+edi-1]
+                            //   0x4C6EF3  E8 DC C5 F3 FF     call 0x4034D4    ; UpCase
+                            //   0x4C6EFC  8A 44 38 FF        mov al,[b+edi-1]
+                            //   0x4C6F00  E8 CF C5 F3 FF     call 0x4034D4
+                            //   0x4C6F06  3A D0 / 74 04      cmp dl,al / je 继续
+                            //   0x4C6F0A  33 DB              xor ebx,ebx      ; 失配
+                            //   0x4C6F0F  4E / 75 DA         dec esi / jne 循环
+                            // 而 0x4034D4 是 UpCase（cmp al,'a' / jb / cmp al,'z' /
+                            // ja / sub al,0x20），所以**大小写不敏感**——台账
+                            // MINE-12 写的「CASE-SENSITIVE」与字节矛盾，C# 原来的
+                            // OrdinalIgnoreCase 在这一点上是对的，错的是全等。
+                            // HUtil32.CompareLStr 与 0x4C6E94 逐条同构。
+                            // 直接后果：地图里写 MINE2 在原版命中 MINE、置 +0x6A=1。
+                            if (HUtil32.CompareLStr(s34, "MINE", "MINE".Length))
                             {
                                 MapFlag.boMINE = true;
                                 continue;
