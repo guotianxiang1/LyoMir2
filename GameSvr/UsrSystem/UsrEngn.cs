@@ -3265,36 +3265,39 @@ namespace GameSvr
             {
                 if (MonGen.nRace > 0)
                 {
-                    short nX;
-                    short nY;
-                    if (M2Share.RandomNumber.Random(100) < MonGen.nMissionGenRate)
+                    // 战神 spawns one monster per iteration with one coordinate jitter
+                    // each, and nothing else.  The jitter lives in the factory
+                    // sub_679F8C, whose first two Random calls are the only ones on the
+                    // spawn path before the per-race body rolls:
+                    //   00679FBD  85 F6              test esi,esi          ; range
+                    //   00679FC1  8B C6 / 03 C0 / 40 mov eax,esi / add eax,eax / inc eax
+                    //   00679FC9  8B 45 F4           mov eax,[ebp-0xC]     ; 2*range+1
+                    //   00679FCC  E8 7B 9B D8 FF     call 0x403B4C
+                    //   00679FD1  03 45 14 / 2B C6   add eax,[ebp+0x14] / sub eax,esi
+                    //   00679FD9  8B 45 F4           mov eax,[ebp-0xC]
+                    //   00679FDC  E8 6B 9B D8 FF     call 0x403B4C
+                    //   00679FE1  03 45 10 / 2B C6   add eax,[ebp+0x10] / sub eax,esi
+                    // i.e. base + Random(2r+1) - r, x first then y, which is what the two
+                    // lines below compute.
+                    //
+                    // Removed with this commit: a `Random(100) < nMissionGenRate` gate
+                    // selecting a "cluster" branch, and that branch's two Random(20) - 10
+                    // per-monster offsets.  Neither exists natively.  The regen worker
+                    // sub_67C9E0 (0x67C9E0-0x67CC74) and ProcessMonsters sub_67C150
+                    // (0x67C150-0x67C2EA) each contain ZERO Random call sites by
+                    // full-image E8 census, the modulus 20 appears nowhere on the spawn
+                    // path (native jitter is always 2*range+1), and the config key
+                    // "MissionGenRate" is 0-hit across the image in case-insensitive
+                    // ASCII and UTF-16LE.
+                    for (var i = 0; i < nCount; i++)
                     {
-                        nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        for (var i = 0; i < nCount; i++)
+                        var nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
+                        var nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
+                        CreateGeneratedMonster(MonGen, nX, nY);
+                        if (HUtil32.GetTickCount() - dwStartTick > M2Share.g_dwZenLimit)
                         {
-                            CreateGeneratedMonster(MonGen,
-                                (short)(nX - 10 + M2Share.RandomNumber.Random(20)),
-                                (short)(nY - 10 + M2Share.RandomNumber.Random(20)));
-                            if ((HUtil32.GetTickCount() - dwStartTick) > M2Share.g_dwZenLimit)
-                            {
-                                result = false;
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        for (var i = 0; i < nCount; i++)
-                        {
-                            nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                            nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                            CreateGeneratedMonster(MonGen, nX, nY);
-                            if (HUtil32.GetTickCount() - dwStartTick > M2Share.g_dwZenLimit)
-                            {
-                                result = false;
-                                break;
-                            }
+                            result = false;
+                            break;
                         }
                     }
                 }
