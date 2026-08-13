@@ -404,7 +404,9 @@ namespace GameSvr.Plugins
                     18 => _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     19 => _api.AutoPickup(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3)),
                     20 => _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
-                    21 => _api.CheckItemBind(S(cmd,0))?1:0,
+                    // 0x10073440 返回的是 Bind 字节或 -1，不是 0/1 —— boolean 折算是
+                    // AllFuc.pas 封装干的活（value=1 或 -1 才算 true），隧道这一层不折算。
+                    21 => _api.CheckItemBindRaw(S(cmd,0)),
                     22 => _api.SendGroundMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),S(cmd,6)),
                     23 => _api.SetPetAttr(S(cmd,11),P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9),P(cmd,10)),
                     24 => _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1)),

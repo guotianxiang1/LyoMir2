@@ -2998,13 +2998,55 @@ namespace GameSvr.Plugins
             return 0;
         }
 
-        /// <summary>检查物品是否绑定: 参数为MakeIndex的字符串表示</summary>
+        /// <summary>
+        /// ys_CheckWupinIsBind / 数字隧道 21 的**原始 int 返回值**。
+        /// 处理函数 0x10073440，整段内联，除 vector::at / stoi / vector 析构外无任何调用：
+        /// <code>
+        ///   1007348C cmp eax,3 / jae 0x100734B5              ; 段数 &lt; 3 -> 0x10073491
+        ///   10073491 …/ 100734A0 83C8FF or eax,-1 / ret      ;   返回 -1
+        ///   100734B5 C745E8FFFFFFFF  mov [ebp-0x18],-1       ; 结果槽预置 -1
+        ///   100734C0 at(2)->stoi->esi                        ; MakeIndex
+        ///   100734DF mov ebx,[Self+0x508]                    ; 背包容器
+        ///   100734E5 [ebx+4]=data  100734EB [ebx+8]=count
+        ///   100734F6 count&lt;=0 -> 0x10073491（-1）
+        ///   100734FA data==0   -> 0x10073491（-1）
+        ///   10073521 循环：p=data[i]；p 非空则 cur=p, mk=[p+0x18]
+        ///   10073538 cur==0 / 10073541 mk==0 / 10073545 mk!=esi  -> 下一件
+        ///   10073550 8A4834 mov cl,byte [cur+0x34]  -> 结果 = Bind 字节，break
+        ///   10073558 返回结果槽（**没匹配到就是那个 -1**）
+        /// </code>
+        /// 也就是说原生**不是 bool**：命中返回该物品的 Bind 字节（0..255），
+        /// 没命中 / 背包空 / 段数不足一律 -1。
+        /// </summary>
+        public int CheckItemBindRaw(string makeIndex)
+        {
+            if (!int.TryParse(makeIndex, out int idx)) return -1;
+            var list = _player?.m_ItemList;
+            if (list == null || list.Count <= 0) return -1;
+            foreach (var item in list)
+            {
+                if (item == null) continue;
+                if (item.MakeIndex == 0) continue;      // 10073541 mk==0 -> 跳过
+                if (item.MakeIndex != idx) continue;
+                return item.Bind;                       // 10073550 原样的 Bind 字节
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// AllFuc.pas 的 boolean 封装，逐字复刻：
+        /// <code>
+        ///   value:=Player.GetBagItemCount(res);
+        ///   if (value=1) or (value=-1) then result:=true else result:=false;
+        /// </code>
+        /// 注意两处与"直觉版"的差别：**物品不在背包时返回 -1，于是被判成 true**；
+        /// 而 Bind 字节为 2..255 时反而是 false。旧实现 `item.Bind != 0` 且
+        /// 未命中返回 false，两点都反了。
+        /// </summary>
         public bool CheckItemBind(string makeIndex)
         {
-            if (!int.TryParse(makeIndex, out int idx)) return false;
-            foreach (var item in _player.m_ItemList)
-                if (item != null && item.MakeIndex == idx) return item.Bind != 0;
-            return false;
+            var v = CheckItemBindRaw(makeIndex);
+            return v == 1 || v == -1;
         }
 
         // ═══════════════════════════════════════════════════════════════
