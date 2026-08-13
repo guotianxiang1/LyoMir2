@@ -58,9 +58,20 @@ namespace GameSvr
         public string NativeItemScriptPath;
         public bool Light = false;
 
+        // Native sub_4C707C @0x004C707C (eax=nCount, edx=nRate):
+        //   4C708C  4B              dec ebx          ; nCount-1
+        //   4C708D  85 DB           test ebx,ebx
+        //   4C708F  7C 12           jl  return 0     ; nCount<=0 → 0 draws
+        //   4C7091  43              inc ebx          ; restore nCount
+        //   4C7092  8B C6           mov eax,esi      ; nRate
+        //   4C7094  E8 B3 CA F3 FF  call 0x403B4C    ; Random(nRate) — no nRate test
+        //   4C7099  85 C0 / 75 06   test eax,eax / jne
+        //   4C709D  FF 45 FC        inc result
+        // nRate<=0 still loops nCount times. Random(0) is 0 so the result is
+        // nCount; a negative nRate participates as its UInt32 bits. The old
+        // `if (nRate<=0) return 0` skipped those draws and zeroed the result.
         private int GetRandomRange(int nCount, int nRate)
         {
-            if (nRate <= 0) return 0;
             var result = 0;
             for (var i = 0; i < nCount; i++)
             {

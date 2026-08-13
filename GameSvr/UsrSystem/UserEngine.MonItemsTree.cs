@@ -119,11 +119,8 @@ namespace GameSvr
                         continue;
 
                     // 0071FBCE  xor edx,edx / 0071FBD5  call dword [ecx+0x28]
-                    // The base item class's +0x28 is sub_783EFC:
-                    //   Dura = Round(DuraMax / 100.0 * (20 + Random(80)))
-                    // Same hook the monster's own drop table runs at 0x71FDA2.
-                    userItem.Dura = (ushort)HUtil32.Round(
-                        userItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
+                    // Same +0x28 the monster table runs at 0x71FDA2.
+                    NativeItemPlus28.ApplyOnDrop(userItem, node.StdItem);
 
                     // 0071FC5D arm: push 1 / push 0 / push killer / push <name string> /
                     // mov ecx,5 / mov edx,item / mov eax,[ebp-0xC] / call sub_7688A0.
