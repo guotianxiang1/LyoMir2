@@ -36,7 +36,7 @@ namespace GameSvr.Plugins
             [39]="眼神特殊函数",[40]="眼神特殊函数",[41]="踢玩家下线",
         };
 
-        // Caret command toggles (^1^ ~ ^37^)
+        // Caret command toggles (^1^ ~ ^38^)
         static readonly Dictionary<int, string> _caretToggles = new()
         {
             [1]="眼神特殊函数",[2]="大背包",[3]="眼神特殊函数",
