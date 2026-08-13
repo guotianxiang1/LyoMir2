@@ -4,7 +4,7 @@ PrepareRuntimeConfig();
 
 var repoRoot = AuditRepoRoot.Resolve(args);
 var source = File.ReadAllText(Path.Combine(repoRoot, "GameSvr", "Castle", "UserCastle.cs"));
-var getCastle = Slice(source, "public void GetCastle(Association Guild)",
+var getCastle = Slice(source, "public void GetCastle(Association Guild, bool notifyServerGroup = false)",
     "public void StartWallconquestWar()");
 var loadAttackers = Slice(source, "private void LoadAttackSabukWall()",
     "private static bool TryParseAttackDate");
@@ -17,18 +17,18 @@ var reverseScan = At(getCastle, "for (var i = m_AttackWarList.Count - 1; i >= 0;
 var replaceGuild = At(getCastle, "attackerInfo.Guild = oldGuild;");
 var replaceName = At(getCastle, "attackerInfo.sGuildName = oldGuild.sGuildName;");
 var refreshOld = At(getCastle, "oldGuild.RefMemberName();");
-var reloadAttackers = At(getCastle, "LoadAttackSabukWall();");
+var saveAttackers = At(getCastle, "SaveAttackSabukWall();");
 var refreshNew = At(getCastle, "m_MasterGuild.RefMemberName();");
 
 Assert(configSave < oldGuildBranch && oldGuildBranch < reverseScan,
     "GetCastle must save config before entering the old-owner path");
 Assert(reverseScan < replaceGuild && replaceGuild < replaceName && replaceName < refreshOld,
     "GetCastle must reverse-scan and replace the attacker record before old-guild refresh");
-Assert(refreshOld < reloadAttackers && reloadAttackers < refreshNew,
-    "GetCastle must RE-LOAD AttackSabukWall between old and new guild refreshes: "
-    + "0x65BF80 calls 0x65A3B8, which is the LOADER (it references both "
-    + "'AttackSabukWall.txt' @0x65A4FC and the 'YYYY-MM-DD' parse format "
-    + "@0x65A4DC), not the writer 0x65B22C (filename only)");
+Assert(refreshOld < saveAttackers && saveAttackers < refreshNew,
+    "GetCastle must SAVE AttackSabukWall between old and new guild refreshes: "
+    + "0x65BF80 calls 0x65A3B8, which walks [ebx+0x8C] and writes "
+    + "'       \"'+YYYY-MM-DD+'\"\\r\\n' (0x65A4C8 / 0x65A4DC / 0x65A4F0). "
+    + "The loader 0x65B22C has a single E8 xref from init 0x65AAD6");
 
 // 战神 sub_65BEC0 has NO rollback on a failed save. 0x65A510 is a Delphi
 // `procedure` (never sets eax) and the next instruction 0x65BF22 `test edi,edi`
@@ -40,9 +40,9 @@ Assert(!getCastle.Contains("if (!SaveConfigFile())", StringComparison.Ordinal),
     + "is a procedure with no return value");
 Assert(!getCastle.Contains("m_MasterGuild = oldGuild;", StringComparison.Ordinal),
     "GetCastle must NOT roll the owner back; native has no restore path");
-Assert(!getCastle.Contains("SaveAttackSabukWall();", StringComparison.Ordinal),
-    "GetCastle must not PERSIST the attacker reassignment -- native re-reads the "
-    + "list from disk at 0x65BF80, discarding it");
+Assert(!getCastle.Contains("LoadAttackSabukWall();", StringComparison.Ordinal),
+    "GetCastle must not RE-LOAD the attacker list -- that would discard the "
+    + "old-guild reassignment that 0x65BF5E just wrote");
 Assert(source.Contains("AttackDate.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture)",
         StringComparison.Ordinal),
     "AttackSabukWall must use the native YYYY-MM-DD date format");
@@ -79,7 +79,7 @@ Equal(new DateTime(2000, 1, 1),
     M2Share.AddDateTimeOfDay(new DateTime(99, 12, 31), 2),
     "native year 99 rollover must jump to 2000");
 
-Console.WriteLine("CastleOwnerTransitionCheck PASS owner=swap=save attackList=native-load date=yyyy-MM-dd/add-day-exact");
+Console.WriteLine("CastleOwnerTransitionCheck PASS owner=swap=save attackList=native-save date=yyyy-MM-dd/add-day-exact");
 
 static int At(string text, string needle)
 {
