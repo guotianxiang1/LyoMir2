@@ -188,5 +188,51 @@ namespace GameSvr
         //   0072737B FF 97 50 02 00 00          call [obj+0x250]
         internal static (ClientPacket Header, byte[] Body) BuildSm965(int recog)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_965, recog, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 966 (0x3C6) body — the AnsiString literal pushed as sMsg at 0x6D6624 (push 0x6D6680).
+        // Delphi long-string header @0x6D6674 (FF FF FF FF / len=0x14) precedes 20 GBK bytes @0x6D6680:
+        //   C7 EB B8 FC D0 C2 B5 BD D7 EE D0 C2 B5 C4 BF CD BB A7 B6 CB  = "请更新到最新的客户端"
+        private static readonly byte[] Sm966Body =
+        {
+            0xC7, 0xEB, 0xB8, 0xFC, 0xD0, 0xC2, 0xB5, 0xBD, 0xD7, 0xEE,
+            0xD0, 0xC2, 0xB5, 0xC4, 0xBF, 0xCD, 0xBB, 0xA7, 0xB6, 0xCB
+        };
+
+        // SM 966 (0x3C6) — send [obj+0x250] @0x6D663E. Param is the hard constant 1; sMsg is the fixed
+        // "请更新到最新的客户端" string above; Recog is a caller countdown (0x834-esi)*1000 ms.
+        //   006D661E 6A 01                      push 1            ; Param = 1
+        //   006D6620 6A 00 6A 00                push 0 ; push 0   ; Tag=Series=0
+        //   006D6624 68 80 66 6D 00             push 0x6D6680     ; sMsg = the literal (body below)
+        //   006D6629 B8 34 08 00 00 / 2B C6 / 69 C8 E8 03 00 00
+        //                                       mov eax,0x834 / sub eax,esi / imul ecx,eax,0x3E8
+        //                                                         ; Recog = (0x834 - esi) * 1000
+        //   006D6636 66 BA C6 03                mov dx,0x3C6
+        //   006D663E FF 96 50 02 00 00          call [obj+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm966(int recogCountdownMs)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_966, recogCountdownMs, 1, 0, 0),
+                (byte[])Sm966Body.Clone());
+
+        // SM 108 (0x6C) — text notice broadcast. The caller (0x705F..) copies the source text to a
+        // local, clamped to 80 bytes (min(len,0x50) via 0x40D580), then calls wrapper 0x705954 which
+        // walks [self+0x30] and re-sends [player+0x250] to every member. Per member the frame is:
+        //   007059A1 66 8B 45 14 push  ; Param  = word[ebp+0x14] (caller word[ebp-2])
+        //   007059A6 66 8B 45 10 push  ; Tag    = 0
+        //   007059AB 66 8B 45 0C push  ; Series = 0
+        //   007059AC 8B 45 08    push  ; sMsg   = the clamped text (body)
+        //   007059B0 8B 4D F4    mov ecx,[ebp-0xC] = Recog = 0 (caller xor ecx,ecx @0x705FBE)
+        //   007059B3 dx = ident 0x6C ; 007059BB call [player+0x250]
+        // The member walk and text source are trigger-side; this builder returns one recipient's
+        // packet. Body = the sMsg bytes clamped to the native 80-byte cap.
+        internal static (ClientPacket Header, byte[] Body) BuildSm108(ushort param, byte[] textBytes)
+        {
+            var body = textBytes ?? Array.Empty<byte>();
+            if (body.Length > 0x50)
+            {
+                var clamped = new byte[0x50];
+                Array.Copy(body, clamped, 0x50);
+                body = clamped;
+            }
+            return (Grobal2.MakeDefaultMsg(Grobal2.SM_108, 0, param, 0, 0), body);
+        }
     }
 }
