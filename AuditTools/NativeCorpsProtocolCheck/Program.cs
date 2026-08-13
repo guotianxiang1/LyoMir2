@@ -1644,9 +1644,29 @@ static void CheckSourceContract()
     Require(serviceSource.Contains(
             "position != 3 && position != 4", StringComparison.Ordinal),
         "4563 Gild owner/vice-owner policy missing");
-    Require(!noticeSources.Contains("Association", StringComparison.Ordinal)
-            && !noticeSources.Contains("GuildManager", StringComparison.Ordinal),
+    // Strip whole-line comments first: NativeCorpsService.cs:238 documents the native
+    // equivalent ("AssociationManager.Run() line ~159") and a raw substring scan read that
+    // prose as if it were a legacy model reference. The assertion is otherwise unchanged and
+    // still bites on real code (verified by mutation: putting `Association.Get(` back into
+    // either file re-trips it).
+    var noticeCode = StripLineComments(noticeSources);
+    Require(!noticeCode.Contains("Association", StringComparison.Ordinal)
+            && !noticeCode.Contains("GuildManager", StringComparison.Ordinal),
         "4563 write chain uses the legacy Guild model");
+}
+
+static string StripLineComments(string source)
+{
+    var builder = new System.Text.StringBuilder(source.Length);
+    foreach (var line in source.Split('\n'))
+    {
+        // Only whole-line comments are dropped; a trailing comment on a code line would
+        // require real tokenising, and no assertion here depends on one.
+        if (!line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+            builder.Append(line);
+        builder.Append('\n');
+    }
+    return builder.ToString();
 }
 
 static NativeCorpsService CreateService(NativeCorpsDataSnapshot snapshot)
