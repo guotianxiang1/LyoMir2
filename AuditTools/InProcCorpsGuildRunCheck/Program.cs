@@ -318,7 +318,7 @@ void RunGildLifecycle()
 // hook is HELD). Verifies the risky membership/relation WRITES: JOIN accept adds the applicant corps to the
 // president's gild (sub_706264); UNION accept = DELETE-3 + INSERT Relation-1 on the canonical pair
 // (sub_708168 save_relation); UNION refuse = DELETE-3 only (sub_708004), no re-insert; both consume the
-// pending request. A TrackingGildStore records the relation INSERT/DELETE so the DB-only pending-Relation-3
+// pending request. A TrackingGildStore records the relation INSERT/DELETE so the pending-Relation-3
 // lifecycle is observable (FakeGildStore is a pure no-op).
 void CheckGildRequestAcceptRefuse()
 {
@@ -359,7 +359,11 @@ void CheckGildRequestAcceptRefuse()
     Assert(s2.ApplyGildEnableUnion(41, true) == 0,
         "gild400 (target) enables union — session flag, set at runtime");
     Assert(s2.ApplyGildRequestUnion(1, "盟友行会") == 0, "union request created (Relation-3 pending)");
-    Assert(GildRelation(s2, 1, 41) == 0, "pending union Relation-3 is DB-only (not in-memory)");
+    // save_relation 0x5E6F19 `33C9 xor ecx,ecx` / 0x5E6F1B `8ACB mov cl,bl` / 0x5E6F23 `call 0x49F9C8`
+    // stores the raw type, so a pending 3 IS in the relation map; the loader agrees
+    // (0x5E8D83 `2C04 sub al,4` admits 0..3, 0x5E8EB5 adds unconditionally).
+    Assert(GildRelation(s2, 1, 41) == NativeCorpsService.GildPendingUnion,
+        "pending union publishes Relation-3 into the in-memory relation map");
     var unionResult = s2.ApplyGildAcceptRequest(41, firstReqId);
     Assert(unionResult == 0 && GildRelation(s2, 1, 41) == NativeCorpsService.GildUnion,
         "UNION accept: DELETE-3 + INSERT-1 -> in-memory union relation");
@@ -599,7 +603,7 @@ sealed class FakeGildStore : INativeGildStore
 }
 
 // INativeGildStore that RECORDS the relation INSERT/DELETE calls (still a fail-safe no-op otherwise), so the
-// DB-only pending-Relation-3 lifecycle (union request INSERT-3 -> accept DELETE-3+INSERT-1 / refuse DELETE-3)
+// pending-Relation-3 lifecycle (union request INSERT-3 -> accept DELETE-3+INSERT-1 / refuse DELETE-3)
 // is observable in CheckGildRequestAcceptRefuse. All other writes return true like FakeGildStore.
 sealed class TrackingGildStore : INativeGildStore
 {

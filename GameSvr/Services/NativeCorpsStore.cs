@@ -473,10 +473,17 @@ namespace GameSvr.Services
                 var relation = unchecked((byte)Convert.ToInt32(
                     reader.GetValue(2)));
                 var createTime = reader.GetDateTime(3);
+                // Native loader 0x5E8D80 `8A45E0 mov al,[ebp-0x20]` /
+                // 0x5E8D83 `2C04 sub al,4` / 0x5E8D85 `72 38 jb` admits the
+                // whole 0..3 domain, and 0x5E8EAA `33C9 xor ecx,ecx` /
+                // `8A4DE0 mov cl,[ebp-0x20]` / 0x5E8EB5 `call 0x49F9C8` puts
+                // every admitted row into the relation map unconditionally.
+                // Only 2 (0x5E8E64) and 1 (0x5E8E90) additionally join the
+                // hostile/union lists; 0 and 3 are map-only.
                 if (first == 0 || second == 0 || first == second
                     || !snapshot.GildById.ContainsKey(first)
                     || !snapshot.GildById.ContainsKey(second)
-                    || relation is not (1 or 2))
+                    || relation > 3)
                     continue;
                 var key = NativeCorpsDataSnapshot.GildRelationKey(first,
                     second);

@@ -165,17 +165,17 @@ var purgeEnd = serviceSource.IndexOf("private void AddLogLocked", purgeStart,
 Check(purgeEnd > purgeStart, "PurgeExpiredRequests body boundary not found");
 var purgeBody = serviceSource[purgeStart..purgeEnd];
 
-// An expired UNION request owns a DB-only pending Relation=3 row that must be deleted.
-Check(purgeBody.Contains("DeleteGildRelationFailSafe", StringComparison.Ordinal),
-    "expired union requests must DELETE their pending Relation=3 row");
-Check(purgeBody.Contains("NativeGildRequestKind.Union", StringComparison.Ordinal),
-    "the relation DELETE must be restricted to union requests");
-// An ESTABLISHED alliance (Relation=1) is NOT time-limited in the native engine.
+// sub_6A5D6C unlinks the request and nothing else: its per-victim teardown is sub_6A60A4
+// (@0x6A5EF0) + sub_6A5070 (@0x6A5EF9). delete_relation sub_5E90A4 has exactly four callers
+// image-wide -- 0x5E9208 war expiry, 0x703DA3 break-union, 0x70809E union refuse, 0x70821C
+// union accept -- and zero dword references, so the caller set is closed and the sweep is not
+// in it. An expired UNION request keeps its pending Relation=3 pair, and an established
+// Relation=1 alliance is likewise never time-limited.
+Check(!purgeBody.Contains("GildRelation", StringComparison.Ordinal),
+    "the purge must not touch any gild relation: native sub_6A5D6C only unlinks the request");
 Check(!purgeBody.Contains("_gildRelations", StringComparison.Ordinal),
     "the purge must NOT touch established relations (_gildRelations): native expires "
     + "only PENDING requests, never a live Relation=1 alliance");
-Check(purgeBody.Contains("SupportsGildWrites", StringComparison.Ordinal),
-    "the store DELETE must be gated on SupportsGildWrites");
 
 // The tick must be wired, and not behind an unrelated interval gate.
 var tickSource = File.ReadAllText(Path.Combine(
