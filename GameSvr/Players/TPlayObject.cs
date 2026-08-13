@@ -223,47 +223,52 @@ namespace GameSvr
                 }
                 return result;
             }
-            if (IsEnoughBag())
+            // 0x6B7662 mov dl,1 / 0x6B7668 call [vmt+0x244] (IsEnoughBag)
+            // 0x6B7676 cmp dword [item+0x1C],0
+            // 0x6B7689 mov dx,word [std+0x1A] / 0x6B768F call 0x73C950
+            // All three failures je 0x6B77BA: SysMsg 0x6B7868 (len=20 GBK
+            // "无法再拾取更多物品。") via vmt+0xD4, and they run BEFORE
+            // DeleteFromMap at 0x6B76C9. The old C# arm DeleteFromMap'd first
+            // then Dispose(UserItem) — a swallow native never does.
+            var UserItem = mapItem.UserItem;
+            var StdItem = UserItem != null
+                ? M2Share.UserEngine.GetStdItem(UserItem.wIndex)
+                : null;
+            if (!IsEnoughBag() || StdItem == null ||
+                !IsAddWeightAvailable(
+                    M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
             {
-                if (m_PEnvir.DeleteFromMap(pickupX, pickupY, CellType.OS_ITEMOBJECT, mapItem) == 1)
+                SysMsg("无法再拾取更多物品。", MsgColor.Red, MsgType.Hint);
+                return false;
+            }
+            if (m_PEnvir.DeleteFromMap(pickupX, pickupY, CellType.OS_ITEMOBJECT, mapItem) == 1)
+            {
+                SendMsg(this, Grobal2.RM_ITEMHIDE, 0, mapItem.Id, pickupX, pickupY, "");
+                // 战神 sub_6B74D8 @0x6B7708: `push 4; mov cl,1; call [vmt+0x248]`
+                // — the ground-pickup site routes through the OUTER AddItemToBag
+                // (sub_6B7378) with acquisitionReason = 4 and the stamper enabled.
+                if (!AddItemToBag(UserItem,
+                        NativeItemAcquisitionStamp.Reason.PickUp, true))
                 {
-                    var UserItem = mapItem.UserItem;
-                    var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                    if (StdItem != null && IsAddWeightAvailable(M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
+                    m_PEnvir.AddToMap(pickupX, pickupY,
+                        CellType.OS_ITEMOBJECT, mapItem);
+                    return false;
+                }
+                TrackNativeMapDropItem(UserItem);
+                if (!M2Share.IsCheapStuff(StdItem.StdMode))
+                {
+                    if (StdItem.NeedIdentify == 1)
                     {
-                        SendMsg(this, Grobal2.RM_ITEMHIDE, 0, mapItem.Id, pickupX, pickupY, "");
-                        // 战神 sub_6B74D8 @0x6B7708: `push 4; mov cl,1; call [vmt+0x248]`
-                        // — the ground-pickup site routes through the OUTER AddItemToBag
-                        // (sub_6B7378) with acquisitionReason = 4 and the stamper enabled.
-                        if (!AddItemToBag(UserItem,
-                                NativeItemAcquisitionStamp.Reason.PickUp, true))
-                        {
-                            m_PEnvir.AddToMap(pickupX, pickupY,
-                                CellType.OS_ITEMOBJECT, mapItem);
-                            return false;
-                        }
-                        TrackNativeMapDropItem(UserItem);
-                        if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                        {
-                            if (StdItem.NeedIdentify == 1)
-                            {
-                                M2Share.AddGameDataLog('4' + "\t" + m_sMapName + "\t" + pickupX + "\t" + pickupY + "\t" + m_sCharName + "\t" + StdItem.Name
-                                                       + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
-                            }
-                        }
-                        Dispose(mapItem);
-                        if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                        {
-                            this.SendAddItem(UserItem);
-                        }
-                        result = true;
-                    }
-                    else
-                    {
-                        Dispose(UserItem);
-                        m_PEnvir.AddToMap(pickupX, pickupY, CellType.OS_ITEMOBJECT, mapItem);
+                        M2Share.AddGameDataLog('4' + "\t" + m_sMapName + "\t" + pickupX + "\t" + pickupY + "\t" + m_sCharName + "\t" + StdItem.Name
+                                               + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
                     }
                 }
+                Dispose(mapItem);
+                if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                {
+                    this.SendAddItem(UserItem);
+                }
+                result = true;
             }
             return result;
         }
@@ -336,13 +341,17 @@ namespace GameSvr
         public bool IsAddWeightAvailable(int nWeight)
         {
             // Native sub_73C950 @ 0x73C950:
-            //   mov edx, [eax+0x2C4]  ; edx = Weight
-            //   cmp edx, [eax+0x2C8]  ; vs MaxWeight
-            //   setl al               ; al=1 if Weight < MaxWeight (STRICT <, not <=)
-            // Native ignores the dx (item weight) parameter passed by callers,
-            // comparing only current vs max. We preserve nWeight for sanity
-            // but match the strict-less-than polarity. DROP-39.
-            return m_WAbil.Weight + nWeight < m_WAbil.MaxWeight;
+            //   73C950  8B 90 C4 02 00 00  mov edx,[eax+0x2C4]  ; Weight — overwrites dx
+            //   73C956  3B 90 C8 02 00 00  cmp edx,[eax+0x2C8]  ; MaxWeight
+            //   73C95C  0F 9C C0           setl al               ; Weight < MaxWeight
+            //   73C95F  C3                 ret
+            // Callers do pass item weight in dx (pickup 0x6B7689 `66 8B 50 1A`)
+            // but the callee's first instruction overwrites it. Adding nWeight
+            // rejects items native accepts; on the pickup fail arm that used to
+            // Dispose the UserItem, that is a swallow. DROP-39 polarity is
+            // still setl (strict <), not setle.
+            _ = nWeight;
+            return m_WAbil.Weight < m_WAbil.MaxWeight;
         }
 
         internal int EnsureClientItemId(TUserItem item)
@@ -1512,9 +1521,34 @@ namespace GameSvr
 
         public void GetBackDealItems()
         {
+            // 战神 sub_6C4114（GetBackDealItems 本体；0x6C40B8 只是 OpenDealDlg 对它的调用）：
+            //   0x6C411B  8B 83 DC 06 00 00  mov eax,[ebx+0x6DC]   ; m_DealItemList
+            //   0x6C4121  8B 40 08           mov eax,[eax+8]       ; .Count
+            //   0x6C4126  7E 33              jle 0x6C415B          ; Count <= 0 跳过整段
+            //   0x6C4128  8B F0 / 4E         mov esi,eax / dec esi ; i := Count-1
+            //   0x6C412B  83 FE 00 / 7C 20   cmp esi,0 / jl 0x6C4150
+            //   0x6C4130  8B D6              mov edx,esi           ; ← 取的是 i
+            //   0x6C4138  E8 .. call 0x424D4C                      ; TList.Get(i)
+            //   0x6C4145  E8 .. call 0x424AB8                      ; m_ItemList.Add
+            //   0x6C414A  4E / 83 FE FF / 75 E0  dec esi / cmp esi,-1 / jne 0x6C4130
+            // TRADE-57：**倒序**（Count-1 downto 0），旧 C# 是正序，于是取回押金后
+            // 背包里这批物品的相对次序与原生完全相反。背包次序是可观测的：客户端
+            // 按 m_ItemList 顺序铺格子，存档 THumInfoData.BagItems 也按同序落盘
+            // （§1.4 记录布局），后续按下标操作的路径同样受影响。
+            //
+            // 0x6C4150 之后是 `call [DealItemList.vmt+8]`(Clear)，然后
+            //   0x6C415B  8B 83 E0 06 00 00  mov eax,[ebx+0x6E0]   ; m_nDealGolds
+            //   0x6C4161  01 83 5C 01 00 00  add [ebx+0x15C],eax   ; **裸加，不走 IncGold**
+            //   0x6C4167  33 C0 / 89 83 E0 06 00 00  m_nDealGolds := 0
+            //   0x6C416F  C6 83 84 06 00 00 00      m_boDealOK := false
+            // 裸加是忠实的：这里退的是本人押金，押金在 ClientChangeDealGold 里
+            // 已从 m_nGold 扣走（0x6C44D4 同样是裸写），加回来不可能超过扣走前的
+            // 值，所以原生不需要 m_nGoldMax 门。**不要"修"成 IncGold** —— IncGold
+            // 的 `jle` 会让 0 押金返回 false，且失败时静默吞掉押金。
+            // 函数尾部无 0x73CEE4（WeightChanged）；那一句只在成交清理 sub_6C4A98 里。
             if (m_DealItemList.Count > 0)
             {
-                for (var i = 0; i < m_DealItemList.Count; i++)
+                for (var i = m_DealItemList.Count - 1; i >= 0; i--)
                 {
                     m_ItemList.Add(m_DealItemList[i]);
                 }
@@ -1587,7 +1621,7 @@ namespace GameSvr
 
         public void ClearStatusTime()
         {
-            this.m_wStatusTimeArr = new ushort[12];
+            ClearLegacyStatusSlots();
         }
 
         private void SendMapDescription()
@@ -2074,7 +2108,9 @@ namespace GameSvr
         public bool CancelGroup()
         {
             var result = true;
-            const string sCanceGrop = "你的小组被解散了.";
+            // 战神 sub_7270F8 @0x727158 push 0x7271BC，AnsiString 前缀 dword=19，
+            // 正文「-你的小组被解散了。」（含全角句号）。旧 C# 用 ASCII 句号且缺前导 '-'。
+            const string sCanceGrop = "-你的小组被解散了。";
             if (m_GroupMembers.Count <= 1)
             {
                 SendGroupText(sCanceGrop);
@@ -2142,11 +2178,21 @@ namespace GameSvr
         
         private bool PileStones(int nX, int nY)
         {
-            // MINE-46: Hard-block when either tier byte == 3 (native 0x6BC202, 0x6BC21E)
-            // Anti-fatigue tier 3 OR cheat-penalty tier 3 completely disables mining.
-            if (m_btNativeFatigueTier == 3 || m_btNativeCheatPenaltyTier == 3)
+            // MINE-46: 三道早退全部 `je/jne 0x6BC366`，而 0x6BC366 是函数 epilogue
+            // （`5F 5E 5B 8B E5 5D C3` pop edi/esi/ebx / mov esp,ebp / pop ebp / ret），
+            // 不是另一段逻辑。RM_HEAVYHIT 广播在 try 块尾 0x6BC306（`66 BA 15 27`
+            // ident 0x2715 / `call [vmt+0xD8]`），早退到不了那里。
+            //   0x6BC202  80 BB 28 18 00 00 03   cmp byte [ebx+0x1828],3  ; fatigue
+            //   0x6BC209  0F 84 57 01 00 00      je  0x6BC366
+            //   0x6BC211  E8 72 B5 01 00         call 0x6D7788            ; HasState(0x19)=25
+            //   0x6BC216  84 C0                  test al,al
+            //   0x6BC218  0F 85 48 01 00 00      jne 0x6BC366
+            //   0x6BC21E  80 BB 29 18 00 00 03   cmp byte [ebx+0x1829],3  ; cheat
+            //   0x6BC225  0F 84 3B 01 00 00      je  0x6BC366
+            if (m_btNativeFatigueTier == 3
+                || HasNativeActiveState(25)
+                || m_btNativeCheatPenaltyTier == 3)
             {
-                SendRefMsg(Grobal2.RM_HEAVYHIT, m_btDirection, m_nCurrX, m_nCurrY, 0, string.Empty);
                 return false;
             }
 
@@ -3214,14 +3260,13 @@ namespace GameSvr
             HumData.Abil.MaxHandWeight = m_Abil.MaxHandWeight;
             HumData.Abil.HP = m_WAbil.HP;
             HumData.Abil.MP = m_WAbil.MP;
-            HumData.wStatusTimeArr = m_wStatusTimeArr == null
-                ? Array.Empty<ushort>()
-                : (ushort[])m_wStatusTimeArr.Clone();
-            if (HumData.wStatusTimeArr.Length >
-                Grobal2.STATE_BUBBLEDEFENCEUP)
-            {
-                HumData.wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
-            }
+            // Save path of the legacy-slot trio. ToArray projects the live node
+            // list down to the 12 legacy seconds the record has always carried,
+            // so the on-disk layout is unchanged (12 x ushort, slot i = native
+            // state 31 - i). Slot 11 is zeroed to match the load path in
+            // UsrEngn.LoadPlayObject.
+            HumData.wStatusTimeArr = m_wStatusTimeArr.ToArray();
+            HumData.wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
             HumData.sHomeMap = m_sHomeMap;
             HumData.wHomeX = m_nHomeX;
             HumData.wHomeY = m_nHomeY;

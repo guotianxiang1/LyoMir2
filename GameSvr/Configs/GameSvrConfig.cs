@@ -109,6 +109,12 @@ namespace GameSvr
         public int[] MonUpLvNeedKillCount;
         public byte[] SlaveColor;
         public int[] dwNeedExps;
+        /// <summary>
+        /// Highest LEVEL_N key loaded from [PlayerLevelExp]. Native player
+        /// GetLevelExp (sub_6AFCC8) treats index &gt; Count as OOB and returns
+        /// 0xFD51DA80; this is that Count.
+        /// </summary>
+        public int nNeedExpMaxLevel;
         public int[] WideAttack;
         public int[] CrsAttack;
         public int[,,] SpitMap;
@@ -507,21 +513,10 @@ namespace GameSvr
         
         
         
-        public int nMakeMineHitRate;
-        
-        
-        
+        // nMakeMineHitRate / nStoneTypeRate{,Min} / nGoldStoneMin..nBlackStoneMax
+        // 已删：全镜像 ASCII+GBK+UTF-16LE 对 GoldStoneMin 等键 0 命中。原生
+        // MakeMine 用硬编码 Random(120)+减权重阶梯，不用区间配置。
         public int nMakeMineRate;
-        public int nStoneTypeRate;
-        public int nStoneTypeRateMin;
-        public int nGoldStoneMin;
-        public int nGoldStoneMax;
-        public int nSilverStoneMin;
-        public int nSilverStoneMax;
-        public int nSteelStoneMin;
-        public int nSteelStoneMax;
-        public int nBlackStoneMin;
-        public int nBlackStoneMax;
         public int nStoneMinDura;
         public int nStoneGeneralDuraRate;
         public int nStoneAddDuraRate;
@@ -1048,6 +1043,7 @@ namespace GameSvr
             MonUpLvNeedKillCount = new int[] { 0, 0, 50, 100, 200, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600 };
             SlaveColor = new byte[] { 0xFF, 0xFE, 0x93, 0x9A, 0xE5, 0xA8, 0xB4, 0xFC, 249, 250, 250, 250, 250, 250, 250 };
             dwNeedExps = new int[Grobal2.MAXCHANGELEVEL];
+            nNeedExpMaxLevel = 0;
             WideAttack = new int[] { 7, 1, 2 };
             CrsAttack = new int[] { 7, 1, 2, 3, 4, 5, 6 };
             SpitMap = new int[,,]{
@@ -1376,18 +1372,7 @@ namespace GameSvr
             nUnknowNecklaceSCAddValueMaxLimit = 5;
             nMonOneDropGoldCount = 2000;
             boSendCurTickCount = true;  
-            nMakeMineHitRate = 4; 
             nMakeMineRate = 12; 
-            nStoneTypeRate = 120;
-            nStoneTypeRateMin = 56;
-            nGoldStoneMin = 1;
-            nGoldStoneMax = 2;
-            nSilverStoneMin = 3;
-            nSilverStoneMax = 20;
-            nSteelStoneMin = 21;
-            nSteelStoneMax = 45;
-            nBlackStoneMin = 46;
-            nBlackStoneMax = 56;
             nStoneMinDura = 3000;
             nStoneGeneralDuraRate = 13000;
             nStoneAddDuraRate = 20;

@@ -1,0 +1,678 @@
+
+### (global) / global  (50)
+00729781  GetValidStr                        function GetValidStr(Str: string; var Dest: string; const divier: Char): string;
+00729792  DebugOut                           procedure DebugOut(const s: string);
+007297A3  ServerSay                          procedure ServerSay(const MsgStr : string; nColor : integer);
+007297B4  CheckOtherMapMon                   function CheckOtherMapMon(const MapName: string): Integer;
+007297C5  CheckOtherMapHum                   function CheckOtherMapHum(const MapName: string): Integer;
+007297D6  GetNow                             function GetNow: Double;
+007297E7  GetYear                            function GetYear: Word;
+007297F8  GetMonth                           function GetMonth: Word;
+00729809  GetDay                             function GetDay: Word;
+0072981A  GetHour                            function GetHour: Word;
+0072982B  GetMin                             function GetMin: Word;
+0072983C  MirStrToDateTime                   function MirStrToDateTime(const str: string): Double;
+0072984D  MirDateTimeToStr                   function MirDateTimeToStr(const FormatStr: string; date: Double): string
+0072985E  GetDayOfWeek                       function GetDayOfWeek: Word;
+0072986F  minusDataTime                      function minusDataTime(dt1, dt2: Double): Integer;
+00729880  SecondsBetween                     function SecondsBetween(dt1, dt2: Double): Integer;
+00729891  PsDecodeDate                       procedure PsDecodeDate(const dt: Double; var Year, Month, Day: Word);
+007298A2  PsDecodeTime                       procedure PsDecodeTime(const dt: Double; var Hour, Min, Sec, MSec: Word);
+007298B3  AddDateTimeWithSec                 function AddDateTimeWithSec(const dtNow: Double; ASec: Integer): Double;
+007298C4  ConvertDateTimeToDB                function ConvertDateTimeToDB(dt : Double) : Integer;
+007298D5  ConvertDBToDateTime                function ConvertDBToDateTime(dt : Integer) : Double;
+007298E6  GetDateNum                         function GetDateNum(datetime : Double) : Integer;
+007298F7  GetMapCanWalkXY                    function GetMapCanWalkXY(MapName : string;var x:Integer; var y : Integer;BoOver: Boolean; BoForce: Boolean): Boolean;
+00729908  GetG                               function GetG(const paramNo, index : Integer) : Integer;
+00729919  SetG                               function SetG(const paramNo, index, value : Integer) : Boolean;
+0072992A  PsPower                            function PsPower(const base, exponent: Double): Double;
+0072993B  RollMsg                            procedure RollMsg(const MsgStr: string);
+0072994C  RollMsgEx                          procedure RollMsgEx(const MsgStr: string; const iType: Word);
+0072995D  SendYBShopConfig                   function SendYBShopConfig(const NeedLoadGoodsNames: string): Boolean;
+0072996E  SetYBShopRefreshTime               procedure SetYBShopRefreshTime(const str: string);
+0072997F  GetDynRoomHumNum                   function GetDynRoomHumNum(const roomName: string; roomIdx: Integer): Integer;
+00729990  GetDynRoomCnt                      function GetDynRoomCnt(const roomName: string): Integer;
+007299A1  PsHaveFreeDynRoom                  function PsHaveFreeDynRoom(const roomName: string): Boolean;
+007299B2  MakeCattleCrazy                    procedure MakeCattleCrazy;
+007299C3  GetAdvPlayerNum                    function GetAdvPlayerNum: Integer;
+007299D4  PsIsDynRoomValid                   function PsIsDynRoomValid(roomName: string; roomIdx: Integer): Boolean;
+007299E5  KickAllHumToMap                    procedure KickAllHumToMap(srcMap, desMap: string; x,y: Word);
+007299F6  GetCurrentEANameByIdx              function GetCurrentEANameByIdx(const iActNo, iFieldNo, idx: Integer): string;
+00729A07  UpdateEverydayActOrder             function UpdateEverydayActOrder(const iActNo, iFieldNo: Integer;const sName: string; const iScore: Integer): Integer;
+00729A18  GetEAOrderInfo                     function GetEAOrderInfo(const iActNo,iFieldNo,Page,TotalPage,PrePage:Word;isCurrent:Boolean;sProcName:string):string;
+00729A29  GetScoreByName                     function GetScoreByName(const iActNo,iFieldNo:Integer;const sHumanName:string;isCurrent: Boolean): Integer;
+00729A3A  EAOrderIsStart                     function EAOrderIsStart(const iActNo,iFieldNo:Integer):Boolean;
+00729A4B  PlayerCry                          procedure PlayerCry(const chrName: string; iType: Word; strMsg: string);
+00729A5C  PlayerGive                         procedure PlayerGive(const chrName: string; const ItemName: string; ItemCount: Integer);
+00729A6D  ReadIniSectionStr                  function ReadIniSectionStr(const sFileName, sSection, sIdent: string): string;
+00729A7E  WriteIniSectionStr                 function WriteIniSectionStr(const sFileName, sSection, sIdent, sValue: string): Boolean;
+00729A8F  PsCeil                             function PsCeil(const X: Extended): Integer;
+00729AA0  InitTaskDispatchInfo               procedure InitTaskDispatchInfo(cmpCost, acceptCnt, dispatchCnt, bronzeCost, silverCost, goldCost: Integer);
+00729AB1  GetOpenGameTime                    function GetOpenGameTime : Double;
+00729AC2  G_Version                          function G_Version: string;
+
+### TOBJECT / method  (2)
+0072A956  Create                             constructor Create
+0072A962  Free                               procedure Free
+
+### TCreature / method  (8)
+0072A9AA  GetOwnMapDesc                      function GetOwnMapDesc: string;
+0072A9B6  CloseDialog                        procedure CloseDialog(const clicker: TCreature);
+0072A9C2  NpcDialog                          procedure NpcDialog(const clicker: TCreature; Str : string);
+0072A9CE  NpcDialogEx                        procedure NpcDialogEx(const clicker: TCreature; Str: string; dlgType, Tag: word);
+0072A9DA  SouthWildStartConvoy               procedure SouthWildStartConvoy(guildName: string);
+0072A9E6  SouthWildStartMonAttack            procedure SouthWildStartMonAttack;
+0072A9F2  PsAddCretHp                        function PsAddCretHp(addHp, maxCnt: Integer): Integer;
+0072A9FE  TurnTo                             procedure TurnTo(const C_dir: Byte);
+
+### TBaseGroup / method  (2)
+0072AA46  GetMember                          function GetMember(i: Integer): THumanKind;
+0072AA52  GetMemberCount                     function GetMemberCount: Integer;
+
+### TPlayer / method  (282)
+0072B021  GetBagItemCount                    function GetBagItemCount(const ItemName: string): Integer;
+0072B02D  GetBagItemCountEx                  function GetBagItemCountEx(const ItemName: string; iParam: Integer): Integer;
+0072B039  Give                               function Give(const ItemName: string; ItemCount: Integer): Boolean;
+0072B045  BindGive                           function BindGive(const ItemName: string; ItemCount: Integer): Boolean;
+0072B051  LoopGive                           function LoopGive(const ItemName: string; ItemCount: Integer; const loopCnt: Integer): Boolean;
+0072B05D  Take                               function Take(const ItemName: string; ItemCount: Integer): Boolean;
+0072B069  TakeExpand                         function TakeExpand(const ItemName: string; ItemCount: Integer; iParam: Integer): Boolean;
+0072B075  TakeEx                             function TakeEx(const ItemName: string; ItemCount: Word;sReason:string;bIncludeEqp:Boolean): Boolean;
+0072B081  Flyto                              procedure Flyto(const MapName: string; x: Word; y: Word);
+0072B08D  FlyToDynRoom                       function FlyToDynRoom(sRoomName: string; x: Integer; y:Integer): integer;
+0072B099  FlyToDynEnvirWithIdx               function FlyToDynEnvirWithIdx(sRoomName: string; idx, x, y:Integer): Boolean;
+0072B0A5  MapName                            function MapName: string;
+0072B0B1  DynRoomName                        function DynRoomName: string;
+0072B0BD  DynRoomIdx                         function DynRoomIdx: Integer;
+0072B0C9  IsCastle                           function IsCastle: Boolean;
+0072B0D5  PlayerNotice                       procedure PlayerNotice(const Msg: string; const vColor: word);
+0072B0E1  QuestInfo                          procedure QuestInfo(const Msg: string);
+0072B0ED  GetV                               function GetV(const nTaskNo, nFieldNo: integer): Integer;
+0072B0F9  SetV                               function SetV(const nTaskNo, nFieldNo, nValue: integer): Boolean;
+0072B105  GetS                               function GetS(const nActNo, nFieldNo: integer): Integer;
+0072B111  SetS                               function SetS(const nActNo, nFieldNo, nValue: integer): Boolean;
+0072B11D  PlayerDialog                       procedure PlayerDialog(const Msg: string);
+0072B129  DelAllThisItem                     function DelAllThisItem(const ItemName: string): integer;
+0072B135  IncPkpoint                         procedure IncPkpoint(const AddNum: integer);
+0072B141  CheckBagItemEx                     function CheckBagItemEx(const ItemName: string; var ChkNum, ChkDura, ChkAllDura: integer): Cardinal;
+0072B14D  CallOut                            procedure CallOut(PsNpc: TObject; SpTime: integer; TimeOutProc : string);
+0072B159  CallOutEx                          procedure CallOutEx(PsNpc: TObject; SpTime: integer; TimeOutProc : string);
+0072B165  IsGuildLord                        function IsGuildLord: Boolean;
+0072B171  IsFirstGuildLord                   function IsFirstGuildLord: Boolean;
+0072B17D  DecPkPoint                         procedure DecPkPoint(const X: integer);
+0072B189  ChgHair                            function ChgHair(const Kind: Byte): Boolean;
+0072B195  ChgSkillLv                         function ChgSkillLv(const SkillName: string; ToLv: Byte; skillexp: integer): Boolean;
+0072B1A1  DoDamageWeapon                     procedure DoDamageWeapon(const nDamage: integer);
+0072B1AD  AddGold                            function AddGold(Value: integer): Boolean;
+0072B1B9  DecGold                            function DecGold(const Num: integer): Boolean;
+0072B1C5  RandomFlyTo                        procedure RandomFlyTo(const MapName : string);
+0072B1D1  ReqCastleWar                       function ReqCastleWar: Boolean;
+0072B1DD  BuildGuild                         function BuildGuild(const GuildStr: string): integer;
+0072B1E9  AgreeMarry                         procedure AgreeMarry(Npc: Tobject);
+0072B1F5  DisAgreeMarry                      procedure DisAgreeMarry;
+0072B201  NpcDivMarry                        procedure NpcDivMarry(Npc: TObject);
+0072B20D  AgreeBaishi                        function AgreeBaishi(Npc: Tobject): Boolean;
+0072B219  DisAgreeBaishi                     procedure DisAgreeBaishi(Npc: TObject);
+0072B225  NpcLeaveTec                        procedure NpcLeaveTec(Npc: TObject);
+0072B231  TakeBodyEquipByName                function TakeBodyEquipByName(const ItemStr: string; TakeNum: integer): Boolean;
+0072B23D  TakeBodyEquipByPos                 function TakeBodyEquipByPos(const nPos: integer): string;
+0072B249  AddLF                              procedure AddLF(const nType, nNum : Integer);
+0072B255  AddLimLF                           procedure AddLimLF(const nType, nNum : Integer);
+0072B261  DecLF                              procedure DecLF(const nType, nNum : Integer; recordFlag : Boolean);
+0072B26D  GetMyPositionInGuild               function GetMyPositionInGuild() : Integer;
+0072B279  GetHeroBagItemCount                function GetHeroBagItemCount(const ItemName: string): Integer;
+0072B285  TakeFromHeroBag                    function TakeFromHeroBag(const ItemName: string; ItemCount: Byte): Boolean;
+0072B291  GetItemNameOnBody                  function GetItemNameOnBody(const nPos : Integer): string;
+0072B29D  GroupFly                           procedure GroupFly(const sTargetMap : string);
+0072B2A9  GroupFlyEx                         function  GroupFlyEx(const sTargetMap : string):word;
+0072B2B5  ShiMenFly                          procedure ShiMenFly(const sTargetMap : string; mode: Integer);
+0072B2C1  CoupleFly                          procedure CoupleFly(const sTargetMap : string);
+0072B2CD  ConfiscateBodyItem                 function ConfiscateBodyItem(const nPos : Integer): Boolean;
+0072B2D9  UpGradeHeroSkill                   function UpGradeHeroSkill(const skill_idx: Integer; skill_exp : Integer) : Boolean;
+0072B2E5  TakeDiamond                        function TakeDiamond(TakeNum: integer; Npc: TObject): Boolean;
+0072B2F1  ChangeMapWithOths                  procedure ChangeMapWithOths(const SeachMap: string);
+0072B2FD  CreateHero                         function CreateHero(heroName: string; hType, heroJob: Integer): Integer;
+0072B309  MakeDiamondWithYB                  procedure MakeDiamondWithYB(const Num : Integer );
+0072B315  Donatediam                         procedure Donatediam(const InPutStr: string);
+0072B321  RequestGuildWar                    procedure RequestGuildWar(const TargGuildStr: string);
+0072B32D  GiveBindItem                       procedure GiveBindItem(const ItemName: string; ItemNum : Integer);
+0072B339  GiveTimeOutItem                    function GiveTimeOutItem(const itemName: string; endTime: TDateTime; iNum: Integer; bBind: Boolean): Boolean;
+0072B345  ReqOpenStorage                     procedure ReqOpenStorage(const InPutStr: string);
+0072B351  GroupFlyToDynRoom                  procedure GroupFlyToDynRoom(roomName: string; roomIdx: Integer);
+0072B35D  GroupFlyToDynRoomInRange           procedure GroupFlyToDynRoomInRange(roomName: string; roomIdx, x, y, iRange: Integer);
+0072B369  GroupCallOut                       procedure GroupCallOut(npc: TObject; procName, param: string; deltTime: Integer);
+0072B375  GroupSetV                          function GroupSetV(const nTaskNo, nFieldNo, nValue: integer): Boolean;
+0072B381  FlyToObserverMap                   procedure FlyToObserverMap();
+0072B38D  GetLeiTaiState                     function GetLeiTaiState(): Integer;
+0072B399  DoSendPlayerToLeitai               function DoSendPlayerToLeitai(): Integer;
+0072B3A5  GetWarResult                       function GetWarResult(): Integer;
+0072B3B1  GetMyLeiTaiFlag                    function GetMyLeiTaiFlag(): Integer;
+0072B3BD  PsConsumeYb                        procedure PsConsumeYb(const NeedYb : integer);
+0072B3C9  ReqBuildDiamond                    procedure ReqBuildDiamond(const InPutStr: string);
+0072B3D5  IncNickLinFu                       procedure IncNickLinFu(value: integer);
+0072B3E1  DecNickLinFu                       procedure DecNickLinFu(value: integer);
+0072B3ED  GetHeroSkillStr                    function GetHeroSkillStr: string;
+0072B3F9  MyHeroState                        function MyHeroState(HeroType : Integer): Integer;
+0072B405  AddTaskToUIList                    procedure AddTaskToUIList(const id, ShowUIFlag: Integer);
+0072B411  UpdateTaskDetail                   procedure UpdateTaskDetail(const id, ShowUIFlag: Integer);
+0072B41D  UpdateTaskProgress                 procedure UpdateTaskProgress(const id, ShowUIFlag: Integer);
+0072B429  DeleteTaskFromUIList               procedure DeleteTaskFromUIList(const id, ShowUIFlag: Integer);
+0072B435  DoRelive                           procedure DoRelive(const delayTime, hp : Integer);
+0072B441  LeftTime                           procedure LeftTime(const MsgStr : string; iLine, iSec : Integer);
+0072B44D  AutoGotoMap                        procedure AutoGotoMap(const mapName: string; x, y: Integer);
+0072B459  AddSkillExp                        function AddSkillExp(const name: string; const exp: Integer): Boolean;
+0072B465  AddHeroSkillExp                    function AddHeroSkillExp(const name: string; const exp: Integer): Boolean;
+0072B471  UpgradeHeroSkillLv                 function UpgradeHeroSkillLv(const name: string): Boolean;
+0072B47D  NewBieGiftConsume                  function NewBieGiftConsume: Boolean;
+0072B489  GetLimitLinfu                      function GetLimitLinfu: Integer;
+0072B495  ShowLingfu3                        function ShowLingfu3: Integer;
+0072B4A1  DecGloryPoint                      function DecGloryPoint(vsId, nPrize, nNum: Integer; bAddPoint: Boolean; const desc: string): Boolean;
+0072B4AD  AddGloryPoint                      function AddGloryPoint(nNum: Integer): Boolean;
+0072B4B9  AddLogRec                          procedure AddLogRec(const Cmd: word; const ItemName: string; const ItemId: Cardinal; const ItemNum: integer; const Desc: string);
+0072B4C5  PsYBConsum                         function PsYBConsum(npc: TCreature; const callbackProc: string; vsId, nPrice, nNum: Integer): Boolean;
+0072B4D1  PsYBConsumEx                       function PsYBConsumEx(exeTag: Byte; const callbackProc, DescName: string; vsId, nPrice, nNum: Integer): Boolean;
+0072B4DD  AddDbLinfuTime                     procedure AddDbLinfuTime(secTime: Cardinal);
+0072B4E9  BoInDbLinfu                        function BoInDbLinfu: Boolean;
+0072B4F5  ChkIfCanAddUSExp                   function ChkIfCanAddUSExp: Integer;
+0072B501  AddUSExp                           function AddUSExp(const lfNum, powerVal, skillExp: Integer): Integer;
+0072B50D  MakeSlave                          function MakeSlave(const SlaveName: string; const MagicLv, nCount: Integer; RoyaltySec: Cardinal; const BoFromHero: Boolean; hpAfterSlave: Integer): TCreature;
+0072B519  CheckSkill                         function CheckSkill(skillId: Integer): Integer;
+0072B525  CheckHeroSkill                     function CheckHeroSkill(skillId: Integer): Integer;
+0072B531  GiveConfigPrize                    procedure GiveConfigPrize(const PrizeIdx: integer; const InfoStr: string; TempTransferFlag : Boolean);
+0072B53D  GiveHeroExp                        function GiveHeroExp(exp: Cardinal; bAddBall: Boolean): Boolean;
+0072B549  GiveHeroSuperExp                   function GiveHeroSuperExp(exp: Cardinal; bAddBall: Boolean): Boolean;
+0072B555  GiveHeroSuperExpLoop               function GiveHeroSuperExpLoop(exp: Cardinal; bAddBall: Boolean; const loopCnt: Integer): Boolean;
+0072B561  GiveHeroForceExp                   function GiveHeroForceExp(exp: Cardinal; bAddBall: Boolean): Boolean;
+0072B56D  GiveItemWithDura                   function GiveItemWithDura(const itemName:string; ItemNum:Integer; ItemDura:Word): Boolean
+0072B579  GetAwardItem                       procedure GetAwardItem(const ActOrder: string);
+0072B585  TakeFullDuraItem                   function TakeFullDuraItem(const ItemName: string; ItemCount: Integer): Boolean;
+0072B591  SignIn                             function SignIn: Boolean;
+0072B59D  GetSignInActPrize                  function GetSignInActPrize: Integer;
+0072B5A9  GetSignInActPrizer                 function GetSignInActPrizer(var lucker1, lucker2: string): string;
+0072B5B5  SignInDayAct                       procedure SignInDayAct;
+0072B5C1  GetSignInDayActPrizer              function GetSignInDayActPrizer(prizeLv: Integer): string;
+0072B5CD  GetSignInDayActTag                 function GetSignInDayActTag: Integer;
+0072B5D9  GetWeaponLucky                     function GetWeaponLucky(boAddBase: Boolean; bHero: Boolean): Integer;
+0072B5E5  SetWeaponLucky                     function SetWeaponLucky(val: Integer; bHero: Boolean): Boolean;
+0072B5F1  GetNecklaceLucky                   function GetNecklaceLucky: Integer;
+0072B5FD  UpWeaponNoBroken                   function UpWeaponNoBroken(upType: Byte; bSureSuc: Boolean; bHero: Boolean): Integer;
+0072B609  FinishCombineHeroTrain             procedure FinishCombineHeroTrain;
+0072B615  ClearMulExpTime                    procedure ClearMulExpTime;
+0072B621  SetAllGroupMemTag                  function SetAllGroupMemTag(const nNode, nVal: Integer): Boolean;
+0072B62D  AddAllGroupMemTag                  function AddAllGroupMemTag(const nNode, nVal: Integer): Boolean;
+0072B639  SetSelfGroupMemTag                 function SetSelfGroupMemTag(const nNode, nVal: Integer): Boolean;
+0072B645  GetSelfGroupMemTag                 function GetSelfGroupMemTag(const nNode: Integer): Integer;
+0072B651  AddGuildPoint                      procedure AddGuildPoint(const nVal: Integer);
+0072B65D  ReqPieceUpNewYearPicture           procedure ReqPieceUpNewYearPicture(const iMod, iNum, iNeedValue: Integer);
+0072B669  GroupChkTagV                       function GroupChkTagV(const nNum, nField, nVal, nTag: Integer): Boolean;
+0072B675  GroupChkTagS                       function GroupChkTagS(const nNum, nField, nVal, nTag: Integer): Boolean;
+0072B681  QueryGloryPointByGoodsNum          function QueryGloryPointByGoodsNum(const goodsType, goodsNum: Integer): Integer;
+0072B68D  QueryGoodsNumByYBNum               function QueryGoodsNumByYBNum(const goodsType, ybNum: Integer): Integer;
+0072B699  SellGoodsToGetGloryPoint           function SellGoodsToGetGloryPoint(const goodsType, goodsNum: Integer): Integer;
+0072B6A5  ConsumeYBToBuyGoods                function ConsumeYBToBuyGoods(const goodsType, consumeYbNum: Integer): Integer;
+0072B6B1  GetGoodsCurrentStorage             function GetGoodsCurrentStorage(const goodsType: Integer): Integer;
+0072B6BD  AddStoreItem                       function AddStoreItem(itemStr: string): Boolean;
+0072B6C9  AddAccountStorageCnt               function AddAccountStorageCnt(num: Integer): Boolean;
+0072B6D5  GetAccountStorageCnt               function GetAccountStorageCnt: Integer;
+0072B6E1  GroupFlyInRange                    procedure GroupFlyInRange(mapName: string; x, y, iRange: Integer);
+0072B6ED  SendItemsToOther                   function SendItemsToOther(const playerName, takeItemName, giveItemName: string; const takeItemNum, giveItemNum, needBagNum: Integer): Integer;
+0072B6F9  DropItemDownExt                    procedure DropItemDownExt(itemName:string;itemNum:Integer);
+0072B705  QueryTeamMemberLevelInfo           function QueryTeamMemberLevelInfo(const limitLv: word): Integer;
+0072B711  GroupExecuteProc                   procedure GroupExecuteProc(npcObj: TObject; procName: string);
+0072B71D  TakeCastleStone                    function  TakeCastleStone(nTakeType:Word):Integer;
+0072B729  GetCastleStoneOwners               function  GetCastleStoneOwners(nTeamID:Word;var Status:Word): string;
+0072B735  GetEquipmentBreakLevel             function GetEquipmentBreakLevel(const nPos:integer;bHero:Boolean):Integer;
+0072B741  ChgEquipmentBreakLevel             function ChgEquipmentBreakLevel(const nPos:integer;Value:Integer;bHero:Boolean;bAdd:Boolean):Integer;
+0072B74D  ReqStartTransferArea               procedure ReqStartTransferArea(const iTransferMode: Word; iZoneId, iGroupId: Word);
+0072B759  ReqAddRemoteTAScore                procedure ReqAddRemoteTAScore(const wScoreType, wScore: Word);
+0072B765  QueryTAScore                       function QueryTAScore(const wScoreType: Word): Integer;
+0072B771  DecTAScore                         function DecTAScore(const wScoreType, wDecScore: Word): Boolean;
+0072B77D  AddPlayerAbil                      procedure AddPlayerAbil(abilType, abilVal, lastSec: Word);
+0072B789  AddHeroAbil                        procedure AddHeroAbil(abilType, abilVal, lastSec: Word);
+0072B795  SetHeroLevel                       procedure SetHeroLevel(level: Word);
+0072B7A1  AutoReLive                         function AutoReLive(sMapName:string;x,y:Integer;bMaxHP:Boolean;bMaxMP:Boolean):Boolean;
+0072B7AD  GetAroundMonNum                    function GetAroundMonNum(const sMonName: string;x,y,Rang:Integer): Integer;
+0072B7B9  FindPlayer                         function FindPlayer(sHumanName:string):Boolean;
+0072B7C5  FindPlayerByName                   function FindPlayerByName(sHumanName:string):TPlayer;
+0072B7D1  SetVEx                             function SetVEx(const nTaskNo, nFieldNo,nValue:Integer;sHumanName:string):Boolean;
+0072B7DD  GetVEx                             function GetVEx(const nTaskNo, nFieldNo: Integer;sHumanName: string):Integer;
+0072B7E9  GiveItemsToOther                   function GiveItemsToOther(const npc:TCreature;const TargName,ItemName:string;const ItemNum,nPrice:Integer;bUseGp:Boolean):Integer;
+0072B7F5  GetPlayerGender                    function GetPlayerGender(const sHumanName: string): Integer;
+0072B801  GetSpouse                          function GetSpouse: TPlayer;
+0072B80D  GetSkillLevelExt                   function GetSkillLevelExt(const SkillName:string;bHero:Boolean):Integer;
+0072B819  UpdateEverydayActOrder             function UpdateEverydayActOrder(const iActNo, iFieldNo: Integer;const sName: string; const iScore: Integer): Integer;
+0072B825  QueryAllVoteTopTen                 function QueryAllVoteTopTen: string;
+0072B831  ShowCurrentBless                   procedure ShowCurrentBless(const lv: Integer; const info1, info2, info3: string);
+0072B850  ChgTenYearImpress                  function  ChgTenYearImpress(value:Integer):Boolean;
+0072B85C  GetCastleOrdDesc                   function  GetCastleOrdDesc:String;
+0072B868  GetCastleGift                      function  GetCastleGift(Npc:TCreature;iOrd:Integer):Integer;
+0072B874  CreateCampAnimal                   procedure CreateCampAnimal(const monName: string; const campIdx, MonX, MonY, MonNum, Range, targX, targY: Integer);
+0072B880  DominaterCall                      procedure DominaterCall;
+0072B88C  VIPCall                            function VIPCall(const s:string;isCall:Boolean):Boolean;
+0072B898  CreateGuildHero                    procedure CreateGuildHero(const heroName, mapName: string; initX, initY, targX, targY, Num: Integer);
+0072B8A4  SetGuildHeroTargXY                 procedure SetGuildHeroTargXY(const targX, targY: Integer);
+0072B8B0  CreateProtectHero                  function CreateProtectHero(const heroName: string): Boolean;
+0072B8BC  GetMyGuildHeroNum                  function GetMyGuildHeroNum: Integer;
+0072B8C8  AddMyGuildResource                 procedure AddMyGuildResource(const num: Integer);
+0072B8D4  DecMyGuildResource                 function DecMyGuildResource(const num, castleType: Integer): Boolean;
+0072B8E0  CurMyGuildResource                 function CurMyGuildResource: Integer;
+0072B8EC  MyGuildDreamCastCost               function MyGuildDreamCastCost: Integer;
+0072B8F8  SetGuildParam                      procedure SetGuildParam(const pType, pNum: Integer);
+0072B904  GetGuildParam                      function GetGuildParam(Const pType: Integer): Integer;
+0072B910  InputDialog                        procedure InputDialog(MsgStr: string; DlgType, InputType: Integer);
+0072B91C  SetPlayerLevel                     procedure SetPlayerLevel(level: Word);
+0072B928  PreSentItem                        function  PreSentItem(const TargName,ItemName:string;ItemNum:Integer;sex:Byte;bReUsed:Boolean;bBind:Boolean):Integer;
+0072B934  GiveHumLevelBuffer                 function GiveHumLevelBuffer(bufType, initLv, coldTimeSec: Integer; bHero: Boolean): Integer;
+0072B940  OpenEquipmentMascotToMax           function OpenEquipmentMascotToMax(const ALevel: Integer): Boolean;
+0072B94C  IsInlayRabbitMascot                function IsInlayRabbitMascot(AItemName: String): Boolean;
+0072B958  GetEquipmentMascotLevel            function GetEquipmentMascotLevel: Integer;
+0072B964  GetEquipmentMascotLevelHero        function GetEquipmentMascotLevelHero: Integer;
+0072B970  UnShutupSelf                       function UnShutupSelf: Integer;
+0072B97C  OpenEquipmentMascotToMaxHero       function OpenEquipmentMascotToMaxHero(const ALevel: Integer): Boolean;
+0072B988  IsInlayRabbitMascotHero            function IsInlayRabbitMascotHero(AItemName: String): Boolean;
+0072B994  setMyGuildTag                      procedure setMyGuildTag(idx, val: Integer);
+0072B9A0  getMyGuildTag                      function getMyGuildTag(idx: integer): Integer;
+0072B9AC  ClientSellerCancelYBDeal           procedure ClientSellerCancelYBDeal;
+0072B9B8  QueryTaskDispatch                  procedure QueryTaskDispatch;
+0072B9C4  DoScriptHpMpRecover                procedure DoScriptHpMpRecover(const nHp, nMp, nHeroHp, nHeroMp: Integer);
+0072B9D0  SetVipTag                          procedure SetVipTag;
+0072B9DC  CreateMon                          procedure CreateMon(const MapName: string; X, Y, Ranger: Integer; MonName: string; MonNum: Integer);
+0072B9E8  GetObPoint                         function GetObPoint: integer;
+0072B9F4  DeleteObPoint                      procedure DeleteObPoint;
+0072BA00  AddGuanMoPoint                     procedure AddGuanMoPoint(gmPoint: Integer);
+0072BA0C  IsGroupMember                      function IsGroupMember(const chrName: String): Boolean;
+0072BA18  RepairBodyEquip                    function RepairBodyEquip(EquipPos: Byte): Boolean;
+0072BA24  AddPointToMarkStoneCharm           function AddPointToMarkStoneCharm(const point: Cardinal; const isMaster: Boolean): Boolean;
+0072BA30  DecJiaYouPoint                     procedure DecJiaYouPoint(point: Integer);
+0072BA3C  OpenStorage                        function OpenStorage(storageType: Integer): Integer;
+0072BA48  PlayerEnterXinfaMap                procedure PlayerEnterXinfaMap(enterType: Byte; mapLevel: Integer);
+0072BA54  DeleteSkill                        function DeleteSkill(const SkillName: string): Boolean;
+0072BA60  LearnMagic                         function LearnMagic(const magName: string): Boolean;
+0072BA6C  LearnLNJN                          procedure LearnLNJN(const iType:Integer);
+0072BA78  UpLevelLNJN                        procedure UpLevelLNJN(const iType: Integer);
+0072BA84  DelBagItemOfAll                    procedure DelBagItemOfAll;
+0072BA90  HeroLearnLNJN                      procedure HeroLearnLNJN(const iType:Integer);
+0072BA9C  HeroUpLevelLNJN                    procedure HeroUpLevelLNJN(const iType: Integer);
+0072BAA8  ExchangeEquip_SameIden             function ExchangeEquip_SameIden(SourceEquip, DestEquip: string; boBind : Boolean):Boolean;
+0072BAB4  OpenMilRank                        procedure OpenMilRank;
+0072BAC0  StartPaodian                       procedure StartPaodian(DuraSec:integer);
+0072BACC  BeginTransLog                      procedure BeginTransLog(Logtype:integer);
+0072BAD8  EndTransLog                        procedure EndTransLog;
+0072BAE4  GetLianTiLv                        function GetLianTiLv:Integer;
+0072BAF0  GetQiangTiLv                       function GetQiangTiLv: Integer;
+0072BAFC  GetTiPoLv                          function GetTiPoLv: Integer;
+0072BB08  GetQiangTiPhase                    function GetQiangTiPhase: Integer;
+0072BB14  GetTiPoPhase                       function GetTiPoPhase: Integer;
+0072BB20  GetLianTiLv_hero                   function GetLianTiLv_hero:Integer;
+0072BB2C  GetQiangTiLv_hero                  function GetQiangTiLv_hero: Integer;
+0072BB38  GetTiPoLv_hero                     function GetTiPoLv_hero: Integer;
+0072BB44  GetQiangTiPhase_hero               function GetQiangTiPhase_hero: Integer;
+0072BB50  GetTiPoPhase_hero                  function GetTiPoPhase_hero: Integer;
+0072BB5C  LearnSkillByScript                 function LearnSkillByScript(skillName: string; boHero: Boolean; initLevel: Integer): Boolean;
+0072BB68  UpgradeSkillByScript               function UpgradeSkillByScript(skillName: string; boHero: Boolean): Boolean;
+0072BB74  GetSkillLevelByScript              function GetSkillLevelByScript(skillName: string; boHero: Boolean): Integer;
+0072BB80  FlyToWeSpot                        procedure FlyToWeSpot;
+0072BB8C  AddPlayerDailyCount                function AddPlayerDailyCount(TaskID, Count: Integer): Boolean;
+0072BB98  SubmitLegendBook                   function SubmitLegendBook: Boolean;
+0072BBA4  GetWWSQPassNum                     function GetWWSQPassNum: Integer;
+0072BBB0  JoinMirMatch                       function JoinMirMatch: Boolean;
+0072BBBC  GetMirMatchPrize                   function GetMirMatchPrize: Boolean;
+0072BBC8  GetPneumaTotalLevel                function GetPneumaTotalLevel: Word;
+0072BBD4  ExpandStorageSpace                 function ExpandStorageSpace(AddedCount: Integer): Integer;
+0072BBE0  GetStorageSpaceCount               function GetStorageSpaceCount: Integer;
+0072BBEC  HelperDialog                       procedure HelperDialog(const msg: string);
+0072BBF8  NewFullMailEx                      procedure NewFullMailEx(const ATitle,AContext: string; AMailType: Integer; AMonyCount: Integer;AMonyType: Integer;  const AItemInfo: string; ACreateDateTime: string)
+0072BC04  CreateSelfCorps                    function CreateSelfCorps(const CorpsName: String) : Integer;
+0072BC10  CreateSelfGild                     function CreateSelfGild(const GildName: String) : Integer;
+0072BC1C  GetCorpsName                       function GetCorpsName : string;
+0072BC28  GetGildName                        function GetGildName : string;
+0072BC34  IncActivePoint                     function IncActivePoint(const Value : Integer) : Integer;
+0072BC40  DecActivePoint                     function DecActivePoint(const Value : Integer) : Integer;
+0072BC4C  GetActivePoint                     function GetActivePoint : Integer;
+0072BC58  GetTmpActivePoint                  function GetTmpActivePoint: Integer
+0072BC64  CanEnterActiveMap                  function CanEnterActiveMap(const MapStr : string) : Boolean;
+0072BC70  NotifyClientCommitItem             procedure NotifyClientCommitItem(AResult: Integer; const AMsg: string);
+0072BC7C  ActiveAuthen                       function ActiveAuthen(AuthenLv : Integer; AuthenOrder : Integer): Integer;
+0072BC88  ActiveDelAuthen                    function ActiveDelAuthen(AuthenLv : Integer; AuthenOrder : Integer): Integer;
+0072BC94  CheckAuthen                        function CheckAuthen(AuthenLv : Integer; AuthenOrder : Integer     ): Boolean;
+0072BCA0  HelpOtherAuthen                    function HelpOtherAuthen : Integer;
+0072BCAC  AuthByHelped                       function AuthByHelped(AuthenLv : Integer; AuthenOrder : Integer): Integer;
+0072BCB8  TakeByClientID                     function TakeByClientID(const AClientItemID: Integer): Boolean;
+0072BCC4  SysGiveGift                        function SysGiveGift(const ItemStr: string;Num: integer;BoBind: Boolean) :Boolean;
+0072BCD0  GetCreateTime                      function GetCreateTime: Double;
+0072BCDC  SystemMsg                          procedure SystemMsg(const AType: Char; const AMsg: string);
+0072BCE8  AddToBuyGoodsLogByScript           function AddToBuyGoodsLogByScript(const GoodsName: string; const GoodsIdx, GoodsWantNum, TotalPrice: Integer): Integer;
+0072BCF4  GetMyTaskState                     function GetMyTaskState(const TaskID: Integer): Integer;
+0072BD00  GetMyTaskDetail                    function GetMyTaskDetail(const TaskID, ShowUIFlag: Integer): string;
+0072BD0C  TaskDialog                         procedure TaskDialog(const TaskID: Integer; const Msg: string);
+0072BD18  QueryAwardCode                     procedure QueryAwardCode(const CodeStr: string);
+0072BD24  SetAwardCodeActiveParam            procedure SetAwardCodeActiveParam(const CodeStr: string; const ActiveParam: Integer);
+0072BD30  ScriptRequestAddYBNum              procedure ScriptRequestAddYBNum(const AddNum: Integer);
+0072BD3C  ScriptRequestSubYBNum              procedure ScriptRequestSubYBNum(const SubNum: Integer);
+0072BD48  MakeSlaveEx                        function MakeSlaveEx(const NameStr: string; const Num, Lv: Integer): Boolean;
+0072BD54  GetSlaveCount                      function GetSlaveCount(const SlaveName: string): Integer;
+0072BD60  ScriptDestroyItem                  function ScriptDestroyItem(const itemId, itemCount: Integer): Boolean;
+
+### TPlayer / prop  (77)
+0072AA84  GMLevel                            GMLevel                        : Word           acc=1
+0072AA97  YBNum                              YBNum                          : Integer        acc=1
+0072AAAA  UsedYBNum                          UsedYBNum                      : Integer        acc=1
+0072AABD  NickLinFu                          NickLinFu                      : integer        acc=1
+0072AAD0  HaveTimeNum                        HaveTimeNum                    : integer        acc=1
+0072AAE3  HaveValidHero                      HaveValidHero                  : Boolean        acc=1
+0072AAF6  JiaYouPoint                        JiaYouPoint                    : Cardinal       acc=1
+0072AB09  BoReferUser                        BoReferUser                    : Boolean        acc=1
+0072AB1C  BoSpreader                         BoSpreader                     : Boolean        acc=1
+0072AB2F  Level                              Level                          : Word           acc=1
+0072AB42  Name                               Name                           : String         acc=1
+0072AB55  FreeBagNum                         FreeBagNum                     : Integer        acc=1
+0072AB68  Job                                Job                            : Byte           acc=1
+0072AB7B  Gender                             Gender                         : Byte           acc=1
+0072AB8E  IsDead                             IsDead                         : Boolean        acc=1
+0072ABA1  My_X                               My_X                           : integer        acc=1
+0072ABB4  My_Y                               My_Y                           : integer        acc=1
+0072ABC7  IsDeleted                          IsDeleted                      : Boolean        acc=1
+0072ABDA  NormalHide                         NormalHide                     : Boolean        acc=1
+0072ABED  IntParam                           IntParam                       : integer        acc=0
+0072AC00  StrParam                           StrParam                       : String         acc=0
+0072AC13  GoldNum                            GoldNum                        : Integer        acc=1
+0072AC26  MyShengwan                         MyShengwan                     : Integer        acc=0
+0072AC39  MyUsedLfNum                        MyUsedLfNum                    : Integer        acc=1
+0072AC4C  MyDiamondnum                       MyDiamondnum                   : Integer        acc=1
+0072AC5F  MyPKpoint                          MyPKpoint                      : integer        acc=1
+0072AC72  LuckNum                            LuckNum                        : Integer        acc=1
+0072AC85  HitRate                            HitRate                        : Byte           acc=1
+0072AC98  QuickRate                          QuickRate                      : Byte           acc=1
+0072ACAB  AC                                 AC                             : Word           acc=1
+0072ACBE  MaxAC                              MaxAC                          : Word           acc=1
+0072ACD1  DC                                 DC                             : Word           acc=1
+0072ACE4  MaxDC                              MaxDC                          : Word           acc=1
+0072ACF7  MC                                 MC                             : Word           acc=1
+0072AD0A  MaxMC                              MaxMC                          : Word           acc=1
+0072AD1D  SC                                 SC                             : Word           acc=1
+0072AD30  MaxSC                              MaxSC                          : Word           acc=1
+0072AD43  HP                                 HP                             : Integer        acc=1
+0072AD56  MaxHP                              MaxHP                          : Integer        acc=1
+0072AD69  MP                                 MP                             : integer        acc=1
+0072AD7C  MaxMP                              MaxMP                          : Integer        acc=1
+0072AD8F  MyLFnum                            MyLFnum                        : Integer        acc=1
+0072ADA2  MyExp                              MyExp                          : Cardinal       acc=1
+0072ADB5  DominateLevel                      DominateLevel                  : Word           acc=0
+0072ADC8  GuildName                          GuildName                      : string         acc=1
+0072ADDB  GuildLord                          GuildLord                      : string         acc=1
+0072ADEE  IsGroupOwner                       IsGroupOwner                   : Boolean        acc=1
+0072AE01  IsTeamMember                       IsTeamMember                   : Boolean        acc=1
+0072AE14  IsAStudent                         IsAStudent                     : Boolean        acc=1
+0072AE27  GuildOrder                         GuildOrder                     : Integer        acc=1
+0072AE3A  LingXiValue                        LingXiValue                    : Integer        acc=0
+0072AE4D  HeroGender                         HeroGender                     : Integer        acc=1
+0072AE60  HeroLevel                          HeroLevel                      : Integer        acc=1
+0072AE73  HeroJob                            HeroJob                        : Integer        acc=1
+0072AE86  HeroTypeExt                        HeroTypeExt                    : Integer        acc=1
+0072AE99  PlatLv                             PlatLv                         : Byte           acc=0
+0072AEAC  GuildPoint                         GuildPoint                     : Integer        acc=1
+0072AEBF  CallOutParam                       CallOutParam                   : string         acc=0
+0072AED2  GetTrustByWine                     GetTrustByWine                 : Byte           acc=1
+0072AEE5  MyExpQuestValue                    MyExpQuestValue                : Cardinal       acc=1
+0072AEF8  MemberCount                        MemberCount                    : Integer        acc=1
+0072AF0B  GloryPoint                         GloryPoint                     : Integer        acc=1
+0072AF1E  IsNetCafeUser                      IsNetCafeUser                  : Boolean        acc=1
+0072AF31  CombineHeroTrainType               CombineHeroTrainType           : byte           acc=1
+0072AF44  MyAttackMode                       MyAttackMode                   : byte           acc=1
+0072AF57  AccumulatedTime                    AccumulatedTime                : Double         acc=1
+0072AF6A  AccumulateFlag                     AccumulateFlag                 : Boolean        acc=0
+0072AF7D  PeiouName                          PeiouName                      : string         acc=1
+0072AF90  CurGlory                           CurGlory                       : Integer        acc=1
+0072AFA3  LevelOrder                         LevelOrder                     : Word           acc=1
+0072AFB6  TryExchangeItemName                TryExchangeItemName            : string         acc=0
+0072AFC9  TryExchangeItemMode                TryExchangeItemMode            : Cardinal       acc=0
+0072AFDC  EnterMapTick                       EnterMapTick                   : longword       acc=1
+0072AFEF  ActiveValue                        ActiveValue                    : Word           acc=1
+0072B002  MultiTempExpRate                   MultiTempExpRate               : Integer        acc=0
+0072B015  MyGroup                            MyGroup                        : TBaseGroup     acc=1
+0072B844  TenYearImpress                     TenYearImpress                 : Cardinal       acc=1
+
+### TBaseItem / prop  (7)
+0072BD92  ItemName                           ItemName                       : string         acc=1
+0072BDA5  ClientItemID                       ClientItemID                   : Cardinal       acc=1
+0072BDB8  AddPa1                             AddPa1                         : Byte           acc=0
+0072BDCB  AddPa2                             AddPa2                         : Byte           acc=0
+0072BDDE  AddPa3                             AddPa3                         : Byte           acc=0
+0072BDF1  AddPa4                             AddPa4                         : Byte           acc=0
+0072BE04  AddPa5                             AddPa5                         : Byte           acc=0
+
+### TMySQLDB / method  (9)
+0073460A  PsFirst                            procedure PsFirst;
+00734616  PsNext                             procedure PsNext;
+00734622  PsBof                              function PsBof: Boolean;
+0073462E  PsEof                              function PsEof: Boolean;
+0073463A  PsFieldName                        function PsFieldName(nPos : Integer) : string;
+00734646  PsFieldByName                      function PsFieldByName(sFieldName : string) : string;
+00734652  ExecuteScript                      function ExecuteScript(const QueryStr: string): Boolean;
+0073465E  ExecuteQuery                       function ExecuteQuery(const QueryStr : string): Integer;
+0073466A  SavePlayerAct                      procedure SavePlayerAct;
+
+### TMySQLDB / prop  (2)
+007345EB  PsFieldCount                       PsFieldCount                   : Integer        acc=1
+007345FE  PsRecordCount                      PsRecordCount                  : Integer        acc=1
+
+### TPsNpc / method  (200)
+00734740  NPCSay                             procedure NPCSay(const MsgStr: string);
+0073474C  CreateMon                          procedure CreateMon(const MapName : string; X, Y, Ranger : Integer; MonName : string; MonNum : Integer);
+00734758  CreateFamePlayerMon                procedure CreateFamePlayerMon(const MapName: string; X, Y: Integer; MonName: string; iRank, MonNum: Integer);
+00734764  ClearMon                           procedure ClearMon(const MapName : string);
+00734770  ClearMonEx                         procedure ClearMonEx(const MapName: string;bAll:Boolean);
+0073477C  CheckCurrMapMon                    function CheckCurrMapMon: Integer;
+00734788  CheckMapMonByName                  function CheckMapMonByName(const sMapName, sMonName: string): Integer;
+00734794  CheckCurrMapHum                    function CheckCurrMapHum: Integer;
+007347A0  FillGoods                          procedure FillGoods(const GoodName : string; Num, Interval : Integer);
+007347AC  AddStdMode                         procedure AddStdMode(nMode: Word);
+007347B8  Click_Buy                          procedure Click_Buy(Clicker: TPlayer);
+007347C4  Click_Sell                         procedure Click_Sell(Clicker: TPlayer);
+007347D0  Click_Repair                       procedure Click_Repair(Clicker: TPlayer);
+007347DC  Click_Open_Mosaic_Hole             procedure Click_Open_Mosaic_Hole(Clicker: TPlayer);
+007347E8  Click_Open_Duihuan_Contri          procedure Click_Open_Duihuan_Contri(Clicker: TPlayer);
+007347F4  Click_Open_MyOffiRankUI            procedure Click_Open_MyOffiRankUI(Clicker: TPlayer);
+00734800  Click_Open_AttachAbilUI            procedure Click_Open_AttachAbilUI(Clicker: TPlayer);
+0073480C  Click_Open_MirTianTiOrder          procedure Click_Open_MirTianTiOrder(Clicker: TPlayer);
+00734818  Click_RepairEx                     procedure Click_RepairEx(Clicker: TPlayer;RepairMode:Word);
+00734824  Click_SRepair                      procedure Click_SRepair(Clicker: TPlayer);
+00734830  Click_Storage                      procedure Click_Storage(Clicker: TPlayer);
+0073483C  Click_GetBack                      procedure Click_GetBack(Clicker: TPlayer);
+00734848  Click_Acc_Storage                  procedure Click_Acc_Storage(Clicker: TPlayer);
+00734854  Click_Acc_GetBack                  procedure Click_Acc_GetBack(Clicker: TPlayer);
+00734860  Click_EQP_Operate                  procedure Click_EQP_Operate(Clicker:TPlayer;OpCode:word);
+0073486C  Click_GoldChgBar                   procedure Click_GoldChgBar(Clicker: TPlayer);
+00734878  Click_BartoBrick                   procedure Click_BartoBrick(Clicker: TPlayer);
+00734884  Click_BricktoBar                   procedure Click_BricktoBar(Clicker: TPlayer);
+00734890  Click_BartoGold                    procedure Click_BartoGold(Clicker: TPlayer);
+0073489C  Click_Makedrug                     procedure Click_Makedrug(Clicker: TPlayer);
+007348A8  NpcNotice                          procedure NpcNotice(MsgStr: string);
+007348B4  NpcSideNotice                      procedure NpcSideNotice(const MsgStr: string);
+007348C0  NpcMapNotice                       procedure NpcMapNotice(const MsgStr: string; const iColor: Integer);
+007348CC  GetCastleTotalGold                 function GetCastleTotalGold : Integer;
+007348D8  GetCastleTodayIncome               function GetCastleTodayIncome : Integer;
+007348E4  GetCastleDoorState                 function GetCastleDoorState : string;
+007348F0  Click_TakeOutGold                  procedure Click_TakeOutGold(Hum: TPlayer; const GoldNumStr: string);
+007348FC  Click_SaveGold                     procedure Click_SaveGold(Hum: TPlayer; const GoldNumStr: string);
+00734908  Click_RepairDoor                   procedure Click_RepairDoor(Hum: TPlayer);
+00734914  Click_RepairWall                   procedure Click_RepairWall(Hum: TPlayer; const nPos: Integer);
+00734920  Click_HireGuard                    procedure Click_HireGuard(Hum: TPlayer; nPos: Integer);
+0073492C  Click_HireArcher                   procedure Click_HireArcher(Hum: TPlayer; nPos: Integer);
+00734938  OpenCastleDoor                     procedure OpenCastleDoor(bOpen : Boolean);
+00734944  InputDialog                        procedure InputDialog(Hum: TPlayer; MsgStr : string; DlgType, InputType : Integer);
+00734950  ReqBecomeCeleb                     function ReqBecomeCeleb(Hum: TPlayer): Integer;
+0073495C  GetCelebName                       Function GetCelebName: String;
+00734968  GetCelebLv                         function GetCelebLv : Integer;
+00734974  ChgCelebColor                      procedure ChgCelebColor(ColIdx : Integer);
+00734980  ReqCastleOwnerNpc                  function ReqCastleOwnerNpc(Hum : TPlayer): Integer;
+0073498C  StorageAllBagItems                 function StorageAllBagItems(Sender: TPlayer): string;
+00734998  ClickUpWeaponNow                   function ClickUpWeaponNow(Hum: TPlayer) : Integer
+007349A4  ClickUpWeaponNoBreak               function ClickUpWeaponNoBreak(Hum: TPlayer) : Integer
+007349B0  ClickGetBackUpWeapon               function ClickGetBackUpWeapon(Clicker: TPlayer) : Integer
+007349BC  AddNpcProp                         procedure AddNpcProp(npcProp : Integer);
+007349C8  ChkStrInFile                       function ChkStrInFile(const sFileName, sSearchStr : string) : Boolean;
+007349D4  AddStrToFile                       function AddStrToFile(const sFileName, sAddStr : string) : Boolean;
+007349E0  DelStrFromFile                     function DelStrFromFile(const sFileName, sDelStr : string) : Boolean;
+007349EC  GetAroundMonNum                    function GetAroundMonNum(const sMonName : string) : Integer;
+007349F8  SetMonTargetXY                     procedure SetMonTargetXY(const x, y : Integer);
+00734A04  NpcRecallPlayers                   procedure NpcRecallPlayers(const sSrcMap : string; num : Integer);
+00734A10  PlayDice                           procedure PlayDice(Player : TPlayer; iDiceNum : Integer; sFunc : string);
+00734A1C  ClickUpgradeJewels                 procedure ClickUpgradeJewels(Player: TPlayer; const nPos :  Integer);
+00734A28  ClientAskYBDuanZao                 procedure ClientAskYBDuanZao(Player: TPlayer);
+00734A34  ClientQuestGetDiam                 procedure ClientQuestGetDiam(Player: TPlayer; Num: integer);
+00734A40  RefreshCredit                      procedure RefreshCredit(Player: TPlayer);
+00734A4C  ClientReqGetBackLostItem           procedure ClientReqGetBackLostItem(Player: TPlayer; const LostType: integer);
+00734A58  ReqItemByGoldID                    procedure ReqItemByGoldID(Player: TPlayer);
+00734A64  ReqItemByGoldAct                   procedure ReqItemByGoldAct(Player: TPlayer);
+00734A70  ReqItemByPlatina                   procedure ReqItemByPlatina(Player: TPlayer);
+00734A7C  ClientQueryLastDealMsg             procedure ClientQueryLastDealMsg(Player: TPlayer);
+00734A88  ClientQueryYbDealItem              procedure ClientQueryYbDealItem(Player: TPlayer; flag : Boolean);
+00734A94  ClientAskOpenYB                    procedure ClientAskOpenYB(Player: TPlayer);
+00734AA0  ReqGetFirstUsedGift                procedure ReqGetFirstUsedGift(Player: TPlayer);
+00734AAC  ClientYBbuyLF                      procedure ClientYBbuyLF(Player: TPlayer; const Num: integer);
+00734AB8  BuyWineFromNpc                     procedure BuyWineFromNpc(Player: TPlayer);
+00734AC4  UseGuildPoint                      function UseGuildPoint(Player: TPlayer) : Integer;
+00734AD0  GetSomeGuildPoint                  function GetSomeGuildPoint(Player: TPlayer) : Integer;
+00734ADC  ChangeGPSwitch                     function ChangeGPSwitch(Player: TPlayer) : Integer;
+00734AE8  GiveWine                           procedure GiveWine(Player: TPlayer; const sName: string; iDrinkVal, iQuality: integer);
+00734AF4  MapName                            function MapName: string;
+00734B00  RequestBaishi                      procedure RequestBaishi(Hum: TPlayer; const InPutStr: string);
+00734B0C  SendKaiChuList                     procedure SendKaiChuList(Hum: TPlayer);
+00734B18  NpcKickOutStu                      procedure NpcKickOutStu(Hum: TPlayer; const stuNo: Integer);
+00734B24  RequestMarry                       procedure RequestMarry(Hum: TPlayer; const InPutStr: string);
+00734B30  ClickComposeDress                  procedure ClickComposeDress(Player: TPlayer; const ProcStr: string);
+00734B3C  GetCastleGuildName                 function GetCastleGuildName() : string;
+00734B48  GetCastleLoadName                  function GetCastleLoadName() : string;
+00734B54  GiveConfigPrize                    procedure GiveConfigPrize(Player: TPlayer; const PrizeIdx: integer; const InfoStr: string);
+00734B60  UpgradeSelfMagicShield             procedure UpgradeSelfMagicShield(Player: TPlayer);
+00734B6C  UpgradeHeroMagicShield             procedure UpgradeHeroMagicShield(Player: TPlayer);
+00734B78  CheckMarry                         function CheckMarry(Player: TPlayer): Integer;
+00734B84  ReqPopGift                         procedure ReqPopGift(Player: TPlayer);
+00734B90  EngageArcher                       procedure EngageArcher(Hum: TPlayer; Idx: integer);
+00734B9C  IsExistArcher                      function IsExistArcher(Hum: TPlayer; Idx: integer): Boolean;
+00734BA8  GetMoveChance                      function GetMoveChance(Hum: TPlayer; Idx: integer): Boolean;
+00734BB4  GetEngageChance                    function GetEngageChance(Hum: TPlayer): Boolean;
+00734BC0  SetRebate                          procedure SetRebate(nRebate : Word);
+00734BCC  EnterRouteWayByLF                  procedure EnterRouteWayByLF(Hum: TPlayer; BoClientClick: Boolean);
+00734BD8  EnterRouteWayByLFEx                procedure EnterRouteWayByLFEx(Hum: TPlayer; BoClientClick: Boolean;bFree:Boolean);
+00734BE4  EnterGuan                          procedure EnterGuan(Hum: TPlayer);
+00734BF0  EnterNewGuan                       procedure EnterNewGuan(Hum: TPlayer);
+00734BFC  ChkMonAndItem                      procedure ChkMonAndItem(Hum: TPlayer);
+00734C08  WantWarMon                         procedure WantWarMon(Hum: TPlayer);
+00734C14  GetSkyPrize                        procedure GetSkyPrize(Hum: TPlayer);
+00734C20  EnterMyStery                       procedure EnterMyStery(Hum: TPlayer);
+00734C2C  ClientGetPrize                     procedure ClientGetPrize(Hum: TPlayer);
+00734C38  EnterNext                          procedure EnterNext(Hum: TPlayer; BoMyStery: Boolean);
+00734C44  EnterNext2                         procedure EnterNext2(Hum: TPlayer);
+00734C50  OpenActionBox                      procedure OpenActionBox(Hum: TPlayer);
+00734C5C  ShowBook                           procedure ShowBook(Player: TPlayer; i, j: Integer; s: string);
+00734C68  CreateDynRoomMon                   procedure CreateDynRoomMon(const sRoomName: string; idx, X, Y, Ranger: Integer; MonName: string; MonNum: Integer);
+00734C74  GetAIdleDynRoomIndex               function GetAIdleDynRoomIndex(roomName: string): Integer;
+00734C80  GetAIdleDynRoomIndexEx             function GetAIdleDynRoomIndexEx(roomName: string;owner:TPlayer):Integer;
+00734C8C  UpHelmet                           procedure UpHelmet(Hum: TPlayer);
+00734C98  FoundryList                        procedure FoundryList(Clicker: TPlayer);
+00734CA4  MakeItemUseDiam                    procedure MakeItemUseDiam(Hum: TPlayer);
+00734CB0  DiaPeif                            procedure DiaPeif(Hum: TPlayer; const nCmd: integer);
+00734CBC  NewYearOrderPresent                function NewYearOrderPresent: string;
+00734CC8  NewYearOrderAccept                 function NewYearOrderAccept: string;
+00734CD4  CurrentNewYearOrderPresent         function CurrentNewYearOrderPresent: string;
+00734CE0  CurrentNewYearOrderAccept          function CurrentNewYearOrderAccept: string;
+00734CEC  GetCurrentNewYearOrder             function GetCurrentNewYearOrder(Hum: TPlayer): string;
+00734CF8  GetLastNewYearOrder                function GetLastNewYearOrder(Hum: TPlayer): string;
+00734D04  NewYearGetMyGift                   function NewYearGetMyGift(Hum: TPlayer): Integer;
+00734D10  SubmitBallQuest                    function SubmitBallQuest(Player: TPlayer): Integer;
+00734D1C  CheckCastleWarDate                 function CheckCastleWarDate(): string;
+00734D28  GetListOfWar                       function GetListOfWar(): string;
+00734D34  GetGuildWarGold                    function GetGuildWarGold(): Integer;
+00734D40  RndGetMedal                        procedure RndGetMedal(Hum: TPlayer; const ProcStr: string);
+00734D4C  SpeGetMedalByRy                    procedure SpeGetMedalByRy(Hum: TPlayer; const ProcStr: string);
+00734D58  SpeGetMedalBySW                    procedure SpeGetMedalBySW(Hum: TPlayer; const ProcStr: string);
+00734D64  UpMedalAbil                        procedure UpMedalAbil(Hum: TPlayer);
+00734D70  ReqUseTimeBuyLF                    procedure ReqUseTimeBuyLF(Hum: TPlayer; const Num: integer);
+00734D7C  UpFeeUserAct                       procedure UpFeeUserAct(Hum: TPlayer);
+00734D88  OpenNeedKeyBox                     procedure OpenNeedKeyBox(Hum: TPlayer);
+00734D94  OpenNeedKeyBox2                    procedure OpenNeedKeyBox2(Hum: TPlayer);
+00734DA0  OpenLuckBox                        procedure OpenLuckBox(Hum: TPlayer);
+00734DAC  OpenLuckBox2                       procedure OpenLuckBox2(Hum: TPlayer);
+00734DB8  UseNick                            procedure UseNick(Hum: TPlayer; Usetype: integer);
+00734DC4  NPCDropItem                        procedure NPCDropItem(ItemName: string; nRanger, ItemNum: integer);
+00734DD0  NPCDropItemToAllMapRnd             procedure NPCDropItemToAllMapRnd(ItemName: string; ItemNum: integer);
+00734DDC  BuyLfBag                           procedure BuyLfBag(Sender: TPlayer);
+00734DE8  UpdateEverydayActOrder             function UpdateEverydayActOrder(const iActNo, iFieldNo: Integer; const sName: string; const iScore: Integer): Integer;
+00734DF4  GetCurrentEAPeriod                 function GetCurrentEAPeriod(const iActNo, iFieldNo: Integer): Integer;
+00734E00  GetCurrentEAIdxByName              function GetCurrentEAIdxByName(const iActNo, iFieldNo: Integer; const sName: string): Integer;
+00734E0C  GetCurrentEANameByIdx              function GetCurrentEANameByIdx(const iActNo, iFieldNo, idx: Integer): string;
+00734E18  GetCurrentEAScoreByIdx             function GetCurrentEAScoreByIdx(const iActNo, iFieldNo, idx: Integer): Integer;
+00734E24  GetLastEAIdxByName                 function GetLastEAIdxByName(const iActNo, iFieldNo: Integer; const sName: string): Integer;
+00734E30  GetLastEANameByIdx                 function GetLastEANameByIdx(const iActNo, iFieldNo, idx: Integer): string;
+00734E3C  GetLastEAScoreByIdx                function GetLastEAScoreByIdx(const iActNo, iFieldNo, idx: Integer): Integer;
+00734E48  GetEAOrderInfo                     function GetEAOrderInfo(const iActNo,iFieldNo,Page,TotalPage,PrePage:Word;isCurrent:Boolean;sProcName:string):string;
+00734E54  EAOrderIsStart                     function EAOrderIsStart(const iActNo,iFieldNo:Integer):Boolean;
+00734E60  GiveConfigPrizeTemp                procedure GiveConfigPrizeTemp(Player: TPlayer; const PrizeIdx: integer; const InfoStr: string);
+00734E6C  SetWineTreat                       procedure SetWineTreat(wtType: Byte; boDesk: Boolean);
+00734E78  GetTreatWine                       function GetTreatWine(Hum: TPlayer): Integer;
+00734E84  ResetHeroExpFealty                 procedure ResetHeroExpFealty(player: TPlayer);
+00734E90  HeroRename                         function HeroRename(player: TPlayer; const oldName, newName: string): Integer;
+00734E9C  AddPlayerBodyLuck                  function AddPlayerBodyLuck(player: TPlayer; const addPoint: Integer): Integer;
+00734EA8  TryEnterSuperSky                   procedure TryEnterSuperSky(player: TPlayer);
+00734EB4  GetRandItem                        function GetRandItem(idx: Integer): string;
+00734EC0  GetRandItemEx                      function GetRandItemEx(curTimeTag: Cardinal; idx: Integer): string;
+00734ECC  MoveAllHumInMap                    procedure MoveAllHumInMap(const desMap: string; x, y: Word);
+00734ED8  MoveAllHumInMapByLevel             procedure MoveAllHumInMapByLevel(const desMap: string; const x, y: Word; const humLv, humForceLv, humSuperForceLv: Integer; const opType: Integer);
+00734EE4  RegDelayProc                       procedure RegDelayProc(const procName: string; delaySec: Integer);
+00734EF0  CreateMapEvent                     procedure CreateMapEvent(const eventType, lineNo, columnNo, lastSecond, startDamage, intervalSecond, incDamage: Integer);
+00734EFC  RemoveMapEvent                     procedure RemoveMapEvent(const eventType, lineNo, columnNo: Integer);
+00734F08  Click_Vote                         procedure Click_Vote(Clicker:TPlayer;VoteMode:Word);
+00734F14  ComposeItem                        procedure ComposeItem(Player:TCreature;iMode:Integer;NeedItemNum:Integer);
+00734F20  OpenDialogsWindows                 procedure OpenDialogsWindows(Player:TCreature;WindowsID,SubID:Integer);
+00734F2C  LoadPlayerStatuary                 procedure LoadPlayerStatuary(job, gender: Byte);
+00734F38  AppearanceTransform                procedure AppearanceTransform(objCret: TCreature);
+00734F44  UpdateFameNpc                      procedure UpdateFameNpc(const iRank: Integer);
+00734F50  GetFamePlayerNameByRank            function GetFamePlayerNameByRank(const iRank: Integer): string;
+00734F5C  DoHitAction                        procedure DoHitAction;
+00734F68  DoHideAction                       procedure DoHideAction;
+00734F74  DoShowAction                       procedure DoShowAction;
+00734F80  DoFlyAction                        procedure DoFlyAction(const desMapName: string; var desX, desY: Integer);
+00734F8C  DoHideNpcEx                        procedure DoHideNpcEx(const sMapName, sNpcName: string);
+00734F98  DoShowNpcEx                        procedure DoShowNpcEx(const sMapName, sNpcName: string);
+00734FA4  SendRollMsgInCurrentMap            procedure SendRollMsgInCurrentMap(const sMsgStr: string; const iType: Integer);
+00734FB0  GetNormalCastleFlagOwner           function GetNormalCastleFlagOwner(const flagName: string): string;
+00734FBC  GetNormalCastleScoreRslt           function GetNormalCastleScoreRslt(page: Integer): string;
+00734FC8  GetNormalCastleMatchTakeInfo       function GetNormalCastleMatchTakeInfo: string;
+00734FD4  GetNormalCastleTakeInfo            function GetNormalCastleTakeInfo(page: Integer): string;
+00734FE0  PlayRepairSwordEffect              procedure PlayRepairSwordEffect(const playTime: Integer);
+00734FEC  GetRecycleItemFeeName              function GetRecycleItemFeeName(stuffIdx: Integer): string;
+00734FF8  GetFreeRetrieveList                function GetFreeRetrieveList(Listid:Integer):string;
+00735004  ClickOpenFreeRetrieve              procedure ClickOpenFreeRetrieve(Clicker: TPlayer);
+00735010  SetPaoDianPrizeAndperiod           procedure SetPaoDianPrizeAndperiod(Prize:string;PeriodSec:Integer);
+0073501C  SetMapParam                        procedure SetMapParam(param:string);
+00735028  YBDealDialogShowMode               procedure YBDealDialogShowMode(APlayer: TPlayer; BoFirst: Boolean);
+00735034  MaxStrengthenEquipLv               function MaxStrengthenEquipLv(APlayer: TPlayer) : Integer;
+00735040  AddPlayerHonorValue                procedure AddPlayerHonorValue(const Value: Integer);
+0073504C  SubPlayerHonorValue                procedure SubPlayerHonorValue(const Value: Integer);
+00735058  GetPlayerHonorValue                function GetPlayerHonorValue: Integer;
+00735064  NotifyClientUPdBagItem             procedure NotifyClientUPdBagItem(APlayer : TPlayer; Item : TBaseItem);
+00735070  NewFullMailEx                      procedure NewFullMailEx(const ARecvName, ATitle,AContext: string; AMailType: Integer; AMonyCount: Integer;AMonyType: Integer; const AItemInfo: string; ACreateDateTime: string);
+0073507C  NotifyClientOpenUpdateClothes      procedure NotifyClientOpenUpdateClothes(APlayer: TPlayer);
+00735088  Click_CommitItem                   procedure Click_CommitItem(Clicker: TPlayer; Series: Word; HintInfo: string);
+00735094  GetComingVersion                   function GetComingVersion(idx:Integer):string;
+
+### TPsNpc / prop  (9)
+0073469C  RepDoorGold                        RepDoorGold                    : Integer        acc=0
+007346AF  RepWallGold                        RepWallGold                    : Integer        acc=0
+007346C2  HireGuardGold                      HireGuardGold                  : Integer        acc=0
+007346D5  HireArcherGold                     HireArcherGold                 : Integer        acc=0
+007346E8  InputStr                           InputStr                       : string         acc=1
+007346FB  InputOK                            InputOK                        : Boolean        acc=1
+0073470E  InputButton                        InputButton                    : Word           acc=1
+00734721  My_X                               My_X                           : Integer        acc=1
+00734734  My_Y                               My_Y                           : Integer        acc=1
+
+### TAnimal / prop  (6)
+0073AED7  Level                              Level                          : Word           acc=1
+0073AEEA  Name                               Name                           : String         acc=1
+0073AEFD  MapName                            MapName                        : String         acc=1
+0073AF10  MapDesc                            MapDesc                        : String         acc=1
+0073AF23  My_X                               My_X                           : integer        acc=1
+0073AF36  My_Y                               My_Y                           : integer        acc=1

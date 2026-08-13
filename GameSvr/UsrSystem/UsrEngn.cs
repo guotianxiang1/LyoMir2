@@ -2561,6 +2561,17 @@ namespace GameSvr
             var sMsg = string.Empty;
             if (PlayObject.m_boOffLineFlag) return;
             if (!string.IsNullOrEmpty(Buff)) sMsg = Buff;
+            // 战神's CM dispatcher receives the wire body length as its fourth parameter and 39
+            // handlers open with a test on it (see NativeClientBodyLengthGate for the per-ident
+            // table with VAs and bytes). This is the same architectural spot: the gates sit
+            // between ident selection and the handler body, and a failing gate lands on 0x6DBC2C
+            // which drops the packet with no reply and no side effect.
+            //
+            // GateService builds `payload` as exactly `MsgBuff[12 .. nMsgLen]` and only when
+            // nMsgLen > 12, so `payload?.Length ?? 0` is byte-for-byte the value the native
+            // caller pushes at 0x6B1B2C.
+            var nBodyLen = payload?.Length ?? 0;
+            if (!NativeClientBodyLengthGate.Allows(DefMsg.Ident, nBodyLen)) return;
             switch (DefMsg.Ident)
             {
                 case Grobal2.CM_SPELL:
@@ -2580,16 +2591,17 @@ namespace GameSvr
                     if (M2Share.g_Config.boSpellSendUpdateMsg)
                     {
                         PlayObject.SendUpdateMsg(PlayObject, DefMsg.Ident, DefMsg.Series,
-                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "");
+                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "", null, nBodyLen);
                     }
                     else
                     {
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series,
-                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "");
+                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "", null, nBodyLen);
                     }
                     break;
                 case Grobal2.CM_QUERYUSERNAME:
-                    PlayObject.SendMsg(PlayObject, DefMsg.Ident, 0, DefMsg.Recog, DefMsg.Param, DefMsg.Tag, "");
+                    PlayObject.SendMsg(PlayObject, DefMsg.Ident, 0, DefMsg.Recog, DefMsg.Param, DefMsg.Tag, "",
+                        null, nBodyLen);
                     break;
                 case Grobal2.CM_DROPITEM:
                 case Grobal2.CM_TAKEONITEM:
@@ -2614,17 +2626,17 @@ namespace GameSvr
                 case Grobal2.CM_USERTAKEBACKSTORAGEITEM:
                 case Grobal2.CM_USERMAKEDRUGITEM:
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series, DefMsg.Recog, DefMsg.Param, DefMsg.Tag,
-                            sMsg, payload);
+                            sMsg, payload, nBodyLen);
                     break;
                 case Grobal2.CM_PASSWORD:
                 case Grobal2.CM_CHGPASSWORD:
                 case Grobal2.CM_SETPASSWORD:
                     PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Param, DefMsg.Recog, DefMsg.Series, DefMsg.Tag,
-                        sMsg, payload);
+                        sMsg, payload, nBodyLen);
                     break;
                 case Grobal2.CM_ADJUST_BONUS:
                     PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series, DefMsg.Recog, DefMsg.Param, DefMsg.Tag,
-                        sMsg, payload);
+                        sMsg, payload, nBodyLen);
                     break;
                 case Grobal2.CM_HORSERUN:
                 case Grobal2.CM_TURN:
@@ -2665,21 +2677,21 @@ namespace GameSvr
                     {
                         PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
                             DefMsg.Recog, DefMsg.Param,
-                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "", nBodyLen);
                     }
                     else
                     {
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
                             DefMsg.Recog, DefMsg.Param,
-                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "", null, nBodyLen);
                     }
                     break;
                 case Grobal2.CM_SAY:
-                    PlayObject.SendMsg(PlayObject, Grobal2.CM_SAY, 0, 0, 0, 0, sMsg, payload);
+                    PlayObject.SendMsg(PlayObject, Grobal2.CM_SAY, 0, 0, 0, 0, sMsg, payload, nBodyLen);
                     break;
                 default:
                     PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series, DefMsg.Recog, DefMsg.Param, DefMsg.Tag,
-                        sMsg, payload);
+                        sMsg, payload, nBodyLen);
                     break;
             }
             if (!PlayObject.m_boReadyRun) return;
@@ -3822,15 +3834,15 @@ namespace GameSvr
             PlayObject.m_Abil.MaxWearWeight = HumData.Abil.MaxWearWeight;
             PlayObject.m_Abil.HandWeight = HumData.Abil.HandWeight;
             PlayObject.m_Abil.MaxHandWeight = HumData.Abil.MaxHandWeight;
-            PlayObject.m_wStatusTimeArr = HumData.wStatusTimeArr == null
-                ? new ushort[12]
-                : (ushort[])HumData.wStatusTimeArr.Clone();
-            if (PlayObject.m_wStatusTimeArr.Length >
-                Grobal2.STATE_BUBBLEDEFENCEUP)
-            {
-                PlayObject.m_wStatusTimeArr[
-                    Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
-            }
+            // Load path of the legacy-slot trio (REPLICATION_RULES 4.19). The
+            // slots no longer have storage of their own; CopyFrom replays the
+            // saved seconds onto the native Self+0xDC node list, which is the
+            // single authority. Slot 11 (STATE_BUBBLEDEFENCEUP, native state 20)
+            // is still cleared here, matching the save path in
+            // TPlayObject.GetHumData - the two ends have to agree or a login
+            // would resurrect what the logout dropped.
+            PlayObject.m_wStatusTimeArr.CopyFrom(HumData.wStatusTimeArr);
+            PlayObject.m_wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
             PlayObject.m_sHomeMap = HumData.sHomeMap;
             PlayObject.m_nHomeX = HumData.wHomeX;
             PlayObject.m_nHomeY = HumData.wHomeY;

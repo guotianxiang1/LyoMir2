@@ -463,8 +463,21 @@ namespace GameSvr
                 LoadList.LoadFromFile(s24);
                 for (var i = 0; i < LoadList.Count; i++)
                 {
-                    var s28 = LoadList[i];
-                    if (!string.IsNullOrEmpty(s28) && s28[0] != ';')
+                    // 战神 sub_6799E0 @0x679ADE-0x679B00 的行过滤只有两步，且都作用在
+                    // 【Trim 之后】的整行上：
+                    //   0x679AE4  call sub_40C140          ; Trim（两端剥 <=0x20，见
+                    //                                      ;   0x40C171/0x40C193 `cmp byte,0x20 / jbe`）
+                    //   0x679AE9  cmp [ebp-0x14],0 / je    ; 空行跳过
+                    //   0x679AF6  mov edx,0x679CD4         ; 长度前缀=1 的字面量 ";"
+                    //   0x679AFB  call sub_40591C (_LStrCmp) / 0x679B00 je  ; 【整行等于 ";"】才跳过
+                    // 不是「以 ';' 开头就跳过」。分号开头但仍能解析出物品名的行在原生里
+                    // 是生效的（例 ";1/100 屠龙" → 首 token ";1" → StrToIntDef 失败取默认 1）。
+                    // 生产实测：363 个 MonItems 文件 14848 行里，以 ';' 开头的只有 4 行
+                    // （幻影蜘蛛:54 / 虹魔蝎卫:55 / 虹魔蝎卫0:16 / 邪恶毒蛇8:54，全是韩文
+                    // 残留注释），四行的物品名都查不到 StdItem，原生同样丢弃 → 本次改动
+                    // 对该部署【零可观测差异】；带首尾空白的行 0 条，所以补 Trim 同样无影响。
+                    var s28 = LoadList[i]?.Trim();
+                    if (!string.IsNullOrEmpty(s28) && s28 != ";")
                     {
                         // ✅ 战神字节证据 (Tier-1)。EA: TUserEngine.LoadMonItems `sub_6799E0`
                         // (目录字面量 0x679CB0="MonItems\", 扩展名 0x679CC4=".txt",

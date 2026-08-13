@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using GameSvr;
@@ -26,8 +27,30 @@ class Program
         }
     }
 
+    // Constructing a real TBaseObject runs the M2Share static ctor, which loads StringConfig from
+    // !Setup.txt / String.ini / Command.conf and throws if they are absent, and the ctor then ends in
+    // M2Share.ObjectManager.RegisterConstructed (TBaseObject.cs:903), which NREs with no ObjectManager.
+    // Same minimal on-disk config + singleton set the InProc harnesses lay down, so the array-bounds
+    // assertions below run against a REAL actor rather than a stub. No engine threads, no network.
+    static void PrepareRuntime()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        File.WriteAllText(Path.Combine(baseDir, "!Setup.txt"), "[Server]\r\n");
+        File.WriteAllText(Path.Combine(baseDir, "String.ini"), "[String]\r\n");
+        File.WriteAllText(Path.Combine(baseDir, "Command.conf"), "[Command]\r\n");
+        var share = Path.GetFullPath(Path.Combine(baseDir, "..", "Share"));
+        Directory.CreateDirectory(share);
+        File.WriteAllText(Path.Combine(share, "PlayerUpgradeExp.ini"), "[PlayerLevelExp]\r\nLEVEL_1=50\r\n");
+        File.WriteAllText(Path.Combine(share, "ServerData.ini"), "[Integer]\r\n");
+
+        M2Share.g_Config ??= new GameSvrConfig();
+        M2Share.RandomNumber ??= RandomNumber.GetInstance();
+        M2Share.ObjectManager ??= new ObjectManager();
+    }
+
     static void Main()
     {
+        PrepareRuntime();
         Console.WriteLine("=== POIS-11 / POIS-30: Poison Index Divergence Check ===\n");
 
         // POIS-30: POISON_68 exceeds array bounds
@@ -86,7 +109,6 @@ class Program
         // Verify m_wStatusTimeArr size
         Console.WriteLine("\nVerify m_wStatusTimeArr array size...");
         var actor = new TBaseObject();
-        Assert(actor.m_wStatusTimeArr != null, "m_wStatusTimeArr should be initialized");
         Assert(actor.m_wStatusTimeArr.Length == 12,
             $"m_wStatusTimeArr.Length should be 12, got {actor.m_wStatusTimeArr.Length}");
         Console.WriteLine($"  ✓ m_wStatusTimeArr has {actor.m_wStatusTimeArr.Length} slots (indices 0-11)");
@@ -117,7 +139,8 @@ class Program
         Console.WriteLine("\nPOIS-30: Verify POISON_68 is unsafe for array indexing...");
         Assert(Grobal2.POISON_68 >= actor.m_wStatusTimeArr.Length,
             $"POISON_68 ({Grobal2.POISON_68}) exceeds array length ({actor.m_wStatusTimeArr.Length})");
-        Console.WriteLine($"  ✓ POISON_68={Grobal2.POISON_68} would throw IndexOutOfRangeException");
+        Console.WriteLine($"  ✓ POISON_68={Grobal2.POISON_68} is outside the 12 legacy slots"
+            + " (the forwarding view ignores it, matching native's `cmp dl,0x6F / ja` skip)");
         Console.WriteLine("  ✓ Use HasNativeActiveState(68) / SetNativeActiveState(68) instead");
 
         // Summary

@@ -41,6 +41,37 @@ namespace SystemModule
         public const int DynamicHeaderSize = 7;
         public const int MaximumDynamicDataSize = 4 + 5 * (DynamicHeaderSize + ushort.MaxValue);
 
+        // !! 与原生相反，且【不要】单独翻转 —— 见下方证据与迁移要求 (§1.4)。
+        //
+        // 0x49D4 记录体的两个名字槽，原生 M2Server 的编码器与解码器成对确认：
+        //   编码 sub_689034（esi = 英雄, [ebp-4] = 记录基址, ebx = 记录+8）
+        //     689045  8D 58 08              lea ebx,[eax+8]          ; 记录 +0x08
+        //     689048  8B C3                 mov eax,ebx
+        //     68904A  8D 96 06 01 00 00     lea edx,[hero+0x106]     ; 英雄自己的 m_sCharName
+        //     689050  B1 0F                 mov cl,0x0F
+        //     689052  E8 8D A9 D7 FF        call 0x4039E4            ; ShortString 拷贝, maxlen 15
+        //     689057  8D 43 10              lea eax,[ebx+0x10]       ; 记录 +0x18
+        //     68905A  8D 96 90 06 00 00     lea edx,[hero+0x690]     ; 主人名
+        //     689062  E8 7D A9 D7 FF        call 0x4039E4
+        //   解码 sub_6888FC（esi = 记录基址, ebx = esi+8）
+        //     688940  8B 45 FC / 05 06 01 00 00  eax = hero+0x106
+        //     688948  8B D3 / B1 0E / E8 ..      edx = 记录+0x00, maxlen 14 -> 写英雄自己的名字
+        //     688951  ... eax = hero+0x690
+        //     688959  8D 53 10 / B1 0F / E8 ..   edx = 记录+0x10 -> 写主人名
+        //   记录基址就是 frame+0x54（编码器 0x6888B0 `lea edx,[ebx+0x54]`，
+        //   ebx = frame 起点，0x54 == FrameHeaderSize 0x0C + MessageHeaderSize 0x48）。
+        //
+        // 即原生是 **记录 +0x08 = HeroName、+0x18 = MasterName**，本文件两个常量正好
+        // 互换。旁证：同族的神兽存档 NativeDominatorPetProtocol.DataMasterNameOffset
+        // 也是 0x18（记录体），而 0x25 是**消息头**的主人名槽（0x160 请求 sub_6CC918
+        // @0x6CC97A 把 [player+0x106] 写到 msg+0x25，这一处 C# 是对的）。
+        //
+        // 为什么现在不翻：C# 的读写两侧共用这两个常量，所以 C#↔C# 自洽；一旦单独翻
+        // 转，**已经用错位布局写进 MySQL 的英雄 blob 会被再翻一次**，比不改更糟
+        // （REPLICATION_RULES §1.4 里 type0/type1 V/S 银行接反那次的同类事故）。
+        // 翻转必须与一次性数据迁移（按写入时间/版本标记区分两种布局）一起上线。
+        // 现状的可观测后果：GameSvr 换回原版 Delphi 后，英雄会以主人的名字复活，
+        // 而 hero+0x690（主人名，存档时写进 msg+0x25）会变成英雄名 -> 存档找不到主人。
         public const int MasterNameOffset = 0x0008;
         public const int HeroNameOffset = 0x0018;
         public const int RaceOffset = 0x0028;

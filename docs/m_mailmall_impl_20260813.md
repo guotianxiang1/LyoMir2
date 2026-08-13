@@ -547,17 +547,15 @@ C# 写的是 `if (age.TotalDays < retentionDays) continue;`，同为 `>=`。
 
 ---
 
-## 5. 判定汇总
+## 5. 判定汇总（本轮独立复核后）
 
 | 判定 | 数量 | 条目 |
 |---|---:|---|
-| `FAITHFUL` | 10 | MAIL-01..08、MALL-03(+44)、MALL-07 现状阶梯已核 |
-| `DIVERGENT` | 5 | MALL-01 商品表契约、MALL-02 记录 +46/+48、MALL-09 分类号、MALL-10 总价用原价、MALL-11 数量静默夹取 |
-| `MISSING` | 2 | MALL-04 生产脚本形状不被解析（导致整表为空）、MALL-06 灵符发放 |
-| `INVENTED` | 3 | MALL-05 货币类型 1/3/4 本地扣款、MALL-08 S(300/301/302) 限购坐标、MALL-12 固定分类名表 |
-| `BLOCKED` | 4 | 见 §6 |
-
-`DIVERGENT` / `MISSING` / `INVENTED` 已全部落地修复，除 MALL-04 只能部分修（见 §6.1）。
+| `FAITHFUL` | 16 | MAIL-01..08 领取/清理/tag；MAIL-10 发送（仅脚本 `NewFullMailEx`、附件 `/` 组数 `>6` 整封拒、无金币上限）；MAIL-11 落盘三表；MALL-01 `$`/10 字段；MALL-03 +44；MALL-07 发货阶梯；MALL-09 首次出现分类号；MALL-10 总价 `vCurPrice`；MALL-13 生产脚本 10/10 解析 |
+| `DIVERGENT` | 0（本轮已修 2） | MAIL-09 领取金币曾走 `m_nGold +=`（已改 `IncGold`）；MALL-14 Looks 曾在 `stdItem==null \|\| Looks==0` 时整条丢（已改 `vEffectImg` 回退） |
+| `MISSING` | 1 | MALL-06 灵符发放（`0x6CC504 add [esi+0xBD8],eax`）。购买闸 fail-closed，这条目前不可达；接线 `PsYBConsumEx` 之前不许单独实现发放 |
+| `INVENTED` | 0（前轮已撤） | 货币类型 1/3/4、S(300/301/302) 限购坐标、固定分类名表 |
+| `BLOCKED` | 3 | 见 §6.1 / §6.2 / §6.3。原 §6.4 Looks 回退已解 |
 
 ---
 
@@ -565,45 +563,167 @@ C# 写的是 `if (age.TotalDays < retentionDays) continue;`，同为 `>=`。
 
 ### 6.1 商城商品表的最终形态：必须由 PAS 引擎调 `@GetYBShopConfig`
 
-原生不解析脚本文本。任何静态正则都是替身，替身注定覆盖不全（这次就是跟错了脚本变体）。
-本次把替身对齐到了原生的 10 字段契约，并让它认识生产脚本的 `case` 形状，
-但仍**无法**处理：`Execute` 里按日期在 `_001`/`_002` 之间切换、
-`IsUsingGoodsName` 的运行期过滤、以及分支里带表达式的赋值。
+原生不解析脚本文本。当前替身已能解生产 `YBShopScript.pas` 的 10 条（见 §8.1），
+但仍无法处理：`Execute` 按日期在 `_001`/`_002` 之间切换（本生产文件两份常量**内容相同**，
+所以今天无差）、`IsUsingGoodsName` 运行期过滤、分支里带表达式的赋值。
 
-缺什么：把 `YBShopScript.pas` 接进 C# 的 PasEngine，按 `sub_636D68` 的形状
-（8 个 variant 实参、返回串）调用 `@GetYBShopConfig`。
+缺什么：把 `YBShopScript.pas` 接进 PasEngine，按 `sub_636D68` 的形状调 `@GetYBShopConfig`。
 
-### 6.2 `EverydayClearLimitValue` 需要真正的 PAS 解释器
+### 6.2 `EverydayClearLimitValue` / `GetDateNum`
 
-`for I := 1 to 50 do begin SetV(91,I,0); if GetV(89,I) < 0 then SetV(89,I,0); end;`
-是变址循环，不能用正则还原。生产脚本的 `GetLimitValue`/`SetLimitValue` 是空桩，
-限购恒 0，所以当前不实现无可观测影响。
+生产 `ClientBuy` **每次购买尝试**的第一步都会：
+`GetS(80,40) <> GetDateNum(GetNow)` → `EverydayClearLimitValue` → `SetS(80,40,today)`。
+循环是 `for I:=1 to 50: SetV(91,I,0); if GetV(89,I)<0 then SetV(89,I,0)`。
+生产 `GetLimitValue` 是 `Result := 0` 空桩，限购读数恒 0，所以**限购效果**目前为零；
+但原生仍会写 V/S，属 §1.4 存档布局。C# 购买闸 fail-closed，这条目前也不可达。
+
+缺什么：`GetDateNum` 的编码（日序号怎么从日期算）未反。不确定就不写存档。
 
 ### 6.3 元宝结算 `PsYBConsumEx` 的外部链路
 
-`This_Player.PsYBConsumEx(2, 'YBShopBuy_YB', …)` 走外部元宝库，
-属既有的 6108 externally-blocked 结论范围。没有它，商城购买无法忠实完成，
-只能 fail-closed。
-
-### 6.4 `1101` 处理器里 Looks 解析失败时的回退
-
-前人文档称 `sub_639D24` 在标准物品查不到时用记录 `+48` 的低字（即 `vEffectImg`）
-当 Looks 回退。若属实，C# `BuildWhitePigMallBody` 里
-`if (stdItem == null || stdItem.Looks == 0) continue;` 会**丢掉原生仍然展示的商品**
-（生产脚本的 `vEffectImg` = 520/410/380 正是像 Looks 的值）。
-本次未逐字节复核 `sub_639D24`，不下判定。
-
-缺什么：反 `sub_639D24 @0x639D24` 的查表失败臂，确认回退源是不是 `+48` 低字。
+`This_Player.PsYBConsumEx(2, 'YBShopBuy_YB', …)` 走外部元宝库。
+没有它，商城购买无法忠实完成，只能 fail-closed：**不扣任何货币，也不发放任何物品**。
 
 ---
 
 ## 7. 建议的优先级
 
-1. **MALL-04 / 6.1**：商城是 29 万次/周期的最热写路径，目前商品表为空。
-   接 PAS 引擎是唯一的终局解，本次的替身修复只是把它从「必然为空」变成「生产脚本能解析」。
-2. **MALL-05 已落地**：三条 INVENTED 扣款是本次唯一的真实经济风险，已 fail-closed。
-3. **MALL-08 已落地**：每次开商城面板往存档写一个原生没有的键（1046 线上 50,039 次），
-   属 §1.4 存档布局问题，已移除。
-4. **MALL-02 已落地**：+46/+48 字段错位是协议问题，影响客户端商品展示。
-5. **6.4**：复核 `sub_639D24` 的 Looks 回退，决定 `stdItem.Looks == 0` 那条 `continue` 该不该留。
-6. 邮件族：线上零流量，全部 FAITHFUL，无需动作。
+1. **6.3 元宝结算**：29 万次/周期的购买路径在 C# 上故意买不成。接线前保持 fail-closed。
+2. **6.1 PAS `@GetYBShopConfig`**：替身已能解本生产文件；换脚本变体仍会再死。
+3. **MALL-06 灵符**：只允许出现在结算成功之后的发货臂，禁止提前实现。
+4. 邮件族：线上零流量。本轮只修领取金币的 `IncGold` 门（刷钱方向 fail-closed）。
+
+---
+
+## 8. 本轮独立复核（不采信前报告）
+
+镜像 `flat_image.bin`，基址 `0x400000`。脚本在 `docs/mailmall_re/q20..q23`。
+
+### 8.1 生产配置解析：10/10，字段逐条对照
+
+文件 `D:\光头卧龙\mud2.0\Mir200\Envir\YBShop\YBShopScript.pas`（12001 字节，GBK）。
+分隔符 `$`（`0x636F8F b1 24`），10 字段（`0x636FC6 83 f8 0a` / `ja 0x63709A`）。
+分类按首次出现：装饰=0，强化=1（**不是**写死表里的强化=2）。
+全部 `vLimitType=0` / `vLimitCount=0`。`GetLimitValue` 活坐标 0 条。
+
+| # | 名 | 分类 | cid | idx | src | cur | lt | lc | img | ec |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 贵族斗笠 | 装饰 | 0 | 222 | 2000 | 2000 | 0 | 0 | 520 | 18 |
+| 2 | 五倍经验卷 | 装饰 | 0 | 222 | 1000 | 1000 | 0 | 0 | 520 | 18 |
+| 3 | 三倍经验卷 | 装饰 | 0 | 222 | 500 | 500 | 0 | 0 | 520 | 18 |
+| 4 | 技巧项链 | 装饰 | 0 | 222 | 500 | 500 | 0 | 0 | 520 | 18 |
+| 5 | 随机传送石 | 强化 | 1 | 247 | 10 | 10 | 0 | 0 | 380 | 1 |
+| 6 | 盟重传送石 | 强化 | 1 | 218 | 10 | 10 | 0 | 0 | 410 | 10 |
+| 7 | 修复神水 | 强化 | 1 | 248 | 10 | 10 | 0 | 0 | 380 | 1 |
+| 8 | 魔血石 | 强化 | 1 | 249 | 300 | 300 | 0 | 0 | 380 | 1 |
+| 9 | 太阳水包 | 强化 | 1 | 250 | 10 | 10 | 0 | 0 | 380 | 1 |
+| 10 | 疗伤药包 | 强化 | 1 | 251 | 50 | 50 | 0 | 0 | 380 | 1 |
+
+`_001` 与 `_002` 常量内容相同；`Execute` 的日期切换对本文件无差。
+
+### 8.2 【MAIL-09 · 已修】领取金币必须走 `IncGold`
+
+```
+0070B7C0  e8 83 c1 fc ff        call 0x6D7948            ; 溢出测试
+0070B7C9  be fd ff ff ff        mov esi, -3              ; 溢出 -> -3，金币/附件都不动
+0070B7DB  ff 91 8c 02 00 00     call [vmt+0x28C]          ; IncGold = 0x6D791C
+0070B7E1  84 c0 / 74 59         test al,al / je 0x70B83E ; false 不改成 -3，仍去发附件
+006D7922  85 d2 / 7e 1d         test edx,edx / jle        ; IncGold: <=0 拒绝
+006D792E  3b 98 8c 06 00 00     cmp ebx,[eax+0x68C]       ; vs m_nGoldMax
+006D7934  7f 0d                 jg 0x6D7943               ; > 上限拒绝
+006D7936  01 90 5c 01 00 00     add [eax+0x15C],edx       ; 才加金币
+006D793C  e8 73 a0 fe ff        call 0x6C19B4             ; GoldChanged 在 IncGold 内
+```
+
+C# 曾 `m_nGold += record.MoneyCount`，绕过 `IncGold` 的 `<=0` 门和 `GoldChanged` 内联。
+已改为 64 位溢出预检（比原生 32 位加法更严，拒绝方向）+ `IncGold(record.MoneyCount)`。
+
+### 8.3 【MALL-14 · 已修】Looks 回退是 `rec+0x30` 低字 = `vEffectImg`
+
+前报告 §6.4 标 BLOCKED。本轮反出：
+
+```
+00639DB5  e8 1a 25 11 00        call 0x74C2D4             ; 按名查标准物品
+00639DC1  74 10                 je  0x639DD3              ; 未找到 -> 回退
+00639DC6  66 8b 40 18           mov ax, [std+0x18]        ; Looks
+00639DCD  66 89 42 20           mov [rec+0x20], ax
+00639DD3  …未找到…
+00639DD6  66 8b 40 30           mov ax, [rec+0x30]        ; vEffectImg 低字
+00639DDD  66 89 42 20           mov [rec+0x20], ax
+```
+
+`+0x18` 与 `NativeItemFactory` 的 `StdMode +0x14 / Shape +0x15` 对齐：`string[19]` 后 Looks 在 +0x18。
+C# 曾 `if (stdItem == null || stdItem.Looks == 0) continue;` 把原生仍会下发的记录丢掉。
+已改为：命中用 `stdItem.Looks`，未命中用 `item.EffectImg`，`Looks==0` 照发。
+这是列表渲染（只读），购买仍在结算闸 fail-closed。
+
+### 8.4 【MAIL-10 · FAITHFUL】谁能发、附件上限、金币上限
+
+客户端协议**没有**发信 ident。`NewFullMailEx` 全镜像仅 3 个调用点：
+`0x649118`（全局 PAS）、`0x6E759C`（`This_Player` PAS）、`0x708CD0`（7 参包装）。
+玩家不能从客户端写信。tag 7「用户邮件」有名字但 `dword_7D3DE8` bit 为 0，领取/清理都拒。
+
+附件格数：
+
+```
+0070907C  b2 2f                 mov dl, 0x2F              ; '/' 切组
+00709301  e8 42 fd ff ff        call 0x709048             ; TStringList.Count
+00709306  83 f8 06              cmp eax, 6
+00709309  7e 18                 jle 0x709323              ; <=6 继续
+00709314  ba 58 95 70 00        mov edx, 0x709558          ; 长串 len=35
+```
+
+`0x709558` 实读 `'[Error] 不能发送超过6个附件的邮件！'`。`>6` 整封不写。
+C# `TryParseItemInfo`：`groups.Length > 6` 返回 false。
+
+金币上限：**发送侧没有**。`sub_70CF34` 是 `mov [mail+0x54], ecx`（原样写入 `moneyCount`），
+`test ecx,ecx / jle` 仅在 `>0` 时把 `AttachStatus` 置 1。脚本可以塞任意 int。
+不发明上限。领取侧才走 `IncGold` 的 `m_nGoldMax` 门。
+
+条数上限在**清理**不在发送：普通 tag 30 封 / tag 6 为 20 封（`0x70D114 mov [ebp-4],0x1E`）。
+发送可暂时超过，下次清理裁。
+
+### 8.5 【MAIL-11 · FAITHFUL】落盘布局
+
+```
+0070C844  INSERT INTO %s.mailitem(sendId,sendName,recvName,recvid,title,context,
+          mailType,mailstatus,attachstatus,moneytype,moneyCount,attachNum,createDate)
+          VALUES(%d,%s,%s,%d,%s,%s,%d,%d,%d,%d,%d,%d,%s);
+0070BEAC  INSERT INTO %s.attachitem(mailid,CreateDate) VALUES(%d,%s);
+0070C334  INSERT INTO %s.Money_order(...,moneyStatus,createDate) VALUES(...,%d,Now());
+0070AD7C  INSERT INTO %s.mailitem_b(...) SELECT ... FROM mailitem  ; 归档
+```
+
+schema 名 `gamedata`（`0x70C814` len=8）。C# `NativeMailStore.NativeSchemaStatements` 同构。
+无事务：`MailService` 注释已写明后步失败时已写入的行保留，与原生一致。
+
+### 8.6 领取原子性
+
+- 背包门（`0x70B6AF cmp edi,eax / jg`）在**任何**副作用之前：附件数 > 空格 → 返回 -1，
+  金币未加、`AttachStatus` 未改。不存在「发了一半」。
+- 金币溢出（`0x70B7C0`）在 `IncGold` 之前：返回 -3 时金币未动、附件未发、邮件仍可领。
+- 发放循环之后**无条件** `AttachStatus := 2`（`0x70B5E3`）：单件 `AddItemToBag` 失败则丢那一件
+  （损失窗口），绝不重复发放。
+- 元宝分支异步：`yb_user_data` 已提交而 `attachStatus` 仍为 1 时可重领。原生如此，不修。
+- 中断「扣了邮件没给物」：溢出/背包门都在标记之前，**不会**。反向「给了物没扣邮件」被
+  无条件 `AttachStatus:=2` 关掉（用损失窗口换一次领取）。
+
+### 8.7 购买流程原子性
+
+生产 `ClientBuy`：日志 → `PsYBConsumEx` 异步扣元宝 → 回调 `YBShopBuy_YB` 才 `Give`。
+引擎 `sub_6CB7E4` / `sub_6CC420` **零条减法**。C# `TrySettleYuanbaoPayment` 恒 false，
+且位于建物品 / 入包 / 写限购之前。两个方向都闭：
+
+- 不会扣钱不给物（本进程不扣款）
+- 不会给物不扣钱（入包不可达）
+
+价格取 `vCurPrice`（脚本 `Price := WantNum * vCurPrice`，`0x637199 66 89 46 26` 是字段 5）。
+数量 `(WantNum > 0) and (WantNum < 1000)` 硬拒绝，不夹取。
+货币只有元宝。限购计数在生产是空桩，跨下线无状态可保留。
+
+### 8.8 本轮改动
+
+- `TPlayObject.Mail.cs`：领取金币改 `IncGold`
+- `TPlayObject.Mall.cs`：Looks 回退 `vEffectImg`，不再因 Looks==0 丢行
+- `MallCurrency4CompatCheck`：生产 10 条字段级断言 + IncGold/Looks/vCurPrice 源码钉
+- `InProcMailRunCheck`：溢出返回 -3 且金币/AttachStatus 不动

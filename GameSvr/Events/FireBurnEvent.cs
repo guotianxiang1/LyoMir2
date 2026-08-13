@@ -7,7 +7,18 @@ namespace GameSvr
     
     public class FireBurnEvent : Event
     {
-        private int m_fireRunTick = 0;
+        /// <summary>Native <c>[obj+0x4C]</c>, the pulse timestamp.</summary>
+        protected int m_fireRunTick = 0;
+
+        /// <summary>
+        /// Native <c>[obj+0x54]</c>. TFireBurnEvent's constructor seeds it at
+        /// <c>0x7178AC C7 43 54 B8 0B 00 00 mov [ebx+0x54],0xBB8</c> and
+        /// TBTFireBurnEvent's overwrites it at
+        /// <c>0x717A81 C7 43 54 E8 03 00 00 mov [ebx+0x54],0x3E8</c>. Run compares
+        /// against it with <c>0x7179C8 3B 43 54 cmp eax,[ebx+0x54]</c> /
+        /// <c>0x7179CB 76 jbe</c>, i.e. strictly greater fires.
+        /// </summary>
+        protected int m_fireRunInterval = 0xBB8;
 
         internal MagicDamageContext Context { get; }
 
@@ -16,6 +27,41 @@ namespace GameSvr
             m_nDamage = nDamage;
             m_OwnBaseObject = Creat;
             Context = MagicDamageContext.Empty;
+        }
+
+        /// <summary>
+        /// Native <c>TFireBurnEvent.Create = sub_717854</c> in its full shape:
+        /// <c>ecx</c> is the Envirnoment and the owner is a separate parameter
+        /// (<c>0x717897 mov eax,[ebp+0x18] / 0x71789A mov [ebx+0x14],eax</c>), so a
+        /// nil owner is legal. TBTFireBurnEvent's constructor uses exactly that —
+        /// it pushes 0 for the owner at <c>0x717A52 6A 00</c> and only writes
+        /// <c>[ebx+0x14]</c> itself afterwards at <c>0x717A88</c>.
+        /// The public constructor above cannot express this because it derives the
+        /// map from the owner.
+        /// </summary>
+        protected FireBurnEvent(Envirnoment envir, TBaseObject owner, int nX,
+            int nY, int nType, int nTime, int nDamage)
+            : base(envir, nX, nY, nType, nTime, true)
+        {
+            m_nDamage = nDamage;
+            m_OwnBaseObject = owner;
+            Context = MagicDamageContext.Empty;
+            // 0x7178B3 cmp dword [ebx+0x14],0 / 0x7178B7 75 03 jne /
+            // 0x7178B9 89 7B 20 mov [ebx+0x20],edi — a nil owner restores the raw
+            // duration, undoing both the 0xAFC80 clamp and the AddToMap-failure
+            // zeroing that the TMapEvent constructor may have applied.
+            if (owner == null)
+            {
+                ContinueTime = nTime;
+            }
+            // NOT modelled, and it applies to the public constructor above too:
+            //   0x7178BC  8B 86 88 00 00 00  mov eax,[esi+0x88]   ; esi = Envir
+            //   0x7178C2  85 C0 / 7E 03      jle
+            //   0x7178C6  89 43 20           mov [ebx+0x20],eax
+            // A positive Envirnoment field +0x88 overrides the duration of EVERY
+            // fire-burn event on that map, last write wins. The C# Envirnoment has
+            // no identified counterpart for +0x88, so guessing one would be worse
+            // than leaving the override out. Flagged in the event report.
         }
 
         public FireBurnEvent(TBaseObject Creat, TUserMagic userMagic, int nX, int nY, int nType, int nTime, int nDamage) : base(Creat.m_PEnvir, nX, nY, nType, nTime, true)
@@ -55,7 +101,8 @@ namespace GameSvr
 
         public override void Run(int currentTick)
         {
-            if (unchecked((uint)(currentTick - m_fireRunTick)) > 3000u)
+            if (unchecked((uint)(currentTick - m_fireRunTick)) >
+                unchecked((uint)m_fireRunInterval))
             {
                 m_fireRunTick = currentTick;
                 IList<TBaseObject> BaseObjectList = new List<TBaseObject>();

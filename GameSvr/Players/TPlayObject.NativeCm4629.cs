@@ -10,8 +10,8 @@ namespace GameSvr
 
         private void ClientNativeCm4629GroupPositions()
         {
-            // 0x6F7C8D E8 16 B1 07 00 call 0x772DA8  -> al = [eax+0x74] (ghost)
-            // 0x6F7C9A 80 7F 73 00     cmp byte [edi+0x73], 0
+            // 0x6F7C8D E8 16 B1 07 00 call 0x772DA8  -> al = [eax+0x74] (death)
+            // 0x6F7C9A 80 7F 73 00     cmp byte [edi+0x73], 0  ; ghost
             // either nonzero -> [ebp-4] = -1, no send (0x6F7DE3 / 0x6F7E65 jl)
             if (m_boGhost || m_boDeath)
                 return;
@@ -33,7 +33,7 @@ namespace GameSvr
                 if (member == null)
                     continue;
                 // Same three member filters as the loop at 0x6F7CC4:
-                // ghost 0x772DA8, [+0x73], different Envir [+0x128], same
+                // death 0x772DA8 [+0x74], ghost [+0x73], different Envir [+0x128], same
                 // 64-bit id [+0x588/+0x58C] as the caller (self).
                 if (member.m_boGhost || member.m_boDeath)
                     continue;

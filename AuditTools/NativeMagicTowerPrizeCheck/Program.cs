@@ -402,7 +402,7 @@ static void CheckSkyDiamondWriter()
     Equal("50\tplayer-map\t10\t20\tplayer\t金刚宝石\t100\t1\t闯天关大奖",
         (string)M2Share.LogStringList[0]!, "diamond exact log");
     Equal(0, context.Player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED),
         "diamond writer refreshed capital");
 }
 
@@ -582,17 +582,7 @@ static void WriteTowerConfigs(int minimumExperience = 1_800_000,
 
 static string FindRepositoryRoot()
 {
-    var current = new DirectoryInfo(AppContext.BaseDirectory);
-    while (current != null)
-    {
-        if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                "GameSvr.csproj"))) return current.FullName;
-        var nested = Path.Combine(current.FullName, "LyoMir2-master");
-        if (File.Exists(Path.Combine(nested, "GameSvr", "GameSvr.csproj")))
-            return nested;
-        current = current.Parent;
-    }
-    throw new InvalidOperationException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void PrepareRuntime()

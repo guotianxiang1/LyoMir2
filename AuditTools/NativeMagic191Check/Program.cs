@@ -69,12 +69,12 @@ class Program
         // Test 2: nil target rejects (sub_767498 leads with `test esi,esi / je`)
         Assert(!caster.TryActivateNativeMagic191(null, 1000), "nil target rejected");
 
-        // Test 3: ghost target rejects (0x7674A7 call sub_772DA8 = byte [target+0x74])
+        // Test 3: ghost target rejects (0x7674B0 cmp byte [target+0x73],0)
         var ghostTarget = new TPlayObject();
         ghostTarget.m_boGhost = true;
         Assert(!caster.TryActivateNativeMagic191(ghostTarget, 2000), "ghost target rejected");
 
-        // Test 4: dead target rejects (0x7674B0 cmp byte [target+0x73],0)
+        // Test 4: dead target rejects (0x7674A7 call sub_772DA8 = byte [target+0x74])
         var deadTarget = new TPlayObject();
         deadTarget.m_boDeath = true;
         Assert(!caster.TryActivateNativeMagic191(deadTarget, 3000), "dead target rejected");
@@ -208,32 +208,12 @@ class Program
         Diagnose("after-GateManager.Instance");
         M2Share.ProcessMsgCriticalSection ??= new object();
         M2Share.LogMsgCriticalSection ??= new object();
-    }
 
-    // The fixture players are online, so every notice and every cooldown
-    // notification reaches TPlayObject.SendSocket, which dereferences
-    // M2Share.GateManager. The singleton has no gate registered, so
-    // AddGateBuffer returns false and nothing leaves the process.
-    static void PrepareRuntimeConfig()
-    {
-        var runtimeDirectory = AppContext.BaseDirectory;
-        File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
-            "[Server]" + Environment.NewLine);
-        File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
-            "[String]" + Environment.NewLine);
-        File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
-            "[Command]" + Environment.NewLine);
-
-        var shareDirectory = Path.Combine(Path.GetFullPath(
-            Path.Combine(runtimeDirectory, "..")), "Share");
-        Directory.CreateDirectory(shareDirectory);
-        File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
-            "[PlayerLevelExp]" + Environment.NewLine);
-        File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
-            "[Integer]" + Environment.NewLine);
-
-        M2Share.GateManager ??= GateManager.Instance;
-        M2Share.ProcessMsgCriticalSection ??= new object();
-        M2Share.LogMsgCriticalSection ??= new object();
+        // TBaseObject's ctor ends in M2Share.ObjectManager.RegisterConstructed(this)
+        // (TBaseObject.cs:903), so the singleton must exist before a real actor can be
+        // built. Same minimal set the InProc harnesses boot: no engine threads, no network.
+        M2Share.g_Config ??= new GameSvrConfig();
+        M2Share.RandomNumber ??= RandomNumber.GetInstance();
+        M2Share.ObjectManager ??= new ObjectManager();
     }
 }

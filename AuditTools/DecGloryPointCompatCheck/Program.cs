@@ -359,7 +359,7 @@ void AssertManagerEmpty(string scenario)
 static void AssertSingleRefresh(TPlayObject target, string scenario)
 {
     Equal(1, target.m_MsgList.Count, scenario + " message count");
-    Equal(Grobal2.SM_LINGFU_CHANGED, target.m_MsgList[0].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, target.m_MsgList[0].wIdent,
         scenario + " refresh Ident");
 }
 

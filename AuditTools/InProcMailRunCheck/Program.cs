@@ -31,8 +31,9 @@ using SystemModule;
 //                   NativeMailCacheService.MarkRead flips the in-memory MailStatus 1->2 and decrements unread.
 //   * CLAIM ITEM  : the real private TPlayObject.FetchNativeMailAttachments -> DeliverNativeMailAttachments ->
 //                   real AddItemToBag puts the TUserItem into m_ItemList; AttachStatus flips 1->2 in cache.
-//   * CLAIM GOLD  : the same real claim core with a moneyType==0 gold payload -> m_nGold += moneyCount
-//                   (real in-memory purse credit); AttachStatus flips 1->2.
+//   * CLAIM GOLD  : the same real claim core with a moneyType==0 gold payload -> IncGold(moneyCount)
+//                   (native 0x70B7DB call [vmt+0x28C]; real in-memory purse credit + GoldChanged);
+//                   AttachStatus flips 1->2. Overflow returns -3 with gold untouched.
 //   * DELETE      : the real private TPlayObject.ClientDeleteNativeMail -> NativeMailCacheService.TryRemove
 //                   removes the mail from the in-memory category list.
 //
@@ -97,7 +98,7 @@ try
         "PASS InProcMailRunCheck deliver=REAL(NativeMailCacheService.Register->mailbox+unread) "
         + "read=REAL(ClientFetchNativeMailInfo->MarkRead flips MailStatus 1->2, unread--) "
         + "claim-item=REAL(FetchNativeMailAttachments->AddItemToBag, attachstatus 1->2) "
-        + "claim-gold=REAL(FetchNativeMailAttachments->m_nGold+=, attachstatus 1->2) "
+        + "claim-gold=REAL(FetchNativeMailAttachments->IncGold, attachstatus 1->2) "
         + "delete=REAL(ClientDeleteNativeMail->TryRemove) "
         + "send-DB/yuanbao-async/DB-persistence=SKIP(no-connection) "
         + "single-process no-network no-DBSvr no-MySQL");
@@ -178,8 +179,25 @@ void RunMailLifecycle(TPlayObject player)
     Log($"CLAIM-GOLD FetchNativeMailAttachments(1003)={claimGold}: m_nGold 0->{player.m_nGold} (moneyCount=500); "
         + $"AttachStatus 1->{RecAttachStatus(recC)} (real in-memory gold credit; Money_order DB row SKIP'd/no-op)");
     Assert(claimGold == 1, "real gold claim returned Delivered(1)");
-    Assert(player.m_nGold == 500, "real claim credited the mail gold into the player's in-memory purse");
+    Assert(player.m_nGold == 500, "real claim credited the mail gold through IncGold");
     Assert(RecAttachStatus(recC) == 2, "real gold claim flipped the in-memory AttachStatus 1->2 (claimed)");
+
+    // Overflow gate: native 0x70B7C0 call 0x6D7948 / 0x70B7C9 mov esi,-3. Gold and
+    // AttachStatus must stay put — this is the "扣了邮件没给钱" inverse: refuse
+    // before IncGold so a full purse cannot burn the mail.
+    var recOverflow = NewRecord(1004, mailType: 1, mailStatus: 2, attachStatus: 1,
+        moneyType: 0, moneyCount: 100, "系统", "溢出", "不应发放", now);
+    var entryOverflow = Register(RecipientId, player.m_sCharName, recOverflow,
+        new List<TUserItem>(), now);
+    player.m_nGold = player.m_nGoldMax;
+    int goldBeforeOverflow = player.m_nGold;
+    int claimOverflow = (int)miFetchAttach.Invoke(player, new object[] { entryOverflow });
+    Log($"CLAIM-GOLD overflow FetchNativeMailAttachments(1004)={claimOverflow}: "
+        + $"m_nGold stayed {player.m_nGold} (max={player.m_nGoldMax}); "
+        + $"AttachStatus 1->{RecAttachStatus(recOverflow)}");
+    Assert(claimOverflow == -3, "gold overflow must return -3 (native esi=-3)");
+    Assert(player.m_nGold == goldBeforeOverflow, "overflow must not credit gold");
+    Assert(RecAttachStatus(recOverflow) == 1, "overflow must not mark the mail claimed");
 
     // ---- 5. DELETE: the real ClientDeleteNativeMail handler removes the mail from the in-memory cache --
     int cat0 = CategoryCount(RecipientId, 1);

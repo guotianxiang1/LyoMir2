@@ -2,6 +2,7 @@
 using System.IO;
 using System.Reflection;
 using GameSvr;
+using SystemModule;
 
 // State 0x33 (single-seat mount) / 0x34 (two-seat mount) gates.
 //
@@ -209,4 +210,12 @@ static void PrepareRuntimeConfig()
     File.WriteAllText(
         Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+
+    // TBaseObject's ctor ends in M2Share.ObjectManager.RegisterConstructed(this)
+    // (TBaseObject.cs:903), so the singleton must exist before CreateTestPlayer can
+    // build a real actor. Same minimal set the InProc harnesses boot: no engine
+    // threads, no network.
+    M2Share.g_Config ??= new GameSvrConfig();
+    M2Share.RandomNumber ??= RandomNumber.GetInstance();
+    M2Share.ObjectManager ??= new ObjectManager();
 }

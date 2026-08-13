@@ -106,7 +106,7 @@ static void CheckOrdinaryDebitAndRepeat()
     Equal((byte)1, ReadField<byte>(context.Player,
         "m_btNativeMagicTowerEngageChance"), "pending chance commit");
     Equal(1, context.Player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED), "10054 refresh count");
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED), "10054 refresh count");
     Equal(1, ReadReasonBucket(context.Player,
         "m_NativeLingFuReasonSessionBuckets", 1), "session reason 1");
     Equal(1, ReadReasonBucket(context.Player,
@@ -126,7 +126,7 @@ static void CheckOrdinaryDebitAndRepeat()
     Equal(1, context.Player.m_nLingFu, "repeat call LingFu balance");
     Equal(5, context.Player.m_nUsedLingFu, "repeat call used LingFu");
     Equal(0, context.Player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED), "repeat call refresh");
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED), "repeat call refresh");
     Equal(0, M2Share.LogStringList.Count, "repeat call log");
 }
 

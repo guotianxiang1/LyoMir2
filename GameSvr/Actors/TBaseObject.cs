@@ -111,8 +111,9 @@ namespace GameSvr
         
         public int m_nViewRange = 0;
 
-        public ushort[] m_wStatusTimeArr = new ushort[12];
-        public int[] m_dwStatusArrTick = new int[12];
+        // m_wStatusTimeArr is now a forwarding view onto the native Self+0xDC
+        // node list; see TBaseObject.LegacyStatusTimeView.cs. It has no storage,
+        // so there is nothing to declare here and nothing to allocate.
         public ushort[] m_wStatusArrValue = null;
         public int[] m_dwStatusArrTimeOutTick = null;
         public ushort m_wAppr = 0;
@@ -764,7 +765,7 @@ namespace GameSvr
             m_nGoldMax = M2Share.g_Config.nHumanMaxGold;
             m_nCharStatus = 0;
             m_nCharStatusEx = 0;
-            m_wStatusTimeArr = new ushort[12];// FillChar(m_wStatusTimeArr, sizeof(grobal2.short), '\0');
+            ClearLegacyStatusSlots();
             m_BonusAbil = new TNakedAbility();// FillChar(m_BonusAbil, sizeof(TNakedAbility), '\0');
             m_CurBonusAbil = new TNakedAbility();// FillChar(m_CurBonusAbil, sizeof(TNakedAbility), '\0');
             m_wStatusArrValue = new ushort[6];// FillChar(m_wStatusArrValue, sizeof(m_wStatusArrValue), 0);
@@ -1141,7 +1142,11 @@ namespace GameSvr
 
         public void HasLevelUp(int nLevel)
         {
-            m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
+            // VMT+0x240 (sub_6BA140): caller 0x6C053C `mov dx,[level]; dec edx`
+            // passes the *previous* level in edx; 0x6BA14D `mov esi,edx` /
+            // 0x6BA15C `call 0x6AFCC8` looks up that, not the already-incremented
+            // word. HP/MP formulas use ecx = current level (`0x6BA149 mov [ebp-2],cx`).
+            m_Abil.MaxExp = GetLevelExp(nLevel);
             RecalcLevelAbilitys();
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_LEVELUP, 0, m_Abil.Exp, 0, 0, "");
@@ -2326,6 +2331,21 @@ namespace GameSvr
             SendRefMsg(Grobal2.RM_USERNAME, 0, 0, 0, 0, GetShowName());
         }
 
+        /// <summary>
+        /// Native SM 4469 (join) / 4470 (leave): name-only slave-list notify.
+        /// Sender sub_6F784C / sub_6F78B4: Recog=0, Param=Tag=Series=0, sMsg=[slave+0x106].
+        /// Only TPlayObject has the [+0x250] unicast slot this goes through
+        /// (TPlayer.MakeSlave = sub_6CB070). HeroObject is AnimalObject — skip.
+        /// </summary>
+        public void NotifyNativeSlaveListChanged(bool joining, TBaseObject slave)
+        {
+            if (slave == null || this is not TPlayObject player)
+                return;
+            player.SendDefMessage(
+                (short)(joining ? Grobal2.SM_SLAVE_JOIN : Grobal2.SM_SLAVE_LEAVE),
+                0, 0, 0, 0, slave.m_sCharName ?? "");
+        }
+
         public TBaseObject MakeSlave(string sMonName, int nMakeLevel, int nExpLevel, int nMaxMob, int dwRoyaltySec)
         {
             short nX = 0;
@@ -2348,6 +2368,9 @@ namespace GameSvr
                     }
                     MonObj.RefNameColor();
                     m_SlaveList.Add(MonObj);
+                    // MakeSlave = sub_6CB070: after TList.Add to [this+0x4FC],
+                    // 0x6CB357 call 0x6F784C -> SM 4469 name notify to the master.
+                    NotifyNativeSlaveListChanged(joining: true, MonObj);
                     result = MonObj;
                 }
             }
@@ -3210,6 +3233,41 @@ namespace GameSvr
             }
             else
             {
+                // 战神 sub_726E68 删的是队长时 @0x726FBF call 0x727FB0：
+                // 从槽 0..10 找第一个「72843C 记录有效且 player != 离队者」的成员，
+                // 写入 group+0x3C，再广播 ShortString 0x7280AC「 提升为小队队长!」。
+                // 旧 C# 把全队 LeaveGroup，等于队长一点删除就解散。
+                TPlayObject successor = null;
+                for (int i = 0; i < m_GroupMembers.Count; i++)
+                {
+                    var cand = m_GroupMembers[i];
+                    if (cand != null && cand != BaseObject && !cand.m_boGhost)
+                    {
+                        successor = cand;
+                        break;
+                    }
+                }
+                BaseObject.LeaveGroup();
+                m_GroupMembers.Remove(BaseObject as TPlayObject);
+                if (successor != null)
+                {
+                    var remaining = new List<TPlayObject>(m_GroupMembers);
+                    m_GroupMembers.Clear();
+                    successor.m_GroupMembers.Clear();
+                    successor.m_GroupMembers.Add(successor);
+                    successor.m_GroupOwner = successor;
+                    for (int i = 0; i < remaining.Count; i++)
+                    {
+                        var member = remaining[i];
+                        if (member == null || member == successor)
+                            continue;
+                        successor.m_GroupMembers.Add(member);
+                        member.m_GroupOwner = successor;
+                    }
+                    successor.SendGroupText(successor.m_sCharName + " 提升为小队队长!");
+                    successor.RefreshNativeGroupWire();
+                    return;
+                }
                 for (int i = m_GroupMembers.Count - 1; i >= 0; i--)
                 {
                     m_GroupMembers[i].LeaveGroup();
@@ -3223,7 +3281,9 @@ namespace GameSvr
             }
             else
             {
-                PlayObject.SendGroupMembers();
+                // 战神 726FE6 call 0x7270F8 仍存活则 726FF7 call 0x7271D0，
+                // 下发 SM 667 的 54 字节成员记录，不是斜杠拼名。
+                PlayObject.RefreshNativeGroupWire();
             }
         }
 
@@ -3391,18 +3451,24 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// Native OOB return of player GetLevelExp (sub_6AFCC8 @ 0x6AFCF5
+        /// <c>B8 80 DA 51 FD</c>) and hero GetLevelExp (sub_6884C0 @ 0x688520
+        /// <c>BE 80 DA 51 FD</c>). Unsigned 4250000000; signed -44967296.
+        /// </summary>
+        public const int NativeNeedExpSentinel = unchecked((int)0xFD51DA80);
+
         public int GetLevelExp(int nLevel)
         {
-            int result;
-            if (nLevel <= Grobal2.MAXLEVEL)
-            {
-                result = M2Share.g_Config.dwNeedExps[nLevel];
-            }
-            else
-            {
-                result = M2Share.g_Config.dwNeedExps[M2Share.g_Config.dwNeedExps.GetUpperBound(0)];
-            }
-            return result;
+            var table = M2Share.g_Config.dwNeedExps;
+            // Player path 0x6AFCC8: `cmp ebx, Count / ja` then sentinel.
+            // Negative nLevel becomes a huge uint and takes the same arm.
+            if ((uint)nLevel >= (uint)table.Length)
+                return NativeNeedExpSentinel;
+            var value = table[nLevel];
+            if (value == 0 && nLevel > M2Share.g_Config.nNeedExpMaxLevel)
+                return NativeNeedExpSentinel;
+            return value;
         }
 
         private byte GetNamecolor()
@@ -3526,7 +3592,7 @@ namespace GameSvr
         }
 
         public void SendMsg(TBaseObject BaseObject, int wIdent, int wParam, int nParam1, int nParam2, int nParam3,
-            string sMsg, object payload = null)
+            string sMsg, object payload = null, int nBodyLen = 0)
         {
             // CRAFT-34 — native enqueue family gates on ghost byte [self+0x73], NOT death [self+0x74].
             //   0x765E7D  80 7E 73 00           cmp byte [esi+0x73], 0
@@ -3558,7 +3624,8 @@ namespace GameSvr
                     dwDeliveryTime = 0,
                     BaseObject = BaseObject,
                     boLateDelivery = false,
-                    Payload = payload
+                    Payload = payload,
+                    nBodyLen = nBodyLen
                 };
                 if (!string.IsNullOrEmpty(sMsg))
                 {
@@ -3702,7 +3769,7 @@ namespace GameSvr
             SendDelayMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, dwDelay);
         }
 
-        public void SendUpdateMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, object payload = null)
+        public void SendUpdateMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, object payload = null, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             int i;
@@ -3731,10 +3798,10 @@ namespace GameSvr
 
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
-            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, payload);
+            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, payload, nBodyLen);
         }
 
-        public void SendActionMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg)
+        public void SendActionMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             int i;
@@ -3762,7 +3829,7 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
-            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg);
+            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, null, nBodyLen);
         }
 
         protected virtual bool GetMessage(ref TProcessMessage Msg)
@@ -3804,6 +3871,7 @@ namespace GameSvr
                     Msg.dwDeliveryTime = SendMessage.dwDeliveryTime;
                     Msg.boLateDelivery = SendMessage.boLateDelivery;
                     Msg.Payload = SendMessage.Payload;
+                    Msg.nBodyLen = SendMessage.nBodyLen;
                     if (!string.IsNullOrEmpty(SendMessage.Buff))
                     {
                         Msg.sMsg = SendMessage.Buff;
@@ -3931,17 +3999,20 @@ namespace GameSvr
                                                         BaseObject = OSObject.CellObj as TBaseObject;
                                                         if ((BaseObject != null) && !BaseObject.m_boGhost)
                                                         {
-                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                                                            // Cache membership is decided by the SCAN alone. Native
+                                                            // rebuilds [self+0x380] in sub_7651EC @0x765263-0x76528A
+                                                            // (Clear + Envirnoment VMT+0x1C), a step that knows
+                                                            // nothing about the ident, and the broadcast slot
+                                                            // sub_6DC590 only ever READS the list. Deciding
+                                                            // membership from the send made the cache depend on
+                                                            // which ident happened to trigger the refresh.
+                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT ||
+                                                                BaseObject.m_boWantRefMsg)
                                                             {
-                                                                BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
                                                                 m_VisibleHumanList.Add(BaseObject);
-                                                            }
-                                                            else if (BaseObject.m_boWantRefMsg)
-                                                            {
-                                                                if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
+                                                                if (CanNativeRefMsgReach(BaseObject, wIdent))
                                                                 {
                                                                     BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                                                                    m_VisibleHumanList.Add(BaseObject);
                                                                 }
                                                             }
                                                         }
@@ -3975,16 +4046,9 @@ namespace GameSvr
                     }
                     if ((BaseObject.m_PEnvir == m_PEnvir) && (Math.Abs(BaseObject.m_nCurrX - m_nCurrX) < 11) && (Math.Abs(BaseObject.m_nCurrY - m_nCurrY) < 11))
                     {
-                        if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                        if (CanNativeRefMsgReach(BaseObject, wIdent))
                         {
                             BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                        }
-                        else if (BaseObject.m_boWantRefMsg)
-                        {
-                            if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
-                            {
-                                BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                            }
                         }
                     }
                 }
@@ -3993,6 +4057,51 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
+        }
+
+        /// <summary>
+        /// The per-observer send test of a ref-broadcast, kept separate from
+        /// the visible-list refresh above so the two cannot influence each
+        /// other. Native keeps them apart the same way: the list is rebuilt
+        /// only in <c>sub_7651EC</c> @<c>0x765263</c>-@<c>0x76528A</c>, behind
+        /// its own 800 ms throttle on <c>[self+0x37C]</c>, while the broadcast
+        /// slot <c>sub_6DC590</c> walks <c>[self+0x380]</c> read-only and
+        /// applies its filters per item at <c>0x6DC6D1</c>-<c>0x6DC720</c>.
+        /// <para>
+        /// The stealth term is <c>sub_774288</c>, called at <c>0x6DC6F1</c>
+        /// with <c>eax</c> = the broadcaster and <c>edx</c> = the observer,
+        /// and a true result skips that observer outright
+        /// (<c>0x6DC6F8 jne</c>). The same filter sits at <c>0x6DC247</c> in
+        /// the VMT+0xE0 slot. Because it is applied here and not in the
+        /// refresh, a stealthed caster's observers stay in the cache and
+        /// resume receiving the moment the state lapses or they close inside
+        /// two cells.
+        /// </para>
+        /// <para>
+        /// Divergence left standing: native's cached loop rejects every
+        /// observer with <c>byte [item+0x178] != 0</c> at <c>0x6DC6D1</c>,
+        /// i.e. only race 0 is served from the cache, with no
+        /// <c>m_boWantRefMsg</c> branch at all. Dropping that branch here
+        /// would stop monsters reacting to STRUCK/HEAR/DEATH between refresh
+        /// ticks, which is a far wider change than this one; it is recorded
+        /// rather than made.
+        /// </para>
+        /// </summary>
+        private bool CanNativeRefMsgReach(TBaseObject observer, int wIdent)
+        {
+            if (observer.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
+            {
+                if (!observer.m_boWantRefMsg)
+                {
+                    return false;
+                }
+                if ((wIdent != Grobal2.RM_STRUCK) && (wIdent != Grobal2.RM_HEAR) &&
+                    (wIdent != Grobal2.RM_DEATH))
+                {
+                    return false;
+                }
+            }
+            return !IsNativeStealthedFrom(observer);
         }
 
         public int GetFeatureToLong()
@@ -4141,33 +4250,21 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// 状态字低 32 位。战神从不"重建"这个字：<c>sub_7729C4</c> 直接把
+        /// <c>[Self+0x168]</c> 起的 16 字节位集当 blob 发出（<c>lea edx,[eax+0x168]</c>,
+        /// RefMsg 0x291 = 657），位 s 就是 state s，没有任何合成或超界归零逻辑。
+        ///
+        /// 这里只剩把持久位集回读出来。原先叠在上面的 legacy overlay
+        /// （<c>m_wStatusTimeArr[i] &gt; 0 =&gt; 0x80000000 &gt;&gt; i</c>）已经删除：
+        /// slot i 就是 state 31 - i，而 state 31 - i 的位由
+        /// <c>SetNativeActiveState</c> / <c>ClearNativeActiveState</c> 在同一个
+        /// <c>m_nCharStatusEx</c> 里维护，overlay 只是把同一位再算一遍，
+        /// 且用的是另一套（秒级、自己倒计时的）过期判据——正是 4.18 说的双权威。
+        /// </summary>
         public int GetCharStatus()
         {
-            long nStatus = 0;
-            for (int i = m_wStatusTimeArr.GetLowerBound(0); i <= m_wStatusTimeArr.GetUpperBound(0); i++)
-            {
-                if (m_wStatusTimeArr[i] > 0)
-                {
-                    nStatus = (0x80000000 >> i) | nStatus;
-                }
-            }
-            var status = (m_nCharStatusEx & NativePersistentLowStateMask) |
-                         nStatus;
-            // ✅ 结论已由战神侧独立支撑:战神从不"重建"状态字 —— sub_7729C4 直接把 [Self+0x168] 起的
-            // 16 字节位集当 blob 发出(RefMsg 0x291=657),没有任何"超界归零"逻辑。故旧写法
-            // `status >= int.MaxValue ? 0 : ...` 无论如何都不是战神语义,unchecked 截断是正确方向。
-            // 证据: staging/statuslayer_migration_plan_20260803.md 行 80(GetCharStatus 一栏:
-            // "native never rebuilds; sub_7729C4 just ships [+0x168]") 与 spec_statustable_
-            // ghostsweep_20260803.md A.15.3(ident 657 匹配)。
-            // 并列 ref 引用(保留,勿删;来源=GameOfMir 参考分支,非战神,仅算术形态线索):
-            //   ObjBase.pas:20074 返回的是 32 位【截断】后的 Integer，不是"超界就归零"。
-            // 旧 bug 的实际后果: 状态槽 0(POISON_DECHEALTH 绿毒)会置位 0x80000000 = 2147483648
-            // > int.MaxValue，旧写法会把【整个状态字清零】——玩家一中绿毒，中毒/护体/隐身/防御等
-            // 所有状态图标全部消失（且 Run tick 里高频 StatusChanged 广播）。
-            // ⚠️ 但本方法【整体】仍是 C# 独有的合成层,战神没有对应函数:legacy 12 槽 overlay 占用
-            // 线上 bit 20..31,与战神 state 20..31 撞位;`0x80000000 >> i` 的 slot→bit 映射【不是 bug】
-            // (它就是客户端期望的线位,由 LoginProtocolExactCheck / NativeState26CompatCheck 断言),
-            // 详见 statuslayer_migration_plan_20260803.md §2.3 —— 勿按 spec A.15.2 的"位反转"措辞去改。
+            var status = m_nCharStatusEx & NativePersistentLowStateMask;
             return unchecked((int)status);
         }
 
@@ -4934,13 +5031,15 @@ namespace GameSvr
         public void SendGroupText(string sMsg)
         {
             TPlayObject PlayObject;
-            sMsg = M2Share.g_Config.sGroupMsgPreFix + sMsg;
+            // 0x7270F4 LStr len=1 "-" then 0x40581C dest = "-" + body.
+            // 〖组队〗 is 0-hit INVENTED. Recog is the member (0x7270B8 edx=esi).
+            sMsg = "-" + sMsg;
             if (m_GroupOwner != null)
             {
                 for (int i = 0; i < m_GroupOwner.m_GroupMembers.Count; i++)
                 {
                     PlayObject = m_GroupOwner.m_GroupMembers[i];
-                    PlayObject.SendMsg(this, Grobal2.RM_GROUPMESSAGE, 0, M2Share.g_Config.btGroupMsgFColor, M2Share.g_Config.btGroupMsgBColor, 0, sMsg);
+                    PlayObject.SendMsg(PlayObject, Grobal2.RM_GROUPMESSAGE, 0, 0, 0, 0, sMsg);
                 }
             }
         }
@@ -5209,6 +5308,8 @@ namespace GameSvr
                     {
                         result = false;
                     }
+                    // 0x767334  8B 45 FC / 80 B8 C7 04 00 00 00 / 74 02 / 33 DB
+                    //   主人休息位 [+0x4C7]，与下面两道门同属一条直线，不要重排。
                     if (m_Master.m_boSlaveRelax)
                     {
                         result = false;
@@ -5219,6 +5320,35 @@ namespace GameSvr
                         {
                             result = false;
                         }
+                    }
+                    // PKD-09 —— 宠物不打「主人的英雄」和「主人本人」。战神 sub_7671F0
+                    // （TCreature 的 [vmt+0x20]，即 IsAttackTarget）在主人分支的收尾处
+                    // 连着两道门，C# 一道都没有：
+                    //   76736F  8B 45 FC              mov eax,[ebp-4]      ; 责任玩家
+                    //   767372  3B B0 B0 0B 00 00     cmp esi,[eax+0xBB0]  ; 主人的英雄
+                    //   767378  75 02                 jne 0x76737C
+                    //   76737A  33 DB                 xor ebx,ebx          ; -> 不可攻击
+                    //   76737C  3B B7 8C 03 00 00     cmp esi,[edi+0x38C]  ; self.m_Master
+                    //   767382  75 02                 jne 0x767386
+                    //   767384  33 DB                 xor ebx,ebx          ; -> 不可攻击
+                    // [ebp-4] 是 self.[vmt+0xB4]() 的返回值，即沿 m_Master 链一路向上解出的
+                    // 责任玩家（TCreature 版 sub_769910 递归取 [+0x38C]，TPlayer 版
+                    // sub_6C185C 是裸 `C3`，eax 未改动 = 返回自身）。C# 没有这条递归解析器，
+                    // 本函数上下文里一律用 m_Master 代替（第 5182/5199 行同样如此），所以这里
+                    // 保持同一约定：单层宠物时 m_Master 就是责任玩家。
+                    // [+0xBB0] = 英雄指针，身份由 sub_6D09D0 @0x6D09FA 独立锚定
+                    // （见 TPlayObject.Message.cs 的 ClientHeroMoveToHeroBag 注释）。
+                    // 玩家可见后果：没有这两道门，宠物/召唤物会把主人的英雄乃至主人本人
+                    // 当成合法目标 —— 混乱状态、诱惑之光反目、群攻溅射都会打到自己人。
+                    if (m_Master is TPlayObject masterOfSlave
+                        && masterOfSlave.m_HeroObject != null
+                        && ReferenceEquals(BaseObject, masterOfSlave.m_HeroObject))
+                    {
+                        result = false;                                 // 0x76737A
+                    }
+                    if (ReferenceEquals(BaseObject, m_Master))
+                    {
+                        result = false;                                 // 0x767384
                     }
                     BreakCrazyMode();
                 }
@@ -5401,6 +5531,14 @@ namespace GameSvr
 
         public virtual bool IsProperTarget(TBaseObject BaseObject)
         {
+            // PKD-08 —— 战神 sub_767498 先过九道硬门再调虚槽 [vmt+0x20]（= IsAttackTarget）。
+            // 完整字节与身份证据见 TBaseObject.NativeProperTargetGate.cs。C# 此前把这九道门
+            // 摊到约 50 个调用点上各写一部分，跨地图 / 石化 / 管理员模式 / 状态 52 的目标在
+            // 未写全的路径上仍可被攻击。
+            if (!NativeProperTargetPreGate(BaseObject))
+            {
+                return false;
+            }
             bool result = IsAttackTarget(BaseObject);
             if (result)
             {
@@ -5550,8 +5688,10 @@ namespace GameSvr
 
         private void LeaveGroup()
         {
-            const string sExitGropMsg = "{0} 已经退出了本组.";
-            SendGroupText(format(sExitGropMsg, m_sCharName));
+            // 战神 sub_6C3200 @0x6C3252 edx=0x6C32C4 ShortString len=9「 退出小组」
+            // （字节 09 20 CD CB B3 F6 D0 A1 D7 E9），拼在 [self+0x106] 名字后面，
+            // 经 sub_727068 用 RM 0x2776 广播给全队。全镜像「已经退出了本组」0 命中。
+            SendGroupText(m_sCharName + " 退出小组");
             m_GroupOwner = null;
             SendMsg(this, Grobal2.RM_GROUPCANCEL, 0, 0, 0, 0, "");
         }
@@ -5998,27 +6138,19 @@ namespace GameSvr
                 // CanAddNativeTimedAbility inside AddTimedAbilityInternal already covers
                 // the ImmuneCheck and the 0x34 veto, and the 0x12 -> remove 0x1A companion
                 // lives in the same method.
-                // The legacy array stays as the save-record projection and as the carrier
-                // the ~300 existing m_wStatusTimeArr readers still depend on; it is not
-                // native, and collapsing it is a separate change.
+                // The legacy array is now a view onto that same node
+                // (m_wStatusTimeArr[nType] IS state 31 - nType), so the
+                // max()-and-stamp block that used to follow this call has been
+                // deleted: it was the second authority writing the same state a
+                // second time, in seconds, on its own clock. AddState already
+                // owns the refresh rule - 0x773117 `cmp edi,eax / jle` takes the
+                // higher value, 0x773140 `cmp eax,[ebp-4] / jge` extends only to
+                // a longer duration - and native MakePosion adds nothing on top.
                 if (!AddTimedAbilityInternal((byte)(31 - nType), nPoint,
                         unchecked(nTime * 1000), 0))
                 {
                     return false;
                 }
-                if (m_wStatusTimeArr[nType] > 0)
-                {
-                    if (m_wStatusTimeArr[nType] < nTime)
-                    {
-                        m_wStatusTimeArr[nType] = (ushort)nTime;
-                    }
-                }
-                else
-                {
-                    m_wStatusTimeArr[nType] = (ushort)nTime;
-                }
-                m_dwStatusArrTick[nType] = HUtil32.GetTickCount();
-                m_nCharStatus = GetCharStatus();
                 m_btGreenPoisoningPoint = (byte)nPoint;
                 // POIS-12. 红毒(state 0x1E=30)的伤害放大档位由 **level** 选择，
                 // 而这个 level 在原版是【链表记录】里的值，不是位:
@@ -6357,7 +6489,6 @@ namespace GameSvr
                 m_wStatusTimeArr[Grobal2.STATE_DEFENCEUP] = nSec;
                 result = true;
             }
-            m_dwStatusArrTick[Grobal2.STATE_DEFENCEUP] = HUtil32.GetTickCount();
             SysMsg(format(M2Share.g_sDefenceUpTime, nSec), MsgColor.Green, MsgType.Hint);
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
@@ -6392,7 +6523,6 @@ namespace GameSvr
                 m_wStatusTimeArr[Grobal2.STATE_MAGDEFENCEUP] = nSec;
                 result = true;
             }
-            m_dwStatusArrTick[Grobal2.STATE_MAGDEFENCEUP] = HUtil32.GetTickCount();
             SysMsg(format(M2Share.g_sMagDefenceUpTime, nSec), MsgColor.Green, MsgType.Hint);
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");

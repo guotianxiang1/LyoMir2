@@ -381,7 +381,6 @@ static T NewActor<T>() where T : TBaseObject
     actor.m_UseItems = new TUserItem[Grobal2.HUMAN_EQUIPPED_ITEM_COUNT];
     actor.m_Abil = new TAbility();
     actor.m_WAbil = new TAbility();
-    actor.m_wStatusTimeArr = new ushort[12];
     return actor;
 }
 

@@ -161,35 +161,17 @@ namespace GameSvr
                 TPlayObject.IsNativeMagicProducerHumanKind(target);
 
             // 0x74450E `lea eax,[edi+0x3E8]` / call Random is drawn
-            // UNCONDITIONALLY, ahead of the isHuman term at 0x74451E, so the
-            // seed advances for monster targets too. When
-            // `high > roll && targetIsHuman`, 0x74452C calls
-            // sub_76C89C(eax=target, edx=self, ecx=5). Its shape is now fully
-            // read; only one hop is still missing.
-            //
-            //   float32 [0x76C988] = 100.0, [0x76C98C] = 200.0, and every
-            //   quotient goes through 0x403580 = @TRUNC (not @ROUND).
-            //   0x76C8AC  if +0x1BA or +0x1D3 is set:
-            //     0x76C8BE   +0x72 == 1  -> mpDrain = TRUNC(MP/100 * 5)
-            //     else       hpDrain = TRUNC(HP/100 * 5), handed to target
-            //                VMT+0x1B0 and then ZEROED, so HP is not
-            //                subtracted here
-            //   0x76C906  else if +0x1BB is set: both drains use /200
-            //             else hpDrain = TRUNC(HP/100 * 5)
-            //   0x76C959  HP -= hpDrain when positive, MP -= mpDrain likewise
-            //   0x76C96D  sub_76B4F8(target, target, hpDrain, 200), which is
-            //             SendDelayMsg with BaseObject = 0x2724 = RM_STRUCK as
-            //             the sentinel, wIdent = 0x2775 = RM_10101,
-            //             wParam = nParam1 = hpDrain, nParam2 = 0,
-            //             nParam3 = the target, delay 200 ms
-            //
-            // BLOCKED: target VMT+0x1B0 = sub_767D14 (TPlayObject VMT
-            // 0x6AC8C8+0x1B0). That is the shared absorb path — state 0x3F
-            // halving at 0x767D2C, a percentage cut from +0x3DF at 0x767D37,
-            // then the magic-shield MP absorption on +0x1D3 / +0x1BA — and it
-            // has no mapped C# entry point, so the drain is not ported.
-            // Consuming the roll here keeps the RNG stream aligned.
-            M2Share.RandomNumber.Random(high + 1000);
+            // UNCONDITIONALLY, ahead of the isHuman term: 0x744519
+            // `cmp edi,eax` / 0x74451B `setg al` / 0x74451E
+            // `and al,[ebp-0xD]`. Keeping the draw in the left operand
+            // reproduces that, since && would otherwise short-circuit it away
+            // for monster targets. 0x74452C then calls
+            // sub_76C89C(eax = target, edx = self, ecx = 5).
+            if (high > M2Share.RandomNumber.Random(high + 1000) &&
+                targetIsHuman)
+            {
+                target.ApplyNativeChargedCounterDrain(5);
+            }
 
             int selfLevelTerm = Math.Min(150, (int)m_WAbil.Level);
             int effectiveLevel =
@@ -299,6 +281,92 @@ namespace GameSvr
             ulong product = Math.BigMul(magnitude, mantissa, out _);
             int truncated = unchecked((int)(product >> 1));
             return damage < 0 ? -truncated : truncated;
+        }
+
+        /// <summary>
+        /// sub_76C89C, the percentage drain the charged counter lands on a
+        /// human target. Called as (eax = target, edx = the caster,
+        /// ecx = 5); edx is stored nowhere and never read, so the caster does
+        /// not participate.
+        /// <para>
+        /// Every quotient is <c>fild stat / fdiv const / fild amount / fmulp
+        /// / call sub_403580</c>, i.e. the divide happens BEFORE the multiply
+        /// and the result is truncated (0x403580 forces RC = chop; the
+        /// rounding helper is the other one, 0x403574). The two constants are
+        /// float32: [0x76C988] = 100.0, [0x76C98C] = 200.0.
+        /// </para>
+        /// <para>
+        /// The shield bytes are the same three sub_767D14 tests, and their
+        /// order there names them: +0x1D3 first @0x767D6B (the plain
+        /// full-absorb, m_boNativeFullMagicShield), +0x1BA @0x767D94 (the
+        /// 1.5x one, m_boMagicShield), +0x1BB @0x767DE3 (the half,
+        /// m_boNativeHalfMagicShield).
+        /// </para>
+        /// </summary>
+        private int ApplyNativeChargedCounterDrain(int amount)
+        {
+            int hpDrain = 0;
+            int mpDrain = 0;
+            // 0x76C8AC `80 BB BA 01 00 00 00` / 0x76C8B5 `80 BB D3 01 00 00 00`.
+            if (m_boMagicShield || m_boNativeFullMagicShield)
+            {
+                // 0x76C8BE `80 7B 72 01` — job 1 gives up mana instead.
+                if (m_btJob == 1)
+                {
+                    mpDrain = TruncNativeChargedCounterDrain(m_WAbil.MP,
+                        100.0d, amount);
+                }
+                else
+                {
+                    hpDrain = TruncNativeChargedCounterDrain(m_WAbil.HP,
+                        100.0d, amount);
+                    // 0x76C8FC VMT+0x1B0 = sub_767D14 = DamageHealth, then
+                    // 0x76C902 `xor esi,esi` discards the local, so the HP
+                    // leaves through the absorb path and is NOT subtracted
+                    // again below.
+                    DamageHealth(hpDrain);
+                    hpDrain = 0;
+                }
+            }
+            else if (m_boNativeHalfMagicShield)
+            {
+                // 0x76C90F and 0x76C927 — both halves divide by 200.
+                hpDrain = TruncNativeChargedCounterDrain(m_WAbil.HP,
+                    200.0d, amount);
+                mpDrain = TruncNativeChargedCounterDrain(m_WAbil.MP,
+                    200.0d, amount);
+            }
+            else
+            {
+                hpDrain = TruncNativeChargedCounterDrain(m_WAbil.HP,
+                    100.0d, amount);
+            }
+
+            // 0x76C959 / 0x76C963: each subtraction is guarded only on its own
+            // value being positive, and neither is floored at zero.
+            if (hpDrain > 0)
+            {
+                m_WAbil.HP = unchecked(m_WAbil.HP - hpDrain);
+            }
+            if (mpDrain > 0)
+            {
+                m_WAbil.MP = unchecked(m_WAbil.MP - mpDrain);
+            }
+
+            // 0x76C96D `push 0xC8` / sub_76B4F8(eax = target, edx = target,
+            // ecx = hpDrain, 200). nParam3 is the TARGET, not the caster, and
+            // the message is unconditional — hpDrain is zero on the
+            // shield-absorb arm and it still goes out.
+            SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101,
+                unchecked((short)hpDrain), hpDrain, 0, ObjectId,
+                string.Empty, 200);
+            return hpDrain;
+        }
+
+        private static int TruncNativeChargedCounterDrain(int stat,
+            double divisor, int amount)
+        {
+            return unchecked((int)Math.Truncate(stat / divisor * amount));
         }
     }
 }

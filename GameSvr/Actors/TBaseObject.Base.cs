@@ -489,6 +489,9 @@ namespace GameSvr
                 {
                     if (m_SlaveList[i].m_boDeath || m_SlaveList[i].m_boGhost || (m_SlaveList[i].m_Master != this))
                     {
+                        // sub_6B3993: TList.Get [player+0x4FC] then SM 4470 (0x6F78B4)
+                        // before the slot is dropped.
+                        NotifyNativeSlaveListChanged(joining: false, m_SlaveList[i]);
                         m_SlaveList.RemoveAt(i);
                     }
                 }
@@ -556,6 +559,9 @@ namespace GameSvr
                             {
                                 if (m_Master.m_SlaveList[i] == this)
                                 {
+                                    // Royalty-expire drop: 0x71E6C4 call 0x6F78B4 -> SM 4470,
+                                    // then TList.Remove from [master+0x4FC].
+                                    m_Master.NotifyNativeSlaveListChanged(joining: false, this);
                                     m_Master.m_SlaveList.RemoveAt(i);
                                     break;
                                 }
@@ -599,11 +605,11 @@ namespace GameSvr
                     }
                     
                     // 战神 sub_6B3EAC @0x6B3B71-0x6B3B87：`eax=ebx(m_DealCreat)` ; `call sub_772DA8`
-                    //   （= m_boGhost getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
-                    //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boDeath 析取项）; 清零 [self+0xBAC]。
+                    //   （= m_boDeath getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
+                    //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boGhost 析取项）; 清零 [self+0xBAC]。
                     // 即原生在 **ghost 或 death** 任一为真时都清 m_DealCreat；旧 C# 只查 ghost，
                     // 于是一个「已死但尚未 ghost」的对端会把 m_DealCreat 一直挂着 ——
-                    // 配合 ClientDealEnd 曾缺失的 m_boDeath 门，这就是「和尸体成交」的具体路径。
+                    // 配合 ClientDealEnd 曾缺失的存活门，这就是「和尸体成交」的具体路径。
                     // （节流：原生用专属 tick 字段 [self+0x73C] 比 0x7530=30000ms；此处所在的
                     //  `m_dwVerifyTick` 块周期同为 30*1000ms，与组队清扫共用一个 tick 字段 =
                     //  周期等价，只是字段合并，不影响可观察行为。）
@@ -624,40 +630,16 @@ namespace GameSvr
             }
             try
             {
-                bool boChg = false;
+                // The once-per-second `m_wStatusTimeArr[i] -= 1` countdown that
+                // used to sit here was the second half of the 4.18 dual
+                // authority: it expired the legacy slots on its own clock while
+                // the node list expired the same states on the native 500 ms
+                // clock (0x772FE4 `sub eax,[ebx+0xE0] / cmp eax,0x1F4 / jb`).
+                // The slots are now a view onto those nodes, so a countdown here
+                // would double-decrement them. Expiry lives in
+                // ProcessTimedAbilities, and the four per-slot side effects moved
+                // to OnNativeTimedStateLost.
                 bool boNeedRecalc = false;
-                for (var i = m_dwStatusArrTick.GetLowerBound(0); i <= m_dwStatusArrTick.GetUpperBound(0); i++)
-                {
-                    if ((m_wStatusTimeArr[i] > 0) && (m_wStatusTimeArr[i] < 60000))
-                    {
-                        if ((HUtil32.GetTickCount() - m_dwStatusArrTick[i]) > 1000)
-                        {
-                            m_wStatusTimeArr[i] -= 1;
-                            m_dwStatusArrTick[i] += 1000;
-                            if (m_wStatusTimeArr[i] == 0)
-                            {
-                                boChg = true;
-                                switch (i)
-                                {
-                                    case Grobal2.STATE_TRANSPARENT:
-                                        m_boHideMode = false;
-                                        break;
-                                    case Grobal2.STATE_DEFENCEUP:
-                                        boNeedRecalc = true;
-                                        SysMsg("防御力回复正常", MsgColor.Green, MsgType.Hint);
-                                        break;
-                                    case Grobal2.STATE_MAGDEFENCEUP:
-                                        boNeedRecalc = true;
-                                        SysMsg("魔法防御力回复正常", MsgColor.Green, MsgType.Hint);
-                                        break;
-                                    case Grobal2.STATE_BUBBLEDEFENCEUP:
-                                        m_boAbilMagBubbleDefence = false;
-                                        break;
-                                }
-                            }
-                        }
-                    }
-                }
                 for (var i = m_wStatusArrValue.GetLowerBound(0); i <= m_wStatusArrValue.GetUpperBound(0); i++)
                 {
                     if (m_wStatusArrValue[i] > 0)
@@ -689,11 +671,6 @@ namespace GameSvr
                             }
                         }
                     }
-                }
-                if (boChg)
-                {
-                    m_nCharStatus = GetCharStatus();
-                    StatusChanged();
                 }
                 if (boNeedRecalc)
                 {
@@ -1011,9 +988,24 @@ namespace GameSvr
             try
             {
                 var boPK = false;
-                if (!M2Share.g_Config.boVentureServer && !m_PEnvir.Flag.boFightZone && !m_PEnvir.Flag.boFight3Zone)
+                // PKD-05 —— 谋杀惩罚的入口门。战神 TPlayer.Die sub_6C07A0 @0x6C081A-0x6C0865:
+                //   6C0823  85 DB / 74 6A                  test ebx,ebx / je   ; 无 LastHiter
+                //   6C0830  80 78 5F 00 / 75 5B            cmp [Envir+0x5F],0  ; FREEPK  -> 跳过
+                //   6C083F  80 78 5D 00 / 75 4C            cmp [Envir+0x5D],0  ; FIGHT   -> 跳过
+                //   6C084E  80 78 5E 00 / 75 3D            cmp [Envir+0x5E],0  ; FIGHT3  -> 跳过
+                //   6C0857  8B 80 60 01 00 00              mov eax,[victim+0x160]
+                //   6C085D  8B 15 AC 5F 7D 00              mov edx,[0x7D5FAC]   ; -> 200
+                //   6C0863  3B 02 / 7F 2A                  cmp eax,[edx] / jg   ; 受害者 PK > 200 -> 跳过
+                // 两处订正:
+                //  * FREEPK 这道门 C# 完全没有 —— 自由 PK 地图上杀人照样加 PK 值、照样掉幸运。
+                //  * `jg` 只在 victimPK > 200 时跳过，所以门是 **victimPK <= 200**；
+                //    C# 写的 PKLevel() < 2 == victimPK < 200，恰好在 PK == 200 这一点上少判一次
+                //    （受害者 PK 正好 200 时原生仍然惩罚凶手，C# 放过）。
+                if (!M2Share.g_Config.boVentureServer && !m_PEnvir.Flag.boFightZone
+                    && !m_PEnvir.Flag.boFight3Zone && !m_PEnvir.Flag.boFREEPK)
                 {
-                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null && PKLevel() < 2)
+                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null
+                        && m_nPkPoint <= M2Share.g_Config.nPKPunishPoint)
                     {
                         if ((m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT) || (m_LastHiter.m_btRaceServer == Grobal2.RC_NPC))//允许NPC杀死人物
                         {
@@ -1029,8 +1021,27 @@ namespace GameSvr
                         }
                     }
                 }
-                if (boPK && m_LastHiter != null)
+                // PKD-06 —— 凶手解析后的两道守卫。战神 0x6C0867-0x6C087E：
+                //   6C086B  FF 92 B4 00 00 00  call [killer.vmt+0xB4]   ; 责任玩家
+                //   6C0871  85 C0 / 74 1C      test eax,eax / je        ; nil -> 不惩罚
+                //   6C0875  80 78 73 00 / 75 16 cmp byte [eax+0x73],0 / jne ; **幽灵**凶手 -> 不惩罚
+                //   6C087B  3B 45 FC / 74 11   cmp eax,[ebp-4] / je     ; 自杀 -> 不惩罚
+                // +0x73 是 m_boGhost（全镜像唯一写入点 0x7680EF，在 MakeGhost 里），
+                // 不是 m_boDeath(+0x74) —— 两份旧 discovery 文档在这一点上是反的。
+                if (boPK && m_LastHiter != null
+                    && !m_LastHiter.m_boGhost                       // 0x6C0875
+                    && !ReferenceEquals(m_LastHiter, this))         // 0x6C087B
                 {
+                    // PKD-07 —— 幸运扣减是无条件的。战神 sub_6C0FE4 @0x6C1019:
+                    //   6C1019  BA 0C FE FF FF  mov edx,0xFFFFFE0C   ; -500 原生单位 = -1 级
+                    //   6C101E  8B C3           mov eax,ebx          ; 凶手
+                    //   6C1020  E8 97 88 0A 00  call sub_7698BC
+                    //   6C1025  C6 45 FE 00     mov byte [ebp-2],0   ; guildwarkill := 0 —— 在这之后
+                    // 它排在行会战 / 攻城战 / 自由 PK / 正当防卫全部判定**之前**，
+                    // 所以这四种情形下原生同样扣 1 点幸运。C# 之前把它塞在
+                    // `!guildwarkill && !IsGoodKilling` 分支里，行会战杀人不掉幸运，
+                    // 幸运又直接进装备掉落分母，属于可被利用的差异。
+                    m_LastHiter.AddBodyLuck(-1);
                     var guildwarkill = false;
                     if (m_MyGuild != null && m_LastHiter.m_MyGuild != null)
                     {
@@ -1057,9 +1068,7 @@ namespace GameSvr
                                 m_LastHiter.IncPkPoint(M2Share.g_Config.nKillHumanAddPKPoint);
                                 m_LastHiter.SysMsg(M2Share.g_sYouMurderedMsg, MsgColor.Red, MsgType.Hint);
                                 SysMsg(format(M2Share.g_sYouKilledByMsg, m_LastHiter.m_sCharName), MsgColor.Red, MsgType.Hint);
-                                // 原版 sub_6C0FE4: 受害者 PK点(a2+352) ≤ off_7D5FAC 时，对凶手 [+0x164] -= 1。
-                                // 原 config nKillHumanDecLuckPoint 系伪造，原生为固定 -1。
-                                m_LastHiter.AddBodyLuck(-1);
+                                // AddBodyLuck(-1) 已上提到 0x6C1019 的位置（见 PKD-07）。
                                 if (PKLevel() < 1)
                                 {
                                     if (M2Share.RandomNumber.Random(5) == 0)
@@ -1329,10 +1338,11 @@ namespace GameSvr
                 }
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
-                    if (m_GroupOwner != null)
-                    {
-                        m_GroupOwner.DelMember(this);// 人物死亡立即退组，以防止组队刷经验
-                    }
+                    // 战神死亡不退组。sub_726E68 (group.DelMember) 全镜像只有两处
+                    // E8：0x6C3181（CM_GROUPMODE 关组，非队长自退）和 0x6C3D73
+                    // （CM_DELGROUPMEMBER）。经验收集轮 0x726C84 call 0x772DA8
+                    // 只跳过 IsDead([+0x74])，尸体仍留在队里，复活后还在。
+                    // 旧 C# 死亡立刻 DelMember 是 INVENTED，玩家每次死亡都要重新组队。
                     if (m_LastHiter != null)
                     {
                         if (m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
@@ -1346,7 +1356,11 @@ namespace GameSvr
                     }
                     else
                     {
-                        tStr = "####";
+                        // PKD-10 —— 无凶手时的占位符是 **五** 个 '#'。战神 0x6C0936
+                        // `B9 FC 09 6C 00  mov ecx,0x6C09FC`，而 0x6C09FC 处的 Delphi 长串
+                        // 长度前缀（VA-4 的 dword）读出来是 5，内容 '#####'。
+                        // C# 写 4 个会让日志消费端按固定宽度切分时整行错位。
+                        tStr = "#####";
                     }
                     M2Share.AddGameDataLog("19" + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + "FZ-" + HUtil32.BoolToIntStr(m_PEnvir.Flag.boFightZone) + "_F3-" + HUtil32.BoolToIntStr(m_PEnvir.Flag.boFight3Zone) + "\t" + '0' + "\t" + '1' + "\t" + tStr);
                 }

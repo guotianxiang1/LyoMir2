@@ -94,7 +94,7 @@ namespace GameSvr
         // would draw RandSeed twice.
         private ushort DoSpell_MPow(TUserMagic UserMagic)
         {
-            return (ushort)(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(Math.Max(1, UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower)));
+            return (ushort)unchecked(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower));
         }
 
         // Native sub_4C8658 (@0x4C8658-0x4C86B4), reached via the thin wrapper
@@ -367,8 +367,21 @@ namespace GameSvr
                     n1C = M2Share.GetNextDirection(PlayObject.m_nCurrX, PlayObject.m_nCurrY, nTargetX, nTargetY);
                     if (PlayObject.m_PEnvir.GetNextPosition(PlayObject.m_nCurrX, PlayObject.m_nCurrY, n1C, 1, ref n14, ref n18))
                     {
-                        PlayObject.m_PEnvir.GetNextPosition(PlayObject.m_nCurrX, PlayObject.m_nCurrY, n1C, 8, ref nTargetX, ref nTargetY);
-                        nPower = PlayObject.GetAttackPower(DoSpell_GetPower(UserMagic) + HUtil32.LoWord(PlayObject.m_WAbil.MC), (ushort)(HUtil32.HiWord(PlayObject.m_WAbil.MC) - HUtil32.LoWord(PlayObject.m_WAbil.MC) + 1));
+                        // Native 0x76E9FD is `6A 08 push 8` (line span). The
+                        // trampoline at 0x76EA07 patches the following `6A 01`
+                        // arg0 slot (S(1,81) → mov al,[ebp+8]), not this 8.
+                        const int laserSpan = 8;
+                        PlayObject.m_PEnvir.GetNextPosition(PlayObject.m_nCurrX, PlayObject.m_nCurrY, n1C, laserSpan, ref nTargetX, ref nTargetY);
+                        int laserLo = HUtil32.LoWord(PlayObject.m_WAbil.MC);
+                        int laserHi = HUtil32.HiWord(PlayObject.m_WAbil.MC);
+                        Plugins.YanshenSkillPatches.MainAttr(PlayObject,
+                            SpellsDef.SKILL_SHOOTLIGHTEN, laserLo, laserHi,
+                            out laserLo, out laserHi);
+                        nPower = PlayObject.GetAttackPower(
+                            DoSpell_GetPower(UserMagic) + laserLo,
+                            (ushort)(laserHi - laserLo + 1));
+                        nPower = (ushort)Plugins.YanshenSkillPatches.ScaleDamage(
+                            PlayObject, SpellsDef.SKILL_SHOOTLIGHTEN, nPower);
                         if (PlayObject.MagPassThroughMagic(n14, n18, nTargetX, nTargetY, n1C, nPower, true) > 0)
                         {
                             boTrain = true;
@@ -488,11 +501,23 @@ namespace GameSvr
                         nTargetY);
                     break;
                 case SpellsDef.SKILL_LIGHTFLOWER:
-                    nPower = PlayObject.GetAttackPower(DoSpell_GetPower(UserMagic) + HUtil32.LoWord(PlayObject.m_WAbil.MC),
-                        HUtil32.HiWord(PlayObject.m_WAbil.MC) - HUtil32.LoWord(PlayObject.m_WAbil.MC) + 1);
-                    if (MagElecBlizzard(PlayObject, nPower))
                     {
-                        boTrain = true;
+                        int hlLo = HUtil32.LoWord(PlayObject.m_WAbil.MC);
+                        int hlHi = HUtil32.HiWord(PlayObject.m_WAbil.MC);
+                        Plugins.YanshenSkillPatches.MainAttr(PlayObject,
+                            SpellsDef.SKILL_LIGHTFLOWER, hlLo, hlHi,
+                            out hlLo, out hlHi);
+                        nPower = PlayObject.GetAttackPower(
+                            DoSpell_GetPower(UserMagic) + hlLo, hlHi - hlLo + 1);
+                        if (MagElecBlizzard(PlayObject, nPower,
+                                Plugins.YanshenSkillPatches.RangeByte(PlayObject,
+                                    SpellsDef.SKILL_LIGHTFLOWER,
+                                    M2Share.g_Config.nElecBlizzardRange),
+                                Plugins.YanshenSkillPatches.HellLightDivisor(
+                                    PlayObject)))
+                        {
+                            boTrain = true;
+                        }
                     }
                     break;
                 case SpellsDef.SKILL_SHOWHP:
@@ -643,6 +668,8 @@ namespace GameSvr
                             {
                                 nPower = (ushort)HUtil32.Round(nPower * 1.5);
                             }
+                            nPower = (ushort)Plugins.YanshenSkillPatches.BloodSuck(
+                                PlayObject, nPower);
                             PlayObject.SendDelayMsg(PlayObject, Grobal2.RM_DELAYMAGIC, (short)nPower, HUtil32.MakeLong(nTargetX, nTargetY), 2, TargeTBaseObject.ObjectId, "", 600);
                             if (TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
                             {
@@ -1264,6 +1291,9 @@ namespace GameSvr
                                             }
                                             TargeTBaseObject.RefShowName();
                                             BaseObject.m_SlaveList.Add(TargeTBaseObject);
+                                            // MagTamming sub_6ED2A4 @0x6ED528: RecalcAbilitys then
+                                            // TList.Add [master+0x4FC] then SM 4469 (0x6F784C).
+                                            BaseObject.NotifyNativeSlaveListChanged(joining: true, TargeTBaseObject);
                                         }
                                         else
                                         {
@@ -1666,6 +1696,9 @@ namespace GameSvr
         {
             int lowMagic = HUtil32.LoWord(PlayObject.m_WAbil.MC);
             int highMagic = HUtil32.HiWord(PlayObject.m_WAbil.MC);
+            Plugins.YanshenSkillPatches.MainAttr(PlayObject,
+                UserMagic.MagicInfo.wMagicID, lowMagic, highMagic,
+                out lowMagic, out highMagic);
             int rawDamage = PlayObject.GetAttackPower(
                 TPlayObject.CalculateNativeMagicProducerSkillPower(UserMagic) +
                     lowMagic,
@@ -1688,13 +1721,20 @@ namespace GameSvr
         private static void QueueNativeAreaBlast(TPlayObject PlayObject,
             TUserMagic UserMagic, short nTargetX, short nTargetY)
         {
+            ushort magicId = UserMagic.MagicInfo.wMagicID;
+            int lowMagic = HUtil32.LoWord(PlayObject.m_WAbil.MC);
+            int highMagic = HUtil32.HiWord(PlayObject.m_WAbil.MC);
+            Plugins.YanshenSkillPatches.MainAttr(PlayObject, magicId,
+                lowMagic, highMagic, out lowMagic, out highMagic);
             int rawDamage = PlayObject.GetAttackPower(
                 TPlayObject.CalculateNativeMagicProducerSkillPower(UserMagic) +
-                    HUtil32.LoWord(PlayObject.m_WAbil.MC),
-                HUtil32.HiWord(PlayObject.m_WAbil.MC) -
-                    HUtil32.LoWord(PlayObject.m_WAbil.MC) + 1);
+                    lowMagic,
+                highMagic - lowMagic + 1);
+            rawDamage = Plugins.YanshenSkillPatches.ScaleDamage(PlayObject,
+                magicId, rawDamage);
+            byte range = Plugins.YanshenSkillPatches.RangeByte(PlayObject, magicId, 1);
             PlayObject.QueueNativeMagicEffect(3, null, rawDamage,
-                UserMagic.MagicInfo.wMagicID, nTargetX, nTargetY, 1, true, 0,
+                magicId, nTargetX, nTargetY, range, true, 0,
                 MagicDamageContext.Capture(UserMagic), 600);
             // Native trains unconditionally here (@0x76F287-0x76F29A), outside
             // the DoSpell tail's `btLevel < 3 && boTrain` gate.
@@ -1722,18 +1762,19 @@ namespace GameSvr
             return result;
         }
 
-        private bool MagElecBlizzard(TBaseObject BaseObject, int nPower)
+        private bool MagElecBlizzard(TBaseObject BaseObject, int nPower,
+            int range, int divisor)
         {
             var result = false;
             IList<TBaseObject> BaseObjectList = new List<TBaseObject>();
-            BaseObject.GetMapBaseObjects(BaseObject.m_PEnvir, BaseObject.m_nCurrX, BaseObject.m_nCurrY, M2Share.g_Config.nElecBlizzardRange, BaseObjectList);
+            BaseObject.GetMapBaseObjects(BaseObject.m_PEnvir, BaseObject.m_nCurrX, BaseObject.m_nCurrY, range, BaseObjectList);
             for (var i = 0; i < BaseObjectList.Count; i++)
             {
                 var TargeTBaseObject = BaseObjectList[i];
                 int nPowerPoint;
                 if (TargeTBaseObject.m_btLifeAttrib != Grobal2.LA_UNDEAD)
                 {
-                    nPowerPoint = nPower / 10;
+                    nPowerPoint = divisor == 0 ? nPower : nPower / divisor;
                 }
                 else
                 {
@@ -1930,6 +1971,17 @@ namespace GameSvr
                 {
                     sMonName = ysShinsu.ShenShouName();
                     nCount = ysShinsu.ShenShouSlaveCount();
+                }
+                // 「修改召唤神兽」装的是 detour，不是常量覆盖：0x100BA4E0 / 0x100BA4F9
+                // 两次 call 0x10032B10 把 0x0076EE98 起 7 字节（push 数量 + push 叛变秒数）
+                // 和 0x0076EEAF 起 5 字节（mov edx,名字指针）整段换成跳转，所以它决定的是
+                // 最终交给 MakeSlave 的名字与数量，排在「召唤神兽」的常量覆盖之后——
+                // 补丁区间本身就吃掉了 0x0076EE99 这个 imm8。取值域见 TryGetModifyShenShou。
+                if (ysShinsu.TryGetModifyShenShou(PlayObject.m_Abil.Level,
+                        out var ysDragonName, out var ysDragonCount))
+                {
+                    sMonName = ysDragonName;
+                    nCount = ysDragonCount;
                 }
                 if (PlayObject.MakeSlave(sMonName, nMakelevel, nExpLevel, nCount, dwRoyaltySec) != null)
                 {

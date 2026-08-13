@@ -14,13 +14,23 @@ VerifyTimedAbilityExpiryBatch();
 var actor = NewActor();
 Assert(actor.SetNativeActiveState(26), "state26 set");
 Assert(actor.HasNativeActiveState(26), "state26 read");
+// POISON_STONE is legacy slot 5, and slot i is native state 31 - i, so this
+// write and state 26 are the same thing. Native's petrify gained-arm confirms
+// the identity: the state-gained dispatch @0x7418C8 sends index 26 to arm 18
+// @0x741DC6, which is "你被石化了！".
 actor.m_wStatusTimeArr[Grobal2.POISON_STONE] = 1;
 actor.m_nCharStatus = actor.GetCharStatus();
-Assert(actor.HasNativeActiveState(26), "legacy stone rebuild cleared state26");
+Assert(actor.HasNativeActiveState(26), "legacy stone write did not reach state26");
+Assert(actor.m_wStatusTimeArr[Grobal2.POISON_STONE] == 1,
+    "legacy stone slot did not read back the state26 node");
 Assert(actor.ClearNativeActiveState(26), "state26 clear");
 Assert(!actor.HasNativeActiveState(26), "state26 clear read");
-Assert(actor.m_wStatusTimeArr[Grobal2.POISON_STONE] == 1,
-    "state26 clear changed legacy stone timer");
+// This used to assert the slot still read 1 after the state was cleared - the
+// 4.18 dual authority as a contract. Native has one carrier: FindState
+// @0x773BB1 gates on the bitset before it walks Self+0xDC, so a record whose
+// bit is clear cannot be found and reports no time.
+Assert(actor.m_wStatusTimeArr[Grobal2.POISON_STONE] == 0,
+    "legacy stone slot outlived the cleared state26 bit");
 
 SetField(actor, "m_dwNativeState26Deadline", uint.MaxValue);
 Assert(!CanAdd(actor, 26), "active deadline admitted state26");
@@ -236,8 +246,8 @@ static TBaseObject NewActor()
 {
     var actor = (TBaseObject)RuntimeHelpers.GetUninitializedObject(
         typeof(TBaseObject));
-    actor.m_wStatusTimeArr = new ushort[12];
-    actor.m_dwStatusArrTick = new int[12];
+    // m_wStatusTimeArr is a forwarding view over the node list now, so an
+    // uninitialised actor already reads all-zero with nothing to allocate.
     return actor;
 }
 

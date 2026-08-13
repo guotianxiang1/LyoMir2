@@ -44,5 +44,20 @@ namespace GameSvr
             SendSocket(Grobal2.MakeDefaultMsg(Grobal2.SM_CLEAR_PENDING_REQUEST, 0, 0, 0, 0),
                 new byte[8]);
         }
+
+        // sub_6F772C @0x006F772C, reached from UserLogon @0x6B24EE (the call
+        // between 4615 and 4628). Always sends SM 4612 via [obj+0x254]:
+        //   0x6F7813 66 BA 04 12
+        //   Recog=0 Param=0 Tag=0 Series=0
+        // Empty list still sends: je 0x6F77EB skips packing but not the send,
+        // Len=0 (ebx stays 0 from the xor at 0x6F7750). Body records are 17
+        // bytes {type byte + ShortString cap 15} when the offline-notice
+        // queue at manager+0x24 is non-empty; C# does not yet populate that
+        // queue, so login emits the empty frame native still always fires.
+        private void SendNativePendingNoticesOnLogon()
+        {
+            SendSocket(Grobal2.MakeDefaultMsg(Grobal2.SM_PENDING_NOTICE, 0, 0, 0, 0),
+                new byte[0]);
+        }
     }
 }

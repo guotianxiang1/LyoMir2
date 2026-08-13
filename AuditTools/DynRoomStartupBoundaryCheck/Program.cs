@@ -1,12 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-// The default tree is not always sitting on the branch under test, so args[0]
-// takes precedence over the environment variable and over the default.
-var repoRoot = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
-    ? args[0]
-    : Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-      ?? @"D:\loym2\LyoMir2-master";
+var repoRoot = AuditRepoRoot.Resolve(args);
 var envirRoot = Environment.GetEnvironmentVariable("LYOMIR_PRODUCTION_ENVIR")
     ?? @"D:\lyom2Release\mud2.0\Mir200\Envir";
 

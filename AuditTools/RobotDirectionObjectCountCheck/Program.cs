@@ -190,24 +190,5 @@ static void Require(bool condition, string message)
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[]
-             {
-                 AppContext.BaseDirectory,
-                 Environment.CurrentDirectory
-             })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                    "RobotPlay", "RobotPlayObject.cs")))
-                return current.FullName;
-            var nested = Path.Combine(current.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(nested, "GameSvr", "RobotPlay",
-                    "RobotPlayObject.cs")))
-                return nested;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }

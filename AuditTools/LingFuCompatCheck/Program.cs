@@ -95,7 +95,7 @@ Assert(bridge.CallPlayerMethod("AddLF", addArgs),
     "AddLF native player procedure is not exposed");
 Equal(21, player.m_nLingFu, "AddLF native balance");
 Equal(1, player.m_MsgList.Count, "AddLF capital refresh count");
-Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
     "AddLF internal capital refresh ident");
 Equal(1, M2Share.LogStringList.Count, "AddLF business log count");
 EqualText("9\tpas-map\t31\t47\tpas-player\t灵符\t23001\t10\tnpc给予：pas-npc-npc-map",
@@ -110,7 +110,7 @@ Assert(bridge.CallPlayerMethod("AddLimLF", addLimitedArgs),
 Equal(50, player.m_CreditCard.Value, "AddLimLF CreditCard.Value");
 Assert(player.m_CreditCard.Dirty, "AddLimLF did not mark CreditCard dirty");
 Equal(1, player.m_MsgList.Count, "AddLimLF capital refresh count");
-Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
     "AddLimLF internal capital refresh ident");
 Equal(1, M2Share.LogStringList.Count, "AddLimLF business log count");
 EqualText("9\tpas-map\t31\t47\tpas-player\t限时灵符\t23002\t6\tnpc给予pas-npc-npc-map",
@@ -145,7 +145,7 @@ Assert(bridge.CallPlayerMethod("DecLF", decArgs),
 Equal(11, player.m_nLingFu, "DecLF ordinary LingFu balance");
 Equal(10, player.m_nUsedLingFu, "DecLF used-LingFu accounting");
 Equal(1, player.m_MsgList.Count, "DecLF capital refresh count");
-Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
     "DecLF internal capital refresh ident");
 Equal(1, M2Share.LogStringList.Count, "DecLF business log count");
 EqualText("10\tpas-map\t31\t47\tpas-player\t灵符\t0\t10\tnpc扣除pas-npc-npc-map",
@@ -186,7 +186,7 @@ Equal(11, player.m_nUsedLingFu,
 Equal(0, M2Share.LogStringList.Count,
     "reason 30003 did not suppress the type-10 business log");
 Equal(1, player.m_MsgList.Count(entry =>
-        entry.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        entry.wIdent == Grobal2.RM_LINGFU_CHANGED),
     "special-reason DecLF capital refresh count");
 
 var invalidDecSnapshot = (player.m_nLingFu, player.m_nUsedLingFu,
@@ -224,12 +224,12 @@ var playerMessageSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Player
     "TPlayObject.Message.cs"));
 
 RequireMatches(lingFuSource,
-    "RefreshNativeLingFu\\(\\)[\\s\\S]{0,180}?SendMsg\\(this,\\s*Grobal2\\.SM_LINGFU_CHANGED",
+    "RefreshNativeLingFu\\(\\)[\\s\\S]{0,180}?SendMsg\\(this,\\s*Grobal2\\.RM_LINGFU_CHANGED",
     1, "capital refresh must enqueue native internal message 10054");
-Reject(lingFuSource, "SendDefMessage(Grobal2.SM_LINGFU_CHANGED",
+Reject(lingFuSource, "SendDefMessage(Grobal2.RM_LINGFU_CHANGED",
     "internal capital message 10054 was sent to the client");
 RequireMatches(playerMessageSource,
-    "case Grobal2\\.SM_LINGFU_CHANGED:[\\s\\S]{0,100}?SendNativeCapitalInfo\\(\\)",
+    "case Grobal2\\.RM_LINGFU_CHANGED:[\\s\\S]{0,100}?SendNativeCapitalInfo\\(\\)",
     1, "internal capital message 10054 is not consumed by player Operate");
 RequireMatches(lingFuSource,
     "MakeDefaultMsg\\(Grobal2\\.SM_GETDIAMNUM_EXT,\\s*0,\\s*0,\\s*0,\\s*0\\)[\\s\\S]{0,100}?" +

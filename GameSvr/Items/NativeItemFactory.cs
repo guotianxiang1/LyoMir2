@@ -240,9 +240,55 @@ namespace GameSvr
             }
         }
 
+        /// <summary>
+        /// Every class the factory can reach whose VMT parent chain ends at
+        /// TBasePileItem (VMT 0x781C24, cell 0x781BD8).  Resolved by walking
+        /// vmtParent at classref-0x24, which is a PPClass and so needs a double
+        /// dereference, over all 141 class cells the factory loads.
+        /// </summary>
+        private static readonly HashSet<string> NativePileClasses =
+            new(StringComparer.Ordinal)
+            {
+                "TBasePileItem",         // 0x781BD8
+                "TLuckOil",              // 0x781CAC
+                "TPneumaStone",          // 0x781D78
+                "TTaoFaLingAddExpItem",  // 0x781E4C
+                "TGoldAcus",             // 0x781F30
+                "TShiMenCall",           // 0x781FFC
+                "TSuperExpItem",         // 0x7820CC
+                "TLevelBuffItem",        // 0x7821A0
+                "TNewHappyCake",         // 0x782274
+                "THeroJingmaiDrug",      // 0x782348
+                "TPileFlower",           // 0x782424
+                "THeroHypericum",        // 0x782920
+                "THeroFileDragonScroll", // 0x7829F4
+                "THeroExpScroll",        // 0x782AD8
+                "TJingXiuBook",          // 0x782D64
+            };
+
+        /// <summary>
+        /// "Was built by the pile constructor", i.e. carries the native pile
+        /// marker <c>mov byte [esi+0x14],7</c>.  That marker is written by
+        /// TBasePileItem.Create @0x788118 and re-written by the six subclass
+        /// constructors that chain it (@0x788C01 / @0x788C84 / @0x78B27C /
+        /// @0x78B2D8 / @0x78B328 / @0x78B544), so the predicate is class
+        /// ancestry, not a StdMode range.
+        ///
+        /// StdMode &gt;= 150 is NOT equivalent: the StdMode 3 arm hands Shape 4
+        /// to the pile constructor as well —
+        ///   0074CCE2  51              push ecx
+        ///   0074CCE3  B2 01           mov  dl,1
+        ///   0074CCE5  A1 AC 1C 78 00  mov  eax,[0x781CAC]   ; TLuckOil
+        ///   0074CCEA  8B CB           mov  ecx,ebx
+        ///   0074CCEC  E8 FF B3 03 00  call 0x7880F0         ; TBasePileItem.Create
+        /// and 0x7880F0 forces <c>word[esi+0x26] = 1</c> @0x788112, i.e. a stack
+        /// of one.  All fifteen classes also share <c>[VMT+0x28] = 0x7882B4</c>,
+        /// a bare <c>ret</c>, so they take no drop-time durability roll.
+        /// </summary>
         internal static bool IsPileItem(GoodItem item)
         {
-            return item != null && item.StdMode >= 150 && GetClassName(item) != null;
+            var className = GetClassName(item);
+            return className != null && NativePileClasses.Contains(className);
         }
 
         // --------------------------------------------------------------------

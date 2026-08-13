@@ -19,6 +19,7 @@ namespace LoginGate.Core
             Run("client endpoint bounds", TestClientBounds, passed);
             Run("native registration and ACK", TestNativeRegistration, passed);
             Run("native probe request and response", TestNativeProbe, passed);
+            Run("native select-group-info and error frame", TestSelectGroupInfoAndError, passed);
             Run("native auth request", TestNativeAuthRequest, passed);
             Run("native 1003 response variants", TestNativeAuthResponses, passed);
             Run("native 1004 failure bounds", TestNativeAuthFailureBounds, passed);
@@ -222,6 +223,50 @@ namespace LoginGate.Core
             Equal((ushort)180, route.AreaIndex, "native probe area");
             Equal((byte)1, route.GroupIndex, "native probe group");
             Equal((byte)0, route.ErrorType, "native probe error type");
+        }
+
+        private static void TestSelectGroupInfoAndError()
+        {
+            Check(LoginGateWireProtocol.TryCreateSelectGroupInfo(
+                1860, LoginGateWireProtocol.NativeMobileEncodeIndex, 2895,
+                180, 1, "", out var payload, out var error), error);
+            Equal(28, payload.Length, "TSelectGroupInfo size");
+            Equal(1860u, BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(0, 4)),
+                "ciSessionID");
+            Equal(LoginGateWireProtocol.NativeMobileEncodeIndex,
+                BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(4, 4)),
+                "iEnCodeIdx mobile sentinel");
+            Equal((ushort)2895,
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(8, 2)),
+                "wSocketHandle");
+            Equal((ushort)0,
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(10, 2)),
+                "wGatePort left for DB");
+            Equal((ushort)180,
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(16, 2)),
+                "wAreaID");
+            Equal((byte)1, payload[18], "bGroupNo");
+            Equal((byte)0, payload[19], "bErrorType left for DB");
+
+            Check(LoginGateWireProtocol.TryCreateSelectServerErrorFrame(
+                3155, 3, out var fail, out error), error);
+            Equal(12, fail.Payload.Length, "error frame is TDefaultMessage only");
+            Check(LoginGateWireProtocol.TryParseInnerHeader(fail.Payload,
+                out var inner, out error), error);
+            Equal(LoginGateWireProtocol.SelectServerIdent, inner.Ident,
+                "error ident");
+            Equal(0, inner.Recog, "error Recog stays 0");
+            Equal((ushort)3, inner.Series, "error Series = wRes");
+
+            var secondZoneSession = unchecked((int)(1000u
+                ^ LoginGateWireProtocol.NativeSecondZoneSessionXor));
+            Check(secondZoneSession < 0, "SecondZone session is negative as int");
+            Check(LoginGateWireProtocol.TryCreateSelectServerJumpFrame(
+                3155, secondZoneSession, "127.0.0.1", 7100, 180, 1, "",
+                out var jump, out error), error);
+            Check(LoginGateWireProtocol.TryParseInnerHeader(jump.Payload,
+                out var jumpInner, out error), error);
+            Equal(secondZoneSession, jumpInner.Recog, "jump Recog keeps xor bits");
         }
 
         private static void TestNativeAuthRequest()

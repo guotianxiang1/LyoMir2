@@ -932,6 +932,11 @@ namespace GameSvr
                                     PacketTrace($"[Pkt] ident={defMsg.Ident}(0x{defMsg.Ident:X4}) recog={defMsg.Recog} len={nMsgLen}");
                                     byte[] body = null;
                                     string sMsg = null;
+                                    // `nMsgLen - 12` is 战神's CM dispatcher fourth parameter
+                                    // (0x6B1B11 `movzx esi,word [node+8]` / 0x6B1B15 `sub esi,0x0C`),
+                                    // so this body array's Length is what the length gates in
+                                    // NativeClientBodyLengthGate compare against. It has to reach
+                                    // ProcessUserMessage intact — do not shorten or re-encode it here.
                                     if (nMsgLen > ClientPacket.PackSize)
                                     {
                                         var bodyLength = Math.Min(nMsgLen, MsgBuff.Length) - ClientPacket.PackSize;

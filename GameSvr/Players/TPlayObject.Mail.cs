@@ -158,9 +158,18 @@ namespace GameSvr
             if (record.MoneyType != 0) return -1;
             if (record.MoneyCount > 0)
             {
+                // 0x70B7C0 e8 83 c1 fc ff  call 0x6D7948  overflow test
+                // 0x70B7C5 84 c0 / 74     test al,al / je
+                // 0x70B7C9 be fd ff ff ff  mov esi,-3     ; overflow -> return -3, gold/items untouched
+                // The native add is 32-bit and can wrap; C# widens to 64-bit so a wrap
+                // cannot sneak past as a grant. Fail-closed: refuse rather than credit.
                 if ((long)m_nGold + record.MoneyCount > m_nGoldMax) return -3;
-                m_nGold += record.MoneyCount;
-                GoldChanged();
+                // 0x70B7DB ff 91 8c 02 00 00  call [vmt+0x28C]  = IncGold (0x6D791C)
+                // 0x70B7E1 84 c0 / 74 59     test al,al / je 0x70B83E
+                // IncGold false does NOT become -3: native skips the success log and
+                // still walks the MoneyType==0 deliver arm. GoldChanged lives inside
+                // IncGold (0x6D793C call 0x6C19B4); do not credit through m_nGold +=.
+                IncGold(record.MoneyCount);
             }
 
             NativeMailStore.SetMoneyOrderStatusBestEffort(orderId, 1);

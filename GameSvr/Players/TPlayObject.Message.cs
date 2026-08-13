@@ -60,6 +60,34 @@ namespace GameSvr
             return separator >= 0 ? mapName[..separator] : mapName;
         }
 
+        /// <summary>
+        /// 原生 CM_HERO_LOGON 的副将槽门（<c>Param == 1</c>）：脚本变量 <c>V(87,3)</c>
+        /// 必须恰好等于 100，否则拒绝并提示「请先召唤一次主将英雄」。
+        /// <code>
+        /// 6D933E  B9 03 00 00 00     mov  ecx,3        ; index
+        /// 6D9343  BA 57 00 00 00     mov  edx,0x57     ; group 87
+        /// 6D934B  E8 94 5E 00 00     call 0x6DF1E4     ; GetV
+        /// 6D9350  83 F8 64           cmp  eax,0x64
+        /// 6D9353  75 30              jne  0x6D9385
+        /// 6D9385  66 B9 FF 38        mov  cx,0x38FF
+        /// 6D9389  BA 68 BF 6D 00     mov  edx,0x6DBF68 ; declen 20 GBK
+        /// 6D9393  FF 93 D4 00 00 00  call [vmt+0xD4]   ; sub_73C8F4 -> RM 0x2774 拆成 FColor/BColor
+        /// </code>
+        /// 引擎自身从不写 <c>V(87,3)</c>（全镜像 SetV 调用点里没有 <c>edx=0x57</c>），
+        /// 它由脚本在玩家首次召唤主将后置位——这正是提示语的字面含义。
+        /// </summary>
+        private bool NativeViceHeroSummonAllowed()
+        {
+            // 0x6DF1F1 mov [ebp-4],0xFFFFFFFF：GetV 未命中答 -1，同样不等于 100。
+            if (!TryGetScriptVar('V', 87, 3, out var nFlag))
+                nFlag = -1;
+            if (nFlag == 100)
+                return true;
+            SendMsg(this, Grobal2.RM_SYSMESSAGE, 0, 0xFF, 0x38, 0,
+                "请先召唤一次主将英雄");
+            return false;
+        }
+
         private void SendMapNpcList(TProcessMessage processMsg)
         {
             var environment = processMsg.nParam2 == 0
@@ -392,35 +420,20 @@ namespace GameSvr
                             {
                                 m_boInSafeArea = boInSafeArea;
                                 RefNameColor();
-                                // Notify 战神 client of safe zone entry/exit
+                                // 0x6B308B  8B 45 FC / E8 C1 53 0B 00  call 0x768454 (InSafeArea)
+                                // 0x6B3096  3A 82 FE 03 00 00  cmp al,[edx+0x3FE]   ; m_boInSafeArea
+                                // 0x6B309C  74 43              je  0x6B30E1         ; unchanged -> no packet
+                                // 0x6B30A3  88 91 FE 03 00 00  mov [ecx+0x3FE],dl
+                                // 0x6B30A9  84 D2 / 74 1B      test dl,dl / je 0x6B30C8
+                                //   true  0x6B30AD 6A 06 / 6A 01 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
+                                //   false 0x6B30C8 6A 06 / 6A 00 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
+                                // i.e. Recog=0, Param=6, Tag=(1|0), Series=0, no string.
                                 SendDefMessage(Grobal2.SM_COMMON_INFORMATION,
-                                    boInSafeArea ? 1 : 0, m_nCurrX, m_nCurrY, 0,
-                                    boInSafeArea ? "safe_enter" : "safe_exit");
+                                    0, 6, boInSafeArea ? 1 : 0, 0, string.Empty);
                             }
                         }
                     }
-                    if (castle != null && castle.m_boUnderWar)
-                    {
-                        if (m_PEnvir == castle.m_MapPalace && m_MyGuild != null)
-                        {
-                            if (!castle.IsMember(this))
-                            {
-                                if (castle.IsAttackGuild(m_MyGuild))
-                                {
-                                    if (castle.CanGetCastle(m_MyGuild))
-                                    {
-                                        castle.GetCastle(m_MyGuild);
-                                        M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_211, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                                        if (castle.InPalaceGuildCount() <= 1)
-                                        {
-                                            castle.StopWallconquestWar();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else
+                    if (castle == null || !castle.m_boUnderWar)
                     {
                         ChangePKStatus(false);
                     }
@@ -927,7 +940,7 @@ namespace GameSvr
                 case NativeMagicProducerPushIdent:
                     TryHandleNativeMagicProducerMessage(ProcessMsg);
                     break;
-                case Grobal2.SM_LINGFU_CHANGED:
+                case Grobal2.RM_LINGFU_CHANGED:
                     SendNativeCapitalInfo();
                     break;
                 case Grobal2.RM_NATIVE_EXP_CONTINUE:
@@ -1685,20 +1698,12 @@ namespace GameSvr
                             nMsgCount = GetSiteDownMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxSitDonwMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sBunOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
-                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");// ����������͹���ʧ����Ϣ
+                                // MOVE-22: native pose (3012 / 0x6D9C7D) has no tick
+                                // interval and never kicks. Overflow just repeats the
+                                // four-zero 0x276 correction already used when
+                                // dwDelayTime==0 (0x6D9C8B push 0×4 / mov dx,0x276).
+                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
+                                SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
                             }
                             else
                             {
@@ -2097,7 +2102,9 @@ namespace GameSvr
                     switch (ProcessMsg.wIdent)
                     {
                         case Grobal2.RM_HEAR:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_HEAR, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // 0x6B4A70 68 00 FF 00 00 push 0xFF00 — Param is hardcoded.
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_HEAR,
+                                ProcessMsg.BaseObject, 0xFF00, 0, 1);
                             break;
                         case Grobal2.RM_COLORHEAR:
                             // 0x6C9485 mov cx,0x69 -- same payload shape as
@@ -2108,7 +2115,37 @@ namespace GameSvr
                                 0, 1);
                             break;
                         case Grobal2.RM_WHISPER:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_WHISPER, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // The recipient's whisper monitor is served here, ahead of
+                            // the packet, and it is a SysMsg rather than a second 103:
+                            //   0x6B4A9C 8B B0 44 19 00 00  mov esi,[eax+0x1944]
+                            //   0x6B4AA6 80 7E 73 00        cmp byte [esi+0x73],0
+                            //   0x6B4AB2 8B 43 10           mov eax,[ebx+0x10]  ; body
+                            //   0x6B4AC6 BA E0 63 6B 00     mov edx,0x6B63E0    ; "聆听私聊 "
+                            //   0x6B4AD8 66 B9 FF 38        mov cx,0x38FF
+                            //   0x6B4ADE FF 96 D4 00 00 00  call [VMT+0xD4]
+                            // Doing it on the arm rather than in Whisper() is what makes
+                            // the cross-server path (0x6C9793) reach the monitor too.
+                            if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
+                            {
+                                m_GetWhisperHuman.SendMsg(m_GetWhisperHuman,
+                                    Grobal2.RM_SYSMESSAGE, 0,
+                                    WhisperMonitorFColor, WhisperMonitorBColor, 0,
+                                    WhisperMonitorPrefix + ProcessMsg.sMsg);
+                            }
+                            // Native RM 10031 arm, the only send point for ident 103:
+                            //   0x6B4AE4 68 FC FF 00 00     push 0xFFFC        -> Param  (literal)
+                            //   0x6B4AE9 66 8B 43 02        mov ax,[ebx+2]     -> Tag    = wParam
+                            //   0x6B4AEE 66 8B 43 04        mov ax,[ebx+4]     -> Series = nParam1
+                            //   0x6B4AFC 8B 4B 24           mov ecx,[ebx+0x24] -> Recog  = BaseObject
+                            //   0x6B4AFF 66 BA 67 00        mov dx,0x67
+                            //   0x6B4B08 FF 93 54 02 00 00  call [VMT+0x254]
+                            // Param is an immediate with no alternate arm - a full-image
+                            // sweep finds exactly two RM 10031 producers (0x6C960C, 0x6C9793)
+                            // and one ident-103 send, so there is no colour-tier selector.
+                            // wParam carries the speaker's level (word[speaker+0x278]).
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_WHISPER,
+                                ProcessMsg.BaseObject, 0xFFFC,
+                                ProcessMsg.wParam, ProcessMsg.nParam1);
                             break;
                         case Grobal2.RM_CRY:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_CRY,
@@ -2133,7 +2170,10 @@ namespace GameSvr
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
                             break;
                         case Grobal2.RM_GROUPMESSAGE:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // 0x6B4EA0 68 C4 FF 00 00 / 0x6B4EB5 66 BA 64 00
+                            // Group wire ident is SM 100, Param=0xFFC4 hardcoded.
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE,
+                                ProcessMsg.BaseObject, 0xFFC4, 0, 1);
                             break;
                         case Grobal2.RM_GUILDMESSAGE:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_GUILDMESSAGE, ProcessMsg.BaseObject, 0xFFD4, 0, 1);
@@ -2787,9 +2827,30 @@ namespace GameSvr
 
                 // === Hero System Client Messages (CM_HERO_*) ===
                 case Grobal2.CM_HERO_LOGON:
-                    if (ProcessMsg.nParam1 == ObjectId)
+                    // 原生分发臂 0x6D9324 起，门序就是下面这三步：
+                    //   6D9327  83 B8 B0 0B 00 00 00  cmp dword [player+0xBB0],0
+                    //   6D932E  0F 85 F8 28 00 00     jne 0x6DBC2C      ; 英雄已在场 -> 静默
+                    //   6D9334  8B 45 CC              mov eax,[msg]
+                    //   6D9337  66 83 78 06 01        cmp word [msg+6],1 ; Param==1 = 副将槽
+                    //   6D933C  75 60                 jne 0x6D939E      ; 主将槽跳过下面这道门
+                    //   6D933E  B9 03 00 00 00        mov ecx,3          ; index
+                    //   6D9343  BA 57 00 00 00        mov edx,0x57       ; group 87
+                    //   6D934B  E8 94 5E 00 00        call 0x6DF1E4      ; GetV
+                    //   6D9350  83 F8 64              cmp eax,0x64       ; == 100 ?
+                    //   6D9353  75 30                 jne 0x6D9385       ; -> 拒绝并提示
+                    //   6D9385  66 B9 FF 38 / BA 68 BF 6D 00 / call [vmt+0xD4]
+                    // 0x6DBF68 是 declen 20 的 GBK 串「请先召唤一次主将英雄」。
+                    // GetV(sub_6DF1E4) 的线性槽是 0x6E42CC `imul eax,edx,0x3E8 / add eax,ecx`，
+                    // 即 group*1000+index，所以 edx=group=87、ecx=index=3。未命中时
+                    // 0x6DF1F1 `mov [ebp-4],0xFFFFFFFF` 让它答 -1，而 -1 != 100 也是拒绝。
+                    // Param/Tag -> [player+0x9BD]/[player+0x9BE]（0x6D93A7/0x6D93B6），
+                    // 即 DB 请求 0x160 里的 HeroKind/HeroSlot 两个字段。
+                    if (m_HeroObject == null)
                     {
-                        if (m_HeroObject == null)
+                        if (ProcessMsg.nParam2 == 1 && !NativeViceHeroSummonAllowed())
+                            break;
+                        // Recog 的校验在原生 sub_6CC7C8 内部（0x6CC874 cmp ebx,[ebp-4]）。
+                        if (ProcessMsg.nParam1 == ObjectId)
                             HeroDataService.RequestLoad(this,
                                 (byte)ProcessMsg.nParam2, (byte)ProcessMsg.nParam3);
                     }
@@ -2996,9 +3057,26 @@ namespace GameSvr
                 //   0x100B9C5E A2 C9 FC 73 00 -> imm8  of 0x73FCC7 83 C0 5A             (non-red K)
                 //   0x100B9D3A A2 6C FF 73 00 -> imm8  of 0x73FF69 83 7D F4 02          (max-1)
                 // Off leaves C#'s existing 15/30 path (host 21/90 is a separate BLOCKED).
+                // PKD-01 红名判据。战神 sub_73FC70 @0x73FCA9:
+                //   73FCA9  A1 AC 5F 7D 00     mov eax,[0x7D5FAC]   ; -> 0x7DCF00 = 200
+                //   73FCAE  8B 00              mov eax,[eax]
+                //   73FCB0  3B 86 60 01 00 00  cmp eax,[esi+0x160]  ; 阈值 vs MyPKpoint
+                //   73FCB6  7D 09              jge 0x73FCC1         ; 阈值 >= PK -> 非红名
+                //   73FCB8  C7 45 F8 15 …      mov [ebp-8],0x15     ; 红名分母 21
+                // `jge` 只在 阈值 < PK 时不跳，所以红名判据是**严格** PK > 200。
+                // 旧写法 `PKLevel()>2` 等价于 PK >= 300，PK 落在 201..299 的玩家整段判错。
+                // 注意与背包 worker sub_740078 @0x7400BE `setle` (PK >= 200) 差一点，
+                // 原生这两处本来就不一致，不能统一。
                 var dropCount = 0;
+                var nativeRedName = m_nPkPoint > M2Share.g_Config.nPKPunishPoint;
                 var deathDropPatched = new YanshenApi(this, null, M2Share.PluginManager)
-                    .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out var patchedCap);
+                    .TryGetDeathEquipDropPatch(nativeRedName, out var patchedRate, out var patchedCap);
+                // PKD-02 落地件数上限。战神 0x73FF69 `83 7D F4 02  cmp [ebp-0xC],2` /
+                // 0x73FF6D `7F 0A  jg 0x73FF79` —— 这条**无条件存在**，不是眼神补丁加的；
+                // 眼神只改了那个立即数 (0x100B9D3A A2 6C FF 73 00 -> imm8 of 0x73FF69)。
+                // C# 之前只在补丁生效时才计数并 break，没插件的服务器 16 个装备位全过筛，
+                // 一次死亡最多能爆 16 件而原生最多 3 件。
+                var nativeDropCap = deathDropPatched ? patchedCap : 2;
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     if (m_UseItems[i] == null)
@@ -3026,20 +3104,35 @@ namespace GameSvr
                             m_UseItems[i].wIndex = 0;
                             // native 0x73FD74 FF 45 F4 inc [ebp-0xc] then jmp 0x73FF6F
                             // (Reserved&8 skips the cap check, but the count still eats the budget)
-                            if (deathDropPatched) dropCount++;
+                            dropCount++;
                         }
                     }
                 }
                 var nRate = deathDropPatched
                     ? patchedRate
-                    : (PKLevel() > 2 ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
+                    : (nativeRedName ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
+                    // PKD-03 抽签次数对齐。战神一次循环走 16 个装备位:
+                    //   73FD2D  8B 86 C0 04 00 00  mov eax,[esi+0x4C0]   ; 装备容器
+                    //   73FD33  E8 …               call sub_75EC20       ; 取第 ebx 格
+                    //   73FD3A  85 FF              test edi,edi
+                    //   73FD3C  0F 84 2D 02 00 00  je 0x73FF6F           ; 空格 -> 直接下一格
+                    //   …                                               ; Reserved&8 走销毁支，也不抽
+                    //   73FD96  8B 45 F8           mov eax,[ebp-8]
+                    //   73FD99  E8 AE 3D CC FF     call sub_403B4C       ; ← 抽签在这里
+                    // 即**只有非空且不带 Reserved&8 的格子才消耗一次 Random**。
+                    // C# 原来把 Random 放在循环第一句，空格、以及上面刚被清成 wIndex=0
+                    // 的格子也各抽一次，整条 LCG 序列相对原生错位，后续所有掉落判定全歪。
+                    if (m_UseItems[i] == null || m_UseItems[i].wIndex <= 0)
+                    {
+                        continue;
+                    }
                     if (M2Share.RandomNumber.Random(nRate) != 0)
                     {
                         continue;
                     }
-                    if (m_UseItems[i] != null && M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
+                    if (M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
                     {
                         continue;
                     }
@@ -3067,12 +3160,10 @@ namespace GameSvr
                                 m_UseItems[i].wIndex = 0;
                             }
                         }
-                        // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 xx / 7F 0A jg
-                        if (deathDropPatched)
-                        {
-                            dropCount++;
-                            if (dropCount > patchedCap) break;
-                        }
+                        // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 02 / 7F 0A jg
+                        // 上限恒定生效（见 PKD-02）；眼神补丁只替换那个立即数。
+                        dropCount++;
+                        if (dropCount > nativeDropCap) break;
                     }
                 }
                 if (delList != null)
@@ -3096,15 +3187,15 @@ namespace GameSvr
         {
             var requestClientItemId = ProcessMsg.nParam1;
             // 战神 sub_6D09D0 gate order, verbatim:
-            //   0x6D09E3  cmp byte [ebx+0x73],0   ; m_boDeath   -> -1
+            //   0x6D09E3  cmp byte [ebx+0x73],0   ; m_boGhost   -> -1
             //   0x6D09ED  cmp byte [ebx+0x461],0  ; m_boDealing -> -1   <-- WAS MISSING
             //   0x6D09FA  cmp dword [ebx+0xBB0],0 ; hero == nil -> -1
-            //   0x6D0A0D  call sub_772DA8         ; hero ghost  -> -1
+            //   0x6D0A0D  call sub_772DA8         ; hero death [+0x74] -> -1
             // Without the m_boDealing gate a player could stage an item in a trade and
             // then shunt the same object reference into the hero bag: the deal list and
             // the hero bag both hold it, the deal completes and hands it to the
             // counterparty while the hero bag keeps its copy -> two-container dupe.
-            if (m_HeroObject == null || m_boDeath || m_boDealing
+            if (m_HeroObject == null || m_boGhost || m_boDealing
                 || m_HeroObject.m_boDeath)
             {
                 SendDefMessage(Grobal2.SM_TOHEROBAG_FAIL, -1, 0, 0, 0, "");
@@ -3152,11 +3243,11 @@ namespace GameSvr
         {
             var requestClientItemId = ProcessMsg.nParam1;
             // 战神 sub_6D0B00 has the identical gate ladder:
-            //   0x6D0B13  cmp byte [ebx+0x73],0   ; m_boDeath   -> -1
+            //   0x6D0B13  cmp byte [ebx+0x73],0   ; m_boGhost   -> -1
             //   0x6D0B1D  cmp byte [ebx+0x461],0  ; m_boDealing -> -1   <-- WAS MISSING
             //   0x6D0B2A  cmp dword [ebx+0xBB0],0 ; hero == nil -> -1
-            //   0x6D0B3D  call sub_772DA8         ; hero ghost  -> -1
-            if (m_HeroObject == null || m_boDeath || m_boDealing
+            //   0x6D0B3D  call sub_772DA8         ; hero death [+0x74] -> -1
+            if (m_HeroObject == null || m_boGhost || m_boDealing
                 || m_HeroObject.m_boDeath)
             {
                 SendDefMessage(Grobal2.SM_TOHUMBAG_FAIL, -1, 0, 0, 0, "");
