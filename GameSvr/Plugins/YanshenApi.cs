@@ -1442,7 +1442,14 @@ namespace GameSvr.Plugins
         /// <summary>作者原文只给了 This_player.GetV(N,1~6) 这一档，即 jp1..jp6。</summary>
         private const int RecycleExtremeSlots = 6;
 
-        /// <summary>元素位 1-17，与 Ys_GetOther(types=1) 公布的范围一致。</summary>
+        /// <summary>
+        /// 元素位 1-17。原先按 Ys_GetOther(types=1) 的公布范围推断，现由插件字节确证：
+        /// 脱壳转储 <c>staging/yanshen208_strparam_runtime_dump_20260719/</c>
+        /// <c>yanshen2_0_8_dll.memory.bin</c>（基址 0x10000000）里，读到配置键
+        /// <c>元素开关</c>（VA 0x102BF810）并通过 <c>0x1006C532 cmp byte [eax+8],0</c>
+        /// 判开关之后，是一段完全展开的取值序列：<c>0x1006C579</c> 起连续 17 次
+        /// <c>push N / call 0x10065F00</c>，N 恰为 1..17 连续无缺口，末次在 <c>0x1006C68F</c>。
+        /// </summary>
         private const int RecycleElementSlots = 17;
 
         /// <summary>与 NPC 给予灵符同一 reason（PasApiBridge.NativeGive / 魔塔奖励都用 23001）。</summary>
