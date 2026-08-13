@@ -57,6 +57,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChatShieldExactCheck", "Aud
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeGroupMaxMembersCheck", "AuditTools\NativeGroupMaxMembersCheck\NativeGroupMaxMembersCheck.csproj", "{7EEE68DE-931E-4DF8-8C4A-334D87C1EA21}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NativeCharPushedDealCancelCheck", "AuditTools\NativeCharPushedDealCancelCheck\NativeCharPushedDealCancelCheck.csproj", "{4185AC81-47B4-4694-AC04-0AD47923EF67}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -379,6 +381,18 @@ Global
 		{7EEE68DE-931E-4DF8-8C4A-334D87C1EA21}.Release|x64.Build.0 = Release|Any CPU
 		{7EEE68DE-931E-4DF8-8C4A-334D87C1EA21}.Release|x86.ActiveCfg = Release|Any CPU
 		{7EEE68DE-931E-4DF8-8C4A-334D87C1EA21}.Release|x86.Build.0 = Release|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Debug|x64.Build.0 = Debug|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Debug|x86.Build.0 = Debug|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Release|x64.ActiveCfg = Release|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Release|x64.Build.0 = Release|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Release|x86.ActiveCfg = Release|Any CPU
+		{4185AC81-47B4-4694-AC04-0AD47923EF67}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -406,6 +420,7 @@ Global
 		{A74960AB-92E8-4CEB-B450-7A6711866549} = {B7F10ED7-40B9-4063-F4B2-F2928D75FB2A}
 		{DB273D35-AF0C-4E24-8D52-1AFF8F592D6E} = {B7F10ED7-40B9-4063-F4B2-F2928D75FB2A}
 		{7EEE68DE-931E-4DF8-8C4A-334D87C1EA21} = {B7F10ED7-40B9-4063-F4B2-F2928D75FB2A}
+		{4185AC81-47B4-4694-AC04-0AD47923EF67} = {B7F10ED7-40B9-4063-F4B2-F2928D75FB2A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {425FF5BB-3CA9-4756-A222-E1BBF4218F66}
