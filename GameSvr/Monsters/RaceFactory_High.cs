@@ -134,6 +134,11 @@ namespace GameSvr
                     cert = new CreateBombMon();
                     break;
 
+                // race 167 TSuperSkeleton : WhiteSkeleton —— 见 Monster/SuperSkeleton.cs
+                case 167:
+                    cert = new SuperSkeleton();
+                    break;
+
                 // race 174 TFoxBossMon : AnimalObject —— 见 Monster/FoxBossMon.cs
                 case 174:
                     cert = new FoxBossMon();
