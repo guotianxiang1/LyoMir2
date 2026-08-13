@@ -72,16 +72,19 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
         YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Notify, true),
     ("捡物触发", "@pickpre", 0x10032CC0, new uint[] { 0x006B770C }, new uint[] { 0x006B7711 },
         YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Notify, true),
+    // 三条在 w/ysa2 接线：sub_76E268 / sub_76DE1C / sub_76E0B4 三个宿主函数由
+    // 「rel32 调用目标普查」定名，分别对应 C# 的 ApplyNativeDirectMagicEffect /
+    // ApplyNativeSingleMagicEffect / ApplyNativeAreaMagicEffect。
     ("攻击触发", "@MyAttack", 0x10032CC0, new uint[] { 0x0076E35D }, new uint[] { 0x0076E362 },
-        YanshenTriggerDispatch.Slot.WithParams, 4, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.WithParams, 4, YanshenTriggerDispatch.HostAction.Notify, true),
     ("魔法攻击触发", "@MyMagicAttack", 0x10032CC0, new uint[] { 0x0076DE84 }, new uint[] { 0x0076DE8A },
-        YanshenTriggerDispatch.Slot.WithParams, 5, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.WithParams, 5, YanshenTriggerDispatch.HostAction.Notify, true),
     ("盘古穿戴触发", "@ChangeEquip", 0x10032FD0,
         new uint[] { 0x006D8E35, 0x006D8E4D }, new uint[] { 0x006D8E3A, 0x006D8E52 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("盘古魔法攻击触发", "@MagicAttack", 0x10032FD0,
         new uint[] { 0x0076E1AF, 0x0076DEC0 }, new uint[] { 0x0076E1B6, 0x0076DEC7 },
-        YanshenTriggerDispatch.Slot.WithParams, 3, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.WithParams, 3, YanshenTriggerDispatch.HostAction.Notify, true),
     ("刀刀切割", "@Cutting", 0x10032CC0, new uint[] { 0x00767BAE }, new uint[] { 0x00767BB4 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("新倍攻和暴击", "@baoji", 0x10032CC0, new uint[] { 0x0076C88B }, new uint[] { 0x0076C890 },

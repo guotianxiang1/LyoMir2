@@ -353,7 +353,7 @@ namespace GameSvr.Plugins
                 ConfigKey = "攻击触发", ScriptLabel = "@MyAttack",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D2D50 },
                 HostTargets = new uint[] { 0x0076E35D }, HostResumes = new uint[] { 0x0076E362 },
-                DispatchSlot = Slot.WithParams, ParamCount = 4, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.WithParams, ParamCount = 4, Action = HostAction.Notify, Wired = true,
                 Note = "桩体 = .rdata 0x102CC6F8 x206 模板 → 222 字节，尾部 +0x0D4 重放被覆盖的 5 字节 "
                      + "`68 C8 00 00 00 push 0xC8` 后 jmp 0x76E362 → Notify，**无门**。This_Player = ebx。"
                      + "四个 Variant：①`[ebp-8]` 经 0x41AFE4(cl=0xFC) → 伤害值；②`[esi+0x106]` ShortString "
@@ -361,15 +361,18 @@ namespace GameSvr.Plugins
                      + "④VType=2(varSmallint)，`cmp [esi],0x6AC8C8` 命中写 1、否则留 0 = 「被打者是玩家」。"
                      + "宿主 sub_76E268（29 个调用者：怪物 0x66CBxx、英雄 0x690Dxx、魔法特效 0x771xxx…），"
                      + "钩子在 0x76E357 `cmp [ebp-8],0 / jle` 之后、0x76E369 `call 0x76B4F8`（对 esi 落伤害）之前。"
-                     + "【缺口】sub_76E268 未定名、C# 对应方法未确认；它是**每次命中都跑**的热点，"
-                     + "接错位置会改变伤害链顺序。补齐所需：给 sub_76E268 定名并锁定其 C# 等价方法与 [ebp-8] 语义。",
+                     + "序言 0x76E271 `mov [ebp-4],ecx` / 0x76E274 `mov esi,edx` / 0x76E276 `mov ebx,eax` ⇒ "
+                     + "ebx=攻击者、esi=被打者、[ebp-8]=0x76E2AF 存下的 `call [tgt_vmt+0x104]` 返回值=伤害。"
+                     + "sub_76E268 的 C# 端口就是 `TBaseObject.ApplyNativeDirectMagicEffect`（该方法本就按 "
+                     + "0x76E284/0x76E2B2/0x76E357/0x76E35D 逐行注释移植，只是没接触发），"
+                     + "落点 = `if (damage > 0)` 内、`SendDelayMsg` 之前。已接线（Wave3）。",
             },
             new()
             {
                 ConfigKey = "魔法攻击触发", ScriptLabel = "@MyMagicAttack",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D2F0B },
                 HostTargets = new uint[] { 0x0076DE84 }, HostResumes = new uint[] { 0x0076DE8A },
-                DispatchSlot = Slot.WithParams, ParamCount = 5, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.WithParams, ParamCount = 5, Action = HostAction.Notify, Wired = true,
                 Note = "桩体 = .rdata 0x102CD3D0 x255 模板 → 277 字节。被覆盖的 6 字节是 "
                      + "`8B F0 85 F6 7E 2C`，桩体**拆成两半重放**：开头 +0x000 `mov esi,eax`，"
                      + "结尾 +0x0FE `test esi,esi` 后用两条 jmp 复现 `jle 0x76DEB6` / 直落 0x76DE8A → Notify。"
@@ -377,9 +380,13 @@ namespace GameSvr.Plugins
                      + "②`[[ebp-4]+0x106]` ShortString = 被打者名；③`[[ebx+0x128]+0x48]` = 施法者 "
                      + "m_PEnvir.sMapDesc；④varSmallint，`[[ebp-4]]==0x6AC8C8` 则 1 = 「被打者是玩家」；"
                      + "⑤`[ebp-8]` 经 0x41AFE4。宿主钩子紧跟 0x76DE7E `call [target_vmt+0x104]`（算魔法伤害）。"
-                     + "【缺口】与 @MyAttack 同类：宿主函数（含 0x76DE84 的那个）连起点都没扫出来"
-                     + "（0x76DA00..0x76DE90 无可辨函数边界），[ebp-4]/[ebp-8] 的语义与 C# 对应方法未定。"
-                     + "同为每次施法都跑的热点，故 fail-closed。",
+                     + "本轮定名：宿主函数 = sub_76DE1C（`55 8B EC 83` 序言，全镜像唯一 rel32 调用者 "
+                     + "0x766E06，位于 TCreature.GetAndExecMsg sub_766878 内），C# 端口 = "
+                     + "`TBaseObject.ApplyNativeSingleMagicEffect`。帧槽：0x76DE27 `mov [ebp-4],edx` = 被打者；"
+                     + "0x76DE24 `mov [ebp-8],ecx`，其身份由 0x76DEAB `mov dx,word [ebp-8]` → `call 0x772468` "
+                     + "钉死 —— 该 call 的 C# 端口是 `ConsumeNativeOneShotMagicDamage(payload.SkillId)`，"
+                     + "故 **[ebp-8] = SkillId**。落点 = `ResolveFullMagicDamage` 之后、`if (damage > 0)` 之前"
+                     + "（伤害非正也发）。已接线（Wave3）。",
             },
             new()
             {
@@ -401,7 +408,7 @@ namespace GameSvr.Plugins
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100ADDBF, 0x100ADE0E },
                 HostTargets = new uint[] { 0x0076E1AF, 0x0076DEC0 },
                 HostResumes = new uint[] { 0x0076E1B6, 0x0076DEC7 },
-                DispatchSlot = Slot.WithParams, ParamCount = 3, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.WithParams, ParamCount = 3, Action = HostAction.Notify, Wired = true,
                 Note = "第二个站点（0x76DEC0→0x76DEC7）本轮解出：140 dword 拼进 [ebp-0xE64] → 147 字节，"
                      + "尾部重放被覆盖的 7 字节 `80 BB B6 01 00 00 00 cmp byte [ebx+0x1B6],0` → Notify。"
                      + "This_Player = ebx。三个 Variant 全部**就地手搓**："
@@ -409,9 +416,17 @@ namespace GameSvr.Plugins
                      + "②VType=2(varSmallint)，`[[ebp-4]]==0x6AC8C8` 则 1；③VType=3(varInteger)，值 = `[ebp-8]`。"
                      + "两个站点是同一条魔法链的前后两处（0x76E1AF 那支同形，只是判 `[esi+0x1B6]` 而非 `[ebx+0x1B6]`，"
                      + "模板 0x8F dword、缓冲另开），所以同一个开关要在两处各发一次。"
-                     + "【缺口】与 @MyMagicAttack 共用同一批未定名宿主帧（[ebp-4]/[ebp-8]），且第一个站点 "
-                     + "0x76E1AF 的桩体缓冲基址尚未从 0x100ADBCD..0x100ADDBF 的 movaps 序列里解出来，"
-                     + "无法确认两处参数向量完全一致。fail-closed。",
+                     + "本轮把第一个站点也解出来了（builder 0x100ADDBF，模板 [ebp-0x10A0] x143 → 150 字节）："
+                     + "This_Player = esi，被打者 = ebx，三个 Variant 同为 varString([ebx+0x106]) / "
+                     + "varSmallint([ebx]==0x6AC8C8) / varInteger([ebp+0x14])，尾部重放 "
+                     + "`80 BE B6 01 00 00 00 cmp byte [esi+0x1B6],0`。**两处参数向量确认完全一致**："
+                     + "调用者 0x766E01 把 `[ebx+0x24]` 装进 ecx 交给 sub_76DE1C（→ 其 [ebp-8]），"
+                     + "0x766E4F 把同一个 `[ebx+0x24]` 压成 sub_76E0B4 的 [ebp+0x14]，两者都是 SkillId。"
+                     + "宿主定名：sub_76E0B4（唯一 rel32 调用者 0x766E6A）= "
+                     + "`TBaseObject.ApplyNativeAreaMagicEffect`，其 [ebp-4]/[ebp-8] 是 X/Y（0x76E14B/0x76E156 "
+                     + "与 [tgt+0x12C]/[tgt+0x130] 比对 = isCenter）；sub_76DE1C = "
+                     + "`ApplyNativeSingleMagicEffect`。两个落点分别在 `if (isCenter)` 与 `if (payload.Arg0)` "
+                     + "内、`TryApplyNativeState26Single` 之前。已接线（Wave3）。",
             },
             new()
             {

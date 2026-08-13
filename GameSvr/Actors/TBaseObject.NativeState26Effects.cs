@@ -103,6 +103,10 @@ namespace GameSvr
             // nParam3 = the attacker, sMsg = nil, delay.
             if (damage > 0)
             {
+                // 眼神「攻击触发」的 trampoline 顶掉的正是 0x76E35D 的 `push 0xC8`，
+                // 桩体在尾部把它重放后才 jmp 0x76E362，所以派发落在这里、
+                // SendDelayMsg 之前。
+                Plugins.YanshenTriggerDispatch.FireMyAttack(this, target, damage);
                 target.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101,
                     unchecked((short)damage), damage, 0, ObjectId,
                     string.Empty, 200);
@@ -250,6 +254,11 @@ namespace GameSvr
             int damage = target.ResolveFullMagicDamage(this, payload.SkillId,
                 payload.Arg0, payload.Context, category, payload.Flags,
                 rawDamage);
+            // 0x76DE84 `mov esi,eax` 是「魔法攻击触发」的挂载点：桩体把这条重放在
+            // 开头、把 `test esi,esi / jle` 重放在结尾，所以派发夹在算完伤害与
+            // 判正之间 —— 伤害非正时也发。
+            Plugins.YanshenTriggerDispatch.FireMyMagicAttack(this, target, damage,
+                payload.SkillId);
             if (damage > 0)
             {
                 ApplyNativeMagicHitHealing();
@@ -258,6 +267,10 @@ namespace GameSvr
             }
             if (payload.Arg0)
             {
+                // 0x76DEC0 `cmp byte [ebx+0x1B6],0` 是「盘古魔法攻击触发」的第二个
+                // 挂载点，桩体在尾部重放它，故派发在 state-26 之前。
+                Plugins.YanshenTriggerDispatch.FirePanguMagicAttack(this, target,
+                    payload.SkillId);
                 TryApplyNativeState26Single(target);
             }
         }
@@ -339,6 +352,10 @@ namespace GameSvr
                 }
                 if (isCenter)
                 {
+                    // 0x76E1AF `cmp byte [esi+0x1B6],0` —— 与 0x76DEC0 同一开关的
+                    // 第一个挂载点，同样在 state-26 之前重放着那条 cmp。
+                    Plugins.YanshenTriggerDispatch.FirePanguMagicAttack(this, target,
+                        payload.SkillId);
                     TryApplyNativeState26Single(target);
                 }
             }
