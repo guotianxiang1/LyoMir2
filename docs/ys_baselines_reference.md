@@ -161,6 +161,10 @@
   **判别法**：看异常堆栈里的源码路径。若显示的是别的 worktree（如 `wt2\audit3\...`）
   而不是你自己的树，那你测的就不是你的代码。
   **正确做法**：`dotnet build <proj>.csproj -o <独立临时目录>`，再跑该目录里的 exe。
+  **但 `-o` 目录要放在工作树内的相应深度**：有一批工具是从 exe 位置逐级向上找仓库根的
+  （判据是能否找到 `GameSvr/Actors/TBaseObject.cs`）。把 `-o` 指到仓库外，它们会报
+  「找不到仓库根」而不是断言失败 —— 那是环境错，别误判成回归。放进工作树内（例如
+  `<worktree>\_vout\<ToolName>`）即可，跑完删掉。
   实例：撤回 `ScatterRange 3→4` 后，共享目录的旧 exe 仍报
   `expected=4, actual=3`；用 `-o` 隔离重建后立刻 `PASS ... scatter-range=4`。
   同理，`_run_audittools.ps1` 是从共享目录找 exe 的，其批量结果需按此法复核后再采信。
