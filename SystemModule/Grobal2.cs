@@ -1789,5 +1789,30 @@ namespace SystemModule
         {
             return HUtil32.MakeLong(HUtil32.MakeWord(btRaceImg, btWeapon), HUtil32.MakeWord(btHair, btDress));
         }
+
+        // === SM missing-ident batch 2/4 (ident 666..1256, second quarter) ===========
+        // Down-wire idents whose native send points were reversed byte-for-byte from
+        // flat_image.bin (ImageBase 0x400000) for TBaseObject.SmIdent_Sm2.cs. Generic
+        // SM_<value> names are used where the native message carries no established
+        // semantic name, to avoid inventing meaning. Idents 917/924/925/965 already
+        // have SM_ constants above and are reused there; 950/1108 are fail-closed
+        // (unresolved body / global-manager dependency) and get no builder.
+        // Values that collide with an existing CM_ constant of the same number are
+        // intentional: the wire number is shared across the up/down directions.
+        public const int SM_689 = 689;
+        public const int SM_951 = 951;
+        public const int SM_959 = 959;
+        public const int SM_966 = 966;
+        public const int SM_1107 = 1107;
+        public const int SM_1109 = 1109;
+        public const int SM_1201 = 1201;
+        public const int SM_1233 = 1233;
+        public const int SM_1250 = 1250;
+        public const int SM_1251 = 1251;
+        public const int SM_1252 = 1252;
+        public const int SM_1253 = 1253;
+        public const int SM_1254 = 1254;
+        public const int SM_1255 = 1255;
+        public const int SM_1256 = 1256;
     }
 }
