@@ -10,9 +10,13 @@ using SystemModule;
 // social flows, capturing the real in-memory state mutations (not model stubs).
 //
 // Domains:
-//   TEAM / GROUP : the real TPlayObject.ClientCreateGroup + ClientAddGroupMember pipeline, resolving
-//                  members through the real UserEngine.GetPlayObject and mutating real
-//                  m_GroupMembers / m_GroupOwner state (JoinGroup). RUNS.
+//   TEAM / GROUP : the real 战神 two-step party pipeline. ClientCreateGroup / ClientAddGroupMember
+//                  (CM 1020 / 1021) only QUEUE an invite - their exhaustive E8-callee sets contain
+//                  no group-mutating callee, their single state change is sub_6F39B4 - so the
+//                  harness then drives the real CM 4412 accept through Operate, which is where
+//                  sub_6C3648 allocates the TGroup and both sides' m_GroupOwner is set. Members are
+//                  resolved through the real UserEngine.GetPlayObject and the real
+//                  m_GroupMembers / m_GroupOwner state is mutated. RUNS.
 //   CHANNEL      : the real NativeChannelManager.CreatePublic + Enter + QueryById on the shared
 //                  in-memory manager, mutating the real channel membership set. RUNS.
 //   RELATION     : SKIPPED (documented, not faked). The only relation store is NativeRelationMySqlStore;
@@ -55,7 +59,7 @@ try
     RunCorpsSkip();
 
     Console.WriteLine(
-        "PASS InProcSocialRunCheck team=REAL(ClientCreateGroup+ClientAddGroupMember->m_GroupMembers) "
+        "PASS InProcSocialRunCheck team=REAL(1020/1021-queue-only + 4412-accept->m_GroupMembers) "
         + "channel=REAL(NativeChannelManager.CreatePublic+Enter->members) relation=SKIP(mysql-only-store) "
         + "corps=SKIP(mysql-backed-store) single-process no-network no-DBSvr no-MySQL");
 }
@@ -88,25 +92,68 @@ void RunGroup(Envirnoment map)
     Assert(ReferenceEquals(M2Share.UserEngine.GetPlayObject("group-m1"), m1),
         "real UserEngine.GetPlayObject resolves a registered player by name");
 
-    // real create: the leader forms a group with m1
+    // ---------------------------------------------------------------------------------
+    // 战神 forms a party in TWO steps and this harness has to drive both, because CM 1020
+    // /1021 do NOT create anything. Exhaustive E8-callee enumeration of the two bodies:
+    //   sub_6C341C (1020) = {405500 4059C0 40C140 652784 6C3380 6C33CC 6F39B4}
+    //   sub_6C34EC (1021) = {405500 4059C0 40C140 652784 6B7BAC 6BBE84 6C33CC 6F39B4}
+    // Neither set contains sub_726B80 (TGroup.Create), sub_7272EC (insert member) or
+    // sub_6C3648 (create-on-accept); their single state change is
+    //   6C348A  E8 25 05 03 00   call 0x6F39B4    (1020, target in eax at 6C3488)
+    //   6C3572  E8 3D 04 03 00   call 0x6F39B4    (1021, target in eax at 6C3570)
+    // which only queues a pending request. Membership materialises exclusively from the
+    // CM 4412 accept: sub_6F3EA8 @6F3F21 cmp [edi+0xA80],0 / je -> 6F3F2E call 0x6C3648,
+    // and it is sub_6C3648 that allocates and wires the group:
+    //   6C36AB  E8 D0 34 06 00   call 0x726B80        ; TGroup.Create(ecx = inviter)
+    //   6C36B5  89 B0 80 0A 00 00 mov [eax+0xA80],esi ; inviter -> the new group
+    //   6C36BF  E8 28 3C 06 00   call 0x7272EC        ; insert the accepter
+    //   72739A  89 98 80 0A 00 00 mov [eax+0xA80],ebx ; accepter -> the same group
+    //   6C36E5  66 BA 94 02      mov dx,0x294         ; SM 660 to the INVITER
+    // and TGroup.Create pins ownership: 726BA6 mov [ebx+0x3C],edi (owner = inviter) /
+    // 726BE2 call 0x728518 (slot 0 := owner). So m_GroupOwner = the inviter for BOTH.
+    // ---------------------------------------------------------------------------------
     miCreateGroup.Invoke(leader, new object[] { "group-m1" });
+    Assert(leader.m_GroupOwner == null && m1.m_GroupOwner == null
+        && leader.m_GroupMembers.Count == 0,
+        "real ClientCreateGroup formed a group by itself; 战神 sub_6C341C only queues "
+        + "(6C348A call 0x6F39B4) and never calls sub_726B80/sub_7272EC/sub_6C3648");
+    Assert(HasPendingRequest(m1, leader, 0),
+        "real ClientCreateGroup did not queue a type-0 request ON THE TARGET "
+        + "(6C3484 xor ecx,ecx = type 0; 6C3488 mov eax,esi = target receives it)");
+    Log("TEAM ClientCreateGroup(leader,m1): queued type-0 invite on m1, no group yet "
+        + $"(leader.m_GroupMembers={leader.m_GroupMembers.Count}) — matches sub_6C341C");
+
+    // The accept is the real CM 4412 handler, reached through the real Operate dispatcher.
+    m1.Operate(NativeMessage(Grobal2.CM_REPLY_GROUP_MESSAGE, 1, 0, leader.m_sCharName));
     bool createdOk = leader.m_GroupMembers != null && leader.m_GroupMembers.Count == 2
         && leader.m_GroupMembers.Contains(m1)
         && ReferenceEquals(m1.m_GroupOwner, leader)
         && ReferenceEquals(leader.m_GroupOwner, leader);
-    Log($"TEAM ClientCreateGroup(leader,m1): m_GroupMembers={leader.m_GroupMembers?.Count} "
+    Log($"TEAM 4412 accept(m1 -> leader): m_GroupMembers={leader.m_GroupMembers?.Count} "
         + $"leader.m_GroupOwner={(ReferenceEquals(leader.m_GroupOwner, leader) ? "leader" : "?")} "
         + $"m1.m_GroupOwner={(ReferenceEquals(m1.m_GroupOwner, leader) ? "leader" : "?")}");
-    Assert(createdOk, "real ClientCreateGroup formed a 2-member group with m1.m_GroupOwner=leader");
+    Assert(createdOk,
+        "the real 1020-invite + 4412-accept chain did not form a 2-member group with "
+        + "m1.m_GroupOwner=leader (6F3F2E call 0x6C3648 -> 726BA6 mov [ebx+0x3C],edi)");
 
-    // real add: the leader adds m2 to the existing group
+    // Same two-step shape for 1021: queue, then accept.
     miAddGroupMember.Invoke(leader, new object[] { "group-m2" });
+    Assert(m2.m_GroupOwner == null && leader.m_GroupMembers.Count == 2,
+        "real ClientAddGroupMember joined the target without consent; 战神 sub_6C34EC's "
+        + "only state change is 6C3572 call 0x6F39B4");
+    Assert(HasPendingRequest(m2, leader, 0),
+        "real ClientAddGroupMember did not queue a type-0 request on the target "
+        + "(6C356C xor ecx,ecx)");
+
+    m2.Operate(NativeMessage(Grobal2.CM_REPLY_GROUP_MESSAGE, 1, 0, leader.m_sCharName));
     bool addedOk = leader.m_GroupMembers.Count == 3 && leader.m_GroupMembers.Contains(m2)
         && ReferenceEquals(m2.m_GroupOwner, leader);
-    Log($"TEAM ClientAddGroupMember(leader,m2): m_GroupMembers={leader.m_GroupMembers.Count} "
+    Log($"TEAM 4412 accept(m2 -> leader): m_GroupMembers={leader.m_GroupMembers.Count} "
         + $"m2.m_GroupOwner={(ReferenceEquals(m2.m_GroupOwner, leader) ? "leader" : "?")} "
         + $"roster=[{string.Join(",", leader.m_GroupMembers.Select(p => p.m_sCharName))}]");
-    Assert(addedOk, "real ClientAddGroupMember added m2 (m_GroupMembers=3, m2.m_GroupOwner=leader)");
+    Assert(addedOk,
+        "the real 1021-invite + 4412-accept chain did not add m2 (m_GroupMembers=3, "
+        + "m2.m_GroupOwner=leader; native 6F3F3B call 0x6C3838 -> sub_7272EC)");
 }
 
 void RunChannel()
@@ -211,4 +258,25 @@ void RegisterInEngine(params TPlayObject[] players)
         ?? throw new MissingMethodException("UserEngine.m_PlayObjectList");
     var list = (System.Collections.IList)listField.GetValue(M2Share.UserEngine);
     foreach (var p in players) list.Add(p);
+}
+
+// The 4412-4416 family carries its name 6-bit encoded, unlike the legacy 1019-1022 family
+// which passes the raw string in sMsg (dispatch 0x6D907B call 0x405708).
+TProcessMessage NativeMessage(int ident, int recog, int param, string name)
+{
+    return new TProcessMessage
+    {
+        wIdent = ident,
+        nParam1 = recog,
+        nParam2 = param,
+        Payload = EDcode.EncodeBuffer(HUtil32.GbkEncoding.GetBytes(name))
+    };
+}
+
+bool HasPendingRequest(TPlayObject recipient, TPlayObject requester, byte type)
+{
+    var method = typeof(TPlayObject).GetMethod("HasNativeGroupRequest",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMethodException("TPlayObject.HasNativeGroupRequest");
+    return (bool)method.Invoke(recipient, new object[] { requester, type });
 }

@@ -3637,12 +3637,10 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "groupsetv":
-                    if (args.Count >= 3)
-                    {
-                        SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                        result = PasValue.FromBool(true);
-                    }
-                    else result = PasValue.FromBool(false);
+                    // sub_6E0830 answers False for an ungrouped caller (6E083F je), so the
+                    // Boolean the script sees has to come from SetGroupPlayerVar itself.
+                    result = PasValue.FromBool(args.Count >= 3
+                        && SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]));
                     return true;
 
                 case "groupsets":
@@ -7791,9 +7789,8 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "groupsetv":
-                    if (args.Count >= 3 && CurrentPlayer != null)
-                        SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                    result = PasValue.FromBool(args.Count >= 3 && CurrentPlayer != null);
+                    result = PasValue.FromBool(args.Count >= 3 && CurrentPlayer != null
+                        && SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]));
                     return true;
 
                 case "groupsets":
@@ -8380,21 +8377,44 @@ namespace GameSvr.PasEngine
             return SetPlayerVar(CurrentPlayer, type, group, index, value);
         }
 
+        /// <summary>
+        /// `GroupSetV` is registered on the TPlayer PAS face at 0x7318AF
+        /// (<c>mov edx,0x6E0830 / mov ecx,0x732A98</c>, the name blob "GroupSetV"),
+        /// so the handler is sub_6E0830 and it forwards to TGroup's sub_727754:
+        /// <code>
+        ///   6E0835  33 DB                 xor ebx,ebx          ; result := False
+        ///   6E0837  8B B0 80 0A 00 00     mov esi,[eax+0xA80]  ; the caller's TGroup
+        ///   6E083D  85 F6 / 6E083F 74 0D  test esi,esi / je    ; no group -> keep False
+        ///   6E0847  E8 08 6F 04 00        call 0x727754
+        ///   727765  C6 45 F3 01           mov byte [ebp-0xD],1 ; result preset True
+        ///   72776C  8B 58 44              mov ebx,[eax+0x44]   ; bound = member count
+        ///   72777E  8B 40 10              mov eax,[eax+0x10]   ; slot -> player
+        ///   72778C  85 C0 / 72778E 74 15  test eax,eax / je    ; empty slot -> skip
+        ///   727790  80 78 73 00 / 75 0F   cmp [eax+0x73],0/jne ; GHOST -> skip
+        ///   7277A0  E8 E3 7A FB FF        call 0x6DF288        ; per-member SetV
+        /// </code>
+        /// Three contracts follow. An ungrouped caller writes NOTHING and answers
+        /// False - 0x6E083F jumps straight to the epilogue, there is no fall back to
+        /// a plain SetV on self. Ghost members are skipped. And the result byte
+        /// preset at 0x727765 is never cleared, so the answer is True whenever a
+        /// group exists, however many members the ghost gate skipped.
+        /// </summary>
         internal bool SetGroupPlayerVar(char type, int group, int index, PasValue value)
         {
             var members = CurrentPlayer?.m_GroupOwner?.m_GroupMembers;
-            if (members == null || members.Count == 0)
+            if (members == null)
             {
-                return SetPlayerVar(type, group, index, value);
+                return false;
             }
 
-            bool anySuccess = false;
-            foreach (var player in members)
+            for (var i = 0; i < members.Count; i++)
             {
-                if (SetPlayerVar(player, type, group, index, value))
-                    anySuccess = true;
+                var player = members[i];
+                if (player == null || player.m_boGhost)
+                    continue;
+                SetPlayerVar(player, type, group, index, value);
             }
-            return anySuccess;
+            return true;
         }
 
         /// <summary>

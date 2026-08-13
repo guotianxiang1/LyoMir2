@@ -37,7 +37,7 @@
 | 回复邀请 | CM 4412 | `0x6F3EA8` | `HandleNativeGroupReply` | FAITHFUL |
 | 成员上限 | 11 | 槽数组 `cmp esi,0xB` @ `0x726CC1 83 FE 0B`；加人 `cmp [group+0x44],0xB` @ `0x6C3534` | `NativeGroupMaxMembers=11` / `GROUPMAX=11` | FAITHFUL |
 | 跨地图 | 同图才进经验池 | `0x726C8D 8B 87 28 01 00 00 / 3B 83 28 01 00 00 / 75` | `m_PEnvir == member.m_PEnvir` | FAITHFUL |
-| 死亡 | **不退组** | `726E68` 仅 2 个 E8：`0x6C3181`、`0x6C3D73` | 已删死亡 `DelMember` | 原 INVENTED，已修 |
+| 死亡 | **不退组** | `726E68` 仅 2 个 E8：`0x6C3181`、`0x6C3D73` | 已删死亡 `DelMember`；**第二轮又删了 30 秒 tick 扫描**（`TBaseObject.Base.cs` 原 587-605），它一直在抵消本条 | 原 INVENTED，已修（两处） |
 | 下线 | 见 BLOCKED | 上述两处不含 logout | `Disappear` 仍 `DelMember` | BLOCKED |
 | 队长转移 | `0x727FB0` | `0x727FE2..0x72800B` 找下一槽；串 `0x7280AC` ShortString len=16「 提升为小队队长!」 | `DelMember` 已按此转移 | 原 DIVERGENT，已修 |
 
@@ -229,8 +229,23 @@ C# `NativeRelationMySqlStore` 列：`Idx, RelationState, FirstPlayerID, FirstChr
 
 ## 5. BLOCKED
 
-1. **下线是否从槽里摘掉**：`726E68` 不含 logout。C# `Disappear` 仍 `DelMember`。没有对象析构/ghost 清槽的完整链，不敢删（List 模型下留悬挂引用更糟）。
-2. **BLACKROOM 图上 tick 退组**：`0x6B3C11 80 78 7C 00` 后 `call 0x6C3200`，只清自己的 `[+0xA80]`，**不** compact 槽。语义像单边离开，缺后续谁清槽的证据。
+1. ~~**下线是否从槽里摘掉**~~ —— **2026-08-13 第二轮已解，见 `docs/m_sgrp_group_round2_20260813.md` §3。**
+   定案：原生**不摘**。三条证据：`[player+0xA80]` 全镜像写形式只有 5 处（登录重挂
+   `0x6B9EE7`、主动离队 `0x6C3278`、建组 `0x6C331D`/`0x6C36B5`、AddMember `0x72739A`），
+   槽写入口 `sub_728518` 只有 3 个 E8 调用者、清槽 `sub_7284E8` 也只有 3 个，
+   下线路径一个都不在；而且原生存在**登录重挂**机制
+   （`0x6B9EE2 call 0x7282C8` 按 Handle+名字恢复 `[+0xA80]`，
+   `0x6B24FC call 0x6F5168 → 0x7280C0` 按 64 位角色 id 把新对象指针写回槽），
+   这套机制只有在「下线保槽」的前提下才有意义。
+   C# `Disappear → DelMember` 判 **DIVERGENT**，登录重挂判 **MISSING**，
+   两半必须一起落地（方案见 round2 §3.3），本轮未改。
+2. **BLACKROOM 图上 tick 退组**：`0x6B3C11 80 78 7C 00` 后 `call 0x6C3200`。
+   补充（round2）：`sub_6C3200` 会清 `[+0xA80]` **和** `[+0xA7C]`
+   （`0x6C3278` / `0x6C3280`），并在 `[group+0x44] > 1` 时先广播「退出小组」文案
+   （`0x6C3252 edx=0x6C32C4`, `0x6C3271 call 0x727068`），最后 `0x6C329A call 0x765E68`
+   发 RM `0x279C`。它确实**不** compact 槽——这与「原生靠 ghost 门过滤、不摘槽」
+   一致，不再是缺口。**仍 BLOCKED 的只剩「谁最终回收槽」**：候选是
+   `sub_726E68` 内的 `0x726F4D call 0x7284E8`，但从 `sub_6C3200` 到它没有直连边。
 3. **`0x6F4B4C` 登录钩子**：在「上线」喊话之后，调 `0x6A6340` / `0x6F6CB8`，不像 4430 推送。未追完，不当好友上线包。
 
 ---
@@ -242,3 +257,7 @@ C# `NativeRelationMySqlStore` 列：`Idx, RelationState, FirstPlayerID, FirstChr
 - 队长离开原生是**转移**不是解散。
 - 好友「上线了/下线了」不是好友协议；是 ident `0x4C` 的登录喊话。
 - 旧行会 1035–1045 / 753–771 静态 0 + 流量 0，维持删除。
+- **订正（第二轮）**：本文上面把 `[player+0xA7C]` 当成「队长镜像」是错的。
+  它存的是 `group+0x38` = **组自身的 Handle**（`0x726BA3 mov [ebx+0x38],ebx`
+  写进 group，`0x726BB3` / `0x7273A3` 复制给成员），用途是登录时给 `sub_7282C8`
+  做组身份匹配，与「谁是队长」（`group+0x3C`）是两个字段。
