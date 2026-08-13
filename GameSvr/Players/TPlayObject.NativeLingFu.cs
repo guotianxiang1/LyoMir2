@@ -245,7 +245,7 @@ namespace GameSvr
 
         internal void RefreshNativeLingFu()
         {
-            SendMsg(this, Grobal2.SM_LINGFU_CHANGED, 0, 0, 0, 0, string.Empty);
+            SendMsg(this, Grobal2.RM_LINGFU_CHANGED, 0, 0, 0, 0, string.Empty);
         }
 
         internal byte[] BuildNativeCapitalInfoBody()

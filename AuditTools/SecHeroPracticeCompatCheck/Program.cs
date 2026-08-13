@@ -418,12 +418,12 @@ static void VerifyNativeLingFuDebit()
         Assert(player.m_CreditCard.Dirty, "CreditCard debit did not mark dirty");
         Equal(1, player.m_MsgList.Count,
             "successful LingFu debit must enqueue one capital refresh");
-        Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+        Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
             "successful LingFu internal capital refresh ident");
         Assert(ReferenceEquals(player, player.m_MsgList[0].BaseObject),
             "successful LingFu internal capital refresh target");
         Assert(player.m_DefMsg == null ||
-               player.m_DefMsg.Ident != (ushort)Grobal2.SM_LINGFU_CHANGED,
+               player.m_DefMsg.Ident != (ushort)Grobal2.RM_LINGFU_CHANGED,
             "internal capital refresh 10054 leaked to the client header");
         Equal("10\tdebit-map\t90\t91\tdebit-player\t灵符\t30010\t8\tnpc扣除shop-npc-npc-map",
             (string)M2Share.LogStringList[0]!,
@@ -448,7 +448,7 @@ static void VerifyNativeLingFuDebit()
         Equal((ushort)42, player.m_DefMsg.Ident,
             "insufficient native LingFu debit sent a refresh");
         Assert(!player.m_MsgList.Any(message =>
-                message.wIdent == Grobal2.SM_LINGFU_CHANGED),
+                message.wIdent == Grobal2.RM_LINGFU_CHANGED),
             "insufficient native LingFu debit queued a capital refresh");
     }
     finally

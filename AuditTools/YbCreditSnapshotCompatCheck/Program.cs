@@ -113,7 +113,7 @@ static void CheckIndependentSnapshotState()
     Equal(17, player.m_CreditCard.UsedValue, "CreditCard.UsedValue");
 
     Equal(1, player.m_MsgList.Count, "snapshot message count");
-    Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
         "snapshot refresh ident");
 }
 
@@ -162,7 +162,7 @@ static void CheckIncreaseMessageOrder()
     Equal(0xFF, increase.nParam1, "increase foreground");
     Equal(0x38, increase.nParam2, "increase background");
     Equal("15 个元宝增加", increase.Buff, "increase text");
-    Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[1].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[1].wIdent,
         "10054 did not follow the increase hint");
 }
 
@@ -191,7 +191,7 @@ static void CheckResponseParamGate()
         "Apply1103 did not execute Param==1 gate");
     Equal(1, applyPlayer.m_MsgList.Count,
         "Param==1 changed the 10054 queue count");
-    Equal(Grobal2.SM_LINGFU_CHANGED, applyPlayer.m_MsgList[0].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, applyPlayer.m_MsgList[0].wIdent,
         "Param==1 did not queue 10054 before deal dispatch");
 }
 

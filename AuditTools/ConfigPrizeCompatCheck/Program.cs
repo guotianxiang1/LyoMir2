@@ -950,7 +950,7 @@ static NativeCreditCardService CreateCreditCardService(bool enabled)
 static void AssertNativeCapitalRefresh(TPlayObject player, string message)
 {
     var matches = player.m_MsgList.Where(entry =>
-        entry.wIdent == Grobal2.SM_LINGFU_CHANGED).ToArray();
+        entry.wIdent == Grobal2.RM_LINGFU_CHANGED).ToArray();
     Equal(1, matches.Length, message + " native 10054 refresh count");
 }
 
