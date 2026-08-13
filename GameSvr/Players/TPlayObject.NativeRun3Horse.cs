@@ -18,10 +18,15 @@ namespace GameSvr
             }
 
             // 战神 sub_6EE174 @0x6EE197: test byte [eax+0x85],0; jne refused
-            // Refusal at 0x6EE1A0: sends "当前地图不能召唤坐骑！" (Blue 0xFCFF)
+            // Refusal at 0x6EE1A0: 硬编码 mov cx,0xFCFF / mov edx,0x6EE248
+            // "当前地图不能召唤坐骑！" / call [vmt+0xD4]，与 0x6EE1C9 的马牌
+            // 拒绝字节完全同构。必须走 SendNativeHorseSystemMessage 的原始
+            // SendMsg(0xFF,0xFC)——SysMsg(Blue,Hint) 会改用配置色
+            // btBlueMsgFColor/BColor 并在 boShowPreFixMsg 时前置 sHintMsgPreFix，
+            // 二者皆非原生行为。
             if (m_PEnvir?.Flag.boNORIDE == true)
             {
-                SysMsg("当前地图不能召唤坐骑！", MsgColor.Blue, MsgType.Hint);
+                SendNativeHorseSystemMessage("当前地图不能召唤坐骑！");
                 ClearNativeHorseCallPending();
                 return;
             }
