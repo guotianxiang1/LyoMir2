@@ -604,6 +604,43 @@ namespace GameSvr
                     SendNativeStateArmMsg("刺术回复正常",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 79:
+                    // 0x742A6B  66 B9 DB FF / BA DC 34 74 00
+                    // 0x7434DC len 14 D7C6C9D5D7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("灼烧状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 80:
+                    // 0x742A83  66 B9 DB FF / BA F4 34 74 00
+                    // 0x7434F4 len 14 C1D1BBEAD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("裂魂状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 81:
+                    // 0x742A9B  66 B9 DB FF / BA 0C 35 74 00
+                    // 0x74350C len 14 C1F7D1AAD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("流血状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 82:
+                    // 0x742AB3  66 B9 DB FF / BA 24 35 74 00
+                    // 0x743524 len 14 BEAABBEAD7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("惊魂状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 83:
+                    // 0x742ACB  66 B9 DB FF / BA 3C 35 74 00
+                    // 0x74353C len 14 CCECEEB8D7B4CCACBDE1CAF8 A3A1
+                    SendNativeStateArmMsg("天罡状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 84:
+                    // 0x742AE3  66 B9 DB FF / BA 54 35 74 00
+                    // 0x743554 len 26
+                    //   BDF0D4AABBA4CCE5BBA4B6DCB1A3BBA4D7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("金元护体护盾保护状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 85:
                     // 0x742AFB  66 B9 DB FF / BA 78 35 74 00
                     // 0x743578 len 18 C4BED4AABBA4CCE5D7B4CCACBDE1CAF8A3A1
