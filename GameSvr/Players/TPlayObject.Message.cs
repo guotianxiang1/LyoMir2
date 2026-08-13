@@ -2108,6 +2108,23 @@ namespace GameSvr
                                 0, 1);
                             break;
                         case Grobal2.RM_WHISPER:
+                            // The recipient's whisper monitor is served here, ahead of
+                            // the packet, and it is a SysMsg rather than a second 103:
+                            //   0x6B4A9C 8B B0 44 19 00 00  mov esi,[eax+0x1944]
+                            //   0x6B4AA6 80 7E 73 00        cmp byte [esi+0x73],0
+                            //   0x6B4AB2 8B 43 10           mov eax,[ebx+0x10]  ; body
+                            //   0x6B4AC6 BA E0 63 6B 00     mov edx,0x6B63E0    ; "聆听私聊 "
+                            //   0x6B4AD8 66 B9 FF 38        mov cx,0x38FF
+                            //   0x6B4ADE FF 96 D4 00 00 00  call [VMT+0xD4]
+                            // Doing it on the arm rather than in Whisper() is what makes
+                            // the cross-server path (0x6C9793) reach the monitor too.
+                            if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
+                            {
+                                m_GetWhisperHuman.SendMsg(m_GetWhisperHuman,
+                                    Grobal2.RM_SYSMESSAGE, 0,
+                                    WhisperMonitorFColor, WhisperMonitorBColor, 0,
+                                    WhisperMonitorPrefix + ProcessMsg.sMsg);
+                            }
                             // Native RM 10031 arm, the only send point for ident 103:
                             //   0x6B4AE4 68 FC FF 00 00     push 0xFFFC        -> Param  (literal)
                             //   0x6B4AE9 66 8B 43 02        mov ax,[ebx+2]     -> Tag    = wParam

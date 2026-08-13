@@ -349,17 +349,18 @@ namespace GameSvr
                 // mov dx,[ebx+0x278]), Series is nParam1 = 0 and Recog is the speaker
                 // (0x6C9610 mov edx,ebx). Native has no permission branch and no
                 // colour tier on this path.
-                PlayObject.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
-                    format("{0}[{1}级]=> {2}", new object[] { m_sCharName, m_Abil.Level, saystr }));
+                var body = format("{0}[{1}级]=> {2}",
+                    new object[] { m_sCharName, m_Abil.Level, saystr });
+                PlayObject.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0, body);
+                // Speaker-side monitor copy, same shape as TPlayObject.Whisper:
+                // 0x6C9619 picks up [ebx+0x1944], 0x6C962F prefixes "聆听私聊 " and
+                // 0x6C963C mov cx,0x38FF sends it through [VMT+0xD4] as a SysMsg.
+                // The recipient's monitor is served by the RM_WHISPER arm at 0x6B4A99.
                 if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
                 {
-                    m_GetWhisperHuman.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
-                        format("{0}[{1}级]=> {2} {3}", new object[] { m_sCharName, m_Abil.Level, PlayObject.m_sCharName, saystr }));
-                }
-                if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                {
-                    PlayObject.m_GetWhisperHuman.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
-                        format("{0}[{1}级]=> {2} {3}", new object[] { m_sCharName, m_Abil.Level, PlayObject.m_sCharName, saystr }));
+                    m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_SYSMESSAGE, 0,
+                        WhisperMonitorFColor, WhisperMonitorBColor, 0,
+                        WhisperMonitorPrefix + body);
                 }
             }
         }
