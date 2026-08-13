@@ -455,7 +455,10 @@ namespace GameSvr
                                         switch (OSObject.CellType)
                                         {
                                             case CellType.OS_MOVINGOBJECT:
-                                                if (HUtil32.GetTickCount() - OSObject.dwAddTime >= 60000)
+                                                // 同 TPlayObject.SearchViewRange：原生 0x77A2EB
+                                                // call 0x765D64 有效性谓词并联 60 秒时限。
+                                                if (HUtil32.GetTickCount() - OSObject.dwAddTime >= 60000
+                                                    || IsNativeStaleCellActor(OSObject.CellObj))
                                                 {
                                                     OSObject.boObjectDisPose = true;
                                                     Dispose(OSObject);

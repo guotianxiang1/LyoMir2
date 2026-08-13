@@ -1794,7 +1794,13 @@ namespace GameSvr
                                 {
                                     if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                     {
-                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
+                                        // 本 override 正对原生 TEnvironment.DoPlayerSearchViewRange
+                                        // (sub_77A178)，其唯一摘链谓词是 0x77A2EB call 0x765D64
+                                        // (CName/PEnvir/PEnvir.MapName 三项合取)。60 秒时限是移植期
+                                        // 自造的替身，两者不等价，故并联而非替换：
+                                        // 见 docs/view_searchrange_predicate_20260814.md。
+                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
+                                            || IsNativeStaleCellActor(OSObject.CellObj))
                                         {
                                             Dispose(OSObject);
                                             MapCellInfo.Remove(nIdx);
