@@ -124,19 +124,19 @@ namespace GameSvr
             return true;
         }
 
+        /// <summary>0x770CA3 `66 BA 44 00` — the action-1028 arm looks the
+        /// caster's magic 68 up by id before it strikes.</summary>
+        private const ushort NativeSkill68MagicId = 0x44;
+
+        /// <summary>0x6EC9B2 `66 B9 04 04` / 0x771AD7 `68 04 04 00 00` — the
+        /// action code, which is also the wIdent the strike carries all the
+        /// way into ReceiveAttackDamge. It is NOT the magic id.</summary>
+        private const ushort NativeChargedFanActionCode = 0x404;
+
         /// <summary>
         /// sub_6EC8E8, reached from TPlayObject.Operate arm 0x6B6097 with
         /// eax = Self, edx = msg.nParam3 (the PEnvir), ecx = msg.wParam (the
         /// direction), [ebp+0xC] = msg.nParam1 (X), [ebp+8] = msg.nParam2 (Y).
-        ///
-        /// BLOCKED — the strike is not applied. 0x6EC9B2 `66 B9 04 04` enters
-        /// sub_7707A8 with action code 0x404, whose arm 0x770CA1 resolves magic
-        /// 68 through VMT+0xE8 and calls sub_771A5C. That in turn goes
-        /// VMT+0x4C (sub_744388, ported as ResolveNativeChargedCounterPower)
-        /// and then sub_76E268 -> target VMT+0x104 = sub_746318, the generic
-        /// struck pipeline, which has no mapped C# entry point. Calling only
-        /// the first half would charge the 45 s lock and the 10 % HP cost of
-        /// sub_744388 and deal nothing, so nothing is called at all.
         /// </summary>
         internal void ProcessNativeSkill68ChargeLanding(int landX, int landY,
             int direction, object envirPayload)
@@ -156,6 +156,144 @@ namespace GameSvr
             m_nCurrX = (short)landX;
             m_nCurrY = (short)landY;
             m_btDirection = (byte)direction;
+
+            // 0x6EC949-0x6EC9C5. The same dir-1/dir/dir+1 fan one cell out,
+            // but this scan stops at the FIRST proper target: 0x6EC9BF is an
+            // unconditional `jmp` to the epilogue, while only the reject arm
+            // 0x6EC9C1 does `inc esi / cmp esi,2 / jne`. The direction pushed
+            // at 0x6EC9B1 is the caster's own [+0x154], not the probe
+            // heading.
+            for (int offset = -1; offset <= 1; offset++)
+            {
+                int probeDir = m_btDirection + offset;
+                if (probeDir > 7)
+                    probeDir = 0;
+                if (probeDir < 0)
+                    probeDir = 7;
+                short probeX = 0;
+                short probeY = 0;
+                envir.GetNextPosition(m_nCurrX, m_nCurrY, probeDir, 1,
+                    ref probeX, ref probeY);
+                // 0x6EC995 sub_7784A8 with `6A 01`, then 0x6EC9A0
+                // sub_767498 = IsProperTarget.
+                var probe = envir.GetMovingObject(probeX, probeY, true)
+                    as TBaseObject;
+                if (probe == null || !IsProperTarget(probe))
+                {
+                    continue;
+                }
+                ExecuteNativeChargedFanAction(m_btDirection);
+                break;
+            }
+        }
+
+        /// <summary>
+        /// The action-1028 arm of the action dispatcher sub_7707A8. Only the
+        /// arm is ported, not the dispatcher: 0x7707E0 re-seats the direction
+        /// and 0x770803-0x770815 indexes the 34-entry table at 0x77081C with
+        /// `add eax,-1000`, so slot 28 is 0x770CA1.
+        /// <para>
+        /// The dispatcher's shared tail (0x770D25-0x770EBC — the [+0x188]
+        /// accumulator through VMT+0x1AC, then sub_73E804) is deliberately
+        /// NOT ported. It runs for all 34 action codes and C# drives ordinary
+        /// attacks through a different path, so replicating it on this one arm
+        /// would double-apply it. On the 1028 path its first block is inert
+        /// anyway: it scales [ebp-0xC], which 0x7707EB zeroes and the arm
+        /// never writes.
+        /// </para>
+        /// </summary>
+        private void ExecuteNativeChargedFanAction(byte direction)
+        {
+            // 0x7707E0 `8A 45 08 / 88 86 54 01 00 00`.
+            m_btDirection = direction;
+            // 0x770CA1 `33 C9 / 66 BA 44 00` then VMT+0xE8 = sub_741628: a
+            // plain forward scan of m_MagicList ([self+0x500]) for
+            // MagicInfo.wMagicID == 68, first match wins. cl = 0 here, so the
+            // `+0x0E == 0xFF` rejection at 0x741678 is skipped. A caster who
+            // never learned 68 gets nil, and native carries that nil straight
+            // into sub_771A5C.
+            ExecuteNativeChargedFanStrike(
+                FindNativeUserMagicById(NativeSkill68MagicId));
+        }
+
+        /// <summary>
+        /// sub_771A5C(eax = Self, edx = UserMagic). Sweeps dir-1, dir and
+        /// dir+1 one cell out and strikes EVERY proper target it finds — the
+        /// loop at 0x771AF1 has no early exit, unlike the landing arm's scan.
+        /// The result byte is the constant 2 written at 0x771A6A, which is why
+        /// the dispatcher's `test bl,bl` checks never fire.
+        /// </summary>
+        private void ExecuteNativeChargedFanStrike(TUserMagic userMagic)
+        {
+            var envir = m_PEnvir;
+            if (envir == null)
+            {
+                return;
+            }
+            // 0x771A6E `or esi,-1` then `inc esi / cmp esi,2 / jne`.
+            for (int offset = -1; offset <= 1; offset++)
+            {
+                // 0x771A7B `cmp eax,7 / jle` -> `xor eax,eax`, then
+                // 0x771A82 `test eax,eax / jge` -> `mov eax,7`.
+                int probeDir = m_btDirection + offset;
+                if (probeDir > 7)
+                    probeDir = 0;
+                if (probeDir < 0)
+                    probeDir = 7;
+                short hitX = 0;
+                short hitY = 0;
+                // 0x771AA1 sub_764CE0 with `push 1`: one step from the
+                // caster's CURRENT cell, recomputed each iteration.
+                envir.GetNextPosition(m_nCurrX, m_nCurrY, probeDir, 1,
+                    ref hitX, ref hitY);
+                // 0x771ABA sub_7784A8 with `6A 01`.
+                var target = envir.GetMovingObject(hitX, hitY, true)
+                    as TBaseObject;
+                // 0x771AC5 sub_767498 / 0x771ACC `je` -> next heading.
+                if (target == null || !IsProperTarget(target))
+                {
+                    continue;
+                }
+                // 0x771AD2 `mov ecx,[eax] / call [ecx+0x4C]` — VMT+0x4C is
+                // sub_744388, already ported. It arms its own 45 s cooldown
+                // on the first call, so headings two and three of the same
+                // sweep get -1 back and pay no further HP; -1 then falls out
+                // of ResolveFullMagicDamage at its `damage <= 0` gate.
+                int power = ResolveNativeChargedCounterPower(target,
+                    HUtil32.GetTickCount());
+                // 0x771AD7-0x771AEC. wIdent is the ACTION code 0x404, the
+                // TUserMagic rides in as the damage context, category is
+                // fixed 4 by sub_76E268 @0x76E296, flags come from
+                // byte [0x771B08] = 0x00, and arg0 is the `6A 01`.
+                ApplyNativeDirectMagicEffect(target,
+                    NativeChargedFanActionCode, true,
+                    MagicDamageContext.Capture(userMagic), 0, power);
+            }
+        }
+
+        /// <summary>
+        /// THumanKind/TPlayObject VMT+0xE8 = sub_741628 (TCreature's slot is
+        /// the unrelated sub_7725F0). Called here with cl = 0.
+        /// </summary>
+        private TUserMagic FindNativeUserMagicById(ushort magicId)
+        {
+            var list = m_MagicList;
+            if (list == null)
+            {
+                return null;
+            }
+            for (int i = 0; i < list.Count; i++)
+            {
+                TUserMagic magic = list[i];
+                // 0x741663 `mov eax,[eax] / mov ax,[eax+0x10]` — the id lives
+                // on the shared TMagic definition, not on the TUserMagic.
+                if (magic?.MagicInfo != null &&
+                    magic.MagicInfo.wMagicID == magicId)
+                {
+                    return magic;
+                }
+            }
+            return null;
         }
     }
 }
