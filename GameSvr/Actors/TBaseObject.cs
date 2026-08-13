@@ -3494,28 +3494,30 @@ namespace GameSvr
 
         public void SendFirstMsg(TBaseObject BaseObject, short wIdent, short wParam, int lParam1, int lParam2, int lParam3, string sMsg)
         {
+            // CRAFT-34: same ghost gate as SendMsg / sub_765E68. Hit = return, queue untouched.
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = lParam1,
-                        nParam2 = lParam2,
-                        nParam3 = lParam3,
-                        dwDeliveryTime = 0,
-                        BaseObject = BaseObject
-                    };
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Insert(0, SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = lParam1,
+                    nParam2 = lParam2,
+                    nParam3 = lParam3,
+                    dwDeliveryTime = 0,
+                    BaseObject = BaseObject
+                };
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
                 }
+                m_MsgList.Insert(0, SendMessage);
             }
             finally
             {
@@ -3526,30 +3528,43 @@ namespace GameSvr
         public void SendMsg(TBaseObject BaseObject, int wIdent, int wParam, int nParam1, int nParam2, int nParam3,
             string sMsg, object payload = null)
         {
+            // CRAFT-34 — native enqueue family gates on ghost byte [self+0x73], NOT death [self+0x74].
+            //   0x765E7D  80 7E 73 00           cmp byte [esi+0x73], 0
+            //   0x765E81  0F 85 DB 00 00 00     jne 0x765F62   ; epilogue pop/leave/ret 0x18
+            // Same shape, same landing (allocate nothing, queue nothing, send nothing):
+            //   0x765F81 sub_765F6C / 0x766075 sub_766060 / 0x76614D sub_76613C
+            // The only [+0x73] write in the image is MarkDelete:
+            //   0x7680EF  C6 43 73 01           mov byte [ebx+0x73], 1
+            //   (string @0x768138 = "TCreature.MarkDelete"; also writes [+0x14C]=GetTickCount)
+            // Die writes a different byte:
+            //   0x766323  C6 43 74 01           mov byte [ebx+0x74], 1   ; corpse still enqueues
+            // 1034 success/fail both call this (0x63FFCE / 0x63FFED call 0x765E68), so a ghosted
+            // player gets no RM_MAKEDRUG_* either.
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = nParam1,
-                        nParam2 = nParam2,
-                        nParam3 = nParam3,
-                        dwDeliveryTime = 0,
-                        BaseObject = BaseObject,
-                        boLateDelivery = false,
-                        Payload = payload
-                    };
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Add(SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = nParam1,
+                    nParam2 = nParam2,
+                    nParam3 = nParam3,
+                    dwDeliveryTime = 0,
+                    BaseObject = BaseObject,
+                    boLateDelivery = false,
+                    Payload = payload
+                };
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
                 }
+                m_MsgList.Add(SendMessage);
             }
             finally
             {
@@ -3563,30 +3578,32 @@ namespace GameSvr
         public void SendDelayMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3,
             string sMsg, int dwDelay, object payload = null)
         {
+            // CRAFT-34: sub_766060 @0x766075  80 7E 73 00 / 0x766079  0F 85 B1 00 00 00 jne 0x766130
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = lParam1,
-                        nParam2 = lParam2,
-                        nParam3 = lParam3,
-                        dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
-                        BaseObject = BaseObject,
-                        boLateDelivery = true,
-                        Payload = payload
-                    };
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Add(SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = lParam1,
+                    nParam2 = lParam2,
+                    nParam3 = lParam3,
+                    dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
+                    BaseObject = BaseObject,
+                    boLateDelivery = true,
+                    Payload = payload
+                };
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
                 }
+                m_MsgList.Add(SendMessage);
             }
             finally
             {
@@ -3599,36 +3616,38 @@ namespace GameSvr
         
         public void SendDelayMsg(int BaseObject, short wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, int dwDelay)
         {
+            // CRAFT-34: sub_76613C @0x76614D  80 7E 73 00 / 0x766151  0F 85 86 00 00 00 jne 0x7661DD
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = lParam1,
-                        nParam2 = lParam2,
-                        nParam3 = lParam3,
-                        dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
-                        boLateDelivery = true
-                    };
-                    if (BaseObject == Grobal2.RM_STRUCK)
-                    {
-                        SendMessage.ObjectId = Grobal2.RM_STRUCK;
-                    }
-                    else
-                    {
-                        SendMessage.BaseObject = M2Share.ObjectManager.Get(BaseObject);
-                    }
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Add(SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = lParam1,
+                    nParam2 = lParam2,
+                    nParam3 = lParam3,
+                    dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
+                    boLateDelivery = true
+                };
+                if (BaseObject == Grobal2.RM_STRUCK)
+                {
+                    SendMessage.ObjectId = Grobal2.RM_STRUCK;
                 }
+                else
+                {
+                    SendMessage.BaseObject = M2Share.ObjectManager.Get(BaseObject);
+                }
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
+                }
+                m_MsgList.Add(SendMessage);
             }
             finally
             {
