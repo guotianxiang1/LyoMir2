@@ -3205,9 +3205,60 @@ namespace GameSvr.Plugins
         public bool IsSummonShenShou() => Enabled("召唤神兽");
         public bool IsSummonKuLou() => Enabled("召唤骷髅");
         public bool IsModifyShenShou() => Enabled("修改召唤神兽");
-        public bool IsShenShouCount() => Enabled("神兽_数量");
-        public bool IsKuLouCount() => Enabled("召唤骷髅_数量");
-        public int ShenShouIdx() => GetParamInt("神兽_序号", -1);
+        public int ShenShouIdx() => GetParamInt("神兽_序号", 0);
+
+        /// <summary>
+        /// 眼神写进宿主 imm8 的从宠数量。取值域由「被改写的那条指令能编码什么」决定：
+        /// 插件只做上钳 127（<c>0x100A9DE9 83 F8 7F cmp eax,0x7F</c> /
+        /// <c>0x100A9DEC 7E 07 jle</c> / <c>0x100A9DEE B8 7F000000 mov eax,0x7F</c>），
+        /// 没有下钳，随后写入的是 <c>al</c>（<c>0x100A9E0F 88 85 2A EF FF FF</c>），
+        /// 所以负数按 8 位回绕而不是饱和到 0。
+        /// </summary>
+        static int NativeSlaveCountImm8(int v) => (byte)(v > 0x7F ? 0x7F : v);
+
+        /// <summary>
+        /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
+        /// 改写宿主 <c>0x0076EE98 6A 01</c> 的 imm8（目标 <c>0x0076EE99</c>，原字节 <c>01</c>），
+        /// 即 <c>0x0076EEB6 call [esi+0xEC]</c> 造宠调用的第一个栈参。
+        /// 补丁点 <c>0x100A9E9B call 0x10033340(src, 1, 0x0076EE99, 0x0076EE99)</c>；
+        /// 还原支 <c>0x100A9F33 C6 85 2B EF FF FF 01</c> 写回 <c>01</c>，即关闭态宿主就是 1。
+        /// </summary>
+        public int ShenShouSlaveCount() => IsSummonShenShou()
+            ? NativeSlaveCountImm8(GetParamInt("神兽_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤骷髅的从宠数量。同构：宿主 <c>0x0076EE1E 6A 01</c> 的 imm8
+        /// （目标 <c>0x0076EE1F</c>，原字节 <c>01</c>），补丁点
+        /// <c>0x100AA04B call 0x10033340(src, 1, 0x0076EE1F, 0x0076EE1F)</c>，
+        /// 上钳同样在 <c>0x100A9FED cmp eax,0x7F</c>；还原支 <c>0x100AA0BC</c> 写回 <c>01</c>。
+        /// 注意名字常量 <c>0x0076EE70</c>「变异骷髅」全镜像没有任何补丁指向它，
+        /// 所以骷髅只能改数量、不能改名字。
+        /// </summary>
+        public int KuLouSlaveCount() => IsSummonKuLou()
+            ? NativeSlaveCountImm8(GetParamInt("召唤骷髅_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤神兽的怪物名。眼神按 <c>神兽_序号</c> 覆盖宿主 <c>0x0076EEEC</c> 处的
+        /// 4 字节 GBK 串（原字节 <c>C9 F1 CA DE</c> =「神兽」）。Delphi 长度前缀
+        /// <c>[0x0076EEE8] = 4</c> 不在补丁范围内，所以候选名恒为两个汉字。
+        /// 选择链 <c>0x100A9E3E..0x100A9E5F</c>（sub/je 逐级比较）：
+        /// 0 →「神兽」（<c>0x100A9DD7</c> 预置 <c>C9F1CADE</c>）、
+        /// 1 →「月灵」（<c>0x100A9E59</c> 写 <c>D4C2C1E9</c>）、
+        /// 2 →「白虎」（<c>0x100A9E4D</c> 写 <c>A2BBD7B0</c> → 内存序 <c>B0D7BBA2</c>）、
+        /// 其余落回预置值。
+        /// </summary>
+        public string ShenShouName()
+        {
+            if (!IsSummonShenShou()) return "神兽";
+            return ShenShouIdx() switch
+            {
+                1 => "月灵",
+                2 => "白虎",
+                _ => "神兽",
+            };
+        }
 
         // ── Mage skill toggle checks ──
         public bool IsFireBallSwitch() => Enabled("火球主属性切换");
