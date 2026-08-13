@@ -1217,6 +1217,14 @@ namespace GameSvr
                 if (normNpc != null && normNpc.m_PEnvir == m_PEnvir && Math.Abs(normNpc.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(normNpc.m_nCurrY - m_nCurrY) <= 15)
                 {
                     normNpc.Click(this);
+                    // Native sub_6B8B28 stores the NPC into player+0xCD8 AFTER the
+                    // talk vcall returns, with no test of the script result:
+                    //   0x6B8BA2 call 0x720444 / 0x6B8BA7 mov [ebx+0xCD8],esi
+                    //   0x6B8C43 call 0x63DC74 / 0x6B8C48 mov [ebx+0xCD8],esi
+                    // Exhaustive disp 0xCD8 scan: those two plus setter 0x63DFAF.
+                    // There is no write of 0 anywhere. Bind here so @main itself
+                    // still sees the previous/nil field (Give audit 0x6DF341).
+                    m_NPC = normNpc;
                 }
             }
         }
