@@ -2333,9 +2333,6 @@ namespace GameSvr
                 case Grobal2.RM_DONATE_OK:
                     SendDefMessage(Grobal2.SM_DONATE_OK, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
-                case Grobal2.RM_DONATE_FAIL:
-                    SendDefMessage(Grobal2.SM_DONATE_FAIL, ProcessMsg.nParam1, 0, 0, 0, "");
-                    break;
                 case Grobal2.RM_MYSTATUS:
                     SendDefMessage(Grobal2.SM_MYSTATUS, 0, (short)GetMyStatus(), 0, 0, "");
                     break;
