@@ -1,0 +1,171 @@
+==============================================================================
+### D6  总开关四个子键的解析：四个 je 汇聚到同一个跳过标签
+==============================================================================
+
+1006B47C  2B 10                      sub      edx, dword ptr [eax]
+1006B47E  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B483  E8 58 57 07 00             call     0x100e0be0
+1006B488  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B48B  51                         push     ecx
+1006B48C  8B C8                      mov      ecx, eax
+1006B48E  E8 3D 5A 07 00             call     0x100e0ed0
+1006B493  68 C8 F7 2B 10             push     0x102bf7c8
+1006B498  8B C8                      mov      ecx, eax
+1006B49A  E8 71 5D 07 00             call     0x100e1210
+1006B49F  84 C0                      test     al, al
+1006B4A1  0F 84 8C 01 00 00          je       0x1006b633
+
+1006B4BD  A4                         movsb    byte ptr es:[edi], byte ptr [esi]
+1006B4BE  51                         push     ecx
+1006B4BF  8B C8                      mov      ecx, eax
+1006B4C1  E8 0A 5A 07 00             call     0x100e0ed0
+1006B4C6  68 C8 F7 2B 10             push     0x102bf7c8
+1006B4CB  8B C8                      mov      ecx, eax
+1006B4CD  E8 CE 59 07 00             call     0x100e0ea0
+1006B4D2  68 D0 F7 2B 10             push     0x102bf7d0
+1006B4D7  8B C8                      mov      ecx, eax
+1006B4D9  E8 C2 59 07 00             call     0x100e0ea0
+1006B4DE  80 78 08 00                cmp      byte ptr [eax + 8], 0
+1006B4E2  0F 84 4B 01 00 00          je       0x1006b633
+
+1006B4FE  A4                         movsb    byte ptr es:[edi], byte ptr [esi]
+1006B4FF  51                         push     ecx
+1006B500  8B C8                      mov      ecx, eax
+1006B502  E8 C9 59 07 00             call     0x100e0ed0
+1006B507  68 C8 F7 2B 10             push     0x102bf7c8
+1006B50C  8B C8                      mov      ecx, eax
+1006B50E  E8 8D 59 07 00             call     0x100e0ea0
+1006B513  68 D4 F7 2B 10             push     0x102bf7d4
+1006B518  8B C8                      mov      ecx, eax
+1006B51A  E8 81 59 07 00             call     0x100e0ea0
+1006B51F  80 78 08 00                cmp      byte ptr [eax + 8], 0
+1006B523  0F 84 0A 01 00 00          je       0x1006b633
+
+1006B53F  A4                         movsb    byte ptr es:[edi], byte ptr [esi]
+1006B540  51                         push     ecx
+1006B541  8B C8                      mov      ecx, eax
+1006B543  E8 88 59 07 00             call     0x100e0ed0
+1006B548  68 C8 F7 2B 10             push     0x102bf7c8
+1006B54D  8B C8                      mov      ecx, eax
+1006B54F  E8 4C 59 07 00             call     0x100e0ea0
+1006B554  68 D8 F7 2B 10             push     0x102bf7d8
+1006B559  8B C8                      mov      ecx, eax
+1006B55B  E8 40 59 07 00             call     0x100e0ea0
+1006B560  80 78 08 00                cmp      byte ptr [eax + 8], 0
+1006B564  0F 84 C9 00 00 00          je       0x1006b633
+
+==============================================================================
+### D6  汇聚点 0x1006B633 之后：关闭值停在预置 -2，门失效
+==============================================================================
+1006B633  68 C4 F7 2B 10             push     0x102bf7c4
+1006B638  68 BC F7 2B 10             push     0x102bf7bc
+1006B63D  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B642  E8 99 55 07 00             call     0x100e0be0
+1006B647  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B64A  51                         push     ecx
+1006B64B  8B C8                      mov      ecx, eax
+1006B64D  E8 7E 58 07 00             call     0x100e0ed0
+1006B652  68 E0 F7 2B 10             push     0x102bf7e0
+1006B657  8B C8                      mov      ecx, eax
+1006B659  E8 B2 5B 07 00             call     0x100e1210
+1006B65E  84 C0                      test     al, al
+
+==============================================================================
+### D5  规则解析全部是「按名查找」，没有任何成员枚举
+###     列出 sub_1006B020 里所有 push <.rdata 字符串> 的键名
+==============================================================================
+push 常量字符串 157 处：
+   '可叠材料'          VA 102BF7B0   push 处 3 个：1006B3D7 1006B3F3 1006B41A
+   '回收类型'          VA 102BF7BC   push 处 62 个：1006B448 1006B479 1006B4AC 1006B4ED 1006B52E 1006B56F
+   '总开关'           VA 102BF7C8   push 处 14 个：1006B493 1006B4C6 1006B507 1006B548 1006B589 1006B5CD
+   'v1'            VA 102BF7D0   push 处 12 个：1006B4D2 1006B595 1006B691 1006B70F 1006BA52 1006BA8D
+   'v2'            VA 102BF7D4   push 处 12 个：1006B513 1006B5D9 1006B6D0 1006B750 1006BAD1 1006BB0C
+   '关闭值'           VA 102BF7D8   push 处 4 个：1006B554 1006B61D 1006BE91 1006BF58
+   '回收倍率'          VA 102BF7E0   push 处 10 个：1006B652 1006B685 1006B6C4 1006B703 1006B744 1006BF8D
+   '元宝'            VA 102BF644   push 处 4 个：1006B7DF 1006B80E 1006C8E9 1006C91F
+   '灵符'            VA 102BF64C   push 处 4 个：1006B84A 1006B879 1006C95B 1006C991
+   '金币'            VA 102BF654   push 处 4 个：1006B8B1 1006B8E0 1006C9C9 1006C9FF
+   '经验'            VA 102B4130   push 处 4 个：1006B918 1006B947 1006CA41 1006CA77
+   '其他'            VA 102BF7EC   push 处 14 个：1006B989 1006B9BC 1006B9FB 1006BA46 1006BA81 1006BAC5
+   '值'             VA 102BF7F4   push 处 4 个：1006B9C8 1006BA07 1006CAF8 1006CB3E
+   '物品种类'          VA 102BF7F8   push 处 2 个：1006BD3E 1006BD65
+   '极品开关'          VA 102BF804   push 处 2 个：1006C19B 1006C1D0
+   '元素开关'          VA 102BF810   push 处 2 个：1006C526 1006C55B
+
+### jsoncpp 成员枚举 API（Value::begin/getMemberNames）在本函数的调用数
+###   —— 若为 0，则未知字段根本不会被看到，D5 成立
+   已知按名访问族 (0x100E0BE0/0DC0/1210/1240/0ED0) 调用数 = 152
+
+==============================================================================
+### INVENTED  回收入口 0x1006CF10 全函数
+==============================================================================
+1006CF10  55                         push     ebp
+1006CF11  8B EC                      mov      ebp, esp
+1006CF13  83 EC 10                   sub      esp, 0x10
+1006CF16  80 3D C5 B8 31 10 00       cmp      byte ptr [0x1031b8c5], 0
+1006CF1D  53                         push     ebx
+1006CF1E  75 0B                      jne      0x1006cf2b
+1006CF20  B8 19 FC FF FF             mov      eax, 0xfffffc19
+1006CF25  8B E5                      mov      esp, ebp
+1006CF27  5D                         pop      ebp
+1006CF28  C2 04 00                   ret      4
+1006CF2B  C7 45 F4 00 00 00 00       mov      dword ptr [ebp - 0xc], 0
+1006CF32  C7 45 F8 00 00 00 00       mov      dword ptr [ebp - 8], 0
+1006CF39  C7 45 FC 00 00 00 00       mov      dword ptr [ebp - 4], 0
+1006CF40  50                         push     eax
+1006CF41  53                         push     ebx
+1006CF42  52                         push     edx
+1006CF43  8B 45 08                   mov      eax, dword ptr [ebp + 8]
+1006CF46  89 45 F4                   mov      dword ptr [ebp - 0xc], eax
+1006CF49  8B 98 08 05 00 00          mov      ebx, dword ptr [eax + 0x508]
+1006CF4F  89 5D F8                   mov      dword ptr [ebp - 8], ebx
+1006CF52  8B 53 08                   mov      edx, dword ptr [ebx + 8]
+1006CF55  89 55 FC                   mov      dword ptr [ebp - 4], edx
+1006CF58  5A                         pop      edx
+1006CF59  5B                         pop      ebx
+1006CF5A  58                         pop      eax
+1006CF5B  8B 55 F8                   mov      edx, dword ptr [ebp - 8]
+1006CF5E  8B 4D F4                   mov      ecx, dword ptr [ebp - 0xc]
+1006CF61  FF 75 FC                   push     dword ptr [ebp - 4]
+1006CF64  E8 B7 E0 FF FF             call     0x1006b020
+1006CF69  83 C4 04                   add      esp, 4
+1006CF6C  89 45 F0                   mov      dword ptr [ebp - 0x10], eax
+1006CF6F  8B 45 F0                   mov      eax, dword ptr [ebp - 0x10]
+1006CF72  8B E5                      mov      esp, ebp
+1006CF74  5D                         pop      ebp
+1006CF75  C2 04 00                   ret      4
+1006CF78  5B                         pop      ebx
+1006CF79  8B E5                      mov      esp, ebp
+1006CF7B  5D                         pop      ebp
+1006CF7C  C3                         ret      
+1006CF7D  CC                         int3     
+1006CF7E  CC                         int3     
+1006CF7F  CC                         int3     
+
+==============================================================================
+### INVENTED  背包模型三个配置键的多编码扫描 + 回收函数内引用数
+==============================================================================
+
+--- 无限背包_是否勾选 ---
+   GBK      : 1 命中  VA 102C2C7C
+   裸ASCII   : 该名含非 ASCII，此编码不适用
+   UTF-16LE : 0 命中  
+   → 回收函数 0x1006B020..0x1006CF80 内引用数 = 0
+
+--- 无限背包_是否固定 ---
+   GBK      : 1 命中  VA 102BFAF0
+   裸ASCII   : 该名含非 ASCII，此编码不适用
+   UTF-16LE : 0 命中  
+   → 回收函数 0x1006B020..0x1006CF80 内引用数 = 0
+
+--- 固定格子 ---
+   GBK      : 2 命中  VA 102BFB04 VA 102C4478
+   裸ASCII   : 该名含非 ASCII，此编码不适用
+   UTF-16LE : 0 命中  
+   → 回收函数 0x1006B020..0x1006CF80 内引用数 = 0
+
+--- V变量控制格子 ---
+   GBK      : 1 命中  VA 102C44AC
+   裸ASCII   : 该名含非 ASCII，此编码不适用
+   UTF-16LE : 0 命中  
+   → 回收函数 0x1006B020..0x1006CF80 内引用数 = 0

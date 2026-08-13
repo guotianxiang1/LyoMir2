@@ -63,14 +63,19 @@ try
            rootKeyError.Contains("物品种类", StringComparison.Ordinal),
         "config without 物品种类 was accepted");
 
+    // 未知规则字段被忽略，其余字段照常生效 —— 原生只按名取，从不枚举成员：
+    // sub_1006B020 全域 157 处 push 常量字符串只涉及 16 个键名，全部喂给 jsoncpp 的
+    // 按名访问族（0x100E0BE0/0DC0/0EA0/0ED0/1210/1240，共 152 次调用）；装载校验
+    // sub_10090EF0 也只查 0x1009103E 物品种类 与 0x10091056 回收类型 两个根键。
+    // 这条断言此前钉的是 C# 自己的 fail-closed（default: throw），不是原版契约。
     WriteGbk(recyclePath,
         "{\"物品种类\":{\"屠龙\":\"类型1\"}," +
         "\"回收类型\":{\"类型1\":{\"金币\":1,\"没这个键\":1}}}");
-    Assert(!manager.ReloadRecycleConfig(out var schemaError) &&
-           schemaError.Contains("回收类型", StringComparison.Ordinal),
-        "unknown 回收类型 field was not rejected");
-    Assert(manager.RecycleConfigItemCount == 1,
-        "schema failure replaced the last valid snapshot");
+    Assert(manager.ReloadRecycleConfig(out var schemaError),
+        "unknown 回收类型 field must be ignored, not rejected: " + schemaError);
+    Assert(manager.RecycleConfigItemCount == 1 &&
+           manager.IsRecycleItemConfigured("屠龙"),
+        "unknown field dropped the sibling rules");
 
     WriteGbk(recyclePath,
         "{\"可叠材料\":{\"新材料\":\"类型2\"},\"物品种类\":{}," +
@@ -103,7 +108,7 @@ try
     CheckUnmatchedItemsAreNeverDeleted(root);
 
     Console.WriteLine(
-        "YanshenRecycleConfigCheck PASS startup=GBK schema=validated rootKeys=物品种类+回收类型 " +
+        "YanshenRecycleConfigCheck PASS startup=GBK unknownField=ignored rootKeys=物品种类+回收类型 " +
         "reload=atomic lastValid=preserved autoRecycle=1/-999 " +
         "production=313items/2dangling nonMatch=neverDeleted");
 }
