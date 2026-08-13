@@ -190,5 +190,37 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_965, recog, 0, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        // SM 1250/1254/1255 — three sibling sends in the same activity subsystem, all
+        // via [obj+0x250] with Recog=-1 and every stack arg 0 (no body). Verbatim, e.g.
+        // 1250 @0x006F0A18:
+        //   006F0A05  6A 00              push 0             ; #1 Param  = 0
+        //   006F0A07  6A 00              push 0             ; #2 Tag    = 0
+        //   006F0A09  6A 00              push 0             ; #3 Series = 0
+        //   006F0A0B  6A 00              push 0             ; #4 sMsg   = nil
+        //   006F0A0D  83 C9 FF           or  ecx,0xFFFFFFFF ; Recog     = -1
+        //   006F0A10  66 BA E2 04        mov dx,0x4E2       ; ident 1250
+        //   006F0A18  FF 93 50 02 00 00  call [obj+0x250]
+        // 1254 @0x006F0F72 (dx=0x4E6) and 1255 @0x006F0EAE (dx=0x4E7) are byte-identical
+        // apart from the ident immediate. Trigger for all three: `call 0x6D3694` result
+        // is stored to byte[self+0x18C8] and the send fires only when it is 0
+        // (test bl,bl / jne skip).
+        internal static (ClientPacket Header, byte[] Body) BuildSm1250()
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1250, -1, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        internal static (ClientPacket Header, byte[] Body) BuildSm1254()
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1254, -1, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        internal static (ClientPacket Header, byte[] Body) BuildSm1255()
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1255, -1, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
