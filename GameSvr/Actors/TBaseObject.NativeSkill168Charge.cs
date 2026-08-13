@@ -77,10 +77,19 @@ namespace GameSvr
                 return false;
             }
 
+            // 0x6EF193 `E8 C0 96 08 00 call 0x778858` / `85 C0 / 7F 72` —
+            // sub_778858 names itself TEnvironment.GetMovObjCount in its own
+            // exception text at 0x778A7C, and any live mover on the cell
+            // refuses the charge.
+            if (envir.GetNativeMovObjCount(targetX, targetY) > 0)
+            {
+                SendNativeSkill168UnreachableHint();
+                return false;
+            }
+
             // 0x7797CC with the literal 1 (`6A 01` at 0x6EF1A3) = boFlag true,
-            // so occupancy is not re-checked inside the mover. 0x778858 (the
-            // call that `7F`s on a positive result) is not mapped onto a C#
-            // helper and is left BLOCKED rather than guessed as GetXYObjCount.
+            // so occupancy is not re-checked inside the mover; the call above
+            // is what guards it.
             if (envir.MoveToMovingObject(m_nCurrX, m_nCurrY, this,
                     targetX, targetY, true) <= 0)
             {
@@ -92,9 +101,11 @@ namespace GameSvr
                 NativeSkill168CooldownMilliseconds, now);
             m_nCurrX = (short)targetX;
             m_nCurrY = (short)targetY;
-            // VMT+0xE0 ident 0xDE5 (3557) with nParam=0x10A is a SendRefMsg
-            // broadcast, not the +0x250 wire slot. No C# RM→SM case exists
-            // for 3557; omitted rather than invented.
+            // 0x6EF1FE `66 BA E5 0D` + VMT+0xE0 with boSendSelf = 1. Series is
+            // the literal `68 0A 01 00 00` = 0x10A pushed at 0x6EF1F1, i.e.
+            // magic 266's id and not 168's — that is what the bytes say.
+            SendRefMsg(Grobal2.RM_NATIVE_BLINK_MOVE,
+                NativeSkill266ColdTimeKey, targetX, targetY, 0, "");
             return true;
         }
 
