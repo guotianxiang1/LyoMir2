@@ -3069,6 +3069,7 @@ namespace GameSvr
                 default:
                     if (!TryHandleInlayCm(ProcessMsg)
                         && !TryHandleQiankunCm(ProcessMsg)
+                        && !TryHandleItemTransferCm(ProcessMsg)
                         && !TryHandleNativeSocialProtocol(ProcessMsg)
                         && !TryHandleNativeCmTailProtocol(ProcessMsg)
                         && !TryHandleNativeCmQ1(ProcessMsg)
