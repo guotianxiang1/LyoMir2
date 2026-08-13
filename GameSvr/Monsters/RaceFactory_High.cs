@@ -114,6 +114,11 @@ namespace GameSvr
                     cert = new SuicideBatEx();
                     break;
 
+                // race 155 TSuperKingFireDragon : KingFireDragon —— 见 Monster/SuperKingFireDragon.cs
+                case 155:
+                    cert = new SuperKingFireDragon();
+                    break;
+
                 // race 157 TMonSingleMagFox : AtMonster —— 见 Monster/MonSingleMagFox.cs
                 case 157:
                     cert = new MonSingleMagFox();
