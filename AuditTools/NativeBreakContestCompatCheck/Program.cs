@@ -405,8 +405,11 @@ static void VerifySourceContract()
         "final inclusive RNG condition missing");
     Contains(source, "MidpointRounding.ToEven",
         "nearest-even rounding missing");
-    Contains(source, "<=\n                NativeBreakContestWindowMilliseconds",
-        "strict greater-than expiry missing");
+    // Files are CRLF; pin the operator, not a particular line break.
+    var expiryCollapsed = string.Join(' ', source.Split((char[])null,
+        StringSplitOptions.RemoveEmptyEntries));
+    Contains(expiryCollapsed, ") <= NativeBreakContestWindowMilliseconds",
+        "unsigned elapsed <= window keep is missing");
     string resolverPath = Path.Combine(root, "GameSvr", "Actors",
         "TBaseObject.NativeMagicDamage.cs");
     string resolver = File.ReadAllText(resolverPath);
