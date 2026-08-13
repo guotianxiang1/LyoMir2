@@ -392,10 +392,16 @@ namespace GameSvr
                             {
                                 m_boInSafeArea = boInSafeArea;
                                 RefNameColor();
-                                // Notify 战神 client of safe zone entry/exit
+                                // 0x6B308B  8B 45 FC / E8 C1 53 0B 00  call 0x768454 (InSafeArea)
+                                // 0x6B3096  3A 82 FE 03 00 00  cmp al,[edx+0x3FE]   ; m_boInSafeArea
+                                // 0x6B309C  74 43              je  0x6B30E1         ; unchanged -> no packet
+                                // 0x6B30A3  88 91 FE 03 00 00  mov [ecx+0x3FE],dl
+                                // 0x6B30A9  84 D2 / 74 1B      test dl,dl / je 0x6B30C8
+                                //   true  0x6B30AD 6A 06 / 6A 01 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
+                                //   false 0x6B30C8 6A 06 / 6A 00 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
+                                // i.e. Recog=0, Param=6, Tag=(1|0), Series=0, no string.
                                 SendDefMessage(Grobal2.SM_COMMON_INFORMATION,
-                                    boInSafeArea ? 1 : 0, m_nCurrX, m_nCurrY, 0,
-                                    boInSafeArea ? "safe_enter" : "safe_exit");
+                                    0, 6, boInSafeArea ? 1 : 0, 0, string.Empty);
                             }
                         }
                     }
