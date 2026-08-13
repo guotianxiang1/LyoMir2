@@ -19,7 +19,7 @@ CheckType12NativeDoubling();
 CheckSourceOrdering();
 
     Console.WriteLine(
-    "PASS timed-ability state=0..111+16B-LE state20=timed-carrier legacy21..31=authority " +
+    "PASS timed-ability state=0..111+16B-LE low-word=flat-bitset+0x168 state20=timed-carrier " +
     "mapping=27->59+43->75+44->76+45->77+61->93+62->94+64->96+68->100 gate52=zero-side-effects gate16=45/53-only " +
     "player45=visible-3415+657 hero45=no-hook expiry=two-phase-oldest-first " +
     "exit=transient-clear type12=native-double producers16/52=NO-GO(scope-closed)");
@@ -95,10 +95,26 @@ static void CheckState20AndLegacyWordAuthority()
     Assert(actor.HasNativeActiveState(20),
         "slot11 overlay did not restore cleared state20 carrier");
 
-    Assert(actor.SetNativeActiveState(21), "raw legacy state 21 set");
-    actor.m_nCharStatus = actor.GetCharStatus();
-    Assert(!actor.HasNativeActiveState(21),
-        "raw state 21 became a second lifetime authority");
+    // Native sub_772974 keeps one flat bitset with no per-index owner split:
+    //   00772993  80 FB 6F              cmp  bl, 0x6F
+    //   00772996  77 0A                 ja   0x7729A2      ; > 111 -> no store
+    //   00772998  83 E3 7F              and  ebx, 0x7F
+    //   0077299B  0F AB 9E 68 01 00 00  bts  dword [esi+0x168], ebx
+    // sub_7729A8 mirrors it with `btr` @0x7729B9 and sub_772960 reads it back
+    // with `bt` @0x772968, so 21..31 are stored exactly like 0..20. A bit the
+    // timed layer sets there has to survive the next GetCharStatus() rebuild
+    // instead of being re-derived from the legacy m_wStatusTimeArr overlay:
+    // otherwise the TimedAbilityNode counts down while HasNativeActiveState
+    // reports false and the effect dies without ever expiring.
+    foreach (var state in new[] { 21, 25, 27, 31 })
+    {
+        Assert(actor.SetNativeActiveState(state), $"low-word state {state} set");
+        actor.m_nCharStatus = actor.GetCharStatus();
+        Assert(actor.HasNativeActiveState(state),
+            $"state {state} lost its +0x168 bit to the legacy rebuild");
+        Equal((ushort)0, actor.m_wStatusTimeArr[31 - state],
+            $"state {state} leaked into the legacy timer slot");
+    }
     Assert(actor.HasNativeActiveState(16),
         "legacy rebuild lost state 0..19 authority");
     Assert(actor.HasNativeActiveState(32),
@@ -593,10 +609,12 @@ static void CheckSourceOrdering()
         "TBaseObject.cs"));
     var setBody = Between(baseSource, "public bool SetBodyState",
         "public void AbilCopyToWAbil");
-    Contains(setBody, "if (stateIndex <= 20)",
-        "state20 carrier and legacy21 authority split");
     NotContains(setBody, "m_wStatusTimeArr[",
         "native helper mutated legacy timer authority");
+    var state26Source = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
+        "Actors", "TBaseObject.NativeState26.cs")));
+    Contains(state26Source, "NativePersistentLowStateMask=0xFFFFFFFFL",
+        "durable low word narrower than the native +0x168 dword");
     var disappear = Between(baseSource, "public virtual void Disappear()",
         "public void FeatureChanged()");
     Contains(disappear, "ClearTimedAbilitiesOnExit()",
