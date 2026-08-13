@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using SystemModule;
 
 namespace GameSvr
@@ -5,12 +6,14 @@ namespace GameSvr
     public partial class UserEngine
     {
         /// <summary>
-        /// MonItemsTree.txt exclusive drop chains keyed by monster name.
-        /// Native storage: [self+0xDC] per sub_67B2C5 (EA: mov eax, [ebx + 0xdc]).
-        /// Loaded by sub_67AEC0, traversed by sub_71FA20 loop1 @AfterScatterItems.
+        /// MonItemsTree.txt exclusive drop groups keyed by monster name.
+        /// Native storage: the name→group hash at <c>[UserEngine+0xDC]</c>
+        /// (sub_67B2C5: <c>mov eax,[ebx+0xDC]</c>; sub_67AEE6 clears it on reload).
+        /// Each monster maps to the HEAD of a singly-linked <see cref="MonItemsTreeGroup"/>
+        /// chain; every group is an independent probability gate.
         /// </summary>
-        private Dictionary<string, MonItemsTreeNode> _monItemsTreeChains =
-            new Dictionary<string, MonItemsTreeNode>(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, MonItemsTreeGroup> _monItemsTreeChains =
+            new Dictionary<string, MonItemsTreeGroup>(System.StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Reload MonItemsTree.txt configuration.
@@ -30,13 +33,76 @@ namespace GameSvr
         private const int NativeExclusiveChainDropRange = 5;
 
         /// <summary>
+        /// Select one item per firing group — a 1:1 port of the selector <c>sub_67B2B0</c>
+        /// (EA 0x67B2B0-0x67B358), called at 0x71FB49 with the monster name.
+        ///
+        /// <para>For every group in the monster's chain the native code draws TWO randoms
+        /// UNCONDITIONALLY, in this order:</para>
+        /// <code>
+        /// 67B2E1  Random([G+8]  = TotalWeight)  -> weightRoll   (drawn even if the group misses)
+        /// 67B2EE  Random([G+4]  = Nth)          -> probRoll
+        /// 67B2F6  cmp probRoll,[G]=Rate / jge   -> group fires when probRoll &lt; Rate
+        /// </code>
+        /// A firing group then walks its item chain and takes the first node whose running
+        /// weight strictly exceeds the roll (0x67B309 <c>cmp esi,[node+0x10] / jge next</c>),
+        /// i.e. the band <c>[cumWeight-10000, cumWeight)</c> — a uniform pick since every
+        /// band is 10000 wide.  The chosen node is copied and PREPENDED to the result
+        /// (0x67B329 <c>newnode.Next = head; head = newnode</c>), so the traversal sees the
+        /// fired groups in reverse chain order — which is what makes a selected gold row
+        /// able to truncate the rest of the run.
+        ///
+        /// <para>The two Random calls fire for missing groups too, so this must NOT be
+        /// short-circuited to skip the weight roll on a miss.</para>
+        /// </summary>
+        private List<MonItemsTreeNode> SelectMonItemsTree(string monsterName)
+        {
+            var selected = new List<MonItemsTreeNode>();
+
+            // 0x67B2CD sub_49F5F4 name lookup; 0x67B2D5 cmp / je 0x67B34F -> return nil.
+            if (string.IsNullOrEmpty(monsterName)
+                || !_monItemsTreeChains.TryGetValue(monsterName, out var group))
+            {
+                return selected;
+            }
+
+            while (group != null)                              // 0x67B349 cmp/jne 0x67B2DB
+            {
+                // 0x67B2E1 / 0x67B2EE — both draws happen before the gate test.
+                var weightRoll = M2Share.RandomNumber.Random(group.TotalWeight);
+                var probRoll = M2Share.RandomNumber.Random(group.Nth);
+
+                // 0x67B2F6 cmp / 0x67B2F8 jge 0x67B340 — fire when probRoll < Rate.
+                if (probRoll < group.Rate)
+                {
+                    var cursor = group.ItemHead;               // 0x67B2FD mov eax,[G+0xC]
+                    while (cursor != null)                     // 0x67B307 loop
+                    {
+                        // 0x67B309 cmp esi,[node+0x10] / jge 0x67B334 (advance).
+                        if (weightRoll < cursor.CumulativeWeight)
+                        {
+                            // 0x67B30E alloc + 0x67B326 copy + 0x67B329/0x67B32F prepend.
+                            selected.Insert(0, cursor);
+                            break;                             // 0x67B332 one item per group
+                        }
+                        cursor = cursor.Next;                  // 0x67B334-0x67B339
+                    }
+                }
+
+                group = group.Next;                            // 0x67B343 mov eax,[G+0x10]
+            }
+
+            return selected;
+        }
+
+        /// <summary>
         /// Traverse the exclusive drop chain for a monster.
-        /// Native: <c>sub_71FA20</c> loop 1, 0x71FB5B-0x71FCFF, segment 1 of
-        /// @AfterScatterItems.
+        /// Native: <c>sub_71FA20</c> loop 1, 0x71FB49-0x71FCFF, segment 1 of
+        /// @AfterScatterItems.  The per-death SELECTION is <see cref="SelectMonItemsTree"/>
+        /// (sub_67B2B0); this method consumes its result.
         ///
         /// Gold-entry chain truncation is faithful, not a C# shortcut: the gold arm ends
         /// in <c>0x71FB8D E9 6D 01 00 00  jmp 0x71FCFF</c>, which lands past the node
-        /// advance at 0x71FCD9, so the remaining nodes are never visited.
+        /// advance at 0x71FCD9, so the remaining selected nodes are never visited.
         /// </summary>
         /// <param name="monsterName">Monster name used to look up the chain head</param>
         /// <param name="killer">The killer, passed through as the item creator</param>
@@ -65,12 +131,11 @@ namespace GameSvr
             // segment 1, so a monster that died without an attributed killer still runs
             // its chain.  It is passed through untouched as the sub_7688A0 creator arg.
 
-            // Chain head by monster name: 0x71FB42 mov eax,[0x7D5D9C] / 0x71FB49 call
-            // sub_67B2B0; 0x71FB51 cmp [ebp-0x20],0 / je 0x71FCFF when the head is nil.
-            if (!_monItemsTreeChains.TryGetValue(monsterName, out var node))
-                return;
+            // 0x71FB49 call sub_67B2B0 selects one item per firing group; 0x71FB51 cmp
+            // [ebp-0x20],0 / je 0x71FCFF means an empty selection scatters nothing.
+            var selected = SelectMonItemsTree(monsterName);
 
-            while (node != null)
+            foreach (var node in selected)                     // 0x71FB5B chain walk
             {
                 // 0071FB5E  83 78 18 00     cmp dword [node+0x18],0 / 74 2E je 0x71FB92
                 // 0071FB6A  66 83 38 00     cmp word [template],0   / 75 22 jne 0x71FB92
@@ -82,10 +147,6 @@ namespace GameSvr
                 // The first word of the native StdItem record is its wire index — the
                 // same +0x00 ushort the type2 DB codec calls NativeWireIndex — so
                 // "word == 0" means "this row resolved to the index-0 金币 sentinel".
-                // Cross-check on the same record: sub_74C338 dispatches the item factory
-                // on byte[template+0x14], and 0x14 is exactly where StdMode lands after
-                // wireIndex(2) + reserved(2) + ShortString[15](16).  This settles the
-                // SPWN-58 / SPWN-59 BLOCKED note on what "首 word == 0" means.
                 if (node.StdItem != null && node.StdItem.NativeWireIndex == 0)
                 {
                     // 0071FB70  8B 40 1C     mov eax,[node+0x1C]      ; N
@@ -98,8 +159,6 @@ namespace GameSvr
                     // [ebp-0x14] is the SHARED gold accumulator that the segment-4
                     // settlement (cap 3000, divide by the fatigue multiplier, 16 piles)
                     // later consumes, i.e. the same place MonGetRandomItems adds to.
-                    // The old code both dropped the Random draw and paid the gold out
-                    // through a fabricated IncGold + SysMsg path that bypassed all of it.
                     // C# int division truncates toward zero, matching sar+jns+adc.
                     monster.m_nGold = monster.m_nGold
                         + node.RepeatCount / 2
@@ -135,9 +194,8 @@ namespace GameSvr
                     }
                 }
 
-                // 0071FCD9  mov eax,[node+0x20] -> next; free the 0x24-byte node
-                // @0x71FCEA; 0x71FCF5 cmp / jne 0x71FB5B.
-                node = node.Next;
+                // 0071FCD9  mov eax,[node+0x20] -> next selected node; native frees the
+                // 0x24-byte copy @0x71FCEA (the C# GC handles that) and loops @0x71FCF5.
             }
         }
     }

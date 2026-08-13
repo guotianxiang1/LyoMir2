@@ -13,9 +13,13 @@ namespace GameSvr
         public string ItemName { get; set; }
 
         /// <summary>
-        /// [node+0x10] Cumulative weight (dword).
-        /// EA 0x67b1f1: mov dword ptr [ebx + 0x10], eax.
-        /// Used during chain construction, not traversal.
+        /// [node+0x10] Cumulative weight (dword) — the running sum of item bands within
+        /// the owning group.  EA 0x67b1f1: <c>mov dword ptr [ebx + 0x10], eax</c> stores
+        /// <c>[G+8]</c> after it has been bumped by <c>ROUND(A/A*10000) = 10000</c> for
+        /// this item.  The selector <c>sub_67B2B0</c> reads it at 0x67B309
+        /// (<c>cmp esi,[node+0x10] / jge next</c>): the first node whose cumulative weight
+        /// exceeds <c>Random([G+8])</c> is chosen, so equal 10000-wide bands make the pick
+        /// uniform.  Used by selection, not by the item-vs-gold traversal.
         /// </summary>
         public int CumulativeWeight { get; set; }
 

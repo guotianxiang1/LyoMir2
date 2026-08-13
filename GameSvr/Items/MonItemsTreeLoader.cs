@@ -1,24 +1,59 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Text;
 using SystemModule;
 
 namespace GameSvr
 {
     /// <summary>
-    /// MonItemsTree.txt exclusive drop chain loader.
-    /// Reverse-engineered from sub_67AEC0 (EA 0x67AEC0-0x67B28D).
+    /// MonItemsTree.txt exclusive drop loader — a byte-faithful port of <c>sub_67AEC0</c>
+    /// (EA 0x67AEC0-0x67B28D), the only caller of which is the GM command
+    /// <c>@ReloadMonitemsTreeCfg</c> (0x624009).
+    ///
+    /// <para>Line grammar (recovered from the tokenizer calls, all <c>GetValidStr3</c>
+    /// = <c>sub_4C6BA4</c>):</para>
+    /// <code>
+    /// &lt;MonsterName&gt; &lt;Rate&gt;/&lt;Nth&gt; &lt;Item&gt;:&lt;Count&gt;:&lt;A&gt;/&lt;B&gt; &lt;Item&gt;:&lt;Count&gt;:&lt;A&gt;/&lt;B&gt; ...
+    /// </code>
+    /// <list type="bullet">
+    /// <item>Whitespace fields split on {0x09, 0x20} (0x67AF82/0x67AF86 sep bytes).</item>
+    /// <item>Field 2 <c>Rate/Nth</c> splits on '/' (0x67AFD0/0x67AFF3) → group probability.</item>
+    /// <item>Each remaining field <c>Item:Count:A/B</c> splits on ':' three times
+    ///       (0x67B0C4/0x67B0E7/0x67B10A) then the third token on '/'
+    ///       (0x67B12D/0x67B150).</item>
+    /// </list>
+    ///
+    /// <para>One line builds one <see cref="MonItemsTreeGroup"/> (0x14-byte record) plus a
+    /// chain of <see cref="MonItemsTreeNode"/> item records (0x24 bytes each).  A monster
+    /// name can appear on several lines; each becomes an independent group.</para>
     /// </summary>
     internal static class MonItemsTreeLoader
     {
+        // 0x67B0A9 Trim (0x40C140) then 0x67B0B4 cmp [ebp-0x5C],0 / je 0x67B230 — an item
+        // field that trims to empty ends the line, so the inner loop stops there.
+        private static readonly char[] WhitespaceSeparators = { ' ', '\t' };
+
+        // The weight constant folded in at 0x67B1E0 (fmul dword [0x67B2AC] = 10000.0f).
+        // Because the native formula divides A by A (0x67B1A9 and 0x67B1C4 both read the
+        // SAME token [ebp-0x1C]) the ratio is always 1, so every item contributes exactly
+        // ROUND(1.0 * 10000.0) = 10000.  The '/B' half of the third field is parsed
+        // (0x67B14A) and then discarded — it is read nowhere.  Selection is therefore
+        // UNIFORM across the items of a fired group, and this constant is the band width.
+        private const double NativeWeightConstant = 10000.0;
+
         /// <summary>
-        /// Load MonItemsTree.txt and build exclusive drop chains keyed by monster name.
-        /// Native: sub_67AEC0 called from GM command @ReloadMonitemsTreeCfg (0x624002).
+        /// Load MonItemsTree.txt and build the monster→group-chain map.
+        /// Native: sub_67AEC0.  A missing file yields an empty map (0x67AF0E
+        /// <c>FileExists / je 0x67B244 / xor eax,eax</c>) — fail-closed, no drops.
         /// </summary>
-        /// <param name="filePath">Path to MonItemsTree.txt</param>
-        /// <param name="userEngine">UserEngine instance for StdItem lookup</param>
-        /// <returns>Dictionary keyed by monster name (case-insensitive), value = chain head</returns>
-        public static Dictionary<string, MonItemsTreeNode> Load(string filePath, UserEngine userEngine)
+        public static Dictionary<string, MonItemsTreeGroup> Load(string filePath, UserEngine userEngine)
         {
-            var chains = new Dictionary<string, MonItemsTreeNode>(StringComparer.OrdinalIgnoreCase);
+            // Native keys the hash [UserEngine+0xDC] by monster name through sub_49F5F4;
+            // monster names are GBK/CJK so case folds to a no-op, and the rest of the C#
+            // drop path already matches monster names case-insensitively.
+            var chains = new Dictionary<string, MonItemsTreeGroup>(StringComparer.OrdinalIgnoreCase);
 
             if (!File.Exists(filePath))
             {
@@ -35,17 +70,19 @@ namespace GameSvr
                 while ((line = reader.ReadLine()) != null)
                 {
                     lineNum++;
-                    line = line.Trim();
 
-                    // Skip comments and empty lines
-                    // EA 0x67af67: cmp byte ptr [eax], 0x23 (# comment)
-                    // EA 0x67af73: cmp byte ptr [eax], 0x3b (; comment)
-                    if (string.IsNullOrWhiteSpace(line) || line[0] == '#' || line[0] == ';')
+                    // 0x67AF64 cmp byte [line],0x23 (#) and 0x67AF70 cmp byte [line],0x3B (;)
+                    // test the FIRST raw byte before any trimming; a null/empty line
+                    // (0x67AF5A cmp [ebp-0x10],0 / je) is skipped too.
+                    if (string.IsNullOrEmpty(line))
+                        continue;
+                    var firstChar = line[0];
+                    if (firstChar == '#' || firstChar == ';')
                         continue;
 
                     try
                     {
-                        ParseAndAddNode(line, chains, userEngine);
+                        ParseLine(line, chains, userEngine);
                     }
                     catch (Exception ex)
                     {
@@ -64,68 +101,112 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// Parse one line and add node to the appropriate chain.
-        /// Native parsing at EA 0x67AF4C-0x67B22B with multiple GetValidStr3 calls.
-        /// Format (inferred from disassembly): MonsterName ItemName MinDrops/MaxDrops RepeatCount
+        /// Parse one line into a group and its item chain.  Mirrors the loader body
+        /// 0x67AF7C-0x67B22B.
         /// </summary>
-        private static void ParseAndAddNode(string line, Dictionary<string, MonItemsTreeNode> chains,
+        private static void ParseLine(string line, Dictionary<string, MonItemsTreeGroup> chains,
             UserEngine userEngine)
         {
-            // Native uses tab/space as primary delimiters (EA 0x67AF82-0x67AF93: sep={0x09, 0x20})
-            // Then '/' and ':' as secondary delimiters within tokens
-            var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 4)
-                return; // Insufficient fields
-
-            var monsterName = parts[0].Trim();
-            var itemName = parts[1].Trim();
-
-            // Parse drop range (format: "min/max")
-            var dropRangeParts = parts[2].Split('/');
-            if (dropRangeParts.Length < 2)
+            // 0x67AF93 token1 = MonsterName, 0x67AFBA token2 = "Rate/Nth", remainder = items.
+            var fields = line.Split(WhitespaceSeparators, StringSplitOptions.RemoveEmptyEntries);
+            if (fields.Length < 2)
                 return;
 
-            if (!int.TryParse(dropRangeParts[0], out int minDrops))
-                return;
-            if (!int.TryParse(dropRangeParts[1], out int maxDrops))
-                return;
+            var monsterName = fields[0];
 
-            // Parse repeat count
-            if (!int.TryParse(parts[3], out int repeatCount))
-                return;
-
-            // Lookup item by name (EA 0x67b1ff-0x67b20e: call 0x74c2d4).  Native is a
-            // plain hash lookup with no index exclusion, so "金币" must resolve to the
-            // index-0 sentinel rather than to null — the traversal recognises a gold row
-            // by NativeWireIndex == 0, not by a null template.  GetStdItem(string) scans
-            // from index 0 and does exactly that; do NOT switch it to GetStdItemIdx,
-            // which skips the sentinel.
-            var stdItem = userEngine.GetStdItem(itemName);
-
-            // Create node (EA 0x67b16d-0x67b182: alloc 0x24 bytes + zerofill)
-            var node = new MonItemsTreeNode
+            // 0x67AFCA / 0x67AFED split token2 on '/'; 0x67B02A/0x67B034 StrToInt into [G]/[G+4].
+            var rateNth = fields[1].Split('/');
+            var group = new MonItemsTreeGroup
             {
-                ItemName = itemName.Length > 15 ? itemName.Substring(0, 15) : itemName, // ShortString[15]
-                StdItem = stdItem,
-                RepeatCount = repeatCount,
-                CumulativeWeight = 0, // Computed during construction, not used in traversal
-                Next = null
+                Rate = rateNth.Length > 0 ? ParseIntOrZero(rateNth[0]) : 0,
+                Nth = rateNth.Length > 1 ? ParseIntOrZero(rateNth[1]) : 0,
+                TotalWeight = 0,
+                ItemHead = null,
+                Next = null,
             };
 
-            // Get or create chain for this monster
-            if (!chains.TryGetValue(monsterName, out var chainHead))
+            // 0x67B03F-0x67B078 link the group by monster name.  When the monster already
+            // has a chain the new group is spliced in RIGHT AFTER the head
+            // (0x67B05F G.Next = head.Next; 0x67B065 head.Next = G), otherwise it becomes
+            // the head (0x67B078).  Order matters because the selector walks groups in
+            // this order and the traversal's gold-arm break is order-sensitive.
+            if (chains.TryGetValue(monsterName, out var head))
             {
-                // First node for this monster
-                chains[monsterName] = node;
+                group.Next = head.Next;
+                head.Next = group;
             }
             else
             {
-                // Append to existing chain (EA 0x67b21a: link prev->next = current)
-                var tail = chainHead;
-                while (tail.Next != null)
-                    tail = tail.Next;
-                tail.Next = node;
+                chains[monsterName] = group;
             }
+
+            // 0x67B082-0x67B22B inner loop: one item record per remaining whitespace field.
+            MonItemsTreeNode lastItem = null;
+            for (var f = 2; f < fields.Length; f++)
+            {
+                var itemField = fields[f];
+                if (string.IsNullOrWhiteSpace(itemField))
+                    continue;
+
+                // 0x67B0BE/0x67B0E1/0x67B104 split on ':' → Name, Count, Third.
+                var colonParts = itemField.Split(':');
+                var itemName = colonParts[0];
+                if (string.IsNullOrEmpty(itemName))
+                    continue;
+
+                var count = colonParts.Length > 1 ? ParseIntOrZero(colonParts[1]) : 0;
+
+                // 0x67B127/0x67B14A split the third token on '/'; the 'A' half is read
+                // twice for A/A (0x67B1A9/0x67B1C4) and the 'B' half (0x67B157) is dropped.
+                var weightSpec = colonParts.Length > 2 ? colonParts[2] : string.Empty;
+                var slashParts = weightSpec.Split('/');
+                var a = slashParts.Length > 0 ? ParseIntOrZero(slashParts[0]) : 0;
+
+                // 0x67B1E6 @ROUND(A/A*10000) then 0x67B1EB accumulate, 0x67B1F1 store the
+                // running total as this node's cumulative weight.  A==0 leaves the band
+                // width at 0 so the item is never reachable by the weighted pick — a
+                // fail-closed reading of the native divide-by-zero on a malformed row.
+                var weight = a != 0
+                    ? (int)Math.Round((double)a / a * NativeWeightConstant, MidpointRounding.ToEven)
+                    : 0;
+                group.TotalWeight += weight;
+
+                var node = new MonItemsTreeNode
+                {
+                    // 0x67B1A4 ShortString[15] assign — names are clamped to 15 bytes.
+                    ItemName = itemName.Length > 15 ? itemName.Substring(0, 15) : itemName,
+                    CumulativeWeight = group.TotalWeight,
+                    // 0x67B1FC store StrToInt(Count) at [node+0x1C]; this is the item's
+                    // guaranteed repeat count, or, for a gold row, the gold amount N.
+                    RepeatCount = count,
+                    // 0x67B209 call sub_74C2D4 — a plain name→template hash lookup with no
+                    // index exclusion.  GetStdItem(string) scans from index 0 so "金币"
+                    // resolves to the index-0 sentinel (NativeWireIndex == 0), which is how
+                    // the traversal recognises a gold row.  Never GetStdItemIdx here.
+                    StdItem = userEngine.GetStdItem(itemName),
+                    Next = null,
+                };
+
+                // 0x67B211-0x67B22B: first node → G.ItemHead, later nodes appended to tail.
+                if (lastItem == null)
+                    group.ItemHead = node;
+                else
+                    lastItem.Next = node;
+                lastItem = node;
+            }
+        }
+
+        // Native uses StrToInt (0x40C9D8), which raises on a non-numeric token and unwinds
+        // the whole load through the function's SEH frame.  Rather than abort every chain
+        // on one bad row, treat an unparseable token as 0 (fail-closed for that column) and
+        // let the per-line try/catch log genuinely broken rows.
+        private static int ParseIntOrZero(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+                return 0;
+            return int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)
+                ? v
+                : 0;
         }
     }
 }
