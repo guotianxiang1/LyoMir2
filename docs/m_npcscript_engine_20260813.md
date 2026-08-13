@@ -2,8 +2,9 @@
 
 - 工作树 `D:\loym2\.claude\wt2\m-npcscript`，分支 `w/m-npcscript`，已 `git merge --no-edit master`
 - 镜像 `staging/_reunpack_work/flat_image.bin`，基址 `0x400000`
-- 复现脚本随本轮留在工作树根：`_dis.py`（capstone 封装）、`_reg_walk.py`（注册表遍历）、
-  `_reg_names.py`、`_final_recon2.py`（对账）、`_orphan_class.py`、`_hooks.py`（触发点）
+- 复现工具链：`tools/npcscript_re/`，按顺序跑
+  `_reg_walk.py` → `_reg_names.py` → `_builtins.py` → `_cs_cases2.py` → `_final_recon2.py`
+  （`_dis.py` 是 capstone 封装，`BASE = 0x400000`）。整条链已在该目录下实跑通过
 - 机器可读产物：`docs/m_npcscript_native_registry_20260813.txt`（654 条原生注册全集）
 - **未执行任何编译命令**
 
@@ -151,7 +152,7 @@ C# 侧口径：`PasApiBridge` 的 13 张 `switch` + `PasInterpreter.ExecuteBuilt
 + `TryCallYanshenFunc`。解释器**不跨接收者回落**（`PasInterpreter.cs:903` 只试 Player 两张表，
 `:916` 只试 NPC 两张表，`:778` 只试 Standalone），所以「名字在别的表里」不等于能调到。
 
-### 3.1 MISSING —— 原生注册了、C# 任何一张表都不认（**24 条，全部要补**）
+### 3.1 MISSING —— 原生注册了、C# 任何一张表都不认（**23 条，全部要补**）
 
 | 类 | 名 | 声明 VA | 声明 |
 |---|---|---|---|
@@ -163,7 +164,6 @@ C# 侧口径：`PasApiBridge` 的 13 张 `switch` + `PasInterpreter.ExecuteBuilt
 | TPlayer | `CurGlory` | `0x72AF90` | `: Integer` 只读 |
 | TPlayer | `EndTransLog` | `0x72BAD8` | `procedure EndTransLog;` |
 | TPlayer | `EnterMapTick` | `0x72AFDC` | `: longword` 只读 |
-| TPlayer | `GetMyLeiTaiFlag` | `0x72B3B1` | `function …: Integer;`（本轮把死标签修活，体仍 fail-closed） |
 | TPlayer | `GuildLord` | `0x72ADDB` | `: string` 只读 |
 | TPlayer | `HeroTypeExt` | `0x72AE86` | `: Integer` 只读 |
 | TPlayer | `IsDeleted` | `0x72ABC7` | `: Boolean` 只读 |
@@ -183,9 +183,16 @@ C# 侧口径：`PasApiBridge` 的 13 张 `switch` + `PasInterpreter.ExecuteBuilt
 生产脚本对这 24 条**全部 0 命中**（扫了 `D:\光头卧龙` 下 458 个 `.pas/.inc` + 解密后的眼神脚本），
 所以优先级低——但 `MyGroup` 连带废掉整个 `TBaseGroup`，建议先补它。
 
+不在这 23 条里、但同样没有实现的两条，单独记：
+
+- `TPlayer.GetMyLeiTaiFlag`（`0x72B3B1`）：本轮把死标签改小写后名字能解析了，
+  但体是 `RejectUnsupportedNativeApi` —— 属 **fail-closed 桩**，不是名字缺失。
+- `TPsNpc.DoShowNpcEx`（`0x734F98`）：可达标签是 reject，实现躺在不可达标签里，见 §3.4。
+
 > 订正一处我自己的误报：`TPsNpc.GetCelebName`（`0x73495C`）声明串首字母是大写 `Function`，
-> 我的正则漏解析，一度被算进 MISSING。C# `CallNpcFunc`/`CallNpcMethod` 都有 `getcelebname`，
-> 判 **FAITHFUL（名字面）**。
+> 提取器的关键字正则区分大小写，把整条声明当成了函数名，一度把它算进 MISSING。
+> C# `CallNpcFunc`/`CallNpcMethod` 都有 `getcelebname`，判 **FAITHFUL（名字面）**。
+> `tools/npcscript_re/_reg_names.py` 已加 `re.IGNORECASE` 并留注释，避免重犯。
 
 ### 3.2 WRONG RECEIVER —— 名字 C# 认识，但挂错了接收者（**36 条**）
 
@@ -460,8 +467,8 @@ C# 侧这条已经落地且注释带字节（`Merchant.cs:1679`、`UsrEngn.cs:25
 
 | 判定 | 条数 | 说明 |
 |---|---|---|
-| FAITHFUL（名字 + 接收者对得上） | **594** | 654 − 24 MISSING − 36 WRONG_RECEIVER |
-| MISSING | **24 + 4 触发 + 2 状态 + 28 built-in** | §3.1 / §4.3 / §1.2+§1.3 / §3.5 |
+| FAITHFUL（名字 + 接收者对得上） | **595** | 654 − 23 MISSING − 36 WRONG_RECEIVER |
+| MISSING | **23 + 4 触发 + 2 状态 + 28 built-in** | §3.1 / §4.3 / §1.2+§1.3 / §3.5 |
 | DIVERGENT | **3** | GM 失败红字（§1.2①）、`GetG` 门与默认值（§5.3）、`doshow npcex` 死标签（§3.4） |
 | INVENTED | **74** | §3.3，其中 49 条带活实现、8 条涉物品金钱 |
 | BLOCKED | 4 | 见 §8 |

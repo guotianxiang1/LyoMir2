@@ -502,7 +502,7 @@
 00734938  OpenCastleDoor                     procedure OpenCastleDoor(bOpen : Boolean);
 00734944  InputDialog                        procedure InputDialog(Hum: TPlayer; MsgStr : string; DlgType, InputType : Integer);
 00734950  ReqBecomeCeleb                     function ReqBecomeCeleb(Hum: TPlayer): Integer;
-0073495C  Function GetCelebName: String;     Function GetCelebName: String;
+0073495C  GetCelebName                       Function GetCelebName: String;
 00734968  GetCelebLv                         function GetCelebLv : Integer;
 00734974  ChgCelebColor                      procedure ChgCelebColor(ColIdx : Integer);
 00734980  ReqCastleOwnerNpc                  function ReqCastleOwnerNpc(Hum : TPlayer): Integer;
