@@ -3,38 +3,84 @@ using System.Reflection;
 using GameSvr;
 using SystemModule;
 
-PrepareRuntimeConfig();
-M2Share.g_Config = new GameSvrConfig();
-M2Share.ObjectManager = new ObjectManager();
-M2Share.UserEngine = new UserEngine();
-M2Share.ProcessMsgCriticalSection = new object();
+try
+{
+    PrepareRuntimeConfig();
+    M2Share.g_Config = new GameSvrConfig();
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.UserEngine = new UserEngine();
+    M2Share.ProcessMsgCriticalSection = new object();
 
-CheckConstantsAndClientMapping();
-CheckNativePersistence();
-CheckSwitchListen();
-CheckHearGate();
-CheckClientConfigPacket();
-CheckGateHasNoSyntheticConfig();
+    CheckNativeContracts();
+    CheckNativePersistence();
+    CheckSwitchListen();
+    CheckHearGate();
+    CheckClientConfigPacket();
+    CheckGateHasNoSyntheticConfig();
+    CheckWhisperBit0Gate();
 
-Console.WriteLine(
-    "ChatShieldExactCheck PASS CM3032 categories=1/2/3/4 masks=2/4/8/1 " +
-    "native-offset=0x500 RM_HEAR-mask=2 SM2953=full-dword gate=no-zero-injection");
+    Console.WriteLine(
+        "ChatShieldExactCheck PASS CM3032 categories=1/2/3/4 masks=2/4/8/1 " +
+        "native-offset=0x4F8 RM_HEAR-mask=2 RM_WHISPER-mask=1 " +
+        "SM2953=full-dword slot=+0x250 gate=no-zero-injection");
+    return 0;
+}
+catch (Exception exception)
+{
+    Console.Error.WriteLine($"ChatShieldExactCheck FAIL: {exception.Message}");
+    return 1;
+}
 
-static void CheckConstantsAndClientMapping()
+static void CheckNativeContracts()
 {
     Equal(3032, Grobal2.CM_SWITCH_LISTEN, "CM_SWITCH_LISTEN");
     Equal(2953, Grobal2.SM_CLIENT_CONF, "SM_CLIENT_CONF");
+    var persistOffset = typeof(TPlayObject).GetField("NativeChatShieldMaskOffset",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingFieldException("NativeChatShieldMaskOffset");
+    Equal(0x4F8, (int)persistOffset.GetValue(null)!, "persist offset");
 
-    var client = File.ReadAllText(FindClientLua(
-        "mir2.scenes.main.common.common_hk.lua"));
-    Contains(client, "CM_SWITCH_LISTEN,", "client CM3032 producer");
-    Contains(client, "recog = b and 0 or 1", "client mode layout");
-    Contains(client, "param = config[1]", "client category layout");
+    var image = File.ReadAllBytes(FindNativeImage());
+    const int imageBase = 0x400000;
+    Pin(image, imageBase, 0x6BBAAF, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xFD],
+        "0x6BBAAF cat1 clear bit1");
+    Pin(image, imageBase, 0x6BBABD, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xFB],
+        "0x6BBABD cat2 clear bit2");
+    Pin(image, imageBase, 0x6BBACB, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xF7],
+        "0x6BBACB cat3 clear bit3");
+    Pin(image, imageBase, 0x6BBAD9, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xFE],
+        "0x6BBAD9 cat4 clear bit0");
+    Pin(image, imageBase, 0x6BBAEA, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x02],
+        "0x6BBAEA cat1 set bit1");
+    Pin(image, imageBase, 0x6BBAF8, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x04],
+        "0x6BBAF8 cat2 set bit2");
+    Pin(image, imageBase, 0x6BBB06, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x08],
+        "0x6BBB06 cat3 set bit3");
+    Pin(image, imageBase, 0x6BBB14, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x01],
+        "0x6BBB14 cat4 set bit0");
+    Pin(image, imageBase, 0x6B12A0, [0x8B, 0x83, 0x9C, 0x0B, 0x00, 0x00],
+        "0x6B12A0 save load [ebx+0xB9C]");
+    Pin(image, imageBase, 0x6B12A6, [0x89, 0x86, 0xF8, 0x04, 0x00, 0x00],
+        "0x6B12A6 save [esi+0x4F8]");
+    Pin(image, imageBase, 0x6B029C, [0x8B, 0x80, 0xF8, 0x04, 0x00, 0x00],
+        "0x6B029C load [rec+0x4F8]");
+    Pin(image, imageBase, 0x6B02A5, [0x89, 0x82, 0x9C, 0x0B, 0x00, 0x00],
+        "0x6B02A5 load [edx+0xB9C]");
+    Pin(image, imageBase, 0x6B2D1D, [0x8B, 0x8B, 0x9C, 0x0B, 0x00, 0x00],
+        "0x6B2D1D SM2953 Recog=[ebx+0xB9C]");
+    Pin(image, imageBase, 0x6B2D23, [0x66, 0xBA, 0x89, 0x0B],
+        "0x6B2D23 mov dx,0xB89");
+    Pin(image, imageBase, 0x6B2D2B, [0xFF, 0x93, 0x50, 0x02, 0x00, 0x00],
+        "0x6B2D2B call [ebx+0x250]");
+    Pin(image, imageBase, 0x6B4A63, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x02],
+        "0x6B4A63 RM_HEAR test bit1");
+    Pin(image, imageBase, 0x6C9584, [0xF6, 0x87, 0x9C, 0x0B, 0x00, 0x00, 0x01],
+        "0x6C9584 whisper test bit0");
 }
 
 static void CheckNativePersistence()
 {
-    const int offset = 0x500;
+    const int offset = 0x4F8;
     var player = NewPlayer();
     player.m_NativeHumanData = new byte[offset + sizeof(uint)];
     BinaryPrimitives.WriteUInt32LittleEndian(
@@ -160,6 +206,14 @@ static void CheckGateHasNoSyntheticConfig()
         "GameGate zero chat-mask injection");
 }
 
+static void CheckWhisperBit0Gate()
+{
+    var root = FindRepositoryRoot();
+    var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
+        "TPlayObject.Chat.cs"));
+    Contains(source, "m_dwChatShieldMask & 0x01u", "whisper target bit0 gate");
+}
+
 static ProbePlayer NewPlayer() => new() { m_boOffLineFlag = true };
 
 static object Invoke(object target, string methodName)
@@ -183,24 +237,6 @@ static void Packet(ClientPacket packet, int ident, int recog, int param,
     Equal((ushort)series, packet.Series, label + " Series");
 }
 
-// The extracted client tree is a sibling of the repository, but the repository
-// is routinely checked out through `git worktree` several levels deeper, so the
-// parent of the repository root is not a fixed anchor.
-static string FindClientLua(string fileName)
-{
-    const string clientTree = "白猪G2.5_0518_lua_plain_readable_20260710_014719";
-    var probed = new List<string>();
-    for (var directory = new DirectoryInfo(FindRepositoryRoot());
-         directory != null; directory = directory.Parent)
-    {
-        var candidate = Path.Combine(directory.FullName, clientTree, "core", fileName);
-        if (File.Exists(candidate)) return candidate;
-        probed.Add(candidate);
-    }
-    throw new InvalidOperationException(
-        $"client lua {fileName} not found; probed: {string.Join("; ", probed)}");
-}
-
 static string FindRepositoryRoot()
 {
     foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
@@ -216,6 +252,26 @@ static string FindRepositoryRoot()
         }
     }
     throw new InvalidOperationException("Repository root not found");
+}
+
+static string FindNativeImage()
+{
+    const string known = @"D:\loym2\staging\_reunpack_work\flat_image.bin";
+    if (File.Exists(known))
+        return known;
+    throw new InvalidOperationException("flat_image.bin not found at " + known);
+}
+
+static void Pin(byte[] image, int imageBase, int va, byte[] expected, string label)
+{
+    var offset = va - imageBase;
+    Assert(offset >= 0 && offset + expected.Length <= image.Length, label + " range");
+    for (var i = 0; i < expected.Length; i++)
+    {
+        if (image[offset + i] != expected[i])
+            throw new InvalidOperationException(
+                $"{label}: byte[{i}] expected={expected[i]:X2} actual={image[offset + i]:X2}");
+    }
 }
 
 static void PrepareRuntimeConfig()

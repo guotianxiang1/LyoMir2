@@ -712,7 +712,9 @@ namespace GameSvr
         public uint m_NativeScriptDataCrc;
         public uint m_dwChatShieldMask;
         public HeroObject m_HeroObject;
-        internal const int NativeChatShieldMaskOffset = 0x500;
+        // rec+0x4F8: 0x6B12A0 mov eax,[ebx+0xB9C] / 0x6B12A6 89 86 F8 04 00 00 mov [esi+0x4F8],eax
+        // load: 0x6B029C mov eax,[eax+0x4F8] / 0x6B02A5 mov [edx+0xB9C],eax
+        internal const int NativeChatShieldMaskOffset = 0x4F8;
         internal const int NativeHeroStateOffset = 0x52;
         public byte m_btNativeHeroState;
         public int m_dwHeroLogoutTick;

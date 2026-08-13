@@ -21,7 +21,9 @@ namespace GameSvr
                     SysMsg(whostr + M2Share.g_sCanotSendmsg, MsgColor.Red, MsgType.Hint);
                     return;
                 }
-                if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName))
+                // 0x6C9584 F6 87 9C 0B 00 00 01 test byte [edi+0xB9C],1 / jne deny
+                if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName)
+                    || (PlayObject.m_dwChatShieldMask & 0x01u) != 0)
                 {
                     SysMsg(whostr + M2Share.g_sUserDenyWhisperMsg, MsgColor.Red, MsgType.Hint);
                     return;
@@ -80,7 +82,8 @@ namespace GameSvr
         {
             var sendwho = string.Empty;
             HUtil32.GetValidStr3(SayStr, ref sendwho, new string[] { "[", " ", "=", ">" });
-            if (m_boHearWhisper && !IsBlockWhisper(sendwho))
+            if (m_boHearWhisper && !IsBlockWhisper(sendwho)
+                && (m_dwChatShieldMask & 0x01u) == 0)
             {
                 switch (MsgType)
                 {
@@ -220,7 +223,8 @@ namespace GameSvr
                                 }
                                 if (!m_PEnvir.Flag.boQUIZ)
                                 {
-                                    if ((HUtil32.GetTickCount() - m_dwShoutMsgTick) > 10 * 1000)
+                                    // 0x6BB7A0 C6 45 FF 0F mov byte [ebp-1],0xF / 0x6BB7BD 69 C0 E8 03 00 00 imul 1000 / 0x6BB7C6 77 ja wait if 15000>elapsed
+                                    if ((HUtil32.GetTickCount() - m_dwShoutMsgTick) >= 15 * 1000)
                                     {
                                         if (m_Abil.Level <= M2Share.g_Config.nCanShoutMsgLevel)
                                         {
@@ -240,7 +244,7 @@ namespace GameSvr
                                         }
                                         return;
                                     }
-                                    SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new[] { 10 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
+                                    SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new[] { 15 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
                                     return;
                                 }
                                 SysMsg(M2Share.g_sThisMapDisableSendCyCyMsg, MsgColor.Red, MsgType.Hint);
