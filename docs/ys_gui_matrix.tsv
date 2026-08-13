@@ -187,7 +187,7 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 星耀专属切割a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsXyCutting		0x102b0130	2
 星耀倍功与暴击a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsXyPowerCrit		0x102b0140	2
 星耀攻击反伤a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsXyReflect		0x102b0150	2
-最大装备数量	""	0	盘古3	panel	value	LABEL_ONLY	4		MaxEquipCount		0x102b09cc	3
+最大装备数量	""	0	盘古3	panel	value	IMPLEMENTED	4	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	MaxEquipCount		0x102b09cc	3
 格位刺杀免伤a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsLuckBlock		0x102b00dc	2
 概率格挡a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsProbBlock		0x102b00ec	2
 武器属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponAttrChance_Acc	0x7609d8	0x102b0c44	3
@@ -268,7 +268,7 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 穿人穿怪	0	0	盘古1	catalog	toggle	LABEL_ONLY	4		IsPassThrough	0x6b30a3 0x768454	0x102b03c4	2
 穿戴触发_plus	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsWearPlusTrigger		0x102b1678	2
 等级禁言	1	1	盘古2	panel	toggle	LABEL_ONLY	7		IsLevelMute;IsMailAntiSpamEnabled		0x102b1688	2
-红名K值	""	0	盘古3	panel	value	LABEL_ONLY	3		RedNameK		0x102b09c4	3
+红名K值	""	0	盘古3	panel	value	IMPLEMENTED	3	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	RedNameK		0x102b09c4	3
 红毒_A	1	1	配置2	catalog-param	value	LABEL_ONLY	4		IsRedPoisonA		0x102b09ec	3
 红毒_B	1	1	配置2	catalog-param	value	LABEL_ONLY	4		IsRedPoisonB		0x102b09f4	3
 绿毒_A	1	1	配置2	catalog-param	value	LABEL_ONLY	4		IsGreenPoisonA		0x102b09dc	3
@@ -345,7 +345,7 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 限制摆摊_左x	280	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_LeftX		0x102b0758	3
 限制摆摊_左y	328	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_LeftY		0x102b0768	3
 限制摆摊_等级	20	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_Level		0x102b0798	3
-随机极品	1	1	盘古4	panel	toggle	LABEL_ONLY	10		IsRandomExtreme		0x102b073c	8
+随机极品	1	1	盘古4	panel	toggle	IMPLEMENTED	10	GameSvr/Items/NativeItemPlus28.cs	IsRandomExtreme		0x102b073c	8
 随身仓库	1	1	盘古1	catalog	toggle	LABEL_ONLY	8		IsPortableStorage;IsPortableStorageEnabled	0x6c2ab9 0x6c2dc9 0x6e087c	0x102b0360	2
 雷电主属性切换	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLightningSwitch	0x76ea8a	0x102aff60	2
 雷电带毒	0	0	盘古2	panel	toggle	LABEL_ONLY	4		IsLightningPoison	0x76eb1d	0x102b0584	2
@@ -354,7 +354,7 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 雷电术自定义伤害_系数A	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsLightningCustomA		0x102afe70	2
 雷电术自定义伤害_系数B	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsLightningCustomB		0x102afe88	2
 雷电自定义范围	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLightningRange	0x76eb06	0x102aff70	2
-非红名K值	""	0	盘古3	panel	value	LABEL_ONLY	3		NormalK		0x102b09b8	3
+非红名K值	""	0	盘古3	panel	value	IMPLEMENTED	3	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	NormalK		0x102b09b8	3
 项链属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Acc	0x76186e	0x102b10c4	3
 项链属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Atk	0x7617e2	0x102b0fa4	3
 项链属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Spd	0x76184b	0x102b107c	3
