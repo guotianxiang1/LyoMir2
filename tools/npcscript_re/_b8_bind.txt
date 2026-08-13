@@ -1,0 +1,87 @@
+--- strings used by the 0x776342 map-flag arm ---
+  0x776B30 len=1  b')'  gbk=)
+  0x776B3C len=1  b'('  gbk=(
+
+==============================================================================
+binder 0x77ADD4  (eax=map, edx=name) -> returns the TPsNpc stored into [map+0xA4]
+==============================================================================
+0077ADD4  55                     push ebp
+0077ADD5  8bec                   mov ebp, esp
+0077ADD7  81c4f4feffff           add esp, 0xfffffef4
+0077ADDD  53                     push ebx
+0077ADDE  56                     push esi
+0077ADDF  57                     push edi
+0077ADE0  33c9                   xor ecx, ecx
+0077ADE2  898df4feffff           mov dword ptr [ebp - 0x10c], ecx
+0077ADE8  894df8                 mov dword ptr [ebp - 8], ecx
+0077ADEB  8bfa                   mov edi, edx
+0077ADED  8bf0                   mov esi, eax
+0077ADEF  33c0                   xor eax, eax
+0077ADF1  55                     push ebp
+0077ADF2  6824af7700             push 0x77af24
+0077ADF7  64ff30                 push dword ptr fs:[eax]
+0077ADFA  648920                 mov dword ptr fs:[eax], esp
+0077ADFD  33c0                   xor eax, eax
+0077ADFF  8945fc                 mov dword ptr [ebp - 4], eax
+0077AE02  a130657d00             mov eax, dword ptr [0x7d6530]
+0077AE07  ff30                   push dword ptr [eax]
+0077AE09  6840af7700             push 0x77af40
+0077AE0E  57                     push edi
+0077AE0F  6854af7700             push 0x77af54
+0077AE14  8d45f8                 lea eax, [ebp - 8]
+0077AE17  ba04000000             mov edx, 4
+0077AE1C  e86faac8ff             call 0x405890
+0077AE21  8b45f8                 mov eax, dword ptr [ebp - 8]
+0077AE24  e80321c9ff             call 0x40cf2c
+0077AE29  84c0                   test al, al
+0077AE2B  0f84ab000000           je 0x77aedc
+0077AE31  b201                   mov dl, 1
+0077AE33  a1a8cf6300             mov eax, dword ptr [0x63cfa8]
+0077AE38  e80b2aecff             call 0x63d848
+0077AE3D  8bd8                   mov ebx, eax
+0077AE3F  895dfc                 mov dword ptr [ebp - 4], ebx
+0077AE42  c6835d04000002         mov byte ptr [ebx + 0x45d], 2
+0077AE49  8d8358040000           lea eax, [ebx + 0x458]
+0077AE4F  8b55f8                 mov edx, dword ptr [ebp - 8]
+0077AE52  e8fda6c8ff             call 0x405554
+0077AE57  8d85f8feffff           lea eax, [ebp - 0x108]
+0077AE5D  8b5644                 mov edx, dword ptr [esi + 0x44]
+0077AE60  b9ff000000             mov ecx, 0xff
+0077AE65  e842a9c8ff             call 0x4057ac
+0077AE6A  8d95f8feffff           lea edx, [ebp - 0x108]
+0077AE70  8b5dfc                 mov ebx, dword ptr [ebp - 4]
+0077AE73  8d8315010000           lea eax, [ebx + 0x115]
+0077AE79  b10f                   mov cl, 0xf
+0077AE7B  e8648bc8ff             call 0x4039e4
+0077AE80  89b328010000           mov dword ptr [ebx + 0x128], esi
+0077AE86  33c0                   xor eax, eax
+0077AE88  89832c010000           mov dword ptr [ebx + 0x12c], eax
+0077AE8E  33c0                   xor eax, eax
+0077AE90  898330010000           mov dword ptr [ebx + 0x130], eax
+0077AE96  8d85f8feffff           lea eax, [ebp - 0x108]
+0077AE9C  8bd7                   mov edx, edi
+0077AE9E  b9ff000000             mov ecx, 0xff
+0077AEA3  e804a9c8ff             call 0x4057ac
+0077AEA8  8d95f8feffff           lea edx, [ebp - 0x108]
+0077AEAE  8d8306010000           lea eax, [ebx + 0x106]
+0077AEB4  b10e                   mov cl, 0xe
+0077AEB6  e8298bc8ff             call 0x4039e4
+0077AEBB  c6835401000000         mov byte ptr [ebx + 0x154], 0
+0077AEC2  33d2                   xor edx, edx
+0077AEC4  8bc3                   mov eax, ebx
+0077AEC6  e84514ffff             call 0x76c310
+0077AECB  8b45fc                 mov eax, dword ptr [ebp - 4]
+0077AECE  c6805c04000000         mov byte ptr [eax + 0x45c], 0
+0077AED5  8b10                   mov edx, dword ptr [eax]
+0077AED7  ff5278                 call dword ptr [edx + 0x78]
+0077AEDA  eb27                   jmp 0x77af03
+0077AEDC  8d85f4feffff           lea eax, [ebp - 0x10c]
+0077AEE2  8b4df8                 mov ecx, dword ptr [ebp - 8]
+0077AEE5  ba64af7700             mov edx, 0x77af64
+0077AEEA  e82da9c8ff             call 0x40581c
+0077AEEF  8b95f4feffff           mov edx, dword ptr [ebp - 0x10c]
+0077AEF5  a1cc5e7d00             mov eax, dword ptr [0x7d5ecc]
+0077AEFA  8b00                   mov eax, dword ptr [eax]
+0077AEFC  b101                   mov cl, 1
+0077AEFE  e8                     (db)
+0077AEFF  71                     (db)

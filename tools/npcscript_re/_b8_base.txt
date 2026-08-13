@@ -1,0 +1,177 @@
+==============================================================================
+TEnvironment VMT+0x00  (base of OnLeave-host 0x5FD574)   0x77A014 .. 0x77A0E0
+==============================================================================
+0077A014  55                     push ebp
+0077A015  8bec                   mov ebp, esp
+0077A017  53                     push ebx
+0077A018  56                     push esi
+0077A019  57                     push edi
+0077A01A  8bda                   mov ebx, edx
+0077A01C  8bf0                   mov esi, eax
+0077A01E  8b7b04                 mov edi, dword ptr [ebx + 4]
+0077A021  8bc7                   mov eax, edi
+0077A023  8b15a8cf6300           mov edx, dword ptr [0x63cfa8]
+0077A029  e8faa7c8ff             call 0x404828
+0077A02E  84c0                   test al, al
+0077A030  741e                   je 0x77a050
+0077A032  8bd7                   mov edx, edi
+0077A034  8b86c8000000           mov eax, dword ptr [esi + 0xc8]
+0077A03A  e8adadcaff             call 0x424dec
+0077A03F  85c0                   test eax, eax
+0077A041  7c0d                   jl 0x77a050
+0077A043  8bd0                   mov edx, eax
+0077A045  8b86c8000000           mov eax, dword ptr [esi + 0xc8]
+0077A04B  e8e0aacaff             call 0x424b30
+0077A050  8bd3                   mov edx, ebx
+0077A052  8b4650                 mov eax, dword ptr [esi + 0x50]
+0077A055  e88a4ed2ff             call 0x49eee4
+0077A05A  a138707d00             mov eax, dword ptr [0x7d7038]
+0077A05F  f6400280               test byte ptr [eax + 2], 0x80
+0077A063  7430                   je 0x77a095
+0077A065  83beb400000000         cmp dword ptr [esi + 0xb4], 0
+0077A06C  7427                   je 0x77a095
+0077A06E  85db                   test ebx, ebx
+0077A070  7423                   je 0x77a095
+0077A072  837b0400               cmp dword ptr [ebx + 4], 0
+0077A076  741d                   je 0x77a095
+0077A078  803b01                 cmp byte ptr [ebx], 1
+0077A07B  7518                   jne 0x77a095
+0077A07D  8b4304                 mov eax, dword ptr [ebx + 4]
+0077A080  80b87801000000         cmp byte ptr [eax + 0x178], 0
+0077A087  750c                   jne 0x77a095
+0077A089  b101                   mov cl, 1
+0077A08B  8b5304                 mov edx, dword ptr [ebx + 4]
+0077A08E  8bc6                   mov eax, esi
+0077A090  e8e7180000             call 0x77b97c
+0077A095  6683bebc00000000       cmp word ptr [esi + 0xbc], 0
+0077A09D  7637                   jbe 0x77a0d6
+0077A09F  803b01                 cmp byte ptr [ebx], 1
+0077A0A2  7532                   jne 0x77a0d6
+0077A0A4  8b4304                 mov eax, dword ptr [ebx + 4]
+0077A0A7  85c0                   test eax, eax
+0077A0A9  742b                   je 0x77a0d6
+0077A0AB  8a9078010000           mov dl, byte ptr [eax + 0x178]
+0077A0B1  84d2                   test dl, dl
+0077A0B3  7405                   je 0x77a0ba
+0077A0B5  80fa36                 cmp dl, 0x36
+0077A0B8  751c                   jne 0x77a0d6
+0077A0BA  0fb7bebc000000         movzx edi, word ptr [esi + 0xbc]
+0077A0C1  66c786bc0000000000     mov word ptr [esi + 0xbc], 0
+0077A0CA  e859b6fcff             call 0x745728
+0077A0CF  6689bebc000000         mov word ptr [esi + 0xbc], di
+0077A0D6  6683bebe00000000       cmp word ptr [esi + 0xbe], 0
+0077A0DE  7640                   jbe 0x77a120
+
+==============================================================================
+TEnvironment VMT+0x04  (base of OnEnter-host 0x5FD534)   0x779F68 .. 0x77A014
+==============================================================================
+00779F68  55                     push ebp
+00779F69  8bec                   mov ebp, esp
+00779F6B  53                     push ebx
+00779F6C  56                     push esi
+00779F6D  8bda                   mov ebx, edx
+00779F6F  8bf0                   mov esi, eax
+00779F71  8bd1                   mov edx, ecx
+00779F73  8b4650                 mov eax, dword ptr [esi + 0x50]
+00779F76  8bcb                   mov ecx, ebx
+00779F78  e8df4cd2ff             call 0x49ec5c
+00779F7D  8bc3                   mov eax, ebx
+00779F7F  8b15e8bb7300           mov edx, dword ptr [0x73bbe8]
+00779F85  e89ea8c8ff             call 0x404828
+00779F8A  84c0                   test al, al
+00779F8C  7461                   je 0x779fef
+00779F8E  6683bebc00000000       cmp word ptr [esi + 0xbc], 0
+00779F96  7607                   jbe 0x779f9f
+00779F98  8bc3                   mov eax, ebx
+00779F9A  e889b7fcff             call 0x745728
+00779F9F  8a8378010000           mov al, byte ptr [ebx + 0x178]
+00779FA5  84c0                   test al, al
+00779FA7  751e                   jne 0x779fc7
+00779FA9  668b86be000000         mov ax, word ptr [esi + 0xbe]
+00779FB0  6685c0                 test ax, ax
+00779FB3  7632                   jbe 0x779fe7
+00779FB5  663b8378020000         cmp ax, word ptr [ebx + 0x278]
+00779FBC  7329                   jae 0x779fe7
+00779FBE  8bc3                   mov eax, ebx
+00779FC0  e863b7fcff             call 0x745728
+00779FC5  eb20                   jmp 0x779fe7
+00779FC7  3c36                   cmp al, 0x36
+00779FC9  751c                   jne 0x779fe7
+00779FCB  668b86c0000000         mov ax, word ptr [esi + 0xc0]
+00779FD2  6685c0                 test ax, ax
+00779FD5  7610                   jbe 0x779fe7
+00779FD7  663b8378020000         cmp ax, word ptr [ebx + 0x278]
+00779FDE  7307                   jae 0x779fe7
+00779FE0  8bc3                   mov eax, ebx
+00779FE2  e841b7fcff             call 0x745728
+00779FE7  ff86c4000000           inc dword ptr [esi + 0xc4]
+00779FED  eb1e                   jmp 0x77a00d
+00779FEF  8bc3                   mov eax, ebx
+00779FF1  8b15a8cf6300           mov edx, dword ptr [0x63cfa8]
+00779FF7  e82ca8c8ff             call 0x404828
+00779FFC  84c0                   test al, al
+00779FFE  740d                   je 0x77a00d
+0077A000  8bd3                   mov edx, ebx
+0077A002  8b86c8000000           mov eax, dword ptr [esi + 0xc8]
+0077A008  e8abaacaff             call 0x424ab8
+0077A00D  5e                     pop esi
+0077A00E  5b                     pop ebx
+0077A00F  5d                     pop ebp
+0077A010  c3                     ret 
+0077A011  8d4000                 lea eax, [eax]
+
+==============================================================================
+TEnvironment VMT+0x08  (base of OnDie-host  0x5FD4D4)   0x779F64 .. 0x779F68
+==============================================================================
+00779F64  c3                     ret 
+00779F65  8d4000                 lea eax, [eax]
+
+==============================================================================
+TEnvironment VMT+0x10  (base of OnReLive-host 0x5FD384) -- contains 0x77BB66   0x77BB38 .. 0x77BBB0
+==============================================================================
+0077BB38  55                     push ebp
+0077BB39  8bec                   mov ebp, esp
+0077BB3B  53                     push ebx
+0077BB3C  8bca                   mov ecx, edx
+0077BB3E  33d2                   xor edx, edx
+0077BB40  85c9                   test ecx, ecx
+0077BB42  7431                   je 0x77bb75
+0077BB44  8bd9                   mov ebx, ecx
+0077BB46  80bb7801000000         cmp byte ptr [ebx + 0x178], 0
+0077BB4D  7526                   jne 0x77bb75
+0077BB4F  807b7300               cmp byte ptr [ebx + 0x73], 0
+0077BB53  7520                   jne 0x77bb75
+0077BB55  83b8a400000000         cmp dword ptr [eax + 0xa4], 0
+0077BB5C  7417                   je 0x77bb75
+0077BB5E  8bd3                   mov edx, ebx
+0077BB60  8b80a4000000           mov eax, dword ptr [eax + 0xa4]
+0077BB66  e8e9adecff             call 0x646954
+0077BB6B  83bbac02000000         cmp dword ptr [ebx + 0x2ac], 0
+0077BB72  0f9fc2                 setg dl
+0077BB75  8bc2                   mov eax, edx
+0077BB77  5b                     pop ebx
+0077BB78  5d                     pop ebp
+0077BB79  c3                     ret 
+0077BB7A  8bc0                   mov eax, eax
+0077BB7C  55                     push ebp
+0077BB7D  8bec                   mov ebp, esp
+0077BB7F  51                     push ecx
+0077BB80  53                     push ebx
+0077BB81  56                     push esi
+0077BB82  57                     push edi
+0077BB83  894dfc                 mov dword ptr [ebp - 4], ecx
+0077BB86  8bfa                   mov edi, edx
+0077BB88  33db                   xor ebx, ebx
+0077BB8A  85ff                   test edi, edi
+0077BB8C  7433                   je 0x77bbc1
+0077BB8E  8bf7                   mov esi, edi
+0077BB90  83beb003000000         cmp dword ptr [esi + 0x3b0], 0
+0077BB97  7428                   je 0x77bbc1
+0077BB99  807e7300               cmp byte ptr [esi + 0x73], 0
+0077BB9D  7522                   jne 0x77bbc1
+0077BB9F  8bc6                   mov eax, esi
+0077BBA1  e80272ffff             call 0x772da8
+0077BBA6  84c0                   test al, al
+0077BBA8  7517                   jne 0x77bbc1
+0077BBAA  8b86b0030000           mov eax, dword ptr [esi + 0x3b0]
+
