@@ -809,6 +809,46 @@ namespace GameSvr
             if (nativeSkill152)
                 return TryActivateNativeSkill152(userMagic, dwCurTick);
 
+            // ---- HERO-MAGIC-3: 接入 sub_68DD88 已移植的分支 (见 HeroObject.NativeDoSpell.cs) ----
+            // 0x68DDC3-0x68DDF1: tx/ty 取目标坐标, 目标为空时取英雄自己的坐标。
+            // (0x68DE41 的死目标清空发生在 SM_SPELL 之后, 故这里仍用目标坐标。)
+            var wMagicID = userMagic.MagicInfo.wMagicID;
+            short nSpellX = spellTarget != null
+                ? spellTarget.m_nCurrX : m_nCurrX;
+            short nSpellY = spellTarget != null
+                ? spellTarget.m_nCurrY : m_nCurrY;
+
+            if (IsNativeHeroSummonMagic(wMagicID))
+            {
+                // 17/30/41/62/112 在原生分派器里是主人造宠内联段, 完全不经伤害路径。
+                // 0x68DDF5: wMagicID != 42 时先广播 SM_SPELL(sub_769258)。
+                SendRefMsg(Grobal2.RM_SPELL, userMagic.MagicInfo.btEffect,
+                    nSpellX, nSpellY, wMagicID, string.Empty);
+                if (!TryReleaseNativeHeroSummonMagic(userMagic, wMagicID))
+                {
+                    return false;             // 0x68E6BE boSpellFail -> 返回 0, 不发 0x27E
+                }
+                // 0x68E6C0-0x68E6F8: boSpellFire 恒为 1, 发 SM_MAGICFIRE(sub_76920C) 后 result=1。
+                SendRefMsg(Grobal2.RM_MAGICFIRE, 0,
+                    HUtil32.MakeWord(userMagic.MagicInfo.btEffectType,
+                        userMagic.MagicInfo.btEffect),
+                    HUtil32.MakeLong(nSpellX, nSpellY),
+                    spellTarget == null ? 0 : spellTarget.ObjectId, string.Empty);
+                return true;
+            }
+
+            // 13/14/15/18/19/48: 原生在效果之前有一道 sub_73EA20 护身符门,
+            // 不过门则 boSpellFail=1 并在 0x68E6BE 直接返回 false (不发 0x27E)。
+            // 门后的效果体 (sub_76EB54 / 76ECEC / 76ED74 / 76F1B8 / 76FD40 / 76FBBC)
+            // 都是 TCreature 级 helper, C# 侧目前只有 TPlayObject 形态的转写,
+            // 尚未按英雄接收者移植 —— 故这些技能【仅】补上护身符门,
+            // 效果仍走下面既有的通用伤害路径, 属已登记缺口。
+            if (TryGetNativeHeroAmuletCost(wMagicID, out var nCharmCount) &&
+                !NativeConsumeBujukCharm(nCharmCount, true))
+            {
+                return false;
+            }
+
             // Native hero cast path sub_71BB8C reaches the SAME power helper the
             // player path uses (sub_4C8648 -> sub_4C8658, e.g. @0x71BD51, @0x71C13F),
             // which fuses the power roll and divides by the hardcoded float32 4.0 at
