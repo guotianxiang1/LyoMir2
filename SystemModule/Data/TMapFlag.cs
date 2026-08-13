@@ -202,8 +202,12 @@ public class TMapFlag
     /// 战神 map flag <c>NOMAGIC</c> -> native <c>[flag+0x81]</c>. The field has exactly ONE
     /// reader, 0x6DA12B <c>80 B8 81 00 00 00 00  cmp byte [eax+0x81],0</c> / 0x6DA132 <c>jne</c>,
     /// reached through the standard <c>mov eax,[actor+0x128]</c> map-pointer form at 0x6DA125.
-    /// C# parses the token but has no equivalent gate yet, so a NOMAGIC map does not block
-    /// anything here.
+    /// The reader sits in the CM_SPELL dispatcher (sub_6D7D68) just before the DoSpell call
+    /// (sub_6BC510): a set flag jumps to the silent reject at 0x6DA17A (spell fail/ack 0x276,
+    /// no cast, no text). Consumer reproduced by
+    /// <c>TPlayObject.NativeNoMagicMapForbidsSpell()</c> (GameSvr\Players\
+    /// TPlayObject.NativeNoMagicMap.cs); wiring into the CM_SPELL case is handed to the parent
+    /// agent (TPlayObject.Message.cs is off-limits to that shard).
     /// </summary>
     public bool boNOMAGIC;
 
@@ -315,7 +319,23 @@ public class TMapFlag
     public List<string> FlyDropItemNames;
 
     /// <summary>
-    /// 战神 map flag <c>TRIGGERBOMB</c>.
+    /// 战神 map flag <c>TRIGGERBOMB</c> -> native <c>[flag+0x83]</c>. Parsers write it
+    /// (A 0x7758DF/0x7758F3, B 0x776894); a whole-image scan finds exactly ONE reader,
+    /// 0x789752 <c>cmp byte [eax+0x83],0</c> inside <c>sub_7896FC</c>.
+    /// <para>
+    /// This field 1:1 reproduces the PROVEN parse write. Its EFFECT is deliberately left
+    /// unmodelled and is <b>BLOCKED</b> (fail-closed): <c>sub_7896FC</c> is a method of the
+    /// class <c>TTimerBomb</c> (classptr 0x781304, parent <c>TBaseItem</c>) at its VMT+0x18,
+    /// and TTimerBomb is <b>never instantiated</b> anywhere in the image — the classptr value
+    /// 0x781304 appears only in the class's own vmtSelfPtr (0x7812B8) and RTTI self-ref
+    /// (0x781371), never as a code immediate/classref, and the name has no FindClass ref. So
+    /// the sole boTRIGGERBOMB reader is dead code and the flag has NO run-time effect in
+    /// native. A live C# consumer would DIVERGE from native (fabrication). The effect itself
+    /// (throttled per-player spawn of a "朱火弹(幻)" bomb monster; off-flag SysMsg
+    /// "在这里无法使用！") also needs the unmodelled TTimerBomb/TBaseItem placeable-object
+    /// subsystem. Full reverse-engineering + proof: GameSvr\Players\
+    /// TPlayObject.NativeTriggerBombMap.cs. Do NOT wire a consumer off this field.
+    /// </para>
     /// </summary>
     public bool boTRIGGERBOMB;
 
