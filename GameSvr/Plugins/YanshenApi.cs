@@ -1568,6 +1568,13 @@ namespace GameSvr.Plugins
                 !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, out var other))
                 return false;
 
+            // 至少一路产出为正才允许删除：0x1006BB3B..0x1006BB57 是五连 test/cmp，
+            // 元宝 灵符 金币 其他值 经验 全部 <= 0 就 jle 0x1006BD2D 结束本件，不进删除段。
+            // 原生判的是缩放前的单价，于是 单价=1、倍率=50 这种配置会过门却只入账
+            // ⌊1*50/100⌋=0，删了不给。这里改判缩放后的金额，比原生紧一档。
+            if (yuanbao <= 0 && gold <= 0 && lingFu <= 0 && exp <= 0 && other <= 0)
+                return false;
+
             // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
             // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
             if (yuanbao > 0) return false;
