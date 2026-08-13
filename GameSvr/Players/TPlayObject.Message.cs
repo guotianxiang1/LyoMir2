@@ -1482,7 +1482,17 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_FIREHIT:
                 case Grobal2.CM_SWORD_HIT:
-                    if (ClientHitXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)ProcessMsg.wParam, ProcessMsg.boLateDelivery, ref dwDelayTime))
+                    // Native masks the wire direction to 3 bits before handing it
+                    // to the shared attack handler sub_6EC078. Both dispatch arms
+                    // do it, byte-identically:
+                    //   0x6D9EF1  8A 40 0A  mov al, byte [msg+0x0A]   ; Series low
+                    //   0x6D9EF4  24 07     and al, 7
+                    //   0x6D9EF6  50        push eax
+                    // and again at 0x6D9F8D / 0x6D9F90 / 0x6D9F92.
+                    // Without the mask a forged packet can drive the direction to
+                    // 0..255 and index past the 8-entry direction tables. Same
+                    // defect class as the CM_RUN direction fix (MOVE-19).
+                    if (ClientHitXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)(ProcessMsg.wParam & 7), ProcessMsg.boLateDelivery, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
