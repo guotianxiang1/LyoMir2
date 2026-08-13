@@ -264,11 +264,17 @@ void CheckThrottlePredicate()
     Assert(!NativeYbConsignmentQuery.ThrottleAllows(tick, 0), "same tick is rejected");
     Assert(NativeYbConsignmentQuery.ThrottleAllows(tick, 1), "1ms passes the tick rule");
 
-    // `jbe` after `sub` is unsigned, so a tick that went backwards fails the two magnitude
-    // rules but still satisfies the bare inequality one.
-    Assert(!NativeYbConsignmentQuery.ThrottleAllows(tenMs, -1), "wrapped tick is rejected");
-    Assert(!NativeYbConsignmentQuery.ThrottleAllows(twoMs, -1), "wrapped tick is rejected (2ms)");
+    // A tick that went backwards. `jbe` is unsigned AND it is the reject arm: 0x632A69
+    // `jbe 0x632B23` lands on the epilogue, past the emitter call at 0x632B17, and past the
+    // write-back at 0x632A6F. So `sub` yielding 0xFFFFFFFF is ABOVE 0x0A, the branch is not
+    // taken, and the request goes through. All three rules let the wrapped case pass; the
+    // original has no wrap guard anywhere. This block used to assert the opposite, which is
+    // a behaviour the image does not contain.
+    Assert(NativeYbConsignmentQuery.ThrottleAllows(tenMs, -1), "wrapped tick passes the 10ms rule");
+    Assert(NativeYbConsignmentQuery.ThrottleAllows(twoMs, -1), "wrapped tick passes the 2ms rule");
     Assert(NativeYbConsignmentQuery.ThrottleAllows(tick, -1), "wrapped tick differs");
+    Assert(NativeYbConsignmentQuery.ThrottleAllows(tenMs, int.MinValue),
+        "the whole negative half-plane is above 0x0A once unsigned");
 }
 
 void CheckThrottleSlotsAreServerWide()

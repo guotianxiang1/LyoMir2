@@ -267,7 +267,10 @@ namespace GameSvr.Services
 
         /// <summary>
         /// The manager's throttle. `elapsed` is `GetTickCount() - slot`. `jbe` after a `sub` is
-        /// an unsigned test, so a tick that went backwards (wrap) also fails.
+        /// an unsigned test and it is the REJECT arm — 0x632A69 `jbe 0x632B23` skips the
+        /// write-back at 0x632A6F and the emitter call at 0x632B17 — so a tick that went
+        /// backwards subtracts to 0xFFFFFFFF, compares ABOVE 0x0A, and is let through.
+        /// The original has no wrap guard; do not add one.
         /// </summary>
         public static bool ThrottleAllows(ThrottleRule rule, int elapsed) => rule switch
         {
