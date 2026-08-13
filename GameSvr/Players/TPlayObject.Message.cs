@@ -2728,6 +2728,24 @@ namespace GameSvr
                     }
                     break;
 
+                // Native CM 4314 handler 0x6DB040 loads Param into DX and calls
+                // 0x6F293C, whose entire body is `C3 ret` (bytes at 0x6F293C).
+                // No SM, no field write. Explicit case so Operate does not fall
+                // through to base.Operate.
+                case Grobal2.CM_4314:
+                    break;
+                // Native CM 4315 handler 0x6DB054 loads Param into DX and calls
+                // 0x6F2940, whose entire body is `C3 ret` (bytes at 0x6F2940).
+                // No SM, no field write. Same empty-callee shape as 4314.
+                case Grobal2.CM_4315:
+                    break;
+                case Grobal2.CM_3290:
+                    ClientNativeCm3290ClockSnapshot();
+                    break;
+                case Grobal2.CM_4629:
+                    ClientNativeCm4629GroupPositions();
+                    break;
+
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:
                 case Grobal2.CM_CHANGEPASSWORD:

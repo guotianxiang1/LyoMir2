@@ -176,6 +176,13 @@ namespace SystemModule
         public const int CM_DROPITEM = 1000;
         public const int CM_PICKUP = 1001;
         public const int CM_PICKUP_RANGE = 4278;
+        // Native CM 4314 handler 0x6DB040: `66 8B 50 06 mov dx,[msg+6]` then
+        // `E8 ED 78 01 00 call 0x6F293C`. Callee 0x6F293C is a single `C3 ret`.
+        public const int CM_4314 = 4314;
+        // Native CM 4315 handler 0x6DB054: `66 8B 50 06 mov dx,[msg+6]` then
+        // `E8 DD 78 01 00 call 0x6F2940`. Callee 0x6F2940 is a single `C3 ret`
+        // (followed by `8D 40 00` alignment padding, not a second instruction).
+        public const int CM_4315 = 4315;
         public const int CM_TAKEONITEM = 1003;
         public const int CM_TAKEOFFITEM = 1004;
         public const int CM_1005 = 1005;
@@ -1100,12 +1107,21 @@ namespace SystemModule
         public const int CM_SPLITITEM = 1116;
         public const int CM_QUERY_FOCUS_ITEM = 1271;
         public const int SM_ITEM_PILEUP_RESULT = 3322;
+        // Native CM 3290 (handler 0x6DA34E) replies on SM 3289 via vtbl+0x254.
+        // C# previously used 3290 as an SM ident (SM_QUERY_FOCUS_ITEM); that is
+        // the opposite direction and is not this CM.
+        public const int CM_3290 = 3290;
+        public const int SM_3289 = 3289;
         public const int SM_QUERY_FOCUS_ITEM = 3290;
 
         // === Title / NPC / Item Commit ===
         public const int CM_QUERY_TITLE = 3202;
         public const int CM_QUERY_MAP_NPC = 4610;
         public const int SM_QUERY_MAP_NPC = 4610;
+        // Native CM 4629 handler 0x6DBB70 -> 0x6F7C40. Same-ident reply via
+        // vtbl+0x254 (0x6F7E81 66 BA 15 12 mov dx,0x1215).
+        public const int CM_4629 = 4629;
+        public const int SM_4629 = 4629;
         public const int CM_COMMIT_ITEM = 4634;
         public const int SM_COMMIT_ITEM = 4634;
         public const int SM_OPEN_COMMIT_ITEM = 4635;
