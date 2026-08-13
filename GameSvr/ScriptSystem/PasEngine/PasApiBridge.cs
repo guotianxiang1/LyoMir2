@@ -5875,34 +5875,33 @@ namespace GameSvr.PasEngine
                     return true;
 
                 // === NPC INTERACTION / CLICK UI METHODS ===
+                // sub_64001C / sub_640058 / sub_640094 / sub_6400D0 / sub_64010C send a
+                // bare SM ident on the Clicker's [vtbl+0x250] with Recog = Integer(Self:
+                // TPsNpc) and Param/Tag/Series/sMsg all zero; no RM_MERCHANTSAY and no
+                // "@page" string is involved. See TPlayObject.NativeScriptUiOpen.
                 case "click_open_mosaic_hole":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0,
-                            $"{CurrentNpc.m_sCharName}/@mosaichole");
+                    CurrentPlayer?.SendNativeScriptUiOpen(
+                        TPlayObject.SM_CLICK_OPEN_MOSAIC_HOLE, CurrentNpc.ObjectId);
                     return true;
 
                 case "click_open_duihuan_contri":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0,
-                            $"{CurrentNpc.m_sCharName}/@duihuancontri");
+                    CurrentPlayer?.SendNativeScriptUiOpen(
+                        TPlayObject.SM_CLICK_OPEN_DUIHUAN_CONTRI, CurrentNpc.ObjectId);
                     return true;
 
                 case "click_open_myoffirankui":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0,
-                            $"{CurrentNpc.m_sCharName}/@myoffirankui");
+                    CurrentPlayer?.SendNativeScriptUiOpen(
+                        TPlayObject.SM_CLICK_OPEN_MYOFFIRANKUI, CurrentNpc.ObjectId);
                     return true;
 
                 case "click_open_attachabilui":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0,
-                            $"{CurrentNpc.m_sCharName}/@attachabilui");
+                    CurrentPlayer?.SendNativeScriptUiOpen(
+                        TPlayObject.SM_CLICK_OPEN_ATTACHABILUI, CurrentNpc.ObjectId);
                     return true;
 
                 case "click_open_mirtiantiorder":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0,
-                            $"{CurrentNpc.m_sCharName}/@mirtiantiorder");
+                    CurrentPlayer?.SendNativeScriptUiOpen(
+                        TPlayObject.SM_CLICK_OPEN_MIRTIANTIORDER, CurrentNpc.ObjectId);
                     return true;
 
                 case "click_repair_ex":
@@ -6231,9 +6230,20 @@ namespace GameSvr.PasEngine
                     return RejectUnsupportedNativeApi(out result);
 
                 // === Recycle / Free Retrieve ===
+                // sub_647F08 @0x00647F08 is the same six-instruction gate + bare send as the
+                // Click_Open_* family (0x00647F30 mov dx,0x10FF / 0x00647F38 call [ebx+0x250]);
+                // it reads no recycle configuration, so the send stands on its own.
+                case "clickopenfreeretrieve":
+                    if (CurrentPlayer != null)
+                    {
+                        CurrentPlayer.SendNativeScriptUiOpen(
+                            TPlayObject.SM_CLICK_OPEN_FREERETRIEVE, CurrentNpc.ObjectId);
+                        result = PasValue.FromBool(true);
+                    }
+                    return true;
+
                 case "getrecycleitemfeename":
                 case "getfreeretrievelist":
-                case "clickopenfreeretrieve":
                     // Native recycle/free-retrieve configuration and persistence are absent.
                     return RejectUnsupportedNativeApi(out result);
 
@@ -7331,27 +7341,27 @@ namespace GameSvr.PasEngine
 
                 // === NPC INTERACTION / CLICK UI (return value) ===
                 case "click_open_mosaic_hole":
-                    if (CurrentPlayer != null) { CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0, $"{CurrentNpc.m_sCharName}/@mosaichole"); result = PasValue.FromBool(true); }
+                    if (CurrentPlayer != null) { CurrentPlayer.SendNativeScriptUiOpen(TPlayObject.SM_CLICK_OPEN_MOSAIC_HOLE, CurrentNpc.ObjectId); result = PasValue.FromBool(true); }
                     else                     return true;
                     return true;
 
                 case "click_open_duihuan_contri":
-                    if (CurrentPlayer != null) { CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0, $"{CurrentNpc.m_sCharName}/@duihuancontri"); result = PasValue.FromBool(true); }
+                    if (CurrentPlayer != null) { CurrentPlayer.SendNativeScriptUiOpen(TPlayObject.SM_CLICK_OPEN_DUIHUAN_CONTRI, CurrentNpc.ObjectId); result = PasValue.FromBool(true); }
                     else                     return true;
                     return true;
 
                 case "click_open_myoffirankui":
-                    if (CurrentPlayer != null) { CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0, $"{CurrentNpc.m_sCharName}/@myoffirankui"); result = PasValue.FromBool(true); }
+                    if (CurrentPlayer != null) { CurrentPlayer.SendNativeScriptUiOpen(TPlayObject.SM_CLICK_OPEN_MYOFFIRANKUI, CurrentNpc.ObjectId); result = PasValue.FromBool(true); }
                     else                     return true;
                     return true;
 
                 case "click_open_attachabilui":
-                    if (CurrentPlayer != null) { CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0, $"{CurrentNpc.m_sCharName}/@attachabilui"); result = PasValue.FromBool(true); }
+                    if (CurrentPlayer != null) { CurrentPlayer.SendNativeScriptUiOpen(TPlayObject.SM_CLICK_OPEN_ATTACHABILUI, CurrentNpc.ObjectId); result = PasValue.FromBool(true); }
                     else                     return true;
                     return true;
 
                 case "click_open_mirtiantiorder":
-                    if (CurrentPlayer != null) { CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTSAY, 0, CurrentNpc.ObjectId, 0, 0, $"{CurrentNpc.m_sCharName}/@mirtiantiorder"); result = PasValue.FromBool(true); }
+                    if (CurrentPlayer != null) { CurrentPlayer.SendNativeScriptUiOpen(TPlayObject.SM_CLICK_OPEN_MIRTIANTIORDER, CurrentNpc.ObjectId); result = PasValue.FromBool(true); }
                     else                     return true;
                     return true;
 
