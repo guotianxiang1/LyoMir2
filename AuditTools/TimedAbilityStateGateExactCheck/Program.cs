@@ -690,14 +690,21 @@ static Envirnoment NewMap(short width, short height)
     return map;
 }
 
+// AddToMap, not MoveToMovingObject: the original's mover sub_7797CC only reports
+// success from 0x779A95, which is reached after unlinking the actor from the SOURCE
+// cell. Asking it to move an actor out of a cell it was never in walks the empty list
+// and falls through to `xor eax,eax` @0x779AAD, i.e. FALSE. A first placement has no
+// source cell, so the mover is the wrong primitive for it.
 static ProbePlayer Place(Envirnoment map, ProbePlayer player, short x, short y)
 {
     player.m_PEnvir = map;
     player.m_nCurrX = x;
     player.m_nCurrY = y;
     player.m_boFixedHideMode = false;
-    Equal(1, map.MoveToMovingObject(x, y, player, x, y, true),
-        $"place {player.m_sCharName}");
+    player.m_boAddToMaped = false;
+    player.m_boDelFormMaped = false;
+    Assert(ReferenceEquals(player, map.AddToMap(x, y,
+        CellType.OS_MOVINGOBJECT, player)), $"place {player.m_sCharName}");
     return player;
 }
 
