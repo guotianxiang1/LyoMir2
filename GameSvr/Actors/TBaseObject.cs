@@ -1328,6 +1328,10 @@ namespace GameSvr
                         {
                             m_dwSearchTick = 0;
                         }
+                        // MOVE-39 — 人形 mover 尾部的双人坐骑同伴跟随（0x741328..0x741350）。
+                        // 位置对齐原生：在广播 RM_WALK(0x74130D) 与落格处理 sub_778EC0(0x74131B)
+                        // 之后。Walk() 把这两步合并，返回 false 时本端要回滚，故只在成功臂调用。
+                        OnNativeHumanWalkMoverCommitted();
                         result = true;
                     }
                     else
