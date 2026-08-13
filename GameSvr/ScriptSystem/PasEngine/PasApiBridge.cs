@@ -556,7 +556,6 @@ namespace GameSvr.PasEngine
                 case "maxmac":          result = PasValue.FromInt(CurrentPlayer.m_WAbil.MAC); break;
                 case "hitrate":         result = PasValue.FromInt(CurrentPlayer.m_btHitPoint); break;
                 case "quickrate":       result = PasValue.FromInt(CurrentPlayer.m_btSpeedPoint); break;
-                case "antiMagic":       result = PasValue.FromInt(CurrentPlayer.m_nAntiMagic); break;
 
                 // Money/Currency
                 case "goldnum":         result = PasValue.FromInt(CurrentPlayer.m_nGold); break;
@@ -5044,7 +5043,7 @@ namespace GameSvr.PasEngine
 
                 case "getleitaistate":
                 case "getwarresult":
-                case "getmyleitaiFlag":
+                case "getmyleitaiflag":
                     // Native arena ownership and match-result state are absent.
                     return RejectUnsupportedNativeApi(out result);
 
