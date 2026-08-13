@@ -524,12 +524,16 @@ namespace GameSvr
                         if (!m_boUseThrusting)
                         {
                             ThrustingOnOff(true);
-                            SendSocket("+LNG");
+                            // 0x6BDFE6 xor ecx,ecx / 66 BA 70 02 mov dx,0x270
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_THRUSTING, 0, 0, 0, 0));
                         }
                         else
                         {
                             ThrustingOnOff(false);
-                            SendSocket("+ULNG");
+                            // 0x6BE001 mov ecx,1 / 66 BA 70 02 mov dx,0x270
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_THRUSTING, 1, 0, 0, 0));
                         }
                     }
                     result = true;
