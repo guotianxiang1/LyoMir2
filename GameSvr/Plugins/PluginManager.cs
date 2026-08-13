@@ -815,7 +815,13 @@ namespace GameSvr.Plugins
                     case "元宝": rule.Yuanbao = ReadRuleInt(field.Value, path); break;
                     case "金币": rule.Gold = ReadRuleInt(field.Value, path); break;
                     case "灵符": rule.LingFu = ReadRuleInt(field.Value, path); break;
-                    case "经验": rule.Exp = ReadRuleInt(field.Value, path); break;
+                    // 只要写了 经验 键就置 HasExp（哪怕值是 0）—— 原生 0x1006B95C
+                    // mov [ebp-0x78],esi 会把这件的经验单价压回泄漏槽，写 0 也是压 0。
+                    // 缺键才让上一件的值继续泄漏（N1，见 YanshenApi.RecycleOne）。
+                    case "经验":
+                        rule.Exp = ReadRuleInt(field.Value, path);
+                        rule.HasExp = true;
+                        break;
                     // 「每件物品回收增加 This_player.SetV(v1,v2,值)」。
                     //
                     // 原生这一段的门不是齐步走的：其他 与 值 缺任一 ⇒ je 0x1006BB25 整段跳过
@@ -1377,6 +1383,14 @@ namespace GameSvr.Plugins
         internal int Gold;
         internal int LingFu;
         internal int Exp;
+
+        /// <summary>
+        /// 这一条类型规则里到底写没写 <c>经验</c> 键。四个标量单价里只有 经验 需要区分
+        /// 「写了 0」和「没写」—— 因为原生的 经验 单价槽 <c>[ebp-0x78]</c> 跨物品泄漏
+        /// （见 YanshenApi.RecycleOne）。元宝/灵符/金币 的槽每件都重置
+        /// （0x1006B2A5 / 0x1006B2AC / 0x1006B2B6），缺键与写 0 同义，不需要这个标志。
+        /// </summary>
+        internal bool HasExp;
 
         internal bool HasOther;
         internal int OtherGroup;
