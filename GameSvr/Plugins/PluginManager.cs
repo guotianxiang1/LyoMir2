@@ -621,6 +621,11 @@ namespace GameSvr.Plugins
                 error = null;
                 M2Share.MainOutMessage(
                     $"[PluginManager] Loaded recycle.json: {candidate.ItemCount} items");
+                if (candidate.UnresolvedItems.Count > 0)
+                    M2Share.MainOutMessage(
+                        "[PluginManager] recycle.json: " + candidate.UnresolvedItems.Count +
+                        " item(s) name an undefined 回收类型 and will not be recycled: " +
+                        string.Join(", ", candidate.UnresolvedItems));
                 return true;
             }
             catch (Exception ex)
@@ -672,6 +677,7 @@ namespace GameSvr.Plugins
             // 大小写在原版都无从验证，取最窄的一种：不 trim、不折叠大小写，
             // 匹配不上就不回收。
             var items = new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
+            var unresolved = new List<string>();
             var foundItemSection = false;
             foreach (var sectionName in new[] { "物品种类", "可叠材料" })
             {
@@ -689,10 +695,17 @@ namespace GameSvr.Plugins
                     if (item.Value.ValueKind != JsonValueKind.String)
                         throw new JsonException($"{sectionName}.{item.Name} must name a recycle type");
 
+                    // 指向不存在的回收类型不是语法错误，作者给 -999 的说法只覆盖
+                    // 「配置文件不存在或语法错误」。生产 recycle.json 的 可叠材料 就还留着
+                    // 出厂模板的 "类型2"，而它的 回收类型 段里只有 11 个中文类型名，没有 类型2；
+                    // 整份判废会让那台服务器一件都回收不了。落到没有结算规则的物品身上
+                    // 只能是不回收 —— 删了没处结账。
                     var typeName = item.Value.GetString();
                     if (string.IsNullOrWhiteSpace(typeName) || !rules.TryGetValue(typeName, out var rule))
-                        throw new JsonException(
-                            $"{sectionName}.{item.Name} references unknown recycle type '{typeName}'");
+                    {
+                        unresolved.Add($"{sectionName}.{item.Name}->{typeName}");
+                        continue;
+                    }
                     items[item.Name] = new RecycleItemRule(rule, stackable);
                 }
             }
@@ -700,7 +713,7 @@ namespace GameSvr.Plugins
             if (!foundItemSection)
                 throw new JsonException("recycle configuration requires 物品种类 or 可叠材料");
 
-            return new RecycleConfigSnapshot(items);
+            return new RecycleConfigSnapshot(items, unresolved);
         }
 
         /// <summary>
@@ -1306,12 +1319,17 @@ namespace GameSvr.Plugins
     {
         private readonly Dictionary<string, RecycleItemRule> _items;
 
-        internal RecycleConfigSnapshot(Dictionary<string, RecycleItemRule> items)
+        internal RecycleConfigSnapshot(
+            Dictionary<string, RecycleItemRule> items, IReadOnlyList<string> unresolvedItems = null)
         {
             _items = items ?? new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
+            UnresolvedItems = unresolvedItems ?? Array.Empty<string>();
         }
 
         internal int ItemCount => _items.Count;
+
+        /// <summary>Items naming a 回收类型 the document never defines. They are never recycled.</summary>
+        internal IReadOnlyList<string> UnresolvedItems { get; }
 
         internal bool ContainsItem(string itemName) =>
             !string.IsNullOrEmpty(itemName) && _items.ContainsKey(itemName);

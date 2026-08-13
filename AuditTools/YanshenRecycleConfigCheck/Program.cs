@@ -37,13 +37,28 @@ try
     Assert(api.AutoRecycle() == 0,
         "AutoRecycle stopped consuming the last valid snapshot after a failed reload");
 
+    // 生产 recycle.json 的 可叠材料 指向出厂模板遗留的 "类型2"，而它的 回收类型 段里没有
+    // 这个名字。整份判废等于那台服务器一件都回收不了，所以只有那件物品失去结算规则，
+    // 其余照常加载；没有结算规则就永远不回收，删不掉也就付不了。
     WriteGbk(recyclePath,
-        "{\"物品种类\":{\"屠龙\":\"不存在\"}," +
+        "{\"物品种类\":{\"屠龙\":\"不存在\",\"怒斩\":\"类型1\"}," +
         "\"回收类型\":{\"类型1\":{\"金币\":1}}}");
+    Assert(manager.ReloadRecycleConfig(out var danglingError),
+        "undefined recycle type rejected the whole document: " + danglingError);
+    Assert(manager.RecycleConfigItemCount == 1 &&
+           manager.IsRecycleItemConfigured("怒斩") &&
+           !manager.IsRecycleItemConfigured("屠龙"),
+        "undefined recycle type did not drop exactly the unresolvable item");
+    Assert(api.AutoRecycle() == 0,
+        "an item without a settlement rule must never be recycled");
+
+    WriteGbk(recyclePath,
+        "{\"物品种类\":{\"屠龙\":\"类型1\"}," +
+        "\"回收类型\":{\"类型1\":{\"金币\":1,\"没这个键\":1}}}");
     Assert(!manager.ReloadRecycleConfig(out var schemaError) &&
-           schemaError.Contains("unknown recycle type", StringComparison.Ordinal),
-        "unknown recycle type was not rejected");
-    Assert(manager.RecycleConfigItemCount == 3,
+           schemaError.Contains("回收类型", StringComparison.Ordinal),
+        "unknown 回收类型 field was not rejected");
+    Assert(manager.RecycleConfigItemCount == 1,
         "schema failure replaced the last valid snapshot");
 
     WriteGbk(recyclePath,
