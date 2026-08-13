@@ -275,7 +275,7 @@ namespace GameSvr
 
         private bool HasNativeNeedKeyBoxFreeSlots() =>
             m_ItemList.Count + NativeNeedKeyBoxRequiredFreeSlots <=
-            Grobal2.MAXBAGITEM;
+            BagCapacity.Of(this);
 
         internal bool SendNativeNeedKeyBoxOpenPacket(byte[] body)
         {

@@ -529,7 +529,7 @@ namespace GameSvr
             var result = 0;
             if (_owner.m_ItemList.Count +
                 TPlayObject.NativeCattlePrizeRequiredFreeSlots <=
-                Grobal2.MAXBAGITEM)
+                BagCapacity.Of(_owner))
             {
                 if (HasRevealPending)
                 {
