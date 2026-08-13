@@ -54,18 +54,28 @@ namespace GameSvr
                 if (!m_boDeath)
                 {
                     int n18;
-                    if ((m_WAbil.HP < m_WAbil.MaxHP) && (m_nHealthTick >= M2Share.g_Config.nHealthFillTime))
+                    // POIS-18 — native natural HP regen @0x76B769-0x76B7AE:
+                    //   76B769  81 7E 10 2C 01 00 00  cmp  [esi+0x10], 0x12C   ; budget >= 300
+                    //   76B770  7C 40                 jl   0x76B7B2
+                    //   76B772  33 C0 / 89 46 10      mov  [esi+0x10], 0
+                    //   76B77D  8B 43 48              mov  eax, [ebx+0x48]     ; HP
+                    //   76B780  85 C0 / 7E 2E         test eax,eax / jle skip  ; HP > 0 required
+                    //   76B784  3B 43 4C / 7D 29      cmp  eax,[ebx+0x4C] / jge skip
+                    //   76B789  8B 86 B0 02 00 00     mov  eax, [esi+0x2B0]    ; MaxHP
+                    //   76B78F  B9 4B 00 00 00        mov  ecx, 0x4B           ; 75
+                    //   76B795  F7 F9 / 8B D0 / 42    idiv ecx; edx = eax + 1
+                    //   76B79E  E8 11 E6 FF FF        call 0x769DB4            ; IncHealthSpell(n,0)
+                    // The `test eax,eax / jle` gate was missing: an actor sitting at 0 HP
+                    // could be healed back up on the tick the budget matured and so never
+                    // reach the HP == 0 death poll below. The MP branch has no such gate
+                    // natively and keeps only the MP < MaxMP compare.
+                    // Going through IncHealthSpell also picks up the bodyState 0x66 halving
+                    // at 0x769DD1, which the inline add skipped; IncHealthSpell clamps to
+                    // MaxHP and raises HealthSpellChanged itself (0x769E3C call 0x7693E8).
+                    if ((m_WAbil.HP > 0) && (m_WAbil.HP < m_WAbil.MaxHP) && (m_nHealthTick >= M2Share.g_Config.nHealthFillTime))
                     {
                         n18 = m_WAbil.MaxHP / 75 + 1;
-                        if ((long)m_WAbil.HP + n18 < m_WAbil.MaxHP)
-                        {
-                            m_WAbil.HP += n18;
-                        }
-                        else
-                        {
-                            m_WAbil.HP = m_WAbil.MaxHP;
-                        }
-                        HealthSpellChanged();
+                        IncHealthSpell(n18, 0);
                     }
                     if ((m_WAbil.MP < m_WAbil.MaxMP) && (m_nSpellTick >= M2Share.g_Config.nSpellFillTime))
                     {
@@ -708,16 +718,24 @@ namespace GameSvr
                         {
                             m_nMeatQuality -= 1000;
                         }
-                        DamageHealth(m_btGreenPoisoningPoint + 1);
-                        m_nHealthTick = 0;
-                        m_nSpellTick = 0;
-                        HealthSpellChanged();
+                        // POIS-08 — the DamageHealth(m_btGreenPoisoningPoint + 1) that
+                        // used to sit here was a second, parallel hit. Native runs one
+                        // if/else-if chain (0x06 > 0x01 > 0x1C > 0x1F) that converges on
+                        // 0x76BDF5 and calls [vmt+0x1B0] exactly once per tick:
+                        //   76BD86  EB 6D                 jmp 0x76BDF5   ; tier 0x06 -> converge
+                        //   76BDF5  83 7D F4 00 / 74 25   if (rec == nil) skip everything
+                        //   76BE0C  FF 91 B0 01 00 00     call [ecx+0x1B0]  ; the only damage
+                        // Now that MakePosion feeds the timed-ability layer, tier 0x1F
+                        // carries the same green poison this block used to serve, so the
+                        // resolver below is the single exit. Meat decay is unrelated to the
+                        // damage call and stays on the legacy carrier.
                     }
-                    // POIS-09/POIS-10 — 战神 sub_76B6F0 @0x76BD4F-0x76BE1C 在同一个
-                    // 2500ms 闸后还服务另外四个 bodyState 档(0x06/0x01/0x1C/0x1F),
-                    // 一个 tick 只取优先级最高的那一档。上面那段走的是 legacy 12 槽
-                    // overlay(m_wStatusTimeArr),与 obj+0x168 位集是两套载体,故这里
-                    // 并列而非替换 —— 详见 TBaseObject.NativePoisonTick.cs 的字节表。
+                    // POIS-09/POIS-10 — 战神 sub_76B6F0 @0x76BD4F-0x76BE1C 在这个 2500ms
+                    // 闸后服务四个 bodyState 档(0x06/0x01/0x1C/0x1F),是 if/else-if 链,
+                    // 一个 tick 只取优先级最高的那一档,汇合于 0x76BDF5 后只打一次。
+                    // 自 MakePosion 改走 AddTimedAbilityInternal 之后,绿毒(0x1F)也由这条
+                    // 链服务,所以这里是本 tick 唯一的伤害出口 —— 详见
+                    // TBaseObject.NativePoisonTick.cs 的字节表。
                     // 伤害由 rec.Value+1 得出,其中 0x06 = MIN(MaxHP,5000000)/100、
                     // 0x01 = 同上/30,每 tick 覆写节点值;0x1C/0x1F 用施法者给的量。
                     if (TryResolveNativePoisonTickDamage(out var nNativePoisonDamage)

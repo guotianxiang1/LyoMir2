@@ -1,10 +1,9 @@
 namespace SystemModule
 {
-    // Dormant facade mapping the RandomNumber API surface onto the Delphi LCG (DelphiRandom),
-    // modeling RandSeed production-cutover step 4 ("让现有 RandomNumber 门面委托给 DelphiRandom,
-    // 统一零上界、负上界和溢出语义") WITHOUT replacing the live RandomNumber, which still uses
-    // .NET System.Random. Swapping the live facade changes every consumer's values at once and is
-    // therefore part of the single atomic cutover, not this dormant model.
+    // Facade mapping the RandomNumber API surface onto the Delphi LCG (DelphiRandom).
+    // POIS-26: RandomNumber now delegates here, so this is the live gameplay path and no
+    // longer a dormant model. Cutting over changes every probability consumer's values at
+    // once, which is the point - the original tunes its rates on this generator's bias.
     //
     // Original bounded draw sub_403B4C @0x00403B4C:
     //   nextSeed = seed * 0x08088405 + 1;  result = high32((uint32)bound * nextSeed)

@@ -792,10 +792,29 @@ namespace GameSvr
                     AttackTarget.StruckDamage(nPower, this);
                     AttackTarget.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101, nPower, AttackTarget.m_WAbil.HP, AttackTarget.m_WAbil.MaxHP, ObjectId, "", 200);
                     TryApplyNativeState26AfterPhysicalDamage(AttackTarget, nPower);
-                    if (!AttackTarget.m_boUnParalysis && m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_btAntiPoison + M2Share.g_Config.nAttackPosionRate) == 0))
+                    // POIS-36/37 — native hit-poison @0x666D2F-0x666D4E, bytes verified:
+                    //   666D2F  0F B7 86 6C 02 00 00  movzx eax, word [esi+0x26C]  ; target resistance
+                    //   666D36  83 C0 14              add   eax, 0x14              ; +20, hardcoded
+                    //   666D39  E8 0E CE D9 FF        call  0x403B4C               ; Random(res+20)
+                    //   666D3E  85 C0 / 75 12         test  eax,eax / jne skip     ; only ==0 passes
+                    //   666D42  6A 01                 push  1                      ; level 1
+                    //   666D44  66 B9 1E 00           mov   cx, 0x1E               ; 30 seconds
+                    //   666D48  B2 1F                 mov   dl, 0x1F               ; bodyState 0x1F = green poison
+                    //   666D4E  FF 93 C8 00 00 00     call  [ebx+0xC8]             ; MakePosion wrapper
+                    // Three corrections against the previous line:
+                    //  1. dl=0x1F is the damage-over-time green poison. POISON_STONE (slot 5)
+                    //     maps to bit 26 = bodyState 0x1A = petrify, a hard disable that no
+                    //     native site applies with 30s/level 1. The slot->bit mapping
+                    //     (0x80000000 >> slot, so slot 0 -> bit 31 -> 0x1F) is correct, so the
+                    //     "different index spaces" premise behind POISON_STONE does not hold.
+                    //  2. the roll reads Self+0x26C. Band state 0x5E (@0x773A2A `add word
+                    //     [esi+8], ax`, esi = Self+0x264) buffs that same word and is modelled
+                    //     as m_wEffectResistance, so Self+0x26C == m_wEffectResistance,
+                    //     not m_btAntiPoison.
+                    //  3. +20 and 30 seconds are immediates, not configuration.
+                    if (!AttackTarget.m_boUnParalysis && m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_wEffectResistance + 20) == 0))
                     {
-                        // Native 0x666D42: push 1 (level), not 0. C# applies POISON_STONE due to different index spaces (POIS-37).
-                        AttackTarget.MakePosion(Grobal2.POISON_STONE, M2Share.g_Config.nAttackPosionTime, 1);
+                        AttackTarget.MakePosion(Grobal2.POISON_DECHEALTH, 30, 1);
                     }
                     if (m_nHongMoSuite > 0)// 虹魔，吸血
                     {

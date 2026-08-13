@@ -88,7 +88,21 @@ namespace GameSvr
                 }
                 if (node.InternalType == 20 && node.Value > 3)
                 {
-                    AddTimedAbilityInternal(19, 0, -1, 1);
+                    // STATE-29 @0x7732AC, bytes verified:
+                    //   7732AC  83 7E 0A 03            cmp  dword [esi+0xA], 3
+                    //   7732B0  0F 8E AB 00 00 00      jle  0x773361
+                    //   7732B6  6A 01                  push 1          ; -> [ebp+0xC]
+                    //   7732B8  6A 00                  push 0          ; -> [ebp+8]
+                    //   7732BA  83 C9 FF               or   ecx, -1    ; permanent
+                    //   7732BD  B2 13                  mov  dl, 0x13
+                    //   7732C3  FF 97 EC 01 00 00      call [edi+0x1EC]
+                    // AddState reads value from [ebp+0xC] (0x7730E0 mov edi,[ebp+0xc])
+                    // and flag from [ebp+8] (0x77310C mov dl,[ebp+8]), so the first push
+                    // is the value and the second is the flag: value=1, flag=0. The two
+                    // were swapped, which left GetNativeTimedAbilityValue(19) returning 0
+                    // so every consumer that tiers on state 0x13's level fell to the
+                    // bottom tier, and set Flag=1 on a record native leaves at 0.
+                    AddTimedAbilityInternal(19, 1, -1, 0);
                 }
             }
 
@@ -273,9 +287,28 @@ namespace GameSvr
                         result = unchecked(result + node.Value);
                         break;
                     case 100:
-                        var percent = unchecked((int)(long)Math.Round(
-                            unchecked((uint)result) * (double)node.Value / 100.0,
-                            MidpointRounding.ToEven));
+                        // STATE-40 — band handler for 0x64 @0x773A45, bytes verified:
+                        //   773A45  8B 87 14 03 00 00  mov  eax, [edi+0x314]
+                        //   773A4B  89 45 C4           mov  [ebp-0x3C], eax
+                        //   773A4E  33 C0 / 89 45 C8   mov  [ebp-0x38], 0     ; zero-extend
+                        //   773A53  DF 6D C4           fild qword [ebp-0x3C]  ; hence (uint)
+                        //   773A56  DB 43 0A           fild dword [ebx+0xA]   ; node value
+                        //   773A59  D8 35 94 3B 77 00  fdiv dword [0x773B94]  ; = 100.0f
+                        //   773A5F  DE C9              fmulp st(1)
+                        //   773A61  E8 1A FB C8 FF     call 0x403580          ; @TRUNC
+                        //   773A66  01 87 14 03 00 00  add  [edi+0x314], eax
+                        // 0x403580 sets RC=11 (`66 81 4C 24 02 00 0F  or word [esp+2],0xF00`)
+                        // before fistp, so it truncates toward zero. The sibling helper
+                        // 0x403574 is a bare fistp on the default control word, which is
+                        // round-half-to-even - that is what MidpointRounding.ToEven modelled,
+                        // and this recompute never calls it.
+                        // Operand order is left as-is: native evaluates
+                        // current * (value / 100) in x87 extended precision, C# evaluates
+                        // (current * value) / 100 in double. Those can disagree in the last
+                        // bit right at an integer boundary; establishing which way needs a
+                        // measurement, so only the rounding mode is corrected here.
+                        var percent = unchecked((int)(long)(
+                            unchecked((uint)result) * (double)node.Value / 100.0));
                         result = unchecked(result + percent);
                         break;
                 }
