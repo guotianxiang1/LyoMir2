@@ -39,6 +39,19 @@ namespace GameSvr
         
         
         private int m_dwContinueTime = 0;
+
+        /// <summary>
+        /// Native field <c>[obj+0x20]</c>. Several subclass constructors write it
+        /// again after the TMapEvent constructor has clamped it, and
+        /// TOnceDamageTrapEvent zeroes it from inside ApplyTo
+        /// (<c>0x717F6F 33 C0 / 0x717F71 89 43 20</c>) so the event dies on the
+        /// next Run. Exposed for those paths only.
+        /// </summary>
+        internal int ContinueTime
+        {
+            get => m_dwContinueTime;
+            set => m_dwContinueTime = value;
+        }
         
         
         

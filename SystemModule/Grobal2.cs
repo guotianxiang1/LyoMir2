@@ -151,8 +151,24 @@ namespace SystemModule
         public const int ET_FIRE = 5;
         public const int ET_SCULPEICE = 6;
         public const int ET_YANHUA_TEXT = 23;
+        /// <summary>TCakeFireEvent.Create @0x718025 `6A 08 push 8`.</summary>
+        public const int ET_CAKEFIRE = 8;
+        /// <summary>TFireDragonPoint.Create @0x718BD9 `6A 0F push 0xF`.</summary>
+        public const int ET_FIREDRAGONPOINT = 0x0F;
+        /// <summary>TBTFireBurnEvent.Create @0x717A97 `C6 43 0C 15`.</summary>
+        public const int ET_BTFIREBURN = 0x15;
+        /// <summary>
+        /// Shared by TDebuffTrapEvent (@0x717CC7 `6A 19`) and
+        /// TOnceDamageTrapEvent (@0x717E5B `6A 19`) — two distinct classes
+        /// that both stamp type 0x19.
+        /// </summary>
+        public const int ET_TRAP = 0x19;
         /// <summary>TPrisonEvent.Create @0x7198E4 `6A 1D push 0x1D`.</summary>
         public const int ET_PRISON = 0x1D;
+        /// <summary>TDamageTrapEvent.Create @0x717C82 `C6 46 0C 1C`.</summary>
+        public const int ET_DAMAGETRAP = 0x1C;
+        /// <summary>TMapScriptEvt.Create @0x719B78 `6A 23 push 0x23`.</summary>
+        public const int ET_MAPSCRIPT = 0x23;
         /// <summary>TStallEvent.Create @0x719A20 `6A 29 push 0x29`.</summary>
         public const int ET_STALL = 0x29;
         public const int RCC_MERCHANT = 50;
@@ -1448,6 +1464,28 @@ namespace SystemModule
         public const int RM_USERNAME = 10043;
         public const int RM_MYSTATUS = 8102;
         public const int RM_STRUCK_MAG = 10027;
+        /// <summary>
+        /// The trap/fire-point damage carrier. Three TMapEvent subclasses emit it
+        /// through the immediate send helper sub_765E68:
+        /// TBTFireBurnEvent.ApplyTo @0x717BA8 `66 B9 2C 27 mov cx,0x272C`,
+        /// TOnceDamageTrapEvent.ApplyTo @0x717F46 (same bytes),
+        /// TFireDragonPoint.ApplyTo @0x718B9F (same bytes).
+        /// <para>
+        /// The player pump has NO arm for it: base cluster @0x6B3EF8
+        /// `add eax,0xFFFFD8F0` then `jmp [0x6B3F0F + eax*4]`, and slot 28
+        /// (10028) holds 0x6B6241 — the same address every out-of-range ident
+        /// jumps to (`0x6B3F02 ja 0x6B6241`). 0x6B6241 forwards to sub_743AD8.
+        /// So the armour roll runs and the number is handed to the fallback,
+        /// not to an HP mutation. Replicated as-is: do not "fix" it into damage.
+        /// </para>
+        /// </summary>
+        public const int RM_10028 = 10028;
+        /// <summary>
+        /// TOnceDamageTrapEvent.ApplyTo @0x717F60 `66 BA 05 29 mov dx,0x2905`,
+        /// dispatched through the enqueue-broadcast slot VMT+0xD8 with
+        /// nParam3 = 0x20 (@0x717F54 `6A 20`).
+        /// </summary>
+        public const int RM_10501 = 10501;
         public const int RM_RUSH = 10015;
         public const int RM_RUSHKUNG = 10016;
         public const int RM_PASSWORDSTATUS = 8106;
