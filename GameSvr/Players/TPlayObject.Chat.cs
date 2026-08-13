@@ -41,29 +41,26 @@ namespace GameSvr
                     }
                     return;
                 }
-                if (m_btPermission > 0)
+                // Native sub_6C94FC has no permission test here: after the 0x6C9584
+                // hear-whisper gate and the 0x6C95A0 IsBlockWhisper gate it falls
+                // straight into the 0x6C95CE concat and one single enqueue. The
+                // GM tier was invented - ident 103's Param is the literal 0xFFFC
+                // (0x6B4AE4 68 FC FF 00 00), which is what btWhisperMsgFColor/BColor
+                // (0xFC/0xFF) already produced on the non-GM branch.
+                //   0x6C95F6 66 8B 93 78 02 00 00 mov dx,[ebx+0x278] -> wParam = speaker level
+                //   0x6C95FE 0F B7 C0 / 50        movzx eax,ax; push -> nParam1 = 0 -> Series
+                //   0x6C9610 8B D3                mov edx,ebx        -> BaseObject = speaker
+                PlayObject.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
+                    m_sCharName + "=> " + saystr);
+                if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
                 {
-                    PlayObject.SendMsg(PlayObject, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, m_sCharName + "=> " + saystr);
-                    if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
-                    {
-                        m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
-                    if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                    {
-                        PlayObject.m_GetWhisperHuman.SendMsg(PlayObject.m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
+                    m_GetWhisperHuman.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
+                        m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
                 }
-                else
+                if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
                 {
-                    PlayObject.SendMsg(PlayObject, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, m_sCharName + "=> " + saystr);
-                    if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
-                    {
-                        m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
-                    if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                    {
-                        PlayObject.m_GetWhisperHuman.SendMsg(PlayObject.m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
+                    PlayObject.m_GetWhisperHuman.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
+                        m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
                 }
             }
             else
@@ -79,28 +76,23 @@ namespace GameSvr
             }
         }
 
-        public void WhisperRe(string SayStr, byte MsgType)
+        // Cross-server whisper delivery, native sub_6C976C
+        // (eax = Self, edx = sender name, ecx = text, word [ebp+8] = sender level).
+        // It has exactly one enqueue and no tier switch:
+        //   0x6C9785 66 8B 45 08  mov ax,[ebp+8]  / 50 push  -> wParam = sender level
+        //   0x6C978A 6A 00 x3                              -> nParam1..3 = 0
+        //   0x6C9793 66 B9 2F 27  mov cx,0x272F              -> RM 10031
+        //   0x6C9797 8B D3 / 8B C3 mov edx,ebx; mov eax,ebx  -> BaseObject = Self
+        // The 0/1/2 selector was a misreading of that level word; ident 103's Param
+        // is the literal 0xFFFC at 0x6B4AE4 and has no colour tier.
+        public void WhisperRe(string SayStr, int nSenderLevel)
         {
             var sendwho = string.Empty;
             HUtil32.GetValidStr3(SayStr, ref sendwho, new string[] { "[", " ", "=", ">" });
             if (m_boHearWhisper && !IsBlockWhisper(sendwho)
                 && (m_dwChatShieldMask & 0x01u) == 0)
             {
-                switch (MsgType)
-                {
-                    case 0:
-                        SendMsg(this, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor,
-                            M2Share.g_Config.btGMWhisperMsgBColor, 0, SayStr);
-                        break;
-                    case 1:
-                        SendMsg(this, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor,
-                            M2Share.g_Config.btWhisperMsgBColor, 0, SayStr);
-                        break;
-                    case 2:
-                        SendMsg(this, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btPurpleMsgFColor,
-                            M2Share.g_Config.btPurpleMsgBColor, 0, SayStr);
-                        break;
-                }
+                SendMsg(this, Grobal2.RM_WHISPER, nSenderLevel, 0, 0, 0, SayStr);
             }
         }
 

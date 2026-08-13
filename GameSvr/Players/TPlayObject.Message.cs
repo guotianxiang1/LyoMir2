@@ -2108,7 +2108,20 @@ namespace GameSvr
                                 0, 1);
                             break;
                         case Grobal2.RM_WHISPER:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_WHISPER, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // Native RM 10031 arm, the only send point for ident 103:
+                            //   0x6B4AE4 68 FC FF 00 00     push 0xFFFC        -> Param  (literal)
+                            //   0x6B4AE9 66 8B 43 02        mov ax,[ebx+2]     -> Tag    = wParam
+                            //   0x6B4AEE 66 8B 43 04        mov ax,[ebx+4]     -> Series = nParam1
+                            //   0x6B4AFC 8B 4B 24           mov ecx,[ebx+0x24] -> Recog  = BaseObject
+                            //   0x6B4AFF 66 BA 67 00        mov dx,0x67
+                            //   0x6B4B08 FF 93 54 02 00 00  call [VMT+0x254]
+                            // Param is an immediate with no alternate arm - a full-image
+                            // sweep finds exactly two RM 10031 producers (0x6C960C, 0x6C9793)
+                            // and one ident-103 send, so there is no colour-tier selector.
+                            // wParam carries the speaker's level (word[speaker+0x278]).
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_WHISPER,
+                                ProcessMsg.BaseObject, 0xFFFC,
+                                ProcessMsg.wParam, ProcessMsg.nParam1);
                             break;
                         case Grobal2.RM_CRY:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_CRY,
