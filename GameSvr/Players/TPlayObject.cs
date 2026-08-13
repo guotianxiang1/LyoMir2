@@ -173,6 +173,20 @@ namespace GameSvr
         private bool ClientPickUpItem(MapItem mapItem, int pickupX, int pickupY)
         {
             var result = false;
+            // sub_6B74D8 opens with this, before it even looks at the item
+            // (0x6B7500 GetTickCount / 0x6B7505 `2B 83 E4 03 00 00` /
+            // 0x6B750B `3D 58 1B 00 00` + `77 28`, then the two coordinate
+            // `jne`s at 0x6B7512 and 0x6B751A). Magic 266 stamps those three
+            // fields at 0x773FF0..0x774003, so for 7 s after a blink the
+            // caster cannot pick anything up off the cell it landed on.
+            if (IsNativeBlinkPickupLocked(pickupX, pickupY,
+                    HUtil32.GetTickCount()))
+            {
+                // 0x6B7522 `66 B9 FF 38` + string 0x6B7800, GBK length
+                // prefix 26 = 13 characters.
+                SysMsg("一定时间范围内，不能拾取。", MsgColor.Red, MsgType.Hint);
+                return false;
+            }
             if (mapItem == null)
             {
                 return false;
