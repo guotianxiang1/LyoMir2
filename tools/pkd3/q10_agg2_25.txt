@@ -1,0 +1,26 @@
+=== stores/reads touching [reg+0x25] in 0x750000..0x7A0000 ===
+   0x752245   add    dword ptr [ebp + 0x25], esi                  017525
+   0x76231B   mov    byte ptr [eax + 0x25], 1                     C6402501
+   0x762372   mov    byte ptr [eax + 0x25], 1                     C6402501
+   0x762B26   mov    byte ptr [eax + 0x25], 1                     C6402501
+   0x762B6A   mov    byte ptr [eax + 0x25], 1                     C6402501
+   0x766B63   add    byte ptr [ebp + 0x25], dh                    007525
+   0x769A4B   add    dh, byte ptr [ebp + 0x25]                    027525
+   0x7724B1   add    dh, byte ptr [edx + 0x25]                    027225
+   0x778F29   add    esi, dword ptr [ebp + 0x25]                  037525
+   0x7824F3   add    byte ptr [eax + 0x25], al                    004025
+   0x792258   add    byte ptr [ecx + 0x25], bh                    00B925000000
+   0x7924AB   add    byte ptr [eax + 0x25], dl                    005025
+   0x793F2B   add    byte ptr [ebp + 0x25], dh                    007525
+   0x79FDDE   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FDE3   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FDE8   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FDEC   and    byte ptr fs:[eax + 0x25], bh                 64207C2025
+   0x79FDED   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FDF2   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FDF6   and    byte ptr fs:[eax + 0x25], bh                 64207C2025
+   0x79FDF7   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FDFB   and    byte ptr fs:[eax + 0x25], bh                 64207C2025
+   0x79FDFC   and    byte ptr [eax + 0x25], bh                    207C2025
+   0x79FE00   and    byte ptr fs:[eax + 0x25], bh                 64207C2025
+   0x79FE01   and    byte ptr [eax + 0x25], bh                    207C2025

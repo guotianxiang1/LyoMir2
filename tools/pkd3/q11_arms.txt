@@ -1,0 +1,100 @@
+=== arms 19 (0x762318) and 24 (0x76236F) ===
+00762300  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762303  C6400701               mov byte ptr [eax + 7], 1
+00762307  E904010000             jmp 0x762410
+0076230C  8B45FC                 mov eax, dword ptr [ebp - 4]
+0076230F  C6400F01               mov byte ptr [eax + 0xf], 1
+00762313  E9F8000000             jmp 0x762410
+00762318  8B45FC                 mov eax, dword ptr [ebp - 4]
+0076231B  C6402501               mov byte ptr [eax + 0x25], 1
+0076231F  E9EC000000             jmp 0x762410
+00762324  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762327  C6402601               mov byte ptr [eax + 0x26], 1
+0076232B  E9E0000000             jmp 0x762410
+00762330  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762333  80480102               or byte ptr [eax + 1], 2
+00762337  8B471C                 mov eax, dword ptr [edi + 0x1c]
+0076233A  0FB7401E               movzx eax, word ptr [eax + 0x1e]
+0076233E  014650                 add dword ptr [esi + 0x50], eax
+00762341  E9CA000000             jmp 0x762410
+00762346  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762349  80480202               or byte ptr [eax + 2], 2
+0076234D  8B471C                 mov eax, dword ptr [edi + 0x1c]
+00762350  0FB7401E               movzx eax, word ptr [eax + 0x1e]
+00762354  014654                 add dword ptr [esi + 0x54], eax
+00762357  E9B4000000             jmp 0x762410
+0076235C  8B45FC                 mov eax, dword ptr [ebp - 4]
+
+=== the second dispatcher around 0x762B26 / 0x762B6A ===
+00762AF0  0201                   add al, byte ptr [ecx]
+00762AF2  0000                   add byte ptr [eax], al
+00762AF4  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762AF7  C6400A01               mov byte ptr [eax + 0xa], 1
+00762AFB  E9F6000000             jmp 0x762bf6
+00762B00  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B03  C6400601               mov byte ptr [eax + 6], 1
+00762B07  E9EA000000             jmp 0x762bf6
+00762B0C  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B0F  800808                 or byte ptr [eax], 8
+00762B12  E9DF000000             jmp 0x762bf6
+00762B17  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B1A  C6402301               mov byte ptr [eax + 0x23], 1
+00762B1E  E9D3000000             jmp 0x762bf6
+00762B23  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B26  C6402501               mov byte ptr [eax + 0x25], 1
+00762B2A  E9C7000000             jmp 0x762bf6
+00762B2F  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B32  C6402601               mov byte ptr [eax + 0x26], 1
+00762B36  E9BB000000             jmp 0x762bf6
+00762B3B  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B3E  80480104               or byte ptr [eax + 1], 4
+00762B42  8B471C                 mov eax, dword ptr [edi + 0x1c]
+00762B45  0FB7401E               movzx eax, word ptr [eax + 0x1e]
+00762B49  014650                 add dword ptr [esi + 0x50], eax
+00762B4C  E9A5000000             jmp 0x762bf6
+00762B51  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B54  80480204               or byte ptr [eax + 2], 4
+00762B58  8B471C                 mov eax, dword ptr [edi + 0x1c]
+00762B5B  0FB7401E               movzx eax, word ptr [eax + 0x1e]
+00762B5F  014654                 add dword ptr [esi + 0x54], eax
+00762B62  E98F000000             jmp 0x762bf6
+00762B67  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B6A  C6402501               mov byte ptr [eax + 0x25], 1
+00762B6E  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B71  C6400401               mov byte ptr [eax + 4], 1
+00762B75  EB7F                   jmp 0x762bf6
+00762B77  807D0805               cmp byte ptr [ebp + 8], 5
+00762B7B  750A                   jne 0x762b87
+00762B7D  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B80  6683481C08             or word ptr [eax + 0x1c], 8
+00762B85  EB08                   jmp 0x762b8f
+00762B87  8B45FC                 mov eax, dword ptr [ebp - 4]
+00762B8A  6683481C10             or word ptr [eax + 0x1c], 0x10
+
+=== which function contains 0x762B26 ===
+   funcstart 0x762974
+00762974  55                     push ebp
+00762975  8BEC                   mov ebp, esp
+00762977  51                     push ecx
+00762978  53                     push ebx
+00762979  56                     push esi
+0076297A  57                     push edi
+0076297B  8BF1                   mov esi, ecx
+0076297D  8955FC                 mov dword ptr [ebp - 4], edx
+00762980  8BF8                   mov edi, eax
+00762982  8B5D0C                 mov ebx, dword ptr [ebp + 0xc]
+00762985  53                     push ebx
+00762986  8A4508                 mov al, byte ptr [ebp + 8]
+00762989  50                     push eax
+0076298A  8BCE                   mov ecx, esi
+0076298C  8B55FC                 mov edx, dword ptr [ebp - 4]
+0076298F  8BC7                   mov eax, edi
+00762991  E8E2CEFFFF             call 0x75f878
+00762996  807B1018               cmp byte ptr [ebx + 0x10], 0x18
+0076299A  7512                   jne 0x7629ae
+0076299C  668B4322               mov ax, word ptr [ebx + 0x22]
+007629A0  66014608               add word ptr [esi + 8], ax
+007629A4  668B4326               mov ax, word ptr [ebx + 0x26]
+007629A8  6601460A               add word ptr [esi + 0xa], ax
+007629AC  EB3A                   jmp 0x7629e8
+007629AE  8B471C                 mov eax, dword ptr [edi + 0x1c]

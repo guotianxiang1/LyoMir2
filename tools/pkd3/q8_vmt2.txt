@@ -1,0 +1,88 @@
+probe 0x75D924 -> vmt 0x75D8D0  class TRing  slot +0x54  instsize 264  parentptr 0x75CAC8
+   slots: +0x50=0x75FE1C +0x54=0x76203C +0x58=0x761C30 +0x5C=0x75F728 +0x60=0x761CB4 +0x64=0x761B04 +0x68=0x761BA4 +0x6C=0x760014 
+
+=== the two `call [reg+0x58]` sites ===
+--- 0x772FE0 ---
+00772FE0  8BF0                   mov esi, eax
+00772FE2  8BC6                   mov eax, esi
+00772FE4  2B83E0000000           sub eax, dword ptr [ebx + 0xe0]
+00772FEA  3DF4010000             cmp eax, 0x1f4
+00772FEF  0F82AF000000           jb 0x7730a4
+00772FF5  89B3E0000000           mov dword ptr [ebx + 0xe0], esi
+00772FFB  33C0                   xor eax, eax
+00772FFD  8945FC                 mov dword ptr [ebp - 4], eax
+00773000  33C0                   xor eax, eax
+00773002  8945F0                 mov dword ptr [ebp - 0x10], eax
+00773005  8B83DC000000           mov eax, dword ptr [ebx + 0xdc]
+0077300B  8945F8                 mov dword ptr [ebp - 8], eax
+0077300E  837DF800               cmp dword ptr [ebp - 8], 0
+00773012  7463                   je 0x773077
+00773014  8B45F8                 mov eax, dword ptr [ebp - 8]
+00773017  8B400E                 mov eax, dword ptr [eax + 0xe]
+0077301A  8945F4                 mov dword ptr [ebp - 0xc], eax
+0077301D  8BCE                   mov ecx, esi
+0077301F  8B55F8                 mov edx, dword ptr [ebp - 8]
+00773022  8BC3                   mov eax, ebx
+00773024  8B38                   mov edi, dword ptr [eax]
+00773026  FF5758                 call dword ptr [edi + 0x58]
+00773029  84C0                   test al, al
+0077302B  7438                   je 0x773065
+0077302D  8B45F8                 mov eax, dword ptr [ebp - 8]
+00773030  8A5001                 mov dl, byte ptr [eax + 1]
+00773033  8BC3                   mov eax, ebx
+00773035  E86EF9FFFF             call 0x7729a8
+0077303A  837DFC00               cmp dword ptr [ebp - 4], 0
+0077303E  740B                   je 0x77304b
+--- 0x78FDE0 ---
+0078FDE0  1566833C58             adc eax, 0x583c8366
+0078FDE5  00760C                 add byte ptr [esi + 0xc], dh
+0078FDE8  C70600CA9A3B           mov dword ptr [esi], 0x3b9aca00
+0078FDEE  66FF0C58               dec word ptr [eax + ebx*2]
+0078FDF2  EB02                   jmp 0x78fdf6
+0078FDF4  33C9                   xor ecx, ecx
+0078FDF6  8BC1                   mov eax, ecx
+0078FDF8  5F                     pop edi
+0078FDF9  5E                     pop esi
+0078FDFA  5B                     pop ebx
+0078FDFB  C3                     ret 
+0078FDFC  55                     push ebp
+0078FDFD  8BEC                   mov ebp, esp
+0078FDFF  83C4F8                 add esp, -8
+0078FE02  53                     push ebx
+0078FE03  56                     push esi
+0078FE04  57                     push edi
+0078FE05  33DB                   xor ebx, ebx
+0078FE07  895DF8                 mov dword ptr [ebp - 8], ebx
+0078FE0A  8BF9                   mov edi, ecx
+0078FE0C  8BF2                   mov esi, edx
+0078FE0E  8BD8                   mov ebx, eax
+0078FE10  33C0                   xor eax, eax
+0078FE12  55                     push ebp
+0078FE13  686CFE7800             push 0x78fe6c
+0078FE18  64FF30                 push dword ptr fs:[eax]
+0078FE1B  648920                 mov dword ptr fs:[eax], esp
+0078FE1E  C645FF00               mov byte ptr [ebp - 1], 0
+0078FE22  8BC7                   mov eax, edi
+0078FE24  E8D756C7FF             call 0x405500
+0078FE29  85DB                   test ebx, ebx
+0078FE2B  7429                   je 0x78fe56
+0078FE2D  8BD6                   mov edx, esi
+0078FE2F  8BC3                   mov eax, ebx
+0078FE31  8B08                   mov ecx, dword ptr [eax]
+0078FE33  FF5158                 call dword ptr [ecx + 0x58]
+0078FE36  8BF0                   mov esi, eax
+0078FE38  85F6                   test esi, esi
+0078FE3A  7C1A                   jl 0x78fe56
+0078FE3C  8D4DF8                 lea ecx, [ebp - 8]
+0078FE3F  8BD6                   mov edx, esi
+0078FE41  8BC3                   mov eax, ebx
+0078FE43  E8007DC9FF             call 0x427b48
+0078FE48  8B55F8                 mov edx, dword ptr [ebp - 8]
+0078FE4B  8BC7                   mov eax, edi
+0078FE4D  E80257C7FF             call 0x405554
+0078FE52  C645FF01               mov byte ptr [ebp - 1], 1
+0078FE56  33C0                   xor eax, eax
+0078FE58  5A                     pop edx
+0078FE59  59                     pop ecx
+0078FE5A  59                     pop ecx
+0078FE5B  648910                 mov dword ptr fs:[eax], edx
