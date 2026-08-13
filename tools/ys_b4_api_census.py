@@ -280,17 +280,25 @@ def main():
     VA = re.compile(r'0x(?:10[0-9A-Fa-f]{6}|0?0?[4-7][0-9A-Fa-f]{5})\b')
     MEMBER = re.compile(r'^[ \t]*(?:(?:public|private|internal|protected|static|readonly|override'
                         r'|virtual|sealed|abstract|partial|new)\s+)+[\w<>\[\],?\.]+\s+(\w+)\s*[\(\{=]', re.M)
-    members = collections.defaultdict(list)
-    for d in MEMBER.finditer(apitext):
-        members[d.group(1)].append(apitext.count('\n', 0, d.start()))
+    # 判据用"成员自身的跨度"，不用 ±70 行窗口。窗口法会让一段长注释把邻居一起算成
+    # 有佐证 —— 本轮给 GetHeroExtreme / GetOther 写完字节注释后，窗口法把证据债从
+    # 33 直接算到 11，其中一多半是邻居蹭到的，不是真的补了证据。
+    decls = list(MEMBER.finditer(apitext))
+    spans = collections.defaultdict(list)
+    for i, d in enumerate(decls):
+        # 往前吃掉紧邻的 /// 文档注释块，它才是写字节佐证的地方
+        head = apitext.rfind('\n\n', 0, d.start())
+        lo = head + 1 if head >= 0 else d.start()
+        hi = decls[i + 1].start() if i + 1 < len(decls) else len(apitext)
+        spans[d.group(1)].append((lo, hi))
     arms = collections.defaultdict(list)
     for am in re.finditer(r'case\s+"([^"]+)"\s*:', br):
         nxt = br.find('case "', am.end())
         arms[am.group(1).lower()].append(br[am.end(): nxt if nxt > 0 else am.end() + 4000])
 
     def has_va(name):
-        for ln in members.get(name, []):
-            if VA.search('\n'.join(apilines[max(0, ln - 70):min(len(apilines), ln + 70)])):
+        for lo, hi in spans.get(name, ()):
+            if VA.search(apitext[lo:hi]):
                 return True
         return False
 
