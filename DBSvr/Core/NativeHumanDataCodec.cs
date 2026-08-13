@@ -1066,21 +1066,35 @@ namespace DBSvr.Core
 
         private static byte[] MergeKeyValues(byte[] original, Dictionary<int, int> current)
         {
+            // The emitted array has to be globally ascending by key, because native
+            // looks entries up with a binary search over it (sub_6E4270):
+            //   0x6E428C  33 D2        xor edx, edx              ; lo = 0
+            //   0x6E428E  8B C8 / 49   mov ecx, eax / dec ecx    ; hi = len - 1
+            //   0x6E4295  8B C1 / 2B C2 / D1 F8   mid = lo + (hi - lo) >> 1
+            //   0x6E42A2  3B 3C C6     cmp edi, [esi+eax*8]      ; hit -> take value
+            //   0x6E42B3  7E 05        jle -> hi = mid - 1
+            //   0x6E42B5  8D 50 01     lea edx,[eax+1]           ; else lo = mid + 1
+            // with the result seeded to -1 at 0x6E427A. Appending new keys after the
+            // pre-existing ones, as this did, leaves the array unsorted as soon as a
+            // script introduces a key smaller than one already on disk; the search
+            // then silently misses it on the next load and the variable reads back
+            // as -1.
             current ??= new Dictionary<int, int>();
-            using var output = new MemoryStream();
-            using var writer = new BinaryWriter(output);
-            var seen = new HashSet<int>();
+            var merged = new SortedDictionary<int, int>();
             if (original != null)
             {
                 for (var offset = 0; offset + 8 <= original.Length; offset += 8)
                 {
                     var key = BinaryPrimitives.ReadInt32LittleEndian(original.AsSpan(offset, 4));
-                    writer.Write(key);
-                    writer.Write(current.TryGetValue(key, out var value) ? value : 0);
-                    seen.Add(key);
+                    merged[key] = current.TryGetValue(key, out var value) ? value : 0;
                 }
             }
-            foreach (var pair in current.Where(pair => !seen.Contains(pair.Key)).OrderBy(pair => pair.Key))
+            foreach (var pair in current)
+                merged[pair.Key] = pair.Value;
+
+            using var output = new MemoryStream();
+            using var writer = new BinaryWriter(output);
+            foreach (var pair in merged)
             {
                 writer.Write(pair.Key);
                 writer.Write(pair.Value);
@@ -1091,16 +1105,28 @@ namespace DBSvr.Core
         private static bool ScriptValuesEquivalent(Dictionary<int, int> original,
             Dictionary<int, int> current)
         {
+            // A key holding 0 and a key that is absent are different states, so this
+            // comparison has to be strict on the key set too. Native's upsert
+            // sub_6E4140 has no zero test anywhere - the four value stores
+            //   0x6E4187  89 50 04        mov [eax+4], edx
+            //   0x6E41C2  89 54 D8 04     mov [eax+ebx*8+4], edx
+            //   0x6E4231  89 54 D8 0C     mov [eax+ebx*8+0xC], edx
+            //   0x6E4260  89 54 D8 04     mov [eax+ebx*8+4], edx
+            // run unconditionally, and the result byte is written once on entry
+            // (0x6E4152 mov byte [ebp-9],1) and read once at the single exit
+            // (0x6E4264), so the call always reports success. The encoder then
+            // bulk-Moves DynArrayLength*8 bytes, zeros included.
+            //
+            // Treating absent as 0 here let a rebuild be skipped when the only change
+            // was a key newly set to 0, so that key never reached the record. A keyed
+            // miss reads back as -1 (0x6E427A), not 0, so the value did not merely
+            // fail to persist - it came back as a different number.
             current ??= new Dictionary<int, int>();
+            if (original.Count != current.Count) return false;
             foreach (var pair in original)
             {
-                var currentValue = current.TryGetValue(pair.Key, out var value) ? value : 0;
-                if (currentValue != pair.Value) return false;
-            }
-            foreach (var pair in current)
-            {
-                var originalValue = original.TryGetValue(pair.Key, out var value) ? value : 0;
-                if (originalValue != pair.Value) return false;
+                if (!current.TryGetValue(pair.Key, out var value) || value != pair.Value)
+                    return false;
             }
             return true;
         }
