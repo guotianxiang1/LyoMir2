@@ -449,25 +449,45 @@ namespace GameSvr
             ClearNativeSkill152StateOnExit();
         }
 
-        // Native @ 0x773254: inclusion bitmap (14 bytes @ 0x77326C) defines which state
-        // changes trigger RecalcAbilitys. The bitmap has 37 set bits covering states:
-        // [6, 13, 14, 24-31, 32-36, 38-40, 67-70, 77, 82-86, 88-93, 95, 96].
-        // STATE-41: Prior buggy exclusion list {19,20,26,45,49,59} incorrectly excluded
-        // state 26 which native INCLUDES, plus incorrectly triggered ~70 states native excludes.
+        // Native leaf @0x773254 decides which state changes set the recalc-pending
+        // flag. Verbatim:
+        //   0x773254  80 C2 F8              add dl, 0xF8      ; dl = internalType - 8
+        //   0x773257  80 FA 67              cmp dl, 0x67      ; unsigned, 103
+        //   0x77325A  77 0A                 ja  0x773266      ; out of range -> CF=0
+        //   0x77325C  83 E2 7F              and edx, 0x7F
+        //   0x77325F  0F A3 15 6C 32 77 00  bt  [0x77326C], edx
+        //   0x773266  0F 92 C0              setb al
+        // So the BIT INDEX IS BIASED BY -8 and the domain is internalType [8,111].
+        // Callers 0x773366 / 0x773399 feed it the node's InternalType and set
+        // Self+0x438 (m_boAbilityRecalcPending) on a true result.
+        //
+        // Decoded with the -8 bias, the 37 set bits are internalType:
+        //   14, 21, 22, 32..44, 46, 47, 48, 75, 76, 77, 78, 85,
+        //   90..94, 96..101, 103, 104
+        //
+        // Two bugs used to live here and had to be fixed together:
+        //  1. the index was applied unbiased, which misjudged 41 of the 112 types
+        //     (20 lost their recalc, 21 gained one native never performs);
+        //  2. byte 5 had been hand-patched from 0x01 to 0x11 to force internalType
+        //     44 true under the unbiased index. 44 is genuinely in the native set
+        //     and falls out correctly once the bias is right, so the extra bit is
+        //     removed - left in place it would additionally recalc type 52, which
+        //     native does not.
         private static readonly byte[] NativeRecalcBitmap = new byte[14]
         {
-            0x40, 0x60, 0x00, 0xFF, 0xDF, 0x11, 0x00,
+            0x40, 0x60, 0x00, 0xFF, 0xDF, 0x01, 0x00,
             0x00, 0x78, 0x20, 0x7C, 0xBF, 0x01, 0x00
         };
 
+        private const int NativeRecalcBitmapBias = 8;
+
         private static bool RequiresTimedAbilityRecalc(byte internalType)
         {
-            if (internalType > 111)
+            int biased = internalType - NativeRecalcBitmapBias;
+            if (biased < 0 || biased > 0x67)
                 return false;
 
-            int byteIndex = internalType / 8;
-            int bitIndex = internalType % 8;
-            return (NativeRecalcBitmap[byteIndex] & (1 << bitIndex)) != 0;
+            return (NativeRecalcBitmap[biased / 8] & (1 << (biased % 8))) != 0;
         }
 
         protected void MarkAbilityRecalcPending()

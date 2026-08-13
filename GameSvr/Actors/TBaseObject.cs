@@ -1816,7 +1816,17 @@ namespace GameSvr
                             {
                                 m_UseItems[i].Dura = nDura;
                             }
-                            if (tDura != HUtil32.Round(nDura / 1000.0)) 
+                            // Native sub_73E804 sends the display packet only when the
+                            // rounded value DROPPED, not on any change:
+                            //   0x73E89C  call 0x403574   ; @ROUND(nDura / 1000.0)
+                            //   0x73E8A1  mov edx,[ebp-8] ; old displayed dura
+                            //   0x73E8A4  sub edx, eax    ; old - new
+                            //   0x73E8A6  dec edx         ; old - new - 1
+                            //   0x73E8A7  jl 0x73E8C8     ; < 0  => skip the packet
+                            // (old - new - 1) < 0 is old <= new, so the send condition
+                            // is strictly old > new. A `!=` here also fires when the
+                            // value rises, emitting a packet native never sends.
+                            if (tDura > HUtil32.Round(nDura / 1000.0))
                             {
                                 SendMsg(this, Grobal2.RM_DURACHANGE, i, nDura, m_UseItems[i].DuraMax, 0, "");
                             }
