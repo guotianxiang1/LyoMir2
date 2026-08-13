@@ -21,7 +21,9 @@ namespace GameSvr
                     SysMsg(whostr + M2Share.g_sCanotSendmsg, MsgColor.Red, MsgType.Hint);
                     return;
                 }
-                if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName))
+                // 0x6C9584 F6 87 9C 0B 00 00 01 test byte [edi+0xB9C],1 / jne deny
+                if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName)
+                    || (PlayObject.m_dwChatShieldMask & 0x01u) != 0)
                 {
                     SysMsg(whostr + M2Share.g_sUserDenyWhisperMsg, MsgColor.Red, MsgType.Hint);
                     return;
@@ -80,7 +82,8 @@ namespace GameSvr
         {
             var sendwho = string.Empty;
             HUtil32.GetValidStr3(SayStr, ref sendwho, new string[] { "[", " ", "=", ">" });
-            if (m_boHearWhisper && !IsBlockWhisper(sendwho))
+            if (m_boHearWhisper && !IsBlockWhisper(sendwho)
+                && (m_dwChatShieldMask & 0x01u) == 0)
             {
                 switch (MsgType)
                 {
