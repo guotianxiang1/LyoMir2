@@ -775,21 +775,20 @@ namespace GameSvr.Mall
             return variables != null && variables.TryGetValue(key, out var value) ? value : 0;
         }
 
+        // 这两个助手读写的是 GetV/GetS/SetV/SetS 的同一块每角色存储，且会随存档落盘，
+        // 所以必须照原生 upsert sub_6E4140 的语义：它没有任何零值判断，四个存储点
+        // （0x6E4187 / 0x6E41C2 / 0x6E4231 / 0x6E4260 `mov [..], edx`）一律原样写入，
+        // 而且原生根本没有"删除某个键"的原语。此处一旦把 0 当成删除，内存里读回
+        // GetV 的 miss 哨兵 -1（0x6DF1F1 `mov [ebp-4],0xFFFFFFFF`），而存档编码器
+        // NativeHumanDataCodec.MergeKeyValues 对盘上已有、内存已无的键补 0 —— 同一个
+        // 坐标在重登前后会给出 -1 和 0 两种结果。
         private static void SetPlayerVariable(Dictionary<int, int> variables, int group, int index, int value)
         {
             if (variables == null)
             {
                 return;
             }
-            var key = group * 1000 + index;
-            if (value == 0)
-            {
-                variables.Remove(key);
-            }
-            else
-            {
-                variables[key] = value;
-            }
+            variables[group * 1000 + index] = value;
         }
 
         private static void ResetDailyLimitIfNeeded(TPlayObject player)
@@ -803,17 +802,17 @@ namespace GameSvr.Mall
                 return;
             }
 
-            var keysToRemove = new List<int>();
+            var keysToReset = new List<int>();
             foreach (var key in player.m_ScriptSVars.Keys)
             {
                 if (key > dailyGroup * 1000 && key < dailyGroup * 1000 + 100)
                 {
-                    keysToRemove.Add(key);
+                    keysToReset.Add(key);
                 }
             }
-            foreach (var key in keysToRemove)
+            foreach (var key in keysToReset)
             {
-                player.m_ScriptSVars.Remove(key);
+                player.m_ScriptSVars[key] = 0;
             }
             SetPlayerVariable(player.m_ScriptSVars, markerGroup, markerIndex, today);
         }
