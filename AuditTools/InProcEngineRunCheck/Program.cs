@@ -349,9 +349,14 @@ void RunMonsterRecalc(Envirnoment map)
     // A real Monster resolves its abilities from the injected definition via the real RecalcAbilitys.
     var mon = NewMonster("测试骷髅", level: 10, x: 45, y: 45, map, hp: 0, recalc: true, setHp: false);
     Log($"MONSTER real Monster '测试骷髅' RecalcAbilitys ran; MaxHP={mon.m_WAbil.MaxHP} DC={HUtil32.HiWord(mon.m_WAbil.DC)} "
-        + $"Level={mon.m_Abil.Level} race=RC_ANIMAL({mon.m_btRaceServer}) onMap={mon.m_boAddToMaped}");
-    Assert(mon.m_btRaceServer == Grobal2.RC_ANIMAL && mon.m_boAddToMaped,
-        "real Monster constructed as RC_ANIMAL and placed on the real map");
+        + $"Level={mon.m_Abil.Level} race=RC_MONSTER({mon.m_btRaceServer}) onMap={mon.m_boAddToMaped}");
+    // A Monster built without MonInitialize keeps TMonster.Create's own default, which is
+    // 80 (RC_MONSTER), not the 50 its TAnimal/TBaseObject parents write:
+    //   TBaseObject 0x764E5F C6 86 78 01 00 00 32  mov byte [esi+0x178],0x32  ; 50
+    //   TAnimal     0x71D851 C6 87 78 01 00 00 32  mov byte [edi+0x178],0x32  ; 50
+    //   TMonster    0x666162 C6 86 78 01 00 00 50  mov byte [esi+0x178],0x50  ; 80
+    Assert(mon.m_btRaceServer == Grobal2.RC_MONSTER && mon.m_boAddToMaped,
+        "real Monster constructed as RC_MONSTER and placed on the real map");
 }
 
 void RunHero(Envirnoment map)
@@ -826,10 +831,18 @@ void RunMerchantMoneyContracts(Envirnoment map)
         it.btValue[0] = (byte)n14;
 
         double got = (double)miGetUserItemPrice.Invoke(pricer, new object[] { it });
-        // independent recomputation of the native arithmetic (base price 1000)
-        int nativeN10 = 1000 + (1000 / 5) * n14;                    // @0x783E86 add edi,eax
+        // independent recomputation of the native arithmetic. This NPC has no price-table
+        // row for the fixture, so the base is the native ×1.1 template fallback, not the raw
+        // 1000 — sub_63F3B4:
+        //   0x63F411 7F 2F              jg 0x63F442            ; table value > 0 -> use verbatim
+        //   0x63F42F DB 40 3C           fild dword [eax+0x3C]  ; template Price
+        //   0x63F432 DB 2D 68 F4 63 00  fld xword [0x63F468]   ; CD CC CC CC CC CC CC 8C FF 3F = 1.1
+        //   0x63F438 DE C9              fmulp st(1)
+        //   0x63F43A E8 35 41 DC FF     call 0x403574          ; @ROUND
+        int nativeBase = HUtil32.Round(1000 * 1.1);                 // 1100
+        int nativeN10 = nativeBase + (nativeBase / 5) * n14;        // @0x783E86 add edi,eax
         int expected = HUtil32._MAX(2, nativeN10);                  // wear terms are identity here
-        int refBug = HUtil32._MAX(2, (1000 / 5) * n14);              // the dropped-`n10 +` value
+        int refBug = HUtil32._MAX(2, (nativeBase / 5) * n14);        // the dropped-`n10 +` value
         Assert((int)got == expected,
             $"STATTED PRICING: n14={n14} -> {got}, native sub_783D70 @0x783E86 gives {expected} "
             + $"(n10 + (n10 div 5)*n14). The dropped-term ref value would be {refBug}.");
@@ -838,7 +851,7 @@ void RunMerchantMoneyContracts(Envirnoment map)
         statCases++;
     }
     Assert(statCases == 4, "statted-pricing sweep did not run all n14 cases");
-    // n14=1 is the worst case: the ref shape is 200 vs the native 1200 = -83.3%
+    // n14=1 is the worst case: the ref shape is 220 vs the native 1320 = -83.3%
     Assert(!code.Contains("Math.Floor(n10 / 5)") && !code.Contains("Math.Floor(n10/5)"),
         "GetUserItemPrice reverted to `Math.Floor(n10/5)*n14` — native @0x783E86 ADDS n10 back");
     Assert(code.Contains("n10 = n10 + (double)((int)n10 / 5 * n14)"),
@@ -945,14 +958,18 @@ void RunMerchantMoneyContracts(Envirnoment map)
         if (!eng.CopyToUserItemFromName("定价堆叠药", ref pile)) continue;
         pile.Dura = (ushort)qty;
         double basePrice = (double)miGetUserItemPrice.Invoke(pricer, new object[] { pile });
-        Assert((int)basePrice == 100 * qty,
+        // The unit price is the ×1.1 template fallback (0x63F42F fild [tpl+0x3C] /
+        // 0x63F432 fld xword [0x63F468]=1.1 / fmulp / 0x63F43A call 0x403574 @ROUND),
+        // because this NPC has no price-table row for the fixture.
+        int pileUnit = HUtil32.Round(100 * 1.1);                    // 110
+        Assert((int)basePrice == pileUnit * qty,
             $"ECON-12 PILE BASE PRICE: qty={qty} -> {basePrice}, native sub_63F3B4 @0x63F458 "
-            + $"`imul` gives {100 * qty} (unit price 100 * count {qty}). Missing the multiply pays "
-            + "for ONE unit while ClientUserSellItem removes the WHOLE stack.");
+            + $"`imul` gives {pileUnit * qty} (unit price {pileUnit} * count {qty}). Missing the "
+            + "multiply pays for ONE unit while ClientUserSellItem removes the WHOLE stack.");
         // the sell half then applies div 2 on the already-multiplied base (0x63F235)
         int sellPrice = (int)miGetSellItemPrice.Invoke(pricer, new object[] { basePrice });
-        Assert(sellPrice == (100 * qty) / 2,
-            $"ECON-12 PILE SELL PRICE: qty={qty} -> {sellPrice}, expected {(100 * qty) / 2} "
+        Assert(sellPrice == pileUnit * qty / 2,
+            $"ECON-12 PILE SELL PRICE: qty={qty} -> {sellPrice}, expected {pileUnit * qty / 2} "
             + "(native halves the multiplied base, so the count survives into the payout)");
         pileCases++;
     }
@@ -963,8 +980,9 @@ void RunMerchantMoneyContracts(Envirnoment map)
     Assert(eng.CopyToUserItemFromName("属性定价剑", ref nonPile), "non-pile fixture not created");
     nonPile.DuraMax = 100; nonPile.Dura = 100;
     double nonPilePrice = (double)miGetUserItemPrice.Invoke(pricer, new object[] { nonPile });
-    Assert((int)nonPilePrice == 1000,
-        $"ECON-12 OVER-REACH: non-pile StdMode 5 priced {nonPilePrice}, expected 1000. The count "
+    Assert((int)nonPilePrice == HUtil32.Round(1000 * 1.1),
+        $"ECON-12 OVER-REACH: non-pile StdMode 5 priced {nonPilePrice}, expected "
+        + $"{HUtil32.Round(1000 * 1.1)}. The count "
         + "multiply must be gated on IsPileItem -- native `jne 0x63F45E` skips it for +0x14 != 7 "
         + "(base ctor sub_783788 @0x7837AE writes 0), otherwise Dura doubles as a bogus multiplier.");
     Assert(code.Contains("NativeItemFactory.IsPileItem(StdItem)"),
@@ -986,7 +1004,7 @@ void RunMerchantMoneyContracts(Envirnoment map)
         + "rate stage and the sell div 2, so buy/sell/repair all scale with the count");
 
     Log($"MERCHANT money contracts: statted pricing = n10 + (n10 div 5)*n14 across {statCases} n14 cases "
-        + "(native sub_783D70 @0x783E86 `add edi,eax`; dropping `n10 +` was -83% at n14=1: 200 vs 1200); "
+        + "(native sub_783D70 @0x783E86 `add edi,eax`; dropping `n10 +` was -83% at n14=1: 220 vs 1320); "
         + "sell price truncates via div 2 (sub_63F200 @0x63F235 sar/jns/adc, not banker's Round: 7->3 not 4); "
         + $"{incRateGoldSites}/4 tax sites pass the ACTUAL money moved incl. IncRateGold(price) for the "
         + "no-break upgrade tier K=0x7530 (sub_6CA020 @0x6CA163-82), single castle [[0x7D6214]], no "
