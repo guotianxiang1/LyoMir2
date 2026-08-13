@@ -151,6 +151,10 @@ namespace SystemModule
         public const int ET_FIRE = 5;
         public const int ET_SCULPEICE = 6;
         public const int ET_YANHUA_TEXT = 23;
+        /// <summary>TPrisonEvent.Create @0x7198E4 `6A 1D push 0x1D`.</summary>
+        public const int ET_PRISON = 0x1D;
+        /// <summary>TStallEvent.Create @0x719A20 `6A 29 push 0x29`.</summary>
+        public const int ET_STALL = 0x29;
         public const int RCC_MERCHANT = 50;
         public const int RCC_GUARD = 12;
         public const int RCC_USERHUMAN = 0;
