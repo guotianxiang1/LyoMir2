@@ -2201,14 +2201,9 @@ namespace GameSvr
 
         private void SendChangeGuildName()
         {
-            if (m_MyGuild != null)
-            {
-                SendDefMessage(Grobal2.SM_CHANGEGUILDNAME, 0, 0, 0, 0, m_MyGuild.sGuildName + '/' + m_sGuildRankName);
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_CHANGEGUILDNAME, 0, 0, 0, 0, "");
-            }
+            // Native RM 10301 handler 0x6B624C is the dispatcher finally, not a
+            // send. CODE has zero 16-bit dx/cx loads of 750 (0x02EE) reaching a
+            // send slot. srv_AppearTimes.ini 750=0. Constant kept.
         }
 
         private static byte[] BuildDelItemListBody(IList<TDeleteItem> ItemList)
