@@ -127,6 +127,11 @@ namespace GameSvr
                 case 244:
                     cert = new MirDotaMatchBossMon();
                     break;
+
+                // race 245 THuoSheMonster : AnimalObject —— 见 Monster/HuoSheMonster.cs
+                case 245:
+                    cert = new HuoSheMonster();
+                    break;
             }
             return cert != null;
         }
