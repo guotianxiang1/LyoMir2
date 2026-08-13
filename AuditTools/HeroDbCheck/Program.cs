@@ -4,15 +4,23 @@ using System.Text.RegularExpressions;
 using DBSvr.Core;
 using SystemModule;
 
-if (args.Length != 1)
+if (args.Length > 1)
 {
-    throw new ArgumentException("Usage: HeroDbCheck <repository root>");
+    Console.Error.WriteLine("Usage: HeroDbCheck [repository root]");
+    return 2;
 }
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 var gbk = Encoding.GetEncoding(936,
     EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
-var root = Path.GetFullPath(args[0]);
+var resolvedRoot = args.Length == 1 ? args[0] : FindRepositoryRoot();
+if (resolvedRoot == null)
+{
+    Console.Error.WriteLine(
+        "INCOMPLETE HeroDbCheck: repository root not found (no LyoMir2.sln above cwd or binary)");
+    return 2;
+}
+var root = Path.GetFullPath(resolvedRoot);
 var dbSvr = Path.Combine(root, "DBSvr");
 var gameSvr = Path.Combine(root, "GameSvr");
 var systemModule = Path.Combine(root, "SystemModule");
@@ -33,7 +41,21 @@ CheckLogicalSnapshot();
 
 Console.WriteLine(
     "PASS hero-db native=33AABB77 commands=160..167/194/51/53/59/70 fixed=49D4 three=DD7C dyn=2,6,7 delete=index-only blob=zlib/crc32 sql=myisam-serialized");
-return;
+return 0;
+
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+    {
+        for (var directory = new DirectoryInfo(start);
+             directory != null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
+                return directory.FullName;
+        }
+    }
+    return null;
+}
 
 void CheckSourceGuards()
 {
@@ -366,20 +388,29 @@ void CheckDynamicDataCodec()
             new NativeHeroDynamicSection(2, new byte[] { 2 })
         }), out _, out _), "out-of-order dynData accepted");
 
-    var extractionSections = new NativeHeroDynamicData(new[]
-    {
-        new NativeHeroDynamicSection(2, new byte[] { 1 }),
-        new NativeHeroDynamicSection(4, new byte[] { 2 }),
-        new NativeHeroDynamicSection(6, new byte[] { 3 }),
-        new NativeHeroDynamicSection(7, new byte[] { 4 }),
-        new NativeHeroDynamicSection(0x0C, new byte[] { 5 })
-    });
-    Assert(NativeHeroDbFrameCodec.TryEncodeDynamicData(extractionSections,
-        out var extractionEncoded, out error), error);
-    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(extractionEncoded,
-        out var extractionDecoded, out error), error);
-    Equal(5, extractionDecoded.Sections.Count,
-        "type4/type12 dynData section count");
+    Assert(!NativeHeroDbFrameCodec.TryEncodeDynamicData(
+        new NativeHeroDynamicData(new[]
+        {
+            new NativeHeroDynamicSection(2, new byte[] { 1 }),
+            new NativeHeroDynamicSection(4, new byte[] { 2 }),
+            new NativeHeroDynamicSection(6, new byte[] { 3 })
+        }), out _, out _), "type4 dynData encoded (native encoder only emits 2,6,7)");
+
+    var skipBlob = BuildRawDynamicData(
+        (2, new byte[] { 1 }),
+        (4, new byte[] { 2 }),
+        (6, new byte[] { 3 }),
+        (7, new byte[] { 4 }),
+        (0x0C, new byte[] { 5 }));
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(skipBlob,
+        out var skipped, out error), error);
+    Equal(3, skipped.Sections.Count,
+        "unknown dynData types 4/0xC must be skipped, not fail the blob");
+    Equal((byte)2, skipped.Sections[0].Type, "kept section 2 after skip");
+    Equal((byte)6, skipped.Sections[1].Type, "kept section 6 after skip");
+    Equal((byte)7, skipped.Sections[2].Type, "kept section 7 after skip");
+    SequenceEqual(new byte[] { 1 }, skipped.Sections[0].Payload, "section 2 payload after skip");
+    SequenceEqual(new byte[] { 4 }, skipped.Sections[2].Payload, "section 7 payload after skip");
 }
 
 void CheckLoadRequestCodec()
@@ -1166,6 +1197,27 @@ NativeHeroDynamicData BuildDynamicData() => new(new[]
     new NativeHeroDynamicSection(2, new byte[] { 0x10, 0x11 }),
     new NativeHeroDynamicSection(7, new byte[] { 0x20, 0x21, 0x22 })
 });
+
+byte[] BuildRawDynamicData(params (byte Type, byte[] Payload)[] sections)
+{
+    var size = 4;
+    foreach (var section in sections)
+        size = checked(size + NativeHeroDbFrameCodec.DynamicHeaderSize + section.Payload.Length);
+    var data = new byte[size];
+    BinaryPrimitives.WriteUInt32LittleEndian(data, (uint)(size - 4));
+    var offset = 4;
+    foreach (var section in sections)
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(offset, 4),
+            NativeHeroDbFrameCodec.DynamicSectionMagic);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(offset + 4, 2),
+            (ushort)section.Payload.Length);
+        data[offset + 6] = section.Type;
+        section.Payload.CopyTo(data, offset + NativeHeroDbFrameCodec.DynamicHeaderSize);
+        offset += NativeHeroDbFrameCodec.DynamicHeaderSize + section.Payload.Length;
+    }
+    return data;
+}
 
 byte[] BuildRecord(string masterName, string heroName)
 {
