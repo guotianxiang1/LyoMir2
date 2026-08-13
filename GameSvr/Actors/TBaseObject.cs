@@ -1318,6 +1318,20 @@ namespace GameSvr
                 }
                 if (m_nCurrX != nOX || m_nCurrY != nOY)
                 {
+                    // MOVE-39 —— 提交新格后清定时状态 0x17。两个 mover 都有这一步：
+                    //   人形 sub_741224  0x7412E8  B2 17          mov  dl,0x17
+                    //                    0x7412EC  E8 DF A1 02 00 call 0x76B4D0
+                    //   怪物 sub_71F0F4  0x71F21C  B2 17          mov  dl,0x17
+                    //                    0x71F220  E8 AB C2 04 00 call 0x76B4D0
+                    // 都在成功提交 X/Y 之后（人形 0x7412D5、怪物 0x71F203），失败臂
+                    // （0x7412CF / 0x71F201 的 je）直接跳过，所以本端也只在位置真的
+                    // 变了的这条臂上清。sub_76B4D0 只是 sub_7731C0 的薄壳：按
+                    // [node+1] 匹配定时状态链表节点、摘链、经 vmt+0x5C 通知丢失，
+                    // 即 C# 的 RemoveTimedAbilityInternal。
+                    // 相对广播的次序：人形在 0x2712 广播(0x741315)之前，怪物在广播
+                    // (0x71F217)之后；两者都在落格处理 sub_778EC0 之前。RM_WALK 载荷
+                    // 只有 Dir/X/Y，不含状态位，故这一处差别对怪物腿无可观测后果。
+                    RemoveNativeMovementTimedState(23);
                     if (Walk(Grobal2.RM_WALK))
                     {
                         if (m_boTransparent && m_boHideMode)

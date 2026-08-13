@@ -1064,6 +1064,11 @@ namespace GameSvr
                 }
                 if (m_nCurrX != nOldX || m_nCurrY != nOldY)
                 {
+                    // MOVE-39 —— 2 格 run mover sub_76756C 同样在提交 X/Y(0x76762E)
+                    // 之后、广播(0x767645)之前清定时状态 0x17：
+                    //   0x767634  B2 17           mov  dl,0x17
+                    //   0x767638  E8 93 3E 00 00  call 0x76B4D0
+                    RemoveNativeMovementTimedState(23);
                     if (Walk(Grobal2.RM_RUN))
                     {
                         m_dwSearchTick = 0;
@@ -1165,6 +1170,11 @@ namespace GameSvr
                 }
                 if (m_nCurrX != n10 || m_nCurrY != n14)
                 {
+                    // MOVE-39 —— 3 格 run mover sub_767694 同构：提交 X/Y(0x767758)
+                    // 之后、广播(0x76776F)之前清定时状态 0x17：
+                    //   0x76775E  B2 17           mov  dl,0x17
+                    //   0x767762  E8 69 3D 00 00  call 0x76B4D0
+                    RemoveNativeMovementTimedState(23);
                     if (Walk(Grobal2.RM_RUN))
                     {
                         m_dwSearchTick = 0;
