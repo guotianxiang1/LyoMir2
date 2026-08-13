@@ -1380,6 +1380,12 @@ namespace GameSvr
                 // else re-push SM 0x3026 (0x6B23EC-0x6B2414) with X=[esi+0x1908] and
                 // Y=[esi+0x190a]. Without it the client draws no marker after a relog.
                 ReplayNativeFixedCoordOnLogon();
+                // 战神 UserLogon @0x6B24D2: call 0x6F071C always emits SM 4501
+                // (0x1195) via [obj+0x254]. Empty [obj+0xAE8] -> Param=5 Len=0;
+                // otherwise Param=0 + 0x40-byte corps desc. C# SendNativePlayerCorps
+                // already matches that ladder; native fires it on login, not only
+                // on CM_PLAYER_CORPS.
+                SendNativePlayerCorps(Grobal2.SM_PLAYER_CORPS);
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
