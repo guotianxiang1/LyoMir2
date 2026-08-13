@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using SystemModule;
 using GameSvr;
@@ -3585,10 +3585,23 @@ namespace GameSvr.Plugins
         public bool IsHideGoldMsg() => Enabled("屏蔽元宝增减信息");
         public bool IsHideAttrUp() => Enabled("屏蔽属性提升提示");
         public bool IsHideRank() => Enabled("屏蔽排行榜");
-        public bool IsBlockSpam() => Enabled("屏蔽发言频繁禁言功能");
+        // 屏蔽发言频繁禁言功能 is a host-code patch, same primitive as 复活戒指重设.
+        // Plugin 0x100AC678 / 0x100AC6B2 memcpy 6×90 over the two flood-counter
+        // increments in ProcessSayMsg (sub_6BB2F8):
+        //   0x6BB56A  FF 83 74 0A 00 00  inc dword [ebx+0xA74]  → m_nSayMsgCount++
+        //   0x6BB579  FE 83 82 06 00 00  inc byte  [ebx+0x682]  → m_btSayRapidCount++
+        // Restore arm 0x100AC75D / 0x100AC797 writes the incs back. Thresholds
+        // (>=2 / >=5), the 60 s mute, and the decay decs are not patched.
+        public bool IsBlockSpamPatchOn() => PatchToggleOn("屏蔽发言频繁禁言功能");
+        public bool IsBlockSpam() => IsBlockSpamPatchOn();
         public bool IsDelSkillSilent() => Enabled("删除技能不提示");
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
-        public bool IsUpSkillSilent() => Enabled("升级技能不提示");
+        // 升级技能不提示 is a host-code patch: plugin 0x100DB61C memcpy EB 3A 90 90
+        // over 0x73F5EE in sub_73F500 (ChgSelfSkillLv / UpUserSkill worker), jumping
+        // from the LStrCatN of "{name} 技能等级变更为：{level}" + SysMsg 0xFFDB
+        // straight to RecalcAbilitys at 0x73F62A. Restore arm writes 57 68 7C F6 73 00.
+        public bool IsUpSkillSilentPatchOn() => PatchToggleOn("升级技能不提示");
+        public bool IsUpSkillSilent() => IsUpSkillSilentPatchOn();
         public bool IsBanChatSilent() => Enabled("禁止发言不提示");
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
@@ -3601,7 +3614,13 @@ namespace GameSvr.Plugins
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
         public bool IsNewMonsterDrop() => Enabled("新怪物爆率");
         public bool IsGetCastle() => Enabled("获取沙城归属");
-        public bool IsGuildShow() => Enabled("行会显示");
+        // 行会显示 is a host-code patch: plugin 0x100AACD8 / 0x100AAD29 memcpy
+        // 90 90 over both skip-jumps in GetShowName's non-castle guild branch
+        //   0x6C5BCB  74 49  je 0x6C5C16   (after cmp g_Config.boShowGuildName)
+        //   0x6C5BF7  74 1D  je 0x6C5C16   (after castle-war-area test)
+        // Restore arm 0x100AADC0 / 0x100AADFA writes 74 49 / 74 1D back.
+        // Both je gone ⇒ every path reaches 0x6C5BF9 and emits %guildname/%rankname.
+        public bool IsGuildShow() => PatchToggleOn("行会显示");
         public bool IsMultiFaction() => Enabled("角色多阵营");
         public bool IsSiegeScript() => Enabled("攻沙脚本控制");
         public bool IsSiegeModify() => Enabled("攻城修改");
@@ -3618,7 +3637,11 @@ namespace GameSvr.Plugins
 
         // ── Trade/Stall toggle checks ──
         public bool IsStallPass() => Enabled("摆摊穿人");
-        public bool IsCloseStall() => Enabled("关闭摆摊");
+        // 关闭摆摊 is a host-code patch: plugin 0x100AD12A memcpy C3 over the
+        // first byte of CM_START_STALL (4424) at 0x6E7C38 (native 55 = push ebp).
+        // Restore arm 0x100AD1AE writes 55 back. SetTimeLevel (4419) is a
+        // different function and is not patched.
+        public bool IsCloseStall() => PatchToggleOn("关闭摆摊");
         public bool IsTuChengStall() => Enabled("土城摆摊");
         public bool IsLimitStall() => Enabled("限制摆摊");
         public int LimitStall_LeftX() => GetParamInt("限制摆摊_左x", 280);
@@ -3856,7 +3879,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>关闭摆摊检查</summary>
-        public bool IsStallClosed() => Enabled("关闭摆摊");
+        public bool IsStallClosed() => IsCloseStall();
 
         /// <summary>指定地图编号摆摊</summary>
         public int GetStallMapId() => GetParamInt("摆摊地图", 3);
@@ -3875,11 +3898,12 @@ namespace GameSvr.Plugins
         public bool TryGetFloorItemTimeout(out int timeoutMilliseconds)
         {
             timeoutMilliseconds = 0;
-            if (!Enabled("地面物品消失时间")) return false;
+            if (!PatchToggleOn("地面物品消失时间")) return false;
 
             // 600 was the M2Server constant (0x77A3FD cmp edx,0x927C0), not the plugin's
             // fallback: when the key is absent the loader seeds 300 seconds
             // (0x100B01AA C7 80 00 0D 00 00 2C 01 00 00 -> mov [cfg+0xD00],0x12C).
+            // Enable arm 0x100AAF86 imul edx,eax,0x3E8 then memcpy 4 bytes to 0x77A3FF.
             var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 300));
             timeoutMilliseconds = seconds > int.MaxValue / 1000
                 ? int.MaxValue

@@ -1,3 +1,4 @@
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -126,11 +127,14 @@ namespace GameSvr
                     return;
                 // 0x6BB526: dup [ebx+0xA74] same-text elapsed<0xBB8; rapid [ebx+0x682] elapsed<0x3E8.
                 // dup>=2 => 0x6C912C edx=0x3C + 0x6BB9B8; rapid>=5 => same + 0x6BB9F4.
+                // 眼神 屏蔽发言频繁禁言功能 NOPs both incs (0x6BB56A / 0x6BB579, 6 bytes
+                // each → 90×6). Decay and the mute SysMsgs stay; counters just never rise.
                 var now = HUtil32.GetTickCount();
                 var elapsed = now - m_dwSayMsgTick;
-                if (sData == m_sOldSayMsg && elapsed < 0xBB8)
+                var skipFloodInc = new YanshenApi(this, null, M2Share.PluginManager).IsBlockSpamPatchOn();
+                if (!skipFloodInc && sData == m_sOldSayMsg && elapsed < 0xBB8)
                     m_nSayMsgCount++;
-                if (elapsed < 0x3E8)
+                if (!skipFloodInc && elapsed < 0x3E8)
                     m_btSayRapidCount++;
                 if (m_nSayMsgCount >= 2)
                 {
