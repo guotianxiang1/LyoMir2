@@ -116,17 +116,14 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject.ProcessSayMsg Msg = {0}";
             try
             {
-                // 战神 sub_6BB2F8 @0x6BB2FE/0x6BBC38/0x6BBB0C/0x6BBA50: all chat types
-                // (say/shout/guild/group) clamp to 255 bytes (cmp eax,0xFF; jle).
-                // Apply native's hard limit first, then the configurable soft limit.
-                if (sData.Length > 255)
-                {
-                    sData = sData.Substring(0, 255);
-                }
-                if (sData.Length > M2Share.g_Config.nSayMsgMaxLen)
-                {
-                    sData = sData.Substring(0, M2Share.g_Config.nSayMsgMaxLen);
-                }
+                // 0x6BB345 83 FF 01 jl exit; 0x6BB34E 81 FF B0 00 00 00 jg priv;
+                // 0x6BB356 83 F8 50 jle ok; else 0x6BB35B 80 BB 75 06 00 00 04 jb exit.
+                // Common path edi==Length==GBK bytes: priv<4 rejects >80, does not truncate.
+                var nGbk = HUtil32.GbkEncoding.GetByteCount(sData);
+                if (nGbk < 1)
+                    return;
+                if ((nGbk > 0xB0 || nGbk > 0x50) && m_btPermission < 4)
+                    return;
                 if ((HUtil32.GetTickCount() - m_dwSayMsgTick) < M2Share.g_Config.dwSayMsgTime)
                 {
                     m_nSayMsgCount++;// 2
