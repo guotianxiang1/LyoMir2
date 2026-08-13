@@ -433,6 +433,38 @@ namespace GameSvr
             ushort nSpellPoint;
             switch (UserMagic.wMagIdx)
             {
+                // ids 3, 4 and 7 are acknowledged and dropped. The outer
+                // ladder's own jump table (base id 3, `add eax,-3` /
+                // `cmp eax,0x18` @0x6BC69C, table at 0x6BC6AF) holds
+                // 0x6BC7DC in the slots for all three (0x6BC6AF, 0x6BC6B3,
+                // 0x6BC6BF), and 0x6BC7DC is two instructions:
+                //   006BC7DC  c6 45 fb 01     mov byte [ebp-5],1
+                //   006BC7E0  e9 1d 05 00 00  jmp 0x6BCD02
+                // i.e. return TRUE having sent nothing and spent nothing.
+                // Without this arm they reach the default below, where
+                // DoSpell refuses them for being warrior skills and the
+                // caller answers with a RM_MAGICFIREFAIL native never sends.
+                case SpellsDef.SKILL_ONESWORD:
+                case SpellsDef.SKILL_ILKWANG:
+                case SpellsDef.SKILL_YEDO:
+                    result = true;
+                    break;
+                // ids 116, 234, 314 and 317 are refused by the ladder itself,
+                // each with its own `je 0x6BCD02` straight to the epilogue:
+                //   0x6BC713  83 f8 74  cmp eax,0x74      / 0x6BC717 je
+                //   0x6BC749  83 e8 42  sub eax,0x42 (234)/ 0x6BC74C je
+                //   0x6BC7C3  2d 3a 01 00 00  sub eax,0x13A (314) / 0x6BC7C8
+                //   0x6BC7CE  83 e8 03  sub eax,3 (317)   / 0x6BC7D1 je
+                // [ebp-5] was zeroed at 0x6BC59F and nothing on these paths
+                // touches it, so all four return FALSE without spending mana
+                // or sending an effect, and the CM_SPELL caller answers with
+                // RM_MOVEFAIL + SM_ACT_FAIL. 314 and 317 previously reached
+                // the default arm and were cast as ordinary spells.
+                case SpellsDef.SKILL_116:
+                case SpellsDef.SKILL_234:
+                case SpellsDef.SKILL_314:
+                case SpellsDef.SKILL_317:
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {

@@ -21,6 +21,20 @@ namespace GameSvr
         protected int m_dwOpenStartTick = 0;
 
         internal int OpenStartTick => m_dwOpenStartTick;
+
+        /// <summary>
+        /// Native sub_7199B8, the whole body of which is
+        /// <c>mov ebx,eax / call GetTickCount / mov [ebx+8],eax</c>
+        /// (@0x7199BE-0x7199C3). Field +0x08 is the expiry baseline: the Run
+        /// body at 0x719985 computes <c>now - [obj+8]</c> and compares it
+        /// against the duration at <c>[obj+0x20]</c>, which is the same pair
+        /// this class calls m_dwOpenStartTick / m_dwContinueTime. Restamping
+        /// it restarts the lifetime WITHOUT re-adding the object to the map.
+        /// </summary>
+        internal void RefreshOpenStartTick(int tick)
+        {
+            m_dwOpenStartTick = tick;
+        }
         
         
         

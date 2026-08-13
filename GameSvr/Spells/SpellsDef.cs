@@ -211,6 +211,9 @@ namespace GameSvr
         public const int SKILL_154 = 154;
         public const int SKILL_161 = 161;
         public const int SKILL_162 = 162;
+        // Direct compare arm of the DoSpell ladder: 0x6ED891 `cmp eax,0xA7` /
+        // 0x6ED898 `je 0x6EDEE1`.
+        public const int SKILL_167 = 167;
         public const int SKILL_169 = 169;
         public const int SKILL_170 = 170;
         public const int SKILL_171 = 171;
@@ -219,10 +222,14 @@ namespace GameSvr
         public const int SKILL_174 = 174;
         public const int SKILL_179 = 179;
         public const int SKILL_180 = 180;
-        /// <summary>凝冰. sub_6EF340 keys its cooldown with 0xBF at 0x6EF3AF and
+        /// <summary>凝冰. Dispatched at 0x6ED8BC `sub eax,0xBF` / 0x6ED8C1
+        /// `je 0x6EDFCF`. sub_6EF340 keys its cooldown with 0xBF at 0x6EF3AF and
         /// 0x6EF420, and 0x6EF4CC holds the 22-byte GBK literal
         /// "[凝冰]技能冷却时间还有".</summary>
         public const int SKILL_191 = 191;
+        /// <summary>Dispatched at 0x6ED8E2 `sub eax,0xE8` / 0x6ED8E7
+        /// `je 0x6EDEA7`.</summary>
+        public const int SKILL_232 = 232;
         public const int SKILL_291 = 291;
         public const int SKILL_292 = 292;
         public const int SKILL_293 = 293;
@@ -260,6 +267,9 @@ namespace GameSvr
         public const int SKILL_66 = 66;
         public const int SKILL_67 = 67;
         public const int SKILL_111 = 111;
+        // Refused outright by the client-cast ladder before DoSpell is
+        // reached: 0x6BC713 `cmp eax,0x74` / 0x6BC717 `je 0x6BCD02`.
+        public const int SKILL_116 = 116;
         public const int SKILL_117 = 117;
         public const int SKILL_118 = 118;
         public const int SKILL_125 = 125;
@@ -271,6 +281,9 @@ namespace GameSvr
         // (0x6ED8C7 sub eax,0x16 / 0x6ED8CA je 0x6EDE0F).
         public const int SKILL_213 = 213;
         public const int SKILL_231 = 231;
+        // Same treatment as 116: 0x6BC749 `sub eax,0x42` (running total 234)
+        // / 0x6BC74C `je 0x6BCD02`.
+        public const int SKILL_234 = 234;
         public const int SKILL_236 = 236;
         public const int SKILL_288 = 288;
         public const int SKILL_289 = 289;

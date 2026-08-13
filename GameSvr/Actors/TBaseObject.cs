@@ -2992,6 +2992,17 @@ namespace GameSvr
                         // 0x0076B0EC C1 E0 02 shl eax,2 / 0x0076B0EF 04 04 add al,4
                         m_nHitDouble = unchecked((byte)(4 + effectiveLevel * 4));
                         break;
+                    // Native sub_76ADA0 reaches 0x76B16D through
+                    // `add eax,-7` / `sub eax,4` / `jb` at 0x76AF2B, i.e.
+                    // unsigned (id - 65) < 4, and stores the record with
+                    // 0x76B170 `mov [ebx+0xC4],eax`. Last one in list order
+                    // wins, and nothing ever clears the field.
+                    case 65:
+                    case SpellsDef.SKILL_66:
+                    case SpellsDef.SKILL_67:
+                    case 68:
+                        m_NativeChargedCounterMagic = UserMagic;
+                        break;
                 }
             }
         }

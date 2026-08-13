@@ -867,12 +867,15 @@ namespace GameSvr
                     boSpellFail = !PlayObject.TryActivateNativeSkill111IceEyeTrollSummon(
                         UserMagic);
                     break;
-                // id 151 @0x6EDD70 / id 154 @0x6EDD83: both dispatch through the
-                // VMT+0x1F4 magic sub-dispatcher (sub_745A20 / sub_74588C ->
-                // sub_748288) with magicId 0x97 / 0x9A, inverting the result into
-                // boSpellFail. The sub-dispatcher is not yet reversed, so the
-                // TryActivateNativeSkill151/154 bodies fail-closed (return false),
-                // reproducing the native hard-reject (0x27F) rather than guessing.
+                // id 151 @0x6EDD70 -> sub_745A20, id 154 @0x6EDD83 ->
+                // sub_74588C; both `xor al,1` / `mov [ebp-6],al`, so a false
+                // return is a hard reject. VMT+0x1F4 is NOT a sub-dispatcher:
+                // it is sub_748288, the keyed cooldown query on the obj+0x504
+                // TList (see TBaseObject.NativeColdTime.cs), which those two
+                // bodies call with keys 0x97 / 0x9A. The comment that used to
+                // stand here claimed the slot was an unreversed dispatcher and
+                // that both TryActivateNativeSkill bodies were fail-closed;
+                // neither was true of the code it sat above.
                 case SpellsDef.SKILL_151:
                     boSpellFail = !PlayObject.TryActivateNativeSkill151(UserMagic);
                     break;
@@ -932,6 +935,22 @@ namespace GameSvr
                 case SpellsDef.SKILL_236:
                     TargeTBaseObject = null;
                     break;
+                // id 232 @0x6EDEA7 calls sub_76F8A8 and throws the result away
+                // (`e9 8a 01 00 00  jmp 0x6EE04B` at 0x6EDEBC, no write to
+                // [ebp-6]), so it cannot reject and it does not clear the
+                // target either -- one step further from 231/236, which at
+                // least consume the return value.
+                //   0076F8A8  55 8b ec           push ebp; mov ebp,esp
+                //   0076F8AB  a0 b4 f8 76 00     mov al,[0x76F8B4]
+                //   0076F8B0  5d c2 08 00        pop ebp; ret 8
+                //   0076F8B4  00 00 00 00        the data byte, value 0
+                // A whole-image dword scan for 0x76F8B4 returns exactly one
+                // hit, 0x76F8AC, which is that instruction's own operand, so
+                // nothing ever writes it. Listed explicitly because an id with
+                // no case looks indistinguishable from an unexamined one, and
+                // the 291-320 band already got rejected once on that guess.
+                case SpellsDef.SKILL_232:
+                    break;
                 // ids 118 and 128 are constant-FALSE stubs whose result IS
                 // stored, so they are hard rejects - NOT silent no-ops.
                 //   118: TR @0x6EDF01 calls sub_6EEE28, whose whole body is
@@ -978,6 +997,29 @@ namespace GameSvr
                 case SpellsDef.SKILL_316:
                     boSpellFail = true;
                     break;
+                // ids 66 and 67 are ONE native handler: TABLE2 slots 0x6ED839
+                // and 0x6ED83D both hold 0x6EDE39, which calls sub_745744 and
+                // inverts the result into [ebp-6] @0x6EDE47.
+                case SpellsDef.SKILL_66:
+                case SpellsDef.SKILL_67:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill66Or67(
+                        UserMagic, TargeTBaseObject);
+                    break;
+                // id 167 @0x6EDEE1 -> 0x6EEE70. The trampoline stores the raw
+                // result into boSpellFire (@0x6EDEF1) and its complement into
+                // boSpellFail (@0x6EDEF9), so both flags move together.
+                case SpellsDef.SKILL_167:
+                    boSpellFire = PlayObject.TryActivateNativeSkill167Prison(
+                        nTargetX, nTargetY);
+                    boSpellFail = !boSpellFire;
+                    break;
+                // id 191 @0x6EDFCF -> TPlayer VMT+0x148 = 0x6EF340, result
+                // inverted into [ebp-6] @0x6EDFED, so every refusal path in
+                // that function is a hard reject.
+                case SpellsDef.SKILL_191:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill191Freeze(
+                        UserMagic, TargeTBaseObject);
+                    break;
                 case SpellsDef.SKILL_152:
                     boSpellFail = !PlayObject.TryActivateNativeSkill152(
                         UserMagic);
@@ -986,12 +1028,18 @@ namespace GameSvr
                     boSpellFail = !PlayObject.TryActivateNativeSkill153Shield(
                         UserMagic);
                     break;
-                // Magic IDs 161, 162: Native hard rejects (per task description).
-                // These IDs require subsystems or mechanics not yet reverse-engineered.
-                // Implementation: set boSpellFail=true to send RM_MAGICFIREFAIL (0x27F).
+                // ids 161 and 162 reach the DEFAULT sink, not a reject. The
+                // 152..166 arm of the ladder is a three-step subtract chain and
+                // neither id is one of its three landing pads:
+                //   0x6ED89E  2d 98 00 00 00  sub eax,0x98   ; 152 -> 0x6EDD96
+                //   0x6ED8A9  48              dec eax        ; 153 -> 0x6EDDA9
+                //   0x6ED8B0  48              dec eax        ; 154 -> 0x6EDD83
+                //   0x6ED8B7  e9 8f 07 00 00  jmp 0x6EE04B   ; everything else
+                // The previous arm rejected both on the strength of a task
+                // description with no VA attached; the sink leaves boSpellFail
+                // at its 0x6ED6D9 zero, sends 0x27E and returns TRUE.
                 case SpellsDef.SKILL_161:
                 case SpellsDef.SKILL_162:
-                    boSpellFail = true;
                     break;
                 // Magic IDs 169 (0xA9), 170 (0xAA): Native DEFAULT convergence handlers.
                 // Both route to 0x6EE04B in DoSpell (sub_6ED62C). Verified via dispatch
@@ -1005,20 +1053,25 @@ namespace GameSvr
                 case SpellsDef.SKILL_169:
                 case SpellsDef.SKILL_170:
                     break;
-                // Magic IDs 171-174: Native hard rejects (per task description).
-                // These rely on a type-based subsystem not yet reverse-engineered.
-                // Implementation: set boSpellFail=true to faithfully reject.
+                // ids 171-174 take the same route 169/170 take, one arm down:
+                //   0x6ED891  cmp eax,0xA7 (167)  -> above, so jg 0x6ED8BC
+                //   0x6ED8BC  sub eax,0xBF (191)  -> not zero
+                //   0x6ED8C7  sub eax,0x16 (213)  -> not zero
+                //   0x6ED8D0  e9 76 07 00 00  jmp 0x6EE04B
+                // The rejecting arm they used to share cited "per task
+                // description" and a comparison at 0x6ED8A0 against 172; that
+                // address is the middle of `sub eax,0x98` and no compare
+                // against 172 exists anywhere in the ladder.
                 case SpellsDef.SKILL_171:
                 case SpellsDef.SKILL_172:
                 case SpellsDef.SKILL_173:
                 case SpellsDef.SKILL_174:
-                    boSpellFail = true;
                     break;
                 // ids 179 (0xB3) and 180 (0xB4) are convergence-routed no-ops.
-                // DoSpell multi-level dispatch (sub_6ED62C): the switch has eight
-                // comparison tiers: @0x6ED79A (151), @0x6ED884 (231), @0x6ED891
-                // (167), @0x6ED8A0 (172), @0x6ED8BC (191), @0x6ED8C7 (213),
-                // @0x6ED8D0 (default sink). For ids 179 and 180:
+                // DoSpell multi-level dispatch (sub_6ED62C) tiers above 151:
+                // @0x6ED79A (151), @0x6ED884 (231), @0x6ED891 (167),
+                // @0x6ED89E (152/153/154 subtract chain), @0x6ED8BC (191),
+                // @0x6ED8C7 (213), @0x6ED8D0 (default sink). For ids 179/180:
                 //   0x6ED79A: cmp eax, 0x97 (151) → 179 > 151, jmp 0x6ED884
                 //   0x6ED884: cmp eax, 0xE7 (231) → 179 < 231, fall through
                 //   0x6ED891: cmp eax, 0xA7 (167) → 179 > 167, jmp 0x6ED8BC
