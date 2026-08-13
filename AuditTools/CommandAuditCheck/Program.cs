@@ -1,11 +1,13 @@
 using System.Text.RegularExpressions;
 
-if (args.Length != 1)
+var root = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (root == null)
 {
-    throw new ArgumentException("Usage: CommandAuditCheck <repository root>");
+    Console.Error.WriteLine("INCOMPLETE: repository root was not supplied and could "
+        + "not be located from the working directory. "
+        + "Usage: CommandAuditCheck [repository root]");
+    Environment.Exit(2);
 }
-
-var root = Path.GetFullPath(args[0]);
 var commandDirectory = Path.Combine(root, "GameSvr", "Command", "Commands");
 if (!Directory.Exists(commandDirectory))
 {
@@ -304,4 +306,23 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// its repository root reported FAIL without evaluating a single assertion. Falling
+// back to the enclosing checkout keeps the assertions exactly as they were and only
+// removes the "never ran" outcome.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

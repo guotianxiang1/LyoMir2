@@ -2,13 +2,17 @@ using System.Collections;
 using System.Reflection;
 using System.Runtime.Loader;
 
-if (args.Length != 1)
-    throw new ArgumentException(
-        "Usage: NativeQuickDrugType60CompatCheck <GameSvr build>");
+var gameDirectory = args.Length > 0 ? Path.GetFullPath(args[0]) : FindGameSvrBuild();
+if (gameDirectory == null)
+{
+    Console.Error.WriteLine("INCOMPLETE: no GameSvr build directory was supplied and "
+        + "none was found under GameSvr/bin. "
+        + "Usage: NativeQuickDrugType60CompatCheck [GameSvr build]");
+    Environment.Exit(2);
+}
 
 PrepareRuntimeConfig();
 
-var gameDirectory = Path.GetFullPath(args[0]);
 AssemblyLoadContext.Default.Resolving += (_, name) =>
 {
     var dependency = Path.Combine(gameDirectory, $"{name.Name}.dll");
@@ -415,4 +419,47 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// a GameSvr build directory reported FAIL without evaluating a single assertion.
+// Falling back to the checkout's own build output keeps the assertions exactly as
+// they were; when no build exists the tool exits 2 (INCOMPLETE) rather than
+// pretending to have checked anything.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
+}
+
+static string FindGameSvrBuild()
+{
+    var repositoryRoot = FindRepositoryRoot();
+    if (repositoryRoot == null)
+        return null;
+    var binRoot = Path.Combine(repositoryRoot, "GameSvr", "bin");
+    if (!Directory.Exists(binRoot))
+        return null;
+    var debug = $"{Path.DirectorySeparatorChar}Debug{Path.DirectorySeparatorChar}";
+    foreach (var candidate in Directory
+                 .EnumerateFiles(binRoot, "GameSvr.dll", SearchOption.AllDirectories)
+                 // run_audits.py builds -c Debug, so prefer that configuration and
+                 // then the freshest output within it.
+                 .OrderByDescending(path => path.Contains(debug, StringComparison.OrdinalIgnoreCase))
+                 .ThenByDescending(File.GetLastWriteTimeUtc))
+    {
+        var directory = Path.GetDirectoryName(candidate);
+        if (directory != null && File.Exists(Path.Combine(directory, "SystemModule.dll")))
+            return directory;
+    }
+    return null;
 }
