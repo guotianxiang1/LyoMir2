@@ -60,17 +60,46 @@
   模板 A/B：`0xE8`/`0xE9` 元素后紧跟 `>0xFF` 的 dword 时由 `0x10032DE2` 改写成 rel32；
   末元素的 rel32 由调用方补。详见 `docs/ys_aclass_surgical_20260814.md`。
 
-  裸 memcpy C 的序言（`0x10033340..0x100333C5`，反汇编实录）：
-  - 取 4 个栈参：`[ebp+8]→ebx`、`[ebp+0xC]→edi`、`[ebp+0x10]→[ebp-0x1C]`、`[ebp+0x14]→[ebp-0x20]`
+  **裸 memcpy C 的签名：`C(payload, len, va, va)`** —— cdecl 四参，arg3 与 arg4 同值。
+  调用点实录（`0x100CF496`，特性 `刀刀切割`）：
+
+  ```
+  100CF45C  mov dword [ebp-0xB0], 0x89575653   ; 就地拼载荷
+  100CF466  mov word  [ebp-0xAC], 0xF84D       ; 合计 6 字节 53 56 57 89 4D F8
+  100CF47F  push 0x767BAE                      ; arg4 = 宿主 VA
+  100CF484  push 0x767BAE                      ; arg3 = 宿主 VA（同值）
+  100CF489  push 6                             ; arg2 = 长度
+  100CF48B  push eax                           ; arg1 = 载荷缓冲(lea [ebp-0xB0])
+  100CF496  call 0x10033340
+  ```
+
+  注意 `0x767BAE` 是**宿主 M2Server 的 VA**（0x400000–0x800000 段）—— C 直接改写宿主字节。
+
+  builder 内部（`0x10033340..0x100333C5`）：
+  - 收参：`[ebp+8]→ebx`(payload)、`[ebp+0xC]→edi`(len)、`[ebp+0x10]→[ebp-0x1C]`(va)、
+    `[ebp+0x14]→[ebp-0x20]`(va)
   - 两道前置闸：`call 0x100329F0` 后 `cmp eax,0x64 / je` 跳过；`push 1 / call 0x11513568 /
     test al,al / jne` 跳过
-  - 改页保护：`lea eax,[edi+1]` → `push &oldProtect / push 0x40 / push &addr /
-    call 0x10032A50`（`0x40` = PAGE_EXECUTE_READWRITE）
-  - 长度门：`cmp [ebp-0x1C],esi`(esi=0) / `jbe` 跳过
-  - 真正的拷贝：`push edi / push ebx / push [ebp-0x20] / call 0x10223FD0`
+  - 改页保护：`lea eax,[edi+1]`（= **len+1**，作为 size）→ `push &oldProtect / push 0x40 /
+    push &size / call 0x10032A50`（`0x40` = PAGE_EXECUTE_READWRITE）
+  - 地址有效性门：`cmp [ebp-0x1C],esi`(esi=0) / `jbe` 跳过 —— 比的是 **va 非零**
+  - 拷贝：`push edi(len) / push ebx(payload) / push [ebp-0x20](va) / call 0x10223FD0`
+    ⇒ `memcpy(dest=va, src=payload, len)`
 
-  由 `lea eax,[edi+1]`（跳过 1 字节）推测 C 多用于**改写既有 `E8`/`E9` 的 rel32 操作数**
-  而非整段贴码 —— 此为推断，落地前需按站点复核，勿直接当结论用。
+  > **订正**：本文早前一版据 `lea eax,[edi+1]` 推测 C 是「改写既有 `E8`/`E9` 的 rel32」，
+  > **该推断已被证伪** —— `edi` 是长度而非地址，`[edi+1]` 是改页 size。C 做的是
+  > **整段字节替换**。同时早前把 `cmp [ebp-0x1C],esi` 记为「长度门」也是错的，
+  > 它是地址有效性门。
+
+  模板 builder A/B 的签名（据 `w/ys-atlas` 复核）：`(outObj, hookStart, hookStart, hookEnd,
+  template[], len)` —— **只有 hookStart 是补丁目标，hookEnd 仅为区间上界**。把 end 误当目标
+  会虚报「新增 VA」。取址时「call 前 14 条指令」的窗口太窄（漏 26 个站点），
+  应按实参形状取：倒数第 1 个 host push = hookStart，第 3 个 = hookEnd。
+
+  **重要结论（`w/ys-atlas` 证）**：101 个 trampoline 站点**全是 apply 臂**（revert 臂 0 个）；
+  每个特性的 revert 臂一律用 memcpy 把原字节写回同一地址，故 trampoline 的目标 VA
+  已被 memcpy 站点全覆盖，**差集为空**。共有的 306 站点上标签/目标 VA/字节数三项与
+  独立提取的 g09 完全吻合、0 冲突。
 - **状态标签归属法**：每条 apply/revert 臂以
   `call 0x100F018C(labelObject, "<键名>(已启动)|(未启动)")` 收尾，从安装点向前走到下一个
   标签即可把补丁站点归属到 GUI 键。全量 407 站点 → 107 特性，见
