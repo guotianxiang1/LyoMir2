@@ -7,7 +7,21 @@ namespace GameSvr
 
     internal static class NativeDropControlRuntime
     {
-        internal const int ScatterRange = 4;
+        /// <summary>
+        /// 战神 sub_71FA20 segment 3 (controlled world/map drop) scatters every item
+        /// returned by the drop-control lookup (sub_752CAC @0x71FEC8) through the single
+        /// scatter call at 0x71FF48, and the radius it loads is a hardcoded 3:
+        /// <code>
+        /// 71FF32  6A 01 / 6A 00 / 6A 00 / 68 34 01 72 00  push 1 / 0 / 0 / &amp;name
+        /// 71FF3D  B9 03 00 00 00                          mov ecx,3     ; landing radius
+        /// 71FF42  8B 55 D8 / 8B 45 F4                      mov edx,item / mov eax,creator
+        /// 71FF48  E8 53 89 04 00                          call 0x7688A0 ; ecx -&gt; GetDropPosition
+        /// </code>
+        /// The own-table loop (segment 2, 0x71FDCF / 0x71FE46) and gold (0x768ADC) also
+        /// use 3; only the exclusive chain (segment 1, 0x71FC02 / 0x71FC79) uses 5.  The
+        /// value was previously 4 with no byte backing.
+        /// </summary>
+        internal const int ScatterRange = 3;
 
         /// <summary>
         /// 战神 sub_71FA20 runs the monster's own drop table (segment 2) before the
