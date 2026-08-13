@@ -231,6 +231,52 @@ namespace SystemModule
         // `E8 DD 78 01 00 call 0x6F2940`. Callee 0x6F2940 is a single `C3 ret`
         // (followed by `8D 40 00` alignment padding, not a second instruction).
         public const int CM_4315 = 4315;
+
+        // ---- CM dispatch tail: ident 4125..4651 -------------------------------
+        // Every ident below owns a real arm in 战神's CM dispatcher sub_6D7D68
+        // (selector tree rooted at 0x6D805C, shared exit label 0x6DBC2C). They are
+        // grouped here because 战神 carries no symbolic name for any of them; the
+        // handler VA on each line is the tree leaf the ident resolves to.
+        // Field roles on the wire record the dispatcher keeps at [ebp-0x34]:
+        //   [msg+0]=Recog -> nParam1, [msg+6]=Param -> nParam2,
+        //   [msg+8]=Tag   -> nParam3, [msg+0xA]=Series -> wParam,
+        //   [ebp-8]=body string -> sMsg, ESI=body length -> nBodyLen.
+        public const int CM_4125 = 4125;  // 0x6DAE25 -> 0x746C34
+        public const int CM_4126 = 4126;  // 0x6DAE74 -> 0x6BF75C
+        public const int CM_4127 = 4127;  // 0x6DAE8D -> 0x747CF4 + 0x74730C
+        public const int CM_4128 = 4128;  // 0x6DAF23 -> 0x6B7184
+        public const int CM_4150 = 4150;  // 0x6DAF51 -> 0x6F2924 -> 0x699B68
+        public const int CM_4151 = 4151;  // 0x6DAF5E -> 0x6999D4
+        public const int CM_4173 = 4173;  // 0x6DB068 -> 0x6E600C
+        public const int CM_4204 = 4204;  // 0x6DAF87 -> 0x6F03E8
+        public const int CM_4205 = 4205;  // 0x6DAFAF -> 0x6F01E4
+        public const int CM_4215 = 4215;  // 0x6DAFCA -> 0x6E8684
+        public const int CM_4218 = 4218;  // 0x6DB00C -> 0x6F3104
+        public const int CM_4408 = 4408;  // 0x6DB08A -> 0x6F37EC(dl=0)
+        public const int CM_4409 = 4409;  // 0x6DB0B2 -> 0x6F38A8(dl=0)
+        public const int CM_4410 = 4410;  // 0x6DB0D0 -> 0x6F37EC(dl=1)
+        public const int CM_4411 = 4411;  // 0x6DB0F8 -> 0x6F38A8(dl=1)
+        public const int CM_4417 = 4417;  // 0x6DB1BF -> 0x699EB4
+        public const int CM_4446 = 4446;  // 0x6DBB37 -> 0x6F75C4
+        public const int CM_4496 = 4496;  // 0x6DBBDC -> 0x6FAC8C
+        public const int CM_4626 = 4626;  // 0x6DB394 -> 0x6AE260
+        public const int CM_4646 = 4646;  // 0x6DBBEB -> 0x6FBB90
+        public const int CM_4647 = 4647;  // 0x6DBBF5 -> 0x6FB6FC
+        public const int CM_4648 = 4648;  // 0x6DBBFF -> 0x6FB874
+        public const int CM_4649 = 4649;  // 0x6DBC09 -> 0x6FBB28
+        public const int CM_4650 = 4650;  // 0x6DBC18 -> 0x6FB51C
+        public const int CM_4651 = 4651;  // 0x6DB1D8 -> 0x6FC054
+
+        // 0x6BF75C answers CM 4126 on every leg through [vmt+0x250] with
+        // `66 BA C2 0F mov dx,0xFC2`. The four legs differ only in the SECOND
+        // pushed dword, which sub_6D7CB0 stores at [ebp-0xC] — the Tag slot:
+        //   0x6BF7C5 push 0/1/0/0  Tag=1  用洗灵石成功
+        //   0x6BF7E2 push 0/2/0/0  Tag=2  没有可用的洗灵石
+        //   0x6BF7FF push 0/3/0/0  Tag=3  已洗到上限
+        //   0x6BF81C push 0/0/0/0  Tag=0  目标不具备洗灵状态
+        //   0x6BF8E9 push 0/0/0/0  Tag=0  Tag 选择子既不是 0 也不是有英雄的 1
+        public const int SM_4034 = 4034;
+
         public const int CM_TAKEONITEM = 1003;
         public const int CM_TAKEOFFITEM = 1004;
         public const int CM_1005 = 1005;
