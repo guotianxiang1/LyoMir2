@@ -117,6 +117,11 @@ namespace GameSvr
                 case 236:
                     cert = new WorldCupPreMatchMon();
                     break;
+
+                // race 243 TFourteenYearBossMon : AnimalObject —— 见 Monster/FourteenYearBossMon.cs
+                case 243:
+                    cert = new FourteenYearBossMon();
+                    break;
             }
             return cert != null;
         }
