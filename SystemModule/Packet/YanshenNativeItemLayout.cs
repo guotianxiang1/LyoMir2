@@ -30,6 +30,14 @@ namespace SystemModule
         public const int HourOffset = 0x1F;
 
         public const int Desc1Offset = 0x20; // item+0x40  10058626..1005863E four dwords
+        // The NATIVE field here is 16 bytes (rec 0x20..0x2F), blind-copied as four
+        // dwords by BOTH stampers — script 10058626/1005862E/10058636/1005863E and
+        // drop 1008287F/10082885/1008288B/10082891, the last of which stores
+        // item+0x4C == rec 0x2C.  (An older comment below claimed "no .text store of
+        // that dword"; it is wrong, and 257 of the 1363 golden item records carry a
+        // non-zero rec[0x2C..0x2F].)  MapTitleSize stays 12 because that is all the
+        // C# projection can reconstruct: the source buffer is a raw heap window, so
+        // the bytes past the map name's NUL are adjacent heap content, not text.
         public const int MapTitleSize = 12;
         public const int Dword2COffset = 0x2C;
         public const int StringFieldSize = 16;
@@ -43,6 +51,18 @@ namespace SystemModule
         public const int PNameOffset = 0x44; // item+0x64  1005867E..10058696 four dwords
         public const int SourceKindOffset = 0x54; // item+0x74  100586A9 mov [eax+0x74],2
         public const int OriginMarkerOffset = 0x55; // item+0x75  100586A4 mov [eax+0x75],0xFF
+        // item+0x74 is NOT re-derivable. A full capstone sweep of the plugin .text
+        // for 1-byte accesses at disp 0x74 finds exactly two real item writers,
+        // 100586A9 and 1005A4EF, and BOTH store the constant 2; there is no reader
+        // at all. The drop stamper 10082868..100828EA writes item+0x40/+0x44/+0x48/
+        // +0x4C/+0x50/+0x54/+0x5C/+0x60/+0x64/+0x68/+0x6C/+0x70/+0x75/+0x3C and
+        // leaves +0x74 alone, which is why every one of the 301 monster-drop records
+        // in the golden corpus reads 0 there — the factory's zero, never overwritten.
+        // Who writes the 1 that 931 of the 1363 golden records carry is UNPROVEN
+        // (0x1006FD7F stores a literal 1 to this+0x74 but its `this` is the script
+        // tunnel's parser object: it returns the -888 "not enough fields" sentinel
+        // and its only caller 0x100779D9 sits inside the 集成函数 dispatcher).
+        // So the byte is carried, never computed.
 
         public const int Ys5Offset = 0x58; // item+0x78  10075D48 mov [ebp-0x14],0x78
         public const int Ys4Offset = 0x59; // item+0x79  10075D3F
@@ -207,6 +227,15 @@ namespace SystemModule
             var hasDrop = !string.IsNullOrEmpty(item.mapName) || !string.IsNullOrEmpty(item.killerName)
                           || !string.IsNullOrEmpty(item.pname) || !string.IsNullOrEmpty(item.sourceTime);
             if (!hasDesc && !hasDrop) return;
+            // Neither stamper ever RE-derives this block: it is written once at the
+            // moment the item is obtained, and from then on all 208 bytes travel by
+            // rep movsd (LOAD 0x74DB3A/0x74DB3D/0x74DB42, SAVE 0x6B170F/0x6B1712/
+            // 0x6B1717, both M2Server). Everything this method can write is only a
+            // lossy PROJECTION of the block — ReadGbkZ stops at the first NUL while
+            // the native map field is a blind 16-byte heap window, and item+0x74 is
+            // not modelled at all — so re-deriving replaces good bytes with a worse
+            // reconstruction. Stamp only when the caller actually changed something.
+            if (OriginUnchanged(item, destination)) return;
 
             if (TryParseSourceTime(item.sourceTime, out var days, out var minute, out var hour))
             {
@@ -224,17 +253,52 @@ namespace SystemModule
             }
             else
             {
-                // 12-byte map title; leave 0x2C untouched (no .text store of that dword).
                 TryWriteGbkFixed(destination.Slice(Desc1Offset, MapTitleSize), item.mapName);
                 WriteStructuredSourceName(destination, item.killerName);
                 WriteStructuredCharName(destination, item.pname);
-                var self = !string.IsNullOrEmpty(item.killerName)
-                           && string.Equals(item.killerName, item.pname, StringComparison.Ordinal);
-                destination[SourceKindOffset] = self ? SourceKindSelf : SourceKindMonster;
+                // SourceKindOffset is deliberately NOT written here (see the note on
+                // the constant): the native drop stamper does not write item+0x74, so
+                // a drop keeps whatever the factory left, which is 0.
             }
 
             destination[OriginMarkerOffset] = OriginMarkerPresent;
         }
+
+        /// <summary>
+        /// True when <paramref name="destination"/> already decodes to exactly the
+        /// origin values <paramref name="item"/> is carrying, i.e. there is nothing
+        /// to stamp. The comparison mirrors <see cref="Unpack(TUserItem, ReadOnlySpan{byte})"/>
+        /// field for field, including which fields that method leaves untouched on
+        /// each branch, so "unchanged" here means the same thing as "this is what
+        /// Unpack produced".
+        /// </summary>
+        private static bool OriginUnchanged(TUserItem item, ReadOnlySpan<byte> destination)
+        {
+            if (destination[OriginMarkerOffset] != OriginMarkerPresent) return false;
+            if (!SameText(item.sourceTime, FormatSourceTime(
+                    BinaryPrimitives.ReadUInt16LittleEndian(destination.Slice(DateDaysOffset, 2)),
+                    destination[MinuteOffset],
+                    destination[HourOffset]))) return false;
+            if (!SameText(item.mapName, ReadGbkZ(destination.Slice(Desc1Offset, MapTitleSize))))
+                return false;
+
+            if (destination[SourceKindOffset] == SourceKindCustom)
+            {
+                return SameText(item.desc1, ReadGbkZ(destination.Slice(Desc1Offset, StringFieldSize)))
+                       && SameText(item.desc2, ReadGbkZ(ReadDesc2(destination)))
+                       && SameText(item.pname, ReadGbkZ(destination.Slice(PNameOffset, StringFieldSize)));
+            }
+
+            // A drop-stamped record carries no description. If one is set now, the
+            // caller turned this into a custom-description item and it must be
+            // re-stamped through the SourceKindCustom branch.
+            return string.IsNullOrEmpty(item.desc1) && string.IsNullOrEmpty(item.desc2)
+                   && SameText(item.killerName, ReadStructuredSourceName(destination))
+                   && SameText(item.pname, ReadStructuredCharName(destination));
+        }
+
+        private static bool SameText(string left, string right)
+            => string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.Ordinal);
 
         private static byte[] ReadDesc2(ReadOnlySpan<byte> record)
         {
