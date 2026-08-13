@@ -163,6 +163,9 @@ namespace GameSvr
         {
             switch (processMessage.wIdent)
             {
+                case Grobal2.CM_4126:
+                    SoulWashApply(processMessage.nParam3, processMessage.nParam1);
+                    return true;
                 case Grobal2.CM_4127:
                     SoulWashRecomputeAndSend(processMessage.nParam3);
                     return true;
@@ -294,6 +297,74 @@ namespace GameSvr
 
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_4037, 0, 0, 0, 0);
             SendSocket(header, body);
+        }
+
+        /// <summary>
+        /// CM 4126, native leaf 0x6DAE74 -> 0x6BF75C. REPLACES cm-4's fail-closed
+        /// ClientNativeSoulWashApply (unreachable now that this hook wins the
+        /// dispatch): reproduces the bare reply and every provable reply code, and
+        /// only fail-closes the one leg that actually burns a 灵气石.
+        ///
+        /// 0x6BF75C selector: Tag==1 with a hero runs on the hero, Tag==0 runs on
+        /// self, and everything else (incl. Tag==1 with no hero) is the bare all-zero
+        /// SM 4034 at 0x6BF8E9. Both real bodies then answer SM 4034 (0xFC2), whose
+        /// result code rides in the Tag slot (0x6BF7C5 push 0/1/0/0 -> Tag=1 etc.):
+        ///   Tag=0  [+0x610]&lt;=0 or [+0x59C]&lt;=0     目标不具备洗灵状态
+        ///   Tag=3  [+0x5A4]+[+0x5A0] &gt;= [+0x59C]    已洗到上限
+        ///   Tag=2  0x746F10 &lt;= 0                    没有可用的洗灵石
+        ///   Tag=1  用洗灵石成功
+        ///
+        /// The Tag=1/Tag=2 leg runs consume(0x746F10) + apply(0x747530): find the
+        /// item at Recog, require its name == 灵气石, decrement [+0x26], delete /
+        /// client-update it and add 5·n 灵佑点 with tier broadcasts (SM 0x38FF). That
+        /// is item-subsystem machinery this port does not model, and it is
+        /// destructive, so it is withheld rather than fabricated. The gate replies —
+        /// which are exactly the legs where native does NOT consume — are faithful.
+        /// </summary>
+        private void SoulWashApply(int nTag, int nRecog)
+        {
+            // 0x6BF839/0x6BF8E9: bare all-zero reply for Tag!=0 unless Tag==1 with a
+            // hero. Identical to cm-4's already-live leg.
+            if (nTag != 0 && !(nTag == 1 && m_HeroObject != null))
+            {
+                SendDefMessage(Grobal2.SM_4034, 0, 0, 0, 0, string.Empty);
+                return;
+            }
+
+            // 0x6BF76C..0x6BF834: the hero leg reads the hero's [+0x610]/[+0x59C]/
+            // [+0x5A0]/[+0x5A4] window, which HeroObject does not model -> fail-closed.
+            if (nTag != 0)
+            {
+                NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
+                return;
+            }
+
+            // Tag==0: self leg.
+            if (!TrySoulWashState(out var cap, out var baseValue, out var current))
+            {
+                // slot array set -> base needs [[0x7D6014]] -> withhold.
+                NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
+                return;
+            }
+
+            // 0x6BF841 `jle` and 0x6BF84E `jle`: prereq or cap not positive -> Tag=0.
+            if (m_btNativeCommonInformationMode <= 0 || cap <= 0)
+            {
+                SendDefMessage(Grobal2.SM_4034, 0, 0, 0, 0, string.Empty);
+                return;
+            }
+
+            // 0x6BF863 `jge`: already at / over the cap -> Tag=3.
+            if (current + baseValue >= cap)
+            {
+                SendDefMessage(Grobal2.SM_4034, 0, 0, 3, 0, string.Empty);
+                return;
+            }
+
+            // 0x6BF86B onwards: would consume a 灵气石 and add points. Item find /
+            // name-match / delete / client-update (0x746F10) and the point apply with
+            // tier broadcasts (0x747530) are unmodeled and destructive -> fail-closed.
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
         }
     }
 }
