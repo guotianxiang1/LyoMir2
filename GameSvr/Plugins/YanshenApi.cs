@@ -1709,6 +1709,7 @@ namespace GameSvr.Plugins
                 var recycleConfig = _pluginManager?.GetRecycleConfigSnapshot();
                 if (recycleConfig == null) return RecycleUnusable;
 
+                var totals = new RecycleRunTotals();
                 for (int i = _player.m_ItemList.Count - 1; i >= 0; i--)
                 {
                     var item = _player.m_ItemList[i];
@@ -1718,8 +1719,12 @@ namespace GameSvr.Plugins
                         continue;
                     if (!RecycleTypeOpen(rule, stackable)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
-                    RecycleOne(item, itemName, rule, stackable);
+                    RecycleOne(item, itemName, rule, stackable, ref totals);
                 }
+
+                // 空包也要走这一趟：0x1006B28E 0F 88 AE 1B 00 00 js 0x1006CE42 直接跳到
+                // 结算段，四路各自的 jle 会把它们全部跳过。
+                SettleRecycleTotals(in totals);
                 return RecycleDone;
             }
             catch (Exception ex)
@@ -1788,6 +1793,97 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
+        /// 一次 AutoRecycle 调用内跨物品存活的四个货币累加器。
+        ///
+        /// 原生是 sub_1006B020 的四个栈槽，**只在进入循环之前清零一次**
+        /// （0x1006B24D 起 <c>xor eax,eax</c> 之后连续 <c>mov …,eax</c>：
+        /// 0x1006B258 <c>[ebp-0xA0]</c> 元宝、0x1006B25E <c>[ebp-0xA4]</c> 灵符、
+        /// 0x1006B264 <c>[ebp-0xA8]</c> 金币、0x1006B26A <c>[ebp-0xAC]</c> 经验），
+        /// 循环头在 0x1006B285 <c>dec edx</c>、回边在 0x1006CE3D <c>jmp 0x1006B285</c>，
+        /// 每件的重置块 0x1006B294..0x1006B30D 里没有这四个槽。
+        /// </summary>
+        private struct RecycleRunTotals
+        {
+            public int Yuanbao;
+            public int LingFu;
+            public int Gold;
+            public int Exp;
+        }
+
+        /// <summary>
+        /// 循环结束后的一次性落账，0x1006CE42..0x1006CEBD。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。四路各自 <c>&gt; 0</c> 才调、
+        /// 顺序固定 元宝 → 灵符 → 金币 → 经验、全部**不看返回值**。
+        /// 于是金币累计顶到 <c>m_nGoldMax</c> 时 <c>IncGold</c> 会**整笔拒绝**，
+        /// 而这一轮匹配到的物品早在循环里就删光了 ⇒ **整批只删不给**。
+        /// 这正是要复刻的行为，不要加上限预检、不要分批付。
+        ///
+        /// 槽 → 引擎函数的映射由插件自己的运行期解析块钉死（<c>add edx,imm32</c> 后
+        /// 紧跟 <c>mov [槽],edx</c>，每个槽全转储各只有一个写入点）：
+        /// 0x1006B09A→<c>[0x1031BC64]=0x6F8730</c>（元宝）、
+        /// 0x1006B0B8→<c>[0x1031BC60]=0x6DE7BC</c>（灵符）、
+        /// 0x1006B0DC→<c>[0x1031BC5C]=0x6D791C</c>（IncGold）、
+        /// 0x1006B136→<c>[0x1031BC50]=0x6C87B4</c>（经验）。
+        /// </summary>
+        private void SettleRecycleTotals(in RecycleRunTotals totals)
+        {
+            // 1006CE42  83 BD 60 FF FF FF 00  cmp  [ebp-0xA0],0
+            // 1006CE49  7E 11                 jle  0x1006CE5C
+            // 1006CE4B  8B 45 A0 / 33 C9      mov  eax,self / xor ecx,ecx
+            // 1006CE50  8B 95 60 FF FF FF     mov  edx,[ebp-0xA0]
+            // 1006CE56  FF 15 64 BC 31 10     call [0x1031BC64] = 0x6F8730  ; 元宝
+            if (totals.Yuanbao > 0) CreditRecycleYuanbao(totals.Yuanbao);
+
+            // 1006CE65  8B 45 A0              mov  eax,self
+            // 1006CE68  33 D2                 xor  edx,edx               ; reason = 0
+            // 1006CE6A  8B 8D 5C FF FF FF     mov  ecx,[ebp-0xA4]
+            // 1006CE70  FF 15 60 BC 31 10     call [0x1031BC60]          ; 灵符
+            if (totals.LingFu > 0)
+                _player.AddNativeLingFu(RecycleLingFuReason, totals.LingFu);
+
+            // 1006CE7F  8B 45 A0 / 33 C9      mov  eax,self / xor ecx,ecx
+            // 1006CE84  8B 95 58 FF FF FF     mov  edx,[ebp-0xA8]
+            // 1006CE8A  FF 15 5C BC 31 10     call [0x1031BC5C]          ; IncGold，返回值丢弃
+            if (totals.Gold > 0) _player.IncGold(totals.Gold);
+
+            // 1006CE99  8B 35 FC 0C 31 10     mov  esi,[0x10310CFC]      ; → "经验"
+            // 1006CE9F..1006CEAE            push 1 / 总额 / 0 / 1 / 0 / 0
+            // 1006CEB0  B1 01                 mov  cl,1
+            // 1006CEB7  FF 15 50 BC 31 10     call [0x1031BC50]          ; 经验
+            if (totals.Exp > 0) _player.GainExp(totals.Exp);
+        }
+
+        /// <summary>
+        /// 元宝落账。原生 <c>0x6F8730</c> 不是就地改字段，而是拼一条请求丢进异步链：
+        /// <code>
+        /// 006F8749  8B F2                 mov  esi,edx               ; 金额
+        /// 006F874B  8B D8                 mov  ebx,eax               ; Self
+        /// 006F8777  8D 93 06 01 00 00     lea  edx,[ebx+0x106]       ; 角色名
+        /// 006F87D7  A1 B0 68 7D 00        mov  eax,[0x7D68B0]        ; 全局服务单例
+        /// 006F87E0  E8 C3 95 01 00        call 0x711DA8
+        /// 006F881B  8B CE                 mov  ecx,esi
+        /// 006F881D  E8 5A 8F 01 00        call 0x71177C
+        /// </code>
+        /// <c>sub_711DA8</c> 在本仓已定性为「外部/异步的元宝通道，不是进程内改值」
+        /// （见 NativeStallBuyExecutor.cs 的同址判例），所以 C# 侧的等价物就是
+        /// <c>NativeYuanbaoManager</c> 的入队。
+        ///
+        /// 关键在于**不要等它的结果**：0x1006CE56 之后没有 test/cmp，插件把返回值丢掉，
+        /// 后面照样接着结算灵符/金币/经验。此前 C# 因为「结算成败要等回调」而把
+        /// 会产元宝的物品整件拒收（D4），那是 C# 自己加的门，原生没有。
+        ///
+        /// 仍未解开的部分（不影响本条）：0x6F8730 拼的那两条 GBK 字面量
+        /// （0x6F8854 / 0x6F885C）与它写进日志的确切文案。它在 M2Server 里 rel32 调用者
+        /// 为 0，只有插件硬编码调用它。
+        /// </summary>
+        private void CreditRecycleYuanbao(int amount)
+        {
+            _player.ScriptRequestNativeYuanbao(amount,
+                GameSvr.Services.NativeYuanbaoManager.AddOperation);
+        }
+
+        /// <summary>
         /// 结算一件物品。
         ///
         /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。
@@ -1809,14 +1905,15 @@ namespace GameSvr.Plugins
         /// 1006BBD8  …                                               ; 四路累加从这里开始
         /// </code>
         /// 唯一能让本件不结算的条件是「删除没发生」；反过来「结算失败」**不会**让物品回来。
-        /// 落账一律不看返回值 —— 0x1006CE56 / 0x1006CE70 / 0x1006CE8A / 0x1006CEB7 四个
-        /// call 之后都没有 test/cmp。IncGold 顶到 <c>[eax+0x68C]</c> 时
-        /// <c>0x6D7934 7F 0D jg</c> 直接返回 FALSE，而物品早已删掉 —— 这就是「只删不给」。
+        /// 而且这里连「落账」都还没发生：四路货币只进累加器，真正付钱在整个循环跑完之后
+        /// 的 <see cref="SettleRecycleTotals"/>（0x1006CE42..0x1006CEBD），全都不看返回值。
+        /// IncGold 顶到 <c>[eax+0x68C]</c> 时 <c>0x6D7934 7F 0D jg</c> 整笔返回 FALSE，
+        /// 而这一轮的物品早已删光 —— 这就是「整批只删不给」。
         ///
         /// 所以删除之后不允许再有任何 return：算术必须像原生一样静默截断，不能中途放弃。
         /// </summary>
         private void RecycleOne(TUserItem item, string itemName, RecycleRule rule,
-            bool stackable)
+            bool stackable, ref RecycleRunTotals totals)
         {
             // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
             var rate = rule.HasRate ? ReadPlayerV(rule.RateGroup, rule.RateIndex) : 0;
@@ -1852,25 +1949,24 @@ namespace GameSvr.Plugins
                 otherUnit <= 0 && rule.Exp <= 0)
                 return;
 
-            // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
-            // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
-            // （这是 D4 的分歧，仍未复刻；放在删除之前，免得它变成又一个只删不给的窗口。）
-            if (rule.Yuanbao > 0) return;
-
             // ── 删除段。此行之后不允许再出现任何 return，见方法头。 ──
             if (!_player.DelBagItem(item.MakeIndex, itemName)) return;
 
-            var gold = ScaleRecyclePrice(rule.Gold, rate, count);
-            var lingFu = ScaleRecyclePrice(rule.LingFu, rate, count);
-            var exp = ScaleRecyclePrice(rule.Exp, rate, count);
-            var other = ScaleRecyclePrice(otherUnit, rate, count);
+            // 四路货币只累加，不在这里落账 —— 落账是循环结束后的一次性动作
+            // （SettleRecycleTotals / 0x1006CE42..0x1006CEBD）。
+            // 累加次序照 0x1006BBD8（元宝）→ 0x1006BC1B（灵符）→ 0x1006BC4D（金币）
+            // → 0x1006BC7F（经验），四条 add 分别是
+            // 0x1006BC0A / 0x1006BC47 / 0x1006BC79 / 0x1006BCB1，全是 32 位回绕的 add。
+            totals.Yuanbao = unchecked(
+                totals.Yuanbao + ScaleRecyclePrice(rule.Yuanbao, rate, count));
+            totals.LingFu = unchecked(
+                totals.LingFu + ScaleRecyclePrice(rule.LingFu, rate, count));
+            totals.Gold = unchecked(
+                totals.Gold + ScaleRecyclePrice(rule.Gold, rate, count));
+            totals.Exp = unchecked(
+                totals.Exp + ScaleRecyclePrice(rule.Exp, rate, count));
 
-            // 落账一律不看返回值，与 0x1006CE56 / 0x1006CE70 / 0x1006CE8A / 0x1006CEB7
-            // 四个 call 之后都没有 test/cmp 一致。次序照 0x1006BBD8 起的累加次序：
-            // 灵符 → 金币 → 经验 → 其他（元宝那一路见 D4）。
-            if (lingFu > 0) _player.AddNativeLingFu(RecycleLingFuReason, lingFu);
-            if (gold > 0) _player.IncGold(gold);
-            if (exp > 0) _player.GainExp(exp);
+            var other = ScaleRecyclePrice(otherUnit, rate, count);
 
             // 其他 走 0x1006BCB7（可叠材料）/ 0x1006CDB4（物品种类）两段同构代码：
             //   1006BCB7  8B 45 98   mov eax,[ebp-0x68]   ; 其他值，**缩放前**
