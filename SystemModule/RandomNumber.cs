@@ -35,8 +35,8 @@ namespace SystemModule
     // the `private static Random random` field this class no longer owns. The four draw
     // entries are virtual and the constructor is protected so that a caller which owns
     // that field can install a derived source. Nothing in the server ever installs one:
-    // M2Share.InitializeRuntime assigns GetInstance(), so production dispatch lands on
-    // the bodies below and every value stays byte-identical to sub_403B4C.
+    // the M2Share static constructor assigns GetInstance(), so production dispatch lands
+    // on the bodies below and every value stays byte-identical to sub_403B4C.
     public class RandomNumber
     {
         private static RandomNumber singleton;
