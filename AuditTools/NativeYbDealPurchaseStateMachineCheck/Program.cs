@@ -197,9 +197,23 @@ static void TestDormantBoundary()
             "dormant YBDeal helper gained a runtime authority: " + forbidden);
     }
 
-    Equal(1, gameSources.Count(path => File.ReadAllText(path).Contains(
-            "NativeYbDealPurchaseStateMachine", StringComparison.Ordinal)),
-        "dormant state machine runtime reference count");
+    // Dormancy is a property of the CODE, so only code counts. This used to be a raw
+    // text match over whole files, which also caught the name in prose and in Chinese
+    // description literals: once the CM Quarter 1 port (d479f644) started citing this
+    // machine to explain why the neighbouring write-side idents stay fail-closed, the
+    // count went 1 -> 6 with no call site added anywhere. A guard that makes accurate
+    // cross-references into a violation gets satisfied by deleting the documentation,
+    // which is the opposite of what it is for. Comments and string literals are now
+    // stripped first; the invariant itself is unchanged and still exactly 1.
+    AssertCodeReferenceScannerWorks();
+    var codeReferences = gameSources
+        .Where(path => StripCommentsAndLiterals(File.ReadAllText(path))
+            .Contains("NativeYbDealPurchaseStateMachine", StringComparison.Ordinal))
+        .Select(path => Path.GetFileName(path))
+        .OrderBy(name => name, StringComparer.Ordinal)
+        .ToArray();
+    Equal("NativeYbDealPurchaseStateMachine.cs", string.Join(", ", codeReferences),
+        "dormant state machine runtime reference set (declaration only)");
     var marker = "case \"ybdealdialogshowmode\":";
     var start = bridge.IndexOf(marker, StringComparison.Ordinal);
     Assert(start >= 0, "YBDealDialogShowMode PAS case missing");
@@ -296,6 +310,90 @@ static void Sequence(IEnumerable<string> expected, IEnumerable<string> actual,
         throw new InvalidOperationException(message + ": expected [" +
             string.Join(" | ", expected) + "], actual [" +
             string.Join(" | ", actual) + "]");
+}
+
+// Drops //, ///, /* */ and string/char literals, keeping everything else byte-for-byte.
+// Not a full C# lexer -- it does not need to be. It only has to make "the name appears
+// in executable code" decidable, and every construct that could hide a call site
+// (identifiers, member access, using directives) survives untouched.
+static string StripCommentsAndLiterals(string source)
+{
+    var output = new System.Text.StringBuilder(source.Length);
+    for (var i = 0; i < source.Length; i++)
+    {
+        var c = source[i];
+        var next = i + 1 < source.Length ? source[i + 1] : '\0';
+
+        if (c == '/' && next == '/')
+        {
+            while (i < source.Length && source[i] != '\n') i++;
+            output.Append('\n');
+            continue;
+        }
+        if (c == '/' && next == '*')
+        {
+            i += 2;
+            while (i + 1 < source.Length && !(source[i] == '*' && source[i + 1] == '/')) i++;
+            i++;
+            continue;
+        }
+        if (c == '@' && next == '"')
+        {
+            i += 2;
+            while (i < source.Length)
+            {
+                if (source[i] == '"')
+                {
+                    if (i + 1 < source.Length && source[i + 1] == '"') { i += 2; continue; }
+                    break;
+                }
+                i++;
+            }
+            continue;
+        }
+        if (c == '"' || c == '\'')
+        {
+            var quote = c;
+            i++;
+            while (i < source.Length && source[i] != quote)
+            {
+                if (source[i] == '\\') i++;
+                i++;
+            }
+            continue;
+        }
+        output.Append(c);
+    }
+    return output.ToString();
+}
+
+// The stripper is the only thing standing between this guard and a false green, so it
+// gets its own fixtures: a real call must survive, and none of the shapes the name
+// legitimately appears in today may.
+static void AssertCodeReferenceScannerWorks()
+{
+    const string name = "NativeYbDealPurchaseStateMachine";
+    var mustSurvive = new[]
+    {
+        "var d = NativeYbDealPurchaseStateMachine.BeginValidatedPurchase(c, h);",
+        "using static GameSvr.Services.NativeYbDealPurchaseStateMachine;",
+        "public static class NativeYbDealPurchaseStateMachine\n{\n}",
+    };
+    foreach (var fixture in mustSurvive)
+        Assert(StripCommentsAndLiterals(fixture).Contains(name, StringComparison.Ordinal),
+            "code-reference scanner lost a real reference: " + fixture);
+
+    var mustVanish = new[]
+    {
+        "// NativeYbDealPurchaseStateMachine is host-driven and dormant",
+        "/// <see cref=\"NativeYbDealPurchaseStateMachine\"/>",
+        "/* NativeYbDealPurchaseStateMachine dormant */",
+        "Add(1254, 0, 0, \"x\", \"C# NativeYbDealPurchaseStateMachine 已建模但按设计休眠\");",
+        "var s = @\"NativeYbDealPurchaseStateMachine\";",
+    };
+    foreach (var fixture in mustVanish)
+        Assert(!StripCommentsAndLiterals(fixture).Contains(name, StringComparison.Ordinal),
+            "code-reference scanner kept a non-code mention: " + fixture);
 }
 
 static void Require(string source, string value, string message)
