@@ -139,6 +139,23 @@
 
 ## 5. 环境陷阱
 
+- **AuditTool 的 exe 是跨 worktree 共享的，可能是别人的旧产物。**
+  `Directory.Build.props` 把输出重定向到绝对路径 `D:\loym2\.claude\wt2\Build\...`，**所有
+  worktree 共用同一份**。在自己的树里 `dotnet build`（哪怕 `-t:Rebuild`）**不一定覆盖**
+  那份 exe —— 实测重建报「0 个错误」，而共享目录里的 exe 时间戳纹丝不动，跑出来的仍是
+  另一棵树几十分钟前构建的二进制。
+  **判别法**：看异常堆栈里的源码路径。若显示的是别的 worktree（如 `wt2\audit3\...`）
+  而不是你自己的树，那你测的就不是你的代码。
+  **正确做法**：`dotnet build <proj>.csproj -o <独立临时目录>`，再跑该目录里的 exe。
+  实例：撤回 `ScatterRange 3→4` 后，共享目录的旧 exe 仍报
+  `expected=4, actual=3`；用 `-o` 隔离重建后立刻 `PASS ... scatter-range=4`。
+  同理，`_run_audittools.ps1` 是从共享目录找 exe 的，其批量结果需按此法复核后再采信。
+
+- **文本匹配型断言会被注释误伤。** `DeathDropPolicyCheck` 断言源码不得含
+  `nDieScatterBagRate`，但 `TPlayObject.Base.cs` 在**注释**里写了「这里原先读
+  g_Config.nDieScatterBagRate」，实际代码是硬编码 `Random(3)` —— 判红属误报。
+  遇到 `source.Contains("...")` 型断言，先确认命中的是代码还是注释。
+
 - `dotnet run --project X -- <arg>` 在本环境**不转发 argv**；需要传参的 AuditTool 要直接
   执行生成的 exe。
 - `HeroLifecycleCheck` 不传构建目录时退出码 2 是**空跑**而非断言失败；有效目录
