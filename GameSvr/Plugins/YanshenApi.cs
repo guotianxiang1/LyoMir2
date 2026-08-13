@@ -1443,6 +1443,18 @@ namespace GameSvr.Plugins
         // 6.6 物品/背包 — 13 functions
         // ═══════════════════════════════════════════════════════════════
 
+        /// <summary>GetV/SetV 拒绝参数时的返回值，与 PasApiBridge 同一常量（0x6DF1F1 预置）。</summary>
+        private const int NativeScriptVarMiss = -1;
+
+        /// <summary>作者原文只给了 This_player.GetV(N,1~6) 这一档，即 jp1..jp6。</summary>
+        private const int RecycleExtremeSlots = 6;
+
+        /// <summary>元素位 1-17，与 Ys_GetOther(types=1) 公布的范围一致。</summary>
+        private const int RecycleElementSlots = 17;
+
+        /// <summary>与 NPC 给予灵符同一 reason（PasApiBridge.NativeGive / 魔塔奖励都用 23001）。</summary>
+        private const int RecycleLingFuReason = 23001;
+
         /// <summary>自动回收 — 按JSON配置回收背包物品, -999=JSON语法错误</summary>
         public int AutoRecycle()
         {
@@ -1451,6 +1463,7 @@ namespace GameSvr.Plugins
             {
                 var recycleConfig = _pluginManager?.GetRecycleConfigSnapshot();
                 if (recycleConfig == null) return -999;
+                if (!RecycleBagModelResolved()) return 0;
 
                 var recycled = 0;
                 for (int i = _player.m_ItemList.Count - 1; i >= 0; i--)
@@ -1458,11 +1471,11 @@ namespace GameSvr.Plugins
                     var item = _player.m_ItemList[i];
                     if (item == null) continue;
                     var itemName = M2Share.UserEngine.GetStdItemName(item.wIndex);
-                    if (recycleConfig.ContainsItem(itemName))
-                    {
-                        _player.DelBagItem(item.MakeIndex, itemName);
-                        recycled++;
-                    }
+                    if (!recycleConfig.TryGetItemRule(itemName, out var rule, out var stackable))
+                        continue;
+                    if (!RecycleTypeOpen(rule)) continue;
+                    if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
+                    if (TryRecycleOne(item, itemName, rule)) recycled++;
                 }
                 return recycled;
             }
@@ -1471,6 +1484,213 @@ namespace GameSvr.Plugins
                 M2Share.MainOutMessage("[异常] AutoRecycle " + ex.Message);
                 return -999;
             }
+        }
+
+        /// <summary>
+        /// 无限背包 把额外格子存在 M2 背包之外（Gs1\MyJson\bags\&lt;角色名&gt;.bin），C# 还没有
+        /// 复刻那个容器，所以回收只能看见 m_ItemList。生产 items\config.json 用的是
+        /// "无限背包_是否固定":"固定格子"（额外格子=144，变量v1=10/变量v2=1 在这条分支下不参与
+        /// 计算——V(10,1) 在生产里是"商店装备"回收开关，拿它算格子数显然不是本意）。
+        /// "V变量控制格子" 那条分支的格子数取自 GetV(变量v1,变量v2)，没有任何字节证据，
+        /// 保持关闭：宁可一件不回收，也不能对着一个没复刻的容量模型删东西。
+        /// </summary>
+        private bool RecycleBagModelResolved()
+        {
+            var manager = _pluginManager;
+            if (manager == null) return true;
+            if (!IsEnabledValue(manager.GetItemConfigValue("无限背包_是否勾选"))) return true;
+            return PluginManager.NormalizeConfigValue(
+                manager.GetItemConfigValue("无限背包_是否固定")) as string == "固定格子";
+        }
+
+        /// <summary>总开关：GetV(v1,v2)==关闭值 时该类型停止回收；省略则失去开关效果。</summary>
+        private bool RecycleTypeOpen(RecycleRule rule)
+        {
+            if (!rule.HasMasterSwitch) return true;
+            return ReadPlayerV(rule.MasterSwitchGroup, rule.MasterSwitchIndex)
+                   != rule.MasterSwitchClosedValue;
+        }
+
+        /// <summary>
+        /// 极品开关 / 元素开关：某号属性值 &gt; GetV(变量号, 号) 的装备不回收。
+        ///
+        /// 阈值读不出来（GetV 拒参或该变量从没写过，都返回 -1）时一律不回收：-1 到底表示
+        /// "没设过阈值所以不过滤" 还是 "阈值是 -1 所以全挡"，插件里看不到，两种猜法差一整套
+        /// 玩家装备。生产 huishou.pas 的加/减按钮把 V(125,1..12) 从 -1 抬到 0 起步，
+        /// 元素那一行（V(126,*)）在生产脚本里是注释掉的，所以生产在恢复那一行之前
+        /// 声明了 元素开关 的类型都不会回收。
+        /// </summary>
+        private bool RecycleQualityAllowed(TUserItem item, RecycleRule rule)
+        {
+            if (rule.ExtremeGroup > 0)
+                for (var slot = 1; slot <= RecycleExtremeSlots; slot++)
+                {
+                    var threshold = ReadPlayerV(rule.ExtremeGroup, slot);
+                    if (threshold == NativeScriptVarMiss) return false;
+                    if (GetExtremeValue(item, slot - 1) > threshold) return false;
+                }
+
+            if (rule.ElementGroup > 0)
+                for (var slot = 1; slot <= RecycleElementSlots; slot++)
+                {
+                    var threshold = ReadPlayerV(rule.ElementGroup, slot);
+                    if (threshold == NativeScriptVarMiss) return false;
+                    if (GetElementValue(item, slot) > threshold) return false;
+                }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 结算一件物品。产出与删除必须一起成立：任何一路产出算不出来、落不了账，
+        /// 或者物品删不掉，都整件放弃，绝不出现删了不给的中间态。
+        /// </summary>
+        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule)
+        {
+            // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
+            var rate = rule.HasRate ? ReadPlayerV(rule.RateGroup, rule.RateIndex) : 0;
+            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, out var yuanbao) ||
+                !TryScaleRecyclePrice(rule.Gold, rate, out var gold) ||
+                !TryScaleRecyclePrice(rule.LingFu, rate, out var lingFu) ||
+                !TryScaleRecyclePrice(rule.Exp, rate, out var exp))
+                return false;
+
+            // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
+            // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
+            if (yuanbao > 0) return false;
+
+            // 灵符在开了信用点服务时会改走限时灵符账户，落到哪个账户无从验证，同样不回收。
+            if (lingFu > 0 && M2Share.CreditCardService?.Enabled == true) return false;
+
+            // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
+            if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
+
+            var otherBase = 0;
+            var otherTotal = 0;
+            if (rule.HasOther)
+            {
+                if (!PlayerVarWritable(rule.OtherGroup, rule.OtherIndex)) return false;
+                otherBase = ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex);
+                var accumulated = (long)otherBase + rule.OtherValue;
+                if (accumulated < int.MinValue || accumulated > int.MaxValue) return false;
+                otherTotal = (int)accumulated;
+            }
+
+            var goldPaid = 0;
+            var lingFuPaid = 0;
+            var otherWritten = false;
+
+            if (gold > 0)
+            {
+                if (!_player.IncGold(gold)) return false;
+                goldPaid = gold;
+            }
+
+            if (lingFu > 0)
+            {
+                if (!_player.AddNativeLingFu(RecycleLingFuReason, lingFu))
+                {
+                    RollbackRecycleGold(goldPaid);
+                    return false;
+                }
+                lingFuPaid = lingFu;
+            }
+
+            if (rule.HasOther)
+            {
+                WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherTotal);
+                otherWritten = true;
+            }
+
+            // GainExp 没有返回值也撤不回来，所以放在删除之前：删除万一失败，玩家是多拿了经验
+            // 又留下了物品，方向上只会多给，不会少给。
+            if (exp > 0) _player.GainExp(exp);
+
+            if (_player.DelBagItem(item.MakeIndex, itemName)) return true;
+
+            if (otherWritten) WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherBase);
+            RollbackRecycleLingFu(lingFuPaid);
+            RollbackRecycleGold(goldPaid);
+            return false;
+        }
+
+        private static bool TryScaleRecyclePrice(int unitPrice, int rate, out int amount)
+        {
+            amount = 0;
+            if (unitPrice <= 0) return true;
+            var scaled = rate > 0 ? (long)unitPrice * rate / 100 : unitPrice;
+            if (scaled < 0 || scaled > int.MaxValue) return false;
+            amount = (int)scaled;
+            return true;
+        }
+
+        private void RollbackRecycleGold(int amount)
+        {
+            if (amount <= 0) return;
+            _player.m_nGold -= amount;
+            _player.GoldChanged();
+        }
+
+        private void RollbackRecycleLingFu(int amount)
+        {
+            if (amount <= 0) return;
+            _player.m_nLingFu = unchecked(_player.m_nLingFu - amount);
+            _player.RefreshNativeLingFu();
+        }
+
+        /// <summary>
+        /// GetV 语义，与 PasApiBridge.GetPlayerVar 同源：0x6DF203 test esi,esi 判组号，
+        /// 组 0 走 0x6DF20F mov eax,[ebx+eax*4+0x808] 的内联槽（0x6DF20A sub edx,0x64 +
+        /// 0x6DF20D jae ⇒ 只收 1..100，没写过的槽读 0），其余走键控字典，
+        /// 未命中保留 0x6DF1F1 预置的 -1。
+        /// </summary>
+        private int ReadPlayerV(int group, int index)
+        {
+            var player = _player;
+            if (player == null) return NativeScriptVarMiss;
+            if (group == 0)
+                return index >= 1 && index <= 100
+                    ? player.m_ScriptVGroup0[index]
+                    : NativeScriptVarMiss;
+            if (group < 0 || index <= 0) return NativeScriptVarMiss;
+            return player.m_ScriptVVars != null &&
+                   player.m_ScriptVVars.TryGetValue(group * 1000 + index, out var value)
+                ? value
+                : NativeScriptVarMiss;
+        }
+
+        /// <summary>
+        /// 其他 是个累加器（生产 NPC 装备回收-3.pas 把 GetV(10,200) 加进 MyShengwan 再清零），
+        /// 累加基数要读真实存储：GetV 把"从没写过"和"存的就是 -1"都折叠成 -1，拿 -1 当基数会
+        /// 让第一件物品少给一点，甚至把 值=0 的类型写成 -1 让 NPC 反扣一点声望。
+        /// </summary>
+        private int ReadStoredPlayerV(int group, int index)
+        {
+            var player = _player;
+            if (player == null) return 0;
+            if (group == 0)
+                return index >= 1 && index <= 100 ? player.m_ScriptVGroup0[index] : 0;
+            return player.m_ScriptVVars != null &&
+                   player.m_ScriptVVars.TryGetValue(group * 1000 + index, out var value)
+                ? value
+                : 0;
+        }
+
+        /// <summary>SetV 的收参门：0x6DF2B3/0x6DF2B7 两个 test 拒掉非正参数，组 0 只收 1..100。</summary>
+        private static bool PlayerVarWritable(int group, int index) =>
+            group == 0 ? index >= 1 && index <= 100 : group > 0 && index > 0;
+
+        private void WritePlayerV(int group, int index, int value)
+        {
+            var player = _player;
+            if (player == null) return;
+            if (group == 0)
+            {
+                player.m_ScriptVGroup0[index] = value;
+                return;
+            }
+            // 原生 upsert sub_6E4140 没有零值判断，0 也原样写入。
+            player.m_ScriptVVars[group * 1000 + index] = value;
         }
 
         /// <summary>全屏拾取: round范围, gbv网关绕过值, isMy仅拾取自己的</summary>
