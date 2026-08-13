@@ -5319,6 +5319,8 @@ namespace GameSvr
                     {
                         result = false;
                     }
+                    // 0x767334  8B 45 FC / 80 B8 C7 04 00 00 00 / 74 02 / 33 DB
+                    //   主人休息位 [+0x4C7]，与下面两道门同属一条直线，不要重排。
                     if (m_Master.m_boSlaveRelax)
                     {
                         result = false;
@@ -5329,6 +5331,35 @@ namespace GameSvr
                         {
                             result = false;
                         }
+                    }
+                    // PKD-09 —— 宠物不打「主人的英雄」和「主人本人」。战神 sub_7671F0
+                    // （TCreature 的 [vmt+0x20]，即 IsAttackTarget）在主人分支的收尾处
+                    // 连着两道门，C# 一道都没有：
+                    //   76736F  8B 45 FC              mov eax,[ebp-4]      ; 责任玩家
+                    //   767372  3B B0 B0 0B 00 00     cmp esi,[eax+0xBB0]  ; 主人的英雄
+                    //   767378  75 02                 jne 0x76737C
+                    //   76737A  33 DB                 xor ebx,ebx          ; -> 不可攻击
+                    //   76737C  3B B7 8C 03 00 00     cmp esi,[edi+0x38C]  ; self.m_Master
+                    //   767382  75 02                 jne 0x767386
+                    //   767384  33 DB                 xor ebx,ebx          ; -> 不可攻击
+                    // [ebp-4] 是 self.[vmt+0xB4]() 的返回值，即沿 m_Master 链一路向上解出的
+                    // 责任玩家（TCreature 版 sub_769910 递归取 [+0x38C]，TPlayer 版
+                    // sub_6C185C 是裸 `C3`，eax 未改动 = 返回自身）。C# 没有这条递归解析器，
+                    // 本函数上下文里一律用 m_Master 代替（第 5182/5199 行同样如此），所以这里
+                    // 保持同一约定：单层宠物时 m_Master 就是责任玩家。
+                    // [+0xBB0] = 英雄指针，身份由 sub_6D09D0 @0x6D09FA 独立锚定
+                    // （见 TPlayObject.Message.cs 的 ClientHeroMoveToHeroBag 注释）。
+                    // 玩家可见后果：没有这两道门，宠物/召唤物会把主人的英雄乃至主人本人
+                    // 当成合法目标 —— 混乱状态、诱惑之光反目、群攻溅射都会打到自己人。
+                    if (m_Master is TPlayObject masterOfSlave
+                        && masterOfSlave.m_HeroObject != null
+                        && ReferenceEquals(BaseObject, masterOfSlave.m_HeroObject))
+                    {
+                        result = false;                                 // 0x76737A
+                    }
+                    if (ReferenceEquals(BaseObject, m_Master))
+                    {
+                        result = false;                                 // 0x767384
                     }
                     BreakCrazyMode();
                 }
@@ -5511,6 +5542,14 @@ namespace GameSvr
 
         public virtual bool IsProperTarget(TBaseObject BaseObject)
         {
+            // PKD-08 —— 战神 sub_767498 先过九道硬门再调虚槽 [vmt+0x20]（= IsAttackTarget）。
+            // 完整字节与身份证据见 TBaseObject.NativeProperTargetGate.cs。C# 此前把这九道门
+            // 摊到约 50 个调用点上各写一部分，跨地图 / 石化 / 管理员模式 / 状态 52 的目标在
+            // 未写全的路径上仍可被攻击。
+            if (!NativeProperTargetPreGate(BaseObject))
+            {
+                return false;
+            }
             bool result = IsAttackTarget(BaseObject);
             if (result)
             {
