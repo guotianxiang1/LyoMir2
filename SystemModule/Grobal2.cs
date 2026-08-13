@@ -1890,5 +1890,55 @@ namespace SystemModule
         public const int SM_1261 = 1261;  // 0x4ED  fixed Recog=-1 mov dx @0x6F0E4E -> call [obj+0x250] @0x6F0E56 (empty body)
         public const int SM_1262 = 1262;  // 0x4EE  fixed Recog=-1 mov dx @0x6F0FC2 -> call [obj+0x250] @0x6F0FCA (empty body)
         public const int SM_1263 = 1263;  // 0x4EF  Param=5, Recog=<arg> mov dx @0x6F11F9 -> call [obj+0x250] @0x6F1201 (empty body)
+
+        // === SM missing batch 4 (rank 71-105 + 顺延 tail 106-140) =====================
+        // Server->client idents that native M2Server (flat_image.bin, ImageBase
+        // 0x400000) sends through a real [obj+0x250]/[obj+0x254] slot but had no C#
+        // constant of any prefix. Census: staging/_sm1_work/reconcile.txt (140 class-c
+        // idents); this batch is the second-highest quarter (rank 71-105) plus the
+        // ascending 顺延 back-fill after skipping already-handled entries (sm-A / sm-1 /
+        // sm-2 / TimedAbility 3554-3555 / NativeScriptUiOpen 4331/4339/4340/4348/4351/
+        // 4361 / NativeYbCredit 3009 / slave-list 4469-4470 / social 4612 / SM_4034 /
+        // m_sm_d relation+YB 4441-4446). Builders decoded byte-for-byte live in
+        // GameSvr/Actors/TBaseObject.SmIdent_Sm4.cs. Idents whose BODY/FRAME is not
+        // evaluable at a mapped send slot are BLOCKED (fail-closed, no builder).
+        //   -- built (empty body unless noted) --
+        public const int SM_2969 = 2969;  // 0xB99  RM-forward -> [obj+0x250] @0x6B5F3D
+        public const int SM_2970 = 2970;  // 0xB9A  RM-forward -> [obj+0x250] @0x6B5F65 (0x254 serializer variant @0x6EB41C = gap)
+        public const int SM_4035 = 4035;  // 0xFC3  status code (Tag 0..2, Recog 0/1) -> [obj+0x250] (12 sites @0x6BF9A7..)
+        public const int SM_4038 = 4038;  // 0xFC6  flag notify -> [obj+0x250] @0x746D3B/@0x746D56
+        public const int SM_4070 = 4070;  // 0xFE6  -> [obj+0x250] @0x649072
+        public const int SM_4117 = 4117;  // 0x1015 Recog=word[self+0x608] -> [obj+0x250] @0x6E86D8 (+2)
+        public const int SM_4205 = 4205;  // 0x106D SMS-auth reply -> [obj+0x250] (4 sites @0x654C3E..@0x6F023A)
+        public const int SM_4206 = 4206;  // 0x106E -> [obj+0x250] @0x6F0496 (Recog 0)/@0x6F04F7 (Recog -1)
+        public const int SM_4349 = 4349;  // 0x10FD RM-forward (nParam2 split) -> [obj+0x250] @0x6B5215
+        public const int SM_4350 = 4350;  // 0x10FE RM-forward (nParam2 split) -> [obj+0x250] @0x68980D
+        public const int SM_4352 = 4352;  // 0x1100 -> [obj+0x250] @0x6E616A (Param 0)/@0x6E6186 (Param 1)
+        public const int SM_4407 = 4407;  // 0x1137 text sMsg -> [obj+0x250] @0x6B60F2 (string body)
+        public const int SM_4408 = 4408;  // 0x1138 bead-inlay(self) result -> [obj+0x250] @0x6F3897
+        public const int SM_4409 = 4409;  // 0x1139 jade-inlay(self) result -> [obj+0x250] @0x6F393A
+        public const int SM_4410 = 4410;  // 0x113A bead-inlay(hero) result -> [obj+0x250] @0x6F387D
+        public const int SM_4411 = 4411;  // 0x113B jade-inlay(hero) result -> [obj+0x250] @0x6F3920
+        public const int SM_4455 = 4455;  // 0x1167 name notice -> [obj+0x250] @0x6A89E0 (string body)
+        public const int SM_4456 = 4456;  // 0x1168 name notice -> [obj+0x250] @0x6A8AAB (+1) (string body)
+        public const int SM_4457 = 4457;  // 0x1169 flag notify -> [obj+0x250] @0x6A8C9F
+        public const int SM_4458 = 4458;  // 0x116A name notice -> [obj+0x250] @0x6A8D22 (string body)
+        public const int SM_4459 = 4459;  // 0x116B name notice -> [obj+0x250] @0x6A8DC2 (string body)
+        public const int SM_4496 = 4496;  // 0x1190 newbie-task status -> [obj+0x250] @0x6FAD1B
+        public const int SM_4499 = 4499;  // 0x1193 text sMsg -> [obj+0x250] @0x6FBD25 (string body)
+        public const int SM_4638 = 4638;  // 0x121E all-zero header -> [obj+0x250] @0x64E832
+        public const int SM_4649 = 4649;  // 0x1229 prize-claim result -> [obj+0x250] @0x6FBB5F
+        public const int SM_4650 = 4650;  // 0x122A treasure-map result -> [obj+0x250] @0x6FB610
+        //   -- fail-closed (BLOCKED, no builder; body/frame not evaluable at a mapped slot) --
+        public const int SM_3412 = 3412;  // 0xD54  BLOCKED: mov dx @0x6EE22C -> call [obj+0xE0] @0x6EE234 (non-slot virtual)
+        public const int SM_4032 = 4032;  // 0xFC0  BLOCKED: [obj+0x254] @0x746D18, Buf/Len = [[0x7D6014]] 43-byte table record (undefined)
+        public const int SM_4033 = 4033;  // 0xFC1  BLOCKED: [obj+0x254] @0x747362, 32-byte state-0x36 record from [self+0x5A8] (unmapped)
+        public const int SM_4037 = 4037;  // 0xFC5  BLOCKED: [obj+0x254] @0x6B71ED, 24-byte body [self+0x60C]+[self+0x5A8] (unmapped)
+        public const int SM_4363 = 4363;  // 0x110B BLOCKED: mov dx @0x767158 -> call [obj+0xE0] @0x767160 (non-slot virtual)
+        public const int SM_4480 = 4480;  // 0x1180 BLOCKED: broadcast via wrapper call 0x705954 @0x7068AF (not a direct slot)
+        public const int SM_4614 = 4614;  // 0x1206 BLOCKED: send via wrapper call 0x7059D0 @0x70214D, 8-byte body (not a direct slot)
+        public const int SM_4626 = 4626;  // 0x1212 BLOCKED: [obj+0x254] @0x6AE363, paged-list Buf/Len (element layout undefined)
+        public const int SM_4646 = 4646;  // 0x1226 BLOCKED: [obj+0x254] @0x6FBC4C, prize-list 0x18-byte elements (layout undefined)
+        public const int SM_4647 = 4647;  // 0x1227 BLOCKED: [obj+0x254] @0x6FB7FF, 24-byte body from 0x69C514 (layout undefined)
     }
 }

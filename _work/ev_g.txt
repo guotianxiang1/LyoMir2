@@ -1,0 +1,291 @@
+=== find loads of SM 4363 (0x110B) ===
+  [mov dx,imm16] @0x767158
+     0x767158  66 BA 0B 11          mov dx, 0x110b
+     0x76715C  8B C7                mov eax, edi
+     0x76715E  8B 18                mov ebx, dword ptr [eax]
+     0x767160  FF 93 E0 00 00 00    call dword ptr [ebx + 0xe0]
+     0x767166  33 C0                xor eax, eax
+     0x767168  5A                   pop edx
+     0x767169  59                   pop ecx
+     0x76716A  59                   pop ecx
+     0x76716B  64 89 10             mov dword ptr fs:[eax], edx
+     0x76716E  68 88 71 76 00       push 0x767188
+     0x767173  8D 45 EC             lea eax, [ebp - 0x14]
+     0x767176  BA 02 00 00 00       mov edx, 2
+     0x76717B  E8 A4 E3 C9 FF       call 0x405524
+     0x767180  C3                   ret 
+
+=== find loads of SM 4480 (0x1180) ===
+  [mov dx,imm16] @0x7068A8
+     0x7068A8  66 BA 80 11          mov dx, 0x1180
+     0x7068AC  8B 45 F8             mov eax, dword ptr [ebp - 8]
+     0x7068AF  E8 A0 F0 FF FF       call 0x705954
+     0x7068B4  47                   inc edi
+     0x7068B5  4B                   dec ebx
+     0x7068B6  75 BD                jne 0x706875
+     0x7068B8  33 C0                xor eax, eax
+     0x7068BA  5A                   pop edx
+     0x7068BB  59                   pop ecx
+     0x7068BC  59                   pop ecx
+     0x7068BD  64 89 10             mov dword ptr fs:[eax], edx
+     0x7068C0  68 E2 68 70 00       push 0x7068e2
+     0x7068C5  8D 45 EC             lea eax, [ebp - 0x14]
+     0x7068C8  BA 03 00 00 00       mov edx, 3
+
+=== find loads of SM 4614 (0x1206) ===
+  [mov dx,imm16] @0x70212E
+     0x70212E  66 BA 06 12          mov dx, 0x1206
+     0x702132  E8 DD 4E 00 00       call 0x707014
+     0x702137  EB 19                jmp 0x702152
+     0x702139  6A 00                push 0
+     0x70213B  6A 00                push 0
+     0x70213D  6A 01                push 1
+     0x70213F  8D 45 08             lea eax, [ebp + 8]
+     0x702142  50                   push eax
+     0x702143  6A 08                push 8
+     0x702145  33 C9                xor ecx, ecx
+     0x702147  66 BA 06 12          mov dx, 0x1206
+     0x70214B  8B C3                mov eax, ebx
+     0x70214D  E8 7E 38 00 00       call 0x7059d0
+     0x702152  FF 75 0C             push dword ptr [ebp + 0xc]
+  [mov dx,imm16] @0x702147
+     0x702147  66 BA 06 12          mov dx, 0x1206
+     0x70214B  8B C3                mov eax, ebx
+     0x70214D  E8 7E 38 00 00       call 0x7059d0
+     0x702152  FF 75 0C             push dword ptr [ebp + 0xc]
+     0x702155  FF 75 08             push dword ptr [ebp + 8]
+     0x702158  8D 55 FC             lea edx, [ebp - 4]
+     0x70215B  8B C3                mov eax, ebx
+     0x70215D  E8 9A 34 00 00       call 0x7055fc
+     0x702162  8B C3                mov eax, ebx
+     0x702164  E8 F7 34 00 00       call 0x705660
+     0x702169  52                   push edx
+     0x70216A  50                   push eax
+     0x70216B  A1 1C 6F 7D 00       mov eax, dword ptr [0x7d6f1c]
+     0x702170  8B 00                mov eax, dword ptr [eax]
+  [mov dx,imm16] @0x70222E
+     0x70222E  66 BA 06 12          mov dx, 0x1206
+     0x702232  E8 DD 4D 00 00       call 0x707014
+     0x702237  EB 19                jmp 0x702252
+     0x702239  6A 00                push 0
+     0x70223B  6A 00                push 0
+     0x70223D  6A 01                push 1
+     0x70223F  8D 45 08             lea eax, [ebp + 8]
+     0x702242  50                   push eax
+     0x702243  6A 08                push 8
+     0x702245  33 C9                xor ecx, ecx
+     0x702247  66 BA 06 12          mov dx, 0x1206
+     0x70224B  8B C3                mov eax, ebx
+     0x70224D  E8 7E 37 00 00       call 0x7059d0
+     0x702252  FF 75 0C             push dword ptr [ebp + 0xc]
+  [mov dx,imm16] @0x702247
+     0x702247  66 BA 06 12          mov dx, 0x1206
+     0x70224B  8B C3                mov eax, ebx
+     0x70224D  E8 7E 37 00 00       call 0x7059d0
+     0x702252  FF 75 0C             push dword ptr [ebp + 0xc]
+     0x702255  FF 75 08             push dword ptr [ebp + 8]
+     0x702258  8D 55 FC             lea edx, [ebp - 4]
+     0x70225B  8B C3                mov eax, ebx
+     0x70225D  E8 9A 33 00 00       call 0x7055fc
+     0x702262  8B C3                mov eax, ebx
+     0x702264  E8 F7 33 00 00       call 0x705660
+     0x702269  52                   push edx
+     0x70226A  50                   push eax
+     0x70226B  A1 1C 6F 7D 00       mov eax, dword ptr [0x7d6f1c]
+     0x702270  8B 00                mov eax, dword ptr [eax]
+  [mov dx,imm16] @0x702825
+     0x702825  66 BA 06 12          mov dx, 0x1206
+     0x702829  E8 E6 47 00 00       call 0x707014
+     0x70282E  EB 19                jmp 0x702849
+     0x702830  6A 00                push 0
+     0x702832  6A 00                push 0
+     0x702834  6A 01                push 1
+     0x702836  8D 45 10             lea eax, [ebp + 0x10]
+     0x702839  50                   push eax
+     0x70283A  6A 08                push 8
+     0x70283C  33 C9                xor ecx, ecx
+     0x70283E  66 BA 06 12          mov dx, 0x1206
+     0x702842  8B C3                mov eax, ebx
+     0x702844  E8 87 31 00 00       call 0x7059d0
+     0x702849  FF 75 14             push dword ptr [ebp + 0x14]
+  [mov dx,imm16] @0x70283E
+     0x70283E  66 BA 06 12          mov dx, 0x1206
+     0x702842  8B C3                mov eax, ebx
+     0x702844  E8 87 31 00 00       call 0x7059d0
+     0x702849  FF 75 14             push dword ptr [ebp + 0x14]
+     0x70284C  FF 75 10             push dword ptr [ebp + 0x10]
+     0x70284F  8D 55 FC             lea edx, [ebp - 4]
+     0x702852  8B C3                mov eax, ebx
+     0x702854  E8 A3 2D 00 00       call 0x7055fc
+     0x702859  8B 45 FC             mov eax, dword ptr [ebp - 4]
+     0x70285C  8B 40 28             mov eax, dword ptr [eax + 0x28]
+     0x70285F  E8 A0 C5 FA FF       call 0x6aee04
+     0x702864  8B C3                mov eax, ebx
+     0x702866  E8 F5 2D 00 00       call 0x705660
+     0x70286B  52                   push edx
+  [mov dx,imm16] @0x702D8D
+     0x702D8D  66 BA 06 12          mov dx, 0x1206
+     0x702D91  E8 7E 42 00 00       call 0x707014
+     0x702D96  EB 19                jmp 0x702db1
+     0x702D98  6A 01                push 1
+     0x702D9A  6A 00                push 0
+     0x702D9C  6A 01                push 1
+     0x702D9E  8D 45 08             lea eax, [ebp + 8]
+     0x702DA1  50                   push eax
+     0x702DA2  6A 08                push 8
+     0x702DA4  33 C9                xor ecx, ecx
+     0x702DA6  66 BA 06 12          mov dx, 0x1206
+     0x702DAA  8B C3                mov eax, ebx
+     0x702DAC  E8 1F 2C 00 00       call 0x7059d0
+     0x702DB1  8B 45 FC             mov eax, dword ptr [ebp - 4]
+  [mov dx,imm16] @0x702DA6
+     0x702DA6  66 BA 06 12          mov dx, 0x1206
+     0x702DAA  8B C3                mov eax, ebx
+     0x702DAC  E8 1F 2C 00 00       call 0x7059d0
+     0x702DB1  8B 45 FC             mov eax, dword ptr [ebp - 4]
+     0x702DB4  8B 78 28             mov edi, dword ptr [eax + 0x28]
+     0x702DB7  85 FF                test edi, edi
+     0x702DB9  74 21                je 0x702ddc
+     0x702DBB  6A 1E                push 0x1e
+     0x702DBD  8B C3                mov eax, ebx
+     0x702DBF  E8 9C 28 00 00       call 0x705660
+     0x702DC4  52                   push edx
+     0x702DC5  50                   push eax
+     0x702DC6  8B C7                mov eax, edi
+     0x702DC8  33 C9                xor ecx, ecx
+  [mov dx,imm16] @0x702E98
+     0x702E98  66 BA 06 12          mov dx, 0x1206
+     0x702E9C  E8 73 41 00 00       call 0x707014
+     0x702EA1  EB 19                jmp 0x702ebc
+     0x702EA3  6A 01                push 1
+     0x702EA5  6A 00                push 0
+     0x702EA7  6A 01                push 1
+     0x702EA9  8D 45 08             lea eax, [ebp + 8]
+     0x702EAC  50                   push eax
+     0x702EAD  6A 08                push 8
+     0x702EAF  33 C9                xor ecx, ecx
+     0x702EB1  66 BA 06 12          mov dx, 0x1206
+     0x702EB5  8B C3                mov eax, ebx
+     0x702EB7  E8 14 2B 00 00       call 0x7059d0
+     0x702EBC  8B 45 FC             mov eax, dword ptr [ebp - 4]
+  [mov dx,imm16] @0x702EB1
+     0x702EB1  66 BA 06 12          mov dx, 0x1206
+     0x702EB5  8B C3                mov eax, ebx
+     0x702EB7  E8 14 2B 00 00       call 0x7059d0
+     0x702EBC  8B 45 FC             mov eax, dword ptr [ebp - 4]
+     0x702EBF  8B 40 28             mov eax, dword ptr [eax + 0x28]
+     0x702EC2  85 C0                test eax, eax
+     0x702EC4  74 10                je 0x702ed6
+     0x702EC6  E8 51 D8 FE FF       call 0x6f071c
+     0x702ECB  8B 45 FC             mov eax, dword ptr [ebp - 4]
+     0x702ECE  8B 40 28             mov eax, dword ptr [eax + 0x28]
+     0x702ED1  E8 2E BF FA FF       call 0x6aee04
+     0x702ED6  8B C3                mov eax, ebx
+     0x702ED8  E8 83 27 00 00       call 0x705660
+     0x702EDD  52                   push edx
+  [mov dx,imm16] @0x703229
+     0x703229  66 BA 06 12          mov dx, 0x1206
+     0x70322D  E8 E2 3D 00 00       call 0x707014
+     0x703232  EB 19                jmp 0x70324d
+     0x703234  6A 00                push 0
+     0x703236  6A 00                push 0
+     0x703238  6A 01                push 1
+     0x70323A  8D 45 08             lea eax, [ebp + 8]
+     0x70323D  50                   push eax
+     0x70323E  6A 08                push 8
+     0x703240  33 C9                xor ecx, ecx
+     0x703242  66 BA 06 12          mov dx, 0x1206
+     0x703246  8B C3                mov eax, ebx
+     0x703248  E8 83 27 00 00       call 0x7059d0
+     0x70324D  8B 45 FC             mov eax, dword ptr [ebp - 4]
+  [mov dx,imm16] @0x703242
+     0x703242  66 BA 06 12          mov dx, 0x1206
+     0x703246  8B C3                mov eax, ebx
+     0x703248  E8 83 27 00 00       call 0x7059d0
+     0x70324D  8B 45 FC             mov eax, dword ptr [ebp - 4]
+     0x703250  8B 78 28             mov edi, dword ptr [eax + 0x28]
+     0x703253  85 FF                test edi, edi
+     0x703255  74 21                je 0x703278
+     0x703257  6A 1E                push 0x1e
+     0x703259  8B C3                mov eax, ebx
+     0x70325B  E8 00 24 00 00       call 0x705660
+     0x703260  52                   push edx
+     0x703261  50                   push eax
+     0x703262  8B C7                mov eax, edi
+     0x703264  33 C9                xor ecx, ecx
+  [mov dx,imm16] @0x703333
+     0x703333  66 BA 06 12          mov dx, 0x1206
+     0x703337  E8 D8 3C 00 00       call 0x707014
+     0x70333C  EB 19                jmp 0x703357
+     0x70333E  6A 00                push 0
+     0x703340  6A 00                push 0
+     0x703342  6A 01                push 1
+     0x703344  8D 45 08             lea eax, [ebp + 8]
+     0x703347  50                   push eax
+     0x703348  6A 08                push 8
+     0x70334A  33 C9                xor ecx, ecx
+     0x70334C  66 BA 06 12          mov dx, 0x1206
+     0x703350  8B C3                mov eax, ebx
+     0x703352  E8 79 26 00 00       call 0x7059d0
+     0x703357  8B 45 FC             mov eax, dword ptr [ebp - 4]
+  [mov dx,imm16] @0x70334C
+     0x70334C  66 BA 06 12          mov dx, 0x1206
+     0x703350  8B C3                mov eax, ebx
+     0x703352  E8 79 26 00 00       call 0x7059d0
+     0x703357  8B 45 FC             mov eax, dword ptr [ebp - 4]
+     0x70335A  8B 40 28             mov eax, dword ptr [eax + 0x28]
+     0x70335D  85 C0                test eax, eax
+     0x70335F  74 05                je 0x703366
+     0x703361  E8 B6 D3 FE FF       call 0x6f071c
+     0x703366  8B C3                mov eax, ebx
+     0x703368  E8 F3 22 00 00       call 0x705660
+     0x70336D  52                   push edx
+     0x70336E  50                   push eax
+     0x70336F  A1 1C 6F 7D 00       mov eax, dword ptr [0x7d6f1c]
+     0x703374  8B 00                mov eax, dword ptr [eax]
+  [mov dx,imm16] @0x7047C9
+     0x7047C9  66 BA 06 12          mov dx, 0x1206
+     0x7047CD  8B 43 04             mov eax, dword ptr [ebx + 4]
+     0x7047D0  E8 3F 28 00 00       call 0x707014
+     0x7047D5  6A 04                push 4
+     0x7047D7  6A 00                push 0
+     0x7047D9  6A 02                push 2
+     0x7047DB  8D 45 08             lea eax, [ebp + 8]
+     0x7047DE  50                   push eax
+     0x7047DF  6A 08                push 8
+     0x7047E1  33 C9                xor ecx, ecx
+     0x7047E3  66 BA 06 12          mov dx, 0x1206
+     0x7047E7  8B 43 04             mov eax, dword ptr [ebx + 4]
+     0x7047EA  E8 25 28 00 00       call 0x707014
+     0x7047EF  8B 43 04             mov eax, dword ptr [ebx + 4]
+  [mov dx,imm16] @0x7047E3
+     0x7047E3  66 BA 06 12          mov dx, 0x1206
+     0x7047E7  8B 43 04             mov eax, dword ptr [ebx + 4]
+     0x7047EA  E8 25 28 00 00       call 0x707014
+     0x7047EF  8B 43 04             mov eax, dword ptr [ebx + 4]
+     0x7047F2  E8 1D 21 00 00       call 0x706914
+     0x7047F7  52                   push edx
+     0x7047F8  50                   push eax
+     0x7047F9  A1 1C 6F 7D 00       mov eax, dword ptr [0x7d6f1c]
+     0x7047FE  8B 00                mov eax, dword ptr [eax]
+     0x704800  66 BA 02 00          mov dx, 2
+     0x704804  E8 BF C9 01 00       call 0x7211c8
+     0x704809  50                   push eax
+     0x70480A  8B 7B 04             mov edi, dword ptr [ebx + 4]
+     0x70480D  FF 77 10             push dword ptr [edi + 0x10]
+  [mov dx,imm16] @0x704D73
+     0x704D73  66 BA 06 12          mov dx, 0x1206
+     0x704D77  8B C3                mov eax, ebx
+     0x704D79  E8 96 22 00 00       call 0x707014
+     0x704D7E  8D 55 D0             lea edx, [ebp - 0x30]
+     0x704D81  8B C6                mov eax, esi
+     0x704D83  E8 84 09 00 00       call 0x70570c
+     0x704D88  83 7D F8 00          cmp dword ptr [ebp - 8], 0
+     0x704D8C  74 12                je 0x704da0
+     0x704D8E  8D 55 A0             lea edx, [ebp - 0x60]
+     0x704D91  8B C6                mov eax, esi
+     0x704D93  E8 74 09 00 00       call 0x70570c
+     0x704D98  8B 45 C8             mov eax, dword ptr [ebp - 0x38]
+     0x704D9B  E8 64 A0 FA FF       call 0x6aee04
+     0x704DA0  8B C3                mov eax, ebx
+
