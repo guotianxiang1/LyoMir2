@@ -3618,8 +3618,15 @@ namespace GameSvr.Plugins
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");
         public bool IsPlayerDropRate() => PatchToggleOn("人物爆率调整");
-        public int PlayerLv1() => GetParamInt("人物等级1_值", 35);
-        public int PlayerLv2() => GetParamInt("人物等级2_值", 40);
+        // 人物等级1..3_值 挨着 人物爆率调整 只是行文顺序，它们**不是**爆率的参数：
+        // 加载器把三个键写进页面对象 0x66C/0x670/0x674，而这三格连同名字/数量六格
+        // 一起在「修改召唤神兽」的 ON 分支里被搬进单例（0x100BA3F7/0x100BA40E/
+        // 0x100BA425 -> [单例+0x86C/0x870/0x874]），GUI 对话框里也在同一个
+        // 「修改召唤神兽」框内（0x00030BEA/BEC/BEE 三个「人物等级:」标签）。
+        // 默认值来自构造函数 0x100B74AD "42" / 0x100B74F5 "45" / 0x100B753D "48"；
+        // 原来的 35/40 没有出处。生产 config.json 是 40/45/48。
+        public int PlayerLv1() => GetParamInt("人物等级1_值", 42);
+        public int PlayerLv2() => GetParamInt("人物等级2_值", 45);
         public int PlayerLv3() => GetParamInt("人物等级3_值", 48);
         public bool IsScriptDropRate() => Enabled("脚本控制人物爆率");
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
@@ -3707,16 +3714,37 @@ namespace GameSvr.Plugins
 
         // ── Monster toggle checks ──
         //
-        // 怪物名字1..3_值 / 怪物数量1..3_值 是「修改召唤神兽」的三档参数。
-        // 六个键在同一个配置加载器里连续读出，名字走 asString、数量走 asInt：
-        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA0B call 0x100DFCF0 (asString)
-        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC57 mov [ecx+0x8C0],eax  (asInt 0x100DFE40)
-        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBCF2 mov [ecx+0x8C4],eax
-        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBD86 mov [ecx+0x8C8],eax
-        // 三个数量键用的是同一个 asInt 转换器、同一段连续偏移，语义完全相同。
-        public string MonsterName1() => ParamS("怪物名字1_值", "强化神兽");
-        public string MonsterName2() => ParamS("怪物名字2_值", "强化神兽");
-        public string MonsterName3() => ParamS("怪物名字3_值", "白虎");
+        // 怪物名字1..3_值 / 怪物数量1..3_值 与 人物等级1..3_值 合起来是
+        // 「修改召唤神兽」的九个参数，三档各一行 (人物等级, 怪物名字, 怪物数量)。
+        // 九个键在同一个配置加载器里连续读出，名字走 asString、等级/数量走
+        // asInt（0x100DFE40），落在页面对象的连续偏移上：
+        //   0x100BB7D3 push "人物等级1_值" -> 0x100BB84F lea ecx,[esi+0x66C]
+        //   0x100BB86E push "人物等级2_值" -> 0x100BB8E7 lea ecx,[esi+0x670]
+        //   0x100BB906 push "人物等级3_值" -> 0x100BB97F lea ecx,[esi+0x674]
+        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA62 lea ecx,[esi+0x678]
+        //   0x100BBA72 push "怪物名字2_值" -> 0x100BBB36 lea ecx,[esi+0x67C]
+        //   0x100BBB46 push "怪物名字3_值" -> 0x100BBC0F lea ecx,[esi+0x680]
+        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC9F lea ecx,[esi+0x684]
+        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBD33 lea ecx,[esi+0x688]
+        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBDC7 lea ecx,[esi+0x68C]
+        // 打补丁时再经 atoi(0x1022DC49) / std::string::assign(0x10018750) 搬进单例：
+        //   0x100BA3F7/0x100BA40E/0x100BA425 -> [单例+0x86C/0x870/0x874]  等级
+        //   0x100BA445/0x100BA46A/0x100BA49B -> [单例+0x878/0x890/0x8A8]  名字
+        //   0x100BA3B2/0x100BA3C9/0x100BA3E0 -> [单例+0x8C0/0x8C4/0x8C8]  数量
+        // 上一轮把 0x8C0/0x8C4/0x8C8 记成「页面对象偏移」是把两个对象混了
+        // （REPLICATION_RULES §4.22 的撞车坑），这里按实际基址寄存器订正。
+        //
+        // 默认值取自页面对象构造函数 0x100B7400..0x100B7710，每个字段的
+        // `lea esi,[edi+off]` 之后紧跟一次 `push <默认串> / call 0x100107D0`
+        // （空则 `call 0x1000BD60` 赋默认）：
+        //   0x66C "42"  0x670 "45"  0x674 "48"
+        //   0x678 "神兽" 0x67C "白虎" 0x680 "月灵"
+        //   0x684 "2"   0x688 "2"   0x68C "2"
+        // 原来这里填的是生产 config.json 的实测值（强化神兽/强化神兽/白虎、1/2/2），
+        // 那是「这台服务器现在填了什么」，不是键缺失时原生会取什么。
+        public string MonsterName1() => ParamS("怪物名字1_值", "神兽");
+        public string MonsterName2() => ParamS("怪物名字2_值", "白虎");
+        public string MonsterName3() => ParamS("怪物名字3_值", "月灵");
 
         /// <summary>
         /// 「怪物数量1_值」是数量，不是开关。原先的 <c>Enabled("怪物数量1_值")</c>
@@ -3726,9 +3754,68 @@ namespace GameSvr.Plugins
         /// 生产 <c>config.json</c> 三档实测是 1 / 2 / 1。
         /// 与 YS-SW-C1 修掉的 <c>IsShenShouCount()</c>/<c>IsKuLouCount()</c> 同一类缺陷。
         /// </summary>
-        public int MonsterCount1() => GetParamInt("怪物数量1_值", 1);
+        public int MonsterCount1() => GetParamInt("怪物数量1_值", 2);
         public int MonsterCount2() => GetParamInt("怪物数量2_值", 2);
         public int MonsterCount3() => GetParamInt("怪物数量3_值", 2);
+
+        /// <summary>
+        /// 「修改召唤神兽」：按人物等级挑一档，覆盖神兽的名字与数量。
+        /// 命中返回 true 并写出 <paramref name="name"/> / <paramref name="count"/>；
+        /// 一档都不满足则返回 false，调用方保持主干算出来的值不变。
+        ///
+        /// 原生不是改常量，是在神兽生成器 <c>sub_76EE7C</c> 上装两段 detour
+        /// （安装器 <c>0x10032B10</c>，<c>0x10032C00</c> 的 Themida 虚拟化孪生体，
+        /// 同为 <c>ret 0x10</c> 的 4 参 stdcall；写 <c>E9 rel32</c> 并用 <c>0x90</c>
+        /// 补到 end，end 不含）：
+        /// <code>
+        ///   0x100BA4CC push 0x100B7DE0 / push 0x76EE9F / push 0x76EE98 / push 0x76EE98
+        ///   0x100BA4E0 call 0x10032B10
+        ///     -> 改写 0x0076EE98 起 7 字节 `6A 01 68 00 2F 0D 00`
+        ///        = `push 1`(数量) + `push 0xD2F00`(叛变秒数)，续跑 0x0076EE9F
+        ///   0x100BA4E5 push 0x100B7EA0 / push 0x76EEB4 / push 0x76EEAF / push 0x76EEAF
+        ///   0x100BA4F9 call 0x10032B10
+        ///     -> 改写 0x0076EEAF 起 5 字节 `BA EC EE 76 00`
+        ///        = `mov edx,0x76EEEC`(名字指针)，续跑 0x0076EEB4
+        /// </code>
+        /// 门控 <c>0x100BA0C3 cmp [edi+0x710],0</c>，日志落点
+        /// <c>0x100BA504 push "修改召唤神兽(已启动)"</c> /
+        /// <c>0x100BA511 push "修改召唤神兽(未启动)"</c>。
+        ///
+        /// 两条关键的取值域差异，与 <c>召唤神兽</c>(<c>神兽_数量</c>/<c>神兽_序号</c>)**相反**：
+        /// 那一套是定长 blob 覆盖，所以数量受 imm8 上钳 127、名字恒两个汉字；
+        /// 这一套整条 <c>push</c>/<c>mov edx</c> 都被换掉了，数量是完整 dword、
+        /// 名字是指针，长度不受限——生产实测就填了四个汉字的「强化神兽」。
+        /// 所以这里既不钳 127 也不截两字。
+        ///
+        /// 两段补丁区间与 <c>神兽_数量</c> 的 <c>0x0076EE99</c>、
+        /// <c>神兽_序号</c> 的 <c>0x0076EEEC</c> 是重叠/失效关系
+        /// （<c>0x0076EE99</c> 就落在 <c>E9 rel32</c> 里面），所以两套开关同开时
+        /// 只有本键生效。生产 <c>召唤神兽=0</c> / <c>修改召唤神兽=1</c>，不冲突。
+        ///
+        /// 全镜像扫描 <c>0x0076EE7C..0x0076EF00</c> 的每个 imm32 引用：
+        /// <c>0x76EE98/0x76EE9F/0x76EEAF/0x76EEB4</c> 只被上面两处安装调用引用，
+        /// **没有任何还原支**——这是一次性安装，关掉开关不会写回宿主原字节。
+        /// </summary>
+        public bool TryGetModifyShenShou(int humanLevel, out string name, out int count)
+        {
+            name = null;
+            count = 0;
+            if (!IsModifyShenShou()) return false;
+            // 三档阈值升序（构造函数 42/45/48，生产 40/45/48），逐档比较、后命中的
+            // 覆盖先命中的，即「取满足条件的最高一档」——与主干 DragonArray 的
+            // 遍历形状一致。一档都不满足时不改动主干的取值。
+            var hit = false;
+            if (humanLevel >= PlayerLv1()) { name = MonsterName1(); count = MonsterCount1(); hit = true; }
+            if (humanLevel >= PlayerLv2()) { name = MonsterName2(); count = MonsterCount2(); hit = true; }
+            if (humanLevel >= PlayerLv3()) { name = MonsterName3(); count = MonsterCount3(); hit = true; }
+            if (!hit || string.IsNullOrEmpty(name))
+            {
+                name = null;
+                count = 0;
+                return false;
+            }
+            return true;
+        }
         public bool IsMonsterDropA() => Enabled("怪物爆率A_值");
         public bool IsMonsterDropB() => Enabled("怪物爆率B_值");
         public bool IsMonsterDropK() => Enabled("怪物爆率K_值");
