@@ -4527,6 +4527,8 @@ namespace GameSvr.PasEngine
                                 slave.m_btSlaveMakeLevel = (byte)level;
                                 slave.m_btSlaveExpLevel = (byte)level;
                                 CurrentPlayer.m_SlaveList.Add(slave);
+                                // MakeSlaveEx = FUN_006bfc20 @0x6BFD02 call 0x6F784C -> SM 4469.
+                                CurrentPlayer.NotifyNativeSlaveListChanged(joining: true, slave);
                             }
                         }
                                             }

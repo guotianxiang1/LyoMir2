@@ -2326,6 +2326,21 @@ namespace GameSvr
             SendRefMsg(Grobal2.RM_USERNAME, 0, 0, 0, 0, GetShowName());
         }
 
+        /// <summary>
+        /// Native SM 4469 (join) / 4470 (leave): name-only slave-list notify.
+        /// Sender sub_6F784C / sub_6F78B4: Recog=0, Param=Tag=Series=0, sMsg=[slave+0x106].
+        /// Only TPlayObject has the [+0x250] unicast slot this goes through
+        /// (TPlayer.MakeSlave = sub_6CB070). HeroObject is AnimalObject — skip.
+        /// </summary>
+        public void NotifyNativeSlaveListChanged(bool joining, TBaseObject slave)
+        {
+            if (slave == null || this is not TPlayObject player)
+                return;
+            player.SendDefMessage(
+                (short)(joining ? Grobal2.SM_SLAVE_JOIN : Grobal2.SM_SLAVE_LEAVE),
+                0, 0, 0, 0, slave.m_sCharName ?? "");
+        }
+
         public TBaseObject MakeSlave(string sMonName, int nMakeLevel, int nExpLevel, int nMaxMob, int dwRoyaltySec)
         {
             short nX = 0;
@@ -2348,6 +2363,9 @@ namespace GameSvr
                     }
                     MonObj.RefNameColor();
                     m_SlaveList.Add(MonObj);
+                    // MakeSlave = sub_6CB070: after TList.Add to [this+0x4FC],
+                    // 0x6CB357 call 0x6F784C -> SM 4469 name notify to the master.
+                    NotifyNativeSlaveListChanged(joining: true, MonObj);
                     result = MonObj;
                 }
             }
