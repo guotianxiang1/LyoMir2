@@ -1,6 +1,4 @@
 #nullable enable
-using System;
-using System.IO;
 using System.Runtime.CompilerServices;
 
 /// <summary>
@@ -18,6 +16,15 @@ using System.Runtime.CompilerServices;
 /// A sibling folder literally named "LyoMir2-master" is never probed during the
 /// walk: from D:\loym2 that always lands on the main worktree, which is often
 /// sitting on an unrelated branch.
+///
+/// Every BCL name below is written as global::System.* on purpose. This file is
+/// compiled into ~400 top-level-statement programs, and a top-level local or
+/// local function named Environment / Path / File is enough to make the simple
+/// name unresolvable here (CS8801). DynRoomRuntimeTransactionCheck has a local
+/// function called Environment and did exactly that.
+///
+/// For the same portability reason there is no Span usage: two projects target
+/// net48, where string[].AsSpan does not exist without System.Memory.
 /// </summary>
 internal static class AuditRepoRoot
 {
@@ -30,9 +37,13 @@ internal static class AuditRepoRoot
     {
         if (args == null)
         {
-            var commandLine = Environment.GetCommandLineArgs();
+            var commandLine = global::System.Environment.GetCommandLineArgs();
             if (commandLine.Length > 1)
-                args = commandLine.AsSpan(1).ToArray();
+            {
+                var copy = new string[commandLine.Length - 1];
+                global::System.Array.Copy(commandLine, 1, copy, 0, copy.Length);
+                args = copy;
+            }
         }
 
         string? resolved = null;
@@ -49,7 +60,8 @@ internal static class AuditRepoRoot
         {
             foreach (var name in new[] { "M2_REPO_ROOT", "LYOMIR_REPO_ROOT" })
             {
-                resolved = ExistingDirectory(Environment.GetEnvironmentVariable(name));
+                resolved = ExistingDirectory(
+                    global::System.Environment.GetEnvironmentVariable(name));
                 if (resolved != null)
                     break;
             }
@@ -61,9 +73,10 @@ internal static class AuditRepoRoot
                      {
                          string.IsNullOrEmpty(callerFile)
                              ? null
-                             : Path.GetDirectoryName(Path.GetFullPath(callerFile)),
-                         Environment.CurrentDirectory,
-                         AppContext.BaseDirectory
+                             : global::System.IO.Path.GetDirectoryName(
+                                 global::System.IO.Path.GetFullPath(callerFile)),
+                         global::System.Environment.CurrentDirectory,
+                         global::System.AppContext.BaseDirectory
                      })
             {
                 resolved = WalkForRepo(start);
@@ -73,10 +86,10 @@ internal static class AuditRepoRoot
         }
 
         if (resolved == null && IsRepoRoot(HardcodedFallback))
-            resolved = Path.GetFullPath(HardcodedFallback);
+            resolved = global::System.IO.Path.GetFullPath(HardcodedFallback);
 
         if (resolved == null)
-            throw new DirectoryNotFoundException(
+            throw new global::System.IO.DirectoryNotFoundException(
                 "repository root not found; pass it as argv[0] or set M2_REPO_ROOT");
 
         Trace(resolved);
@@ -85,8 +98,8 @@ internal static class AuditRepoRoot
 
     static void Trace(string resolved)
     {
-        if (Environment.GetEnvironmentVariable("M2_AUDIT_REPO_TRACE") == "1")
-            Console.Error.WriteLine("AUDIT_REPO_ROOT=" + resolved);
+        if (global::System.Environment.GetEnvironmentVariable("M2_AUDIT_REPO_TRACE") == "1")
+            global::System.Console.Error.WriteLine("AUDIT_REPO_ROOT=" + resolved);
     }
 
     static string? Nth(string[]? args, int index)
@@ -99,31 +112,32 @@ internal static class AuditRepoRoot
 
     static string? ExistingDirectory(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) || !global::System.IO.Directory.Exists(path))
             return null;
-        return Path.GetFullPath(path);
+        return global::System.IO.Path.GetFullPath(path);
     }
 
     static bool IsRepoRoot(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        if (string.IsNullOrWhiteSpace(path) || !global::System.IO.Directory.Exists(path))
             return false;
-        var git = Path.Combine(path, ".git");
-        return File.Exists(Path.Combine(path, "LyoMir2.sln"))
-               || Directory.Exists(git)
-               || File.Exists(git);
+        var git = global::System.IO.Path.Combine(path, ".git");
+        return global::System.IO.File.Exists(
+                   global::System.IO.Path.Combine(path, "LyoMir2.sln"))
+               || global::System.IO.Directory.Exists(git)
+               || global::System.IO.File.Exists(git);
     }
 
     static string? WalkForRepo(string? start)
     {
         if (string.IsNullOrWhiteSpace(start))
             return null;
-        DirectoryInfo? current;
+        global::System.IO.DirectoryInfo? current;
         try
         {
-            current = new DirectoryInfo(start);
+            current = new global::System.IO.DirectoryInfo(start);
         }
-        catch (Exception)
+        catch (global::System.Exception)
         {
             return null;
         }
