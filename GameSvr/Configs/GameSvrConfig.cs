@@ -507,21 +507,10 @@ namespace GameSvr
         
         
         
-        public int nMakeMineHitRate;
-        
-        
-        
+        // nMakeMineHitRate / nStoneTypeRate{,Min} / nGoldStoneMin..nBlackStoneMax
+        // 已删：全镜像 ASCII+GBK+UTF-16LE 对 GoldStoneMin 等键 0 命中。原生
+        // MakeMine 用硬编码 Random(120)+减权重阶梯，不用区间配置。
         public int nMakeMineRate;
-        public int nStoneTypeRate;
-        public int nStoneTypeRateMin;
-        public int nGoldStoneMin;
-        public int nGoldStoneMax;
-        public int nSilverStoneMin;
-        public int nSilverStoneMax;
-        public int nSteelStoneMin;
-        public int nSteelStoneMax;
-        public int nBlackStoneMin;
-        public int nBlackStoneMax;
         public int nStoneMinDura;
         public int nStoneGeneralDuraRate;
         public int nStoneAddDuraRate;
@@ -1376,18 +1365,7 @@ namespace GameSvr
             nUnknowNecklaceSCAddValueMaxLimit = 5;
             nMonOneDropGoldCount = 2000;
             boSendCurTickCount = true;  
-            nMakeMineHitRate = 4; 
             nMakeMineRate = 12; 
-            nStoneTypeRate = 120;
-            nStoneTypeRateMin = 56;
-            nGoldStoneMin = 1;
-            nGoldStoneMax = 2;
-            nSilverStoneMin = 3;
-            nSilverStoneMax = 20;
-            nSteelStoneMin = 21;
-            nSteelStoneMax = 45;
-            nBlackStoneMin = 46;
-            nBlackStoneMax = 56;
             nStoneMinDura = 3000;
             nStoneGeneralDuraRate = 13000;
             nStoneAddDuraRate = 20;
