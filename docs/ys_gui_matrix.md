@@ -4,13 +4,13 @@
 
 | 状态 | 计数 |
 |---|---|
-| IMPLEMENTED | 169 |
+| IMPLEMENTED | 173 |
 | SCRIPT_ONLY | 22 |
-| LABEL_ONLY | 188 |
+| LABEL_ONLY | 184 |
 | MISSING | 1 |
 | INVENTED | 1 |
 
-生产已开启（值 != 0）215 键；其中无行为的 81 键。
+生产已开启（值 != 0）215 键；其中无行为的 80 键。
 
 ## 生产已开启但 C# 无行为
 
@@ -81,7 +81,6 @@
 | `装备提升人物爆率` | 1 | 盘古3 | LABEL_ONLY | `0x102b0718` | 2 | `0x71fd37` |
 | `装备提升人物爆率_A值` | "10" | 盘古3 | LABEL_ONLY | `0x102b0988` | 3 | - |
 | `装备提升人物爆率_B值` | "10" | 盘古3 | LABEL_ONLY | `0x102b09a0` | 3 | - |
-| `随机极品` | 1 | 盘古4 | LABEL_ONLY | `0x102b073c` | 8 | - |
 | `主号高级暴击` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b1578` | 2 | - |
 | `技能等级突破` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b0210` | 2 | - |
 | `技能等级突破_最大值` | 255 | 眼神2(第1页) | LABEL_ONLY | `0x102b0a40` | 2 | - |
@@ -238,20 +237,20 @@
 | `无极真气` | 1 | Y | toggle | LABEL_ONLY | IsZhenQi |
 | `无极真气_A值` | "10" | Y | value | LABEL_ONLY | ZhenQiA |
 | `无极真气_时间` | "10" | Y | value | LABEL_ONLY | ZhenQiTime |
-| `最大装备数量` | "" |  | value | LABEL_ONLY | MaxEquipCount |
+| `最大装备数量` | "" |  | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
 | `法道合击` | 1 | Y | toggle | LABEL_ONLY | IsWizTaoCombo; IsWizTaoComboEnabled |
 | `法道合击_数值1` | "" |  | value | LABEL_ONLY | WizTaoComboV1 |
 | `法道合击_数值2` | "" |  | value | LABEL_ONLY | WizTaoComboV2 |
 | `法道合击_数值3` | "" |  | value | LABEL_ONLY | WizTaoComboV3 |
 | `法道合击_数值4` | "" |  | value | LABEL_ONLY | WizTaoComboV4 |
 | `法道合击_数值5` | "" |  | value | LABEL_ONLY | WizTaoComboV5 |
-| `红名K值` | "" |  | value | LABEL_ONLY | RedNameK |
+| `红名K值` | "" |  | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
 | `脚本控制人物爆率` | 0 |  | toggle | LABEL_ONLY | IsScriptDropRate; IsScriptDropRateEnabled |
 | `装备吸血` | 1 | Y | toggle | LABEL_ONLY | IsEquipSteal |
 | `装备提升人物爆率` | 1 | Y | toggle | LABEL_ONLY | IsBoostDropRate |
 | `装备提升人物爆率_A值` | "10" | Y | value | LABEL_ONLY | BoostDropRateA |
 | `装备提升人物爆率_B值` | "10" | Y | value | LABEL_ONLY | BoostDropRateB |
-| `非红名K值` | "" |  | value | LABEL_ONLY | NormalK |
+| `非红名K值` | "" |  | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
 
 ### 盘古4（98）
 
@@ -338,7 +337,7 @@
 | `衣服点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `衣服点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `衣服点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
-| `随机极品` | 1 | Y | toggle | LABEL_ONLY | IsRandomExtreme |
+| `随机极品` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `项链属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `项链属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `项链属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
