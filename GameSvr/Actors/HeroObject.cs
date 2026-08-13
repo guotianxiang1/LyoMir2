@@ -693,10 +693,10 @@ namespace GameSvr
                 return;
             }
 
-            // 原版目标有效性清扫 sub_68A610 @0x68A660 用 sub_76B4A4（切比雪夫）。
             int dist = NativeGridDistance(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
 
-            if (dist > 10)
+            // 0x68A665 83 F8 0F / 72 0A: drop when Chebyshev >= 15
+            if (dist >= 15)
             {
                 DelTargetCreat();
                 return;
