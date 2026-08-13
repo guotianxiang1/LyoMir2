@@ -78,6 +78,10 @@ namespace GameSvr
         
         
         public int m_nTotalGold;
+        // +0x04 byte. Day-roll 0x65BBC3 mov byte [ebx+4],0x14. Persist WineCount.
+        public byte m_btWineCount;
+        // +0x08 clock-of-day seconds (hour*3600+min*60+sec), occupancy 0x65C6AF
+        public int m_nClockOfDaySec;
         public int m_nWarRangeX;
         public int m_nWarRangeY;
         
@@ -112,21 +116,19 @@ namespace GameSvr
         
         
         const string AttackSabukWallList = "AttackSabukWall.txt";
-        
-        
-        
-        private const string SabukWFileName = "SabukW.txt";
 
         public TUserCastle(string sCastleDir)
         {
             m_MasterGuild = null;
-            m_sHomeMap = M2Share.g_Config.sCastleHomeMap; 
-            m_nHomeX = M2Share.g_Config.nCastleHomeX; 
-            m_nHomeY = M2Share.g_Config.nCastleHomeY; 
-            m_sName = M2Share.g_Config.sCastleName; 
+            m_sHomeMap = M2Share.g_Config.sCastleHomeMap;
+            // 0x6592F9 push 0x2BC / 0x659315 push 0x190
+            m_nHomeX = 0x2BC;
+            m_nHomeY = 0x190;
+            m_sName = M2Share.g_Config.sCastleName;
             m_sConfigDir = sCastleDir;
             m_sPalaceMap = "0150";
             m_sSecretMap = "D701";
+            m_sMapName = "3";
             m_MapCastle = null;
             m_DoorStatus = null;
             m_boStartWar = false;
@@ -134,18 +136,50 @@ namespace GameSvr
             m_boForceWar = false;
             m_boShowOverMsg = false;
             m_dwRunTick = 0;
+            m_nClockOfDaySec = 0;
+            m_btWineCount = 0;
+            m_ChangeDate = CastleConfManager.DelphiEpoch;
+            m_WarDate = CastleConfManager.DelphiEpoch;
+            m_IncomeToday = CastleConfManager.DelphiEpoch;
             m_AttackWarList = new List<TAttackerInfo>();
             m_AttackGuildList = new List<Association>();
             m_dwSaveTick = 0;
             m_nWarRangeX = M2Share.g_Config.nCastleWarRangeX;
             m_nWarRangeY = M2Share.g_Config.nCastleWarRangeY;
             m_EnvirList = new List<string>();
-            var filePath = Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sCastleDir, m_sConfigDir);
-            if (!Directory.Exists(filePath))
+            // 0x6592C1 push 0x268 / 0x6592DD push 0x10C
+            m_nPalaceDoorX = 0x268;
+            m_nPalaceDoorY = 0x10C;
+            m_MainDoor = new TObjUnit
             {
-                Directory.CreateDirectory(filePath);
+                nX = 0x2A0,
+                nY = 0x14A,
+                sName = "SabukDoor",
+                nStatus = true,
+                nHP = 2000
+            };
+            m_LeftWall = new TObjUnit { nX = 624, nY = 278, sName = "城墙左", nHP = 2000 };
+            m_CenterWall = new TObjUnit { nX = 627, nY = 278, sName = "城墙中", nHP = 2000 };
+            m_RightWall = new TObjUnit { nX = 634, nY = 271, sName = "城墙右", nHP = 2000 };
+            for (var i = 0; i < m_Archer.Length; i++)
+            {
+                m_Archer[i] = new TObjUnit { sName = "弓箭手", nHP = 0 };
             }
-            castleConf = new CastleConfManager(Path.Combine(filePath, SabukWFileName));
+            for (var i = 0; i < m_Guard.Length; i++)
+            {
+                m_Guard[i] = new TObjUnit { sName = "护卫", nHP = 0 };
+            }
+            var castleDir = NativeCastleDir();
+            if (!Directory.Exists(castleDir))
+            {
+                Directory.CreateDirectory(castleDir);
+            }
+            castleConf = new CastleConfManager(castleDir);
+        }
+
+        internal static string NativeCastleDir()
+        {
+            return Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sCastleDir);
         }
 
         public int nTechLevel
@@ -288,7 +322,7 @@ namespace GameSvr
         
         private void LoadAttackSabukWall()
         {
-            var sabukwallPath = Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sCastleDir, m_sConfigDir);
+            var sabukwallPath = NativeCastleDir();
             if (!Directory.Exists(sabukwallPath))
                 Directory.CreateDirectory(sabukwallPath);
             var sFileName = Path.Combine(sabukwallPath, AttackSabukWallList);
@@ -352,7 +386,7 @@ namespace GameSvr
         {
             try
             {
-                var sabukwallPath = Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sCastleDir, m_sConfigDir);
+                var sabukwallPath = NativeCastleDir();
                 if (!Directory.Exists(sabukwallPath))
                     Directory.CreateDirectory(sabukwallPath);
                 var sFileName = Path.Combine(sabukwallPath, AttackSabukWallList);
@@ -379,6 +413,8 @@ namespace GameSvr
             try
             {
                 var nowTick = HUtil32.GetTickCount();
+                // 0x65BB51 call 0x65c690 is BEFORE the 10s gate.
+                TryCapturePalaceFromRun();
                 // 0x65BB58 sub eax,[ebx+0x10] / 0x65BB5B cmp eax,0x2710 / jb ret
                 if ((nowTick - m_dwRunTick) < 0x2710) return;
                 m_dwRunTick = nowTick;
@@ -390,9 +426,12 @@ namespace GameSvr
                     m_nTodayIncome = 0;
                     m_IncomeToday = now;
                     m_boStartWar = false;
+                    // 0x65BBC3 C6 43 04 14
+                    m_btWineCount = 0x14;
                 }
                 // 0x49E39C: DecodeTime then hour*3600+min*60+sec. Stored at [ebx+8].
-                var timeSec = now.Hour * 3600 + now.Minute * 60 + now.Second;
+                m_nClockOfDaySec = now.Hour * 3600 + now.Minute * 60 + now.Second;
+                var timeSec = m_nClockOfDaySec;
                 if (!m_boStartWar && !m_boUnderWar)
                 {
                     // start window [0x11940, 0x12E58) unless +0x2B force skips it
@@ -448,6 +487,15 @@ namespace GameSvr
                         m_Archer[i].BaseObject = null;
                     }
                 }
+                // 0x65BD50..0x65BDAA also drop ghosted door/walls, not just guards.
+                if (m_MainDoor.BaseObject != null && m_MainDoor.BaseObject.m_boGhost)
+                    m_MainDoor.BaseObject = null;
+                if (m_LeftWall.BaseObject != null && m_LeftWall.BaseObject.m_boGhost)
+                    m_LeftWall.BaseObject = null;
+                if (m_CenterWall.BaseObject != null && m_CenterWall.BaseObject.m_boGhost)
+                    m_CenterWall.BaseObject = null;
+                if (m_RightWall.BaseObject != null && m_RightWall.BaseObject.m_boGhost)
+                    m_RightWall.BaseObject = null;
                 if (m_boUnderWar)
                 {
                     if (m_LeftWall.BaseObject != null) m_LeftWall.BaseObject.m_boStoneMode = false;
@@ -479,6 +527,40 @@ namespace GameSvr
             catch
             {
                 M2Share.ErrorMessage(sExceptionMsg);
+            }
+        }
+
+        // 0x65C690. Native calls this every Run, before the 10s throttle.
+        // Capture unlock is clock-of-day >= 0x11B98 (20:10:00), not elapsed-from-start.
+        private void TryCapturePalaceFromRun()
+        {
+            if (!m_boUnderWar || m_MapPalace == null) return;
+            if (m_nClockOfDaySec < 0x11B98) return;
+            var humans = new List<TBaseObject>();
+            M2Share.UserEngine.GetMapRageHuman(m_MapPalace, 0, 0, 0x3E8, humans);
+            Association firstGuild = null;
+            var allSame = true;
+            for (var i = 0; i < humans.Count; i++)
+            {
+                var player = humans[i] as TPlayObject;
+                if (player == null || player.m_boDeath) continue;
+                if (firstGuild == null)
+                {
+                    firstGuild = player.m_MyGuild;
+                    continue;
+                }
+                if (player.m_MyGuild != firstGuild)
+                {
+                    allSame = false;
+                    break;
+                }
+            }
+            if (!allSame || firstGuild == null || firstGuild == m_MasterGuild) return;
+            if (!IsAttackGuild(firstGuild)) return;
+            GetCastle(firstGuild, notifyServerGroup: true);
+            if (m_AttackGuildList.Count <= 1)
+            {
+                StopWallconquestWar();
             }
         }
 
@@ -545,32 +627,40 @@ namespace GameSvr
 
         public bool CanGetCastle(Association guild)
         {
-            if ((HUtil32.GetTickCount() - m_dwStartCastleWarTick) <= M2Share.g_Config.dwGetCastleTime)
+            // 0x65C6AF cmp [ebx+8],0x11B98 / jb skip. Not elapsed-from-start.
+            if (m_nClockOfDaySec < 0x11B98)
             {
                 return false;
             }
             var playPbjectList = new List<TBaseObject>();
             M2Share.UserEngine.GetMapRageHuman(m_MapPalace, 0, 0, 1000, playPbjectList);
+            Association firstGuild = null;
             var result = true;
             for (var i = 0; i < playPbjectList.Count; i++)
             {
                 var playObject = (TPlayObject)playPbjectList[i];
-                if (!playObject.m_boDeath && playObject.m_MyGuild != guild)
+                if (playObject.m_boDeath) continue;
+                if (firstGuild == null)
+                {
+                    firstGuild = playObject.m_MyGuild;
+                    continue;
+                }
+                if (playObject.m_MyGuild != firstGuild)
                 {
                     result = false;
                     break;
                 }
             }
             playPbjectList = null;
-            return result;
+            if (!result || firstGuild == null || firstGuild != guild) return false;
+            if (firstGuild == m_MasterGuild) return false;
+            return true;
         }
 
-        public void GetCastle(Association Guild)
+        public void GetCastle(Association Guild, bool notifyServerGroup = false)
         {
             const string sGetCastleMsg = "[{0} 已被 {1} 占领]";
             var oldGuild = m_MasterGuild;
-            var oldOwnGuild = m_sOwnGuild;
-            var oldChangeDate = m_ChangeDate;
             m_MasterGuild = Guild;
             m_sOwnGuild = Guild.sGuildName;
             m_ChangeDate = DateTime.Now;
@@ -604,16 +694,16 @@ namespace GameSvr
                 // xref only from init 0x65AAD6. StopWall also saves via 0x65C1AC.
                 SaveAttackSabukWall();
             }
-            m_MasterGuild.RefMemberName();//刷新新的行会信息
+            m_MasterGuild.RefMemberName();
             var s10 = string.Format(sGetCastleMsg, m_sName, m_sOwnGuild);
             M2Share.UserEngine.SendBroadCastMsgExt(s10, MsgType.System);
             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s10);
-            // 已按战神二进制点验删除 AllGetCastle()（2026-08-03，Tier-1 证据）：
-            // 战神易主例程 sub_65BEC0 只设主行会/名称/时间戳 + 刷新 m_AttackWarList([+0x8C]，
-            // C# 上方 580-590 已做) + 广播，【无在线玩家循环、无脚本调用】。决定性证据：全段扫描
-            // "@GetCastFunc" 出现 0 次（"@GetCastle"/"GetCastFunc" 同为 0；32 处 GetCastle 命中
-            // 全是 PAS API 声明）——Delphi GotoLable 必须内嵌字面量，故战神绝无可能执行该脚本。
-            // 证据：staging/adjudicate_3_disputed_20260802.md（含反汇编片段）。
+            // cl=1 at 0x65C76F: GetCastle sends SS_211 itself (0x65BFD2 / 0x65BFE7
+            // mov dx,0xD3). cl=0 callers (0x65785C xor ecx,ecx) skip it.
+            if (notifyServerGroup)
+            {
+                M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_211, M2Share.nServerIndex, m_sOwnGuild);
+            }
             M2Share.MainOutMessage(s10);
         }
 
@@ -1026,15 +1116,20 @@ namespace GameSvr
         public bool AddAttackerInfo(Association Guild)
         {
             var result = false;
-            if (InAttackerList(Guild)) return result;
-            var AttackerInfo = new TAttackerInfo();
-            AttackerInfo.AttackDate = M2Share.AddDateTimeOfDay(DateTime.Now, M2Share.g_Config.nStartCastleWarDays);
-            AttackerInfo.sGuildName = Guild.sGuildName;
-            AttackerInfo.Guild = Guild;
-            m_AttackWarList.Add(AttackerInfo);
-            SaveAttackSabukWall();
+            // 0x65B66B call 0x65A36C (already listed) / jne skip-add, but the
+            // SS_212 send at 0x65B6C9 still runs. Return 1 only if a row was added.
+            if (!InAttackerList(Guild))
+            {
+                var AttackerInfo = new TAttackerInfo();
+                // 0x65B686 Now / 0x65B68B fadd dword [0x65B6DC] = 3.0 TDateTime days
+                AttackerInfo.AttackDate = DateTime.Now.AddDays(3.0);
+                AttackerInfo.sGuildName = Guild.sGuildName;
+                AttackerInfo.Guild = Guild;
+                m_AttackWarList.Add(AttackerInfo);
+                SaveAttackSabukWall();
+                result = true;
+            }
             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_212, M2Share.nServerIndex, "");
-            result = true;
             return result;
         }
 

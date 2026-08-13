@@ -399,28 +399,7 @@ namespace GameSvr
                             }
                         }
                     }
-                    if (castle != null && castle.m_boUnderWar)
-                    {
-                        if (m_PEnvir == castle.m_MapPalace && m_MyGuild != null)
-                        {
-                            if (!castle.IsMember(this))
-                            {
-                                if (castle.IsAttackGuild(m_MyGuild))
-                                {
-                                    if (castle.CanGetCastle(m_MyGuild))
-                                    {
-                                        castle.GetCastle(m_MyGuild);
-                                        M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_211, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                                        if (castle.InPalaceGuildCount() <= 1)
-                                        {
-                                            castle.StopWallconquestWar();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else
+                    if (castle == null || !castle.m_boUnderWar)
                     {
                         ChangePKStatus(false);
                     }
