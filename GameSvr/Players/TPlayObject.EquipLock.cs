@@ -170,6 +170,13 @@ namespace GameSvr
         /// </summary>
         private void NativeEquipLockInput(int recog, int param, string body)
         {
+            // 0x6D17BE..0x6D17E0: payload P (native [ebp-0xc]) = (Recog>0)?IntToStr(Recog):(body if len>0
+            // else ""). It is the third field of every 密宝请求 record, so it is built here for the submit
+            // arms' fail-closed evidence even though those arms cannot reach the cross-server manager.
+            string payload = recog > 0
+                ? recog.ToString()
+                : (string.IsNullOrEmpty(body) ? string.Empty : body);
+
             // 0x6D17E8 `cmp eax,0xB / ja 0x6D1A4D`. ECX came from `movzx ecx, word[rec+6]`, so the index
             // is the zero-extended 16-bit Param.
             int arm = param & 0xFFFF;
@@ -256,7 +263,7 @@ namespace GameSvr
                     // broadcast manager [[0x7D62DC]] (sub_71315C). Not modeled here (same manager cm-1
                     // withholds for CM 1090/1200/1217) => fail closed.
                     EquipLockFailClosed(1068, arm,
-                        $"ungated cross-server 密宝请求 submit (question={_nativeEquipLockQuestion}) -> 0x6C5438 -> [[0x7D62DC]] sub_71315C");
+                        $"ungated cross-server 密宝请求 submit (question={_nativeEquipLockQuestion}, payload='{payload}') -> 0x6C5438 -> [[0x7D62DC]] sub_71315C");
                     return;
 
                 default:
