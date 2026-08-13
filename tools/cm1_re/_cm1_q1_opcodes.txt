@@ -1,0 +1,64 @@
+CM missing-set Quarter 1 (lowest 25) — authoritative opcode list
+================================================================
+
+Reproduction (identical build()/covered() as sibling batch cm-2):
+  native = cm2_table.build()          # emulate dispatch tree sub_6D7D68 @0x6D805C,
+                                      #   keep opcode->VA for every arm != 0x6DBC2C
+  cs     = cm2_csharp_cover.covered() # harvest `case` labels on the Operate() CM path
+  missing = sorted(k for k in native if k not in cs)      # 99 items
+  bounds  = [round(99*i/4) for i in range(5)] = [0,25,50,74,99]
+  quarter[q] = missing[bounds[q]:bounds[q+1]]             # 25 / 25 / 24 / 25
+
+Cross-checks (tools/cm1_re/_cm1_quarter.py, _cm1_crosscheck.py):
+  native arms          : 311   (matches my first-hand _cm1_map.json)
+  C# covered           : 397
+  missing total        : 99
+  quarter 1 : 25 items (1054..1260)   <-- THIS BATCH
+  quarter 2 : 25 items (1265..3179)   (cm-2)
+  quarter 3 : 24 items (3180..4124)   (cm-3)
+  quarter 4 : 25 items (4125..4651)   (cm-4, already merged) -- MATCHES cm-4's
+                                       reported range exactly, proving the split
+                                       is consistent across all four batches.
+  cm-1 root and cm-2 root give byte-identical missing sets and quarter 1.
+
+Quarter 1 opcodes  (ident -> leaf VA; leaf VA re-derived first-hand, equals
+cm-2's build() VA):
+
+  ident | leaf VA   | subsystem (image evidence)
+  ------+-----------+---------------------------------------------------------
+  1054  | 0x6D942F  | shop/mall mgr [[0x7D5D98]] submit 0x637A00 (subcmd 0x7B)
+  1055  | 0x6D9492  | shop/mall mgr [[0x7D5D98]] submit 0x637A00 (subcmd 0x6B)
+  1056  | 0x6D953A  | shop/mall via 0x6CB9B4 -> 0x6D3694 (subcmd 0x76)
+  1057  | 0x6D9547  | shop/mall via 0x6CB9F0 -> 0x6D3694 (subcmd 0x75)
+  1059  | 0x6D9554  | 0x6D7794 throttle [+0x744]/[+0x757] -> 0x6E3944
+  1061  | 0x6D9579  | skill-stone copy 0x6CBDD4, mgrs [[0x7D5F20]]/[[0x7D6630]]
+  1068  | 0x6D959B  | equip-secret lock [+0x711] 0x6D1780 (12-arm jumptable)
+  1080  | 0x6D95D6  | std-item/strengthen tbl [[0x7D5D6C]]/[[0x7D6630]] 0x6CF49C
+  1084  | 0x6D95C9  | equip-secret lock 0x6D1AB8 (180s timer, SM 0x2733)
+  1090  | 0x6D9732  | quiz/broadcast mgr [[0x7D62DC]] 0x6BD674->0x71315C
+  1200  | 0x6DA21F  | quiz/broadcast mgr [[0x7D62DC]] 0x6BD674 (cl=Param==1)
+  1210  | 0x6DA418  | booth/stall mgr [[0x7D7190]] 0x6E3974 (envir+0x7C gate)
+  1211  | 0x6DA45D  | booth/stall mgr [[0x7D7190]] 0x6E39C8
+  1212  | 0x6DA49B  | booth/stall mgr [[0x7D7190]] 0x6E3A34
+  1213  | 0x6DA4BF  | booth/stall 0x6E3A4C, trade-fee gate 0x6151CC/0x6152B8
+  1214  | 0x6DA529  | booth/stall 0x6E3A88
+  1217  | 0x6DA372  | broadcast mgr [[0x7D62DC]] 0x6C53B8 (subcmd 0x165)
+  1248  | 0x6DA58E  | piece-up synth 0x6E5384 (bag [+0x508], script @AckPieceUp)
+  1250  | 0x6DA5A1  | task-board script obj [[0x7D5D20]] 0x6E1CEC (SM 0xB31)
+  1251  | 0x6DA66A  | YB consignment [[0x7D6ABC]] gate 0x6F9594 -> 0x6CB94C
+  1254  | 0x6DA69F  | YB consignment [[0x7D6ABC]] 0x6F9538->0x6326F4 (accept)
+  1255  | 0x6DA6B1  | YB consignment [[0x7D6ABC]] 0x6E8350->0x632B4C
+  1258  | 0x6DA6C3  | YB consignment [[0x7D6ABC]] 0x6E82F4->0x632FC4
+  1259  | 0x6DA6EF  | YB consignment open 0x6F9594 -> shop submit 0x6D3694 dx=0x70
+  1260  | 0x6DA6FC  | set 元宝交易金额 [+0x18A0]/[+0x18A2] 0x6E84BC (SM 0xBC2)
+
+Disposition summary: all 25 fail-closed. Every leaf reaches a REAL worker (none
+is the 0x6DBC2C no-op sink), but every worker's terminal action and reply body
+depend on runtime subsystem state that is not derivable from image bytes (shop /
+YB-consignment / booth / quiz-broadcast managers, task-board & piece-up scripts,
+the equip-secret lock, the std-item/strengthen tables). This mirrors cm-4 (whole
+quarter fail-closed) and the C# port's own deliberate dormancy of these
+write-side subsystems (NativeStallWriteGate off, NativeYbDealPurchaseStateMachine
+dormant). Evaluable pre-gates are reproduced where they read modelled state only
+(CM 1061/1080 empty-body silence via NativeClientBodyLengthGate upstream; CM 1248
+body<0x20 silence via nBodyLen).
