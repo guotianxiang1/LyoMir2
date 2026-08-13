@@ -590,15 +590,13 @@ namespace GameSvr
                     attackerInfo.sGuildName = oldGuild.sGuildName;
                     break;
                 }
-                oldGuild.RefMemberName();//刷新旧的行会信息
-                // 0x65BF80 `call 0x65A3B8` is LoadAttackSabukWall, not Save.
-                // Identified by its literals: 0x65A3B8 references both
-                // 'AttackSabukWall.txt' (0x65A4FC) and the 'YYYY-MM-DD' parse
-                // format (0x65A4DC), while the writer 0x65B22C references only the
-                // filename. So native RE-READS the list from disk here, discarding
-                // the in-memory reassignment done in the loop above. Calling Save
-                // instead would persist the reassignment native throws away.
-                LoadAttackSabukWall();
+                oldGuild.RefMemberName();
+                // 0x65BF80 call 0x65A3B8 is SAVE, not load.
+                // 0x65A3B8 walks [ebx+0x8C], formats '       "'+YYYY-MM-DD+'"\r\n'
+                // (0x65A4C8 / 0x65A4DC / 0x65A4F0) and writes AttackSabukWall.txt.
+                // The loader is 0x65B22C (FileExists + TStringList + 0x65C908 parse),
+                // xref only from init 0x65AAD6. StopWall also saves via 0x65C1AC.
+                SaveAttackSabukWall();
             }
             m_MasterGuild.RefMemberName();//刷新新的行会信息
             var s10 = string.Format(sGetCastleMsg, m_sName, m_sOwnGuild);
