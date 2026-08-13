@@ -200,6 +200,14 @@ namespace SystemModule
         /// 战神 has no symbolic name for it.
         /// </summary>
         public const int CM_1325 = 1325;
+        /// <summary>
+        /// Native handler 0x6DA3A2 (jump-table slot <c>0x6D8315[39]</c>, base ident 1200).
+        /// Self-contained: <c>0x6DA3A5 66 83 78 06 00 cmp word [msg+6],0 / 0x6DA3AA jne</c>
+        /// then <c>0x6DA3AF mov byte [self+0x1898],1</c> or
+        /// <c>0x6DA3BE mov byte [self+0x1898],0</c>. Param == 0 turns the hint ON.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1239 = 1239;
         public const int CM_COMMON_INFORMATION = 1099;
         public const int CM_YANHUA_TEXT = 1290;
         public const int CM_BUTCH = 1007;

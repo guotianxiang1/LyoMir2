@@ -1007,6 +1007,19 @@ namespace GameSvr
                 case Grobal2.CM_205:
                     ClientNativeCheatSelfReport(ProcessMsg.wParam, ProcessMsg.nParam2);
                     break;
+                case Grobal2.CM_1239:
+                    // Native 0x6DA3A2, whole handler:
+                    //   0x6DA3A5  66 83 78 06 00        cmp  word [msg+6],0   ; Param
+                    //   0x6DA3AA  75 0F                 jne  0x6DA3BB
+                    //   0x6DA3AF  C6 80 98 18 00 00 01  mov  byte [self+0x1898],1
+                    //   0x6DA3B6  E9 71 18 00 00        jmp  0x6DBC2C
+                    //   0x6DA3BE  C6 80 98 18 00 00 00  mov  byte [self+0x1898],0
+                    // No callee, no packet, no other field. Param is the DEFAULT-case
+                    // nParam2 (ProcessUserMessage maps Recog/Param/Tag/Series onto
+                    // nParam1/nParam2/nParam3/wParam), and the wire field is a ushort so
+                    // the native `jne` against a word is a plain equality test.
+                    m_boNativeHeroCapHintEnabled = ProcessMsg.nParam2 == 0;
+                    break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
                 //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051

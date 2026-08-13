@@ -522,6 +522,19 @@ namespace GameSvr
         public byte m_btNativeCheatPenaltyTier = 0;
 
         /// <summary>
+        /// native <c>Self+0x1898</c> (Byte) — "show the 副将 level-cap hint" preference.
+        /// Constructor default is ON (<c>0x6AD8C0 C6 87 98 18 00 00 01
+        /// mov byte [edi+0x1898],1</c>), the client flips it with CM 1239
+        /// (<c>0x6DA3AF</c> = 1 when Param == 0, <c>0x6DA3BE</c> = 0 otherwise), and the
+        /// single reader is the hero experience adder <c>sub_687714</c> at
+        /// <c>0x68781D 80 B8 98 18 00 00 00 cmp byte [owner+0x1898],0 / 0x687824 je</c>,
+        /// which suppresses the 1-in-100 「您的副将英雄等级受限于主将等级」 hint.
+        /// A whole-CODE scan finds exactly those four references and no persistence
+        /// site, so the flag is per-session and never reaches the character record.
+        /// </summary>
+        public bool m_boNativeHeroCapHintEnabled = true;
+
+        /// <summary>
         /// native <c>Self+0x18A0</c> (Word) — 元宝 trade-protection amount, persisted
         /// at rec+0x050C. Setter <c>0x6D154E</c>; named by the in-function literals
         /// 「已成功设置交易保护金额为：」 / 「修改元宝交易金额」.
