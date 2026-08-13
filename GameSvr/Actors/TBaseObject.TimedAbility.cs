@@ -24,6 +24,16 @@ namespace GameSvr
         private TimedAbilityNode m_TimedAbilityHead;
         private int m_TimedAbilityProcessTick;
 
+        /// <summary>
+        /// 眼神中文隧道 `!!!!hq取sj戳` 读的就是本字段（原生 <c>[obj+0xE0]</c>）：
+        /// 0x1005E68A <c>8B80E0000000 mov eax,[Self+0xE0]</c>。
+        /// 它不是"当前时间"，而是状态走查闩 —— 0x772FF5 <c>mov [ebx+0xE0],esi</c>
+        /// 每轮走查用 GetTickCount 硬写一次，走查本身被 0x772FEA <c>cmp eax,0x1F4</c>
+        /// 限制成 500 ms 一次（本文件 STATE-08/09，见 docs/eqv_shard11_20260814.md）。
+        /// 只读暴露给插件层，不给写口。
+        /// </summary>
+        internal int NativeTimedAbilityLatchTick => m_TimedAbilityProcessTick;
+
         public void AddTimedAbility(int scriptType, int value, int seconds)
         {
             if (!IsSupportedTimedAbilityType(scriptType))

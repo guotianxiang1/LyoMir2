@@ -3226,6 +3226,14 @@ namespace GameSvr.Plugins
             return 0;                                  // 10075E4E jne -> 结果槽保持 0
         }
 
+        /// <summary>
+        /// 中文隧道 `!!!!hq取sj戳` 的返回值，即原生 <c>[player+0xE0]</c>。
+        /// 见 <see cref="TBaseObject.NativeTimedAbilityLatchTick"/> 的字节佐证。
+        /// CD 族 ys_CDGetTimes_min / ys_CmpTime_min / ys_GetTime_cha / ys_SetCD_min
+        /// 全部以它为基准，所以基准取错会让四个函数一起偏。
+        /// </summary>
+        public int NativeTimestampLatch() => _player?.NativeTimedAbilityLatchTick ?? 0;
+
         public int GetOnlinePlayerNum()
         {
             return M2Share.UserEngine?.OnlinePlayObject ?? 0;

@@ -25,6 +25,13 @@ try
     M2Share.PluginManager = pluginManager;
 
     var player = new TPlayObject { m_sCharName = "CD测试角色" };
+    // 中文隧道 `!!!!hq取sj戳` 的原生实现是 0x1005E68A `mov eax,[Self+0xE0]`，
+    // 也就是状态走查闩 m_TimedAbilityProcessTick（0x772FF5 每轮走查用 GetTickCount
+    // 硬写，走查被 0x772FEA cmp eax,0x1F4 限成 500 ms 一次）。裸构造的对象从未被
+    // 走查过，闩是 0；真实服务器上它一直在跟。这里显式播一个值来模拟"已被走查过"，
+    // 并在下面断言隧道回的**就是这个闩**而不是当前时钟。
+    var latch = Environment.TickCount;
+    SeedTimedAbilityLatch(player, latch);
     var bridge = new PasApiBridge();
     InitializeYanshen(bridge, envirPath);
     using (bridge.PushContext(player, null))
@@ -36,7 +43,6 @@ try
             }, out var result), "ys_CmpTime_min was not dispatched");
         Assert(result.AsBool(), "zero timestamp did not pass ys_CmpTime_min");
 
-        var before = Environment.TickCount;
         Assert(bridge.CallStandaloneFunction("ys_SetCD_min",
             new List<PasValue> { PasValue.FromInt(111), PasValue.FromInt(112) },
             out result), "ys_SetCD_min was not dispatched");
@@ -46,8 +52,21 @@ try
             new List<PasValue> { PasValue.FromInt(111), PasValue.FromInt(112) },
             out result), "GetV was not dispatched");
         var stored = result.AsInt();
-        Assert(unchecked((uint)(stored - before)) <= 5_000,
-            $"stored millisecond tick is outside the execution window: {stored}");
+        Assert(stored == latch,
+            $"ys_SetCD_min stored {stored}, but the native tunnel returns [player+0xE0] = {latch}");
+
+        // 反向验证：闩动了，隧道的返回值必须跟着动 —— 这条排除"其实读的是
+        // Environment.TickCount，只是恰好接近闩"的可能。
+        SeedTimedAbilityLatch(player, unchecked(latch + 12_345));
+        Assert(bridge.CallStandaloneFunction("ys_SetCD_min",
+            new List<PasValue> { PasValue.FromInt(111), PasValue.FromInt(113) },
+            out result), "ys_SetCD_min was not dispatched for the moved latch");
+        Assert(bridge.CallStandaloneFunction("GetV",
+            new List<PasValue> { PasValue.FromInt(111), PasValue.FromInt(113) },
+            out result), "GetV was not dispatched for the moved latch");
+        Assert(result.AsInt() == unchecked(latch + 12_345),
+            $"tunnel did not follow [player+0xE0]: got {result.AsInt()}");
+        SeedTimedAbilityLatch(player, latch);
 
         Assert(bridge.CallStandaloneFunction("ys_CmpTime_min",
             new List<PasValue>
@@ -60,7 +79,7 @@ try
             new List<PasValue>
             {
                 PasValue.FromInt(111), PasValue.FromInt(112),
-                PasValue.FromInt(unchecked(Environment.TickCount - 5_001))
+                PasValue.FromInt(unchecked(latch - 5_001))
             }, out result), "SetV was not dispatched");
         Assert(bridge.CallStandaloneFunction("ys_CmpTime_min",
             new List<PasValue>
@@ -110,6 +129,15 @@ finally
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+static void SeedTimedAbilityLatch(TPlayObject player, int tick)
+{
+    var field = typeof(TBaseObject).GetField("m_TimedAbilityProcessTick",
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException(
+            "m_TimedAbilityProcessTick is gone — the hq取sj戳 tunnel lost its native anchor");
+    field.SetValue(player, tick);
 }
 
 static void InitializeYanshen(PasApiBridge bridge, string envirPath)

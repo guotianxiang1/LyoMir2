@@ -564,7 +564,13 @@ namespace GameSvr.Plugins
                 case "获取元素": return _api.GetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
                 case "定义伤害": _api.DirectAttack(P(cmd,0),P(cmd,1)); return 0;
                 case "英雄极品": return _api.GetHeroExtreme(P(cmd,0),P(cmd,1));
-                case "hq取sj戳": return Environment.TickCount;
+                // 0x1005E68A `8B 80 E0 00 00 00 mov eax,[Self+0xE0]` —— 不是 GetTickCount，
+                // 是玩家对象上的状态走查闩：0x772FF5 每轮走查用 GetTickCount 硬写，
+                // 走查被 0x772FEA `cmp eax,0x1F4` 限成 500 ms 一次（=C# 的
+                // m_TimedAbilityProcessTick，docs/eqv_shard11 STATE-08/09）。
+                // 所以这个"时间戳"同源于 GetTickCount，但按 500 ms 台阶滞后，
+                // 且在该对象还没被走查过时是 0。
+                case "hq取sj戳": return _api.NativeTimestampLatch();
                 case "zd义回收": return _api.AutoRecycle();
                 default: return 0;
             }
