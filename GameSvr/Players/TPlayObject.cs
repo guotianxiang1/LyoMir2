@@ -937,6 +937,10 @@ namespace GameSvr
                 int nOldX = m_nCurrX;
                 int nOldY = m_nCurrY;
                 m_btDirection = btDir;
+                // run mover sub_76756C 在 0x7675BA(探测 sub_777EF8)与 0x767601(移动 sub_7797CC)
+                // 两处都 `mov al,[ebx+0x3fe]` 读 Obj+0x3FE(穿透缓存) 作 boIgnoreOccupancy——
+                // 与 walk(0x6BBD0C) 同一缓存判定。MOVE-73：该字段的唯一写点是玩家 tick
+                // sub_6B2D38 的 0x6B30A3，mover 一律**只读**，本端不再在入口重算。
                 switch (btDir)
                 {
                     case Grobal2.DR_UP:
@@ -1029,6 +1033,8 @@ namespace GameSvr
                 n10 = m_nCurrX;
                 n14 = m_nCurrY;
                 m_btDirection = btDir;
+                // 3 格马跑 mover sub_767694 同样在 0x7676E2(探测)/0x76772B(移动)读 Obj+0x3FE
+                // 作 boIgnoreOccupancy，同样只读（MOVE-73，写点唯一在 0x6B30A3）。
                 switch (btDir)
                 {
                     case Grobal2.DR_UP:

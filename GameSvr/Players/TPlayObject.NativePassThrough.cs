@@ -9,7 +9,8 @@ namespace GameSvr
     // 当作 MoveToMovingObject 的 boIgnoreOccupancy。MOVE-71 明确点名：把 NOTHROUGH
     // 直接内联进 walkability 判定是本子系统「最容易移植错」的一处——正确模型是
     //   Envir[+0x84] → sub_768454 → 缓存 Obj[+0x3FE] → mover 第三参 → boIgnoreOccupancy
-    // 本文件复刻判定 sub_768454 与其安全区子判定 sub_7684DC，并提供缓存字段/刷新。
+    // 本文件复刻判定 sub_768454 与其安全区子判定 sub_7684DC，并持有缓存字段本体；
+    // 缓存的重算与回写在 TPlayObject.NativeThroughOccupancyTick.cs（唯一写点）。
     //
     // 极性（MOVE-71）：NOTHROUGH 置位 → 判定 FALSE → 缓存=0 → 走 occupancy 扫描
     // （撞人撞怪，不可穿越）；NOTHROUGH 清零且其它条件满足 → 判定 TRUE → 缓存=1 →
@@ -141,15 +142,5 @@ namespace GameSvr
             return false;
         }
 
-        // 原版在 tick(sub_6B2D38) 内重算并回写 Obj[+0x3FE]。本端 Run 属禁改文件，故把
-        // 「重算+回写」放到移动使用点即时调用（walk: ClientWalkXY 对应 sub_6BBCE0 在
-        // 0x6BBD0C `mov cl,[ebx+0x3FE]` 读缓存；run: sub_76756C 在 0x7675BA/0x767601 读）。
-        // 语义等价于「在本 tick 首次移动前刷新」，稳态移动行为与原版一致；差异仅为
-        // 刷新时机（用点而非 tick 头）与不复刻 SM_2821 变化广播，已在字段处记录。
-        internal bool NativeRefreshThroughOccupancyCache()
-        {
-            m_boThroughOccupancyCache = NativeComputeThroughOccupancy();
-            return m_boThroughOccupancyCache;
-        }
     }
 }

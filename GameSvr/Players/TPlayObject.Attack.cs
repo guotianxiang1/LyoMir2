@@ -797,7 +797,8 @@ namespace GameSvr
             // 把缓存的穿透判定当作 WalkTo 第三参(boFlag)，再经 sub_741224(0x74122D 存、
             // 0x7412B3 压) 传给 MoveToMovingObject 的 boIgnoreOccupancy(0x779870)。此处
             // 原先恒传 false，导致玩家在安全区永不可穿人——与原版分歧。改传穿透判定。
-            if (WalkTo((byte)n14, NativeRefreshThroughOccupancyCache()))
+            // MOVE-73：0x6BBD0C 是 `mov cl,[ebx+0x3FE]` —— 读缓存，不重算。
+            if (WalkTo((byte)n14, m_boThroughOccupancyCache))
             {
                 if (m_bo316 || m_nCurrX == nX && m_nCurrY == nY)
                 {
