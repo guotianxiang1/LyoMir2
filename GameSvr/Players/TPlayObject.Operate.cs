@@ -1147,6 +1147,14 @@ namespace GameSvr
                     // 1/2/3 -- matching the three-way select in the say path at
                     // 0x6C9448/0x6C9454. Duration comes from DuraMax, not Shape.
                     return GrantNativeColorSay(stdItem.Shape, stdItem.DuraMax);
+                case "TTimerBomb":
+                    // 定时炸弹水晶 (StdMode 3 / Shape 32). Native VMT 0x781304 slot +0x18
+                    // = TTimerBomb.UseNormalCrystal (0x789694) + inner sub_7896FC: on a
+                    // boTRIGGERBOMB map, every 300ms spawn "朱火弹(幻)"+Ac at the player and
+                    // charge 1000 dura; off-map -> SysMsg "在这里无法使用！". Returns true
+                    // (=remove item) only once the crystal's dura drops below 1000. See
+                    // TPlayObject.NativeTimerBomb.cs for the full byte-level derivation.
+                    return UseNativeTimerBomb(stdItem, item);
                 default:
                     return false;
             }
