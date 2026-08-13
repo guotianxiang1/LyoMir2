@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -59,6 +60,27 @@ namespace GameSvr
 
         private void ClientSplitItem(int clientItemId, int count, int series)
         {
+            // 眼神「防0拆分」. The plugin detours this routine's prologue: at
+            // 0x100AA765 it hands 0x10032FD0 the range 0x6E0FF3..0x6E0FF9 plus an
+            // 18-byte stub assembled from the static int[] templates 0x102D15E0 /
+            // 0x102D17B0 / 0x102D23E0 / 0x102D0C30 (one byte per dword) —
+            //   66 83 F9 00  cmp cx,0        ; ecx = the count parameter
+            //   7F 05        jg  +5
+            //   B9 01000000  mov ecx,1
+            //   51           push ecx        ; the two displaced instructions
+            //   B9 07000000  mov ecx,7
+            //   E9 ....      jmp 0x6E0FF9
+            // so it clamps the count to 1 before anything else runs. The compare
+            // is 16-bit and signed while the assignment replaces all of ecx, and
+            // the wire field is Param (u16 @+6), so counts 32768..65535 clamp too.
+            // Unpatched, count 0 splits off a Dura-0 item that the source keeps
+            // paying nothing for — an extra bag entry out of nothing.
+            if (unchecked((short)count) <= 0 &&
+                new YanshenApi(this, null, M2Share.PluginManager).IsZeroDefSplit())
+            {
+                count = 1;
+            }
+
             var container = FindSplitItemContainer(clientItemId, series, out var items, out var source);
             if (container == PileItemContainer.None || source == null ||
                 source.Dura <= count || !IsPileItem(source) || !HasPileItemSpace(container, items.Count))
