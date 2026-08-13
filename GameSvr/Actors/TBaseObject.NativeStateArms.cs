@@ -268,6 +268,37 @@ namespace GameSvr
                     SendNativeStateArmMsg("你被定身了！",
                         NativeStateArmAlertColor, NativeStateArmAlertType);
                     break;
+                // 85..88 share the 3-part concat shape of arms 21/22 (push
+                // prefix / movzx eax,di / call 0x40C89C IntToStr / push 0x742C94
+                // "秒" / mov edx,3 / call 0x405890) but load the Alert pair
+                // `66 B9 FF 38 mov cx,0x38FF` instead of Buff — they speak in
+                // the alert colour yet still print the second count.
+                case 85:
+                    // 0x742194  68 38 30 74 00  push 0x743038 / ... / mov cx,0x38FF
+                    // 0x743038 len 24 C4E3B4A6D3DAC4BED4AABBA4CCE5D7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于木元护体状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 86:
+                    // 0x7421DB  68 5C 30 74 00  push 0x74305C / ... / mov cx,0x38FF
+                    // 0x74305C len 20 C4E3B4A6D3DACBAED4AAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于水元状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 87:
+                    // 0x742222  68 7C 30 74 00  push 0x74307C / ... / mov cx,0x38FF
+                    // 0x74307C len 20 C4E3B4A6D3DABBF0D4AAD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于火元状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                case 88:
+                    // 0x742269  68 9C 30 74 00  push 0x74309C / ... / mov cx,0x38FF
+                    // 0x74309C len 20 C4E3B4A6D3DAB1E4C9EDD7B4CCACA3ACB3D6D0F8
+                    SendNativeStateArmMsg("你处于变身状态，持续" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                    break;
+                // 89 gains nothing: index-map byte at 0x7418E2+89 is 0 (DEFAULT
+                // slot), so state 89 converges on 0x742C42 — a silent hole.
             }
         }
 
@@ -373,6 +404,32 @@ namespace GameSvr
                     SendNativeStateArmMsg("定身状态结束！",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 85:
+                    // 0x742AFB  66 B9 DB FF / BA 78 35 74 00
+                    // 0x743578 len 18 C4BED4AABBA4CCE5D7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("木元护体状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 86:
+                    // 0x742B13  BA 94 35 74 00
+                    // 0x743594 len 14 CBAED4AAD7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("水元状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 87:
+                    // 0x742B2B  BA AC 35 74 00
+                    // 0x7435AC len 14 BBF0D4AAD7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("火元状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 88:
+                    // 0x742B43  BA C4 35 74 00
+                    // 0x7435C4 len 14 B1E4C9EDD7B4CCACBDE1CAF8A3A1
+                    SendNativeStateArmMsg("变身状态结束！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // 89 loses nothing: lost target for state 89 is 0x742C42
+                // (DEFAULT) — a silent hole, matching its gained side.
             }
         }
     }
