@@ -114,8 +114,8 @@ xref 普查：8 个标记串各 **恰好 1 处** dword 引用，且全部落在�
 | `0x102BE84C` zd义回收 | `0x1005E6D1` | `68 4C E8 2B 10` | 门 `[cfg+0x954]>0x1F4`；`call [[0x1031BFB4]]` |
 | `0x102BE870` 给与元素 | `0x1005E794` | `68 70 E8 2B 10` | 门 `[cfg+0x664]>0x1F4`；按 `":"` 切分 |
 | `0x102BE880` 获取元素 | `0x1005E7A5` | `68 80 E8 2B 10` | 同上 |
-| `0x102BE894` 定义伤害 | `0x1005EDB4` | `68 94 E8 2B 10` | — |
-| `0x102BE8A4` 英雄极品 | `0x1005EF8C` | `68 A4 E8 2B 10` | — |
+| `0x102BE894` 定义伤害 | `0x1005EDB3` | `68 94 E8 2B 10` | — |
+| `0x102BE8A4` 英雄极品 | `0x1005EF8B` | `68 A4 E8 2B 10` | — |
 | `0x102BE890` `":"` | `0x1005E7F5` 等 9 处 | `68 90 E8 2B 10` | 分隔符 |
 
 `0x1031BFB8` / `0x1031BFB4` 由 `0x100016F0` / `0x100016E0` 两个 accessor 桩赋值为 `cfg+4` / `cfg+0`：
@@ -147,6 +147,10 @@ xref 普查：8 个标记串各 **恰好 1 处** dword 引用，且全部落在�
 链路可完整静态跟踪：
 标记 `0x102BE82C` → 比对 `0x1005E58C` → `call 0x1005E470`（蹦床，`sub_1005E470` 尾部 `call 0x1005DBA0`）
 → `sub_1005DBA0` → `jmp @0x1005DD13` → 表 `0x1005E3D8`（38 臂，`^1^ .. ^38^`）。
+
+```
+1005DD13  FF 24 BD D8 E3 05 10   jmp dword [edi*4 + 0x1005E3D8]
+```
 
 ### 2.5 `GetSignInActPrizer` 通道 —— `lucker2` / `libmysql` 哨兵
 
@@ -242,7 +246,7 @@ xref 普查：8 个标记串各 **恰好 1 处** dword 引用，且全部落在�
 | 22 | `ys_givenewitem` | `GiveNewItem` | 给予标签 `$` | — | 0x102BE6D0 表 | 0x10058051 | — |
 | 23 | `ys_givepis` | `GivePis` | 中文 给与元素 | — | 0x102BE870 | 0x1005E794 | — |
 | 24 | `ys_healing` | `Healing` | 集成函数 | 13 | 0x102BE81C | 0x10076E21 | 0x10071A70 |
-| 25 | `ys_herojp` | `GetHeroExtreme` | 中文 英雄极品 | — | 0x102BE8A4 | 0x1005EF8C | — |
+| 25 | `ys_herojp` | `GetHeroExtreme` | 中文 英雄极品 | — | 0x102BE8A4 | 0x1005EF8B | — |
 | 26 | `ys_jitui` | `PushEnemy` | 集成函数 | 4 | 0x102BE81C | 0x10076A6F | 0x100700A0 |
 | 27 | `ys_jitui2` | `PushEnemy2` | 集成函数 | 4 | 0x102BE81C | 0x10076A6F | 0x100700A0 |
 | 28 | `ys_myjn_delay` | `CustomDamageDelay` | 集成函数 | **3** | 0x102BE81C | 0x10076A06 | **0x1006DAB0** |
