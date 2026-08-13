@@ -875,6 +875,11 @@ namespace GameSvr
         
         public void IncRateGold(int nGold)
         {
+            // CGLD-01..04 @sub_65B31C: tax = @ROUND(price * 0.05) — 0x65B329 fild(signed) /
+            // 0x65B332 fmulp / 0x65B334 call @ROUND(=0x403574, fistp=banker's half-to-even).
+            // The 0.05 is an 80-bit x87 tbyte @0x65B39C (cd cc cc cc cc cc cc cc fa 3f); a
+            // float32/float64 reinterpret of those 10 bytes yields garbage, so the rate must be
+            // recomputed (nCastleTaxRate=5 -> 5/100.0), never read from the raw constant width.
             var nInGold = HUtil32.Round(nGold * (M2Share.g_Config.nCastleTaxRate / 100.0));
             if (m_nTodayIncome + nInGold <= M2Share.g_Config.nCastleOneDayGold)
             {
