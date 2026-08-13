@@ -2451,7 +2451,11 @@ namespace GameSvr
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                                 if (StdItem.NeedIdentify == 1)
                                 {
-                                    M2Share.AddGameDataLog('0' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
+                                    // TRADE-51: 取仓日志类型是 2 不是 0。原生两处取仓日志
+                                    // 0x6C2F6A 与 0x6C2F92 都是 `66 BA 02 00 mov dx,2`，
+                                    // 随后 `call 0x768BE0`。对照存仓 0x6C2C88 / 0x6C2CAA
+                                    // 都是 `66 BA 01 00 mov dx,1`，与 C# 的 '1' 一致。
+                                    M2Share.AddGameDataLog('2' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
                                 }
                             }
                             else
