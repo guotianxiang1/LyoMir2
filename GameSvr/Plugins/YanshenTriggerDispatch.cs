@@ -314,20 +314,31 @@ namespace GameSvr.Plugins
                 ConfigKey = "新倍攻和暴击", ScriptLabel = "@baoji",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D3BC4 },
                 HostTargets = new uint[] { 0x0076C88B }, HostResumes = new uint[] { 0x0076C890 },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
-                Note = "BLOCKED（本轮）。宿主 sub_76C804 已定案 = C# TBaseObject.GetAttackPower"
-                     + "(nBasePower,nPower)（幸运掷点，TBaseObject.cs:1634），三个调用者 0x767F13/"
-                     + "0x76F491(魔法 [ebx+0x294..0x298])/0x770B6A(物理 [esi+0x28c..0x290]) 逐字节印证。"
-                     + "但 464 字节桩体（site 0x100D3BC4）不是纯通知——它是【伤害倍率修改器】，完整解码："
-                     + "①守卫 cmp [ebx],0x6AC8C8 只对 TPlayer 攻击者生效（怪物/守卫不发）；"
-                     + "②读扩展块 [player+0x804] 的三组『标签+值』：标签 0x428→值 +0x1FC=倍攻%、"
-                     + "标签 0x42B/0x42C→值 +0x214/+0x21C=暴击%/暴击概率；"
-                     + "③先按倍攻% 把 esi 缩放为 esi*pct/100（含 >1000 防溢出分支与 INT_MAX 上钳）；"
-                     + "④仅当暴击标签在且 Random(100)<=概率 时，才 push 标签 call [ebx+0x44] 发 @baoji，"
-                     + "并再乘暴击% ；⑤把改写后的 esi 作为 GetAttackPower 返回值（0x76C88B mov eax,esi）。"
-                     + "→ 这会改写最热的伤害掷点返回值，且依赖一个尚未定位写入来源的插件扩展块 "
-                     + "[player+0x804]（0x804 非 M2Server TPlayer 原生字段，疑似插件另立的带标签属性表）。"
-                     + "在该扩展块的来源与取值域定案前不接（避免污染主干伤害）。解码见 _analysis/t06_out.txt。",
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = true,
+                Note = "宿主 sub_76C804 = TBaseObject.GetAttackPower（幸运掷点）：0x76C80A `mov esi,ecx`"
+                     + "(nPower) / 0x76C80C `mov edi,edx`(nBasePower) / 0x76C80E `mov ebx,eax`(self)，"
+                     + "0x76C816 起按 [ebx+0x84](m_nLuck) 分三路掷点。三个直接调用者 0x767F13 / "
+                     + "0x76F491(魔法) / 0x770B6A(物理)；VMT+0xCC 槽（TPlayer/THumanKind/TCreature 同值）"
+                     + "是 0x767F10，全身只有 `push ebp / mov ebp,esp / call 0x76C804 / pop ebp / ret 8` "
+                     + "五条，是纯 thunk —— 所以 sub_76C804 的返回值就是 GetAttackPower 的返回值。"
+                     + "桩体覆盖 0x76C88B 的 `8B C6 5F 5E 5B`(mov eax,esi + pop edi/esi/ebx)，在 +0x1CA "
+                     + "原样重放这五字节后 jmp 0x76C890(`5D C3` pop ebp/ret)。"
+                     + "464 字节桩体由 .rdata 0x102CE160 处 461 个 dword 模板拼装（0x100D3B9A "
+                     + "`mov ecx,0x1CD` + 0x100D3BB0 `rep movsd`；模板纯数据，唯一 >0xFF 的 dword 是"
+                     + "第 289 项 0x403B4C，即 Random 的 rel32 目标）。标签串在 0x100D3BF3 起现搭："
+                     + "refcnt=-1 / len=6 / 0x6F616240 '@bao' + 0x696A 'ji'。"
+                     + "桩体语义：①+0x000 `cmp ebx,0x400000` 与 +0x00C `cmp [ebx],0x6AC8C8` 只对 TPlayer "
+                     + "攻击者生效（英雄走 @Herobaoji）；②读 [ebx+0x804] —— 该字段落在 TPlayer 实例内"
+                     + "（vmtInstanceSize 0x1948=6472），是**原生** S 变量银行 TScriptTagArr（RTTI "
+                     + "[0x78D908]→0x78D90C，elSize 8，{Key,Value} 升序，Key=group*1000+index 由 "
+                     + "sub_6E42CC `imul eax,edx,0x3E8 / add eax,ecx` 合成），故裸偏移 0x1F8/0x210/0x218 "
+                     + "= 槽 63/66/67 = S(1,64)/S(1,67)/S(1,68)，与桩体内嵌的期望键 0x428/0x42B/0x42C "
+                     + "(1064/1067/1068) 逐一相符；③S(1,64)>0 时按百分比缩放 esi（三分支防溢出 + "
+                     + "INT_MAX 上钳）；④S(1,67)>0 且 S(1,68)>0 且 Random(100)<=S(1,68) 时先 "
+                     + "`call [ebx+0x44]` 发 @baoji，再按 S(1,67) 缩放；⑤改写后的 esi 经重放的 "
+                     + "`mov eax,esi` 成为返回值。三个索引由服务端脚本经标准 SetS 写入"
+                     + "（眼神 SetS 包装器 0x10065F40 的三个调用点只写 S(1,110)/S(6,1)/S(6,2)，"
+                     + "不碰 64/67/68；插件在 0x100CE4EA 起把 S(1,1..150) 播种建键）。",
             },
             new()
             {
@@ -543,5 +554,81 @@ namespace GameSvr.Plugins
             if (!Enabled("盘古穿戴触发")) return;
             DispatchPlain(player, "@ChangeEquip");
         }
+
+        /// <summary>
+        /// 新倍攻和暴击（<c>@baoji</c>，宿主 sub_76C804 的返回点 0x76C88B）。
+        /// <para>桩体重放被覆盖的 <c>mov eax,esi</c>，但在此之前会改写 <c>esi</c>，
+        /// 所以这条不是纯通知：它同时是幸运掷点结果的倍率修改器。返回值即改写后的
+        /// 攻击力，未命中任何一道门时原样返回入参。</para>
+        /// <para>三个取值来自原生 S 变量银行 <c>[player+0x804]</c>：桩体按裸偏移
+        /// 0x1F8/0x210/0x218 直读并校验键 0x428/0x42B/0x42C，等价于键查
+        /// S(1,64)/S(1,67)/S(1,68)（键 = group*1000+index，sub_6E42CC）。</para>
+        /// </summary>
+        public static int FireBaoji(TPlayObject player, int power)
+        {
+            // +0x000 `cmp ebx,0x400000` / +0x00C `cmp [ebx],0x6AC8C8`。
+            if (!Armed || player == null) return power;
+            if (!Enabled("新倍攻和暴击")) return power;
+
+            // +0x02D `mov edi,[bank+0x1F8]` / +0x033 `cmp edi,0x428` / jne 全放弃：
+            // 键对不上（含银行为空，+0x021 `cmp edx,0x400000` / jb）连暴击都不判。
+            if (!player.TryGetScriptVar('S', 1, 64, out var powerRate)) return power;
+            // +0x045 `cmp edx,0 / jle +0x0C7`：值非正只跳过倍攻，仍继续暴击判定。
+            if (powerRate > 0) power = ScaleByPercentNative(power, powerRate);
+
+            // +0x0D8..+0x114：暴击的两把键各自要求 tag 命中且值 > 0。
+            if (!player.TryGetScriptVar('S', 1, 67, out var critRate) || critRate <= 0) return power;
+            if (!player.TryGetScriptVar('S', 1, 68, out var critChance) || critChance <= 0) return power;
+
+            // +0x11A `mov eax,0x64` / +0x120 `call 0x403B4C` / +0x126 `cmp eax,ecx` / jg。
+            // Random(100) 取 [0,99]，比较是 <=，所以概率 100 恒中、概率 1 实为 2%。
+            if (M2Share.RandomNumber.Random(100) > critChance) return power;
+
+            // +0x12E pushal / +0x12F `mov edx,ebx`(This_Player) / +0x14A `call [ebx+0x44]`。
+            DispatchPlain(player, "@baoji");
+            // +0x14E `mov eax,esi`，edx 跨 pushal/popal 仍是 critRate。
+            return ScaleByPercentNative(power, critRate);
+        }
+
+        /// <summary>
+        /// 桩体里出现两次（+0x04E 与 +0x14E）的同一段百分比缩放。先判被乘数再判
+        /// 百分比，两道 <c>cmp …,0x3E8</c> 门都是为了让 32 位 <c>imul</c> 不溢出；
+        /// 命中任一门就先做除法，精度按原生截断。
+        /// </summary>
+        private static int ScaleByPercentNative(int value, int percent)
+        {
+            // +0x0BD `mov esi,0x7FFFFFFF` —— 三条臂的 `jo` 共用的上钳出口。
+            const int saturated = int.MaxValue;
+
+            // +0x050 `cmp eax,0x3E8 / jg +0x0A1`：先把被乘数压缩，乘完不再除。
+            if (value > 1000)
+                return TryMul(DivHundredNative(value), percent, out var byValue) ? byValue : saturated;
+
+            // +0x05B `cmp edx,0x3E8 / jg +0x081`：改压缩百分比，同样乘完不再除。
+            if (percent > 1000)
+                return TryMul(value, DivHundredNative(percent), out var byPercent) ? byPercent : saturated;
+
+            // +0x067 `imul eax,edx` / +0x06A `jo` —— 溢出时跳过除法直接上钳。
+            return TryMul(value, percent, out var product) ? DivHundredNative(product) : saturated;
+        }
+
+        /// <summary>
+        /// 2 操作数 <c>imul r32,r32</c> 配 <c>jo</c>：乘积放不下 32 位有符号就置 OF。
+        /// </summary>
+        private static bool TryMul(int a, int b, out int result)
+        {
+            var wide = (long)a * b;
+            result = unchecked((int)wide);
+            return wide == result;
+        }
+
+        /// <summary>
+        /// <c>99 cdq</c> + <c>F7 F3 div ebx</c>（ebx=100）。modrm 的 reg 域是 6，
+        /// 是**无符号** DIV 而非 IDIV：被除数非负时 cdq 写出的 edx 为 0，等价于
+        /// value/100；为负时 edx:eax 撑爆 32 位商，原生在这里是 #DE。可达输入里
+        /// 被除数恒非负 —— sub_76C804 入口 0x76C812 把 nPower 钳到 &gt;=0，
+        /// nBasePower 来自能力值字，且乘积已过 <c>jo</c>。
+        /// </summary>
+        private static int DivHundredNative(int value) => unchecked((int)((uint)value / 100u));
     }
 }

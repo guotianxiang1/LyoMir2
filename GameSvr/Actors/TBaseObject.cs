@@ -1664,6 +1664,14 @@ namespace GameSvr
                     }
                 }
             }
+            // 掷点到此为止就是 sub_76C804 的全部；VMT+0xCC 槽 0x767F10 只是
+            // `call 0x76C804` 的 thunk。眼神「新倍攻和暴击」的桩体覆盖 0x76C88B 的
+            // `8B C6 5F 5E 5B`（mov eax,esi + pop edi/esi/ebx），在改写 esi 后重放
+            // 这五字节并 jmp 0x76C890，所以它作用的正是这里的 result。
+            if (this is TPlayObject baojiPlayer)
+            {
+                result = GameSvr.Plugins.YanshenTriggerDispatch.FireBaoji(baojiPlayer, result);
+            }
             if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
             {
                 PlayObject = this as TPlayObject;
