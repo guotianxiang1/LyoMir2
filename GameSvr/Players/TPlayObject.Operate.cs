@@ -1288,31 +1288,41 @@ namespace GameSvr
                 {
                     if (BaseObject.m_boDeath && !BaseObject.m_boSkeleton && BaseObject.m_boAnimal)
                     {
-                        var n10 = M2Share.RandomNumber.Random(16) + 5;
-                        var n14 = M2Share.RandomNumber.Random(201) + 100;
-                        BaseObject.m_nBodyLeathery -= n10;
-                        BaseObject.m_nMeatQuality -= (ushort)n14;
-                        if (BaseObject.m_nMeatQuality < 0)
+                        // 战神 sub_71ED80 @0x71EDB3: mov cx,2 / call sub_7743E0(尸体, 挖肉者) —— 硬门,
+                        // 要求 |尸体.CurrX-挖肉者.CurrX|<=2 且 |尸体.CurrY-挖肉者.CurrY|<=2,否则 return
+                        // (整段挖肉不执行)。外层 IsValidObject 以封包 nX/nY 为心,与此以玩家坐标为心不等价,故补齐。
+                        if (Math.Abs(BaseObject.m_nCurrX - m_nCurrX) <= 2 && Math.Abs(BaseObject.m_nCurrY - m_nCurrY) <= 2)
                         {
-                            BaseObject.m_nMeatQuality = 0;
-                        }
-                        if (BaseObject.m_nBodyLeathery <= 0)
-                        {
-                            if (BaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL && BaseObject.m_btRaceServer < Grobal2.RC_MONSTER)
+                            var n10 = M2Share.RandomNumber.Random(16) + 5;
+                            var n14 = M2Share.RandomNumber.Random(201) + 100;
+                            BaseObject.m_nBodyLeathery -= n10;
+                            BaseObject.m_nMeatQuality -= (ushort)n14;
+                            if (BaseObject.m_nMeatQuality < 0)
                             {
-                                BaseObject.m_boSkeleton = true;
-                                BaseObject.SendRefMsg(Grobal2.RM_SKELETON, BaseObject.m_btDirection, BaseObject.m_nCurrX, BaseObject.m_nCurrY, 0, "");
+                                BaseObject.m_nMeatQuality = 0;
                             }
-                            // DROP-35/36: 战神 sub_71ED80(TAnimal VMT 槽 0x98) @0x71EE5C 走
-                            // sub_71EC88——把怪物模板掉落表(m_boAnimal 动物的战利品来源)直接发进
-                            // 挖肉者背包(AddItemToBag),非旧的 ApplyMeatQuality()+TakeBagItems(尸体
-                            // m_ItemList,动物恒空→永远"没有获得任何东西")。非堆叠物耐久回填=
-                            // m_nMeatQuality、入包失败即丢弃(无落地兜底)均在交付内忠实实现。
-                            if (!M2Share.UserEngine.MonDeliverDropTableToKillerBag(BaseObject, this))
+                            // 战神 sub_71ED80 @0x71EDFF: cmp [+0x4A4],0 / jge return —— 皮革>=0 直接 return,
+                            // 严格 <0 才交付(原 C# 用 <=0,皮革==0 即交付,与 native 边界相反)。紧接
+                            // @0x71EE0C: cmp [+0x47D],0 / jne return —— m_boNoItem 门(皮革耗尽后、骨架/交付/
+                            // 皮革重置之前),置位则整体跳过。两处相邻早退之间无副作用,等价合并为 <0 && !m_boNoItem。
+                            if (BaseObject.m_nBodyLeathery < 0 && !BaseObject.m_boNoItem)
                             {
-                                SysMsg(M2Share.sYouFoundNothing, MsgColor.Red, MsgType.Hint);
+                                if (BaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL && BaseObject.m_btRaceServer < Grobal2.RC_MONSTER)
+                                {
+                                    BaseObject.m_boSkeleton = true;
+                                    BaseObject.SendRefMsg(Grobal2.RM_SKELETON, BaseObject.m_btDirection, BaseObject.m_nCurrX, BaseObject.m_nCurrY, 0, "");
+                                }
+                                // DROP-35/36: 战神 sub_71ED80(TAnimal VMT 槽 0x98) @0x71EE5C 走
+                                // sub_71EC88——把怪物模板掉落表(m_boAnimal 动物的战利品来源)直接发进
+                                // 挖肉者背包(AddItemToBag),非旧的 ApplyMeatQuality()+TakeBagItems(尸体
+                                // m_ItemList,动物恒空→永远"没有获得任何东西")。非堆叠物耐久回填=
+                                // m_nMeatQuality、入包失败即丢弃(无落地兜底)均在交付内忠实实现。
+                                if (!M2Share.UserEngine.MonDeliverDropTableToKillerBag(BaseObject, this))
+                                {
+                                    SysMsg(M2Share.sYouFoundNothing, MsgColor.Red, MsgType.Hint);
+                                }
+                                BaseObject.m_nBodyLeathery = 50;
                             }
-                            BaseObject.m_nBodyLeathery = 50;
                         }
                         BaseObject.m_dwDeathTick = HUtil32.GetTickCount();
                     }
