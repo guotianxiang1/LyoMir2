@@ -31,10 +31,13 @@ using SystemModule;
 //     esi = -3 (SM_TAKEOFF_FAIL) BEFORE the slot is touched. C# had no pre-gate and ran
 //     Dispose() on the player's own item when the add failed.
 //
-//  D. A FAILED MAIL ATTACHMENT STAYS UNCLAIMED — sub_70B458 @0x70B4F0/@0x70B4F6
-//     and the post-loop AttachStatus write at @0x70B5E3. Documented deliberate
-//     hardening: C#'s SetNativeMailAttachStatus is followed by
-//     ArchiveAndDeleteBestEffort, so marking claimed can HARD-DELETE the mail.
+//  D. A FAILED MAIL ATTACHMENT IS LOST, NOT DUPLICATED — sub_70B458 @0x70B4F0/@0x70B4F6
+//     `je 0x70B5D9` goes to the loop INCREMENT, and the AttachStatus:=2 write at
+//     @0x70B5E3/@0x70B5E9 is reached unconditionally, so the mail is closed even on a
+//     partial delivery. The earlier "leave it claimable" hardening rested on native
+//     supposedly not hard-deleting claimed mail; it does — clear-all sub_70D2D0
+//     @0x70D318/@0x70D321 accepts AttachStatus in {2,3} and sub_70D350 runs sub_70B0F0
+//     (INSERT INTO mailitem_b ... SELECT, then delete) and frees the object @0x70D3C6.
 //
 //  E. A DROPPED UNVERIFIED / GIFT ITEM IS DESTROYED, NOT SCATTERED — sub_73CC98
 //     @0x73CD23-0x73CDFB: `cmp byte [esi+0x178],0; jne` / `mov cl,4; call sub_617A38` /
@@ -84,9 +87,11 @@ var miFetchAttach = typeof(TPlayObject).GetMethod("FetchNativeMailAttachments",
     BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { mailEntryType }, null)
     ?? throw new MissingMethodException("TPlayObject.FetchNativeMailAttachments");
 // The INNER delivery loop == native sub_70B458 itself. The outer FetchNativeMailAttachments
-// carries the once-only pre-flight gate (Mail.cs:137, native sub_70B670 @0x70B69D, verified
-// FAITHFUL), so the per-item failure the fix guards against is only reachable through the
-// core - exactly the 48-slot race native tolerates at @0x70B4F6.
+// carries the once-only pre-flight gate (Mail.cs:137, native sub_70B664 @0x70B6A7 `call
+// sub_7481F4` / @0x70B6AF `cmp edi,eax; jg`, verified FAITHFUL), so the per-item failure is
+// only reachable through the core - exactly the 48-slot race native tolerates at @0x70B4F6,
+// and the arm native itself takes at @0x70B294 `call sub_70B458` from the async yuanbao
+// callback, which has no pre-flight gate at all.
 var miDeliverAttach = typeof(TPlayObject).GetMethod("DeliverNativeMailAttachments",
     BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { mailEntryType }, null)
     ?? throw new MissingMethodException("TPlayObject.DeliverNativeMailAttachments");
@@ -106,7 +111,7 @@ try
     VerifyEquipSwapFullBagLosesNothing();
     VerifyUnequipNoSpaceMutatesNothing();
     VerifyHeroBagDealingRejected();
-    VerifyFailedMailAttachmentStaysUnclaimed();
+    VerifyFailedMailAttachmentIsLostNotDuplicated();
     VerifyUnverifiedDropIsDestroyed();
     VerifyGiftDropIsDestroyed();
 
@@ -116,7 +121,7 @@ try
         + "equip-swap-fullbag=REAL(no loss, rollback, sub_6B7E9C @0x6B804C) "
         + "unequip-nospace=REAL(nothing mutated, no Dispose, sub_6B8188 @0x6B81F0 => -3) "
         + "hero-bag-dealing=REAL(both directions rejected -1, sub_6D09D0 @0x6D09ED) "
-        + "mail-failed-attachment=REAL(stays unclaimed, AttachStatus 1->1, sub_70B458) "
+        + "mail-failed-attachment=REAL(lost not duplicated, AttachStatus 1->2, sub_70B458) "
         + "drop-unverified=REAL(destroyed not scattered, sub_73CC98 @0x73CDEB) "
         + "drop-gift=REAL(destroyed not scattered, item+0xD8) "
         + "single-process no-network no-DBSvr no-MySQL");
@@ -388,9 +393,9 @@ void VerifyHeroBagDealingRejected()
         + "exactly once, never in two containers");
 }
 
-// ===================== D. A FAILED MAIL ATTACHMENT STAYS UNCLAIMED ===============================
+// =============== D. A FAILED MAIL ATTACHMENT IS LOST, NOT DUPLICATED =============================
 
-void VerifyFailedMailAttachmentStaysUnclaimed()
+void VerifyFailedMailAttachmentIsLostNotDuplicated()
 {
     const long RecipientId = 0x7001;
 
@@ -458,18 +463,34 @@ void VerifyFailedMailAttachmentStaysUnclaimed()
     Assert(!player.m_ItemList.Contains(attachment),
         "the attachment genuinely failed to land (the bag was over-full)");
     Assert(player.m_ItemList.Count == bagBefore, "no attachment entered the bag");
-    Assert(attachStatus != 2,
-        "a mail whose attachment FAILED to land must NOT be marked claimed "
-        + "(AttachStatus stays " + attachStatus + ", not 2). Marking it claimed lets "
-        + "ClientClearAllNativeMail -> ArchiveAndDeleteBestEffort HARD-DELETE the mail, "
-        + "destroying the attachment permanently with no way to re-claim it.");
-    Assert(result != 1,
-        "and the claim reports failure to the client rather than success");
+    Assert(attachStatus == 2,
+        "a mail whose attachment failed to land is STILL marked claimed "
+        + "(AttachStatus " + attachStatus + " must be 2). sub_70B458 reaches the write at "
+        + "0x70B5E3 `cmp byte[mail+0x4D],2` / 0x70B5E9 `mov dl,2; call sub_70CB24` "
+        + "unconditionally after the loop, because 0x70B4F8 `je 0x70B5D9` sends a failed "
+        + "add to the loop INCREMENT, not to an abort. Leaving it at 1 would let the whole "
+        + "attachment list — including the copies that already landed — be granted again.");
+    Assert(result == 1,
+        "and the claim still reports 1 (0x70B5F2 mov esi,1), as native does");
     Log($"MAIL failed attachment: claim result={result}; bag {bagBefore} -> "
         + $"{player.m_ItemList.Count} (unchanged); AttachStatus 1 -> {attachStatus} "
-        + "(NOT 2 = mail stays claimable; sub_70B458 @0x70B4F6 / @0x70B5E3)");
+        + "(2 = mail is closed, attachment lost not duplicated; "
+        + "sub_70B458 @0x70B4F6 / @0x70B5E3)");
 
-    // The happy path must still mark claimed, so the guard cannot simply block everything.
+    // CONSERVATION: the mail is now closed, so freeing bag space and asking again must be
+    // refused by the -2 arm (sub_70B664 @0x70B68D `cmp byte[mail+0x4D],2` /
+    // @0x70B693 `mov esi,0xFFFFFFFE`). Without that the attachment list is grantable twice.
+    player.m_ItemList.Clear();
+    var reclaim = (int)miFetchAttach.Invoke(player, new[] { entry });
+    Assert(reclaim == -2,
+        "re-claiming a closed mail is refused with -2, so the attachment list can never be "
+        + "granted twice (this is the duplication the removed deliveredAll guard opened)");
+    Assert(player.m_ItemList.Count == 0,
+        "and the refused re-claim granted nothing into the now-empty bag");
+    Log($"MAIL re-claim after partial delivery: result={reclaim}; bag stays "
+        + $"{player.m_ItemList.Count} (sub_70B664 @0x70B693 mov esi,-2)");
+
+    // The happy path must still mark claimed.
     var roomy = NewPlayer("mail-ok-owner", "mail-ok-user");
     fiMailRecipientId.SetValue(roomy, RecipientId + 1);
     var record2 = Activator.CreateInstance(mailRecordType, nonPublic: true);
@@ -502,7 +523,7 @@ void VerifyFailedMailAttachmentStaysUnclaimed()
     Assert(attachStatus2 == 2,
         "and a fully-delivered mail IS marked claimed (sub_70B458 @0x70B5E9 sub_70CB24(dl=2))");
     Log($"MAIL successful claim: result={okResult}; bag 0 -> {roomy.m_ItemList.Count}; "
-        + $"AttachStatus 1 -> {attachStatus2} (guard does not over-fire)");
+        + $"AttachStatus 1 -> {attachStatus2}");
 }
 
 // ===================== E. DROP OF AN UNVERIFIED / GIFT ITEM ======================================
