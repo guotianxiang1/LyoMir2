@@ -642,12 +642,12 @@ namespace GameSvr.Plugins
             if (root.ValueKind != JsonValueKind.Object)
                 throw new JsonException("recycle configuration root must be a JSON object");
 
-            if (root.TryGetProperty("回收类型", out var recycleTypes) ||
-                root.TryGetProperty("物品种类", out _) ||
-                root.TryGetProperty("可叠材料", out _))
-                return ParseNativeRecycleConfig(root, recycleTypes);
+            if (!root.TryGetProperty("回收类型", out var recycleTypes) &&
+                !root.TryGetProperty("物品种类", out _) &&
+                !root.TryGetProperty("可叠材料", out _))
+                throw new JsonException("unrecognized recycle configuration schema");
 
-            return ParseLegacyRecycleConfig(root);
+            return ParseNativeRecycleConfig(root, recycleTypes);
         }
 
         private static RecycleConfigSnapshot ParseNativeRecycleConfig(
@@ -772,69 +772,6 @@ namespace GameSvr.Plugins
             if (!owner.TryGetProperty(name, out var value))
                 throw new JsonException($"{path} is missing '{name}'");
             return ReadRuleInt(value, $"{path}.{name}");
-        }
-
-        private static void ValidateNumericRule(JsonElement value, string path)
-        {
-            if (value.ValueKind == JsonValueKind.Number)
-            {
-                if (!value.TryGetDecimal(out _))
-                    throw new JsonException($"{path} contains an invalid number");
-                return;
-            }
-
-            if (value.ValueKind != JsonValueKind.Object)
-                throw new JsonException($"{path} must contain numeric values or objects");
-
-            foreach (var property in value.EnumerateObject())
-                ValidateNumericRule(property.Value, $"{path}.{property.Name}");
-        }
-
-        private static RecycleConfigSnapshot ParseLegacyRecycleConfig(JsonElement root)
-        {
-            var itemNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var foundSection = false;
-
-            if (root.TryGetProperty("可被回收", out var recyclable))
-            {
-                foundSection = true;
-                AddLegacyItems(recyclable, "可被回收", itemNames);
-            }
-
-            if (root.TryGetProperty("物品列表", out var itemList))
-            {
-                foundSection = true;
-                if (itemList.ValueKind != JsonValueKind.Object)
-                    throw new JsonException("物品列表 must be a JSON object");
-                foreach (var category in itemList.EnumerateObject())
-                    AddLegacyItems(category.Value, $"物品列表.{category.Name}", itemNames);
-            }
-
-            if (root.TryGetProperty("独立规则", out var standalone))
-            {
-                foundSection = true;
-                AddLegacyItems(standalone, "独立规则", itemNames);
-            }
-
-            if (!foundSection)
-                throw new JsonException("unrecognized recycle configuration schema");
-
-            return new RecycleConfigSnapshot(itemNames);
-        }
-
-        private static void AddLegacyItems(
-            JsonElement section, string path, HashSet<string> itemNames)
-        {
-            if (section.ValueKind != JsonValueKind.Object)
-                throw new JsonException($"{path} must be a JSON object");
-
-            foreach (var item in section.EnumerateObject())
-            {
-                if (string.IsNullOrWhiteSpace(item.Name))
-                    throw new JsonException($"{path} contains an empty item name");
-                ValidateNumericRule(item.Value, $"{path}.{item.Name}");
-                itemNames.Add(item.Name);
-            }
         }
 
         /// <summary>
@@ -1374,13 +1311,6 @@ namespace GameSvr.Plugins
             _items = items ?? new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
         }
 
-        internal RecycleConfigSnapshot(IEnumerable<string> itemNames)
-        {
-            _items = new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
-            foreach (var itemName in itemNames)
-                _items[itemName] = default;
-        }
-
         internal int ItemCount => _items.Count;
 
         internal bool ContainsItem(string itemName) =>
@@ -1388,7 +1318,7 @@ namespace GameSvr.Plugins
 
         /// <summary>
         /// Resolves the settlement rule for an item. A configured name without a rule
-        /// (legacy schema) reports false so that no payout-less deletion can happen.
+        /// reports false so that no payout-less deletion can happen.
         /// </summary>
         internal bool TryGetItemRule(string itemName, out RecycleRule rule, out bool stackable)
         {
