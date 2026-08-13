@@ -103,6 +103,12 @@ namespace GameSvr
                     cert = new FireCracker();
                     break;
 
+                // race 151 & 170 THolyMonster : AtMonster（同一 VMT 0x663060）—— 见 Monster/HolyMonster.cs
+                case 151:
+                case 170:
+                    cert = new HolyMonster();
+                    break;
+
                 // race 159 TTimerBombMon : AnimalObject —— 见 Monster/TimerBombMon.cs
                 case 159:
                     cert = new TimerBombMon();
