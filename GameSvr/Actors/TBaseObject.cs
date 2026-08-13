@@ -2045,10 +2045,17 @@ namespace GameSvr
             return result;
         }
 
+        // MOVE-52 — both space-move arms load the internal idents as immediates:
+        //   006BD3AA  66 B9 85 27  mov cx,0x2785 -> 006BD3B2 call 0x765E68
+        //   006BD3D3  66 B9 86 27  mov cx,0x2786 -> 006BD3DB call 0x765F6C
+        // and the cross-map arm repeats them at 0x6BD51B / 0x6BD544. Only
+        // ExecuteNativeUserMove used to ask for those; every other teleport took
+        // the default and queued the legacy 8097/8098 instead. The default is
+        // now the native pair, so all teleports agree.
         internal bool TrySpaceMoveToEnvironment(Envirnoment targetEnvironment,
             short nX, short nY, int showMode,
             bool coordinatesAlreadyResolved = false,
-            bool useNativeInternalMessages = false)
+            bool useNativeInternalMessages = true)
         {
             if (targetEnvironment == null
                 || M2Share.nServerIndex != targetEnvironment.nServerIndex)
