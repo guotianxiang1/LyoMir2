@@ -2496,7 +2496,19 @@ namespace GameSvr
                 for (var i = 0; i < ItemList.Count; i++)
                 {
                     var MonItem = ItemList[i];
-                    if (M2Share.RandomNumber.Random(MonItem.MaxPoint * penalty) <= MonItem.SelPoint)
+                    // 眼神「装备提升人物爆率 / A值 / B值」把宿主 0x71FD37 起的 6 字节换成
+                    // trampoline（安装器 sub_10032FD0，46 dword 模板），夹在「取本件 MaxPoint」
+                    // 与 call Random 之间，**逐件**生效：分母改成
+                    //   (MaxPoint × 倍率 × A) / (B + 凶手 CC下限[+0x2A4])
+                    // 算术是 32 位：F7 E9 `imul ecx` 单操作数只吃 eax，前一条 imul 的高半 edx
+                    // 当场被 8B 55 F8(凶手指针) 覆盖，末尾 99 cdq 再从 eax 符号扩展——按 64 位
+                    // 中间积实现会在乘积越过 int32 时给出完全不同的分母。开关关闭或凶手为空时
+                    // Denominator() 恒等返回入参。详见 GameSvr/Plugins/YanshenEquipDropBoost.cs
+                    // 与 docs/ys_equip_dropboost_20260814.md。
+                    if (M2Share.RandomNumber.Random(
+                            Plugins.YanshenEquipDropBoost.Denominator(
+                                MonItem.MaxPoint * penalty, killer))
+                        <= MonItem.SelPoint)
                     {
                         if (string.Compare(MonItem.ItemName, Grobal2.sSTRING_GOLDNAME, StringComparison.OrdinalIgnoreCase) == 0)
                         {
