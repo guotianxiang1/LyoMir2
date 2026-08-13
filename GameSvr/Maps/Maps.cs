@@ -108,9 +108,24 @@ namespace GameSvr
                             {
                                 continue;
                             }
-                            if (s34.Equals("SAFE", StringComparison.OrdinalIgnoreCase))
+                            // 战神 sub_776008 @0x776081-0x7760CA (配置解析器 B) 与
+                            // sub_774D98 @0x774DD1-0x774E3A (GM 解析器 A) 同形：
+                            //   0x776081  mov ecx,4 / edx="SAFE"(0x776B20) / call 0x4C6E94
+                            //             —— **长度 4 前缀**比较(大小写不敏感, UpCase 0x4034D4)，非全等。
+                            //   0x77608A  C6 43 5C 01              mov byte [ebx+0x5C],1
+                            //   0x7760A3  call 0x4C6964            取 "(...)" 括号参数
+                            //   0x7760AB  edx="NOTHROUGH"(0x776B48)
+                            //   0x7760B0  call 0x40591C           **大小写敏感**全等(无 UpCase)
+                            //   0x7760B7  C6 83 84 00 00 00 01    mov byte [ebx+0x84],1  (参数==NOTHROUGH)
+                            //   0x7760C3  C6 83 84 00 00 00 00    mov byte [ebx+0x84],0  (否则)
+                            // NOTHROUGH 是 SAFE 的括号参数，不是独立 token；+0x84=boNOTHROUGH。
+                            if (HUtil32.CompareLStr(s34, "SAFE", "SAFE".Length))
                             {
                                 MapFlag.boSAFE = true;
+                                var safeArg = string.Empty;
+                                HUtil32.ArrestStringEx(s34, '(', ')', ref safeArg);
+                                MapFlag.boNOTHROUGH =
+                                    safeArg.Equals("NOTHROUGH", StringComparison.Ordinal);
                                 continue;
                             }
                             if (s34.Equals("PICKUP", StringComparison.OrdinalIgnoreCase))
@@ -534,12 +549,12 @@ namespace GameSvr
                 mapFlag.boNOEQUIPRELIVE = true;
                 return true;
             }
-            // MFLG-12/MFLG-24: Additional map flags from 战神 token census
-            if (token.Equals("NOTHROUGH", StringComparison.OrdinalIgnoreCase))
-            {
-                mapFlag.boNOTHROUGH = true;
-                return true;
-            }
+            // MFLG-24: 战神 map flag census.  NOTHROUGH 不是独立 token —— 它是 SAFE 的
+            // 括号参数 SAFE(NOTHROUGH)，已在 LoadMapInfo 的 SAFE 臂里解析(写 +0x84)。
+            // 两个解析器 (sub_774D98 / sub_776008) 都没有独立的 NOTHROUGH 臂 (整幅镜像
+            // 只在 SAFE 臂内的 0x774E04 / 0x7760B0 出现一次)，之前把它当顶层 token 是
+            // 发明的；移除以对齐原版(原版对独立 NOTHROUGH 静默忽略)。DARE / MONATTACK
+            // 则是真的独立 token (0x774F5C→[+5] / 0x774F8B→[+0x90])，保留。
             if (token.Equals("DARE", StringComparison.OrdinalIgnoreCase))
             {
                 mapFlag.boDARE = true;
