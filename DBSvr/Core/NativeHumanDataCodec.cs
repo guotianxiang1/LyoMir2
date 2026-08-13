@@ -13,6 +13,22 @@ namespace DBSvr.Core
     {
         public const int DataRecordSize = 0xEEF8;
         public const ushort DataSizeMarker = 0xEF00;
+
+        // The persisted blob is NOT reproduced verbatim on the wire.  The native load
+        // reply sub_5986CC blits all 0xEF00 bytes (0x598810 rep movsd, ecx=0x3BC0) and
+        // then overwrites exactly one word inside them:
+        //   0x598819 mov edx,[ebp-8]            ; the account name
+        //   0x59881C call 0x5AD608               ; [mgr+0x14] lookup, 0 when absent
+        //   0x598824 mov word ptr [rec+0x53C],ax
+        // rec is the blob start (frame+0x54), so this is record-proper 0x53C-8 = 0x534.
+        // The value comes from the in-memory account object's +0x1C, whose meaning is
+        // UNPROVEN: its only two writers are 0x426436 and 0x5AD676, neither expanded.
+        // Do not synthesise a value here.  The constant exists so that nobody "cleans
+        // up" the codec on the assumption that blob and wire round-trip byte for byte;
+        // they do not, at this one offset.  A DBSvr swap is still migration-free because
+        // the field is recomputed at load time rather than persisted.
+        public const int AccountScopedWordOffset = 0x0534;
+
         public const int ItemRecordSize = 208;
         public const int NativeEquippedItemCount = Grobal2.HUMAN_EQUIPPED_ITEM_COUNT;
         public const int EquippedItemCount = NativeEquippedItemCount;
