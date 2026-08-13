@@ -1575,6 +1575,12 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_RUN:
+                    // MOVE-11: 原生 run 臂的第一件事不是乘客闸，而是 0x6D9CE4
+                    // `mov eax,[ebp-4]` / 0x6D9CE7 `call 0x7742C0` —— 隐身态(0x40)
+                    // 揭示钩子。次序不能与下面的 MOVE-10 对调：0x6D9CE7 < 0x6D9CEC，
+                    // 故乘客态被静默丢弃时也已经揭示过了。CM_WALK 没有这一步
+                    // （0x6D9BD0 直接 `mov dl,0x34`）—— 走路保持隐身，跑步破隐。
+                    BreakNativeStealthOnAction();
                     // MOVE-10: 同 CM_WALK —— 乘客态(state 0x34)静默丢弃整臂，不发任何包。
                     // 跳表 0x6D8592 证明该闸只覆盖 walk(3011)/run(3013)。
                     if (IsNativeMoveBlockedByPassengerState())
