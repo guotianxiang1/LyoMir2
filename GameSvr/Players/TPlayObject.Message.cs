@@ -273,7 +273,11 @@ namespace GameSvr
                 {
                     m_boFireHitSkill = false;
                     SysMsg(M2Share.sSpiritsGone, MsgColor.Red, MsgType.Hint);
-                    SendSocket("+UFIR");
+                    // 0x6B2F33 mov byte [eax+0x96],0 / 6A00 x4 /
+                    // B9 01000000 mov ecx,1 / 66 BA 72 02 mov dx,0x272 /
+                    // FF 93 50 02 00 00.  "+UFIR" is absent from the image.
+                    SendSocket(Grobal2.MakeDefaultMsg(
+                        Grobal2.SM_FIREHITSKILL, 1, 0, 0, 0));
                 }
                 if (m_boTwinHitSkill && (HUtil32.GetTickCount() - m_dwLatestTwinHitTick) > 60 * 1000)
                 {

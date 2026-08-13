@@ -579,7 +579,10 @@ namespace GameSvr
                                     DamageSpell(nSpellPoint);
                                     HealthSpellChanged();
                                 }
-                                SendSocket("+FIR");
+                                // 0x6BC856 6A00 x4 / 33 C9 / 66 BA 72 02 mov dx,0x272 /
+                                // FF 93 50 02 00 00.  "+FIR" is absent from the image.
+                                SendSocket(Grobal2.MakeDefaultMsg(
+                                    Grobal2.SM_FIREHITSKILL, 0, 0, 0, 0));
                             }
                         }
                     }

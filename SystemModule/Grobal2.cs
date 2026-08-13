@@ -854,6 +854,15 @@ namespace SystemModule
         // four words are 0. Production srv_AppearTimes: 627 = 2,688,495.
         public const int SM_POWERHITSKILL = 627;
 
+        // 烈火剑法 (SKILL_FIRESWORD) on/off notify = ident 626 (0x272).
+        // ON  0x6BC860 (magic-dispatcher arm for id 26, after AllowFireHitSkill and
+        //     the MP check): `push 0 x4; xor ecx,ecx; mov dx,0x272` — Recog = 0.
+        // OFF 0x6B2F47 (Run, 20 s after m_dwLatestFireHitTick, clears [obj+0x96]):
+        //     `push 0 x4; mov ecx,1; mov dx,0x272` — Recog = 1.
+        // Same Recog convention as SM_SWORDHIT_ON (0xB03) at 0x6BC8E5 / 0x6B2F8D.
+        // Production srv_AppearTimes: 626 = 56,720.
+        public const int SM_FIREHITSKILL = 626;
+
         // NOT a 战神 ident: `mov dx,781` occurs ZERO times in the native image and no
         // native call site ever loads 781 into the SendDefMessage ident register.
         // The real native thrusting toggle is SM_THRUSTING=624 (@0x6B225B) above.
