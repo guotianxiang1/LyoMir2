@@ -457,7 +457,19 @@ namespace GameSvr
                 return HUtil32.Round(nPower * multiplier);
             }
 
-            return nPower + HUtil32.Round(nPower / 100.0 * (nativeHitDouble * 10));
+            // Native _Attack = sub_769F90, fire branch @0x0076A06C-0x0076A08A:
+            //   0x0076A06C  DB 45 F8           fild dword ptr [ebp-8]
+            //   0x0076A06F  D8 35 B4 A5 76 00  fdiv dword ptr [0x76A5B4]
+            //   0x0076A080  DB 45 E0           fild dword ptr [ebp-0x20]  (hitDouble)
+            //   0x0076A083  DE C9              fmulp st(1)
+            //   0x0076A085  E8 EA 94 C9 FF     call @ROUND
+            //   0x0076A08A  01 45 F8           add dword ptr [ebp-8], eax
+            // [0x76A5B4] = 00 00 20 41 = float32 10.0. Dividing by 100 and
+            // pre-multiplying hitDouble by 10 is algebraically the same but
+            // rounds differently: 601 of the sampled pairs disagreed with the
+            // x87 chain, versus 9 for this order (all at hitDouble 255, which
+            // only the plugin's 倍功 override can produce).
+            return nPower + HUtil32.Round(nPower / 10.0 * nativeHitDouble);
         }
 
         internal static int CalculateSunSwordAttackPower(int power, int effectiveLevel,
