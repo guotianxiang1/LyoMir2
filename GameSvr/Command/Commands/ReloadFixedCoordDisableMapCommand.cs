@@ -22,8 +22,13 @@ namespace GameSvr
     /// 6281FF  jmp  0x62B64C          ; success is SILENT -- no message at all
     /// 628204  mov  cx,0x38FF
     /// 628208  mov  edx,0x62D204      ; "传送石禁用地图.txt 文件不存在！"
-    /// 628212  call [ebx+0xD4]
+    /// 628213  call [ebx+0xD4]
     /// </code>
+    /// <para>
+    /// The GM types the record name verbatim, so the registered command is the
+    /// Chinese literal itself. The former English name ReloadFixedCoordDisableMap
+    /// scans to zero hits image-wide in GBK, UTF-8 and UTF-16LE.
+    /// </para>
     /// <para>
     /// Note this command does NOT touch a player's remembered position. The
     /// anchor storage (rec 0x5AC / 0x5BC / 0x5BE and the matching object slots)
@@ -32,7 +37,7 @@ namespace GameSvr
     /// anchor. Only the map GATE is reloadable.
     /// </para>
     /// </summary>
-    [GameCommand("ReloadFixedCoordDisableMap", "重新加载传送石禁用地图", "", 4)]
+    [GameCommand("重载传送石禁用地图", "重新加载传送石禁用地图配置", "", 4)]
     public class ReloadFixedCoordDisableMapCommand : BaseCommond
     {
         [DefaultCommand]
