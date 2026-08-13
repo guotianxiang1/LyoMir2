@@ -157,5 +157,38 @@ namespace GameSvr
                 baseObjectRecog, nParam1, nParam2, wParam);
             return (header, Array.Empty<byte>());
         }
+
+        // SM 951 (0x3B7) — @0x006CF5EF via [obj+0x250], no body.
+        //   006CF5DC  6A 00              push 0             ; #1 Param  = 0
+        //   006CF5DE  6A 00              push 0             ; #2 Tag    = 0
+        //   006CF5E0  6A 00              push 0             ; #3 Series = 0
+        //   006CF5E2  6A 00              push 0             ; #4 sMsg   = nil
+        //   006CF5E4  8B 4D F4           mov ecx,[ebp-0xC]  ; Recog     = [ebp-0xC]
+        //   006CF5E7  66 BA B7 03        mov dx,0x3B7       ; ident 951
+        //   006CF5EF  FF 93 50 02 00 00  call [ebx+0x250]
+        // Trigger: [ebp-0xC] is the result of the loop's `call 0x600F6C`
+        // (0x6CF5CB mov [ebp-0xC],eax); the send is gated by `cmp [ebp-0xC],1 / je`
+        // (0x6CF5D6), i.e. it fires only when that result != 1. Recog carries it.
+        internal static (ClientPacket Header, byte[] Body) BuildSm951(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_951, recog, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        // SM 965 (0x3C5, SM_965) — @0x0072737B via [obj+0x250], no body.
+        //   00727368  6A 00              push 0             ; #1 Param  = 0
+        //   0072736A  6A 00              push 0             ; #2 Tag    = 0
+        //   0072736C  6A 00              push 0             ; #3 Series = 0
+        //   0072736E  6A 00              push 0             ; #4 sMsg   = nil
+        //   00727370  8B C8              mov ecx,eax        ; Recog = eax (= [ebx+0x40])
+        //   00727372  66 BA C5 03        mov dx,0x3C5       ; ident 965
+        //   0072737B  FF 97 50 02 00 00  call [edi+0x250]
+        // Trigger: guarded by `mov eax,[ebx+0x40] / test eax,eax / je` (0x727361);
+        // fires only when [ebx+0x40] is non-nil, and that handle is the Recog.
+        internal static (ClientPacket Header, byte[] Body) BuildSm965(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_965, recog, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
