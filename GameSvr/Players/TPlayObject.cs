@@ -223,47 +223,52 @@ namespace GameSvr
                 }
                 return result;
             }
-            if (IsEnoughBag())
+            // 0x6B7662 mov dl,1 / 0x6B7668 call [vmt+0x244] (IsEnoughBag)
+            // 0x6B7676 cmp dword [item+0x1C],0
+            // 0x6B7689 mov dx,word [std+0x1A] / 0x6B768F call 0x73C950
+            // All three failures je 0x6B77BA: SysMsg 0x6B7868 (len=20 GBK
+            // "无法再拾取更多物品。") via vmt+0xD4, and they run BEFORE
+            // DeleteFromMap at 0x6B76C9. The old C# arm DeleteFromMap'd first
+            // then Dispose(UserItem) — a swallow native never does.
+            var UserItem = mapItem.UserItem;
+            var StdItem = UserItem != null
+                ? M2Share.UserEngine.GetStdItem(UserItem.wIndex)
+                : null;
+            if (!IsEnoughBag() || StdItem == null ||
+                !IsAddWeightAvailable(
+                    M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
             {
-                if (m_PEnvir.DeleteFromMap(pickupX, pickupY, CellType.OS_ITEMOBJECT, mapItem) == 1)
+                SysMsg("无法再拾取更多物品。", MsgColor.Red, MsgType.Hint);
+                return false;
+            }
+            if (m_PEnvir.DeleteFromMap(pickupX, pickupY, CellType.OS_ITEMOBJECT, mapItem) == 1)
+            {
+                SendMsg(this, Grobal2.RM_ITEMHIDE, 0, mapItem.Id, pickupX, pickupY, "");
+                // 战神 sub_6B74D8 @0x6B7708: `push 4; mov cl,1; call [vmt+0x248]`
+                // — the ground-pickup site routes through the OUTER AddItemToBag
+                // (sub_6B7378) with acquisitionReason = 4 and the stamper enabled.
+                if (!AddItemToBag(UserItem,
+                        NativeItemAcquisitionStamp.Reason.PickUp, true))
                 {
-                    var UserItem = mapItem.UserItem;
-                    var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                    if (StdItem != null && IsAddWeightAvailable(M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
+                    m_PEnvir.AddToMap(pickupX, pickupY,
+                        CellType.OS_ITEMOBJECT, mapItem);
+                    return false;
+                }
+                TrackNativeMapDropItem(UserItem);
+                if (!M2Share.IsCheapStuff(StdItem.StdMode))
+                {
+                    if (StdItem.NeedIdentify == 1)
                     {
-                        SendMsg(this, Grobal2.RM_ITEMHIDE, 0, mapItem.Id, pickupX, pickupY, "");
-                        // 战神 sub_6B74D8 @0x6B7708: `push 4; mov cl,1; call [vmt+0x248]`
-                        // — the ground-pickup site routes through the OUTER AddItemToBag
-                        // (sub_6B7378) with acquisitionReason = 4 and the stamper enabled.
-                        if (!AddItemToBag(UserItem,
-                                NativeItemAcquisitionStamp.Reason.PickUp, true))
-                        {
-                            m_PEnvir.AddToMap(pickupX, pickupY,
-                                CellType.OS_ITEMOBJECT, mapItem);
-                            return false;
-                        }
-                        TrackNativeMapDropItem(UserItem);
-                        if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                        {
-                            if (StdItem.NeedIdentify == 1)
-                            {
-                                M2Share.AddGameDataLog('4' + "\t" + m_sMapName + "\t" + pickupX + "\t" + pickupY + "\t" + m_sCharName + "\t" + StdItem.Name
-                                                       + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
-                            }
-                        }
-                        Dispose(mapItem);
-                        if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                        {
-                            this.SendAddItem(UserItem);
-                        }
-                        result = true;
-                    }
-                    else
-                    {
-                        Dispose(UserItem);
-                        m_PEnvir.AddToMap(pickupX, pickupY, CellType.OS_ITEMOBJECT, mapItem);
+                        M2Share.AddGameDataLog('4' + "\t" + m_sMapName + "\t" + pickupX + "\t" + pickupY + "\t" + m_sCharName + "\t" + StdItem.Name
+                                               + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
                     }
                 }
+                Dispose(mapItem);
+                if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                {
+                    this.SendAddItem(UserItem);
+                }
+                result = true;
             }
             return result;
         }
@@ -336,13 +341,17 @@ namespace GameSvr
         public bool IsAddWeightAvailable(int nWeight)
         {
             // Native sub_73C950 @ 0x73C950:
-            //   mov edx, [eax+0x2C4]  ; edx = Weight
-            //   cmp edx, [eax+0x2C8]  ; vs MaxWeight
-            //   setl al               ; al=1 if Weight < MaxWeight (STRICT <, not <=)
-            // Native ignores the dx (item weight) parameter passed by callers,
-            // comparing only current vs max. We preserve nWeight for sanity
-            // but match the strict-less-than polarity. DROP-39.
-            return m_WAbil.Weight + nWeight < m_WAbil.MaxWeight;
+            //   73C950  8B 90 C4 02 00 00  mov edx,[eax+0x2C4]  ; Weight — overwrites dx
+            //   73C956  3B 90 C8 02 00 00  cmp edx,[eax+0x2C8]  ; MaxWeight
+            //   73C95C  0F 9C C0           setl al               ; Weight < MaxWeight
+            //   73C95F  C3                 ret
+            // Callers do pass item weight in dx (pickup 0x6B7689 `66 8B 50 1A`)
+            // but the callee's first instruction overwrites it. Adding nWeight
+            // rejects items native accepts; on the pickup fail arm that used to
+            // Dispose the UserItem, that is a swallow. DROP-39 polarity is
+            // still setl (strict <), not setle.
+            _ = nWeight;
+            return m_WAbil.Weight < m_WAbil.MaxWeight;
         }
 
         internal int EnsureClientItemId(TUserItem item)
