@@ -115,6 +115,29 @@ Assert(GetCallOffset(sendHeroLogon, sendHeroBornEffect) < GetCallOffset(sendHero
     "hero logon does not emit SM897 before SM899");
 Assert(ContainsCall(playerOperate, removeHeroMethod),
     "CM_HERO_LOGOUT no longer removes the server hero object");
+
+// THeroAct.Run 的回收门（sub_689FDC @0x68A048-0x68A057）在尸体满 60 秒或主人 ghost 时
+// 调 sub_6CCA1C(主人)，而 sub_6CCA1C 会 MarkDelete 英雄、清 [master+0xBB0]、下发
+// SM_HERO_LOGOUT(0x6CCAE7 mov dx,0x396 -> [master_vmt+0x250]) 并排一次 DB 存档
+// (0x6CCAF7 call 0x6CC9A8 = 0x194)。只 MakeGhost 会让主人的 m_HeroObject 永远非空，
+// CM_HERO_LOGON 的 `m_HeroObject == null` 门再也打不开。
+var runMasterGoneReap = heroType.GetMethod("RunNativeMasterGoneReap",
+    BindingFlags.Instance | BindingFlags.NonPublic)!;
+var sendDefMessage = playerType.GetMethod("SendDefMessage")!;
+Assert(ContainsCall(runMasterGoneReap, removeHeroMethod),
+    "hero corpse/owner-gone reap no longer performs the native sub_6CCA1C recall "
+    + "(owner keeps a dangling m_HeroObject and can never re-summon)");
+Assert(ContainsCall(runMasterGoneReap, sendDefMessage),
+    "hero corpse/owner-gone reap no longer sends SM_HERO_LOGOUT to the owner "
+    + "(native 0x6CCAE7 mov dx,0x396 through the +0x250 send slot)");
+
+// CM_HERO_LOGON 的副将槽门：原生 0x6D9337 `cmp word [msg+6],1` 命中后要求
+// GetV(group 87, index 3) == 100（0x6D934B call 0x6DF1E4 / 0x6D9350 cmp eax,0x64），
+// 否则发「请先召唤一次主将英雄」并中止。
+var viceHeroGate = playerType.GetMethod("NativeViceHeroSummonAllowed",
+    BindingFlags.Instance | BindingFlags.NonPublic)!;
+Assert(ContainsCall(playerOperate, viceHeroGate),
+    "CM_HERO_LOGON no longer consults the native vice-hero V(87,3)==100 gate");
 Assert(ContainsCall(queueForFree, queueHeroSave),
     "hero retirement releases runtime state before queuing a native save");
 Assert(ContainsCall(processHeroesMethod, processHeroData),
@@ -176,6 +199,23 @@ playerType.GetMethod("Initialize")!.Invoke(owner, null);
 Assert(CountMapReferences(environment, owner) == 1, "owner was not added to exactly one map cell");
 Assert((int)GetProperty(environmentType, environment, "HumCount") == 1,
     "map player count did not increment once");
+
+// 副将槽门的行为面：GetV 未命中 -> -1，V(87,3) 必须**恰好**是 100 才放行
+// （0x6D9350 `cmp eax,0x64` / `jne`，不是 >=）。
+var setScriptVar = playerType.GetMethod("SetScriptVar")!;
+Assert(!(bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate opened while V(87,3) was never written (native GetV miss = -1)");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 99 });
+Assert(!(bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate opened at V(87,3)=99 (native compares for equality with 100)");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 101 });
+Assert(!(bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate opened at V(87,3)=101 (native compares for equality with 100)");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 100 });
+Assert((bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate stayed shut at V(87,3)=100");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 0 });
+((IList)GetField(baseObjectType, owner, "m_MsgList")).Clear();
 
 var registerHero = userEngineType.GetMethod("RegisterHero")!;
 var removeHero = userEngineType.GetMethod("RemoveHero", new[] { playerType })!;
