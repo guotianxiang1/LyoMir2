@@ -3422,6 +3422,51 @@ namespace GameSvr.Plugins
         public bool IsHeroBarbarian() => Enabled("英雄野蛮");
         public bool IsHeroSpeed() => Enabled("英雄攻速移速");
         public bool IsHeroCastSpeed() => Enabled("英雄施法速度");
+        /// <summary>
+        /// 英雄千分比免伤：<b>减的是守方的伤害</b>，读的是守方英雄自己的
+        /// <c>S(1,58)</c>。方向此前只有推断，现在有字节证据。
+        ///
+        /// 消费点在插件的伤害管线 <c>0x100795C0</c>（MSVC，栈参
+        /// <c>[ebp+8]</c>=对象A、<c>[ebp+0xC]</c>=对象B、<c>[ebp+0x10]</c>=伤害(in/out)、
+        /// <c>[ebp+0x14]</c>=A 的类、<c>[ebp+0x18]</c>=B 的类）。
+        /// 收尾 <c>0x1007BFDC 8B 45 10 mov eax,[ebp+0x10]</c> ⇒ 返回值就是伤害。
+        ///
+        /// 定方向的锚点是同一函数开头那段**英雄格挡**：
+        /// <code>
+        ///   100798CD  cmp [ebp+0x14], 0x685CA0 / 0x685968 / 0x685FD8
+        ///   100798EC  cmp [ebp+8], 0 / je
+        ///   100798FE  8B 45 08              mov eax,[ebp+8]
+        ///   10079901  8B 80 8C 06 00 00     mov eax,[eax+0x68C]    ; -> 英雄
+        ///   1007992C  cmp [ebp-0xAC], 0x006AC8C8                   ; 英雄类
+        ///   1007993C  push 0xE4 ; edx=1 ; call 0x10056040          ; S(英雄,1,228)
+        ///   1007996A  eax=0x3E8 ; call [0x1031BCC4]                ; Random(1000)
+        ///   10079983  cmp S, rand / jle skip
+        ///   1007999F  68 B4 F9 2B 10        push "@HeroBlocking"
+        ///   100799C5  B8 01 00 00 00        mov eax,1
+        ///   100799CB  E9 0F 26 00 00        jmp 0x1007BFDF          ; 绕过取伤害，直接返 1
+        /// </code>
+        /// 格挡只能是守方能力，而它取的英雄来自 <c>[ebp+8]</c>，
+        /// 所以 <c>[ebp+8]</c> = 守方、<c>[ebp+0xC]</c> = 攻方，
+        /// <c>[ebp+0x14]</c> = 守方的类。反向佐证：<c>高级英雄倍功暴击</c>
+        /// （加伤）在 <c>0x10079FF8</c> 取的是 <c>[ebp+0xC]</c> 的英雄。
+        ///
+        /// 公式（<c>0x1007A8A1..0x1007A95E</c>，与本键的门控
+        /// <c>cmp [单例+0x108],0x1F4</c> 同一分支）：
+        /// <code>
+        ///   守方类 ∈ {0x685CA0, 0x685968, 0x685FD8}
+        ///   hero = [守方+0x68C] ; 无英雄则跳过
+        ///   v = S(hero, 1, 58) ; v &lt;= 0 跳过 ; v &gt; 1000 整个丢弃(不钳位)
+        ///   damage -= (int)(damage * v / 1000.0)     ; cvttsd2si = 截断
+        /// </code>
+        ///
+        /// <b>未落地的原因已经换了一个</b>：证据齐了，缺的是 C# 侧的载体——
+        /// 脚本变量库只挂在 <c>TPlayObject</c>（<c>m_ScriptSVars</c> /
+        /// <c>TryGetScriptVar</c>）上，而 <c>HeroObject : AnimalObject</c> 没有。
+        /// 原生读的是英雄对象自己的 S 槽（英雄类 <c>0x006AC8C8</c> 的父链落在
+        /// <c>0x0073BBE8 -&gt; 0x0073B8DC</c> 这一族，和 <c>THumanKind</c>
+        /// <c>0x0073BC34</c> 同簇，所以英雄天然有 S 槽）。
+        /// 退而求其次去读主号的 <c>S(1,58)</c> 会读错对象，故维持 fail-closed。
+        /// </summary>
         public bool IsHeroDmgReduction() => Enabled("英雄千分比免伤");
         public bool IsHeroReadExtreme() => Enabled("英雄读取极品");
         public bool IsHeroRepairEquip() => Enabled("英雄修装备a");
@@ -3451,6 +3496,54 @@ namespace GameSvr.Plugins
         public bool IsMindRevealTrigger() => Enabled("心灵启示触发");
         public bool IsReturnBtnTrigger() => Enabled("回城按钮触发");
         public bool IsLureTrigger() => Enabled("诱惑之光触发脚本a");
+        /// <summary>
+        /// 召唤神兽触发 / 召唤骷髅触发。两者是**替换**，不是前置：开关一开，
+        /// 宿主的造宠函数就完全不再被调用，宝宝只能由脚本自己造出来。
+        ///
+        /// 安装器 <c>0x10032FD0</c> 的第 5/6 个参数是一张 dword 令牌表和令牌数
+        /// （每个 dword 的低字节是一个码字节；只有 <c>0xE8</c>/<c>0xE9</c> 且不是
+        /// 最后一个令牌时才吃掉下一个令牌当 rel32 重定位）。它先 VirtualAlloc
+        /// 0x400 字节，把令牌铺成桩体，末尾接一条 <c>E9 &lt;rel32&gt;</c> 指向续跑点
+        /// （<c>0x100331AF add ecx,[ebp+0x14]</c>），再在宿主起点写
+        /// <c>E9 rel32</c> 并用 <c>0x90</c> 补到 end（end 不含，
+        /// <c>0x10033267 cmp eax,[ebp+0x14] / jge</c>）。
+        ///
+        /// 骷髅：<c>0x100AE275 push 0x23</c>(=35 个令牌) /
+        /// <c>0x100AE285 push &amp;[ebp-0x6E4]</c> / <c>0x100AE29A push 0x6EDB49</c> /
+        /// <c>0x100AE2AD push 0x6EDB44</c> / <c>0x100AE2C0 push 0x6EDB44</c> /
+        /// <c>0x100AE2F6 call 0x10032FD0</c>。宿主 <c>0x006EDB44 E8 B3 12 08 00
+        /// call 0x76EDFC</c> 整条 5 字节被换掉，续跑 <c>0x006EDB49</c>。
+        /// 令牌由 8 张 16 字节 .rdata 模板 + 3 个立即数拼出，35/35 全部有出处：
+        /// <code>
+        ///   60 9C 8B D3 A1 20 5D 7D 00 8B 00 8B F0 8B 7E 08
+        ///   68 00 01 5D 01 6A 00 33 C9 8B C7 8B 18 FF 53 44 9D 61 E9
+        /// ⇒ pushal / pushfd
+        ///   mov edx,ebx                  ; ebx = 施法者(0x006EDB42 mov eax,ebx 现场)
+        ///   mov eax,[0x007D5D20] / mov eax,[eax] / mov esi,eax
+        ///   mov edi,[esi+8]
+        ///   push 0x015D0100              ; 神兽侧是 0x03170100
+        ///   push 0 / xor ecx,ecx
+        ///   mov eax,edi / mov ebx,[eax] / call [ebx+0x44]   ; 宿主脚本派发槽
+        ///   popfd / popal
+        ///   jmp 0x006EDB49               ; 安装器补的 E9 rel32
+        /// </code>
+        /// 桩体里**没有任何 E8 令牌**，重定位路径一次都没触发，也就没有对
+        /// <c>sub_76EDFC</c> 的调用——这就是「替换而非前置」的字节证据。
+        ///
+        /// 神兽：<c>0x100AE51F call 0x10032FD0</c>，宿主
+        /// <c>0x006EDC5E E8 19 12 08 00 call 0x76EE7C</c>，续跑 <c>0x006EDC63</c>，
+        /// 令牌表在 <c>[ebp-0x770]</c>，35 个字节与骷髅逐字节相同，只有那个
+        /// <c>push imm32</c> 从 <c>0x015D0100</c> 换成 <c>0x03170100</c>。
+        ///
+        /// 脚本名按 SSO std::string 拼在栈上后经 <c>call 0x10033450</c> 注册：
+        /// 骷髅 <c>[ebp-0x9C]=0xC</c> + <c>'@Sum','monS','kele'</c> ⇒ <c>@SummonSkele</c>；
+        /// 神兽 <c>[ebp-0xF8]=0xD</c> + <c>'@Sum','monS','hins'</c> + <c>'u'</c>
+        /// ⇒ <c>@SummonShinsu</c>。
+        ///
+        /// 仍未落地：<c>[ebx+0x44]</c> 这个宿主派发槽和那个 imm32 参数没解出来
+        /// （<c>[0x007D5D20]</c> 在运行时转储里为空），C# 也没有对应的脚本入口。
+        /// 生产两项都是 0，当前无可观测影响。
+        /// </summary>
         public bool IsShenShouTrigger() => Enabled("召唤神兽触发");
         public bool IsKuLouTrigger() => Enabled("召唤骷髅触发");
 
