@@ -1648,15 +1648,11 @@ namespace GameSvr.Plugins
         {
             var player = _player;
             if (player == null) return NativeScriptVarMiss;
-            if (group == 0)
-                return index >= 1 && index <= 100
-                    ? player.m_ScriptVGroup0[index]
-                    : NativeScriptVarMiss;
-            if (group < 0 || index <= 0) return NativeScriptVarMiss;
-            return player.m_ScriptVVars != null &&
-                   player.m_ScriptVVars.TryGetValue(group * 1000 + index, out var value)
-                ? value
-                : NativeScriptVarMiss;
+            // Flat group*1000+index into m_ScriptVVars silently reads 0 for
+            // group 0: those slots live in m_ScriptVGroup0, not the dictionary.
+            if (!player.TryGetScriptVar('V', group, index, out var value))
+                return NativeScriptVarMiss;
+            return value;
         }
 
         /// <summary>
@@ -1668,12 +1664,7 @@ namespace GameSvr.Plugins
         {
             var player = _player;
             if (player == null) return 0;
-            if (group == 0)
-                return index >= 1 && index <= 100 ? player.m_ScriptVGroup0[index] : 0;
-            return player.m_ScriptVVars != null &&
-                   player.m_ScriptVVars.TryGetValue(group * 1000 + index, out var value)
-                ? value
-                : 0;
+            return player.TryGetScriptVar('V', group, index, out var value) ? value : 0;
         }
 
         /// <summary>SetV 的收参门：0x6DF2B3/0x6DF2B7 两个 test 拒掉非正参数，组 0 只收 1..100。</summary>
@@ -1683,14 +1674,9 @@ namespace GameSvr.Plugins
         private void WritePlayerV(int group, int index, int value)
         {
             var player = _player;
-            if (player == null) return;
-            if (group == 0)
-            {
-                player.m_ScriptVGroup0[index] = value;
-                return;
-            }
-            // 原生 upsert sub_6E4140 没有零值判断，0 也原样写入。
-            player.m_ScriptVVars[group * 1000 + index] = value;
+            if (player == null || !PlayerVarWritable(group, index)) return;
+            // SetScriptVar stores 0 as 0 (sub_6E4140 has no zero test).
+            player.SetScriptVar('V', group, index, value);
         }
 
         /// <summary>全屏拾取: round范围, gbv网关绕过值, isMy仅拾取自己的</summary>
