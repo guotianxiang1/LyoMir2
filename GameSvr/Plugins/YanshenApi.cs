@@ -660,7 +660,9 @@ namespace GameSvr.Plugins
         private static void EnsureBindByteSlot(TUserItem item)
         {
             if (item == null) return;
-            if (item.btValue != null && item.btValue.Length >= 9) return;
+            // 14 是 TUserItem.btValue 的原生宽度；绑定隧道写的是 btValue[10]
+            // （item+0x34），所以门槛不能停在 9。
+            if (item.btValue != null && item.btValue.Length >= 14) return;
 
             var replacement = new byte[14];
             if (item.btValue != null)
@@ -824,14 +826,59 @@ namespace GameSvr.Plugins
             return value;
         }
 
-        /// <summary>装备持久操作: types 0=查询 1=增加 2=减少 3=设置</summary>
+        /// <summary>
+        /// ys_GiveDuar / 数字隧道 15 —— 装备持久（TUserItem.Dura，原生 item+0x26 的 word）。
+        /// 处理函数 0x10072650，字段顺序 (pis, val, types) = fields[2..4]。
+        /// types 0=查询 1=增加 2=减少 3=设置。全函数只 call vector::at / stoi / vector 析构，
+        /// 没有任何发包或引擎调用，所以四条支路都不刷新客户端。
+        /// </summary>
         public int EquipDura(int bodyPos, int value, int opType)
         {
             if (!Enabled("自定义元素")) return 0;
-            if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return 0;
-            var item = _player.m_UseItems[bodyPos];
-            if (item == null) return 0;
-            return opType switch { 0 => item.Dura, 1 => (item.Dura = (ushort)(item.Dura + value)), 2 => (item.Dura = (ushort)Math.Max(0, item.Dura - value)), 3 => (item.Dura = (ushort)value), _ => item.Dura };
+            // 10072722 83FE0F cmp esi,0xF / 10072725 0F8719010000 ja 0x10072844
+            //   -> 10072853 B819FCFFFF mov eax,0xFFFFFC19
+            if ((uint)bodyPos > 0xF) return -999;
+            // 1007272B 85FF test edi,edi / 1007272D 7909 jns -> 1007272F C745E800000000
+            // 10072738 81FFFFFF0000 cmp edi,0xFFFF / 1007273E 7E07 jle
+            //   -> 10072740 C745E8FFFF0000
+            if (value < 0) value = 0;
+            else if (value > 0xFFFF) value = 0xFFFF;
+            // 10072747 83F803 cmp eax,3 / 1007274A 0F87E8000000 ja 0x10072838
+            //   -> 10072838 C745EC19FCFFFF mov [ebp-0x14],0xFFFFFC19
+            if ((uint)opType > 3) return -999;
+            var item = bodyPos < _player.m_UseItems.Length ? _player.m_UseItems[bodyPos] : null;
+            // 100726C5 C745ECFFFFFFFF: 结果预置 -1。四条支路都在 `test eax,eax / je` 之后
+            // 才写 [ebp-0x14]，所以空槽位一律返回 -1 且不写任何东西。
+            if (item == null) return -1;
+            switch (opType)
+            {
+                case 0:                                     // 10072757 臂
+                    return item.Dura;                       // 1007276F 668B5826
+                case 1:                                     // 100727A5 臂
+                {
+                    var sum = item.Dura + value;
+                    // 100727C4 81FBFFFF0000 cmp ebx,0xFFFF / 100727CA 7E05 jle
+                    if (sum > 0xFFFF) sum = 0xFFFF;
+                    item.Dura = (ushort)sum;                // 100727D1 66895826
+                    return sum;                             // 100727D5 895DEC
+                }
+                case 2:                                     // 100727DC 臂
+                {
+                    var diff = item.Dura - value;
+                    // 100727FB 6683FB00 cmp bx,0 / 100727FF 7D02 jge —— 减法是 32 位的，
+                    // 但判负只看低 16 位并按有符号解释。照抄，因为它有两个可观测后果：
+                    //   Dura 在 32768..65535 之间时，减掉一小点得到的差仍落在 0x8000..0xFFFF，
+                    //   被判成负数而清零（持久 >32.767 的装备一减就归零）；
+                    //   反过来 val-Dura 超过 32768 时低 16 位又是正数，会被当成有效值写回
+                    //   （Dura=0、val=40000 -> 写入 25536，返回 -40000）。
+                    if ((short)diff < 0) diff = 0;          // 10072801 33DB xor ebx,ebx
+                    item.Dura = (ushort)diff;               // 10072803 66895826 只写低 16 位
+                    return diff;                            // 10072807 895DEC 存的是完整 32 位
+                }
+                default:                                    // 10072811 臂（types == 3）
+                    item.Dura = (ushort)value;              // 1007282A 66895826
+                    return value;                           // 1007282E 895DEC
+            }
         }
 
         /// <summary>装备投保</summary>
@@ -1920,33 +1967,40 @@ namespace GameSvr.Plugins
             return flag == 0 ? _player.m_WAbil.Weight : _player.m_WAbil.MaxWeight;
         }
 
-        /// <summary>物品绑定/解绑: flag 0=绑定 >0=解绑</summary>
+        /// <summary>
+        /// Ys_GiveBind / 数字隧道 33 —— flag==0 绑定，flag!=0 解绑。
+        /// 处理函数 0x10076060，字段顺序 (itemid, flag) = fields[2..3]。
+        ///
+        /// 寻址：0x10076110 call 0x10075AE0，那个查找器只遍历 [player+0x508]（= m_ItemList），
+        /// 逐项和入参比较后原样返回命中的对象；身上装备和英雄容器都不在范围内。
+        /// 入参在原生是「服务端物品 id」，即 TUserItem 对象指针本身（caret 20
+        /// 的 Ys_GetClientItemIDByItemid 在 0x1005AE06 用同样的指针相等判定，
+        /// 命中后返回 [item+0x18] = ClientItemID）。C# 没有指针，本工程一贯用
+        /// MakeIndex 代表「服务端物品 id」，这里沿用同一约定。
+        ///
+        /// 绑定位是 item+0x34：10076124 C6403401 / 1007613A C6403400。换算到
+        /// TUserItem 就是 btValue[10]（记录偏移 0x14），与本仓库其余地方
+        /// （NativeStallItemMove、MailService、TryGetNativePileCompatibility）
+        /// 用的 btValue[10..11] 绑定/锁定字是同一个字节。原生只写低字节，
+        /// btValue[11] 保持不动。
+        ///
+        /// 全函数没有任何发包调用，返回值恒为 1（10076129 / 1007613F BE01000000），
+        /// 找不到物品也是 1。
+        /// </summary>
         public int BindUnbindItem(int itemId, int flag)
         {
             if (!Enabled("屏蔽自动绑定")) return 0;
-            // Find item by MakeIndex in bag
+            TUserItem found = null;
             foreach (var item in _player.m_ItemList)
             {
-                if (item != null && item.MakeIndex == itemId)
-                {
-                    // Use btValue[8] as bind flag: 0=unbound, 1+=bound
-                    item.btValue[8] = flag == 0 ? (byte)1 : (byte)0;
-                    _player.SendUpdateItem(item);
-                    return flag;
-                }
+                if (item != null && item.MakeIndex == itemId) { found = item; break; }
             }
-            // Also check equipped items
-            for (int i = 0; i < _player.m_UseItems.Length; i++)
+            if (found != null)
             {
-                var item = _player.m_UseItems[i];
-                if (item != null && item.MakeIndex == itemId)
-                {
-                    item.btValue[8] = flag == 0 ? (byte)1 : (byte)0;
-                    _player.SendUpdateItem(item);
-                    return flag;
-                }
+                EnsureBindByteSlot(found);
+                found.btValue[10] = flag == 0 ? (byte)1 : (byte)0;
             }
-            return flag;
+            return 1;
         }
 
         /// <summary>在地面丢弃物品</summary>
