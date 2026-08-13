@@ -2129,17 +2129,27 @@ namespace GameSvr
                     MsgType.Hint);
                 return false;
             }
-            // Amulet check: type-1, count computed from edx=2000 => nCount=20
-            // (sub_73EA20 divides edx by 100). But verifying against CheckAmulet
-            // signature: nCount * 100 <= Dura + 50, so we pass nCount directly.
-            short amuletIdx = 0;
-            if (!Magic.CheckAmulet(PlayObject, 20, 1, ref amuletIdx))
+            // DURA-11 (2026-08-14 fix): native SKILL_62 block @0x6EDC71 consumes the
+            // charm via sub_73EA20 (RAW amount, NOT the ×100 slot-9 routine sub_73E93C):
+            //   0x6EDC87 mov cl,1 / 0x6EDC89 mov edx,0x7D0(2000) / 0x6EDC90 call 0x73EA20
+            // sub_73EA20 scans equip slot9 AND bag, requires Dura>=2000 (RAW, no ×100),
+            // deducts 2000 raw, and destroys only when the REMAINING Dura < 100.
+            // The old code used Magic.CheckAmulet/UseAmulet(nCount=20,type=1), i.e. the
+            // ×100 equip-only routine sub_73E93C, which diverged on three counts:
+            //   (a) only inspected equip slot 9 (missed a bagged charm);
+            //   (b) gate was Dura>=1950 (nCount*100<=Dura+50), not Dura>=2000;
+            //   (c) destroyed when Dura<=2000, not when the post-consume remainder<100.
+            // Route through the faithful port (TPlayObject.NativeAmuletConsume.cs).
+            if (!PlayObject.NativeConsumeBujukCharm(2000, false))
             {
                 PlayObject.SysMsg("没有足够的护身符", MsgColor.Red,
                     MsgType.Hint);
                 return false;
             }
-            // VMT+0x124 call (angel-like producer)
+            // VMT+0x124 call (angel-like producer). NOTE(integrator): native consumes
+            // the charm at 0x6EDC90 BEFORE this summon and then proceeds unconditionally;
+            // the structure below still consumes only on MakeSlave success (pre-existing
+            // modeling of VMT+0x124=0x76EEF4, outside DURA-11 scope — reported).
             if (!PlayObject.CheckServerMakeSlave())
             {
                 var sMonName = M2Share.g_Config.sAngel;
@@ -2151,7 +2161,7 @@ namespace GameSvr
                     dwRoyaltySec) != null)
                 {
                     result = true;
-                    Magic.UseAmulet(PlayObject, 20, 1, ref amuletIdx);
+                    PlayObject.NativeConsumeBujukCharm(2000, true); // sub_73EA20(cl=1,edx=2000)
                     PlayObject.m_dwMagic62LastTick = HUtil32.GetTickCount();
                 }
             }
