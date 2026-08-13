@@ -1,0 +1,112 @@
+
+### (global) / global  (50)
+
+### changegpswitch  (1)
+   00734ADC  ChangeGPSwitch                     function ChangeGPSwitch(Player: TPlayer) : Integer;
+
+### eaorderisstart  (2)
+   00729A3A  EAOrderIsStart                     function EAOrderIsStart(const iActNo,iFieldNo:Integer):Boolean;
+   00734E54  EAOrderIsStart                     function EAOrderIsStart(const iActNo,iFieldNo:Integer):Boolean;
+
+### getaroundmonnum  (2)
+   0072B7AD  GetAroundMonNum                    function GetAroundMonNum(const sMonName: string;x,y,Rang:Integer): Integer;
+   007349EC  GetAroundMonNum                    function GetAroundMonNum(const sMonName : string) : Integer;
+
+### getcurrenteaidxbyname  (1)
+   00734E00  GetCurrentEAIdxByName              function GetCurrentEAIdxByName(const iActNo, iFieldNo: Integer; const sName: string): Integer;
+
+### getcurrenteanamebyidx  (2)
+   007299F6  GetCurrentEANameByIdx              function GetCurrentEANameByIdx(const iActNo, iFieldNo, idx: Integer): string;
+   00734E0C  GetCurrentEANameByIdx              function GetCurrentEANameByIdx(const iActNo, iFieldNo, idx: Integer): string;
+
+### getcurrenteaperiod  (1)
+   00734DF4  GetCurrentEAPeriod                 function GetCurrentEAPeriod(const iActNo, iFieldNo: Integer): Integer;
+
+### getcurrenteascorebyidx  (1)
+   00734E18  GetCurrentEAScoreByIdx             function GetCurrentEAScoreByIdx(const iActNo, iFieldNo, idx: Integer): Integer;
+
+### geteaorderinfo  (2)
+   00729A18  GetEAOrderInfo                     function GetEAOrderInfo(const iActNo,iFieldNo,Page,TotalPage,PrePage:Word;isCurrent:Boolean;sProcName:string):string;
+   00734E48  GetEAOrderInfo                     function GetEAOrderInfo(const iActNo,iFieldNo,Page,TotalPage,PrePage:Word;isCurrent:Boolean;sProcName:string):string;
+
+### getguildwargold  (1)
+   00734D34  GetGuildWarGold                    function GetGuildWarGold(): Integer;
+
+### getlasteaidxbyname  (1)
+   00734E24  GetLastEAIdxByName                 function GetLastEAIdxByName(const iActNo, iFieldNo: Integer; const sName: string): Integer;
+
+### getlasteanamebyidx  (1)
+   00734E30  GetLastEANameByIdx                 function GetLastEANameByIdx(const iActNo, iFieldNo, idx: Integer): string;
+
+### getlasteascorebyidx  (1)
+   00734E3C  GetLastEAScoreByIdx                function GetLastEAScoreByIdx(const iActNo, iFieldNo, idx: Integer): Integer;
+
+### getsomeguildpoint  (1)
+   00734AD0  GetSomeGuildPoint                  function GetSomeGuildPoint(Player: TPlayer) : Integer;
+
+### gettreatwine  (1)
+   00734E78  GetTreatWine                       function GetTreatWine(Hum: TPlayer): Integer;
+
+### herorename  (1)
+   00734E90  HeroRename                         function HeroRename(player: TPlayer; const oldName, newName: string): Integer;
+
+### moveallhuminmap  (1)
+   00734ECC  MoveAllHumInMap                    procedure MoveAllHumInMap(const desMap: string; x, y: Word);
+
+### newfullmailex  (2)
+   0072BBF8  NewFullMailEx                      procedure NewFullMailEx(const ATitle,AContext: string; AMailType: Integer; AMonyCount: Integer;AMonyType: Integer;  const AItemInfo: string; ACreateDateTime: string)
+   00735070  NewFullMailEx                      procedure NewFullMailEx(const ARecvName, ATitle,AContext: string; AMailType: Integer; AMonyCount: Integer;AMonyType: Integer; const AItemInfo: string; ACreateDateTime: string);
+
+### setwinetreat  (1)
+   00734E6C  SetWineTreat                       procedure SetWineTreat(wtType: Byte; boDesk: Boolean);
+
+### updateeverydayactorder  (3)
+   00729A07  UpdateEverydayActOrder             function UpdateEverydayActOrder(const iActNo, iFieldNo: Integer;const sName: string; const iScore: Integer): Integer;
+   0072B819  UpdateEverydayActOrder             function UpdateEverydayActOrder(const iActNo, iFieldNo: Integer;const sName: string; const iScore: Integer): Integer;
+   00734DE8  UpdateEverydayActOrder             function UpdateEverydayActOrder(const iActNo, iFieldNo: Integer; const sName: string; const iScore: Integer): Integer;
+
+### useguildpoint  (1)
+   00734AC4  UseGuildPoint                      function UseGuildPoint(Player: TPlayer) : Integer;
+
+### buildguild  (1)
+   0072B1DD  BuildGuild                         function BuildGuild(const GuildStr: string): integer;
+
+### chgequipmentbreaklevel  (1)
+   0072B741  ChgEquipmentBreakLevel             function ChgEquipmentBreakLevel(const nPos:integer;Value:Integer;bHero:Boolean;bAdd:Boolean):Integer;
+
+### giveitemstoother  (1)
+   0072B7E9  GiveItemsToOther                   function GiveItemsToOther(const npc:TCreature;const TargName,ItemName:string;const ItemNum,nPrice:Integer;bUseGp:Boolean):Integer;
+
+### inputdialog  (2)
+   0072B910  InputDialog                        procedure InputDialog(MsgStr: string; DlgType, InputType: Integer);
+   00734944  InputDialog                        procedure InputDialog(Hum: TPlayer; MsgStr : string; DlgType, InputType : Integer);
+
+### querytaskdispatch  (1)
+   0072B9B8  QueryTaskDispatch                  procedure QueryTaskDispatch;
+
+### reqpieceupnewyearpicture  (1)
+   0072B65D  ReqPieceUpNewYearPicture           procedure ReqPieceUpNewYearPicture(const iMod, iNum, iNeedValue: Integer);
+
+### requestguildwar  (1)
+   0072B321  RequestGuildWar                    procedure RequestGuildWar(const TargGuildStr: string);
+
+### startpaodian  (1)
+   0072BAC0  StartPaodian                       procedure StartPaodian(DuraSec:integer);
+
+### getscorebyname  (1)
+   00729A29  GetScoreByName                     function GetScoreByName(const iActNo,iFieldNo:Integer;const sHumanName:string;isCurrent: Boolean): Integer;
+
+### kickallhumtomap  (1)
+   007299E5  KickAllHumToMap                    procedure KickAllHumToMap(srcMap, desMap: string; x,y: Word);
+
+### playercry  (1)
+   00729A4B  PlayerCry                          procedure PlayerCry(const chrName: string; iType: Word; strMsg: string);
+
+### playergive  (1)
+   00729A5C  PlayerGive                         procedure PlayerGive(const chrName: string; const ItemName: string; ItemCount: Integer);
+
+### level  (4)
+   0072B795  SetHeroLevel                       procedure SetHeroLevel(level: Word);
+   0072B91C  SetPlayerLevel                     procedure SetPlayerLevel(level: Word);
+   0072AB2F  Level                              Level                          : Word           acc=1
+   0073AED7  Level                              Level                          : Word           acc=1

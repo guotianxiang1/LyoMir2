@@ -1,0 +1,271 @@
+======================================================================
+CallPlayerMethod getaroundmonnum
+ 1912|                 case "getaroundmonnum":
+ 1913|                     // GetAroundMonNum([range]) — count monsters within range of player
+ 1914|                     if (CurrentPlayer != null && CurrentPlayer.m_PEnvir != null)
+ 1915|                     {
+ 1916|                         int range = args.Count >= 1 ? args[0].AsInt() : 5;
+ 1917|                         int count = 0;
+ 1918|                         var objList = new List<TBaseObject>();
+ 1919|                         if (CurrentPlayer.m_PEnvir.GetMapBaseObjects((short)CurrentPlayer.m_nCurrX, (short)CurrentPlayer.m_nCurrY, range, objList))
+ 1920|                         {
+ 1921|                             foreach (var obj in objList)
+ 1922|                             {
+ 1923|                                 if (obj != null && obj.m_btRaceServer >= Grobal2.RC_MONSTER && !obj.m_boDeath)
+ 1924|                                     count++;
+ 1925|                             }
+ 1926|                         }
+ 1927|                         M2Share.MainOutMessage($"[PasBridge] GetAroundMonNum: {count} monsters in range {range}");
+ 1928|                     }
+ 1929|                     return true;
+ 1930| 
+ 1931|                 case "getmember":
+ 1932|                     // GetMember(index) — get group member name by index
+ 1933|                     if (CurrentPlayer != null && CurrentPlayer.m_GroupMembers != null)
+ 1934|                     {
+ 1935|                         int idx = args.Count >= 1 ? args[0].AsInt() : 0;
+
+======================================================================
+CallNpcMethod inputdialog
+ 5280|                     if (CurrentPlayer != null)
+ 5281|                         CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_MERCHANTDLGCLOSE, 0, CurrentNpc.ObjectId, 0, 0, "");
+ 5282|                     return true;
+ 5283| 
+ 5284|                 case "inputdialog":
+ 5285|                     // InputDialog(Hum, MsgStr, DlgType, InputType)
+ 5286|                     if (args.Count >= 3 && CurrentPlayer != null && CurrentNpc != null)
+ 5287|                     {
+ 5288|                         var msg = args[1].AsString();
+ 5289|                         var dlgType = args[2].AsInt();
+ 5290|                         var inputType = args.Count >= 4 ? args[3].AsInt() : 0;
+ 5291|                         CurrentPlayer.SendDefMessage(Grobal2.SM_MERCHANT_QUERY, CurrentNpc.ObjectId, inputType, dlgType, 0, msg);
+ 5292|                     }
+ 5293|                     return true;
+ 5294| 
+ 5295|                 case "npcsay":
+ 5296|                     if (args.Count >= 1)
+ 5297|                         M2Share.UserEngine.SendBroadCastMsg(args[0].AsString(), MsgType.Notice);
+ 5298|                     return true;
+ 5299| 
+ 5300|                 case "npcnotice":
+
+======================================================================
+CallNpcMethod buildguild/requestguildwar
+ 5698|                             castle.AddAttackerInfo(CurrentPlayer.m_MyGuild);
+ 5699|                     }
+ 5700|                     return true;
+ 5701| 
+ 5702|                 case "buildguild":
+ 5703|                     // BuildGuild(guildName, chiefName) - create a new guild
+ 5704|                     if (args.Count >= 2)
+ 5705|                     {
+ 5706|                         var guildName = args[0].AsString();
+ 5707|                         var chiefName = args[1].AsString();
+ 5708|                         M2Share.GuildManager.AddGuild(guildName, chiefName);
+ 5709|                     }
+ 5710|                     return true;
+ 5711| 
+ 5712|                 case "requestguildwar":
+ 5713|                     // RequestGuildWar - request guild war for player's guild
+ 5714|                     if (CurrentPlayer?.m_MyGuild != null)
+ 5715|                     {
+ 5716|                         var castle = M2Share.CastleManager.GetCastle(0);
+ 5717|                         if (castle != null)
+ 5718|                             castle.AddAttackerInfo(CurrentPlayer.m_MyGuild);
+ 5719|                     }
+ 5720|                     return true;
+
+======================================================================
+CallNpcMethod chgequipmentbreaklevel
+ 5892|                             "NPC/" + args[0].AsString());
+ 5893|                     }
+ 5894|                     return true;
+ 5895| 
+ 5896|                 case "chgequipmentbreaklevel":
+ 5897|                     // ChgEquipmentBreakLevel(newLevel: Integer) - change equipment break/upgrade level
+ 5898|                     if (args.Count >= 1 && CurrentPlayer != null)
+ 5899|                     {
+ 5900|                         var weapon = CurrentPlayer.m_UseItems[Grobal2.U_WEAPON];
+ 5901|                         if (weapon != null && weapon.wIndex > 0 && weapon.btValue != null && weapon.btValue.Length > 4)
+ 5902|                         {
+ 5903|                             weapon.btValue[4] = (byte)Math.Max(0, Math.Min(255, args[0].AsInt()));
+ 5904|                             CurrentPlayer.RecalcAbilitys();
+ 5905|                             CurrentPlayer.SendMsg(CurrentPlayer, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
+
+======================================================================
+CallNpcMethod giveitemstoother
+ 6126|                     // Native medal selection and grant transaction is not mapped.
+ 6127|                     return RejectUnsupportedNativeApi(out result);
+ 6128| 
+ 6129|                 // === ITEM / GIVE (NPC-side variants) ===
+ 6130|                 case "giveitemstoother":
+ 6131|                     // Native cross-player delivery owns validation and persistence.
+ 6132|                     return RejectUnsupportedNativeApi(out result);
+ 6133| 
+ 6134|                 case "giveconfigprizetemp":
+ 6135|                     if (args.Count != 3 || args[0].ObjVal is not TPlayObject tempPrizePlayer)
+ 6136|                         return false;
+ 6137|                     using (var context = PushItemContext(tempPrizePlayer, CurrentNpc,
+ 6138|                         CurrentInputOk, CurrentInputStr, CurrentItem))
+ 6139|                     {
+ 6140|                         _ = TryNativeGiveConfigPrize(args[1].AsInt(),
+ 6141|                             args[2].AsString(), false);
+ 6142|                     }
+
+======================================================================
+CallNpcMethod startpaodian
+ 6303|                     return RejectUnsupportedNativeApi(out result);
+ 6304| 
+ 6305|                 // === PaoDian ===
+ 6306|                 case "setpaodianprizeandperiod":
+ 6307|                 case "startpaodian":
+ 6308|                     // Native paodian reward scheduler and lifecycle are absent.
+ 6309|                     return RejectUnsupportedNativeApi(out result);
+ 6310| 
+ 6311|                 // === Random Item ===
+ 6312|                 case "getranditem":
+ 6313|                     // GetRandItem(idx) - get a random item by config index
+ 6314|                     {
+ 6315|                         var idx = args.Count >= 1 ? args[0].AsInt() : 0;
+ 6316|                         var itemIdx = GetPlayerVarOrZero('V', 50, idx);
+
+======================================================================
+CallNpcMethod reqpieceupnewyearpicture
+ 6435|                         }
+ 6436|                                             }
+ 6437|                     return true;
+ 6438| 
+ 6439|                 case "reqpieceupnewyearpicture":
+ 6440|                 case "composeitem":
+ 6441|                     // Native New Year picture and item-compose transactions are absent.
+ 6442|                     return RejectUnsupportedNativeApi(out result);
+ 6443| 
+ 6444|                 // === YB Shop ===
+ 6445|                 case "sendybshopconfig":
+ 6446|                     // Native M2 registers the GBK PAS configuration in the global shop manager.
+
+======================================================================
+CallNpcMethod playercry/playergive
+ 6526|                     }
+ 6527|                     return true;
+ 6528| 
+ 6529|                 // === Player Cry ===
+ 6530|                 case "playercry":
+ 6531|                     // PlayerCry(chrName, iType, strMsg) - make player character cry/emote
+ 6532|                     if (args.Count >= 1)
+ 6533|                     {
+ 6534|                         var chrName = args[0].AsString();
+ 6535|                         var iType = args.Count >= 2 ? args[1].AsInt() : 0;
+ 6536|                         var strMsg = args.Count >= 3 ? args[2].AsString() : "";
+ 6537|                         var targetPlayer = M2Share.UserEngine.GetPlayObject(chrName);
+ 6538|                         if (targetPlayer != null)
+ 6539|                         {
+ 6540|                             targetPlayer.SysMsg(strMsg, MsgColor.Green, MsgType.Hint);
+ 6541|                             targetPlayer.SendRefMsg(Grobal2.RM_CRY, iType, 0, 0, 0, strMsg);
+ 6542|                         }
+ 6543|                     }
+ 6544|                     return true;
+ 6545| 
+ 6546|                 // === Player Give (NPC-side) ===
+ 6547|                 case "playergive":
+ 6548|                     // PlayerGive(chrName, ItemName, ItemCount) - NPC gives item to another player
+ 6549|                     if (args.Count >= 3 && CurrentNpc != null)
+ 6550|                     {
+ 6551|                         var chrName = args[0].AsString();
+ 6552|                         var itemName = args[1].AsString();
+ 6553|                         var itemCount = args[2].AsInt();
+ 6554|                         var targetPlayer = M2Share.UserEngine.GetPlayObject(chrName);
+ 6555|                         if (targetPlayer != null)
+ 6556|                         {
+ 6557|                             for (int i = 0; i < itemCount; i++)
+ 6558|                                 CurrentNpc.GotoLable_GiveItem(targetPlayer, itemName, 1);
+ 6559|                         }
+ 6560|                     }
+
+======================================================================
+CallNpcFunc inputdialog
+ 7249|                 case "click_makedrug":
+ 7250|                     if (CurrentPlayer != null)
+ 7251|                         CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_USERMAKEDRUGITEMLIST, 0, CurrentNpc.ObjectId, 0, 0, "");
+ 7252|                     result = PasValue.FromBool(true); return true;
+ 7253|                 case "inputdialog":
+ 7254|                     // InputDialog(Hum, MsgStr, DlgType, InputType) — show input dialog to player
+ 7255|                     if (args.Count >= 3 && CurrentPlayer != null && CurrentNpc != null)
+ 7256|                     {
+ 7257|                         var msg = args[1].AsString();
+ 7258|                         var dlgType = args[2].AsInt();
+ 7259|                         var inputType = args.Count >= 4 ? args[3].AsInt() : 0;
+ 7260|                         CurrentPlayer.SendDefMessage(Grobal2.SM_MERCHANT_QUERY, CurrentNpc.ObjectId, inputType, dlgType, 0, msg);
+ 7261|                     }
+ 7262|                                         return true;
+
+======================================================================
+CallNpcFunc giveitemstoother
+ 7504|                     }
+ 7505|                     return true;
+ 7506| 
+ 7507|                 // === ITEM / GIVE (NPC-side, return value) ===
+ 7508|                 case "giveitemstoother":
+ 7509|                     // Native cross-player delivery owns validation and persistence.
+ 7510|                     return RejectUnsupportedNativeApi(out result);
+ 7511| 
+ 7512|                 case "giveconfigprizetemp":
+ 7513|                     // Native temporary-transfer prize transaction is absent.
+ 7514|                     return RejectUnsupportedNativeApi(out result);
+ 7515| 
+
+======================================================================
+CallStandalone newfullmailex
+ 7930| 
+ 7931|                 case "chkmonanditem":
+ 7932|                     // Native Magic Tower/challenge state is not a generic map scan.
+ 7933|                     return RejectUnsupportedNativeApi(out result);
+ 7934| 
+ 7935|                 case "newfullmailex":
+ 7936|                     if (args.Count != 8) return false;
+ 7937|                     _ = new global::GameSvr.Services.MailService().NewFullMailEx(
+ 7938|                         args[0].AsString(), args[1].AsString(), args[2].AsString(),
+ 7939|                         args[3].AsInt(), args[4].AsInt(), args[5].AsInt(),
+ 7940|                         args[6].AsString(), args[7].AsString());
+ 7941|                     return true;
+ 7942| 
+
+======================================================================
+CallStandalone querytaskdispatch
+ 8062|                         SetGlobalVar(100, 4, PasValue.FromInt(args[3].AsInt())); // bronzeCost
+ 8063|                         SetGlobalVar(100, 5, PasValue.FromInt(args[4].AsInt())); // silverCost
+ 8064|                         SetGlobalVar(100, 6, PasValue.FromInt(args[5].AsInt())); // goldCost
+ 8065|                     }
+ 8066|                     return true;
+ 8067| 
+ 8068|                 case "querytaskdispatch":
+ 8069|                     // QueryTaskDispatch — return current task dispatch status
+ 8070|                     {
+ 8071|                         var acceptCnt = GetGlobalVar(100, 2);
+ 8072|                         var dispatchCnt = GetGlobalVar(100, 3);
+ 8073|                         result = PasValue.FromInt(dispatchCnt.AsInt() >= acceptCnt.AsInt() ? 0 : 1);
+ 8074|                     }
+ 8075|                     return true;
+
+======================================================================
+GetAnimalProperty
+  757|         public bool GetAnimalProperty(string name, out PasValue result)
+  758|         {
+  759|             result = PasValue.Nil;
+  760|             if (CurrentAnimal == null) return false;
+  761| 
+  762|             switch (name.ToLowerInvariant())
+  763|             {
+  764|                 case "name":
+  765|                     result = PasValue.FromString(CurrentAnimal.m_sCharName ?? string.Empty);
+  766|                     return true;
+  767|                 case "mapname":
+  768|                     result = PasValue.FromString(CurrentAnimal.m_sMapName ?? string.Empty);
+  769|                     return true;
+  770|                 case "mapdesc":
+  771|                     result = PasValue.FromString(CurrentAnimal.m_PEnvir?.sMapDesc ??
+  772|                         CurrentAnimal.m_sMapName ?? string.Empty);
+  773|                     return true;
+  774|                 case "my_x":
+  775|                 case "x":
+
