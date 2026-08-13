@@ -159,10 +159,23 @@ static void VerifyProtocolSource()
         @"ResumeSecHeroPracticeAfterLogon\s*\(\s*\)\s*\{\s*" +
         @"if\s*\(\s*\(uint\)\s*\(m_btSecHeroPracticeCostTier\s*-\s*1\)",
         1, "logon resume must not reset the constructor practice tick");
+    // The save entry is now two thin public overloads over one private core, so
+    // the old anchor matched the 3-line forwarder and the flush fell outside the
+    // 2200-character window. Pin the forwarding instead, then check the ordering
+    // inside the core — "shared entry" is still exactly what is enforced.
     RequireMatches(userEngineSource,
-        @"SaveHumanRcd\s*\(\s*TPlayObject\s+PlayObject\s*\)[\s\S]{0,2200}?" +
-        @"PlayObject\.FlushSecHeroPracticeLingFuLog\s*\(\s*\)\s*;[\s\S]{0,800}?" +
-        @"PlayObject\.MakeSaveRcd",
+        @"public\s+void\s+SaveHumanRcd\s*\(\s*TPlayObject\s+PlayObject\s*\)\s*\{\s*" +
+        @"SaveHumanRcdCore\s*\(\s*PlayObject\s*,\s*0\s*\)\s*;\s*\}",
+        1, "SaveHumanRcd(1-arg) must forward to the shared core");
+    RequireMatches(userEngineSource,
+        @"public\s+void\s+SaveHumanRcd\s*\(\s*TPlayObject\s+PlayObject\s*,\s*" +
+        @"ushort\s+saveMode\s*\)\s*\{\s*" +
+        @"SaveHumanRcdCore\s*\(\s*PlayObject\s*,\s*saveMode\s*\)\s*;\s*\}",
+        1, "SaveHumanRcd(2-arg) must forward to the shared core");
+    RequireMatches(userEngineSource,
+        @"SaveHumanRcdCore\s*\(\s*TPlayObject\s+PlayObject\s*,\s*ushort\s+saveMode\s*\)" +
+        @"[\s\S]*?PlayObject\.FlushSecHeroPracticeLingFuLog\s*\(\s*\)\s*;" +
+        @"[\s\S]{0,2000}?PlayObject\.MakeSaveRcd",
         1, "practice LingFu summary at shared save entry");
     Assert(!practiceSource.Contains("StringComparison.OrdinalIgnoreCase",
             StringComparison.Ordinal) &&
@@ -620,21 +633,7 @@ static void PrepareRuntimeConfig()
         "[Integer]" + Environment.NewLine);
 }
 
-static string FindRepositoryRoot()
-{
-    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
-    {
-        var directory = new DirectoryInfo(start);
-        while (directory != null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "GameSvr", "GameSvr.csproj")))
-                return directory.FullName;
-            directory = directory.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException(
-        "Repository root containing GameSvr/GameSvr.csproj was not found.");
-}
+static string FindRepositoryRoot() => AuditRepoRoot.Resolve();
 
 static void RequireMatches(string source, string pattern, int expected, string message)
 {

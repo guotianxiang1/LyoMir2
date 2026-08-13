@@ -12,7 +12,8 @@ CheckCopyDoesNotRandomize(definitions.Helmet);
 CheckUnknownModeDispatch(definitions);
 CheckConfiguredBagAndEquipment(definitions);
 CheckAutoRepairPath(definitions.Helmet);
-CheckMonsterDropDoesNotRandomize(definitions.Helmet);
+CheckMonsterDropDoesNotRandomize(definitions.WrongShape);
+CheckMonsterDropRunsNativePlus28(definitions.Helmet);
 
 Console.WriteLine("PASS RobotUnknownItemInitCheck " +
     "paths=init-bag+init-equipped+15s-repair " +
@@ -343,6 +344,21 @@ static void CheckSourceContract(string sourceRoot)
 // the stock-Mir2 `StdMode/Shape -> RandomUpgradeUnknownItem` gate has no counterpart
 // here. A monster drop must leave btValue untouched however unknown-looking the
 // template is, and must set Dura from that one Random(80) band.
+// Shape 130/131/132 does NOT take the plain Dura80 arm: THelmet's +0x28 is
+// sub_7611C8 and it dispatches those three shapes to [vmt+0x08] instead.
+//   007611D1  8b 46 1c        mov eax,[esi+0x1C]     ; StdItem
+//   007611D4  8a 40 15        mov al,[eax+0x15]      ; Shape
+//   007611D7  04 7e           add al,0x7E
+//   007611D9  2c 03           sub al,3
+//   007611DB  73 0c           jae 0x7611E9           ; Shape>=133 -> normal
+//   007611DD..E1              call [vmt+0x08]        ; 130/131/132 -> unknown body
+//   007611ED  e8 0a 2d 02 00  call 0x783EFC          ; normal: Dura80
+//   007611FA  b8 0a 00 00 00  mov eax,0xA / call 0x403B4C   ; Random(10) gate
+//   0076120F  f6 40 02 40     test byte [eax+2],0x40 ; extra-attr flag
+//   00761213  0f 84 1b 01 00 00 je 0x761334
+// The fixture therefore has to be a NON-unknown shape for "btValue stays 0 and
+// Dura comes from the one Random(80) band" to be the native contract at all.
+// (StdMode 15 is THelmet for every shape — factory sub_74C338 / case 15.)
 static void CheckMonsterDropDoesNotRandomize(GoodItem definition)
 {
     const string monsterName = "AuditDropMonster";
@@ -370,6 +386,35 @@ static void CheckMonsterDropDoesNotRandomize(GoodItem definition)
     Assert(dropped.Dura >= definition.DuraMax / 100.0 * 20
            && dropped.Dura <= definition.DuraMax / 100.0 * 99,
         $"monster drop Dura {dropped.Dura} outside the sub_783EFC 20..99% band");
+}
+
+// The stock-Mir2 marker must still never appear on a drop, even for the shapes
+// that DO take the native unknown body: RandomUpgradeUnknownItem stamps
+// btValue[8] = 1 (asserted by CheckUnknownModeDispatch), and THelmet's
+// +0x08 body @0x761338 writes slots 0..7 only. So btValue[8] == 0 is the exact
+// separator between "native +0x28 ran" and "the stock gate got reintroduced".
+static void CheckMonsterDropRunsNativePlus28(GoodItem definition)
+{
+    const string monsterName = "AuditPlus28Monster";
+    M2Share.UserEngine.MonsterList.Add(new TMonInfo
+    {
+        sName = monsterName,
+        ItemList = new List<TMonItem>
+        {
+            new TMonItem
+            {
+                ItemName = definition.Name, MaxPoint = 1, SelPoint = 1, Count = 1
+            }
+        }
+    });
+
+    var monster = new TBaseObject { m_sCharName = monsterName };
+    M2Share.UserEngine.MonGetRandomItems(monster);
+
+    Equal(1, monster.m_ItemList.Count, "unknown-shape drop produced no item");
+    var dropped = monster.m_ItemList[0];
+    Equal((byte)0, dropped.btValue[8],
+        "monster drop stamped the stock RandomUpgradeUnknownItem marker");
 }
 
 static int Count(string source, string value)

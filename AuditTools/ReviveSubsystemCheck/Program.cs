@@ -240,11 +240,19 @@ Check(tickSource.Contains("TryNativeRevive();", StringComparison.Ordinal),
 Check(!tickSource.Contains("M2Share.g_Config.dwRevivalTime", StringComparison.Ordinal),
     "0x743756 is an immediate 0xEA60: the config-driven revival bound is gone from the tick");
 // Die() must still follow, and still be conditional on HP having stayed 0.
-var reviveCall = tickSource.IndexOf("TryNativeRevive();", StringComparison.Ordinal);
-var afterRevive = reviveCall > 0 ? tickSource.Substring(reviveCall) : "";
+// The 200-character window used to be measured on the raw text, so the
+// byte-evidence comment block that now sits between the two calls (眼神
+// @MyKill 的桩体说明) pushed Die() out of range. Strip comments and
+// whitespace first so the window measures code, not prose.
+var tickCode = System.Text.RegularExpressions.Regex.Replace(
+    tickSource, @"//[^\n]*", string.Empty);
+tickCode = string.Concat(tickCode.Where(value => !char.IsWhiteSpace(value)));
+var reviveCall = tickCode.IndexOf("TryNativeRevive();", StringComparison.Ordinal);
+var afterRevive = reviveCall > 0 ? tickCode.Substring(reviveCall) : "";
 var dieIdx = afterRevive.IndexOf("Die();", StringComparison.Ordinal);
 Check(dieIdx > 0 && dieIdx < 200 &&
-      afterRevive[..dieIdx].Contains("m_WAbil.HP == 0", StringComparison.Ordinal),
+      afterRevive.StartsWith("TryNativeRevive();if(m_WAbil.HP==0){",
+          StringComparison.Ordinal),
     "the revive attempt precedes Die(), which stays gated on HP still being 0");
 
 Console.WriteLine("== H: the two scheduled-message idents (were mislabelled as a colour) ==");

@@ -384,8 +384,13 @@ static void AuditProductionAccesses()
         "for (var i = nNpcPosition; i < QuestNPCList.Count; i++)",
         "NPC = QuestNPCList[i];"
     };
+    // 注释行不是访问。UsrEngn.cs 里有两行字节证据注释提到这两个表
+    // （NULL 槽 + sub_67D8F0 五分钟延迟释放 FIFO + vtable+0x7C 钩子的说明），
+    // 原来的逐行 Contains 把它们数成了直接访问，计数从 8 变 10。
     var directLines = userEngineLines
         .Select(line => line.Trim())
+        .Where(line => !line.StartsWith("//", StringComparison.Ordinal)
+            && !line.StartsWith("*", StringComparison.Ordinal))
         .Where(line => line.Contains("m_MerchantList", StringComparison.Ordinal)
             || line.Contains("QuestNPCList", StringComparison.Ordinal))
         .ToArray();
@@ -462,22 +467,7 @@ static void RequireInOrder(string source, params string[] tokens)
     }
 }
 
-static string FindRepositoryRoot()
-{
-    foreach (var start in new[] { Directory.GetCurrentDirectory(),
-                 AppContext.BaseDirectory })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                    "GameSvr.csproj")))
-                return current.FullName;
-            current = current.Parent;
-        }
-    }
-    throw new InvalidOperationException("repository root not found");
-}
+static string FindRepositoryRoot() => AuditRepoRoot.Resolve();
 
 static void Equal<T>(T expected, T actual, string message)
 {
