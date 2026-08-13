@@ -621,7 +621,7 @@ namespace GameSvr
         {
             TPlayObject PlayObject;
             var ListC = new List<TBaseObject>();
-            M2Share.UserEngine.GetMapRageHuman(m_MapPalace, m_nHomeX, m_nHomeY, 100, ListC);
+            M2Share.UserEngine.GetMapRageHuman(m_MapCastle, m_nHomeX, m_nHomeY, 0xC8, ListC);
             for (var i = 0; i < ListC.Count; i++)
             {
                 PlayObject = (TPlayObject)ListC[i];
