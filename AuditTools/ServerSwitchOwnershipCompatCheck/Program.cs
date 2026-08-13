@@ -13,7 +13,8 @@ TestSourceOwnership();
 
 Console.WriteLine(
     "PASS ServerSwitch bytes=5 owner=shared RMW=bit-preserving " +
-    "concurrency=stale-snapshots word=low32 fifth-byte=preserved SignIn=closed");
+    "concurrency=stale-snapshots word=low32 fifth-byte=preserved " +
+    "SignIn=shared-bit22");
 return;
 
 static void TestMissingAndShortFiles()
@@ -130,12 +131,12 @@ static void TestWordUpdatePreservesFifthByte()
 static void TestSourceOwnership()
 {
     var root = FindRepositoryRoot();
-    var credit = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
+    var credit = ReadSource(Path.Combine(root, "GameSvr", "Services",
         "NativeCreditCardService.cs"));
-    var nick = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
+    var nick = ReadSource(Path.Combine(root, "GameSvr", "Services",
         "NativeNickLinFuState.cs"));
-    var startup = File.ReadAllText(Path.Combine(root, "GameSvr", "GameApp.cs"));
-    var bridge = File.ReadAllText(Path.Combine(root, "GameSvr", "ScriptSystem",
+    var startup = ReadSource(Path.Combine(root, "GameSvr", "GameApp.cs"));
+    var bridge = ReadSource(Path.Combine(root, "GameSvr", "ScriptSystem",
         "PasEngine", "PasApiBridge.cs"));
 
     Reject(credit, "File.WriteAllBytes", "CreditCard private whole-file writer");
@@ -147,8 +148,17 @@ static void TestSourceOwnership()
         "NickLinFu shared owner injection");
     Require(startup, "NativeCreditCardService.TryCreate(M2Share.ServerSwitches,",
         "CreditCard shared owner injection");
-    Require(bridge, "case \"signin\":\n                    return RejectUnsupportedNativeApi(out result);",
-        "SignIn function fail-closed guard");
+    // The old contract here was "the SignIn function must stay fail-closed".
+    // 底本推翻了它：0x0072E6E9 是 Delphi 字面量 `FF FF FF FF 19 00 00 00` +
+    // "function SignIn: Boolean;"(len 0x19)，0x00732E4B 是派发名表里的
+    // `FF FF FF FF 06 00 00 00` + "SignIn"(len 6)，另有类名 TSignInAct
+    // (0x006167D2, len 0x0A) 与 TSignInEveryday (0x00616847, len 0x0F)。
+    // SignIn 是原生真实存在的脚本函数，NativeSignActCoreCompatCheck 与
+    // SignInActivityCompatCheck 两把闸已覆盖其语义。本工具只管开关归属：
+    // signin 必须从共享 owner 读第 22 位（byte 2 / mask 0x40），不得私读文件。
+    Require(bridge, "M2Share.ServerSwitches.IsBitSet(2, 0x40)",
+        "SignIn shared switch-owner read");
+    Reject(bridge, "ServerSwitch.Bin", "PAS bridge private switch file access");
 }
 
 static void MutateFromStaleSnapshot(NativeServerSwitchStore owner,
@@ -199,21 +209,12 @@ static void WithDirectory(Action<string> action)
     }
 }
 
-static string FindRepositoryRoot()
-{
-    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
-    {
-        var directory = new DirectoryInfo(start);
-        while (directory != null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName,
-                    "GameSvr", "GameSvr.csproj")))
-                return directory.FullName;
-            directory = directory.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("GameSvr/GameSvr.csproj was not found");
-}
+static string FindRepositoryRoot() => AuditRepoRoot.Resolve();
+
+// The multi-line source patterns below are written with '\n'; the checkout is
+// CRLF, so match against a normalized copy instead of the raw bytes.
+static string ReadSource(string path) =>
+    File.ReadAllText(path).Replace("\r\n", "\n");
 
 static void Require(string source, string value, string message)
 {

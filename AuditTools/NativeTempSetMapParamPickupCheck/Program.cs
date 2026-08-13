@@ -74,7 +74,11 @@ try
     var denied = NewPlayer(4, current);
     target.Flag.boPICKUP = false;
     var denial = command.Handle("TARGET PICKUP 1", denied);
-    Equal(M2Share.g_sGameCommandPermissionTooLow, denial,
+    // 0x00622AB9 `cmp bl,3` / `jb 0x622B09`（<3 静默），0x00622AC4 `68 68 b7 62 00`
+    // push 0x62B768("该命令需要", refcnt FF FF FF FF len 0A) -> 0x00622AD4 IntToStr ->
+    // 0x00622ADF `68 7c b7 62 00` push 0x62B77C("级GM才能使用", len 0C) -> 0x00622AEF
+    // LStrCatN(edx=3)。"权限不够!!!" 在底本里 0 命中。
+    Equal("该命令需要5级GM才能使用", denial,
         "permission 4 production denial");
     Require(!target.Flag.boPICKUP,
         "permission 4 changed PICKUP on a production server");
