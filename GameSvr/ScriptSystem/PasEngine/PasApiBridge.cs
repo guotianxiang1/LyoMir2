@@ -7761,7 +7761,9 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "getg":
-                    result = args.Count >= 2 ? GetGlobalVar(args[0].AsInt(), args[1].AsInt()) : PasValue.FromInt(0);
+                    result = args.Count >= 2
+                        ? GetGlobalVar(args[0].AsInt(), args[1].AsInt())
+                        : PasValue.FromInt(NativeGlobalVarMiss);
                     return true;
 
                 case "setg":
@@ -8277,17 +8279,48 @@ namespace GameSvr.PasEngine
         // GLOBAL VARIABLE SYSTEM (G variables)
         // =====================================================================
 
-        // Delphi 战神 G 变量公式: paramNo * 100 + index (系统公共变量)
+        /// <summary>
+        /// `GetG` 的未命中值是 **-2**，不是 0。
+        /// sub_699198 一进门就 `0x6991BF BE FE FF FF FF mov esi,0xFFFFFFFE` 种下 -2，
+        /// 只有缓存命中或数据库查到才覆盖它，收尾 `0x6992B2 8B C6 mov eax,esi` 原样返回。
+        /// 缓存查找 sub_69B01C 自己的 miss 分支也是 -2（`0x69B040 B8 FE FF FF FF`）。
+        /// 脚本里的 `if GetG(a,b) = 0 then` 依赖这个区分——返回 0 会把判断整个反过来。
+        /// </summary>
+        private const int NativeGlobalVarMiss = -2;
+
+        /// <summary>
+        /// `GetG`/`SetG` 共有的 index 窗口 1..50，两侧都是先判范围再碰存储：
+        ///   GetG sub_699198  0x6991C4 `83 FB 01 cmp ebx,1`     / 0x6991C7 `0F 8C` jl  -> 0x699290
+        ///                    0x6991CD `83 FB 32 cmp ebx,0x32`  / 0x6991D0 `0F 8F` jg  -> 0x699290
+        ///   SetG sub_699310  0x6993FD `83 FE 01 cmp esi,1`     / 0x699400 `0F 8C` jl  -> 0x69949D
+        ///                    0x699406 `83 FE 32 cmp esi,0x32`  / 0x699409 `0F 8F` jg  -> 0x69949D
+        /// 50 就是底层 MySQL 表 `MirParams` 的列数 g1..g50，列名由
+        /// 0x6992C4 `'g'` + IntToStr(index) 拼出，行键是 ParamNo。
+        /// </summary>
+        private const int NativeGlobalVarMinIndex = 1;
+        private const int NativeGlobalVarMaxIndex = 50;
+
+        // 扁平键 = ParamNo * 100 + index：
+        //   0x6991DF  6B 55 FC 64  imul edx,[ebp-4],0x64   ; ParamNo * 100
+        //   0x6991E3  03 D3        add  edx,ebx            ; + index
+        // 注意 GameSvrConfig.cs 上 GlobalVal 那句 "nTaskNo*1000+nFieldNo" 的注释与这里的
+        // 字节矛盾，乘数是 100 不是 1000。
         public PasValue GetGlobalVar(int group, int index)
         {
-            if (M2Share.g_Config == null) return PasValue.FromInt(0);
+            if (index < NativeGlobalVarMinIndex || index > NativeGlobalVarMaxIndex)
+                return PasValue.FromInt(NativeGlobalVarMiss);
+            if (M2Share.g_Config == null) return PasValue.FromInt(NativeGlobalVarMiss);
             int flat = group * 100 + index;
-            if (flat < 0 || flat >= M2Share.g_Config.GlobalVal.Length) return PasValue.FromInt(0);
+            // 越出数组 = 原生那张表里没有这个 ParamNo 行，查询返回 0 行，esi 保持 -2。
+            if (flat < 0 || flat >= M2Share.g_Config.GlobalVal.Length)
+                return PasValue.FromInt(NativeGlobalVarMiss);
             return PasValue.FromInt(M2Share.g_Config.GlobalVal[flat]);
         }
 
         public bool SetGlobalVar(int group, int index, PasValue value)
         {
+            if (index < NativeGlobalVarMinIndex || index > NativeGlobalVarMaxIndex)
+                return false;
             if (M2Share.g_Config == null) return false;
             int flat = group * 100 + index;
             if (flat >= 0 && flat < M2Share.g_Config.GlobalVal.Length)
