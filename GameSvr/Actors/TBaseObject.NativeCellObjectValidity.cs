@@ -82,8 +82,16 @@ namespace GameSvr
         /// 注意 <c>POject = nil</c> 与 <c>Valid = False</c> 是<b>两条不同的臂</b>：前者
         /// 只跳过、不摘链。故本方法对 null / 非 <see cref="TBaseObject"/> 载荷一律返回
         /// false（= 不摘链），只有「确实是一个 actor 且该 actor 无效」才返回 true。
+        ///
+        /// 族 A（格子链清道夫）的六个原生站点形状逐字节相同，都用这一条：
+        /// <c>0x7777EA</c> <c>TEnvironment.AddToMap</c>（sub_7776EC）、
+        /// <c>0x778030</c> <c>TEnvironment.CanWalk</c>（sub_777EF8）、
+        /// <c>0x7788F9</c> <c>TEnvironment.GetMovObjCount</c>（sub_778858）、
+        /// <c>0x7798C0</c> <c>TEnvironment.CreatureMoveTo</c>（sub_7797CC）、
+        /// <c>0x77A2EB</c> <c>TEnvironment.DoPlayerSearchViewRange</c>（sub_77A178）、
+        /// <c>0x77AB07</c> <c>TEnvironment.DoSearchTargetList</c>（sub_77A990）。
         /// </summary>
-        protected static bool IsNativeStaleCellActor(object cellObj)
+        public static bool IsNativeStaleCellActor(object cellObj)
         {
             return cellObj is TBaseObject actor && !IsNativeCellObjectValid(actor);
         }

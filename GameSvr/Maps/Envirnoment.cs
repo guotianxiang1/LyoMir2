@@ -399,10 +399,37 @@ namespace GameSvr
                             }
                             else
                             {
-                                for (var i = 0; i < MapCellInfo.Count; i++)
+                                var i = 0;
+                                while (i < MapCellInfo.Count)
                                 {
                                     if (MapCellInfo.ObjList[i].CellType == CellType.OS_MOVINGOBJECT)
                                     {
+                                        // MOVE-31 复核 —— 族 A 摘链臂，原生 sub_7797CC
+                                        // （自述名 TEnvironment.CreatureMoveTo）的占位扫描：
+                                        //   007798A4  8B 45 EC / 80 38 01   cmp byte [node],1
+                                        //   007798AA  0F 85 FC 00 00 00     jne 0x7799AC   ; 非 actor -> 下一节点
+                                        //   007798B0  8B 45 EC / 8B 70 04   esi := node^.POject
+                                        //   007798B6  85 F6 / 0F 84 EE 00.. POject = nil -> 只跳过，不摘链
+                                        //   007798C0  E8 9F C4 FE FF        call 0x765D64  ; 有效性谓词
+                                        //   007798C5  84 C0
+                                        //   007798C7  0F 85 CB 00 00 00     jne 0x779998   ; 有效 -> call [POject.VMT+0]
+                                        //   007798CD-007798DC  摘链：prev^.Next := next / cell^.head := next
+                                        //   007798E7  B3 01                 bl := 1（抑制 prev 前进）
+                                        //   ...       记 [Exception] 日志后跳 0x7799AC —— continue，不占位
+                                        // 旧账本 MOVE-31 判「可观测等价、不改」，前提是三项合取在 C#
+                                        // 结构上不可达；但 m_sCharName 无初值、默认 null，只是「实践上
+                                        // 不可达」。故按 SPWN-56 同样处理：谓词为假就摘链，不夺走任何
+                                        // 已命名 + 已入图的活体。
+                                        if (TBaseObject.IsNativeStaleCellActor(MapCellInfo.ObjList[i].CellObj))
+                                        {
+                                            MapCellInfo.Remove(i);
+                                            if (MapCellInfo.Count > 0)
+                                            {
+                                                continue;
+                                            }
+                                            ReleaseCellObjectList(nX, nY);
+                                            break;
+                                        }
                                         BaseObject = (TBaseObject)MapCellInfo.ObjList[i].CellObj;
                                         if (BaseObject != null)
                                         {
@@ -413,6 +440,7 @@ namespace GameSvr
                                             }
                                         }
                                     }
+                                    i++;
                                 }
                             }
                         }
@@ -600,11 +628,35 @@ namespace GameSvr
                 result = true;
                 if (!boFlag && MapCellInfo.ObjList != null)
                 {
-                    for (var i = 0; i < MapCellInfo.Count; i++)
+                    var i = 0;
+                    while (i < MapCellInfo.Count)
                     {
                         OSObject = MapCellInfo.ObjList[i];
                         if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                         {
+                            // 战神 sub_777EF8（自述名 TEnvironment.CanWalk，见 0x778030 失败臂拼的
+                            // "[Exception]: TEnvironment.CanWalk Pt.POject.CName = 空 Pt = "）：
+                            //   00778014  8B 45 E8 / 80 38 01     cmp byte [node],1      ; CellType
+                            //   0077801A  0F 85 D1 00 00 00       jne 0x7780F1           ; 非 actor -> 下一节点
+                            //   00778020  8B 45 E8 / 8B 70 04     esi := node^.POject
+                            //   00778026  85 F6 / 0F 84 C3 00..   POject = nil -> 只跳过，不摘链
+                            //   0077802E  8B C6
+                            //   00778030  E8 2F DD FE FF          call 0x765D64          ; 有效性谓词
+                            //   00778035  84 C0
+                            //   00778037  0F 85 A1 00 00 00       jne 0x7780DE           ; 有效 -> 占位判定
+                            //   0077803D-0077804C  摘链：prev^.Next := next / cell^.head := next
+                            //   00778057  B3 01                   bl := 1（抑制 prev 前进）
+                            //   ...       记 [Exception] 日志后跳尾部 —— 是 continue，不是 break
+                            if (TBaseObject.IsNativeStaleCellActor(OSObject.CellObj))
+                            {
+                                MapCellInfo.Remove(i);
+                                if (MapCellInfo.Count > 0)
+                                {
+                                    continue;
+                                }
+                                ReleaseCellObjectList(nX, nY);
+                                break;
+                            }
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
@@ -615,6 +667,7 @@ namespace GameSvr
                                 }
                             }
                         }
+                        i++;
                     }
                 }
             }
@@ -1545,15 +1598,39 @@ namespace GameSvr
             MapCellinfo MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
             if (mapCell && MapCellInfo.ObjList != null)
             {
-                for (var i = 0; i < MapCellInfo.Count; i++)
+                var i = 0;
+                while (i < MapCellInfo.Count)
                 {
                     CellObject OSObject = MapCellInfo.ObjList[i];
                     if (OSObject.CellType != CellType.OS_MOVINGOBJECT)
                     {
+                        i++;
                         continue;
+                    }
+                    // 族 A 摘链臂。sub_778858 与 CanWalk / DoPlayerSearchViewRange 逐字节同形：
+                    //   007788E0  8B 45 EC / 80 38 01     cmp byte [node],1
+                    //   007788E3  0F 85 F0 00 00 00       jne 0x7789D9      ; 非 actor -> 下一节点
+                    //   007788E9  8B 45 EC / 8B 70 04     esi := node^.POject
+                    //   007788EF  85 F6 / 0F 84 E2 00..   POject = nil -> 只跳过，不摘链
+                    //   007788F9  E8 66 D4 FE FF          call 0x765D64     ; 有效性谓词
+                    //   007788FE  84 C0
+                    //   00778900  0F 85 A0 00 00 00       jne 0x7789A6      ; 有效 -> 计数条件
+                    //   00778906-00778915  摘链：prev^.Next := next / cell^.head := next
+                    //   00778920  B3 01                   bl := 1（抑制 prev 前进）
+                    //   ...       记 [Exception] 日志后跳尾部 —— continue，不计数
+                    if (TBaseObject.IsNativeStaleCellActor(OSObject.CellObj))
+                    {
+                        MapCellInfo.Remove(i);
+                        if (MapCellInfo.Count > 0)
+                        {
+                            continue;
+                        }
+                        ReleaseCellObjectList(nX, nY);
+                        break;
                     }
                     if (!(OSObject.CellObj is TBaseObject BaseObject))
                     {
+                        i++;
                         continue;
                     }
                     if (!BaseObject.m_boGhost && BaseObject.bo2B9 &&
@@ -1563,6 +1640,7 @@ namespace GameSvr
                     {
                         result++;
                     }
+                    i++;
                 }
             }
             return result;
