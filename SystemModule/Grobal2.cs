@@ -798,12 +798,6 @@ namespace SystemModule
         public const int CM_HERO_SKILL_HOTKEY = 1109;    // Enable or disable a hero skill
         public const int CM_SECHERO_PRACTICE = 1216;
 
-        // Mobile protocol constants (from 战神 capture)
-        public const int SM_MOBILE_SURROUNDING = 0x3A;   // 58 - entity position sync
-        public const int SM_MOBILE_STATUSCHANGE = 0x1C;   // 28 - entity appear/disappear
-        public const int SM_MOBILE_ITEMS = 0x3E;          // 62 - backpack/equipment
-        public const int SM_MOBILE_NPCDIALOG = 0x4A;      // 74 - NPC dialog HTML
-
         // === 4000-series Mobile Login Protocol (战神 client) ===
         public const int SM_SERVER_LIST = 4001;   // Server sends server list to client
         public const int CM_SELECT_SERVER = 4002; // Client selects server
