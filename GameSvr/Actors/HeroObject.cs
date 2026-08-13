@@ -12,7 +12,7 @@ namespace GameSvr
     /// attacks the master's target, and has its own magic list, bag, and equipment.
     /// Handles all 43 SM_HERO_* and 22 CM_HERO_* protocol messages.
     /// </summary>
-    public class HeroObject : AnimalObject
+    public partial class HeroObject : AnimalObject
     {
         /// <summary>Character name of the master player.</summary>
         public string MasterName;
