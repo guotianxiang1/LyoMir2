@@ -366,13 +366,30 @@ namespace GameSvr.PasEngine
             return seconds > int.MaxValue / 1000 ? int.MaxValue : seconds * 1000;
         }
 
+        /// <summary>
+        /// `PlayDice` sub_645200 seeds its 10-slot buffer from GROUP-0 `GetV`, not from
+        /// the keyed bank:
+        ///   0x64522F  33 F6           xor esi, esi        ; i = 0
+        ///   0x645234  8D 4E 01        lea ecx, [esi+1]    ; index = i + 1
+        ///   0x645237  33 D2           xor edx, edx        ; group  = 0
+        ///   0x64523B  E8 A4 9F 09 00  call 0x6DF1E4       ; GetV(0, i+1)
+        ///   0x645246  83 FE 0A        cmp esi, 0x0A       ; ten slots, index 1..10
+        /// and GetV routes group 0 to the inline region (0x6DF203 `test esi,esi` ->
+        /// 0x6DF20F `mov eax,[ebx+eax*4+0x808]`), which C# models as m_ScriptVGroup0.
+        /// Reading m_ScriptVVars[1..10] instead can never hit: a keyed entry is filed
+        /// under group*1000+index (sub_6E42CC `imul eax,edx,0x3E8 / add eax,ecx`), so a
+        /// key below 1000 requires group 0 - and group-0 writes go to the inline array.
+        /// </summary>
         private static int PackDiceValues(TPlayObject player, int firstIndex, int count)
         {
             uint packed = 0;
+            var slots = player.m_ScriptVGroup0;
             for (var offset = 0; offset < count; offset++)
             {
-                var value = 0;
-                player.m_ScriptVVars?.TryGetValue(firstIndex + offset, out value);
+                var index = firstIndex + offset;
+                var value = slots != null && index >= 1 && index < slots.Length
+                    ? slots[index]
+                    : 0;
                 packed |= (uint)(byte)value << (offset * 8);
             }
             return unchecked((int)packed);
