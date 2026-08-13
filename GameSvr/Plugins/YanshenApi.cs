@@ -414,7 +414,15 @@ namespace GameSvr.Plugins
             if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return;
             var item = _player.m_UseItems[bodyPos];
             if (item == null) return;
-            SetElementValue(item, elementType, value);
+            // 负值在写入前就被拒掉，旧值保持不变：1005E8D5 85FF test edi,edi / 0F884601 js。
+            if (value < 0) return;
+            // 类型 <1 走 ys1 的 dword 槽，>17 夹到 17 而不是拒绝：
+            // 1005E8DD 83FE01 cmp esi,1 / 0F8C2201 jl；1005E8E6 83FE11 cmp esi,0x11 /
+            // 7E07 jle / BE11000000 mov esi,0x11；1005E8F2 83FE01 / 0F840D01 je。
+            if (elementType < 1) elementType = 1;
+            else if (elementType > 17) elementType = 17;
+            // 2..17 是单字节槽，原生 1005E9FA 880C10 mov byte[eax+edx],cl 直接截断低位。
+            SetElementValue(item, elementType, elementType == 1 ? value : (byte)value);
         }
 
         /// <summary>获取身体部位装备元素值</summary>
