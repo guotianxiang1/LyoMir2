@@ -175,7 +175,10 @@ namespace GameSvr
                         if (List28 != null)
                         {
                             sLine = HUtil32.GetValidStr3(sLine, ref sSubName, new[] { " ", "\t" });
-                            nItemCount = HUtil32.Str_ToInt(sLine.Trim(), 1);
+                            // 0x74DA19 mov edx,1 / 0x74DA21 call 0x40CA18(StrToIntDef)：解析失败回落 1。
+                            // HUtil32.Str_ToInt 的 out 参数会被 int.TryParse 覆写成 0，def 形同虚设，
+                            // 所以这里不能走它——写不出数量的配方行会得到 need=0，材料白送。
+                            nItemCount = int.TryParse(sLine.Trim(), out var parsedCount) ? parsedCount : 1;
                             List28.Add(new TMakeItem() { ItemName = sSubName, ItemCount = nItemCount });
                         }
                     }
