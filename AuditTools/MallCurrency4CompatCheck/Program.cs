@@ -99,7 +99,7 @@ try
         var production = LoadAll(load, manager, productionPath);
         productionCount = production.Count;
         Equal(10, productionCount, "production YBShopScript.pas item count");
-        Equal("贵族斗笠", production[0].ItemName, "prod[0] name");
+        EqualStr("贵族斗笠", production[0].ItemName, "prod[0] name");
         Equal(0, production[0].Category, "prod[0] 装饰 is first-seen category 0");
         Equal(222, production[0].Id, "prod[0] vGoodsIdx");
         Equal(2000, production[0].Price, "prod[0] vSrcPrice");
@@ -330,7 +330,7 @@ static void Equal(int expected, int actual, string message)
         throw new InvalidOperationException($"{message}: expected {expected}, actual {actual}");
 }
 
-static void Equal(string expected, string actual, string message)
+static void EqualStr(string expected, string actual, string message)
 {
     if (!string.Equals(expected, actual, StringComparison.Ordinal))
         throw new InvalidOperationException($"{message}: expected {expected}, actual {actual}");
