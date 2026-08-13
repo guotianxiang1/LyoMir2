@@ -1935,5 +1935,56 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === SM missing batch 5 (rank 106-140) ===========================================
+        // Highest 35 by value of the 140 class-(c) native wire-SM idents
+        // (staging/_sm1_work/classes.txt) that fire through a real send slot in
+        // flat_image.bin (ImageBase 0x400000) yet had NO C# constant of any prefix.
+        // Send builders (frame + body decoded byte-for-byte with capstone from each
+        // send site) live in GameSvr/Actors/TBaseObject.SmIdent_Sm5.cs. Send-slot
+        // conventions (reverified against the earlier batches' exemplars and the two
+        // member-broadcast wrappers 0x705954 [0x250] / 0x7059D0 [0x254]):
+        //   [obj+0x250] SendDefMessage: push Param,Tag,Series,sMsg ; ecx=Recog dx=ident
+        //   [obj+0x254] SendSocket:     push Param,Tag,Series,Buf,Len ; ecx=Recog dx=ident
+        // Eight idents whose body cannot be evaluated at the send slot (locally
+        // composed record/struct buffers with uninitialised ShortString padding, an
+        // opaque per-record serializer, or a non-standard virtual slot) are registered
+        // here but marked BLOCKED and have NO builder (fail-closed):
+        //   SM_4363, SM_4441, SM_4442, SM_4443, SM_4612, SM_4626, SM_4646, SM_4647.
+        public const int SM_4349 = 4349; // 0x10FD [obj+0x250] empty; RM arm Recog=nParam1 Param=wParam Tag=LoWord(nParam2) Series=HiWord(nParam2) @0x6B5215
+        public const int SM_4350 = 4350; // 0x10FE [obj+0x250] empty; RM arm (same 5-tuple as 4349) @0x68980D
+        public const int SM_4351 = 4351; // 0x10FF [obj+0x250] empty; Recog=arg(eax), all-0; gated target!=nil/not-ghost/[t+0x73]==0 @0x647F38
+        public const int SM_4352 = 4352; // 0x1100 [obj+0x250] empty; Recog=self, all-0 @0x6E616A
+        public const int SM_4361 = 4361; // 0x1109 [obj+0x250] empty; Recog=arg(eax), all-0 (sibling of 4348/4360 helper family) @0x64013C
+        public const int SM_4363 = 4363; // 0x110B BLOCKED: send via [vmt+0xE0] non-standard 6-arg slot (unproven signature, cf SM_554); Buf=[rec+0x10] Len=word[rec+0x14] + extra push 1 @0x767160
+        public const int SM_4407 = 4407; // 0x1137 [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=wParam[rec+2], Param/Tag/Series=0 @0x6B60F2
+        public const int SM_4408 = 4408; // 0x1138 [obj+0x250] empty; Recog=esi(0x7487A8 result), all-0 (flag==0 arm) @0x6F3897
+        public const int SM_4409 = 4409; // 0x1139 [obj+0x250] empty; Recog=esi(0x748A18 result), all-0 (flag==0 arm) @0x6F393A
+        public const int SM_4410 = 4410; // 0x113A [obj+0x250] empty; Recog=esi(0x7487A8 result), all-0 (flag!=0 arm) @0x6F387D
+        public const int SM_4411 = 4411; // 0x113B [obj+0x250] empty; Recog=esi(0x748A18 result), all-0 (flag!=0 arm) @0x6F3920
+        public const int SM_4441 = 4441; // 0x1159 BLOCKED: [obj+0x254] 36-byte composed struct (name1 SS[15]@0x00, word[src+0x18]@0x10, byte[src+0x1A]@0x12, name2 SS[15]@0x13 from by-name lookup, flag@0x23); ShortString tail padding uninit @0x6FF4D9
+        public const int SM_4442 = 4442; // 0x115A BLOCKED: [obj+0x254] 22-byte composed struct (name SS[15]@0x00, word[src+0x18]@0x10, byte[src+0x1A]@0x12, byte[src+0x1B]@0x13, online flag@0x14, pad@0x15); SS padding + pad uninit @0x6FFE30
+        public const int SM_4443 = 4443; // 0x115B BLOCKED: [obj+0x254] 20-byte composed struct (name SS[15]@0x00, word[src+0x18]@0x10, online flag@0x12, pad@0x13); SS padding + pad uninit @0x700918
+        public const int SM_4444 = 4444; // 0x115C [obj+0x250] sMsg text=char-name([tgt+0x106]); Recog=0 Param=byte[rec+4] (per-target loop) @0x6FE929
+        public const int SM_4445 = 4445; // 0x115D [obj+0x250] sMsg text=char-name([tgt+0x106]); Recog=0 Param=byte[rec+4] (per-target loop) @0x6FE865
+        public const int SM_4446 = 4446; // 0x115E [obj+0x250] empty; Recog=LoWord(0x712BE4 result), all-0; gated [self+0x192C]!=0 @0x6F75EF
+        public const int SM_4455 = 4455; // 0x1167 [obj+0x250] sMsg text=char-name; Recog=0 Param=(stat&0x7F) Tag=(stat&0x7F) (per-nearby loop) @0x6A89E0
+        public const int SM_4456 = 4456; // 0x1168 [obj+0x250] sMsg text=char-name; Recog=0 Param=(stat&0x7F) Tag=byte @0x6A8AAB
+        public const int SM_4457 = 4457; // 0x1169 [obj+0x250] empty; Recog=0 Param=byte(arg dl) @0x6A8C9F
+        public const int SM_4458 = 4458; // 0x116A [obj+0x250] sMsg text=char-name; Recog=0 Param=byte(arg cl) @0x6A8D22
+        public const int SM_4459 = 4459; // 0x116B [obj+0x250] sMsg text=char-name; Recog=0 Param=byte(arg cl) @0x6A8DC2
+        public const int SM_4469 = 4469; // 0x1175 [obj+0x250] sMsg text=char-name([arg+0x106]); all-0 frame @0x6F788B
+        public const int SM_4470 = 4470; // 0x1176 [obj+0x250] sMsg text=char-name([arg+0x106]); all-0 frame @0x6F78F3
+        public const int SM_4480 = 4480; // 0x1180 member-broadcast wrapper 0x705954; sMsg text = "与"+<name>+"行会的行会战结束"; all-0 frame @0x7068AF
+        public const int SM_4496 = 4496; // 0x1190 [obj+0x250] empty; Recog=esi(runtime, -1 default / 0x4177C0 result), all-0 @0x6FAD1B
+        public const int SM_4499 = 4499; // 0x1193 [obj+0x250] sMsg text=esi(string arg); Recog=edi(int arg), all-0 @0x6FBD25
+        public const int SM_4612 = 4612; // 0x1204 BLOCKED: [obj+0x254] count*17 record array (byte + SS[15] name) copied by loop from unmapped source dyn-array; SS padding uninit; Len=[src+8]*17 @0x6F781C
+        public const int SM_4614 = 4614; // 0x1206 member-broadcast wrapper 0x7059D0 ([0x254] variant); body=8 bytes (two dwords); Param=0 Tag=0 Series=1 Recog=0 @0x70214D
+        public const int SM_4626 = 4626; // 0x1212 BLOCKED: [obj+0x254] count*0x40 record array filled by opaque serializer 0x7060B8; Buf=[ebp-0x1C] Len=[ebp-0x14]*0x40 @0x6AE363
+        public const int SM_4638 = 4638; // 0x121E [obj+0x250] empty; Recog=0 all-0; sent to edx target!=nil @0x64E832
+        public const int SM_4646 = 4646; // 0x1226 BLOCKED: [obj+0x254] Delphi dyn-array (elem filled by 0x69C57C+0x403260); Buf=[ebp-4] Len=[self+0x658] element-count (byte-length unresolved) @0x6FBC4C
+        public const int SM_4647 = 4647; // 0x1227 BLOCKED: [obj+0x254] 24-byte record via 0x69C514 (SS[20]@0x00..0x14, gap@0x15, word@0x16); gap uninit @0x6FB7FF
+        public const int SM_4649 = 4649; // 0x1229 [obj+0x250] empty; Recog=esi(0/1 from 0x69C47C), all-0 @0x6FBB5F
+        public const int SM_4650 = 4650; // 0x122A [obj+0x250] empty; Recog=[ebp-4](runtime), all-0 @0x6FB610
     }
 }
