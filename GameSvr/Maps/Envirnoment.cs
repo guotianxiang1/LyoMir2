@@ -378,7 +378,7 @@ namespace GameSvr
                                         BaseObject = (TBaseObject)MapCellInfo.ObjList[i].CellObj;
                                         if (BaseObject != null)
                                         {
-                                            if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                            if (BaseObject.IsNativeCellBlocking())
                                             {
                                                 bo1A = false;
                                                 break;
@@ -487,7 +487,7 @@ namespace GameSvr
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
-                                if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                if (BaseObject.IsNativeCellBlocking())
                                 {
                                     result = false;
                                     break;
@@ -532,7 +532,7 @@ namespace GameSvr
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
-                                if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                if (BaseObject.IsNativeCellBlocking())
                                 {
                                     result = false;
                                     break;
@@ -552,7 +552,7 @@ namespace GameSvr
 
         private bool IsRunBlockingObject(TBaseObject baseObject)
         {
-            if (baseObject == null || baseObject.m_boGhost || !baseObject.bo2B9 || baseObject.m_boDeath || baseObject.m_boFixedHideMode || baseObject.m_boObMode)
+            if (baseObject == null || !baseObject.IsNativeCellBlocking())
             {
                 return false;
             }
@@ -1395,7 +1395,7 @@ namespace GameSvr
                         BaseObject = (TBaseObject)OSObject.CellObj;
                         if (BaseObject != null)
                         {
-                            if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                            if (BaseObject.IsNativeCellBlocking())
                             {
                                 result++;
                             }

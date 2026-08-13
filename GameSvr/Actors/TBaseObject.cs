@@ -593,6 +593,53 @@ namespace GameSvr
             return false;
         }
 
+        /// <summary>
+        /// Native sub_765D94 (TPlayer VMT+0x00), the single predicate every cell
+        /// scan reaches when it asks "does this actor block the cell?". Native
+        /// defaults to passable and only zeroes the answer at the bottom, so the
+        /// blocking case is the whole conjunction:
+        /// <code>
+        /// 00765D9B  B3 01                 mov  bl,1               ; default passable
+        /// 00765D9D  80 7E 73 00           cmp  byte [esi+0x73],0  ; m_boGhost
+        /// 00765DA1  75 2A                 jne  0x765DCD
+        /// 00765DA3  80 BE E6 02 00 00 00  cmp  byte [esi+0x2E6],0 ; bo2B9
+        /// 00765DAA  74 21                 je   0x765DCD
+        /// 00765DAE  E8 F5 CF 00 00        call 0x772DA8           ; byte [eax+0x74] death
+        /// 00765DB5  75 16                 jne  0x765DCD
+        /// 00765DB7  80 BE E3 02 00 00 00  cmp  byte [esi+0x2E3],0 ; m_boFixedHideMode
+        /// 00765DBE  75 0D                 jne  0x765DCD
+        /// 00765DC2  E8 F1 D0 00 00        call 0x772EB8           ; pass-through grant
+        /// 00765DC9  75 02                 jne  0x765DCD
+        /// 00765DCB  33 DB                 xor  ebx,ebx            ; blocks
+        /// </code>
+        /// MOVE-33: the sixth term was missing in C#, which had inlined only the
+        /// m_boObMode half of 0x772EB8 and dropped the bodyState 0x3C half. The
+        /// expression was also copied five times inside Envirnoment.cs, so the
+        /// term is added here once instead.
+        /// </summary>
+        internal bool IsNativeCellBlocking()
+        {
+            return !m_boGhost && bo2B9 && !m_boDeath && !m_boFixedHideMode
+                   && !HasNativeCellPassThroughGrant();
+        }
+
+        /// <summary>
+        /// Native sub_772EB8, the unconditional pass-through grant consumed by
+        /// sub_765D94 at 0x765DC2. It is a disjunction of two terms:
+        /// <code>
+        /// 00772EBE  80 BB E2 02 00 00 00  cmp  byte [ebx+0x2E2],0 ; m_boObMode
+        /// 00772EC5  75 12                 jne  0x772ED9           ; -> TRUE
+        /// 00772EC7  B2 3C                 mov  dl,0x3C
+        /// 00772ECB  E8 90 FA FF FF        call 0x772960           ; InBodyState(0x3C)
+        /// 00772ED2  75 05                 jne  0x772ED9           ; -> TRUE
+        /// 00772ED4  33 C0                 xor  eax,eax            ; FALSE
+        /// </code>
+        /// </summary>
+        internal bool HasNativeCellPassThroughGrant()
+        {
+            return m_boObMode || HasNativeActiveState(0x3C);
+        }
+
         public bool m_boAutoChangeColor = false;
         public int m_dwAutoChangeColorTick = 0;
         public int m_nAutoChangeIdx = 0;
