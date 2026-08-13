@@ -808,7 +808,7 @@ namespace GameSvr
         /// </code>
         ///
         /// <c>sub_6D7788</c> is a one-line thunk: <c>mov dl,0x19 / call 0x772960</c>, i.e.
-        /// active-state 25, so it maps to <see cref="HasNativeActiveState"/>(25).
+        /// active-state 25, so it maps to <see cref="HasNativeActiveState(int)"/> with 25.
         ///
         /// What the exit skips is exactly the four scatter segments (exclusive chain
         /// @0x71FB2E, the monster's own table @0x71FCFF, world drop @0x71FEA7, gold
