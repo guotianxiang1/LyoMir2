@@ -30,7 +30,11 @@ namespace GameSvr
         // payloads).
         private void SendNativeLogonStateSync()
         {
-            var snapshot = BuildNativeTimedAbilitySnapshot();
+            // 3554 的构造在 TBaseObject.TimedAbility.cs 只保留一份实现。合并 w/m-sm-c 时
+            // 发现它与已在 master 的 BuildTimedAbilityListState 是同一功能的两份实现
+            // （同为 ident 0xDE2、同样遍历 [self+0xDC]、同样 10 字节记录），取了证据注释
+            // 更完整、且已有审计工具 NativeTimedAbilityListCheck 钉住的那份。
+            var snapshot = BuildTimedAbilityListState();
             SendSocket(snapshot.Header, snapshot.Body);
         }
     }
