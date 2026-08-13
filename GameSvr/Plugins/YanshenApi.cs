@@ -1482,7 +1482,7 @@ namespace GameSvr.Plugins
                         continue;
                     if (!RecycleTypeOpen(rule)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
-                    if (TryRecycleOne(item, itemName, rule)) recycled++;
+                    if (TryRecycleOne(item, itemName, rule, stackable)) recycled++;
                 }
                 return recycled;
             }
@@ -1557,15 +1557,25 @@ namespace GameSvr.Plugins
         /// 结算一件物品。产出与删除必须一起成立：任何一路产出算不出来、落不了账，
         /// 或者物品删不掉，都整件放弃，绝不出现删了不给的中间态。
         /// </summary>
-        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule)
+        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule,
+            bool stackable)
         {
             // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
             var rate = rule.HasRate ? ReadPlayerV(rule.RateGroup, rule.RateIndex) : 0;
-            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, out var yuanbao) ||
-                !TryScaleRecyclePrice(rule.Gold, rate, out var gold) ||
-                !TryScaleRecyclePrice(rule.LingFu, rate, out var lingFu) ||
-                !TryScaleRecyclePrice(rule.Exp, rate, out var exp) ||
-                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, out var other))
+
+            // 可叠材料整堆结算，件数取 word[item+0x26]（= Dura，本仓另有 0x63F454 商人基础价
+            // 与 0x740914 背包计数两处同址判例）。0x1006BB2F 66 8B 58 26 读它，
+            // 0x1006BC07 / 0x1006BC44 / 0x1006BC76 / 0x1006BCAE / 0x1006BCD6 五路各乘一次。
+            // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
+            // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
+            var count = stackable ? item.Dura : 1;
+
+            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
+                !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
+                !TryScaleRecyclePrice(rule.LingFu, rate, count, out var lingFu) ||
+                !TryScaleRecyclePrice(rule.Exp, rate, count, out var exp) ||
+                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, count,
+                    out var other))
                 return false;
 
             // 至少一路产出为正才允许删除：0x1006BB3B..0x1006BB57 是五连 test/cmp，
@@ -1640,11 +1650,17 @@ namespace GameSvr.Plugins
             return false;
         }
 
-        private static bool TryScaleRecyclePrice(int unitPrice, int rate, out int amount)
+        /// <summary>
+        /// 单价 → 实付。先按倍率缩放再乘件数，与 0x1006BBE9（缩放）后接 0x1006BC07（乘件数）
+        /// 的次序一致。原生两步都是 32 位 imul，溢出静默截断；这里放宽到 64 位并在越界时
+        /// 整件放弃，方向上只会少删不会错付。
+        /// </summary>
+        private static bool TryScaleRecyclePrice(int unitPrice, int rate, int count,
+            out int amount)
         {
             amount = 0;
             if (unitPrice <= 0) return true;
-            var scaled = rate > 0 ? (long)unitPrice * rate / 100 : unitPrice;
+            var scaled = (rate > 0 ? (long)unitPrice * rate / 100 : unitPrice) * count;
             if (scaled < 0 || scaled > int.MaxValue) return false;
             amount = (int)scaled;
             return true;
