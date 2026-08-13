@@ -178,8 +178,6 @@ namespace GameSvr
         /// leaving the node list untouched; making it unassignable turns every
         /// one of those into a compile error rather than a silent divergence.
         /// </summary>
-        private LegacyStatusTimeView _legacyStatusTimeView;
-
         public LegacyStatusTimeView m_wStatusTimeArr =>
             _legacyStatusTimeView ??= new LegacyStatusTimeView(this);
 
