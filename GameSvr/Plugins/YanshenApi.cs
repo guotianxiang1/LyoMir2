@@ -3380,7 +3380,11 @@ namespace GameSvr.Plugins
         public bool IsPortableStorage() => Enabled("随身仓库");
         public bool IsRandomExtreme() => Enabled("随机极品");
         public bool IsGiveExtreme() => Enabled("give极品");
-        public int MaxEquipCount() { var v = ParamS("最大装备数量"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // 0x100B9D3A `A2 6C FF 73 00` overwrites the imm8 of host
+        // 0x0073FF69 `83 7D F4 02 cmp dword [ebp-0xc],2`. Plugin does
+        // `atoi(最大装备数量); dec eax` then writes al, so the compare
+        // immediate is the low 8 bits of (N-1), sign-extended by `cmp`.
+        public int MaxEquipCount() => ParamAtoi("最大装备数量", 3);
 
         // ── Equipment stat param readers (武器/衣服/头盔/项链/手镯/戒指) ──
         // 武器
@@ -3507,7 +3511,7 @@ namespace GameSvr.Plugins
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");
-        public bool IsPlayerDropRate() => Enabled("人物爆率调整");
+        public bool IsPlayerDropRate() => PatchToggleOn("人物爆率调整");
         public int PlayerLv1() => GetParamInt("人物等级1_值", 35);
         public int PlayerLv2() => GetParamInt("人物等级2_值", 40);
         public int PlayerLv3() => GetParamInt("人物等级3_值", 48);
@@ -3596,9 +3600,15 @@ namespace GameSvr.Plugins
         public bool IsMonsterDropB() => Enabled("怪物爆率B_值");
         public bool IsMonsterDropK() => Enabled("怪物爆率K_值");
 
-        // ── Red/Green name K值 params ──
-        public int RedNameK() { var v = ParamS("红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
-        public int NormalK() { var v = ParamS("非红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // ── Red/Green name K值 params (patch immediates, not locale parse) ──
+        // 0x100B9CCC `A3 BB FC 73 00` -> imm32 of 0x0073FCB8
+        // `C7 45 F8 15 00 00 00 mov dword [ebp-8],0x15`. Full dword, no wrap.
+        public int RedNameK() => ParamAtoi("红名K值", 21);
+        // 0x100B9C5E `A2 C9 FC 73 00` -> imm8 of 0x0073FCC7
+        // `83 C0 5A add eax,0x5A`. `add eax,imm8` sign-extends, so A
+        // survives only as a signed byte. No `cmp 0x7F` clamp before the write.
+        public int NormalK() =>
+            unchecked((sbyte)ParamAtoi("非红名K值", 90));
 
         // ── Loop time ──
         public bool IsLoopTimeVal() => Enabled("循环时间_值");
@@ -3777,11 +3787,23 @@ namespace GameSvr.Plugins
         // 效果无字节证据（插件加壳），按 fail-closed 不实现。
         // 开关本身仍可由 IsLevelMute() 读取。
 
-        /// <summary>人物爆率调整 — 获取爆率倍率</summary>
-        public double GetPlayerDropRateMultiplier()
+        /// <summary>
+        /// 人物爆率调整 is a code-patch override of THumanKind's equip-drop
+        /// worker <c>sub_73FC70</c>, not a runtime multiplier. Gated by
+        /// <c>[edi+0x5D0]</c> at 0x100B9BBA (that slot is 人物爆率调整:
+        /// loader 0x100BABEC stores the converted toggle there). Off means
+        /// the host immediates stay at stock 21 / 90 / 2.
+        /// </summary>
+        public bool TryGetDeathEquipDropPatch(bool redName, out int denominator, out int capImm)
         {
-            if (!Enabled("人物爆率调整")) return 1.0;
-            return 1.0; // Default multiplier, overridden by script
+            denominator = 0;
+            capImm = 2;
+            if (!PatchToggleOn("人物爆率调整")) return false;
+            denominator = redName ? RedNameK() : NormalK();
+            // 0x73FD0B cmp [ebp-8],0 / jge / xor — native floors before Random.
+            if (denominator < 0) denominator = 0;
+            capImm = unchecked((sbyte)(MaxEquipCount() - 1));
+            return true;
         }
 
         /// <summary>脚本控制人物爆率</summary>
