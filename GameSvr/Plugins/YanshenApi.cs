@@ -1168,7 +1168,6 @@ namespace GameSvr.Plugins
             int canl, int types, int cuttingV, int lei, int effect, int mgId,
             int undead, int doubling, int attId, int delay)
         {
-            _ = lei;    // D-17：本实现体不读 lei，防御属性由 types 决定
             _ = effect; // F-6：特效广播 0x76920C 未移植
             if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
 
@@ -1181,8 +1180,18 @@ namespace GameSvr.Plugins
             {
                 // 方框路径 0x1006E38E 起：`[ebp-0x3C]` 在 0x1006E534 被清 0 挪作它用，
                 // 所以 AttactId 在这条路上根本不参与。
+                // 0x1006E38E `8B 75 98 / 83 FE 01 / 75 0E` —— lei == 1 时
+                // 0x1006E396 把方框中心的 [ebp-0x44]/[ebp-0x20] 覆盖成
+                // [ebp-0x24]/[ebp-0x28]，而这两槽由 Themida 搬迁块写入：
+                //   10CB4E0E 89 45 DC        [ebp-0x24] = eax = [ebx+0x12C] = caster.CurrX
+                //   10CB4E13 8B 83 30 01 …   [ebp-0x28] =       [ebx+0x130] = caster.CurrY
+                // 与切割 0x1006ED9E 完全同形；随后 0x1006E3E2 还有一支
+                // `cmp esi,1 / jne 0x1006E534` 的 8 向朝向筛格，同属 F-5 未移植，
+                // 所以 lei == 1 时这里打满方框，比原生多打几格。
+                int cx = lei == 1 ? _player.m_nCurrX : tx;
+                int cy = lei == 1 ? _player.m_nCurrY : ty;
                 int last = 0;
-                foreach (var t in NativeCollectAreaTargets(tx, ty, range))
+                foreach (var t in NativeCollectAreaTargets(cx, cy, range))
                 {
                     // 0x1006E5E3 / 0x1006E5ED 都是 `je/jne 下一个`，不返回错误码
                     if (!NativeClassFilterAccepts(filter, t)) continue;
@@ -1292,7 +1301,11 @@ namespace GameSvr.Plugins
             return dmg;                                            // 1006E386 返回钳后的 dmg
         }
 
-        /// <summary>ys_MyJn_plus2 — 第 10 参 lei（本实现体不读，见 D-17）</summary>
+        /// <summary>
+        /// ys_MyJn_plus2 — 第 10 参 lei。它**不参与选攻防属性**（那是 types 的活），
+        /// 只在 `round &gt; 0` 的方框路径上把圆心从 (TargetX,TargetY) 换成施法者
+        /// （0x1006E38E `8B 75 98 / 83 FE 01`），与切割 0x1006ED9E 同形。
+        /// </summary>
         public int CustomDamage2(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int lei)
         {
             if (!Enabled("自定义伤害_plus")) return 0;
