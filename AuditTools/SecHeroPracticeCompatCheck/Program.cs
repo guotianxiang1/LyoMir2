@@ -12,9 +12,7 @@ const string originalSha256 =
     "CC505716AEB2FDB09C96B805D06C1DDDCD70DB0F331EF42AE1338C71766B452F";
 var originalM2 = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
     ? args[0]
-    : Environment.GetEnvironmentVariable("LYOMIR_ORIGINAL_M2") ??
-      "C:\\Users\\Administrator\\Desktop\\\u4E09\u9F99\u4F4D\\" +
-      "\u4ED9\u7F18\u590D\u5DE50.3\u5929\u9F99\\mud2.0\\Mir200\\Gs1\\M2Server.exe";
+    : Environment.GetEnvironmentVariable("LYOMIR_ORIGINAL_M2") ?? ResolveOriginalM2();
 if (!File.Exists(originalM2))
 {
     // Absence of the golden binary says nothing about the C# port, so this is
@@ -71,6 +69,30 @@ void VerifyInterval(int nowTick, int lastTick, bool expected, string scenario)
 {
     var actual = (bool)intervalMethod.Invoke(null, new object[] { nowTick, lastTick })!;
     Equal(expected, actual, scenario);
+}
+
+/// <summary>
+/// The operator Desktop tree this used to name is not in the repo and is not on
+/// this machine, so the check always took the exit-2 INCOMPLETE branch and proved
+/// nothing. staging/ys207_original_capture/Mir200/GS1/M2Server.exe is the same
+/// 7774208-byte binary and hashes to the CC505716... the check demands, so it is
+/// searched first. The SHA256 gate below is unchanged and still decides.
+/// </summary>
+static string ResolveOriginalM2()
+{
+    foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+    {
+        for (var dir = new DirectoryInfo(start); dir != null; dir = dir.Parent)
+        {
+            var captured = Path.Combine(dir.FullName, "staging",
+                "ys207_original_capture", "Mir200", "GS1", "M2Server.exe");
+            if (File.Exists(captured))
+                return captured;
+        }
+    }
+
+    return "C:\\Users\\Administrator\\Desktop\\\u4E09\u9F99\u4F4D\\"
+        + "\u4ED9\u7F18\u590D\u5DE50.3\u5929\u9F99\\mud2.0\\Mir200\\Gs1\\M2Server.exe";
 }
 
 static void VerifyProtocolSource()
