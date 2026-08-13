@@ -90,8 +90,8 @@ namespace GameSvr
 
             SetNativeColdTime(NativeSkill168ColdTimeKey,
                 NativeSkill168CooldownMilliseconds, now);
-            m_nCurrX = targetX;
-            m_nCurrY = targetY;
+            m_nCurrX = (short)targetX;
+            m_nCurrY = (short)targetY;
             // VMT+0xE0 ident 0xDE5 (3557) with nParam=0x10A is a SendRefMsg
             // broadcast, not the +0x250 wire slot. No C# RM→SM case exists
             // for 3557; omitted rather than invented.
