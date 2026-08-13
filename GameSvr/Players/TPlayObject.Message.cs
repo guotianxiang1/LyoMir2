@@ -1999,6 +1999,11 @@ namespace GameSvr
                     if (ProcessMsg.wIdent == Grobal2.RM_GUILDMESSAGE
                         && (m_dwChatShieldMask & 0x08u) != 0)
                         break;
+                    // Native tag 10099 owns jump-table slot 99 at 0x6B3F0F+99*4, and that
+                    // slot points at the default label 0x6B6241 - the arm discards the
+                    // message without sending anything.
+                    if (ProcessMsg.wIdent == Grobal2.RM_MOVEMESSAGE)
+                        break;
                     switch (ProcessMsg.wIdent)
                     {
                         case Grobal2.RM_HEAR:
@@ -2036,9 +2041,6 @@ namespace GameSvr
                             break;
                         case Grobal2.RM_MERCHANTSAY:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MERCHANTSAY, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
-                            break;
-                        case Grobal2.RM_MOVEMESSAGE:
-                            this.m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MOVEMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), ProcessMsg.nParam3, ProcessMsg.wParam);
                             break;
                     }
                     if (ProcessMsg.wIdent == Grobal2.RM_MERCHANTSAY &&
