@@ -87,5 +87,29 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3007, recog, 0, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        /// <summary>
+        /// SM 3015 (0xBC7) - YB trade-setting result. slot 0x250 (SendDefMessage),
+        /// header only. Recog is the operation result (error path sets esi=-1 at
+        /// 0x006E85CE). Native send site @0x006E85FA:
+        /// <code>
+        /// 006E85E8  6A 00                push 0             ; Param  = 0
+        /// 006E85EA  6A 00                push 0             ; Tag    = 0
+        /// 006E85EC  6A 00                push 0             ; Series = 0
+        /// 006E85EE  6A 00                push 0             ; sMsg   = nil
+        /// 006E85F0  8B CE                mov  ecx, esi      ; Recog  = result
+        /// 006E85F2  66 BA C7 0B          mov  dx, 0xBC7     ; Ident  = 3015
+        /// 006E85F6  8B C3                mov  eax, ebx      ; self
+        /// 006E85F8  8B 18                mov  ebx, [eax]
+        /// 006E85FA  FF 93 50 02 00 00    call [ebx+0x250]   ; SendDefMessage
+        /// </code>
+        /// Same numeric value as CM_HEAVYHIT (3015) but opposite direction; this
+        /// is the server-&gt;client SM, so it does not clash semantically.
+        /// </summary>
+        internal static (ClientPacket Header, byte[] Body) BuildSm3015(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3015, recog, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
     }
 }

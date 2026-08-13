@@ -30,5 +30,10 @@ namespace SystemModule
 
         // 0xBBF @0x633E84 slot 0x250 - YB-deal count/value result (Recog = incoming value).
         public const int SM_3007 = 3007;
+
+        // 0xBC7 @0x6E85FA slot 0x250 - YB trade-setting result (Recog = result; -1 on error).
+        // NOTE: numerically equal to Grobal2.CM_HEAVYHIT, but this is the opposite
+        // direction (server -> client SM), a distinct message.
+        public const int SM_3015 = 3015;
     }
 }
