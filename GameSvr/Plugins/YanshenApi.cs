@@ -3799,6 +3799,12 @@ namespace GameSvr.Plugins
             denominator = 0;
             capImm = 2;
             if (!PatchToggleOn("人物爆率调整")) return false;
+            // Red path is a bare imm32 (0x73FCB8). Non-red is
+            // `[esi+0x18c] + imm8` (0x73FCC1/0x73FCC7). The addend is the
+            // patched byte; the +0x18c dword is a native field this switch
+            // does not rewrite and is not identified in C# — treated as 0.
+            // LastHiter[+0x579] subtract at 0x73FD08 is likewise unpatched
+            // native and omitted here.
             denominator = redName ? RedNameK() : NormalK();
             // 0x73FD0B cmp [ebp-8],0 / jge / xor — native floors before Random.
             if (denominator < 0) denominator = 0;
