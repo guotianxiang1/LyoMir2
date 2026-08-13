@@ -1,0 +1,144 @@
+==============================================================================
+LEAF 1090 @0x6D9732
+------------------------------------------------------------------------------
+006D9732  33C9                   xor ecx, ecx
+006D9734  33D2                   xor edx, edx
+006D9736  8B45FC                 mov eax, dword ptr [ebp - 4]
+006D9739  E8363FFEFF             call 0x6bd674
+006D973E  E9E9240000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006D9743  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D9746  8B10                   mov edx, dword ptr [eax]
+006D9748  8B45FC                 mov eax, dword ptr [ebp - 4]
+006D974B  E88072FFFF             call 0x6d09d0  ; 'UìÄôSVWUüØ3ÀEô{s'
+006D9750  E9D7240000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006D9755  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D9758  8B10                   mov edx, dword ptr [eax]
+006D975A  8B45FC                 mov eax, dword ptr [ebp - 4]
+006D975D  E89E73FFFF             call 0x6d0b00  ; 'UìÄôSVWUüØ3ÀEô{s'
+006D9762  E9C5240000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006D9767  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D976A  8A4806                 mov cl, byte ptr [eax + 6]
+006D976D  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D9770  8B10                   mov edx, dword ptr [eax]
+006D9772  8B45FC                 mov eax, dword ptr [ebp - 4]
+006D9775  E8C6E9FDFF             call 0x6b8140
+006D977A  E9AD240000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006D977F  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D9782  8A4806                 mov cl, byte ptr [eax + 6]
+006D9785  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D9788  8B10                   mov edx, dword ptr [eax]
+006D978A  8B45FC                 mov eax, dword ptr [ebp - 4]
+006D978D  E8A6EBFDFF             call 0x6b8338
+006D9792  E995240000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006D9797  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D979A  0FB74806               movzx ecx, word ptr [eax + 6]
+006D979E  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D97A1  8B10                   mov edx, dword ptr [eax]
+006D97A3  8B45FC                 mov eax, dword ptr [ebp - 4]
+006D97A6  E8B9EFFDFF             call 0x6b8764
+006D97AB  E97C240000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006D97B0  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006D97B3  0FB74008               movzx eax, word ptr [eax + 8]
+006D97B7  50                     push eax
+006D97B8  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+
+==============================================================================
+LEAF 1200 @0x6DA21F
+------------------------------------------------------------------------------
+006DA21F  8D8514FEFFFF           lea eax, [ebp - 0x1ec]
+006DA225  8B55F8                 mov edx, dword ptr [ebp - 8]
+006DA228  E8DBB4D2FF             call 0x405708
+006DA22D  8B9514FEFFFF           mov edx, dword ptr [ebp - 0x1ec]
+006DA233  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA236  6683780601             cmp word ptr [eax + 6], 1
+006DA23B  0F94C1                 sete cl
+006DA23E  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA241  E82E34FEFF             call 0x6bd674
+006DA246  E9E1190000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA24B  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA24E  0FB7400A               movzx eax, word ptr [eax + 0xa]
+006DA252  50                     push eax
+006DA253  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA256  668B5008               mov dx, word ptr [eax + 8]
+006DA25A  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA25D  668B4006               mov ax, word ptr [eax + 6]
+006DA261  E8DAEAD2FF             call 0x408d40
+006DA266  8BC8                   mov ecx, eax
+006DA268  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA26B  8B10                   mov edx, dword ptr [eax]
+006DA26D  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA270  E80F6A0000             call 0x6e0c84  ; 'UìQ¹'
+006DA275  E9B2190000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA27A  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA27D  0FB7400A               movzx eax, word ptr [eax + 0xa]
+006DA281  50                     push eax
+006DA282  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA285  0FB74806               movzx ecx, word ptr [eax + 6]
+006DA289  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA28C  8B10                   mov edx, dword ptr [eax]
+006DA28E  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA291  E85A6D0000             call 0x6e0ff0  ; 'UìQ¹'
+006DA296  E991190000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA29B  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA29E  8B00                   mov eax, dword ptr [eax]
+006DA2A0  50                     push eax
+006DA2A1  6A00                   push 0
+006DA2A3  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA2A6  668B4806               mov cx, word ptr [eax + 6]
+
+==============================================================================
+LEAF 1217 @0x6DA372
+------------------------------------------------------------------------------
+006DA372  6A00                   push 0
+006DA374  6A00                   push 0
+006DA376  66B96501               mov cx, 0x165
+006DA37A  33D2                   xor edx, edx
+006DA37C  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA37F  E834B0FEFF             call 0x6c53b8  ; 'UìÄ¸þÿÿSVòØfM¸fEfEºEE¼EÈô
+'
+006DA384  E9A3180000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA389  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA38C  8A4806                 mov cl, byte ptr [eax + 6]
+006DA38F  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA392  8A5008                 mov dl, byte ptr [eax + 8]
+006DA395  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA398  E8D3730000             call 0x6e1770  ; 'UìQSVWMþUÿØ3ö°'
+006DA39D  E98A180000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA3A2  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA3A5  6683780600             cmp word ptr [eax + 6], 0
+006DA3AA  750F                   jne 0x6da3bb  ; 'EüÆ'
+006DA3AC  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA3AF  C6809818000001         mov byte ptr [eax + 0x1898], 1
+006DA3B6  E971180000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA3BB  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA3BE  C6809818000000         mov byte ptr [eax + 0x1898], 0
+006DA3C5  E962180000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA3CA  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA3CD  8B80B00B0000           mov eax, dword ptr [eax + 0xbb0]
+006DA3D3  85C0                   test eax, eax
+006DA3D5  0F8451180000           je 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA3DB  6A00                   push 0
+006DA3DD  8B55CC                 mov edx, dword ptr [ebp - 0x34]
+006DA3E0  668B4A06               mov cx, word ptr [edx + 6]
+006DA3E4  8B55CC                 mov edx, dword ptr [ebp - 0x34]
+006DA3E7  8B12                   mov edx, dword ptr [edx]
+006DA3E9  E8AE61FBFF             call 0x69059c
+006DA3EE  E939180000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA3F3  8B45CC                 mov eax, dword ptr [ebp - 0x34]
+006DA3F6  8B10                   mov edx, dword ptr [eax]
+006DA3F8  8B45FC                 mov eax, dword ptr [ebp - 4]
+006DA3FB  E80C8E0000             call 0x6e320c  ; 'UìÄøSVWðÆèê'
+006DA400  E927180000             jmp 0x6dbc2c  ; '3ÀZYYdéÕ'
+006DA405  0FB7CE                 movzx ecx, si
+
+==============================================================================
+STRINGS in 0x6BD674 worker
+------------------------------------------------------------------------------
+006BD89C: '你超过了三次仍未答题，连接中断'
+006BD8C4: '回答正确, 你获得奖励'
+006BD8E4: '回答错误，连接中断'
+
+==============================================================================
+SINGLETON [0x7D62DC]
+------------------------------------------------------------------------------
+  [0x7D62DC] = 0x007DC7D4 (data-slot value at rest, usually 0/uninit in image)

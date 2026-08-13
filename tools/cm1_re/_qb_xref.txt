@@ -1,0 +1,81 @@
+==============================================================================
+disp +0x7B0 (cooldown/timer dword): 17 raw hits
+------------------------------------------------------------------------------
+  006B06A1  8982B0070000         mov dword ptr [edx + 0x7b0], eax
+  006B1447  8B83B0070000         mov eax, dword ptr [ebx + 0x7b0]
+  006B21DE  BEB0070000           mov esi, 0x7b0
+  006B21E9  C786B0070000F4060000 mov dword ptr [esi + 0x7b0], 0x6f4
+  006B3803  8990B0070000         mov dword ptr [eax + 0x7b0], edx
+  006BD664  0183B0070000         add dword ptr [ebx + 0x7b0], eax
+  006BD70C  8983B0070000         mov dword ptr [ebx + 0x7b0], eax
+  006BD72F  C783B0070000DC050000 mov dword ptr [ebx + 0x7b0], 0x5dc
+  006BD786  8983B0070000         mov dword ptr [ebx + 0x7b0], eax
+  006BD82E  C783B0070000DC050000 mov dword ptr [ebx + 0x7b0], 0x5dc
+  006D3274  8983B0070000         mov dword ptr [ebx + 0x7b0], eax
+  006D655A  0183B0070000         add dword ptr [ebx + 0x7b0], eax
+  006D6577  8B83B0070000         mov eax, dword ptr [ebx + 0x7b0]
+  006D6591  8983B0070000         mov dword ptr [ebx + 0x7b0], eax
+  006D65B2  8BB3B0070000         mov esi, dword ptr [ebx + 0x7b0]
+  006D65DD  C783B0070000DC050000 mov dword ptr [ebx + 0x7b0], 0x5dc
+  006DCEEF  2B83B0070000         sub eax, dword ptr [ebx + 0x7b0]
+
+==============================================================================
+disp +0x7B4 (speak-count dword): 14 raw hits
+------------------------------------------------------------------------------
+  006B06B3  8982B4070000         mov dword ptr [edx + 0x7b4], eax
+  006B1453  8B83B4070000         mov eax, dword ptr [ebx + 0x7b4]
+  006B380E  8990B4070000         mov dword ptr [eax + 0x7b4], edx
+  006BD6AE  FF83B4070000         inc dword ptr [ebx + 0x7b4]
+  006BD6B5  BBB4070000           mov ebx, 0x7b4
+  006BD714  8983B4070000         mov dword ptr [ebx + 0x7b4], eax
+  006BD78E  8983B4070000         mov dword ptr [ebx + 0x7b4], eax
+  006D327C  8983B4070000         mov dword ptr [ebx + 0x7b4], eax
+  006D6599  8983B4070000         mov dword ptr [ebx + 0x7b4], eax
+  006D65C2  8983B4070000         mov dword ptr [ebx + 0x7b4], eax
+  006DCF09  2B83B4070000         sub eax, dword ptr [ebx + 0x7b4]
+  006DCF48  BBB4070000           mov ebx, 0x7b4
+  006DCF50  FF8BB4070000         dec dword ptr [ebx + 0x7b4]
+
+==============================================================================
+disp +0x7B8 (correct-answer char[] / flag): 24 raw hits
+------------------------------------------------------------------------------
+  0040A856  05B8070000           add eax, 0x7b8
+  006BD728  C683B807000000       mov byte ptr [ebx + 0x7b8], 0
+  006BD7A3  BBB8070000           mov ebx, 0x7b8
+  006BD7AE  8D93B8070000         lea edx, [ebx + 0x7b8]
+  006BD7C7  C683B807000000       mov byte ptr [ebx + 0x7b8], 0
+  006BD827  C683B807000000       mov byte ptr [ebx + 0x7b8], 0
+  006D65D6  C683B807000000       mov byte ptr [ebx + 0x7b8], 0
+  006DCE9A  8D83B8070000         lea eax, [ebx + 0x7b8]
+  006EC7E7  05B8070000           add eax, 0x7b8
+  006EC960  05B8070000           add eax, 0x7b8
+  00768B81  05B8070000           add eax, 0x7b8
+  00771A85  05B8070000           add eax, 0x7b8
+  00788AC6  05B8070000           add eax, 0x7b8
+
+==============================================================================
+disp +0x7C3 (quiz-active flag byte): 14 raw hits
+------------------------------------------------------------------------------
+  006B3817  C680C307000000       mov byte ptr [eax + 0x7c3], 0
+  006BD6A2  BBC3070000           mov ebx, 0x7c3
+  006BD71A  C683C307000000       mov byte ptr [ebx + 0x7c3], 0
+  006BD76B  BBC3070000           mov ebx, 0x7c3
+  006BD794  C683C307000000       mov byte ptr [ebx + 0x7c3], 0
+  006D659F  C683C307000000       mov byte ptr [ebx + 0x7c3], 0
+  006D65C8  C683C307000000       mov byte ptr [ebx + 0x7c3], 0
+  006D6616  BBC3070000           mov ebx, 0x7c3
+  006D6644  C683C307000001       mov byte ptr [ebx + 0x7c3], 1
+  006DCF39  C683C307000000       mov byte ptr [ebx + 0x7c3], 0
+
+==============================================================================
+disp +0x7C4 (answer-pending flag byte): 10 raw hits
+------------------------------------------------------------------------------
+  006B3821  C680C407000000       mov byte ptr [eax + 0x7c4], 0
+  006BD721  C683C407000000       mov byte ptr [ebx + 0x7c4], 0
+  006BD778  BBC4070000           mov ebx, 0x7c4
+  006BD79B  C683C407000000       mov byte ptr [ebx + 0x7c4], 0
+  006D65A6  C683C407000000       mov byte ptr [ebx + 0x7c4], 0
+  006D65CF  C683C407000000       mov byte ptr [ebx + 0x7c4], 0
+  006DCF30  C683C407000001       mov byte ptr [ebx + 0x7c4], 1
+  006DCF40  C683C407000000       mov byte ptr [ebx + 0x7c4], 0
+
