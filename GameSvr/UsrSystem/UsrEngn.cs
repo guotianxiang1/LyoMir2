@@ -2600,17 +2600,28 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_WIDEHIT:
                 case Grobal2.CM_FIREHIT:
-                    // MOVE-19: Direction encoding - Native applies & 7 mask (EA 0x6D9B76: and al,7)
-                    // GameGate rewrites packet.Tag = inner.Series, so direction comes from Tag but needs mask
+                    // The shared native action handler at 0x6D9EAF takes X, Y and the
+                    // direction from three separate header fields:
+                    //   0x6D9EE9  0F B7 40 06  movzx eax, word [eax+6]   ; Param  -> Y
+                    //   0x6D9EF1  8A 40 0A     mov   al,  byte [eax+0xA] ; Series
+                    //   0x6D9EF4  24 07        and   al,  7              ; direction
+                    //   0x6D9EFA  8B 08        mov   ecx, [eax]          ; Recog  -> X
+                    // and its callee 0x6EC078 proves which is which by comparing them
+                    // against the actor's own coordinates:
+                    //   0x6EC0C3  cmp esi, [ebx+0x12C]   ; Recog vs CurrX
+                    //   0x6EC0D2  cmp eax, [ebx+0x130]   ; Param vs CurrY
+                    // This used to read Y out of the high word of Recog and the
+                    // direction out of Tag, which only worked because GameGate-CS
+                    // repacked the header to suit; that repack is gone.
                     if (M2Share.g_Config.boActionSendActionMsg)
                     {
-                        PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Tag & 7, HUtil32.LoWord(DefMsg.Recog),
-                            HUtil32.HiWord(DefMsg.Recog), 0, "");
+                        PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
+                            DefMsg.Recog, DefMsg.Param, 0, "");
                     }
                     else
                     {
-                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Tag & 7, HUtil32.LoWord(DefMsg.Recog),
-                            HUtil32.HiWord(DefMsg.Recog), 0, "");
+                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
+                            DefMsg.Recog, DefMsg.Param, 0, "");
                     }
                     break;
                 case Grobal2.CM_SAY:

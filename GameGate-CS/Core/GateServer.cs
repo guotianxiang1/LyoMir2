@@ -43,9 +43,28 @@ public sealed class GateServer : IDisposable
     private const int InitialClientReceiveBuffer = 2048;
     private const int MaximumClientReceiveBuffer = 64 * 1024;
 
+    // The action family used to be repacked here - Param folded into the high word of
+    // Recog and Series copied over Tag - so that GameSvr could unpack it again. Native
+    // has no such step: M2Server reads the three fields where they already are.
+    // The shared action handler at 0x6D9EAF builds its call straight from the 12-byte
+    // header:
+    //   0x6D9EE9  0F B7 40 06  movzx eax, word [eax+6]   ; Param
+    //   0x6D9EF1  8A 40 0A     mov   al,  byte [eax+0xA] ; Series low byte
+    //   0x6D9EF4  24 07        and   al,  7              ; direction
+    //   0x6D9EFA  8B 08        mov   ecx, [eax]          ; Recog, whole i32
+    // and the callee 0x6EC078 compares them against the actor's own position:
+    //   0x6EC0C3  3B B3 2C 01 00 00  cmp esi, [ebx+0x12C]   ; Recog  vs CurrX
+    //   0x6EC0D2  3B 83 30 01 00 00  cmp eax, [ebx+0x130]   ; Param  vs CurrY
+    // (+0x12C / +0x130 are CurrX / CurrY, confirmed by 0x770DF6 and 0x770E01 sending
+    // them as the Tag / Series of SM_PHYSICAL_ATT.)
+    //
+    // The repack was self-consistent with GameSvr's matching unpack, so the pair worked,
+    // but it made the gate-to-server link a C#-only dialect: an original gate could not
+    // drive this server and this gate could not drive an original M2Server. Both sides
+    // now use the native field assignment instead.
     private static ClientPacket CreateGameSvrClientPacket(MobileCodec.InnerHeader inner, ushort ident)
     {
-        var packet = new ClientPacket
+        return new ClientPacket
         {
             Recog = inner.Recog,
             Ident = ident,
@@ -53,14 +72,6 @@ public sealed class GateServer : IDisposable
             Tag = inner.Tag,
             Series = inner.Series
         };
-
-        if (UsesPackedActionCoordinates(ident))
-        {
-            packet.Recog = HUtil32.MakeLong((ushort)inner.Recog, inner.Param);
-            packet.Tag = inner.Series;
-        }
-
-        return packet;
     }
 
     internal static InternalPacket77 CreateGameDataPacket(uint connId, uint sequence,
@@ -93,7 +104,7 @@ public sealed class GateServer : IDisposable
         Series = 0
     };
 
-    private static bool UsesPackedActionCoordinates(ushort ident)
+    private static bool IsActionCoordinateIdent(ushort ident)
     {
         switch (ident)
         {
@@ -119,12 +130,10 @@ public sealed class GateServer : IDisposable
 
     private static void UpdateClientActionState(ClientSession session, ClientPacket packet)
     {
-        if (!UsesPackedActionCoordinates(packet.Ident)) return;
+        if (!IsActionCoordinateIdent(packet.Ident)) return;
 
-        int x = (ushort)(packet.Recog & 0xFFFF);
-        int y = (ushort)((uint)packet.Recog >> 16);
-        session.X = x;
-        session.Y = y;
+        session.X = (ushort)(packet.Recog & 0xFFFF);
+        session.Y = packet.Param;
     }
 
     private static string ReadPlayerText(byte[] body)
