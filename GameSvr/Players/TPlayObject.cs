@@ -1574,20 +1574,6 @@ namespace GameSvr
             }
         }
 
-        private void SendGoldInfo(bool boSendName)
-        {
-            var sMsg = string.Empty;
-            if (m_nSoftVersionDateEx == 0)
-            {
-                return;
-            }
-            if (boSendName)
-            {
-                sMsg = M2Share.g_Config.sGameGoldName + '\r' + M2Share.g_Config.sGamePointName;
-            }
-            SendDefMessage(Grobal2.SM_GAMEGOLDNAME, m_nGameGold, HUtil32.LoWord(m_nGamePoint), HUtil32.HiWord(m_nGamePoint), 0, sMsg);
-        }
-
         private void SendServerStatus()
         {
             if (m_btPermission < 10)
@@ -2645,11 +2631,6 @@ namespace GameSvr
                             result = true;
                             break;
                     }
-                    // Notify 战神 client: drug consumed (case 0 consumable)
-                    if (result)
-                    {
-                        SendDefMessage(Grobal2.SM_DRINK_DRUG_STATUS, StdItem.Shape, StdItem.Ac, StdItem.Mac, 0, "");
-                    }
                     break;
                 case 1:
                     var nOldStatus = GetMyStatus();
@@ -2659,8 +2640,6 @@ namespace GameSvr
                     {
                         RefMyStatus();
                     }
-                    // Notify 战神 client: drink status changed
-                    SendDefMessage(Grobal2.SM_DRINK_STATUS, 0, m_nHungerStatus, StdItem.Ac, StdItem.Mac, "");
                     result = true;
                     break;
                 case 2:
@@ -2719,16 +2698,9 @@ namespace GameSvr
                                 SendMsg(this, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
                                 result = true;
                             }
-                            // Notify 战神 client: buff drug applied
-                            if (result)
-                            {
-                                SendDefMessage(Grobal2.SM_DRINK_DRUG_STATUS, 12, StdItem.Dc, StdItem.Mac2, StdItem.Mc, "");
-                            }
                             break;
                         case 13:
                             GetExp(StdItem.DuraMax);
-                            // Notify 战神 client: EXP drink consumed
-                            SendDefMessage(Grobal2.SM_DRINKEXP_STATUS, StdItem.DuraMax, 0, 0, 0, "");
                             result = true;
                             break;
                         default:

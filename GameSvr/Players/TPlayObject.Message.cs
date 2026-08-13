@@ -2214,7 +2214,6 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_GOLDCHANGED, m_nGold, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_GAMEGOLDCHANGED:
-                    SendGoldInfo(false);
                     break;
                 case Grobal2.RM_CHANGELIGHT:
                     SendDefMessage(Grobal2.SM_CHANGELIGHT, ProcessMsg.BaseObject, 4, 0, 0, "");
@@ -2443,10 +2442,6 @@ namespace GameSvr
                     Buffer.BlockCopy(diceText, 0, diceBody, diceHeader.Length, diceText.Length);
                     SendSocket(m_DefMsg, diceBody);
                     break;
-                case Grobal2.RM_PASSWORDSTATUS:
-                    m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_PASSWORDSTATUS, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3);
-                    SendSocket(m_DefMsg, ProcessMsg.sMsg);
-                    break;
                 // === Task/Quest System ===
                 case Grobal2.CM_QUEST_ORDER:
                     HandleNativeQuestOrder(ProcessMsg.nParam1,
@@ -2619,18 +2614,7 @@ namespace GameSvr
                 break;
 
                 case Grobal2.CM_QUERY_FOCUS_ITEM:
-                {
-                    var focusItem = FindOwnedItemByClientId(ProcessMsg.nParam1);
-                    if (focusItem == null)
-                    {
-                        break;
-                    }
-
-                    m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_QUERY_FOCUS_ITEM,
-                        EnsureClientItemId(focusItem), 0, 0, 0);
-                    SendSocket(m_DefMsg, EncodeOwnedClientItemRecord(focusItem));
-                }
-                break;
+                    break;
 
                 // === Hero System Client Messages (CM_HERO_*) ===
                 case Grobal2.CM_HERO_LOGON:
