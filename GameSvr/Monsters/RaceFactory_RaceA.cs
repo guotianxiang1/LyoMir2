@@ -36,6 +36,12 @@ namespace GameSvr
                     cert = new FriendAnimal();
                     break;
 
+                // race 135 group 53 handler 0x67A859  classref 0x663F9C  ctor 0x66B288  TFireDragon
+                //   case body 无 ctor 后逻辑。构造器 sub_66B288 已核验（见 FireDragon.cs）。
+                case 135:
+                    cert = new FireDragon();
+                    break;
+
                 default:
                     return false;
             }
