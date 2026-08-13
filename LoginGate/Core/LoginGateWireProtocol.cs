@@ -32,13 +32,28 @@ namespace LoginGate.Core
 
         public const ushort NativeRegistrationIdent = 2000;
         public const ushort NativeRegistrationAckIdent = 1000;
+        // GDM_SELECT_SERVER / DGM_SELECT_SERVER (uTypes.pas:74/86). Historically
+        // named "probe" because C# invented a registration-time challenge; the
+        // values were always 1001/2001. The wire ident is the select-server pair.
         public const ushort NativeProbeRequestIdent = 1001;
+        public const ushort NativeSelectServerRequestIdent = NativeProbeRequestIdent;
         public const ushort NativeProbeResponseIdent = 2001;
+        public const ushort NativeSelectServerResponseIdent = NativeProbeResponseIdent;
+        public const ushort NativeDirectStaticAuthIdent = 2011;
+        public const ushort NativeDirectDynAuthIdent = 2012;
+        public const ushort NativeDirectECardAuthIdent = 2013;
         public const ushort NativeAuthRequestIdent = 2018;
         public const ushort NativeAuthResponseIdent = 1003;
         public const ushort NativeAuthFailureIdent = 1004;
         public const ushort NativeType2EnabledIdent = 0x07D2;
         public const ushort NativeType2DisabledIdent = 0x07D3;
+        /// <summary>
+        /// uGateListen.pas:287 mobile path stamps FEnCodeIdx := -999. Delphi
+        /// <c>(FEnCodeIdx mod 100) = 0</c> is then false, so the SecondZone
+        /// <c>wGatePort or $8000</c> bit is not applied for mobile clients.
+        /// </summary>
+        public const int NativeMobileEncodeIndex = -999;
+        public const uint NativeSecondZoneSessionXor = 0xA5A5A5A5;
 
         public const int NativeRegistrationPayloadSize = 40;
         // uDBListen.pas:368-371 accepts TPingMsg (40) or TPingMsgNew (68); the
@@ -46,6 +61,16 @@ namespace LoginGate.Core
         public const int NativeRegistrationExtendedPayloadSize = 68;
         public const int NativeRegistrationQueueCountOffset = 40;
         public const int NativeProbePayloadSize = 28;
+        public const int NativeSelectGroupInfoSize = NativeProbePayloadSize;
+        /// <summary>sizeof(TStatusAuthInfo) / TLoginCenterAuthInfo, uTypes.pas:214/251. Confirmed 136.</summary>
+        public const int NativeStatusAuthInfoSize = 136;
+        /// <summary>
+        /// sizeof(TOldDynamicAuthInfo) inferred from field layout (BLOCKED-2 in the
+        /// login-chain report). Only used as the 2012 length gate.
+        /// </summary>
+        public const int NativeOldDynamicAuthInfoSize = 76;
+        /// <summary>sizeof(TDynamicAuthInfo) inferred; same caveat as 76.</summary>
+        public const int NativeDynamicAuthInfoSize = 124;
         public const int NativeAuthRequestPayloadSize = 136;
         public const int NativeAuthResponseShortPayloadSize = 12;
         public const int NativeAuthResponseMediumPayloadSize = 20;
@@ -254,9 +279,13 @@ namespace LoginGate.Core
         {
             frame = null!;
             error = string.Empty;
-            if (sessionId <= 0)
+            // ciSessionID = 0 is the DB failure signal (uMainThread.pas:195) and
+            // must not produce a 32-byte jump frame. Any other bit pattern is
+            // legal, including SecondZone's xor $A5A5A5A5 which is negative as
+            // a signed int (uMainThread.pas:281-284).
+            if (sessionId == 0)
             {
-                error = "LoginGate jump session id must be positive";
+                error = "LoginGate jump session id must be non-zero";
                 return false;
             }
             if (gameGatePort == 0)
@@ -286,6 +315,48 @@ namespace LoginGate.Core
             frame = new LoginGateClientFrame(ClientDataFlag, ClientDataCommand,
                 dataIndex, payload);
             return true;
+        }
+
+        /// <summary>
+        /// 12-byte SM_SELECT_SERVER failure. uGateListen.pas:221-227 (wRes 2/3/4)
+        /// and uDBListen.pas:239-245 (no DB socket → Series=3) send only
+        /// TDefaultMessage, not TSelectServerMsg.
+        /// </summary>
+        public static bool TryCreateSelectServerErrorFrame(uint dataIndex,
+            byte errorSeries, out LoginGateClientFrame frame, out string error)
+        {
+            frame = null!;
+            error = string.Empty;
+            if (errorSeries == 0)
+            {
+                error = "LoginGate select-server error Series must be non-zero";
+                return false;
+            }
+
+            var payload = new byte[InnerHeaderSize];
+            WriteInnerHeader(payload, new LoginGateInnerHeader(
+                0, SelectServerIdent, 0, 0, errorSeries));
+            frame = new LoginGateClientFrame(ClientDataFlag, ClientDataCommand,
+                dataIndex, payload);
+            return true;
+        }
+
+        /// <summary>
+        /// TSelectGroupInfo (uTypes.pas:153-163), 28 bytes. LoginGate fills
+        /// ciSessionID / iEnCodeIdx / wSocketHandle / wAreaID / bGroupNo /
+        /// szPostfix; wGatePort / ciGateIP / bErrorType stay 0 for DB to write.
+        /// </summary>
+        public static bool TryCreateSelectGroupInfo(uint sessionId, int encodeIndex,
+            ushort socketHandle, ushort areaId, byte groupNo, string? suffix,
+            out byte[] payload, out string error)
+        {
+            payload = new byte[NativeSelectGroupInfoSize];
+            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), sessionId);
+            BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(4, 4), encodeIndex);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(8, 2), socketHandle);
+            BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(16, 2), areaId);
+            payload[18] = groupNo;
+            return TryWriteGbkCString(payload.AsSpan(20, 8), suffix, out error);
         }
 
         public static bool TryParseInnerHeader(ReadOnlySpan<byte> payload,
