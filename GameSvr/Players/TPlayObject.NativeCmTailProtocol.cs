@@ -76,6 +76,12 @@ namespace GameSvr
                 case Grobal2.CM_4408:
                     ClientNativeBeadInlaySelf();
                     return true;
+                case Grobal2.CM_4409:
+                    ClientNativeJadeInlaySelf();
+                    return true;
+                case Grobal2.CM_4410:
+                    ClientNativeBeadInlayHero();
+                    return true;
                 default:
                     return false;
             }
@@ -341,6 +347,38 @@ namespace GameSvr
         private void ClientNativeBeadInlaySelf()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4408, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4409, native leaf 0x6DB0B2, worker 0x6F38A8 with the self/hero
+        /// selector DL = 0 (self).
+        ///
+        /// The leaf calls 0x6F38A8(Self, DL=0, Param=word[record+6], body length
+        /// ESI, body string [ebp-8]). With DL=0 the target is Self; the worker then
+        /// runs the jade inlay chain 0x748A18 (0x6F3901), which reads the spirit-
+        /// bead template table [[0x7D3F34]] and the item's element bytes. None of
+        /// those are modelled, so the inlay and its SM (self leg at 0x6F3928) are
+        /// withheld.
+        /// </summary>
+        private void ClientNativeJadeInlaySelf()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4409, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4410, native leaf 0x6DB0D0, worker 0x6F37EC with the self/hero
+        /// selector DL = 1 (hero) — the same bead-inlay worker as CM 4408.
+        ///
+        /// The leaf calls 0x6F37EC(Self, DL=1, Recog=[record], MakeLong(Param,Tag)
+        /// via 0x408D40). With DL=1 the worker resolves the hero [Self+0xBB0],
+        /// requires it valid (0x772DA8) and non-ghost ([+0x73]), then runs the same
+        /// 0x7487A8 inlay chain against the hero's item. The hero's per-item bead
+        /// slots are not modelled, so the mount and reply are withheld (the no-hero
+        /// leg would answer with the -99 sentinel, which is folded into the drop).
+        /// </summary>
+        private void ClientNativeBeadInlayHero()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4410, m_sCharName);
         }
     }
 }
