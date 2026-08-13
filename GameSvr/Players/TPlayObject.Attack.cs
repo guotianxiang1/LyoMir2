@@ -793,7 +793,11 @@ namespace GameSvr
                     GameGoldChanged();
                 }
             }
-            if (WalkTo((byte)n14, false))
+            // MOVE-71：原版 CM_WALK 处理器 sub_6BBCE0 在 0x6BBD0C `mov cl,[ebx+0x3FE]`
+            // 把缓存的穿透判定当作 WalkTo 第三参(boFlag)，再经 sub_741224(0x74122D 存、
+            // 0x7412B3 压) 传给 MoveToMovingObject 的 boIgnoreOccupancy(0x779870)。此处
+            // 原先恒传 false，导致玩家在安全区永不可穿人——与原版分歧。改传穿透判定。
+            if (WalkTo((byte)n14, NativeRefreshThroughOccupancyCache()))
             {
                 if (m_bo316 || m_nCurrX == nX && m_nCurrY == nY)
                 {
