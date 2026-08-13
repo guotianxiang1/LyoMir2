@@ -2561,9 +2561,17 @@ namespace GameSvr
                 case Grobal2.RM_10414:
                     var gaugeHp = BaseObject.m_WAbil.HP;
                     var gaugeMaxHp = BaseObject.m_WAbil.MaxHP;
+                    // RM 10414 arm 0x006B5C23 pushes HP first and the literal 1 as Series:
+                    //   006B5C38  66 8B 86 AC 02 00 00  mov ax,[esi+0x2AC] / push  ; Param  = HP
+                    //   006B5C40  66 8B 86 B0 02 00 00  mov ax,[esi+0x2B0] / push  ; Tag    = MaxHP
+                    //   006B5C48  6A 01                 push 1                     ; Series = 1
+                    //   006B5C4A  8D 45 F0              lea eax,[ebp-0x10] / push  ; Buf
+                    //   006B5C4E  6A 08                 push 8                     ; Len
+                    // The two offsets are pinned by the SM 1100 arm, which C# already matches
+                    // as Param=HP / Tag=MaxHP.
                     m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_INSTANCEHEALGUAGE,
-                        ProcessMsg.BaseObject, 1, HUtil32.LoWord(gaugeMaxHp),
-                        HUtil32.LoWord(gaugeHp));
+                        ProcessMsg.BaseObject, HUtil32.LoWord(gaugeHp),
+                        HUtil32.LoWord(gaugeMaxHp), 1);
                     SendSocket(m_DefMsg,
                         BuildInstanceHealGaugeBody(gaugeHp, gaugeMaxHp));
                     break;
