@@ -1610,10 +1610,12 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TBaseObject::DropUseItems";
             try
             {
-                if (m_boNoDropUseItem)
-                {
-                    return;
-                }
+                // 这里原先也有一个 `if (m_boNoDropUseItem) return;` —— 与 PKD-14 删掉的
+                // 玩家侧那一个是同一处 INVENTED 的另一半（英雄 / 怪物走的是这条基类实现）。
+                // sub_73FC70 的序言到 0x73FCB6 那条 `7D 09 jge` 之间没有任何条件跳转，
+                // 上游 sub_741368 的策略梯只读六个地图旗标字节。NoDropUseItem /
+                // boNoDropUseItem / DropUseItem 全镜像 GBK、裸 ASCII（大小写不敏感）、
+                // UTF-16LE 三路皆 0 命中。按 §3.1 删除。
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
                     nC = 0;
