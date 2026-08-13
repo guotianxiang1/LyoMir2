@@ -1132,6 +1132,13 @@ namespace GameSvr
                             NativeAfterScatterItemsBlocked(AttackBaseObject);
                         if (!scatterBlocked)
                         {
+                            // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
+                            // MonItemsTree exclusive chain runs FIRST, before the
+                            // monster's own drop table at 0x71FCFF.  The C# code for it
+                            // existed but had no caller in the whole tree, so every
+                            // MonItemsTree.txt row produced nothing.
+                            M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
+                                AttackBaseObject, this, scatteredItems);
                             NativeDropControlRuntime.RunInNativeOrder(
                                 () => NativeDropControlRuntime.TryScatter(this,
                                     AttackBaseObject, scatteredItems),

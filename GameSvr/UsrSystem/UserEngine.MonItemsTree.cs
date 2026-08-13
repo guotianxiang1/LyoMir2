@@ -42,11 +42,29 @@ namespace GameSvr
         /// <param name="killer">The killer, passed through as the item creator</param>
         /// <param name="monster">The monster that died (drop anchor and gold accumulator)</param>
         /// <param name="scatteredItems">List to record scattered items</param>
-        public void TraverseMonItemsTree(string monsterName, TPlayObject killer, TBaseObject monster,
+        public void TraverseMonItemsTree(string monsterName, TBaseObject killer, TBaseObject monster,
             IList<KeyValuePair<string, string>> scatteredItems)
         {
-            if (string.IsNullOrEmpty(monsterName) || killer == null || monster == null)
+            if (string.IsNullOrEmpty(monsterName) || monster == null)
                 return;
+
+            // 0071FA8A  83 B8 74 04 00 00 00  cmp dword [self+0x474],0
+            // 0071FA91  0F 84 FB 05 00 00     je  0x720092
+            // A monster with no drop table exits the WHOLE scatter routine before
+            // segment 1, so the chain must not fire for it.  ([self+0x474] is the drop
+            // table, the same field loop 2 walks at 0x71FCFF.)  Note this gate covers
+            // segments 3 and 4 in native too; only segment 1 is honoured here, because
+            // that is the segment being introduced — the other two keep their existing
+            // behaviour rather than being silently restricted by this commit.
+            if (!TryGetMonsterInfo(monster.m_sCharName, out var monsterInfo)
+                || monsterInfo.ItemList == null)
+            {
+                return;
+            }
+
+            // The killer may be nil: 0x71FAB4 `cmp [ebp-8],0 / je 0x71FB2E` jumps INTO
+            // segment 1, so a monster that died without an attributed killer still runs
+            // its chain.  It is passed through untouched as the sub_7688A0 creator arg.
 
             // Chain head by monster name: 0x71FB42 mov eax,[0x7D5D9C] / 0x71FB49 call
             // sub_67B2B0; 0x71FB51 cmp [ebp-0x20],0 / je 0x71FCFF when the head is nil.
