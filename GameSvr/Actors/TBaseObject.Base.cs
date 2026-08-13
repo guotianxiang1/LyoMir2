@@ -1148,7 +1148,8 @@ namespace GameSvr
                         }
                         if (!scatterBlocked && m_btRaceServer >= Grobal2.RC_ANIMAL && m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {
-                            ScatterGolds(AttackBaseObject, scatteredItems);
+                            ScatterGolds(AttackBaseObject, scatteredItems,
+                                nativeMonsterScatter: true);
                         }
 
                         if (!scatterBlocked && AttackBaseObject is TPlayObject player && !player.m_boGhost)

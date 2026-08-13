@@ -4777,13 +4777,68 @@ namespace GameSvr
         
         
         
+        /// <summary>
+        /// <c>cmp dword [ebp-0x14],0xBB8</c> @0x71FFBD — the gold cap is a literal 3000,
+        /// not a config key ("MonOneDropGoldCount" and friends are 0-hit in the image
+        /// under GBK, bare ASCII and UTF-16LE).
+        /// </summary>
+        private const int NativeScatterGoldCap = 0xBB8;
+
         private void ScatterGolds(TBaseObject GoldOfCreat,
-            IList<KeyValuePair<string, string>> scatteredItems = null)
+            IList<KeyValuePair<string, string>> scatteredItems = null,
+            bool nativeMonsterScatter = false)
         {
             int I;
             int nGold;
             if (m_nGold > 0)
             {
+                // 战神 sub_71FA20 @0x71FFAD-0x71FFD4 — the settlement that runs between
+                // "is there any gold" and the pile loop.  C# went straight from
+                // `m_nGold > 0` into the piles, so both steps were missing:
+                //
+                //   71FFAD  cmp dword [ebp-0x14],0    / jle 0x720049  ; == `m_nGold > 0`
+                //   71FFB7  cmp byte [ebp+8],0        / je  0x71FFCD  ; cap switch off
+                //   71FFBD  cmp dword [ebp-0x14],0xBB8/ jle 0x71FFCD
+                //   71FFC6  mov dword [ebp-0x14],0xBB8               ; <== cap FIRST
+                //   71FFCD  mov eax,[ebp-0x14] / cdq
+                //   71FFD1  idiv dword [ebp-0x2C]                    ; <== divide SECOND
+                //   71FFD4  mov [ebp-0x14],eax
+                //
+                // 0x71FFC6 < 0x71FFD1 and the idiv sits on the 0x71FFCD merge point, so
+                // the divide runs whether or not the cap fired.  Order matters: capping
+                // after dividing would let a 20000-gold monster pay out 3000 at tier 2
+                // instead of 1500.
+                //
+                // The cap switch [ebp+8] is 1 on the monster-death path.  It threads
+                // through two thin forwarders and both call sites in monster Die push it
+                // literally:
+                //   71E3C4  6A 00 push 0 / 71E3C6  6A 01 push 1 / 71E3D2 call [esi+0x1FC]
+                //   71E3DA  6A 00 push 0 / 71E3DC  6A 01 push 1 / 71E3EF call [esi+0x1FC]
+                // slot +0x1FC holds sub_71F46C in 123 monster VMTs (every one verified by
+                // the Delphi self-pointer test dword[VMT-0x4C]==VMT); sub_71F46C @0x71F483
+                // re-pushes [ebp+0xC] then [ebp+8] and tail-calls sub_71FA20 @0x71F491, so
+                // the last-pushed 1 lands in sub_71FA20's [ebp+8].  (The 0 that goes with
+                // it is [ebp+0xC], the second-arm switch tested at 0x71FBD8 / 0x71FDA5.)
+                //
+                // [ebp-0x2C] is the same anti-fatigue multiplier MonGetRandomItems folds
+                // into its gate modulus: 1 at 0x71FA62, 2 at 0x71FB27 when
+                // byte[killer+0x1828]==2, and only reachable for a non-nil killer of race
+                // RC_PLAYOBJECT (0x71FAB4 / 0x71FACE).  HeroObject derives from
+                // AnimalObject, not TPlayObject, so the cast reproduces the race gate.
+                //
+                // Uncapped and undivided this was a straight money printer: the overshoot
+                // is (raw gold / 3000) with no ceiling, i.e. 6.7x on a 20 000-gold monster
+                // and 33x on a 100 000-gold boss, doubled again for a tier-2 account.
+                if (nativeMonsterScatter)
+                {
+                    if (m_nGold > NativeScatterGoldCap)
+                    {
+                        m_nGold = NativeScatterGoldCap;
+                    }
+                    var goldDivisor =
+                        (GoldOfCreat as TPlayObject)?.m_btNativeFatigueTier == 2 ? 2 : 1;
+                    m_nGold = m_nGold / goldDivisor;
+                }
                 I = 0;
                 while (true)
                 {
