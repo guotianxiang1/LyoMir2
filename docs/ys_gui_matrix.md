@@ -4,13 +4,13 @@
 
 | 状态 | 计数 |
 |---|---|
-| IMPLEMENTED | 73 |
+| IMPLEMENTED | 169 |
 | SCRIPT_ONLY | 22 |
-| LABEL_ONLY | 284 |
+| LABEL_ONLY | 188 |
 | MISSING | 1 |
 | INVENTED | 1 |
 
-生产已开启（值 != 0）215 键；其中无行为的 172 键。
+生产已开启（值 != 0）215 键；其中无行为的 81 键。
 
 ## 生产已开启但 C# 无行为
 
@@ -81,98 +81,7 @@
 | `装备提升人物爆率` | 1 | 盘古3 | LABEL_ONLY | `0x102b0718` | 2 | `0x71fd37` |
 | `装备提升人物爆率_A值` | "10" | 盘古3 | LABEL_ONLY | `0x102b0988` | 3 | - |
 | `装备提升人物爆率_B值` | "10" | 盘古3 | LABEL_ONLY | `0x102b09a0` | 3 | - |
-| `头盔属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f44` | 3 | `0x7612d2` |
-| `头盔属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e24` | 3 | `0x761237` |
-| `头盔属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0efc` | 3 | `0x7612af` |
-| `头盔属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0eb4` | 3 | `0x76128c` |
-| `头盔属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e6c` | 3 | `0x761269` |
-| `头盔最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0f5c` | 3 | `0x7611fb` |
-| `头盔最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f14` | 3 | `0x7612c6` |
-| `头盔最高点数_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0df4` | 3 | `0x76122b` |
-| `头盔最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0ecc` | 3 | `0x7612a3` |
-| `头盔最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e84` | 3 | `0x761280` |
-| `头盔最高点数_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e3c` | 3 | `0x76125d` |
-| `头盔点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0f2c` | 3 | `0x7612c1` |
-| `头盔点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e0c` | 3 | `0x761226` |
-| `头盔点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0ee4` | 3 | `0x76129e` |
-| `头盔点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e9c` | 3 | `0x76127b` |
-| `头盔点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e54` | 3 | `0x761258` |
-| `戒指属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b13c4` | 3 | `0x761dba` |
-| `戒指属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b12a4` | 3 | `0x761d2e` |
-| `戒指属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b137c` | 3 | `0x761d97` |
-| `戒指属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1334` | 3 | `0x761d74` |
-| `戒指属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b12ec` | 3 | `0x761d51` |
-| `戒指最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b13dc` | 3 | `0x761cf0` |
-| `戒指最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1394` | 3 | `0x761dae` |
-| `戒指最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b134c` | 3 | `0x761d8b` |
-| `戒指最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1304` | 3 | `0x761d68` |
-| `戒指点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b13ac` | 3 | `0x761da9` |
-| `戒指点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b128c` | 3 | `0x761d1d` |
-| `戒指点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1364` | 3 | `0x761d86` |
-| `戒指点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b131c` | 3 | `0x761d63` |
-| `戒指点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b12d4` | 3 | `0x761d40` |
-| `手镯属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1244` | 3 | `0x7626b2` |
-| `手镯属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1124` | 3 | `0x762626` |
-| `手镯属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11fc` | 3 | `0x76268f` |
-| `手镯属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11b4` | 3 | `0x76266c` |
-| `手镯属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b116c` | 3 | `0x762649` |
-| `手镯最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b125c` | 3 | `0x7625e8` |
-| `手镯最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1214` | 3 | `0x7626a6` |
-| `手镯最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11cc` | 3 | `0x762683` |
-| `手镯最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1184` | 3 | `0x762660` |
-| `手镯点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b122c` | 3 | `0x7626a1` |
-| `手镯点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b110c` | 3 | `0x762615` |
-| `手镯点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b11e4` | 3 | `0x76267e` |
-| `手镯点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b119c` | 3 | `0x76265b` |
-| `手镯点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1154` | 3 | `0x762638` |
-| `武器属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0c44` | 3 | `0x7609d8` |
-| `武器属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0b24` | 3 | `0x760920` |
-| `武器属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0bfc` | 3 | `0x76098f` |
-| `武器属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0bb4` | 3 | `0x76096a` |
-| `武器属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0b6c` | 3 | `0x760945` |
-| `武器最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0c5c` | 3 | `0x7608f0` |
-| `武器最高点数_准确_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0c14` | 3 | `0x7609cc` |
-| `武器最高点数_攻速_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0bcc` | 3 | `0x760983` |
-| `武器最高点数_道术_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0b84` | 3 | `0x76095e` |
-| `武器最高点数_魔法_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0b3c` | 3 | `0x760939` |
-| `武器点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0c2c` | 3 | `0x7609c7` |
-| `武器点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b0c` | 3 | `0x76090f` |
-| `武器点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0be4` | 3 | `0x76097e` |
-| `武器点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b9c` | 3 | `0x760959` |
-| `武器点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b54` | 3 | `0x760934` |
-| `衣服属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0dc4` | 3 | `0x783ff2` |
-| `衣服属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0ca4` | 3 | `0x783f66` |
-| `衣服属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d7c` | 3 | `0x783fcf` |
-| `衣服属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d34` | 3 | `0x783fac` |
-| `衣服属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0cec` | 3 | `0x783f89` |
-| `衣服最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0ddc` | 3 | `0x7639f3` |
-| `衣服最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d94` | 3 | `0x783fe6` |
-| `衣服最高点数_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0c74` | 3 | `0x783f5a` |
-| `衣服最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d4c` | 3 | `0x783fc3` |
-| `衣服最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d04` | 3 | `0x783fa0` |
-| `衣服最高点数_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0cbc` | 3 | `0x783f7d` |
-| `衣服点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0dac` | 3 | `0x783fe1` |
-| `衣服点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0c8c` | 3 | `0x783f55` |
-| `衣服点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0d64` | 3 | `0x783fbe` |
-| `衣服点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0d1c` | 3 | `0x783f9b` |
-| `衣服点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0cd4` | 3 | `0x783f78` |
 | `随机极品` | 1 | 盘古4 | LABEL_ONLY | `0x102b073c` | 8 | - |
-| `项链属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b10c4` | 3 | `0x76186e` |
-| `项链属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fa4` | 3 | `0x7617e2` |
-| `项链属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b107c` | 3 | `0x76184b` |
-| `项链属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1034` | 3 | `0x761828` |
-| `项链属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fec` | 3 | `0x761805` |
-| `项链最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b10dc` | 3 | `0x7617a3` |
-| `项链最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1094` | 3 | `0x761862` |
-| `项链最高点数_攻击_值` | "3" | 盘古4 | LABEL_ONLY | `0x102b0f74` | 3 | `0x7617d6` |
-| `项链最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b104c` | 3 | `0x76183f` |
-| `项链最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1004` | 3 | `0x76181c` |
-| `项链最高点数_魔法_值` | "2" | 盘古4 | LABEL_ONLY | `0x102b0fbc` | 3 | `0x7617f9` |
-| `项链点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b10ac` | 3 | `0x76185d` |
-| `项链点数几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f8c` | 3 | `0x7617d1` |
-| `项链点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1064` | 3 | `0x76183a` |
-| `项链点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b101c` | 3 | `0x761817` |
-| `项链点数几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fd4` | 3 | `0x7617f4` |
 | `主号高级暴击` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b1578` | 2 | - |
 | `技能等级突破` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b0210` | 2 | - |
 | `技能等级突破_最大值` | 255 | 眼神2(第1页) | LABEL_ONLY | `0x102b0a40` | 2 | - |
@@ -348,104 +257,104 @@
 
 | 键 | 值 | 开 | 控件 | 状态 | C# 行为落点 / API 成员 |
 |---|---|---|---|---|---|
-| `头盔属性几率_准确_值` | "10" | Y | value | LABEL_ONLY | HelmetAttrChance_Acc |
-| `头盔属性几率_攻击_值` | "10" | Y | value | LABEL_ONLY | HelmetAttrChance_Atk |
-| `头盔属性几率_攻速_值` | "10" | Y | value | LABEL_ONLY | HelmetAttrChance_Spd |
-| `头盔属性几率_道术_值` | "10" | Y | value | LABEL_ONLY | HelmetAttrChance_Tao |
-| `头盔属性几率_魔法_值` | "10" | Y | value | LABEL_ONLY | HelmetAttrChance_Mgc |
-| `头盔最随机性_极品_值` | "80" | Y | value | LABEL_ONLY | HelmetRandExtreme |
-| `头盔最高点数_准确_值` | "10" | Y | value | LABEL_ONLY | HelmetMaxPts_Acc |
-| `头盔最高点数_攻击_值` | "10" | Y | value | LABEL_ONLY | HelmetMaxPts_Atk |
-| `头盔最高点数_攻速_值` | "10" | Y | value | LABEL_ONLY | HelmetMaxPts_Spd |
-| `头盔最高点数_道术_值` | "10" | Y | value | LABEL_ONLY | HelmetMaxPts_Tao |
-| `头盔最高点数_魔法_值` | "10" | Y | value | LABEL_ONLY | HelmetMaxPts_Mgc |
-| `头盔点数几率_准确_值` | "5" | Y | value | LABEL_ONLY | HelmetPtsChance_Acc |
-| `头盔点数几率_攻击_值` | "5" | Y | value | LABEL_ONLY | HelmetPtsChance_Atk |
-| `头盔点数几率_攻速_值` | "5" | Y | value | LABEL_ONLY | HelmetPtsChance_Spd |
-| `头盔点数几率_道术_值` | "5" | Y | value | LABEL_ONLY | HelmetPtsChance_Tao |
-| `头盔点数几率_魔法_值` | "5" | Y | value | LABEL_ONLY | HelmetPtsChance_Mgc |
+| `头盔属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔属性几率_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔属性几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔最随机性_极品_值` | "80" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔最高点数_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔最高点数_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔最高点数_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔最高点数_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔最高点数_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔点数几率_准确_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔点数几率_攻击_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `头盔点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `屏蔽自动绑定` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `戒指属性几率_准确_值` | "10" | Y | value | LABEL_ONLY | RingAttrChance_Acc |
-| `戒指属性几率_攻击_值` | "10" | Y | value | LABEL_ONLY | RingAttrChance_Atk |
-| `戒指属性几率_攻速_值` | "10" | Y | value | LABEL_ONLY | RingAttrChance_Spd |
-| `戒指属性几率_道术_值` | "10" | Y | value | LABEL_ONLY | RingAttrChance_Tao |
-| `戒指属性几率_魔法_值` | "10" | Y | value | LABEL_ONLY | RingAttrChance_Mgc |
-| `戒指最随机性_极品_值` | "80" | Y | value | LABEL_ONLY | RingRandExtreme |
-| `戒指最高点数_准确_值` | "10" | Y | value | LABEL_ONLY | RingMaxPts_Acc |
-| `戒指最高点数_攻击_值` | "" |  | value | LABEL_ONLY | RingMaxPts_Atk |
-| `戒指最高点数_攻速_值` | "10" | Y | value | LABEL_ONLY | RingMaxPts_Spd |
-| `戒指最高点数_道术_值` | "10" | Y | value | LABEL_ONLY | RingMaxPts_Tao |
-| `戒指最高点数_魔法_值` | "" |  | value | LABEL_ONLY | RingMaxPts_Mgc |
-| `戒指点数几率_准确_值` | "5" | Y | value | LABEL_ONLY | RingPtsChance_Acc |
-| `戒指点数几率_攻击_值` | "5" | Y | value | LABEL_ONLY | RingPtsChance_Atk |
-| `戒指点数几率_攻速_值` | "5" | Y | value | LABEL_ONLY | RingPtsChance_Spd |
-| `戒指点数几率_道术_值` | "5" | Y | value | LABEL_ONLY | RingPtsChance_Tao |
-| `戒指点数几率_魔法_值` | "5" | Y | value | LABEL_ONLY | RingPtsChance_Mgc |
-| `手镯属性几率_准确_值` | "10" | Y | value | LABEL_ONLY | BraceletAttrChance_Acc |
-| `手镯属性几率_攻击_值` | "10" | Y | value | LABEL_ONLY | BraceletAttrChance_Atk |
-| `手镯属性几率_攻速_值` | "10" | Y | value | LABEL_ONLY | BraceletAttrChance_Spd |
-| `手镯属性几率_道术_值` | "10" | Y | value | LABEL_ONLY | BraceletAttrChance_Tao |
-| `手镯属性几率_魔法_值` | "10" | Y | value | LABEL_ONLY | BraceletAttrChance_Mgc |
-| `手镯最随机性_极品_值` | "80" | Y | value | LABEL_ONLY | BraceletRandExtreme |
-| `手镯最高点数_准确_值` | "10" | Y | value | LABEL_ONLY | BraceletMaxPts_Acc |
-| `手镯最高点数_攻击_值` | "" |  | value | LABEL_ONLY | BraceletMaxPts_Atk |
-| `手镯最高点数_攻速_值` | "10" | Y | value | LABEL_ONLY | BraceletMaxPts_Spd |
-| `手镯最高点数_道术_值` | "10" | Y | value | LABEL_ONLY | BraceletMaxPts_Tao |
-| `手镯最高点数_魔法_值` | "" |  | value | LABEL_ONLY | BraceletMaxPts_Mgc |
-| `手镯点数几率_准确_值` | "5" | Y | value | LABEL_ONLY | BraceletPtsChance_Acc |
-| `手镯点数几率_攻击_值` | "5" | Y | value | LABEL_ONLY | BraceletPtsChance_Atk |
-| `手镯点数几率_攻速_值` | "5" | Y | value | LABEL_ONLY | BraceletPtsChance_Spd |
-| `手镯点数几率_道术_值` | "5" | Y | value | LABEL_ONLY | BraceletPtsChance_Tao |
-| `手镯点数几率_魔法_值` | "5" | Y | value | LABEL_ONLY | BraceletPtsChance_Mgc |
-| `武器属性几率_准确_值` | "10" | Y | value | LABEL_ONLY | WeaponAttrChance_Acc |
-| `武器属性几率_攻击_值` | "10" | Y | value | LABEL_ONLY | WeaponAttrChance_Atk |
-| `武器属性几率_攻速_值` | "10" | Y | value | LABEL_ONLY | WeaponAttrChance_Spd |
-| `武器属性几率_道术_值` | "10" | Y | value | LABEL_ONLY | WeaponAttrChance_Tao |
-| `武器属性几率_魔法_值` | "10" | Y | value | LABEL_ONLY | WeaponAttrChance_Mgc |
-| `武器最随机性_极品_值` | "80" | Y | value | LABEL_ONLY | WeaponRandExtreme |
-| `武器最高点数_准确_值` | "7" | Y | value | LABEL_ONLY | WeaponMaxPts_Acc |
-| `武器最高点数_攻击_值` | "" |  | value | LABEL_ONLY | WeaponMaxPts_Atk |
-| `武器最高点数_攻速_值` | "7" | Y | value | LABEL_ONLY | WeaponMaxPts_Spd |
-| `武器最高点数_道术_值` | "7" | Y | value | LABEL_ONLY | WeaponMaxPts_Tao |
-| `武器最高点数_魔法_值` | "7" | Y | value | LABEL_ONLY | WeaponMaxPts_Mgc |
-| `武器点数几率_准确_值` | "5" | Y | value | LABEL_ONLY | WeaponPtsChance_Acc |
-| `武器点数几率_攻击_值` | "5" | Y | value | LABEL_ONLY | WeaponPtsChance_Atk |
-| `武器点数几率_攻速_值` | "5" | Y | value | LABEL_ONLY | WeaponPtsChance_Spd |
-| `武器点数几率_道术_值` | "5" | Y | value | LABEL_ONLY | WeaponPtsChance_Tao |
-| `武器点数几率_魔法_值` | "5" | Y | value | LABEL_ONLY | WeaponPtsChance_Mgc |
-| `衣服属性几率_准确_值` | "10" | Y | value | LABEL_ONLY | ArmorAttrChance_Acc |
-| `衣服属性几率_攻击_值` | "10" | Y | value | LABEL_ONLY | ArmorAttrChance_Atk |
-| `衣服属性几率_攻速_值` | "10" | Y | value | LABEL_ONLY | ArmorAttrChance_Spd |
-| `衣服属性几率_道术_值` | "10" | Y | value | LABEL_ONLY | ArmorAttrChance_Tao |
-| `衣服属性几率_魔法_值` | "10" | Y | value | LABEL_ONLY | ArmorAttrChance_Mgc |
-| `衣服最随机性_极品_值` | "80" | Y | value | LABEL_ONLY | ArmorRandExtreme |
-| `衣服最高点数_准确_值` | "10" | Y | value | LABEL_ONLY | ArmorMaxPts_Acc |
-| `衣服最高点数_攻击_值` | "10" | Y | value | LABEL_ONLY | ArmorMaxPts_Atk |
-| `衣服最高点数_攻速_值` | "10" | Y | value | LABEL_ONLY | ArmorMaxPts_Spd |
-| `衣服最高点数_道术_值` | "10" | Y | value | LABEL_ONLY | ArmorMaxPts_Tao |
-| `衣服最高点数_魔法_值` | "10" | Y | value | LABEL_ONLY | ArmorMaxPts_Mgc |
-| `衣服点数几率_准确_值` | "5" | Y | value | LABEL_ONLY | ArmorPtsChance_Acc |
-| `衣服点数几率_攻击_值` | "5" | Y | value | LABEL_ONLY | ArmorPtsChance_Atk |
-| `衣服点数几率_攻速_值` | "5" | Y | value | LABEL_ONLY | ArmorPtsChance_Spd |
-| `衣服点数几率_道术_值` | "5" | Y | value | LABEL_ONLY | ArmorPtsChance_Tao |
-| `衣服点数几率_魔法_值` | "5" | Y | value | LABEL_ONLY | ArmorPtsChance_Mgc |
+| `戒指属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指属性几率_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指属性几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指最随机性_极品_值` | "80" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指最高点数_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指最高点数_攻击_值` | "" |  | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指最高点数_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指最高点数_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指最高点数_魔法_值` | "" |  | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指点数几率_准确_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指点数几率_攻击_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `戒指点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯属性几率_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯属性几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯最随机性_极品_值` | "80" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯最高点数_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯最高点数_攻击_值` | "" |  | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯最高点数_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯最高点数_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯最高点数_魔法_值` | "" |  | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯点数几率_准确_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯点数几率_攻击_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `手镯点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器属性几率_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器属性几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器最随机性_极品_值` | "80" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器最高点数_准确_值` | "7" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器最高点数_攻击_值` | "" |  | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器最高点数_攻速_值` | "7" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器最高点数_道术_值` | "7" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器最高点数_魔法_值` | "7" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器点数几率_准确_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器点数几率_攻击_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `武器点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服属性几率_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服属性几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服最随机性_极品_值` | "80" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服最高点数_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服最高点数_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服最高点数_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服最高点数_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服最高点数_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服点数几率_准确_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服点数几率_攻击_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `衣服点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `随机极品` | 1 | Y | toggle | LABEL_ONLY | IsRandomExtreme |
-| `项链属性几率_准确_值` | "10" | Y | value | LABEL_ONLY | NecklaceAttrChance_Acc |
-| `项链属性几率_攻击_值` | "10" | Y | value | LABEL_ONLY | NecklaceAttrChance_Atk |
-| `项链属性几率_攻速_值` | "10" | Y | value | LABEL_ONLY | NecklaceAttrChance_Spd |
-| `项链属性几率_道术_值` | "10" | Y | value | LABEL_ONLY | NecklaceAttrChance_Tao |
-| `项链属性几率_魔法_值` | "10" | Y | value | LABEL_ONLY | NecklaceAttrChance_Mgc |
-| `项链最随机性_极品_值` | "80" | Y | value | LABEL_ONLY | NecklaceRandExtreme |
-| `项链最高点数_准确_值` | "10" | Y | value | LABEL_ONLY | NecklaceMaxPts_Acc |
-| `项链最高点数_攻击_值` | "3" | Y | value | LABEL_ONLY | NecklaceMaxPts_Atk |
-| `项链最高点数_攻速_值` | "10" | Y | value | LABEL_ONLY | NecklaceMaxPts_Spd |
-| `项链最高点数_道术_值` | "10" | Y | value | LABEL_ONLY | NecklaceMaxPts_Tao |
-| `项链最高点数_魔法_值` | "2" | Y | value | LABEL_ONLY | NecklaceMaxPts_Mgc |
-| `项链点数几率_准确_值` | "5" | Y | value | LABEL_ONLY | NecklacePtsChance_Acc |
-| `项链点数几率_攻击_值` | "10" | Y | value | LABEL_ONLY | NecklacePtsChance_Atk |
-| `项链点数几率_攻速_值` | "5" | Y | value | LABEL_ONLY | NecklacePtsChance_Spd |
-| `项链点数几率_道术_值` | "5" | Y | value | LABEL_ONLY | NecklacePtsChance_Tao |
-| `项链点数几率_魔法_值` | "10" | Y | value | LABEL_ONLY | NecklacePtsChance_Mgc |
+| `项链属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链属性几率_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链属性几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链最随机性_极品_值` | "80" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链最高点数_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链最高点数_攻击_值` | "3" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链最高点数_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链最高点数_道术_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链最高点数_魔法_值` | "2" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链点数几率_准确_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链点数几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
+| `项链点数几率_魔法_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 
 ### 配置1（33）
 
@@ -633,9 +542,9 @@
 
 ## 生产 config 无但转储里有（合法，非臆造）
 
-- `怪物伤害触发技能特效` @ `0x102bcfdc` — GameSvr/Plugins/YanshenApi.cs:1502, GameSvr/Plugins/YanshenApi.cs:1531
-- `指定英雄放技能` @ `0x102b9048` — GameSvr/Plugins/YanshenApi.cs:1569
-- `火墙修改` @ `0x102bd07c` — GameSvr/Plugins/YanshenApi.cs:3140
+- `怪物伤害触发技能特效` @ `0x102bcfdc` — GameSvr/Plugins/YanshenApi.cs:1518, GameSvr/Plugins/YanshenApi.cs:1547
+- `指定英雄放技能` @ `0x102b9048` — GameSvr/Plugins/YanshenApi.cs:1585
+- `火墙修改` @ `0x102bd07c` — GameSvr/Plugins/YanshenApi.cs:3156
 
 ## INVENTED（生产 config 和转储字符串里都没有）
 

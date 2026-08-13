@@ -148,14 +148,59 @@ for i in 0..95:
 是因为它的实现被拆成两个函数：`0x7639DC` 只做耐久抖动 + `最随机性_极品` 闸门，
 属性主体在 `0x783F40`（`0x763A02 call 0x783F40`）。**这不是提取错误。**
 
-## 5. 交付状态
+## 5. 附带解出：`装备提升人物爆率` 的 trampoline
+
+`q06.txt` 里 101 个 trampoline 有 8 个标 `<template not recovered>`，
+`装备提升人物爆率(已重设) site 0x100B9F9E target 0x71FD37` 是其中之一。
+它失败的原因不是模板缺失，而是**桩体里有两个运行时算出的立即数**：
+`0x100B9E64/0x100B9E6F` 把 `A值`/`B值` 两个字符串 `atoi`（`0x1022DC49`），
+再逐字节拆进模板数组（`[ebp-0x1A8..-0x19C]` = A 的四个字节，
+`[ebp-0x168..-0x15C]` = B），所以纯常量重放拿不到它们。
+按这个模型补齐后 46 个 dword 全部解出（`staging/_ysgui2/r26_tramp2.py`）：
+
+```
+0x000  8B 40 14               mov eax,[eax+0x14]         ; 被顶掉的原指令：entry.MaxPoint
+0x003  F7 6D D4               imul dword [ebp-0x2C]      ; 被顶掉的原指令：× 疲劳倍率
+0x006  81 7D F8 00 00 41 00   cmp dword [ebp-8],0x410000 ; 击杀者是不是合法对象
+0x00D  0F 82 1A 00 00 00      jb  +0x2D                  ; 不是就原样返回
+0x013  B9 <A值>               mov ecx, A值
+0x018  F7 E9                  imul ecx
+0x01A  8B 55 F8               mov edx,[ebp-8]            ; 击杀者
+0x01D  8B 92 A4 02 00 00      mov edx,[edx+0x2A4]        ; 玩家累计爆率加成
+0x023  B9 <B值>               mov ecx, B值
+0x028  01 D1                  add ecx,edx
+0x02A  99 / F7 F9             cdq / idiv ecx
+       E9 → 0x71FD3D                                     ; 回到 call Random
+```
+
+即掉落判定的分母由 `MaxPoint × 倍率` 变成
+**`MaxPoint × 倍率 × A ÷ (B + 玩家爆率加成)`**。生产 `A值 = B值 = 10`，
+所以加成为 0 时恒等，加成越高分母越小、爆率越高。
+
+宿主 `sub_71FA20` 就是怪物散落表循环，C# 对应
+`GameSvr/UsrSystem/UsrEngn.cs:2472`
+`Random(MonItem.MaxPoint * penalty) <= MonItem.SelPoint`
+（`[+0x14]`=MaxPoint、`[+0x10]`=SelPoint、`[ebp-0x2C]`=penalty，逐项对上）。
+**未落地的唯一缺口**：`[player+0x2A4]`「累计爆率加成」在 C# 里没有对应字段，
+需要先定位它由哪些装备/状态累加。定了就是三行的事。
+
+## 6. 交付状态
 
 - 96/96 键 → 宿主 VA + 宿主指令 + 出厂立即数 + 生产值，已在
   `docs/ys_extreme_map.tsv`。
 - 算法语义已完整（§3），RNG 顺序已确定。
-- **仍缺的一环**：虚槽 19 的调用点没有定位。`call [reg+0x4C]` 在 M2Server 里
-  有 112 处，需要按对象类型过滤才能定出「掉落时谁调它」。
-  C# 侧 `GoodItem.RandomUpgradeItem`（`GameSvr/Items/GoodItem.cs:164`）**不是**它
-  ——常量与结构都不同（无 `最随机性` 总闸门、无 `StdMode & 0x40` 判定、
-  且带 DuraMax 提升）。所以这 96 键在 C# 里属于**机制层面完全缺失**，
-  不是接线问题；按本仓既定标准（无落点不实现），实现前需先定位调用点。
+- **已落地**：C# 侧的落点是 `GameSvr/Items/NativeItemPlus28.cs`，
+  它本来就是这六个例程的忠实移植，只是把出厂立即数写死了。
+  这构成一次**双向互证**——该文件里 96 个硬编码常量与本文从转储解出的宿主
+  立即数**逐个吻合**，两条推导完全独立。现已改为经
+  `YanshenApi.ExtremeParamInt` 读取，出厂值作为唯一兜底。
+  顺带修掉约 40 个此前猜错的默认值（`武器最高点数_攻击` 写 7 实为 6、
+  `武器最随机性_极品` 写 20 实为 10、`戒指最随机性_极品` 实为 9）。
+  矩阵中 IMPLEMENTED 由 73 升到 169，生产缺口由 172 降到 81。
+- 注意 `GoodItem.RandomUpgradeItem`（`GameSvr/Items/GoodItem.cs:164`）**不是**
+  这一族——它没有 `最随机性` 总闸门、没有 `StdMode & 0x40` 判定、还带 DuraMax
+  提升，是另一个原生函数，不要往那里接。
+- 关于 VMT 槽号：本文 §4 用「向前扫到非代码 dword」推出索引 19，
+  而 `NativeItemPlus28` 的注释按 Delphi 自指针判据（`dword[VMT-0x4C]==VMT`）
+  给出 `+0x28`。**后者才是对的**，前者的基址取偏了；两者指的是同一个槽，
+  §4 的价值在于「六类共用一槽、共 12 个物品类」这个结论，那部分不受影响。

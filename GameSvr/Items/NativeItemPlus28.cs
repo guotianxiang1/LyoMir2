@@ -1,3 +1,4 @@
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -14,6 +15,16 @@ namespace GameSvr
     {
         private const ushort DuraCap = 0xFDE8; // 65000, min() at 0x4C700C
         private const byte ExtraAttrFlag = 0x40; // test byte [StdItem+2], 0x40
+
+        /// <summary>
+        /// The 96 随机极品 knobs of GUI page 盘古4 are exactly the immediates of the
+        /// GetRandomRange / Random pairs below — see docs/ys_gui_extreme_20260813.md
+        /// for the key -> host VA map. Reading them through YanshenApi keeps the
+        /// stock values in one place: every accessor falls back to the immediate
+        /// the unpatched host holds.
+        /// </summary>
+        private static YanshenApi Knobs() =>
+            new YanshenApi(null, null, M2Share.PluginManager);
 
         public static void ApplyOnDrop(TUserItem item, GoodItem std)
         {
@@ -77,19 +88,20 @@ namespace GameSvr
             return std != null && (std.NativeReserved02 & ExtraAttrFlag) != 0;
         }
 
-        // 0x7608D4
+        // 0x7608D4. Knob immediates 0x7608F0 (gate) and 0x76090F..0x7609D8.
         private static void ApplyWeapon(TUserItem item, GoodItem std)
         {
             ApplyDura80(item);
-            if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
+            var k = Knobs();
+            if (Random(k.WeaponRandExtreme()) != 0 || !HasExtraAttrFlag(std)) return;
 
-            MaybeStore(item, 0, 6, 20, 30);
-            MaybeStore(item, 1, 12, 15, 30);
-            MaybeStore(item, 2, 12, 15, 30);
+            MaybeStore(item, 0, k.WeaponMaxPts_Atk(), k.WeaponPtsChance_Atk(), k.WeaponAttrChance_Atk());
+            MaybeStore(item, 1, k.WeaponMaxPts_Mgc(), k.WeaponPtsChance_Mgc(), k.WeaponAttrChance_Mgc());
+            MaybeStore(item, 2, k.WeaponMaxPts_Tao(), k.WeaponPtsChance_Tao(), k.WeaponAttrChance_Tao());
 
             // +0x30: GRR(12,15); Random(20)==0; (n+1)/3; Random(3)==0 → +10
-            var n = GetRandomRange(12, 15);
-            if (Random(20) == 0)
+            var n = GetRandomRange(k.WeaponMaxPts_Spd(), k.WeaponPtsChance_Spd());
+            if (Random(k.WeaponAttrChance_Spd()) == 0)
             {
                 var slot = (n + 1) / 3;
                 if (slot > 0)
@@ -99,10 +111,12 @@ namespace GameSvr
                 }
             }
 
-            n = GetRandomRange(12, 15);
-            if (Random(24) == 0)
+            n = GetRandomRange(k.WeaponMaxPts_Acc(), k.WeaponPtsChance_Acc());
+            if (Random(k.WeaponAttrChance_Acc()) == 0)
                 item.btValue[5] = (byte)(n / 2);
 
+            // The last two draws sit past 0x7609D8, the highest weapon knob, so
+            // they stay at the stock immediates however 盘古4 is configured.
             n = GetRandomRange(12, 12);
             if (Random(3) < 2)
                 AddDura(item, (n + 1) * 2000);
@@ -112,22 +126,24 @@ namespace GameSvr
                 item.btValue[7] = (byte)(n / 2 + 1);
         }
 
-        // 0x7639DC → 0x783F40
+        // 0x7639DC → 0x783F40. Gate 0x7639F3, body 0x783F55..0x783FF2 — the only
+        // class whose knobs live in two separate host blocks.
         private static void ApplyClothes(TUserItem item, GoodItem std)
         {
             ApplyDura80(item);
-            if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
-            MaybeStore(item, 0, 6, 20, 20);
-            MaybeStore(item, 1, 6, 20, 20);
-            MaybeStore(item, 2, 6, 20, 30);
-            MaybeStore(item, 3, 6, 20, 30);
-            MaybeStore(item, 4, 6, 20, 30);
+            var k = Knobs();
+            if (Random(k.ArmorRandExtreme()) != 0 || !HasExtraAttrFlag(std)) return;
+            MaybeStore(item, 0, k.ArmorMaxPts_Atk(), k.ArmorPtsChance_Atk(), k.ArmorAttrChance_Atk());
+            MaybeStore(item, 1, k.ArmorMaxPts_Mgc(), k.ArmorPtsChance_Mgc(), k.ArmorAttrChance_Mgc());
+            MaybeStore(item, 2, k.ArmorMaxPts_Tao(), k.ArmorPtsChance_Tao(), k.ArmorAttrChance_Tao());
+            MaybeStore(item, 3, k.ArmorMaxPts_Spd(), k.ArmorPtsChance_Spd(), k.ArmorAttrChance_Spd());
+            MaybeStore(item, 4, k.ArmorMaxPts_Acc(), k.ArmorPtsChance_Acc(), k.ArmorAttrChance_Acc());
             var n = GetRandomRange(6, 10);
             if (Random(8) < 6)
                 AddDura(item, (n + 1) * 2000);
         }
 
-        // 0x7611C8
+        // 0x7611C8. Knob immediates 0x7611FB (gate) and 0x761226..0x7612D2.
         private static void ApplyHelmet(TUserItem item, GoodItem std)
         {
             if (IsUnknownShape(std))
@@ -136,35 +152,39 @@ namespace GameSvr
                 return;
             }
             ApplyDura80(item);
-            if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
+            var k = Knobs();
+            if (Random(k.HelmetRandExtreme()) != 0 || !HasExtraAttrFlag(std)) return;
             if (std.Shape == 1) item.btValue[0] = 0;
-            else MaybeStore(item, 0, 6, 20, 20);
+            else MaybeStore(item, 0, k.HelmetMaxPts_Atk(), k.HelmetPtsChance_Atk(), k.HelmetAttrChance_Atk());
             if (std.Shape == 1) item.btValue[1] = 0;
-            else MaybeStore(item, 1, 6, 20, 20);
-            MaybeStore(item, 2, 6, 20, 30);
-            MaybeStore(item, 3, 6, 20, 30);
-            MaybeStore(item, 4, 6, 20, 30);
+            else MaybeStore(item, 1, k.HelmetMaxPts_Mgc(), k.HelmetPtsChance_Mgc(), k.HelmetAttrChance_Mgc());
+            MaybeStore(item, 2, k.HelmetMaxPts_Tao(), k.HelmetPtsChance_Tao(), k.HelmetAttrChance_Tao());
+            MaybeStore(item, 3, k.HelmetMaxPts_Spd(), k.HelmetPtsChance_Spd(), k.HelmetAttrChance_Spd());
+            MaybeStore(item, 4, k.HelmetMaxPts_Acc(), k.HelmetPtsChance_Acc(), k.HelmetAttrChance_Acc());
             var n = GetRandomRange(6, 12);
             if (Random(4) < 3)
                 AddDura(item, (n + 1) * 1000);
         }
 
-        // 0x76178C → 0x7617BC
+        // 0x76178C → 0x7617BC. Knob immediates 0x7617A3 (gate) and 0x7617D1..0x76186E.
         private static void ApplyNecklace(TUserItem item, GoodItem std)
         {
             ApplyDura80(item);
-            if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
-            MaybeStore(item, 0, 6, 20, 40);
-            MaybeStore(item, 1, 6, 20, 40);
-            MaybeStore(item, 2, 6, 20, 30);
-            MaybeStore(item, 3, 6, 20, 30);
-            MaybeStore(item, 4, 6, 20, 30);
+            var k = Knobs();
+            if (Random(k.NecklaceRandExtreme()) != 0 || !HasExtraAttrFlag(std)) return;
+            MaybeStore(item, 0, k.NecklaceMaxPts_Atk(), k.NecklacePtsChance_Atk(), k.NecklaceAttrChance_Atk());
+            MaybeStore(item, 1, k.NecklaceMaxPts_Mgc(), k.NecklacePtsChance_Mgc(), k.NecklaceAttrChance_Mgc());
+            MaybeStore(item, 2, k.NecklaceMaxPts_Tao(), k.NecklacePtsChance_Tao(), k.NecklaceAttrChance_Tao());
+            MaybeStore(item, 3, k.NecklaceMaxPts_Spd(), k.NecklacePtsChance_Spd(), k.NecklaceAttrChance_Spd());
+            MaybeStore(item, 4, k.NecklaceMaxPts_Acc(), k.NecklacePtsChance_Acc(), k.NecklaceAttrChance_Acc());
             var n = GetRandomRange(6, 10);
             if (Random(4) < 3)
                 AddDura(item, (n + 1) * 1000);
         }
 
-        // 0x761CC4 → 0x761D08
+        // 0x761CC4 → 0x761D08. Knob immediates 0x761CF0 (gate, stock 9 not 10)
+        // and 0x761D1D..0x761DBA. Ring and arm ring share the stock numbers but
+        // not the knobs, so they cannot share a body any more.
         private static void ApplyRing(TUserItem item, GoodItem std)
         {
             if (IsUnknownShape(std))
@@ -173,11 +193,18 @@ namespace GameSvr
                 return;
             }
             ApplyDura80(item);
-            if (Random(9) != 0 || !HasExtraAttrFlag(std)) return;
-            ApplyRingBody(item);
+            var k = Knobs();
+            if (Random(k.RingRandExtreme()) != 0 || !HasExtraAttrFlag(std)) return;
+            MaybeStore(item, 0, k.RingMaxPts_Atk(), k.RingPtsChance_Atk(), k.RingAttrChance_Atk());
+            MaybeStore(item, 1, k.RingMaxPts_Mgc(), k.RingPtsChance_Mgc(), k.RingAttrChance_Mgc());
+            MaybeStore(item, 2, k.RingMaxPts_Tao(), k.RingPtsChance_Tao(), k.RingAttrChance_Tao());
+            MaybeStore(item, 3, k.RingMaxPts_Spd(), k.RingPtsChance_Spd(), k.RingAttrChance_Spd());
+            MaybeStore(item, 4, k.RingMaxPts_Acc(), k.RingPtsChance_Acc(), k.RingAttrChance_Acc());
+            TrailingDura1000(item);
         }
 
-        // 0x7625BC: dura first, then the 130-132 +0x08 skip, then Random(10)
+        // 0x7625BC: dura first, then the 130-132 +0x08 skip, then Random(10).
+        // Knob immediates 0x7625E8 (gate) and 0x762615..0x7626B2.
         private static void ApplyArmRing(TUserItem item, GoodItem std)
         {
             ApplyDura80(item);
@@ -186,8 +213,14 @@ namespace GameSvr
                 ApplyUnknownArmRing08(item);
                 return;
             }
-            if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
-            ApplyRingBody(item);
+            var k = Knobs();
+            if (Random(k.BraceletRandExtreme()) != 0 || !HasExtraAttrFlag(std)) return;
+            MaybeStore(item, 0, k.BraceletMaxPts_Atk(), k.BraceletPtsChance_Atk(), k.BraceletAttrChance_Atk());
+            MaybeStore(item, 1, k.BraceletMaxPts_Mgc(), k.BraceletPtsChance_Mgc(), k.BraceletAttrChance_Mgc());
+            MaybeStore(item, 2, k.BraceletMaxPts_Tao(), k.BraceletPtsChance_Tao(), k.BraceletAttrChance_Tao());
+            MaybeStore(item, 3, k.BraceletMaxPts_Spd(), k.BraceletPtsChance_Spd(), k.BraceletAttrChance_Spd());
+            MaybeStore(item, 4, k.BraceletMaxPts_Acc(), k.BraceletPtsChance_Acc(), k.BraceletAttrChance_Acc());
+            TrailingDura1000(item);
         }
 
         // THelmet VMT+0x08 @0x761338. No extra-attr flag, no Random(80).
@@ -346,13 +379,9 @@ namespace GameSvr
             AddDura(item, (n + 1) * 1000);
         }
 
-        private static void ApplyRingBody(TUserItem item)
+        // Past the last knob of the ring/arm-ring blocks, so never configurable.
+        private static void TrailingDura1000(TUserItem item)
         {
-            MaybeStore(item, 0, 6, 20, 20);
-            MaybeStore(item, 1, 6, 20, 20);
-            MaybeStore(item, 2, 6, 20, 30);
-            MaybeStore(item, 3, 6, 20, 30);
-            MaybeStore(item, 4, 6, 20, 30);
             var n = GetRandomRange(6, 12);
             if (Random(4) < 3)
                 AddDura(item, (n + 1) * 1000);
