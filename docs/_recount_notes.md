@@ -155,3 +155,68 @@
   3. 同一原生字段 `Obj+0x3FE` 在 C# 里被**两个不同字段**建模（`m_boInSafeArea` 与 `m_boThroughOccupancyCache`），
      语义互相冲突，必有一错。
 - 裁决：**仍 DIVERGENT，且属「错接」而非单纯缺失**。优先级应高于原报告给的评级。
+
+### SGRP-26 (217/218 师徒) —— 已闭合 (FAITHFUL)
+- `31d80e5a`。独立复核跳表桩体：`0x6572A4 mov ecx,[ebp+8] / mov edx,[ebp+0xc] / call 0x657CF0`；
+  `0x6572B4 ... call 0x657AC0`。与契约一致。
+- C#: `Grobal2.ISM_MENTOR_STUDENT_1=217` / `ISM_MENTOR_STUDENT_2=218`；
+  `MirrorMessage.cs:159-166` → `MsgGetMentorStudentLeft` / `MsgGetMentorExpel`
+  → `TPlayObject.NativeMirrorMentor.cs` 的 `NativeMirrorStudentLeftMaster` / `NativeMirrorMasterExpelStudent`。
+- 裁决：**CLOSED / FAITHFUL**。
+
+### SGRP-31 (241 信用卡全清) —— 已闭合 (FAITHFUL)
+- `31d80e5a`。独立复核桩体 `0x65735C mov eax,[0x7D6D50] / mov eax,[eax] / call 0x655A18`
+  —— **无 body 入参、无条件**。
+- C#: `MirrorMessage.cs:116-124` 无条件 `ResetOnlineAll()`；旧的「非空 body 走行会战」C# 扩展已删除；
+  `ISM_GUILDWAR=241` 已标 `[Obsolete]`。
+- 裁决：**CLOSED / FAITHFUL**。
+
+### SGRP-25 (202 反作弊惩罚) —— **仍未闭合（DIVERGENT，已降级为有据 fail-closed）**
+- 独立复核桩体 `0x657208 mov edx,[ebp+8] / push edx / mov ecx,[ebp+0x10] / mov edx,[ebp+0xc] / call 0x658384`
+  —— 确有第三参 `[ebp+0x10]`（惩罚时长）。
+- C# `MirrorMessage.cs:44-69` **仍调 `MsgGetUserLogout`**。常量 `ISM_USERLOGOUT=202` 已标 `[Obsolete]`，
+  但 case 与行为未改。
+- 已记录的三条卡点（可信）：跨服为文本协议无第三 dword 载体；`[+0x180c]` 到期字段全仓无对应成员；
+  全仓唯一 live 202 发送方是 `UsrEngn.cs:1568` 的登出广播。
+- 裁决：**仍 DIVERGENT**（契约「202 是反作弊惩罚而非登出」未满足）。但从「未察觉的错」升级为「已取证的有据 fail-closed」。
+
+### SGRP-44 (207 常量冲突) —— **仍未闭合（DIVERGENT，已降级为有据 fail-closed）**
+- C# `Grobal2.cs:1806/1808`：`ISM_RELOADGUILD = 207` 与 `ISM_SERVERSWITCH = 207` **冲突仍在**（两者均已标 `[Obsolete]`，
+  另新增 `ISM_SINGLEQUOTE_SCAN = 207`）。`MirrorMessage.cs:88-112` 的 case 仍是数字 body→信用卡 switchWord、
+  非数字→重载行会两套 C# 旧语义；原生 `sub_658114` 的 37 位全局位图 swap 未移植。
+- 卡点：新掩码来自帧第三 dword（文本协议无载体）；全局 `[0x7D7038]` 位图对象与逐位回调 `sub_658110`/`0x794F30` 无模型。
+- 裁决：**仍 DIVERGENT**。
+
+### SGRP-30 (247) —— **仍未闭合（PARTIAL / fail-closed）**
+- C# 新增 `ISM_IDENT_247 = 247` 与 `MirrorMessage.cs:211-224` 的**显式空 case**（避免落 error sink 打印
+  "[Error] ProcessOthGsMsg Ident=247"，那与原生不符）。
+- 但原生 handler 本体（`sub_65805C` 门 `len==0xD`、读三 dword、`0x65808A call 0x699310` 写日志/DB）**未移植**。
+- 裁决：**PARTIAL**。较契约「entirely MISSING」有改善（派发面已在），本体仍缺。
+
+### POIS-11 —— 已闭合 (FAITHFUL)
+- `02a76791`。原判 DIVERGENT 的根因是「并行 ushort[12] 秒制存储」这个第二权威。
+  复核：`TBaseObject.cs:114-118` 明确 `m_wStatusTimeArr` 已无存储；
+  `TBaseObject.LegacyStatusTimeView.cs` 是**纯转发门面**（`sealed class` 只持 `_owner`，
+  且做成只读属性以便任何再赋值变成编译错误），读写均落唯一权威 Self+0xDC 节点链。
+- 索引双 fork 的桥接经独立反汇编坐实：绿毒 applier `0x76E5C9 push 0x1F`、红毒 applier `0x76E673 push 0x1E`；
+  C# `POISON_DECHEALTH=0`→31−0=0x1F ✓、`POISON_DAMAGEARMOR=1`→31−1=0x1E ✓。
+- 裁决：**CLOSED / FAITHFUL**。
+
+### STATE-19 —— 已闭合 (FAITHFUL；原 DIVERGENT 前提被推翻)
+- `7ee2a42d`（仅证据文档）。独立复核两条关键事实：
+  1. `8037 = 0x1F65` 作为 16 位立即数全镜像 **0 命中**（`66 ba 65 1f` 与 `66 b9 65 1f` 皆 0）；
+     对照 `66 ba 5a 28`(0x285A) **9 命中** ⇒ 扫描器可信。契约的负命题成立。
+  2. 但「原生直调 MakePosion」是**错的**：绿毒 applier `0x76E5D5 push 0x3E8`(1000ms) / `0x76E5DA mov cx,0x283C`(10300)
+     / `0x76E5E1 call 0x766060`(SendDelayMsg)；红毒 applier `0x76E689/0x76E68E/0x76E696` 同构。
+     **原生同样走 1000ms 延迟内部消息**。
+- C# `SendDelayMsg(RM_POISON, …, 1000)` → `TBaseObject.Base.cs:2097 case RM_POISON` → MakePosion，
+  与原生 10300 接收臂同构。8037 与 10300 都是**服务器内部编号、永不上线**，行为不可见。
+- 裁决：**CLOSED / FAITHFUL**。
+
+### SPWN-56 —— **仍未闭合（DIVERGENT，有据 fail-closed）**
+- `02a76791` 维持只报不改，但把根因从「谓词写错」更正为「照搬会造成净回归」。
+- 原生类型 1 分支用 `sub_765D64`（`[+0x106]!=0 && [+0x128]!=0 && Envir[+0x44]!=0` 三项有效性）做校验；
+  C# 用 `m_boDeath`。二者不等价：**已死但仍有效**的对象在 C# 会被摘链、在原生不会。
+- 保留 C# 谓词的理由（可信）：托管端三项恒真 ⇒ 照搬会让摘链臂变死代码，而它是 OS_MOVINGOBJECT
+  孤儿格子项在托管侧的唯一 GC，且位于每 tick 最热循环。
+- 裁决：**仍 DIVERGENT**（这是一处**有意的、已记录的**偏离，不是疏漏）。
