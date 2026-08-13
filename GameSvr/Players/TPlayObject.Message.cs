@@ -1698,18 +1698,33 @@ namespace GameSvr
                     // `mov dx,[msg+4]` (Ident) - so for 3027 the client names the
                     // action in Tag and sub_6EC078 range-checks that value instead.
                     // UsrEngn carries it here in nParam3.
-                    // MINE-49: 骑乘态攻击门。原生 HIT 派发器 sub_6D9EAF 在 ClientHitXY(0x6EC078)
-                    // 之前先调 sub_6BBEB8：0x6D9EBC call 0x6BBEB8 / 0x6D9EC3 jne 0x6DBC2C
-                    // == HasState(51)||HasState(52) → 放弃整个 HIT case、不发任何包（静默消费）。
-                    // 覆盖本 arm 全部 ident（CASE1 3002/3014/3015/3016/3018/3019/3024/3025/3026/3028
-                    // 命中 jne 0x6DBC2C 静默；CASE2 CM_3037 原生改跳 0x6D9FE7 先发 0x276 更正包——
-                    // 因该更正包精确载荷未取证，按 fail-closed 统一对齐 0x6DBC2C 静默放弃，
-                    // 记为有界偏差：CM_3037 骑乘态下少发一个 SM_ACT_FAIL 更正包）。
-                    if (IsNativeHitBlockedByMountState())
+                    // HIT-ARM: 原生 HIT 族是**两条**臂，前置闸的次序按 ident 分叉，
+                    // 整条阶梯移进 RunNativeHitArmGates（TPlayObject.NativeHitArmGates.cs）：
+                    //   CASE1 0x6D9EAF（3002/3014/3015/3016/3018/3019/3024/3025/3026/3028）
+                    //     0x6D9EB4 call 0x6F2D48 揭示钩子 → 0x6D9EBC 骑乘闸(命中静默)
+                    //     → 0x6D9ED3 call 0x6BCE2C 取消通道 → 0x6D9EDF can-act 闸
+                    //   CASE2 0x6D9F4B（3027 = CM_3037，jcc 全扫证明它是唯一入口）
+                    //     0x6D9F50 揭示钩子 → 0x6D9F58 骑乘闸(命中发 0x276)
+                    //     → 0x6D9F6C can-act 闸 → 0x6D9F7D 取消通道
+                    // 即 sub_6BCE2C 在 CASE1 排在 can-act 之前、CASE2 之后，单点插入
+                    // 无法同时忠实，故由 helper 按 ident 分叉。
+                    // MINE-49 的骑乘闸并入该阶梯；CM_3037 骑乘态下原生走 0x6D9FE7 的
+                    // 0x276，现按 Refuse 落到下方 dwDelayTime==0 分支，旧注释登记的
+                    // 「CM_3037 少发一个 SM_ACT_FAIL 更正包」有界偏差随之消除。
+                    // can-act 闸 0x6D9EDF/0x6D9F6C = `B2 01 mov dl,1` + `FF 51 40
+                    // call [ecx+0x40]` = TPlayer VMT 0x6AC8C8+0x40 = 0x6E6700；本端
+                    // IsNativeCanActBlocked(1) 早已在位（MOVE-14/15），只是从未在
+                    // HIT 路径上被查询过。
+                    // Refuse 不自行发包：原生两条拒绝边与 sub_6EC078 失败共用同一个
+                    // 0x276 块（0x6D9EE4 与 0x6D9F0D 同落 0x6D9F0F），故复用下方
+                    // 「ClientHitXY 返回 false」的分支；dwDelayTime 在本 switch 内
+                    // 保持 :934 的初值 0（与 MOVE-90 的 CM_SPELL 短路同理）。
+                    int nHitGate = RunNativeHitArmGates(ProcessMsg.wIdent);
+                    if (nHitGate == NativeHitGateConsume)
                     {
                         break;
                     }
-                    if (ClientHitXY(
+                    if (nHitGate == NativeHitGateProceed && ClientHitXY(
                             ProcessMsg.wIdent == Grobal2.CM_3037
                                 ? ProcessMsg.nParam3
                                 : ProcessMsg.wIdent,
@@ -1824,6 +1839,15 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_SPELL:
+                    // HIT-ARM: 原生 3017 臂 0x6DA04A 的第一件事是
+                    //   0x6DA04D  0F B7 50 0A     movzx edx,word [msg+0x0A]   ; Series
+                    //   0x6DA054  E8 EF 8C 01 00  call 0x6F2D48
+                    // 即带 0x10B 豁免的揭示钩子，排在 0x6DA059 的 state 0x33 骑乘闸之前。
+                    // [msg+0x0A] 是施法魔法号，UsrEngn 的 default 臂把 Series 放进
+                    // SendMsg 的第 3 参 wParam（同一个值下面 ClientSpellXY 当 nKey 收），
+                    // 所以这里传 ProcessMsg.wParam。唯有 magic 267(0x10B) 不破隐身 0x40；
+                    // 隐藏态 0x3C 照破（0x6F2D53 排在 0x6F2D58 的比较之前）。
+                    NotifyNativeActionReveal(ProcessMsg.wParam);
                     // MOVE-90: NOMAGIC 地图禁施法门。原生 CM_SPELL 派发器 sub_6D7D68 在调
                     // DoSpell(sub_6BC510) 之前先测地图旗标：
                     //   006DA125  8B 80 28 01 00 00     mov eax,[eax+0x128]      ; player.m_PEnvir
