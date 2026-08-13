@@ -121,6 +121,11 @@ public static class NativeGildDeclareWarTransaction
     public const int TargetIsSelfCode = 19;      // 0x13  target == own gild
     public const int RelationBusyState1 = 32;    // 0x20  sub_5E7890 == 1
     public const int RelationBusyState2 = 15;    // 0x0F  sub_5E7890 == 2
+    // 0x0F from save_relation's own existence gate 0x5E6F0D `48 dec eax` /
+    // `2C03 sub al,3` / `73 07 jae` -> 0x5E6F12 `mov eax,0x0F`. The ladder above
+    // consumes 1 and 2, so the state this gate still catches is a pending union
+    // proposal (3).
+    public const int SaveRelationRelationExists = 15;
     public const int Success = 0;
 
     /// <summary>Raw result code that goes verbatim into SendDefMessage wParam (SM 4579 for both ops).</summary>

@@ -136,7 +136,9 @@ namespace GameSvr.Services
         internal const byte GildUnion = 1;
         internal const byte GildHostile = 2;
         // Pending (unaccepted) union relation type. save_relation(sub_5E6E60) writes this on a 4573
-        // request BEFORE acceptance; it is DB-only (never enters the in-memory union/hostile lists).
+        // request BEFORE acceptance. It goes into the relation map like every other type
+        // (0x5E6F1B `8ACB mov cl,bl` / 0x5E6F23 `call 0x49F9C8`) but takes neither list: the dispatch at
+        // 0x5E6F45/0x5E6F49 is two `FECB dec bl` + `je`, so only 1 and 2 reach a list append.
         internal const byte GildPendingUnion = 3;
         internal const int UnknownError = 1000;
         internal const int PermissionDenied = 555;
@@ -248,8 +250,7 @@ namespace GameSvr.Services
                 {
                     var relationKey = NativeCorpsDataSnapshot.GildRelationKey(
                         war.FirstGildId, war.SecondGildId);
-                    _gildRelations.Remove(relationKey);
-                    DeleteGildRelationFailSafe(relationKey);
+                    RemoveGildRelationLocked(relationKey);
                 }
             }
         }
@@ -978,8 +979,7 @@ namespace GameSvr.Services
                 if (result != NativeGildUnionConcernTransaction.Success)
                     return result;
 
-                _gildRelations.Remove(relationKey);
-                DeleteGildRelationFailSafe(relationKey);
+                RemoveGildRelationLocked(relationKey);
                 return NativeGildUnionConcernTransaction.Success;
             }
         }
@@ -1035,6 +1035,20 @@ namespace GameSvr.Services
                 // fire-and-forget fail-safe, exactly as the original.
                 RelationRemovable = allied
             };
+        }
+
+        // delete_relation sub_5E90A4: 0x5E9105 `8A45F8 mov al,[ebp-8]` /
+        // 0x5E9108 `2C04 sub al,4` / 0x5E910A `jae` bails only on >= 4, so the
+        // whole 0..3 domain is removed from the relation map
+        // (0x5E9116 `call 0x49FBD4`) and DELETEd. The union/hostile list
+        // unlink at 0x5E9161/0x5E9165 (`FEC8 dec al` / `je`) is 1/2 only, and
+        // in C# those lists are derived from the same dictionary, so the
+        // single Remove covers both.
+        private void RemoveGildRelationLocked(
+            (ulong First, ulong Second) relationKey)
+        {
+            _gildRelations.Remove(relationKey);
+            DeleteGildRelationFailSafe(relationKey);
         }
 
         private void DeleteGildRelationFailSafe(
@@ -1146,9 +1160,13 @@ namespace GameSvr.Services
                 TargetGildFound = targetFound,
                 TargetIsSelf = targetIsSelf,
                 RelationState = relationState,
-                // save_relation(type=2) for a fresh pair INSERTs and returns 0;
-                // the native's defensive 15 (sub_49FCB8) is not reproduced.
-                RelationHelperResult = NativeGildDeclareWarTransaction.Success
+                // save_relation(type=2) re-reads the pair through sub_49FCB8 and
+                // returns 15 for any existing 1/2/3; 0x704060 `8BF8 mov edi,eax`
+                // propagates that verbatim. Only a pair reading 0 INSERTs.
+                RelationHelperResult = relationState == 0
+                    ? NativeGildDeclareWarTransaction.Success
+                    : NativeGildDeclareWarTransaction
+                        .SaveRelationRelationExists
             };
         }
 
@@ -1901,10 +1919,13 @@ namespace GameSvr.Services
         // 4573 CM_GILD_REQUEST_UNION write (native sub_6F6390 -> sub_704494): the client sends a gild NAME;
         // sub_5E76F0 resolves it (unresolved -> 12). President-only. Classified by the reversed
         // NativeGildRequestUnionTransaction (5/12/25/19/34/15/33/8/0). On reaching the create region the
-        // native enqueues a Relation=3 (PENDING) gildrelation INSERT BEFORE the dup probe (sub_5E6E60); we
-        // mirror that EXACT order via TryInsertGildRelation(...,3), gated + fail-safe, WITHOUT touching
-        // _gildRelations (type-3 is DB-only — save_relation only appends the in-memory union/hostile lists
-        // for type 1/2). An orphaned pending row on a dup-reject (8) is faithful (native order). Secondary/
+        // native calls save_relation(sub_5E6E60, dl=3) BEFORE the dup probe and DISCARDS its result
+        // (0x7045CC has no `mov edi,eax`, unlike 0x704060 and 0x708241). save_relation publishes the type
+        // into the SAME relation map every other path reads — 0x5E6F19 `33C9 xor ecx,ecx` / 0x5E6F1B
+        // `8ACB mov cl,bl` / 0x5E6F23 `call 0x49F9C8` with bl = the raw type — so a pending 3 IS in memory,
+        // not DB-only. Its own gate 0x5E6F0D `48 dec eax` / `2C03 sub al,3` / `73 jae` passes only when the
+        // pair currently reads 0, and both the map write and the INSERT sit past that gate.
+        // An orphaned pending row on a dup-reject (8) is faithful (native order). Secondary/
         // dedup key = the caller's OWN gild id (native dup probe sub_7065B0); target = the resolved gild.
         // Callers gate on SupportsGildWrites (so _gildStore is non-null on this path).
         internal int ApplyGildRequestUnion(long operatorId, string targetName)
@@ -1955,16 +1976,26 @@ namespace GameSvr.Services
                 var result = NativeGildRequestUnionTransaction.Evaluate(
                     context);
 
-                // Create region reached (all gates passed): the Relation=3 pending INSERT fires BEFORE the
-                // dup probe, whether or not a duplicate is then found (native order; orphan on 8 is
-                // faithful; the (GildID1,GildID2) UNIQUE KEY blocks a real dup row).
+                // Create region reached (all gates passed): the Relation=3 publish fires BEFORE the dup
+                // probe, whether or not a duplicate is then found (native order; orphan on 8 is faithful).
+                // The ladder itself only rejects 1 and 2 (0x704540/0x704544 `FEC8 dec al` + `je`), so a pair
+                // already holding 3 arrives here; save_relation's own 0x5E6F0D gate then rejects it, which
+                // is why nothing is written for a non-zero existing relation — that is also what keeps the
+                // (GildID1,GildID2) UNIQUE KEY from ever seeing a second INSERT.
                 if (result == NativeGildRequestUnionTransaction.Success
                     || result == NativeGildRequestUnionTransaction
                         .DuplicatePendingRequest)
                 {
-                    InsertGildRelationFailSafe(
-                        NativeCorpsDataSnapshot.GildRelationKey(ownGild.Id,
-                            targetGildId), GildPendingUnion, DateTime.Now);
+                    if (relation == 0)
+                    {
+                        var pendingKey = NativeCorpsDataSnapshot
+                            .GildRelationKey(ownGild.Id, targetGildId);
+                        var pendingTime = DateTime.Now;
+                        _gildRelations[pendingKey] =
+                            (GildPendingUnion, pendingTime);
+                        InsertGildRelationFailSafe(pendingKey,
+                            GildPendingUnion, pendingTime);
+                    }
                     if (result == NativeGildRequestUnionTransaction.Success)
                         result = _requestLedger.Add(
                             new NativeGildPendingRequest
@@ -2081,9 +2112,9 @@ namespace GameSvr.Services
         // (type()=0/1) refuse via the join-refuse ladder (555/12/5/0), no relation write. UNION requests
         // (TUnionGildRequest, type()=2) are reachable ONLY by a PRESIDENT (sub_70443C -> sub_708004); a
         // non-president hits WrongType-23. The cascade already returns the right ladder per role+type; on a
-        // UNION success we DELETE the Relation=3 pending row that 4573 created (sub_5E90A4) — refuse ONLY
-        // deletes, NO re-insert (accept does DELETE-3 + INSERT-1). Type-3 is DB-only (never in
-        // _gildRelations). Lookup = the per-guild ledger by applicant CharID (= sub_6A5284 Self[+0x1C]);
+        // UNION success we run delete_relation on the Relation=3 pending pair that 4573 created
+        // (sub_5E90A4 @0x70809E) — refuse ONLY deletes, NO re-insert (accept does DELETE-3 + INSERT-1).
+        // Lookup = the per-guild ledger by applicant CharID (= sub_6A5284 Self[+0x1C]);
         // guild[+0x24] is the president's UI copy only. break-union (4574) is unrelated (dissolves an
         // established relation-1 alliance). [union notify SM 4612 tag-3 / mail type-3 = DEFERRED, as above.]
         internal int ApplyGildRefuseRequest(long operatorId,
@@ -2123,13 +2154,14 @@ namespace GameSvr.Services
                     found ? (int)request.Kind : 0, found, context);
                 if (result == 0)
                 {
-                    // UNION refuse (sub_708004): DELETE the Relation=3 pending row (sub_5E90A4) — refuse
-                    // ONLY deletes, no re-insert. Store DELETE of the canonical (requesterGild,targetGild)
-                    // pair (type-3 is DB-only, never in _gildRelations). Join requests carry no relation
-                    // row. ledger.Remove consumes the record (native: remove from gild pending list +
-                    // global registry).
+                    // UNION refuse (sub_708004): delete_relation (sub_5E90A4) on the canonical
+                    // (requesterGild,targetGild) pair — refuse ONLY deletes, no re-insert. That helper
+                    // drops the map entry as well as the row, so the pending 3 must leave _gildRelations
+                    // here or the pair stays permanently un-warrable. Join requests carry no relation row.
+                    // ledger.Remove consumes the record (native: remove from gild pending list + global
+                    // registry).
                     if (request.Kind == NativeGildRequestKind.Union)
-                        DeleteGildRelationFailSafe(
+                        RemoveGildRelationLocked(
                             NativeCorpsDataSnapshot.GildRelationKey(
                                 request.SecondaryKey, request.TargetKey));
                     _requestLedger.RemoveByUniqueId(uniqueRequestId);
@@ -2238,11 +2270,14 @@ namespace GameSvr.Services
                     }
                     else if (request.Kind == NativeGildRequestKind.Union)
                     {
-                        // save_relation (sub_5E6E60 n4=1): DELETE-3 then INSERT-1 on the canonical pair
-                        // (no in-place UPDATE); type-1 enters _gildRelations (union list) + fail-safe DB.
-                        DeleteGildRelationFailSafe(relationKey);
-                        _gildRelations[relationKey] = (GildUnion, DateTime.Now);
-                        InsertGildRelationFailSafe(relationKey, GildUnion, DateTime.Now);
+                        // 0x70821C `call 0x5E90A4` delete_relation then 0x70823A `B201 mov dl,1` /
+                        // 0x70823C `call 0x5E6E60` save_relation: DELETE-3 then INSERT-1 on the canonical
+                        // pair (no in-place UPDATE). The delete is what lets save_relation's 0x5E6F0D gate
+                        // see a 0 for a pair that is currently holding the pending 3.
+                        RemoveGildRelationLocked(relationKey);
+                        var unionTime = DateTime.Now;
+                        _gildRelations[relationKey] = (GildUnion, unionTime);
+                        InsertGildRelationFailSafe(relationKey, GildUnion, unionTime);
                         saveRelationResult = 0;
                     }
                 }
@@ -2277,8 +2312,13 @@ namespace GameSvr.Services
         // pure ladder NativeGildCancelJoinTransaction (5/10/subtype). The caller's own request is the ledger
         // entry whose RequestId == the caller CharID (a player holds at most one pending request — native
         // player[0xBA6] is a single pointer). On success the request is removed from the ledger; a UNION
-        // request also DELETEs its pending Relation=3 gildrelation row that 4573 created (mirroring the
-        // refuse path sub_708004 -> sub_5E90A4; type-3 is DB-only, never in _gildRelations), fail-safe.
+        // request does NOT release its pending Relation=3 pair: the union subtype's cancel is VMT
+        // 0x707334+0x1C = sub_7084A8, whose whole body is 555/12/5 guards then sub_706608 (unlink from the
+        // gild's pending list) + sub_6A5190 (unlink from the global registry) + `33C0 xor eax,eax`. It
+        // never calls delete_relation, and sub_5E90A4 has exactly four callers image-wide (0x5E9208 war
+        // expiry, 0x703DA3 break-union, 0x70809E refuse, 0x70821C accept) with zero dword references, so
+        // the caller set is closed. A cancelled proposal therefore keeps blocking declare-war until the
+        // pair is accepted, refused or broken.
         // FLAGGED (does NOT block the wiring): the polymorphic subtype cancel code is modeled as its 0
         // success value (the observable self-cancel outcome — request removed); the native subtype method's
         // rarer 12/555 edges + the pending-request UI clear (sub_6F769C) / applicant notify are DEFERRED,
@@ -2306,10 +2346,6 @@ namespace GameSvr.Services
                     });
                 if (outcome.Result != 0) return outcome.Result;
 
-                if (ownRequest.Kind == NativeGildRequestKind.Union)
-                    DeleteGildRelationFailSafe(
-                        NativeCorpsDataSnapshot.GildRelationKey(
-                            ownRequest.SecondaryKey, ownRequest.TargetKey));
                 _requestLedger.RemoveByUniqueId(ownRequest.UniqueId);
                 return outcome.Result;
             }
@@ -2461,31 +2497,18 @@ namespace GameSvr.Services
         //   * The tally is logged only when at least one entry was dropped (`83 7d f8 00 / 7e 3b` =
         //     if count <= 0 skip) using the literals 0x006A5FFC + 0x006A6040.
         //
-        // A UNION request additionally owns a DB-only pending Relation=3 gildrelation row (written by 4573
-        // ApplyGildRequestUnion above). Native's per-subtype teardown removes it on refuse (sub_708004 ->
-        // sub_5E90A4) and cancel; the same DELETE is applied here so an expired alliance request does not
-        // leave an orphan pending row that would make the pair look permanently "in negotiation".
-        // Relation=3 never enters _gildRelations, so there is no in-memory relation to touch — an
-        // ESTABLISHED alliance (Relation=1) is NOT time-limited in 战神 and is deliberately left alone:
-        // the only relation-clearing paths are break-union 4574 and declare-war.
+        // The sweep touches NO gild relation. Its per-victim teardown is only sub_6A60A4 (@0x6A5EF0) +
+        // sub_6A5070 (@0x6A5EF9), which construct a status object and relink the list; delete_relation
+        // sub_5E90A4 is absent from the whole 0x6A5Dxx..0x6A5Fxx body and its four image-wide callers
+        // (0x5E9208 war expiry, 0x703DA3 break-union, 0x70809E refuse, 0x70821C accept) are all elsewhere,
+        // with zero dword references to it. So an expired UNION request leaves its pending Relation=3 pair
+        // in place — that pending 3 keeps blocking declare-war through save_relation's 0x5E6F0D gate until
+        // the pair is accepted, refused or broken.
         internal int PurgeExpiredRequests(DateTime now)
         {
             lock (_sync)
             {
-                var expired = _requestLedger.RemoveExpired(now);
-                if (expired.Count == 0) return 0;
-                if (SupportsGildWrites)
-                {
-                    foreach (var request in expired)
-                    {
-                        if (request.Kind != NativeGildRequestKind.Union)
-                            continue;
-                        DeleteGildRelationFailSafe(
-                            NativeCorpsDataSnapshot.GildRelationKey(
-                                request.SecondaryKey, request.TargetKey));
-                    }
-                }
-                return expired.Count;
+                return _requestLedger.RemoveExpired(now).Count;
             }
         }
 

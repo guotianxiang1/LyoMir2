@@ -237,8 +237,8 @@ namespace GameSvr
         // 4573 CM_GILD_REQUEST_UNION live routing. ADDITIVE + gated on SupportsGildWrites (no store ->
         // original SendUnsupportedNativeGuildNameOperation, Param=1000). Client sends the target gild NAME
         // (>= 8 bytes); routed through NativeCorpsService.ApplyGildRequestUnion (name resolve -> 12;
-        // president-only ladder 5/12/25/19/34/15/33/8/0; Relation=3 PENDING gildrelation INSERT fail-safe
-        // BEFORE the dup probe, mirroring the native order). Replies SM 4573 via SendDefMessage
+        // president-only ladder 5/12/25/19/34/15/33/8/0; Relation=3 PENDING publish into the relation map
+        // + fail-safe INSERT BEFORE the dup probe, mirroring the native order). Replies SM 4573 via SendDefMessage
         // (Param=result), matching native sub_6F6390's +592 reply.
         private void HandleNativeGildRequestUnion(TProcessMessage processMessage)
         {
@@ -316,8 +316,8 @@ namespace GameSvr
         // original fail-closed SM_GILD_CANCEL_JOIN/1000). No wire body — the request
         // is resolved from the caller's identity. The reversed handler gate (not in
         // a corps -> 5), the ledger lookup (not found -> 10) and the subtype cancel
-        // (-> removed + 0, plus the pending Relation=3 DELETE for a union) all run
-        // inside ApplyGildCancelJoin. Replies SM_GILD_CANCEL_JOIN with the result,
+        // (sub_7084A8: unlink only, the pending Relation=3 pair is deliberately left
+        // standing) all run inside ApplyGildCancelJoin. Replies SM_GILD_CANCEL_JOIN with the result,
         // matching native sub_6ADB60's SendDefMessage(0,4627,0,0,0,result).
         private void HandleNativeGildCancelJoin()
         {

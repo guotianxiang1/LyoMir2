@@ -121,13 +121,19 @@ namespace GildWarCreateTimeCheck
             Assert("expiry deadline is CreateTime + duration",
                 expiry, s => Has(s, "pair.Value.CreateTime.AddMilliseconds(durationMs)"));
 
-            Assert("ExpireGildWars removes the relation in memory",
+            // Teardown goes through the shared RemoveGildRelationLocked (native
+            // delete_relation sub_5E90A4, which drops the map entry AND the row);
+            // both halves are pinned here so neither can be lost in the helper.
+            Assert("ExpireGildWars tears the relation down through the shared helper",
                 service, s => Has(s, "internal void ExpireGildWars(int durationMs)")
-                              && Has(s, "_gildRelations.Remove(relationKey)"));
+                              && InBlock(s, "internal void ExpireGildWars",
+                                  "RemoveGildRelationLocked(relationKey)"));
 
-            Assert("ExpireGildWars pushes the DB DELETE",
-                service, s => InBlock(s, "internal void ExpireGildWars",
-                    "DeleteGildRelationFailSafe(relationKey)"));
+            Assert("the shared teardown removes in memory and pushes the DB DELETE",
+                service, s => InBlock(s, "private void RemoveGildRelationLocked",
+                                  "_gildRelations.Remove(relationKey)")
+                              && InBlock(s, "private void RemoveGildRelationLocked",
+                                  "DeleteGildRelationFailSafe(relationKey)"));
 
             Assert("ExpireGildWars calls the shared expiry helper",
                 service, s => InBlock(s, "internal void ExpireGildWars",
