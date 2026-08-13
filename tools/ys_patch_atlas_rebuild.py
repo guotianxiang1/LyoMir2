@@ -98,16 +98,18 @@ def _load(repo, name):
 # incumbent map: what g09.json / g11.json know
 
 def incumbent_sites(atlas_dir, strip):
-    """(site VA -> (label, target VA)) for the two legacy site atlases."""
+    """site VA -> (label, target VA, byte count) for the two legacy atlases."""
     out = {}
-    for fname, site_field, va_field in (("g09.json", "call", "va"),
-                                        ("g11.json", "site", "target")):
+    for fname, site_field, va_field, len_field in (
+            ("g09.json", "call", "va", "len"),
+            ("g11.json", "site", "target", "width")):
         path = os.path.join(atlas_dir, fname)
         if not os.path.exists(path):
             continue
         for row in json.load(open(path, encoding="utf-8")):
             label = strip.sub("", (row.get("label") or "")).strip()
-            out[row[site_field]] = (label or None, row.get(va_field))
+            out[row[site_field]] = (label or None, row.get(va_field),
+                                    row.get(len_field))
     return out
 
 
@@ -148,14 +150,31 @@ def main():
                     return s
         return ""
 
-    def host_pushes(site):
-        """host immediates pushed since the previous installer site, in order"""
+    def arg_pushes(site):
+        """every `push imm` since the previous installer site, in order"""
         prev = max([a for a in ordered if a < site], default=site - 0x800)
         return [x.operands[0].imm & 0xFFFFFFFF
                 for x in dump.align(site, back=0x800)
                 if x.address > prev and x.mnemonic == "push" and x.operands
-                and x.operands[0].type == census.X86_OP_IMM
-                and 0x400000 <= (x.operands[0].imm & 0xFFFFFFFF) < 0x800000]
+                and x.operands[0].type == census.X86_OP_IMM]
+
+    def host_pushes(site):
+        return [v for v in arg_pushes(site) if 0x400000 <= v < 0x800000]
+
+    def memcpy_len(site):
+        """sub_10033340(payload, len, va, va): the count pushed after the VAs.
+
+            push 0x6e7930 / push 0x6e7930 / push 8 / push eax / call
+        """
+        p = arg_pushes(site)
+        last = max((i for i, v in enumerate(p) if 0x400000 <= v < 0x800000),
+                   default=None)
+        if last is None:
+            return None
+        for v in p[last + 1:]:
+            if 0 < v <= 0x400:
+                return v
+        return None
 
     for r in sites:
         r["literal"] = status_literal(r["site"])
@@ -163,7 +182,8 @@ def main():
         if r["kind"] == "memcpy":
             # single destination argument; the conservative window is exact here
             r["target"] = r["conservative"][0] if r["conservative"] else None
-            r["end"] = None
+            n = memcpy_len(r["site"])
+            r["end"] = (r["target"] + n) if (n and r["target"]) else None
         else:
             p = host_pushes(r["site"])
             if len(p) >= 3 and p[-1] == p[-2] and p[-3] > p[-1]:
@@ -211,6 +231,16 @@ def main():
               % (r["site"], r["label"],
                  ("%#08x" % r["target"]) if r["target"] else "-",
                  old[r["site"]][1]))
+
+    len_mismatch = [r for r in shared
+                    if old[r["site"]][2] and r["end"] and r["target"]
+                    and (r["end"] - r["target"]) != old[r["site"]][2]]
+    unsized = [r for r in shared if r["end"] is None]
+    print("byte-count disagreements on shared sites: %d   (unsized: %d)"
+          % (len(len_mismatch), len(unsized)))
+    for r in len_mismatch[:10]:
+        print("    %#010x %s rebuild=%d legacy=%s"
+              % (r["site"], r["label"], r["end"] - r["target"], old[r["site"]][2]))
 
     # The point of the exercise: do the 101 rebuild-only sites reach any address
     # the legacy atlas did not?  They are all apply arms, and every feature's
