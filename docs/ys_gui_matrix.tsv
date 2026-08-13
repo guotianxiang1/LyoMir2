@@ -77,22 +77,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 复活触发脚本	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsReviveScript	0x73c484	0x102afcd0	2
 多元伤害	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsMultiDmg		0x102b1694	2
 大背包	0	0	扩展/物品相关	fallback	toggle	SCRIPT_ONLY	9	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsBigBag;SwitchBigBag		0x102b0178	2
-头盔属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Acc		0x102b0f44	3
-头盔属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Atk		0x102b0e24	3
-头盔属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Spd		0x102b0efc	3
-头盔属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Tao		0x102b0eb4	3
-头盔属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Mgc		0x102b0e6c	3
-头盔最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetRandExtreme		0x102b0f5c	3
-头盔最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Acc		0x102b0f14	3
-头盔最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Atk		0x102b0df4	3
-头盔最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Spd		0x102b0ecc	3
-头盔最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Tao		0x102b0e84	3
-头盔最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Mgc		0x102b0e3c	3
-头盔点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Acc		0x102b0f2c	3
-头盔点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Atk		0x102b0e0c	3
-头盔点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Spd		0x102b0ee4	3
-头盔点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Tao		0x102b0e9c	3
-头盔点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Mgc		0x102b0e54	3
+头盔属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Acc	0x7612d2	0x102b0f44	3
+头盔属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Atk	0x761237	0x102b0e24	3
+头盔属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Spd	0x7612af	0x102b0efc	3
+头盔属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Tao	0x76128c	0x102b0eb4	3
+头盔属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Mgc	0x761269	0x102b0e6c	3
+头盔最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetRandExtreme	0x7611fb	0x102b0f5c	3
+头盔最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Acc	0x7612c6	0x102b0f14	3
+头盔最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Atk	0x76122b	0x102b0df4	3
+头盔最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Spd	0x7612a3	0x102b0ecc	3
+头盔最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Tao	0x761280	0x102b0e84	3
+头盔最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Mgc	0x76125d	0x102b0e3c	3
+头盔点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Acc	0x7612c1	0x102b0f2c	3
+头盔点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Atk	0x761226	0x102b0e0c	3
+头盔点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Spd	0x76129e	0x102b0ee4	3
+头盔点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Tao	0x76127b	0x102b0e9c	3
+头盔点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Mgc	0x761258	0x102b0e54	3
 安全区禁止丢物	1	1	盘古1	catalog	toggle	IMPLEMENTED	8	GameSvr/Actors/HeroObject.cs;GameSvr/Players/TPlayObject.Operate.cs	IsDropAllowed;IsSafeNoDrop	0x73cc98	0x102b03a0	2
 宝宝叛变属性a	0	0	扩展/角色相关	fallback	toggle	LABEL_ONLY	3		IsPetRebelAttr;IsPetRebelAttrEnabled		0x102b00f8	2
 宝宝自动叛变	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsPetAutoRebel;IsPetAutoRebelEnabled		0x102b022c	3
@@ -114,22 +114,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 怪物爆率A_值	0	0	眼神2(第2页)	panel	value	LABEL_ONLY	5		IsMonsterDropA		0x102b1458	3
 怪物爆率B_值	0	0	眼神2(第2页)	panel	value	LABEL_ONLY	3		IsMonsterDropB		0x102b1468	3
 怪物爆率K_值	0	0	眼神2(第2页)	panel	value	LABEL_ONLY	3		IsMonsterDropK		0x102b1478	3
-戒指属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Acc		0x102b13c4	3
-戒指属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Atk		0x102b12a4	3
-戒指属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Spd		0x102b137c	3
-戒指属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Tao		0x102b1334	3
-戒指属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Mgc		0x102b12ec	3
-戒指最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingRandExtreme		0x102b13dc	3
-戒指最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Acc		0x102b1394	3
-戒指最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Atk		0x102b1274	3
-戒指最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Spd		0x102b134c	3
-戒指最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Tao		0x102b1304	3
-戒指最高点数_魔法_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Mgc		0x102b12bc	3
-戒指点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Acc		0x102b13ac	3
-戒指点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Atk		0x102b128c	3
-戒指点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Spd		0x102b1364	3
-戒指点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Tao		0x102b131c	3
-戒指点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Mgc		0x102b12d4	3
+戒指属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Acc	0x761dba	0x102b13c4	3
+戒指属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Atk	0x761d2e	0x102b12a4	3
+戒指属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Spd	0x761d97	0x102b137c	3
+戒指属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Tao	0x761d74	0x102b1334	3
+戒指属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Mgc	0x761d51	0x102b12ec	3
+戒指最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingRandExtreme	0x761cf0	0x102b13dc	3
+戒指最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Acc	0x761dae	0x102b1394	3
+戒指最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Atk	0x761d22	0x102b1274	3
+戒指最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Spd	0x761d8b	0x102b134c	3
+戒指最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Tao	0x761d68	0x102b1304	3
+戒指最高点数_魔法_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Mgc	0x761d45	0x102b12bc	3
+戒指点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Acc	0x761da9	0x102b13ac	3
+戒指点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Atk	0x761d1d	0x102b128c	3
+戒指点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Spd	0x761d86	0x102b1364	3
+戒指点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Tao	0x761d63	0x102b131c	3
+戒指点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Mgc	0x761d40	0x102b12d4	3
 战士合击	1	1	盘古3	panel	toggle	LABEL_ONLY	5		IsWarriorCombo;IsWarriorComboEnabled	0x7d341c 0x7d3420	0x102b06f4	2
 战士合击_数值1	"1.5"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV1		0x102b08e8	3
 战士合击_数值2	"2"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV2		0x102b08f8	3
@@ -137,22 +137,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 战士合击_数值4	"2.6"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV4		0x102b0918	3
 战士合击_数值5	"2.8"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV5		0x102b0928	3
 战队职业限制	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	8		IsGamePartnerLimit;IsGamePartnerLimitEnabled		0x102b1548	2
-手镯属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Acc		0x102b1244	3
-手镯属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Atk		0x102b1124	3
-手镯属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Spd		0x102b11fc	3
-手镯属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Tao		0x102b11b4	3
-手镯属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Mgc		0x102b116c	3
-手镯最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletRandExtreme		0x102b125c	3
-手镯最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Acc		0x102b1214	3
-手镯最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Atk		0x102b10f4	3
-手镯最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Spd		0x102b11cc	3
-手镯最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Tao		0x102b1184	3
-手镯最高点数_魔法_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Mgc		0x102b113c	3
-手镯点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Acc		0x102b122c	3
-手镯点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Atk		0x102b110c	3
-手镯点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Spd		0x102b11e4	3
-手镯点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Tao		0x102b119c	3
-手镯点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Mgc		0x102b1154	3
+手镯属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Acc	0x7626b2	0x102b1244	3
+手镯属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Atk	0x762626	0x102b1124	3
+手镯属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Spd	0x76268f	0x102b11fc	3
+手镯属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Tao	0x76266c	0x102b11b4	3
+手镯属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Mgc	0x762649	0x102b116c	3
+手镯最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletRandExtreme	0x7625e8	0x102b125c	3
+手镯最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Acc	0x7626a6	0x102b1214	3
+手镯最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Atk	0x76261a	0x102b10f4	3
+手镯最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Spd	0x762683	0x102b11cc	3
+手镯最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Tao	0x762660	0x102b1184	3
+手镯最高点数_魔法_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Mgc	0x76263d	0x102b113c	3
+手镯点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Acc	0x7626a1	0x102b122c	3
+手镯点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Atk	0x762615	0x102b110c	3
+手镯点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Spd	0x76267e	0x102b11e4	3
+手镯点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Tao	0x76265b	0x102b119c	3
+手镯点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Mgc	0x762638	0x102b1154	3
 技能等级突破	1	1	眼神2(第1页)	panel	toggle	LABEL_ONLY	6		IsLevelBreak		0x102b0210	2
 技能等级突破_最大值	255	1	眼神2(第1页)	panel	value	LABEL_ONLY	6		IsLevelBreakMax;IsLevelBreakMaxEnabled		0x102b0a40	2
 技能触发脚本	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsSkillTrigger		0x102b0298	2
@@ -190,22 +190,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 最大装备数量	""	0	盘古3	panel	value	LABEL_ONLY	4		MaxEquipCount		0x102b09cc	3
 格位刺杀免伤a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsLuckBlock		0x102b00dc	2
 概率格挡a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsProbBlock		0x102b00ec	2
-武器属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Acc		0x102b0c44	3
-武器属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Atk		0x102b0b24	3
-武器属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Spd		0x102b0bfc	3
-武器属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Tao		0x102b0bb4	3
-武器属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Mgc		0x102b0b6c	3
-武器最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponRandExtreme		0x102b0c5c	3
-武器最高点数_准确_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Acc		0x102b0c14	3
-武器最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Atk		0x102b0af4	3
-武器最高点数_攻速_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Spd		0x102b0bcc	3
-武器最高点数_道术_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Tao		0x102b0b84	3
-武器最高点数_魔法_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Mgc		0x102b0b3c	3
-武器点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Acc		0x102b0c2c	3
-武器点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Atk		0x102b0b0c	3
-武器点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Spd		0x102b0be4	3
-武器点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Tao		0x102b0b9c	3
-武器点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Mgc		0x102b0b54	3
+武器属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Acc	0x7609d8	0x102b0c44	3
+武器属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Atk	0x760920	0x102b0b24	3
+武器属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Spd	0x76098f	0x102b0bfc	3
+武器属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Tao	0x76096a	0x102b0bb4	3
+武器属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Mgc	0x760945	0x102b0b6c	3
+武器最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponRandExtreme	0x7608f0	0x102b0c5c	3
+武器最高点数_准确_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Acc	0x7609cc	0x102b0c14	3
+武器最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Atk	0x760914	0x102b0af4	3
+武器最高点数_攻速_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Spd	0x760983	0x102b0bcc	3
+武器最高点数_道术_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Tao	0x76095e	0x102b0b84	3
+武器最高点数_魔法_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Mgc	0x760939	0x102b0b3c	3
+武器点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Acc	0x7609c7	0x102b0c2c	3
+武器点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Atk	0x76090f	0x102b0b0c	3
+武器点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Spd	0x76097e	0x102b0be4	3
+武器点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Tao	0x760959	0x102b0b9c	3
+武器点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Mgc	0x760934	0x102b0b54	3
 武器绿毒	1	1	盘古2	panel	toggle	LABEL_ONLY	4		IsWeaponGreenPoison	0x76e2bc	0x102b054c	2
 死亡触发	1	1	盘古1	panel	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsDeathTrigger	0x6c09b5	0x102b04a8	2
 毫秒级cd记录	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	14	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	CDSet;IsCdMs;IsMsCDEnabled		0x102b1610	2
@@ -296,22 +296,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 获取沙城归属	0	0	眼神2(第1页)	panel	toggle	SCRIPT_ONLY	7	GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsGetCastle;IsGetCastleEnabled		0x102b1668	2
 获取玩家对象函数	1	1	扩展/脚本相关	fallback	toggle	MISSING	0			0x646f40 0x647d24 0x736b28 0x736ef8	0x102b063c	2
 行会显示	1	1	盘古1	catalog	toggle	IMPLEMENTED	10	GameSvr/Players/TPlayObject.Base.cs;GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	GetCreatureAttr;IsGuildShow	0x6c5bcb 0x6c5bf7	0x102b03f0	2
-衣服属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Acc		0x102b0dc4	3
-衣服属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Atk		0x102b0ca4	3
-衣服属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Spd		0x102b0d7c	3
-衣服属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Tao		0x102b0d34	3
-衣服属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Mgc		0x102b0cec	3
-衣服最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorRandExtreme		0x102b0ddc	3
-衣服最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Acc		0x102b0d94	3
-衣服最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Atk		0x102b0c74	3
-衣服最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Spd		0x102b0d4c	3
-衣服最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Tao		0x102b0d04	3
-衣服最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Mgc		0x102b0cbc	3
-衣服点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Acc		0x102b0dac	3
-衣服点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Atk		0x102b0c8c	3
-衣服点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Spd		0x102b0d64	3
-衣服点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Tao		0x102b0d1c	3
-衣服点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Mgc		0x102b0cd4	3
+衣服属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Acc	0x783ff2	0x102b0dc4	3
+衣服属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Atk	0x783f66	0x102b0ca4	3
+衣服属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Spd	0x783fcf	0x102b0d7c	3
+衣服属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Tao	0x783fac	0x102b0d34	3
+衣服属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Mgc	0x783f89	0x102b0cec	3
+衣服最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorRandExtreme	0x7639f3	0x102b0ddc	3
+衣服最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Acc	0x783fe6	0x102b0d94	3
+衣服最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Atk	0x783f5a	0x102b0c74	3
+衣服最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Spd	0x783fc3	0x102b0d4c	3
+衣服最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Tao	0x783fa0	0x102b0d04	3
+衣服最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Mgc	0x783f7d	0x102b0cbc	3
+衣服点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Acc	0x783fe1	0x102b0dac	3
+衣服点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Atk	0x783f55	0x102b0c8c	3
+衣服点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Spd	0x783fbe	0x102b0d64	3
+衣服点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Tao	0x783f9b	0x102b0d1c	3
+衣服点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Mgc	0x783f78	0x102b0cd4	3
 被击杀触发	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsBeKilledTrigger	0x766624	0x102afd00	2
 装备吸血	1	1	盘古3	panel	toggle	LABEL_ONLY	7		IsEquipSteal	0x76e2a3	0x102b0630	2
 装备多职业	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	7		IsMultiJob;IsMultiJobEquip		0x102b1530	2
@@ -355,22 +355,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 雷电术自定义伤害_系数B	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsLightningCustomB		0x102afe88	2
 雷电自定义范围	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLightningRange	0x76eb06	0x102aff70	2
 非红名K值	""	0	盘古3	panel	value	LABEL_ONLY	3		NormalK		0x102b09b8	3
-项链属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Acc		0x102b10c4	3
-项链属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Atk		0x102b0fa4	3
-项链属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Spd		0x102b107c	3
-项链属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Tao		0x102b1034	3
-项链属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Mgc		0x102b0fec	3
-项链最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceRandExtreme		0x102b10dc	3
-项链最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Acc		0x102b1094	3
-项链最高点数_攻击_值	"3"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Atk		0x102b0f74	3
-项链最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Spd		0x102b104c	3
-项链最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Tao		0x102b1004	3
-项链最高点数_魔法_值	"2"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Mgc		0x102b0fbc	3
-项链点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Acc		0x102b10ac	3
-项链点数几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Atk		0x102b0f8c	3
-项链点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Spd		0x102b1064	3
-项链点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Tao		0x102b101c	3
-项链点数几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Mgc		0x102b0fd4	3
+项链属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Acc	0x76186e	0x102b10c4	3
+项链属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Atk	0x7617e2	0x102b0fa4	3
+项链属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Spd	0x76184b	0x102b107c	3
+项链属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Tao	0x761828	0x102b1034	3
+项链属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Mgc	0x761805	0x102b0fec	3
+项链最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceRandExtreme	0x7617a3	0x102b10dc	3
+项链最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Acc	0x761862	0x102b1094	3
+项链最高点数_攻击_值	"3"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Atk	0x7617d6	0x102b0f74	3
+项链最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Spd	0x76183f	0x102b104c	3
+项链最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Tao	0x76181c	0x102b1004	3
+项链最高点数_魔法_值	"2"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Mgc	0x7617f9	0x102b0fbc	3
+项链点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Acc	0x76185d	0x102b10ac	3
+项链点数几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Atk	0x7617d1	0x102b0f8c	3
+项链点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Spd	0x76183a	0x102b1064	3
+项链点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Tao	0x761817	0x102b101c	3
+项链点数几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Mgc	0x7617f4	0x102b0fd4	3
 高级回收	1	1	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	13	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	AutoRecycle;IsAutoRecycle		0x102b164c	2
 高级物理攻击触发	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	4		IsAdvancedPhysTrigger		0x102b15c0	2
 高级英雄倍功暴击	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsHeroAdvancedPowerCrit;IsHeroAdvancedPowerCritEnabled		0x102b1588	2

@@ -431,6 +431,26 @@ def dump_strings(dump_path, candidates):
     return out
 
 
+def load_extreme_map(repo):
+    """key -> host VA, for the 96 random-superior knobs.
+
+    These never show up in the memcpy/immediate atlas: the apply arm stores into
+    M2Server .text with a plain `mov [absolute], eax`, so a scan that only looks
+    for the patch helpers misses all 96.  See docs/ys_gui_extreme_20260813.md.
+    """
+    path = os.path.join(repo, "docs", "ys_extreme_map.tsv")
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    with open(path, encoding="utf-8") as fh:
+        next(fh, None)
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 4 and parts[3]:
+                out[parts[0]] = {int(parts[3], 16)}
+    return out
+
+
 def load_atlas(atlas_dir):
     """feature label -> set of M2Server target VAs the plugin writes."""
     out = collections.defaultdict(set)
@@ -471,6 +491,7 @@ def main():
     consumers = accessor_consumers(repo, hits)
     lookups = scan_lookups(repo)
     atlas = load_atlas(args.atlas)
+    atlas.update(load_extreme_map(repo))
     keystrings = load_keystrings(args.atlas)
 
     rows = []
