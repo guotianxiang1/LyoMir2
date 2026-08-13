@@ -366,6 +366,23 @@ staging\_gg_reunpack_work\   GGService 2019 / 2021 / 2025 三版脱壳 + 34 MB f
 
 **开工前先 `dir staging\_*reunpack*` 与 `dir staging\*runtime_dump*`，
 不要凭 PE 头的加壳特征就判 BLOCKED。**
+
+**DBServer 转储的基址已定案：`VA = 0x401000 + 转储内偏移`。** 三条独立判据
+（`staging/dbsvr_re/q01_verify.py` 可复跑）：PE 节表 `CODE VA=0x00401000 VSZ=0x1D34C8`，
+向上对齐 `0x1000` 得 `0x1D4000` = 转储长度；`jmp dword[imm32+reg*4]` 表项落在转储内
+`0x401000` 命中 91.7%，`0x400000`/`0x402000`/`0x10000000` 全是 **0%**；
+按此基址三个分发器臂都解出自洽的 Delphi。**用 `0x400000` 会让全部交叉引用 0 命中，
+看起来像「证据不存在」——这个坑已经踩过一次。**
+
+工具链在 `staging/dbsvr_re/dbs.py`（capstone，`BASE = 0x401000`）。
+入口：type-1 `sub_59889C`、type-2 `sub_599860`、type-3 `sub_599DB4`；
+连接角色字节 `[conn+0x40A0]`，`9` = DBTool，其余 = GameServer 序号，由 type-2 `0x003D` 设置。
+结论见 `docs/m_dbsvr_impl_20260813.md`。
+
+> **教训（2026-08-13）**：仅凭「原版 M2Server 的分发器不认某个码」就判 `INVENTED`
+> 是不成立的推理 —— **认不认在接收侧，发不发在发送侧**。据此判过的
+> `0x0073/0x0075/0x0076/0x006D/0x0059/0x00C9/0x0071` 七个码，用 DBServer 字节全部翻案为
+> `FAITHFUL`。判 `INVENTED` 前必须**两侧都扫**。
 - **`.rsrc` 里没有对话框资源，这条已被逐字节复核，不要再翻案。** 主代理曾据「`.rsrc`
   熵 3.575、未加壳」推断可以静态提取 GUI，并据此派了任务——**推断是错的，上一条才是对的**。
   资源目录（文件偏移 `0x15ACC00`）只有 4 个 ID 条目：`03`(ICON) / `0E`(GROUP_ICON) /
