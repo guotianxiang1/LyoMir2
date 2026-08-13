@@ -4088,6 +4088,25 @@ namespace GameSvr
                 for (var nC = 0; nC < m_VisibleHumanList.Count; nC++)
                 {
                     BaseObject = m_VisibleHumanList[nC];
+                    // 族 B —— 取用前的「这指针还能碰吗」门。原生 sub_76533C
+                    // (TCreature.SendRefMsg) 倒序遍历 [self+0x380]：
+                    //   00765474  8B 45 FC / 8B 80 80 03 00 00  eax := self^.VisibleHumanList
+                    //   0076547F  E8 C8 F8 CB FF                call 0x424D4C  ; TList.Get(edx=idx)
+                    //   00765487  83 7D F4 00 / 0F 84 96 00..   item = nil -> jmp 0x765527（跳过）
+                    //   00765494  E8 CB 08 00 00                call 0x765D64  ; 有效性谓词
+                    //   00765499  84 C0 / 75 49                 jne 0x7654E6   ; 有效 -> 幽灵判定
+                    //   0076549D-007654DF  拼 "[Exception]: TCreature.SendRefMsg Obj.CName = 空 Obj = "
+                    //   007654DF  E8 90 8A 03 00                call 0x79DF74  ; 记异常
+                    //   007654E4  EB 41                         jmp 0x765527   ; 跳过，表项**留着**
+                    // 与族 A 的关键区别就在这一步：这里**不删表项**。相邻的幽灵臂才删
+                    // （0x7654E9 cmp byte [obj+0x73],0 -> 0x7654FA call 0x424B30 = TList.Delete），
+                    // 两条处置不同，正是「有效性 != 死亡/幽灵」的原生佐证。
+                    // sub_765790 (TCreature.SendRefBuff) 在 0x7658E0 用同一形状。
+                    // 原生的诊断日志未复刻：它无 gameplay 可观察面，且这里是每 tick 热路径。
+                    if (!IsNativeCellObjectValid(BaseObject))
+                    {
+                        continue;
+                    }
                     if (BaseObject.m_boGhost)
                     {
                         continue;

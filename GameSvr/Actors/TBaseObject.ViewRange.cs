@@ -200,9 +200,15 @@ namespace GameSvr
                                 {
                                     if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                     {
-                                        // 战神 0x77A2EB call 0x765D64 是本循环唯一的摘链谓词，
-                                        // 60 秒时限是移植期自造的替身。两者不等价，故并联而非替换：
-                                        // 见 docs/view_searchrange_predicate_20260814.md。
+                                        // 本方法（非玩家版）的原生对应体是 sub_77A990
+                                        // = TEnvironment.DoSearchTargetList，其摘链谓词在
+                                        // 0x77AB07 call 0x765D64。认定依据：sub_77A990 的节点
+                                        // 循环 0x77AAEE `cmp byte [node],1 / jne 0x77AC13`
+                                        // **只有 CellType 1 一条臂**，没有地面物 / 事件臂，
+                                        // 与本方法逐条对应；玩家版 sub_77A178（0x77A2EB）则有
+                                        // 1/2/3 三条臂。两处的谓词与摘链臂逐字节相同。
+                                        // 60 秒时限是移植期自造的替身，与谓词不等价，
+                                        // 故并联而非替换：见 docs/view_searchrange_predicate_20260814.md。
                                         if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
                                             || IsNativeStaleCellActor(OSObject.CellObj))
                                         {
