@@ -423,6 +423,28 @@ namespace GameSvr.PasEngine
             return true;
         }
 
+        /// <summary>
+        /// NpcFuc.pas smuggles its monster spawner through CheckMapMonByName by
+        /// passing the literal 'yanshen2.0.7' where a map name belongs:
+        ///   result:=This_NPC.CheckMapMonByName('yanshen2.0.7',res);
+        /// with res = '0^x^y^num^round^Ac^Mac^Dc^DcMax^Mc^Sc^Speed^Hit^hp^Maxhp^
+        /// AttackSpd^WalkSpd^MonName^Map'.
+        ///
+        /// Not implemented: the 12 per-monster stats have no equivalent spawn
+        /// path here (YSCreateMon carries only HP/AC/MAC/DC/YS/GS — no DcMax,
+        /// Mc, Sc, Speed, Hit, AttackSpd or WalkSpd), and the plugin body is
+        /// inside the Themida-packed DLL. Rather than guess, reject loudly:
+        /// no such map exists, so the count path would otherwise return 0 and
+        /// the script would read that as "spawned nothing, all fine".
+        /// </summary>
+        private static void RejectUnimplementedNpcCreatMonsTunnel(string mapName)
+        {
+            if (!string.Equals(mapName, "yanshen2.0.7", StringComparison.OrdinalIgnoreCase))
+                return;
+            throw new YanshenApiUnavailableException("NPC_CreatMons", "npc自定义函数",
+                "NpcFuc.pas 造怪隧道未实现（12 项怪物属性无等价生成路径）");
+        }
+
         internal static bool IsYanshenSignInTunnelCall(List<PasValue> args)
         {
             if (args.Count != 2) return false;
