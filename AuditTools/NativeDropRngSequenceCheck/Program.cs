@@ -6,6 +6,7 @@ using SystemModule;
 // Bounds (Random arguments) and draw counts are the contract; a later edit
 // that inserts or drops a draw turns this red.
 
+PrepareRuntimeConfig();
 M2Share.RandomNumber = RandomNumber.GetInstance();
 NativeJewelStoneTable.Reset();
 
@@ -59,9 +60,13 @@ static void PinJewelTableWrite()
     Equal(row[3], item.NativeRecord[0x19], "jewel word hi item+0x39");
     Equal(row[4], item.NativeRecord[0x1A], "jewel min item+0x3A");
     Equal(row[5], item.NativeRecord[0x1B], "jewel max item+0x3B");
-    Equal(row[6], item.NativeRecord[0xE0], "jewel compose item+0x100");
-    Equal(row[7], item.NativeRecord[0xE1], "jewel normal-up item+0x101");
-    Equal(row[8], item.NativeRecord[0xE2], "jewel shop-up item+0x102");
+    // item+0x100..0x102 are runtime bytes, NOT record bytes: the persisted window is
+    // item+0x20..item+0xEF (0x74DB3A lea edi,[ebx+0x20] / 0x74DB3D mov ecx,0x34 /
+    // 0x74DB42 rep movsd), so record offset 0xE0 is past the end of the 208-byte
+    // array and the old spelling threw IndexOutOfRange on every jewel drop.
+    Equal(row[6], item.NativeItemPlus100, "jewel compose item+0x100");
+    Equal(row[7], item.NativeItemPlus101, "jewel normal-up item+0x101");
+    Equal(row[8], item.NativeItemPlus102, "jewel shop-up item+0x102");
     NativeJewelStoneTable.Reset();
 
     var skipped = Item(1000);
@@ -106,7 +111,7 @@ static void PinSeededDropChain()
     var expected = Concat(
         new[] { 30, 80, 100, 40 },
         new[] { 80, 12 },
-        HelmetUnknown08);
+        HelmetUnknown08());
     EqualSeq(bounds, expected, "seeded drop-chain bounds");
     Equal(bounds.Length, expected.Length, "seeded drop-chain count");
     Equal(seed != DelphiRandom.Seed, true, "seed advanced");
@@ -214,6 +219,27 @@ static void Equal<T>(T actual, T expected, string label)
 static void Assert(bool condition, string label)
 {
     if (!condition) throw new InvalidOperationException(label);
+}
+
+// M2Share's static constructor reads !Setup.txt / ../Share/*.ini out of the
+// runtime directory; without them the very first M2Share touch throws before a
+// single assertion runs.  Same bootstrap the other in-process audits use.
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }
 
 static string FindRepoRoot()

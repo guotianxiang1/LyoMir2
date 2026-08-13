@@ -429,7 +429,6 @@ namespace GameSvr
         public const int RecordSize = 9;
         public const int NativeRecordSize = 208;
         public const int ItemPlus36RecordOffset = 0x16; // item+0x36
-        public const int ItemPlus100RecordOffset = 0xE0; // item+0x100
 
         // [type 1..4][index 0..12]; index 0 is unused (loader skips it).
         private static readonly byte[][][] Rows = CreateEmpty();
@@ -479,9 +478,12 @@ namespace GameSvr
             if (item.NativeRecord == null || item.NativeRecord.Length != NativeRecordSize)
                 item.NativeRecord = new byte[NativeRecordSize];
             Buffer.BlockCopy(rec, 0, item.NativeRecord, ItemPlus36RecordOffset, 6);
-            item.NativeRecord[ItemPlus100RecordOffset] = rec[6];
-            item.NativeRecord[ItemPlus100RecordOffset + 1] = rec[7];
-            item.NativeRecord[ItemPlus100RecordOffset + 2] = rec[8];
+            // 0x78C643/0x78C64C/0x78C655 write item+0x100..0x102, which is 0x10 bytes
+            // past the end of the persisted item+0x20..item+0xEF window, so they are
+            // runtime state and not record bytes.
+            item.NativeItemPlus100 = rec[6];
+            item.NativeItemPlus101 = rec[7];
+            item.NativeItemPlus102 = rec[8];
         }
     }
 }

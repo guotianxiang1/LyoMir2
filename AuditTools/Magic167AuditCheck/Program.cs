@@ -161,18 +161,62 @@ namespace Magic167AuditCheck
         private static void ConstantIs(string source, string name, int expected, string evidence)
         {
             var match = Regex.Match(source,
-                Regex.Escape(name) + @"\s*=\s*(0[xX][0-9A-Fa-f]+|-?\d+)\s*;");
+                Regex.Escape(name)
+                + @"\s*=\s*(0[xX][0-9A-Fa-f]+|-?\d+|Grobal2\.[A-Za-z_][A-Za-z0-9_]*)\s*;");
             if (!match.Success)
             {
                 Fail($"constant {name} was not found ({evidence})");
                 return;
             }
             var text = match.Groups[1].Value;
-            var actual = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-                ? int.Parse(text.Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture)
-                : int.Parse(text, CultureInfo.InvariantCulture);
+            if (!TryReadInt(text, out var actual))
+            {
+                Fail($"{name} is {text}, whose value could not be resolved ({evidence})");
+                return;
+            }
             if (actual != expected)
                 Fail($"{name} is {text} but {evidence} gives 0x{expected:X}");
+        }
+
+        // The right-hand side may be a literal or a published Grobal2 constant
+        // (c7600445 moved the prison event type onto Grobal2.ET_PRISON). Chase the
+        // symbol into Grobal2.cs so the numeric assertion still bites.
+        private static bool TryReadInt(string text, out int value)
+        {
+            if (text.StartsWith("Grobal2.", StringComparison.Ordinal))
+            {
+                var symbol = text.Substring("Grobal2.".Length);
+                var grobal2 = _grobal2Source ??= ReadGrobal2Source();
+                if (grobal2 == null)
+                {
+                    value = 0;
+                    return false;
+                }
+                var declaration = Regex.Match(grobal2,
+                    @"\b(?:const|static\s+readonly)\s+\w+\s+"
+                    + Regex.Escape(symbol)
+                    + @"\s*=\s*(0[xX][0-9A-Fa-f]+|-?\d+)\s*;");
+                if (!declaration.Success)
+                {
+                    value = 0;
+                    return false;
+                }
+                text = declaration.Groups[1].Value;
+            }
+            value = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                ? int.Parse(text.Substring(2), NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture)
+                : int.Parse(text, CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        private static string _grobal2Source;
+
+        private static string ReadGrobal2Source()
+        {
+            var path = FindSource(Array.Empty<string>(),
+                Path.Combine("SystemModule", "Grobal2.cs"));
+            return path == null ? null : File.ReadAllText(path);
         }
 
         private static void Require(string source, string pattern, string message)

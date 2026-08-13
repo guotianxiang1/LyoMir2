@@ -129,12 +129,17 @@ string WriteIni(string contents)
 
 string FindRepoRoot()
 {
-    var dir = new DirectoryInfo(AppContext.BaseDirectory);
-    while (dir != null)
+    // The shared build drops the exe outside the worktree, so the walk has to start
+    // from the working directory too, not just the runtime directory.
+    foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
     {
-        if (File.Exists(Path.Combine(dir.FullName, "GameSvr", "Actors", "TBaseObject.cs")))
-            return dir.FullName;
-        dir = dir.Parent;
+        var dir = new DirectoryInfo(start);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "GameSvr", "Actors", "TBaseObject.cs")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
     }
     return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
 }
@@ -150,6 +155,11 @@ void PrepareRuntimeConfig()
     File.WriteAllText(Path.Combine(share, "PlayerUpgradeExp.ini"),
         "[PlayerLevelExp]");
     File.WriteAllText(Path.Combine(share, "ServerData.ini"), "[Integer]");
+    // TBaseObject.cs:907 ends every construction with
+    // M2Share.ObjectManager.RegisterConstructed(this); production sets that field
+    // in GameApp.cs:564 long before the first actor exists, so an in-process
+    // harness has to stand one up itself (same as YanshenMonsterAttrCheck).
+    M2Share.ObjectManager ??= new ObjectManager();
 }
 
 void Equal<T>(T expected, T actual, string name)

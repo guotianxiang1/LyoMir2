@@ -41,8 +41,16 @@ Assert(Count(failHandler, "autoFindPath:research()") == 1,
 
 var commandSource = Read(Path.Combine(repositoryRoot, "GameSvr", "Command", "Commands",
     "SetNoKillMapLvCommand.cs"));
+// 战神 GM command table record @0x7CD254 (stride 0x120, name ShortString[23] at
+// +0x00, id dword at +0x18, permission dword at +0x1C):
+//   7CD254  0E 53 65 74 4E 6F 4B 69 6C 6C 4D 61 70 4C 76   len=14 "SetNoKillMapLv"
+//   7CD26C  88 01 00 00                                    id   = 392
+//   7CD270  05 00 00 00                                    permission = 5
+// The +0x1C field is the permission: AttackMode @0x7B6274 and Rest @0x7B6394 read
+// 0, addGuildMem @0x7B9AB4 reads 3, AddHeroExp @0x7C46D4 and GetUserItem
+// @0x7BC8D4 read 4 -- each matching its own [GameCommand] attribute.
 Assert(commandSource.Contains("[GameCommand(\"SetNoKillMapLv\"", StringComparison.Ordinal) &&
-       commandSource.Contains("\"等级\", 10)]", StringComparison.Ordinal),
+       commandSource.Contains("\"等级\", 5)]", StringComparison.Ordinal),
     "SetNoKillMapLv GM permission contract changed");
 Assert(commandSource.Contains("public override string Handle", StringComparison.Ordinal) &&
        commandSource.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
@@ -161,7 +169,7 @@ finally
 }
 
 Console.WriteLine(
-    "PASS act-fail=active-path-only throttle=250ms auto-rat=isolated relive=gbk-script-gated fail-closed gm=permission10");
+    "PASS act-fail=active-path-only throttle=250ms auto-rat=isolated relive=gbk-script-gated fail-closed gm=permission5");
 
 static string Read(string path) => File.ReadAllText(path);
 

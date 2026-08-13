@@ -101,7 +101,10 @@ NativeDropControlRuntime.Materialize(
 Equal(3, failedCreates, "placement failure consumes all quantity");
 Equal(3, failedPlacements, "placement attempted for every quantity");
 Equal(3, failedRandomCalls, "failed placement does not roll back init");
-Equal(4, failedRange, "native fixed scatter range");
+// 0x71FF3D  B9 03 00 00 00  mov ecx,3  -> DropItemDown's ItemRange (ECX is the
+// third register param; 0x7688B4 `mov ebx,ecx` receives it).  Segment 3 of
+// sub_71FA20 hardcodes a radius of 3, not 4.
+Equal(3, failedRange, "native fixed scatter range");
 
 var stackPlaced = new List<TUserItem>();
 var stackLog = new List<KeyValuePair<string, string>>();
@@ -142,7 +145,7 @@ Equal(new ushort[] { 777, 777 }, pileDurabilities.ToArray(),
 Console.WriteLine(
     "NativeDropControlRuntimeCheck PASS timed-uint-rollover " +
     "map-equality-reset world-greater-reset bucket-isolation chain=A,C,B " +
-    "rng-order=ordinary,controlled scatter-range=4 failure-lossy=true " +
+    "rng-order=ordinary,controlled scatter-range=3 failure-lossy=true " +
     "type7-final-dura=virtual pile-init=noop");
 
 static TUserItem Item(ushort index, ushort duraMax)

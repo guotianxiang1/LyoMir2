@@ -155,7 +155,9 @@ static void CheckWiringAndFailClosedLegs()
         StringComparison.Ordinal);
     Assert(bodyStart >= 0, "SendNativeLogonStateSync method present");
     var methodBody = sync[bodyStart..];
-    Contains(methodBody, "BuildNativeTimedAbilitySnapshot()", "3554 snapshot builder call");
+    // 3c43b685 folded the duplicate SM 3554 builder into TBaseObject's
+    // BuildTimedAbilityListState (same ident 0xDE2, same [self+0xDC] walk).
+    Contains(methodBody, "BuildTimedAbilityListState()", "3554 snapshot builder call");
     Equal(1, Count(methodBody, "SendSocket("), "exactly one send primitive");
     Equal(0, Count(methodBody, "SendDefMessage("), "no fabricated direct send");
     Equal(0, Count(methodBody, "SendRefMsg("), "no fabricated broadcast send");
@@ -165,9 +167,9 @@ static void CheckWiringAndFailClosedLegs()
 
 static (ClientPacket Header, byte[] Body) InvokeSnapshot(TBaseObject actor)
 {
-    var method = typeof(TBaseObject).GetMethod("BuildNativeTimedAbilitySnapshot",
+    var method = typeof(TBaseObject).GetMethod("BuildTimedAbilityListState",
         BindingFlags.NonPublic | BindingFlags.Instance)
-        ?? throw new InvalidOperationException("BuildNativeTimedAbilitySnapshot missing");
+        ?? throw new InvalidOperationException("BuildTimedAbilityListState missing");
     var tuple = method.Invoke(actor, null)
         ?? throw new InvalidOperationException("snapshot returned null");
     var type = tuple.GetType();

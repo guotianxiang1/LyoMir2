@@ -396,8 +396,10 @@ void CheckOtherServerDivorce()
     Assert(!global.Contains("ISM_FRIEND_OPEN = 216;",
             StringComparison.Ordinal),
         "opcode 216 is still owned by the stale FriendOpen label");
+    // Only whitespace and // comments may sit between the label and the call;
+    // any other statement would mean 216 no longer routes straight to the receiver.
     Assert(Regex.IsMatch(mirrorMessage,
-            @"case Grobal2\.ISM_DIVORCE:\s*"
+            @"case Grobal2\.ISM_DIVORCE:(?:\s|//[^\r\n]*)*"
             + @"MsgGetDivorce\(serverNum, Body\);\s*break;",
             RegexOptions.CultureInvariant),
         "Other-GS divorce dispatcher is missing");
