@@ -149,7 +149,7 @@ namespace GameSvr
             var list = new List<Envirnoment>();
             foreach (var item in m_MapList.Values)
             {
-                if (item.Flag.boMINE || item.Flag.boMINE2)
+                if (item.Flag.boMINE)
                 {
                     list.Add(item);
                 }
