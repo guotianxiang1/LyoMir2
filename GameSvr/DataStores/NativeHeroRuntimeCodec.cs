@@ -163,7 +163,7 @@ namespace GameSvr
             hero.m_Abil.Level = record.Level;
             hero.HeroLevel = record.Level;
             hero.m_Abil.Exp = unchecked((int)record.Exp);
-            hero.m_Abil.MaxExp = 100; // EXP-06: B.MaxExp is pinned at 100, never changes
+            hero.m_Abil.MaxExp = hero.GetLevelExp(record.Level); // 0x68720E
             hero.m_Abil.HP = 0;
             hero.m_Abil.MP = 0;
             hero.RecalcLevelAbilitys();
