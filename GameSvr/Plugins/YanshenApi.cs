@@ -3637,10 +3637,27 @@ namespace GameSvr.Plugins
         public bool IsCustomDmgPlus() => Enabled("自定义伤害_plus");
 
         // ── Monster toggle checks ──
+        //
+        // 怪物名字1..3_值 / 怪物数量1..3_值 是「修改召唤神兽」的三档参数。
+        // 六个键在同一个配置加载器里连续读出，名字走 asString、数量走 asInt：
+        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA0B call 0x100DFCF0 (asString)
+        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC57 mov [ecx+0x8C0],eax  (asInt 0x100DFE40)
+        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBCF2 mov [ecx+0x8C4],eax
+        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBD86 mov [ecx+0x8C8],eax
+        // 三个数量键用的是同一个 asInt 转换器、同一段连续偏移，语义完全相同。
         public string MonsterName1() => ParamS("怪物名字1_值", "强化神兽");
         public string MonsterName2() => ParamS("怪物名字2_值", "强化神兽");
         public string MonsterName3() => ParamS("怪物名字3_值", "白虎");
-        public bool IsMonsterCount1() => Enabled("怪物数量1_值");
+
+        /// <summary>
+        /// 「怪物数量1_值」是数量，不是开关。原先的 <c>Enabled("怪物数量1_值")</c>
+        /// 方向就是错的：数量 0 会被读成「关」，任何非 0 数量都读成「开」，
+        /// 而它的兄弟键 <c>怪物数量2_值</c>/<c>怪物数量3_值</c> 在同一段加载器里
+        /// 走的是同一个 <c>asInt</c>（<c>0x100DFE40</c>），C# 侧已经按 int 建模。
+        /// 生产 <c>config.json</c> 三档实测是 1 / 2 / 1。
+        /// 与 YS-SW-C1 修掉的 <c>IsShenShouCount()</c>/<c>IsKuLouCount()</c> 同一类缺陷。
+        /// </summary>
+        public int MonsterCount1() => GetParamInt("怪物数量1_值", 1);
         public int MonsterCount2() => GetParamInt("怪物数量2_值", 2);
         public int MonsterCount3() => GetParamInt("怪物数量3_值", 2);
         public bool IsMonsterDropA() => Enabled("怪物爆率A_值");
