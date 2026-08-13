@@ -2392,11 +2392,14 @@ namespace GameSvr
         /// VMT slot <c>+0x244</c> (<c>sub_6D0AE8</c>: <c>Count + 1 &lt;= 48</c>, i.e.
         /// <c>Count &lt; 48</c>) then <c>sub_73CEA8</c> = TList.Add and the weight refresh
         /// <c>sub_73CEE4</c>.
+        ///
+        /// 这是全树的主入包门。<see cref="BagCapacity.Of"/> 对非 <c>TPlayObject</c>
+        /// 返回 48，所以英雄/怪物走的仍是原生那条 <c>sub_6D0AE8</c>。
         /// </summary>
         public bool AddItemToBag(TUserItem UserItem)
         {
             bool result = false;
-            if (m_ItemList.Count < Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count < BagCapacity.Of(this))
             {
                 m_ItemList.Add(UserItem);
                 WeightChanged();
