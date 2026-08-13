@@ -2984,9 +2984,26 @@ namespace GameSvr
             {
                 return;
             }
-            // MINE-61: Native @0x6BC3F7 hardcodes Random(120) for weight ladder, not config-driven.
+            // MINE-24/25: 原版 sub_6BC3CC 是「减权重 + 借位跳转」的阶梯，不是区间比较：
+            //   0x6BC3F7  B8 78 00 00 00   mov eax, 0x78   ; Random(120) -> 0..119
+            //   0x6BC401  83 E8 0C         sub eax, 12
+            //   0x6BC404  72 11            jb  0x6BC417    ; 金矿   权重 12  (10.0%)
+            //   0x6BC406  83 E8 12         sub eax, 18
+            //   0x6BC409  72 1B            jb  0x6BC426    ; 银矿   权重 18  (15.0%)
+            //   0x6BC40B  83 E8 0F         sub eax, 15
+            //   0x6BC40E  72 25            jb  0x6BC435    ; 铁矿   权重 15  (12.5%)
+            //   0x6BC410  83 E8 3C         sub eax, 60
+            //   0x6BC413  72 2F            jb  0x6BC444    ; 黑铁矿石 权重 60 (50.0%)
+            //   0x6BC415  EB 3C            jmp 0x6BC453    ; 铜矿   余数 15  (12.5%)
+            // 各分支目标字符串（Delphi 常量，长度前缀已校验）：
+            //   0x6BC4C4 len=4 BD F0 BF F3          = 金矿
+            //   0x6BC4D4 len=4 D2 F8 BF F3          = 银矿
+            //   0x6BC4E4 len=4 CC FA BF F3          = 铁矿
+            //   0x6BC4F4 len=8 BA DA CC FA BF F3 CA AF = 黑铁矿石
+            //   0x6BC508 len=4 CD AD BF F3          = 铜矿
             var nRandom = M2Share.RandomNumber.Random(120);
-            if (nRandom >= M2Share.g_Config.nGoldStoneMin && nRandom <= M2Share.g_Config.nGoldStoneMax)
+            nRandom -= 12;
+            if (nRandom < 0)
             {
                 UserItem = new TUserItem();
                 if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGoldStone, ref UserItem))
@@ -3002,7 +3019,9 @@ namespace GameSvr
                 }
                 return;
             }
-            if (nRandom >= M2Share.g_Config.nSilverStoneMin && nRandom <= M2Share.g_Config.nSilverStoneMax)
+
+            nRandom -= 18; // 0x6BC406: sub eax,0x12 — silver weight 18
+            if (nRandom < 0)
             {
                 UserItem = new TUserItem();
                 if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sSilverStone, ref UserItem))
@@ -3018,7 +3037,9 @@ namespace GameSvr
                 }
                 return;
             }
-            if (nRandom >= M2Share.g_Config.nSteelStoneMin && nRandom <= M2Share.g_Config.nSteelStoneMax)
+
+            nRandom -= 15; // 0x6BC40B: sub eax,0x0F — steel weight 15
+            if (nRandom < 0)
             {
                 UserItem = new TUserItem();
                 if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sSteelStone, ref UserItem))
@@ -3034,7 +3055,9 @@ namespace GameSvr
                 }
                 return;
             }
-            if (nRandom >= M2Share.g_Config.nBlackStoneMin && nRandom <= M2Share.g_Config.nBlackStoneMax)
+
+            nRandom -= 60; // 0x6BC410: sub eax,0x3C — black weight 60
+            if (nRandom < 0)
             {
                 UserItem = new TUserItem();
                 if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sBlackStone, ref UserItem))
@@ -3050,6 +3073,8 @@ namespace GameSvr
                 }
                 return;
             }
+
+            // 0x6BC415: jmp → copper (weight 15 = 12.5%)
             UserItem = new TUserItem();
             if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sCopperStone, ref UserItem))
             {
