@@ -1386,6 +1386,11 @@ namespace GameSvr
                 // already matches that ladder; native fires it on login, not only
                 // on CM_PLAYER_CORPS.
                 SendNativePlayerCorps(Grobal2.SM_PLAYER_CORPS);
+                // 战神 UserLogon @0x6B24D9: call 0x6F07CC always emits SM 4500
+                // (0x1194) via [obj+0x254]. 0x6F07E3 cmp [ebx+0xAE8],0 / je
+                // Param=5; else 0x6ADAE4 fail -> Param=12; else Param=0 +
+                // 0x38-byte gild desc (0x6F0826 66 BA 94 11).
+                SendNativePlayerGuild();
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
