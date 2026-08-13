@@ -291,6 +291,9 @@ void CheckSendDisposition()
         NativeMailWriteTransaction.ClassifySend(6, true), "send six items created");
     AssertEqual(NativeMailSendDisposition.Created,
         NativeMailWriteTransaction.ClassifySend(0, true), "send no items created");
-    AssertEqual(NativeMailSendDisposition.InsertFailed,
+        AssertEqual(NativeMailSendDisposition.InsertFailed,
         NativeMailWriteTransaction.ClassifySend(3, false), "send insert failed");
+    // Gold/yuanbao on send have no engine cap: sub_70CF34 is `mov [mail+0x54],ecx`
+    // then `test ecx,ecx / jle` to SetAttachStatus(1). The only send abort is
+    // item groups > 6 (0x709301 e8 ... call 0x709048 / 0x709306 83 f8 06 / 7e).
 }
