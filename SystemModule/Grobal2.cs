@@ -2159,5 +2159,17 @@ namespace SystemModule
         //   master [+0x24] list, keeping only corps whose member count < 30 —
         //   predicate sub_705690 `cmp [members+8],0x1E / setge`). Same 64-byte
         //   TCorps description record + pagination frame as CM_CORPS_LIST/4520.
+
+        // === SoulWash subsystem ===
+        // 祈福神佑袋 / 灵佑点 (native strings 0x74705C "灵气石", 0x747834 "点灵佑点!",
+        // 0x747080 "神佑祈福收取"). CM 4126/4127/4128 (workers 0x6BF75C /
+        // 0x747CF4+0x74730C / 0x6B7184). CM_4126/4127/4128 constants and SM_4034
+        // (0xFC2, the CM 4126 reply, Tag carries the 0/1/2/3 result code) are declared
+        // above and reused. Only these two down-wire replies were missing:
+        //   SM_4033 (0xFC1) — 0x74730C sends via [vmt+0x254] a 32-byte body
+        //     {int cur[+0x5A4]; int base[+0x5A0]; int cap[+0x59C]; word[10] slots[+0x5A8]},
+        //     Tag = ([+0x178] == 0x36 ? 1 : 0), Recog=Param=Series=0.
+        //   SM_4037 (0xFC5) — 0x6B7184 sends via [vmt+0x254] a 24-byte body
+        //     {int [T+0x60C]; byte[20] [T+0x5A8]}, Recog=Param=Tag=Series=0.
     }
 }
