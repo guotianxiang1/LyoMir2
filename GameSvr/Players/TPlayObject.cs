@@ -1512,9 +1512,34 @@ namespace GameSvr
 
         public void GetBackDealItems()
         {
+            // 战神 sub_6C4114（GetBackDealItems 本体；0x6C40B8 只是 OpenDealDlg 对它的调用）：
+            //   0x6C411B  8B 83 DC 06 00 00  mov eax,[ebx+0x6DC]   ; m_DealItemList
+            //   0x6C4121  8B 40 08           mov eax,[eax+8]       ; .Count
+            //   0x6C4126  7E 33              jle 0x6C415B          ; Count <= 0 跳过整段
+            //   0x6C4128  8B F0 / 4E         mov esi,eax / dec esi ; i := Count-1
+            //   0x6C412B  83 FE 00 / 7C 20   cmp esi,0 / jl 0x6C4150
+            //   0x6C4130  8B D6              mov edx,esi           ; ← 取的是 i
+            //   0x6C4138  E8 .. call 0x424D4C                      ; TList.Get(i)
+            //   0x6C4145  E8 .. call 0x424AB8                      ; m_ItemList.Add
+            //   0x6C414A  4E / 83 FE FF / 75 E0  dec esi / cmp esi,-1 / jne 0x6C4130
+            // TRADE-57：**倒序**（Count-1 downto 0），旧 C# 是正序，于是取回押金后
+            // 背包里这批物品的相对次序与原生完全相反。背包次序是可观测的：客户端
+            // 按 m_ItemList 顺序铺格子，存档 THumInfoData.BagItems 也按同序落盘
+            // （§1.4 记录布局），后续按下标操作的路径同样受影响。
+            //
+            // 0x6C4150 之后是 `call [DealItemList.vmt+8]`(Clear)，然后
+            //   0x6C415B  8B 83 E0 06 00 00  mov eax,[ebx+0x6E0]   ; m_nDealGolds
+            //   0x6C4161  01 83 5C 01 00 00  add [ebx+0x15C],eax   ; **裸加，不走 IncGold**
+            //   0x6C4167  33 C0 / 89 83 E0 06 00 00  m_nDealGolds := 0
+            //   0x6C416F  C6 83 84 06 00 00 00      m_boDealOK := false
+            // 裸加是忠实的：这里退的是本人押金，押金在 ClientChangeDealGold 里
+            // 已从 m_nGold 扣走（0x6C44D4 同样是裸写），加回来不可能超过扣走前的
+            // 值，所以原生不需要 m_nGoldMax 门。**不要"修"成 IncGold** —— IncGold
+            // 的 `jle` 会让 0 押金返回 false，且失败时静默吞掉押金。
+            // 函数尾部无 0x73CEE4（WeightChanged）；那一句只在成交清理 sub_6C4A98 里。
             if (m_DealItemList.Count > 0)
             {
-                for (var i = 0; i < m_DealItemList.Count; i++)
+                for (var i = m_DealItemList.Count - 1; i >= 0; i--)
                 {
                     m_ItemList.Add(m_DealItemList[i]);
                 }
