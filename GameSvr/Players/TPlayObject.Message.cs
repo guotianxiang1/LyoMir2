@@ -2728,6 +2728,11 @@ namespace GameSvr
                     }
                     break;
 
+                case Grobal2.SM_CHANNEL_MAGIC_CANCEL:
+                    SendDefMessage(Grobal2.SM_CHANNEL_MAGIC_CANCEL,
+                        ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0, "");
+                    break;
+
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:
                 case Grobal2.CM_CHANGEPASSWORD:
