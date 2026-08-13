@@ -514,7 +514,16 @@ namespace GameSvr
                 }
                 m_dwTurnTick = HUtil32.GetTickCount();
             }
-            SendRefMsg(Grobal2.RM_SPELL2, 0, 0, 0, 0, "");
+            // MOVE-02 — the native pose primitive sub_6BBF9C @0x6BBF9C broadcasts
+            // 0x2719 (RM_SPELL2 = 10009) through sub_765e68 carrying the client's
+            // X in nParam1 (edx = Recog = dword[msg+0] -> msg+4), Y in nParam2
+            // (ecx = Param = word[msg+6] -> msg+8) and the masked direction in
+            // nParam3 (dl = byte[msg+0xA]&7 -> msg+0xC); wParam stays 0. The
+            // primitive never touches X/Y and never persists Dir at +0x154, so
+            // this only tells observers which cell/facing to draw the pose in.
+            // The old four-zero payload dropped all three, drawing every remote
+            // sit at (0,0) facing up.
+            SendRefMsg(Grobal2.RM_SPELL2, 0, nX, nY, nDir, "");
             return true;
         }
 
