@@ -1167,7 +1167,7 @@ namespace GameSvr
                     var nPrice = GetUserPrice(User, GetItemPrice(UserItem.wIndex));
                     var nStock = List14.Count;
                     short nSubMenu;
-                    if (StdItem.StdMode <= 4 || StdItem.StdMode == 30 || StdItem.StdMode == 31 || StdItem.StdMode == 42)
+                    if (StdItem.StdMode <= 4 || StdItem.StdMode == 31 || StdItem.StdMode == 42)
                     {
                         nSubMenu = 0;
                     }
@@ -1756,7 +1756,7 @@ namespace GameSvr
                             for (var j = 0; j < List20.Count; j++)
                             {
                                 UserItem = List20[j];
-                                var isStaticGoods = StdItem.StdMode <= 4 || StdItem.StdMode == 30 ||
+                                var isStaticGoods = StdItem.StdMode <= 4 ||
                                                     StdItem.StdMode == 31 || StdItem.StdMode == 42;
                                 if (isStaticGoods || ReferenceEquals(UserItem, detailItem))
                                 {
@@ -1929,7 +1929,7 @@ namespace GameSvr
         public void ClientQuerySellPrice(TPlayObject PlayObject, TUserItem UserItem)
         {
             var nC = GetSellItemPrice(GetUserItemPrice(UserItem));
-            if (nC >= 0)
+            if (nC > 0)
             {
                 PlayObject.SendMsg(this, Grobal2.RM_SENDBUYPRICE, 0, nC, 0, 0, "");
             }
