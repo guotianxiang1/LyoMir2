@@ -688,19 +688,37 @@ namespace GameSvr
             }
 
             // 原版目标有效性清扫 sub_68A610 @0x68A660 用 sub_76B4A4（切比雪夫）。
+            // 0x68A665 83 F8 0F / 0x68A668 72 0A jb — 仅 dist<15 保留。
             int dist = NativeGridDistance(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
 
-            if (dist > 10)
+            if (dist >= 15)
             {
                 DelTargetCreat();
                 return;
             }
 
-            if (dist > 1)
+            // Job engagement radius. These are the AttackTarget predicates, not
+            // the invented universal melee-1 walk:
+            //   TWarHero 0x6931B0 `cmp eax,1 / ja` → walk when dist > 1
+            //   TMagHero 0x69502A `cmp edi,8 / setle` → act when dist <= 8
+            //   TTaosHero 0x694268 `cmp edi,9 / jg` and `cmp [ebp-8],9 / jg`
+            //     (per-axis box = Chebyshev 9)
+            var approach = m_btJob switch
             {
-                // Move toward target
+                1 => 8,
+                2 => 9,
+                _ => 1
+            };
+            if (dist > approach)
+            {
                 SetTargetXY(m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
                 GotoTargetXY();
+                return;
+            }
+
+            if (m_btJob != 0 && dist > 1)
+            {
+                TryCastSkill(master, dwCurTick);
                 return;
             }
 
