@@ -1439,7 +1439,14 @@ namespace GameSvr.Plugins
         /// <summary>GetV/SetV 拒绝参数时的返回值，与 PasApiBridge 同一常量（0x6DF1F1 预置）。</summary>
         private const int NativeScriptVarMiss = -1;
 
-        /// <summary>作者原文只给了 This_player.GetV(N,1~6) 这一档，即 jp1..jp6。</summary>
+        /// <summary>
+        /// 极品位 1-6。作者原文只给了 This_player.GetV(N,1~6) 一句，现由插件字节定案：
+        /// 脱壳转储（基址 0x10000000）里 <c>极品开关</c>（VA 0x102BF804）取到变量组号后，
+        /// <c>0x1006C222</c> 起是恰好六次 <c>GetV(组号, N)</c>，N 由
+        /// <c>0x1006C232 B9 01 00 00 00</c> 到 <c>0x1006C2D2 B9 06 00 00 00</c> 连续取 1..6，
+        /// 第七次不存在（<c>0x1006C2E3 popal</c> 收尾）。物品侧对应
+        /// <c>0x1006C10A..0x1006C137</c> 读 <c>item+0x2A..0x2F</c> 六个字节。
+        /// </summary>
         private const int RecycleExtremeSlots = 6;
 
         /// <summary>
@@ -1512,13 +1519,18 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// 极品开关 / 元素开关：某号属性值 &gt; GetV(变量号, 号) 的装备不回收。
-        ///
-        /// 阈值读不出来（GetV 拒参或该变量从没写过，都返回 -1）时一律不回收：-1 到底表示
-        /// "没设过阈值所以不过滤" 还是 "阈值是 -1 所以全挡"，插件里看不到，两种猜法差一整套
-        /// 玩家装备。生产 huishou.pas 的加/减按钮把 V(125,1..12) 从 -1 抬到 0 起步，
-        /// 元素那一行（V(126,*)）在生产脚本里是注释掉的，所以生产在恢复那一行之前
-        /// 声明了 元素开关 的类型都不会回收。
+        /// 极品开关 / 元素开关。两道门的判定在插件里逐字节同构，首段分别是 0x1006C2E4
+        /// 与 0x1006C699：
+        /// <code>
+        /// 1006C2EA  85 C0              test eax, eax        ; eax = GetV(组号, 槽)
+        /// 1006C2EC  7E 14              jle  放行            ; 阈值 &lt;= 0 ⇒ 该槽不过滤
+        /// 1006C2EE  3B 85 50 FF FF FF  cmp  eax, 物品值
+        /// 1006C2F4  7F 0C              jg   放行            ; 阈值 &gt; 物品值 ⇒ 放行
+        /// 1006C2F6  C7 45 9C 64 …      mov  拦下标志, 0x64
+        /// </code>
+        /// 即拦下的充要条件是 <c>0 &lt; 阈值 ≤ 物品值</c>。GetV 未命中返回的 -1 落在
+        /// "阈值 ≤ 0" 这一侧，所以是不过滤，不是全挡 —— 生产 V(126,*) 从没写过，
+        /// 按全挡实现会让回收整体静默失效。
         /// </summary>
         private bool RecycleQualityAllowed(TUserItem item, RecycleRule rule)
         {
@@ -1526,16 +1538,16 @@ namespace GameSvr.Plugins
                 for (var slot = 1; slot <= RecycleExtremeSlots; slot++)
                 {
                     var threshold = ReadPlayerV(rule.ExtremeGroup, slot);
-                    if (threshold == NativeScriptVarMiss) return false;
-                    if (GetExtremeValue(item, slot - 1) > threshold) return false;
+                    if (threshold > 0 && threshold <= GetExtremeValue(item, slot - 1))
+                        return false;
                 }
 
             if (rule.ElementGroup > 0)
                 for (var slot = 1; slot <= RecycleElementSlots; slot++)
                 {
                     var threshold = ReadPlayerV(rule.ElementGroup, slot);
-                    if (threshold == NativeScriptVarMiss) return false;
-                    if (GetElementValue(item, slot) > threshold) return false;
+                    if (threshold > 0 && threshold <= GetElementValue(item, slot))
+                        return false;
                 }
 
             return true;
