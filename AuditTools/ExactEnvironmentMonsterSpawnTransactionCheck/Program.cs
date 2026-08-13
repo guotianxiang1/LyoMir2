@@ -636,17 +636,21 @@ static TBaseObject InvokeOrdinaryAddBaseObject(Fixture fixture, short x, short y
     // identical to RegenMonsterByName) — its contract is transaction rollback, unchanged.
     // The exactPosition=true semantic (does 战神's magic-tower spawn place at exact coord,
     // no nudge?) is pending Tier-1 confirmation — see staging/idat_batch_queue_20260803.md.
+    // The overload grew a trailing ignoreCellBlockers flag; reflection does not apply
+    // optional-parameter defaults, so the old 7-type lookup found nothing and the whole
+    // audit died on MissingMethodException. Pass ignoreCellBlockers=false, which is the
+    // default and keeps this the ordinary search-and-nudge path described above.
     var method = typeof(UserEngine).GetMethod("AddBaseObject",
         BindingFlags.Instance | BindingFlags.NonPublic, null,
         new[]
         {
             typeof(Envirnoment), typeof(short), typeof(short), typeof(int),
-            typeof(string), typeof(bool), typeof(bool)
+            typeof(string), typeof(bool), typeof(bool), typeof(bool)
         }, null) ?? throw new MissingMethodException("AddBaseObject");
     return (TBaseObject)method.Invoke(fixture.Engine, new object[]
     {
         fixture.Environment, x, y, M2Share.MONSTER_OMA, fixture.MonsterName,
-        true, false
+        true, false, false
     });
 }
 

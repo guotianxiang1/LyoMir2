@@ -6,6 +6,7 @@ using SystemModule;
 using SystemModule.Packet;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+PrepareRuntimeConfig();
 TestCompletionDecode();
 TestCompletionRejectsInvalidWire();
 TestFailureDialogsAndAck();
@@ -23,6 +24,29 @@ Console.WriteLine(
     "rawGBK=51/comma runtime=closed " +
     "bounty-draw=global-Delphi-RandSeed");
 return;
+
+// TestBountyDrawIsTheGlobalRandSeed touches M2Share, whose static ctor loads
+// !Setup.txt / String.ini / Command.conf and ..\Share\PlayerUpgradeExp.ini and throws
+// when they are absent — which aborted the run before any assertion reported. Same
+// minimal skeleton the other GameSvr audits lay down; nothing else is booted.
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}
 
 static void TestCompletionDecode()
 {

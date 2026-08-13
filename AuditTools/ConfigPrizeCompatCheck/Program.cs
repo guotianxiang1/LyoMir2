@@ -1175,13 +1175,9 @@ static string FindRepositoryRoot()
 
 static void PrepareRuntimeConfig()
 {
-    // The fixture players are online (m_boOffLineFlag stays false), so every
-    // SendDefMessage reaches TPlayObject.SendSocket, which dereferences
-    // M2Share.GateManager. Only GameApp.cs assigns it in a real boot. The
-    // singleton registers no gate, so AddGateBuffer returns false for the
-    // fixture's gate index and nothing is actually transmitted.
-    M2Share.GateManager ??= GateManager.Instance;
-
+    // The config files must be on disk BEFORE anything touches M2Share: the very
+    // first reference runs its static ctor, which loads !Setup.txt / String.ini /
+    // Command.conf and ..\Share\PlayerUpgradeExp.ini and throws if they are absent.
     var runtimeDirectory = AppContext.BaseDirectory;
     File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
         "[Server]" + Environment.NewLine);
@@ -1197,6 +1193,13 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+
+    // The fixture players are online (m_boOffLineFlag stays false), so every
+    // SendDefMessage reaches TPlayObject.SendSocket, which dereferences
+    // M2Share.GateManager. Only GameApp.cs assigns it in a real boot. The
+    // singleton registers no gate, so AddGateBuffer returns false for the
+    // fixture's gate index and nothing is actually transmitted.
+    M2Share.GateManager ??= GateManager.Instance;
 }
 
 static void Equal(int expected, int actual, string message)
