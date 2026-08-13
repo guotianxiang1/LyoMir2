@@ -2140,5 +2140,10 @@ namespace SystemModule
         public const int SM_4032 = 4032;  // 0xFC0  BLOCKED: [obj+0x254] @0x746D18, Buf/Len = [[0x7D6014]] 43-byte table record (undefined)
         public const int SM_4033 = 4033;  // 0xFC1  BLOCKED: [obj+0x254] @0x747362, 32-byte state-0x36 record from [self+0x5A8] (unmapped)
         public const int SM_4037 = 4037;  // 0xFC5  BLOCKED: [obj+0x254] @0x6B71ED, 24-byte body [self+0x60C]+[self+0x5A8] (unmapped)
+
+        // === TaskBoard subsystem ===
+        // Task-dispatch board refresh reply. Worker sub_699B68 answers via [player+0x254]
+        // with Recog=Param=Tag=Series=0 and a fixed 873-byte (0x369) body.
+        public const int SM_TASKBOARD_REFRESH = 3452; // 0xD7C
     }
 }
