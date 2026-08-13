@@ -1665,7 +1665,26 @@ namespace GameSvr
                         }
                         else
                         {
-                            n10 = n10 + HUtil32.Round(n10 / UserItem.DuraMax * 2.0 * (UserItem.DuraMax - UserItem.Dura));
+                            // ✅ 战神字节证据 (Tier-1) — PRICE-13: 超上限奖励的差值是
+                            // 【cur - liveMax】(正数),不是 liveMax - cur。EA: TMeatItem
+                            // sub_786208 的 over 臂 @0x78627B-0x78629B(edi=cur[+0x26],
+                            // esi=liveMax[+0x28],本臂由 @0x78623C `cmp edi,esi / jge` 进入,
+                            // 即 cur > liveMax):
+                            //   0078627B  db 45 fc           fild  dword [ebp-4]      ; price
+                            //   0078627E  89 75 ec           mov   [ebp-0x14],esi     ; liveMax
+                            //   00786281  db 45 ec           fild  dword [ebp-0x14]
+                            //   00786284  de f9              fdivp st(1)              ; price/liveMax
+                            //   00786286  d8 0d b0 62 78 00  fmul  dword [0x7862B0]   ; * 2.0f
+                            //   0078628C  2b fe              sub   edi,esi            ; 【cur - liveMax】
+                            //   0078628E  89 7d e8           mov   [ebp-0x18],edi
+                            //   00786291  db 45 e8           fild  dword [ebp-0x18]
+                            //   00786294  de c9              fmulp st(1)
+                            //   00786296  e8 d9 d2 c7 ff     call  0x403574           ; @ROUND
+                            //   0078629B  01 45 fc           add   [ebp-4],eax        ; 累加,本臂无 _MAX 钳位
+                            // 写反后差值恒为负(本分支的进入条件就是 Dura > DuraMax),负的 n10
+                            // 继续流入下方 StdMode>4 段被逐级放大,最后被 :1721 的 _MAX(2,…) 兜到 2 ——
+                            // 不崩不报错,只静默给出荒谬低价。
+                            n10 = n10 + HUtil32.Round(n10 / UserItem.DuraMax * 2.0 * (UserItem.Dura - UserItem.DuraMax));
                         }
                     }
                     if (StdItem.StdMode == 43)
