@@ -1535,17 +1535,32 @@ namespace GameSvr.Plugins
         /// </summary>
         private const int RecycleLingFuReason = 0;
 
-        /// <summary>自动回收 — 按JSON配置回收背包物品, -999=JSON语法错误</summary>
+        /// <summary>回收功能不可用（配置缺根键、解析失败或结算中途抛异常）。</summary>
+        private const int RecycleUnusable = -999;
+
+        /// <summary>回收跑完，与件数无关。</summary>
+        private const int RecycleDone = 1;
+
+        /// <summary>
+        /// 自动回收 — 按 JSON 配置回收背包物品。
+        ///
+        /// 返回值只有两种，原生不返回件数：入口 0x1006CF10 在有效位
+        /// <c>0x1031B8C5</c> 为 0 时 <c>0x1006CF20 B8 19 FC FF FF</c> 返回 -999；
+        /// 正常出口 <c>0x1006CECC B8 01 00 00 00</c> 恒返回 1
+        /// （前一条 <c>0x1006CEC6 mov eax,0x3E7</c> 是作者留下的死代码，被这条盖掉）；
+        /// 异常臂 <c>0x1006CEEA B8 19 FC FF FF</c> 同样是 -999。
+        /// </summary>
         public int AutoRecycle()
         {
-            if (!Enabled("高级回收")) return 0;
+            // 原生入口不查这个键，只查配置有效位；保留它是因为生产 config.json 里
+            // 高级回收 = 1，该门在目标部署上零差异，而拆掉它等于对所有部署同时打开删除闸门。
+            if (!Enabled("高级回收")) return RecycleUnusable;
             try
             {
                 var recycleConfig = _pluginManager?.GetRecycleConfigSnapshot();
-                if (recycleConfig == null) return -999;
-                if (!RecycleBagModelResolved()) return 0;
+                if (recycleConfig == null) return RecycleUnusable;
+                if (!RecycleBagModelResolved()) return RecycleUnusable;
 
-                var recycled = 0;
                 for (int i = _player.m_ItemList.Count - 1; i >= 0; i--)
                 {
                     var item = _player.m_ItemList[i];
@@ -1555,14 +1570,14 @@ namespace GameSvr.Plugins
                         continue;
                     if (!RecycleTypeOpen(rule, stackable)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
-                    if (TryRecycleOne(item, itemName, rule, stackable)) recycled++;
+                    TryRecycleOne(item, itemName, rule, stackable);
                 }
-                return recycled;
+                return RecycleDone;
             }
             catch (Exception ex)
             {
                 M2Share.MainOutMessage("[异常] AutoRecycle " + ex.Message);
-                return -999;
+                return RecycleUnusable;
             }
         }
 
@@ -1656,7 +1671,7 @@ namespace GameSvr.Plugins
             // 0x1006BC07 / 0x1006BC44 / 0x1006BC76 / 0x1006BCAE / 0x1006BCD6 五路各乘一次。
             // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
             // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
-            var count = stackable ? item.Dura : 1;
+            var count = stackable ? (int)item.Dura : 1;
 
             if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
                 !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
