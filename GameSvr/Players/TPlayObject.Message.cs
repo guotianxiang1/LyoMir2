@@ -1994,6 +1994,12 @@ namespace GameSvr
                     if (ProcessMsg.wIdent == Grobal2.RM_HEAR
                         && (m_dwChatShieldMask & 0x02u) != 0)
                         break;
+                    if (ProcessMsg.wIdent == Grobal2.RM_CRY
+                        && (m_dwChatShieldMask & 0x04u) != 0)
+                        break;
+                    if (ProcessMsg.wIdent == Grobal2.RM_GUILDMESSAGE
+                        && (m_dwChatShieldMask & 0x08u) != 0)
+                        break;
                     switch (ProcessMsg.wIdent)
                     {
                         case Grobal2.RM_HEAR:
