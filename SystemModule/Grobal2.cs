@@ -647,6 +647,13 @@ namespace SystemModule
         public const int SS_KEEPALIVE = 104;
         public const int SS_KICKUSER = 111;
         public const int SS_SERVERLOAD = 113;
+        // SS_200..214 reuse the same integers as SM_ADDITEM/BAGITEMS/DELITEM
+        // (200..203) and as ISM 200..214. Native ProcessOthGsMsg (0x657144
+        // add edx,-202 / cmp 0x37 / ja 0x6573A0) only accepts 202..257 on
+        // the DB type-2 OthGs channel. These SS_* aliases are not a second
+        // native ident family — sending them through [obj+0x250]/[+0x254]
+        // would collide with the live client SM_ item idents (srv_AppearTimes
+        // 200=2060999, 201=81693, 202=162358, 203=11067).
         public const int SS_200 = 200;
         public const int SS_201 = 201;
         public const int SS_202 = 202;
@@ -689,6 +696,10 @@ namespace SystemModule
         public const int GS_USERACCOUNT = 32102;
         public const int GS_CHANGEACCOUNTINFO = 32103;
         public const int WM_SENDPROCMSG = 32104;
+        // LOMCN process-local sentinel, not a wire magic. Full-image scan of
+        // 0xAA9AAA9A / 0xAA55AA55 / 0x55AA55AA = 0 hits. Live frame magic is
+        // 0x33AABB77 (26 sites, e.g. 0x7130B3 C7 00 77 BB AA 33). Do not
+        // change the value; do not treat this as a GameGate/SGRP ident.
         public const uint RUNGATECODE = 0xAA55AA55 + 0x00450045;
         public const int GM_OPEN = 1;
         public const int GM_CLOSE = 2;
