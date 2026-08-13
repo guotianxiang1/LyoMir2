@@ -1463,6 +1463,10 @@ namespace GameSvr
                     RefNameColor();
                 }
             }
+            // 眼神「BB杀怪触发」把 sub_71F3D0 的收尾 0x71F467 `5E 5B 59 5D C3` 换成
+            // jmp 桩体，桩体重放 pop esi/pop ebx，派发 @BBupr，再重放 pop ecx/pop ebp/ret。
+            // 所以它跑在【整段升级判定之后】，而且是纯通知：宿主行为一字未改。
+            GameSvr.Plugins.YanshenTriggerDispatch.FireSlaveGainExp(this);
         }
 
         protected bool DropGoldDown(int nGold, bool boFalg, TBaseObject GoldOfCreat, TBaseObject DropGoldCreat)
