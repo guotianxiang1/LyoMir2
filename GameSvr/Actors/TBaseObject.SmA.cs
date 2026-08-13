@@ -65,5 +65,27 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3004, recog, 0, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        /// <summary>
+        /// SM 3007 (0xBBF) - YB-deal count/value result. slot 0x250
+        /// (SendDefMessage), header only. The Recog is the caller's incoming int
+        /// (<c>mov [ebp-4], edx</c> @0x00633E28). Native send site @0x00633E84:
+        /// <code>
+        /// 00633E71  6A 00                push 0             ; Param  = 0
+        /// 00633E73  6A 00                push 0             ; Tag    = 0
+        /// 00633E75  6A 00                push 0             ; Series = 0
+        /// 00633E77  6A 00                push 0             ; sMsg   = nil
+        /// 00633E79  8B 4D FC             mov  ecx, [ebp-4]  ; Recog  = incoming value
+        /// 00633E7C  66 BA BF 0B          mov  dx, 0xBBF     ; Ident  = 3007
+        /// 00633E80  8B C7                mov  eax, edi      ; self = resolved target
+        /// 00633E82  8B 30                mov  esi, [eax]
+        /// 00633E84  FF 96 50 02 00 00    call [esi+0x250]   ; SendDefMessage
+        /// </code>
+        /// </summary>
+        internal static (ClientPacket Header, byte[] Body) BuildSm3007(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3007, recog, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
