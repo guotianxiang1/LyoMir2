@@ -150,25 +150,22 @@ namespace SystemModule
             // (0x68AD4F / 0x68AD78 / 0x68ADA3).
             while (offset < data.Length)
             {
+                // Truncated header / bad magic / short payload: native leaves the
+                // already-parsed sections in place and exits the loop.
+                // Bad magic 0x68B0B9 `jne 0x68B396` logs then falls to 0x68B3F3.
+                // Short payload 0x68B0C9 `jl 0x68B354` logs then `jmp 0x68B3F3`.
+                // C# used to `return false` here; TryDecodeLoadResponse then
+                // replaced DynamicData with an empty list and dropped 2/6/7.
                 if (data.Length - offset < DynamicHeaderSize)
-                {
-                    error = "truncated native hero dynData section header";
-                    return false;
-                }
+                    break;
                 if (BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4)) != DynamicSectionMagic)
-                {
-                    error = $"invalid native hero dynData section magic at 0x{offset:X}";
-                    return false;
-                }
+                    break;
 
                 var payloadLength = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset + 4, 2));
                 var type = data[offset + 6];
                 var nextOffset = offset + DynamicHeaderSize + payloadLength;
                 if (nextOffset > data.Length)
-                {
-                    error = $"truncated native hero dynData section type {type}";
-                    return false;
-                }
+                    break;
                 if (type is not (2 or 6 or 7))
                 {
                     offset = nextOffset;

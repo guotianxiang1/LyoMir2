@@ -357,10 +357,17 @@ void CheckDynamicDataCodec()
         "dynData root length mismatch accepted");
     var badMagic = (byte[])encoded.Clone();
     badMagic[4] ^= 1;
-    Assert(!NativeHeroDbFrameCodec.TryDecodeDynamicData(badMagic, out _, out _),
-        "dynData bad section magic accepted");
-    Assert(!NativeHeroDbFrameCodec.TryDecodeDynamicData(encoded[..^1], out _, out _),
-        "truncated dynData accepted");
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(badMagic, out var badMagicDecoded, out _),
+        "dynData bad section magic must keep already-parsed sections (0x68B0B9 jne 0x68B396)");
+    Equal(0, badMagicDecoded.Sections.Count,
+        "first-section bad magic leaves no parsed sections");
+    var truncated = encoded[..^1];
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(truncated, out var truncatedDecoded, out _),
+        "truncated dynData must keep already-parsed sections (0x68B0C9 jl 0x68B354)");
+    Equal(2, truncatedDecoded.Sections.Count,
+        "truncated last section keeps the preceding 2/6");
+    Equal((byte)2, truncatedDecoded.Sections[0].Type, "truncated leftover type 2");
+    Equal((byte)6, truncatedDecoded.Sections[1].Type, "truncated leftover type 6");
     Assert(!NativeHeroDbFrameCodec.TryEncodeDynamicData(
         new NativeHeroDynamicData(new[]
         {
