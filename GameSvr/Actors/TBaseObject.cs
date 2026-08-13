@@ -266,6 +266,30 @@ namespace GameSvr
         public bool bo2BA = false;
         public bool m_boAnimal = false;
         public bool m_boNoItem = false;
+        /// <summary>
+        /// 战神 byte[self+0x47F].  Two consumers share it and each one both tests and
+        /// arms it, so the monster's drop table can be consumed exactly once per
+        /// instance no matter which of them runs first:
+        /// <code>
+        /// ; sub_71FA20 @AfterScatterItems
+        /// 71FA50  80 B8 7F 04 00 00 00  cmp byte [eax+0x47F],0
+        /// 71FA57  0F 85 35 06 00 00     jne 0x720092          ; whole function exits
+        /// 71FA6C  C6 80 7F 04 00 00 01  mov byte [eax+0x47F],1
+        /// ; sub_71EC88 (deliver-to-killer path)
+        /// 71ECB1  80 BB 7F 04 00 00 00  cmp byte [ebx+0x47F],0
+        /// 71ECB8  0F 85 B8 00 00 00     jne 0x71ED76
+        /// 71ECBE  C6 83 7F 04 00 00 01  mov byte [ebx+0x47F],1
+        /// </code>
+        /// Full-image scan of disp32 0x47F finds exactly these two writes, both
+        /// storing 1, and no clear site: the monster constructor's zero-fill at
+        /// 0x71D840.. is the only thing that ever puts it back to 0, so the flag is
+        /// per-instance and one-way.
+        ///
+        /// The two <c>call [esi+0x1FC]</c> sites in monster Die (0x71E3D2 / 0x71E3EF)
+        /// are the if/else arms of <c>0x71E3C2 je 0x71E3DA</c> and cannot both run,
+        /// so they are NOT what this guards; sub_71EC88 and any later re-entry are.
+        /// </summary>
+        public bool m_boNativeScatterConsumed = false;
         public bool m_boFixedHideMode = false;
         public bool m_boStickMode = false;
         public bool bo2BF = false;

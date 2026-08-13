@@ -813,6 +813,21 @@ namespace GameSvr
         /// established (SPWN-30 / SPWN-31 are BLOCKED on the ecx/pushed-parameter
         /// identities), so it is deliberately not reproduced here rather than guessed at.
         /// </summary>
+        /// <summary>
+        /// 战神 sub_71FA20 @0x71FA50 / @0x71FA6C.  The arm-and-test sits at the very
+        /// top of @AfterScatterItems, ahead of both the drop-table gate (0x71FA8A) and
+        /// the anti-fatigue ladder (0x71FAD7), and the store at 0x71FA6C is
+        /// unconditional — a monster that goes on to scatter nothing still burns the
+        /// flag, which is what stops the sibling consumer sub_71EC88 from re-running
+        /// the same table.
+        /// </summary>
+        private bool TryEnterNativeScatter()
+        {
+            if (m_boNativeScatterConsumed) return false;
+            m_boNativeScatterConsumed = true;
+            return true;
+        }
+
         private static bool NativeAfterScatterItemsBlocked(TBaseObject killer)
         {
             // 0x71FAB4 + 0x71FACE: only a non-nil, RC_PLAYOBJECT killer reaches the tests.
@@ -1146,8 +1161,13 @@ namespace GameSvr
                     if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
-                        var scatterBlocked =
-                            NativeAfterScatterItemsBlocked(AttackBaseObject);
+                        // Both exits land on 0x720092, which is past the
+                        // @AfterScatterItems callback at 0x720062, so one boolean
+                        // covers segments 1-4 and the callback alike.  Order matters:
+                        // 0x71FA50 runs before 0x71FAD7 and arms unconditionally, so
+                        // TryEnterNativeScatter must be the left operand.
+                        var scatterBlocked = !TryEnterNativeScatter()
+                            || NativeAfterScatterItemsBlocked(AttackBaseObject);
                         if (!scatterBlocked)
                         {
                             // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
