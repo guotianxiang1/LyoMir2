@@ -1814,19 +1814,13 @@ namespace GameSvr
                         horseDismountBody.Length, ProcessMsg.nParam3);
                     SendSocket(m_DefMsg, horseDismountBody);
                     break;
+                // RM_41 (9041) and RM_43 (9043) are below the dispatcher's window: native
+                // does 0x6B3EF8 `add eax,0xFFFFD8F0` then 0x6B3EFD `cmp eax,0x86` /
+                // 0x6B3F02 `ja 0x6B6241`, so both wrap to a huge unsigned value and land on
+                // the default label without sending anything. The labels stay because this
+                // switch's own default is not silent.
                 case Grobal2.RM_41:
-                    if (ProcessMsg.BaseObject != this.ObjectId)
-                    {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_41, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
-                        SendSocket(m_DefMsg);
-                    }
-                    break;
                 case Grobal2.RM_43:
-                    if (ProcessMsg.BaseObject != this.ObjectId)
-                    {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_43, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
-                        SendSocket(m_DefMsg);
-                    }
                     break;
                 case Grobal2.RM_TURN:
                 case Grobal2.RM_PUSH:
