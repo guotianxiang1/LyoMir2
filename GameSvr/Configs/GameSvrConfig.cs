@@ -109,6 +109,12 @@ namespace GameSvr
         public int[] MonUpLvNeedKillCount;
         public byte[] SlaveColor;
         public int[] dwNeedExps;
+        /// <summary>
+        /// Highest LEVEL_N key loaded from [PlayerLevelExp]. Native player
+        /// GetLevelExp (sub_6AFCC8) treats index &gt; Count as OOB and returns
+        /// 0xFD51DA80; this is that Count.
+        /// </summary>
+        public int nNeedExpMaxLevel;
         public int[] WideAttack;
         public int[] CrsAttack;
         public int[,,] SpitMap;
@@ -1048,6 +1054,7 @@ namespace GameSvr
             MonUpLvNeedKillCount = new int[] { 0, 0, 50, 100, 200, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 76800, 153600 };
             SlaveColor = new byte[] { 0xFF, 0xFE, 0x93, 0x9A, 0xE5, 0xA8, 0xB4, 0xFC, 249, 250, 250, 250, 250, 250, 250 };
             dwNeedExps = new int[Grobal2.MAXCHANGELEVEL];
+            nNeedExpMaxLevel = 0;
             WideAttack = new int[] { 7, 1, 2 };
             CrsAttack = new int[] { 7, 1, 2, 3, 4, 5, 6 };
             SpitMap = new int[,,]{
