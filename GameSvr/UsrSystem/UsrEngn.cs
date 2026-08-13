@@ -2569,10 +2569,6 @@ namespace GameSvr
                 case Grobal2.CM_USERSTORAGEITEM:
                 case Grobal2.CM_USERTAKEBACKSTORAGEITEM:
                 case Grobal2.CM_USERMAKEDRUGITEM:
-                case Grobal2.CM_GUILDADDMEMBER:
-                case Grobal2.CM_GUILDDELMEMBER:
-                case Grobal2.CM_GUILDUPDATENOTICE:
-                case Grobal2.CM_GUILDUPDATERANKINFO:
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series, DefMsg.Recog, DefMsg.Param, DefMsg.Tag,
                             sMsg, payload);
                     break;

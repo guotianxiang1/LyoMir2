@@ -1227,38 +1227,25 @@ namespace GameSvr
                 case Grobal2.CM_USERMAKEDRUGITEM:
                     ClientMakeDrugItem(ProcessMsg.nParam1, ProcessMsg.sMsg);
                     break;
-                case Grobal2.CM_OPENGUILDDLG:
-                    ClientOpenGuildDlg();
-                    break;
-                case Grobal2.CM_GUILDHOME:
-                    ClientGuildHome();
-                    break;
-                case Grobal2.CM_GUILDMEMBERLIST:
-                    ClientGuildMemberList();
-                    break;
-                case Grobal2.CM_GUILDADDMEMBER:
-                    ClientGuildAddMember(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDDELMEMBER:
-                    ClientGuildDelMember(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDUPDATENOTICE:
-                    ClientGuildUpdateNotice(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDUPDATERANKINFO:
-                    ClientGuildUpdateRankInfo(ProcessMsg.sMsg);
-                    break;
+                // 1035-1041 and 1044/1045 (the pre-GILD guild protocol) are not part of
+                // this engine's wire surface and are no longer dispatched here. The
+                // 1016-based jump table at 0x6D8159 covers 19 entries only
+                // (0x6D8144 `05 08 FC FF FF add eax,-0x3F8`, 0x6D8149 `83 F8 12
+                // cmp eax,0x12`, 0x6D814C `ja 0x6DBC2C`), so 1035-1041 fall off the end
+                // into the default arm; the 1043-based table at 0x6D81BA has entries for
+                // 1044/1045 but both hold 0x6DBC2C, the default label itself
+                // (`xor eax,eax; pop edx; pop ecx; pop ecx; mov fs:[eax],edx; jmp exit`).
+                // A CODE-wide scan for every immediate encoding of 1035/1036/1037/1040/
+                // 1041/1044/1045 returns zero hits, and 1038/1039 hit only RTL constants
+                // (0x462A75 `push 0x40E` in an exception path, 0x40E021 `mov ecx,0x40F`
+                // in float digit clamping). The guild wire protocol this engine really
+                // uses is CM_GILD_* 4560-4588, all of which have live handlers
+                // (0x6DB5DE..0x6DB9AC) and live C# arms.
                 case Grobal2.CM_SPEEDHACKUSER:
                     M2Share.MainOutMessage("[Warning]: [使用加速外挂程序(客户端)] ");
                     break;
                 case Grobal2.CM_ADJUST_BONUS:
                     ClientAdjustBonus(ProcessMsg.nParam1, ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDALLY:
-                    ClientGuildAlly();
-                    break;
-                case Grobal2.CM_GUILDBREAKALLY:
-                    ClientGuildBreakAlly(ProcessMsg.sMsg);
                     break;
                 case Grobal2.CM_TURN:
                     if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam, ref dwDelayTime))
