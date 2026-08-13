@@ -577,6 +577,33 @@ namespace GameSvr
                     SendNativeStateArmMsg("真龙护体状态结束！",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 71:
+                    // 0x742A53  66 B9 DB FF / BA C4 34 74 00
+                    // 0x7434C4 len 14 C8BCD1AAC6C6BFD5B9D8B1D5 A3A1
+                    // Gained side is "燃血破空开启！"; lost is the 关闭 twin
+                    // (B9D8B1D5 关闭 vs BFAAC6F4 开启). Both verbatim.
+                    SendNativeStateArmMsg("燃血破空关闭！",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 76:
+                    // 0x742A23  66 B9 DB FF / BA 8C 34 74 00
+                    // 0x74348C len 16 BACFBBF7BFB9D0D4BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("合击抗性回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 77:
+                    // 0x742A3B  66 B9 DB FF / BA A8 34 74 00
+                    // 0x7434A8 len 16 BDFCD5BDBFB9D0D4BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("近战抗性回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 78:
+                    // 0x74281D  66 B9 DB FF / BA 78 32 74 00
+                    // 0x743278 len 12 B4CCCAF5BBD8B8B4D5FDB3A3
+                    // Gained "刺术上下限瞬间提高" drops 上下限 on loss — verbatim.
+                    SendNativeStateArmMsg("刺术回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 85:
                     // 0x742AFB  66 B9 DB FF / BA 78 35 74 00
                     // 0x743578 len 18 C4BED4AABBA4CCE5D7B4CCACBDE1CAF8A3A1
