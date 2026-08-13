@@ -73,9 +73,19 @@ try
         packet => packet.ConnID == 0 && packet.Cmd == 0x0C);
     Equal(InternalPacket77.ACK_FRAME_LEN, compactAck.FrameLen,
         "compact ACK frame length");
-    Console.WriteLine("PASS M2 compact ACK stays 14 bytes");
+    Console.WriteLine(
+        $"PASS M2 compact ACK stays {InternalPacket77.ACK_FRAME_LEN} bytes");
 
-    M2Share.g_Config.nCheckBlock = 4;
+    // GateService compares against nCheckBlock*10 bytes, and every frame this fixture
+    // queues is HEADER_SIZE+1 = 17 bytes. 4 (=40 bytes) lets two frames through before the
+    // probe, so the send/probe/send/probe/send sequence the asserts below describe never
+    // happens and the third frame is what stalls. 1 (=10 bytes) is the value that makes each
+    // individual frame trip the per-frame gate, which is the scenario under test.
+    // NOTE: the threshold arithmetic itself is unanchored — "CheckBlock" is not in 战神's
+    // !Setup.txt key table (0x794560..: ServerIndex/Server/ServerName/GMSuperCode/
+    // TestServer/DBAddr/DBPort/GCAddr/GCPort/YBDBAddr/LogServerAddr/LogServerPort/BaseDir/
+    // Share/GuildDir/...), so nothing here pins the *10.
+    M2Share.g_Config.nCheckBlock = 1;
     Require(fixture.GateService.HandleSendBuffer(
         CreateGateBuffer(route.ConnId, 0xA1)), "flow frame A was not accepted");
     Require(fixture.GateService.HandleSendBuffer(
