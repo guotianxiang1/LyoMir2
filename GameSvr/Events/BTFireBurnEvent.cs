@@ -187,7 +187,8 @@ namespace GameSvr
             // it runs the script call `@AddFatalBombCount` (Delphi long string at
             // 0x717C34, length prefix 0x11 = 17 at 0x717C30) against the global
             // script engine at [0x7D5D20], gated on owner present, owner is not the
-            // target, and byte [+0x178] == 0 on both sides.
+            // target, and m_btRaceServer ([+0x178]) == 0 — i.e. both sides are
+            // players — at 0x717BC9 and 0x717BD2.
             // Not modelled: the C# script host has no @AddFatalBombCount entry and
             // inventing one would be worse than leaving the sentinel inert.
             return true;
