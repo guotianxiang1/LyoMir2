@@ -1005,6 +1005,38 @@ namespace GameSvr
                 case Grobal2.CM_QUERYUSERSTATE:
                     ClientQueryUserState(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3);
                     break;
+                case Grobal2.CM_205:
+                    ClientNativeCheatSelfReport(ProcessMsg.wParam, ProcessMsg.nParam2);
+                    break;
+                case Grobal2.CM_1239:
+                    // Native 0x6DA3A2, whole handler:
+                    //   0x6DA3A5  66 83 78 06 00        cmp  word [msg+6],0   ; Param
+                    //   0x6DA3AA  75 0F                 jne  0x6DA3BB
+                    //   0x6DA3AF  C6 80 98 18 00 00 01  mov  byte [self+0x1898],1
+                    //   0x6DA3B6  E9 71 18 00 00        jmp  0x6DBC2C
+                    //   0x6DA3BE  C6 80 98 18 00 00 00  mov  byte [self+0x1898],0
+                    // No callee, no packet, no other field. Param is the DEFAULT-case
+                    // nParam2 (ProcessUserMessage maps Recog/Param/Tag/Series onto
+                    // nParam1/nParam2/nParam3/wParam), and the wire field is a ushort so
+                    // the native `jne` against a word is a plain equality test.
+                    m_boNativeHeroCapHintEnabled = ProcessMsg.nParam2 == 0;
+                    break;
+                case Grobal2.CM_1281:
+                    // Native 0x6DA9C8, whole handler:
+                    //   0x6DA9CB  66 8B 40 06           mov  ax, word [msg+6]  ; Param
+                    //   0x6DA9CF  66 85 C0 / 75 0F      test ax,ax / jne 0x6DA9E3
+                    //   0x6DA9D7  C6 80 AC 18 00 00 00  mov  byte [self+0x18AC],0
+                    //   0x6DA9E3  66 83 F8 01           cmp  ax,1
+                    //   0x6DA9E7  0F 85 3F 12 00 00     jne  0x6DBC2C          ; leave as-is
+                    //   0x6DA9F0  C6 80 AC 18 00 00 01  mov  byte [self+0x18AC],1
+                    // Unlike CM 1239 this is a THREE-way test: only 0 and 1 write, every
+                    // other Param falls through to the default label without touching the
+                    // flag, so it must not be written as a boolean assignment.
+                    if (ProcessMsg.nParam2 == 0)
+                        m_boNativeHeroRecordShared = false;
+                    else if (ProcessMsg.nParam2 == 1)
+                        m_boNativeHeroRecordShared = true;
+                    break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
                 //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051
@@ -1120,6 +1152,20 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_CLICKNPC:
+                    // Native handler 0x6D8EE9 opens with a two-seat-mount gate that C#
+                    // was missing, so a player riding pillion could still open NPC
+                    // dialogs here while 战神 drops the click outright:
+                    //   0x6D8EE9  B2 34              mov  dl,0x34
+                    //   0x6D8EEB  8B 45 FC           mov  eax,[ebp-4]
+                    //   0x6D8EEE  E8 6D 9A 09 00     call 0x772960   ; HasNativeActiveState
+                    //   0x6D8EF3  84 C0              test al,al
+                    //   0x6D8EF5  0F 85 31 2D 00 00  jne  0x6DBC2C   ; mounted -> silent drop
+                    // State 0x34 is the two-seat mount (SET 0x6EE8AF/0x6EE8B3, CLEAR
+                    // 0x6EEBC2-0x6EEBC6), the same one the group prechecks read at
+                    // 0x6BBEA0. Only after the gate does native call 0x6B8B28 with
+                    // edx = Recog (the NPC id) and ecx = Tag.
+                    if (HasNativeActiveState(0x34))
+                        break;
                     ClientClickNPC(ProcessMsg.nParam1);
                     break;
                 case Grobal2.CM_MERCHANTDLGSELECT:
@@ -1157,6 +1203,21 @@ namespace GameSvr
                     // sends CM_LOGINNOTICEOK when the player acknowledges the login notice/MOTD dialog;
                     // the server does not need to take any action in response. This explicit no-op case
                     // documents the native behavior (silent acknowledgment, no server-side state change).
+                    break;
+                case Grobal2.CM_1325:
+                    // Unlike CM_LOGINNOTICEOK above, 1325 DOES have a real dispatch arm -
+                    // jump-table slot 0x6D8482[0] points at handler 0x6DAC1C:
+                    //   0x6DAC1F  66 8B 50 06  mov dx, word [msg+6]   ; Param
+                    //   0x6DAC23  8B 45 FC     mov eax,[ebp-4]        ; Self
+                    //   0x6DAC26  E8 F1 34 01 00  call 0x6EE11C
+                    //   0x6DAC2B  E9 FC 0F 00 00  jmp 0x6DBC2C
+                    // but 0x6EE11C is an empty procedure in full:
+                    //   55 8B EC 51 89 45 FC 59 5D C3
+                    //   push ebp / mov ebp,esp / push ecx / mov [ebp-4],eax / pop ecx / pop ebp / ret
+                    // It never reads dx and returns nothing. A whole-image scan finds
+                    // exactly one caller (0x6DAC26), so there is no other body that could
+                    // give the routine meaning. Param is therefore discarded and the
+                    // opcode has no server-side effect at all.
                     break;
                 case Grobal2.CM_GROUPMODE:
                     if (ProcessMsg.nParam2 == 0)

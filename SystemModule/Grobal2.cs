@@ -157,6 +157,15 @@ namespace SystemModule
         public const int CM_QUERYUSERSTATE = 82;
         public const int CM_QUERYUSERNAME = 80;
         public const int CM_QUERYBAGITEMS = 81;
+        /// <summary>
+        /// Native handler 0x6D8CA2 (dispatch arm <c>0x6D80DB</c>). The client's own
+        /// cheat self-report: header gate is <c>Series == 0xFF</c>
+        /// (<c>0x6D8CA5 66 81 78 0A FF 00 cmp word[msg+0xA],0xFF / 0x6D8CAB jne default</c>)
+        /// plus <c>Param &gt; 0</c> unsigned
+        /// (<c>0x6D8CB4 66 83 78 06 00 / 0x6D8CB9 jbe default</c>).
+        /// 战神 has no symbolic name for it, so it keeps the numeric form.
+        /// </summary>
+        public const int CM_205 = 205;
         public const int CM_QUERYCHR = 100;
         public const int CM_NEWCHR = 101;
         public const int CM_DELCHR = 102;
@@ -189,6 +198,32 @@ namespace SystemModule
         public const int CM_EAT = 1006;
         public const int CM_QUEST_ORDER = 1060;
         public const int CM_1069 = 1069;
+        /// <summary>
+        /// Native handler 0x6DAC1C (jump-table slot <c>0x6D8482[0]</c>, base ident 1325).
+        /// It loads Param into <c>dx</c> and calls 0x6EE11C, whose ENTIRE body is
+        /// <c>55 8B EC 51 89 45 FC 59 5D C3</c> — an empty Delphi procedure that stores
+        /// Self into a stack local and returns without reading <c>dx</c>. 0x6EE11C has
+        /// exactly one caller (this handler), so the opcode is a proven no-op.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1325 = 1325;
+        /// <summary>
+        /// Native handler 0x6DA3A2 (jump-table slot <c>0x6D8315[39]</c>, base ident 1200).
+        /// Self-contained: <c>0x6DA3A5 66 83 78 06 00 cmp word [msg+6],0 / 0x6DA3AA jne</c>
+        /// then <c>0x6DA3AF mov byte [self+0x1898],1</c> or
+        /// <c>0x6DA3BE mov byte [self+0x1898],0</c>. Param == 0 turns the hint ON.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1239 = 1239;
+        /// <summary>
+        /// Native handler 0x6DA9C8 (dispatch arm <c>0x6D8439</c>). Self-contained
+        /// three-way on Param: <c>0x6DA9CF 66 85 C0 test ax,ax / 75 0F</c> then
+        /// <c>0x6DA9D7 mov byte [self+0x18AC],0</c>; <c>0x6DA9E3 66 83 F8 01 cmp ax,1 /
+        /// 0F 85 jne default</c> then <c>0x6DA9F0 mov byte [self+0x18AC],1</c>.
+        /// Param values other than 0 and 1 leave the flag untouched.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1281 = 1281;
         public const int CM_COMMON_INFORMATION = 1099;
         public const int CM_YANHUA_TEXT = 1290;
         public const int CM_BUTCH = 1007;
