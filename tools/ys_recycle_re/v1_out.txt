@@ -1,0 +1,163 @@
+==============================================================================
+D3 / 产出全 <= 0 的判据（可叠材料分支）  0x1006BB25..0x1006BB60
+==============================================================================
+1006BB25  8B 4D 98                   mov      ecx, dword ptr [ebp - 0x68]
+1006BB28  50                         push     eax
+1006BB29  53                         push     ebx
+1006BB2A  8B 45 8C                   mov      eax, dword ptr [ebp - 0x74]
+1006BB2D  33 DB                      xor      ebx, ebx
+1006BB2F  66 8B 58 26                mov      bx, word ptr [eax + 0x26]
+1006BB33  89 9D DC FE FF FF          mov      dword ptr [ebp - 0x124], ebx
+1006BB39  5B                         pop      ebx
+1006BB3A  58                         pop      eax
+1006BB3B  85 FF                      test     edi, edi
+1006BB3D  7F 1E                      jg       0x1006bb5d
+1006BB3F  83 BD 70 FF FF FF 00       cmp      dword ptr [ebp - 0x90], 0
+1006BB46  7F 15                      jg       0x1006bb5d
+1006BB48  83 BD 6C FF FF FF 00       cmp      dword ptr [ebp - 0x94], 0
+1006BB4F  7F 0C                      jg       0x1006bb5d
+1006BB51  85 C9                      test     ecx, ecx
+1006BB53  7F 08                      jg       0x1006bb5d
+1006BB55  85 F6                      test     esi, esi
+1006BB57  0F 8E D0 01 00 00          jle      0x1006bd2d
+
+==============================================================================
+D3 / 物品种类分支同构段  0x1006CC55..0x1006CC90
+==============================================================================
+1006CC55  C8 E8 45 42                enter    0x45e8, 0x42
+1006CC59  07                         pop      es
+1006CC5A  00 8B C8 E8 DE 31          add      byte ptr [ebx + 0x31dee8c8], cl
+1006CC60  07                         pop      es
+1006CC61  00 89 85 64 FF FF          add      byte ptr [ecx - 0x9b7b], cl
+1006CC67  FF 8B 45 98 85 F6          dec      dword ptr [ebx - 0x97a67bb]
+1006CC6D  7F 19                      jg       0x1006cc88
+1006CC6F  83 BD 70 FF FF FF 00       cmp      dword ptr [ebp - 0x90], 0
+1006CC76  7F 10                      jg       0x1006cc88
+1006CC78  85 FF                      test     edi, edi
+1006CC7A  7F 0C                      jg       0x1006cc88
+1006CC7C  85 C0                      test     eax, eax
+1006CC7E  7F 08                      jg       0x1006cc88
+1006CC80  85 DB                      test     ebx, ebx
+1006CC82  0F 8E 97 01 00 00          jle      0x1006ce1f
+1006CC88  C7 85 E4 FE FF FF 64 00 00 00 mov      dword ptr [ebp - 0x11c], 0x64
+1006CC92  60                         pushal   
+
+==============================================================================
+D1 / 删除段  0x1006BB60..0x1006BBD8（重读 FList、Delete、下发、Dispose）
+==============================================================================
+
+
+==============================================================================
+D1+D2 / 删除之后的四路累加  0x1006BBD8..0x1006BC10
+==============================================================================
+1006BBD8  8B 5D 90                   mov      ebx, dword ptr [ebp - 0x70]
+1006BBDB  8B BD 74 FF FF FF          mov      edi, dword ptr [ebp - 0x8c]
+1006BBE1  85 DB                      test     ebx, ebx
+1006BBE3  7E 2D                      jle      0x1006bc12
+1006BBE5  85 FF                      test     edi, edi
+1006BBE7  7E 16                      jle      0x1006bbff
+1006BBE9  8B CF                      mov      ecx, edi
+1006BBEB  0F AF CB                   imul     ecx, ebx
+1006BBEE  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BBF3  F7 E9                      imul     ecx
+1006BBF5  C1 FA 05                   sar      edx, 5
+1006BBF8  8B DA                      mov      ebx, edx
+1006BBFA  C1 EB 1F                   shr      ebx, 0x1f
+1006BBFD  03 DA                      add      ebx, edx
+1006BBFF  8B 8D DC FE FF FF          mov      ecx, dword ptr [ebp - 0x124]
+1006BC05  8B C1                      mov      eax, ecx
+1006BC07  0F AF C3                   imul     eax, ebx
+1006BC0A  01 85 60 FF FF FF          add      dword ptr [ebp - 0xa0], eax
+1006BC10  EB 06                      jmp      0x1006bc18
+1006BC12  8B 8D DC FE FF FF          mov      ecx, dword ptr [ebp - 0x124]
+
+==============================================================================
+D2+D4 / 循环后的总额落账  0x1006CE42..0x1006CEC0
+==============================================================================
+1006CE42  83 BD 60 FF FF FF 00       cmp      dword ptr [ebp - 0xa0], 0
+1006CE49  7E 11                      jle      0x1006ce5c
+1006CE4B  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006CE4E  33 C9                      xor      ecx, ecx
+1006CE50  8B 95 60 FF FF FF          mov      edx, dword ptr [ebp - 0xa0]
+1006CE56  FF 15 64 BC 31 10          call     dword ptr [0x1031bc64]
+1006CE5C  83 BD 5C FF FF FF 00       cmp      dword ptr [ebp - 0xa4], 0
+1006CE63  7E 11                      jle      0x1006ce76
+1006CE65  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006CE68  33 D2                      xor      edx, edx
+1006CE6A  8B 8D 5C FF FF FF          mov      ecx, dword ptr [ebp - 0xa4]
+1006CE70  FF 15 60 BC 31 10          call     dword ptr [0x1031bc60]
+1006CE76  83 BD 58 FF FF FF 00       cmp      dword ptr [ebp - 0xa8], 0
+1006CE7D  7E 11                      jle      0x1006ce90
+1006CE7F  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006CE82  33 C9                      xor      ecx, ecx
+1006CE84  8B 95 58 FF FF FF          mov      edx, dword ptr [ebp - 0xa8]
+1006CE8A  FF 15 5C BC 31 10          call     dword ptr [0x1031bc5c]
+1006CE90  83 BD 54 FF FF FF 00       cmp      dword ptr [ebp - 0xac], 0
+1006CE97  7E 24                      jle      0x1006cebd
+1006CE99  8B 35 FC 0C 31 10          mov      esi, dword ptr [0x10310cfc]
+1006CE9F  6A 01                      push     1
+1006CEA1  8B 85 54 FF FF FF          mov      eax, dword ptr [ebp - 0xac]
+1006CEA7  50                         push     eax
+1006CEA8  6A 00                      push     0
+1006CEAA  6A 01                      push     1
+1006CEAC  6A 00                      push     0
+1006CEAE  6A 00                      push     0
+1006CEB0  B1 01                      mov      cl, 1
+1006CEB2  8B D6                      mov      edx, esi
+1006CEB4  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006CEB7  FF 15 50 BC 31 10          call     dword ptr [0x1031bc50]
+
+==============================================================================
+D4 / 元宝落账目标 [0x1031BC64] 的静态值 + M2 侧函数头
+==============================================================================
+  [1031BC50] = 00000000   (exp)   bytes 00 00 00 00
+  [1031BC54] = 00000000   (SetV)   bytes 00 00 00 00
+  [1031BC58] = 00000000   (GetV)   bytes 00 00 00 00
+  [1031BC5C] = 00000000   (IncGold)   bytes 00 00 00 00
+  [1031BC60] = 00000000   (LingFu)   bytes 00 00 00 00
+  [1031BC64] = 00000000   (Yuanbao)   bytes 00 00 00 00
+  [1031BC68] = 00000000   (TList.Delete)   bytes 00 00 00 00
+  [1031BC4C] = 00000000   (Dispose)   bytes 00 00 00 00
+
+--- IncGold 0x6D791C 上限判定 ---
+006D791C  55                         push     ebp
+006D791D  8B EC                      mov      ebp, esp
+006D791F  53                         push     ebx
+006D7920  33 C9                      xor      ecx, ecx
+006D7922  85 D2                      test     edx, edx
+006D7924  7E 1D                      jle      0x6d7943
+006D7926  8B 98 5C 01 00 00          mov      ebx, dword ptr [eax + 0x15c]
+006D792C  03 DA                      add      ebx, edx
+006D792E  3B 98 8C 06 00 00          cmp      ebx, dword ptr [eax + 0x68c]
+006D7934  7F 0D                      jg       0x6d7943
+006D7936  01 90 5C 01 00 00          add      dword ptr [eax + 0x15c], edx
+006D793C  E8 73 A0 FE FF             call     0x6c19b4
+006D7941  B1 01                      mov      cl, 1
+006D7943  8B C1                      mov      eax, ecx
+006D7945  5B                         pop      ebx
+006D7946  5D                         pop      ebp
+006D7947  C3                         ret      
+006D7948  85 D2                      test     edx, edx
+006D794A  7C 11                      jl       0x6d795d
+
+--- 元宝 0x6F8730 函数头 ---
+006F8730  55                         push     ebp
+006F8731  8B EC                      mov      ebp, esp
+006F8733  83 C4 B8                   add      esp, -0x48
+006F8736  53                         push     ebx
+006F8737  56                         push     esi
+006F8738  33 C9                      xor      ecx, ecx
+006F873A  89 4D BC                   mov      dword ptr [ebp - 0x44], ecx
+006F873D  89 4D B8                   mov      dword ptr [ebp - 0x48], ecx
+006F8740  89 4D FC                   mov      dword ptr [ebp - 4], ecx
+006F8743  89 4D C4                   mov      dword ptr [ebp - 0x3c], ecx
+006F8746  89 4D C0                   mov      dword ptr [ebp - 0x40], ecx
+006F8749  8B F2                      mov      esi, edx
+006F874B  8B D8                      mov      ebx, eax
+006F874D  33 C0                      xor      eax, eax
+006F874F  55                         push     ebp
+006F8750  68 45 88 6F 00             push     0x6f8845
+006F8755  64 FF 30                   push     dword ptr fs:[eax]
+006F8758  64 89 20                   mov      dword ptr fs:[eax], esp
+006F875B  6A FF                      push     -1
+006F875D  6A FF                      push     -1

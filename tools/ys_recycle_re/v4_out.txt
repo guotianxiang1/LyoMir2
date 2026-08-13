@@ -1,0 +1,142 @@
+==============================================================================
+### 五路单价槽 在 sub_1006B020 (0x1006B020..0x1006CF00) 全域的读写普查
+==============================================================================
+
+---- 元宝单价（0x1006BC18 起被复用为件数）   ebp-112 ----
+  立即数写入 1 处:
+     1006B2A5  C7 45 90 00 00 00 00           mov dword [ebp-112], 0
+  寄存器写入 3 处:
+     1006B823  89 7D 90                       mov [ebp-112], edi
+     1006BC18  89 4D 90                       mov [ebp-112], ecx
+     1006C934  89 75 90                       mov [ebp-112], esi
+  读取/运算 7 处:
+     1006B828  8B 7D 90                       mov edi, [ebp-112]
+     1006BBD8  8B 5D 90                       mov ebx, [ebp-112]
+     1006BC3F  8B 4D 90                       mov ecx, [ebp-112]
+     1006BC71  8B 4D 90                       mov ecx, [ebp-112]
+     1006BCA9  8B 4D 90                       mov ecx, [ebp-112]
+     1006C939  8B 75 90                       mov esi, [ebp-112]
+     1006CD03  8B 45 90                       mov eax, [ebp-112]
+
+---- 灵符单价   ebp-144 ----
+  立即数写入 1 处:
+     1006B2AC  C7 85 70 FF FF FF 00 00 00 00  mov dword [ebp-144], 0
+  寄存器写入 2 处:
+     1006B88C  89 85 70 FF FF FF              mov [ebp-144], eax
+     1006C9A4  89 85 70 FF FF FF              mov [ebp-144], eax
+  读取/运算 4 处:
+     1006BB3F  83 BD 70 FF FF FF              op(83) edi [ebp-144]
+     1006BC1B  8B 9D 70 FF FF FF              mov ebx, [ebp-144]
+     1006CC6F  83 BD 70 FF FF FF              op(83) edi [ebp-144]
+     1006CD30  8B 85 70 FF FF FF              mov eax, [ebp-144]
+
+---- 金币单价   ebp-148 ----
+  立即数写入 1 处:
+     1006B2B6  C7 85 6C FF FF FF 00 00 00 00  mov dword [ebp-148], 0
+  寄存器写入 2 处:
+     1006B8F3  89 85 6C FF FF FF              mov [ebp-148], eax
+     1006CA14  89 BD 6C FF FF FF              mov [ebp-148], edi
+  读取/运算 4 处:
+     1006BB48  83 BD 6C FF FF FF              op(83) edi [ebp-148]
+     1006BC4D  8B 9D 6C FF FF FF              mov ebx, [ebp-148]
+     1006CA1C  8B BD 6C FF FF FF              mov edi, [ebp-148]
+     1006CD5A  8B 85 6C FF FF FF              mov eax, [ebp-148]
+
+---- ★经验单价   ebp-120 ----
+  立即数写入 0 处:
+  寄存器写入 5 处:
+     1006B24F  89 45 88                       mov [ebp-120], eax
+     1006B95C  89 75 88                       mov [ebp-120], esi
+     1006BCA0  89 75 88                       mov [ebp-120], esi
+     1006CA8C  89 5D 88                       mov [ebp-120], ebx
+     1006CDA5  89 5D 88                       mov [ebp-120], ebx
+  读取/运算 4 处:
+     1006B967  8B 75 88                       mov esi, [ebp-120]
+     1006BC7F  8B 75 88                       mov esi, [ebp-120]
+     1006CA97  8B 5D 88                       mov ebx, [ebp-120]
+     1006CD84  8B 5D 88                       mov ebx, [ebp-120]
+
+---- 其他值   ebp-104 ----
+  立即数写入 0 处:
+  寄存器写入 7 处:
+     1006B27C  89 45 98                       mov [ebp-104], eax
+     1006B2F1  89 45 98                       mov [ebp-104], eax
+     1006BA1C  89 4D 98                       mov [ebp-104], ecx
+     1006BCD9  89 45 98                       mov [ebp-104], eax
+     1006BCE1  89 4D 98                       mov [ebp-104], ecx
+     1006CB51  89 45 98                       mov [ebp-104], eax
+     1006CDD3  89 45 98                       mov [ebp-104], eax
+  读取/运算 6 处:
+     1006BB25  8B 4D 98                       mov ecx, [ebp-104]
+     1006BCB7  8B 45 98                       mov eax, [ebp-104]
+     1006BD07  8B 45 98                       mov eax, [ebp-104]
+     1006CC68  8B 45 98                       mov eax, [ebp-104]
+     1006CDB4  8B 45 98                       mov eax, [ebp-104]
+     1006CDF9  8B 45 98                       mov eax, [ebp-104]
+
+==============================================================================
+### D3 判零点上文：0x1006BAF0..0x1006BB3D，确认 edi/esi 装的是哪两个槽
+==============================================================================
+1006BAF4  00 8D 4D A4 51 8B          add      byte ptr [ebp - 0x74ae5bb3], cl
+1006BAFA  C8 E8 D0 53                enter    -0x2f18, 0x53
+1006BAFE  07                         pop      es
+1006BAFF  00 68 EC                   add      byte ptr [eax - 0x14], ch
+1006BB02  F7 2B                      imul     dword ptr [ebx]
+1006BB04  10 8B C8 E8 94 53          adc      byte ptr [ebx + 0x5394e8c8], cl
+1006BB0A  07                         pop      es
+1006BB0B  00 68 D4                   add      byte ptr [eax - 0x2c], ch
+1006BB0E  F7 2B                      imul     dword ptr [ebx]
+1006BB10  10 8B C8 E8 88 53          adc      byte ptr [ebx + 0x5388e8c8], cl
+1006BB16  07                         pop      es
+1006BB17  00 8B C8 E8 21 43          add      byte ptr [ebx + 0x4321e8c8], cl
+1006BB1D  07                         pop      es
+1006BB1E  00 89 85 64 FF FF          add      byte ptr [ecx - 0x9b7b], cl
+1006BB24  FF 8B 4D 98 50 53          dec      dword ptr [ebx + 0x5350984d]
+1006BB2A  8B 45 8C                   mov      eax, dword ptr [ebp - 0x74]
+1006BB2D  33 DB                      xor      ebx, ebx
+1006BB2F  66 8B 58 26                mov      bx, word ptr [eax + 0x26]
+1006BB33  89 9D DC FE FF FF          mov      dword ptr [ebp - 0x124], ebx
+1006BB39  5B                         pop      ebx
+1006BB3A  58                         pop      eax
+1006BB3B  85 FF                      test     edi, edi
+1006BB3D  7F 1E                      jg       0x1006bb5d
+
+==============================================================================
+### 物品种类分支判零段（对齐到 0x1006CC68）
+==============================================================================
+1006CC68  8B 45 98                   mov      eax, dword ptr [ebp - 0x68]
+1006CC6B  85 F6                      test     esi, esi
+1006CC6D  7F 19                      jg       0x1006cc88
+1006CC6F  83 BD 70 FF FF FF 00       cmp      dword ptr [ebp - 0x90], 0
+1006CC76  7F 10                      jg       0x1006cc88
+1006CC78  85 FF                      test     edi, edi
+1006CC7A  7F 0C                      jg       0x1006cc88
+1006CC7C  85 C0                      test     eax, eax
+1006CC7E  7F 08                      jg       0x1006cc88
+1006CC80  85 DB                      test     ebx, ebx
+1006CC82  0F 8E 97 01 00 00          jle      0x1006ce1f
+1006CC88  C7 85 E4 FE FF FF 64 00 00 00 mov      dword ptr [ebp - 0x11c], 0x64
+1006CC92  60                         pushal   
+1006CC93  8B 75 8C                   mov      esi, dword ptr [ebp - 0x74]
+
+==============================================================================
+### 循环前唯一一次清零 [ebp-0x78]：0x1006B240..0x1006B2AC 对齐重扫
+==============================================================================
+1006B24F  89 45 88                   mov      dword ptr [ebp - 0x78], eax
+1006B252  89 85 00 FF FF FF          mov      dword ptr [ebp - 0x100], eax
+1006B258  89 85 60 FF FF FF          mov      dword ptr [ebp - 0xa0], eax
+1006B25E  89 85 5C FF FF FF          mov      dword ptr [ebp - 0xa4], eax
+1006B264  89 85 58 FF FF FF          mov      dword ptr [ebp - 0xa8], eax
+1006B26A  89 85 54 FF FF FF          mov      dword ptr [ebp - 0xac], eax
+1006B270  89 85 7C FF FF FF          mov      dword ptr [ebp - 0x84], eax
+1006B276  89 85 78 FF FF FF          mov      dword ptr [ebp - 0x88], eax
+1006B27C  89 45 98                   mov      dword ptr [ebp - 0x68], eax
+1006B27F  89 45 84                   mov      dword ptr [ebp - 0x7c], eax
+1006B282  8B 55 08                   mov      edx, dword ptr [ebp + 8]
+1006B285  4A                         dec      edx
+1006B286  89 95 FC FE FF FF          mov      dword ptr [ebp - 0x104], edx
+1006B28C  85 D2                      test     edx, edx
+1006B28E  0F 88 AE 1B 00 00          js       0x1006ce42
+1006B294  C7 45 9C 00 00 00 00       mov      dword ptr [ebp - 0x64], 0
+1006B29B  C7 85 74 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x8c], 0
+1006B2A5  C7 45 90 00 00 00 00       mov      dword ptr [ebp - 0x70], 0
