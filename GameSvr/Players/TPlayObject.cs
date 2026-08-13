@@ -2117,65 +2117,76 @@ namespace GameSvr
 
             var result = false;
             var s1C = string.Empty;
-            var mineEvent = (StoneMineEvent)m_PEnvir.GetEvent(nX, nY);
-            if (mineEvent != null && mineEvent.m_nEventType == Grobal2.ET_MINE)
+            // MINE-15: 原版取不到矿点就地创建，挖矿是唯一创建点（类引用单元
+            // 0x71683C 在全镜像只有 0x6BC277 一处代码引用）：
+            //   0x6BC25E  E8 15 ED 0B 00  call 0x77AF78     ; 按格取矿点
+            //   0x6BC263  8B F0           mov esi,eax
+            //   0x6BC265  85 F6           test esi,esi
+            //   0x6BC267  75 19           jne 0x6BC282      ; 已存在则直接用
+            //   0x6BC276  A1 3C 68 71 00  mov eax,[0x71683C]; TStoneMineEvent
+            //   0x6BC27B  E8 D8 B3 05 00  call 0x717658     ; ctor
+            // 创建点落在格子门之后、MineCount 判定之前，抽签序不变。
+            // 取矿点走带类型的重载而不是类强转：原版 0x77AF78 只认节点种类
+            // 字节 8（0x77AFB0 cmp byte[node],8），格上挂着别的 Event 时
+            // 原版走链继续、最终返回 null，不会当成矿点。
+            var mineEvent =
+                m_PEnvir.GetEvent(nX, nY, Grobal2.ET_MINE) as StoneMineEvent
+                ?? new StoneMineEvent(m_PEnvir, nX, nY, Grobal2.ET_MINE);
+            if (mineEvent.MineCount > 0)
             {
-                if (mineEvent.MineCount > 0)
+                mineEvent.MineCount -= 1;
+                // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
+                if (M2Share.RandomNumber.Random(4) == 0)
                 {
-                    mineEvent.MineCount -= 1;
-                    // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
-                    if (M2Share.RandomNumber.Random(4) == 0)
+                    var pileEvent = (PileStones)m_PEnvir.GetEvent(m_nCurrX, m_nCurrY);
+                    if (pileEvent == null)
                     {
-                        var pileEvent = (PileStones)m_PEnvir.GetEvent(m_nCurrX, m_nCurrY);
-                        if (pileEvent == null)
-                        {
-                            pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
-                            M2Share.EventManager.AddEvent(pileEvent);
-                        }
-                        else
-                        {
-                            if (pileEvent.m_nEventType == Grobal2.ET_PILESTONES)
-                            {
-                                pileEvent.AddEventParam();
-                            }
-                        }
-                        // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
-                        // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
-                        // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
-                        int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
-                        // MINE-08: Native @0x6BC24A tests the map flag BEFORE drawing the
-                        // rate roll, so a non-mine map consumes no RNG at all.
-                        if (m_PEnvir.Flag.boMINE)
-                        {
-                            if (M2Share.RandomNumber.Random(mineRate) == 0)
-                            {
-                                MakeMine();
-                            }
-                        }
-                        else if (m_PEnvir.Flag.boMINE2)
-                        {
-                            if (M2Share.RandomNumber.Random(mineRate) == 0)
-                            {
-                                MakeMine2();
-                            }
-                        }
-                        // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
-                        //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
-                        //   0x6BC2E4  83 C2 05        add edx,5      ; +5
-                        //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
-                        //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
-                        //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
-                        DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
-                        SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
-                        result = true;
+                        pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
+                        M2Share.EventManager.AddEvent(pileEvent);
                     }
+                    else
+                    {
+                        if (pileEvent.m_nEventType == Grobal2.ET_PILESTONES)
+                        {
+                            pileEvent.AddEventParam();
+                        }
+                    }
+                    // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
+                    // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
+                    // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
+                    int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
+                    // MINE-08: Native @0x6BC24A tests the map flag BEFORE drawing the
+                    // rate roll, so a non-mine map consumes no RNG at all.
+                    if (m_PEnvir.Flag.boMINE)
+                    {
+                        if (M2Share.RandomNumber.Random(mineRate) == 0)
+                        {
+                            MakeMine();
+                        }
+                    }
+                    else if (m_PEnvir.Flag.boMINE2)
+                    {
+                        if (M2Share.RandomNumber.Random(mineRate) == 0)
+                        {
+                            MakeMine2();
+                        }
+                    }
+                    // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
+                    //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
+                    //   0x6BC2E4  83 C2 05        add edx,5      ; +5
+                    //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
+                    //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
+                    //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
+                    DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
+                    SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
+                    result = true;
                 }
-                else
+            }
+            else
+            {
+                if ((HUtil32.GetTickCount() - mineEvent.AddStoneMineTick) > 10 * 60 * 1000)
                 {
-                    if ((HUtil32.GetTickCount() - mineEvent.AddStoneMineTick) > 10 * 60 * 1000)
-                    {
-                        mineEvent.AddStoneMine();
-                    }
+                    mineEvent.AddStoneMine();
                 }
             }
             // MINE-51: Native @0x6BC306 broadcast RM_HEAVYHIT (0x2715) payload:
