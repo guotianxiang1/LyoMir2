@@ -129,6 +129,11 @@ namespace GameSvr
                     cert = new TimerBombMon();
                     break;
 
+                // race 160 TCreateBombMon : SoccerBall —— 见 Monster/CreateBombMon.cs
+                case 160:
+                    cert = new CreateBombMon();
+                    break;
+
                 // race 174 TFoxBossMon : AnimalObject —— 见 Monster/FoxBossMon.cs
                 case 174:
                     cert = new FoxBossMon();
