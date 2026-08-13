@@ -122,6 +122,11 @@ namespace GameSvr
                 case 243:
                     cert = new FourteenYearBossMon();
                     break;
+
+                // race 244 TMirDotaMatchBossMon : AnimalObject —— 见 Monster/MirDotaMatchBossMon.cs
+                case 244:
+                    cert = new MirDotaMatchBossMon();
+                    break;
             }
             return cert != null;
         }
