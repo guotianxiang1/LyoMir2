@@ -23,16 +23,24 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// Traverse exclusive drop chain for a monster and distribute items/gold.
-        /// Native: sub_71FA20 loop1 (EA 0x71FB5B-0x71FCF9), called from @AfterScatterItems.
-        ///
-        /// Gold entry truncation bug (faithful reproduction):
-        /// When a gold entry is encountered (StdItem == null), the native code jumps to 0x71FCFF
-        /// (EA 0x71fb8d: jmp 0x71fcff), truncating the rest of the chain.
+        /// <c>ecx = 5</c> at 0x71FC02 and 0x71FC79 — the exclusive chain drops at radius 5,
+        /// not the radius 3 the monster's own table uses (<c>ecx = 3</c> @0x71FDCF /
+        /// 0x71FE46).  Hardcoded in both arms; no config key exists for it.
         /// </summary>
-        /// <param name="monsterName">Monster name to lookup chain</param>
-        /// <param name="killer">Attacking player (for item distribution)</param>
-        /// <param name="monster">The monster that died</param>
+        private const int NativeExclusiveChainDropRange = 5;
+
+        /// <summary>
+        /// Traverse the exclusive drop chain for a monster.
+        /// Native: <c>sub_71FA20</c> loop 1, 0x71FB5B-0x71FCFF, segment 1 of
+        /// @AfterScatterItems.
+        ///
+        /// Gold-entry chain truncation is faithful, not a C# shortcut: the gold arm ends
+        /// in <c>0x71FB8D E9 6D 01 00 00  jmp 0x71FCFF</c>, which lands past the node
+        /// advance at 0x71FCD9, so the remaining nodes are never visited.
+        /// </summary>
+        /// <param name="monsterName">Monster name used to look up the chain head</param>
+        /// <param name="killer">The killer, passed through as the item creator</param>
+        /// <param name="monster">The monster that died (drop anchor and gold accumulator)</param>
         /// <param name="scatteredItems">List to record scattered items</param>
         public void TraverseMonItemsTree(string monsterName, TPlayObject killer, TBaseObject monster,
             IList<KeyValuePair<string, string>> scatteredItems)
@@ -40,105 +48,82 @@ namespace GameSvr
             if (string.IsNullOrEmpty(monsterName) || killer == null || monster == null)
                 return;
 
-            // Lookup chain head by monster name (EA 0x71fb49: call sub_67B2B0)
+            // Chain head by monster name: 0x71FB42 mov eax,[0x7D5D9C] / 0x71FB49 call
+            // sub_67B2B0; 0x71FB51 cmp [ebp-0x20],0 / je 0x71FCFF when the head is nil.
             if (!_monItemsTreeChains.TryGetValue(monsterName, out var node))
                 return;
 
-            int goldAccumulator = 0;
-
-            // Loop: EA 0x71fb5b-0x71fcf9
             while (node != null)
             {
-                // Gold check: EA 0x71fb5e-0x71fb6e
-                // Native checks: node+0x18 != NULL AND word_at(item) == 0
-                // C# simplification: StdItem == null means gold entry
-                if (node.StdItem == null)
+                // 0071FB5E  83 78 18 00     cmp dword [node+0x18],0 / 74 2E je 0x71FB92
+                // 0071FB6A  66 83 38 00     cmp word [template],0   / 75 22 jne 0x71FB92
+                // Gold therefore needs BOTH a resolved template AND a zero first word.
+                // C# had `StdItem == null -> gold`, which is the exact inverse: a name
+                // that failed to resolve became free money, while a real gold row was
+                // paid out as an item.
+                //
+                // The first word of the native StdItem record is its wire index — the
+                // same +0x00 ushort the type2 DB codec calls NativeWireIndex — so
+                // "word == 0" means "this row resolved to the index-0 金币 sentinel".
+                // Cross-check on the same record: sub_74C338 dispatches the item factory
+                // on byte[template+0x14], and 0x14 is exactly where StdMode lands after
+                // wireIndex(2) + reserved(2) + ShortString[15](16).  This settles the
+                // SPWN-58 / SPWN-59 BLOCKED note on what "首 word == 0" means.
+                if (node.StdItem != null && node.StdItem.NativeWireIndex == 0)
                 {
-                    // Gold branch: EA 0x71fb70-0x71fb8d
-                    // Native: gold = Random(repeatCount) + repeatCount/2
-                    // Simplified: just use repeatCount as gold amount
-                    goldAccumulator += node.RepeatCount;
-
-                    // ⚠️ FAITHFUL BUG: EA 0x71fb8d: jmp 0x71fcff
-                    // Gold entry truncates the rest of the chain
-                    break;
+                    // 0071FB70  8B 40 1C     mov eax,[node+0x1C]      ; N
+                    // 0071FB76  E8 D1 3F CE FF  call 0x403B4C         ; Random(N)
+                    // 0071FB7E  8B 52 1C     mov edx,[node+0x1C]
+                    // 0071FB81  D1 FA        sar edx,1                ; N div 2 ...
+                    // 0071FB83  79 03 / 83 D2 00   jns / adc edx,0    ; ... toward zero
+                    // 0071FB88  03 C2        add eax,edx
+                    // 0071FB8A  01 45 EC     add [ebp-0x14],eax
+                    // [ebp-0x14] is the SHARED gold accumulator that the segment-4
+                    // settlement (cap 3000, divide by the fatigue multiplier, 16 piles)
+                    // later consumes, i.e. the same place MonGetRandomItems adds to.
+                    // The old code both dropped the Random draw and paid the gold out
+                    // through a fabricated IncGold + SysMsg path that bypassed all of it.
+                    // C# int division truncates toward zero, matching sar+jns+adc.
+                    monster.m_nGold = monster.m_nGold
+                        + node.RepeatCount / 2
+                        + M2Share.RandomNumber.Random(node.RepeatCount);
+                    break;      // 0x71FB8D jmp 0x71FCFF
                 }
 
-                // Main item processing: EA 0x71fb92-0x71fcd3
-                // Distribute item × RepeatCount times
-                for (int i = 0; i < node.RepeatCount; i++)
+                // 0071FB92  item arm.  `mov ebx,[node+0x1C] / dec ebx / test ebx,ebx /
+                // jl 0x71FCD9` skips a non-positive count, and inside the repeat loop
+                // `mov edi,[node+0x18] / test edi,edi / je 0x71FBC4` followed by
+                // `cmp [ebp-0x28],0 / je 0x71FCD2` makes an unresolved template a no-op
+                // repeat — native builds nothing and pays nothing.
+                for (var i = 0; i < node.RepeatCount && node.StdItem != null; i++)
                 {
-                    // EA 0x71fba7-0x71fcd2: lookup item, create instance, give to player
-                    // Create item from StdItem
                     var userItem = new TUserItem();
-                    if (CopyToUserItemFromName(node.ItemName, ref userItem))
+                    if (!CopyToUserItemFromName(node.ItemName, ref userItem))
+                        continue;
+
+                    // 0071FBCE  xor edx,edx / 0071FBD5  call dword [ecx+0x28]
+                    // The base item class's +0x28 is sub_783EFC:
+                    //   Dura = Round(DuraMax / 100.0 * (20 + Random(80)))
+                    // Same hook the monster's own drop table runs at 0x71FDA2.
+                    userItem.Dura = (ushort)HUtil32.Round(
+                        userItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
+
+                    // 0071FC5D arm: push 1 / push 0 / push killer / push <name string> /
+                    // mov ecx,5 / mov edx,item / mov eax,[ebp-0xC] / call sub_7688A0.
+                    // Both arms of the chain (0x71FBF5 and 0x71FC5D) go straight to the
+                    // ground.  The bag attempt C# used to make first was invented and it
+                    // changed ownership: native scatters where anyone can contest the
+                    // pickup.
+                    if (monster.DropItemDown(userItem, NativeExclusiveChainDropRange,
+                            true, killer, monster))
                     {
-                        if (GiveItemToPlayer(killer, monster, userItem))
-                        {
-                            scatteredItems?.Add(new KeyValuePair<string, string>(node.ItemName, "1"));
-                        }
+                        scatteredItems?.Add(new KeyValuePair<string, string>(node.ItemName, "1"));
                     }
                 }
 
-                // Advance to next node: EA 0x71fcdc-0x71fcf9
+                // 0071FCD9  mov eax,[node+0x20] -> next; free the 0x24-byte node
+                // @0x71FCEA; 0x71FCF5 cmp / jne 0x71FB5B.
                 node = node.Next;
-            }
-
-            // Distribute accumulated gold
-            if (goldAccumulator > 0)
-            {
-                DistributeGold(killer, monster, goldAccumulator, scatteredItems);
-            }
-        }
-
-        /// <summary>
-        /// Give item to player or drop on ground.
-        /// Simplified version - full implementation would check inventory space, etc.
-        /// </summary>
-        private bool GiveItemToPlayer(TPlayObject player, TBaseObject monster, TUserItem item)
-        {
-            if (player == null || monster == null || item == null)
-                return false;
-
-            // Try to add to player's bag first
-            if (player.IsEnoughBag() && player.AddItemToBag(item))
-            {
-                return true;
-            }
-
-            // Drop on ground near monster
-            var dropWide = HUtil32._MIN(M2Share.g_Config.nDropItemRage, 7);
-            return monster.DropItemDown(item, dropWide, true, player, monster);
-        }
-
-        /// <summary>
-        /// Distribute gold to player or drop on ground.
-        /// </summary>
-        private void DistributeGold(TPlayObject player, TBaseObject monster, int amount,
-            IList<KeyValuePair<string, string>> scatteredItems)
-        {
-            if (player == null || monster == null || amount <= 0)
-                return;
-
-            // Check if player can receive gold
-            if (player.IncGold(amount))
-            {
-                scatteredItems?.Add(new KeyValuePair<string, string>("Gold", amount.ToString()));
-                player.SysMsg($"你获得了 {amount} 金币。", MsgColor.Green, MsgType.Hint);
-            }
-            else
-            {
-                // Drop gold on ground
-                var goldItem = new TUserItem();
-                if (M2Share.UserEngine.CopyToUserItemFromName("金币", ref goldItem))
-                {
-                    goldItem.Dura = (ushort)Math.Min(amount, ushort.MaxValue);
-                    var dropWide = HUtil32._MIN(M2Share.g_Config.nDropItemRage, 7);
-                    if (monster.DropItemDown(goldItem, dropWide, true, player, monster))
-                    {
-                        scatteredItems?.Add(new KeyValuePair<string, string>("Gold", amount.ToString()));
-                    }
-                }
             }
         }
     }
