@@ -54,6 +54,14 @@ namespace GameSvr
             {
                 ContinueTime = nTime;
             }
+            // NOT modelled, and it applies to the public constructor above too:
+            //   0x7178BC  8B 86 88 00 00 00  mov eax,[esi+0x88]   ; esi = Envir
+            //   0x7178C2  85 C0 / 7E 03      jle
+            //   0x7178C6  89 43 20           mov [ebx+0x20],eax
+            // A positive Envirnoment field +0x88 overrides the duration of EVERY
+            // fire-burn event on that map, last write wins. The C# Envirnoment has
+            // no identified counterpart for +0x88, so guessing one would be worse
+            // than leaving the override out. Flagged in the event report.
         }
 
         public FireBurnEvent(TBaseObject Creat, TUserMagic userMagic, int nX, int nY, int nType, int nTime, int nDamage) : base(Creat.m_PEnvir, nX, nY, nType, nTime, true)
