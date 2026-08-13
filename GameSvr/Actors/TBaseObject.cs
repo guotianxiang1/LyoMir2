@@ -6044,11 +6044,22 @@ namespace GameSvr
             //   left unimplemented (fail-closed), reported as a separate gap.
             for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
             {
-                if ((m_UseItems[i] != null) && (m_UseItems[i].wIndex > 0) && (M2Share.RandomNumber.Random(8) == 0))
+                // The `Dura > 0` term is the native per-item gate sub_75EA40
+                // @0x75EA69 `call [item_vmt+0x74]`, whose equipment-class
+                // implementation 0x75F6C8 is exactly `cmp word [item+0x26],0; jbe
+                // -> false`. Without it an already-broken item re-enters the
+                // wear path and is destroyed on the next hit, which native never
+                // does. See TBaseObject.NativeStruckDurability.cs.
+                if ((m_UseItems[i] != null) && (m_UseItems[i].wIndex > 0) && NativeStruckWearsOnHit(m_UseItems[i])
+                    && (M2Share.RandomNumber.Random(8) == 0))
                 {
                     nDura = m_UseItems[i].Dura;
-                    nOldDura = HUtil32.Round(nDura / 1000.0);
+                    nOldDura = NativeStruckDuraDisplayPoint(nDura);
                     nDura -= nDam;
+                    // sub_75EA40 sets the notify flag @0x75EB57 unconditionally on
+                    // the destroy arm, and only on a visible point change @0x75EAC9
+                    // on the wear arm.
+                    bool boSendDuraChange;
                     if (nDura <= 0)
                     {
                         if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
@@ -6067,14 +6078,19 @@ namespace GameSvr
                         m_UseItems[i].wIndex = 0;
                         m_UseItems[i].Dura = 0;
                         bo19 = true;
+                        boSendDuraChange = true;
                     }
                     else
                     {
                         m_UseItems[i].Dura = (ushort)nDura;
+                        boSendDuraChange = nOldDura != NativeStruckDuraDisplayPoint(nDura);
                     }
-                    if (nOldDura != HUtil32.Round(nDura / 1000.0))
+                    if (boSendDuraChange)
                     {
-                        SendMsg(this, Grobal2.RM_DURACHANGE, i, nDura, m_UseItems[i].DuraMax, 0, "");
+                        // sub_75F49C @0x75F4D2/@0x75F4D7 reads the item's CURRENT
+                        // `word [item+0x26]` / `word [item+0x28]`, so the destroy arm
+                        // reports 0 rather than the negative running total.
+                        SendMsg(this, Grobal2.RM_DURACHANGE, i, m_UseItems[i].Dura, m_UseItems[i].DuraMax, 0, "");
                     }
                 }
             }
