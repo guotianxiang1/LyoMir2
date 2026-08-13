@@ -1,0 +1,4642 @@
+[
+ {
+  "va": 4428327,
+  "text": "mov word ptr [eax + 0x26], bx",
+  "bytes": "66895826",
+  "fn": 4427948,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 6517145,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 6516072,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 6549568,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 6549148,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 6549645,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 6549148,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 6842478,
+  "text": "sub word ptr [eax + 0x26], dx",
+  "bytes": "66295026",
+  "fn": 6842296,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)",
+   "GetUseItems",
+   "IsA:TDragonHeart",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 6867422,
+  "text": "sub word ptr [eax + 0x26], 0x64",
+  "bytes": "6683682664",
+  "fn": 6867184,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems",
+   "IsA:TPoisons",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 6878410,
+  "text": "sub word ptr [esi + 0x26], di",
+  "bytes": "66297e26",
+  "fn": 6878288,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)",
+   "GetUseItems",
+   "IsA:TDragonHeart",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 6921883,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 6921860,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 6949649,
+  "text": "sub word ptr [eax + 0x26], 0x3e8",
+  "bytes": "66816826e803",
+  "fn": 6949364,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 6949812,
+  "text": "sub word ptr [eax + 0x26], 0x3e8",
+  "bytes": "66816826e803",
+  "fn": 6949364,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 6949988,
+  "text": "sub word ptr [eax + 0x26], 0x3e8",
+  "bytes": "66816826e803",
+  "fn": 6949364,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7062650,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7062476,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7065497,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7065320,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7068387,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7068212,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7068397,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7068212,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7113181,
+  "text": "mov word ptr [eax + 0x26], bx",
+  "bytes": "66895826",
+  "fn": 7112628,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7113194,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 7112628,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7128594,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7128096,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7128608,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7128096,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7140018,
+  "text": "sub word ptr [eax + 0x26], 0x3e8",
+  "bytes": "66816826e803",
+  "fn": 7139836,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7140110,
+  "text": "mov word ptr [eax + 0x26], 0",
+  "bytes": "66c740260000",
+  "fn": 7139836,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7140221,
+  "text": "sub word ptr [edi + 0x26], 0x3e8",
+  "bytes": "66816f26e803",
+  "fn": 7140132,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7167822,
+  "text": "add word ptr [ebx + 0x26], 0x64",
+  "bytes": "6683432664",
+  "fn": 7167568,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems",
+   "IsA:TVessel",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7198437,
+  "text": "mov word ptr [edi + 0x26], ax",
+  "bytes": "66894726",
+  "fn": 7198324,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7198445,
+  "text": "mov word ptr [edi + 0x26], ax",
+  "bytes": "66894726",
+  "fn": 7198324,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7207277,
+  "text": "sub word ptr [ebx + 0x26], di",
+  "bytes": "66297b26",
+  "fn": 7206888,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7208187,
+  "text": "sub word ptr [eax + 0x26], di",
+  "bytes": "66297826",
+  "fn": 7208142,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7214658,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 7214313,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7214667,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 7214313,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7249163,
+  "text": "dec word ptr [esi + 0x26]",
+  "bytes": "66ff4e26",
+  "fn": 7249106,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7256443,
+  "text": "sub word ptr [ebx + 0x26], 0x3e8",
+  "bytes": "66816b26e803",
+  "fn": 7256292,
+  "owner": null,
+  "ev": [
+   "GetDura",
+   "IsA:TMicroWhelk",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7287638,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 7287588,
+  "owner": null,
+  "ev": [
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7324367,
+  "text": "sub word ptr [eax + 0x26], bx",
+  "bytes": "66295826",
+  "fn": 7323732,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7378021,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 7377995,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7378034,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 7377995,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7415303,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7415012,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7416094,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7415964,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7416789,
+  "text": "mov word ptr [esi + 0x26], dx",
+  "bytes": "66895626",
+  "fn": 7416772,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7466310,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 7466254,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7471592,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7471529,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7596112,
+  "text": "mov word ptr [ebx + 0x26], 0",
+  "bytes": "66c743260000",
+  "fn": 7596048,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7596172,
+  "text": "mov word ptr [ebx + 0x26], si",
+  "bytes": "66897326",
+  "fn": 7596048,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7596452,
+  "text": "sub word ptr [edi + 0x26], ax",
+  "bytes": "66294726",
+  "fn": 7596348,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems",
+   "IsA:TBujuk",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7596810,
+  "text": "sub word ptr [eax + 0x26], dx",
+  "bytes": "66295026",
+  "fn": 7596576,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems",
+   "IsA:TBujuk",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7597171,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7597120,
+  "owner": null,
+  "ev": [
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7597179,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7597120,
+  "owner": null,
+  "ev": [
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7603738,
+  "text": "sub word ptr [ebx + 0x26], di",
+  "bytes": "66297b26",
+  "fn": 7603532,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7605389,
+  "text": "sub word ptr [ebx + 0x26], di",
+  "bytes": "66297b26",
+  "fn": 7604996,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7605732,
+  "text": "sub word ptr [eax + 0x26], dx",
+  "bytes": "66295026",
+  "fn": 7605596,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7606295,
+  "text": "mov word ptr [ebx + 0x26], dx",
+  "bytes": "66895326",
+  "fn": 7606254,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7606352,
+  "text": "add word ptr [ebx + 0x26], ax",
+  "bytes": "66014326",
+  "fn": 7606254,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7606702,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 7606488,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7628055,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7627996,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7630787,
+  "text": "sub word ptr [ebx + 0x26], di",
+  "bytes": "66297b26",
+  "fn": 7630662,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7631418,
+  "text": "sub word ptr [ebx + 0x26], di",
+  "bytes": "66297b26",
+  "fn": 7631120,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7672711,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7672500,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7687886,
+  "text": "mov word ptr [edx + 0x26], ax",
+  "bytes": "66894226",
+  "fn": 7687488,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7687898,
+  "text": "add word ptr [eax + 0x26], dx",
+  "bytes": "66015026",
+  "fn": 7687488,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7727780,
+  "text": "sub word ptr [ebx + 0x26], ax",
+  "bytes": "66294326",
+  "fn": 7727680,
+  "owner": null,
+  "ev": [
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7727953,
+  "text": "mov word ptr [ebx + 0x26], 0",
+  "bytes": "66c743260000",
+  "fn": 7727680,
+  "owner": null,
+  "ev": [
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7730690,
+  "text": "mov word ptr [eax + 0x26], di",
+  "bytes": "66897826",
+  "fn": 7730592,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetDura",
+   "GetUseItems"
+  ]
+ },
+ {
+  "va": 7732044,
+  "text": "add word ptr [edi + 0x26], ax",
+  "bytes": "66014726",
+  "fn": 7731988,
+  "owner": [
+   [
+    "TEquipItem",
+    12
+   ],
+   [
+    "TRWeapon",
+    12
+   ],
+   [
+    "THeadMask",
+    12
+   ],
+   [
+    "TWarDrum",
+    12
+   ],
+   [
+    "TMaPai",
+    12
+   ],
+   [
+    "TCharm",
+    12
+   ],
+   [
+    "TCryCharm",
+    12
+   ],
+   [
+    "THPCharm",
+    12
+   ],
+   [
+    "TMPCharm",
+    12
+   ],
+   [
+    "THPMPCharm",
+    12
+   ],
+   [
+    "TMarkStoneCharm",
+    12
+   ],
+   [
+    "TEquipBujuk",
+    12
+   ],
+   [
+    "TBujuk",
+    12
+   ],
+   [
+    "TPoisons",
+    12
+   ],
+   [
+    "TVessel",
+    12
+   ],
+   [
+    "TUnionItem",
+    12
+   ],
+   [
+    "TDragonHeart",
+    12
+   ],
+   [
+    "TSuperDragonHeart",
+    12
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7733658,
+  "text": "mov word ptr [ecx + 0x26], 0",
+  "bytes": "66c741260000",
+  "fn": 7733632,
+  "owner": [
+   [
+    "TTemporaryManClothes",
+    12
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7734030,
+  "text": "mov word ptr [ecx + 0x26], 0",
+  "bytes": "66c741260000",
+  "fn": 7734004,
+  "owner": [
+   [
+    "TTemporaryWomanClothes",
+    12
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7735868,
+  "text": "mov word ptr [edi + 0x26], ax",
+  "bytes": "66894726",
+  "fn": 7735508,
+  "owner": [
+   [
+    "TLWeapon",
+    10
+   ],
+   [
+    "TBrokenWeapon",
+    10
+   ],
+   [
+    "TSpade",
+    10
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7736003,
+  "text": "add word ptr [esi + 0x26], ax",
+  "bytes": "66014626",
+  "fn": 7735924,
+  "owner": [
+   [
+    "TLWeapon",
+    12
+   ],
+   [
+    "TBrokenWeapon",
+    12
+   ],
+   [
+    "TSpade",
+    12
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7736838,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7736804,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7738160,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7737800,
+  "owner": [
+   [
+    "THelmet",
+    10
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7738497,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7738168,
+  "owner": [
+   [
+    "THelmet",
+    2
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7739596,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7739587,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7740952,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7740680,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7741216,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7740960,
+  "owner": [
+   [
+    "TRing",
+    2
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7743248,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7742976,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7743551,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7743256,
+  "owner": [
+   [
+    "TArmRing",
+    2
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7746576,
+  "text": "sub word ptr [eax + 0x26], 0x3e8",
+  "bytes": "66816826e803",
+  "fn": 7746540,
+  "owner": [
+   [
+    "TCryCharm",
+    6
+   ]
+  ],
+  "ev": []
+ },
+ {
+  "va": 7746584,
+  "text": "mov word ptr [eax + 0x26], 0",
+  "bytes": "66c740260000",
+  "fn": 7746540,
+  "owner": [
+   [
+    "TCryCharm",
+    6
+   ]
+  ],
+  "ev": []
+ },
+ {
+  "va": 7746718,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7746652,
+  "owner": [
+   [
+    "THPCharm",
+    7
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7746843,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7746780,
+  "owner": [
+   [
+    "TMPCharm",
+    7
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7746988,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7746908,
+  "owner": [
+   [
+    "THPMPCharm",
+    7
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7747024,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7746908,
+  "owner": [
+   [
+    "THPMPCharm",
+    7
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7747116,
+  "text": "sub word ptr [ebx + 0x26], 0x64",
+  "bytes": "66836b2664",
+  "fn": 7747068,
+  "owner": [
+   [
+    "TVessel",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7747294,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7747260,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7747421,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 7747332,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7747604,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 7747544,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "GetDura"
+  ]
+ },
+ {
+  "va": 7748414,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7748380,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7748818,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7748452,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7748832,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7748452,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7749546,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7749411,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7749560,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7749411,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7878630,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7878536,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7879218,
+  "text": "sub word ptr [ebx + 0x26], 0x7d0",
+  "bytes": "66816b26d007",
+  "fn": 7879144,
+  "owner": [
+   [
+    "TEquipItem",
+    11
+   ],
+   [
+    "TClothes",
+    11
+   ],
+   [
+    "TManClothes",
+    11
+   ],
+   [
+    "TTemporaryManClothes",
+    11
+   ],
+   [
+    "TWomanClothes",
+    11
+   ],
+   [
+    "TTemporaryWomanClothes",
+    11
+   ],
+   [
+    "TRWeapon",
+    11
+   ],
+   [
+    "TLWeapon",
+    11
+   ],
+   [
+    "TBrokenWeapon",
+    11
+   ],
+   [
+    "TSpade",
+    11
+   ],
+   [
+    "THeadMask",
+    11
+   ],
+   [
+    "TWarDrum",
+    11
+   ],
+   [
+    "THelmet",
+    11
+   ],
+   [
+    "TNecklace",
+    11
+   ],
+   [
+    "TRing",
+    11
+   ],
+   [
+    "TArmRing",
+    11
+   ],
+   [
+    "TBelt",
+    11
+   ],
+   [
+    "TBoots",
+    11
+   ],
+   [
+    "TMaPai",
+    11
+   ],
+   [
+    "TCharm",
+    11
+   ],
+   [
+    "TCryCharm",
+    11
+   ],
+   [
+    "THPCharm",
+    11
+   ],
+   [
+    "TMPCharm",
+    11
+   ],
+   [
+    "THPMPCharm",
+    11
+   ],
+   [
+    "TMarkStoneCharm",
+    11
+   ],
+   [
+    "TEquipBujuk",
+    11
+   ],
+   [
+    "TBujuk",
+    11
+   ],
+   [
+    "TPoisons",
+    11
+   ],
+   [
+    "TVessel",
+    11
+   ],
+   [
+    "TUnionItem",
+    11
+   ],
+   [
+    "TDragonHeart",
+    11
+   ],
+   [
+    "TSuperDragonHeart",
+    11
+   ],
+   [
+    "TBaseItem",
+    11
+   ],
+   [
+    "TMapGold",
+    11
+   ],
+   [
+    "TDrug",
+    11
+   ],
+   [
+    "TSlowDrug",
+    11
+   ],
+   [
+    "TQuickDrug",
+    11
+   ],
+   [
+    "TShengShui",
+    11
+   ],
+   [
+    "TQuickDrugForce",
+    11
+   ],
+   [
+    "TMoveScroll",
+    11
+   ],
+   [
+    "TRepairOil",
+    11
+   ],
+   [
+    "TSpecialDrug",
+    11
+   ],
+   [
+    "TTmpBuffDrug",
+    11
+   ],
+   [
+    "TNewTmpBuffDrug",
+    11
+   ],
+   [
+    "TNewTempBuffDrugEx",
+    11
+   ],
+   [
+    "TStrengthDrug",
+    11
+   ],
+   [
+    "TPercentAddDrug",
+    11
+   ],
+   [
+    "TPercentResumeDrug",
+    11
+   ],
+   [
+    "TSuperForceBall",
+    11
+   ],
+   [
+    "TMagicStone",
+    11
+   ],
+   [
+    "TSkillBook",
+    11
+   ],
+   [
+    "TUnionUpBook",
+    11
+   ],
+   [
+    "TNormalBox",
+    11
+   ],
+   [
+    "TQianKunBag",
+    11
+   ],
+   [
+    "TBundleItem",
+    11
+   ],
+   [
+    "TUnBundleItem",
+    11
+   ],
+   [
+    "TRabbitPrize",
+    11
+   ],
+   [
+    "TCNFeastBox",
+    11
+   ],
+   [
+    "TCoupleFeastBox",
+    11
+   ],
+   [
+    "TCloseAttrItm",
+    11
+   ],
+   [
+    "TMeatItem",
+    11
+   ],
+   [
+    "TBaneMaterial",
+    11
+   ],
+   [
+    "TOreItem",
+    11
+   ],
+   [
+    "TNoEffectItem",
+    11
+   ],
+   [
+    "TDoubleExpProp",
+    11
+   ],
+   [
+    "TAntiDecExpProp",
+    11
+   ],
+   [
+    "THappyCake",
+    11
+   ],
+   [
+    "TBirthdayCake",
+    11
+   ],
+   [
+    "TNewFireworks",
+    11
+   ],
+   [
+    "TChgHairProp",
+    11
+   ],
+   [
+    "TColorSayProp",
+    11
+   ],
+   [
+    "TWhiteGoldCard",
+    11
+   ],
+   [
+    "TWoodBox",
+    11
+   ],
+   [
+    "TGoldActCred",
+    11
+   ],
+   [
+    "TRope",
+    11
+   ],
+   [
+    "TRopeExt",
+    11
+   ],
+   [
+    "TCityStone",
+    11
+   ],
+   [
+    "TRndFlyStone",
+    11
+   ],
+   [
+    "TDreamFlyStone",
+    11
+   ],
+   [
+    "TDreamCityScroll",
+    11
+   ],
+   [
+    "TFoxMapScroll",
+    11
+   ],
+   [
+    "TCallMobProp",
+    11
+   ],
+   [
+    "TMicroWhelk",
+    11
+   ],
+   [
+    "TCallMonStone",
+    11
+   ],
+   [
+    "TCastleCityFlyStone",
+    11
+   ],
+   [
+    "TRepairWater",
+    11
+   ],
+   [
+    "TFireFlower",
+    11
+   ],
+   [
+    "TMonsterBlowItem",
+    11
+   ],
+   [
+    "TMakeMonFireFlower",
+    11
+   ],
+   [
+    "TRabbitYearFire",
+    11
+   ],
+   [
+    "TBufferFlower",
+    11
+   ],
+   [
+    "TBufferItem",
+    11
+   ],
+   [
+    "TExpBall",
+    11
+   ],
+   [
+    "THeroHighExpItem",
+    11
+   ],
+   [
+    "TSpiritWater",
+    11
+   ],
+   [
+    "TConjurator",
+    11
+   ],
+   [
+    "THeroExpBall",
+    11
+   ],
+   [
+    "TFireDragonBall",
+    11
+   ],
+   [
+    "TDragonSeal",
+    11
+   ],
+   [
+    "TWine",
+    11
+   ],
+   [
+    "TSkillTrainScroll",
+    11
+   ],
+   [
+    "TGroupAddExpItem",
+    11
+   ],
+   [
+    "TNewQkBag",
+    11
+   ],
+   [
+    "TTimerBomb",
+    11
+   ],
+   [
+    "TDragonBlood",
+    11
+   ],
+   [
+    "TNBJieJing",
+    11
+   ],
+   [
+    "THorseYearBadge",
+    11
+   ],
+   [
+    "TForceBall",
+    11
+   ],
+   [
+    "TForceExpHeap",
+    11
+   ],
+   [
+    "TForceExpBook",
+    11
+   ],
+   [
+    "TForceExpBall",
+    11
+   ],
+   [
+    "TIdentifyScrollItem",
+    11
+   ],
+   [
+    "TTaskIdentifyScroll",
+    11
+   ],
+   [
+    "TNewPlayerBox",
+    11
+   ],
+   [
+    "TBasePileItem",
+    11
+   ],
+   [
+    "TLuckOil",
+    11
+   ],
+   [
+    "TPneumaStone",
+    11
+   ],
+   [
+    "TTaoFaLingAddExpItem",
+    11
+   ],
+   [
+    "TGoldAcus",
+    11
+   ],
+   [
+    "TShiMenCall",
+    11
+   ],
+   [
+    "TSuperExpItem",
+    11
+   ],
+   [
+    "TLevelBuffItem",
+    11
+   ],
+   [
+    "TNewHappyCake",
+    11
+   ],
+   [
+    "THeroJingmaiDrug",
+    11
+   ],
+   [
+    "TPileFlower",
+    11
+   ],
+   [
+    "TNormalCrystal",
+    11
+   ],
+   [
+    "TAnimalMascot",
+    11
+   ],
+   [
+    "TXiuFuLingShui",
+    11
+   ],
+   [
+    "TFixedCoordStone",
+    11
+   ],
+   [
+    "TStealthItem",
+    11
+   ],
+   [
+    "THeroHypericum",
+    11
+   ],
+   [
+    "THeroFileDragonScroll",
+    11
+   ],
+   [
+    "THeroExpScroll",
+    11
+   ],
+   [
+    "THumanRenameToken",
+    11
+   ],
+   [
+    "TAbilRouleauItem",
+    11
+   ],
+   [
+    "TJingXiuBook",
+    11
+   ],
+   [
+    "TAutoTransScore",
+    11
+   ],
+   [
+    "TOffiRankStone",
+    11
+   ],
+   [
+    "THuoYuanMedicament",
+    11
+   ],
+   [
+    "TShuiYuanMedicament",
+    11
+   ],
+   [
+    "TMuYuanMedicament",
+    11
+   ],
+   [
+    "TJinYuanMedicament",
+    11
+   ],
+   [
+    "TTuYuanMedicament",
+    11
+   ],
+   [
+    "TSpecialDropItem",
+    11
+   ],
+   [
+    "TJewelStone",
+    11
+   ],
+   [
+    "TJewelFragment",
+    11
+   ],
+   [
+    "TGoldPackage",
+    11
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7879226,
+  "text": "mov word ptr [ebx + 0x26], 0",
+  "bytes": "66c743260000",
+  "fn": 7879144,
+  "owner": [
+   [
+    "TEquipItem",
+    11
+   ],
+   [
+    "TClothes",
+    11
+   ],
+   [
+    "TManClothes",
+    11
+   ],
+   [
+    "TTemporaryManClothes",
+    11
+   ],
+   [
+    "TWomanClothes",
+    11
+   ],
+   [
+    "TTemporaryWomanClothes",
+    11
+   ],
+   [
+    "TRWeapon",
+    11
+   ],
+   [
+    "TLWeapon",
+    11
+   ],
+   [
+    "TBrokenWeapon",
+    11
+   ],
+   [
+    "TSpade",
+    11
+   ],
+   [
+    "THeadMask",
+    11
+   ],
+   [
+    "TWarDrum",
+    11
+   ],
+   [
+    "THelmet",
+    11
+   ],
+   [
+    "TNecklace",
+    11
+   ],
+   [
+    "TRing",
+    11
+   ],
+   [
+    "TArmRing",
+    11
+   ],
+   [
+    "TBelt",
+    11
+   ],
+   [
+    "TBoots",
+    11
+   ],
+   [
+    "TMaPai",
+    11
+   ],
+   [
+    "TCharm",
+    11
+   ],
+   [
+    "TCryCharm",
+    11
+   ],
+   [
+    "THPCharm",
+    11
+   ],
+   [
+    "TMPCharm",
+    11
+   ],
+   [
+    "THPMPCharm",
+    11
+   ],
+   [
+    "TMarkStoneCharm",
+    11
+   ],
+   [
+    "TEquipBujuk",
+    11
+   ],
+   [
+    "TBujuk",
+    11
+   ],
+   [
+    "TPoisons",
+    11
+   ],
+   [
+    "TVessel",
+    11
+   ],
+   [
+    "TUnionItem",
+    11
+   ],
+   [
+    "TDragonHeart",
+    11
+   ],
+   [
+    "TSuperDragonHeart",
+    11
+   ],
+   [
+    "TBaseItem",
+    11
+   ],
+   [
+    "TMapGold",
+    11
+   ],
+   [
+    "TDrug",
+    11
+   ],
+   [
+    "TSlowDrug",
+    11
+   ],
+   [
+    "TQuickDrug",
+    11
+   ],
+   [
+    "TShengShui",
+    11
+   ],
+   [
+    "TQuickDrugForce",
+    11
+   ],
+   [
+    "TMoveScroll",
+    11
+   ],
+   [
+    "TRepairOil",
+    11
+   ],
+   [
+    "TSpecialDrug",
+    11
+   ],
+   [
+    "TTmpBuffDrug",
+    11
+   ],
+   [
+    "TNewTmpBuffDrug",
+    11
+   ],
+   [
+    "TNewTempBuffDrugEx",
+    11
+   ],
+   [
+    "TStrengthDrug",
+    11
+   ],
+   [
+    "TPercentAddDrug",
+    11
+   ],
+   [
+    "TPercentResumeDrug",
+    11
+   ],
+   [
+    "TSuperForceBall",
+    11
+   ],
+   [
+    "TMagicStone",
+    11
+   ],
+   [
+    "TSkillBook",
+    11
+   ],
+   [
+    "TUnionUpBook",
+    11
+   ],
+   [
+    "TNormalBox",
+    11
+   ],
+   [
+    "TQianKunBag",
+    11
+   ],
+   [
+    "TBundleItem",
+    11
+   ],
+   [
+    "TUnBundleItem",
+    11
+   ],
+   [
+    "TRabbitPrize",
+    11
+   ],
+   [
+    "TCNFeastBox",
+    11
+   ],
+   [
+    "TCoupleFeastBox",
+    11
+   ],
+   [
+    "TCloseAttrItm",
+    11
+   ],
+   [
+    "TMeatItem",
+    11
+   ],
+   [
+    "TBaneMaterial",
+    11
+   ],
+   [
+    "TOreItem",
+    11
+   ],
+   [
+    "TNoEffectItem",
+    11
+   ],
+   [
+    "TDoubleExpProp",
+    11
+   ],
+   [
+    "TAntiDecExpProp",
+    11
+   ],
+   [
+    "THappyCake",
+    11
+   ],
+   [
+    "TBirthdayCake",
+    11
+   ],
+   [
+    "TNewFireworks",
+    11
+   ],
+   [
+    "TChgHairProp",
+    11
+   ],
+   [
+    "TColorSayProp",
+    11
+   ],
+   [
+    "TWhiteGoldCard",
+    11
+   ],
+   [
+    "TWoodBox",
+    11
+   ],
+   [
+    "TGoldActCred",
+    11
+   ],
+   [
+    "TRope",
+    11
+   ],
+   [
+    "TRopeExt",
+    11
+   ],
+   [
+    "TCityStone",
+    11
+   ],
+   [
+    "TRndFlyStone",
+    11
+   ],
+   [
+    "TDreamFlyStone",
+    11
+   ],
+   [
+    "TDreamCityScroll",
+    11
+   ],
+   [
+    "TFoxMapScroll",
+    11
+   ],
+   [
+    "TCallMobProp",
+    11
+   ],
+   [
+    "TMicroWhelk",
+    11
+   ],
+   [
+    "TCallMonStone",
+    11
+   ],
+   [
+    "TCastleCityFlyStone",
+    11
+   ],
+   [
+    "TRepairWater",
+    11
+   ],
+   [
+    "TFireFlower",
+    11
+   ],
+   [
+    "TMonsterBlowItem",
+    11
+   ],
+   [
+    "TMakeMonFireFlower",
+    11
+   ],
+   [
+    "TRabbitYearFire",
+    11
+   ],
+   [
+    "TBufferFlower",
+    11
+   ],
+   [
+    "TBufferItem",
+    11
+   ],
+   [
+    "TExpBall",
+    11
+   ],
+   [
+    "THeroHighExpItem",
+    11
+   ],
+   [
+    "TSpiritWater",
+    11
+   ],
+   [
+    "TConjurator",
+    11
+   ],
+   [
+    "THeroExpBall",
+    11
+   ],
+   [
+    "TFireDragonBall",
+    11
+   ],
+   [
+    "TDragonSeal",
+    11
+   ],
+   [
+    "TWine",
+    11
+   ],
+   [
+    "TSkillTrainScroll",
+    11
+   ],
+   [
+    "TGroupAddExpItem",
+    11
+   ],
+   [
+    "TNewQkBag",
+    11
+   ],
+   [
+    "TTimerBomb",
+    11
+   ],
+   [
+    "TDragonBlood",
+    11
+   ],
+   [
+    "TNBJieJing",
+    11
+   ],
+   [
+    "THorseYearBadge",
+    11
+   ],
+   [
+    "TForceBall",
+    11
+   ],
+   [
+    "TForceExpHeap",
+    11
+   ],
+   [
+    "TForceExpBook",
+    11
+   ],
+   [
+    "TForceExpBall",
+    11
+   ],
+   [
+    "TIdentifyScrollItem",
+    11
+   ],
+   [
+    "TTaskIdentifyScroll",
+    11
+   ],
+   [
+    "TNewPlayerBox",
+    11
+   ],
+   [
+    "TBasePileItem",
+    11
+   ],
+   [
+    "TLuckOil",
+    11
+   ],
+   [
+    "TPneumaStone",
+    11
+   ],
+   [
+    "TTaoFaLingAddExpItem",
+    11
+   ],
+   [
+    "TGoldAcus",
+    11
+   ],
+   [
+    "TShiMenCall",
+    11
+   ],
+   [
+    "TSuperExpItem",
+    11
+   ],
+   [
+    "TLevelBuffItem",
+    11
+   ],
+   [
+    "TNewHappyCake",
+    11
+   ],
+   [
+    "THeroJingmaiDrug",
+    11
+   ],
+   [
+    "TPileFlower",
+    11
+   ],
+   [
+    "TNormalCrystal",
+    11
+   ],
+   [
+    "TAnimalMascot",
+    11
+   ],
+   [
+    "TXiuFuLingShui",
+    11
+   ],
+   [
+    "TFixedCoordStone",
+    11
+   ],
+   [
+    "TStealthItem",
+    11
+   ],
+   [
+    "THeroHypericum",
+    11
+   ],
+   [
+    "THeroFileDragonScroll",
+    11
+   ],
+   [
+    "THeroExpScroll",
+    11
+   ],
+   [
+    "THumanRenameToken",
+    11
+   ],
+   [
+    "TAbilRouleauItem",
+    11
+   ],
+   [
+    "TJingXiuBook",
+    11
+   ],
+   [
+    "TAutoTransScore",
+    11
+   ],
+   [
+    "TOffiRankStone",
+    11
+   ],
+   [
+    "THuoYuanMedicament",
+    11
+   ],
+   [
+    "TShuiYuanMedicament",
+    11
+   ],
+   [
+    "TMuYuanMedicament",
+    11
+   ],
+   [
+    "TJinYuanMedicament",
+    11
+   ],
+   [
+    "TTuYuanMedicament",
+    11
+   ],
+   [
+    "TSpecialDropItem",
+    11
+   ],
+   [
+    "TJewelStone",
+    11
+   ],
+   [
+    "TJewelFragment",
+    11
+   ],
+   [
+    "TGoldPackage",
+    11
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7880495,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7880444,
+  "owner": [
+   [
+    "TEquipItem",
+    10
+   ],
+   [
+    "TRWeapon",
+    10
+   ],
+   [
+    "THeadMask",
+    10
+   ],
+   [
+    "TWarDrum",
+    10
+   ],
+   [
+    "TBelt",
+    10
+   ],
+   [
+    "TBoots",
+    10
+   ],
+   [
+    "TMaPai",
+    10
+   ],
+   [
+    "TCharm",
+    10
+   ],
+   [
+    "TCryCharm",
+    10
+   ],
+   [
+    "THPCharm",
+    10
+   ],
+   [
+    "TMPCharm",
+    10
+   ],
+   [
+    "THPMPCharm",
+    10
+   ],
+   [
+    "TMarkStoneCharm",
+    10
+   ],
+   [
+    "TEquipBujuk",
+    10
+   ],
+   [
+    "TBujuk",
+    10
+   ],
+   [
+    "TPoisons",
+    10
+   ],
+   [
+    "TUnionItem",
+    10
+   ],
+   [
+    "TDragonHeart",
+    10
+   ],
+   [
+    "TSuperDragonHeart",
+    10
+   ],
+   [
+    "TBaseItem",
+    10
+   ],
+   [
+    "TMapGold",
+    10
+   ],
+   [
+    "TDrug",
+    10
+   ],
+   [
+    "TSlowDrug",
+    10
+   ],
+   [
+    "TQuickDrug",
+    10
+   ],
+   [
+    "TShengShui",
+    10
+   ],
+   [
+    "TQuickDrugForce",
+    10
+   ],
+   [
+    "TMoveScroll",
+    10
+   ],
+   [
+    "TRepairOil",
+    10
+   ],
+   [
+    "TSpecialDrug",
+    10
+   ],
+   [
+    "TTmpBuffDrug",
+    10
+   ],
+   [
+    "TNewTmpBuffDrug",
+    10
+   ],
+   [
+    "TNewTempBuffDrugEx",
+    10
+   ],
+   [
+    "TStrengthDrug",
+    10
+   ],
+   [
+    "TPercentAddDrug",
+    10
+   ],
+   [
+    "TPercentResumeDrug",
+    10
+   ],
+   [
+    "TSuperForceBall",
+    10
+   ],
+   [
+    "TMagicStone",
+    10
+   ],
+   [
+    "TSkillBook",
+    10
+   ],
+   [
+    "TUnionUpBook",
+    10
+   ],
+   [
+    "TNormalBox",
+    10
+   ],
+   [
+    "TQianKunBag",
+    10
+   ],
+   [
+    "TBundleItem",
+    10
+   ],
+   [
+    "TUnBundleItem",
+    10
+   ],
+   [
+    "TRabbitPrize",
+    10
+   ],
+   [
+    "TCNFeastBox",
+    10
+   ],
+   [
+    "TCoupleFeastBox",
+    10
+   ],
+   [
+    "TCloseAttrItm",
+    10
+   ],
+   [
+    "TMeatItem",
+    10
+   ],
+   [
+    "TBaneMaterial",
+    10
+   ],
+   [
+    "TOreItem",
+    10
+   ],
+   [
+    "TNoEffectItem",
+    10
+   ],
+   [
+    "TDoubleExpProp",
+    10
+   ],
+   [
+    "TAntiDecExpProp",
+    10
+   ],
+   [
+    "THappyCake",
+    10
+   ],
+   [
+    "TBirthdayCake",
+    10
+   ],
+   [
+    "TNewFireworks",
+    10
+   ],
+   [
+    "TChgHairProp",
+    10
+   ],
+   [
+    "TColorSayProp",
+    10
+   ],
+   [
+    "TWhiteGoldCard",
+    10
+   ],
+   [
+    "TWoodBox",
+    10
+   ],
+   [
+    "TGoldActCred",
+    10
+   ],
+   [
+    "TRope",
+    10
+   ],
+   [
+    "TRopeExt",
+    10
+   ],
+   [
+    "TCityStone",
+    10
+   ],
+   [
+    "TRndFlyStone",
+    10
+   ],
+   [
+    "TDreamFlyStone",
+    10
+   ],
+   [
+    "TDreamCityScroll",
+    10
+   ],
+   [
+    "TFoxMapScroll",
+    10
+   ],
+   [
+    "TCallMobProp",
+    10
+   ],
+   [
+    "TMicroWhelk",
+    10
+   ],
+   [
+    "TCastleCityFlyStone",
+    10
+   ],
+   [
+    "TRepairWater",
+    10
+   ],
+   [
+    "TFireFlower",
+    10
+   ],
+   [
+    "TMonsterBlowItem",
+    10
+   ],
+   [
+    "TMakeMonFireFlower",
+    10
+   ],
+   [
+    "TRabbitYearFire",
+    10
+   ],
+   [
+    "TBufferFlower",
+    10
+   ],
+   [
+    "TBufferItem",
+    10
+   ],
+   [
+    "TExpBall",
+    10
+   ],
+   [
+    "THeroHighExpItem",
+    10
+   ],
+   [
+    "TSpiritWater",
+    10
+   ],
+   [
+    "TConjurator",
+    10
+   ],
+   [
+    "THeroExpBall",
+    10
+   ],
+   [
+    "TFireDragonBall",
+    10
+   ],
+   [
+    "TDragonSeal",
+    10
+   ],
+   [
+    "TWine",
+    10
+   ],
+   [
+    "TSkillTrainScroll",
+    10
+   ],
+   [
+    "TGroupAddExpItem",
+    10
+   ],
+   [
+    "TNewQkBag",
+    10
+   ],
+   [
+    "TTimerBomb",
+    10
+   ],
+   [
+    "TDragonBlood",
+    10
+   ],
+   [
+    "TNBJieJing",
+    10
+   ],
+   [
+    "THorseYearBadge",
+    10
+   ],
+   [
+    "TForceBall",
+    10
+   ],
+   [
+    "TForceExpHeap",
+    10
+   ],
+   [
+    "TForceExpBook",
+    10
+   ],
+   [
+    "TIdentifyScrollItem",
+    10
+   ],
+   [
+    "TTaskIdentifyScroll",
+    10
+   ],
+   [
+    "TNewPlayerBox",
+    10
+   ],
+   [
+    "TNormalCrystal",
+    10
+   ],
+   [
+    "TAnimalMascot",
+    10
+   ],
+   [
+    "TXiuFuLingShui",
+    10
+   ],
+   [
+    "TFixedCoordStone",
+    10
+   ],
+   [
+    "TStealthItem",
+    10
+   ],
+   [
+    "THumanRenameToken",
+    10
+   ],
+   [
+    "TAbilRouleauItem",
+    10
+   ],
+   [
+    "TAutoTransScore",
+    10
+   ],
+   [
+    "TOffiRankStone",
+    10
+   ],
+   [
+    "THuoYuanMedicament",
+    10
+   ],
+   [
+    "TShuiYuanMedicament",
+    10
+   ],
+   [
+    "TMuYuanMedicament",
+    10
+   ],
+   [
+    "TJinYuanMedicament",
+    10
+   ],
+   [
+    "TTuYuanMedicament",
+    10
+   ],
+   [
+    "TSpecialDropItem",
+    10
+   ],
+   [
+    "TJewelFragment",
+    10
+   ],
+   [
+    "TGoldPackage",
+    10
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7880784,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7880512,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7882125,
+  "text": "mov word ptr [eax + 0x26], cx",
+  "bytes": "66894826",
+  "fn": 7882116,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7882130,
+  "text": "mov word ptr [eax + 0x26], dx",
+  "bytes": "66895026",
+  "fn": 7882116,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7882382,
+  "text": "mov word ptr [ebx + 0x26], ax",
+  "bytes": "66894326",
+  "fn": 7882168,
+  "owner": [
+   [
+    "TEquipItem",
+    15
+   ],
+   [
+    "TClothes",
+    15
+   ],
+   [
+    "TManClothes",
+    15
+   ],
+   [
+    "TTemporaryManClothes",
+    15
+   ],
+   [
+    "TWomanClothes",
+    15
+   ],
+   [
+    "TTemporaryWomanClothes",
+    15
+   ],
+   [
+    "TRWeapon",
+    15
+   ],
+   [
+    "TLWeapon",
+    15
+   ],
+   [
+    "TBrokenWeapon",
+    15
+   ],
+   [
+    "TSpade",
+    15
+   ],
+   [
+    "THeadMask",
+    15
+   ],
+   [
+    "TWarDrum",
+    15
+   ],
+   [
+    "THelmet",
+    15
+   ],
+   [
+    "TNecklace",
+    15
+   ],
+   [
+    "TRing",
+    15
+   ],
+   [
+    "TArmRing",
+    15
+   ],
+   [
+    "TBelt",
+    15
+   ],
+   [
+    "TBoots",
+    15
+   ],
+   [
+    "TMaPai",
+    15
+   ],
+   [
+    "TCharm",
+    15
+   ],
+   [
+    "TCryCharm",
+    15
+   ],
+   [
+    "THPCharm",
+    15
+   ],
+   [
+    "TMPCharm",
+    15
+   ],
+   [
+    "THPMPCharm",
+    15
+   ],
+   [
+    "TMarkStoneCharm",
+    15
+   ],
+   [
+    "TEquipBujuk",
+    15
+   ],
+   [
+    "TBujuk",
+    15
+   ],
+   [
+    "TPoisons",
+    15
+   ],
+   [
+    "TVessel",
+    15
+   ],
+   [
+    "TUnionItem",
+    15
+   ],
+   [
+    "TDragonHeart",
+    15
+   ],
+   [
+    "TSuperDragonHeart",
+    15
+   ],
+   [
+    "TBaseItem",
+    15
+   ],
+   [
+    "TMapGold",
+    15
+   ],
+   [
+    "TDrug",
+    15
+   ],
+   [
+    "TSlowDrug",
+    15
+   ],
+   [
+    "TQuickDrug",
+    15
+   ],
+   [
+    "TShengShui",
+    15
+   ],
+   [
+    "TQuickDrugForce",
+    15
+   ],
+   [
+    "TMoveScroll",
+    15
+   ],
+   [
+    "TRepairOil",
+    15
+   ],
+   [
+    "TSpecialDrug",
+    15
+   ],
+   [
+    "TTmpBuffDrug",
+    15
+   ],
+   [
+    "TNewTmpBuffDrug",
+    15
+   ],
+   [
+    "TNewTempBuffDrugEx",
+    15
+   ],
+   [
+    "TStrengthDrug",
+    15
+   ],
+   [
+    "TPercentAddDrug",
+    15
+   ],
+   [
+    "TPercentResumeDrug",
+    15
+   ],
+   [
+    "TSuperForceBall",
+    15
+   ],
+   [
+    "TMagicStone",
+    15
+   ],
+   [
+    "TSkillBook",
+    15
+   ],
+   [
+    "TUnionUpBook",
+    15
+   ],
+   [
+    "TNormalBox",
+    15
+   ],
+   [
+    "TQianKunBag",
+    15
+   ],
+   [
+    "TBundleItem",
+    15
+   ],
+   [
+    "TUnBundleItem",
+    15
+   ],
+   [
+    "TRabbitPrize",
+    15
+   ],
+   [
+    "TCNFeastBox",
+    15
+   ],
+   [
+    "TCoupleFeastBox",
+    15
+   ],
+   [
+    "TCloseAttrItm",
+    15
+   ],
+   [
+    "TMeatItem",
+    15
+   ],
+   [
+    "TBaneMaterial",
+    15
+   ],
+   [
+    "TOreItem",
+    15
+   ],
+   [
+    "TNoEffectItem",
+    15
+   ],
+   [
+    "TDoubleExpProp",
+    15
+   ],
+   [
+    "TAntiDecExpProp",
+    15
+   ],
+   [
+    "THappyCake",
+    15
+   ],
+   [
+    "TBirthdayCake",
+    15
+   ],
+   [
+    "TNewFireworks",
+    15
+   ],
+   [
+    "TChgHairProp",
+    15
+   ],
+   [
+    "TColorSayProp",
+    15
+   ],
+   [
+    "TWhiteGoldCard",
+    15
+   ],
+   [
+    "TWoodBox",
+    15
+   ],
+   [
+    "TGoldActCred",
+    15
+   ],
+   [
+    "TRope",
+    15
+   ],
+   [
+    "TRopeExt",
+    15
+   ],
+   [
+    "TCityStone",
+    15
+   ],
+   [
+    "TRndFlyStone",
+    15
+   ],
+   [
+    "TDreamCityScroll",
+    15
+   ],
+   [
+    "TFoxMapScroll",
+    15
+   ],
+   [
+    "TCallMobProp",
+    15
+   ],
+   [
+    "TMicroWhelk",
+    15
+   ],
+   [
+    "TCallMonStone",
+    15
+   ],
+   [
+    "TCastleCityFlyStone",
+    15
+   ],
+   [
+    "TRepairWater",
+    15
+   ],
+   [
+    "TFireFlower",
+    15
+   ],
+   [
+    "TMonsterBlowItem",
+    15
+   ],
+   [
+    "TMakeMonFireFlower",
+    15
+   ],
+   [
+    "TRabbitYearFire",
+    15
+   ],
+   [
+    "TBufferFlower",
+    15
+   ],
+   [
+    "TBufferItem",
+    15
+   ],
+   [
+    "TExpBall",
+    15
+   ],
+   [
+    "THeroHighExpItem",
+    15
+   ],
+   [
+    "TSpiritWater",
+    15
+   ],
+   [
+    "TConjurator",
+    15
+   ],
+   [
+    "THeroExpBall",
+    15
+   ],
+   [
+    "TFireDragonBall",
+    15
+   ],
+   [
+    "TDragonSeal",
+    15
+   ],
+   [
+    "TWine",
+    15
+   ],
+   [
+    "TSkillTrainScroll",
+    15
+   ],
+   [
+    "TGroupAddExpItem",
+    15
+   ],
+   [
+    "TNewQkBag",
+    15
+   ],
+   [
+    "TTimerBomb",
+    15
+   ],
+   [
+    "TDragonBlood",
+    15
+   ],
+   [
+    "TNBJieJing",
+    15
+   ],
+   [
+    "THorseYearBadge",
+    15
+   ],
+   [
+    "TForceBall",
+    15
+   ],
+   [
+    "TForceExpHeap",
+    15
+   ],
+   [
+    "TForceExpBook",
+    15
+   ],
+   [
+    "TForceExpBall",
+    15
+   ],
+   [
+    "TIdentifyScrollItem",
+    15
+   ],
+   [
+    "TTaskIdentifyScroll",
+    15
+   ],
+   [
+    "TNewPlayerBox",
+    15
+   ],
+   [
+    "TBasePileItem",
+    15
+   ],
+   [
+    "TLuckOil",
+    15
+   ],
+   [
+    "TPneumaStone",
+    15
+   ],
+   [
+    "TTaoFaLingAddExpItem",
+    15
+   ],
+   [
+    "TGoldAcus",
+    15
+   ],
+   [
+    "TShiMenCall",
+    15
+   ],
+   [
+    "TSuperExpItem",
+    15
+   ],
+   [
+    "TLevelBuffItem",
+    15
+   ],
+   [
+    "TNewHappyCake",
+    15
+   ],
+   [
+    "THeroJingmaiDrug",
+    15
+   ],
+   [
+    "TPileFlower",
+    15
+   ],
+   [
+    "TNormalCrystal",
+    15
+   ],
+   [
+    "TAnimalMascot",
+    15
+   ],
+   [
+    "TXiuFuLingShui",
+    15
+   ],
+   [
+    "TFixedCoordStone",
+    15
+   ],
+   [
+    "TStealthItem",
+    15
+   ],
+   [
+    "THeroHypericum",
+    15
+   ],
+   [
+    "THeroFileDragonScroll",
+    15
+   ],
+   [
+    "THeroExpScroll",
+    15
+   ],
+   [
+    "THumanRenameToken",
+    15
+   ],
+   [
+    "TAbilRouleauItem",
+    15
+   ],
+   [
+    "TJingXiuBook",
+    15
+   ],
+   [
+    "TAutoTransScore",
+    15
+   ],
+   [
+    "TOffiRankStone",
+    15
+   ],
+   [
+    "THuoYuanMedicament",
+    15
+   ],
+   [
+    "TShuiYuanMedicament",
+    15
+   ],
+   [
+    "TMuYuanMedicament",
+    15
+   ],
+   [
+    "TJinYuanMedicament",
+    15
+   ],
+   [
+    "TTuYuanMedicament",
+    15
+   ],
+   [
+    "TSpecialDropItem",
+    15
+   ],
+   [
+    "TJewelStone",
+    15
+   ],
+   [
+    "TJewelFragment",
+    15
+   ],
+   [
+    "TGoldPackage",
+    15
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7883213,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7883140,
+  "owner": [
+   [
+    "TEquipItem",
+    16
+   ],
+   [
+    "TClothes",
+    16
+   ],
+   [
+    "TManClothes",
+    16
+   ],
+   [
+    "TTemporaryManClothes",
+    16
+   ],
+   [
+    "TWomanClothes",
+    16
+   ],
+   [
+    "TTemporaryWomanClothes",
+    16
+   ],
+   [
+    "TRWeapon",
+    16
+   ],
+   [
+    "TLWeapon",
+    16
+   ],
+   [
+    "TBrokenWeapon",
+    16
+   ],
+   [
+    "TSpade",
+    16
+   ],
+   [
+    "THeadMask",
+    16
+   ],
+   [
+    "TWarDrum",
+    16
+   ],
+   [
+    "THelmet",
+    16
+   ],
+   [
+    "TNecklace",
+    16
+   ],
+   [
+    "TRing",
+    16
+   ],
+   [
+    "TArmRing",
+    16
+   ],
+   [
+    "TBelt",
+    16
+   ],
+   [
+    "TBoots",
+    16
+   ],
+   [
+    "TMaPai",
+    16
+   ],
+   [
+    "TCharm",
+    16
+   ],
+   [
+    "TCryCharm",
+    16
+   ],
+   [
+    "THPCharm",
+    16
+   ],
+   [
+    "TMPCharm",
+    16
+   ],
+   [
+    "THPMPCharm",
+    16
+   ],
+   [
+    "TMarkStoneCharm",
+    16
+   ],
+   [
+    "TEquipBujuk",
+    16
+   ],
+   [
+    "TBujuk",
+    16
+   ],
+   [
+    "TPoisons",
+    16
+   ],
+   [
+    "TVessel",
+    16
+   ],
+   [
+    "TUnionItem",
+    16
+   ],
+   [
+    "TDragonHeart",
+    16
+   ],
+   [
+    "TSuperDragonHeart",
+    16
+   ],
+   [
+    "TBaseItem",
+    16
+   ],
+   [
+    "TMapGold",
+    16
+   ],
+   [
+    "TDrug",
+    16
+   ],
+   [
+    "TSlowDrug",
+    16
+   ],
+   [
+    "TQuickDrug",
+    16
+   ],
+   [
+    "TShengShui",
+    16
+   ],
+   [
+    "TQuickDrugForce",
+    16
+   ],
+   [
+    "TMoveScroll",
+    16
+   ],
+   [
+    "TRepairOil",
+    16
+   ],
+   [
+    "TSpecialDrug",
+    16
+   ],
+   [
+    "TTmpBuffDrug",
+    16
+   ],
+   [
+    "TNewTmpBuffDrug",
+    16
+   ],
+   [
+    "TNewTempBuffDrugEx",
+    16
+   ],
+   [
+    "TStrengthDrug",
+    16
+   ],
+   [
+    "TPercentAddDrug",
+    16
+   ],
+   [
+    "TPercentResumeDrug",
+    16
+   ],
+   [
+    "TSuperForceBall",
+    16
+   ],
+   [
+    "TMagicStone",
+    16
+   ],
+   [
+    "TSkillBook",
+    16
+   ],
+   [
+    "TUnionUpBook",
+    16
+   ],
+   [
+    "TNormalBox",
+    16
+   ],
+   [
+    "TQianKunBag",
+    16
+   ],
+   [
+    "TBundleItem",
+    16
+   ],
+   [
+    "TUnBundleItem",
+    16
+   ],
+   [
+    "TRabbitPrize",
+    16
+   ],
+   [
+    "TCNFeastBox",
+    16
+   ],
+   [
+    "TCoupleFeastBox",
+    16
+   ],
+   [
+    "TCloseAttrItm",
+    16
+   ],
+   [
+    "TMeatItem",
+    16
+   ],
+   [
+    "TBaneMaterial",
+    16
+   ],
+   [
+    "TOreItem",
+    16
+   ],
+   [
+    "TNoEffectItem",
+    16
+   ],
+   [
+    "TDoubleExpProp",
+    16
+   ],
+   [
+    "TAntiDecExpProp",
+    16
+   ],
+   [
+    "THappyCake",
+    16
+   ],
+   [
+    "TBirthdayCake",
+    16
+   ],
+   [
+    "TNewFireworks",
+    16
+   ],
+   [
+    "TChgHairProp",
+    16
+   ],
+   [
+    "TColorSayProp",
+    16
+   ],
+   [
+    "TWhiteGoldCard",
+    16
+   ],
+   [
+    "TWoodBox",
+    16
+   ],
+   [
+    "TGoldActCred",
+    16
+   ],
+   [
+    "TRope",
+    16
+   ],
+   [
+    "TRopeExt",
+    16
+   ],
+   [
+    "TCityStone",
+    16
+   ],
+   [
+    "TRndFlyStone",
+    16
+   ],
+   [
+    "TDreamFlyStone",
+    16
+   ],
+   [
+    "TDreamCityScroll",
+    16
+   ],
+   [
+    "TFoxMapScroll",
+    16
+   ],
+   [
+    "TCallMobProp",
+    16
+   ],
+   [
+    "TMicroWhelk",
+    16
+   ],
+   [
+    "TCallMonStone",
+    16
+   ],
+   [
+    "TCastleCityFlyStone",
+    16
+   ],
+   [
+    "TRepairWater",
+    16
+   ],
+   [
+    "TFireFlower",
+    16
+   ],
+   [
+    "TMonsterBlowItem",
+    16
+   ],
+   [
+    "TMakeMonFireFlower",
+    16
+   ],
+   [
+    "TRabbitYearFire",
+    16
+   ],
+   [
+    "TBufferFlower",
+    16
+   ],
+   [
+    "TBufferItem",
+    16
+   ],
+   [
+    "TExpBall",
+    16
+   ],
+   [
+    "THeroHighExpItem",
+    16
+   ],
+   [
+    "TSpiritWater",
+    16
+   ],
+   [
+    "TConjurator",
+    16
+   ],
+   [
+    "THeroExpBall",
+    16
+   ],
+   [
+    "TFireDragonBall",
+    16
+   ],
+   [
+    "TDragonSeal",
+    16
+   ],
+   [
+    "TWine",
+    16
+   ],
+   [
+    "TSkillTrainScroll",
+    16
+   ],
+   [
+    "TGroupAddExpItem",
+    16
+   ],
+   [
+    "TNewQkBag",
+    16
+   ],
+   [
+    "TTimerBomb",
+    16
+   ],
+   [
+    "TDragonBlood",
+    16
+   ],
+   [
+    "TNBJieJing",
+    16
+   ],
+   [
+    "THorseYearBadge",
+    16
+   ],
+   [
+    "TForceBall",
+    16
+   ],
+   [
+    "TForceExpHeap",
+    16
+   ],
+   [
+    "TForceExpBook",
+    16
+   ],
+   [
+    "TForceExpBall",
+    16
+   ],
+   [
+    "TIdentifyScrollItem",
+    16
+   ],
+   [
+    "TTaskIdentifyScroll",
+    16
+   ],
+   [
+    "TNewPlayerBox",
+    16
+   ],
+   [
+    "TBasePileItem",
+    16
+   ],
+   [
+    "TLuckOil",
+    16
+   ],
+   [
+    "TPneumaStone",
+    16
+   ],
+   [
+    "TTaoFaLingAddExpItem",
+    16
+   ],
+   [
+    "TGoldAcus",
+    16
+   ],
+   [
+    "TShiMenCall",
+    16
+   ],
+   [
+    "TSuperExpItem",
+    16
+   ],
+   [
+    "TLevelBuffItem",
+    16
+   ],
+   [
+    "TNewHappyCake",
+    16
+   ],
+   [
+    "THeroJingmaiDrug",
+    16
+   ],
+   [
+    "TPileFlower",
+    16
+   ],
+   [
+    "TNormalCrystal",
+    16
+   ],
+   [
+    "TAnimalMascot",
+    16
+   ],
+   [
+    "TXiuFuLingShui",
+    16
+   ],
+   [
+    "TFixedCoordStone",
+    16
+   ],
+   [
+    "TStealthItem",
+    16
+   ],
+   [
+    "THeroHypericum",
+    16
+   ],
+   [
+    "THeroFileDragonScroll",
+    16
+   ],
+   [
+    "THeroExpScroll",
+    16
+   ],
+   [
+    "THumanRenameToken",
+    16
+   ],
+   [
+    "TAbilRouleauItem",
+    16
+   ],
+   [
+    "TJingXiuBook",
+    16
+   ],
+   [
+    "TAutoTransScore",
+    16
+   ],
+   [
+    "TOffiRankStone",
+    16
+   ],
+   [
+    "THuoYuanMedicament",
+    16
+   ],
+   [
+    "TShuiYuanMedicament",
+    16
+   ],
+   [
+    "TMuYuanMedicament",
+    16
+   ],
+   [
+    "TJinYuanMedicament",
+    16
+   ],
+   [
+    "TTuYuanMedicament",
+    16
+   ],
+   [
+    "TSpecialDropItem",
+    16
+   ],
+   [
+    "TJewelStone",
+    16
+   ],
+   [
+    "TJewelFragment",
+    16
+   ],
+   [
+    "TGoldPackage",
+    16
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7893686,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7893100,
+  "owner": [
+   [
+    "TFireFlower",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7893861,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7893100,
+  "owner": [
+   [
+    "TFireFlower",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7894052,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7893100,
+  "owner": [
+   [
+    "TFireFlower",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7895658,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7895624,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7896249,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7896200,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7896830,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7896796,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7897362,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7897328,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)"
+  ]
+ },
+ {
+  "va": 7897586,
+  "text": "add word ptr [edi + 0x26], cx",
+  "bytes": "66014f26",
+  "fn": 7897404,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7897590,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7897404,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7897598,
+  "text": "mov word ptr [edi + 0x26], ax",
+  "bytes": "66894726",
+  "fn": 7897404,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7897602,
+  "text": "sub word ptr [esi + 0x26], dx",
+  "bytes": "66295626",
+  "fn": 7897404,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7897829,
+  "text": "sub word ptr [ebx + 0x26], ax",
+  "bytes": "66294326",
+  "fn": 7897784,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7897915,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7897898,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7898094,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7897948,
+  "owner": [
+   [
+    "TGoldAcus",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7898385,
+  "text": "dec word ptr [edi + 0x26]",
+  "bytes": "66ff4f26",
+  "fn": 7898136,
+  "owner": [
+   [
+    "TNewHappyCake",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)",
+   "GetDura"
+  ]
+ },
+ {
+  "va": 7899302,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7899225,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7900061,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7900000,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7900074,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7900000,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7900155,
+  "text": "mov word ptr [edi + 0x26], 1",
+  "bytes": "66c747260100",
+  "fn": 7900116,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7900286,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7900252,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7900589,
+  "text": "dec word ptr [ebx + 0x26]",
+  "bytes": "66ff4b26",
+  "fn": 7900328,
+  "owner": [
+   [
+    "TTaoFaLingAddExpItem",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "GetDura"
+  ]
+ },
+ {
+  "va": 7901338,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7901300,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7901440,
+  "text": "mov word ptr [esi + 0x26], 0xb4",
+  "bytes": "66c74626b400",
+  "fn": 7901372,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7901539,
+  "text": "mov word ptr [ecx + 0x26], 0",
+  "bytes": "66c741260000",
+  "fn": 7901516,
+  "owner": [
+   [
+    "TCastleCityFlyStone",
+    12
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7901676,
+  "text": "sub word ptr [esi + 0x26], 0x64",
+  "bytes": "66836e2664",
+  "fn": 7901556,
+  "owner": [
+   [
+    "TCastleCityFlyStone",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7902059,
+  "text": "sub word ptr [ebx + 0x26], 0x3e8",
+  "bytes": "66816b26e803",
+  "fn": 7902000,
+  "owner": [
+   [
+    "TDreamFlyStone",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7902918,
+  "text": "sub word ptr [edi + 0x26], 0x3e8",
+  "bytes": "66816f26e803",
+  "fn": 7902868,
+  "owner": [
+   [
+    "TTimerBomb",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7903874,
+  "text": "mov word ptr [esi + 0x26], 0",
+  "bytes": "66c746260000",
+  "fn": 7903840,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7905507,
+  "text": "dec word ptr [eax + 0x26]",
+  "bytes": "66ff4826",
+  "fn": 7905433,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7907184,
+  "text": "dec word ptr [eax + 0x26]",
+  "bytes": "66ff4826",
+  "fn": 7907068,
+  "owner": [
+   [
+    "TBufferFlower",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7908089,
+  "text": "dec word ptr [esi + 0x26]",
+  "bytes": "66ff4e26",
+  "fn": 7907632,
+  "owner": [
+   [
+    "TPileFlower",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "GetDura",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7910006,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7909972,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7910098,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7910064,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7910178,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7910144,
+  "owner": null,
+  "ev": [
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7910718,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7910684,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7910826,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7910792,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7910938,
+  "text": "mov word ptr [edi + 0x26], 0",
+  "bytes": "66c747260000",
+  "fn": 7910876,
+  "owner": [
+   [
+    "THuoYuanMedicament",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7910990,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7910956,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911102,
+  "text": "mov word ptr [edi + 0x26], 0",
+  "bytes": "66c747260000",
+  "fn": 7911040,
+  "owner": [
+   [
+    "TShuiYuanMedicament",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911154,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7911120,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911266,
+  "text": "mov word ptr [edi + 0x26], 0",
+  "bytes": "66c747260000",
+  "fn": 7911204,
+  "owner": [
+   [
+    "TMuYuanMedicament",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911318,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7911284,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911439,
+  "text": "mov word ptr [ebx + 0x26], 0",
+  "bytes": "66c743260000",
+  "fn": 7911368,
+  "owner": [
+   [
+    "TJinYuanMedicament",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911494,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7911460,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "+0x28(DuraMax)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911630,
+  "text": "mov word ptr [edi + 0x26], 0",
+  "bytes": "66c747260000",
+  "fn": 7911544,
+  "owner": [
+   [
+    "TTuYuanMedicament",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x1C(pStdItem)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911682,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7911648,
+  "owner": null,
+  "ev": [
+   "+0x1C(pStdItem)",
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911853,
+  "text": "mov word ptr [edi + 0x26], 0",
+  "bytes": "66c747260000",
+  "fn": 7911728,
+  "owner": [
+   [
+    "TAutoTransScore",
+    6
+   ]
+  ],
+  "ev": [
+   "IsClass"
+  ]
+ },
+ {
+  "va": 7911970,
+  "text": "mov word ptr [esi + 0x26], 1",
+  "bytes": "66c746260100",
+  "fn": 7911936,
+  "owner": null,
+  "ev": []
+ },
+ {
+  "va": 7912130,
+  "text": "sub word ptr [esi + 0x26], 0x3e8",
+  "bytes": "66816e26e803",
+  "fn": 7912024,
+  "owner": [
+   [
+    "THorseYearBadge",
+    6
+   ]
+  ],
+  "ev": [
+   "+0x28(DuraMax)",
+   "GetDura"
+  ]
+ },
+ {
+  "va": 7913023,
+  "text": "add word ptr [ebx + 0x26], ax",
+  "bytes": "66014326",
+  "fn": 7912816,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ },
+ {
+  "va": 7913037,
+  "text": "mov word ptr [esi + 0x26], ax",
+  "bytes": "66894626",
+  "fn": 7912816,
+  "owner": null,
+  "ev": [
+   "+0x28(DuraMax)"
+  ]
+ }
+]

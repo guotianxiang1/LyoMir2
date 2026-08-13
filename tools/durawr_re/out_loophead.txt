@@ -1,0 +1,59 @@
+0073ECF9  cc                     int3                                  
+0073ECFA  db FF
+0073ECFB  ebeb                   jmp 0x73ece8                          
+0073ECFD  8bc3                   mov eax, ebx                          
+0073ECFF  5f                     pop edi                               
+0073ED00  5e                     pop esi                               
+0073ED01  5b                     pop ebx                               
+0073ED02  59                     pop ecx                               
+0073ED03  59                     pop ecx                               
+0073ED04  5d                     pop ebp                               
+0073ED05  c3                     ret                                   
+0073ED06  0000                   add byte ptr [eax], al                
+0073ED08  db FF
+0073ED09  db FF
+0073ED0A  db FF
+0073ED0B  ff0400                 inc dword ptr [eax + eax]             
+0073ED0E  0000                   add byte ptr [eax], al                
+0073ED10  db C4
+0073ED11  e3b5                   jecxz 0x73ecc8                        
+0073ED13  c400                   les eax, ptr [eax]                    
+0073ED15  0000                   add byte ptr [eax], al                
+0073ED17  00ff                   add bh, bh                            
+0073ED19  db FF
+0073ED1A  db FF
+0073ED1B  ff06                   inc dword ptr [esi]                   
+0073ED1D  0000                   add byte ptr [eax], al                
+0073ED1F  00ca                   add dl, cl                            
+0073ED21  a7                     cmpsd dword ptr [esi], dword ptr es:[edi]
+0073ED22  d0a7c1cb0000           shl byte ptr [edi + 0xcbc1], 1        
+0073ED28  55                     push ebp                              
+0073ED29  8bec                   mov ebp, esp                          
+0073ED2B  33c9                   xor ecx, ecx                          
+0073ED2D  51                     push ecx                              
+0073ED2E  51                     push ecx                              
+0073ED2F  51                     push ecx                              
+0073ED30  51                     push ecx                              
+0073ED31  53                     push ebx                              
+0073ED32  56                     push esi                              
+0073ED33  57                     push edi                              
+0073ED34  8bfa                   mov edi, edx                          
+0073ED36  8945fc                 mov dword ptr [ebp - 4], eax          
+0073ED39  33c0                   xor eax, eax                          
+0073ED3B  55                     push ebp                              
+0073ED3C  68f0ed7300             push 0x73edf0                         
+0073ED41  64ff30                 push dword ptr fs:[eax]               
+0073ED44  648920                 mov dword ptr fs:[eax], esp           
+0073ED47  33f6                   xor esi, esi                          
+0073ED49  8bd6                   mov edx, esi                          
+0073ED4B  8b45fc                 mov eax, dword ptr [ebp - 4]          
+0073ED4E  8b80c0040000           mov eax, dword ptr [eax + 0x4c0]      
+0073ED54  e8c7fe0100             call 0x75ec20                           ; 0075EC20=GetUseItems(container,slot)
+0073ED59  8bd8                   mov ebx, eax                          
+0073ED5B  55                     push ebp                              
+0073ED5C  8bd3                   mov edx, ebx                          
+0073ED5E  8bc7                   mov eax, edi                          
+0073ED60  e8dbfeffff             call 0x73ec40                         
+0073ED65  59                     pop ecx                               
+0073ED66  84c0                   test al, al                           
+0073ED68  7461                   je 0x73edcb                           

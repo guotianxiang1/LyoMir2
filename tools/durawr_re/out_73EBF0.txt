@@ -1,0 +1,49 @@
+=== function 0073EBF0 ===
+0073EBF0  55                     push ebp                              
+0073EBF1  8bec                   mov ebp, esp                          
+0073EBF3  53                     push ebx                              
+0073EBF4  56                     push esi                              
+0073EBF5  8bda                   mov ebx, edx                          
+0073EBF7  8bf0                   mov esi, eax                          
+0073EBF9  33c0                   xor eax, eax                          
+0073EBFB  85db                   test ebx, ebx                         
+0073EBFD  743b                   je 0x73ec3a                           
+0073EBFF  66837b2600             cmp word ptr [ebx + 0x26], 0          
+0073EC04  7634                   jbe 0x73ec3a                          
+0073EC06  85f6                   test esi, esi                         
+0073EC08  750d                   jne 0x73ec17                          
+0073EC0A  33d2                   xor edx, edx                          
+0073EC0C  8bc3                   mov eax, ebx                          
+0073EC0E  e869130200             call 0x75ff7c                         
+0073EC13  84c0                   test al, al                           
+0073EC15  7521                   jne 0x73ec38                          
+0073EC17  4e                     dec esi                               
+0073EC18  751a                   jne 0x73ec34                          
+0073EC1A  b201                   mov dl, 1                             
+0073EC1C  8bc3                   mov eax, ebx                          
+0073EC1E  e859130200             call 0x75ff7c                         
+0073EC23  84c0                   test al, al                           
+0073EC25  7511                   jne 0x73ec38                          
+0073EC27  b202                   mov dl, 2                             
+0073EC29  8bc3                   mov eax, ebx                          
+0073EC2B  e84c130200             call 0x75ff7c                         
+0073EC30  84c0                   test al, al                           
+0073EC32  7504                   jne 0x73ec38                          
+0073EC34  33c0                   xor eax, eax                          
+0073EC36  eb02                   jmp 0x73ec3a                          
+0073EC38  b001                   mov al, 1                             
+0073EC3A  5e                     pop esi                               
+0073EC3B  5b                     pop ebx                               
+0073EC3C  5d                     pop ebp                               
+0073EC3D  c3                     ret                                   
+0073EC3E  8bc0                   mov eax, eax                          
+0073EC40  55                     push ebp                              
+0073EC41  8bec                   mov ebp, esp                          
+0073EC43  6a00                   push 0                                
+0073EC45  6a00                   push 0                                
+0073EC47  53                     push ebx                              
+0073EC48  56                     push esi                              
+0073EC49  57                     push edi                              
+0073EC4A  8bf2                   mov esi, edx                          
+0073EC4C  8bf8                   mov edi, eax                          
+0073EC4E  33c0                   xor eax, eax                          

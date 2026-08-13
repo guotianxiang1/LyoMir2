@@ -1,0 +1,108 @@
+GetUseItems call sites: 107
+00609D59 fn=00609CDC slot=reg:byte ptr [ebp - 0xc]           VARIABLE TFieldHero#38 TFieldWarHero#38
+0060A309 fn=0060A224 slot=reg:esi                    VARIABLE TFieldHero#101 TFieldWarHero#101
+0060B547 fn=0060B504 slot=reg:ebx                    VARIABLE                              
+0060BC40 fn=0060BB68 slot=1                          U_WEAPON TFieldWarHero#135            
+0060D0A8 fn=0060CFD0 slot=1                          U_WEAPON TMirDotaMatchHumMon_War#135  
+006251E2 fn=00622820 slot=1                          U_WEAPON                              
+006251FA fn=00622820 slot=1                          U_WEAPON                              
+00628129 fn=00626318 slot=0                          U_DRESS                               
+00628141 fn=00626318 slot=0                          U_DRESS                               
+00642B02 fn=006409D0 slot=2                          U_RIGHTHAND TPsNpc#30                 
+0064F1DB fn=0064F1A7 slot=reg:esi                    VARIABLE                              
+0064F362 fn=0064F301 slot=reg:esi                    VARIABLE                              
+006866F4 fn=006866BC slot=9                          U_BUJUK                               
+00686710 fn=006866BC slot=9                          U_BUJUK                               
+0068678F fn=00686778 slot=9                          U_BUJUK                               
+00686817 fn=006867B8 slot=9                DURA-WR   U_BUJUK                               
+0068C142 fn=0068C0A0 slot=reg:byte ptr [ebp - 5]           VARIABLE                              
+0068C519 fn=0068C4B0 slot=12                         U_CHARM                               
+0068C926 fn=0068C8F0 slot=9                DURA-WR   U_BUJUK                               
+0068F499 fn=0068F450 slot=9                DURA-WR   U_BUJUK                               
+0068F7D1 fn=0068F6CC slot=reg:ebx                    VARIABLE TSecWarHero#101 TSecTaosHero#101
+00693239 fn=00693090 slot=1                          U_WEAPON TSecWarHero#168 TWarHero#168 
+006B7308 fn=006B71FC slot=reg:esi                    VARIABLE TGdMsgGMAgent#101 TPlayer#101
+006B7F43 fn=006B7E9C slot=reg:byte ptr [ebp - 5]           VARIABLE                              
+006B8488 fn=006B8380 slot=9                          U_BUJUK                               
+006B84F4 fn=006B8380 slot=9                          U_BUJUK                               
+006B8561 fn=006B8380 slot=12                         U_CHARM                               
+006B994C fn=006B97C0 slot=reg:esi                    VARIABLE                              
+006BB060 fn=006BAF10 slot=12                         U_CHARM                               
+006C643B fn=006C6408 slot=reg:ebx                    VARIABLE                              
+006C6518 fn=006C64C0 slot=reg:esi                    VARIABLE                              
+006C6CDB fn=006C6CAC slot=1                          U_WEAPON                              
+006C9DC4 fn=006C9D98 slot=1                          U_WEAPON                              
+006CA054 fn=006CA020 slot=1                          U_WEAPON                              
+006D08BD fn=006D07C4 slot=reg:esi                    VARIABLE                              
+006D5E75 fn=006D5E50 slot=9                DURA-WR   U_BUJUK                               
+006D68F9 fn=006D68AC slot=reg:esi                    VARIABLE                              
+006D7A6E fn=006D7A4C slot=1                          U_WEAPON                              
+006DFB37 fn=006DFA40 slot=reg:ebx          DURA-WR   VARIABLE                              
+006E02A3 fn=006E000C slot=reg:ebx                    VARIABLE                              
+006E04E7 fn=006E000C slot=reg:edi                    VARIABLE                              
+006E2F55 fn=006E2D34 slot=1                          U_WEAPON                              
+006E2F66 fn=006E2D34 slot=1                          U_WEAPON                              
+006E2FC2 fn=006E2D34 slot=1                          U_WEAPON                              
+006E2FD3 fn=006E2D34 slot=1                          U_WEAPON                              
+006E3027 fn=006E2D34 slot=3                          U_NECKLACE                            
+006E307C fn=006E2D34 slot=1                          U_WEAPON                              
+006E308D fn=006E2D34 slot=1                          U_WEAPON                              
+006E7165 fn=006E7110 slot=None                       VARIABLE                              
+006E72DB fn=006E7110 slot=3                          U_NECKLACE                            
+006E8DA8 fn=006E8D7C slot=7                          U_RING_L                              
+006E8DB9 fn=006E8D7C slot=7                          U_RING_L                              
+006E8DE5 fn=006E8D7C slot=8                          U_RING_R                              
+006E8DF6 fn=006E8D7C slot=8                          U_RING_R                              
+006E9180 fn=006E9168 slot=reg:ebx                    VARIABLE                              
+006E91C8 fn=006E9168 slot=reg:ebx                    VARIABLE                              
+006EC0EA fn=006EC078 slot=1                          U_WEAPON                              
+006ED951 fn=006ED62C slot=9                DURA-WR   U_BUJUK                               
+006EE1C0 fn=006EE174 slot=15                         U_15                                  
+006EE336 fn=006EE2F0 slot=15                         U_15                                  
+006EE7FF fn=006EE760 slot=15                         U_15                                  
+006EE814 fn=006EE760 slot=15                         U_15                                  
+006F278A fn=006F264C slot=12                         U_CHARM                               
+006F27C8 fn=006F264C slot=12                         U_CHARM                               
+006F333C fn=006F3324 slot=reg:ebx          DURA-WR   VARIABLE                              
+006F334D fn=006F3324 slot=reg:ebx          DURA-WR   VARIABLE                              
+006FC139 fn=006FC054 slot=reg:esi          DURA-WR   VARIABLE                              
+0073D1A3 fn=0073D194 slot=1                          U_WEAPON                              
+0073D225 fn=0073D214 slot=1                          U_WEAPON                              
+0073E81A fn=0073E810 slot=1                DURA-WR   U_WEAPON                              
+0073E967 fn=0073E93C slot=9                DURA-WR   U_BUJUK                               
+0073EA58 fn=0073EA20 slot=9                DURA-WR   U_BUJUK                               
+0073ED54 fn=0073ED28 slot=reg:esi                    VARIABLE                              
+0073FD33 fn=0073FC70 slot=reg:ebx                    VARIABLE                              
+00740942 fn=00740930 slot=reg:ebx                    VARIABLE                              
+00741123 fn=007410D8 slot=reg:edi          DURA-WR   VARIABLE                              
+007411FF fn=007411E0 slot=None                       VARIABLE                              
+007440C2 fn=0074408C slot=reg:ebx                    VARIABLE TSecWarHero#158 TSecTaosHero#158
+0074653B fn=00746524 slot=reg:ebx                    VARIABLE                              
+00746722 fn=00746708 slot=9                          U_BUJUK                               
+00746733 fn=00746708 slot=9                          U_BUJUK                               
+0074674F fn=00746708 slot=9                          U_BUJUK                               
+0074677E fn=00746764 slot=9                          U_BUJUK                               
+0074678F fn=00746764 slot=9                          U_BUJUK                               
+007467AB fn=00746764 slot=9                          U_BUJUK                               
+007467D6 fn=007467BC slot=10                         U_BELT                                
+007467E7 fn=007467BC slot=10                         U_BELT                                
+00746803 fn=007467F9 slot=10                         U_BELT                                
+00746832 fn=00746818 slot=10                         U_BELT                                
+00746843 fn=00746818 slot=10                         U_BELT                                
+0074685F fn=00746818 slot=10                         U_BELT                                
+00748740 fn=00748688 slot=reg:ebx                    VARIABLE                              
+00748E7F fn=00748E60 slot=reg:ebx                    VARIABLE                              
+00748E90 fn=00748E60 slot=reg:ebx                    VARIABLE                              
+00748EA5 fn=00748E60 slot=reg:ebx                    VARIABLE                              
+00758ADB fn=00758AC0 slot=reg:ebx                    VARIABLE                              
+00758AE8 fn=00758AC0 slot=reg:ebx                    VARIABLE                              
+00758B0F fn=00758AC0 slot=reg:ebx                    VARIABLE                              
+0075F2A5 fn=0075F27C slot=reg:byte ptr [ebp - 1]           VARIABLE                              
+0075F4BC fn=0075F49C slot=reg:ebx                    VARIABLE                              
+0075F5C0 fn=0075F5A0 slot=reg:ebx          DURA-WR   VARIABLE                              
+0075F5CD fn=0075F5A0 slot=reg:ebx          DURA-WR   VARIABLE                              
+0075F5DD fn=0075F5A0 slot=reg:ebx          DURA-WR   VARIABLE                              
+0075F5F0 fn=0075F5A0 slot=reg:ebx          DURA-WR   VARIABLE                              
+0075F5FD fn=0075F5A0 slot=reg:ebx          DURA-WR   VARIABLE                              
+007858CF fn=00785894 slot=1                DURA-WR   U_WEAPON TLuckOil#6                   
+00785974 fn=00785948 slot=1                DURA-WR   U_WEAPON TRepairOil#6                 

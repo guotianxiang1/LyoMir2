@@ -1,0 +1,58 @@
+=== function 0073ED60 ===
+0073ED60  e8dbfeffff             call 0x73ec40                         
+0073ED65  59                     pop ecx                               
+0073ED66  84c0                   test al, al                           
+0073ED68  7461                   je 0x73edcb                           
+0073ED6A  56                     push esi                              
+0073ED6B  0fb74326               movzx eax, word ptr [ebx + 0x26]      
+0073ED6F  50                     push eax                              
+0073ED70  0fb74328               movzx eax, word ptr [ebx + 0x28]      
+0073ED74  50                     push eax                              
+0073ED75  6a00                   push 0                                
+0073ED77  6a00                   push 0                                
+0073ED79  6a00                   push 0                                
+0073ED7B  66b98d27               mov cx, 0x278d                        
+0073ED7F  8b55fc                 mov edx, dword ptr [ebp - 4]          
+0073ED82  8b45fc                 mov eax, dword ptr [ebp - 4]          
+0073ED85  e8de700200             call 0x765e68                         
+0073ED8A  8b4320                 mov eax, dword ptr [ebx + 0x20]       
+0073ED8D  50                     push eax                              
+0073ED8E  6a01                   push 1                                
+0073ED90  8d55f4                 lea edx, [ebp - 0xc]                  
+0073ED93  0fb74326               movzx eax, word ptr [ebx + 0x26]      
+0073ED97  e800dbccff             call 0x40c89c                         
+0073ED9C  8b4df4                 mov ecx, dword ptr [ebp - 0xc]        
+0073ED9F  8d45f8                 lea eax, [ebp - 8]                    
+0073EDA2  ba08ee7300             mov edx, 0x73ee08                       ; "死亡复活-"
+0073EDA7  e8706accff             call 0x40581c                         
+0073EDAC  8b45f8                 mov eax, dword ptr [ebp - 8]          
+0073EDAF  50                     push eax                              
+0073EDB0  8d55f0                 lea edx, [ebp - 0x10]                 
+0073EDB3  8bc3                   mov eax, ebx                          
+0073EDB5  e8ae570400             call 0x784568                         
+0073EDBA  8b4df0                 mov ecx, dword ptr [ebp - 0x10]       
+0073EDBD  66ba1300               mov dx, 0x13                          
+0073EDC1  8b45fc                 mov eax, dword ptr [ebp - 4]          
+0073EDC4  e8179e0200             call 0x768be0                         
+0073EDC9  eb0a                   jmp 0x73edd5                          
+0073EDCB  46                     inc esi                               
+0073EDCC  83fe10                 cmp esi, 0x10                         
+0073EDCF  0f8574ffffff           jne 0x73ed49                          
+0073EDD5  33c0                   xor eax, eax                          
+0073EDD7  5a                     pop edx                               
+0073EDD8  59                     pop ecx                               
+0073EDD9  59                     pop ecx                               
+0073EDDA  648910                 mov dword ptr fs:[eax], edx           
+0073EDDD  68f7ed7300             push 0x73edf7                         
+0073EDE2  8d45f0                 lea eax, [ebp - 0x10]                 
+0073EDE5  ba03000000             mov edx, 3                            
+0073EDEA  e83567ccff             call 0x405524                         
+0073EDEF  c3                     ret                                   
+0073EDF0  e94360ccff             jmp 0x404e38                          
+0073EDF5  ebeb                   jmp 0x73ede2                          
+0073EDF7  5f                     pop edi                               
+0073EDF8  5e                     pop esi                               
+0073EDF9  5b                     pop ebx                               
+0073EDFA  8be5                   mov esp, ebp                          
+0073EDFC  5d                     pop ebp                               
+0073EDFD  c3                     ret                                   
