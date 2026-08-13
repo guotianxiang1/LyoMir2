@@ -151,10 +151,17 @@ namespace GameSvr
                                 var cellInfo = m_PEnvir.GetMapCellInfo(n14, n18, ref mapCell);
                                 if (mapCell && cellInfo.Attribute != CellAttribute.Walk)
                                 {
-                                    if (PileStones(n14, n18))
-                                    {
-                                        SendSocket("=DIG");
-                                    }
+                                    // MINE-50/51: native ClientHitXY mining arm @0x6EC131
+                                    // `call 0x6BC1EC`(PileStones) DISCARDS the return value
+                                    // (no `test al,al`) and sends NOTHING after it — the dig
+                                    // feedback is the 0x2715 broadcast emitted inside
+                                    // PileStones itself (0x6BC32D). The old
+                                    // `if (PileStones(...)) SendSocket("=DIG")` invented an
+                                    // extra text packet: the literal "=DIG" has ZERO
+                                    // occurrences anywhere in flat_image.bin and no native
+                                    // send site, so it is not part of the native success
+                                    // sequence (0x274 then 0x2715). Call and drop the result.
+                                    PileStones(n14, n18);
                                     m_nHealthTick -= 30;
                                     m_nSpellTick -= 50;
                                     m_nSpellTick = HUtil32._MAX(0, m_nSpellTick);
