@@ -1,7 +1,6 @@
 using System.Text.RegularExpressions;
 
-var repoRoot = Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-    ?? @"D:\loym2\LyoMir2-master";
+var repoRoot = AuditRepoRoot.Resolve(args);
 
 var exactSites = new[]
 {

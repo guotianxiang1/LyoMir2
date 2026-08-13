@@ -99,39 +99,7 @@ static void CheckWordBoundary(int input, int expected)
 
 static string FindRepositoryRoot()
 {
-    var directory = new DirectoryInfo(AppContext.BaseDirectory);
-    while (directory != null)
-    {
-        if (File.Exists(Path.Combine(directory.FullName, "GameSvr", "GameSvr.csproj")))
-        {
-            return directory.FullName;
-        }
-        var nestedRoot = Path.Combine(directory.FullName, "LyoMir2-master");
-        if (File.Exists(Path.Combine(nestedRoot, "GameSvr", "GameSvr.csproj")))
-        {
-            return nestedRoot;
-        }
-
-        directory = directory.Parent;
-    }
-
-    directory = new DirectoryInfo(Environment.CurrentDirectory);
-    while (directory != null)
-    {
-        if (File.Exists(Path.Combine(directory.FullName, "GameSvr", "GameSvr.csproj")))
-        {
-            return directory.FullName;
-        }
-        var nestedRoot = Path.Combine(directory.FullName, "LyoMir2-master");
-        if (File.Exists(Path.Combine(nestedRoot, "GameSvr", "GameSvr.csproj")))
-        {
-            return nestedRoot;
-        }
-
-        directory = directory.Parent;
-    }
-
-    throw new DirectoryNotFoundException("LyoMir2 repository root was not found.");
+    return AuditRepoRoot.Resolve();
 }
 
 static void Equal<T>(T expected, T actual, string message)

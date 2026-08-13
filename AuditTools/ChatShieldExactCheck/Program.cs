@@ -25,10 +25,7 @@ static void CheckConstantsAndClientMapping()
     Equal(3032, Grobal2.CM_SWITCH_LISTEN, "CM_SWITCH_LISTEN");
     Equal(2953, Grobal2.SM_CLIENT_CONF, "SM_CLIENT_CONF");
 
-    var root = FindRepositoryRoot();
-    var clientPath = Path.Combine(Directory.GetParent(root)!.FullName,
-        "白猪G2.5_0518_lua_plain_readable_20260710_014719", "core",
-        "mir2.scenes.main.common.common_hk.lua");
+    var clientPath = FindClientLuaFixture();
     var client = File.ReadAllText(clientPath);
     Contains(client, "CM_SWITCH_LISTEN,", "client CM3032 producer");
     Contains(client, "recog = b and 0 or 1", "client mode layout");
@@ -188,19 +185,28 @@ static void Packet(ClientPacket packet, int ident, int recog, int param,
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    return AuditRepoRoot.Resolve();
+}
+
+static string FindClientLuaFixture()
+{
+    const string leaf = @"白猪G2.5_0518_lua_plain_readable_20260710_014719\core\mir2.scenes.main.common.common_hk.lua";
+    foreach (var start in new[]
+             {
+                 AuditRepoRoot.Resolve(),
+                 @"D:\loym2",
+                 Environment.CurrentDirectory
+             })
     {
-        for (var directory = new DirectoryInfo(start);
-             directory != null; directory = directory.Parent)
+        if (string.IsNullOrWhiteSpace(start)) continue;
+        for (var dir = new DirectoryInfo(start); dir != null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
-                return directory.FullName;
-            var sibling = Path.Combine(directory.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(sibling, "LyoMir2.sln")))
-                return sibling;
+            var candidate = Path.Combine(dir.FullName, leaf);
+            if (File.Exists(candidate))
+                return candidate;
         }
     }
-    throw new InvalidOperationException("Repository root not found");
+    throw new FileNotFoundException("client lua fixture not found", leaf);
 }
 
 static void PrepareRuntimeConfig()

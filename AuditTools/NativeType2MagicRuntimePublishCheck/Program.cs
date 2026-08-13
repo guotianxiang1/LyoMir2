@@ -393,11 +393,7 @@ static void VerifyUserEngineAtomicPublication()
 
 static void VerifyProductionWiringSourceBoundaries()
 {
-    // argv[1] first, then LYOMIR_REPO_ROOT: the hardcoded fallback is the main
-    // worktree, which is not always sitting on the branch under test.
-    var repoRoot = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault()
-                   ?? Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-                   ?? @"D:\loym2\LyoMir2-master";
+    var repoRoot = AuditRepoRoot.Resolve();
     var heroObject = ReadSource(repoRoot, "GameSvr", "Actors",
         "HeroObject.cs");
     var heroCodec = ReadSource(repoRoot, "GameSvr", "DataStores",

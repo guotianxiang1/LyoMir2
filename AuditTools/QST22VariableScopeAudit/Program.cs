@@ -29,9 +29,7 @@ namespace QST22VariableScopeAudit
     {
         static int Main(string[] args)
         {
-            // The default is the main worktree, but that one is not always sitting on
-            // the branch under test, so allow the tree to be named explicitly.
-            var repoRoot = args.Length > 0 ? args[0] : @"D:\loym2\LyoMir2-master";
+            var repoRoot = AuditRepoRoot.Resolve(args);
             var pasApiBridgePath = Path.Combine(repoRoot, "GameSvr", "ScriptSystem", "PasEngine", "PasApiBridge.cs");
 
             if (!File.Exists(pasApiBridgePath))

@@ -171,8 +171,11 @@ static void ApplyLimitItemMoveSourceContract()
     var root = FindRepositoryRoot();
     var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Maps",
         "Maps.cs"));
+    // Native parser B @0x7769D2: mov ecx,0xD / mov edx,0x776F2C ("LimitItemMove")
+    // / call 0x4C6E94 (CompareLStr). Same shape at parser A 0x775A42.
+    // A full-string Equals is the wrong contract: native is a length-13 prefix.
     var token = source.IndexOf(
-        "s34.Equals(\"LimitItemMove\", StringComparison.OrdinalIgnoreCase)",
+        "HUtil32.CompareLStr(s34, \"LimitItemMove\", \"LimitItemMove\".Length)",
         StringComparison.Ordinal);
     Assert(token >= 0, "LimitItemMove parser branch missing");
     var end = source.IndexOf("continue;", token, StringComparison.Ordinal);
@@ -219,22 +222,7 @@ static void VerifySourceContract()
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[] { AppContext.BaseDirectory,
-                 Environment.CurrentDirectory })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                    "GameSvr.csproj")))
-                return current.FullName;
-            var nested = Path.Combine(current.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(nested, "GameSvr", "GameSvr.csproj")))
-                return nested;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void Equal<T>(T expected, T actual, string label)

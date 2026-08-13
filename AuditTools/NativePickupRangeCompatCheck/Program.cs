@@ -294,26 +294,12 @@ static MapItem SelectRangeItem(Envirnoment environment, int x, int y,
 
 static string FindRepoFile(params string[] relativeParts)
 {
-    foreach (var seed in new[] { Environment.CurrentDirectory,
-                 AppContext.BaseDirectory })
-    {
-        var directory = new DirectoryInfo(seed);
-        while (directory != null)
-        {
-            var relativePath = Path.Combine(relativeParts);
-            var candidate = Path.Combine(directory.FullName,
-                "LyoMir2-master", relativePath);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-            directory = directory.Parent;
-        }
-    }
-
-    throw new FileNotFoundException(
-        "Could not locate repository source file",
-        Path.Combine(relativeParts));
+    var path = Path.Combine(new[] { AuditRepoRoot.Resolve() }
+        .Concat(relativeParts).ToArray());
+    if (!File.Exists(path))
+        throw new FileNotFoundException(
+            "Could not locate repository source file", path);
+    return path;
 }
 
 static void PrepareRuntimeConfig()

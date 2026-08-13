@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-var repoRoot = Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-    ?? @"D:\loym2\LyoMir2-master";
+var repoRoot = AuditRepoRoot.Resolve(args);
 var envirRoot = Environment.GetEnvironmentVariable("LYOMIR_PRODUCTION_ENVIR")
     ?? @"D:\lyom2Release\mud2.0\Mir200\Envir";
 
