@@ -101,10 +101,14 @@ void CheckProvenanceAndConstants()
 
 void CheckSupportedTags()
 {
-    // sub_70DBCC bitmask / NativeMailStore.IsSupportedTag: 1,4,5,6.
-    foreach (var tag in new[] { 1, 4, 5, 6 })
+    // sub_70DBCC @0x70DBCC: `cmp dl,7 / ja 0x70DBDB / and edx,0x7F /
+    // bt dword [0x7D3DE8],edx / setb al`. dword_7D3DE8 = 7E 8D 40 00 (bits 1..6),
+    // and the bt at 0x70DBD7 is the only reference to that address in the image, so
+    // nothing writes the mask. Tag 7 has a name (0x7D3DEC[7] = 0x708C10 '用户邮件')
+    // but bit 7 of 0x7E is clear, so the gate still rejects it.
+    foreach (var tag in new[] { 1, 2, 3, 4, 5, 6 })
         Assert(NativeMailWriteTransaction.IsSupportedTag(tag), $"tag {tag} supported");
-    foreach (var tag in new[] { 0, 2, 3, 7, 8 })
+    foreach (var tag in new[] { 0, 7, 8 })
         Assert(!NativeMailWriteTransaction.IsSupportedTag(tag),
             $"tag {tag} unsupported");
 }
