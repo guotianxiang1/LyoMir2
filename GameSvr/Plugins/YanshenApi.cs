@@ -274,6 +274,74 @@ namespace GameSvr.Plugins
             ["投保报文"] = "投保报文",         ["give极品"] = "give极品",
         };
 
+        // ── C-runtime number parsing, for the parameters the plugin feeds
+        // straight into a memory patch. yanshen2.0.8 @0x10000000 reads the six
+        // warrior-skill A/B strings out of its config struct and converts them
+        // with the CRT, not with a locale-aware parser:
+        //   0x1022DC49  atoi   (strtol base 10: 0x1022DC61 `push 0xA`)
+        //   0x10234345  atof   (strtod: 0x1023434F `call 0x102342E1`)
+        // So "3.5" becomes 3 on every A, and "1e3" becomes 1, not 1000.
+
+        /// <summary>C `atoi`: optional sign, decimal digits, stop at the first non-digit.</summary>
+        internal static int NativeAtoi(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int i = 0;
+            while (i < text.Length && (text[i] == ' ' || (text[i] >= '\t' && text[i] <= '\r'))) i++;
+            bool negative = false;
+            if (i < text.Length && (text[i] == '+' || text[i] == '-'))
+            {
+                negative = text[i] == '-';
+                i++;
+            }
+            long value = 0;
+            for (; i < text.Length && text[i] >= '0' && text[i] <= '9'; i++)
+            {
+                value = value * 10 + (text[i] - '0');
+                if (value > 0x7FFFFFFFL) { value = negative ? 0x80000000L : 0x7FFFFFFFL; break; }
+            }
+            return negative ? unchecked((int)-value) : unchecked((int)value);
+        }
+
+        string RawParam(string chineseKey)
+        {
+            if (_pluginManager == null) return null;
+            var val = _pluginManager.GetNativeConfigValue(chineseKey);
+            if (val == null) return null;
+            if (val is string s) return s;
+            try
+            {
+                if (val is System.Text.Json.JsonElement je)
+                {
+                    return je.ValueKind == System.Text.Json.JsonValueKind.String
+                        ? je.GetString()
+                        : je.ToString();
+                }
+            }
+            catch { }
+            return val.ToString();
+        }
+
+        /// <summary>Read a parameter the way the plugin does: CRT atoi over the raw config string.</summary>
+        int ParamAtoi(string chineseKey, int defaultValue)
+        {
+            var raw = RawParam(chineseKey);
+            return raw == null ? defaultValue : NativeAtoi(raw);
+        }
+
+        /// <summary>
+        /// Read a divisor the way the plugin does: CRT atof, then narrowed to
+        /// float32 by the `fstp dword` that stages the patch word
+        /// (0x100B406C for 刺杀, 0x100B42A3 for 半月).
+        /// </summary>
+        float ParamAtof32(string chineseKey, float defaultValue)
+        {
+            var raw = RawParam(chineseKey);
+            if (raw == null) return defaultValue;
+            return double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? (float)d : 0f;
+        }
+
         /// <summary>Get a native config parameter value as float. Returns defaultValue if not found.</summary>
         double GetParam(string chineseKey, double defaultValue = 0)
         {
@@ -2751,23 +2819,86 @@ namespace GameSvr.Plugins
         /// <summary>Get string param value by Chinese config key</summary>
         public string ParamS(string chineseKey, string def = "") { if (_pluginManager == null) return def; var v = _pluginManager.GetNativeConfigValue(chineseKey); if (v is string s && !string.IsNullOrEmpty(s)) return s; try { if (v is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.String) return je.GetString() ?? def; } catch { } return v?.ToString() ?? def; }
 
-        // ── Skill toggle checks ──
+        // ── Warrior skill overrides ──
+        // These six are not interpreted by the plugin at attack time: the config
+        // dialog rewrites M2Server code bytes once and the native formula then
+        // runs unchanged. Every clamp below is the clamp the plugin applies
+        // before the write, and every factor table is the set of values the
+        // rewritten instruction can actually encode.
+
         public bool IsStabSword() => Enabled("刺杀剑术");
-        public double StabSwordA() => GetParam("刺杀剑术_A值", 2);
-        public double StabSwordB() => GetParam("刺杀剑术_B值", 5);
+        // 0x100B40BB `A2 50 1C 77 00` stores A over the imm8 of host
+        // 0x00771C4E `83 C0 02 add eax,2`. That `add` is 32-bit with a
+        // sign-extended imm8, hence 0x100B404E `cmp eax,0x7F` + 0x100B4069
+        // `cmovg eax,ecx`, and hence the signed reading of the stored byte.
+        public int StabSwordA() =>
+            unchecked((sbyte)Math.Min(ParamAtoi("刺杀剑术_A值", 2), 127));
+        // 0x100B4129 `A3 24 1D 77 00` overwrites [0x00771D24], the float32 the
+        // host divides by at 0x00771C5A `D8 35 24 1D 77 00`. Stock value there
+        // is `00 00 A0 40` = 5.0f.
+        public float StabSwordB() => ParamAtof32("刺杀剑术_B值", 5f);
+
         public bool IsHalfMoon() => Enabled("半月弯刀");
-        public double HalfMoonA() => GetParam("半月弯刀_A值", 2);
-        public double HalfMoonB() => GetParam("半月弯刀_B值", 15);
+        // 0x100B42F2 `A2 46 20 77 00` -> imm8 of 0x00772044 `83 C0 02`, same
+        // 32-bit `add` with a sign-extended imm8, same cap at 0x100B428E.
+        public int HalfMoonA() =>
+            unchecked((sbyte)Math.Min(ParamAtoi("半月弯刀_A值", 2), 127));
+        // 0x100B4360 `A3 48 21 77 00` -> [0x00772148], read by 0x00772050
+        // `D8 35 48 21 77 00`. Stock value `00 00 70 41` = 15.0f.
+        public float HalfMoonB() => ParamAtof32("半月弯刀_B值", 15f);
+
         public bool IsFireSword() => Enabled("烈火剑法");
-        public double FireSwordA() => GetParam("烈火剑法_A值", 4);
-        public double FireSwordB() => GetParam("烈火剑法_B值", 4);
+        public int FireSwordA() => ParamAtoi("烈火剑法_A值", 4);
+        // 0x100B4550 `A2 F0 B0 76 00` -> imm8 of 0x0076B0EF `04 04 add al,4`,
+        // capped to 255 at 0x100B4491.
+        public int FireSwordB() => Math.Min(ParamAtoi("烈火剑法_B值", 4), 255);
+
         public bool IsThrusting() => Enabled("攻杀剑术");
-        public double ThrustingA() => GetParam("攻杀剑术_A值", 5);
+        // 0x100B3F5A `A2 2D B0 76 00` -> imm8 of 0x0076B02C `04 05 add al,5`,
+        // capped to 255 at 0x100B3F04.
+        public int ThrustingA() => Math.Min(ParamAtoi("攻杀剑术_A值", 5), 255);
+
         public bool IsSunSword() => Enabled("逐日剑法");
-        public double SunSwordA() => GetParam("逐日剑法_A值", 7);
-        public double SunSwordB() => GetParam("逐日剑法_B值", 6);
+        // 0x100B47D9 `A2 4D B1 76 00` -> imm8 of the `04 07 add al,7` that
+        // 0x100B4750 splices over host 0x0076B14C, capped to 255 at 0x100B46F6.
+        public int SunSwordA() => Math.Min(ParamAtoi("逐日剑法_A值", 7), 255);
+        // 0x100B4847 `A3 A4 1D 77 00` -> imm32 of 0x00771DA3 `B9 0A 00 00 00
+        // mov ecx,0xA`, the divisor of the `idiv ecx` at 0x00771DA9. Integer,
+        // not float: this one goes through atoi, not atof.
+        public int SunSwordB() => ParamAtoi("逐日剑法_B值", 6);
+
         public bool IsOneSword() => Enabled("基本剑术");
-        public int OneSwordN() => GetParamInt("基本剑术_n值", 3);
+        public int OneSwordN() => ParamAtoi("基本剑术_n值", 3);
+
+        /// <summary>
+        /// 烈火 multiplies the level with `shl eax,k`, so A survives only as a
+        /// power of two. 0x100B44BB-0x100B44FD picks k for 0/2/4/8/16; the
+        /// staged default at 0x100B4488/0x100B44B3 is `C1 E0 02` = shl eax,2,
+        /// which every other A silently falls back to.
+        /// </summary>
+        public static int FireSwordLevelFactor(int a) => a switch
+        {
+            0 => 1,
+            2 => 2,
+            4 => 4,
+            8 => 8,
+            16 => 16,
+            _ => 4,
+        };
+
+        /// <summary>
+        /// 基本剑术 multiplies with `lea eax,[eax+eax*s]`, so n survives only as
+        /// an encodable LEA scale. 0x100B4967-0x100B49A1 picks the SIB byte for
+        /// 1/2/5/9; the staged default at 0x100B4946 is `8D 04 40` = x3.
+        /// </summary>
+        public static int OneSwordLevelFactor(int n) => n switch
+        {
+            1 => 1,
+            2 => 2,
+            5 => 5,
+            9 => 9,
+            _ => 3,
+        };
         public bool IsZhenQi() => Enabled("无极真气");
         public double ZhenQiA() => GetParam("无极真气_A值", 10);
         public int ZhenQiTime() => GetParamInt("无极真气_时间", 6);

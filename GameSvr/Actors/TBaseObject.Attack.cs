@@ -362,12 +362,20 @@ namespace GameSvr
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
-            if (yanshenApi != null && yanshenApi.IsHalfMoon())
+            // Same two-constant swap as 刺杀 (0x100B42F2 -> imm8 of 0x00772044
+            // `83 C0 02`, 0x100B4360 -> [0x00772148]), with one asymmetry that
+            // matters: 半月 is the only one of the six whose high-level arm the
+            // plugin leaves alone. 刺杀 gets `EB 17` over 0x00771C25 and 烈火
+            // gets `EB 15` over 0x0077231D, but no blob patch targets the
+            // half-moon branch in either _Attack copy, so above the scaling
+            // level the native arm still wins and A/B never enter the result.
+            if (effectiveLevel <= 3 && yanshenApi != null && yanshenApi.IsHalfMoon())
             {
-                var divisor = yanshenApi.HalfMoonB();
+                float divisor = yanshenApi.HalfMoonB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + effectiveLevel) / divisor);
+                    return HUtil32.Round((double)nPower / divisor
+                        * (effectiveLevel + yanshenApi.HalfMoonA()));
                 }
             }
 
@@ -393,12 +401,21 @@ namespace GameSvr
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
+            // Override = the same native chain with two constants swapped:
+            //   0x00771C4E  83 C0 02              add eax,2   <- imm8 becomes A
+            //   0x00771C5A  D8 35 24 1D 77 00     fdiv [0x00771D24] <- becomes B
+            //   plugin 0x100B40BB / 0x100B4129 write those two
+            // Divide first, then multiply: that is the fdiv/fmulp order, and B
+            // is the float32 the patch stores, not a double.
+            // The btLevel==4 tier is patched out while the override is on --
+            // 0x100B417C splices `EB 17` over 0x00771C25 `75 17`.
             if (yanshenApi != null && yanshenApi.IsStabSword())
             {
-                var divisor = yanshenApi.StabSwordB();
+                float divisor = yanshenApi.StabSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + effectiveLevel) / divisor);
+                    return HUtil32.Round((double)nPower / divisor
+                        * (effectiveLevel + yanshenApi.StabSwordA()));
                 }
             }
 
@@ -435,26 +452,50 @@ namespace GameSvr
             return HUtil32.Round(scaled / 20.0);
         }
 
+        // The 攻杀 override is not a damage-time multiplier. The plugin rewrites
+        // the imm8 of the recalc site that produces m_nHitPlus:
+        //   host  0x0076B027  8B C6 E8 40 D9 D5 FF   mov eax,esi; call sub_4C896C
+        //   host  0x0076B02C  04 05                  add al,5
+        //   host  0x0076B02E  88 83 90 00 00 00      mov [ebx+0x90],al
+        //   plugin 0x100B3F5A A2 2D B0 76 00         mov byte[0x0076B02D],al
+        // Two consequences the old expression missed: the level is sub_4C896C's
+        // EFFECTIVE level, and `add al` is 8-bit, so (level + A) wraps at 256
+        // instead of saturating at 255.
         internal static int CalculateThrustingHitPlus(int nativeHitPlus, int skillLevel,
             Plugins.YanshenApi yanshenApi)
         {
             if (yanshenApi != null && yanshenApi.IsThrusting())
             {
-                return Math.Clamp(HUtil32.Round(yanshenApi.ThrustingA() + skillLevel), 0, 255);
+                return unchecked((byte)(yanshenApi.ThrustingA() + skillLevel));
             }
 
             return nativeHitPlus;
         }
 
+        // The plugin rewrites the two instructions that build m_nHitDouble and
+        // nothing else -- the damage arithmetic below is untouched native code,
+        // so the override changes only the byte fed into it:
+        //   host   0x0076B0EC  C1 E0 02        shl eax,2   <- A picks the shift
+        //   host   0x0076B0EF  04 04           add al,4    <- imm8 becomes B
+        //   plugin 0x100B45A3  blob patch 3 bytes @0x0076B0EC
+        //   plugin 0x100B4550  A2 F0 B0 76 00  mov byte[0x0076B0F0],al
+        // `shl eax,k` cannot encode an arbitrary A, so FireSwordLevelFactor
+        // holds the five representable multipliers; and because the addend is
+        // 8-bit the result wraps at 256 rather than stopping at the 25.5x the
+        // dialog text advertises (that number is just 255/10).
+        //
+        // The plugin also kills the btLevel==4 arm outright:
+        //   host   0x0077231D  75 15   jne 0x00772334
+        //   plugin 0x100B45DA  blob patch 2 bytes @0x0077231D with EB 15 (jmp)
+        // so the fixed 1.8x tier is unreachable while the override is on.
         internal static int CalculateFireSwordAttackPower(int nPower, int nativeHitDouble,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             if (yanshenApi != null && yanshenApi.IsFireSword())
             {
-                var multiplier = Math.Min(
-                    (yanshenApi.FireSwordA() * skillLevel + yanshenApi.FireSwordB()) / 10 + 1,
-                    25.5);
-                return HUtil32.Round(nPower * multiplier);
+                var factor = Plugins.YanshenApi.FireSwordLevelFactor(yanshenApi.FireSwordA());
+                nativeHitDouble = unchecked((byte)(
+                    unchecked((byte)(skillLevel * factor)) + yanshenApi.FireSwordB()));
             }
 
             // Native _Attack = sub_769F90, fire branch @0x0076A06C-0x0076A08A:
@@ -472,6 +513,19 @@ namespace GameSvr
             return nPower + HUtil32.Round(nPower / 10.0 * nativeHitDouble);
         }
 
+        // Native builds the multiplier byte from a table and then divides with
+        // integer idiv; the override replaces the table lookup and the divisor
+        // literal, and deletes the clamp that guarded the lookup:
+        //   host   0x0076B13E  73 1D                  jae 0x0076B15D  (L>=4 -> Tbl[3])
+        //   host   0x0076B14C  8A 80 28 4B 7D 00      mov al,[eax+0x7D4B28]
+        //   host   0x0076B152  88 83 92 00 00 00      mov [ebx+0x92],al
+        //   host   0x00771DA0  F7 6D FC               imul [ebp-4]
+        //   host   0x00771DA3  B9 0A 00 00 00         mov ecx,0xA
+        //   host   0x00771DA9  F7 F9                  idiv ecx
+        //   plugin 0x100B4787  blob 2 bytes @0x0076B13E -> 90 90 (clamp gone)
+        //   plugin 0x100B4750  blob 6 bytes @0x0076B14C -> 04 07 90 90 90 90
+        //   plugin 0x100B47D9  A2 4D B1 76 00         -> the `add al` imm8 = A
+        //   plugin 0x100B4847  A3 A4 1D 77 00         -> the idiv divisor = B
         internal static int CalculateSunSwordAttackPower(int power, int effectiveLevel,
             Plugins.YanshenApi yanshenApi)
         {
@@ -480,8 +534,10 @@ namespace GameSvr
                 var divisor = yanshenApi.SunSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(power *
-                        Math.Min(yanshenApi.SunSwordA() + effectiveLevel, 255) / divisor);
+                    // `add al` is 8-bit, so the multiplier wraps at 256; and the
+                    // native division is idiv, which truncates toward zero.
+                    var multiplier = unchecked((byte)(effectiveLevel + yanshenApi.SunSwordA()));
+                    return power * multiplier / divisor;
                 }
             }
 
@@ -517,6 +573,19 @@ namespace GameSvr
             BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(10, 2),
                 unchecked((ushort)y));
             return body;
+        }
+
+        // sub_4C896C @0x004C896C:
+        //   8A 50 0C     mov dl,[eax+0x0C]        btLevel
+        //   02 50 18     add dl,[eax+0x18]        + NativeLevelBonus   (8-bit)
+        //   8B 08 / 8A 49 1A / 3A D1 / 76 02 / 8B D1   min(.., btTrainLv)
+        // Every recalc arm the plugin patches feeds off this, never off btLevel.
+        internal static int NativeEffectiveMagicLevel(TUserMagic magic)
+        {
+            return magic == null || magic.MagicInfo == null
+                ? magic?.btLevel ?? 0
+                : Math.Min(unchecked((byte)(magic.btLevel + magic.NativeLevelBonus)),
+                    magic.MagicInfo.btTrainLv);
         }
 
         private static int GetSunSwordEffectiveLevel(TUserMagic magic)
@@ -690,7 +759,7 @@ namespace GameSvr
                         var magic = m_MagicArr[SpellsDef.SKILL_YEDO];
                         nPower += CalculateThrustingHitPlus(
                             m_nHitPlus,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -704,7 +773,7 @@ namespace GameSvr
                         nPower = CalculateFireSwordAttackPower(
                             nPower,
                             m_nHitDouble,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -727,7 +796,7 @@ namespace GameSvr
                         var magic = m_MagicArr[SpellsDef.SKILL_YEDO];
                         nPower += CalculateThrustingHitPlus(
                             m_nHitPlus,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
