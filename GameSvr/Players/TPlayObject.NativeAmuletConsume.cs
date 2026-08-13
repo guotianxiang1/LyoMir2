@@ -55,8 +55,12 @@ namespace GameSvr
     //     C# 用 ConsumeSpentPoisonCharm/UseAmulet 同款 slot=null;RecalcAbilitys;SendDelItems;AddGameDataLog。
     //
     // ---- 18 个原生调用者 (E8 call 0x73EA20) 与 cl/nCount ----
-    //   [主 DoSpell sub_6ED2A4 (=MagicManager.DoSpell); 跳表@0x6ED706 索引即 wMagicID]
-    //     0x6EDC90  wMagicID 30 = SKILL_SINSU(召唤神兽)  cl=1 消耗 nCount=2000(0x7D0), 前置 30s 冷却门
+    //   [主 DoSpell sub_6ED62C (不是 sub_6ED2A4); 跳表 1 @0x6ED706 索引即 wMagicID(0..0x24),
+    //    跳表 2 @0x6ED7CD 索引 = wMagicID-0x27(39..67), 跳表 3 @0x6ED854 索引 = wMagicID-0x75]
+    //     0x6EDC90  wMagicID 62 = SKILL_62(召唤圣兽)  cl=1 消耗 nCount=2000(0x7D0), 前置 30s 冷却门
+    //       (SKILL-62 更正: 此前写作 "wMagicID 30 = SKILL_SINSU" 有误 —— 跳表 1 索引 30 指向
+    //        0x6EDC4A(走 sub_73E93C 的另一条例程); 本调用点是跳表 2 索引 23 = wMagicID 62,
+    //        原始字节 71 DC 6E 00 @0x6ED829, 且同块的提示串是 "圣兽刚收回不到30秒"@0x6EE0F8。)
     //   [英雄魔法并行分派器 sub_68D2F8 (跳表@0x68DE7D/@0x68DEFF 结构与主 DoSpell 同构, 同一技能集)]
     //     0x68E0BD cl=1 n=100 | 0x68E0EB cl=1 n=100 | 0x68E11B cl=1 n=100 | 0x68E15C cl=1 n=100
     //     0x68E1EB cl=1 n=100 | 0x68E214 cl=1 n=100 | 0x68E28D cl=1 n=100 | 0x68E3CB cl=1 n=2000(30s门)

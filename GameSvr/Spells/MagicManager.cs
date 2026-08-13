@@ -866,12 +866,11 @@ namespace GameSvr
                 case SpellsDef.SKILL_149:
                 case SpellsDef.SKILL_150:
                     break;
-                // id 62 @0x6EDC71: 30-second cooldown gate + amulet type-1 check
-                // + VMT+0x124 (0x76EEF4, MagMakeAngelSlave-like producer). Bytes:
-                // C6 45 FA 01 (boSpellFail=1), E8 C6 A6 D1 FF (GetTickCount),
-                // 2B 83 0C 05 00 00 (sub [ebx+0x50C]), 3D 30 75 00 00 (cmp 30000),
-                // 76 3F (jbe fail), then amulet check sub_73EA20(cl=1,edx=2000).
-                // Verified 2026-08-13 against flat_image.bin.
+                // id 62 @0x6EDC71: 30 秒门 (+0x50C) -> 护身符消耗 sub_73EA20(cl=1,
+                // edx=2000) -> boSpellFail:=0 -> VMT+0x124 = sub_76EEF4 "圣兽" 造宠
+                // (返回值丢弃)。消耗在造宠之前且无条件, 造宠失败既不退也不提示。
+                // 逐地址证据与三处修正见 TryProduceNativeMagic62 上方注释。
+                // Verified 2026-08-14 against flat_image.bin.
                 case SpellsDef.SKILL_62:
                     boSpellFail = !TryProduceNativeMagic62(PlayObject, UserMagic);
                     break;
@@ -2113,59 +2112,58 @@ namespace GameSvr
             return result;
         }
 
-        // Native id 62 handler @0x6EDC71: 30-second cooldown check at [ebx+0x50C],
-        // amulet type-1 check sub_73EA20(cl=1, edx=2000), then VMT+0x124 call
-        // (MagMakeAngelSlave-like producer). Bytes verified:
-        // C6 45 FA 01 E8 C6 A6 D1 FF 2B 83 0C 05 00 00 3D 30 75 00 00 76 3F.
+        // Native id 62 handler @0x6EDC71 (跳表 2 @0x6ED7CD 索引 62-0x27=23 存 0x6EDC71,
+        // 原始字节 71 DC 6E 00 @0x6ED829 —— 确认这一块就是 wMagicID 62 "圣兽")。
+        // 逐地址真值:
+        //   006EDC71  C6 45 FA 01           mov byte [ebp-6],1      ; boSpellFail := True
+        //   006EDC75  E8 C6 A6 D1 FF        call 0x408340           ; GetTickCount
+        //   006EDC7A  2B 83 0C 05 00 00     sub eax,[ebx+0x50C]
+        //   006EDC80  3D 30 75 00 00        cmp eax,0x7530          ; 30000
+        //   006EDC85  76 3F                 jbe 0x6EDCC6            ; <=30s -> 冷却提示
+        //   006EDC87  B1 01                 mov cl,1                ; boConsume = True
+        //   006EDC89  BA D0 07 00 00        mov edx,0x7D0           ; nCount = 2000
+        //   006EDC90  E8 8B 0D 05 00        call 0x73EA20           ; 【消耗在召唤之前】
+        //   006EDC95  84 C0 / 74 15         test al,al / je 0x6EDCAE; 没护身符 -> 提示
+        //   006EDC99  C6 45 FA 00           mov byte [ebp-6],0      ; boSpellFail := False
+        //   006EDCA3  FF 91 24 01 00 00     call [ecx+0x124]        ; 0x76EEF4 造宠, 返回值丢弃
+        //   006EDCAE  mov cx,0xFFDB / edx=0x6EE0DC / [vmt+0xD4]     ; "没有足够的护身符"
+        //   006EDCC6  mov cx,0xFFDB / edx=0x6EE0F8 / [vmt+0xD4]     ; "圣兽刚收回不到30秒，元气尚未回复"
+        // ([ebp-6] 是外层 sub_6ED62C 的 boSpellFail: 0x6EE04B `cmp byte[ebp-6],0 / jne`
+        //  为真则整支 DoSpell 返回 False 且不发 SM_MAGICFIRE。)
+        //
+        // SKILL-62 (2026-08-14) 修正的三处顺序/条件错误:
+        //   (a) 消耗必须在造宠【之前】且【无条件】——原生 0x6EDC90 一旦过了 30 秒门就扣,
+        //       扣完才去造宠; 旧代码是 cl=0 试探 + 造宠成功后才 cl=1 真扣。
+        //   (b) boSpellFail 在 0x6EDC99 就定死为 False, 造宠成功与否【不影响】返回值,
+        //       失败也不退护身符、不发任何消息 (sub_76EEF4 三处早退全是静默 return nil)。
+        //   (c) 冷却时间戳 +0x50C 【不】在本块写入 —— 唯一运行期写入点是
+        //       THolyMonster.Die = sub_66C2F4 @0x66C327 (圣兽被收回/死亡时记到召唤者身上),
+        //       已落地在 HolyMonster.Die; 旧代码在造宠成功后自行盖戳属臆造。
+        //   另: 冷却提示串取自 0x6EE0F8 (GBK, len 0x20), 旧串 "魔法使用还没恢复30秒" 无出处;
+        //       怪物名取 0x76EF74 的字面量 "圣兽", 不是 g_Config.sAngel(默认 "精灵")。
         private static bool TryProduceNativeMagic62(TPlayObject PlayObject,
             TUserMagic UserMagic)
         {
-            var result = false;
-            // 30-second cooldown gate
-            var elapsed = HUtil32.GetTickCount() - PlayObject.m_dwMagic62LastTick;
-            if (elapsed <= 30000)
+            // 0x6EDC75-0x6EDC85: 严格大于 30000 才放行 (jbe 走冷却臂)。
+            if (HUtil32.GetTickCount() - PlayObject.m_dwMagic62LastTick <= 30000)
             {
-                PlayObject.SysMsg("魔法使用还没恢复30秒", MsgColor.Red,
+                PlayObject.SysMsg("圣兽刚收回不到30秒，元气尚未回复", MsgColor.Red,
                     MsgType.Hint);
-                return false;
+                return false;                                   // boSpellFail 保持 1
             }
-            // DURA-11 (2026-08-14 fix): native SKILL_62 block @0x6EDC71 consumes the
-            // charm via sub_73EA20 (RAW amount, NOT the ×100 slot-9 routine sub_73E93C):
-            //   0x6EDC87 mov cl,1 / 0x6EDC89 mov edx,0x7D0(2000) / 0x6EDC90 call 0x73EA20
-            // sub_73EA20 scans equip slot9 AND bag, requires Dura>=2000 (RAW, no ×100),
-            // deducts 2000 raw, and destroys only when the REMAINING Dura < 100.
-            // The old code used Magic.CheckAmulet/UseAmulet(nCount=20,type=1), i.e. the
-            // ×100 equip-only routine sub_73E93C, which diverged on three counts:
-            //   (a) only inspected equip slot 9 (missed a bagged charm);
-            //   (b) gate was Dura>=1950 (nCount*100<=Dura+50), not Dura>=2000;
-            //   (c) destroyed when Dura<=2000, not when the post-consume remainder<100.
-            // Route through the faithful port (TPlayObject.NativeAmuletConsume.cs).
-            if (!PlayObject.NativeConsumeBujukCharm(2000, false))
+            // 0x6EDC87-0x6EDC97: sub_73EA20(cl=1, edx=2000) —— 装备槽9 优先、其次背包,
+            // 扣【原始】2000 耐久 (不 ×100), 余量 <100 才销毁。忠实移植见
+            // TPlayObject.NativeAmuletConsume.cs; 返回值是"是否找到合格护身符"。
+            if (!PlayObject.NativeConsumeBujukCharm(2000, true))
             {
                 PlayObject.SysMsg("没有足够的护身符", MsgColor.Red,
                     MsgType.Hint);
-                return false;
+                return false;                                   // boSpellFail 保持 1
             }
-            // VMT+0x124 call (angel-like producer). NOTE(integrator): native consumes
-            // the charm at 0x6EDC90 BEFORE this summon and then proceeds unconditionally;
-            // the structure below still consumes only on MakeSlave success (pre-existing
-            // modeling of VMT+0x124=0x76EEF4, outside DURA-11 scope — reported).
-            if (!PlayObject.CheckServerMakeSlave())
-            {
-                var sMonName = M2Share.g_Config.sAngel;
-                int nMakeLevel = TPlayObject
-                    .GetNativeMagicProducerEffectiveLevel(UserMagic);
-                int nExpLevel = nMakeLevel;
-                var dwRoyaltySec = 10 * 24 * 60 * 60;
-                if (PlayObject.MakeSlave(sMonName, nMakeLevel, nExpLevel, 1,
-                    dwRoyaltySec) != null)
-                {
-                    result = true;
-                    PlayObject.NativeConsumeBujukCharm(2000, true); // sub_73EA20(cl=1,edx=2000)
-                    PlayObject.m_dwMagic62LastTick = HUtil32.GetTickCount();
-                }
-            }
-            return result;
+            // 0x6EDC99 boSpellFail := 0 —— 在造宠【之前】写死, 之后再不改。
+            // 0x6EDCA3 VMT+0x124 = sub_76EEF4, 返回值被丢弃。
+            PlayObject.NativeMakeHolyBeastSlave(UserMagic);
+            return true;
         }
 
         // Native ids 66/67 shared handler @0x6EDE39: calls sub_745744(self,

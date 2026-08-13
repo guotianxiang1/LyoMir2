@@ -20,13 +20,105 @@ namespace GameSvr
     {
         internal const int NativeMagicProducerPushIdent = 10417;
 
-        /// <summary>Native self+0x50C: last-use tick stamp for the magic id 62
-        /// producer's 30-second gate. Read at 0x6EDC7A
-        /// (2B 83 0C 05 00 00 = sub eax,[ebx+0x50C]) and re-stamped on success.
-        /// Same shape as skill 111's +0x510 stamp
-        /// (m_dwNativeSkill111LastRecallTick), which is a plain per-object dword
-        /// rather than a coldTime-table entry.</summary>
+        /// <summary>原生 self+0x50C —— wMagicID 62 "圣兽" 的【收回】时间戳,
+        /// 30 秒门读它: 0x6EDC7A `2B 83 0C 05 00 00` = sub eax,[ebx+0x50C]。
+        /// 与 skill 111 的 +0x510 一样是对象上的裸 dword, 不是 coldTime 表项。
+        ///
+        /// SKILL-62 取证 (2026-08-14): 本字段的【唯一】运行期写入点是
+        /// THolyMonster.Die = sub_66C2F4 (VMT 0x663060 槽 +0x84) 的
+        /// 0x66C31C-0x66C327 —— 也就是圣兽【死亡/被收回】时把 tick 记到召唤者身上,
+        /// 与提示串 "圣兽刚收回不到30秒" 完全一致。SKILL_62 施法块 0x6EDC71-0x6EDCA9
+        /// 【没有】任何对 +0x50C 的写入, 所以造宠成功后不得在此处补盖时间戳
+        /// (那会把语义变成"召唤后 30 秒内不能再召唤")。落点见
+        /// <see cref="HolyMonster.Die"/>。其余 +0x50C 触点只有存档读写:
+        /// 0x688B9C(载入: tick-30000+剩余秒×1000)、0x6B0832(同形)、
+        /// 0x6891F0 / 0x6B1517(存档: 把剩余毫秒折成秒写回)。</summary>
         internal int m_dwMagic62LastTick;
+
+        /// <summary>原生 0x76EF74 处的字面量 GBK 长串 "圣兽" (len 前缀 @0x76EF70 = 4)。
+        /// sub_76EEF4 @0x76EF2D 是 `BA 74 EF 76 00` = `mov edx,0x76EF74`, 直接取
+        /// 字符串【数据地址】而不是从某个全局变量间接装载, 所以这个名字在原生里
+        /// 不可配置 —— 不能用 g_Config.sAngel(默认 "精灵") 之类的可配置名替代。</summary>
+        internal const string NativeHolyBeastName = "圣兽";
+
+        /// <summary>sub_76EEF4 @0x76EF16 `6A 01` —— MakeSlave 的 nMaxMob。</summary>
+        private const int NativeHolyBeastMaxMob = 1;
+
+        /// <summary>sub_76EEF4 @0x76EF18 `68 00 2F 0D 00` = 0xD2F00 = 864000 秒
+        /// (10 天) —— MakeSlave 的 dwRoyaltySec。</summary>
+        private const int NativeHolyBeastRoyaltySec = 0xD2F00;
+
+        // =================================================================
+        // 原生 TPlayer VMT+0x124 = sub_76EEF4 (VMT 基址 0x6AC8C8, +0x124 槽)。
+        // wMagicID 62 的施法块 0x6EDCA3 `FF 91 24 01 00 00` 就是唯一派发点
+        // (全镜像对 0x76EEF4 没有任何 E8 直调)。逐地址:
+        //   0076EEFF  xor esi,esi                     ; Result := nil
+        //   0076EF01  cmp [ebp-4],0 / je 0x76EF65     ; UserMagic = nil -> nil
+        //   0076EF07  mov dx,0x28A1 / call 0x7661E8   ; CheckServerMakeSlave
+        //   0076EF14  jne 0x76EF65                    ; 队列里已有 RM_10401 -> nil
+        //   0076EF16  push 1 / push 0xD2F00 / push 0 / push 0xA
+        //   0076EF24  call sub_4C896C -> cl           ; 有效技能等级
+        //   0076EF2D  mov edx,0x76EF74                ; "圣兽" 字面量
+        //   0076EF36  call [esi+0xEC]                 ; TPlayer.MakeSlave = 0x6CB070
+        //   0076EF3E  test esi,esi / je 0x76EF65      ; 造宠失败 -> nil
+        //   0076EF49  call sub_66C630(slave, self, UserMagic)   ; THolyMonster 初始化
+        //   0076EF4E  eax=3 / call 0x403B4C / inc ecx ; Random(3)+1
+        //   0076EF62  call [ebx+0x3C]                 ; TrainSkill(UserMagic, 上式)
+        //   0076EF65  mov eax,esi / ret               ; 返回 slave (调用点丢弃)
+        // 失败语义 (三处 je 0x76EF65) 全部是【静默返回 nil】: 不退护身符、不发任何
+        // 消息、不调 RecallSlave、不写 +0x50C。
+        //
+        // fail-closed —— sub_66C630 (0x66C630-0x66C70F) 只移植了 0x66C6BB 一条
+        // (`89 B3 F8 04 00 00` dword[slave+0x4F8] := master, 见 HolyMonster)。其余
+        // 各条都写 THolyMonster 在父类 TATMonster(size 0x4E8) 之后新增、C# 无命名
+        // 落点的字段, 且消费者是同样未移植的 holy-seize 机制 (Operate 0x66C7C8 /
+        // Run 0x66C8AC), 强行落地必然臆造:
+        //   0x66C63E byte[+0x4F5]:=0        0x66C645 byte[+0x2E3]:=0
+        //   0x66C650 word[+0x4F0]:=word[+0x0C]
+        //   0x66C65F word[+0x4F2]:=byte[+0x179]
+        //   0x66C675 UserMagic 非空时 rep movsd+movsb 把 25 字节 TUserMagic 记录
+        //            整体拷进 [+0x4FC]
+        //   0x66C67F [+0x80]:=GetTickCount ; 0x66C689 call 0x765DEC
+        //   0x66C6B2 [vmt+0xD8] 广播 cx=0x27D8
+        //   0x66C6D8 [+0x4EC]:=Round([master+0x2A0] * tbyte@0x66C710)
+        //   0x66C6E6 call 0x76C7B8(master, 0x22)
+        // 另一个调用者 sub_6CB6C4 @0x6CB74D (按 byte[slave+0x178]==0x97 即 race 151
+        // 分流, UserMagic 传 nil) 属另一条造宠链, 本次不涉及。
+        // =================================================================
+
+        /// <summary>原生 sub_76EEF4 —— wMagicID 62 的 "圣兽" 造宠原语。
+        /// 返回造出的奴仆; 任一道门未过均返回 null 且【不产生任何可见反馈】。
+        /// 调用点 0x6EDCA3 丢弃返回值, 所以它不影响 boSpellFail。</summary>
+        public TBaseObject NativeMakeHolyBeastSlave(TUserMagic UserMagic)
+        {
+            if (UserMagic == null)
+            {
+                return null;                                   // 0x76EF01 / 0x76EF05
+            }
+            if (CheckServerMakeSlave())                        // 0x76EF0D sub_7661E8(0x28A1)
+            {
+                return null;                                   // 0x76EF14 jne
+            }
+            // 0x6CB070 把 ecx 同时写进 +0x483(MakeLevel) 与 +0x482(ExpLevel), 故两参同值。
+            int nMakeLevel = GetNativeMagicProducerEffectiveLevel(UserMagic);
+            var slave = MakeSlave(NativeHolyBeastName, nMakeLevel, nMakeLevel,
+                NativeHolyBeastMaxMob, NativeHolyBeastRoyaltySec);   // 0x76EF36
+            if (slave == null)
+            {
+                return null;                                   // 0x76EF3E / 0x76EF40
+            }
+            // 0x76EF49 sub_66C630 的唯一可落地条: 记录召唤者, 供 THolyMonster.Die
+            // 回写 30 秒门的时间戳。原生这一调用是【无条件】的 (0x76EF49 是 E8 直调,
+            // 不走虚表, 不检查类型), 因为 MonItems 里 "圣兽" 的 race 必是
+            // 151/170; 若被改成别的 race, 原生会按 THolyMonster 布局往越界偏移写,
+            // 无法也不应复刻 —— C# 用 as 判定收敛到"配置正确时行为一致"。
+            (slave as HolyMonster)?.NativeBindHolyBeastSummoner(this);
+            // 0x76EF62 [vmt+0x3C] = 0x76AD30, 本工程的忠实移植是 TrainNativeMagicProducer
+            // (m_boFastTrain ×3 -> sub_4C8910 等级门/升级循环), 不是只加点数的 TrainSkill。
+            TrainNativeMagicProducer(UserMagic,
+                NextNativeMagicProducerRandom(3) + 1);
+            return slave;
+        }
 
         internal static ushort GetNativeMagicProducerMpCost(
             TUserMagic magic)
