@@ -1675,6 +1675,28 @@ namespace GameSvr
             // 或 3（mode 2 的 0x0200 禁交易位）。旧 C# 硬编码 0，客户端因此分不清
             // 「没找到」和「这件不能交易」。
             var dealAddFailCode = 0;
+            // TRADE-09/10: 战神 sub_6C417C @0x6C41AD — 放物前的 GM 旁路。分类器（0x78389C）
+            // 之前先算一个「任一方是 GM」的旗标，成立则**整段跳过**绑定/禁交易判定：
+            //   0x6C41AD  80 BB 75 06 00 00 04  cmp byte [ebx+0x675], 4   ; 自己 m_btPermission
+            //   0x6C41B4  73 13                 jae 0x6C41C9              ; >= 4 → 旗标 = 1
+            //   0x6C41B6  8B 83 AC 0B 00 00     mov eax, [ebx+0xBAC]     ; 对端 m_DealCreat
+            //   0x6C41BC  80 B8 75 06 00 00 04  cmp byte [eax+0x675], 4  ; 对端 m_btPermission
+            //   0x6C41C3  73 04                 jae 0x6C41C9             ; >= 4 → 旗标 = 1
+            //   0x6C41C5  33 C0 / EB 02         xor eax, eax            ; 双方 < 4 → 旗标 = 0
+            //   0x6C41C9  B0 01                 mov al, 1
+            //   0x6C41CB  88 45 EE              mov [ebp-0x12], al
+            //   0x6C421D  80 7D EE 00           cmp byte [ebp-0x12], 0   ; （循环内）
+            //   0x6C4221  75 1B                 jne 0x6C423E            ; 旗标成立 → 跳过 0x78389C
+            // `jae` = 无符号 >= 4，与本仓库其它 GM 判据同界：AddItemToBag 盖印门
+            // 0x6B73A3 `cmp byte [player+0x675],3 / ja`（> 3 ≡ >= 4，C# 建模为
+            // m_btPermission <= NativeItemAcquisitionStamp.MaxStampedGmLevel(=3)）。
+            // m_btPermission 的取值域已钉死为原生 [obj+0x675]：唯一非零写入点是
+            // TPlayObject.Base.cs 的 UserEngine.GetHumPermission（登录 admin-list 查名，
+            // = 原生 0x6B1E80 / sub_65583C），脚本 gmlevel 与 SuperGM 命令都只读不写，
+            // 故此旁路不会因 C# 侧赋值偏差扩大成全服解绑。开口是**双向 OR**（自己或对端
+            // 任一 >= 4），照抄原版，不做成「只有自己」。对端指针在方法入口 m_DealCreat==null
+            // 已判空，此处 m_DealCreat.m_btPermission 不会空解引用。
+            bool gmDealBypass = m_btPermission >= 4 || m_DealCreat.m_btPermission >= 4;
             if (!m_DealCreat.m_boDealOK)
             {
                 for (var i = 0; i < m_ItemList.Count; i++)
@@ -1690,16 +1712,21 @@ namespace GameSvr
                             //         E8 67 F6 0B 00 (call sub_78389C) / 89 45 F0 (mov [ebp-0x10],eax)
                             //         83 7D F0 00 (cmp dword [ebp-0x10],0) / 7F 56 (jg reject)
                             // Returns non-zero when stdItem.Reserved02 & 0x02 (the no-trade flag).
-                            var stdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                            dealAddFailCode = NativeItemDropDestroy.CheckTransferPermission(
-                                UserItem, stdItem, NativeItemDropDestroy.TransferModeTrade);
-                            if (dealAddFailCode > 0)
+                            // TRADE-09/10: 仅在无 GM 旁路时才跑分类器（原生 0x6C4221 `jne 0x6C423E`
+                            // 在旗标成立时直接跳过 0x6C4230 的 call 0x78389C，failCode 保持 0，物品直接收下）。
+                            if (!gmDealBypass)
                             {
-                                // Native rejects by jumping to 0x6C4294, which breaks out of the item
-                                // loop and falls through to send SM_DEALADDITEM_FAIL. No other message.
-                                // 0x6C4238 是 `jg`（> 0），不是 `!= 0`；sub_78389C 只返回 0/1/3/5，
-                                // 两者当前等价，照抄 `jg` 以免将来加入负返回码时方向反掉。
-                                break;
+                                var stdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                                dealAddFailCode = NativeItemDropDestroy.CheckTransferPermission(
+                                    UserItem, stdItem, NativeItemDropDestroy.TransferModeTrade);
+                                if (dealAddFailCode > 0)
+                                {
+                                    // Native rejects by jumping to 0x6C4294, which breaks out of the item
+                                    // loop and falls through to send SM_DEALADDITEM_FAIL. No other message.
+                                    // 0x6C4238 是 `jg`（> 0），不是 `!= 0`；sub_78389C 只返回 0/1/3/5，
+                                    // 两者当前等价，照抄 `jg` 以免将来加入负返回码时方向反掉。
+                                    break;
+                                }
                             }
 
                             m_DealItemList.Add(UserItem);
