@@ -36,6 +36,11 @@ namespace SystemModule
         // direction (server -> client SM), a distinct message.
         public const int SM_3015 = 3015;
 
+        // 0xCEE @0x6EB11C slot 0x250 - three substrings concatenated (via
+        // _LStrCatN @0x405890) with each substring's byte length carried in
+        // Param/Tag/Series so the client can re-split. Recog = incoming value.
+        public const int SM_3310 = 3310;
+
         // 0xCF0 @0x64F13B slot 0x250 - small helper: Recog + Series(=flag, default 4).
         public const int SM_3312 = 3312;
 

@@ -113,6 +113,45 @@ namespace GameSvr
         }
 
         /// <summary>
+        /// SM 3310 (0xCEE) - three substrings concatenated into one string body,
+        /// with each substring's ANSI byte length carried in Param/Tag/Series so
+        /// the client can re-split. slot 0x250 (SendDefMessage); returns
+        /// (header, message). Native function @0x006EB0BC:
+        /// <code>
+        /// 006EB0E2  8B C6 / E8 .. (0x4057D0=Length) / 50   push Length(esi)      ; -> Param
+        /// 006EB0EA  8B C7 / E8 ..                   / 50   push Length(edi)      ; -> Tag
+        /// 006EB0F2  8B 45 08 / E8 ..                / 50   push Length([ebp+8])  ; -> Series
+        /// 006EB0FB  56                                     push esi              ; str1
+        /// 006EB0FC  57                                     push edi              ; str2
+        /// 006EB0FD  FF 75 08                               push [ebp+8]          ; str3
+        /// 006EB100  8D 45 F8 / BA 03 00 00 00 / E8 ..      lea eax,[ebp-8]; mov edx,3
+        ///                                                  call 0x405890         ; _LStrCatN(3): [ebp-8]=str1+str2+str3
+        /// 006EB10D  8B 45 F8 / 50                          push [ebp-8]          ; sMsg = concatenation
+        /// 006EB111  8B 4D FC                               mov ecx,[ebp-4]       ; Recog
+        /// 006EB114  66 BA EE 0C                            mov dx, 0xCEE         ; Ident = 3310
+        /// 006EB11C  FF 93 50 02 00 00                      call [ebx+0x250]      ; SendDefMessage
+        /// </code>
+        /// _LStrCatN (@0x405890) cleans only its <c>count</c>=3 string arguments
+        /// (<c>lea esp,[esp+edx*4]</c> @0x405914), so the three Length dwords
+        /// pushed first survive on the stack and land in Param/Tag/Series;
+        /// SendDefMessage's 4-dword frame (ret 0x10) forces exactly this. The
+        /// lengths are Delphi <c>Length()</c> = ANSI byte counts, reproduced here
+        /// with <see cref="HUtil32.GetBytes(string)"/> (GBK / codepage 936).
+        /// </summary>
+        internal static (ClientPacket Header, string Msg) BuildSm3310(
+            int recog, string str1, string str2, string str3)
+        {
+            str1 ??= string.Empty;
+            str2 ??= string.Empty;
+            str3 ??= string.Empty;
+            var param = HUtil32.GetBytes(str1).Length;
+            var tag = HUtil32.GetBytes(str2).Length;
+            var series = HUtil32.GetBytes(str3).Length;
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3310, recog, param, tag, series);
+            return (header, str1 + str2 + str3);
+        }
+
+        /// <summary>
         /// SM 3312 (0xCF0) - a two-argument helper (eax = Recog, edx = self,
         /// [ebp+8] = series flag). slot 0x250 (SendDefMessage), header only. The
         /// send site substitutes Series = 4 when the flag argument is 0. Native
