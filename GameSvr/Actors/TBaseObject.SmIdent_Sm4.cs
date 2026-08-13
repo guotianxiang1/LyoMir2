@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SystemModule;
 
 namespace GameSvr
@@ -154,90 +154,10 @@ namespace GameSvr
         internal static (ClientPacket Header, byte[] Body) BuildSm4352(int recog, ushort param)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_4352, recog, param, 0, 0), Array.Empty<byte>());
 
-        // SM 4408 (0x1138) / SM 4410 (0x113A) — bead-inlay result, function @0x6F38xx.
-        // esi = call 0x7487A8 (inlay chain result); byte[ebp-1] selects hero(4410)/self(4408):
-        //   self  @0x6F388F: 6A 00 x4 ; 8B CE mov ecx,esi (Recog=result) ; 66 BA 38 11 dx=0x1138
-        //   hero  @0x6F3875: 6A 00 x4 ; 8B CE mov ecx,esi                ; 66 BA 3A 11 dx=0x113A
-        //   FF 93 50 02 00 00 call [obj+0x250]. Empty body; the inlay chain is trigger-side.
-        internal static (ClientPacket Header, byte[] Body) BuildSm4408(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4408, recog, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4410 (0x113A) — bead-inlay result, hero branch of the SM 4408 function (see above).
-        internal static (ClientPacket Header, byte[] Body) BuildSm4410(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4410, recog, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4409 (0x1139) / SM 4411 (0x113B) — jade-inlay result, function @0x6F39xx.
-        // esi = call 0x748A18 (jade chain result); byte[ebp-1] selects hero(4411)/self(4409):
-        //   self  @0x6F3932: 6A 00 x4 ; 8B CE mov ecx,esi ; 66 BA 39 11 dx=0x1139
-        //   hero  @0x6F3918: 6A 00 x4 ; 8B CE mov ecx,esi ; 66 BA 3B 11 dx=0x113B
-        //   FF 93 50 02 00 00 call [obj+0x250]. Empty body.
-        internal static (ClientPacket Header, byte[] Body) BuildSm4409(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4409, recog, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4411 (0x113B) — jade-inlay result, hero branch of the SM 4409 function (see above).
-        internal static (ClientPacket Header, byte[] Body) BuildSm4411(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4411, recog, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4457 (0x1169) — send [obj+0x250] @0x6A8C9F. Empty body; Param carries a byte
-        // flag, Recog=0:
-        //   006A8C8B 8A 45 FF mov al,[ebp-1] /50 push ; Param = byte flag
-        //   006A8C8F 6A 00 6A 00 6A 00 (Tag=Series=0 ; sMsg=nil) ; 33 C9 (Recog=0)
-        //   66 BA 69 11 mov dx,0x1169 / FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm4457(byte param)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4457, 0, param, 0, 0), Array.Empty<byte>());
-
-        // SM 4496 (0x1190) — newbie-task status, send [obj+0x250] @0x6FAD1B. Empty body;
-        // Recog = esi, a small int resolved by the string chain
-        // 0x69AEB8 / 0x41F660 / 0x41F6FC / 0x4177C0 above the send:
-        //   006FAD09 6A 00 x4 (empty) ; 8B CE mov ecx,esi (Recog)
-        //   006FAD13 66 BA 90 11 mov dx,0x1190 / FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm4496(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4496, recog, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4638 (0x121E) — send [obj+0x250] @0x64E832. Fully empty packet (header all
-        // zero, no body). self=edx recipient; gated on edx!=0:
-        //   0064E820 6A 00 x4 (Param=Tag=Series=0 ; sMsg=nil) ; 33 C9 (Recog=0)
-        //   0064E82C 66 BA 1E 12 mov dx,0x121E / 0064E832 FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm4638()
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4638, 0, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4649 (0x1229) — prize-claim(+item-delete) result, send [obj+0x250] @0x6FBB5F.
-        // Empty body; Recog = esi, a 0/1 flag: esi=1 initially, cleared to 0 when the
-        // claim op 0x69C47C returns true:
-        //   006FBB4D 6A 00 x4 (empty) ; 8B CE mov ecx,esi (Recog=0|1)
-        //   006FBB57 66 BA 29 12 mov dx,0x1229 / FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm4649(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4649, recog, 0, 0, 0), Array.Empty<byte>());
-
-        // SM 4650 (0x122A) — treasure-map synthesis result, send [obj+0x250] @0x6FB610.
-        // Empty body; Recog = [ebp-4] (the result/target handle):
-        //   006FB605 8B 4D FC mov ecx,[ebp-4] (Recog) ; preceded by 6A 00 x4 (empty)
-        //   006FB608 66 BA 2A 12 mov dx,0x122A / 006FB610 FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm4650(int recog)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4650, recog, 0, 0, 0), Array.Empty<byte>());
-
         // ============================================================
         // String-bodied sends ([obj+0x250], 4th arg = sMsg). Return (Header, string):
         // the wire body is the AnsiString bytes the send splits, mirroring sm-2 BuildSm966.
         // ============================================================
-
-        // SM 4407 (0x1137) — send [obj+0x250] @0x6B60F2 with a text sMsg. RM-forward arm:
-        //   006B60C4 6A 00 6A 00 6A 00 (Param=Tag=Series=0)
-        //   006B60CA lea eax,[ebp-0x1C4]; mov edx,[[ebp-8]+0x10]; call 0x405708 ; str := rec.text
-        //   006B60DB 8B 85 3C FE FF FF /50 push [ebp-0x1C4]      ; sMsg = text
-        //   006B60E2 8B 45 F8 / 0F B7 48 02  movzx ecx,word[[ebp-8]+2] ; Recog = wParam
-        //   006B60E9 66 BA 37 11 mov dx,0x1137 / 006B60F2 FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, string Msg) BuildSm4407(ushort recogWParam, string text)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4407, recogWParam, 0, 0, 0), text ?? string.Empty);
-
-        // SM 4499 (0x1193) — send [obj+0x250] @0x6FBD25. func(eax=self, edx=Recog, ecx=text):
-        //   006FBD14 6A 00 6A 00 6A 00 (Param=Tag=Series=0)
-        //   006FBD1A 56 push esi        ; sMsg = esi (= ecx arg, an AnsiString ptr)
-        //   006FBD1B 8B CF mov ecx,edi  ; Recog = edi (= edx arg)
-        //   006FBD1D 66 BA 93 11 mov dx,0x1193 / 006FBD25 FF 93 50 02 00 00 call [obj+0x250]
-        // Sent only when the string ptr is non-nil (test esi,esi / je @0x6FBD12).
-        internal static (ClientPacket Header, string Msg) BuildSm4499(int recog, string text)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4499, recog, 0, 0, 0), text ?? string.Empty);
 
         // SM 4455 (0x1167) — name notice, send [obj+0x250] @0x6A89E0. Recog=0:
         //   006A89B5 66 8B 45 FA mov ax,[ebp-6] /50 push ; Param = word[ebp-6]
@@ -257,21 +177,6 @@ namespace GameSvr
         internal static (ClientPacket Header, string Msg) BuildSm4456(
             ushort param, byte tag, string charName)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_4456, 0, param, tag, 0), charName ?? string.Empty);
-
-        // SM 4458 (0x116A) — name notice, send [obj+0x250] @0x6A8D22. Recog=0:
-        //   006A8CFB 8A 45 FB mov al,[ebp-5] /50 push ; Param = byte flag
-        //   006A8CFF 6A 00 6A 00 (Tag=Series=0)
-        //   006A8D03 lea eax,[ebp-0xC]; mov edx,[ebp-4]; add edx,0x106; call 0x405774 ; name
-        //   006A8D14 8B 45 F4 /50 push [ebp-0xC] (sMsg=name) ; 33 C9 (Recog=0)
-        //   006A8D1A 66 BA 6A 11 mov dx,0x116A / 006A8D22 FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, string Msg) BuildSm4458(byte param, string charName)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4458, 0, param, 0, 0), charName ?? string.Empty);
-
-        // SM 4459 (0x116B) — name notice, send [obj+0x250] @0x6A8DC2 (identical shape to 4458).
-        //   Param = byte[ebp-5] ; Tag=Series=0 ; sMsg = name[player+0x106] ; Recog=0.
-        //   006A8DBA 66 BA 6B 11 mov dx,0x116B / 006A8DC2 FF 93 50 02 00 00 call [obj+0x250]
-        internal static (ClientPacket Header, string Msg) BuildSm4459(byte param, string charName)
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4459, 0, param, 0, 0), charName ?? string.Empty);
 
         // ------------------------------------------------------------------
         // FAIL-CLOSED (no builder fabricated; constant + evidence gap only).
