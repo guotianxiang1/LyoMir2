@@ -1067,6 +1067,7 @@ namespace SystemModule
         public const int SM_FIND_GILD_BYNAME = 4617;
         public const int CM_GILD_CANCEL_JOIN = 4627;
         public const int SM_GILD_CANCEL_JOIN = 4627;
+        public const int SM_REFRESH_SOCIAL_ROLE = 4628;
         public const int CM_REFRESH_CORPSINFO = 4631;
         public const int SM_REFRESH_CORPSINFO = 4631;
         public const int CM_REFRESH_GILDINFO = 4632;
