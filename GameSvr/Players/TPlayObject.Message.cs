@@ -2398,7 +2398,15 @@ namespace GameSvr
                         OpenNativeAccountStorageForDeposit(ProcessMsg.nParam1);
                     else
                     {
-                        SendDefMessage(Grobal2.SM_SENDUSERSTORAGEITEM, ProcessMsg.nParam1, ProcessMsg.nParam2, 0, 0, "");
+                        // RM 10146 arm 0x006B5568: nParam2 goes in Series, Param stays 0.
+                    //   006B55B1  6A 00        push 0                     ; Param  = 0
+                    //   006B55B3  6A 00        push 0                     ; Tag    = 0
+                    //   006B55B5  66 8B 43 08  mov ax,[ebx+8] / 50 push   ; Series = LoWord(nParam2)
+                    //   006B55BA  6A 00        push 0                     ; sMsg   = nil
+                    //   006B55BC  8B 4B 04     mov ecx,[ebx+4]            ; Recog  = nParam1
+                    //   006B55BF  66 BA BC 02  mov dx,0x2BC
+                    //   006B55C8  FF 93 50 02 00 00  call [ebx+0x250]
+                    SendDefMessage(Grobal2.SM_SENDUSERSTORAGEITEM, ProcessMsg.nParam1, 0, 0, ProcessMsg.nParam2, "");
                         SendSaveItemList(ProcessMsg.nParam1);
                     }
                     break;
@@ -2481,7 +2489,20 @@ namespace GameSvr
                     // reaching a send slot. srv_AppearTimes.ini 764=0.
                     break;
                 case Grobal2.RM_MYSTATUS:
-                    SendDefMessage(Grobal2.SM_MYSTATUS, 0, (short)GetMyStatus(), 0, 0, "");
+                    // Native has exactly one ident-708 emitter, sub_6B6BEC, and it puts the
+                    // accumulated zone bitmask in nRecog with Param/Tag/Series all zero:
+                    //   006B6BF4  33 F6                 xor esi,esi
+                    //   006B6C02  83 CE 01              or  esi,1        ; Envir[+0x5D]
+                    //   006B6C0B  83 CE 02              or  esi,2        ; Envir[+0x5C]
+                    //   006B6C4E  83 CE 08              or  esi,8
+                    //   006B6C7E  83 CE 20              or  esi,0x20
+                    //   006B6C81  6A 00 x4              ; Param=Tag=Series=0, sMsg=nil
+                    //   006B6C89  8B CE                 mov ecx,esi      ; nRecog = bitmask
+                    //   006B6C8B  66 BA C4 02           mov dx,0x2C4
+                    //   006B6C93  FF 96 50 02 00 00     call [esi+0x250]
+                    // RefUserState() is that function. Sending GetMyStatus() (hunger, 0..4)
+                    // in Param instead made the client read hunger as zone bits.
+                    RefUserState();
                     break;
                 case Grobal2.RM_MENU_OK:
                     SendDefMessage(Grobal2.SM_MENU_OK, ProcessMsg.nParam1, 0, 0, 0, ProcessMsg.sMsg);
@@ -2505,13 +2526,29 @@ namespace GameSvr
                     break;
                 case Grobal2.RM_SPACEMOVE_SHOW:
                 case Grobal2.RM_SPACEMOVE_SHOW2:
+                    // Series is wParam verbatim, no light byte.  RM 10331 arm 0x006B59E6:
+                    //   006B59E6  66 8B 43 04  mov ax,[ebx+4]  / push   ; Param  = nParam1
+                    //   006B59EB  66 8B 43 08  mov ax,[ebx+8]  / push   ; Tag    = nParam2
+                    //   006B59F0  66 8B 43 02  mov ax,[ebx+2]  / push   ; Series = wParam
+                    //   006B59F8  66 B9 21 03  mov cx,0x321    / call 0x006BCE54
+                    // The sole producer of RM 10331/10336 is 0x00768ED6, and it zero-extends
+                    // the direction into the wParam slot:
+                    //   00768EEE  33 C9              xor ecx,ecx
+                    //   00768EF0  8A 8B 54 01 00 00  mov cl,[ebx+0x154]   ; direction
+                    //   00768EFC  FF 96 D8 00 00 00  call [esi+0xD8] (=0x0076533C)
+                    // 0x0076533C forwards it unchanged (0x00765501 mov ax,[ebp-6] / push) to
+                    // 0x00765E68, which stores it at 0x00765E9D mov [rec+2],ax.  High byte 0.
                     if (ProcessMsg.wIdent == Grobal2.RM_SPACEMOVE_SHOW)
                     {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, HUtil32.MakeWord(ProcessMsg.wParam, BaseObject.m_nLight));
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
                     }
                     else
                     {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW2, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, HUtil32.MakeWord(ProcessMsg.wParam, BaseObject.m_nLight));
+                        // RM 10336 arm 0x006B5B7A is byte-identical to the 10331 arm:
+                        //   006B5B7A/7F/84  mov ax,[ebx+4]/[ebx+8]/[ebx+2] / push
+                        //   006B5B8C  66 B9 27 03  mov cx,0x327 / call 0x006BCE54
+                        // Same producer 0x00768ED0, same zero-extended direction in wParam.
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPACEMOVE_SHOW2, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
                     }
                     SendSocket(m_DefMsg,
                         BuildMobileActorStateBody(BaseObject.GetFeature(this), BaseObject));
@@ -2567,9 +2604,17 @@ namespace GameSvr
                 case Grobal2.RM_10414:
                     var gaugeHp = BaseObject.m_WAbil.HP;
                     var gaugeMaxHp = BaseObject.m_WAbil.MaxHP;
+                    // RM 10414 arm 0x006B5C23 pushes HP first and the literal 1 as Series:
+                    //   006B5C38  66 8B 86 AC 02 00 00  mov ax,[esi+0x2AC] / push  ; Param  = HP
+                    //   006B5C40  66 8B 86 B0 02 00 00  mov ax,[esi+0x2B0] / push  ; Tag    = MaxHP
+                    //   006B5C48  6A 01                 push 1                     ; Series = 1
+                    //   006B5C4A  8D 45 F0              lea eax,[ebp-0x10] / push  ; Buf
+                    //   006B5C4E  6A 08                 push 8                     ; Len
+                    // The two offsets are pinned by the SM 1100 arm, which C# already matches
+                    // as Param=HP / Tag=MaxHP.
                     m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_INSTANCEHEALGUAGE,
-                        ProcessMsg.BaseObject, 1, HUtil32.LoWord(gaugeMaxHp),
-                        HUtil32.LoWord(gaugeHp));
+                        ProcessMsg.BaseObject, HUtil32.LoWord(gaugeHp),
+                        HUtil32.LoWord(gaugeMaxHp), 1);
                     SendSocket(m_DefMsg,
                         BuildInstanceHealGaugeBody(gaugeHp, gaugeMaxHp));
                     break;

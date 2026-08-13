@@ -8212,8 +8212,17 @@ namespace GameSvr.PasEngine
             else
                 CurrentPlayer.m_nStorageSpaceCount = current;
 
+            // Native puts the new count in Tag, not Series:
+            //   006F30D1  6A 00              push 0                 ; Param  = 0
+            //   006F30D3  8B 86 D0 06 00 00  mov eax,[esi+0x6D0]
+            //   006F30D9  66 8B 40 08        mov ax,[eax+8] / push  ; Tag    = new count
+            //   006F30DE  6A 00              push 0                 ; Series = 0
+            //   006F30E0  6A 00              push 0                 ; sMsg   = nil
+            //   006F30E2  33 C9              xor ecx,ecx            ; Recog  = 0
+            //   006F30E4  66 BA CE 02        mov dx,0x2CE
+            //   006F30EC  FF 96 50 02 00 00  call [esi+0x250]
             CurrentPlayer.SendDefMessage(Grobal2.SM_STORAGE_SPACE,
-                0, 0, 0, CurrentPlayer.m_nStorageSpaceCount, string.Empty);
+                0, 0, CurrentPlayer.m_nStorageSpaceCount, 0, string.Empty);
             return actualAdded;
         }
 
