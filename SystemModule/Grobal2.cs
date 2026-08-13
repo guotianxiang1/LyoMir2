@@ -1935,5 +1935,15 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === RewardList subsystem ===
+        // Reply idents for the 金刚石抽奖领奖 / 藏宝图合成 subsystem (CM 4646..4650,
+        // native dispatch leaves 0x6DBBEB..0x6DBC18). Each reply ident equals its CM
+        // ident on the wire (SM 0x1226/0x1227/0x1229/0x122A), which is how 战神's own
+        // senders emit them. Kept as explicit SM_ aliases for call-site clarity.
+        public const int SM_REWARDLIST = 4646;       // 0x1226 worker 0x6FBB90 -> [obj+0x254] list body
+        public const int SM_REWARDPRECHECK = 4647;   // 0x1227 worker 0x6FB6FC -> [obj+0x254] 24-byte drawn-reward record
+        public const int SM_REWARDCLAIMITEM = 4649;  // 0x1229 worker 0x6FBB28 -> [obj+0x250] empty, Recog=deleted?0:1
+        public const int SM_TREASUREMAPSYNTH = 4650; // 0x122A worker 0x6FB51C -> [obj+0x250] empty, Recog=synth result
     }
 }
