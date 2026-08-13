@@ -18,6 +18,12 @@ namespace GameSvr
         public int m_nHonorValue;
         public bool m_boHonorValueLoaded;
 
+        // ITEM-09 pickup spam check (player+0x3E4/0x3E8/0x3EC).
+        // sub_6B74D8 @0x6B7500: same cell cannot be picked from twice within 7 seconds.
+        private int _lastPickupTick;
+        private int _lastPickupX;
+        private int _lastPickupY;
+
         internal int MerchantDialogSeq => _merchantDialogSeq;
 
         /// <summary>The cooldown table lives on THumanKind (created at 0x73BFF2
@@ -177,6 +183,17 @@ namespace GameSvr
             {
                 return false;
             }
+
+            // ITEM-09: sub_6B74D8 @0x6B7500-0x6B7535 rejects a pickup when the same
+            // cell was picked from within 7 seconds (0x1B58 ms).
+            var currentTick = HUtil32.GetTickCount();
+            if ((currentTick - _lastPickupTick) <= 0x1B58 &&
+                pickupX == _lastPickupX &&
+                pickupY == _lastPickupY)
+            {
+                SysMsg("请稍后再拾取", MsgColor.Red, MsgType.Hint);
+                return false;
+            }
             if ((HUtil32.GetTickCount() - mapItem.CanPickUpTick) > M2Share.g_Config.dwFloorItemCanPickUpTime)// 2 * 60 * 1000
             {
                 mapItem.OfBaseObject = null;
@@ -200,6 +217,9 @@ namespace GameSvr
                         }
                         GoldChanged();
                         Dispose(mapItem);
+                        _lastPickupTick = currentTick;
+                        _lastPickupX = pickupX;
+                        _lastPickupY = pickupY;
                     }
                     else
                     {
@@ -242,6 +262,9 @@ namespace GameSvr
                             this.SendAddItem(UserItem);
                         }
                         result = true;
+                        _lastPickupTick = currentTick;
+                        _lastPickupX = pickupX;
+                        _lastPickupY = pickupY;
                     }
                     else
                     {
