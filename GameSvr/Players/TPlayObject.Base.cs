@@ -2190,9 +2190,46 @@ namespace GameSvr
             {
                 for (var i = m_ItemList.Count - 1; i >= 0; i--)
                 {
-                    // 0x740140: the destroy ladder runs BEFORE the drop, and it is not
-                    // subject to the 1/3 roll (native reaches 0x740140 both from the
-                    // always-drop class at 0x7400E9 and from the roll's fall-through).
+                    // PKD-04 —— 抽签与门的顺序。战神 sub_740078 每件物品的真实顺序是
+                    //   7400E9  80 BB FC 00 00 00 00  cmp byte [ebx+0xFC],0
+                    //   7400F0  75 4E                 jne 0x740140   ; 必爆类 -> 跳过抽签与三道门
+                    //   7400F2  80 7D FF 00           cmp byte [ebp-1],0
+                    //   7400F6  75 12                 jne 0x74010A   ; 红名 -> 跳过抽签
+                    //   7400F8  B8 03 00 00 00        mov eax,3
+                    //   7400FD  E8 4A 3A CC FF        call sub_403B4C   ; Random(3)
+                    //   740102  85 C0 / 0F 85 …       test eax,eax / jne 0x74025C  ; 非 0 -> 不掉
+                    //   74010A  8B 43 1C / F6 40 02 10 / jne 0x74025C  ; Reserved02 & 0x0010
+                    //   740117  8B 43 1C / F6 40 03 02 / jne 0x74025C  ; Reserved02 & 0x0200
+                    //   740124  call sub_784720 (Reserved02 & 0x4000) / je 0x740140
+                    //   74012F  call sub_784710 (绑定字 [item+0x34]) / cmp ax,1 / je 0x74025C
+                    //   740140  ← 销毁/落地分流从这里才开始
+                    // 也就是说销毁支**在抽签与三道门之后**。C# 之前把 ShouldDestroy 提到
+                    // 循环第一句，于是 (a) 未验证/赠品被 100% 销毁而不是原生的 1/3，
+                    // (b) 绑定物、Reserved02&0x0010/0x0200 的物品本来一件都不该动，
+                    // 却照样被销毁 —— 两条都是净额外的玩家资产损失。
+                    var bagStdItem = M2Share.UserEngine.GetStdItem(m_ItemList[i].wIndex);
+                    if (!boDropall
+                        && M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate) != 0)
+                    {
+                        continue;                                   // 0x740104 jne 0x74025C
+                    }
+                    if (bagStdItem != null)
+                    {
+                        if ((bagStdItem.NativeReserved02 & 0x0010) != 0)
+                        {
+                            continue;                               // 0x740111 jne 0x74025C
+                        }
+                        if ((bagStdItem.NativeReserved02 & 0x0200) != 0)
+                        {
+                            continue;                               // 0x74011E jne 0x74025C
+                        }
+                        if ((bagStdItem.NativeReserved02 & 0x4000) != 0
+                            && NativeItemAcquisitionStamp.ReadBindWord(m_ItemList[i]) == 1)
+                        {
+                            continue;                               // 0x74013A je 0x74025C
+                        }
+                    }
+                    // 0x740140: 分流点。
                     if (NativeItemDropDestroy.ShouldDestroy(isPlayerRace,
                             scatterAuthenticated, m_ItemList[i]))
                     {
@@ -2221,27 +2258,25 @@ namespace GameSvr
                         Dispose(destroyed);                     // 0x74021E sub_404690
                         continue;                               // 0x740223 jmp 0x74025C
                     }
-                    if (boDropall || M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate) == 0)
+                    // 0x740225: 落地支。抽签与三道门已在上面走过，这里不再重抽。
+                    if (DropItemDown(m_ItemList[i], DropWide, true, ItemOfCreat, this))
                     {
-                        if (DropItemDown(m_ItemList[i], DropWide, true, ItemOfCreat, this))
+                        pu = m_ItemList[i];
+                        if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
-                            pu = m_ItemList[i];
-                            if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                            if (DelList == null)
                             {
-                                if (DelList == null)
-                                {
-                                    DelList = new List<TDeleteItem>();
-                                }
-                                DelList.Add(new TDeleteItem()
-                                {
-                                    sItemName = M2Share.UserEngine.GetStdItemName(pu.wIndex),
-                                    MakeIndex = pu.MakeIndex,
-                                    ClientItemID = EnsureClientItemId(pu)
-                                });
+                                DelList = new List<TDeleteItem>();
                             }
-                            Dispose(m_ItemList[i]);
-                            m_ItemList.RemoveAt(i);
+                            DelList.Add(new TDeleteItem()
+                            {
+                                sItemName = M2Share.UserEngine.GetStdItemName(pu.wIndex),
+                                MakeIndex = pu.MakeIndex,
+                                ClientItemID = EnsureClientItemId(pu)
+                            });
                         }
+                        Dispose(m_ItemList[i]);
+                        m_ItemList.RemoveAt(i);
                     }
                 }
                 if (DelList != null)

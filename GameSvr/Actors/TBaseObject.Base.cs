@@ -1017,9 +1017,24 @@ namespace GameSvr
             try
             {
                 var boPK = false;
-                if (!M2Share.g_Config.boVentureServer && !m_PEnvir.Flag.boFightZone && !m_PEnvir.Flag.boFight3Zone)
+                // PKD-05 —— 谋杀惩罚的入口门。战神 TPlayer.Die sub_6C07A0 @0x6C081A-0x6C0865:
+                //   6C0823  85 DB / 74 6A                  test ebx,ebx / je   ; 无 LastHiter
+                //   6C0830  80 78 5F 00 / 75 5B            cmp [Envir+0x5F],0  ; FREEPK  -> 跳过
+                //   6C083F  80 78 5D 00 / 75 4C            cmp [Envir+0x5D],0  ; FIGHT   -> 跳过
+                //   6C084E  80 78 5E 00 / 75 3D            cmp [Envir+0x5E],0  ; FIGHT3  -> 跳过
+                //   6C0857  8B 80 60 01 00 00              mov eax,[victim+0x160]
+                //   6C085D  8B 15 AC 5F 7D 00              mov edx,[0x7D5FAC]   ; -> 200
+                //   6C0863  3B 02 / 7F 2A                  cmp eax,[edx] / jg   ; 受害者 PK > 200 -> 跳过
+                // 两处订正:
+                //  * FREEPK 这道门 C# 完全没有 —— 自由 PK 地图上杀人照样加 PK 值、照样掉幸运。
+                //  * `jg` 只在 victimPK > 200 时跳过，所以门是 **victimPK <= 200**；
+                //    C# 写的 PKLevel() < 2 == victimPK < 200，恰好在 PK == 200 这一点上少判一次
+                //    （受害者 PK 正好 200 时原生仍然惩罚凶手，C# 放过）。
+                if (!M2Share.g_Config.boVentureServer && !m_PEnvir.Flag.boFightZone
+                    && !m_PEnvir.Flag.boFight3Zone && !m_PEnvir.Flag.boFREEPK)
                 {
-                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null && PKLevel() < 2)
+                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null
+                        && m_nPkPoint <= M2Share.g_Config.nPKPunishPoint)
                     {
                         if ((m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT) || (m_LastHiter.m_btRaceServer == Grobal2.RC_NPC))//允许NPC杀死人物
                         {
@@ -1035,8 +1050,27 @@ namespace GameSvr
                         }
                     }
                 }
-                if (boPK && m_LastHiter != null)
+                // PKD-06 —— 凶手解析后的两道守卫。战神 0x6C0867-0x6C087E：
+                //   6C086B  FF 92 B4 00 00 00  call [killer.vmt+0xB4]   ; 责任玩家
+                //   6C0871  85 C0 / 74 1C      test eax,eax / je        ; nil -> 不惩罚
+                //   6C0875  80 78 73 00 / 75 16 cmp byte [eax+0x73],0 / jne ; **幽灵**凶手 -> 不惩罚
+                //   6C087B  3B 45 FC / 74 11   cmp eax,[ebp-4] / je     ; 自杀 -> 不惩罚
+                // +0x73 是 m_boGhost（全镜像唯一写入点 0x7680EF，在 MakeGhost 里），
+                // 不是 m_boDeath(+0x74) —— 两份旧 discovery 文档在这一点上是反的。
+                if (boPK && m_LastHiter != null
+                    && !m_LastHiter.m_boGhost                       // 0x6C0875
+                    && !ReferenceEquals(m_LastHiter, this))         // 0x6C087B
                 {
+                    // PKD-07 —— 幸运扣减是无条件的。战神 sub_6C0FE4 @0x6C1019:
+                    //   6C1019  BA 0C FE FF FF  mov edx,0xFFFFFE0C   ; -500 原生单位 = -1 级
+                    //   6C101E  8B C3           mov eax,ebx          ; 凶手
+                    //   6C1020  E8 97 88 0A 00  call sub_7698BC
+                    //   6C1025  C6 45 FE 00     mov byte [ebp-2],0   ; guildwarkill := 0 —— 在这之后
+                    // 它排在行会战 / 攻城战 / 自由 PK / 正当防卫全部判定**之前**，
+                    // 所以这四种情形下原生同样扣 1 点幸运。C# 之前把它塞在
+                    // `!guildwarkill && !IsGoodKilling` 分支里，行会战杀人不掉幸运，
+                    // 幸运又直接进装备掉落分母，属于可被利用的差异。
+                    m_LastHiter.AddBodyLuck(-1);
                     var guildwarkill = false;
                     if (m_MyGuild != null && m_LastHiter.m_MyGuild != null)
                     {
@@ -1063,9 +1097,7 @@ namespace GameSvr
                                 m_LastHiter.IncPkPoint(M2Share.g_Config.nKillHumanAddPKPoint);
                                 m_LastHiter.SysMsg(M2Share.g_sYouMurderedMsg, MsgColor.Red, MsgType.Hint);
                                 SysMsg(format(M2Share.g_sYouKilledByMsg, m_LastHiter.m_sCharName), MsgColor.Red, MsgType.Hint);
-                                // 原版 sub_6C0FE4: 受害者 PK点(a2+352) ≤ off_7D5FAC 时，对凶手 [+0x164] -= 1。
-                                // 原 config nKillHumanDecLuckPoint 系伪造，原生为固定 -1。
-                                m_LastHiter.AddBodyLuck(-1);
+                                // AddBodyLuck(-1) 已上提到 0x6C1019 的位置（见 PKD-07）。
                                 if (PKLevel() < 1)
                                 {
                                     if (M2Share.RandomNumber.Random(5) == 0)
@@ -1353,7 +1385,11 @@ namespace GameSvr
                     }
                     else
                     {
-                        tStr = "####";
+                        // PKD-08 —— 无凶手时的占位符是 **五** 个 '#'。战神 0x6C0936
+                        // `B9 FC 09 6C 00  mov ecx,0x6C09FC`，而 0x6C09FC 处的 Delphi 长串
+                        // 长度前缀（VA-4 的 dword）读出来是 5，内容 '#####'。
+                        // C# 写 4 个会让日志消费端按固定宽度切分时整行错位。
+                        tStr = "#####";
                     }
                     M2Share.AddGameDataLog("19" + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + "FZ-" + HUtil32.BoolToIntStr(m_PEnvir.Flag.boFightZone) + "_F3-" + HUtil32.BoolToIntStr(m_PEnvir.Flag.boFight3Zone) + "\t" + '0' + "\t" + '1' + "\t" + tStr);
                 }

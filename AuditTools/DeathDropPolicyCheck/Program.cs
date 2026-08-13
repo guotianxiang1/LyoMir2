@@ -265,6 +265,125 @@ Check(magicSource.Contains("TargeTBaseObject.SetLastHiter(BaseObject);", StringC
     "0x76F9AC call sub_767504 then 0x76F9B3 mov [ebx+0x2AC],0: "
     + "SetLastHiter precedes HP:=0 so the kill is attributed");
 
+Console.WriteLine("== F: PKD 2026-08-13 — 爆装抽签序列 / 善恶值门 / 死亡链顺序 ==");
+
+// Every F-assertion cites a 战神 EA read off flat_image.bin (ImageBase 0x400000) this pass.
+// Where the contract is an ORDER (which draw happens first) the assertion is a source-shape
+// one, because driving TPlayObject.Die end-to-end needs the full engine bootstrap that
+// InProcEngineRunCheck owns.  Order defects are exactly what this section guards.
+
+var equipSource = ReadRepoFile("GameSvr/Players/TPlayObject.Message.cs");
+var bagSource = ReadRepoFile("GameSvr/Players/TPlayObject.Base.cs");
+
+// F1. sub_73FC70 @0x73FCB0 `3B 86 60 01 00 00 cmp eax,[esi+0x160]` / 0x73FCB6 `7D 09 jge`
+//     — the red branch (denominator 0x15) is taken ONLY when threshold < PK, i.e. a STRICT
+//     PK > 200.  PKLevel() > 2 is PK >= 300 and mis-classifies the whole 201..299 band.
+Check(equipSource.Contains("m_nPkPoint > M2Share.g_Config.nPKPunishPoint", StringComparison.Ordinal),
+    "0x73FCB6 jge: 装备爆率的红名判据是严格 m_nPkPoint > 200");
+Check(!equipSource.Contains("PKLevel() > 2", StringComparison.Ordinal),
+    "0x73FCB6: PKLevel() > 2 (== PK>=300) 不是原生判据，必须已被移除");
+// F1b. ANTI-REGRESSION: the BAG worker sub_740078 @0x7400BE uses `0F 9E setle`, i.e.
+//      threshold <= PK => PK >= 200.  Native is deliberately inconsistent between the two
+//      workers; do NOT "harmonise" them.
+Check(bagSource.Contains("M2Share.g_Config.boDieRedScatterBagAll && PKLevel() >= 2", StringComparison.Ordinal),
+    "0x7400BE setle: 背包爆率的红名判据是 PK >= 200，与装备的 > 200 差一点，不许统一");
+
+// F2. sub_73FC70 @0x73FF69 `83 7D F4 02 cmp [ebp-0xC],2` / 0x73FF6D `7F 0A jg` — the
+//     3-item ground-drop cap is UNCONDITIONAL native code; the 眼神 patch only rewrites the
+//     imm8 (0x100B9D3A A2 6C FF 73 00 -> imm8 of 0x73FF69).
+Check(equipSource.Contains("nativeDropCap", StringComparison.Ordinal)
+      && equipSource.Contains("dropCount > nativeDropCap", StringComparison.Ordinal),
+    "0x73FF69/0x73FF6D: 落地件数上限恒定生效，不依赖眼神补丁");
+Check(!equipSource.Contains("if (deathDropPatched) dropCount++;", StringComparison.Ordinal),
+    "0x73FD74 inc [ebp-0xC]: Reserved&8 支同样占用件数预算，计数不得依赖补丁开关");
+
+// F3. RNG ORDER.  sub_73FC70 fetches the slot first (0x73FD33 call sub_75EC20) and bails on
+//     an empty slot at 0x73FD3C `0F 84 2D 02 00 00 je 0x73FF6F` — BEFORE the draw at
+//     0x73FD99 `call sub_403B4C`.  Drawing for empty slots desynchronises the whole LCG.
+var nullGuard = equipSource.IndexOf("m_UseItems[i] == null || m_UseItems[i].wIndex <= 0",
+    StringComparison.Ordinal);
+var equipDraw = equipSource.IndexOf("M2Share.RandomNumber.Random(nRate)", StringComparison.Ordinal);
+Check(nullGuard > 0 && equipDraw > 0 && nullGuard < equipDraw,
+    "0x73FD3C je 先于 0x73FD99 call sub_403B4C: 空装备格不消耗抽签");
+
+// F4/F5. sub_740078 per-item order: 0x7400F8 Random(3) -> 0x740111 / 0x74011E / 0x74013A
+//        three StdItem gates -> 0x740140 destroy-vs-drop split.  C# had the destroy branch
+//        FIRST and ungated, so 未验证/赠品 were destroyed 100% instead of 1/3 and bound /
+//        undroppable items were destroyed too.
+var bagDraw = bagSource.IndexOf("M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate)",
+    StringComparison.Ordinal);
+var bagDestroy = bagSource.IndexOf("NativeItemDropDestroy.ShouldDestroy(", StringComparison.Ordinal);
+Check(bagDraw > 0 && bagDestroy > 0 && bagDraw < bagDestroy,
+    "0x7400F8 Random(3) 先于 0x740140 销毁/落地分流：销毁支同样要过 1/3 抽签");
+Check(bagSource.Contains("NativeReserved02 & 0x0010", StringComparison.Ordinal),
+    "0x74010D test byte [std+2],0x10 / jne 0x74025C: 背包该位置位则整件不动");
+Check(bagSource.Contains("NativeReserved02 & 0x0200", StringComparison.Ordinal),
+    "0x74011A test byte [std+3],2 / jne 0x74025C");
+Check(bagSource.Contains("NativeReserved02 & 0x4000", StringComparison.Ordinal)
+      && bagSource.Contains("NativeItemAcquisitionStamp.ReadBindWord", StringComparison.Ordinal),
+    "0x740126 sub_784720 + 0x740131 sub_784710 cmp ax,1: 已绑定物品不掉不销毁");
+
+// F6. TPlayer.Die sub_6C07A0 murder gate.  0x6C0830 tests FREEPK ([Envir+0x5F]) alongside
+//     FIGHT/FIGHT3, and 0x6C0863 `3B 02 / 7F 2A jg` proceeds while victimPK <= 200.
+Check(dieSource.Contains("!m_PEnvir.Flag.boFREEPK", StringComparison.Ordinal),
+    "0x6C0830 cmp byte [Envir+0x5F],0 / jne: FREEPK 地图不计谋杀");
+Check(dieSource.Contains("m_nPkPoint <= M2Share.g_Config.nPKPunishPoint", StringComparison.Ordinal),
+    "0x6C0863 jg: 受害者 PK <= 200 才惩罚凶手（PK 恰为 200 仍然惩罚）");
+Check(!dieSource.Contains("m_LastHiter != null && PKLevel() < 2", StringComparison.Ordinal),
+    "0x6C0863: PKLevel() < 2 (== PK<200) 在 PK==200 处少判一次，必须已被替换");
+
+// F7. 0x6C0875 `cmp byte [eax+0x73],0 / jne` + 0x6C087B `cmp eax,[ebp-4] / je`.
+//     +0x73 is m_boGhost (single image-wide writer 0x7680EF inside MakeGhost); +0x74 is
+//     m_boDeath (0x766323, first statement of TCreature.Die).  Using m_boDeath here would
+//     disable the murder penalty for every kill, since the victim is always dead by now.
+Check(dieSource.Contains("!m_LastHiter.m_boGhost", StringComparison.Ordinal),
+    "0x6C0875 cmp byte [killer+0x73],0: 幽灵凶手不吃谋杀惩罚（+0x73 = m_boGhost）");
+Check(dieSource.Contains("!ReferenceEquals(m_LastHiter, this)", StringComparison.Ordinal),
+    "0x6C087B cmp eax,[ebp-4] / je: 自杀不算 PK");
+Check(!dieSource.Contains("!m_LastHiter.m_boDeath", StringComparison.Ordinal),
+    "反回归: 0x6C0875 读的是 +0x73(m_boGhost)，不是 +0x74(m_boDeath)");
+
+// F8. sub_6C0FE4 @0x6C1019 `mov edx,0xFFFFFE0C / call sub_7698BC` runs BEFORE
+//     0x6C1025 `mov byte [ebp-2],0` (guildwarkill := 0) and before every branch below it.
+var luckMinus = dieSource.IndexOf("m_LastHiter.AddBodyLuck(-1);", StringComparison.Ordinal);
+var guildWarInit = dieSource.IndexOf("var guildwarkill = false;", StringComparison.Ordinal);
+var goodKilling = dieSource.IndexOf("m_LastHiter.IsGoodKilling(this)", StringComparison.Ordinal);
+Check(luckMinus > 0 && guildWarInit > 0 && luckMinus < guildWarInit,
+    "0x6C1020 call sub_7698BC(-500) 先于 0x6C1025 guildwarkill 初始化");
+Check(luckMinus > 0 && goodKilling > 0 && luckMinus < goodKilling,
+    "0x6C1019: 行会战/攻城战/正当防卫下原生同样扣 1 点幸运");
+
+// F9. 0x6C0936 `mov ecx,0x6C09FC`; the Delphi length dword at 0x6C09F8 is 5 => '#####'.
+Check(dieSource.Contains("tStr = \"#####\";", StringComparison.Ordinal),
+    "0x6C09FC Delphi 长串长度前缀 = 5: 无凶手占位符是五个 '#'");
+Check(!dieSource.Contains("tStr = \"####\";", StringComparison.Ordinal),
+    "0x6C09FC: 四个 '#' 会让 19 号日志定宽切分整行错位");
+
+// F10. PK 值衰减.  TPlayer tick @0x6B3705-0x6B3733:
+//        6B3705  2B 90 34 07 00 00  sub edx,[self+0x734]
+//        6B370B  81 FA C0 D4 01 00  cmp edx,0x1D4C0      ; 120000 ms
+//        6B3711  76 25              jbe 0x6B3738         ; <=120000 -> 不衰减（严格 >）
+//        6B3719  mov [self+0x734],now                    ; 无论 PK 是否 >0 都刷新时间戳
+//        6B3722  83 B8 60 01 00 00 00 / 7E 0D  cmp [self+0x160],0 / jle
+//        6B372B  BA 01 00 00 00     mov edx,1            ; DecPKPoint(1)
+var cfg = M2Share.g_Config;          // 已由 E 段的 PrepareConfig() 引导
+Check(cfg.dwDecPkPointTime == 120000,
+    "0x6B370B cmp edx,0x1D4C0: 善恶值衰减周期 = 120000 ms");
+Check(cfg.nDecPkPointCount == 1,
+    "0x6B372B mov edx,1: 每次衰减 1 点");
+Check(dieSource.Contains("(HUtil32.GetTickCount() - m_dwDecPkPointTick) > M2Share.g_Config.dwDecPkPointTime",
+        StringComparison.Ordinal),
+    "0x6B3711 jbe: 严格大于才衰减，写成 >= 会多衰减一 tick");
+
+// F11. The three PK globals, read out of the image at their initialised addresses.
+Check(cfg.nPKPunishPoint == 200,
+    "[0x7D5FAC] -> 0x7DCF00 = 0xC8: PK 阈值 200");
+Check(cfg.nKillHumanAddPKPoint == 100,
+    "[0x7D5AE8] -> 0x7DCF04 = 0x64: 0x6C10FE IncPkPoint 每次 +100");
+// F12. sub_740078 @0x7400F8 `mov eax,3` is a HARDCODED 3, so the config default must be 3.
+Check(cfg.nDieScatterBagRate == 3,
+    "0x7400F8 mov eax,3: 背包爆率分母硬编码 3");
+
 Console.WriteLine();
 if (failures.Count > 0)
 {
