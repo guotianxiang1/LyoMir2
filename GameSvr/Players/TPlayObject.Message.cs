@@ -1685,20 +1685,12 @@ namespace GameSvr
                             nMsgCount = GetSiteDownMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxSitDonwMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sBunOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
-                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");// ����������͹���ʧ����Ϣ
+                                // MOVE-22: native pose (3012 / 0x6D9C7D) has no tick
+                                // interval and never kicks. Overflow just repeats the
+                                // four-zero 0x276 correction already used when
+                                // dwDelayTime==0 (0x6D9C8B push 0×4 / mov dx,0x276).
+                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
+                                SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
                             }
                             else
                             {
