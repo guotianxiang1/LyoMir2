@@ -15,6 +15,19 @@ Console.WriteLine(
     "MOVE-83 NORIDE map-flag-parser+gate-blocks-mount+allows-when-false+" +
     "exact-message-text-and-color");
 
+static void WriteMinimalMap(string path)
+{
+    const short width = 2;
+    const short height = 2;
+    var header = new byte[52];
+    BitConverter.GetBytes(width).CopyTo(header, 0);
+    BitConverter.GetBytes(height).CopyTo(header, 2);
+    var cells = new byte[width * height * 12];
+    using var stream = File.Create(path);
+    stream.Write(header, 0, header.Length);
+    stream.Write(cells, 0, cells.Length);
+}
+
 static void CheckNorideMapFlagParsing()
 {
     var directory = Path.Combine(Path.GetTempPath(),
@@ -26,28 +39,54 @@ static void CheckNorideMapFlagParsing()
 
         // Test NORIDE flag is parsed and set to true
         File.WriteAllText(mapInfoPath,
-            "[test_map]" + Environment.NewLine +
-            "NORIDE" + Environment.NewLine,
+            // Real MapInfo.txt shape, e.g.
+            //   [0139~200  开区等待室 0] SAFE NORECALL NORANDOMMOVE
+            // The brackets hold name/description/server-index; the flag tokens
+            // follow the closing bracket. Maps.cs does
+            // ArrestStringEx(sFlag, "[", "]", ref sMapName) and then walks the
+            // RETURNED remainder, so a token placed inside the brackets - or on
+            // a line of its own - never reaches the flag parser.
+            "[test_map 0] NORIDE" + Environment.NewLine,
             HUtil32.GbkEncoding);
 
-        var maps = new Maps();
-        var loadMethod = typeof(Maps).GetMethod("LoadMapInfo",
-            BindingFlags.Instance | BindingFlags.Public);
-        loadMethod?.Invoke(maps, new object[] { directory });
+        // Maps.LoadMapInfo is `public static int LoadMapInfo()` - it takes no
+        // arguments and reads Path.Combine(M2Share.sConfigPath,
+        // g_Config.sEnvirDir, "MapInfo.txt"), publishing what it parses into
+        // M2Share.MapManager via AddMapInfo. The previous scaffolding looked it
+        // up with BindingFlags.Instance, so GetMethod returned null and the
+        // `?.Invoke` silently did nothing: nothing was ever loaded and the
+        // lookups below could not have passed. Point the loader at the temp
+        // directory and query the manager instead.
+        M2Share.sConfigPath = directory;
+        M2Share.g_Config.sEnvirDir = string.Empty;
+        M2Share.g_Config.sMapDir = string.Empty;
+        // MapManager.AddMapInfo dereferences M2Share.MiniMapList unconditionally
+        // (MapManager.cs:203) and the field defaults to null, so the harness has
+        // to supply it or the load NREs before any flag is published.
+        M2Share.MiniMapList ??= new Dictionary<string, int>();
+        // AddMapInfo only publishes the Envirnoment when LoadMapData succeeds
+        // (MapManager.cs:212), so the flag under test never becomes observable
+        // without a .map on disk. Envirnoment.LoadMapData wants a 52-byte header
+        // whose first two Int16 are width/height, followed by width*height*12
+        // bytes of cell data - a 2x2 map is the smallest thing that satisfies it.
+        WriteMinimalMap(Path.Combine(directory, "test_map.map"));
+        WriteMinimalMap(Path.Combine(directory, "test_map2.map"));
 
-        var map = maps.FindMap("test_map");
+        Maps.LoadMapInfo();
+
+        var map = M2Share.MapManager.FindMap("test_map");
         Assert(map != null, "NORIDE parser map found");
         Assert(map.Flag.boNORIDE == true, "NORIDE parser sets flag true");
 
         // Test default is false
         File.WriteAllText(mapInfoPath,
-            "[test_map2]" + Environment.NewLine,
+            "[test_map2 0]" + Environment.NewLine,
             HUtil32.GbkEncoding);
 
-        maps = new Maps();
-        loadMethod?.Invoke(maps, new object[] { directory });
+        M2Share.MapManager = new MapManager();
+        Maps.LoadMapInfo();
 
-        var map2 = maps.FindMap("test_map2");
+        var map2 = M2Share.MapManager.FindMap("test_map2");
         Assert(map2 != null, "NORIDE default map found");
         Assert(map2.Flag.boNORIDE == false, "NORIDE defaults to false");
     }
