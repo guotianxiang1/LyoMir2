@@ -40,6 +40,27 @@
 
 三份 32204 B 的是加密原件，文件头为二进制乱码，**不要拿它做证据**。
 
+## 3.5 补丁站点已全部解出 —— 先查表，别重造 stub 还原器
+
+**全部 407 个站点连目标 VA、跨度、apply/revert 臂别都已解出并入库**，直接查表即可：
+
+| 文件 | 内容 |
+|---|---|
+| `docs/ys_patch_sites_atlas.tsv` | 407 行逐站点：`site_va / kind / arm / label / target_va / span_end / span_len / status_literal` |
+| `docs/ys_patch_target_vas.tsv` | 键 → 目标 VA 集合 |
+| `docs/ys_patch_completeness.tsv` | 380 个键的五档定级 |
+| `tools/ys_patch_atlas_rebuild.py` | 重建脚本（需复算时才跑） |
+
+例：`0x100D49B4` = tramp1 / **APPLY** / `英雄倍攻和暴击` / target `0x76C816` / 7 字节；
+`0x100D4AF9` = memcpy / **REVERT** / 同特性 / **同一** target `0x76C816` / 7 字节。
+宿主 `0x76C816` 原字节 `83 BB 84 00 00 00 00` = `cmp dword [ebx+0x84],0`，其后
+`0x76C81D 7E 34 jle 0x76C853` —— span_end 正好落在下一条指令首，即补丁恰好整条替换这个概率门。
+
+> **已有两个代理在这里栽过**：自建 stub 还原器只实现 dword 模板走法，遇到 builder C 的
+> 站点报 `cannot align`；改进版在两个 VA 上空转 262 秒后被超时杀死。**这两个 VA 表里都有。**
+> 需要原字节时，直接按 `target_va`/`span_len` 去宿主
+> `staging\_reunpack_work\flat_image.bin` 取（`file_off = VA - 0x400000`）即可，无需还原器。
+
 ## 4. 已建立的分析方法（勿重复造轮子）
 
 - **trampoline 安装器 ABI**：共三个 builder，**调用点实测分布如下**（`E8` rel32 全镜像穷举）：
