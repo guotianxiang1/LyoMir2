@@ -1,0 +1,95 @@
+namespace GameSvr
+{
+    // =====================================================================
+    // STATE-32 — the bonus-ability recompute switch of native sub_7733C0.
+    //
+    // sub_7733C0 is the "apply all timed-ability contributions" pass. Its four
+    // callers (0x60A8B9 / 0x71E1BC / 0x73DD6B / 0x73E43E) each do
+    // `lea edx,[obj+0x264]` then `call 0x7733C0`, so:
+    //   edi = Self          (the object)
+    //   esi = Self+0x264    (the ability accumulator — STATE-33: it is the
+    //                        object's OWN live ability record, accumulated IN
+    //                        PLACE, never zeroed by the recompute — STATE-35)
+    //   ebx = current state record; ebx+1 = id, ebx+0xA = value (STATE-04)
+    // The pass walks the head-inserted state list (newest first), so any
+    // handler that multiplies vs. subtracts sees list order — STATE-34. The C#
+    // port keeps that: AddTimedAbilityInternal head-inserts and
+    // ApplyTimedAbilityBonuses walks m_TimedAbilityHead head->tail.
+    //
+    // Dispatch @0x773400 (byte-verified):
+    //   773400  83 C0 EB              add  eax,-0x15          ; bias by state 0x15
+    //   773403  83 F8 55              cmp  eax,0x55           ; 86 entries
+    //   773406  0F 87 ..              ja   0x773B1D           ; DEFAULT no-op
+    //   77340C  8A 80 19 34 77 00     mov  al,[eax+0x773419]  ; bytetab (86 bytes)
+    //   773412  FF 24 85 6F 34 77 00  jmp  [eax*4+0x77346F]   ; jmptab (29 slots)
+    // jmptab H00 = 0x773B1D is the DEFAULT (silent no-op). The other 28 slots
+    // are real handlers. Full state->handler map (measured from the image):
+    //
+    //   state 0x15 H02 0x7734FE  MAC-hi += Level(+0x278)/7 + 2   FAIL-CLOSED
+    //   state 0x16 H01 0x7734E3  AC-hi  += Level(+0x278)/7 + 2   FAIL-CLOSED
+    //   state 0x17..0x1F        H00 default no-op
+    //   state 0x20 H03 0x773519  DC += v (lo+hi)         -> ApplyTimedAbilityBonuses case 0
+    //   state 0x21 H04 0x77352A  MC += v (lo+hi)         -> case 1
+    //   state 0x22 H05 0x77353B  SC += v (lo+hi)         -> case 2
+    //   state 0x23 H09 0x77357F  hitspeed(+0x274) += v   -> case 3   (STATE-47)
+    //   state 0x24 H0A 0x77358C  MaxHP(+0x2B0) += v      -> case 4
+    //   state 0x25 H0B 0x773597  MaxMP(+0x2B8) += v      -> case 5
+    //   state 0x26 H0C 0x7735A2  speed(+0x266) += v      -> case 6
+    //   state 0x27 H0D 0x7735AF  antiMagic(+0x270) += v  -> case 7
+    //   state 0x28 H06 0x77354C  AC += v (lo+hi)         -> case 8
+    //   state 0x29 H07 0x77355D  MAC += v (lo+hi)        -> case 9
+    //   state 0x2A H12 0x773636  x1.2 DC/MC/SC, x1.5 AC/MAC/MaxHP/MaxMP when
+    //                            value==1                -> case 10 (STATE-37)
+    //   state 0x2B H08 0x77356E  SC += v (lo+hi)         -> case 11 (THIS FILE)
+    //   state 0x2C H0F 0x7735C9  MaxWeight/Wear/Hand x2  -> case 12 (STATE-39)
+    //   state 0x2D..0x35        H00 default no-op
+    //   state 0x36 H10 0x7735E0  AC/MAC -= v, floor 0    -> case 22 (STATE-38)
+    //   state 0x37..0x4D        H00 default no-op
+    //   state 0x4E H11 0x773625  CC(+0x2A4/+0x2A8) += v  FAIL-CLOSED (no CC field)
+    //   state 0x4F..0x54        H00 default no-op
+    //   state 0x55 H13 0x77376E  job-scaled MaxHP/MaxMP + SM 0xFA message,
+    //                            [Self+0x439] dirty flag  FAIL-CLOSED (side effect)
+    //   state 0x56..0x5A        H00 default no-op
+    //   state 0x5B H14 0x7739CB  job DC/MC/SC-hi (job3 CC) += v -> case 59
+    //   state 0x5C H15 0x773A0D  drugJobBonus(+0x3DC) += v      -> case 60
+    //   state 0x5D H16 0x773A1D  effectStrength(+0x276) += v    -> case 61
+    //   state 0x5E H17 0x773A2A  effectResist(+0x26C) += v      -> case 62
+    //   state 0x5F..0x63        H00 default no-op
+    //   state 0x60 H18 0x773A37  holyDefense(+0x314) += v  -> GetTimedHolyDefense 96
+    //   state 0x64 H19 0x773A45  holyDefense += trunc(cur*v/100) -> GetTimedHolyDefense 100 (STATE-40)
+    //   state 0x61 H1A 0x773A71  job-scaled MaxHP/MaxMP  -> case 65 (THIS FILE)
+    //   state 0x62..0x66        H00 default no-op
+    //   state 0x67 H1B 0x773ADC  DC/MC/SC-hi += v        -> case 71 (THIS FILE)
+    //   state 0x68 H1C 0x773AF9  AC/MAC += v (lo+hi)     -> case 72 (THIS FILE)
+    //   state 0x69              H00 default no-op
+    //   state 0x6A H0E 0x7735BC  type74(+0x272) += v     FAIL-CLOSED (no field)
+    //
+    // Handlers whose targets are EXISTING m_WAbil fields and are pure
+    // accumulations live below and are wired into the switch. Handlers that
+    // would need a new field with no consumer (0x4E CC, 0x6A type74), or that
+    // carry an un-portable side effect with no live producer (0x55 message), or
+    // whose only producer is itself fail-closed (0x15 -> ArmLightGuard VMT+0x198,
+    // 0x16 has no producer), are left as documented FAIL-CLOSED entries. Their
+    // native producers, where they exist, live in the still-unported magic-skill
+    // domain (e.g. state 0x2B @0x60A522/0x76F877, state 0x55 @0x669051), so the
+    // recompute arms below are dormant until that work lands — exactly as the
+    // native arms are dormant until their AddState producer fires.
+    // =====================================================================
+    public partial class TBaseObject
+    {
+        // STATE-32 H08 — band handler for state 0x2B @0x77356E, byte-verified:
+        //   77356E  8B 43 0A            mov  eax,[ebx+0xA]     ; node value
+        //   773571  01 46 38            add  [esi+0x38],eax    ; esi+0x38 = SC lo
+        //   773574  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773577  01 46 3C            add  [esi+0x3C],eax    ; esi+0x3C = SC hi
+        //   77357A  E9 ..               jmp  0x773B1D
+        // esi+0x38/0x3C are the same SC lo/hi dwords state 0x22 (H05) writes, so
+        // this is the identical AddTimedRange(SC, value) that case 2 uses. Native
+        // producers: 0x60A522 and 0x76F877 (both 6000 ms), in the magic-skill
+        // band that is not yet ported.
+        private void ApplyRecomputeState2B_ScBoost(int value)
+        {
+            m_WAbil.SC = AddTimedRange(m_WAbil.SC, value);
+        }
+    }
+}

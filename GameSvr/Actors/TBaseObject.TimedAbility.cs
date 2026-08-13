@@ -896,6 +896,12 @@ namespace GameSvr
                         m_WAbil.MaxHP = TruncMulNative(m_WAbil.MaxHP, 1.5);
                         m_WAbil.MaxMP = TruncMulNative(m_WAbil.MaxMP, 1.5);
                         break;
+                    case 11:
+                        // STATE-32 H08 — state 0x2B (internalType 43): SC += value
+                        // on both lo/hi words (@0x77356E, esi+0x38/0x3C = SC).
+                        // Body/evidence in TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState2B_ScBoost(value);
+                        break;
                     case 4:
                         m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value);
                         break;
