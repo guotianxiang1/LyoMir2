@@ -1301,10 +1301,14 @@ namespace GameSvr
                             if (BaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL && BaseObject.m_btRaceServer < Grobal2.RC_MONSTER)
                             {
                                 BaseObject.m_boSkeleton = true;
-                                ApplyMeatQuality();
                                 BaseObject.SendRefMsg(Grobal2.RM_SKELETON, BaseObject.m_btDirection, BaseObject.m_nCurrX, BaseObject.m_nCurrY, 0, "");
                             }
-                            if (!TakeBagItems(BaseObject))
+                            // DROP-35/36: 战神 sub_71ED80(TAnimal VMT 槽 0x98) @0x71EE5C 走
+                            // sub_71EC88——把怪物模板掉落表(m_boAnimal 动物的战利品来源)直接发进
+                            // 挖肉者背包(AddItemToBag),非旧的 ApplyMeatQuality()+TakeBagItems(尸体
+                            // m_ItemList,动物恒空→永远"没有获得任何东西")。非堆叠物耐久回填=
+                            // m_nMeatQuality、入包失败即丢弃(无落地兜底)均在交付内忠实实现。
+                            if (!M2Share.UserEngine.MonDeliverDropTableToKillerBag(BaseObject, this))
                             {
                                 SysMsg(M2Share.sYouFoundNothing, MsgColor.Red, MsgType.Hint);
                             }
