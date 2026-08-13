@@ -2363,7 +2363,15 @@ namespace GameSvr
                         OpenNativeAccountStorageForDeposit(ProcessMsg.nParam1);
                     else
                     {
-                        SendDefMessage(Grobal2.SM_SENDUSERSTORAGEITEM, ProcessMsg.nParam1, ProcessMsg.nParam2, 0, 0, "");
+                        // RM 10146 arm 0x006B5568: nParam2 goes in Series, Param stays 0.
+                    //   006B55B1  6A 00        push 0                     ; Param  = 0
+                    //   006B55B3  6A 00        push 0                     ; Tag    = 0
+                    //   006B55B5  66 8B 43 08  mov ax,[ebx+8] / 50 push   ; Series = LoWord(nParam2)
+                    //   006B55BA  6A 00        push 0                     ; sMsg   = nil
+                    //   006B55BC  8B 4B 04     mov ecx,[ebx+4]            ; Recog  = nParam1
+                    //   006B55BF  66 BA BC 02  mov dx,0x2BC
+                    //   006B55C8  FF 93 50 02 00 00  call [ebx+0x250]
+                    SendDefMessage(Grobal2.SM_SENDUSERSTORAGEITEM, ProcessMsg.nParam1, 0, 0, ProcessMsg.nParam2, "");
                         SendSaveItemList(ProcessMsg.nParam1);
                     }
                     break;
