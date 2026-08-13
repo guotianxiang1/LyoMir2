@@ -104,6 +104,31 @@ namespace GameSvr
                     // bottom tier, and set Flag=1 on a record native leaves at 0.
                     AddTimedAbilityInternal(19, 1, -1, 0);
                 }
+                if (node.InternalType == 50)
+                {
+                    // STATE-30 — gained mutation @0x77332E, bytes verified:
+                    //   77328F  8A 46 01 / 2C 12 / 74 7F   id==0x12
+                    //   773297  2C 02 / 74 11              id==0x14
+                    //   77329B  2C 06 / 74 2F              id==0x1A
+                    //   77329F  2C 18 / 0F 84 87 00 00 00  id==0x32 -> 0x77332E
+                    //   77332E  8A 43 72                   mov  al, byte [ebx+0x72] ; m_btJob
+                    //   773331  3C 01 / 75 15              cmp  al,1 / jne job2
+                    //   773335  6A 01 / 6A 00 / 83 C9 FF   value=1, flag=0, ecx=-1
+                    //   77333C  B2 07                      mov  dl, 7
+                    //   773342  FF 97 EC 01 00 00          call [edi+0x1EC] AddState
+                    //   77334A  3C 02 / 75 13              cmp  al,2 / jne skip
+                    //   773355  B2 08                      mov  dl, 8
+                    //   77335B  FF 97 EC 01 00 00          call [edi+0x1EC]
+                    // Job 0 and any other value do nothing. Permanent (ecx=-1).
+                    if (m_btJob == 1)
+                    {
+                        AddTimedAbilityInternal(7, 1, -1, 0);
+                    }
+                    else if (m_btJob == 2)
+                    {
+                        AddTimedAbilityInternal(8, 1, -1, 0);
+                    }
+                }
             }
 
             if (abilityChanged && RequiresTimedAbilityRecalc(node.InternalType))
