@@ -1816,10 +1816,24 @@ namespace GameSvr
             // 逐条（全部 `je/jne 0x6C49EB` = 纯 epilogue，`xor eax,eax` 后 SEH 收尾 → **静默返回，不发任何消息**）：
             //   1) @0x6C45A2 `cmp byte[ebx+0x461],0` / `je`      → 自己 m_boDealing 为假 → 静默返回
             //   2) @0x6C45AF `cmp dword[ebx+0xBAC],0` / `je`     → m_DealCreat 为空 → 静默返回
-            //   3) @0x6C45BC `cmp byte[ebx+0x73],0` / `jne`      → 自己 m_boDeath 为真 → 静默返回
+            //   3) @0x6C45BC `cmp byte[ebx+0x73],0` / `jne`      → 自己 m_boGhost 为真 → 静默返回
             //   4) @0x6C45CC `cmp byte[eax+0x461],0` / `je`      → 对端 m_boDealing 为假 → 静默返回
-            //   5) @0x6C45D9 `cmp byte[eax+0x73],0` / `jne`      → 对端 m_boDeath 为真 → 静默返回
+            //   5) @0x6C45D9 `cmp byte[eax+0x73],0` / `jne`      → 对端 m_boGhost 为真 → 静默返回
             //   6) @0x6C45E3 `cmp ebx,[eax+0xBAC]` / `jne`       → 对端 m_DealCreat 不指向自己 → 静默返回
+            //
+            // TRADE-59（REPLICATION_RULES §4.6 点名的 ghost/death 混用）：
+            // 第 3/5 条读的是 **`+0x73` = m_boGhost**，不是 m_boDeath。判据是全镜像
+            // 写点计数，本轮独立复跑（staging/_trade3dis/scan.py b <pat>）：
+            //   `C6 43 73 01` → **1 命中** @0x7680EF（MakeGhost/MarkDelete，从不写 0）
+            //   `C6 43 74 01` → 5 命中，含 0x766323（死亡，复活会清零）
+            // 旧 C# 两处都写 m_boDeath，**两个方向都错**：
+            //   少了 ghost 门 —— 已 MarkDelete、正在回收的对象仍可完成成交，而
+            //     sub_6C4A98 会往它身上写七个字段并发两个包（对悬挂对象操作）；
+            //   多了 death 门 —— 原生允许「死了但还没变 ghost」的一方点成交，
+            //     C# 挡下，双方只能取消重来。
+            // 这一改同时收紧（补 ghost）与放宽（去 death）；放宽半在物品守恒上
+            // 是中性的：ClientDealEnd 无论走成交还是走 DealCancel，押金都完整
+            // 落到某一方，不存在只删不给。若主控不接受放宽半，单独回退本提交即可。
             //   然后 @0x6C45EF `mov byte ptr [ebx+0x684], 1` = m_boDealOK := true
             // 第 6 条（互指一致性）+ 第 1/4 条（双边 dealing）+ 第 3/5 条（双边存活）共同保证：
             // 押金释放只在「双方都活着、双方都在交易中、两个指针互指」时可达。
@@ -1833,7 +1847,7 @@ namespace GameSvr
             {
                 return;
             }
-            if (m_boDeath)
+            if (m_boGhost)
             {
                 return;
             }
@@ -1841,7 +1855,7 @@ namespace GameSvr
             {
                 return;
             }
-            if (m_DealCreat.m_boDeath)
+            if (m_DealCreat.m_boGhost)
             {
                 return;
             }
