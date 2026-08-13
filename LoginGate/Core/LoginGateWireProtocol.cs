@@ -41,6 +41,10 @@ namespace LoginGate.Core
         public const ushort NativeType2DisabledIdent = 0x07D3;
 
         public const int NativeRegistrationPayloadSize = 40;
+        // uDBListen.pas:368-371 accepts TPingMsg (40) or TPingMsgNew (68); the
+        // latter adds QueueCount:Word at +40 followed by UnUse[6] at +44.
+        public const int NativeRegistrationExtendedPayloadSize = 68;
+        public const int NativeRegistrationQueueCountOffset = 40;
         public const int NativeProbePayloadSize = 28;
         public const int NativeAuthRequestPayloadSize = 136;
         public const int NativeAuthResponseShortPayloadSize = 12;
@@ -283,13 +287,17 @@ namespace LoginGate.Core
             out NativeLoginGateRegistration registration, out string error)
         {
             registration = null!;
-            if (!TryRequireNativeFrame(frame, NativeRegistrationIdent,
-                    NativeRegistrationPayloadSize, out error))
+            error = string.Empty;
+            if (frame == null || frame.Ident != NativeRegistrationIdent
+                || (frame.Payload.Length != NativeRegistrationPayloadSize
+                    && frame.Payload.Length != NativeRegistrationExtendedPayloadSize))
             {
+                error = $"native LoginGate frame must be ident {NativeRegistrationIdent} with "
+                        + $"{NativeRegistrationPayloadSize} or {NativeRegistrationExtendedPayloadSize} bytes";
                 return false;
             }
 
-            var payload = frame!.Payload;
+            var payload = frame.Payload;
             if (!TryReadFixedGbkCString(payload.AsSpan(0, 16),
                     out var serverName, out error))
             {
@@ -301,8 +309,13 @@ namespace LoginGate.Core
                 humanCounts[i] = BinaryPrimitives.ReadInt32LittleEndian(
                     payload.AsSpan(16 + i * 4, 4));
 
+            var queueCount = payload.Length == NativeRegistrationExtendedPayloadSize
+                ? BinaryPrimitives.ReadUInt16LittleEndian(
+                    payload.AsSpan(NativeRegistrationQueueCountOffset, 2))
+                : (ushort)0;
+
             registration = new NativeLoginGateRegistration(
-                serverName, humanCounts, payload);
+                serverName, humanCounts, payload, queueCount);
             return true;
         }
 
@@ -663,7 +676,7 @@ namespace LoginGate.Core
     public sealed class NativeLoginGateRegistration
     {
         public NativeLoginGateRegistration(string serverName,
-            int[] humanCounts, byte[] rawPayload)
+            int[] humanCounts, byte[] rawPayload, ushort queueCount = 0)
         {
             ServerName = serverName ?? string.Empty;
             var counts = new int[6];
@@ -671,9 +684,13 @@ namespace LoginGate.Core
                 Array.Copy(humanCounts, counts, Math.Min(humanCounts.Length, 6));
             HumanCounts = counts;
             RawPayload = Clone(rawPayload);
+            QueueCount = queueCount;
         }
 
         public string ServerName { get; }
+
+        /// <summary>Native TPingMsgNew.QueueCount (排队人数); 0 for the 40-byte TPingMsg form.</summary>
+        public ushort QueueCount { get; }
 
         /// <summary>Native TGS_Human_Count: six Int32 slots, index 0 is the forge count.</summary>
         public IReadOnlyList<int> HumanCounts { get; }
