@@ -2320,10 +2320,14 @@ namespace GameSvr
                     {
                         pileEvent.AddEventParam();
                     }
-                    // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
+                    // MINE-21/MINE-61: Tier==2 halves ore output rate. Both branches
+                    // are HARDCODED to match native: 0x6BC2A3 `cmp byte[ebx+0x1828],2`
+                    // -> 0x6BC2AC `mov eax,0x18`(24) tier2 / 0x6BC2C3 `mov eax,0xC`(12)
+                    // normal. 原生无区间/比率配置；此前正常档误用 nMakeMineRate 配置，
+                    // 默认 12 虽同值但配置化即偏离原生，故改回硬编码（MINE-61）。
                     // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
                     // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
-                    int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
+                    int mineRate = m_btNativeFatigueTier == 2 ? 24 : 12;
                     // MINE-08: MINE 旗标由派发器在 0x6EC0FE 测过了（非 MINE 图
                     // 根本到不了这里），产出卷因此无条件抽。原来这里的注释把
                     // 旗标地址写成 0x6BC24A —— 那是格子地形门 cmp byte[cell],0，
