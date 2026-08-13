@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using GameSvr;
@@ -27,7 +28,27 @@ namespace AuditTools.QuestZeroValueCheck
     {
         static int Main(string[] args)
         {
-            PrepareRuntimeConfig();
+            // M2Share.cctor (M2Share.cs:1678) loads !Setup.txt from
+            // AppContext.BaseDirectory on the first TPlayObject construction.
+            // Without the skeleton this process used to die in type init; if a
+            // native AV is still hiding behind that, the DIAG line below is the
+            // last thing stdout will hold.
+            try
+            {
+                Diagnose("enter-main");
+                Diagnose("prepare-runtime-config");
+                PrepareRuntimeConfig();
+                Diagnose("before-new-TPlayObject");
+                _ = new TPlayObject();
+                Diagnose("after-new-TPlayObject");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    "INCOMPLETE: TPlayObject construction/type-init failed before QST-07 assertions.");
+                Console.Error.WriteLine(ex.ToString());
+                return 2;
+            }
 
             Console.WriteLine("================================================================================");
             Console.WriteLine("QST-07 Audit: Quest Zero-Value Storage");
@@ -230,12 +251,17 @@ namespace AuditTools.QuestZeroValueCheck
             return 0;
         }
 
+        static void Diagnose(string step)
+        {
+            Console.WriteLine("DIAG step=" + step);
+            Console.Out.Flush();
+            Console.Error.Flush();
+        }
+
         /// <summary>
-        /// The M2Share static constructor (M2Share.cs:1682) resolves !Setup.txt
-        /// against AppContext.BaseDirectory, i.e. this audit's own bin directory,
-        /// and IniFile.Load throws when it is absent. The first `new TPlayObject()`
-        /// therefore aborted the run with TypeInitializationException before any
-        /// assertion executed. Same minimal skeleton the other audits lay down.
+        /// M2Share.cctor (M2Share.cs:1682) resolves !Setup.txt against
+        /// AppContext.BaseDirectory. Same minimal skeleton the other audits lay down
+        /// before the first <c>new TPlayObject()</c>.
         /// </summary>
         static void PrepareRuntimeConfig()
         {

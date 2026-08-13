@@ -44,10 +44,10 @@ namespace GameSvr.Services
         /// "allow-stall + drop-yanshen" encode (see the class header + the yanshen verdict). Packs the clean
         /// 208 bytes (MakeIndex@0 / wIndex@4 / Dura@6 / DuraMax@8 / btValue@10 / UpgradeFlags@0x27 / Bind@0xB8)
         /// and IGNORES ys*/jp*/pname/desc (which live in the separate HUMAN-record sidecar, never in the
-        /// 208-byte item). Keeps the UpgradeFlags check + the tail-zero assertion (a yanshen'd item's 208-byte
-        /// tail is already clean, so it never fires on a legit item — but a bad tail still fail-closes).
+        /// 208-byte item). The fail-closed guard now covers only the two spans with no known owner
+        /// (0x56..0xB7, 0xB9..0xCF); 0x18..0x55 is the 眼神 provenance block and is carried through verbatim.
         /// This is deliberately NOT the shared fail-closing <see cref="LegacyUserItem208Codec.TryEncode"/>,
-        /// which stays strict for the human-DB path.
+        /// which stays strict about ys*/jp* for the human-DB path.
         /// </summary>
         internal static bool TryEncode(TUserItem item, out byte[] srvData208, out string error)
         {
@@ -56,11 +56,6 @@ namespace GameSvr.Services
             if (item == null || item.btValue == null || item.btValue.Length != 14)
             {
                 error = "invalid core item record";
-                return false;
-            }
-            if ((item.UpgradeFlags & ~LegacyUserItem208Codec.KnownUpgradeFlags) != 0)
-            {
-                error = "item contains unknown native refine flags";
                 return false;
             }
             byte[] record;
@@ -76,8 +71,16 @@ namespace GameSvr.Services
                     return false;
                 }
                 record = (byte[])item.NativeRecord.Clone();
-                if (!ValidateTail(record, out error))
-                    return false;
+            }
+            if (!ValidateUnownedSpans(record, out error))
+                return false;
+            if ((item.UpgradeFlags & ~LegacyUserItem208Codec.KnownUpgradeFlags) != 0
+                && (item.UpgradeFlags & ~LegacyUserItem208Codec.KnownUpgradeFlags)
+                    != (record[LegacyUserItem208Codec.UpgradeFlagsOffset]
+                        & ~LegacyUserItem208Codec.KnownUpgradeFlags))
+            {
+                error = "item refine flags would rewrite bytes native never writes";
+                return false;
             }
             BinaryPrimitives.WriteInt32LittleEndian(record.AsSpan(0, 4), item.MakeIndex);
             BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(4, 2), item.wIndex);
@@ -90,22 +93,17 @@ namespace GameSvr.Services
             return true;
         }
 
-        // Mirror of the shared codec's tail-zero assertion (KEPT per the yanshen verdict): bytes CoreSize..207
-        // must be 0 except UpgradeFlags@0x27 (known refine bits) and Bind@0xB8.
-        private static bool ValidateTail(byte[] record, out string error)
+        // Mirror of the shared codec's guard, re-scoped for the same reason (see
+        // LegacyUserItem208Codec): 0x18..0x55 is the 眼神 provenance block, not padding, so
+        // only 0x56..0xB7 and 0xB9..0xCF may be asserted zero. The old class-header claim
+        // that "a yanshen'd item's 208-byte tail is already clean, so it never fires on a
+        // legit item" is disproved by the golden corpus: 1232 of 1363 real items carry a
+        // non-zero byte at 0x1C alone.
+        private static bool ValidateUnownedSpans(byte[] record, out string error)
         {
             error = string.Empty;
-            for (var i = LegacyUserItem208Codec.CoreSize; i < record.Length; i++)
+            for (var i = LegacyUserItem208Codec.UnownedSpanStart; i < record.Length; i++)
             {
-                if (i == LegacyUserItem208Codec.UpgradeFlagsOffset)
-                {
-                    if ((record[i] & ~LegacyUserItem208Codec.KnownUpgradeFlags) != 0)
-                    {
-                        error = $"unknown native refine flags: 0x{record[i]:X2}";
-                        return false;
-                    }
-                    continue;
-                }
                 if (i == LegacyUserItem208Codec.BindOffset) continue;
                 if (record[i] != 0)
                 {

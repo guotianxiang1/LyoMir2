@@ -943,9 +943,16 @@ namespace GameSvr
 
             var queuedItem = new TUserItem(weapon);
             var useSureSuccessOre = noBreak && user.CheckItems(sureSuccessOre) != null;
-            queuedItem.UpgradeFlags = noBreak
-                ? (byte)(0x80 | (useSureSuccessOre ? 0x40 : 0))
-                : (byte)0;
+            // sub_6CA020 (the 不破碎 submit) ORs the flags in and never touches the rest of
+            // the byte: @0x6CA0F3 `or byte [esi+0x47],0x80`, @0x6CA10D `or byte [esi+0x47],0x40`.
+            // The plain submit has no writer at all for item+0x47. Assigning the whole byte
+            // wiped the low six bits, which in production carry the GBK trail byte of the
+            // 眼神 provenance map title at record 0x20..0x2B.
+            if (noBreak)
+            {
+                queuedItem.UpgradeFlags |= 0x80;
+                if (useSureSuccessOre) queuedItem.UpgradeFlags |= 0x40;
+            }
             if (!LegacyUserItem208Codec.TryEncode(queuedItem, out _, out var codecError))
             {
                 M2Share.ErrorMessage($"WeaponUpg submit rejected for {user.m_sCharName}: {codecError}");

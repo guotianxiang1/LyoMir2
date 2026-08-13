@@ -52,8 +52,16 @@ namespace SystemModule
         /// <c>cmp byte [item+0xD8],0; je</c>: a gift item is FREED with a chat notice
         /// instead of being placed on the map, which is what stops a gift from being
         /// laundered to another character via the floor.
-        /// Runtime-only, exactly like <c>NativeMapDropAllowed</c>: native never persists
-        /// it (the 208-byte record has no slot for it).
+        ///
+        /// CORRECTION: the old claim that native never persists this byte is wrong.
+        /// <c>item+0xD8</c> is INSIDE the saved window — the record is
+        /// <c>item+0x20 .. item+0xEF</c> (0xD0 = 208 bytes, LOAD @0x74DB3A/0x74DB3D/0x74DB42,
+        /// SAVE @0x6B170F/0x6B1712/0x6B1717) — so the gift byte lands at record offset
+        /// 0xB8 and survives every save/load. What actually happens today is that the
+        /// persisted value is decoded into <see cref="Bind"/> (see its remark) while this
+        /// runtime flag stays false, so a gift item stops being a gift after one relog.
+        /// The only reader is <c>NativeItemDropDestroy</c>; nothing in production ever
+        /// sets this field.
         /// </summary>
         [ProtoIgnore]
         public bool NativeGiftItem;
@@ -194,7 +202,32 @@ namespace SystemModule
 
         // ======================== Yanshen Plugin: Bind Flag ========================
 
-        /// <summary>Bind flag: 0 = unbound, greater than 0 = bound (value may encode bind type)</summary>
+        /// <summary>
+        /// Bind flag: 0 = unbound, greater than 0 = bound.
+        ///
+        /// MISNAMED, DELIBERATELY NOT MOVED. Every persisted codec maps this field to
+        /// record offset <c>0xB8</c> (<c>NativeHumanDataCodec</c>, <c>NativeHeroRuntimeCodec</c>,
+        /// <c>NativeMerchantGoodsCodec</c>, <c>NativeMailAttachmentCodec</c>,
+        /// <c>LegacyUserItem208Codec</c>), and record <c>0xB8</c> is <c>item+0xD8</c> — the
+        /// native 赠品 (gift) byte, not a bind flag. See <see cref="NativeGiftItem"/> for the
+        /// VAs.
+        ///
+        /// The genuine native bind/lock word is <c>word[item+0x34]</c> = record <c>0x14..0x15</c>
+        /// = <c>btValue[10..11]</c>: <c>sub_784710</c> @0x784710 <c>66 8b 40 34</c>
+        /// (<c>mov ax,word [eax+0x34]</c>) and <c>sub_784718</c> @0x784718 <c>66 89 50 34</c>
+        /// (<c>mov word [eax+0x34],dx</c>). It is written by the item factory for the
+        /// bind-on-create class (<c>sub_783788</c> @0x7837C4 <c>test byte [std+3],8</c> ->
+        /// @0x7837CA <c>mov dx,1</c> -> <c>call sub_784718</c>) and by the acquisition
+        /// stamper <c>sub_7842F8</c>. That word is already modelled correctly as
+        /// <c>btValue[10..11]</c> (see <c>NativeItemAcquisitionStamp</c>) and round-trips
+        /// through every codec, so nothing is lost today.
+        ///
+        /// Renaming the offset would re-interpret every already-written row and every
+        /// existing .Sav in both directions at once. The migration plan (read the gift
+        /// byte into <see cref="NativeGiftItem"/>, fold bind into <c>btValue[10..11]</c>,
+        /// backfill in one pass) is in staging/m_itemdb_20260813.md. Do not change the
+        /// offset without it.
+        /// </summary>
         [ProtoMember(32)]
         public byte Bind;
 
@@ -213,8 +246,20 @@ namespace SystemModule
         public string mapName;
 
         /// <summary>
-        /// Native Gs1 weapon-refine flags from legacy item offset 0x27.
-        /// This is server state and is intentionally not part of the mobile item packet.
+        /// Native weapon-upgrade flags at record offset <c>0x27</c> = <c>item+0x47</c>.
+        /// Bit <c>0x80</c> = 不破碎 (<c>or byte [esi+0x47],0x80</c> @0x6CA0F3), bit
+        /// <c>0x40</c> = 必成功 (<c>or byte [esi+0x47],0x40</c> @0x6CA10D). Read at
+        /// @0x6D7A93 <c>mov al,[ebx+0x47]</c> / <c>and al,0x80</c> / <c>cmp al,0x80</c>,
+        /// cleared with <c>mov byte [ebx+0x47],0</c> at @0x6D7AE5 and @0x6D7B07.
+        /// Server state; intentionally not part of the mobile item packet.
+        ///
+        /// The offset is right, but the byte is SHARED. Record <c>0x20..0x2B</c> holds the
+        /// 眼神 provenance map title as 12 GBK bytes, so <c>0x26..0x27</c> is the 4th
+        /// character and <c>0x27</c> is its trail byte. Trail bytes always have bit 0x80
+        /// set, so in production every item picked up on a map whose name is four or more
+        /// characters reads back as 不破碎 for free (golden corpus: 287 of 1363 items).
+        /// That collision is native's, not ours — but it means the low six bits are player
+        /// data: only ever OR bits in or clear the whole byte, never assign a value.
         /// </summary>
         [ProtoMember(36)]
         public byte UpgradeFlags;
