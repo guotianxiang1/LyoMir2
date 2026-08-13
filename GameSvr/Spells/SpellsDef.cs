@@ -211,6 +211,9 @@ namespace GameSvr
         public const int SKILL_154 = 154;
         public const int SKILL_161 = 161;
         public const int SKILL_162 = 162;
+        // Direct compare arm of the DoSpell ladder: 0x6ED891 `cmp eax,0xA7` /
+        // 0x6ED898 `je 0x6EDEE1`.
+        public const int SKILL_167 = 167;
         public const int SKILL_169 = 169;
         public const int SKILL_170 = 170;
         public const int SKILL_171 = 171;
@@ -219,6 +222,10 @@ namespace GameSvr
         public const int SKILL_174 = 174;
         public const int SKILL_179 = 179;
         public const int SKILL_180 = 180;
+        // 0x6ED8BC `sub eax,0xBF` / 0x6ED8C1 `je 0x6EDFCF`.
+        public const int SKILL_191 = 191;
+        // 0x6ED8E2 `sub eax,0xE8` / 0x6ED8E7 `je 0x6EDEA7`.
+        public const int SKILL_232 = 232;
         public const int SKILL_291 = 291;
         public const int SKILL_292 = 292;
         public const int SKILL_293 = 293;
