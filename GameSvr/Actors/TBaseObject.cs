@@ -1780,6 +1780,23 @@ namespace GameSvr
             {
                 m_btDirection = olddir;
             }
+            // TPlayer overrides CharPushed and cancels an open trade, but only when
+            // the player actually moved. VMT [0x6AC8C8+0xA4] holds 0x6BFD1C, and the
+            // override reads:
+            //   0x6BFD28  B2 34              mov dl, 0x34
+            //   0x6BFD2C  E8 2F 2C 0B 00     call 0x772960       ; state 0x34 set?
+            //   0x6BFD33  74 04              je  0x6BFD39
+            //   0x6BFD35  33 F6 / EB 18      xor esi,esi / jmp   ; blocked, no cancel
+            //   0x6BFD3F  E8 08 86 0A 00     call 0x76834C       ; inherited, eax=steps
+            //   0x6BFD46  85 F6              test esi, esi
+            //   0x6BFD48  7E 07              jle 0x6BFD51        ; 0 steps -> no cancel
+            //   0x6BFD4C  E8 73 46 00 00     call 0x6C43C4       ; DealCancel
+            // So the gate is "moved at least one cell", not "took damage": a push that
+            // was fully blocked leaves the trade standing.
+            if (result > 0 && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+            {
+                (this as TPlayObject)?.DealCancel();
+            }
             return result;
         }
 
