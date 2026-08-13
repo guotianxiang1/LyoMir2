@@ -710,12 +710,19 @@ namespace SystemModule
             result = true;
             for (var i = 0; i <= compn - 1; i++)
             {
-                if (char.ToUpper(src[i]) == char.ToUpper(targ[i])) continue;
+                // 战神 @UpCase (flat_image.bin @0x4034D4: cmp al,0x61/jb; cmp al,0x7A/ja; sub al,0x20)
+                // 仅对 ASCII a-z 做 -0x20 大写化，非区域性感知。原用 char.ToUpper 在 tr-TR 等区域会把
+                // 'i' 映射成 'İ' 造成与原生分歧（eqv-17 分片核验发现，CompareLStr ~38 调用点共享助手），
+                // 改为纯 ASCII 上写以逐字节对齐原生。
+                if (NativeAsciiUpCase(src[i]) == NativeAsciiUpCase(targ[i])) continue;
                 result = false;
                 break;
             }
             return result;
         }
+
+        /// <summary>战神 @UpCase (flat_image.bin @0x4034D4)：仅 ASCII a-z → A-Z(-0x20)，其余字符原样返回；不区域性感知。</summary>
+        private static char NativeAsciiUpCase(char c) => (c >= 'a' && c <= 'z') ? (char)(c - 0x20) : c;
 
         private static bool IsEnglish(char Ch)
         {
