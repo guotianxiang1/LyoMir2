@@ -622,8 +622,9 @@ namespace GameSvr.Mall
                 }
 
                 var grantCountLong = (long)Math.Max(1, mallItem.ItemCount) * quantity;
-                if (grantCountLong > Grobal2.MAXBAGITEM
-                    || player.m_ItemList.Count + grantCountLong > Grobal2.MAXBAGITEM)
+                var bagCapacity = BagCapacity.Of(player);
+                if (grantCountLong > bagCapacity
+                    || player.m_ItemList.Count + grantCountLong > bagCapacity)
                 {
                     failureCode = -4;
                     errorMsg = "背包空间不足，请先清理背包";
