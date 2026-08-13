@@ -2246,6 +2246,15 @@ namespace GameSvr
                 m_bo316 = true;
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT) m_dwSearchTick = 0;
                 OnEnvirnomentChanged();
+                // The move is done here: the actor is on the target cell and its visibility
+                // state has been rebuilt; everything below is notification. 战神 has no
+                // rollback at all on this path — sub_6BD294's prologue (0x6BD294 push ebp /
+                // 0x6BD295 mov ebp,esp / 0x6BD297 add esp,-0x10C / push ebx/esi/edi) installs
+                // no SEH frame, and no "SpaceMove" exception string exists in the image — so
+                // a fault while queueing RM_NATIVE_CLEAROBJECTS / RM_NATIVE_CHANGEMAP /
+                // RM_SPACEMOVE_SHOW must never un-move an actor that native would have left
+                // on the target map. Committing after the sends did exactly that.
+                committed = true;
                 SendMsg(this, useNativeInternalMessages
                     ? Grobal2.RM_NATIVE_CLEAROBJECTS
                     : Grobal2.RM_CLEAROBJECTS, 0, 0, 0, 0, "");
@@ -2262,7 +2271,6 @@ namespace GameSvr
                     SendRefMsg(Grobal2.RM_SPACEMOVE_SHOW, m_btDirection,
                         m_nCurrX, m_nCurrY, 0, "");
                 }
-                committed = true;
                 if (this is TPlayObject committedPlayer)
                 {
                     var committedEnvironment = m_PEnvir;
