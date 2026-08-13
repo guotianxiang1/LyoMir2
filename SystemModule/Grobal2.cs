@@ -2090,5 +2090,17 @@ namespace SystemModule
         // 神珠/宝玉 镶嵌 reply idents. The numeric SM ident equals the CM ident for
         // all four: the workers 0x6F37EC / 0x6F38A8 answer via [vmt+0x250]
         // (SendDefMessage) with `mov dx,0x1138..0x113B` and ECX = the result code.
+
+        // === Qiankun subsystem ===
+        // 乾坤包/鸿福袋 CM idents. Dispatch-tree leaves rooted at selector 0x6D805C
+        // (dispatcher sub_6D7D68). ImageBase 0x400000; file offset = VA - 0x400000.
+        // Handler arm -> worker (三件套证据见 TPlayObject.Qiankun.cs 头注释):
+        //   CM 3282 0x6DA600 -> 0x6E64BC  乾坤包列表查询/明细 (fail-closed: 依赖运行期配置)
+        //   CM 3283 0x6DA626 -> 0x6E67B0  鸿福袋开启 (fail-closed: 配置管理器 [0x7D64B8] 未移植)
+        //   CM 3284 0x6DA650 -> 0x6E6EA4  乾坤包选择列表重置 -> SM 2957(全零)
+        //   CM 3285 0x6DA638 -> 0x6E6DE8  乾坤包·荣耀点更换 (config 恒 null -> 静默返回)
+        //   CM 3286 0x6DA65D -> 0x6E6B54  乾坤包·领取奖励 (列表恒空 -> reset -> SM 2957)
+        //   CM 3287 0x6DA895 -> 0x6E8734  附近玩家展示物品 RM 0x3004 (独立特性, fail-closed)
+        //   CM 3288 0x6DA8C4 -> 0x6E8820  自身物品 RM 0x3005 (独立特性, fail-closed)
     }
 }
