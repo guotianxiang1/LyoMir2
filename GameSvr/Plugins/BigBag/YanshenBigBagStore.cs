@@ -180,10 +180,33 @@ namespace GameSvr.Plugins.BigBag
         }
 
         public bool TrySave(string characterName, YanshenBigBagFile file, out string error)
+            => TrySave(characterName, file, BagCapacity.PersistableExtraSlots, out error);
+
+        /// <summary>
+        /// Write the extra bag. If <paramref name="file"/> holds more records than
+        /// <paramref name="maxRecords"/>, refuse rather than truncate — the native
+        /// 48-slot silent clip (<c>0x6B171B cmp edi,0x30</c>) must not grow a twin
+        /// on the extra-bag path. Plugin <c>0x1007ED74 83 7d 10 30 7f 44</c> skips
+        /// deleting <c>MyJson\bags\</c> when the extra count is already &gt; 0x30.
+        /// </summary>
+        public bool TrySave(string characterName, YanshenBigBagFile file, int maxRecords, out string error)
         {
             if (file == null)
             {
                 error = "extra-bag file to save is null";
+                return false;
+            }
+
+            if (maxRecords < 0)
+            {
+                error = "extra-bag persistable extra slots cannot be negative";
+                return false;
+            }
+
+            var count = file.RecordCount;
+            if (count > maxRecords)
+            {
+                error = $"extra-bag has {count} records, persistable extra slots are {maxRecords}; refusing to save rather than truncate";
                 return false;
             }
 
