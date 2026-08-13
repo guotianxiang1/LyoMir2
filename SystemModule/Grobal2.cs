@@ -1789,5 +1789,49 @@ namespace SystemModule
         {
             return HUtil32.MakeLong(HUtil32.MakeWord(btRaceImg, btWeapon), HUtil32.MakeWord(btHair, btDress));
         }
+
+        // ===================== SM missing-ident batch 1/4 (ascending first quarter) =====================
+        // Native server->client (SM) idents that fire through a send slot ([obj+0x250] end sMsg /
+        // [obj+0x254] end (Buf,Len) / [vmt+0xE0] / cx-wrapper 0x6BCE54) in flat_image.bin
+        // (ImageBase 0x400000) yet had NO C# constant of any prefix. Census:
+        // staging/_sm1_work/classes.txt (140 idents); this block is the lowest 35 by value.
+        // Send builders (frame + body decoded from the image) live in
+        // GameSvr/Actors/TBaseObject.SmIdent_Sm1.cs. Idents whose BODY could not be proven from the
+        // image are registered here but marked BLOCKED and have no builder (fail-closed).
+        // SM_965 (0x3C5) already exists earlier in this file and is reused by the builder.
+        public const int SM_35 = 35;      // 0x023  RM-dispatch arm mov dx @0x6B48DE -> call [obj+0x250] @0x6B48E7 (empty body)
+        public const int SM_37 = 37;      // 0x025  RM-dispatch arm mov dx @0x6B473C -> call [obj+0x250] @0x6B4745 (empty body)
+        public const int SM_56 = 56;      // 0x038  BLOCKED: 3 sites; traffic-bearing site carries the map-description container body ([Envir+0x24]/+0x44/+0x48 fill points + MapDesc.Dat unmapped). Empty-frame site verified @0x6E388D.
+        public const int SM_66 = 66;      // 0x042  RM-dispatch arm mov dx @0x6B5E5E -> call [obj+0x254] @0x6B5E67 (Buf=nil Len=0, empty body)
+        public const int SM_70 = 70;      // 0x046  RM-dispatch arm mov dx @0x6B5D8C -> call [obj+0x250] @0x6B5D95 (empty body)
+        public const int SM_71 = 71;      // 0x047  RM-dispatch arm mov dx @0x6B5DC0 -> call [obj+0x250] @0x6B5DC9 (empty body)
+        public const int SM_72 = 72;      // 0x048  RM-dispatch arm mov dx @0x6B5DF4 -> call [obj+0x250] @0x6B5DFD (empty body)
+        public const int SM_73 = 73;      // 0x049  RM-dispatch arm mov dx @0x6B5E28 -> call [obj+0x250] @0x6B5E31 (empty body)
+        public const int SM_108 = 108;    // 0x06C  member-list broadcast via wrapper 0x705954, sMsg = source text truncated to 80 bytes @0x705FC6
+        public const int SM_539 = 539;    // 0x21B  by-name target send mov dx @0x638A0C -> call [obj+0x250] @0x638A12 (empty body)
+        public const int SM_543 = 543;    // 0x21F  fixed Recog=-6 mov dx @0x654BC5 -> call [obj+0x250] @0x654BCD (empty body)
+        public const int SM_546 = 546;    // 0x222  fixed Recog=-2 mov dx @0x6E0B95 -> call [obj+0x250] @0x6E0B9D (empty body)
+        public const int SM_551 = 551;    // 0x227  Param=2 mov dx @0x786606 -> call [obj+0x250] @0x786610 (empty body)
+        public const int SM_554 = 554;    // 0x22A  BLOCKED: virtual send [vmt+0xE0] @0x656432, 6-arg signature + record +6/+8/+0xA semantics + Param=word[rec+6]+0x4C offset unproven
+        public const int SM_689 = 689;    // 0x2B1  RM-dispatch arm mov dx @0x6B4B98 -> call [obj+0x250] @0x6B4BA1 (empty body)
+        public const int SM_951 = 951;    // 0x3B7  computed-Recog mov dx @0x6CF5E7 -> call [obj+0x250] @0x6CF5EF (empty body)
+        public const int SM_959 = 959;    // 0x3BF  RM-dispatch arm mov dx @0x6B5758 -> call [obj+0x250] @0x6B5761 (empty body)
+        public const int SM_966 = 966;    // 0x3C6  Param=1, sMsg = AnsiString @0x6D6680 len20 GBK "请更新到最新的客户端" mov dx @0x6D6636 -> call [obj+0x250] @0x6D663E
+        public const int SM_1201 = 1201;  // 0x4B1  RM-dispatch arm mov dx @0x6B4C38 -> call [obj+0x250] @0x6B4C41 (empty body)
+        public const int SM_1233 = 1233;  // 0x4D1  BLOCKED: cx-wrapper 0x6BCE54 builds a 32-byte object-appearance body ([obj+0x1C8] virtual + [obj+0x168] 16B + [obj+0x70] virtual 8B), all unmapped
+        public const int SM_1250 = 1250;  // 0x4E2  fixed Recog=-1 mov dx @0x6F0A10 -> call [obj+0x250] @0x6F0A18 (empty body)
+        public const int SM_1251 = 1251;  // 0x4E3  Param=6, Recog=[self+0xA54] mov dx @0x6D165E -> call [obj+0x250] @0x6D1666 (empty body)
+        public const int SM_1252 = 1252;  // 0x4E4  Param=4, Recog=[self+0xA50] mov dx @0x654C08 -> call [obj+0x250] @0x654C10 (empty body)
+        public const int SM_1253 = 1253;  // 0x4E5  Tag=HiWord(dw[rec]) Series=LoWord Recog=-2 mov dx @0x6F0F14 -> call [obj+0x250] @0x6F0F1C (empty body)
+        public const int SM_1254 = 1254;  // 0x4E6  fixed Recog=-1 mov dx @0x6F0F6A -> call [obj+0x250] @0x6F0F72 (empty body)
+        public const int SM_1255 = 1255;  // 0x4E7  fixed Recog=-1 mov dx @0x6F0EA6 -> call [obj+0x250] @0x6F0EAE (empty body)
+        public const int SM_1256 = 1256;  // 0x4E8  Recog=<arg> mov dx @0x6F1015 -> call [obj+0x250] @0x6F101D (empty body)
+        public const int SM_1257 = 1257;  // 0x4E9  Recog=<self-derived> mov dx @0x6F10C0 -> call [obj+0x250] @0x6F10C8 (empty body)
+        public const int SM_1258 = 1258;  // 0x4EA  Param=flag(0/1), Recog=<self-derived> mov dx @0x6F159E -> call [obj+0x250] @0x6F15A6 (empty body)
+        public const int SM_1259 = 1259;  // 0x4EB  fixed Recog=-1 mov dx @0x6F114E -> call [obj+0x250] @0x6F1156 (empty body)
+        public const int SM_1260 = 1260;  // 0x4EC  fixed Recog=-1 mov dx @0x6F11A6 -> call [obj+0x250] @0x6F11AE (empty body)
+        public const int SM_1261 = 1261;  // 0x4ED  fixed Recog=-1 mov dx @0x6F0E4E -> call [obj+0x250] @0x6F0E56 (empty body)
+        public const int SM_1262 = 1262;  // 0x4EE  fixed Recog=-1 mov dx @0x6F0FC2 -> call [obj+0x250] @0x6F0FCA (empty body)
+        public const int SM_1263 = 1263;  // 0x4EF  Param=5, Recog=<arg> mov dx @0x6F11F9 -> call [obj+0x250] @0x6F1201 (empty body)
     }
 }
