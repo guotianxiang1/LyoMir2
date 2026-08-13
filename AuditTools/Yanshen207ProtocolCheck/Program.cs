@@ -828,15 +828,53 @@ static void CheckWhitePigEquipmentSlots()
             $"invalid StdMode accepted for slot {entry.Slot}");
     }
 
-    foreach (var stdMode in new byte[] { 27, 54, 64 })
-        Require(M2Share.CheckUserItems(Grobal2.U_BELT,
-            new GoodItem { StdMode = stdMode }), $"belt StdMode {stdMode}");
-    foreach (var stdMode in new byte[] { 28, 52, 62 })
-        Require(M2Share.CheckUserItems(Grobal2.U_BOOTS,
-            new GoodItem { StdMode = stdMode }), $"boots StdMode {stdMode}");
-    foreach (var stdMode in new byte[] { 7, 53, 63 })
-        Require(M2Share.CheckUserItems(Grobal2.U_CHARM,
-            new GoodItem { StdMode = stdMode }), $"charm StdMode {stdMode}");
+    // A8 裁决（2026-08-14）：腰带/鞋子/宝石各只收一个 StdMode，扩展号一律拒收。
+    //
+    // 本文件建树时（d5d00744 基线导入）此处写的是 腰带{27,54,64}/鞋子{28,52,62}/
+    // 宝石{7,53,63}，从未给出原生出处，与 M2Share.CheckUserItems 的 DURA-16/17
+    // 反演正面冲突。本轮在 flat_image.bin(base 0x400000) 与眼神 2.0.8 转储
+    // (base 0x10000000) 上逐字节裁决，判 DURA-16/17 为准，扩展号是无据之谈：
+    //
+    // 1) 宿主 StdMode -> 物品类 的派发是 byte 表 0x74C374[StdMode] 取臂号、
+    //    dword 表 0x74C414[臂号] 取构造臂。实测：
+    //      27 -> 11h -> 0074D141  mov eax,[0x75DA68]  TBelt
+    //      28 -> 12h -> 0074D157  mov eax,[0x75DB58]  TBoots
+    //       7 -> 07h -> 0074CE9E  TCharm 族跳表
+    //      51/52/53/54/63/64 -> 00h -> 默认臂 0074D67E mov eax,[0x781BD8] TBasePileItem
+    //      62               -> 20h -> 0074D3E2 mov eax,[0x7825C8] TAnimalMascot
+    // 2) 槽位资格是 VMT+0x60 谓词。TBelt/TBoots/TCharm 的谓词体分别是
+    //      00762D30 80FA0A 0F94C0 C3   cmp dl,0Ah / sete al / ret
+    //      007630CC 80FA0B 0F94C0 C3   cmp dl,0Bh
+    //      00763390 80FA0C 0F94C0 C3   cmp dl,0Ch
+    //    ——各自只对一个槽号返回真，没有第二个受理号。
+    //    TBasePileItem VMT 0x781C24 的 +0x60 = 0x781C88 落在类名串 "TBasePileItem"、
+    //    TAnimalMascot VMT 0x782614 的 +0x60 = 0x782678 落在类名串 "TAnimalMascot"
+    //    ——两者父链都不是 TEquipItem，VMT 里根本没有谓词槽，原生穿不上。
+    // 3) 眼神插件没有扩展它：把上述 20 个 VA（两张派发表、四条构造臂、三个谓词体、
+    //    四个 classref 全局、四张 VMT、TEquipItem 基类谓词 0x75FE18）在 45 MB 插件
+    //    转储里做绝对 dword 引用普查，命中 **0**；三条谓词的字节签名
+    //    80FA0A0F94C0C3 / 80FA0B… / 80FA0C… 作为补丁 blob 也 0 命中。
+    //    对照组（插件确实要打的挂载点）同一把尺子量各有 4~10 处引用：
+    //      0x76C88B=8  0x76C816=6  0x6EDC5E=4  0x6EC111=4  0x6C09B5=4
+    //      0x76E2BC=8  0x767BAE=10 0x6BC9E2=4  0x691E2E=5  0x7720FB=4
+    //    ——普查方法有效，结论是插件从不碰装备资格。
+    var slotOnlyStdMode = new[]
+    {
+        (Slot: Grobal2.U_BELT,  Name: "belt",  Accept: (byte)27, Reject: new byte[] { 51, 52, 53, 54, 62, 63, 64 }),
+        (Slot: Grobal2.U_BOOTS, Name: "boots", Accept: (byte)28, Reject: new byte[] { 51, 52, 53, 54, 62, 63, 64 }),
+        (Slot: Grobal2.U_CHARM, Name: "charm", Accept: (byte)7,  Reject: new byte[] { 51, 52, 53, 54, 62, 63, 64 })
+    };
+    foreach (var entry in slotOnlyStdMode)
+    {
+        Require(M2Share.CheckUserItems(entry.Slot,
+                new GoodItem { StdMode = entry.Accept }),
+            $"{entry.Name} must accept its native StdMode {entry.Accept}");
+        foreach (var stdMode in entry.Reject)
+            Require(!M2Share.CheckUserItems(entry.Slot,
+                    new GoodItem { StdMode = stdMode }),
+                $"{entry.Name} must reject StdMode {stdMode}: it constructs "
+                + "TBasePileItem/TAnimalMascot, whose VMT has no +0x60 predicate");
+    }
 }
 
 static void CheckExtendedEquipmentAbilities()
