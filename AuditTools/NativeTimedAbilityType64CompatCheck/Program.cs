@@ -260,13 +260,15 @@ static Type64ProbePlayer NewProbePlayer(string name, ushort amount,
     };
 }
 
+// The deterministic source is installed on M2Share.RandomNumber, the field the
+// server assigns at startup. It used to be installed by reflecting
+// RandomNumber's private `random` field, which POIS-26 removed when the facade
+// moved onto the Delphi LCG sub_403B4C; GetField then returned null and this
+// threw MissingFieldException instead of running the healing assertions.
 static int InvokeHealingDeterministically(TBaseObject actor)
 {
-    var randomField = typeof(RandomNumber).GetField("random",
-        BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException("RandomNumber.random");
-    object originalRandom = randomField.GetValue(null);
-    randomField.SetValue(null, new Type64DeterministicRandom());
+    RandomNumber originalRandom = M2Share.RandomNumber;
+    M2Share.RandomNumber = new Type64DeterministicRandom();
     try
     {
         var method = typeof(TBaseObject).GetMethod(
@@ -278,7 +280,7 @@ static int InvokeHealingDeterministically(TBaseObject actor)
     }
     finally
     {
-        randomField.SetValue(null, originalRandom);
+        M2Share.RandomNumber = originalRandom;
     }
 }
 
@@ -404,16 +406,16 @@ sealed class Type64ProbeHero : HeroObject
 {
 }
 
-sealed class Type64DeterministicRandom : Random
+sealed class Type64DeterministicRandom : RandomNumber
 {
-    public override int Next() => 0;
+    public override int Random() => 0;
 
-    public override int Next(int maxValue)
+    public override int Random(int Value)
     {
-        if (maxValue <= 0 || maxValue == 100)
+        if (Value <= 0 || Value == 100)
             return 0;
-        if (maxValue == 2)
+        if (Value == 2)
             return 1;
-        return maxValue - 1;
+        return Value - 1;
     }
 }
