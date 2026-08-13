@@ -143,7 +143,11 @@ namespace SystemModule
 
             var sections = new List<NativeHeroDynamicSection>(3);
             var offset = 4;
-            var expectedTypeIndex = 0;
+            // Native decoder 0x68B0D5 `cmp eax,7 / ja 0x68B2EA` then
+            // `jmp dword [eax*4+0x68B0E5]` — dispatch by type, no order test.
+            // A blob that is 7 then 2 is therefore legal on the read path.
+            // The encoder below still emits only {2,6,7} in that order
+            // (0x68AD4F / 0x68AD78 / 0x68ADA3).
             while (offset < data.Length)
             {
                 if (data.Length - offset < DynamicHeaderSize)
@@ -175,15 +179,6 @@ namespace SystemModule
                     error = $"empty native hero dynData section type {type}";
                     return false;
                 }
-                while (expectedTypeIndex < DynamicSectionTypes.Length
-                       && DynamicSectionTypes[expectedTypeIndex] != type)
-                    expectedTypeIndex++;
-                if (expectedTypeIndex >= DynamicSectionTypes.Length)
-                {
-                    error = $"out-of-order native hero dynData section type {type}";
-                    return false;
-                }
-                expectedTypeIndex++;
                 sections.Add(new NativeHeroDynamicSection(type,
                     data.AsSpan(offset + DynamicHeaderSize, payloadLength).ToArray()));
                 offset = nextOffset;
