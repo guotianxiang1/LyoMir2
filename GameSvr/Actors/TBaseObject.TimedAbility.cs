@@ -614,6 +614,33 @@ namespace GameSvr
                     case 2:
                         m_WAbil.SC = AddTimedRange(m_WAbil.SC, value);
                         break;
+                    case 10:
+                        // STATE-37 — band handler for 0x2A @0x773636, bytes verified:
+                        //   773636  83 7B 0A 01            cmp  dword [ebx+0xA], 1
+                        //   77363A  0F 85 DD 04 00 00      jne  default (0x773B1D)
+                        //   773640  8D 87 64 02 00 00      lea  eax, [edi+0x264]
+                        // ×1.2 six dwords esi+0x28/2C/30/34/38/3C (DC/MC/SC lo+hi):
+                        //   fild dword / fld tbyte [0x773B5C] / fmulp / call 0x403580 @TRUNC
+                        //   0x773B5C = 9A 99 99 99 99 99 99 99 FF 3F  (80-bit extended 1.2)
+                        // ×1.5 six dwords esi+0x18/1C/20/24/4C/54 (AC/MAC lo+hi, MaxHP, MaxMP):
+                        //   fild dword / fmul dword [0x773B68] / call 0x403580 @TRUNC
+                        //   0x773B68 = 00 00 C0 3F  (float32 1.5)
+                        // @TRUNC @0x403580: `66 81 4C 24 02 00 0F` or word [esp+2],0x0F00
+                        // then fistp — toward-zero, not @ROUND 0x403574.
+                        // 0..50000 integer scan: trunc(n*1.2) agrees between the 80-bit
+                        // constant and IEEE double, so double 1.2 is used here.
+                        if (value != 1)
+                        {
+                            break;
+                        }
+                        m_WAbil.DC = ScaleTimedRange(m_WAbil.DC, 1.2);
+                        m_WAbil.MC = ScaleTimedRange(m_WAbil.MC, 1.2);
+                        m_WAbil.SC = ScaleTimedRange(m_WAbil.SC, 1.2);
+                        m_WAbil.AC = ScaleTimedRange(m_WAbil.AC, 1.5);
+                        m_WAbil.MAC = ScaleTimedRange(m_WAbil.MAC, 1.5);
+                        m_WAbil.MaxHP = TruncMulNative(m_WAbil.MaxHP, 1.5);
+                        m_WAbil.MaxMP = TruncMulNative(m_WAbil.MaxMP, 1.5);
+                        break;
                     case 4:
                         m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value);
                         break;
@@ -701,6 +728,26 @@ namespace GameSvr
             return HUtil32.MakeLong(
                 unchecked((ushort)(HUtil32.LoWord(ability) + value)),
                 unchecked((ushort)(HUtil32.HiWord(ability) + value)));
+        }
+
+        /// <summary>
+        /// STATE-37: toward-zero multiply matching @TRUNC (0x403580).
+        /// <c>(int)(value * factor)</c> truncates toward zero for both signs.
+        /// </summary>
+        private static int TruncMulNative(int value, double factor)
+        {
+            return unchecked((int)(value * factor));
+        }
+
+        /// <summary>
+        /// STATE-37: native stores AC/DC/MC/SC as two dwords at Self+0x264+off;
+        /// C# packs each pair as LoWord/HiWord of one int, same as AddTimedRange.
+        /// </summary>
+        private static int ScaleTimedRange(int ability, double factor)
+        {
+            return HUtil32.MakeLong(
+                unchecked((ushort)TruncMulNative(HUtil32.LoWord(ability), factor)),
+                unchecked((ushort)TruncMulNative(HUtil32.HiWord(ability), factor)));
         }
 
         /// <summary>
