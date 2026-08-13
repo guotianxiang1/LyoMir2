@@ -571,7 +571,23 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-13/14 — the other half of gate 4. Native case 3013 reaches
+            // the run primitive only through `mov dl,1 / call [ecx+0x40]` at
+            // 0x6D9D1C-0x6D9D23, i.e. TPlayer VMT+0x40 sub_6E6700, which chains
+            // into the base can-act ladder sub_76B354. Foot running went
+            // straight past it because the ladder lived only on the mounted
+            // CM_RUN3 path, so states 0x1D/0x01/0x1A/0x3E stopped a walk but not
+            // a run, and 0x18 (run-only, arg-dependent at 0x76B398) stopped
+            // nothing at all.
+            if (IsNativeCanActBlocked(1))
+            {
+                return result;
+            }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanRun)
+            {
+                return result;
+            }
+            if (m_PEnvir == null)
             {
                 return result;
             }
@@ -618,6 +634,19 @@ namespace GameSvr
             }
             m_dwMoveTick = HUtil32.GetTickCount();
             m_bo316 = false;
+            // MOVE-16/17/18/19 — sub_6BBFBC opens with the switch / map RUNFLAG
+            // / weight / CanRun ladder before it ever calls the run mover, and
+            // whatever fails it drops through 0x6BC001 into the clamp-and-walk
+            // degrade rather than refusing. Native 3013 never tests the mounted
+            // state 0x33 (only 4108 does, at 0x6D9D99), so foot runners belong
+            // on this ladder too; C# gated the whole ladder behind "is mounted"
+            // and left this path with no weight rule, no paralysis rule and no
+            // degrade. Sharing ClientNativeRun3Fallback mirrors native, where
+            // both run primitives fall into the same walk primitive sub_6BBCD8.
+            if (!IsNativeRunLadderAllowed())
+            {
+                return ClientNativeRun3Fallback(nX, nY);
+            }
             nDir = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, nX, nY);
             if (RunTo(nDir, false, nX, nY))
             {
