@@ -2194,6 +2194,12 @@ namespace GameSvr
                 // native。残差仅为「同图未占静默快臂」的广播差，属传送原语热点(GetRandomXY 11 /
                 // MoveToMovingObject 17 caller, MOVE-63)且与 C# 统一 RM_NATIVE_* 广播适配(MOVE-52)冲突
                 // → 依铁律只报不改(详见 docs/eqv_shard22 MOVE-54 与本分支报告)。
+                // MOVE-54(re-verify) — VMT+0x1C0 的 classname 扫描佐证该分派:push-1 的 override
+                // sub_6BD294 仅存于 TPlayer + TGdMsgGMAgent 两张 VMT;push-0 的基类 sub_768D78 覆盖
+                // TCreature / THumanKind / 英雄(TSecWarHero)等,故 `this is not TPlayObject` 为忠实
+                // 判别子。落位不变已复核:稳健臂用被拒的 (X1,Y1) 作 GetRandomXY 种子,其首个
+                // CanWalk(忽略占位) 恒真 → 原样返回、0 额外 RNG(@0x768EA7),两臂均落 (X1,Y1);
+                // 唯一差为快臂静默 vs 稳健臂 RM_SPACEMOVE 的广播,与落位/RNG 无关。
                 targetAddAttempted = true;
                 if (!ReferenceEquals(targetEnvironment.AddToMap(m_nCurrX, m_nCurrY,
                     CellType.OS_MOVINGOBJECT, this), this))
