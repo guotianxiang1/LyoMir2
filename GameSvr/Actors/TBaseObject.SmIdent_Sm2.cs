@@ -334,5 +334,62 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_966, recog, 1, 0, 0);
             return (header, Sm966Text);
         }
+
+        // SM 917 (0x395, SM_HERO_DELITEMS) — @0x00689708 via [obj+0x254], variable body.
+        //   006896ED  6A 00              push 0             ; #1 Param  = 0
+        //   006896EF  6A 00              push 0             ; #2 Tag    = 0
+        //   006896F1  6A 00              push 0             ; #3 Series = 0
+        //   006896F3  8B 43 10           mov eax,[ebx+0x10] ; #4 Buf = [rec+0x10]
+        //   006896F6  50                 push eax
+        //   006896F7  0F B7 43 14        movzx eax,[ebx+0x14]; #5 Len = word[rec+0x14]
+        //   006896FB  50                 push eax
+        //   006896FC  8B 4B 04           mov ecx,[ebx+4]    ; Recog = nParam1
+        //   006896FF  66 BA 95 03        mov dx,0x395       ; ident 917
+        //   00689708  FF 93 54 02 00 00  call [obj+0x254]
+        // The send point is a pure Buf/Len forward of the RM record's buffer. That
+        // buffer is a client-item-id list — the hero counterpart of the human
+        // SM_DELITEMS body (TPlayObject.BuildDelItemListBody) — but it is filled by the
+        // hero RM producer, which is unmapped (docs/m_sm_b_20260813.md §8-B2). The body
+        // is therefore taken pre-encoded: the frame is reproduced, the buffer's
+        // per-field layout is not invented here.
+        internal static (ClientPacket Header, byte[] Body) BuildSm917(int nParam1, byte[] body)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_HERO_DELITEMS, nParam1, 0, 0, 0);
+            return (header, body ?? Array.Empty<byte>());
+        }
+
+        // SM 1233 (0x4D1) — RM 12323 arm @0x006B602C, sent through the CX wrapper
+        // 0x006BCE54 which attaches the standard 32-byte actor-state body (the same body
+        // the movement/action family — SM 6/7/9/10/11/13/27/32/33/34 — carries).
+        // Caller arm (RM record fields pushed for the wrapper, ret 0xC = 3 stack args):
+        //   006B6013  66 8B 43 04        mov ax,[ebx+4]     ; -> [ebp+0x10] = Param  = nParam1
+        //   006B6018  66 8B 43 08        mov ax,[ebx+8]     ; -> [ebp+0xC]  = Tag    = nParam2
+        //   006B601D  66 8B 43 02        mov ax,[ebx+2]     ; -> [ebp+8]    = Series = wParam
+        //   006B6022  8B 53 24           mov edx,[ebx+0x24] ; 主体 actor = BaseObject
+        //   006B6025  66 B9 D1 04        mov cx,0x4D1       ; ident 1233
+        //   006B602C  E8 23 6E 00 00     call 0x006BCE54
+        // Wrapper 0x006BCE54 body build (buffer [ebp-0x24], 32 bytes, pre-zeroed):
+        //   [0..3]   call [actor VMT+0x1C8](edx=recipient)   = GetFeature(recipient)
+        //   [4..19]  16 bytes copied from [actor+0x168]       = WriteBodyState
+        //   [20..29] call [actor VMT+0x70](0,recipient)       = GetMobileFeature
+        //            (dword race/sex/hair, dword weapon/dress, word horse = 10 bytes)
+        //   [30..31] remain 0 (pad)
+        // then send via [recipient VMT+0x254] with Recog=ebx=BaseObject, Len=0x20.
+        // This is byte-for-byte the C# BuildMobileActorStateBody used by the FAITHFUL
+        // movement idents; it is reproduced here (rather than reused) only because that
+        // helper is a private member of the TPlayObject partial. `this` is the actor.
+        internal (ClientPacket Header, byte[] Body) BuildSm1233(
+            TBaseObject recipient, ushort nParam1, ushort nParam2, ushort wParam)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1233,
+                ObjectId, nParam1, nParam2, wParam);
+            using var stream = new MemoryStream(32);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(GetFeature(recipient)); // [0..3]
+            WriteBodyState(writer);              // [4..19]
+            writer.Write(GetMobileFeature());    // [20..29]
+            writer.Write((ushort)0);             // [30..31] pad
+            return (header, stream.ToArray());
+        }
     }
 }
