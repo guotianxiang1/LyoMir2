@@ -5983,6 +5983,34 @@ namespace GameSvr
                 return;
             }
             bo19 = false;
+            // === DURA-16 (struck-durability): NATIVE-CONFIRMED — DO NOT REMOVE ===
+            // The 16-slot durability loop below is NOT a GameOfMir-legacy invention.
+            // The native struck path DOES wear the DEFENDER's equipment on all 16
+            // slots by writing durability word [item+0x26]. Re-disassembled end to
+            // end from flat_image.bin (VA-0x400000):
+            //   sub_73F9FC (THumanKind.StruckDamage) @0x73FB55: `mov edx,[ebp-8]`
+            //     (nDam = Random(10)+5, computed @0x73FA30-0x73FA3D); `mov eax,ebx`
+            //     (self = the object being struck); @0x73FB5A `call sub_73FBE8`.
+            //   sub_73FBE8 @0x73FBEB: `mov eax,[self+0x4c0]` (UseItems container);
+            //     @0x73FBF1 `call sub_75EBC0` (edx=nDam preserved).
+            //   sub_75EBC0 @0x75EBD2..0x75EC07: `xor esi,esi` … `inc esi; cmp esi,0x10;
+            //     jne` = the 16-SLOT LOOP. Per non-null slot calls sub_75EA40; on the
+            //     destroy flag calls sub_75F49C (remove); after the loop, if anything
+            //     changed, @0x75EC12 `call sub_75EE78` (RecalcAbilitys).
+            //   sub_75EA40 (per item): @0x75EA69 `call [item_vmt+0x74]` (has-durability
+            //     guard); @0x75EA7D `mov eax,8; call Random`; @0x75EA89 `jne` = the 1/8
+            //     GATE (skipped when byte[item+0xfc]!=0); @0x75EA8F `movzx eax,word
+            //     [item+0x26]` (Dura); @0x75EAA4 `sub word [item+0x26],ax` = Dura-=nDam;
+            //     destroy branch @0x75EB51 `mov word [item+0x26],0`. nDam is read from
+            //     the parent frame ([ebp+8]-4 via the `push ebp` @0x75EBDF).
+            //   The identical worker is also reached from a 2nd struck override
+            //     sub_68F548 @0x68F688 — durability wear is a struck-side behavior.
+            // Field map cross-checked vs DoDamageWeapon sub_73E804 (+0x26=Dura,
+            // +0x28=DuraMax): that function is the ATTACKER's slot-1-only weapon wear
+            // (`mov dl,1; call GetUseItems 0x75EC20`), a DIFFERENT path — not this one.
+            // NOTE (out of DURA-16 scope): the U_DRESS pre-pass just below has no native
+            // counterpart — native processes slot 0 exactly once inside the single loop,
+            // so slot 0 is presently rolled twice. Left as-is; flagged for a separate task.
             // DURA-16: U_DRESS also requires 1/8 probability gate, matching other equipment slots
             if (m_UseItems[Grobal2.U_DRESS] != null && m_UseItems[Grobal2.U_DRESS].wIndex > 0 && M2Share.RandomNumber.Random(8) == 0)
             {
