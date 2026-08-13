@@ -1802,7 +1802,16 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_SPELL:
-                    if (ClientSpellXY((short)ProcessMsg.wIdent, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, M2Share.ObjectManager.Get(ProcessMsg.nParam3), ProcessMsg.boLateDelivery, ref dwDelayTime))
+                    // MOVE-90: NOMAGIC 地图禁施法门。原生 CM_SPELL 派发器 sub_6D7D68 在调
+                    // DoSpell(sub_6BC510) 之前先测地图旗标：
+                    //   006DA125  8B 80 28 01 00 00     mov eax,[eax+0x128]      ; player.m_PEnvir
+                    //   006DA12B  80 B8 81 00 00 00 00  cmp byte [eax+0x81],0    ; boNOMAGIC
+                    //   006DA132  0F 85 42 00 00 00     jne 0x6DA17A             ; 置位→静默拒绝
+                    //   006DA17A  ... mov dx,0x276 / call [vtbl+0x250]           ; 只发失败应答,不施法,无文本
+                    // 短路后 dwDelayTime 保持 0(方法入口初始化)，走下方 else 的 dwDelayTime==0
+                    // 分支发 RM_MOVEFAIL + SM_ACT_FAIL(0x276)，与原生静默拒绝等价。
+                    if (!NativeNoMagicMapForbidsSpell()
+                        && ClientSpellXY((short)ProcessMsg.wIdent, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, M2Share.ObjectManager.Get(ProcessMsg.nParam3), ProcessMsg.boLateDelivery, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
