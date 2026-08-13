@@ -3,10 +3,15 @@ using DBSvr;
 using GameSvr;
 using SystemModule;
 
-if (args.Length != 1)
-    throw new ArgumentException("Usage: DurabilitySecurityCheck <repository root>");
+var root = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (root == null)
+{
+    Console.Error.WriteLine("INCOMPLETE: repository root was not supplied and could "
+        + "not be located from the working directory. "
+        + "Usage: DurabilitySecurityCheck [repository root]");
+    return 2;
+}
 
-var root = Path.GetFullPath(args[0]);
 var failures = new List<string>();
 
 Run("debug builds do not grant GM permission", CheckCommandPermission);
@@ -169,4 +174,23 @@ static void Same(object expected, object actual, string message)
 {
     if (!ReferenceEquals(expected, actual))
         throw new InvalidOperationException(message);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// its repository root reported FAIL without evaluating a single assertion. Falling
+// back to the enclosing checkout keeps the assertions exactly as they were and only
+// removes the "never ran" outcome.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

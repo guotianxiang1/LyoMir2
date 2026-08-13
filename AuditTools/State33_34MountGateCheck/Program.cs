@@ -1,156 +1,188 @@
+using System;
 using System.Reflection;
 using GameSvr;
-using SystemModule;
+
+// State 0x33 (single-seat mount) / 0x34 (two-seat mount) gates.
+//
+// This audit used to assert a single public TPlayObject.IsStoneParalyzed() with
+// pure-OR semantics (0x33 || 0x34). Neither half survives the image:
+//
+//   * There is no single predicate. Native has TWO shapes.
+//     Shape A, the only one that exists as a named function, is sub_6BBE84:
+//       0x6BBE8A  B2 33                 mov dl,0x33
+//       0x6BBE8E  E8 CD 6A 0B 00        call 0x772960          ; HasState(0x33)
+//       0x6BBE93  84 C0 / 74 09         test al,al / je 0x6BBEA0
+//       0x6BBE97  83 BB C0 03 00 00 00  cmp dword [ebx+0x3C0],0
+//       0x6BBE9E  75 12                 jne 0x6BBEB2           ; -> TRUE
+//       0x6BBEA0  B2 34                 mov dl,0x34
+//       0x6BBEA4  E8 B7 6A 0B 00        call 0x772960          ; HasState(0x34)
+//       0x6BBEAB  75 05                 jne 0x6BBEB2           ; -> TRUE
+//       0x6BBEAD  33 C0                 xor eax,eax            ; -> FALSE
+//     i.e. (0x33 AND [self+0x3C0] != 0) OR 0x34. Solo-mounted with no partner is
+//     ALLOWED. The same shape is inlined at 0x6DADE3-0x6DAE0D and 0x78A032-0x78A055.
+//
+//     Shape B is a pure OR with no partner test, inlined at 0x6D8DC8:
+//       0x6D8DC8  B2 33 / call 0x772960 / test al,al / jne 0x6DBC2C
+//       0x6D8DDA  B2 34 / call 0x772960 / test al,al / jne 0x6DBC2C
+//
+//   * Pure OR is therefore correct only for the shape-B family. Asserting it for
+//     everything demanded that the three shape-A ports drop the +0x3C0 conjunct,
+//     which would let a two-seat passenger through gates native closes and close
+//     gates native leaves open for a solo rider.
+//
+// So this now pins shape A on the two product predicates that implement it, with
+// the +0x3C0 conjunct as an explicit assertion in both directions.
+//
+// Coverage census (measured on flat_image.bin, ImageBase 0x400000): `mov dl,0x33`
+// immediately followed by a direct `call 0x772960` occurs 40 times and
+// `mov dl,0x34` 41 times; SET is 0x6EE37E / 0x6EE8AF and CLEAR is 0x6EE48C /
+// 0x6EEBC2. C# carries four gates. That 40:4 gap is a real product hole, but
+// closing it needs a per-site census this tool cannot stand in for.
 
 PrepareRuntimeConfig();
-InitializeRuntime();
 
-CheckIsStoneParalyzedPredicate();
+var groupRestricted = typeof(TPlayObject).GetMethod("IsNativeGroupRestricted",
+    BindingFlags.NonPublic | BindingFlags.Static);
+if (groupRestricted == null)
+    throw new Exception("TPlayObject.IsNativeGroupRestricted is missing");
+if (groupRestricted.ReturnType != typeof(bool))
+    throw new Exception("IsNativeGroupRestricted must return bool");
+
+var fixedCoordBlocked = typeof(TPlayObject).GetMethod("IsNativeFixedCoordMountBlocked",
+    BindingFlags.NonPublic | BindingFlags.Instance);
+if (fixedCoordBlocked == null)
+    throw new Exception("TPlayObject.IsNativeFixedCoordMountBlocked is missing");
+if (fixedCoordBlocked.ReturnType != typeof(bool))
+    throw new Exception("IsNativeFixedCoordMountBlocked must return bool");
+
+var partnerField = typeof(TPlayObject).GetField("m_NativeHorsePartner",
+    BindingFlags.NonPublic | BindingFlags.Instance)
+    ?? typeof(TPlayObject).GetField("m_NativeHorsePartner",
+        BindingFlags.Public | BindingFlags.Instance);
+if (partnerField == null)
+    throw new Exception("TPlayObject.m_NativeHorsePartner is missing "
+        + "(native [self+0x3C0], read at 0x6BBE97)");
+if (partnerField.FieldType != typeof(TPlayObject))
+    throw new Exception("m_NativeHorsePartner must be the partner actor pointer, "
+        + "not a scalar: 0x6C5A99 dereferences it and reads the name at +0x106");
+
+CheckShapeA("IsNativeGroupRestricted",
+    player => (bool)groupRestricted!.Invoke(null, new object[] { player })!);
+CheckShapeA("IsNativeFixedCoordMountBlocked",
+    player => (bool)fixedCoordBlocked!.Invoke(player, null)!);
 CheckMountStateFlags();
-CheckGateCoverage();
 
 Console.WriteLine(
-    "PASS state33/34=mount-gates IsStoneParalyzed=0x33||0x34 " +
-    "gates=walk+run+spell+turn+sit+useitem+butch+backhome+heropowerup " +
-    "binary-sites=40x0x33+41x0x34 coverage=primary-commands+item-ops");
+    "PASS state33/34=mount-gates shapeA=(0x33&&partner)||0x34@sub_6BBE84 "
+    + "shapeB=0x33||0x34@0x6D8DC8 predicates=group+fixedcoord "
+    + "binary-sites=40x0x33+41x0x34 csharp-gates=4");
 return;
 
-static void CheckIsStoneParalyzedPredicate()
+// sub_6BBE84 as a truth table. Case 2 is the one that separates the two native
+// shapes: under shape B it would be blocked, under shape A it is not.
+void CheckShapeA(string label, Func<TPlayObject, bool> predicate)
 {
-    var player = CreateTestPlayer(job: 0);
+    var idle = CreateTestPlayer();
+    if (predicate(idle))
+        throw new Exception($"{label}: no mount state must not block (0x6BBEAD xor eax,eax)");
 
-    // Verify IsStoneParalyzed returns false when neither state is set
-    if (player.IsStoneParalyzed())
-        throw new Exception("IsStoneParalyzed should return false when no mount state is active");
+    var soloRider = CreateTestPlayer();
+    if (!soloRider.SetNativeActiveState(0x33))
+        throw new Exception($"{label}: could not set state 0x33");
+    if (predicate(soloRider))
+        throw new Exception($"{label}: 0x33 with a null partner must NOT block "
+            + "(0x6BBE97 cmp dword [ebx+0x3C0],0 / 0x6BBE9E jne)");
 
-    // Set state 0x33 (single-seat mount)
-    if (!player.SetNativeActiveState(0x33))
-        throw new Exception("Failed to set state 0x33");
+    var pairedRider = CreateTestPlayer();
+    if (!pairedRider.SetNativeActiveState(0x33))
+        throw new Exception($"{label}: could not set state 0x33");
+    partnerField!.SetValue(pairedRider, CreateTestPlayer());
+    if (!predicate(pairedRider))
+        throw new Exception($"{label}: 0x33 plus a partner must block (0x6BBE9E jne 0x6BBEB2)");
 
-    if (!player.HasNativeActiveState(0x33))
-        throw new Exception("State 0x33 should be active after setting");
+    var passenger = CreateTestPlayer();
+    if (!passenger.SetNativeActiveState(0x34))
+        throw new Exception($"{label}: could not set state 0x34");
+    if (!predicate(passenger))
+        throw new Exception($"{label}: 0x34 must block on its own (0x6BBEAB jne 0x6BBEB2)");
 
-    if (!player.IsStoneParalyzed())
-        throw new Exception("IsStoneParalyzed should return true when state 0x33 is set");
+    // 0x6BBEA0 is reached with no partner test, so 0x34 blocks regardless.
+    var passengerWithPartner = CreateTestPlayer();
+    if (!passengerWithPartner.SetNativeActiveState(0x34))
+        throw new Exception($"{label}: could not set state 0x34");
+    partnerField!.SetValue(passengerWithPartner, CreateTestPlayer());
+    if (!predicate(passengerWithPartner))
+        throw new Exception($"{label}: 0x34 plus a partner must block");
 
-    // Clear 0x33, set 0x34 (two-seat mount)
-    if (!player.ClearNativeActiveState(0x33))
-        throw new Exception("Failed to clear state 0x33");
+    var both = CreateTestPlayer();
+    both.SetNativeActiveState(0x33);
+    both.SetNativeActiveState(0x34);
+    if (!predicate(both))
+        throw new Exception($"{label}: both states set must block");
 
-    if (!player.SetNativeActiveState(0x34))
-        throw new Exception("Failed to set state 0x34");
-
-    if (!player.HasNativeActiveState(0x34))
-        throw new Exception("State 0x34 should be active after setting");
-
-    if (!player.IsStoneParalyzed())
-        throw new Exception("IsStoneParalyzed should return true when state 0x34 is set");
-
-    // Both states set
-    if (!player.SetNativeActiveState(0x33))
-        throw new Exception("Failed to set state 0x33 again");
-
-    if (!player.HasNativeActiveState(0x33) || !player.HasNativeActiveState(0x34))
-        throw new Exception("Both states should be active");
-
-    if (!player.IsStoneParalyzed())
-        throw new Exception("IsStoneParalyzed should return true when both states are set");
-
-    // Clear both
-    if (!player.ClearNativeActiveState(0x33))
-        throw new Exception("Failed to clear state 0x33");
-
-    if (!player.ClearNativeActiveState(0x34))
-        throw new Exception("Failed to clear state 0x34");
-
-    if (player.IsStoneParalyzed())
-        throw new Exception("IsStoneParalyzed should return false when both states are cleared");
+    var cleared = CreateTestPlayer();
+    cleared.SetNativeActiveState(0x33);
+    cleared.SetNativeActiveState(0x34);
+    partnerField!.SetValue(cleared, CreateTestPlayer());
+    if (!cleared.ClearNativeActiveState(0x33))
+        throw new Exception($"{label}: could not clear state 0x33");
+    if (!cleared.ClearNativeActiveState(0x34))
+        throw new Exception($"{label}: could not clear state 0x34");
+    if (predicate(cleared))
+        throw new Exception($"{label}: clearing both states must unblock even with "
+            + "a stale partner pointer");
 }
 
 static void CheckMountStateFlags()
 {
-    // Verify that states 0x33 and 0x34 are distinct and in the correct word
-    // 0x33 = 51 decimal: 51 / 32 = 1 (word index), 51 % 32 = 19 (bit index)
-    // 0x34 = 52 decimal: 52 / 32 = 1 (word index), 52 % 32 = 20 (bit index)
-    // Both are in m_nCharStatus2 (GetBodyStateWord(1))
+    // 0x33 = 51: word 1, bit 19. 0x34 = 52: word 1, bit 20. Native indexes the
+    // obj+0x168 bitset register-wise (bt 0x772968 / bts 0x77299B / btr 0x7729B9)
+    // and RM_SPELL reads exactly this pair as (1<<19)|(1<<20) on GetBodyStateWord(1)
+    // in TPlayObject.Message.cs.
+    var player = CreateTestPlayer();
 
-    var player = CreateTestPlayer(job: 0);
-
-    // Set only 0x33
     player.SetNativeActiveState(0x33);
-    var word1_with_33 = player.GetBodyStateWord(1);
-
-    // Verify bit 19 is set (0x33 % 32 = 19)
-    if ((word1_with_33 & (1 << 19)) == 0)
+    var wordWith33 = player.GetBodyStateWord(1);
+    if ((wordWith33 & (1 << 19)) == 0)
         throw new Exception("State 0x33 should set bit 19 in word 1");
-
-    // Verify bit 20 is not set
-    if ((word1_with_33 & (1 << 20)) != 0)
+    if ((wordWith33 & (1 << 20)) != 0)
         throw new Exception("State 0x34 bit should not be set when only 0x33 is active");
 
-    // Add 0x34
     player.SetNativeActiveState(0x34);
-    var word1_with_both = player.GetBodyStateWord(1);
-
-    // Verify both bits are set
-    if ((word1_with_both & (1 << 19)) == 0)
+    var wordWithBoth = player.GetBodyStateWord(1);
+    if ((wordWithBoth & (1 << 19)) == 0)
         throw new Exception("State 0x33 bit should still be set");
-
-    if ((word1_with_both & (1 << 20)) == 0)
+    if ((wordWithBoth & (1 << 20)) == 0)
         throw new Exception("State 0x34 should set bit 20 in word 1");
 }
 
-static void CheckGateCoverage()
+static TPlayObject CreateTestPlayer() => new TPlayObject
 {
-    // Verify that the critical gate points exist in source code
-    // We can't directly test private methods, but we can verify the structure exists
+    m_btJob = 0,
+    m_boGhost = false,
+    m_PEnvir = new Envirnoment()
+};
 
-    var playerType = typeof(TPlayObject);
-
-    // Verify IsStoneParalyzed is public
-    var isStoneParalyzedMethod = playerType.GetMethod("IsStoneParalyzed",
-        BindingFlags.Public | BindingFlags.Instance);
-    if (isStoneParalyzedMethod == null)
-        throw new Exception("IsStoneParalyzed method should be public");
-
-    // Verify it returns bool
-    if (isStoneParalyzedMethod.ReturnType != typeof(bool))
-        throw new Exception("IsStoneParalyzed should return bool");
-
-    // The actual gate coverage is verified by code review and binary analysis:
-    // - ClientWalkXY: TPlayObject.Attack.cs line 677
-    // - ClientSpellXY: TPlayObject.Attack.cs line 297
-    // - ClientUseItems: TPlayObject.Operate.cs (newly added)
-    // - ClientGetButchItem: TPlayObject.Operate.cs (newly added)
-    // - ClientChangeDir: TPlayObject.Operate.cs line 456
-    // - ClientSitDownHit: TPlayObject.Operate.cs line 498
-    // - CM_HERO_POWERUP: TPlayObject.Message.cs line 2675
-    // - BackHome: TPlayObject.NativeBackHome.cs lines 48, 52
-}
-
+// M2Share's static constructor resolves !Setup.txt against AppContext.BaseDirectory
+// (M2Share.cs:1682) and IniFile.Load throws when it is absent, so the skeleton has
+// to exist before the first TPlayObject is constructed.
 static void PrepareRuntimeConfig()
 {
-    M2Share.Init();
-}
+    var runtimeDirectory = AppContext.BaseDirectory;
+    System.IO.File.WriteAllText(
+        System.IO.Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    System.IO.File.WriteAllText(
+        System.IO.Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
 
-static void InitializeRuntime()
-{
-    M2Share.g_Config = new TConfig();
-    M2Share.g_Config.LoadConfig();
-    M2Share.g_Config.ClientConf = new TClientConf();
-    M2Share.m_ItemsDB = [];
-    M2Share.m_MagicDB = [];
-    M2Share.m_MonsterDB = [];
-    M2Share.m_NpcDB = [];
-    M2Share.RandomNumber = new Random();
-    M2Share.ObjectManager = new TObjectManager();
-}
-
-static TPlayObject CreateTestPlayer(byte job)
-{
-    var player = new TPlayObject();
-    player.m_btJob = job;
-    player.m_boGhost = false;
-    player.m_PEnvir = new TEnvirnoment();
-    return player;
+    var shareDirectory = System.IO.Path.Combine(System.IO.Path.GetFullPath(
+        System.IO.Path.Combine(runtimeDirectory, "..")), "Share");
+    System.IO.Directory.CreateDirectory(shareDirectory);
+    System.IO.File.WriteAllText(
+        System.IO.Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    System.IO.File.WriteAllText(
+        System.IO.Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }

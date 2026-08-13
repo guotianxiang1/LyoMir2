@@ -4,15 +4,17 @@ using System.Text.RegularExpressions;
 using DBSvr.Core;
 using SystemModule;
 
-if (args.Length != 1)
-{
-    throw new ArgumentException("Usage: HeroDbCheck <repository root>");
-}
-
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 var gbk = Encoding.GetEncoding(936,
     EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
-var root = Path.GetFullPath(args[0]);
+var root = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (root == null)
+{
+    Console.Error.WriteLine("INCOMPLETE: repository root was not supplied and could "
+        + "not be located from the working directory. "
+        + "Usage: HeroDbCheck [repository root]");
+    Environment.Exit(2);
+}
 var dbSvr = Path.Combine(root, "DBSvr");
 var gameSvr = Path.Combine(root, "GameSvr");
 var systemModule = Path.Combine(root, "SystemModule");
@@ -1207,4 +1209,23 @@ static void Equal<T>(T expected, T actual, string message) where T : IEquatable<
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// its repository root reported FAIL without evaluating a single assertion. Falling
+// back to the enclosing checkout keeps the assertions exactly as they were and only
+// removes the "never ran" outcome.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

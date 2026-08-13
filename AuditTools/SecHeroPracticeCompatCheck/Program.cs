@@ -10,11 +10,20 @@ PrepareRuntimeConfig();
 
 const string originalSha256 =
     "CC505716AEB2FDB09C96B805D06C1DDDCD70DB0F331EF42AE1338C71766B452F";
-var originalM2 = Environment.GetEnvironmentVariable("LYOMIR_ORIGINAL_M2") ??
-    "C:\\Users\\Administrator\\Desktop\\\u4E09\u9F99\u4F4D\\" +
-    "\u4ED9\u7F18\u590D\u5DE50.3\u5929\u9F99\\mud2.0\\Mir200\\Gs1\\M2Server.exe";
-Assert(File.Exists(originalM2),
-    $"original M2 baseline was not found: {originalM2}");
+var originalM2 = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
+    ? args[0]
+    : Environment.GetEnvironmentVariable("LYOMIR_ORIGINAL_M2") ??
+      "C:\\Users\\Administrator\\Desktop\\\u4E09\u9F99\u4F4D\\" +
+      "\u4ED9\u7F18\u590D\u5DE50.3\u5929\u9F99\\mud2.0\\Mir200\\Gs1\\M2Server.exe";
+if (!File.Exists(originalM2))
+{
+    // Absence of the golden binary says nothing about the C# port, so this is
+    // exit 2 (run_audits.py EXIT_INCOMPLETE), not a failed contract. When the
+    // file IS present the SHA256 below still has to match exactly.
+    Console.Error.WriteLine("INCOMPLETE: original M2 baseline was not found: "
+        + originalM2 + ". Pass its path as argument 1 or set LYOMIR_ORIGINAL_M2.");
+    Environment.Exit(2);
+}
 Equal(originalSha256, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(originalM2))),
     "original M2 SHA256");
 

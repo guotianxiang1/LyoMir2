@@ -203,8 +203,22 @@ Console.WriteLine(
 return;
 
 static bool InvokeExact(MethodInfo method, TBaseObject actor,
-    Envirnoment target, short x, short y, int showMode) =>
-    (bool)method.Invoke(actor, new object[] { target, x, y, showMode })!;
+    Envirnoment target, short x, short y, int showMode)
+{
+    // TrySpaceMoveToEnvironment gained two optional parameters and Invoke does not
+    // apply C# default values, so they are read off the signature. That keeps this
+    // identical to a four-argument call site such as TBaseObject.SpaceMove even if
+    // a default later changes.
+    var parameters = method.GetParameters();
+    var arguments = new object[parameters.Length];
+    arguments[0] = target;
+    arguments[1] = x;
+    arguments[2] = y;
+    arguments[3] = showMode;
+    for (var index = 4; index < parameters.Length; index++)
+        arguments[index] = parameters[index].DefaultValue;
+    return (bool)method.Invoke(actor, arguments)!;
+}
 
 static TBaseObject NewActor(Envirnoment environment, byte race, short x, short y) =>
     new()
