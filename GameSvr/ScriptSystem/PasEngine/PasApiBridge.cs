@@ -2149,6 +2149,8 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "playernotice":
+                    if (args.Count >= 2 && TryExecuteNoticeTunnel(args[0].AsString()))
+                        return true;
                     if (args.Count >= 2 && !string.IsNullOrEmpty(args[0].AsString()))
                     {
                         var packedColor = args[1].AsInt() switch

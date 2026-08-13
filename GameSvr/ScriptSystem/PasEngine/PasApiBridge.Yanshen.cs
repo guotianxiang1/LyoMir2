@@ -395,6 +395,34 @@ namespace GameSvr.PasEngine
             return true;
         }
 
+        /// <summary>
+        /// `#$$#` is the plugin's second command prefix, carried on PlayerNotice.
+        /// 2.08 AllFuc.pas has exactly one live user:
+        ///   procedure Ys_XiGuai(Player:TPlayer);
+        ///   begin Player.PlayerNotice('#$$#眼神全屏吸怪',1314); end;
+        /// Only that literal is claimed here; any other `#$$#` string stays a
+        /// normal notice rather than being swallowed on a guess.
+        /// </summary>
+        private bool TryExecuteNoticeTunnel(string notice)
+        {
+            if (!string.Equals(notice, "#$$#眼神全屏吸怪", StringComparison.Ordinal))
+                return false;
+
+            const string apiName = "PlayerNotice";
+            YanshenApi.EnsureDirectCallReady(M2Share.PluginManager, apiName);
+            var api = GetYanshenApi();
+            if (api == null) return false;
+            using var directCall = YanshenApi.BeginStrictDirectCall(apiName);
+            api.EnsureFeatureEnabled("全屏吸怪");
+
+            // The no-argument form takes its range and level cap from S variables
+            // instead of parameters; Ys_NewXiGuai(round,lv,num) is the later form
+            // that passes them directly. num has no S slot, so it stays unlimited.
+            api.VacuumMonstersEx(GetPlayerVar('S', 1, 123).AsInt(),
+                GetPlayerVar('S', 1, 124).AsInt(), 0);
+            return true;
+        }
+
         internal static bool IsYanshenSignInTunnelCall(List<PasValue> args)
         {
             if (args.Count != 2) return false;

@@ -1057,23 +1057,6 @@ namespace GameSvr.Plugins
             return steal;
         }
 
-        /// <summary>吸怪 — 全屏拉怪到玩家身边</summary>
-        public void VacuumMonsters()
-        {
-            if (!Enabled("全屏吸怪")) return;
-            var envir = _player.m_PEnvir; if (envir == null) return;
-            var list = new List<TBaseObject>();
-            M2Share.UserEngine.GetMapMonster(envir, list);
-            foreach (var m in list)
-            {
-                if (m != null && !m.m_boDeath)
-                {
-                    m.m_nCurrX = _player.m_nCurrX;
-                    m.m_nCurrY = _player.m_nCurrY;
-                }
-            }
-        }
-
         public int VacuumMonstersEx(int range, int levelLimit, int maxCount)
         {
             if (!Enabled("全屏吸怪")) return 0;
