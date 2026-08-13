@@ -941,8 +941,19 @@ namespace GameSvr.PasEngine
         private static ClientPacket BuildNativeUnionSkillProgressHeader(TPlayObject player,
             TUserMagic userMagic)
         {
-            return Grobal2.MakeDefaultMsg(2885, player.ObjectId, 0, 0,
-                userMagic.MagicInfo.wMagicID);
+            // sub_744E88 pushes the five wire fields in Delphi register order
+            // (Param, Tag, Series, Buf, Len) before ecx=nRecog / dx=Ident:
+            //   00744ED7  E8 60 36 D8 FF     call 0x4C853C   ; ax = MagicInfo.wMagicID
+            //   00744EDC  50                 push eax        ; Param  = wMagicID
+            //   00744EDD  6A 00              push 0          ; Tag    = 0
+            //   00744EDF  6A 00              push 0          ; Series = 0
+            //   00744EE1  8B 45 FC / 50      push [ebp-4]    ; Buf
+            //   00744EE5  6A 14              push 0x14       ; Len    = 20
+            //   00744EE7  8B CF              mov ecx, edi    ; nRecog = Self
+            //   00744EE9  66 BA 45 0B        mov dx, 0xB45   ; 2885
+            // 0x4C853C is `mov eax,[eax] / mov ax,[eax+0x10] / ret` = MagicInfo.wMagicID.
+            return Grobal2.MakeDefaultMsg(2885, player.ObjectId,
+                userMagic.MagicInfo.wMagicID, 0, 0);
         }
 
         private static byte[] BuildNativeUnionSkillProgressBody(TUserMagic userMagic)
