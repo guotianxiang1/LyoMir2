@@ -209,31 +209,4 @@ class Program
         M2Share.ProcessMsgCriticalSection ??= new object();
         M2Share.LogMsgCriticalSection ??= new object();
     }
-
-    // The fixture players are online, so every notice and every cooldown
-    // notification reaches TPlayObject.SendSocket, which dereferences
-    // M2Share.GateManager. The singleton has no gate registered, so
-    // AddGateBuffer returns false and nothing leaves the process.
-    static void PrepareRuntimeConfig()
-    {
-        var runtimeDirectory = AppContext.BaseDirectory;
-        File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
-            "[Server]" + Environment.NewLine);
-        File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
-            "[String]" + Environment.NewLine);
-        File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
-            "[Command]" + Environment.NewLine);
-
-        var shareDirectory = Path.Combine(Path.GetFullPath(
-            Path.Combine(runtimeDirectory, "..")), "Share");
-        Directory.CreateDirectory(shareDirectory);
-        File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
-            "[PlayerLevelExp]" + Environment.NewLine);
-        File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
-            "[Integer]" + Environment.NewLine);
-
-        M2Share.GateManager ??= GateManager.Instance;
-        M2Share.ProcessMsgCriticalSection ??= new object();
-        M2Share.LogMsgCriticalSection ??= new object();
-    }
 }
