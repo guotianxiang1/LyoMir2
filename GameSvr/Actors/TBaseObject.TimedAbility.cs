@@ -35,6 +35,28 @@ namespace GameSvr
             AddTimedAbilityInternal(internalType, value, duration, 0);
         }
 
+        /// <summary>
+        /// Native <c>MakePosion</c> = VMT+0xC8 @0x76B3C8 taken by state id rather
+        /// than by legacy poison slot. The public <see cref="MakePosion"/> gates on
+        /// <c>nType &lt; MAX_STATUS_ATTRIBUTE</c> (12) because it also mirrors into
+        /// the legacy <c>m_wStatusTimeArr</c>; native has no such gate — it hands
+        /// <c>dl</c> straight to AddState. TDebuffTrapEvent needs ids 0x11 and 0x18,
+        /// which have no legacy slot (slots 0..11 map to state ids 31..20), so there
+        /// is nothing to mirror and the gate would just swallow the call.
+        /// <para>
+        /// Body reproduced: @0x76B413 <c>imul ecx, eax, 0x3E8</c> (seconds to ms)
+        /// then @0x76B41F <c>call [ebx+0x1EC]</c> = AddState(id, ms, flag 0, value).
+        /// The ImmuneCheck (@0x76B3D8), the state-0x34 veto (@0x76B3E1) and the
+        /// "id 0x12 removes 0x1A" companion (@0x76B3EE) all live inside
+        /// CanAddNativeTimedAbility / AddTimedAbilityInternal already.
+        /// </para>
+        /// </summary>
+        internal bool ApplyNativeStateSeconds(byte stateId, int seconds, int value)
+        {
+            return AddTimedAbilityInternal(stateId, value,
+                unchecked(seconds * 1000), 0);
+        }
+
         private bool AddTimedAbilityInternal(byte internalType, int value,
             int duration, byte newNodeFlag)
         {

@@ -306,6 +306,30 @@ namespace GameSvr
             return false;
         }
 
+        /// <summary>
+        /// Native <c>sub_7792EC(eax=Envir, edx=X, ecx=Y, [esp+4]=boRelease)</c>,
+        /// the cell-attribute half of the stall lock. It resolves the cell through
+        /// sub_7776A8 and then writes the attribute byte directly:
+        /// <c>0x779310 74 08 je 0x77931A</c> — a NON-zero flag stores 0
+        /// (<c>0x779315 C6 00 00</c>, walkable) and a zero flag stores 2
+        /// (<c>0x77931D C6 00 02</c>, LowWall). TStallEvent's constructor calls it
+        /// with 0 to claim the cell (@0x719A67 `6A 00`) and its Run/Close call it
+        /// with 1 to give the cell back (@0x719AE7 / @0x7199DE `6A 01`).
+        /// Returns false when the coordinates are off-map, matching the
+        /// <c>test al,al / je</c> at 0x77930A.
+        /// </summary>
+        internal bool SetNativeStallCellAttribute(int nX, int nY, bool boRelease)
+        {
+            if (!TryGetMapCellIndex(nX, nY, out var index))
+            {
+                return false;
+            }
+            MapCellAttributes[index] = boRelease
+                ? CellAttribute.Walk
+                : CellAttribute.LowWall;
+            return true;
+        }
+
         public MapCellinfo GetMapCellInfo(int nX, int nY, ref bool success)
         {
             if (TryGetMapCellIndex(nX, nY, out var index))
