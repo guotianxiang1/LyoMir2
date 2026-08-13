@@ -3089,6 +3089,7 @@ namespace GameSvr
                         && !TryHandleHeroNotifyCm(ProcessMsg)
                         && !TryHandleHorseTokenCm(ProcessMsg)
                         && !TryHandleCmMiscTail(ProcessMsg)
+                        && !TryHandleTaskBoardScriptCm(ProcessMsg)
                         && !TryHandleNativeSocialProtocol(ProcessMsg)
                         && !TryHandleNativeCmTailProtocol(ProcessMsg)
                         && !TryHandleNativeCmQ1(ProcessMsg)
