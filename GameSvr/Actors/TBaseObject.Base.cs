@@ -1515,22 +1515,50 @@ namespace GameSvr
             SendRefMsg(Grobal2.RM_HEAR, 0, M2Share.g_Config.btHearMsgFColor, M2Share.g_Config.btHearMsgBColor, 0, sCharName + ':' + sMsg);
         }
 
+        /// <summary>
+        /// 战神 <c>TCreature.MarkDelete sub_768060</c>（身份由自带异常串
+        /// <c>'[Exception]: TCreature.MarkDelete Cret的地图无效'</c> @0x768138 坐实）。
+        /// 前半段 0x76807B..0x7680E4 只是两条地图有效性日志（<c>m_PEnvir</c> 为空 /
+        /// <c>[envir+0x44]</c> 为 0），不改任何状态；真正的状态迁移是这四条：
+        ///   0x7680E9  80 7B 73 00        cmp byte [ebx+0x73],0    ; 已是 ghost 则整段跳过
+        ///   0x7680ED  75 18              jne 0x768107
+        ///   0x7680EF  C6 43 73 01        mov byte [ebx+0x73],1    ; m_boGhost，无条件
+        ///   0x7680F3  E8 48 02 CA FF     call 0x408340            ; GetTickCount
+        ///   0x7680F8  89 83 4C 01 00 00  mov [ebx+0x14c],eax      ; m_dwGhostTick
+        ///   0x7680FE  33 D2 / 8B C3 / E8 AD 00 00 00  xor edx,edx / mov eax,ebx / call 0x7681B4
+        /// <c>sub_7681B4</c> = <c>DisappearA</c>：<c>DeleteFromMap</c>（0x7681D7 call 0x7794A8）
+        /// 成功才发 <c>RM_DISAPPEAR</c>（0x7681EE <c>mov dx,0x1E</c> → <c>call [vmt+0xE0]</c>）。
+        ///
+        /// 【无 m_boCanReAlive 分叉】全函数 0x768060..0x76812E 只有 0x7680E9 这一个字节测试，
+        /// 读的是 <c>+0x73</c> 自身（幂等门），不读任何"可复活"标志；<c>m_boGhost</c> 是无条件写入。
+        /// 三条独立旁证：
+        ///   (1) 刷怪工厂 <c>sub_67C9E0</c> 落地新怪时只写 <c>word[obj+0x38]</c>（尸体秒数，
+        ///       0x67CA56 <c>mov [eax+0x38],dx</c>），【不写】任何 can-realive 标志、
+        ///       【不写】<c>m_pMonGen</c> 回指针 —— 原生怪物身上根本没有这个状态位；
+        ///   (2) 逐怪 tick 循环 <c>ProcessMon sub_67C150</c> 的 CertList 遍历
+        ///       （0x67C354..0x67C4A8）每只怪只有三个出口：槽为 null 跳过（0x67C381）/
+        ///       <c>cmp byte [obj+0x73],0 / jne</c> 走回收臂（0x67C38E，NULL 槽 + 入延迟释放
+        ///       FIFO + <c>[vmt+0x7C]</c>）/ 否则到点 <c>Run</c>。判据只有 <c>+0x73</c>，
+        ///       没有"复活"臂 —— 补怪是工厂重新造一只，不是把旧对象救活；
+        ///   (3) 两份 Delphi 参考的 <c>TBaseObject.MakeGhost</c> 同样是三行无分叉
+        ///       （<c>staging/ref-MIR2/GameOfMir/M2Server/ObjBase.pas:20510</c>、
+        ///        <c>staging/ref-MirServer-Delphi/EM2Engine/ObjBase.pas:18605</c>）。
+        ///
+        /// 原先这里的 <c>if (m_boCanReAlive) m_boInvisible = true;</c> 来自上游 LyoMir2 的 C#
+        /// （<c>staging/upstream-LyoMir2/GameSvr/Actors/TBaseObject.Base.cs:1117</c>），
+        /// 战神与两份 Delphi 三方皆无 —— 属 INVENTED。它配套的"原地复活"消费端
+        /// （<c>ReAliveEx</c>）已于 2026-08-03 按字节删除，只剩这半截分叉：由于
+        /// <c>m_boCanReAlive</c> 恰好对【所有】刷怪点怪物为真（UsrEngn.cs:3410），
+        /// 走这条臂的怪永远拿不到 <c>m_boGhost</c>，而回收循环（UsrEngn.cs:1803）唯一判据
+        /// 就是 <c>m_boGhost</c> —— 尸体永不入延迟释放 FIFO、CertList 槽永不腾出、
+        /// 刷怪点永不补怪。
+        /// </summary>
         public virtual void MakeGhost()
         {
-            if (m_boCanReAlive)
-            {
-                m_boInvisible = true;
-                m_dwGhostTick = HUtil32.GetTickCount();
-                RemoveFromMapForGhost();
-                SendRefMsg(Grobal2.RM_DISAPPEAR, 0, 0, 0, 0, "");
-            }
-            else
-            {
-                m_boGhost = true;
-                m_dwGhostTick = HUtil32.GetTickCount();
-                RemoveFromMapForGhost();
-                SendRefMsg(Grobal2.RM_DISAPPEAR, 0, 0, 0, 0, "");
-            }
+            m_boGhost = true;
+            m_dwGhostTick = HUtil32.GetTickCount();
+            RemoveFromMapForGhost();
+            SendRefMsg(Grobal2.RM_DISAPPEAR, 0, 0, 0, 0, "");
         }
 
         private void RemoveFromMapForGhost()
