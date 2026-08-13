@@ -311,8 +311,14 @@ static void VerifySourceContracts()
     Require(blast, "QueueNativeMagicEffect(3, null, rawDamage,",
         "AoE must queue dispatchCategory 3 with a nil target (@0x76F272 " +
         "push 3, @0x76F27E xor edx,edx)");
-    Require(blast, "nTargetX, nTargetY, 1, true, 0,",
-        "AoE range slot is 1 and arg0 is true (@0x76F270 / @0x76F27A)");
+    // The range slot now goes through the 眼神 skill-range trampoline, which
+    // returns its nativeDefault when the toggle is off — so the native 1 has to be
+    // that default (@0x76F270 `6A 01 push 1`), and arg0 stays true (@0x76F27A
+    // `6A 01 push 1`).
+    Require(blast, "RangeByte(PlayObject, magicId, 1)",
+        "AoE range slot defaults to the native 1 (@0x76F270)");
+    Require(blast, "nTargetX, nTargetY, range, true, 0,",
+        "AoE passes that range through and arg0 is true (@0x76F27A)");
     Require(blast, "600);",
         "AoE delay is 600 ms (@0x76F26B push 0x258)");
     foreach (string skill in new[]

@@ -180,12 +180,24 @@ static void CheckSuccessAndRace99()
 
     var actor = context.Map.GetMovingObject(51, 43, true) as TBaseObject;
     Assert(actor != null, "Race99 actor missing");
-    Assert(actor is MagicTowerArcherMonster,
-        "Race99 did not use MagicTowerArcherMonster");
+    // Race 99 is TSkyArcher: factory sub_679F8C jt[28] = 0x67A63F loads classref
+    // 0x67F21C and calls ctor 0x681958, which writes
+    //   681976  C6 86 78 01 00 00 63   mov byte [esi+0x178],0x63  ; race = 99
+    //   68197D  C7 46 78 07 00 00 00   mov dword [esi+0x78],7     ; view range = 7
+    // AddBaseObject reaches it through TryCreateRaceA, which runs before the big
+    // switch, so the unevidenced MagicTowerArcherMonster arm never executes.
+    Assert(actor is SkyArcher,
+        "Race99 did not use the byte-verified TSkyArcher (ctor 0x681958)");
     Assert(actor is not ArcherMonster, "Race99 reused Race104 class");
     Equal((byte)99, actor.m_btRaceServer, "Race99 value");
     Equal(7, actor.m_nViewRange, "Race99 view range");
-    Assert(actor.m_boWantRefMsg, "Race99 +0x3AC visibility carrier");
+    // VMT slot +0x20 override sub_6819B0: `cmp al,0x32 / jb -> false`,
+    // `cmp al,0x63 / jne -> true`, i.e. race in [50,255] and != 99.
+    // (The ctor's `mov byte [esi+0x3AC],1` has no proven C# field — SkyArcher.cs
+    // and ShadowHero.cs both register +0x3AC as unmapped — so it is not asserted.)
+    Assert(!actor.IsAttackTarget(NewRaceProbe(0x31)), "0x6819BA jb race<50");
+    Assert(actor.IsAttackTarget(NewRaceProbe(0x32)), "0x6819B8 race>=50");
+    Assert(!actor.IsAttackTarget(NewRaceProbe(0x63)), "0x6819BE race==99 excluded");
     Assert(ReferenceEquals(context.Player, actor.m_Master), "owner");
     Assert(ReferenceEquals(context.Map, actor.m_PEnvir), "environment");
     Equal((short)51, actor.m_nCurrX, "success X");
@@ -384,6 +396,9 @@ static List<TBaseObject> MovingActorsAt(Envirnoment map, int x, int y)
         .Where(actor => actor != null)
         .ToList();
 }
+
+static TBaseObject NewRaceProbe(byte race) =>
+    new Monster { m_btRaceServer = race };
 
 static void AssertCloseOnly(TPlayObject player, string name)
 {
