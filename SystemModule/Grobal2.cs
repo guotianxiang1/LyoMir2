@@ -629,15 +629,39 @@ namespace SystemModule
         /// </summary>
         public const int CM_SETFIXEDCOORD = 3420;
         /// <summary>
-        /// 战神 SM opcode 0x3026 (12326) — 定位石已记录坐标回包 (map name + X/Y).
-        /// Two senders, both `mov cx,0x3026` then `call sub_765E68`:
-        /// the setter 0x6E9CFE, and the login replay 0x6B2414 (inside UserLogon
-        /// fn~0x6B1AA0, guarded by `cmp byte [esi+0x18F8],0` at 0x6B23E3).
-        /// Args in both: (0, 0, X, Y) + saved map name as the string body.
-        /// sub_765E68 appends straight to the client send queue (0x76C11C), so
-        /// there is no server-side handler for this ident.
+        /// 定位石已记录坐标回包 (map name + X/Y). Same value as the request
+        /// <see cref="CM_SETFIXEDCOORD"/>: native answers on the ident it was asked on.
+        /// <para>
+        /// 0x3026 (12326) is the INTERNAL queue tag, not the wire ident. sub_765E68 is
+        /// an enqueue, not a send: it allocates a record via 0x764D68 and fills it,
+        ///   0x765E96  66 89 03        mov word [ebx],   ax   ; tag from cx
+        ///   0x765E9D  66 89 43 02     mov word [ebx+2],  ax
+        ///   0x765EA4  89 43 04        mov [ebx+4],  eax
+        ///   0x765EAA  89 43 08        mov [ebx+8],  eax
+        ///   0x765EB0  89 43 0C        mov [ebx+0xC], eax
+        ///   0x765EDA / 0x765EF9       [ebx+0x14] = len+1, [ebx+0x10] = body
+        /// with no call through the send slots [+0x250]/[+0x254] anywhere in it.
+        /// </para>
+        /// <para>
+        /// The wire packet is emitted later by the RM handler at 0x6B6036, which reads
+        /// back those very fields and only then sends:
+        ///   0x6B6036  66 8B 43 02        mov ax, word [ebx+2]
+        ///   0x6B603B  66 8B 43 08        mov ax, word [ebx+8]
+        ///   0x6B6040  66 8B 43 0C        mov ax, word [ebx+0xC]
+        ///   0x6B6045  8B 43 10           mov eax, [ebx+0x10]
+        ///   0x6B6049  0F B7 43 14        movzx eax, word [ebx+0x14]
+        ///   0x6B604E  8B 4B 04           mov ecx, [ebx+4]
+        ///   0x6B6051  66 BA 5C 0D        mov dx, 0xD5C          ; = 3420
+        ///   0x6B605A  FF 93 54 02 00 00  call [ebx+0x254]       ; send slot
+        /// </para>
+        /// A whole-image scan settles the split: `mov cx,0x3026` appears at exactly the
+        /// two enqueue sites, 0x6B2414 (login replay, inside UserLogon fn~0x6B1AA0,
+        /// guarded by `cmp byte [esi+0x18F8],0` at 0x6B23E3) and 0x6E9CFE (the setter),
+        /// while 0xD5C appears as an ident exactly once, at the send above.
+        /// Emitting 12326 on the wire, as this constant used to, means the original
+        /// client never recognises the reply and the recorded position never displays.
         /// </summary>
-        public const int SM_FIXEDCOORD = 12326;
+        public const int SM_FIXEDCOORD = 3420;
         public const int SM_HORSERUN = 5010;
         public const int UNKNOWMSG = 199;
         public const int SS_OPENSESSION = 100;

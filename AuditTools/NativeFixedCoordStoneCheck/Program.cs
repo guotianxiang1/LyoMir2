@@ -5,7 +5,7 @@
 //            0x6D8745 je 0x6DADE3; body calls the setter at 0x6DAE1B)
 //   CONSUMER TFixedCoordStone VMT slot +0x18 (ptr 0x7827D4, VMT 0x7827BC)
 //            = sub_78A014
-//   REPLAY   logon 0x6B23E3 cmp byte [esi+0x18f8],0 -> re-push SM 0x3026
+//   REPLAY   logon 0x6B23E3 cmp byte [esi+0x18f8],0 -> re-enqueue tag 0x3026, wire ident 3420
 //
 // Runtime fields (TPlayer, instSize 0x1948):
 //   obj+0x18F8 ShortString[15] map, obj+0x1908 word X, obj+0x190A word Y
@@ -28,7 +28,11 @@ try
 {
     PrepareRuntimeFiles();
     Equal(3420, Grobal2.CM_SETFIXEDCOORD, "CM_SETFIXEDCOORD constant");
-    Equal(12326, Grobal2.SM_FIXEDCOORD, "SM_FIXEDCOORD constant (0x3026)");
+    // 0x3026 is the internal queue tag that sub_765E68 stores at record+0, not an
+    // ident that ever reaches a socket. The RM handler 0x6B6036 reads that record
+    // back and sends 0x6B6051 `mov dx,0xD5C` = 3420, the only ident load for this
+    // reply in the image.
+    Equal(3420, Grobal2.SM_FIXEDCOORD, "SM_FIXEDCOORD constant (wire 0xD5C)");
 
     // Offsets are the load-bearing facts; 0x6E9CB1 `mov cl,0x0F` fixes the capacity.
     Equal(0x05AC, Const<int>("NativeFixedCoordMapOffset"), "map offset");
@@ -49,7 +53,7 @@ try
     CheckGm401IsRegistered();
 
     Console.WriteLine(
-        "PASS NativeFixedCoordStone cm=3420 sm=0x3026 rec=0x5AC/0x5BC/0x5BE " +
+        "PASS NativeFixedCoordStone cm=3420 sm=3420 rec=0x5AC/0x5BC/0x5BE " +
         "cap=0x0F emptiness=lenbyte assign=no-zerofill gate=NORECALL+传送石禁用地图 " +
         "replay=0x6B23E3");
     return 0;
@@ -205,7 +209,7 @@ static void CheckReplayOnlyWhenSet()
     // Argument order comes from the six pushes at 0x6E9CD4-0x6E9CFC into sub_765E68
     // (ret 0x18), repeated byte-identically by the logon replay at 0x6B23EC-0x6B2414:
     // [ebp+0x14]=X -> Param, [ebp+0x10]=Y -> Tag.
-    Equal((ushort)Grobal2.SM_FIXEDCOORD, sent[0].Ident, "replay ident 0x3026");
+    Equal((ushort)Grobal2.SM_FIXEDCOORD, sent[0].Ident, "replay wire ident 3420");
     Equal(845, sent[0].Param, "replay X (0x6B23F0 movzx [esi+0x1908])");
     Equal(674, sent[0].Tag, "replay Y (0x6B23F8 movzx [esi+0x190a])");
 }
@@ -243,7 +247,7 @@ static void CheckWiring()
 
     RequireContains(Path.Combine(root, "GameSvr", "Players", "TPlayObject.Base.cs"),
         "ReplayNativeFixedCoordOnLogon();",
-        "logon must replay SM 0x3026 (0x6B23E3)");
+        "logon must replay the fixed-coord reply (0x6B23E3)");
 
     RequireContains(Path.Combine(root, "GameSvr", "Players", "TPlayObject.Message.cs"),
         "ClientSetFixedCoord(ProcessMsg.nParam1);",
