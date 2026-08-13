@@ -1104,6 +1104,11 @@ namespace SystemModule
         public const int CM_SPLITITEM = 1116;
         public const int CM_QUERY_FOCUS_ITEM = 1271;
         public const int SM_ITEM_PILEUP_RESULT = 3322;
+        // Native CM 3290 (handler 0x6DA34E) replies on SM 3289 via vtbl+0x254.
+        // C# previously used 3290 as an SM ident (SM_QUERY_FOCUS_ITEM); that is
+        // the opposite direction and is not this CM.
+        public const int CM_3290 = 3290;
+        public const int SM_3289 = 3289;
         public const int SM_QUERY_FOCUS_ITEM = 3290;
 
         // === Title / NPC / Item Commit ===

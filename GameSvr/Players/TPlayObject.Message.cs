@@ -2739,6 +2739,9 @@ namespace GameSvr
                 // No SM, no field write. Same empty-callee shape as 4314.
                 case Grobal2.CM_4315:
                     break;
+                case Grobal2.CM_3290:
+                    ClientNativeCm3290ClockSnapshot();
+                    break;
 
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:
