@@ -3,28 +3,40 @@ using System;
 namespace GameSvr
 {
     /// <summary>
-    /// STATE-01/02/03/05 structural layer: body state duration tracking via
-    /// the native obj+0xDC linked list and obj+0x168 bitset.
+    /// STATE-01/02/03/05 structural scaffolding for the native obj+0xDC duration
+    /// list. Exercised only by AuditTools/NativeMagic191Check.
     ///
-    /// Native evidence: EA 0x77316A (applier), 0x773000 (remove walk),
-    /// 0x772974 (bts setter cmp bl,0x6F/ja→no-op), 0x7729A8 (btr clearer).
+    /// NOT THE RUNTIME AUTHORITY. The native obj+0xDC list and its 500ms walker
+    /// (sub_772FD0) are already implemented by ProcessTimedAbilities /
+    /// m_TimedAbilityHead in TBaseObject.TimedAbility.cs, which Run() calls every
+    /// frame. Verified at 0x772FD0-0x7730AA: GetTickCount, sub [ebx+0xE0],
+    /// cmp eax,0x1F4, jb skip, walk [ebx+0xDC], per-node virtual tick at
+    /// VMT+0x58, btr via 0x7729A8, detach the whole expired batch, then replay
+    /// callbacks through VMT+0x5C and free via 0x764E10.
     ///
-    /// Node layout (18 bytes, verified at 0x773150-0x77317C):
-    ///   +0x00 [1] flags (updated in modify path 0x77310F)
-    ///   +0x01 [1] StateId (byte, 0..0x6F valid per 0x772993)
-    ///   +0x02 [4] Value (uint, ability modifier)
-    ///   +0x06 [4] TickRef (int, re-stamped at load 0x7731B3)
-    ///   +0x0A [4] DurationMs (int, -1=permanent per STATE-05)
-    ///   +0x0E [4] pNext (next node pointer, prepend at 0x773176)
+    /// Do not call ProcessNativeBodyStateDurations from Run(). Nothing in GameSvr
+    /// populates m_pNativeBodyStateDurationHead, so it would be a dead walk in the
+    /// per-frame path, and any node that did appear would clear bits in the shared
+    /// obj+0x168 bitset behind the timed-ability list's back. Native has exactly
+    /// one duration list and one walker.
     ///
-    /// Bitset: obj+0x168, 112 bits (0..0x6F = 0..111), accessed via bt/bts/btr.
-    /// C# maps to m_nCharStatus (bits 0..31), m_nCharStatus2 (32..63),
-    /// m_nCharStatus3 (64..95), m_nCharStatus4 (96..127). Valid range 0..0x6F.
+    /// Node layout (18 bytes) as encoded by the native applier:
+    ///   +0x00 [1] flags
+    ///   +0x01 [1] StateId       (0x773164 mov [eax+1],bl; range 0..0x6F)
+    ///   +0x02 [4] DurationMs    (0x77315E store; 0x773191 mov eax,[eax+2] then
+    ///                            idiv 0x3E8 to report seconds; -1 = permanent)
+    ///   +0x06 [4] TickRef       (0x7731B3 mov [edx+6],eax after GetTickCount)
+    ///   +0x0A [4] Value         (0x77316A mov [eax+0xA],edi; read back by
+    ///                            GetValue at 0x773C0B mov eax,[eax+0xA])
+    ///   +0x0E [4] pNext         (0x773176 prepend to obj+0xDC)
     ///
-    /// Tick: 500ms gate (>=, not >), wall-clock elapsed decrement, mov latch
-    /// (not +=). Permanent duration (-1) short-circuits before arithmetic.
+    /// Bitset: obj+0x168, 112 bits (0..0x6F). The whole image contains exactly
+    /// three instructions touching it, all register-indexed: bt at 0x772968,
+    /// bts at 0x77299B, btr at 0x7729B9. C# maps it to m_nCharStatus,
+    /// m_nCharStatus2, m_nCharStatus3, m_nCharStatus4.
     ///
-    /// Coexists with legacy m_wStatusTimeArr[12] (not replaced, per task req).
+    /// Coexists with legacy m_wStatusTimeArr[12], which is a separate
+    /// second-granularity carrier and is not replaced here.
     /// </summary>
     public partial class TBaseObject
     {
