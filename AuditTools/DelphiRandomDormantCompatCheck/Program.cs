@@ -20,7 +20,8 @@ Console.WriteLine(
     "negative=uint-bits float=seed/2^32 concurrent=linearized " +
     "image-seed=0 randomize=qpc-low32/fallback-gettickcount " +
     "facade=sub_403B4C(v)/(0)/min+(max-min)/min+(max-min+1) " +
-    "direct-delphirandom-in-gamesvr=0 facade-access>=453 pas-shared=4 yb-shared=1 " +
+    "direct-delphirandom-in-gamesvr=0(+appservice-seed-only) facade-access>=453 " +
+    "pas-shared=0(via-contract) yb-shared=0(via-contextid) " +
     "new-random=0");
 
 static void TestSeedAccess()
@@ -241,10 +242,11 @@ static void TestDormantRuntimeGate()
     // whose NAME contains the string.
     var dormantOrLocal = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "NativePasRandomContract.cs",        // dormant PAS random/randomrange contract
+        "NativePasRandomContract.cs",        // PAS random/randomrange, now live on the shared seed
         "NativeUpdateClothesTransaction.cs", // dormant 4637 Randomize+Random(800) model
         "NativeYuanbaoContextId.cs",         // dormant YBDB-gated 30-step context-id model
         "NativeQuestDiamondProtocol.cs",     // local NextDelphiRandom method NAME only
+        "AppService.cs",                     // startup seeding, asserted exactly below
     };
     var liveText = string.Join('\n',
         gameSources.Where(p => !dormantOrLocal.Contains(Path.GetFileName(p)))
@@ -253,6 +255,29 @@ static void TestDormantRuntimeGate()
     Equal(0, Regex.Matches(liveText, @"\bDelphiRandom\b",
         RegexOptions.CultureInvariant).Count,
         "dormant owner leaked into LIVE GameSvr runtime (dormant/local models excluded)");
+
+    // AppService is the one live file allowed to name DelphiRandom, because native
+    // seeds the generator at startup and something has to model that. TMainThread.Create
+    // does it before Execute enters the game loop:
+    //   0x00792C5A  E8 4D 08 C7 FF     call 0x004034AC        ; Randomize
+    //   0x004034AC  83 C4 F8 / 54      add esp,-8 / push esp   ; function entry
+    //   0x004034B0  E8 BF E0 FF FF     call 0x00401574        ; time source
+    //   0x004034BC  A3 08 20 7A 00     mov [0x007A2008], eax  ; the seed global
+    // (0x004034BC is the store inside that function, not its entry - an earlier report
+    // cited it as the call target, which is what made the two accounts look inconsistent.)
+    //
+    // A blanket exemption would let a real draw hide in this file, so the allowance is
+    // exact: one reference, and it has to be the seeding call.
+    var appService = gameSources.FirstOrDefault(
+        p => string.Equals(Path.GetFileName(p), "AppService.cs", StringComparison.OrdinalIgnoreCase));
+    Assert(appService != null, "AppService.cs not found for the startup-seeding check");
+    var appServiceText = File.ReadAllText(appService!);
+    Equal(1, Regex.Matches(appServiceText, @"\bDelphiRandom\b",
+        RegexOptions.CultureInvariant).Count,
+        "AppService may name DelphiRandom exactly once, for the startup seed");
+    Equal(1, Regex.Matches(appServiceText, @"\bDelphiRandom\.Randomize\s*\(\s*\)",
+        RegexOptions.CultureInvariant).Count,
+        "AppService's single DelphiRandom use must be Randomize(), not a draw");
 
     var oldInvocations = Regex.Matches(allGameText,
         @"(?<![A-Za-z0-9_])(?:M2Share\.)?RandomNumber\.Random",
@@ -266,17 +291,32 @@ static void TestDormantRuntimeGate()
         $"legacy RandomNumber access floor: expected >= 453, actual {oldInvocations} " +
         "(a DROP below the floor means gameplay draws were removed = regression)");
 
+    // The PAS builtins used to draw from Random.Shared, a generator of their own. They
+    // now go through NativePasRandomContract onto the shared RandSeed, which is what
+    // native does - the script random is the engine random, not a second stream. This
+    // assertion used to require the four Random.Shared sites and so pinned the less
+    // faithful shape; it now requires them gone and the contract in their place.
     var pas = File.ReadAllText(Path.Combine(gameRoot, "ScriptSystem",
         "PasEngine", "PasInterpreter.cs"));
-    Equal(4, Regex.Matches(pas, @"Random\.Shared\.",
+    Equal(0, Regex.Matches(pas, @"Random\.Shared\.",
         RegexOptions.CultureInvariant).Count,
-        "PAS separate Random.Shared gate");
+        "PAS builtins must not own a second generator");
+    Assert(Regex.IsMatch(pas, @"NativePasRandomContract\.\s*Random\s*\("),
+        "PAS random builtin no longer routes through NativePasRandomContract");
+    Assert(Regex.IsMatch(pas, @"NativePasRandomContract\.\s*RandomRange\s*\("),
+        "PAS randomrange builtin no longer routes through NativePasRandomContract");
 
+    // Same move as the PAS builtins: the context id used to be drawn from Random.Shared
+    // inline and now comes from NativeYuanbaoContextId on the shared seed. Requiring the
+    // old inline draw pinned the second generator, so the requirement is inverted and
+    // paired with a positive check that the generator is still reached.
     var yuanbao = File.ReadAllText(Path.Combine(gameRoot, "Services",
         "NativeYuanbaoManager.cs"));
-    Equal(1, Regex.Matches(yuanbao, @"Random\.Shared\.",
+    Equal(0, Regex.Matches(yuanbao, @"Random\.Shared\.",
         RegexOptions.CultureInvariant).Count,
-        "yuanbao context-id Random.Shared gate");
+        "yuanbao manager must not own a second generator");
+    Assert(Regex.IsMatch(yuanbao, @"NativeYuanbaoContextId\.\s*Generate\s*\(\s*\)"),
+        "yuanbao context id no longer routes through NativeYuanbaoContextId");
 
     var newRandom = Regex.Matches(allGameText,
         @"new\s+System\.Random\s*\(",
