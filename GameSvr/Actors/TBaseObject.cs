@@ -5132,88 +5132,47 @@ namespace GameSvr
 
         public bool InSafeZone()
         {
-            // MFLG-17: Fixed safe zone rule order and logic to match native sub_76858C
-            // Native ladder:
-            //   1. m_PEnvir == null -> FALSE (not true!)
-            //   2. m_PEnvir.Flag.boSAFE -> TRUE
-            //   3. StartPointList check -> TRUE if found
-            //   4. RedHomeMap check (only if nSafeZoneSize > 0) -> TRUE if in range
-            //   5. SafeZoneList polygon check -> TRUE if inside
-
-            // Step 1: null check returns FALSE (7684B5-7684B7: xor eax,eax / test edi,edi / je)
-            if (m_PEnvir == null)
-            {
-                return false;
-            }
-
-            // Step 2: boSAFE flag (76859B-76859D: test al,al / jne)
-            if (m_PEnvir.Flag.boSAFE)
-            {
-                return true;
-            }
-
-            // Step 3: StartPointList iteration (sub_7684A0 -> sub_696D7C)
-            for (int i = 0; i < M2Share.StartPointList.Count; i++)
-            {
-                var startPoint = M2Share.StartPointList[i];
-                if (startPoint != null && startPoint.m_sMapName == m_PEnvir.sMapName)
-                {
-                    int nSafeX = startPoint.m_nCurrX;
-                    int nSafeY = startPoint.m_nCurrY;
-                    if ((Math.Abs(m_nCurrX - nSafeX) <= M2Share.g_Config.nSafeZoneSize) &&
-                        (Math.Abs(m_nCurrY - nSafeY) <= M2Share.g_Config.nSafeZoneSize))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            // Step 4: RedHomeMap check (76850E-768549)
-            // Native: 76850E test edi,edi / 768510 jle -> skip if nSafeZoneSize <= 0
-            if (M2Share.g_Config.nSafeZoneSize > 0 &&
-                !string.IsNullOrEmpty(M2Share.g_Config.sRedHomeMap) &&
-                string.Equals(m_PEnvir.sMapName, M2Share.g_Config.sRedHomeMap, StringComparison.OrdinalIgnoreCase))
-            {
-                // Native: 768527-768549 uses <= for range check (not >)
-                if ((Math.Abs(m_nCurrX - M2Share.g_Config.nRedHomeX) <= M2Share.g_Config.nSafeZoneSize) &&
-                    (Math.Abs(m_nCurrY - M2Share.g_Config.nRedHomeY) <= M2Share.g_Config.nSafeZoneSize))
-                {
-                    return true;
-                }
-            }
-
-            // Step 5: SafeZoneList polygon check (76854F-76856E: call sub_696E48)
-            if (M2Share.SafeZoneList != null)
-            {
-                for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
-                {
-                    if (M2Share.SafeZoneList[i].Contains(m_PEnvir.sMapName, m_nCurrX, m_nCurrY))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
+            return InSafeZone(m_PEnvir, m_nCurrX, m_nCurrY);
         }
 
+        // MFLG-17. The native counterpart is sub_7684DC (eax=Self, edx=nX, ecx=nY,
+        // [ebp+8]=nRange, `ret 4`); every caller passes the range as a literal 10
+        // (0x6C1776 `6A0A push 0xa`, 0x68A362 `6A0A`), which is g_Config.nSafeZoneSize.
+        // sub_76858C is a sibling with no RedHome arm and a hardcoded range of 12
+        // (0x7685BE `6A0C`), so it is NOT the function this ports.
+        //
+        // Native gate order is boSAFE (0x7684F6 `8A585C` / `84DB` / `750F`), then the
+        // SafeZoneList polygons (0x768505 -> sub_7684A0 -> sub_696D7C), then RedHome,
+        // then the start points (0x76856B -> sub_696E48). C# runs the start points
+        // before the polygons; all four gates are side-effect-free, so the OR is
+        // order-independent and the result is identical.
+        //
+        // RedHome is compiled in as map '3' (Delphi literal at 0x768588) at
+        // 845 / 674 (0x76852C `2D4D030000`, 0x76853D `2DA2020000`) -- the same values
+        // GameSvrConfig defaults to. Both bounds are inclusive: 0x768536 `3BF8 cmp edi,eax`
+        // / 0x768538 `7C13 jl` takes the arm only while nRange >= abs(dx), likewise
+        // 0x768547 `3BF8` / 0x768549 `7C02` for dy. The start-point scan compares the
+        // same way but unsigned on 16 bits (0x696EDE `663B45F6` / 0x696EE2 `720B jb`).
+        // The arm is reached only when nRange > 0 (0x768510 `85FF` / 0x768512 `7E5E jle`).
+        //
+        // Two deliberate deviations, both out of MFLG-17's scope:
+        //   - that `jle` skips the start-point scan as well, not just RedHome, so a
+        //     nSafeZoneSize <= 0 config lets C# match start points where native cannot;
+        //   - sub_696E48 prefers a per-entry range when it is non-zero (0x696ED1
+        //     `668B4014` / 0x696ED5 `6685C0` / 0x696ED8 `7704 ja`), which is what
+        //     SendSafeZoneInfo already models; here every entry uses nSafeZoneSize.
+        // Native never null-checks the map (0x7684F0 loads it, 0x7684F6 dereferences it
+        // straight away), so returning false below is a port-safety choice.
         public bool InSafeZone(Envirnoment Envir, int nX, int nY)
         {
-            // MFLG-17: Same logic as InSafeZone() but with explicit Envir/coordinates
-
-            // Step 1: null check returns FALSE
             if (Envir == null)
             {
                 return false;
             }
-
-            // Step 2: boSAFE flag
             if (Envir.Flag.boSAFE)
             {
                 return true;
             }
-
-            // Step 3: StartPointList iteration
             for (int i = 0; i < M2Share.StartPointList.Count; i++)
             {
                 var startPoint = M2Share.StartPointList[i];
@@ -5228,11 +5187,10 @@ namespace GameSvr
                     }
                 }
             }
-
-            // Step 4: RedHomeMap check
             if (M2Share.g_Config.nSafeZoneSize > 0 &&
                 !string.IsNullOrEmpty(M2Share.g_Config.sRedHomeMap) &&
-                string.Equals(Envir.sMapName, M2Share.g_Config.sRedHomeMap, StringComparison.OrdinalIgnoreCase))
+                string.Equals(Envir.sMapName, M2Share.g_Config.sRedHomeMap,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 if ((Math.Abs(nX - M2Share.g_Config.nRedHomeX) <= M2Share.g_Config.nSafeZoneSize) &&
                     (Math.Abs(nY - M2Share.g_Config.nRedHomeY) <= M2Share.g_Config.nSafeZoneSize))
@@ -5240,8 +5198,6 @@ namespace GameSvr
                     return true;
                 }
             }
-
-            // Step 5: SafeZoneList polygon check
             if (M2Share.SafeZoneList != null)
             {
                 for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
@@ -5252,7 +5208,6 @@ namespace GameSvr
                     }
                 }
             }
-
             return false;
         }
 
