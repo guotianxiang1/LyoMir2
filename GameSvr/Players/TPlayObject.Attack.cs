@@ -465,6 +465,51 @@ namespace GameSvr
                 case SpellsDef.SKILL_314:
                 case SpellsDef.SKILL_317:
                     break;
+                // Four more outer ids whose callee is `33 C0 C3` (xor eax,eax
+                // / ret). Result stays the 0 written at 0x6BC59F.
+                //   115  0x6BCBAD E8 84 2E 03 00 call 0x6EFA38 (`33 C0 C3`)
+                //   269  0x6BCADF E8 E7 FE 02 00 call 0x6EC9D0 (`33 C0 C3`)
+                //   270  0x6BCB86 FF 91 60 01 00 00 call [ecx+0x160];
+                //        TPlayer VMT 0x6AC8C8+0x160 = 0x774154 (`33 C0 C3`)
+                //   287  0x6BCBBC FF 91 20 02 00 00 call [ecx+0x220];
+                //        TPlayer VMT+0x220 = 0x6ED268 (`33 C0 C3`); the
+                //        0x769258 tail at 0x6BCBD6 is behind
+                //        `cmp [ebp-5],0 / je 0x6BCD02` and never runs.
+                // Without these arms they fall into default, DoSpell DEFAULT
+                // succeeds, and the client sees a 0x27E fire native never
+                // sends. CM_SPELL answers RM_MOVEFAIL + SM_ACT_FAIL.
+                case SpellsDef.SKILL_115:
+                case SpellsDef.SKILL_269:
+                case SpellsDef.SKILL_270:
+                case SpellsDef.SKILL_287:
+                    break;
+                case SpellsDef.SKILL_65:
+                    result = TryActivateNativeSkill65Charge();
+                    break;
+                case SpellsDef.SKILL_290:
+                    result = TryActivateNativeSkill290(nTargetX);
+                    break;
+                case SpellsDef.SKILL_237:
+                    result = TryActivateNativeSkill237Dragon(UserMagic);
+                    break;
+                case SpellsDef.SKILL_261:
+                    result = TryActivateNativeSkill261(UserMagic);
+                    break;
+                case SpellsDef.SKILL_262:
+                    result = TryActivateNativeSkill262Poison(UserMagic);
+                    break;
+                case SpellsDef.SKILL_267:
+                    result = TryActivateNativeSkill267(UserMagic);
+                    break;
+                case SpellsDef.SKILL_273:
+                    TBaseObject skill273Target = null;
+                    if (CretInNearXY(TargeTBaseObject, nTargetX, nTargetY))
+                    {
+                        skill273Target = TargeTBaseObject;
+                    }
+                    TryActivateNativeSkill273DragonBreak(UserMagic,
+                        skill273Target);
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
