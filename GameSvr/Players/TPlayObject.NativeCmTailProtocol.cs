@@ -37,6 +37,14 @@ namespace GameSvr
     {
         private bool TryHandleNativeCmTailProtocol(TProcessMessage processMessage)
         {
+            // === TaskBoard subsystem === CM 4150/4151/4417/4651 are owned by
+            // TPlayObject.TaskBoard.cs (TryHandleTaskBoardCm). It takes precedence over the
+            // legacy fail-closed stubs below for those idents.
+            if (TryHandleTaskBoardCm(processMessage))
+            {
+                return true;
+            }
+
             switch (processMessage.wIdent)
             {
                 case Grobal2.CM_4125:
