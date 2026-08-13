@@ -689,7 +689,26 @@ namespace GameSvr
                         nC++;
                         if (nC >= 5) break;
                     }
-                    if (!Envir.CanWalk(PlayObject.m_nCurrX, PlayObject.m_nCurrY, true))
+                    // MOVE-57: 战神 sub_6B9A2C 在 jitter 循环之后【无条件】调
+                    // sub_7782D0 = GetRandomXY(Envir, &X, &Y, boFlag=1, fallback=1)，
+                    // 只有它也失败才记错误并回退到回城图：
+                    //   006B9C34  75 39                 jne 0x6B9C6F   ; 探测成功也跳到 GetRandomXY 之前
+                    //   006B9C6F  6A 01 / 6A 01         push 1 / push 1
+                    //   006B9C73  8D 8B 30 01 00 00     lea ecx,[ebx+0x130]   ; &Y
+                    //   006B9C79  8D 93 2C 01 00 00     lea edx,[ebx+0x12C]   ; &X
+                    //   006B9C81  E8 4A E6 0B 00        call 0x7782D0         ; GetRandomXY
+                    //   006B9C88  75 7B                 jne 0x6B9D05          ; 成功→跳过错误+回城
+                    // 旧 C# 用 `if (!CanWalk)` 直接回城，跳过了这一步——本可在当前图
+                    // 就地找到落点的登录被强行传回主城。NativeGetRandomXY 对已合法的
+                    // 坐标在首个 CanWalk 命中时原样返回，故成功路径逐位不变。
+                    var nSpawnX = (int)PlayObject.m_nCurrX;
+                    var nSpawnY = (int)PlayObject.m_nCurrY;
+                    if (TBaseObject.NativeGetRandomXY(Envir, ref nSpawnX, ref nSpawnY))
+                    {
+                        PlayObject.m_nCurrX = unchecked((short)nSpawnX);
+                        PlayObject.m_nCurrY = unchecked((short)nSpawnY);
+                    }
+                    else
                     {
                         M2Share.MainOutMessage(string.Format(sChangeServerFail2,
                             new object[] { M2Share.nServerIndex, PlayObject.m_nServerIndex, PlayObject.m_sMapName }));
