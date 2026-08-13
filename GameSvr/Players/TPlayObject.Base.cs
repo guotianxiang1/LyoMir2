@@ -1792,18 +1792,38 @@ namespace GameSvr
                                                 }
                                                 else
                                                 {
+                                                    // PKD-10 —— 归属人作废的判据是**幽灵**，不是死亡。
+                                                    // 战神 sub_783988（地面物归属过期，唯一调用点
+                                                    // 0x77A476，在地图格 tick 里）：
+                                                    //   783988  cmp dword [item+0xF4],0 / 75 09 jne
+                                                    //   783991  cmp dword [item+0xF8],0 / 74 4D je   ; 两槽都空 -> 无事
+                                                    //   78399A  2B 50 08              sub edx,[item+8]  ; now - 落地tick
+                                                    //   78399D  81 FA C0 D4 01 00     cmp edx,0x1D4C0   ; 120000 ms
+                                                    //   7839A3  76 12                 jbe 0x7839B7      ; 严格 > 才清
+                                                    //   7839A5  两槽同时清零                            ; -> 变成公共物
+                                                    //   7839B7  mov edx,[item+0xF4] / test / je
+                                                    //   7839C1  80 7A 73 00           cmp byte [edx+0x73],0
+                                                    //   7839C5  74 08                 je 0x7839CF
+                                                    //   7839C7  清 [item+0xF4]
+                                                    //   7839CF  对 [item+0xF8] 重复同一段
+                                                    // +0x73 是 m_boGhost（全镜像唯一写入点 0x7680EF，在
+                                                    // MakeGhost sub_768060 里，且从不写 0）；m_boDeath 是
+                                                    // +0x74（0x766323，TCreature.Die 的第一条语句）。
+                                                    // C# 写成 m_boDeath 会把归属提前作废整整一个尸体周期：
+                                                    // 击杀者一死，他脚下的战利品立刻变公共，旁边的人可以直接
+                                                    // 捡走；原生要等他变成幽灵（或满 120 秒）才放开。
                                                     if (MapItem.OfBaseObject as TBaseObject != null)
                                                     {
-                                                        if ((MapItem.OfBaseObject as TBaseObject).m_boDeath)
+                                                        if ((MapItem.OfBaseObject as TBaseObject).m_boGhost)
                                                         {
-                                                            MapItem.OfBaseObject = null;
+                                                            MapItem.OfBaseObject = null;    // 0x7839C7
                                                         }
                                                     }
                                                     if (MapItem.DropBaseObject as TBaseObject != null)
                                                     {
-                                                        if ((MapItem.DropBaseObject as TBaseObject).m_boDeath)
+                                                        if ((MapItem.DropBaseObject as TBaseObject).m_boGhost)
                                                         {
-                                                            MapItem.DropBaseObject = null;
+                                                            MapItem.DropBaseObject = null;  // 0x7839DF
                                                         }
                                                     }
                                                 }
