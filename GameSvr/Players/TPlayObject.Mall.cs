@@ -37,6 +37,7 @@ namespace GameSvr
             {
                 var response = Grobal2.MakeDefaultMsg(Grobal2.SM_SHOPITEMS, ObjectId, requestedType, 0, 0);
                 SendSocket(response, body);
+                SendNativeGpForbidItems();
             }
 
             var hotItems = MallManager.Instance.GetHotItems(WhitePigMallHotRecordCount);
@@ -62,6 +63,10 @@ namespace GameSvr
             var ident = recordCount > 0 ? Grobal2.SM_RESHOPITEMS_OK : Grobal2.SM_RESHOPITEMS_FAIL;
             var response = Grobal2.MakeDefaultMsg(ident, ObjectId, requestedType, 0, 0);
             SendSocket(response, recordCount > 0 ? body : Array.Empty<byte>());
+            if (recordCount > 0)
+            {
+                SendNativeGpForbidItems();
+            }
         }
 
         private byte[] BuildWhitePigMallBody(IReadOnlyList<MallItem> items, int page, int recordSlots, out int validCount)
@@ -155,6 +160,16 @@ namespace GameSvr
         {
             var response = Grobal2.MakeDefaultMsg(Grobal2.SM_DOSHOP_FAIL, failureCode, 0, 0, 0);
             SendSocket(response, Array.Empty<byte>());
+        }
+
+        private void SendNativeGpForbidItems()
+        {
+            if (!MallManager.Instance.TryGetGpForbidBody(out var count, out var body))
+            {
+                return;
+            }
+            var response = Grobal2.MakeDefaultMsg(Grobal2.SM_GPFORBIDITEMS, ObjectId, count, 0, 0);
+            SendSocket(response, body);
         }
 
     }

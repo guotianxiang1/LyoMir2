@@ -546,6 +546,14 @@ namespace SystemModule
         public const int SM_TOHEROBAG_FAIL = 818;
         public const int SM_TOHUMBAG_OK = 819;
         public const int SM_TOHUMBAG_FAIL = 820;
+        /// <summary>
+        /// GP 禁售物品名表 (config\GPForbidItems.txt). Native sub_63C194
+        /// <c>0x63C1C3 66 BA 35 03 mov dx,0x335</c> via [obj+0x254].
+        /// Recog=player, Param=count, Tag=0, Series=0, body N×16 ShortString[15].
+        /// After SM_SHOPITEMS (0x63A2D4) and SM_RESHOPITEMS_OK (0x63A38A);
+        /// skipped when count&lt;=0 (0x63C1A4 jle).
+        /// </summary>
+        public const int SM_GPFORBIDITEMS = 821;
         public const int SM_OPENHEALTH = 1100;
         public const int SM_CLOSEHEALTH = 1101;
         public const int SM_CHANGEFACE = 1104;
