@@ -635,8 +635,9 @@ namespace GameSvr
         public void StopWallconquestWar()
         {
             TPlayObject PlayObject;
-            const string sWallWarStop = "[{0} 攻城战已经结束]";
+            const string sWallWarStop = "[沙巴克攻城战已经结束]";
             m_boUnderWar = false;
+            m_boForceWar = false;
             m_AttackGuildList.Clear();
             // ✅ 已按战神二进制点验为【忠实】(2026-08-03, Tier-1)：战神 sub_65C080(持有 GBK
             // "[沙巴克攻城战已经结束]" @dword_65C354) 清战争状态字节 + 清攻方行会表后，于
@@ -656,10 +657,19 @@ namespace GameSvr
                     PlayObject.MapRandomMove(PlayObject.m_sHomeMap, 0);
                 }
             }
-            var s14 = string.Format(sWallWarStop, m_sName);
+            var s14 = sWallWarStop;
             M2Share.UserEngine.SendBroadCastMsgExt(s14, MsgType.System);
             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_204, M2Share.nServerIndex, s14);
             M2Share.MainOutMessage(s14);
+            // 0x65C13E..0x65C1AC: Trunc(WarDate) vs Trunc(attackDate); delete
+            // when attackDay >= warDay (jl/jb keep), then call 0x65A3B8 save.
+            var warDay = m_WarDate.Date;
+            for (var i = m_AttackWarList.Count - 1; i >= 0; i--)
+            {
+                if (m_AttackWarList[i].AttackDate.Date < warDay) continue;
+                m_AttackWarList.RemoveAt(i);
+            }
+            SaveAttackSabukWall();
         }
 
         public int InPalaceGuildCount()
