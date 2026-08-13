@@ -17,6 +17,20 @@ namespace GameSvr
                 return;
             }
 
+            // 战神 sub_6EE174 @0x6EE197: test byte [eax+0x85],0; jne refused
+            // Refusal at 0x6EE1A0: 硬编码 mov cx,0xFCFF / mov edx,0x6EE248
+            // "当前地图不能召唤坐骑！" / call [vmt+0xD4]，与 0x6EE1C9 的马牌
+            // 拒绝字节完全同构。必须走 SendNativeHorseSystemMessage 的原始
+            // SendMsg(0xFF,0xFC)——SysMsg(Blue,Hint) 会改用配置色
+            // btBlueMsgFColor/BColor 并在 boShowPreFixMsg 时前置 sHintMsgPreFix，
+            // 二者皆非原生行为。
+            if (m_PEnvir?.Flag.boNORIDE == true)
+            {
+                SendNativeHorseSystemMessage("当前地图不能召唤坐骑！");
+                ClearNativeHorseCallPending();
+                return;
+            }
+
             var mount = m_UseItems != null &&
                         m_UseItems.Length > Grobal2.U_MOUNT
                 ? m_UseItems[Grobal2.U_MOUNT]
@@ -81,19 +95,12 @@ namespace GameSvr
             m_wNativeHorseCallDelay = 0;
         }
 
+        // CM_RUN3 (4108) only. Handler 0x6D9D99 requires bodyState 0x33
+        // before it ever reaches sub_6BC0D4; the inner mover is always
+        // sub_767694 (×3 + ident 0xD58). CM_RUN (3013) must not call this:
+        // it has no mount gate and uses sub_76756C (×2 + ident 0x0D).
         private bool ClientNativeRun3(int destinationX, int destinationY)
         {
-            // MOVE-10: State 52 gate applied across all four native movement
-            // arms. When a player is riding someone else's horse (state 52 =
-            // passenger), they cannot initiate movement. Native walk/run both
-            // check `test byte ptr [esi+0x169],4` at 0x6D9BD5/0x6D9CF1. Run3
-            // (opcode 4108) follows the same pattern: the gate appears before
-            // state checks 45/29/1/26/24/62 and before the death/forced-move
-            // checks. Returns FALSE silently (no message, dwDelayTime=0).
-            if (HasNativeActiveState(52))
-            {
-                return false;
-            }
             if (!HasNativeActiveState(NativeHorseMountedState) ||
                 HasNativeActiveState(45) ||
                 HasNativeActiveState(29) ||
@@ -112,12 +119,7 @@ namespace GameSvr
             }
 
             m_bo316 = false;
-            var useMainRun = (!M2Share.ServerSwitches.IsBitSet(2, 0x80) ||
-                              m_PEnvir.NativeCanRunWhileOverweight ||
-                              m_WAbil.Weight < m_WAbil.MaxWeight) &&
-                             !HasNativeActiveState(67) &&
-                             !HasNativeActiveState(13);
-            if (!useMainRun)
+            if (!IsNativeRunLadderAllowed())
             {
                 return ClientNativeRun3Fallback(destinationX, destinationY);
             }
@@ -144,6 +146,33 @@ namespace GameSvr
             }
             return result;
         }
+
+        /// <summary>
+        /// Prologue of the run primitive, byte-identical in sub_6BBFBC (the
+        /// CM_RUN 3013 primitive) and its twin sub_6BC0D4 (CM_RUN3 4108):
+        /// <code>
+        /// 006BBFCB  A1 38 70 7D 00        mov  eax,[0x7D7038]
+        /// 006BBFD0  F6 40 02 80           test byte [eax+2],0x80  ; MOVE-17 switch
+        /// 006BBFD4  74 1D                 je   0x6BBFF3           ; off: no weight rule
+        /// 006BBFD6  8B 83 28 01 00 00     mov  eax,[ebx+0x128]    ; the actor's Envir
+        /// 006BBFDC  80 B8 B0 00 00 00 00  cmp  byte [eax+0xB0],0  ; MOVE-17 map RUNFLAG
+        /// 006BBFE3  75 0E                 jne  0x6BBFF3           ; exempt: no weight rule
+        /// 006BBFE5  8B 83 C4 02 00 00     mov  eax,[ebx+0x2C4]    ; bag weight
+        /// 006BBFEB  3B 83 C8 02 00 00     cmp  eax,[ebx+0x2C8]    ; weight limit
+        /// 006BBFF1  7D 0E                 jge  0x6BC001           ; MOVE-18: equal is overweight
+        /// 006BBFF3  FF 92 C0 00 00 00     call [edx+0xC0]         ; MOVE-16 CanRun sub_774348
+        /// 006BBFFF  75 3B                 jne  0x6BC03C           ; TRUE: take the real run
+        /// </code>
+        /// sub_774348 answers FALSE when bodyState 0x43 (0x77434E) or 0x0D
+        /// (0x77435B) is set. Anything that reaches 0x6BC001 instead falls into
+        /// the clamp-and-walk degrade of MOVE-19, never into a plain refusal.
+        /// </summary>
+        private bool IsNativeRunLadderAllowed() =>
+            (!M2Share.ServerSwitches.IsBitSet(2, 0x80) ||
+             m_PEnvir.NativeCanRunWhileOverweight ||
+             m_WAbil.Weight < m_WAbil.MaxWeight) &&
+            !HasNativeActiveState(67) &&
+            !HasNativeActiveState(13);
 
         private bool ClientNativeRun3Fallback(int destinationX,
             int destinationY)
@@ -178,6 +207,23 @@ namespace GameSvr
 
         private bool NativeRun3FallbackWalk(byte direction)
         {
+            // This is the human 1-step mover sub_741224, which both run
+            // primitives fall into via sub_6BBCD8 `call [edi+0x30]` at
+            // 0x6BBD16 (degrade 0x6BC02F / 0x6BC147). It is NOT WalkTo:
+            //   007412C8  call 0x7797cc          ; MoveToMovingObject
+            //   007412E8  mov  dl,0x17 / call 0x76b4d0
+            //   0074130D  mov  dx,0x2712         ; RM_WALK = 10002
+            //   00741315  call [edi+0xD8]        ; broadcast FIRST
+            //   00741323  call 0x778ec0          ; doors/events AFTER
+            //   00741328  mov  dl,0x33 / call InBodyState ; then partner
+            // 0x778EC0's return is discarded (next insn is mov dl,0x33).
+            // WalkTo would reverse broadcast/door order (MOVE-39) and add
+            // gates sub_741224 does not have. CompleteNativeRun3Move
+            // already matches this tail.
+            // boFlag 来源：sub_741224 在 0x74122D `mov [ebp-5],cl` 收第三参，
+            // 0x7412B0 `mov al,[ebp-5] / push eax` 转给 0x7797CC。调用方
+            // 0x6BBD0C `mov cl,[ebx+0x3FE]` 直接喂穿透缓存 —— 读缓存，不重算。
+            // 改前这里误读 m_boInSafeArea（那条只在行会战 tick 里被赋值）。
             if (direction >= 8 || m_PEnvir == null)
             {
                 return false;
@@ -208,7 +254,7 @@ namespace GameSvr
             if (nextX <= 0 || nextX >= m_PEnvir.wWidth ||
                 nextY <= 0 || nextY >= m_PEnvir.wHeight ||
                 m_PEnvir.MoveToMovingObject(oldX, oldY, this, nextX, nextY,
-                    m_boInSafeArea) <= 0)
+                    m_boThroughOccupancyCache) <= 0)
             {
                 return false;
             }
@@ -253,11 +299,13 @@ namespace GameSvr
             };
 
             m_btDirection = direction;
-            var ignoreObjects = M2Share.g_Config.boDiableHumanRun ||
-                                m_btPermission > 9 &&
-                                M2Share.g_Config.boGMRunAll;
+            // sub_767694 在 0x7676E2(探测 sub_777EF8)/0x76772B(移动 sub_7797CC)都读 Obj+0x3FE
+            // (穿透缓存) 作 boIgnoreOccupancy——与 walk / 2 格 run(sub_76756C) 同一缓存判定。
+            // 刷新一次(原生 tick sub_6B2D38 写点等价)后，探测与 CommitRunMove 统一读该字段。
+            // 改前误用 boDiableHumanRun||(perm>9&&boGMRunAll)(stock-Mir2 污染，原生 mover 无此参)。
+            NativeRefreshThroughOccupancyCache();
             if (!m_PEnvir.CanWalkEx(m_nCurrX + offsetX,
-                    m_nCurrY + offsetY, ignoreObjects))
+                    m_nCurrY + offsetY, m_boThroughOccupancyCache))
             {
                 return false;
             }
@@ -271,6 +319,9 @@ namespace GameSvr
 
             m_nCurrX = (short)destinationX;
             m_nCurrY = (short)destinationY;
+            // 0x767769 mov dx,0xD58 — broadcast ident is bound to this mover,
+            // not to HasNativeActiveState(51). The 2-step twin at 0x76763F
+            // sends 0x0D via RunTo → RM_RUN.
             CompleteNativeRun3Move(Grobal2.RM_RUN3);
             return true;
         }

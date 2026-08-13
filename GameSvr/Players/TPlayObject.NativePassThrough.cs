@@ -30,16 +30,16 @@ namespace GameSvr
         // 实时写回本字段；接入实时写回属另一契约范围，这里先给出可被写回的权威存储。
         public static int NativeSafeZoneThroughRange = 0;
 
-        // 原版 Obj[+0x3FE]：穿透判定缓存。写点仅 sub_6B2D38（玩家 tick）：
+        // 原版 Obj[+0x3FE]：穿透判定缓存。全镜像 28 个访问点里**写点只有一个**，
+        // 就是玩家 tick sub_6B2D38：
         //   0x6B308E  E8 ..            call 0x768454        ; al = 重算判定
         //   0x6B3096  3A 82 FE 03 00 00 cmp al,[edx+0x3FE]  ; 与旧缓存比较
         //   0x6B309C  74 43            je  0x6B30E1         ; 未变 → 不写、不发消息
         //   0x6B30A3  88 91 FE 03 00 00 mov [ecx+0x3FE],dl  ; 变了才回写缓存
         // 变化时另发 SM_2821(0xB05) 广播（TRUE: push 6/1/0/0；FALSE: push 6/0/0/0，
-        // 经 vmt[+0x250]）。本端因铁律禁改 TPlayObject.Message.cs（Run 即 sub_6B2D38）
-        // 无法在 tick 内挂刷新，故：缓存字段保留以承载模型形状，实际刷新改在移动使用点
-        // （见 NativeRefreshThroughOccupancyCache 的说明），SM_2821 变化广播暂不复刻，
-        // 属已记录的有界偏差（判定值本身与原版一致，仅刷新时机/通知消息不同）。
+        // 经 vmt[+0x250]）。这一整段现由 NativeTickThroughOccupancyTransition() 复刻
+        // （TPlayObject.NativeThroughOccupancyTick.cs），接在玩家 tick 里；各 mover
+        // 与原版一样**只读**本字段，不再自行刷新（MOVE-73）。
         public bool m_boThroughOccupancyCache;
 
         // 原版 sub_768454(Self) -> Boolean。返回「本对象能否穿过占格者」。
