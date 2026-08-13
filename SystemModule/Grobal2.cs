@@ -810,6 +810,20 @@ namespace SystemModule
         public const int SM_EXCHANGEBOOK_GET_PRIZE = 963;
         public const int SM_PHYSICAL_ATT = 1230;
         public const int SM_NATIVE_UNION_EFFECT = 1230;
+        /// <summary>
+        /// Channel-magic cancel broadcast. Native sub_6EE128
+        /// <c>0x6EE164 66 BA D0 04 mov dx,0x4D0</c> via [obj+0xE0].
+        /// Recog=Self, Param=magicId from [obj+0xA24], Tag=0, Series=0.
+        /// C# queues this ident through SendRefMsg; Operate must emit the wire packet.
+        /// </summary>
+        public const int SM_CHANNEL_MAGIC_CANCEL = 1232;
+        /// <summary>
+        /// Location-channel magic cancel. Native sub_6EF5D0
+        /// <c>0x6EF62E 66 BA D2 04 mov dx,0x4D2</c> via [obj+0xE0].
+        /// Recog=Self, Param=magicId from [obj+0xA4C], Tag=0, Series=0.
+        /// Skipped when magicId==0 (0x6EF5EA jbe).
+        /// </summary>
+        public const int SM_LOCATION_CHANNEL_MAGIC_CANCEL = 1234;
         public const int SM_SECHERO_PRACTICE = 1216;
 
         // === Native hero client commands ===

@@ -1,4 +1,4 @@
-using SystemModule;
+﻿using SystemModule;
 using GameSvr.PasEngine;
 using GameSvr.Plugins;
 
@@ -2338,7 +2338,8 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_BUILDGUILD_FAIL, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_DONATE_OK:
-                    SendDefMessage(Grobal2.SM_DONATE_OK, ProcessMsg.nParam1, 0, 0, 0, "");
+                    // Native CODE has zero 16-bit dx/cx loads of 764 (0x02FC)
+                    // reaching a send slot. srv_AppearTimes.ini 764=0.
                     break;
                 case Grobal2.RM_MYSTATUS:
                     SendDefMessage(Grobal2.SM_MYSTATUS, 0, (short)GetMyStatus(), 0, 0, "");
@@ -2378,7 +2379,8 @@ namespace GameSvr
                     break;
                 case Grobal2.RM_RECONNECTION:
                     m_boReconnection = true;
-                    SendDefMessage(Grobal2.SM_RECONNECT, 0, 0, 0, 0, ProcessMsg.sMsg);
+                    // Native CODE has zero 16-bit dx/cx loads of 802 (0x0322)
+                    // reaching a send slot. srv_AppearTimes.ini 802=0.
                     break;
                 case Grobal2.RM_HIDEEVENT:
                     SendDefMessage(Grobal2.SM_HIDEEVENT, ProcessMsg.nParam1, ProcessMsg.wParam, ProcessMsg.nParam2, ProcessMsg.nParam3, "");
@@ -2745,6 +2747,14 @@ namespace GameSvr
                     break;
                 case Grobal2.CM_4629:
                     ClientNativeCm4629GroupPositions();
+                case Grobal2.SM_CHANNEL_MAGIC_CANCEL:
+                    SendDefMessage(Grobal2.SM_CHANNEL_MAGIC_CANCEL,
+                        ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0, "");
+                    break;
+
+                case Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL:
+                    SendDefMessage(Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL,
+                        ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0, "");
                     break;
 
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===

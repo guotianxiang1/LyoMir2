@@ -1881,15 +1881,9 @@ namespace GameSvr
             master.SendSocket(BuildHeroAbilityHeader(m_Abil.Exp, m_btJob), body);
         }
 
-        /// <summary>Send SM_HERO_SUBABILITY — hero secondary stats (AC/MAC/DC/MC/SC/Hit/Speed/etc).</summary>
+        /// <summary>Native has no SM 901 (16-bit dx/cx ident load 0 in CODE).</summary>
         public void SendHeroSubAbility()
         {
-            SendToMaster(Grobal2.SM_HERO_SUBABILITY,
-                HUtil32.MakeLong(HUtil32.MakeWord(m_nAntiMagic, 0), 0),
-                HUtil32.MakeWord(m_btHitPoint, m_btSpeedPoint),
-                HUtil32.MakeWord(m_btAntiPoison, m_nPoisonRecover),
-                HUtil32.MakeWord(m_nHealthRecover, m_nSpellRecover),
-                "");
         }
 
         /// <summary>Send SM_HERO_BAGITEMS — hero full bag contents.</summary>
