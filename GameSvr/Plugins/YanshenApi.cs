@@ -1702,7 +1702,7 @@ namespace GameSvr.Plugins
                         continue;
                     if (!RecycleTypeOpen(rule, stackable)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
-                    TryRecycleOne(item, itemName, rule, stackable);
+                    RecycleOne(item, itemName, rule, stackable);
                 }
                 return RecycleDone;
             }
@@ -1772,10 +1772,34 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// 结算一件物品。产出与删除必须一起成立：任何一路产出算不出来、落不了账，
-        /// 或者物品删不掉，都整件放弃，绝不出现删了不给的中间态。
+        /// 结算一件物品。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。
+        /// 顺序是**先删后结算，且没有任何回滚**。删除段 0x1006BB5D..0x1006BBD2 整段跑完，
+        /// 0x1006BBD8 起才是四路累加，0x1006BCB7 起才是 其他 的 SetV：
+        /// <code>
+        /// 1006BB68  8B 75 8C              mov  esi,[ebp-0x74]        ; item
+        /// 1006BB6B  8B 45 80 / 8B 40 04   mov  eax,[TList] / [eax+4] ; FList
+        /// 1006BB71  03 85 D8 FE FF FF     add  eax, idx*4
+        /// 1006BB77  8B 00                 mov  eax,[eax]
+        /// 1006BB7F  3B C6                 cmp  eax,esi
+        /// 1006BB81  75 45                 jne  0x1006BBC8            ; 指针变了 ⇒ 不删
+        /// 1006BB89  83 F8 01 / 7F 0F      cmp  FCount,1 / jg
+        /// 1006BB95  FF 15 0C 0D 31 10     call [0x10310D0C]=0x6C1ED8 ; FCount<=1 清空整包
+        /// 1006BBA6  FF 15 68 BC 31 10     call [0x1031BC68]          ; TList.Delete(idx)
+        /// 1006BBB9  3E FF 97 68 02 00 00  call [player VMT+0x268]    ; 下发删除
+        /// 1006BBC2  FF 15 4C BC 31 10     call [0x1031BC4C]          ; Dispose(item)
+        /// 1006BBCF  3B 45 8C / 0F 85 …    cmp / jne 0x1006BD2D       ; 没删成 ⇒ 也不结算
+        /// 1006BBD8  …                                               ; 四路累加从这里开始
+        /// </code>
+        /// 唯一能让本件不结算的条件是「删除没发生」；反过来「结算失败」**不会**让物品回来。
+        /// 落账一律不看返回值 —— 0x1006CE56 / 0x1006CE70 / 0x1006CE8A / 0x1006CEB7 四个
+        /// call 之后都没有 test/cmp。IncGold 顶到 <c>[eax+0x68C]</c> 时
+        /// <c>0x6D7934 7F 0D jg</c> 直接返回 FALSE，而物品早已删掉 —— 这就是「只删不给」。
+        ///
+        /// 所以删除之后不允许再有任何 return：算术必须像原生一样静默截断，不能中途放弃。
         /// </summary>
-        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule,
+        private void RecycleOne(TUserItem item, string itemName, RecycleRule rule,
             bool stackable)
         {
             // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
@@ -1810,110 +1834,66 @@ namespace GameSvr.Plugins
             // 后果：单价=1 且倍率=50 会过门，却只入账 ⌊1*50/100⌋=0 ⇒ 删了不给。
             if (rule.Yuanbao <= 0 && rule.LingFu <= 0 && rule.Gold <= 0 &&
                 otherUnit <= 0 && rule.Exp <= 0)
-                return false;
-
-            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
-                !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
-                !TryScaleRecyclePrice(rule.LingFu, rate, count, out var lingFu) ||
-                !TryScaleRecyclePrice(rule.Exp, rate, count, out var exp) ||
-                !TryScaleRecyclePrice(otherUnit, rate, count, out var other))
-                return false;
+                return;
 
             // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
             // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
-            if (yuanbao > 0) return false;
+            // （这是 D4 的分歧，仍未复刻；放在删除之前，免得它变成又一个只删不给的窗口。）
+            if (rule.Yuanbao > 0) return;
 
-            // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
-            if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
+            // ── 删除段。此行之后不允许再出现任何 return，见方法头。 ──
+            if (!_player.DelBagItem(item.MakeIndex, itemName)) return;
+
+            var gold = ScaleRecyclePrice(rule.Gold, rate, count);
+            var lingFu = ScaleRecyclePrice(rule.LingFu, rate, count);
+            var exp = ScaleRecyclePrice(rule.Exp, rate, count);
+            var other = ScaleRecyclePrice(otherUnit, rate, count);
+
+            // 落账一律不看返回值，与 0x1006CE56 / 0x1006CE70 / 0x1006CE8A / 0x1006CEB7
+            // 四个 call 之后都没有 test/cmp 一致。次序照 0x1006BBD8 起的累加次序：
+            // 灵符 → 金币 → 经验 → 其他（元宝那一路见 D4）。
+            if (lingFu > 0) _player.AddNativeLingFu(RecycleLingFuReason, lingFu);
+            if (gold > 0) _player.IncGold(gold);
+            if (exp > 0) _player.GainExp(exp);
 
             // 其他 走 0x1006BCB7（可叠材料）/ 0x1006CDB4（物品种类）两段同构代码：
             //   1006BCB7  8B 45 98   mov eax,[ebp-0x68]   ; 其他值，**缩放前**
             //   1006BCBA  85 C0      test eax,eax
             //   1006BCBC  7E 6F      jle 0x1006BD2D       ; 缩放前 <=0 才整段不写 SetV
             //   1006BCBE  85 FF      test edi,edi         ; 倍率，第一条 imul 在 0x1006BCC2
+            //   1006BCF4  FF 15 58 BC 31 10  call GetV
             //   1006BCFD  7D 02 / 1006BCFF 33 C0          ; 累加基数的负值钳到 0
+            //   1006BD26  FF 15 54 BC 31 10  call SetV    ; 不看返回值
             // 同 D3：闸门读的是缩放前的值。缩放后为 0 时原生照样写一次 SetV，
             // 于是 GetV 原本是 -1 的槽会被钳零后写成 0 —— 这不是空操作，别"优化"掉。
             // （此处原注释写的「缩放后 <= 0」与字节矛盾，已按字节订正。）
-            var otherStored = 0;
-            var otherTotal = 0;
-            var otherPays = otherUnit > 0;
-            if (otherPays)
+            // 组/下标非法时 SetV 自己用 0x6DF2B3 / 0x6DF2B7 两个 jle 静默丢弃，
+            // 物品照删 —— 这一路的守卫在 WritePlayerV 里，不在这里，别提前 return。
+            if (otherUnit > 0)
             {
-                if (!PlayerVarWritable(rule.OtherGroup, rule.OtherIndex)) return false;
-                // 回滚要还原真实旧值，所以钳位只用于累加，不覆盖 otherStored。
-                otherStored = ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex);
-                var accumulated = (long)Math.Max(0, otherStored) + other;
-                if (accumulated > int.MaxValue) return false;
-                otherTotal = (int)accumulated;
+                var accumulated = unchecked(Math.Max(0,
+                    ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex)) + other);
+                WritePlayerV(rule.OtherGroup, rule.OtherIndex, accumulated);
             }
-
-            var goldPaid = 0;
-            var lingFuPaid = 0;
-            var otherWritten = false;
-
-            if (gold > 0)
-            {
-                if (!_player.IncGold(gold)) return false;
-                goldPaid = gold;
-            }
-
-            if (lingFu > 0)
-            {
-                if (!_player.AddNativeLingFu(RecycleLingFuReason, lingFu))
-                {
-                    RollbackRecycleGold(goldPaid);
-                    return false;
-                }
-                lingFuPaid = lingFu;
-            }
-
-            if (otherPays)
-            {
-                WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherTotal);
-                otherWritten = true;
-            }
-
-            // GainExp 没有返回值也撤不回来，所以放在删除之前：删除万一失败，玩家是多拿了经验
-            // 又留下了物品，方向上只会多给，不会少给。
-            if (exp > 0) _player.GainExp(exp);
-
-            if (_player.DelBagItem(item.MakeIndex, itemName)) return true;
-
-            if (otherWritten) WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherStored);
-            RollbackRecycleLingFu(lingFuPaid);
-            RollbackRecycleGold(goldPaid);
-            return false;
         }
 
         /// <summary>
         /// 单价 → 实付。先按倍率缩放再乘件数，与 0x1006BBE9（缩放）后接 0x1006BC07（乘件数）
-        /// 的次序一致。原生两步都是 32 位 imul，溢出静默截断；这里放宽到 64 位并在越界时
-        /// 整件放弃，方向上只会少删不会错付。
+        /// 的次序一致。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】两步都是 **32 位** imul，溢出静默截断，不会中止本件：
+        /// <c>0x1006BBEB 0F AF CB imul ecx,ebx</c>（倍率×单价）→
+        /// <c>0x1006BBEE B8 1F 85 EB 51 / F7 E9 / C1 FA 05 / C1 EB 1F / 03 DA</c>
+        /// （0x51EB851F 魔数除 100，向零截断）→ <c>0x1006BC07 0F AF C3 imul eax,ebx</c>
+        /// （×件数）→ <c>0x1006BC0A 01 85 60 FF FF FF add [ebp-0xA0],eax</c>（32 位累加）。
+        /// 此前 C# 用 64 位算并在越界时整件放弃 —— 那是删除段之后的一条 return，
+        /// 与「先删后结算、无回滚」直接冲突，所以必须回到 32 位回绕。
         /// </summary>
-        private static bool TryScaleRecyclePrice(int unitPrice, int rate, int count,
-            out int amount)
+        private static int ScaleRecyclePrice(int unitPrice, int rate, int count)
         {
-            amount = 0;
-            if (unitPrice <= 0) return true;
-            var scaled = (rate > 0 ? (long)unitPrice * rate / 100 : unitPrice) * count;
-            if (scaled < 0 || scaled > int.MaxValue) return false;
-            amount = (int)scaled;
-            return true;
-        }
-
-        private void RollbackRecycleGold(int amount)
-        {
-            if (amount <= 0) return;
-            _player.m_nGold -= amount;
-            _player.GoldChanged();
-        }
-
-        private void RollbackRecycleLingFu(int amount)
-        {
-            if (amount <= 0) return;
-            _player.m_nLingFu = unchecked(_player.m_nLingFu - amount);
-            _player.RefreshNativeLingFu();
+            if (unitPrice <= 0) return 0;
+            var scaled = rate > 0 ? unchecked(rate * unitPrice) / 100 : unitPrice;
+            return unchecked(scaled * count);
         }
 
         /// <summary>
