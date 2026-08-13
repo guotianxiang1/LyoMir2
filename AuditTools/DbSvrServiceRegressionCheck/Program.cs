@@ -74,8 +74,13 @@ void Run(string name, Action test)
 
 static void TestNativeLvChangeTimeUpdate()
 {
+    // Line endings are a git-checkout artifact (core.autocrlf turns the LF in
+    // the repo into CRLF on Windows), not part of the contract being asserted,
+    // so normalise before matching. Without this the SQL probe below can never
+    // hit on a Windows checkout and the audit reports a false red.
     var source = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
-        "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"));
+        "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"))
+        .Replace("\r\n", "\n");
     Check(source.Contains("WHERE idx=@idx AND\n                        (Level<>@oldLevel OR ForceLv<>@oldForceLv OR sfLevel<>@oldSfLevel)",
               StringComparison.Ordinal)
           && source.Contains("cmd.Parameters.AddWithValue(\"@oldLevel\", oldLevel)",
