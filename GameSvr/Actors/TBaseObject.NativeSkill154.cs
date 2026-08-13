@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using SystemModule;
 using System.Runtime.CompilerServices;
 
@@ -36,13 +37,17 @@ namespace GameSvr
         private const int NativeSkill154CooldownMilliseconds = 30000;
         private const int NativeSkill154ColdTimeKey = 0x9A;
 
-        // Native table at 0x7D3EF6 (strike counts), indexed by effective level
-        // Note: staging doc shows only strike counts for 154, no separate damage table
-        // The damage bonus calculation is likely inline or uses a different mechanism
-        // Native table read raw from flat_image.bin at 0x7D3EF8:
-        //   02 00 | 04 00 | 08 00   Int16, indexed by effective level 1..3.
+        // Native strike-count table at 0x7D3EF8, indexed by effective level.
+        // 154 has NO damage-factor table (unlike 151): its consumer arm at
+        // 0x74628C multiplies the job max attack by 5 with no fmul, so the
+        // bonus is a flat *5 rather than a factor-scaled value.
+        //   0x7D3EF8  02 00 | 04 00 | 08 00   Int16, indexed by effective level 1..3.
         // The previous { 0, 3, 5, 8 } was invented.
         private static readonly ushort[] NativeSkill154StrikeCounts = { 0, 2, 4, 8 };
+
+        // Native attack-kind discriminator [ebp-8] gate value @0x746296: id
+        // 154's burst fires only for kind 0x400.
+        private const int NativeSkill154AttackKind = 0x400;
 
         private ushort m_nNativeSkill154StrikeCount;
 
@@ -76,6 +81,13 @@ namespace GameSvr
 
             // Native @0x745909-0x745914: read table and set state
             ushort strikeCount = NativeSkill154StrikeCounts[effectiveLevel];
+
+            // Assertion (write-only, not executed here): must equal the raw
+            // Int16s at 0x7D3EF8 { 02, 04, 08 }.
+            Debug.Assert(strikeCount == effectiveLevel switch
+                { 1 => 2, 2 => 4, 3 => 8, _ => 0 },
+                "154 strike count diverged from 0x7D3EF8 {02,04,08}");
+
             m_nNativeSkill154StrikeCount = strikeCount;
 
             // Native @0x745931-0x74593E: send success message
@@ -89,29 +101,45 @@ namespace GameSvr
             return true;
         }
 
-        internal int ApplyNativeSkill154BurstDamage(int damage)
+        /// <summary>
+        /// Native consumer arm @0x74628C, byte-for-byte the id 151 sequence at
+        /// 0x746247 MINUS the `fmul dword [esi+0x3F8]` factor multiply — which is
+        /// why 154 carries no factor table, not because one is missing:
+        ///   0074628C  66 83 BE E0 03 00 00 00  cmp word [esi+0x3E0],0
+        ///   00746294  76 22                    jbe 0x7462B8        ; no strikes
+        ///   00746296  81 7D F8 00 04 00 00     cmp [ebp-8],0x400   ; attack kind
+        ///   0074629D  75 19                    jne 0x7462B8
+        ///   0074629F  B2 01                    mov dl,1            ; flag = max
+        ///   007462A1  8B C6                    mov eax,esi         ; Self
+        ///   007462A3  E8 E4 6A 02 00           call 0x76CD8C       ; job max att
+        ///   007462A8  8D 04 80                 lea eax,[eax+eax*4] ; * 5  (NO cap)
+        ///   007462AB  89 45 E8                 mov [ebp-0x18],eax
+        ///   007462AE  DB 45 E8                 fild dword [ebp-0x18]
+        ///   007462B1  E8 CA D2 CB FF           call 0x403580       ; @TRUNC (chop)
+        ///   007462B6  03 D8                     add ebx,eax        ; damage += bonus
+        /// i.e. bonus = TRUNC(jobMaxAttack * 5). Unlike id 151 there is NO
+        /// `mov edx,0x1388 / call 0x4C700C` cap step between the getter and the
+        /// `* 5`, so 154 is NOT clamped to 5000. The fild/TRUNC of the integer
+        /// product is the identity, so the bonus is simply that product.
+        /// <para>
+        /// BLOCKED (wiring): identical to id 151 — the C# attack-kind
+        /// discriminator (native [ebp-8] == 0x400) and the +0x3E0 strike-count
+        /// decrement site are not yet verified, so this stays a fail-closed,
+        /// ready-to-call helper and is not wired into the melee pipeline. Note
+        /// the native consumer does NOT decrement +0x3E0 here.
+        /// </para>
+        /// </summary>
+        internal int ApplyNativeSkill154BurstDamage(int damage, int attackKind)
         {
-            // Apply bonus if state is active (strike count > 0)
-            // Note: The staging doc doesn't show a separate damage table for 154
-            // like it does for 151. This suggests the damage bonus may be
-            // calculated differently or applied elsewhere in the damage pipeline.
-            // For now, implementing the strike count mechanism only.
-            if (m_nNativeSkill154StrikeCount > 0 && damage > 0)
+            // 0x74628C jbe / 0x746296 attack-kind gate. Native does NOT test
+            // damage>0 and does NOT decrement the counter here.
+            if (m_nNativeSkill154StrikeCount > 0 &&
+                attackKind == NativeSkill154AttackKind)
             {
-                m_nNativeSkill154StrikeCount--;
-            // The bonus path is now identified: id 154 shares the consumer with
-            // id 151 at 0x746247, and its own block starts at 0x74628C:
-            //   0x74628C  cmp word [esi+0x3E0],0  ; remaining strikes, else skip
-            //   0x746296  cmp [ebp-8],0x400       ; only for this magic id
-            //   0x7462A3  call 0x76CD8C           ; class-dispatched power getter
-            //   0x7462A8  lea eax,[eax+eax*4]     ; * 5
-            // It is byte-for-byte the 151 sequence MINUS the
-            // `fmul dword [esi+0x3F8]` factor multiply, which is why 154 has no
-            // factor table - not because one is missing. Landing the real value
-            // still needs 0x76CD8C's four job branches and 0x76CD5C mapped to
-            // their C# counterparts, so this stays a pass-through rather than a
-            // guessed formula.
-                return damage;
+                // 0x76CD8C then `lea eax,[eax+eax*4]` — no 0x4C700C cap for 154.
+                int jobMax = GetNativeBurstJobMaxAttack();
+                int bonus = unchecked(jobMax * 5);
+                return unchecked(damage + bonus);
             }
             return damage;
         }
