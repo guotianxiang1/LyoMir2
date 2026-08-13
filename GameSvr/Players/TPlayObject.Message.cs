@@ -3067,7 +3067,12 @@ namespace GameSvr
                     break;  // 客户端处理，服务端仅 ack
 
                 default:
-                    if (!TryHandleNativeSocialProtocol(ProcessMsg)
+                    // === SoulWash subsystem === CM 4126/4127/4128 洗灵石/祈福神佑袋。
+                    // 忠实实现在 TPlayObject.SoulWash.cs，先于 cm-4 的 fail-closed 尾段
+                    // (TryHandleNativeCmTailProtocol) 分发；未被 SoulWash 接管的 ident
+                    // 继续沿旧链走。
+                    if (!TryHandleSoulWashCm(ProcessMsg)
+                        && !TryHandleNativeSocialProtocol(ProcessMsg)
                         && !TryHandleNativeCmTailProtocol(ProcessMsg))
                     {
                         result = base.Operate(ProcessMsg);

@@ -1935,5 +1935,19 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === SoulWash subsystem ===
+        // 祈福神佑袋 / 灵佑点 (native strings 0x74705C "灵气石", 0x747834 "点灵佑点!",
+        // 0x747080 "神佑祈福收取"). CM 4126/4127/4128 (workers 0x6BF75C /
+        // 0x747CF4+0x74730C / 0x6B7184). CM_4126/4127/4128 constants and SM_4034
+        // (0xFC2, the CM 4126 reply, Tag carries the 0/1/2/3 result code) are declared
+        // above and reused. Only these two down-wire replies were missing:
+        //   SM_4033 (0xFC1) — 0x74730C sends via [vmt+0x254] a 32-byte body
+        //     {int cur[+0x5A4]; int base[+0x5A0]; int cap[+0x59C]; word[10] slots[+0x5A8]},
+        //     Tag = ([+0x178] == 0x36 ? 1 : 0), Recog=Param=Series=0.
+        //   SM_4037 (0xFC5) — 0x6B7184 sends via [vmt+0x254] a 24-byte body
+        //     {int [T+0x60C]; byte[20] [T+0x5A8]}, Recog=Param=Tag=Series=0.
+        public const int SM_4033 = 4033;
+        public const int SM_4037 = 4037;
     }
 }
