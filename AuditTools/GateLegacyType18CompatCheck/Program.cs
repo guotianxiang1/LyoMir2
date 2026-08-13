@@ -120,12 +120,16 @@ void InternalCmd18IsNotLegacy()
 {
     var encoded = BuildInternal(0x10203040, 22, 18,
         new byte[] { 0x77, 0xBB, 0xAA, 0x33, 0, 1, 2, 3 });
-    Equal((ushort)32,
-        BinaryPrimitives.ReadUInt16LittleEndian(encoded.AsSpan(12, 2)),
-        "internal frame length at discriminator");
+    // +0x0C is Cmd and +0x0E is BodyLen for BOTH shapes (0x637AC7 mov [eax+0x0C],di /
+    // 0x637AD7 mov [eax+0x0E],bx), so a legacy type 18 is just an internal frame whose Cmd
+    // is 18. What keeps this one internal is the body: 8 bytes is below the 12-byte
+    // ClientPacketSize a legacy frame must carry.
     Equal((ushort)18,
+        BinaryPrimitives.ReadUInt16LittleEndian(encoded.AsSpan(12, 2)),
+        "internal command 18 at the discriminator");
+    Equal((ushort)8,
         BinaryPrimitives.ReadUInt16LittleEndian(encoded.AsSpan(14, 2)),
-        "internal command 18");
+        "internal body length below the legacy client packet size");
     var frames = ParseOnce(encoded);
     Equal(1, frames.Count, "cmd18 internal count");
     NotNull(frames[0].Internal77, "cmd18 remains internal");

@@ -68,10 +68,21 @@ Assert(!hero.TryTakeNativeBagItems("普通药", 2, out _),
     "insufficient take was accepted");
 Equal(1, hero.GetNativeBagItemCount("普通药"), "failed take mutated the bag");
 
-Assert(api.CallPlayerMethod("TakeFromHeroBagEx",
+// TakeFromHeroBagEx / TakeHeroBagExItem do not exist in 战神: both names are 0-hit in the
+// M2 baseline, while the two real hero-bag APIs are present twice each (declaration +
+// runtime name binding) —
+//   0x72D439 'function GetHeroBagItemCount(const ...' / 0x732894 'GetHeroBagItemCount'
+//   0x72D481 'function TakeFromHeroBag(const ItemName: string; ItemCount: Byte): Boolean'
+//   0x7328B0 'TakeFromHeroBag'
+// so the Ex form must stay fail-closed and must not touch the bag.
+Assert(!api.CallPlayerMethod("TakeFromHeroBagEx",
     new List<PasValue> { PasValue.FromString("普通药"), PasValue.FromInt(1) }),
-    "TakeFromHeroBagEx did not share the native mutation path");
-Equal(0, hero.GetNativeBagItemCount("普通药"), "bag count after Ex take");
+    "TakeFromHeroBagEx is 0-hit in the native surface and must stay fail-closed");
+Assert(!api.CallPlayerMethod("TakeHeroBagExItem",
+    new List<PasValue> { PasValue.FromString("普通药"), PasValue.FromInt(1) }),
+    "TakeHeroBagExItem is 0-hit in the native surface and must stay fail-closed");
+Equal(1, hero.GetNativeBagItemCount("普通药"),
+    "rejected Ex take must not mutate the hero bag");
 
 Assert(api.CallPlayerMethod("SetHeroLevel",
     new List<PasValue> { PasValue.FromInt(42) }), "SetHeroLevel failed");
@@ -81,7 +92,9 @@ Assert(NativeHeroRuntimeCodec.TryCreateSnapshot(hero, out var saved,
     out _, out error), error);
 Equal((ushort)42, saved.Level, "saved native level");
 Equal((byte)0xA7, saved.ToArray()[0x150], "unknown fixed byte after mutations");
-Equal(1, saved.ToArray().AsSpan(NativeHeroDbFrameCodec.BagItemsOffset,
+// Four records went in (三份 普通药 + 一份 叠加药); the only accepted take was
+// TakeFromHeroBag(普通药, 2), so 普通药 ×1 and 叠加药 ×1 survive.
+Equal(2, saved.ToArray().AsSpan(NativeHeroDbFrameCodec.BagItemsOffset,
         NativeHeroDbFrameCodec.BagItemCount * NativeHeroDbFrameCodec.ItemRecordSize)
     .ToArray().Chunk(NativeHeroDbFrameCodec.ItemRecordSize)
     .Count(item => BinaryPrimitives.ReadUInt16LittleEndian(item.AsSpan(4, 2)) != 0),
@@ -202,7 +215,7 @@ Assert(!api.CallPlayerMethod("AddHeroAbil",
     "two-argument AddHeroAbil was accepted");
 
 Console.WriteLine(
-    "PASS hero-pas-admin count=stdmode7-dura take=atomic+queued ex=shared level=native+queued addabil=timed+transient+runtime-only");
+    "PASS hero-pas-admin count=stdmode7-dura take=atomic+queued ex=fail-closed(0-hit) level=native+queued addabil=timed+transient+runtime-only");
 
 void WriteShortString(byte[] destination, int offset, int maximumLength, string value)
 {

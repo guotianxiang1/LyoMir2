@@ -361,7 +361,21 @@ void CheckDynamicDataCodec()
         "dynData bad section magic must keep already-parsed sections (0x68B0B9 jne 0x68B396)");
     Equal(0, badMagicDecoded.Sections.Count,
         "first-section bad magic leaves no parsed sections");
+    // The section-level guard is what this case is about, so the ROOT length has to stay
+    // consistent with the buffer — otherwise the root-length check asserted just above fires
+    // first and the native path below is never reached. Native walks sections against the
+    // declared root length:
+    //   0x68B097 BE 07 00 00 00        mov esi,7                  ; header size / cursor
+    //   0x68B0A9 3B F3 / 0F 8D ...     cmp esi,ebx / jge 0x68B3F3 ; ebx = declared length
+    //   0x68B0B3 81 38 AA EF CD AB     cmp dword [eax],0xABCDEFAA
+    //   0x68B0B9 0F 85 D7 02 00 00     jne 0x68B396               ; bad magic -> log, exit
+    //   0x68B0C1 0F B7 40 04           movzx eax,word [eax+4]     ; section payload length
+    //   0x68B0C5 03 C6                 add eax,esi
+    //   0x68B0C7 3B D8                 cmp ebx,eax
+    //   0x68B0C9 0F 8C 85 02 00 00     jl 0x68B354                ; short payload -> log, exit
+    // Both exits keep the sections already parsed.
     var truncated = encoded[..^1];
+    BinaryPrimitives.WriteUInt32LittleEndian(truncated, (uint)(truncated.Length - 4));
     Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(truncated, out var truncatedDecoded, out _),
         "truncated dynData must keep already-parsed sections (0x68B0C9 jl 0x68B354)");
     Equal(2, truncatedDecoded.Sections.Count,

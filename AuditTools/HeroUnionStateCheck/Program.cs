@@ -1728,7 +1728,12 @@ static void CheckMapSkillFlags()
 
     player.m_btPermission = 4;
     M2Share.g_Config.boTestServer = false;
-    Equal(M2Share.g_sGameCommandPermissionTooLow,
+    // "权限不够!!!" is 0 hits in the M2 baseline. The native reply is concatenated from two
+    // adjacent constants:
+    //   0x62B760 FF FF FF FF 0A 00 00 00  B8 C3 C3 FC C1 EE D0 E8 D2 AA  = "该命令需要" (10)
+    //   0x62B774 FF FF FF FF 0C 00 00 00  BC B6 47 4D B2 C5 C4 DC CA B9 D3 C3
+    //                                                                    = "级GM才能使用" (12)
+    Equal("该命令需要" + commandAttribute.nPermissionMin + "级GM才能使用",
         command.Handle("0 0 0 0 on", player),
         "non-test permission4 remains below command permission5");
     Equal((byte)0, environment.GetMapCellSkillFlag(0, 0),
