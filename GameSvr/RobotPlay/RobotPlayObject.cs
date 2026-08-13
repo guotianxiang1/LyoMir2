@@ -2629,9 +2629,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)nOldX;
-                        m_nCurrY = (short)nOldY;
-                        m_PEnvir.MoveToMovingObject(nOldX, nOldY, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(nOldX, nOldY);
                     }
                 }
             }

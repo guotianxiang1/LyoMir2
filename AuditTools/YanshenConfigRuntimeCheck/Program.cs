@@ -602,6 +602,22 @@ static void SaveSnapshot(Form form, string path)
 
 static string ResolveDefaultSource()
 {
+    // The operator Desktop tree the candidates below name is not in the repo and
+    // is no longer on disk, so the check died in FileNotFoundException before any
+    // assertion ran. staging/ys207_original_capture is the archived capture of
+    // that same GS1/config.json, so it is searched first, walking up from both the
+    // tool's own bin directory and the working directory.
+    foreach (var start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+    {
+        for (var dir = new DirectoryInfo(start); dir != null; dir = dir.Parent)
+        {
+            var captured = Path.Combine(dir.FullName, "staging",
+                "ys207_original_capture", "Mir200", "GS1", "config.json");
+            if (File.Exists(captured))
+                return captured;
+        }
+    }
+
     var candidates = new[]
     {
         @"C:\Users\Administrator\Desktop\三龙位\仙缘复工0.3破白猪+眼神\mud2.0\Mir200\Gs1\config.json",

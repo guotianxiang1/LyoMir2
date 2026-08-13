@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.IO;
 using System.Reflection;
 using GameSvr;
 
@@ -39,7 +40,22 @@ using GameSvr;
 // 0x6EEBC2. C# carries four gates. That 40:4 gap is a real product hole, but
 // closing it needs a per-site census this tool cannot stand in for.
 
-PrepareRuntimeConfig();
+try
+{
+    Diagnose("enter-main");
+    Diagnose("prepare-runtime-config");
+    PrepareRuntimeConfig();
+    Diagnose("before-new-TPlayObject");
+    _ = CreateTestPlayer();
+    Diagnose("after-new-TPlayObject");
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine(
+        "INCOMPLETE: TPlayObject construction/type-init failed before state33/34 assertions.");
+    Console.Error.WriteLine(ex.ToString());
+    return 2;
+}
 
 var groupRestricted = typeof(TPlayObject).GetMethod("IsNativeGroupRestricted",
     BindingFlags.NonPublic | BindingFlags.Static);
@@ -76,7 +92,7 @@ Console.WriteLine(
     "PASS state33/34=mount-gates shapeA=(0x33&&partner)||0x34@sub_6BBE84 "
     + "shapeB=0x33||0x34@0x6D8DC8 predicates=group+fixedcoord "
     + "binary-sites=40x0x33+41x0x34 csharp-gates=4");
-return;
+return 0;
 
 // sub_6BBE84 as a truth table. Case 2 is the one that separates the two native
 // shapes: under shape B it would be blocked, under shape A it is not.
@@ -163,26 +179,34 @@ static TPlayObject CreateTestPlayer() => new TPlayObject
     m_PEnvir = new Envirnoment()
 };
 
+static void Diagnose(string step)
+{
+    Console.WriteLine("DIAG step=" + step);
+    Console.Out.Flush();
+    Console.Error.Flush();
+}
+
 // M2Share's static constructor resolves !Setup.txt against AppContext.BaseDirectory
-// (M2Share.cs:1682) and IniFile.Load throws when it is absent, so the skeleton has
-// to exist before the first TPlayObject is constructed.
+// (M2Share.cs:1682). The previous body called M2Share.Init() / new TConfig() /
+// new TObjectManager() / new TEnvirnoment(), none of which exist on this tree,
+// so the tool could not even compile. Same skeleton the other audits lay down.
 static void PrepareRuntimeConfig()
 {
     var runtimeDirectory = AppContext.BaseDirectory;
-    System.IO.File.WriteAllText(
-        System.IO.Path.Combine(runtimeDirectory, "!Setup.txt"),
+    File.WriteAllText(
+        Path.Combine(runtimeDirectory, "!Setup.txt"),
         "[Server]" + Environment.NewLine);
-    System.IO.File.WriteAllText(
-        System.IO.Path.Combine(runtimeDirectory, "Command.conf"),
+    File.WriteAllText(
+        Path.Combine(runtimeDirectory, "Command.conf"),
         "[Command]" + Environment.NewLine);
 
-    var shareDirectory = System.IO.Path.Combine(System.IO.Path.GetFullPath(
-        System.IO.Path.Combine(runtimeDirectory, "..")), "Share");
-    System.IO.Directory.CreateDirectory(shareDirectory);
-    System.IO.File.WriteAllText(
-        System.IO.Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(
+        Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
         "[PlayerLevelExp]" + Environment.NewLine);
-    System.IO.File.WriteAllText(
-        System.IO.Path.Combine(shareDirectory, "ServerData.ini"),
+    File.WriteAllText(
+        Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
 }

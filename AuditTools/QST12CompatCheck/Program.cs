@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Diagnostics;
+using System.IO;
 using GameSvr;
 using GameSvr.PasEngine;
 
@@ -26,7 +27,22 @@ namespace QST12CompatCheck
     {
         static int Main()
         {
-            PrepareRuntimeConfig();
+            try
+            {
+                Diagnose("enter-main");
+                Diagnose("prepare-runtime-config");
+                PrepareRuntimeConfig();
+                Diagnose("before-new-TPlayObject");
+                _ = new TPlayObject();
+                Diagnose("after-new-TPlayObject");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    "INCOMPLETE: TPlayObject construction/type-init failed before QST-12 assertions.");
+                Console.Error.WriteLine(ex.ToString());
+                return 2;
+            }
 
             int failures = 0;
 
@@ -178,12 +194,17 @@ namespace QST12CompatCheck
             }
         }
 
+        static void Diagnose(string step)
+        {
+            Console.WriteLine("DIAG step=" + step);
+            Console.Out.Flush();
+            Console.Error.Flush();
+        }
+
         /// <summary>
-        /// The M2Share static constructor (M2Share.cs:1682) resolves !Setup.txt
-        /// against AppContext.BaseDirectory, i.e. this audit's own bin directory,
-        /// and IniFile.Load throws when it is absent. The first `new TPlayObject()`
-        /// therefore aborted the run with TypeInitializationException before any
-        /// assertion executed. Same minimal skeleton the other audits lay down.
+        /// M2Share.cctor resolves !Setup.txt against AppContext.BaseDirectory.
+        /// This project was also the only audit on net10.0-windows x86; GameSvr
+        /// is net8.0-windows AnyCPU, so that pairing is a unique AV surface.
         /// </summary>
         static void PrepareRuntimeConfig()
         {
@@ -201,6 +222,5 @@ namespace QST12CompatCheck
             File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
                 "[Integer]" + Environment.NewLine);
         }
-
     }
 }

@@ -5959,7 +5959,6 @@ namespace GameSvr
             bool result = false;
             if (nType < Grobal2.MAX_STATUS_ATTRIBUTE)
             {
-                var nOldCharStatus = m_nCharStatus;
                 // POIS-08 / STATE-52 — native MakePosion is VMT+0xC8 @0x76B3C8 and owns
                 // no storage of its own; it is a seconds->milliseconds wrapper around the
                 // one and only state authority, AddState (VMT+0x1EC @0x7730D0):
@@ -6023,10 +6022,14 @@ namespace GameSvr
                 {
                     RecordNativeRedPoisonLevel(nPoint);
                 }
-                if (nOldCharStatus != m_nCharStatus)
-                {
-                    StatusChanged();
-                }
+                // STATE-16 — native MakePosion (0x76B3C8 / TPlayObject override
+                // 0x746604) does not broadcast 657 itself. AddState @0x77318C
+                // notifies through VMT+0x14, which for the default class is
+                // 0x76B42C -> 0x7729C4 (`66 8B 90 74 02 00 00` word [Self+0x274]
+                // then ident 0x291). C# SendTimedAbilityState already sends that
+                // packet (nParam1 = m_nHitSpeed). The extra StatusChanged() here
+                // was a second 657 with wParam=m_nHitSpeed / nParam1=m_nCharStatus,
+                // a shape 0x7729C4 never uses.
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
                     SysMsg(format(M2Share.sYouPoisoned, nTime, nPoint), MsgColor.Red, MsgType.Hint);

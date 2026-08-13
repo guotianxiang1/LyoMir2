@@ -15,6 +15,7 @@ namespace GameSvr
         private byte _nativeAuthStatus1;
         private byte _nativeAuthStatus2;
         private byte _nativeAuthStatus3;
+        private string _lastMapDescription = string.Empty;
         public int m_nHonorValue;
         public bool m_boHonorValueLoaded;
 
@@ -173,6 +174,20 @@ namespace GameSvr
         private bool ClientPickUpItem(MapItem mapItem, int pickupX, int pickupY)
         {
             var result = false;
+            // sub_6B74D8 opens with this, before it even looks at the item
+            // (0x6B7500 GetTickCount / 0x6B7505 `2B 83 E4 03 00 00` /
+            // 0x6B750B `3D 58 1B 00 00` + `77 28`, then the two coordinate
+            // `jne`s at 0x6B7512 and 0x6B751A). Magic 266 stamps those three
+            // fields at 0x773FF0..0x774003, so for 7 s after a blink the
+            // caster cannot pick anything up off the cell it landed on.
+            if (IsNativeBlinkPickupLocked(pickupX, pickupY,
+                    HUtil32.GetTickCount()))
+            {
+                // 0x6B7522 `66 B9 FF 38` + string 0x6B7800, GBK length
+                // prefix 26 = 13 characters.
+                SysMsg("一定时间范围内，不能拾取。", MsgColor.Red, MsgType.Hint);
+                return false;
+            }
             if (mapItem == null)
             {
                 return false;
@@ -767,8 +782,20 @@ namespace GameSvr
                 }
             }
 
+            // 战神 sub_6F05D8 (@0x6F05E0 mov ebx,eax => ebx IS Self) always answers, and
+            // always with nRecog = Self:
+            //   empty  0x6F0697 cmp [ebp-4],0 / je 0x6F06D8 and 0x6F06A5 test eax,eax /
+            //          0x6F06A7 jle 0x6F06D8 -> 0x6F06D8 push 0 x5 / 8B CB mov ecx,ebx /
+            //          66 BA 86 10 mov dx,0x1086 / FF 93 54 02 00 00 call [ebx+0x254]
+            //   filled 0x6F06B1 push eax(count) / push 0 / push 0 / push list /
+            //          0x6F06C2 6B C0 16 imul eax,eax,0x16 push (count*22) /
+            //          0x6F06C6 8B CB mov ecx,ebx / mov dx,0x1086 / call [ebx+0x254]
+            // Both were wrong here: nRecog was 0, and an empty list returned without
+            // sending, so a client that waits for 4230 during the login burst never got it.
             if (records.Count == 0)
             {
+                m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, ObjectId, 0, 0, 0);
+                SendSocket(m_DefMsg);
                 return;
             }
 
@@ -783,7 +810,7 @@ namespace GameSvr
                 writer.Write(records[i].Range);
             }
 
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, 0, records.Count, 0, 0);
+            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SAFE_ZONE_INFO, ObjectId, records.Count, 0, 0);
             SendSocket(m_DefMsg, memoryStream.ToArray());
         }
 
@@ -918,6 +945,25 @@ namespace GameSvr
             return m_PEnvir.MoveToMovingObjectForRun(m_nCurrX, m_nCurrY, this, nX, nY, ignoreObjects) > 0;
         }
 
+        // Walk() returning false means EnterAnotherMap failed after the run
+        // mover already committed the actor into the new cell. Native
+        // sub_741224 / sub_76756C / sub_767694 all ignore 0x778EC0's return
+        // (next insn is `mov dl,0x33`) and never roll back; C# still does.
+        // The rollback must name the COMMITTED cell as the source: MOVE-35(b)
+        // only succeeds from 0x779A95 after unlinking the actor from nCX/nCY,
+        // so passing the already-restored old coords looks up an empty list
+        // and returns 0, leaving the actor registered only at the new cell
+        // while CurrXY says the old one.
+        protected void RollbackCommittedRunMove(int oldX, int oldY)
+        {
+            var committedX = m_nCurrX;
+            var committedY = m_nCurrY;
+            m_nCurrX = (short)oldX;
+            m_nCurrY = (short)oldY;
+            m_PEnvir.MoveToMovingObject(committedX, committedY, this,
+                m_nCurrX, m_nCurrY, true);
+        }
+
         private bool RunTo(byte btDir, bool boFlag, int nDestX, int nDestY)
         {
             const string sExceptionMsg = "[Exception] TBaseObject::RunTo";
@@ -995,9 +1041,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)nOldX;
-                        m_nCurrY = (short)nOldY;
-                        m_PEnvir.MoveToMovingObject(nOldX, nOldY, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(nOldX, nOldY);
                     }
                 }
             }
@@ -1087,9 +1131,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)n10;
-                        m_nCurrY = (short)n14;
-                        m_PEnvir.MoveToMovingObject(n10, n14, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(n10, n14);
                     }
                 }
             }
@@ -1201,6 +1243,17 @@ namespace GameSvr
         private void ClientClickNPC(int npcId)
         {
             // PERF: diagnostic write removed from hot path (per-click)
+            // TRADE-62: 战神 sub_6B8B28 的第一条可执行语句（SEH 序言之后）就是
+            //   0x6B8B4D  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6B8B54  0F 85 2A 01 00 00     jne 0x6B8C84
+            // 0x6B8C84 是 `33 C0 xor eax,eax` + SEH 拆除 + `C3 ret`，即**静默返回**，
+            // 不发任何消息。交易进行中点 NPC 会被整体忽略。
+            // 注意：紧随其后的 `!m_boCanDeal` 占的正是这道门的位置，但它不是原生门
+            // （见下），原生在此只测 +0x461。
+            if (m_boDealing)
+            {
+                return;
+            }
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
@@ -1217,6 +1270,14 @@ namespace GameSvr
                 if (normNpc != null && normNpc.m_PEnvir == m_PEnvir && Math.Abs(normNpc.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(normNpc.m_nCurrY - m_nCurrY) <= 15)
                 {
                     normNpc.Click(this);
+                    // Native sub_6B8B28 stores the NPC into player+0xCD8 AFTER the
+                    // talk vcall returns, with no test of the script result:
+                    //   0x6B8BA2 call 0x720444 / 0x6B8BA7 mov [ebx+0xCD8],esi
+                    //   0x6B8C43 call 0x63DC74 / 0x6B8C48 mov [ebx+0xCD8],esi
+                    // Exhaustive disp 0xCD8 scan: those two plus setter 0x63DFAF.
+                    // There is no write of 0 anywhere. Bind here so @main itself
+                    // still sees the previous/nil field (Give audit 0x6DF341).
+                    m_NPC = normNpc;
                 }
             }
         }
@@ -1531,12 +1592,17 @@ namespace GameSvr
 
         private void SendMapDescription()
         {
-            var nMUSICID = -1;
-            if (m_PEnvir.Flag.boMUSIC)
+            // sub_6E37C4: the description is compared against the per-player cache at
+            // [Self+0x9B4] (0x6E380A CompareStr / 0x6E380F je 0x6E383F) and only a change
+            // sends the packet; nRecog is the literal 1 (0x6E382C B901000000 mov ecx,1),
+            // not a music id.
+            var description = m_PEnvir.sMapDesc ?? string.Empty;
+            if (string.CompareOrdinal(_lastMapDescription, description) == 0)
             {
-                nMUSICID = m_PEnvir.Flag.nMUSICID;
+                return;
             }
-            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, nMUSICID, 0, 0, 0, m_PEnvir.sMapDesc);
+            _lastMapDescription = description;
+            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, 1, 0, 0, 0, description);
         }
 
         private void SendWhisperMsg(TPlayObject PlayObject)
@@ -1839,21 +1905,9 @@ namespace GameSvr
 
         private void SendAdjustBonus()
         {
-            var sSendMsg = string.Empty;
-            switch (m_btJob)
-            {
-                case M2Share.jWarr:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofWarr) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofWarr);
-                    break;
-                case M2Share.jWizard:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofWizard) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofWizard);
-                    break;
-                case M2Share.jTaos:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofTaos) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofTaos);
-                    break;
-            }
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ADJUST_BONUS, m_nBonusPoint, 0, 0, 0);
-            SendSocket(m_DefMsg, sSendMsg);
+            // Native CODE 0x401000..0x7A10D0 has zero 16-bit dx/cx loads of 811
+            // (0x032B) reaching a send slot. srv_AppearTimes.ini ident 811 = 0.
+            // Keep the RM_ADJUST_BONUS consumer so routing stays, but do not emit.
         }
 
         private void ShowMapInfo(string sMap, string sX, string sY)
@@ -2213,14 +2267,9 @@ namespace GameSvr
 
         private void SendChangeGuildName()
         {
-            if (m_MyGuild != null)
-            {
-                SendDefMessage(Grobal2.SM_CHANGEGUILDNAME, 0, 0, 0, 0, m_MyGuild.sGuildName + '/' + m_sGuildRankName);
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_CHANGEGUILDNAME, 0, 0, 0, 0, "");
-            }
+            // Native RM 10301 handler 0x6B624C is the dispatcher finally, not a
+            // send. CODE has zero 16-bit dx/cx loads of 750 (0x02EE) reaching a
+            // send slot. srv_AppearTimes.ini 750=0. Constant kept.
         }
 
         private static byte[] BuildDelItemListBody(IList<TDeleteItem> ItemList)

@@ -171,13 +171,19 @@ static void ApplyLimitItemMoveSourceContract()
     var root = FindRepositoryRoot();
     var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Maps",
         "Maps.cs"));
+    // Native parser B 0x7769D2 `mov ecx,0xD` / 0x7769D7 `mov edx,0x776F2C`
+    // ("LimitItemMove") / 0x7769DF `call 0x4C6E94` (CompareLStr). A full
+    // Equals rejects the prefix native accepts.
     var token = source.IndexOf(
-        "s34.Equals(\"LimitItemMove\", StringComparison.OrdinalIgnoreCase)",
+        "HUtil32.CompareLStr(s34, \"LimitItemMove\"",
         StringComparison.Ordinal);
-    Assert(token >= 0, "LimitItemMove parser branch missing");
+    Assert(token >= 0, "LimitItemMove CompareLStr parser branch missing");
     var end = source.IndexOf("continue;", token, StringComparison.Ordinal);
     Assert(end > token, "LimitItemMove parser branch has no terminator");
     var branch = source.Substring(token, end - token);
+    Assert(branch.Contains("\"LimitItemMove\".Length", StringComparison.Ordinal)
+           || branch.Contains(", 13)", StringComparison.Ordinal),
+        "LimitItemMove prefix length is no longer native 13");
     Assert(branch.Contains("MapFlag.boLIMITITEMMOVE = true;",
         StringComparison.Ordinal), "LimitItemMove independent flag missing");
     Assert(branch.Contains("MapFlag.boNORECALL = true;",

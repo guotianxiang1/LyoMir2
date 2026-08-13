@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using SystemModule;
 using GameSvr;
@@ -3150,6 +3150,37 @@ namespace GameSvr.Plugins
         public bool IsOneSword() => PatchToggleOn("基本剑术");
         public int OneSwordN() => ParamAtoi("基本剑术_n值", 3);
 
+        // 复活戒指重设 is a host-code patch, same primitive as the six warrior
+        // skills. Plugin 0x100B3472 `83 BF B8 05 00 00 00 cmp [edi+0x5B8],0`
+        // (loader lag puts 复活戒指重设 at +0x5B8) / je 0x100B36D2 skips the
+        // writes when the toggle is off. On: atoi(重设时间) then
+        // `69 C0 E8 03 00 00 imul 0x3E8` is stored over the two `0xEA60`
+        // immediates, and atoi(无敌时间) `0F B7 C0 movzx eax,ax` is stored
+        // over `66 B9 02 00` at 0x743911.
+        //   0x100B3501 A3 FA C4 73 00 -> host 0x73C4FA of `81 FE 60 EA 00 00`
+        //   0x100B357B A3 58 37 74 00 -> host 0x743758 of `81 FA 60 EA 00 00`
+        //   0x100B35E9 A3 80 C4 73 00 -> host 0x73C480 of `B8 3C 00 00 00`
+        //   0x100B3657 66 A3 13 39 74 00 -> host 0x743913 of `mov cx,2`
+        // 0x7CC on the cfg struct is the already-applied latch (written 0x64
+        // after the patch, 0 when the toggle is off) — C# rereads the config
+        // each revive, which is the player-visible result of uncheck/recheck.
+        public bool IsReviveResetPatchOn() => PatchToggleOn("复活戒指重设");
+
+        /// <summary>
+        /// Milliseconds written over the two <c>cmp …,0xEA60</c> sites.
+        /// Native default 60000; plugin <c>imul eax,0x3E8</c> is 32-bit wrap.
+        /// </summary>
+        public int ReviveResetCooldownMs() =>
+            unchecked(ParamAtoi("复活戒指重设_重设时间", 60) * 1000);
+
+        /// <summary>
+        /// Seconds written over <c>mov cx,2</c> @0x743911. Plugin
+        /// <c>0x100B34B7 0F B7 C0 movzx eax,ax</c> keeps the low 16 bits of
+        /// atoi, including the zero-extended negative case (atoi -1 → 65535).
+        /// </summary>
+        public int ReviveResetImmuneSeconds() =>
+            ParamAtoi("复活戒指重设_无敌时间", 2) & 0xFFFF;
+
         /// <summary>
         /// Toggle read for a code-patch override. Unlike a script API, "off"
         /// here is not a failure: it is simply the unpatched native
@@ -3325,7 +3356,10 @@ namespace GameSvr.Plugins
         public bool IsLuckBlock() => Enabled("格位刺杀免伤a");
         public bool IsProbBlock() => Enabled("概率格挡a");
         public bool IsFixStabParalysis() => Enabled("修复刺杀位麻痹");
-        public bool IsFixDefense() => Enabled("修复卡防御");
+        // Code patch at host 0x00767910 (jle → jmp), not a script API.
+        // Off means the unpatched luck-max armour roll, so this must not
+        // raise inside a strict yanshen call the way Enabled() does.
+        public bool IsFixDefense() => PatchToggleOn("修复卡防御");
         public bool IsZeroDefSplit() => Enabled("防0拆分");
         public bool IsMagicShieldFix() => Enabled("魔法盾修正");
         public bool IsHolyShieldMsg() => Enabled("护身触发报文a");
@@ -3439,7 +3473,11 @@ namespace GameSvr.Plugins
         public bool IsPortableStorage() => Enabled("随身仓库");
         public bool IsRandomExtreme() => Enabled("随机极品");
         public bool IsGiveExtreme() => Enabled("give极品");
-        public int MaxEquipCount() { var v = ParamS("最大装备数量"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // 0x100B9D3A `A2 6C FF 73 00` overwrites the imm8 of host
+        // 0x0073FF69 `83 7D F4 02 cmp dword [ebp-0xc],2`. Plugin does
+        // `atoi(最大装备数量); dec eax` then writes al, so the compare
+        // immediate is the low 8 bits of (N-1), sign-extended by `cmp`.
+        public int MaxEquipCount() => ParamAtoi("最大装备数量", 3);
 
         // ── Equipment stat param readers (武器/衣服/头盔/项链/手镯/戒指) ──
         // 武器
@@ -3558,15 +3596,28 @@ namespace GameSvr.Plugins
         public bool IsHideGoldMsg() => Enabled("屏蔽元宝增减信息");
         public bool IsHideAttrUp() => Enabled("屏蔽属性提升提示");
         public bool IsHideRank() => Enabled("屏蔽排行榜");
-        public bool IsBlockSpam() => Enabled("屏蔽发言频繁禁言功能");
+        // 屏蔽发言频繁禁言功能 is a host-code patch, same primitive as 复活戒指重设.
+        // Plugin 0x100AC678 / 0x100AC6B2 memcpy 6×90 over the two flood-counter
+        // increments in ProcessSayMsg (sub_6BB2F8):
+        //   0x6BB56A  FF 83 74 0A 00 00  inc dword [ebx+0xA74]  → m_nSayMsgCount++
+        //   0x6BB579  FE 83 82 06 00 00  inc byte  [ebx+0x682]  → m_btSayRapidCount++
+        // Restore arm 0x100AC75D / 0x100AC797 writes the incs back. Thresholds
+        // (>=2 / >=5), the 60 s mute, and the decay decs are not patched.
+        public bool IsBlockSpamPatchOn() => PatchToggleOn("屏蔽发言频繁禁言功能");
+        public bool IsBlockSpam() => IsBlockSpamPatchOn();
         public bool IsDelSkillSilent() => Enabled("删除技能不提示");
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
-        public bool IsUpSkillSilent() => Enabled("升级技能不提示");
+        // 升级技能不提示 is a host-code patch: plugin 0x100DB61C memcpy EB 3A 90 90
+        // over 0x73F5EE in sub_73F500 (ChgSelfSkillLv / UpUserSkill worker), jumping
+        // from the LStrCatN of "{name} 技能等级变更为：{level}" + SysMsg 0xFFDB
+        // straight to RecalcAbilitys at 0x73F62A. Restore arm writes 57 68 7C F6 73 00.
+        public bool IsUpSkillSilentPatchOn() => PatchToggleOn("升级技能不提示");
+        public bool IsUpSkillSilent() => IsUpSkillSilentPatchOn();
         public bool IsBanChatSilent() => Enabled("禁止发言不提示");
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");
-        public bool IsPlayerDropRate() => Enabled("人物爆率调整");
+        public bool IsPlayerDropRate() => PatchToggleOn("人物爆率调整");
         public int PlayerLv1() => GetParamInt("人物等级1_值", 35);
         public int PlayerLv2() => GetParamInt("人物等级2_值", 40);
         public int PlayerLv3() => GetParamInt("人物等级3_值", 48);
@@ -3574,7 +3625,13 @@ namespace GameSvr.Plugins
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
         public bool IsNewMonsterDrop() => Enabled("新怪物爆率");
         public bool IsGetCastle() => Enabled("获取沙城归属");
-        public bool IsGuildShow() => Enabled("行会显示");
+        // 行会显示 is a host-code patch: plugin 0x100AACD8 / 0x100AAD29 memcpy
+        // 90 90 over both skip-jumps in GetShowName's non-castle guild branch
+        //   0x6C5BCB  74 49  je 0x6C5C16   (after cmp g_Config.boShowGuildName)
+        //   0x6C5BF7  74 1D  je 0x6C5C16   (after castle-war-area test)
+        // Restore arm 0x100AADC0 / 0x100AADFA writes 74 49 / 74 1D back.
+        // Both je gone ⇒ every path reaches 0x6C5BF9 and emits %guildname/%rankname.
+        public bool IsGuildShow() => PatchToggleOn("行会显示");
         public bool IsMultiFaction() => Enabled("角色多阵营");
         public bool IsSiegeScript() => Enabled("攻沙脚本控制");
         public bool IsSiegeModify() => Enabled("攻城修改");
@@ -3591,7 +3648,11 @@ namespace GameSvr.Plugins
 
         // ── Trade/Stall toggle checks ──
         public bool IsStallPass() => Enabled("摆摊穿人");
-        public bool IsCloseStall() => Enabled("关闭摆摊");
+        // 关闭摆摊 is a host-code patch: plugin 0x100AD12A memcpy C3 over the
+        // first byte of CM_START_STALL (4424) at 0x6E7C38 (native 55 = push ebp).
+        // Restore arm 0x100AD1AE writes 55 back. SetTimeLevel (4419) is a
+        // different function and is not patched.
+        public bool IsCloseStall() => PatchToggleOn("关闭摆摊");
         public bool IsTuChengStall() => Enabled("土城摆摊");
         public bool IsLimitStall() => Enabled("限制摆摊");
         public int LimitStall_LeftX() => GetParamInt("限制摆摊_左x", 280);
@@ -3672,9 +3733,15 @@ namespace GameSvr.Plugins
         public bool IsMonsterDropB() => Enabled("怪物爆率B_值");
         public bool IsMonsterDropK() => Enabled("怪物爆率K_值");
 
-        // ── Red/Green name K值 params ──
-        public int RedNameK() { var v = ParamS("红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
-        public int NormalK() { var v = ParamS("非红名K值"); if (string.IsNullOrEmpty(v)) return 0; return int.TryParse(v, out var n) ? n : 0; }
+        // ── Red/Green name K值 params (patch immediates, not locale parse) ──
+        // 0x100B9CCC `A3 BB FC 73 00` -> imm32 of 0x0073FCB8
+        // `C7 45 F8 15 00 00 00 mov dword [ebp-8],0x15`. Full dword, no wrap.
+        public int RedNameK() => ParamAtoi("红名K值", 21);
+        // 0x100B9C5E `A2 C9 FC 73 00` -> imm8 of 0x0073FCC7
+        // `83 C0 5A add eax,0x5A`. `add eax,imm8` sign-extends, so A
+        // survives only as a signed byte. No `cmp 0x7F` clamp before the write.
+        public int NormalK() =>
+            unchecked((sbyte)ParamAtoi("非红名K值", 90));
 
         // ── Loop time ──
         public bool IsLoopTimeVal() => Enabled("循环时间_值");
@@ -3823,7 +3890,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>关闭摆摊检查</summary>
-        public bool IsStallClosed() => Enabled("关闭摆摊");
+        public bool IsStallClosed() => IsCloseStall();
 
         /// <summary>指定地图编号摆摊</summary>
         public int GetStallMapId() => GetParamInt("摆摊地图", 3);
@@ -3842,9 +3909,13 @@ namespace GameSvr.Plugins
         public bool TryGetFloorItemTimeout(out int timeoutMilliseconds)
         {
             timeoutMilliseconds = 0;
-            if (!Enabled("地面物品消失时间")) return false;
+            if (!PatchToggleOn("地面物品消失时间")) return false;
 
-            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 600));
+            // 600 was the M2Server constant (0x77A3FD cmp edx,0x927C0), not the plugin's
+            // fallback: when the key is absent the loader seeds 300 seconds
+            // (0x100B01AA C7 80 00 0D 00 00 2C 01 00 00 -> mov [cfg+0xD00],0x12C).
+            // Enable arm 0x100AAF86 imul edx,eax,0x3E8 then memcpy 4 bytes to 0x77A3FF.
+            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 300));
             timeoutMilliseconds = seconds > int.MaxValue / 1000
                 ? int.MaxValue
                 : seconds * 1000;
@@ -3876,11 +3947,29 @@ namespace GameSvr.Plugins
         // 效果无字节证据（插件加壳），按 fail-closed 不实现。
         // 开关本身仍可由 IsLevelMute() 读取。
 
-        /// <summary>人物爆率调整 — 获取爆率倍率</summary>
-        public double GetPlayerDropRateMultiplier()
+        /// <summary>
+        /// 人物爆率调整 is a code-patch override of THumanKind's equip-drop
+        /// worker <c>sub_73FC70</c>, not a runtime multiplier. Gated by
+        /// <c>[edi+0x5D0]</c> at 0x100B9BBA (that slot is 人物爆率调整:
+        /// loader 0x100BABEC stores the converted toggle there). Off means
+        /// the host immediates stay at stock 21 / 90 / 2.
+        /// </summary>
+        public bool TryGetDeathEquipDropPatch(bool redName, out int denominator, out int capImm)
         {
-            if (!Enabled("人物爆率调整")) return 1.0;
-            return 1.0; // Default multiplier, overridden by script
+            denominator = 0;
+            capImm = 2;
+            if (!PatchToggleOn("人物爆率调整")) return false;
+            // Red path is a bare imm32 (0x73FCB8). Non-red is
+            // `[esi+0x18c] + imm8` (0x73FCC1/0x73FCC7). The addend is the
+            // patched byte; the +0x18c dword is a native field this switch
+            // does not rewrite and is not identified in C# — treated as 0.
+            // LastHiter[+0x579] subtract at 0x73FD08 is likewise unpatched
+            // native and omitted here.
+            denominator = redName ? RedNameK() : NormalK();
+            // 0x73FD0B cmp [ebp-8],0 / jge / xor — native floors before Random.
+            if (denominator < 0) denominator = 0;
+            capImm = unchecked((sbyte)(MaxEquipCount() - 1));
+            return true;
         }
 
         /// <summary>脚本控制人物爆率</summary>

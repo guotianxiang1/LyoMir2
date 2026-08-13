@@ -78,10 +78,16 @@ namespace GameSvr
             }
             if (m_boDupMode)
             {
-                int nOldX = m_nCurrX;
-                int nOldY = m_nCurrY;
-                WalkTo((byte)M2Share.RandomNumber.Random(8), false);
-                if (nOldX != m_nCurrX || nOldY != m_nCurrY)
+                // MONAI-11 — TMonster.Think sub_666184 叠格走开走的是 WalkTo(Random(8), TRUE)：
+                //   006661FF  B8 08 00 00 00     mov  eax,8
+                //   00666204  E8 43 D9 D9 FF     call 0x403B4C        ; Random(8)
+                //   00666209  8B D0              mov  edx,eax         ; dir
+                //   0066620B  B1 01              mov  cl,1            ; boFlag = 1
+                //   00666211  FF 56 30           call [esi+0x30]      ; WalkTo
+                //   00666214  84 C0              test al,al
+                //   00666216  74 0B              je   0x666223        ; 假则仍留在 dup
+                // 原先 C# 传 false 且用坐标差当成功，叠格时不能走进已占用格，解不开。
+                if (WalkTo((byte)M2Share.RandomNumber.Random(8), true))
                 {
                     m_boDupMode = false;
                     result = true;
@@ -209,7 +215,16 @@ namespace GameSvr
                             }
                             if (!m_Master.m_boSlaveRelax && (m_PEnvir != m_Master.m_PEnvir || Math.Abs(m_nCurrX - m_Master.m_nCurrX) > 20 || Math.Abs(m_nCurrY - m_Master.m_nCurrY) > 20))
                             {
-                                SpaceMove(m_Master.m_PEnvir.sMapName, m_nTargetX, m_nTargetY, 1);
+                                // MONAI-15 — TMonster.Run 召回传送 sub_66622C @0x6665AF：
+                                //   B8 04 / E8 Random / 03 83 30 01 00 00  ; Y = masterY + Random(4) 先抽
+                                //   50 / 6A 01 / 6A 00                     ; push Y, 1, 0
+                                //   B8 04 / E8 Random / 03 8B 2C 01 00 00  ; X = masterX + Random(4) 后抽
+                                //   8B 93 28 01 00 00 / FF 93 C0 01 00 00  ; edx=master.envir, vcall +0x1C0
+                                // 旧 C# 传到 GetBackPosition 写下的 m_nTargetX/Y，抽签次数为 0。
+                                // push 0 那一档 C# SpaceMove 没有对应形参，标 BLOCKED，nInt 仍传 1。
+                                var nRecallY = (short)(m_Master.m_nCurrY + M2Share.RandomNumber.Random(4));
+                                var nRecallX = (short)(m_Master.m_nCurrX + M2Share.RandomNumber.Random(4));
+                                SpaceMove(m_Master.m_PEnvir, nRecallX, nRecallY, 1);
                             }
                         }
                     }

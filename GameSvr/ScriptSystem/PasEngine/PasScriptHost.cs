@@ -1108,14 +1108,17 @@ namespace GameSvr.PasEngine
             {
                 if (!HasLabelHandler(scriptPath, label)) continue;
                 var interaction = BindNpcInteraction(player, npc, resolution);
-                if (player != null) player.m_NPC = npc;
+                // Native click handler sub_6B8B28 writes player+0xCD8 AFTER the
+                // talk vcall (0x6B8BA7 / 0x6B8C48), and never writes 0. GotoLable
+                // 0x63DC98 itself does not touch +0xCD8. Do not bind or clear
+                // m_NPC here: a label miss would otherwise drop a binding native
+                // keeps, and a pre-call write would let Give's audit (0x6DF341
+                // cmp [edi+0xCD8],0) see the new NPC during @main.
                 var invoked = TryCallLabelCore(scriptPath, label, player, npc,
                     resolution.DynamicBindingHandle, out result);
                 if (!invoked)
                 {
                     RemoveNpcInteraction(interaction);
-                    if (player != null && ReferenceEquals(player.m_NPC, npc))
-                        player.m_NPC = null;
                 }
                 else if (ParseScriptLabel(label).Label.Equals("@exit",
                              StringComparison.OrdinalIgnoreCase))

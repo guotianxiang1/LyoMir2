@@ -473,7 +473,18 @@ namespace GameSvr
                                 CellObj = Cert,
                                 dwAddTime = HUtil32.GetTickCount()
                             };
-                            MapCellInfo.ObjList.Add(OSObject);
+                            // MOVE-35(c) — dest cell is a native singly-linked list
+                            // whose head lives at destCell[8]. After unlinking, the
+                            // mover splices the same node onto the front:
+                            //   00779A80  8B 45 E0        mov eax,[ebp-0x20] ; dest cell
+                            //   00779A83  8B 40 08        mov eax,[eax+8]    ; old head
+                            //   00779A89  89 42 0C        mov [edx+0xC],eax  ; node.next = old head
+                            //   00779A92  89 50 08        mov [eax+8],edx    ; destCell[8] = node
+                            // C# stores the chain as List<T> and walks 0..Count-1, so
+                            // index 0 is the native head. Add() was tail-insert and
+                            // reversed every consumer that iterates the cell (pick-up,
+                            // target select, AOE). Insert(0) restores head order.
+                            MapCellInfo.ObjList.Insert(0, OSObject);
                             result = 1;
                         }
                     }
@@ -1416,6 +1427,57 @@ namespace GameSvr
                                 result++;
                             }
                         }
+                    }
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// sub_778858, named by its own exception text at 0x778A7C:
+        /// "[Exception]: TEnvironment.GetMovObjCount". Distinct from
+        /// <see cref="GetXYObjCount"/>: it walks the raw cell chain, drops
+        /// entries whose actor fails the liveness probe sub_765D64 (logging
+        /// each one), and counts the survivors that pass
+        ///   0x7789AA  80 7E 73 00  !m_boGhost
+        ///   0x7789B0  80 BE E6 02 00 00 00 / 74   bo2B9 must be set
+        ///   0x7789BB  sub_772DA8 / 75              !m_boDeath
+        ///   0x7789C4  80 BE E3 02 00 00 00 / 75    !m_boFixedHideMode
+        ///   0x7789CD  80 BE E0 02 00 00 00 / 75    BLOCKED, see below
+        /// It deliberately does NOT carry the ObMode / state-0x3C exclusion
+        /// that IsNativeCellBlocking applies, which is why GetXYObjCount is
+        /// not reused here.
+        ///
+        /// BLOCKED: the +0x2E0 term has no C# field. That byte is written only
+        /// by the constructor at 0x609038 (`C6 86 E0 02 00 00 01`), reached
+        /// from 0x605048, i.e. it is a fixed per-class marker rather than
+        /// runtime state; sub_767498 IsProperTarget rejects on the same byte at
+        /// 0x7674BA. Objects of that class are counted here where native would
+        /// skip them.
+        /// </summary>
+        public int GetNativeMovObjCount(int nX, int nY)
+        {
+            var result = 0;
+            var mapCell = false;
+            MapCellinfo MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
+            if (mapCell && MapCellInfo.ObjList != null)
+            {
+                for (var i = 0; i < MapCellInfo.Count; i++)
+                {
+                    CellObject OSObject = MapCellInfo.ObjList[i];
+                    if (OSObject.CellType != CellType.OS_MOVINGOBJECT)
+                    {
+                        continue;
+                    }
+                    if (!(OSObject.CellObj is TBaseObject BaseObject))
+                    {
+                        continue;
+                    }
+                    if (!BaseObject.m_boGhost && BaseObject.bo2B9 &&
+                        !BaseObject.m_boDeath &&
+                        !BaseObject.m_boFixedHideMode)
+                    {
+                        result++;
                     }
                 }
             }

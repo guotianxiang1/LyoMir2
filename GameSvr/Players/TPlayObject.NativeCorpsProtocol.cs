@@ -9,7 +9,7 @@ namespace GameSvr
         private Action<ClientPacket, byte[]> _nativeCorpsPacketSink;
         private Func<TPlayObject> _nativeCorpsDirectTargetResolver;
 
-        private const int NativeSocialRoleRefreshIdent = 4628;
+        private const int NativeSocialRoleRefreshIdent = Grobal2.SM_REFRESH_SOCIAL_ROLE;
 
         private NativeCorpsService CorpsService =>
             _nativeCorpsService ?? M2Share.CorpsService ??

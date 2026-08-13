@@ -29,13 +29,21 @@ namespace SystemModule
     //
     // DelphiRandom is process-global and lock-linearised, which also removes the
     // unsynchronised System.Random instance that the gameplay and AI threads shared.
+    //
+    // M2Share.RandomNumber is a mutable public static field, i.e. the draw source has
+    // always been a substitutable seam; before the cutover the substitution point was
+    // the `private static Random random` field this class no longer owns. The four draw
+    // entries are virtual and the constructor is protected so that a caller which owns
+    // that field can install a derived source. Nothing in the server ever installs one:
+    // the M2Share static constructor assigns GetInstance(), so production dispatch lands
+    // on the bodies below and every value stays byte-identical to sub_403B4C.
     public class RandomNumber
     {
         private static RandomNumber singleton;
 
         private static readonly object syncObject = new object();
 
-        private RandomNumber() { }
+        protected RandomNumber() { }
 
         public static RandomNumber GetInstance()
         {
@@ -68,7 +76,7 @@ namespace SystemModule
         }
 
         /// <summary>Inclusive of max: min + Random(max - min + 1).</summary>
-        public int GetRandomNumber(int minValue, int maxValue)
+        public virtual int GetRandomNumber(int minValue, int maxValue)
         {
             int result = DelphiRandomNumberFacade.GetRandomNumber(minValue, maxValue);
             if (RngTraceSink.Enabled) RngTraceSink.Record(RngTraceApi.GetRandomNumber, minValue, maxValue, result, 0, 0);
@@ -79,7 +87,7 @@ namespace SystemModule
         /// Deliberate seed advance, the original Random(0): steps the seed once and
         /// yields 0. Every caller discards the value.
         /// </summary>
-        public int Random()
+        public virtual int Random()
         {
             int result = DelphiRandomNumberFacade.Advance();
             if (RngTraceSink.Enabled) RngTraceSink.Record(RngTraceApi.ParamlessAdvance, 0, 0, result, 0, 0);
@@ -87,7 +95,7 @@ namespace SystemModule
         }
 
         /// <summary>Bounded draw, sub_403B4C.</summary>
-        public int Random(int Value)
+        public virtual int Random(int Value)
         {
             int result = DelphiRandomNumberFacade.Random(Value);
             if (RngTraceSink.Enabled) RngTraceSink.Record(RngTraceApi.Random, Value, 0, result, 0, 0);
@@ -95,7 +103,7 @@ namespace SystemModule
         }
 
         /// <summary>Half-open [min, max): min + Random(max - min).</summary>
-        public int Random(int minValue, int maxValue)
+        public virtual int Random(int minValue, int maxValue)
         {
             int result = DelphiRandomNumberFacade.Random(minValue, maxValue);
             if (RngTraceSink.Enabled) RngTraceSink.Record(RngTraceApi.RandomMinMax, minValue, maxValue, result, 0, 0);
