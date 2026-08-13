@@ -138,11 +138,24 @@ namespace GameSvr
                             AttackDir(null, 7, nDir);
                             break;
                         case Grobal2.CM_CRSHIT:
-                            AttackDir(null, 8, nDir);
+                            // 3026 reaches sub_7707A8 with action code 1018
+                            // (0x6EC178[24] = 0x0A -> slot 0x6EC2B1 -> `mov cx,0x3FA`),
+                            // whose arm 0x77092A ends in `call 0x771BB8` — and 0x771BB8
+                            // is an empty stub: `55 8B EC 33 C0 5D C2 04 00`
+                            // (push ebp; mov ebp,esp; xor eax,eax; pop ebp; ret 4).
+                            // The only lasting effect is 0x7707E3
+                            // `88 86 54 01 00 00  mov [esi+0x154],al`, i.e. the facing
+                            // update ([+0x154] is m_btDirection: 0x771BE6 feeds it to
+                            // GetNextPosition alongside [+0x12C]/[+0x130] CurrX/CurrY).
+                            // No attack of any kind is performed.
+                            m_btDirection = nDir;
                             break;
-                        case Grobal2.CM_TWINHIT:
-                            AttackDir(null, 9, nDir);
-                            break;
+                        // CM_TWINHIT (3028) has no arm on purpose: 0x6EC178[26] = 0x0B
+                        // selects jump-table slot 11 = 0x6EC2D7, which is the tail of
+                        // sub_6EC078 itself, so 3028 never even reaches sub_7707A8 and
+                        // does not update the facing either. It still runs the shared
+                        // position check, the SKILL_YEDO counter and the health/spell
+                        // tick block below, and still answers SM_ACT_GOOD.
                         case Grobal2.CM_42HIT:
                             AttackDir(null, 10, nDir);
                             AttackDir(null, 11, nDir);

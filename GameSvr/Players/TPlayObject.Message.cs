@@ -1482,6 +1482,7 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_FIREHIT:
                 case Grobal2.CM_SWORD_HIT:
+                case Grobal2.CM_3037:
                     // Native masks the wire direction to 3 bits before handing it
                     // to the shared attack handler sub_6EC078. Both dispatch arms
                     // do it, byte-identically:
@@ -1492,7 +1493,17 @@ namespace GameSvr
                     // Without the mask a forged packet can drive the direction to
                     // 0..255 and index past the 8-entry direction tables. Same
                     // defect class as the CM_RUN direction fix (MOVE-19).
-                    if (ClientHitXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)(ProcessMsg.wParam & 7), ProcessMsg.boLateDelivery, ref dwDelayTime))
+                    //
+                    // 3027's arm 0x6D9F4B differs from the shared arm in exactly one
+                    // instruction - 0x6D9F9B `mov dx,[msg+8]` (Tag) against 0x6D9EFF
+                    // `mov dx,[msg+4]` (Ident) - so for 3027 the client names the
+                    // action in Tag and sub_6EC078 range-checks that value instead.
+                    // UsrEngn carries it here in nParam3.
+                    if (ClientHitXY(
+                            ProcessMsg.wIdent == Grobal2.CM_3037
+                                ? ProcessMsg.nParam3
+                                : ProcessMsg.wIdent,
+                            ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)(ProcessMsg.wParam & 7), ProcessMsg.boLateDelivery, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
@@ -2720,7 +2731,6 @@ namespace GameSvr
 
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:
-                case Grobal2.CM_3037:
                 case Grobal2.CM_CHANGEPASSWORD:
                 case Grobal2.CM_CHECKTIME:
                     break;  // 客户端处理，服务端仅 ack

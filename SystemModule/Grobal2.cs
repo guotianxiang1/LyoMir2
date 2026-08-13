@@ -704,9 +704,16 @@ namespace SystemModule
         public const int CM_CHGPASSWORD = 2002;
         public const int CM_SETPASSWORD = 2004;
         public const int CM_HORSERUN = 3035;
-        public const int CM_CRSHIT = 3036;
-        public const int CM_3037 = 3037;
-        public const int CM_TWINHIT = 3038;
+        // 3026/3027/3028, not 3036/3037/3038. Native dispatch table 0x6D8592 is based
+        // at ident 3010, and entry [16] (0x6D85D2) = 0x6D9EAF is 3026; 3027 is the
+        // `0x6D8502 3D D3 0B 00 00 cmp eax,0xBD3` / `0x6D850D je 0x6D9F4B` arm; 3028 is
+        // `0x6D85F0 2D D4 0B 00 00 sub eax,0xBD4` / `0x6D85F5 je 0x6D9EAF`.
+        // 3036/3037/3038 have zero comparison-form encodings anywhere in CODE
+        // (0x401000..0x7A10D0): no 3D/2D/05 imm32, no 81 /0 /5 /7 imm32, no 66-prefixed
+        // imm16 and no 83-form, so the native dispatcher cannot reach them at all.
+        public const int CM_CRSHIT = 3026;
+        public const int CM_3037 = 3027;
+        public const int CM_TWINHIT = 3028;
         public const int CM_QUERYUSERSET = 3040;
         public const int CM_QUERY_TASK_DETAIL = 3051;
         public const int CM_QUERY_TASK_ALL = 3052;
