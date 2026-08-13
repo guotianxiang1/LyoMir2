@@ -246,6 +246,10 @@ namespace GameSvr
                 if (record.Status == StallRecordStatus.Running && record.Items.Count == 0)
                     record.Status = StallRecordStatus.PausedClosed;    // auto-pause a now-empty running booth
                 PersistStallHeader(record, store);                     // itemcnt (+ status) -> UpdateStall
+                // sub_61BECC @0x61BF43: after the stall-item lookup succeeds,
+                // edx=[ebp-8] (the DelItem ecx item-id) / eax=[ebp-4] (player)
+                // call 0x6E7D94 -> SendDefMessage(4427, Recog=itemId, 0,0,0,"").
+                SendDefMessage(Grobal2.SM_UPT_DEL_STALLITEM, clientItemId, 0, 0, 0, "");
             }
             SendDefMessage(responseIdent, code, 0, 0, 0, "");
             return true;
