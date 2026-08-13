@@ -2,6 +2,8 @@ namespace GameSvr
 {
     /// <summary>
     /// PKD-08 —— 战神 <c>sub_767498</c> 的目标前置筛选梯。
+    /// （2026-08-13 独立复核：0x767498..0x767503 逐字节重读一致；<c>E8</c> 直调者实测
+    ///  <b>169</b> 个，与下文数字相符；<c>sub_772DA8</c> 实测就是 <c>8A 40 74 / C3</c>。）
     ///
     /// 身份已由两份先前产物独立锚定（<c>NativeMonsterAiSearchAttack.cs:31</c> 与
     /// <c>TBaseObject.NativeSkill265.cs:130</c> 都把 <c>sub_767498</c> 写成 IsProperTarget），
