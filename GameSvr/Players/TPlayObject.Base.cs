@@ -422,6 +422,13 @@ namespace GameSvr
         public byte m_btNativeFatigueTier = 0;
 
         /// <summary>
+        /// Anti-addiction drop multiplier tier (防沉迷掉落档位).
+        /// 0=normal, 1=normal, 2=double drop count.
+        /// SPAWN-02: when tier==2 MonGetRandomItems runs the item generation loop twice.
+        /// </summary>
+        public byte m_btAntiAddictionTier = 0;
+
+        /// <summary>
         /// native <c>Self+0x1829</c> (Byte) — Cheat penalty tier (外挂惩罚档位).
         /// Values: 0=normal, 1=normal, 2=penalty, 3=hard-block.
         /// Binary: 0x6BC21E (mining gate), 0x71FAE3 (drop gate).

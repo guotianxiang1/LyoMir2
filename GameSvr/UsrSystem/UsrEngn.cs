@@ -2434,41 +2434,47 @@ namespace GameSvr
         
         
         
-        public void MonGetRandomItems(TBaseObject mon)
+        public void MonGetRandomItems(TBaseObject mon, TPlayObject killer = null)
         {
+            // SPAWN-02: when killer's anti-addiction tier is 2, run the drop generation loop twice
+            // to double the drop count (both gold and item drops).
+            var tierMultiplier = (killer != null && killer.m_btAntiAddictionTier == 2) ? 2 : 1;
             IList<TMonItem> ItemList = TryGetMonsterInfo(mon.m_sCharName,
                 out var monster) ? monster.ItemList : null;
             if (ItemList != null)
             {
-                for (var i = 0; i < ItemList.Count; i++)
+                for (var pass = 0; pass < tierMultiplier; pass++)
                 {
-                    var MonItem = ItemList[i];
-                    if (M2Share.RandomNumber.Random(MonItem.MaxPoint) <= MonItem.SelPoint)
+                    for (var i = 0; i < ItemList.Count; i++)
                     {
-                        if (string.Compare(MonItem.ItemName, Grobal2.sSTRING_GOLDNAME, StringComparison.OrdinalIgnoreCase) == 0)
+                        var MonItem = ItemList[i];
+                        if (M2Share.RandomNumber.Random(MonItem.MaxPoint) <= MonItem.SelPoint)
                         {
-                            mon.m_nGold = mon.m_nGold + MonItem.Count / 2 + M2Share.RandomNumber.Random(MonItem.Count);
-                        }
-                        else
-                        {
-                            TUserItem UserItem = null;
-                            if (CopyToUserItemFromName(MonItem.ItemName, ref UserItem))
+                            if (string.Compare(MonItem.ItemName, Grobal2.sSTRING_GOLDNAME, StringComparison.OrdinalIgnoreCase) == 0)
                             {
-                                UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
-                                var StdItem = GetStdItem(UserItem.wIndex);
-                                if (StdItem == null) continue;
-                                if (M2Share.RandomNumber.Random(M2Share.g_Config.nMonRandomAddValue) == 0)
+                                mon.m_nGold = mon.m_nGold + MonItem.Count / 2 + M2Share.RandomNumber.Random(MonItem.Count);
+                            }
+                            else
+                            {
+                                TUserItem UserItem = null;
+                                if (CopyToUserItemFromName(MonItem.ItemName, ref UserItem))
                                 {
-                                    StdItem.RandomUpgradeItem(UserItem);
-                                }
-                                if (new ArrayList(new byte[] { 15, 19, 20, 21, 22, 23, 24, 26 }).Contains(StdItem.StdMode))
-                                {
-                                    if (StdItem.Shape == 130 || StdItem.Shape == 131 || StdItem.Shape == 132)
+                                    UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
+                                    var StdItem = GetStdItem(UserItem.wIndex);
+                                    if (StdItem == null) continue;
+                                    if (M2Share.RandomNumber.Random(M2Share.g_Config.nMonRandomAddValue) == 0)
                                     {
-                                        StdItem.RandomUpgradeUnknownItem(UserItem);
+                                        StdItem.RandomUpgradeItem(UserItem);
                                     }
+                                    if (new ArrayList(new byte[] { 15, 19, 20, 21, 22, 23, 24, 26 }).Contains(StdItem.StdMode))
+                                    {
+                                        if (StdItem.Shape == 130 || StdItem.Shape == 131 || StdItem.Shape == 132)
+                                        {
+                                            StdItem.RandomUpgradeUnknownItem(UserItem);
+                                        }
+                                    }
+                                    mon.m_ItemList.Add(UserItem);
                                 }
-                                mon.m_ItemList.Add(UserItem);
                             }
                         }
                     }

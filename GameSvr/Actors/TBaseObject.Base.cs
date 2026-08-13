@@ -1061,7 +1061,8 @@ namespace GameSvr
                             () =>
                             {
                                 if (this is not HeroObject)
-                                    M2Share.UserEngine.MonGetRandomItems(this);
+                                    M2Share.UserEngine.MonGetRandomItems(this,
+                                        AttackBaseObject as TPlayObject);
                             });
                         DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
