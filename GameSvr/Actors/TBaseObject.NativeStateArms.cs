@@ -314,6 +314,36 @@ namespace GameSvr
                     SendNativeStateArmMsg("道术回复正常",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 35:
+                    // 0x7428AD  BA 08 33 74 00
+                    // 0x743308 len 16 B9A5BBF7CBD9B6C8BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("攻击速度回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 36:
+                    // 0x7428C5  BA 24 33 74 00
+                    // 0x743324 len 14 C9FAC3FCD6B5BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("生命值回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 37:
+                    // 0x7428DD  BA 3C 33 74 00
+                    // 0x74333C len 14 C4A7B7A8D6B5BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("魔法值回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 38:
+                    // 0x74290D  BA 70 33 74 00
+                    // 0x743370 len 12 C3F4BDDDBBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("敏捷回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 39:
+                    // 0x742925  BA 88 33 74 00
+                    // 0x743388 len 12 C4A7B6E3BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("魔躲回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
             }
         }
     }
