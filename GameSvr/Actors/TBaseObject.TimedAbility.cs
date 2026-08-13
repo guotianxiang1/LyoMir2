@@ -88,7 +88,21 @@ namespace GameSvr
                 }
                 if (node.InternalType == 20 && node.Value > 3)
                 {
-                    AddTimedAbilityInternal(19, 0, -1, 1);
+                    // STATE-29 @0x7732AC, bytes verified:
+                    //   7732AC  83 7E 0A 03            cmp  dword [esi+0xA], 3
+                    //   7732B0  0F 8E AB 00 00 00      jle  0x773361
+                    //   7732B6  6A 01                  push 1          ; -> [ebp+0xC]
+                    //   7732B8  6A 00                  push 0          ; -> [ebp+8]
+                    //   7732BA  83 C9 FF               or   ecx, -1    ; permanent
+                    //   7732BD  B2 13                  mov  dl, 0x13
+                    //   7732C3  FF 97 EC 01 00 00      call [edi+0x1EC]
+                    // AddState reads value from [ebp+0xC] (0x7730E0 mov edi,[ebp+0xc])
+                    // and flag from [ebp+8] (0x77310C mov dl,[ebp+8]), so the first push
+                    // is the value and the second is the flag: value=1, flag=0. The two
+                    // were swapped, which left GetNativeTimedAbilityValue(19) returning 0
+                    // so every consumer that tiers on state 0x13's level fell to the
+                    // bottom tier, and set Flag=1 on a record native leaves at 0.
+                    AddTimedAbilityInternal(19, 1, -1, 0);
                 }
             }
 
