@@ -1284,6 +1284,12 @@ namespace SystemModule
         public const int CM_QUERY_NEARBYPLAYER = 4414;
         public const int CM_QUERY_NEARBYGROUP = 4415;
         public const int CM_QUERY_GROUP_MEMBERS = 4416;
+        // 战神 CM 1089 (0x441) 组长广播：dispatch @0x6D970A。仅当 self 为组长时，
+        // sub_727628 @0x727655 向本队每个存活成员单播 SM 965 (0x3C5)，
+        // nRecog = 包里的 Recog ([msg+0])，其余 Param/Tag/Series=0、sMsg=""。
+        // 965 在原始 SM 表落于 960-963/971 空隙、无既有语义名，按编号命名不臆造。
+        public const int CM_1089 = 1089;
+        public const int SM_965 = 965;
 
         // === Strengthen/Fusion System ===
         public const int CM_STRENGTHEN_EQUIP_QUEST = 4465;

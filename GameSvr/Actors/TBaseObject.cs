@@ -187,9 +187,12 @@ namespace GameSvr
         
         
         public IList<TPlayObject> m_GroupMembers = null;
-        
-        
-        
+
+        // 战神群对象 [group+0x40]：CM 1089 组长广播时 sub_727628 @0x72763C
+        //   8B 45 FC / 8B 55 F8 / 89 50 40  mov [group+0x40],edx  把包里的 Recog
+        // 缓存到群对象。C# 无独立群对象，用组长身份对象（m_GroupOwner==this）承载。
+        public int m_NativeGroupBroadcastRecog = 0;
+
         public bool m_boHearWhisper = false;
         
         

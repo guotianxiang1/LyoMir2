@@ -46,6 +46,9 @@ namespace GameSvr
                 case Grobal2.CM_QUERY_GROUP_MEMBERS:
                     HandleNativeGroupMembersQuery();
                     return true;
+                case Grobal2.CM_1089:
+                    HandleNativeGroupLeaderBroadcast(processMessage);
+                    return true;
                 default:
                     return false;
             }
@@ -304,6 +307,54 @@ namespace GameSvr
             SendNativeGroupPacket(this,
                 BuildNativeGroupHeader(Grobal2.SM_GROUPMEMBERS, count,
                     body.Length, 0, 0), body);
+        }
+
+        // 战神 CM 1089 (0x441) 组长广播 —— dispatch @0x6D970A（VA+字节+反汇编）：
+        //   6D970A 8B 45 FC              mov  eax,[ebp-4]           ; self
+        //   6D970D E8 9A E4 FD FF        call 0x6B7BAC              ; IsGroupLeader?(self)->al
+        //   6D9712 84 C0                 test al,al
+        //   6D9714 0F 84 12 25 00 00     je   0x6DBC2C              ; 非组长 -> DEFAULT 静默丢弃
+        //   6D971A 8B 45 CC              mov  eax,[ebp-0x34]        ; msg 记录指针
+        //   6D971D 8B 10                 mov  edx,[eax]             ; edx = Recog ([msg+0], dword)
+        //   6D971F 8B 45 FC              mov  eax,[ebp-4]           ; self
+        //   6D9722 8B 80 80 0A 00 00     mov  eax,[eax+0xA80]       ; group 对象
+        //   6D9728 E8 FB DE 04 00        call 0x727628             ; sub_727628(group, Recog)
+        //   6D972D E9 FA 24 00 00        jmp  0x6DBC2C              ; -> DEFAULT
+        // 门 sub_6B7BAC @0x6B7BAC：group=[self+0xA80]!=0 且 sub_726C14 @0x726C14
+        //   (3B 50 3C cmp edx,[eax+0x3C] / 0F 94 C0 sete al) 判 self==[group+0x3C]（组长）。
+        //   C# 折叠群对象到组长：m_GroupOwner 即 [self+0xA80] 兼 [group+0x3C]，故门=self 是组长。
+        // sub_727628(group=eax, Recog=edx) @0x727628：
+        //   72763C 89 50 40             mov  [group+0x40],edx       ; 缓存 Recog
+        //   727641 循环 i=0..10（727670 cmp ebx,0xB）：
+        //     727644 8B 44 98 48         mov eax,[group+ebx*4+0x48] ; 成员记录
+        //     727648 8B 40 10            mov eax,[eax+0x10]         ; [rec+0x10]=playobj
+        //     72764B 85 C0 / 74 1D       test eax,eax / je 跳过     ; 空槽
+        //     72764F 80 78 73 00 / 75 17 cmp [obj+0x73],0 / jne 跳过; 鬼魂
+        //     727655 6A00x4 / 8B4DF8 mov ecx,[Recog] / 66BA C503 mov dx,0x3C5
+        //     727664 8B30 / FF96 50020000 call [obj+0x250]         ; SendDefMessage
+        //       = SendDefMessage(SM 965, Recog, 0,0,0,"")；含组长自身（slot0）。
+        private void HandleNativeGroupLeaderBroadcast(TProcessMessage processMessage)
+        {
+            if (!ReferenceEquals(m_GroupOwner, this))
+                return;
+
+            var members = m_GroupMembers;
+            if (members == null)
+                return;
+
+            var recog = processMessage.nParam1; // [msg+0] Recog -> nParam1
+
+            m_NativeGroupBroadcastRecog = recog; // 72763C mov [group+0x40],edx
+
+            for (var i = 0; i < members.Count && i < NativeGroupMaxMembers; i++)
+            {
+                var member = members[i];
+                if (member == null || member.m_boGhost)
+                    continue;
+
+                member.SendDefMessage((short)Grobal2.SM_965, recog, 0, 0, 0,
+                    string.Empty);
+            }
         }
 
         private static void CreateNativeGroup(TPlayObject leader,
