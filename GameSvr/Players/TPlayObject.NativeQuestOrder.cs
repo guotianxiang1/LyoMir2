@@ -14,6 +14,10 @@ namespace GameSvr
 
         internal bool HandleNativeQuestOrder(int requestedPage, byte category)
         {
+            // 眼神「屏蔽排行榜」把本函数（sub_6CBA88）的序言首字节 55 改成 C3，
+            // 整个处理在建栈帧之前就返回：不回包、无副作用。返回值两侧都丢弃。
+            // 证据与 opcode 1060 的推导见 Plugins/YanshenHideRank。
+            if (Plugins.YanshenHideRank.HandlerStubbed()) return true;
             if (category is 9 or 10) return true;
             if (!TryCreateNativeQuestOrderResponse(requestedPage, category,
                     out var header, out var body))
