@@ -1,0 +1,322 @@
+0074CDB0  8bcb                   mov ecx, ebx                          
+0074CDB2  e8d1690300             call 0x783788                         
+0074CDB7  8bf0                   mov esi, eax                          
+0074CDB9  e9e8080000             jmp 0x74d6a6                          
+0074CDBE  51                     push ecx                              
+0074CDBF  b201                   mov dl, 1                             
+0074CDC1  a14c287800             mov eax, dword ptr [0x78284c]           ; [0078284C]=VMT:TStealthItem
+0074CDC6  8bcb                   mov ecx, ebx                          
+0074CDC8  e8bb690300             call 0x783788                         
+0074CDCD  8bf0                   mov esi, eax                          
+0074CDCF  e9d2080000             jmp 0x74d6a6                          
+0074CDD4  51                     push ecx                              
+0074CDD5  b201                   mov dl, 1                             
+0074CDD7  a174057800             mov eax, dword ptr [0x780574]           ; [00780574]=VMT:TMonsterBlowItem
+0074CDDC  8bcb                   mov ecx, ebx                          
+0074CDDE  e8a5690300             call 0x783788                         
+0074CDE3  8bf0                   mov esi, eax                          
+0074CDE5  e9bc080000             jmp 0x74d6a6                          
+0074CDEA  51                     push ecx                              
+0074CDEB  b201                   mov dl, 1                             
+0074CDED  a158d77700             mov eax, dword ptr [0x77d758]           ; [0077D758]=VMT:TBaseItem
+0074CDF2  8bcb                   mov ecx, ebx                          
+0074CDF4  e88f690300             call 0x783788                         
+0074CDF9  8bf0                   mov esi, eax                          
+0074CDFB  e9a6080000             jmp 0x74d6a6                          
+0074CE00  51                     push ecx                              
+0074CE01  b201                   mov dl, 1                             
+0074CE03  a118e77700             mov eax, dword ptr [0x77e718]           ; [0077E718]=VMT:TSkillBook
+0074CE08  8bcb                   mov ecx, ebx                          
+0074CE0A  e84d910300             call 0x785f5c                         
+0074CE0F  8bf0                   mov esi, eax                          
+0074CE11  e990080000             jmp 0x74d6a6                          
+0074CE16  3c05                   cmp al, 5                             
+0074CE18  756e                   jne 0x74ce88                          
+0074CE1A  8a4315                 mov al, byte ptr [ebx + 0x15]         
+0074CE1D  2c06                   sub al, 6                             
+0074CE1F  7408                   je 0x74ce29                           
+0074CE21  04c9                   add al, 0xc9                          
+0074CE23  2c03                   sub al, 3                             
+0074CE25  7235                   jb 0x74ce5c                           
+0074CE27  eb49                   jmp 0x74ce72                          
+0074CE29  66837b1e64             cmp word ptr [ebx + 0x1e], 0x64       
+0074CE2E  7516                   jne 0x74ce46                          
+0074CE30  51                     push ecx                              
+0074CE31  b201                   mov dl, 1                             
+0074CE33  a1c0d27500             mov eax, dword ptr [0x75d2c0]           ; [0075D2C0]=VMT:TBrokenWeapon
+0074CE38  8bcb                   mov ecx, ebx                          
+0074CE3A  e8a53f0100             call 0x760de4                         
+0074CE3F  8bf0                   mov esi, eax                          
+0074CE41  e960080000             jmp 0x74d6a6                          
+0074CE46  51                     push ecx                              
+0074CE47  b201                   mov dl, 1                             
+0074CE49  a1ccd17500             mov eax, dword ptr [0x75d1cc]           ; [0075D1CC]=VMT:TLWeapon
+0074CE4E  8bcb                   mov ecx, ebx                          
+0074CE50  e833390100             call 0x760788                         
+0074CE55  8bf0                   mov esi, eax                          
+0074CE57  e94a080000             jmp 0x74d6a6                          
+0074CE5C  51                     push ecx                              
+0074CE5D  b201                   mov dl, 1                             
+0074CE5F  a1c0d37500             mov eax, dword ptr [0x75d3c0]           ; [0075D3C0]=VMT:TSpade
+0074CE64  8bcb                   mov ecx, ebx                          
+0074CE66  e81d390100             call 0x760788                         
+0074CE6B  8bf0                   mov esi, eax                          
+0074CE6D  e934080000             jmp 0x74d6a6                          
+0074CE72  51                     push ecx                              
+0074CE73  b201                   mov dl, 1                             
+0074CE75  a1ccd17500             mov eax, dword ptr [0x75d1cc]           ; [0075D1CC]=VMT:TLWeapon
+0074CE7A  8bcb                   mov ecx, ebx                          
+0074CE7C  e807390100             call 0x760788                         
+0074CE81  8bf0                   mov esi, eax                          
+0074CE83  e91e080000             jmp 0x74d6a6                          
+0074CE88  51                     push ecx                              
+0074CE89  b201                   mov dl, 1                             
+0074CE8B  a1ccd17500             mov eax, dword ptr [0x75d1cc]           ; [0075D1CC]=VMT:TLWeapon
+0074CE90  8bcb                   mov ecx, ebx                          
+0074CE92  e8f1380100             call 0x760788                         
+0074CE97  8bf0                   mov esi, eax                          
+0074CE99  e908080000             jmp 0x74d6a6                          
+0074CE9E  33c0                   xor eax, eax                          
+0074CEA0  8a4315                 mov al, byte ptr [ebx + 0x15]         
+0074CEA3  83f809                 cmp eax, 9                            
+0074CEA6  0f879d000000           ja 0x74cf49                           
+0074CEAC  ff2485b3ce7400         jmp dword ptr [eax*4 + 0x74ceb3]      
+0074CEB3  dbce                   fcmovne st(0), st(6)                  
+0074CEB5  7400                   je 0x74ceb7                           
+0074CEB7  f1                     int1                                  
+0074CEB8  ce                     into                                  
+0074CEB9  7400                   je 0x74cebb                           
+0074CEBB  07                     pop es                                
+0074CEBC  cf                     iretd                                 
+0074CEBD  7400                   je 0x74cebf                           
+0074CEBF  1dcf740049             sbb eax, 0x490074cf                   
+0074CEC4  cf                     iretd                                 
+0074CEC5  7400                   je 0x74cec7                           
+0074CEC7  33cf                   xor ecx, edi                          
+0074CEC9  7400                   je 0x74cecb                           
+0074CECB  33cf                   xor ecx, edi                          
+0074CECD  7400                   je 0x74cecf                           
+0074CECF  33cf                   xor ecx, edi                          
+0074CED1  7400                   je 0x74ced3                           
+0074CED3  33cf                   xor ecx, edi                          
+0074CED5  7400                   je 0x74ced7                           
+0074CED7  33cf                   xor ecx, edi                          
+0074CED9  7400                   je 0x74cedb                           
+0074CEDB  51                     push ecx                              
+0074CEDC  b201                   mov dl, 1                             
+0074CEDE  a128de7500             mov eax, dword ptr [0x75de28]           ; [0075DE28]=VMT:TCryCharm
+0074CEE3  8bcb                   mov ecx, ebx                          
+0074CEE5  e85e640100             call 0x763348                         
+0074CEEA  8bf0                   mov esi, eax                          
+0074CEEC  e9b5070000             jmp 0x74d6a6                          
+0074CEF1  51                     push ecx                              
+0074CEF2  b201                   mov dl, 1                             
+0074CEF4  a120df7500             mov eax, dword ptr [0x75df20]           ; [0075DF20]=VMT:THPCharm
+0074CEF9  8bcb                   mov ecx, ebx                          
+0074CEFB  e848640100             call 0x763348                         
+0074CF00  8bf0                   mov esi, eax                          
+0074CF02  e99f070000             jmp 0x74d6a6                          
+0074CF07  51                     push ecx                              
+0074CF08  b201                   mov dl, 1                             
+0074CF0A  a114e07500             mov eax, dword ptr [0x75e014]           ; [0075E014]=VMT:TMPCharm
+0074CF0F  8bcb                   mov ecx, ebx                          
+0074CF11  e832640100             call 0x763348                         
+0074CF16  8bf0                   mov esi, eax                          
+0074CF18  e989070000             jmp 0x74d6a6                          
+0074CF1D  51                     push ecx                              
+0074CF1E  b201                   mov dl, 1                             
+0074CF20  a108e17500             mov eax, dword ptr [0x75e108]           ; [0075E108]=VMT:THPMPCharm
+0074CF25  8bcb                   mov ecx, ebx                          
+0074CF27  e81c640100             call 0x763348                         
+0074CF2C  8bf0                   mov esi, eax                          
+0074CF2E  e973070000             jmp 0x74d6a6                          
+0074CF33  51                     push ecx                              
+0074CF34  b201                   mov dl, 1                             
+0074CF36  a100e27500             mov eax, dword ptr [0x75e200]           ; [0075E200]=VMT:TMarkStoneCharm
+0074CF3B  8bcb                   mov ecx, ebx                          
+0074CF3D  e8da6b0100             call 0x763b1c                         
+0074CF42  8bf0                   mov esi, eax                          
+0074CF44  e95d070000             jmp 0x74d6a6                          
+0074CF49  51                     push ecx                              
+0074CF4A  b201                   mov dl, 1                             
+0074CF4C  a138dd7500             mov eax, dword ptr [0x75dd38]           ; [0075DD38]=VMT:TCharm
+0074CF51  8bcb                   mov ecx, ebx                          
+0074CF53  e8f0630100             call 0x763348                         
+0074CF58  8bf0                   mov esi, eax                          
+0074CF5A  e947070000             jmp 0x74d6a6                          
+0074CF5F  8a4315                 mov al, byte ptr [ebx + 0x15]         
+0074CF62  fec8                   dec al                                
+0074CF64  7516                   jne 0x74cf7c                          
+0074CF66  51                     push ecx                              
+0074CF67  b201                   mov dl, 1                             
+0074CF69  a1a00e7800             mov eax, dword ptr [0x780ea0]           ; [00780EA0]=VMT:TDragonSeal
+0074CF6E  8bcb                   mov ecx, ebx                          
+0074CF70  e813ad0300             call 0x787c88                         
+0074CF75  8bf0                   mov esi, eax                          
+0074CF77  e92a070000             jmp 0x74d6a6                          
+0074CF7C  51                     push ecx                              
+0074CF7D  b201                   mov dl, 1                             
+0074CF7F  a158d77700             mov eax, dword ptr [0x77d758]           ; [0077D758]=VMT:TBaseItem
+0074CF84  8bcb                   mov ecx, ebx                          
+0074CF86  e8fd670300             call 0x783788                         
+0074CF8B  8bf0                   mov esi, eax                          
+0074CF8D  e914070000             jmp 0x74d6a6                          
+0074CF92  8a4315                 mov al, byte ptr [ebx + 0x15]         
+0074CF95  2c1c                   sub al, 0x1c                          
+0074CF97  7516                   jne 0x74cfaf                          
+0074CF99  51                     push ecx                              
+0074CF9A  b201                   mov dl, 1                             
+0074CF9C  a1bccd7500             mov eax, dword ptr [0x75cdbc]           ; [0075CDBC]=VMT:TTemporaryManClothes
+0074CFA1  8bcb                   mov ecx, ebx                          
+0074CFA3  e868310100             call 0x760110                         
+0074CFA8  8bf0                   mov esi, eax                          
+0074CFAA  e9f7060000             jmp 0x74d6a6                          
+0074CFAF  51                     push ecx                              
+0074CFB0  b201                   mov dl, 1                             
+0074CFB2  a1c4cc7500             mov eax, dword ptr [0x75ccc4]           ; [0075CCC4]=VMT:TManClothes
+0074CFB7  8bcb                   mov ecx, ebx                          
+0074CFB9  e8ee300100             call 0x7600ac                         
+0074CFBE  8bf0                   mov esi, eax                          
+0074CFC0  e9e1060000             jmp 0x74d6a6                          
+0074CFC5  8a4315                 mov al, byte ptr [ebx + 0x15]         
+0074CFC8  2c1c                   sub al, 0x1c                          
+0074CFCA  7516                   jne 0x74cfe2                          
+0074CFCC  51                     push ecx                              
+0074CFCD  b201                   mov dl, 1                             
+0074CFCF  a1c8cf7500             mov eax, dword ptr [0x75cfc8]           ; [0075CFC8]=VMT:TTemporaryWomanClothes
+0074CFD4  8bcb                   mov ecx, ebx                          
+0074CFD6  e8a9320100             call 0x760284                         
+0074CFDB  8bf0                   mov esi, eax                          
+0074CFDD  e9c4060000             jmp 0x74d6a6                          
+0074CFE2  51                     push ecx                              
+0074CFE3  b201                   mov dl, 1                             
+0074CFE5  a1c8ce7500             mov eax, dword ptr [0x75cec8]           ; [0075CEC8]=VMT:TWomanClothes
+0074CFEA  8bcb                   mov ecx, ebx                          
+0074CFEC  e82f320100             call 0x760220                         
+0074CFF1  8bf0                   mov esi, eax                          
+0074CFF3  e9ae060000             jmp 0x74d6a6                          
+0074CFF8  51                     push ecx                              
+0074CFF9  b201                   mov dl, 1                             
+0074CFFB  a19cd67500             mov eax, dword ptr [0x75d69c]           ; [0075D69C]=VMT:THelmet
+0074D000  8bcb                   mov ecx, ebx                          
+0074D002  e815410100             call 0x76111c                         
+0074D007  8bf0                   mov esi, eax                          
+0074D009  e998060000             jmp 0x74d6a6                          
+0074D00E  51                     push ecx                              
+0074D00F  b201                   mov dl, 1                             
+0074D011  a1b0d47500             mov eax, dword ptr [0x75d4b0]           ; [0075D4B0]=VMT:THeadMask
+0074D016  8bcb                   mov ecx, ebx                          
+0074D018  e8673e0100             call 0x760e84                         
+0074D01D  8bf0                   mov esi, eax                          
+0074D01F  e982060000             jmp 0x74d6a6                          
+0074D024  51                     push ecx                              
+0074D025  b201                   mov dl, 1                             
+0074D027  a18cd77500             mov eax, dword ptr [0x75d78c]           ; [0075D78C]=VMT:TNecklace
+0074D02C  8bcb                   mov ecx, ebx                          
+0074D02E  e881460100             call 0x7616b4                         
+0074D033  8bf0                   mov esi, eax                          
+0074D035  e96c060000             jmp 0x74d6a6                          
+0074D03A  51                     push ecx                              
+0074D03B  b201                   mov dl, 1                             
+0074D03D  a184d87500             mov eax, dword ptr [0x75d884]           ; [0075D884]=VMT:TRing
+0074D042  8bcb                   mov ecx, ebx                          
+0074D044  e89f4b0100             call 0x761be8                         
+0074D049  8bf0                   mov esi, eax                          
+0074D04B  e956060000             jmp 0x74d6a6                          
+0074D050  51                     push ecx                              
+0074D051  b201                   mov dl, 1                             
+0074D053  a174d97500             mov eax, dword ptr [0x75d974]           ; [0075D974]=VMT:TArmRing
+0074D058  8bcb                   mov ecx, ebx                          
+0074D05A  e881540100             call 0x7624e0                         
+0074D05F  8bf0                   mov esi, eax                          
+0074D061  e940060000             jmp 0x74d6a6                          
+0074D066  33c0                   xor eax, eax                          
+0074D068  8a4315                 mov al, byte ptr [ebx + 0x15]         
+0074D06B  83f80a                 cmp eax, 0xa                          
+0074D06E  0f87b7000000           ja 0x74d12b                           
+0074D074  ff24857bd07400         jmp dword ptr [eax*4 + 0x74d07b]      
+0074D07B  2bd1                   sub edx, ecx                          
+0074D07D  7400                   je 0x74d07f                           
+0074D07F  a7                     cmpsd dword ptr [esi], dword ptr es:[edi]
+0074D080  d07400a7               sal byte ptr [eax + eax - 0x59], 1    
+0074D084  d074002b               sal byte ptr [eax + eax + 0x2b], 1    
+0074D088  d174002b               sal dword ptr [eax + eax + 0x2b], 1   
+0074D08C  d17400bd               sal dword ptr [eax + eax - 0x43], 1   
+0074D090  d074002b               sal byte ptr [eax + eax + 0x2b], 1    
+0074D094  d17400d3               sal dword ptr [eax + eax - 0x2d], 1   
+0074D098  d07400e9               sal byte ptr [eax + eax - 0x17], 1    
+0074D09C  d07400ff               sal byte ptr [eax + eax - 1], 1       
+0074D0A0  d0740015               sal byte ptr [eax + eax + 0x15], 1    
+0074D0A4  d1740051               sal dword ptr [eax + eax + 0x51], 1   
+0074D0A8  b201                   mov dl, 1                             
+0074D0AA  a1e8e47500             mov eax, dword ptr [0x75e4e8]           ; [0075E4E8]=VMT:TPoisons
+0074D0AF  8bcb                   mov ecx, ebx                          
+0074D0B1  e8665b0100             call 0x762c1c                         
+0074D0B6  8bf0                   mov esi, eax                          
+0074D0B8  e9e9050000             jmp 0x74d6a6                          
+0074D0BD  51                     push ecx                              
+0074D0BE  b201                   mov dl, 1                             
+0074D0C0  a1f8e37500             mov eax, dword ptr [0x75e3f8]           ; [0075E3F8]=VMT:TBujuk
+0074D0C5  8bcb                   mov ecx, ebx                          
+0074D0C7  e8505b0100             call 0x762c1c                         
+0074D0CC  8bf0                   mov esi, eax                          
+0074D0CE  e9d3050000             jmp 0x74d6a6                          
+0074D0D3  51                     push ecx                              
+0074D0D4  b201                   mov dl, 1                             
+0074D0D6  a1cce67500             mov eax, dword ptr [0x75e6cc]           ; [0075E6CC]=VMT:TUnionItem
+0074D0DB  8bcb                   mov ecx, ebx                          
+0074D0DD  e896660100             call 0x763778                         
+0074D0E2  8bf0                   mov esi, eax                          
+0074D0E4  e9bd050000             jmp 0x74d6a6                          
+0074D0E9  51                     push ecx                              
+0074D0EA  b201                   mov dl, 1                             
+0074D0EC  a1dce57500             mov eax, dword ptr [0x75e5dc]           ; [0075E5DC]=VMT:TVessel
+0074D0F1  8bcb                   mov ecx, ebx                          
+0074D0F3  e8c4650100             call 0x7636bc                         
+0074D0F8  8bf0                   mov esi, eax                          
+0074D0FA  e9a7050000             jmp 0x74d6a6                          
+0074D0FF  51                     push ecx                              
+0074D100  b201                   mov dl, 1                             
+0074D102  a1c4e77500             mov eax, dword ptr [0x75e7c4]           ; [0075E7C4]=VMT:TDragonHeart
+0074D107  8bcb                   mov ecx, ebx                          
+0074D109  e80e5b0100             call 0x762c1c                         
+0074D10E  8bf0                   mov esi, eax                          
+0074D110  e991050000             jmp 0x74d6a6                          
+0074D115  51                     push ecx                              
+0074D116  b201                   mov dl, 1                             
+0074D118  a1c0e87500             mov eax, dword ptr [0x75e8c0]           ; [0075E8C0]=VMT:TSuperDragonHeart
+0074D11D  8bcb                   mov ecx, ebx                          
+0074D11F  e8f85a0100             call 0x762c1c                         
+0074D124  8bf0                   mov esi, eax                          
+0074D126  e97b050000             jmp 0x74d6a6                          
+0074D12B  51                     push ecx                              
+0074D12C  b201                   mov dl, 1                             
+0074D12E  a158d77700             mov eax, dword ptr [0x77d758]           ; [0077D758]=VMT:TBaseItem
+0074D133  8bcb                   mov ecx, ebx                          
+0074D135  e84e660300             call 0x783788                         
+0074D13A  8bf0                   mov esi, eax                          
+0074D13C  e965050000             jmp 0x74d6a6                          
+0074D141  51                     push ecx                              
+0074D142  b201                   mov dl, 1                             
+0074D144  a168da7500             mov eax, dword ptr [0x75da68]           ; [0075DA68]=VMT:TBelt
+0074D149  8bcb                   mov ecx, ebx                          
+0074D14B  e83c5b0100             call 0x762c8c                         
+0074D150  8bf0                   mov esi, eax                          
+0074D152  e94f050000             jmp 0x74d6a6                          
+0074D157  51                     push ecx                              
+0074D158  b201                   mov dl, 1                             
+0074D15A  a158db7500             mov eax, dword ptr [0x75db58]           ; [0075DB58]=VMT:TBoots
+0074D15F  8bcb                   mov ecx, ebx                          
+0074D161  e8c25e0100             call 0x763028                         
+0074D166  8bf0                   mov esi, eax                          
+0074D168  e939050000             jmp 0x74d6a6                          
+0074D16D  51                     push ecx                              
+0074D16E  b201                   mov dl, 1                             
+0074D170  a1a8d57500             mov eax, dword ptr [0x75d5a8]           ; [0075D5A8]=VMT:TWarDrum
+0074D175  8bcb                   mov ecx, ebx                          
+0074D177  e8303e0100             call 0x760fac                         
+0074D17C  8bf0                   mov esi, eax                          
+0074D17E  e923050000             jmp 0x74d6a6                          
+0074D183  51                     push ecx                              
+0074D184  b201                   mov dl, 1                             
+0074D186  a1d8d07500             mov eax, dword ptr [0x75d0d8]           ; [0075D0D8]=VMT:TRWeapon
