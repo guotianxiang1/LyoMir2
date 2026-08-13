@@ -1512,13 +1512,19 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// 极品开关 / 元素开关：某号属性值 &gt; GetV(变量号, 号) 的装备不回收。
+        /// 极品开关 / 元素开关：阈值 &gt; 0 且 某号属性值 &gt;= 阈值 的装备不回收。
         ///
-        /// 阈值读不出来（GetV 拒参或该变量从没写过，都返回 -1）时一律不回收：-1 到底表示
-        /// "没设过阈值所以不过滤" 还是 "阈值是 -1 所以全挡"，插件里看不到，两种猜法差一整套
-        /// 玩家装备。生产 huishou.pas 的加/减按钮把 V(125,1..12) 从 -1 抬到 0 起步，
-        /// 元素那一行（V(126,*)）在生产脚本里是注释掉的，所以生产在恢复那一行之前
-        /// 声明了 元素开关 的类型都不会回收。
+        /// 两条边界都由插件字节定死（脱壳转储 <c>yanshen2_0_8_dll.memory.bin</c>，基址
+        /// 0x10000000）。17 个元素槽是同一段展开代码，首槽在 0x1006C69F：
+        /// <c>test eax,eax / 0x1006C6A1 jle</c> 先把 <b>阈值 &lt;= 0 的槽整个跳过</b>——
+        /// GetV 未命中返回的 -1 正落在这一支里，所以"没设过阈值"是<b>不过滤</b>，
+        /// 不是挡下全部；接着 <c>cmp eax,属性值 / 0x1006C6A9 jg</c> 在阈值更大时也跳过，
+        /// 只有 <c>阈值 &lt;= 属性值</c> 才走 <c>0x1006C6AB mov [ebp-0x64],0x64</c> 并
+        /// <c>jmp 0x1006CE1F</c> 绕过产出，即该件不回收。被比较的一侧由 0x1006C39D 起
+        /// 从物品字段 <c>[esi+0x78..0x8B]</c> 装入，恰好 17 个。极品那 6 槽在
+        /// 0x1006C222..0x1006C398 形状完全相同。
+        ///
+        /// 随包文档那句"属性值 &gt; 阈值才不回收"差一格：真实边界是 &gt;=。
         /// </summary>
         private bool RecycleQualityAllowed(TUserItem item, RecycleRule rule)
         {
@@ -1526,16 +1532,16 @@ namespace GameSvr.Plugins
                 for (var slot = 1; slot <= RecycleExtremeSlots; slot++)
                 {
                     var threshold = ReadPlayerV(rule.ExtremeGroup, slot);
-                    if (threshold == NativeScriptVarMiss) return false;
-                    if (GetExtremeValue(item, slot - 1) > threshold) return false;
+                    if (threshold <= 0) continue;
+                    if (GetExtremeValue(item, slot - 1) >= threshold) return false;
                 }
 
             if (rule.ElementGroup > 0)
                 for (var slot = 1; slot <= RecycleElementSlots; slot++)
                 {
                     var threshold = ReadPlayerV(rule.ElementGroup, slot);
-                    if (threshold == NativeScriptVarMiss) return false;
-                    if (GetElementValue(item, slot) > threshold) return false;
+                    if (threshold <= 0) continue;
+                    if (GetElementValue(item, slot) >= threshold) return false;
                 }
 
             return true;
