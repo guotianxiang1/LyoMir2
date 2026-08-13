@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
 using SystemModule;
 using System.Runtime.CompilerServices;
 
@@ -25,8 +26,8 @@ namespace GameSvr
         //   00745A9D  0fb6c0        movzx eax, al                   ; effective level (1-3)
         //   00745AA0  668b04457efe7d00  mov ax, word ptr [eax*2+0x7D3EFE]  ; table[level]
         //   00745AA8  6689863f040000  mov word ptr [esi+0x3F4], ax  ; self+0x3F4 = strike count
-        //   00745AAF  8b0485047f7d00  mov eax, dword ptr [eax*4+0x7D3F04] ; damage table
-        //   00745AB6  8986f8030000  mov dword ptr [esi+0x3F8], eax  ; self+0x3F8 = bonus damage
+        //   00745AAF  8b0485047f7d00  mov eax, dword ptr [eax*4+0x7D3F04] ; Single factor table
+        //   00745AB6  8986f8030000  mov dword ptr [esi+0x3F8], eax  ; self+0x3F8 = Single factor bits
         //   00745AC5  66b9dbff      mov cx, 0xFFDB                  ; GREEN
         //   00745AD2  ba30a87400    mov edx, 0x74A830               ; message string
         //   "进入破釜沉舟状态，之后" + N + "次攻击会造成额外伤害"
@@ -50,31 +51,42 @@ namespace GameSvr
         private static readonly float[] NativeSkill151DamageFactors =
             { 0f, 0.25f, 0.5f, 1.0f };
 
-        // DIVERGENT, deliberately not guessed. Native does NOT add a flat bonus.
-        // The consumer at 0x746247 (shared with id 154) computes it per hit:
-        //   0x746247  cmp word [esi+0x3F4],0   ; remaining strikes, else skip
-        //   0x746267  call 0x76CD8C            ; class-dispatched power getter:
-        //                                      ;   reads byte [self+0x72] (job)
-        //                                      ;   job 0 -> ([+0x28C],[+0x290])
-        //                                      ;   into 0x76CD5C; jobs 1/2/3 at
-        //                                      ;   0x76CDBD / 0x76CDD3 / 0x76CDE9
-        //   0x74626C  mov edx,0x1388           ; 5000
-        //   0x746271  call 0x4C700C            ; min(power, 5000)
-        //   0x746276  lea eax,[eax+eax*4]      ; * 5
-        //   0x74627F  fmul dword [esi+0x3F8]   ; * the stored Single factor
-        //   0x746285  call 0x403580            ; @TRUNC
-        //   0x74628A  add ebx,eax
-        // i.e. bonus = TRUNC(min(classPower, 5000) * 5 * factor[level]).
-        // Id 154's block at 0x74628C is the same shape with the fmul absent,
-        // which is why it has no factor table of its own.
-        // Landing this needs the four job branches of 0x76CD8C and the
-        // semantics of 0x76CD5C mapped to their C# counterparts first; until
-        // then the additive model below is knowingly wrong rather than
-        // speculatively rewritten.
-        private static readonly int[] NativeSkill151BonusDamages = { 0, 50, 80, 120 };
+        // Native stores the per-hit bonus FACTOR (Single) at self+0x3F8, not a
+        // flat additive int. The old { 0, 50, 80, 120 } was invented and has
+        // been removed. The consumer at 0x746247 (shared with id 154) is now
+        // fully reversed:
+        //   00746247  66 83 BE F4 03 00 00 00  cmp word [esi+0x3F4],0
+        //   0074624F  76 3B                    jbe 0x74628C        ; no strikes
+        //   00746251  81 7D F8 FA 03 00 00     cmp [ebp-8],0x3FA   ; attack kind
+        //   00746258  74 09                    je 0x746263
+        //   0074625A  81 7D F8 E8 03 00 00     cmp [ebp-8],0x3E8
+        //   00746261  75 29                    jne 0x74628C
+        //   00746263  B2 01                    mov dl,1            ; flag = max
+        //   00746265  8B C6                    mov eax,esi         ; Self
+        //   00746267  E8 20 6B 02 00           call 0x76CD8C       ; job max att
+        //   0074626C  BA 88 13 00 00           mov edx,0x1388      ; 5000
+        //   00746271  E8 96 0D D8 FF           call 0x4C700C       ; min(pow,5000)
+        //   00746276  8D 04 80                 lea eax,[eax+eax*4] ; * 5
+        //   0074627C  DB 45 E8                 fild dword [ebp-0x18]
+        //   0074627F  D8 8E F8 03 00 00        fmul dword [esi+0x3F8] ; * factor
+        //   00746285  E8 F6 D2 CB FF           call 0x403580       ; @TRUNC (chop)
+        //   0074628A  03 D8                     add ebx,eax        ; damage += bonus
+        // i.e. bonus = TRUNC(min(jobMaxAttack, 5000) * 5 * factor[level]).
+        // NOTE the consumer does NOT decrement +0x3F4 here; the strike-count
+        // decrement site is elsewhere and is not yet located (see the BLOCKED
+        // wiring note on ApplyNativeSkill151BurstDamage). This handler therefore
+        // remains unwired into the C# melee pipeline; the entry state below is
+        // faithful and ApplyNativeSkill151BurstDamage carries the exact formula
+        // ready for the day the injection point is verified.
+        //
+        // Native attack-kind discriminator [ebp-8] gate values (0x746251 /
+        // 0x74625A): id 151's burst fires only for kinds 0x3FA and 0x3E8.
+        private const int NativeSkill151AttackKindA = 0x3FA;
+        private const int NativeSkill151AttackKindB = 0x3E8;
 
         private ushort m_nNativeSkill151StrikeCount;
-        private int m_nNativeSkill151BonusDamage;
+        // self+0x3F8: the Single factor pulled from NativeSkill151DamageFactors.
+        private float m_fNativeSkill151DamageFactor;
 
         internal bool TryActivateNativeSkill151(TUserMagic userMagic,
             [CallerFilePath] string sourceFile = "")
@@ -104,12 +116,22 @@ namespace GameSvr
                 return false;
             }
 
-            // Native @0x745A9D-0x745AB6: read tables and set state
+            // Native @0x745A9D-0x745AB6: read tables and set state. self+0x3F4
+            // takes the Int16 strike count, self+0x3F8 the Single factor.
             ushort strikeCount = NativeSkill151StrikeCounts[effectiveLevel];
-            int bonusDamage = NativeSkill151BonusDamages[effectiveLevel];
+            float factor = NativeSkill151DamageFactors[effectiveLevel];
+
+            // Assertion (write-only, not executed here): the corrected tables
+            // must hold exactly the raw bytes at 0x7D3F00 / 0x7D3F08.
+            Debug.Assert(strikeCount == effectiveLevel switch
+                { 1 => 1, 2 => 2, 3 => 4, _ => 0 },
+                "151 strike count diverged from 0x7D3F00 {01,02,04}");
+            Debug.Assert(factor == effectiveLevel switch
+                { 1 => 0.25f, 2 => 0.5f, 3 => 1.0f, _ => 0f },
+                "151 damage factor diverged from 0x7D3F08 {0.25,0.5,1.0}");
 
             m_nNativeSkill151StrikeCount = strikeCount;
-            m_nNativeSkill151BonusDamage = bonusDamage;
+            m_fNativeSkill151DamageFactor = factor;
 
             // Native @0x745AC5-0x745AD7: send success message
             SendNativeSkill151Hint(
@@ -122,15 +144,70 @@ namespace GameSvr
             return true;
         }
 
-        internal int ApplyNativeSkill151BurstDamage(int damage)
+        /// <summary>
+        /// Native consumer arm @0x746247. Adds the burst bonus to the running
+        /// melee damage accumulator (ebx) when a strike is banked AND the attack
+        /// kind matches. Byte-for-byte:
+        ///   bonus = TRUNC(min(jobMaxAttack, 5000) * 5 * factor).
+        /// <para>
+        /// BLOCKED (wiring): this method is not yet called from the C# melee
+        /// pipeline. Two facts are still unverified — (1) the C# equivalent of
+        /// the native attack-kind discriminator [ebp-8] whose values 0x3E8/0x3FA
+        /// gate this arm, and (2) the site that decrements the +0x3F4 strike
+        /// counter (the consumer at 0x746247 deliberately does NOT, so the
+        /// decrement lives elsewhere in the attack path). Until both are pinned
+        /// down, wiring this in would risk a permanent (never-expiring) burst or
+        /// an RNG-order shift, so it stays fail-closed as a ready-to-call helper.
+        /// </para>
+        /// </summary>
+        internal int ApplyNativeSkill151BurstDamage(int damage, int attackKind)
         {
-            // Apply bonus if state is active (strike count > 0)
-            if (m_nNativeSkill151StrikeCount > 0 && damage > 0)
+            // 0x746247 jbe / 0x746251+0x74625A attack-kind gate. Native does
+            // NOT test damage>0 and does NOT decrement the counter here.
+            if (m_nNativeSkill151StrikeCount > 0 &&
+                (attackKind == NativeSkill151AttackKindA ||
+                 attackKind == NativeSkill151AttackKindB))
             {
-                m_nNativeSkill151StrikeCount--;
-                return unchecked(damage + m_nNativeSkill151BonusDamage);
+                int jobMax = GetNativeBurstJobMaxAttack();       // 0x76CD8C
+                int capped = Math.Min(jobMax, 5000);             // 0x4C700C
+                int base5 = unchecked(capped * 5);               // lea *,[*+*4]
+                // 0x74627F fmul float32 factor then 0x403580 @TRUNC (chop). The
+                // three factors 0.25/0.5/1.0 are exact in both float32 and
+                // double, and base5 <= 25000, so the double product reproduces
+                // the x87 result before truncation exactly.
+                int bonus = (int)Math.Truncate(
+                    base5 * (double)m_fNativeSkill151DamageFactor);
+                return unchecked(damage + bonus);
             }
             return damage;
+        }
+
+        /// <summary>
+        /// sub_76CD8C @0x76CD8C, called from the 151/154 burst consumers with
+        /// dl = 1. The dl flag is stored at [ebp-1] and, via the `push ebp`
+        /// trampoline into the shared tail sub_76CD5C @0x76CD5C, selects the
+        /// max-attack branch (`cmp byte [eax-1],0 / jne` @0x76CD68 returns the
+        /// HIGH dword directly instead of rolling low + Random(high-low)). The
+        /// job byte [self+0x72] then picks the attack pair:
+        ///   job 0 @0x76CDA7  DC = dword[+0x28C]/[+0x290]  -> HiWord(m_WAbil.DC)
+        ///   job 1 @0x76CDBD  MC = dword[+0x294]/[+0x298]  -> HiWord(m_WAbil.MC)
+        ///   job 2 @0x76CDD3  SC = dword[+0x29C]/[+0x2A0]  -> HiWord(m_WAbil.SC)
+        ///   job 3 @0x76CDE9  CC = dword[+0x2A4]/[+0x2A8]  -> CCHigh
+        ///   else  @0x76CDFF  xor eax,eax                  -> 0
+        /// The +0x28C..+0x2A8 layout is the same working-ability block the
+        /// 65..68 charged counter reads, so the mapping matches that verified
+        /// port. Because dl = 1 always, only the HIGH (max) word is used.
+        /// </summary>
+        private int GetNativeBurstJobMaxAttack()
+        {
+            switch (m_btJob)
+            {
+                case 0: return HUtil32.HiWord(m_WAbil.DC);
+                case 1: return HUtil32.HiWord(m_WAbil.MC);
+                case 2: return HUtil32.HiWord(m_WAbil.SC);
+                case 3: return m_NativeCoreWorkingAbility.CCHigh;
+                default: return 0;
+            }
         }
 
         internal static byte GetNativeSkill151EffectiveLevel(
@@ -157,7 +234,7 @@ namespace GameSvr
         private void ClearNativeSkill151StateOnExit()
         {
             m_nNativeSkill151StrikeCount = 0;
-            m_nNativeSkill151BonusDamage = 0;
+            m_fNativeSkill151DamageFactor = 0f;
         }
     }
 }
