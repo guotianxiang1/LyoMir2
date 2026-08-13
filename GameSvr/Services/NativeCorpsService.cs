@@ -2303,6 +2303,20 @@ namespace GameSvr.Services
             }
         }
 
+        // sub_6A52A0(player CharID): the login SM 4613 sender (0x6F7638) looks up the
+        // caller's own pending request by [obj+0x588/+0x58C]. Native holds at most one
+        // (player[0xBA6] is a single pointer); the ledger entry is RequestId == CharID.
+        internal bool TryGetOwnPendingRequest(long playerId,
+            out NativeGildPendingRequest request)
+        {
+            request = null;
+            if (playerId == 0) return false;
+            var pending = _requestLedger.Snapshot(r => r.RequestId == playerId);
+            if (pending.Count == 0) return false;
+            request = pending[0];
+            return true;
+        }
+
         // 4627 CM_GILD_CANCEL_JOIN write (cancel my OWN pending gild join/union request) — native handler
         // sub_6ADB60 -> role strategy[+0x70] sub_703754. Handler gate: caller NOT in a corps (a1[698]==0)
         // -> 5 (only a corps captain / gild president ever files a gild request, so a player with no corps

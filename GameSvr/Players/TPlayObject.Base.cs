@@ -1391,6 +1391,9 @@ namespace GameSvr
                 // Param=5; else 0x6ADAE4 fail -> Param=12; else Param=0 +
                 // 0x38-byte gild desc (0x6F0826 66 BA 94 11).
                 SendNativePlayerGuild();
+                // 战神 UserLogon @0x6B24E0: call 0x6F7638 always emits SM 4613
+                // (0x6F7687 66 BA 05 12) with an 8-byte body.
+                SendNativePendingRequestOnLogon();
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
