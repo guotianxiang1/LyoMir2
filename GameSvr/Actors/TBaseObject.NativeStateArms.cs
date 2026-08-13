@@ -253,6 +253,15 @@ namespace GameSvr
                     SendNativeStateArmMsg("魔防上下限瞬间提高" + seconds + "秒",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
+                case 44:
+                    // 0x741C34  push 0x742D78
+                    // 0x742D78 len 12 C1A6C1BFCBB2BCE4CCE1B8DF
+                    // 44 speaks on gain but is a DEFAULT convergence on loss
+                    // (0x742721 holds 42 2C 74 00), so there is no "力量回复
+                    // 正常" counterpart to look for.
+                    SendNativeStateArmMsg("力量瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 45:
                     // 0x741E38  66 B9 FF 38 / BA 88 2E 74 00
                     // 0x742E88 len 12 C4E3B1BBB6A8C9EDC1CBA3A1
@@ -282,6 +291,27 @@ namespace GameSvr
                     // 0x74296D  66 B9 DB FF / BA D8 33 74 00
                     // 0x7433D8 len 14 B7C0D3F9C1A6BBD8B8B4D5FDB3A3
                     SendNativeStateArmMsg("防御力回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                // Every lost arm below is the same four-instruction shape as
+                // 21/22: mov cx,0xFFDB / mov edx,<str> / mov eax,esi /
+                // mov ebx,[eax] / call [ebx+0xD4] / jmp 0x742C42.
+                case 32:
+                    // 0x742835  BA 90 32 74 00
+                    // 0x743290 len 12 B9A5BBF7BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("攻击回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 33:
+                    // 0x74284D  BA A8 32 74 00
+                    // 0x7432A8 len 12 C4A7B7A8BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("魔法回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 34:
+                    // 0x742865  BA C0 32 74 00
+                    // 0x7432C0 len 12 B5C0CAF5BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("道术回复正常",
                         NativeStateArmBuffColor, NativeStateArmBuffType);
                     break;
             }
