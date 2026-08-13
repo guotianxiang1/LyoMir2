@@ -509,7 +509,8 @@ namespace GameSvr.Plugins
         /// cfg2+0x11C 的配置键名取自配置序列化器：两段 run（0x10005E10.. 与
         /// 0x10009EB3..）严格 CMP→KEY 交替且都以 CMP 开头，故每个
         /// `cmp [esi+off],0x1F4` 配它后面那个键。0x1000642A `cmp [esi+0x11c],0x1F4`
-        /// 之后是 0x10006456 `push 0x102BE2E4` = "眼神特殊函数"。
+        /// 之后是 0x10006456 `68 E4 02 2B 10` push 0x102B02E4
+        /// (`D1 DB C9 F1 CC D8 CA E2 BA AF CA FD` = "眼神特殊函数")。
         /// 同法三处盲验通过：cfg2+0x538→毫秒级cd记录、cfg2+0x664→自定义元素、
         /// cfg2+0x954→高级回收，与派发器 sub_1005E4D0 给这三条中文隧道的门逐一对上。
         /// </summary>
