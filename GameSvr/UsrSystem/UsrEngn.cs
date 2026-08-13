@@ -2446,8 +2446,9 @@ namespace GameSvr
             for (var i = 0; i < m_PlayObjectList.Count; i++)
             {
                 PlayObject = m_PlayObjectList[i];
+                // 0x652CB2 3B 45 10 cmp eax,[ebp+0x10] / 0x652CB5 7F 32 jg skip: include abs==nWide
                 if (!PlayObject.m_boGhost && PlayObject.m_PEnvir == pMap && PlayObject.m_boBanShout &&
-                    Math.Abs(PlayObject.m_nCurrX - nX) < nWide && Math.Abs(PlayObject.m_nCurrY - nY) < nWide)
+                    Math.Abs(PlayObject.m_nCurrX - nX) <= nWide && Math.Abs(PlayObject.m_nCurrY - nY) <= nWide)
                     PlayObject.SendMsg(null, wIdent, 0, btFColor, btBColor, 0, sMsg);
             }
         }
