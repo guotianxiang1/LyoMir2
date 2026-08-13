@@ -2799,6 +2799,7 @@ namespace GameSvr
             // 对既有 race 行为零影响。
             TryCreateRaceA(nMonRace, out Cert);
             if (Cert == null) TryCreateRaceBase(nMonRace, out Cert);
+            if (Cert == null) TryCreateRaceHigh(nMonRace, out Cert);
 
             if (Cert == null)
             switch (nMonRace)
