@@ -1706,7 +1706,26 @@ namespace GameSvr
                         }
                         else
                         {
-                            n10 = n10 + HUtil32.RoundOrePriceBonus((long)n10, oreDuraMax, oreDuraMax - UserItem.Dura);
+                            // ✅ 战神字节证据 (Tier-1) — PRICE-16: 与肉同形,超上限差值是
+                            // 【cur - liveMaxF】(liveMaxF = 已按 10000 下限钳位的局部值),
+                            // 不是 liveMaxF - cur。EA: TOreItem sub_7862B4 的 over 臂
+                            // @0x78633C-0x78635E(edi=cur[+0x26],ebx=liveMaxF,本臂由
+                            // @0x7862FD `cmp edi,ebx / jge` 进入,即 cur > liveMaxF):
+                            //   0078633C  db 45 fc           fild  dword [ebp-4]      ; price
+                            //   0078633F  89 5d ec           mov   [ebp-0x14],ebx     ; liveMaxF
+                            //   00786342  db 45 ec           fild  dword [ebp-0x14]
+                            //   00786345  de f9              fdivp st(1)              ; price/liveMaxF
+                            //   00786347  db 2d 78 63 78 00  fld   xword [0x786378]   ; 1.3 (10 字节 extended)
+                            //   0078634D  de c9              fmulp st(1)
+                            //   0078634F  2b fb              sub   edi,ebx            ; 【cur - liveMaxF】
+                            //   00786351  89 7d e8           mov   [ebp-0x18],edi
+                            //   00786354  db 45 e8           fild  dword [ebp-0x18]
+                            //   00786357  de c9              fmulp st(1)
+                            //   00786359  e8 16 d2 c7 ff     call  0x403574           ; @ROUND
+                            //   0078635E  01 45 fc           add   [ebp-4],eax        ; 累加,本臂无 _MAX 钳位
+                            // RoundOrePriceBonus 第三参就是这个 delta;换成正值后走其主路径,
+                            // 内部对负分子的 floor 修正(HUtil32.cs:212-216)不再被触发。
+                            n10 = n10 + HUtil32.RoundOrePriceBonus((long)n10, oreDuraMax, UserItem.Dura - oreDuraMax);
                         }
                     }
                     if (StdItem.StdMode > 4)
