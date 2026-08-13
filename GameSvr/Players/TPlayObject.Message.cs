@@ -340,6 +340,10 @@ namespace GameSvr
                         }
                     }
                 }
+                // 眼神「全局循环函数」周期驱动：与上面 @OnTimer 同族的 per-player 节拍，
+                // 按 循环时间_值（生产 2000ms）敲脚本 MyTimer→Ys_HuiShou→AutoRecycle。
+                // 全部判定（开关/周期/节流）在 YanshenRecycleDriver 独立文件，此处仅一行挂载。
+                YanshenRecycleDriver.Tick(this, currentTick);
                 if (m_boTimeGoto && (HUtil32.GetTickCount() > m_dwTimeGotoTick)) 
                 {
                     m_boTimeGoto = false;
