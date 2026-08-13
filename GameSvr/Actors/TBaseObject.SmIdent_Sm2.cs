@@ -259,5 +259,37 @@ namespace GameSvr
                 HUtil32.HiWord(value), HUtil32.LoWord(value));
             return (header, Array.Empty<byte>());
         }
+
+        // SM 1251 (0x4E3) — @0x006D1666 via [obj+0x250], no body. Param is the constant 6.
+        //   006D1650  6A 06              push 6             ; #1 Param  = 6
+        //   006D1652  6A 00              push 0             ; #2 Tag    = 0
+        //   006D1654  6A 00              push 0             ; #3 Series = 0
+        //   006D1656  6A 00              push 0             ; #4 sMsg   = nil
+        //   006D1658  8B 8E 54 0A 00 00  mov ecx,[esi+0xA54]; Recog     = [esi+0xA54]
+        //   006D165E  66 BA E3 04        mov dx,0x4E3       ; ident 1251
+        //   006D1666  FF 93 50 02 00 00  call [obj+0x250]
+        // (Native has additional 1251 sites with a different Recog/Param; only the
+        // Param=6 form at 0x006D1666 is byte-verified here.)
+        internal static (ClientPacket Header, byte[] Body) BuildSm1251(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1251, recog, 6, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        // SM 1252 (0x4E4) — @0x00654C10 via [obj+0x250], no body. Param is the constant 4.
+        //   00654BFA  6A 04              push 4             ; #1 Param  = 4
+        //   00654BFC  6A 00              push 0             ; #2 Tag    = 0
+        //   00654BFE  6A 00              push 0             ; #3 Series = 0
+        //   00654C00  6A 00              push 0             ; #4 sMsg   = nil
+        //   00654C02  8B 8E 50 0A 00 00  mov ecx,[esi+0xA50]; Recog     = [esi+0xA50]
+        //   00654C08  66 BA E4 04        mov dx,0x4E4       ; ident 1252
+        //   00654C10  FF 93 50 02 00 00  call [obj+0x250]
+        // (Native has additional 1252 sites with other Recog/Param; only the Param=4
+        // form at 0x00654C10 is byte-verified here.)
+        internal static (ClientPacket Header, byte[] Body) BuildSm1252(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1252, recog, 4, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
