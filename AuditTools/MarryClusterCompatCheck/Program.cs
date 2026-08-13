@@ -404,8 +404,11 @@ void CheckOtherServerDivorce()
             RegexOptions.CultureInvariant),
         "Other-GS divorce dispatcher is missing");
 
+    // End the slice at the method that actually follows MsgGetDivorce. The old
+    // MsgGetReloadMakeItemList marker now sits many receivers later, so the
+    // "no non-native handling" guard below was reading other handlers' code.
     var receiver = Slice(mirrorMessage,
-        "private void MsgGetDivorce", "private void MsgGetReloadMakeItemList");
+        "private void MsgGetDivorce", "private void MsgGetMentorStudentLeft");
     RequireInOrder(receiver, new[]
     {
         "serverNum != M2Share.nServerIndex",

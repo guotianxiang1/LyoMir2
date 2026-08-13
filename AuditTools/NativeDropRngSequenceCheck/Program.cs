@@ -127,7 +127,10 @@ static void PinSourceOrder()
     var plus = File.ReadAllText(Path.Combine(root, "GameSvr", "Items",
         "NativeItemPlus28.cs"));
 
-    var gate = usr.IndexOf("Random(MonItem.MaxPoint * penalty)", StringComparison.Ordinal);
+    // The bound is now wrapped by the 眼神 equip-drop-boost trampoline
+    // (YanshenEquipDropBoost.Denominator), so match the operand, not the old
+    // Random(...) spelling; the ordering against the +0x28 hook is the contract.
+    var gate = usr.IndexOf("MonItem.MaxPoint * penalty", StringComparison.Ordinal);
     var drop = usr.IndexOf("NativeItemPlus28.ApplyOnDrop", StringComparison.Ordinal);
     Assert(gate >= 0 && drop > gate, "MonGetRandomItems gate before +0x28");
 

@@ -58,7 +58,11 @@ foreach (var rel in new[] { "GameSvr/Players/TPlayObject.Base.cs",
     var expiry = src.IndexOf("MapItem.CanPickUpTick", StringComparison.Ordinal);
     Check(expiry > 0, $"{rel}: 找得到地面物归属过期段");
     if (expiry <= 0) continue;
-    var window = src.Substring(expiry, Math.Min(1600, src.Length - expiry));
+    // 窗口收到本段结构末尾（下一个 OS_EVENTOBJECT 分支）为止，而不是数字符数：
+    // 两处实现都在过期段里加了证据注释，1600 字符已经够不着 m_boGhost 那一行。
+    var windowEnd = src.IndexOf("CellType.OS_EVENTOBJECT", expiry, StringComparison.Ordinal);
+    if (windowEnd < 0) windowEnd = Math.Min(src.Length, expiry + 4000);
+    var window = src[expiry..windowEnd];
 
     Check(window.Contains("> M2Share.g_Config.dwFloorItemCanPickUpTime", StringComparison.Ordinal),
         $"{rel}: 0x7839A3 jbe => 严格大于才清归属，写成 >= 会早清一 tick");

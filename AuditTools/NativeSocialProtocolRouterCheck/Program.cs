@@ -16,9 +16,15 @@ var defaultEnd = messageSource.IndexOf("break;", defaultStart,
     StringComparison.Ordinal);
 Require(defaultEnd > defaultStart, "Operate default branch terminator missing");
 var defaultBranch = messageSource[defaultStart..defaultEnd];
-Ordered(defaultBranch, "if (!" + socialCall + ")",
+// The default branch chains every CM router into one guard, so the social call is
+// now a `&& !...` term rather than the whole `if (!...)`. What must hold is that it
+// is negated inside the guard and that base.Operate only runs after it fails.
+Ordered(defaultBranch, "!" + socialCall,
     "result = base.Operate(ProcessMsg);",
     "base fallback must follow a failed social route");
+Require(defaultBranch.TrimStart().StartsWith("default:", StringComparison.Ordinal)
+        && defaultBranch.Contains("if (!", StringComparison.Ordinal),
+    "default branch must gate every router behind a single if");
 Require(Count(defaultBranch, socialCall) == 1,
     "default branch social router call count");
 Require(Count(defaultBranch, "base.Operate(ProcessMsg)") == 1,
