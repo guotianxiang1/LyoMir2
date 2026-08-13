@@ -2747,6 +2747,7 @@ namespace GameSvr
                     break;
                 case Grobal2.CM_4629:
                     ClientNativeCm4629GroupPositions();
+                    break;
                 case Grobal2.SM_CHANNEL_MAGIC_CANCEL:
                     SendDefMessage(Grobal2.SM_CHANNEL_MAGIC_CANCEL,
                         ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0, "");
