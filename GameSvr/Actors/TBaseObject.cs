@@ -5105,6 +5105,20 @@ namespace GameSvr
         private const int NativeScatterGoldCap = 0xBB8;
 
         /// <summary>
+        /// 战神字节证据 (Tier-1)：0x71FFB7 <c>cmp byte [ebp+8],0 / je 0x71FFCD</c> —
+        /// the 3000 cap at 0x71FFBD-0x71FFC6 is the ONLY thing that byte gates; the
+        /// <c>idiv</c> at 0x71FFD1 sits on the 0x71FFCD merge point and always runs.
+        /// That byte reaches <c>sub_71FA20</c> through the thin VMT+0x1FC forwarder
+        /// <c>sub_71F46C</c>, and monster Die pushes it literally 1 at both sites
+        /// (0x71E3C4 and 0x71E3DA <c>push 0 / push 1 / call [esi+0x1FC]</c>).
+        /// A class that overrides VMT+0x1FC can therefore only ever turn the cap OFF,
+        /// which is exactly what <c>TGoldbarPig</c> (race 249, override 0x66D270)
+        /// does — see GoldbarPig.cs. Modelled as a virtual because the single native
+        /// caller always supplies 1.
+        /// </summary>
+        protected virtual bool NativeScatterGoldCapped => true;
+
+        /// <summary>
         /// <c>cmp dword [ebp-0x14],0x7D0</c> @0x71FFDC with the matching
         /// <c>mov ebx,0x7D0</c> @0x71FFE5 and <c>sub dword [ebp-0x14],0x7D0</c> @0x71FFEA
         /// — the per-pile amount is a literal 2000, not the operator-tunable
@@ -5159,7 +5173,7 @@ namespace GameSvr
                 // and 33x on a 100 000-gold boss, doubled again for a tier-2 account.
                 if (nativeMonsterScatter)
                 {
-                    if (m_nGold > NativeScatterGoldCap)
+                    if (NativeScatterGoldCapped && m_nGold > NativeScatterGoldCap)
                     {
                         m_nGold = NativeScatterGoldCap;
                     }
