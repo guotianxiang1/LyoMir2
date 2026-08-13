@@ -2354,7 +2354,11 @@ namespace GameSvr
                 if (ClientItemIdMatches(UserItem, nItemIdx) && string.Compare(sUserItemName, sMsg, StringComparison.OrdinalIgnoreCase) == 0)
                 {
                     
-                    if (merchant != null && merchant.m_boStorage && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
+                    // TRADE-39: 战神 sub_6C2A34 @0x6C2AE8 `66 B9 0F 00 mov cx,0xF` /
+                    // 0x6C2AF0 `call 0x7743E0`, 该 helper @0x774400 `cmp eax,edi / jg 拒绝`
+                    // 与 @0x774415 `cmp edi,eax / jl 拒绝` 合起来是 |dx| <= 15 && |dy| <= 15，
+                    // 所以边界是 <= 15 不是 < 15。原生无 g_FunctionNPC 旁路。
+                    if (merchant != null && merchant.m_boStorage && merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) <= 15)
                     {
                         // TRADE-42: 战神 sub_6C2A34 @0x6C2B34 `mov eax,esi` / 0x6C2B36
                         // `E8 25 15 0C 00 call 0x784060` / 0x6C2B3B `84 C0 test al,al` /
@@ -2429,7 +2433,10 @@ namespace GameSvr
                     if (IsAddWeightAvailable(M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
                     {
                         
-                        if (merchant.m_boGetback && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
+                        // TRADE-39: 取仓 sub_6C2D7C @0x6C2DF8 `66 B9 0F 00 mov cx,0xF` /
+                        // 0x6C2E00 `call 0x7743E0` —— 与存仓同一道门、同一个 helper，
+                        // 同为 <= 15 且无 g_FunctionNPC 旁路。
+                        if (merchant.m_boGetback && merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) <= 15)
                         {
                             if (AddItemToBag(UserItem))
                             {
