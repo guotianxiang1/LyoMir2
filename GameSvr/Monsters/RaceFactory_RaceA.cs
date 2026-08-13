@@ -36,6 +36,12 @@ namespace GameSvr
                     cert = new FriendAnimal();
                     break;
 
+                // race 98  group 27 handler 0x67A62B  classref 0x67EF94  ctor 0x68130C  TWalkMon
+                //   case body 无 ctor 后逻辑。ctor 已核验（见 WalkMon.cs）。
+                case 98:
+                    cert = new WalkMon();
+                    break;
+
                 // race 99  group 28 handler 0x67A63F  classref 0x67F21C  ctor 0x681958  TSkyArcher
                 //   case body 无 ctor 后逻辑。ctor + IsAttackTarget 已核验（见 SkyArcher.cs）。
                 case 99:
