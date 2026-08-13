@@ -3056,6 +3056,14 @@ namespace GameSvr
                 case 150:
                     Cert = new FireKingMonster();
                     break;
+                // ✅ 战神字节证据 (Tier-1)：race 247 = TParalyzationMon(VMT 0x665C18,
+                // parent TGasMothMonster)。工厂 jt[115]=0x67AD0E → classref [0x665BCC]。
+                // ctor sub_66D1F8 纯转调 GasMoth ctor；唯一覆写 Attack(+0x204)=0x66D1EC 是空
+                // 转发（call GasMoth Attack 0x667124），故行为 = GasMothMonster。详见
+                // ParalyzationMon.cs。原先该 race 落工厂 default → 返回 nil，怪物不出现。
+                case 247:
+                    Cert = new ParalyzationMon();
+                    break;
             }
 
             if (Cert != null)

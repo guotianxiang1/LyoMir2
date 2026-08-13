@@ -350,14 +350,18 @@ namespace GameSvr
             return result;
         }
 
-        // Native _Attack = sub_769F90, half-moon branch @0x0076A11D-0x0076A16D.
-        //   0x0076A136  E8 31 E8 D5 FF     call sub_4C896C   -> effective level
-        //   0x0076A13B  3C 03              cmp al,3
-        //   0x0076A13D  76 05              jbe 0x0076A144
-        //   0x0076A13F  8B 5D F8           mov ebx,[ebp-8]   (level > 3: unscaled)
-        //   0x0076A154  83 C0 02           add eax,2
-        //   0x0076A160  D8 35 C8 A5 76 00  fdiv dword ptr [0x76A5C8]
-        // [0x76A5C8] = 00 00 70 41 = float32 15.0, a literal, not btTrainLv + 10.
+        // A player's half moon runs sub_771E9C, reached from the client command
+        // dispatcher sub_6EC078 (0x006EC280 E8 23 45 08 00 call 0x7707A8 with
+        // cx = 0x3ED).
+        //   0x0077203A  E8 2D 69 D5 FF     call sub_4C896C -> effective level
+        //   0x0077203F  25 FF 00 00 00     and eax,0xFF
+        //   0x00772044  83 C0 02           add eax,2
+        //   0x00772050  D8 35 48 21 77 00  fdiv dword ptr [0x772148]
+        // [0x772148] = 00 00 70 41 = float32 15.0, a literal, not btTrainLv + 10.
+        // The AttackDir/monster twin sub_769F90 uses the same 15.0 constant at
+        // [0x76A5C8]. Effective level 4 diverts to a whole-map TList sweep
+        // (0x00771F2F 3C 04 cmp al,4) that C# does not implement; see
+        // staging/ys_skills_impl_20260813.md.
         internal static int CalculateHalfMoonWideAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
@@ -379,24 +383,21 @@ namespace GameSvr
                 }
             }
 
-            if (effectiveLevel > 3)
-            {
-                return nPower;
-            }
             return HUtil32.Round((double)nPower / 15.0 * (effectiveLevel + 2));
         }
 
-        // Native _Attack = sub_769F90, stab branch @0x0076A096-0x0076A0F8. That is
-        // the function AttackDir sub_76A5D4 actually calls
-        // (0x0076A76D E8 1E F8 FF FF call 0x769F90); sub_7707A8 is a separate
-        // entry used by the client command handlers and is NOT this code path.
-        //   0x0076A0AF / 0x0076A0D5  call sub_4C896C   -> effective level
-        //   0x0076A0B4  3C 04              cmp al,4
-        //   0x0076A0BB  DB 2D B8 A5 76 00  fld tbyte[0x76A5B8]   (80-bit 1.05)
-        //   0x0076A0CA  83 C3 05           add ebx,5
-        //   0x0076A0EB  D8 35 C4 A5 76 00  fdiv dword[0x76A5C4]
-        // [0x76A5C4] = 00 00 A0 40 = float32 5.0. The divisor is that literal;
-        // btTrainLv (+0x1A) is only ever the level cap inside sub_4C896C.
+        // A player's stab sword runs sub_771BC4, reached from the client command
+        // dispatcher sub_6EC078 (0x006EC26B E8 38 45 08 00 call 0x7707A8 with
+        // cx = 0x3EC).
+        //   0x00771C1E / 0x00771C44  call sub_4C896C  -> effective level
+        //   0x00771C23  3C 04              cmp al,4
+        //   0x00771C2A  DB 2D 18 1D 77 00  fld tbyte ptr [0x771D18]  (80-bit 1.05)
+        //   0x00771C39  83 C7 05           add edi,5
+        //   0x00771C5A  D8 35 24 1D 77 00  fdiv dword ptr [0x771D24]
+        // [0x771D24] = 00 00 A0 40 = float32 5.0. The divisor is that literal;
+        // btTrainLv (+0x1A) is only ever the level cap inside sub_4C896C. The
+        // AttackDir/monster twin sub_769F90 carries byte-identical constants at
+        // [0x76A5C4] and [0x76A5B8].
         internal static int CalculateStabSwordLongAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
@@ -426,7 +427,7 @@ namespace GameSvr
             return HUtil32.Round((double)nPower / 5.0 * (effectiveLevel + 2));
         }
 
-        // tbyte[0x76A5B8] = 66 66 66 66 66 66 66 86 FF 3F, exactly
+        // tbyte[0x771D18] = 66 66 66 66 66 66 66 86 FF 3F, exactly
         // 4842270319348757299 / 2^62 = 21/20 - 1/(5*2^62): strictly below 1.05,
         // whereas IEEE double 1.05 is strictly above it. The product differs from
         // 21n/20 by less than the .5-boundary granularity except when 21n/20 is
@@ -498,19 +499,21 @@ namespace GameSvr
                     unchecked((byte)(skillLevel * factor)) + yanshenApi.FireSwordB()));
             }
 
-            // Native _Attack = sub_769F90, fire branch @0x0076A06C-0x0076A08A:
-            //   0x0076A06C  DB 45 F8           fild dword ptr [ebp-8]
-            //   0x0076A06F  D8 35 B4 A5 76 00  fdiv dword ptr [0x76A5B4]
-            //   0x0076A080  DB 45 E0           fild dword ptr [ebp-0x20]  (hitDouble)
-            //   0x0076A083  DE C9              fmulp st(1)
-            //   0x0076A085  E8 EA 94 C9 FF     call @ROUND
-            //   0x0076A08A  01 45 F8           add dword ptr [ebp-8], eax
-            // [0x76A5B4] = 00 00 20 41 = float32 10.0. Dividing by 100 and
-            // pre-multiplying hitDouble by 10 is algebraically the same but
-            // rounds differently: 601 of the sampled pairs disagreed with the
-            // x87 chain, versus 9 for this order (all at hitDouble 255, which
-            // only the plugin's 倍功 override can produce).
-            return nPower + HUtil32.Round(nPower / 10.0 * nativeHitDouble);
+            // A player's fire sword runs sub_7722BC: the client command
+            // dispatcher sub_6EC078 (its only callers are 0x006D9F06 and
+            // 0x006D9FA2, the attack-family CM handlers) reaches it through
+            // 0x006EC295 E8 0E 45 08 00 call 0x7707A8 with cx = 0x3EF. That
+            // branch is pure integer arithmetic -- no FPU, no rounding:
+            //   0x00772336  8A 87 91 00 00 00  mov al, byte ptr [edi+0x91]
+            //   0x0077233C  F7 6D FC           imul dword ptr [ebp-4]
+            //   0x0077233F  B9 0A 00 00 00     mov ecx,0xA
+            //   0x00772344  99                 cdq
+            //   0x00772345  F7 F9              idiv ecx
+            //   0x00772347  01 45 FC           add dword ptr [ebp-4], eax
+            // idiv truncates toward zero, matching C# integer division. The
+            // fdiv/@ROUND form at 0x0076A06F belongs to sub_769F90, which only
+            // the AttackDir path (monsters and AI actors) reaches.
+            return nPower + nPower * nativeHitDouble / 10;
         }
 
         // Native builds the multiplier byte from a table and then divides with
