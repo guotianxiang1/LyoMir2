@@ -1,0 +1,245 @@
+GetS sites: 58
+const (g,i): 49 unique / 53 sites
+  S(1,1)  n=1  e.g. 0x100ce533
+  S(1,9)  n=1  e.g. 0x1007b13a
+  S(1,10)  n=1  e.g. 0x1007b5f3
+  S(1,11)  n=1  e.g. 0x1007b60b
+  S(1,29)  n=1  e.g. 0x1007bcad
+  S(1,49)  n=1  e.g. 0x100ce4f3
+  S(1,50)  n=1  e.g. 0x1007b194
+  S(1,51)  n=1  e.g. 0x1007b1ac
+  S(1,52)  n=1  e.g. 0x1007b639
+  S(1,53)  n=1  e.g. 0x1007b210
+  S(1,56)  n=1  e.g. 0x1007a718
+  S(1,57)  n=1  e.g. 0x10062dca
+  S(1,58)  n=1  e.g. 0x1007a8fe
+  S(1,60)  n=1  e.g. 0x1007bc7a
+  S(1,62)  n=1  e.g. 0x1007b651
+  S(1,63)  n=1  e.g. 0x1007b228
+  S(1,69)  n=2  e.g. 0x10090322
+  S(1,70)  n=2  e.g. 0x1009030c
+  S(1,73)  n=1  e.g. 0x10066bf5
+  S(1,95)  n=2  e.g. 0x1008ba91
+  S(1,100)  n=2  e.g. 0x10079a12
+  S(1,101)  n=1  e.g. 0x10079ac2
+  S(1,129)  n=1  e.g. 0x1007ab49
+  S(1,130)  n=1  e.g. 0x10067e25
+  S(1,131)  n=1  e.g. 0x10067e3a
+  S(1,175)  n=1  e.g. 0x1007bcc8
+  S(1,178)  n=1  e.g. 0x1007ab0e
+  S(1,179)  n=1  e.g. 0x10089373
+  S(1,180)  n=1  e.g. 0x10089389
+  S(1,181)  n=1  e.g. 0x100894c3
+  S(1,200)  n=1  e.g. 0x1006976e
+  S(1,201)  n=1  e.g. 0x10069785
+  S(1,202)  n=1  e.g. 0x1008541c
+  S(1,214)  n=1  e.g. 0x10086175
+  S(1,216)  n=1  e.g. 0x100880a0
+  S(1,217)  n=1  e.g. 0x1008aab6
+  S(1,219)  n=1  e.g. 0x10090008
+  S(1,220)  n=1  e.g. 0x10090391
+  S(1,221)  n=1  e.g. 0x1005705f
+  S(1,228)  n=1  e.g. 0x10079949
+  S(2,1)  n=1  e.g. 0x1007a37f
+  S(2,2)  n=1  e.g. 0x1007a397
+  S(2,3)  n=1  e.g. 0x1007a342
+  S(2,4)  n=1  e.g. 0x1007a35a
+  S(2,5)  n=1  e.g. 0x1007a267
+  S(2,6)  n=1  e.g. 0x1007a27f
+  S(6,1)  n=1  e.g. 0x100697b7
+  S(6,2)  n=1  e.g. 0x100ce57c
+  S(7,31)  n=1  e.g. 0x10062d0f
+non-const GetS: 5
+  0x10068e08 func 0x10068470 g=mov edx, 0x8 i=push [ebp-0xac] (runtime slot)
+  0x1006d50c func 0x1006d3d0 g=lea edx, [ebx+0x1] (indexed) i=push 0x3d
+  0x10079eb1 func 0x10079510 g=mov edx, 0x7 i=push eax (runtime)
+  0x1007a107 func 0x10079510 g=mov edx, 0x8 i=push ecx (runtime)
+  0x1007a224 func 0x10079510 g=mov edx, 0x9 i=push eax (runtime)
+SetS const:
+  0x100697ff g=1 i=110 (mov edx, 0x1; push 0x6e)
+  0x10069844 g=6 i=1 (mov edx, 0x6; push 0x1)
+  0x10090110 g=6 i=2 (mov edx, 0x6; push 0x2)
+SetS_g1:
+  0x100ce522 g=1 i=1 (mov edx, 0x1; push esi (imm:0x1))
+  0x100ce549 g=1 i=1 (mov edx, 0x1; push esi (imm:0x1))
+  0x100ce557 g=1 i=1 (mov edx, 0x1; push esi (imm:0x1))
+
+trampoline [player+0x804] load sites: 91
+unique naked offsets: 117
+  bank+0x0  n=1  labels=['特殊宝宝(已启动)']
+  bank+0x8  n=2  labels=['刀刀切割(已启动)', '特殊宝宝(已启动)']
+  bank+0x44  n=1  labels=['刀刀切割(已启动)']
+  bank+0x4c  n=1  labels=['刀刀切割(已启动)']
+  bank+0x54  n=1  labels=['刀刀切割(已启动)']
+  bank+0x60  n=1  labels=['永久属性(已启动)']
+  bank+0x64  n=1  labels=['永久属性(已启动)']
+  bank+0x68  n=1  labels=['永久属性(已启动)']
+  bank+0x6c  n=1  labels=['永久属性(已启动)']
+  bank+0x70  n=1  labels=['永久属性(已启动)']
+  bank+0x74  n=1  labels=['永久属性(已启动)']
+  bank+0x78  n=1  labels=['永久属性(已启动)']
+  bank+0x7c  n=1  labels=['永久属性(已启动)']
+  bank+0x80  n=1  labels=['永久属性(已启动)']
+  bank+0x84  n=1  labels=['永久属性(已启动)']
+  bank+0x88  n=1  labels=['永久属性(已启动)']
+  bank+0x8c  n=1  labels=['永久属性(已启动)']
+  bank+0x90  n=1  labels=['永久属性(已启动)']
+  bank+0x94  n=1  labels=['永久属性(已启动)']
+  bank+0x98  n=1  labels=['永久属性(已启动)']
+  bank+0x9c  n=1  labels=['永久属性(已启动)']
+  bank+0xa0  n=1  labels=['永久属性(已启动)']
+  bank+0xa4  n=1  labels=['永久属性(已启动)']
+  bank+0xa8  n=1  labels=['永久属性(已启动)']
+  bank+0xac  n=1  labels=['永久属性(已启动)']
+  bank+0xb0  n=1  labels=['永久属性(已启动)']
+  bank+0xb4  n=1  labels=['永久属性(已启动)']
+  bank+0xbc  n=1  labels=['特殊属性(已启动)']
+  bank+0xc4  n=1  labels=['特殊属性(已启动)']
+  bank+0xcc  n=1  labels=['移动速度(已启动)']
+  bank+0xd4  n=1  labels=['永久攻速(已启动)']
+  bank+0xdc  n=3  labels=['复活戒指改cd(已启动)']
+  bank+0xe4  n=1  labels=['攻击反伤(已启动)']
+  bank+0xf0  n=1  labels=['永久属性(已启动)']
+  bank+0xf4  n=1  labels=['永久属性(已启动)']
+  bank+0xf8  n=1  labels=['永久属性(已启动)']
+  bank+0xfc  n=1  labels=['永久属性(已启动)']
+  bank+0x100  n=1  labels=['永久属性(已启动)']
+  bank+0x104  n=1  labels=['永久属性(已启动)']
+  bank+0x108  n=1  labels=['永久属性(已启动)']
+  bank+0x10c  n=1  labels=['永久属性(已启动)']
+  bank+0x110  n=1  labels=['永久属性(已启动)']
+  bank+0x114  n=1  labels=['永久属性(已启动)']
+  bank+0x118  n=1  labels=['永久属性(已启动)']
+  bank+0x11c  n=1  labels=['永久属性(已启动)']
+  bank+0x120  n=1  labels=['永久属性(已启动)']
+  bank+0x124  n=1  labels=['永久属性(已启动)']
+  bank+0x128  n=1  labels=['永久属性(已启动)']
+  bank+0x12c  n=1  labels=['永久属性(已启动)']
+  bank+0x130  n=1  labels=['永久属性(已启动)']
+  bank+0x134  n=1  labels=['永久属性(已启动)']
+  bank+0x138  n=1  labels=['永久属性(已启动)']
+  bank+0x13c  n=1  labels=['永久属性(已启动)']
+  bank+0x140  n=1  labels=['永久属性(已启动)']
+  bank+0x144  n=1  labels=['永久属性(已启动)']
+  bank+0x14c  n=1  labels=['英雄攻速移速(已启动)']
+  bank+0x15c  n=1  labels=['英雄倍攻和暴击(已启动)']
+  bank+0x174  n=1  labels=['英雄施法速度(已启动)']
+  bank+0x180  n=1  labels=['英雄倍攻和暴击(已启动)']
+  bank+0x184  n=1  labels=['英雄倍攻和暴击(已启动)']
+  bank+0x18c  n=2  labels=['刀刀切割(已启动)']
+  bank+0x19c  n=1  labels=['刀刀切割(已启动)']
+  bank+0x1a4  n=1  labels=['刀刀切割(已启动)']
+  bank+0x1dc  n=1  labels=['攻击反伤(已启动)']
+  bank+0x1e4  n=2  labels=['全屏拾取(已启动)']
+  bank+0x1ec  n=1  labels=['刀刀切割(已启动)']
+  bank+0x1f4  n=1  labels=['刀刀切割(已启动)']
+  bank+0x1f8  n=1  labels=['新倍攻和暴击(已启动)']
+  bank+0x1fc  n=1  labels=['新倍攻和暴击(已启动)']
+  bank+0x200  n=1  labels=['刀刀切割(已启动)']
+  bank+0x204  n=1  labels=['刀刀切割(已启动)']
+  bank+0x210  n=1  labels=['新倍攻和暴击(已启动)']
+  bank+0x214  n=1  labels=['新倍攻和暴击(已启动)']
+  bank+0x218  n=1  labels=['新倍攻和暴击(已启动)']
+  bank+0x224  n=1  labels=['麻痹概率(已启动)']
+  bank+0x22c  n=1  labels=['麻痹概率(已启动)']
+  bank+0x234  n=1  labels=['复活戒指概率(已启动)']
+  bank+0x244  n=3  labels=['特殊宝宝(已启动)']
+  bank+0x248  n=1  labels=['地狱雷光系数(已启动)']
+  bank+0x24c  n=1  labels=['地狱雷光系数(已启动)']
+  bank+0x250  n=1  labels=['地狱雷光范围(已启动)']
+  bank+0x254  n=1  labels=['地狱雷光范围(已启动)']
+  bank+0x258  n=1  labels=['爆裂火焰可换主属性(已启动)']
+  bank+0x25c  n=2  labels=['爆裂火焰可换主属性(已启动)']
+  bank+0x260  n=1  labels=['爆裂火焰范围及系数(已启动)']
+  bank+0x264  n=2  labels=['爆裂火焰范围及系数(已启动)']
+  bank+0x268  n=2  labels=['爆裂火焰范围及系数(已启动)']
+  bank+0x26c  n=3  labels=['爆裂火焰范围及系数(已启动)']
+  bank+0x270  n=1  labels=['地狱雷光可换主属性(已启动)']
+  bank+0x274  n=2  labels=['地狱雷光可换主属性(已启动)']
+  bank+0x278  n=1  labels=['激光电影可换主属性(已启动)']
+  bank+0x27c  n=2  labels=['激光电影可换主属性(已启动)']
+  bank+0x280  n=1  labels=['激光范围及系数(已启动)']
+  bank+0x284  n=1  labels=['激光范围及系数(已启动)']
+  bank+0x288  n=1  labels=['激光命中概率(已启动)']
+  bank+0x28c  n=1  labels=['激光命中概率(已启动)']
+  bank+0x290  n=1  labels=['火球主属性切换(已启动)']
+  bank+0x294  n=2  labels=['火球主属性切换(已启动)']
+  bank+0x298  n=1  labels=['雷电主属性切换(已启动)']
+  bank+0x29c  n=2  labels=['雷电主属性切换(已启动)']
+  bank+0x2a0  n=1  labels=['雷电自定义范围(已启动)']
+  bank+0x2a4  n=1  labels=['雷电自定义范围(已启动)']
+  bank+0x2a8  n=1  labels=['火球自定义范围(已启动)']
+  bank+0x2ac  n=1  labels=['火球自定义范围(已启动)']
+  bank+0x2b0  n=2  labels=['冰咆哮主属性切换(已启动)']
+  bank+0x2b4  n=4  labels=['冰咆哮主属性切换(已启动)']
+  bank+0x2b8  n=1  labels=['冰咆哮范围(已启动)']
+  bank+0x2bc  n=1  labels=['冰咆哮范围(已启动)']
+  bank+0x2c0  n=1  labels=['激光范围及系数(已启动)']
+  bank+0x2c8  n=1  labels=['火雨主属切换(已启动)']
+  bank+0x2cc  n=2  labels=['火雨主属切换(已启动)']
+  bank+0x2d0  n=1  labels=['嗜血术倍数(已启动)']
+  bank+0x2d4  n=1  labels=['嗜血术倍数(已启动)']
+  bank+0x2d8  n=1  labels=['嗜血术倍数(已启动)']
+  bank+0x2dc  n=1  labels=['嗜血术倍数(已启动)']
+  bank+0x2f0  n=1  labels=['野蛮等级(已启动)']
+  bank+0x2f4  n=1  labels=['野蛮等级(已启动)']
+key-checked (formula): 48
+  S(1, 13)  n=1  e.g. 永久属性(已启动) site 0x100d125c off 0x60 cmp 0x3f5
+  S(1, 14)  n=1  e.g. 永久属性(已启动) site 0x100d12ae off 0x68 cmp 0x3f6
+  S(1, 15)  n=1  e.g. 永久属性(已启动) site 0x100d1300 off 0x70 cmp 0x3f7
+  S(1, 16)  n=1  e.g. 永久属性(已启动) site 0x100d1352 off 0x78 cmp 0x3f8
+  S(1, 17)  n=1  e.g. 永久属性(已启动) site 0x100d13a4 off 0x80 cmp 0x3f9
+  S(1, 18)  n=1  e.g. 永久属性(已启动) site 0x100d13f6 off 0x88 cmp 0x3fa
+  S(1, 19)  n=1  e.g. 永久属性(已启动) site 0x100d1448 off 0x90 cmp 0x3fb
+  S(1, 20)  n=1  e.g. 永久属性(已启动) site 0x100d149a off 0x98 cmp 0x3fc
+  S(1, 21)  n=1  e.g. 永久属性(已启动) site 0x100d14ec off 0xa0 cmp 0x3fd
+  S(1, 22)  n=1  e.g. 永久属性(已启动) site 0x100d153e off 0xa8 cmp 0x3fe
+  S(1, 23)  n=1  e.g. 永久属性(已启动) site 0x100d1590 off 0xb0 cmp 0x3ff
+  S(1, 31)  n=1  e.g. 永久属性(已启动) site 0x100d125c off 0xf0 cmp 0x407
+  S(1, 32)  n=1  e.g. 永久属性(已启动) site 0x100d12ae off 0xf8 cmp 0x408
+  S(1, 33)  n=1  e.g. 永久属性(已启动) site 0x100d1300 off 0x100 cmp 0x409
+  S(1, 34)  n=1  e.g. 永久属性(已启动) site 0x100d1352 off 0x108 cmp 0x40a
+  S(1, 35)  n=1  e.g. 永久属性(已启动) site 0x100d13a4 off 0x110 cmp 0x40b
+  S(1, 36)  n=1  e.g. 永久属性(已启动) site 0x100d13f6 off 0x118 cmp 0x40c
+  S(1, 37)  n=1  e.g. 永久属性(已启动) site 0x100d1448 off 0x120 cmp 0x40d
+  S(1, 38)  n=1  e.g. 永久属性(已启动) site 0x100d149a off 0x128 cmp 0x40e
+  S(1, 39)  n=1  e.g. 永久属性(已启动) site 0x100d14ec off 0x130 cmp 0x40f
+  S(1, 40)  n=1  e.g. 永久属性(已启动) site 0x100d153e off 0x138 cmp 0x410
+  S(1, 41)  n=1  e.g. 永久属性(已启动) site 0x100d1590 off 0x140 cmp 0x411
+  S(1, 49)  n=1  e.g. 英雄倍攻和暴击(已启动) site 0x100d49b4 off 0x180 cmp 0x419
+  S(1, 64)  n=1  e.g. 新倍攻和暴击(已启动) site 0x100d3bc4 off 0x1f8 cmp 0x428
+  S(1, 65)  n=1  e.g. 刀刀切割(已启动) site 0x100cf36e off 0x200 cmp 0x429
+  S(1, 67)  n=1  e.g. 新倍攻和暴击(已启动) site 0x100d3bc4 off 0x210 cmp 0x42b
+  S(1, 68)  n=1  e.g. 新倍攻和暴击(已启动) site 0x100d3bc4 off 0x218 cmp 0x42c
+  S(1, 74)  n=1  e.g. 地狱雷光系数(已启动) site 0x100d8a3d off 0x248 cmp 0x432
+  S(1, 75)  n=1  e.g. 地狱雷光范围(已启动) site 0x100d8cde off 0x250 cmp 0x433
+  S(1, 76)  n=1  e.g. 爆裂火焰可换主属性(已启动) site 0x100d8e0f off 0x258 cmp 0x434
+  S(1, 77)  n=1  e.g. 爆裂火焰范围及系数(已启动) site 0x100d8f56 off 0x260 cmp 0x435
+  S(1, 78)  n=2  e.g. 爆裂火焰范围及系数(已启动) site 0x100d8f56 off 0x268 cmp 0x436
+  S(1, 79)  n=1  e.g. 地狱雷光可换主属性(已启动) site 0x100d908c off 0x270 cmp 0x437
+  S(1, 80)  n=1  e.g. 激光电影可换主属性(已启动) site 0x100d91d3 off 0x278 cmp 0x438
+  S(1, 81)  n=1  e.g. 激光范围及系数(已启动) site 0x100d931a off 0x280 cmp 0x439
+  S(1, 82)  n=1  e.g. 激光命中概率(已启动) site 0x100d95ba off 0x288 cmp 0x43a
+  S(1, 83)  n=1  e.g. 火球主属性切换(已启动) site 0x100d96d4 off 0x290 cmp 0x43b
+  S(1, 84)  n=1  e.g. 雷电主属性切换(已启动) site 0x100d9aa5 off 0x298 cmp 0x43c
+  S(1, 85)  n=1  e.g. 雷电自定义范围(已启动) site 0x100d9d45 off 0x2a0 cmp 0x43d
+  S(1, 86)  n=1  e.g. 火球自定义范围(已启动) site 0x100d9974 off 0x2a8 cmp 0x43e
+  S(1, 87)  n=2  e.g. 冰咆哮主属性切换(已启动) site 0x100d9e76 off 0x2b0 cmp 0x43f
+  S(1, 88)  n=1  e.g. 冰咆哮范围(已启动) site 0x100da231 off 0x2b8 cmp 0x440
+  S(1, 89)  n=1  e.g. 激光范围及系数(已启动) site 0x100d931a off 0x2c0 cmp 0x441
+  S(1, 90)  n=1  e.g. 火雨主属切换(已启动) site 0x100da362 off 0x2c8 cmp 0x442
+  S(1, 91)  n=1  e.g. 嗜血术倍数(已启动) site 0x100da50d off 0x2d0 cmp 0x443
+  S(1, 92)  n=1  e.g. 嗜血术倍数(已启动) site 0x100da50d off 0x2d8 cmp 0x444
+  S(1, 95)  n=1  e.g. 野蛮等级(已启动) site 0x100db11c off 0x2f0 cmp 0x447
+  S(1, 314)  n=1  e.g. 英雄倍攻和暴击(已启动) site 0x100d49b4 off 0x184 cmp 0x522
+
+VM entries: 275
+plugin .text 0x804 insns: 8
+  0x1007af24  8B B2 04 08 00 00  mov esi, dword ptr [edx + 0x804]
+  0x1007af8a  8B B2 04 08 00 00  mov esi, dword ptr [edx + 0x804]
+  0x1007afef  8B B2 04 08 00 00  mov esi, dword ptr [edx + 0x804]
+  0x1007b055  8B B2 04 08 00 00  mov esi, dword ptr [edx + 0x804]
+  0x1007b0b8  8B B2 04 08 00 00  mov esi, dword ptr [edx + 0x804]
+  0x100dba72  8B BB 04 08 00 00  mov edi, dword ptr [ebx + 0x804]
+  0x100dba86  8B BB 04 08 00 00  mov edi, dword ptr [ebx + 0x804]
+  0x100dbb1d  8B 93 04 08 00 00  mov edx, dword ptr [ebx + 0x804]
