@@ -52,6 +52,12 @@ namespace GameSvr
                     ClientNativeNeighbourSoulStateQuery(processMessage.nParam1,
                         processMessage.nParam2, processMessage.nParam3);
                     return true;
+                case Grobal2.CM_4150:
+                    ClientNativeTaskBoardRefresh();
+                    return true;
+                case Grobal2.CM_4151:
+                    ClientNativeTaskBoardAction();
+                    return true;
                 default:
                     return false;
             }
@@ -193,6 +199,38 @@ namespace GameSvr
             }
 
             NativeCmTailFailClosed.Drop(Grobal2.CM_4128, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4150, native leaf 0x6DAF51 (`8B 45 FC` Self / `E8 CB 79 01 00`
+        /// call 0x6F2924), which is a thunk: 0x6F2924 loads the task-board object
+        /// [[0x7D5D20]] into EAX, swaps Self into EDX (`92 xchg`) and tail-calls
+        /// the real worker 0x699B68.
+        ///
+        /// 0x699B68 opens a 0xA4-dword frame and builds the task-board listing the
+        /// client renders; the native leaf then answers it as a single large SM
+        /// body. Neither the task-board object at [[0x7D5D20]] nor its per-entry
+        /// record layout exists in this port, so the body cannot be derived.
+        /// </summary>
+        private void ClientNativeTaskBoardRefresh()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4150, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4151, native leaf 0x6DAF5E, worker 0x6999D4.
+        ///
+        /// The leaf pushes Recog ([record+0]), Param (word[record+6]) and Tag
+        /// (word[record+8]), loads the task-board object [[0x7D5D20]] and Self,
+        /// then calls 0x6999D4 (a 0x13-dword-frame Delphi routine). That worker is
+        /// the task-board command entry (dispatch / accept / complete), all of
+        /// which run @Main-style script procedures against the [[0x7D5D20]] object.
+        /// None of that script machinery is ported, so the outcome and any reply
+        /// cannot be reproduced.
+        /// </summary>
+        private void ClientNativeTaskBoardAction()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4151, m_sCharName);
         }
     }
 }
