@@ -3250,8 +3250,8 @@ namespace GameSvr
             HumData.QuestUnit = m_QuestUnit == null ? Array.Empty<byte>() : (byte[])m_QuestUnit.Clone();
             HumData.QuestFlag = m_QuestFlag == null ? Array.Empty<byte>() : (byte[])m_QuestFlag.Clone();
             HumData.IntVar = Array.Empty<int>();
-            HumData.ScriptV = new Dictionary<int, int>(m_ScriptVVars);
-            HumData.ScriptS = new Dictionary<int, int>(m_ScriptSVars);
+            HumData.ScriptV = CopyKeyedScriptVars(m_ScriptVVars);
+            HumData.ScriptS = CopyKeyedScriptVars(m_ScriptSVars);
             var HumItems = new TUserItem[Grobal2.HUMAN_EQUIPPED_ITEM_COUNT];
             HumanRcd.Data.HumItems = HumItems;
             var equippedCount = Math.Min(HumItems.Length, m_UseItems?.Length ?? 0);
@@ -3294,6 +3294,24 @@ namespace GameSvr
             for (var i = 0; i < m_StorageItemList.Count; i++)
                 if (m_StorageItemList[i] != null && m_StorageItemList[i].wIndex > 0)
                     StorageItems[i] = new TUserItem(m_StorageItemList[i]);
+        }
+
+        /// <summary>
+        /// Keyed V/S banks only. group*1000+index is >= 1001 whenever both
+        /// arguments are positive (sub_6E42CC). Keys below that are group 0,
+        /// which native keeps in the inline table and never writes to the
+        /// type0/type1 sections (encoder 0x6E4DE7 / 0x6E4E19).
+        /// </summary>
+        private static Dictionary<int, int> CopyKeyedScriptVars(Dictionary<int, int> source)
+        {
+            var copy = new Dictionary<int, int>();
+            if (source == null) return copy;
+            foreach (var pair in source)
+            {
+                if (pair.Key < 1001) continue;
+                copy[pair.Key] = pair.Value;
+            }
+            return copy;
         }
 
         public void RefRankInfo(int nRankNo, string sRankName)
