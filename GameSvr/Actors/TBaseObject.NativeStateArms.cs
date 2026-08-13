@@ -191,6 +191,38 @@ namespace GameSvr
                     SendNativeStateArmMsg("你中毒了！",
                         NativeStateArmAlertColor, NativeStateArmAlertType);
                     break;
+                // 32..41 and 44 all share the 3-part concat shape of arms 21/22,
+                // differing only in the prefix literal they push.
+                case 32:
+                    // 0x741A5C  push 0x742CA0
+                    // 0x742CA0 len 18 B9A5BBF7C9CFCFC2CFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("攻击上下限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 33:
+                    // 0x741A97  push 0x742CBC
+                    // 0x742CBC len 18 C4A7B7A8C9CFCFC2CFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("魔法上下限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 34:
+                    // 0x741AD2  push 0x742CD8
+                    // 0x742CD8 len 18 B5C0CAF5C9CFCFC2CFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("道术上下限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 40:
+                    // 0x741B0D  push 0x742CF4
+                    // 0x742CF4 len 18 B7C0D3F9C9CFCFC2CFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("防御上下限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 41:
+                    // 0x741B48  push 0x742D10
+                    // 0x742D10 len 18 C4A7B7C0C9CFCFC2CFDECBB2BCE4CCE1B8DF
+                    SendNativeStateArmMsg("魔防上下限瞬间提高" + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 45:
                     // 0x741E38  66 B9 FF 38 / BA 88 2E 74 00
                     // 0x742E88 len 12 C4E3B1BBB6A8C9EDC1CBA3A1
