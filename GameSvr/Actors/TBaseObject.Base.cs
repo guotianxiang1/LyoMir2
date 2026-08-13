@@ -1005,13 +1005,32 @@ namespace GameSvr
                 //  * `jg` 只在 victimPK > 200 时跳过，所以门是 **victimPK <= 200**；
                 //    C# 写的 PKLevel() < 2 == victimPK < 200，恰好在 PK == 200 这一点上少判一次
                 //    （受害者 PK 正好 200 时原生仍然惩罚凶手，C# 放过）。
-                if (!M2Share.g_Config.boVentureServer && !m_PEnvir.Flag.boFightZone
+                // 原先这一行还有一个 `!M2Share.g_Config.boVentureServer` 全局门。
+                // 原生 0x6C081A..0x6C0865 只有三个地图旗标字节加一个 PK 阈值，
+                // 整段唯一的绝对地址读是 `0x6C085D 8B 15 AC 5F 7D 00 mov edx,[0x7D5FAC]`
+                // （PK 阈值 200），没有任何形如 `cmp byte [0x7Dxxxx],0` 的全局开关读。
+                // 全镜像多编码零命中：VentureServer / boVentureServer 在 GBK、
+                // 裸 ASCII（大小写不敏感）、UTF-16LE 三路皆 0。按 §3.1 删除。
+                if (!m_PEnvir.Flag.boFightZone
                     && !m_PEnvir.Flag.boFight3Zone && !m_PEnvir.Flag.boFREEPK)
                 {
                     if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null
                         && m_nPkPoint <= M2Share.g_Config.nPKPunishPoint)
                     {
-                        if ((m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT) || (m_LastHiter.m_btRaceServer == Grobal2.RC_NPC))//允许NPC杀死人物
+                        // 原先这里还有一条 `|| m_LastHiter.m_btRaceServer == RC_NPC`
+                        // 「允许 NPC 杀死人物」。原生 0x6C081A..0x6C088C 这段里**一条
+                        // 种族比较都没有**，凶手身份完全由 `[LastHiter.vmt+0xB4]` 的
+                        // 责任玩家解析决定：
+                        //   6C0867  8B C3 / 8B 10 / FF 92 B4 00 00 00   call [vmt+0xB4]
+                        //   6C0871  85 C0 / 74 1C                       nil    -> 不惩罚
+                        //   6C0875  80 78 73 00 / 75 16                 幽灵   -> 不惩罚
+                        //   6C087B  3B 45 FC / 74 11                    自杀   -> 不惩罚
+                        // 该段全部 8 条比较是 `test ebx,ebx` / [+0x5F] / [+0x5D] / [+0x5E] /
+                        // PK 阈值 / `test eax,eax` / [+0x73] / 自杀，没有 [+0x178]。
+                        // 字节级零命中：`cmp byte [reg+0x178],0x0A`（race == RC_NPC=10）
+                        // 全镜像只有 6 处（0x62E76D / 0x62E80F / 0x62EA9F / 0x6E1D8E /
+                        // 0x6E8A82 / 0x6E9441），无一落在死亡链内。按 §3.1 删除。
+                        if (m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
                             boPK = true;
                         }
@@ -1265,10 +1284,24 @@ namespace GameSvr
                             {
                                 ScatterBagItems(null);
                             }
-                            if (M2Share.g_Config.boDieDropGold)
-                            {
-                                ScatterGolds(null);
-                            }
+                            // 玩家死亡原生不掉金币，所以这里原先的 `boDieDropGold ->
+                            // ScatterGolds(null)` 已删除。判据是三条独立的：
+                            // ① 掉金币到地上的例程是 sub_768AAC（怪物结算 sub_71FA20
+                            //    @0x72000A `E8 9D 8A 04 00` 调它，之前是 0xBB8 上钳、
+                            //    idiv、0x7D0 分堆）。它全镜像只有 6 个 E8 调用者
+                            //    ——0x64E74A / 0x64E765 / 0x64F5C0 / 0x64F5DB / 0x6C30F9 /
+                            //    0x72000A，且 0 个字面 dword 引用（非虚派发）。
+                            //    0x6C30F9 是玩家手动丢金币那条短函数（0x6C30E1 与
+                            //    0x6C3102 两处 `29 B3 5C 01 00 00 sub [ebx+0x15C],esi`，
+                            //    0x6C3112 ret），与死亡无关。**六个里没有一个在死亡链上。**
+                            // ② 金币字段 [obj+0x15C] 的位移字节 `5C 01 00 00` 全镜像出现
+                            //    103 次，落在 TPlayer.Die(sub_6C07A0) / THumanKind.Die
+                            //    (sub_741368) / sub_73FC70 / sub_740078 里的是 **0** 次。
+                            // ③ 策略梯 sub_741368 的三条出口在 0x741498 汇合，之后只有
+                            //    0x7414DB `[self+0x37C] := 0` 和 0x741514 `dx=0x2725`
+                            //    (10021) 一个包，没有任何金币动作。
+                            // 配置名 DieDropGold / boDieDropGold 在 GBK、裸 ASCII
+                            // （大小写不敏感）、UTF-16LE 三路皆 0 命中。按 §3.1 删除。
                         }
                     }
                 }
@@ -1402,27 +1435,23 @@ namespace GameSvr
             }
             if (!BaseObject.m_boInFreePKArea)
             {
-                if (M2Share.g_Config.boPKLevelProtect)// 新人保护
-                {
-                    if (m_Abil.Level > M2Share.g_Config.nPKProtectLevel)// 如果大于指定等级
-                    {
-                        if (!BaseObject.m_boPKFlag && BaseObject.m_Abil.Level <= M2Share.g_Config.nPKProtectLevel &&
-                            BaseObject.PKLevel() < 2)// 被攻击的人物小指定等级没有红名，则不可以攻击。
-                        {
-                            result = false;
-                            return result;
-                        }
-                    }
-                    if (m_Abil.Level <= M2Share.g_Config.nPKProtectLevel)// 如果小于指定等级
-                    {
-                        if (!BaseObject.m_boPKFlag && BaseObject.m_Abil.Level > M2Share.g_Config.nPKProtectLevel && BaseObject.PKLevel() < 2)
-                        {
-                            result = false;
-                            return result;
-                        }
-                    }
-                }
-                
+                // 战神 sub_6C175C 从 0x6C17B1 的免战门到 0x6C182C 的三秒门之间**只有两条**
+                // 等级梯，就是下面这两段：
+                //   6C17BA  A1 AC 5F 7D 00 / 8B 00      eax := [[0x7D5FAC]] = 200
+                //   6C17C1  3B 83 60 01 00 00 / 7F 2A   cmp eax,[self+0x160] / jg  -> 第二梯
+                //   6C17C9  66 83 BB 78 02 00 00 14 / 76 20  self.Level <= 20      -> 第二梯
+                //   6C17D3  66 83 BF 78 02 00 00 14 / 77 16  target.Level > 20     -> 第二梯
+                //   6C17DD  3B 02 / 7D 06                    target.PK >= 200      -> 第二梯
+                //   6C17ED  C6 45 FF 00                      受保护
+                //   6C17F3  66 83 BB 78 02 00 00 14 / 77 2F  self.Level > 20       -> 三秒门
+                //   6C1804  3B 83 60 01 00 00 / 7E 20        self.PK >= 200        -> 三秒门
+                //   6C180C  3B 02 / 7C 10                    target.PK < 200       -> 三秒门
+                //   6C181C  66 83 BF 78 02 00 00 14 / 76 06  target.Level <= 20    -> 三秒门
+                //   6C1826  C6 45 FF 00                      受保护
+                // 原先这里还有一段 `boPKLevelProtect` / `nPKProtectLevel` 的「新人保护」，
+                // 在原生无任何对应：`sub_6C175C` 全函数 255 字节里没有第三条梯，
+                // 也从不读 `[+0x4B9]`（m_boPKFlag）。全镜像多编码零命中已确认那两个配置名
+                // 不存在（GBK / 裸 ASCII 大小写不敏感 / UTF-16LE 三路皆 0）。按 §3.1 删除。
                 if (PKLevel() >= 2 && m_Abil.Level > M2Share.g_Config.nRedPKProtectLevel)
                 {
                     if (BaseObject.m_Abil.Level <= M2Share.g_Config.nRedPKProtectLevel && BaseObject.PKLevel() < 2)
@@ -1581,10 +1610,12 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TBaseObject::DropUseItems";
             try
             {
-                if (m_boNoDropUseItem)
-                {
-                    return;
-                }
+                // 这里原先也有一个 `if (m_boNoDropUseItem) return;` —— 与 PKD-14 删掉的
+                // 玩家侧那一个是同一处 INVENTED 的另一半（英雄 / 怪物走的是这条基类实现）。
+                // sub_73FC70 的序言到 0x73FCB6 那条 `7D 09 jge` 之间没有任何条件跳转，
+                // 上游 sub_741368 的策略梯只读六个地图旗标字节。NoDropUseItem /
+                // boNoDropUseItem / DropUseItem 全镜像 GBK、裸 ASCII（大小写不敏感）、
+                // UTF-16LE 三路皆 0 命中。按 §3.1 删除。
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
                     nC = 0;
@@ -1678,10 +1709,32 @@ namespace GameSvr
                                 ClientItemID = (this as TPlayObject)?.EnsureClientItemId(destroyed) ?? destroyed.ClientItemID
                             });
                         }
-                        // 0x73FF0B `call sub_75F3E8` clears the slot (0x75F40F
-                        // `mov [esi+eax*4+8],0`) — the object leaves the slot and is freed,
-                        // it is NOT left as a zombie entry with wIndex = 0.
-                        m_UseItems[nC] = null;
+                        // ★ 原生缺陷，照抄，不要"顺手修好"（REPLICATION_RULES §3.1）★
+                        // 装备销毁支**不清槽位**。sub_73FC70 的这条支路末尾是：
+                        //   0x73FEB4  8B 4D 94 / 66 BA 5E 00 / 8B C6
+                        //   0x73FEBD  E8 1E 8D 02 00   call sub_768BE0   ; 日志 dx=0x5E
+                        //   0x73FEC2  8B C7            mov eax,edi       ; edi = 该 TUserItem
+                        //   0x73FEC4  E8 C7 47 CC FF   call sub_404690   ; TObject.Free
+                        //   0x73FEC9  E9 A1 00 00 00   jmp 0x73FF6F      ; -> inc ebx，下一格
+                        // Free 之后直接跳到 `inc ebx`，[self+0x4C0] 的第 ebx 格仍然指向
+                        // 已释放的对象 —— 这是真悬垂指针。
+                        // 同函数另外两条支路都清槽，所以这不是我读漏了：
+                        //   Reserved02&8 支 0x73FD86/0x73FD8C call sub_75F27C
+                        //                 (0x75F2BB `89 54 83 08  mov [ebx+eax*4+8],0`)
+                        //   落地支       0x73FF0B/0x73FF11 call sub_75F3E8
+                        //                 (0x75F40F `89 54 86 08  mov [esi+eax*4+8],0`)
+                        // 背包 worker 的同名销毁支也清：0x74019D `E8 8E 49 CE FF
+                        // call sub_424B30` 先从 [self+0x508] 摘除，再在 0x74021E 才 Free。
+                        // 唯独装备这一支漏了。
+                        // 此处原先写 `m_UseItems[nC] = null;`，并引用 0x73FF0B 当依据——
+                        // 那个 VA 属于**落地支**，不是这一支（§4.6 那类张冠李戴）。
+                        // C# 里照抄的方式就是保留槽位引用：Dispose(obj) 本身是空操作
+                        // （TBaseObject.cs `internal void Dispose(object obj) { obj = null; }`
+                        // 只赋值形参），对象不会被回收也不会被复用，所以保留引用等价于
+                        // 原生"槽位仍指向那块内存"，且不会引入别名/复制风险。
+                        // 玩家可见后果：未验证 / 赠品装备在死亡时被判销毁、10148 包告诉
+                        // 客户端它没了，但服务端这一格仍然装着它 —— 属性重算与存档都还算它。
+                        // 原版就是这个样子。
                         if (!string.IsNullOrEmpty(notice))
                         {
                             SysMsg(notice + " "

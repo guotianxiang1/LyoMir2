@@ -3109,10 +3109,18 @@ namespace GameSvr
             IList<TDeleteItem> delList = null;
             try
             {
-                if (m_boAngryRing || m_boNoDropUseItem)
-                {
-                    return;
-                }
+                // 战神 sub_73FC70 的序言同样没有任何早退。0x73FC70..0x73FCB6：
+                //   73FC70  55 / 8B EC / 83 C4 8C          栈帧
+                //   73FC76  53 56 57                       push ebx,esi,edi
+                //   73FC79  33 D2 + 七条 mov [ebp-…],edx   七个局部清零
+                //   73FC90  8B F0                          esi := self
+                //   73FC94  55 / 68 01 00 74 00 / 64 FF 30 / 64 89 20   SEH 帧
+                //   73FCA0  33 C0 / 89 45 F4 / C6 45 FF 00 计数与红名局部清零
+                //   73FCA9  A1 AC 5F 7D 00 / 8B 00 / 3B 86 60 01 00 00
+                //   73FCB6  7D 09                          jge 0x73FCC1  ← 全函数第一条条件跳转
+                // 原先这里的 `m_boAngryRing || m_boNoDropUseItem` 早退在原生无对应，
+                // 全镜像多编码零命中（GBK / 裸 ASCII 大小写不敏感 / UTF-16LE 三路皆 0）。
+                // 按 §3.1 删除：原版死亡就是照掉装备，没有不死戒指这一说。
                 GoodItem StdItem;
                 // 人物爆率调整 patches sub_73FC70, not a runtime multiplier:
                 //   0x100B9CCC A3 BB FC 73 00 -> imm32 of 0x73FCB8 C7 45 F8 15 00 00 00 (red K)
@@ -3194,11 +3202,21 @@ namespace GameSvr
                     {
                         continue;
                     }
-                    if (M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
-                    {
-                        continue;
-                    }
-                    
+                    // 原先这里还有一次 `InDisableTakeOffList(wIndex)` 查表。战神
+                    // sub_73FC70 的整个循环体 0x73FD29..0x73FF73 里没有任何按物品编号
+                    // 查表的动作，抽签之后紧接的就是分流：
+                    //   73FD99  E8 AE 3D CC FF        call sub_403B4C   ; Random(K)
+                    //   73FD9E  85 C0 / 74 0D         test eax,eax / je -> 通过
+                    //   73FDA2  80 BF FC 00 00 00 00  cmp byte [item+0xFC],0 / 0F 84 …
+                    //   73FDAF  80 BE 78 01 00 00 00  cmp byte [self+0x178],0
+                    //   73FDB6  0F 85 12 01 00 00     jne 0x73FECE      ; 非玩家 -> 落地支
+                    //   73FDBC  A1 34 65 7D 00 …      sub_617A38(…, cl=4) 实名认证
+                    //   73FDD0  80 BF D8 00 00 00 00  cmp byte [item+0xD8],0  ; 赠品
+                    // 剩下的过滤全部走 `[std+2]` / `[std+3]` 的位与 sub_78389C，
+                    // 没有第二张按 wIndex 索引的名单。
+                    // 全镜像多编码零命中：DisableTakeOffList / DisableTakeOffList.txt /
+                    // TakeOffList 三个名字在 GBK、裸 ASCII（大小写不敏感）、UTF-16LE
+                    // 三路皆 0。按 §3.1 删除。
                     if (DropItemDown(m_UseItems[i], 2, true, BaseObject, this))
                     {
                         StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
