@@ -117,7 +117,13 @@ namespace GameSvr
                 nOldY = this.m_nCurrY;
                 this.WalkTo(nDir, false);
                 n20 = M2Share.RandomNumber.Random(3);
-                for (var i = Grobal2.DR_UP; i <= Grobal2.DR_UPLEFT; i++)
+                // MONAI-12 — GotoTargetXY sub_71DDD0 的转向重试是 7 次，不是 8：
+                //   0071DE93  C7 45 F4 07 00 00 00  mov  [ebp-0xC],7
+                //   0071DE9A  ...（循环体：仍在原地才改向再 WalkTo）
+                //   0071DEDB  FF 4D F4              dec  [ebp-0xC]
+                //   0071DEDE  75 BA                 jne  0x71DE9A
+                // C# 原先 `for i = DR_UP..DR_UPLEFT`（0..7 含）多试一次方向。
+                for (var i = 0; i < 7; i++)
                 {
                     if (nOldX == this.m_nCurrX && nOldY == this.m_nCurrY)
                     {
@@ -237,7 +243,7 @@ namespace GameSvr
             m_nTargetY = -1;
         }
 
-        protected virtual void SearchTarget()
+        protected virtual bool SearchTarget()
         {
             TBaseObject BaseObject = null;
             TBaseObject BaseObject18 = null;
@@ -246,6 +252,8 @@ namespace GameSvr
             for (var i = 0; i < this.m_VisibleActors.Count; i++)
             {
                 BaseObject = this.m_VisibleActors[i].BaseObject;
+                // MONAI-13 — sub_71DA70 扫描臂用 sub_772DA8 = `mov al,[eax+0x74]; ret`
+                // （TBaseObject.cs 已钉 +0x74 = m_boDeath），不是 +0x73 ghost。
                 if (!BaseObject.m_boDeath)
                 {
                     if (this.IsProperTarget(BaseObject) && (!BaseObject.m_boHideMode || this.m_boCoolEye))
@@ -268,7 +276,10 @@ namespace GameSvr
             if (BaseObject18 != null)
             {
                 this.SetTargetCreat(BaseObject18);
+                // 0071DC04  C6 45 FB 01  mov byte [ebp-5],1  then 0071DCA8  8A 45 FB  mov al,[ebp-5]
+                return true;
             }
+            return false;
         }
 
         protected void sub_4C959C()

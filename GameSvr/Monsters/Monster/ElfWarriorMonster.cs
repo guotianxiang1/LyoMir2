@@ -57,10 +57,11 @@ namespace GameSvr
         //   66A5AD  mov edx,0x1F4 ; sub edx,eax  ; 500 - lvl*50
         //   66A5B4  mov [ebx+0x324],edx          ; m_nWalkSpeed
         //   66A5BA  call sub_408340 ; add 0x7D0  ; m_dwWalkTick = tick+2000
-        protected override void SearchTarget()
+        protected override bool SearchTarget()
         {
-            base.SearchTarget();
+            var result = base.SearchTarget();
             ResetElfMon();
+            return result;
         }
 
         private void ResetElfMon()
