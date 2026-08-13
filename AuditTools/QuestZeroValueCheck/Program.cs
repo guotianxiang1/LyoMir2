@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -7,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using GameSvr;
 using GameSvr.PasEngine;
+using SystemModule;
 
 namespace AuditTools.QuestZeroValueCheck
 {
@@ -41,6 +41,8 @@ namespace AuditTools.QuestZeroValueCheck
                 Diagnose("before-new-TPlayObject");
                 _ = new TPlayObject();
                 Diagnose("after-new-TPlayObject");
+                // The loader half of the round trip is an instance method on UserEngine.
+                M2Share.UserEngine ??= new UserEngine();
             }
             catch (Exception ex)
             {
@@ -87,128 +89,185 @@ namespace AuditTools.QuestZeroValueCheck
             }
         }
 
+        // The real script-variable writer: PasApiBridge.SetPlayerVar(player, type, group,
+        // index, value) — private static, so a bare TPlayObject is enough to drive it.
+        static readonly MethodInfo SetPlayerVarMethod =
+            typeof(PasApiBridge).GetMethod("SetPlayerVar",
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public,
+                null,
+                new[] { typeof(TPlayObject), typeof(char), typeof(int), typeof(int), typeof(PasValue) },
+                null);
+
+        // The real script-variable reader (native GetV/GetS, sub_6DF1E4): a keyed miss
+        // yields NativeScriptVarMiss (-1), which is what a wrongly-erased 0 degrades into.
+        static readonly MethodInfo GetPlayerVarMethod =
+            typeof(PasApiBridge).GetMethod("GetPlayerVar",
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public,
+                null,
+                new[] { typeof(TPlayObject), typeof(char), typeof(int), typeof(int) },
+                null);
+
+        static bool SetVar(TPlayObject player, char bank, int group, int index, int value) =>
+            (bool)SetPlayerVarMethod.Invoke(null,
+                new object[] { player, bank, group, index, PasValue.FromInt(value) });
+
+        static int GetVar(TPlayObject player, char bank, int group, int index) =>
+            ((PasValue)GetPlayerVarMethod.Invoke(null,
+                new object[] { player, bank, group, index })).AsInt();
+
         static int CheckSetPlayerVarImplementation()
         {
-            // Use reflection to check the SetPlayerVar method source
-            // We'll verify by testing actual behavior since we can't easily inspect source
-            Console.WriteLine("  Checking writer behavior via reflection/testing...");
+            // This used to write into a locally constructed Dictionary<int,int> and then
+            // assert that Dictionary had stored the zero — a tautology that passed no
+            // matter what the product did. It now drives the REAL writer and the REAL
+            // reader, so re-introducing the QST-30 zero erasure fails it.
+            Console.WriteLine("  Driving the real PasApiBridge.SetPlayerVar / GetPlayerVar...");
+
+            if (SetPlayerVarMethod == null || GetPlayerVarMethod == null)
+            {
+                Console.WriteLine("  [FAIL] PasApiBridge.SetPlayerVar/GetPlayerVar not found — "
+                    + "the writer this audit guards no longer exists in that shape");
+                return 1;
+            }
 
             var player = new TPlayObject();
-            player.m_ScriptVVars = new Dictionary<int, int>();
-            player.m_ScriptSVars = new Dictionary<int, int>();
 
-            // Simulate SetV(1, 5, 0) and SetS(2, 10, 0)
-            int keyV = 1 * 1000 + 5; // 1005
-            int keyS = 2 * 1000 + 10; // 2010
+            // Keyed banks only: group-0 V is the inline +0x808 array, a different store.
+            SetVar(player, 'V', 1, 5, 0);
+            SetVar(player, 'S', 2, 10, 0);
+            SetVar(player, 'V', 1, 6, 77);   // control: a non-zero neighbour must survive
 
-            player.m_ScriptVVars[keyV] = 0;
-            player.m_ScriptSVars[keyS] = 0;
+            int failures = 0;
 
-            // Verify zero values are stored, not removed
-            bool v_contains = player.m_ScriptVVars.ContainsKey(keyV);
-            bool s_contains = player.m_ScriptSVars.ContainsKey(keyS);
-
-            if (v_contains && player.m_ScriptVVars[keyV] == 0)
+            if (player.m_ScriptVVars != null && player.m_ScriptVVars.TryGetValue(1005, out var vStored)
+                && vStored == 0)
             {
-                Console.WriteLine("  [PASS] m_ScriptVVars stores zero value (key=1005, value=0)");
+                Console.WriteLine("  [PASS] real SetV(1,5,0) filed key 1005 with value 0");
             }
             else
             {
-                Console.WriteLine($"  [FAIL] m_ScriptVVars does not store zero correctly (contains={v_contains})");
-                return 1;
+                Console.WriteLine("  [FAIL] real SetV(1,5,0) did not file a zero at key 1005 "
+                    + $"(present={player.m_ScriptVVars?.ContainsKey(1005)})");
+                failures++;
             }
 
-            if (s_contains && player.m_ScriptSVars[keyS] == 0)
+            if (player.m_ScriptSVars != null && player.m_ScriptSVars.TryGetValue(2010, out var sStored)
+                && sStored == 0)
             {
-                Console.WriteLine("  [PASS] m_ScriptSVars stores zero value (key=2010, value=0)");
+                Console.WriteLine("  [PASS] real SetS(2,10,0) filed key 2010 with value 0");
             }
             else
             {
-                Console.WriteLine($"  [FAIL] m_ScriptSVars does not store zero correctly (contains={s_contains})");
-                return 1;
+                Console.WriteLine("  [FAIL] real SetS(2,10,0) did not file a zero at key 2010 "
+                    + $"(present={player.m_ScriptSVars?.ContainsKey(2010)})");
+                failures++;
             }
 
-            return 0;
+            // The player-visible consequence: an erased 0 reads back as the -1 miss value,
+            // which flips every `= 0` quest condition in the scripts.
+            var vRead = GetVar(player, 'V', 1, 5);
+            var sRead = GetVar(player, 'S', 2, 10);
+            if (vRead == 0 && sRead == 0)
+            {
+                Console.WriteLine("  [PASS] real GetV/GetS return 0, not the -1 keyed miss");
+            }
+            else
+            {
+                Console.WriteLine($"  [FAIL] real GetV(1,5)={vRead}, GetS(2,10)={sRead}; "
+                    + "a stored 0 must not read back as the -1 miss");
+                failures++;
+            }
+
+            if (GetVar(player, 'V', 1, 6) == 77)
+            {
+                Console.WriteLine("  [PASS] non-zero neighbour V(1,6)=77 unaffected");
+            }
+            else
+            {
+                Console.WriteLine("  [FAIL] non-zero neighbour V(1,6) was disturbed");
+                failures++;
+            }
+
+            return failures == 0 ? 0 : 1;
         }
 
         static int CheckLoaderImplementation()
         {
-            // Verify that Dictionary assignment doesn't skip zero values
-            Console.WriteLine("  Simulating loader behavior...");
+            // Was: copy one local Dictionary into another and assert the copy worked.
+            // Now: the REAL save -> load round trip, which is the only way to catch the
+            // QST-30 shape where the writer keeps 0 but the loader drops it on next login
+            // (write / persist / load must all agree — REPLICATION_RULES 4.19).
+            Console.WriteLine("  Driving the real MakeSaveRcd -> UserEngine.GetHumData round trip...");
 
-            var sourceV = new Dictionary<int, int>
+            var getHumData = typeof(UserEngine).GetMethod("GetHumData",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (getHumData == null)
             {
-                { 1001, 10 },
-                { 1002, 0 },   // Zero value
-                { 1003, 25 }
-            };
-
-            var sourceS = new Dictionary<int, int>
-            {
-                { 2001, 100 },
-                { 2002, 0 },   // Zero value
-                { 2003, 50 }
-            };
-
-            var targetV = new Dictionary<int, int>();
-            var targetS = new Dictionary<int, int>();
-
-            // Simulate the fixed loader code (no 'if value != 0' check)
-            foreach (var variable in sourceV)
-            {
-                targetV[variable.Key] = variable.Value;
-            }
-
-            foreach (var variable in sourceS)
-            {
-                targetS[variable.Key] = variable.Value;
-            }
-
-            // Verify all values including zeros are loaded
-            bool v_has_zero = targetV.ContainsKey(1002) && targetV[1002] == 0;
-            bool s_has_zero = targetS.ContainsKey(2002) && targetS[2002] == 0;
-            bool v_count_correct = targetV.Count == 3;
-            bool s_count_correct = targetS.Count == 3;
-
-            if (v_has_zero && v_count_correct)
-            {
-                Console.WriteLine("  [PASS] ScriptV loader preserves zero values (3 entries including 0)");
-            }
-            else
-            {
-                Console.WriteLine($"  [FAIL] ScriptV loader issue (has_zero={v_has_zero}, count={targetV.Count})");
+                Console.WriteLine("  [FAIL] UserEngine.GetHumData not found — "
+                    + "the loader this audit guards no longer exists in that shape");
                 return 1;
             }
 
-            if (s_has_zero && s_count_correct)
+            var saved = new TPlayObject();
+            SetVar(saved, 'V', 1, 2, 0);     // the zero under test
+            SetVar(saved, 'V', 1, 1, 10);    // controls either side of it
+            SetVar(saved, 'V', 1, 3, 25);
+            SetVar(saved, 'S', 2, 2, 0);
+            SetVar(saved, 'S', 2, 1, 100);
+
+            var record = new THumDataInfo();
+            saved.MakeSaveRcd(ref record);
+
+            var reloaded = new TPlayObject();
+            getHumData.Invoke(M2Share.UserEngine, new object[] { reloaded, record });
+
+            int failures = 0;
+
+            if (GetVar(reloaded, 'V', 1, 2) == 0 && GetVar(reloaded, 'V', 1, 1) == 10
+                && GetVar(reloaded, 'V', 1, 3) == 25)
             {
-                Console.WriteLine("  [PASS] ScriptS loader preserves zero values (3 entries including 0)");
+                Console.WriteLine("  [PASS] ScriptV survives save+load with the zero intact");
             }
             else
             {
-                Console.WriteLine($"  [FAIL] ScriptS loader issue (has_zero={s_has_zero}, count={targetS.Count})");
-                return 1;
+                Console.WriteLine("  [FAIL] ScriptV round trip lost the zero: "
+                    + $"V(1,1)={GetVar(reloaded, 'V', 1, 1)} "
+                    + $"V(1,2)={GetVar(reloaded, 'V', 1, 2)} (must be 0, not -1) "
+                    + $"V(1,3)={GetVar(reloaded, 'V', 1, 3)}");
+                failures++;
             }
 
-            return 0;
+            if (GetVar(reloaded, 'S', 2, 2) == 0 && GetVar(reloaded, 'S', 2, 1) == 100)
+            {
+                Console.WriteLine("  [PASS] ScriptS survives save+load with the zero intact");
+            }
+            else
+            {
+                Console.WriteLine("  [FAIL] ScriptS round trip lost the zero: "
+                    + $"S(2,1)={GetVar(reloaded, 'S', 2, 1)} "
+                    + $"S(2,2)={GetVar(reloaded, 'S', 2, 2)} (must be 0, not -1)");
+                failures++;
+            }
+
+            return failures == 0 ? 0 : 1;
         }
 
         static int TestRuntimeBehavior()
         {
-            Console.WriteLine("  Testing write-read cycle...");
+            // Was: a local Dictionary written and read back by the test itself. Now the
+            // same four cases go through the real writer/reader pair, so a stored 0 and an
+            // absent key are distinguished by the product, not by the harness.
+            Console.WriteLine("  Testing the real write-read cycle...");
 
-            var storage = new Dictionary<int, int>();
+            var player = new TPlayObject();
+            SetVar(player, 'V', 5, 123, 42);   // Normal value
+            SetVar(player, 'V', 7, 1, 0);      // Zero value
+            SetVar(player, 'V', 9, 999, -1);   // Negative value
 
-            // Write operations
-            storage[5123] = 42;  // Normal value
-            storage[7001] = 0;   // Zero value
-            storage[9999] = -1;  // Negative value
-
-            // Read operations (native returns -1 for missing keys)
-            int read1 = storage.TryGetValue(5123, out int v1) ? v1 : -1;
-            int read2 = storage.TryGetValue(7001, out int v2) ? v2 : -1;
-            int read3 = storage.TryGetValue(9999, out int v3) ? v3 : -1;
-            int read4 = storage.TryGetValue(8888, out int v4) ? v4 : -1; // Missing key
+            int read1 = GetVar(player, 'V', 5, 123);
+            int read2 = GetVar(player, 'V', 7, 1);
+            int read3 = GetVar(player, 'V', 9, 999);
+            int read4 = GetVar(player, 'V', 8, 888);  // never written
 
             bool test1 = (read1 == 42);
             bool test2 = (read2 == 0);   // Zero stored, not -1
@@ -278,6 +337,13 @@ namespace AuditTools.QuestZeroValueCheck
                 "[PlayerLevelExp]" + Environment.NewLine);
             File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
                 "[Integer]" + Environment.NewLine);
+
+            // TBaseObject's ctor ends in M2Share.ObjectManager.RegisterConstructed(this)
+            // (TBaseObject.cs:903), so the singleton must exist before a real actor can be
+            // built. Same minimal set the InProc harnesses boot: no threads, no network.
+            M2Share.g_Config ??= new GameSvrConfig();
+            M2Share.RandomNumber ??= RandomNumber.GetInstance();
+            M2Share.ObjectManager ??= new ObjectManager();
         }
 
     }

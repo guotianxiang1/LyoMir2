@@ -435,4 +435,11 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+
+    // HeroObject.TrySetNativeLevel reaches TBaseObject.SendMsg, which locks
+    // M2Share.ProcessMsgCriticalSection (TBaseObject.cs:3532). Only GameApp assigns it in
+    // a real boot, so without it Monitor.Enter(null) threw and the level/exp assertions
+    // never ran. Nothing is queued out of the process.
+    M2Share.ProcessMsgCriticalSection ??= new object();
+    M2Share.LogMsgCriticalSection ??= new object();
 }
