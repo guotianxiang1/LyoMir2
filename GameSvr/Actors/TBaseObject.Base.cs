@@ -1294,6 +1294,11 @@ namespace GameSvr
                         // where 0x71E3B7 puts it.
                         if (!scatterBlocked)
                         {
+                            // 战神 sub_71FA20 段3「世界掉落」0x71FEA7-0x71FFA7，夹在
+                            // 段2 的落地循环与 0x71FFAD 的金币结算之间，同受那三道门
+                            // 约束（三条失败臂都跳 0x720092）。查表走单例
+                            // [0x7D71F4] -> sub_752CAC，与掉落控制 sub_720278 无关。
+                            NativeWorldScatter.Scatter(this, scatteredItems);
                             ScatterGolds(AttackBaseObject, scatteredItems,
                                 nativeMonsterScatter: true);
                         }

@@ -23,6 +23,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeMagicTowerCheckMonAndItemCheck")]
 [assembly: InternalsVisibleTo("NativeDropControlParserCheck")]
 [assembly: InternalsVisibleTo("NativeDropControlRuntimeCheck")]
+[assembly: InternalsVisibleTo("NativeWorldScatterCheck")]
 [assembly: InternalsVisibleTo("NativeMagicTowerPrizeCheck")]
 [assembly: InternalsVisibleTo("NativeMagicTowerWantWarMonCheck")]
 [assembly: InternalsVisibleTo("NativePileUpItemCompatCheck")]
