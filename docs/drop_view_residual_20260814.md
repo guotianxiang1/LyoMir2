@@ -97,6 +97,13 @@
 
 ## 2. SPWN-56 视野谓词 —— **DIVERGENT，只报不改（fail-closed）**
 
+> **2026-08-14 已被 `docs/view_searchrange_predicate_20260814.md` 取代（本节结论已推翻）。**
+> 本节 §2.3 的「照搬即净回归」只对**替换**成立，对**并联**不成立：`age>=60s || !Valid`
+> 是单调的——`Valid` 为真时行为逐位不变，60 秒 GC 完整保留；`Valid` 为假时才新增摘链，
+> 而那正是原生 `0x77A2EB` 要做的事。谓词已按并联落地（`w/view56`），并接入全部 4 个拷贝。
+> 另：本节把 C# 的 `m_boDeath` 排除在分歧点之外是对的，但没指出 `TPlayObject.SearchViewRange`
+> 这个真正跑玩家路径的 override 压根没有 `m_boDeath`。
+
 ### 2.1 原生语义（本轮独立复核，且比分片记载更明确）
 
 `sub_765D64` 逐字节：
