@@ -314,5 +314,32 @@ namespace GameSvr
                 SmIdentConstsA.SM_3325_Series);
             return (header, msg ?? string.Empty);
         }
+
+        // ------------------------------------------------------------------
+        // FAIL-CLOSED (3000-3600 native SM idents whose body layout is not
+        // recoverable from evidence alone -> no builder is fabricated).
+        //
+        //  SM 3283 (0xCD3) @0x6E65BB slot 0x254 - body is the return of an
+        //      opaque per-object serializer `call [obj+0x34]` (obj composed from
+        //      a 5-slot array via 0x75339C); length = dyn-array Length (0x791F3C).
+        //      The +0x34 record layout is not modeled in C#.
+        //  SM 3291 (0xCDB) @0x6DA925 slot 0x254 - body is 0x1C (28) raw bytes
+        //      copied verbatim from `target+0x554`. That record layout has not
+        //      been reversed (see TPlayObject.Base.cs; CM 1280 is still MISSING).
+        //  SM 3313 (0xCF1) @0x6EB25A slot 0x254 - body is `call [obj+0x34]`
+        //      serializer output (obj from 0x754D40), dyn length; Series = esi.
+        //      Same opaque serializer as 3283.
+        //  SM 3324 (0xCFC) @0x746A3F slot 0x250 - login/shape sync sibling of
+        //      3325 reading self+0x60C / self+0x610. Already a DELIBERATE
+        //      fail-closed in TPlayObject.NativeLogonStateSync.cs (fields
+        //      UNMAPPED); left untouched to honor that decision.
+        //  SM 3332 (0xD04) @0x6CBDC0 slot 0x254 - body is `call [obj+0x34]`
+        //      serializer output (obj from 0x74C2FC by id=edi), dyn length;
+        //      Recog = edi. Same opaque serializer.
+        //  SM 3452 (0xD7C) @0x699DBA slot 0x254 - body is a fixed 0x369 (873)
+        //      byte aggregate at [ebp-0x371] filled by several opaque VMT calls
+        //      ([eax+0x6A]/[eax+0x48]/[eax+0x33]) plus 0x41A65C; the 873-byte
+        //      field layout is not recoverable within scope.
+        // ------------------------------------------------------------------
     }
 }
