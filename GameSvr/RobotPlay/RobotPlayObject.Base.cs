@@ -482,9 +482,9 @@ namespace GameSvr
                                             case CellType.OS_ITEMOBJECT:
                                                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                                                 {
-                                                    // 战神 sub_77A178 expiry ladder — see
-                                                    // NativeMapItemExpiry (0xDBBA0 = 15 min,
-                                                    // +0x0D == 0 -> never expires).
+                                                    // 战神 sub_77A178 cell tag 2 @0x77A3D9 —
+                                                    // one flat 0x927C0 = 600_000 ms limit
+                                                    // (@0x77A3FD).  See NativeMapItemExpiry.
                                                     if (HasFloorItemExpired(OSObject.CellObj,
                                                             HUtil32.GetTickCount() - OSObject.dwAddTime,
                                                             floorItemClearTimeout))

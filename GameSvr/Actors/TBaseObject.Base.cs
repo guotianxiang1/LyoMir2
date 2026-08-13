@@ -773,6 +773,60 @@ namespace GameSvr
             }
         }
 
+        /// <summary>
+        /// 战神 <c>sub_71FA20</c> (@AfterScatterItems) @0x71FAD7-0x71FB19 — the three
+        /// abort tests the whole scatter routine opens with.  Any one of them takes the
+        /// 0x71FAF7 branch which ends in <c>jmp 0x720092</c>, and 0x720092 is the outer
+        /// exception-frame exit that sits PAST the function's own <c>ret</c> at
+        /// 0x7200B7 — so nothing after it runs:
+        ///
+        /// <code>
+        /// 71FAB4  cmp dword [ebp-8],0        / je  0x71FB2E   ; killer nil -> no tier logic
+        /// 71FACE  cmp byte [killer+0x178],0  / jne 0x71FB2E   ; non-player race -> ditto
+        /// 71FAD7  mov ebx,[ebp-8]
+        /// 71FADA  cmp byte [ebx+0x1828],3    / je  0x71FAF7   ; fatigue tier 3
+        /// 71FAE3  cmp byte [ebx+0x1829],3    / je  0x71FAF7   ; cheat-penalty tier 3
+        /// 71FAEC  mov eax,ebx / call 0x6D7788                 ; = TestStatus(killer,0x19)
+        /// 71FAF3  test al,al                 / jne 0x71FAF7
+        /// 71FB19  jmp 0x720092                                ; whole function exits
+        /// </code>
+        ///
+        /// <c>sub_6D7788</c> is a one-line thunk: <c>mov dl,0x19 / call 0x772960</c>, i.e.
+        /// active-state 25, so it maps to <see cref="HasNativeActiveState"/>(25).
+        ///
+        /// What the exit skips is exactly the four scatter segments (exclusive chain
+        /// @0x71FB2E, the monster's own table @0x71FCFF, world drop @0x71FEA7, gold
+        /// settlement @0x71FFAD) plus the @AfterScatterItems script callback at 0x720062.
+        /// It does NOT cover DropUseItems / ScatterBagItems — those are separate native
+        /// workers reached from the Die ladder, not from sub_71FA20.
+        ///
+        /// The same tier pair was already honoured on the mining path
+        /// (TPlayObject.PileStones, native 0x6BC202 / 0x6BC21E) but the drop path had
+        /// neither test, so a tier-3 account kept 100% of item drops and 100% of gold —
+        /// the one economic sink the anti-fatigue / anti-cheat system has.
+        ///
+        /// The native abort branch additionally emits a log record through
+        /// <c>sub_768BE0</c> -> <c>sub_79D3D8</c> (a 0xBC-byte record stamped with magic
+        /// 0x33AABB77 and kind byte 0xA2) carrying the GBK literals "怪物爆出被防沉迷"
+        /// (0x7200D0, length prefix 16) and "被防沉迷" (0x7200EC, length prefix 8).  That
+        /// is a log-service record, not an SM_* packet, and its field layout is not
+        /// established (SPWN-30 / SPWN-31 are BLOCKED on the ecx/pushed-parameter
+        /// identities), so it is deliberately not reproduced here rather than guessed at.
+        /// </summary>
+        private static bool NativeAfterScatterItemsBlocked(TBaseObject killer)
+        {
+            // 0x71FAB4 + 0x71FACE: only a non-nil, RC_PLAYOBJECT killer reaches the tests.
+            if (killer == null || killer.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
+                return false;
+            if (killer is TPlayObject player
+                && (player.m_btNativeFatigueTier == 3
+                    || player.m_btNativeCheatPenaltyTier == 3))
+            {
+                return true;
+            }
+            return killer.HasNativeActiveState(25);
+        }
+
         public virtual void Die()
         {
             int tExp;
@@ -1092,25 +1146,38 @@ namespace GameSvr
                     if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
-                        NativeDropControlRuntime.RunInNativeOrder(
-                            () => NativeDropControlRuntime.TryScatter(this,
-                                AttackBaseObject, scatteredItems),
-                            () =>
-                            {
-                                if (this is not HeroObject)
-                                    M2Share.UserEngine.MonGetRandomItems(this, AttackBaseObject);
-                            });
+                        var scatterBlocked =
+                            NativeAfterScatterItemsBlocked(AttackBaseObject);
+                        if (!scatterBlocked)
+                        {
+                            // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
+                            // MonItemsTree exclusive chain runs FIRST, before the
+                            // monster's own drop table at 0x71FCFF.  The C# code for it
+                            // existed but had no caller in the whole tree, so every
+                            // MonItemsTree.txt row produced nothing.
+                            M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
+                                AttackBaseObject, this, scatteredItems);
+                            NativeDropControlRuntime.RunInNativeOrder(
+                                () => NativeDropControlRuntime.TryScatter(this,
+                                    AttackBaseObject, scatteredItems),
+                                () =>
+                                {
+                                    if (this is not HeroObject)
+                                        M2Share.UserEngine.MonGetRandomItems(this, AttackBaseObject);
+                                });
+                        }
                         DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {
                             ScatterBagItems(AttackBaseObject, scatteredItems);
                         }
-                        if (m_btRaceServer >= Grobal2.RC_ANIMAL && m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
+                        if (!scatterBlocked && m_btRaceServer >= Grobal2.RC_ANIMAL && m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {
-                            ScatterGolds(AttackBaseObject, scatteredItems);
+                            ScatterGolds(AttackBaseObject, scatteredItems,
+                                nativeMonsterScatter: true);
                         }
 
-                        if (AttackBaseObject is TPlayObject player && !player.m_boGhost)
+                        if (!scatterBlocked && AttackBaseObject is TPlayObject player && !player.m_boGhost)
                         {
                             M2Share.PasEngine?.TryCallAfterScatterItems(this, player, scatteredItems);
                         }

@@ -2461,20 +2461,46 @@ namespace GameSvr
                             TUserItem UserItem = null;
                             if (CopyToUserItemFromName(MonItem.ItemName, ref UserItem))
                             {
+                                // 战神's only per-item initialisation hook on the drop
+                                // path is the freshly-built object's virtual +0x28,
+                                // invoked once with edx=0 at 0x71FDA2 (this loop) and
+                                // 0x71FBD5 (the exclusive chain):
+                                //   71FD9B  33 D2              xor edx,edx
+                                //   71FD9D  8B 45 D8           mov eax,[ebp-0x28]
+                                //   71FDA0  8B 08              mov ecx,[eax]
+                                //   71FDA2  FF 51 28           call dword [ecx+0x28]
+                                // For the base item class that slot is sub_783EFC, and
+                                // sub_783EFC is exactly this line:
+                                //   783F05  B8 50 00 00 00     mov eax,0x50      ; 80
+                                //   783F0A  E8 3D FC C7 FF     call 0x403B4C     ; Random
+                                //   783F0F  83 C0 14           add eax,0x14      ; +20
+                                //   783F18  0F B7 43 28        movzx eax,word [ebx+0x28] ; DuraMax
+                                //   783F22  D8 35 38 3F 78 00  fdiv dword [0x783F38]     ; 100.0f
+                                //   783F28  DE C9              fmulp st(1)
+                                //   783F2A  E8 45 F6 C7 FF     call 0x403574     ; @ROUND
+                                //   783F2F  66 89 43 26        mov word [ebx+0x26],ax    ; Dura
+                                // sub_783EFC sits in VMT slot +0x28 of 116 item classes;
+                                // every one of the 116 dword references passes the Delphi
+                                // self-pointer test dword[VMT-0x4C]==VMT and the
+                                // slot-offset histogram over all of them is {0x28: 116}.
+                                // So this Random(80) is native and stays.
+                                //
+                                // What did NOT survive is the pair of stock-Mir2 rolls
+                                // that used to follow it: `Random(nMonRandomAddValue)==0
+                                // -> RandomUpgradeItem` and the StdMode/Shape gate into
+                                // RandomUpgradeUnknownItem.  Neither has a counterpart in
+                                // 战神 — the drop function has exactly three Random call
+                                // sites (0x71FB76, 0x71FD3D, 0x71FD6B, all in the two
+                                // gold branches), the factory sub_74C338 has none, and
+                                // every config key those two paths read
+                                // (MonRandomAddValue, WeaponDCAddValue*, UnknowHelMet*)
+                                // is 0-hit across the whole image in GBK, bare ASCII and
+                                // UTF-16LE.  战神 does randomise extra attributes on some
+                                // drops, but through per-class +0x28 overrides with
+                                // hardcoded moduli (e.g. 0x7617A7 calls sub_783EFC then
+                                // Random(10)), which is a different mechanism and belongs
+                                // with the NativeItemFactory class-dispatch work.
                                 UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
-                                var StdItem = GetStdItem(UserItem.wIndex);
-                                if (StdItem == null) continue;
-                                if (M2Share.RandomNumber.Random(M2Share.g_Config.nMonRandomAddValue) == 0)
-                                {
-                                    StdItem.RandomUpgradeItem(UserItem);
-                                }
-                                if (new ArrayList(new byte[] { 15, 19, 20, 21, 22, 23, 24, 26 }).Contains(StdItem.StdMode))
-                                {
-                                    if (StdItem.Shape == 130 || StdItem.Shape == 131 || StdItem.Shape == 132)
-                                    {
-                                        StdItem.RandomUpgradeUnknownItem(UserItem);
-                                    }
-                                }
                                 mon.m_ItemList.Add(UserItem);
                             }
                         }
@@ -3262,36 +3288,49 @@ namespace GameSvr
             {
                 if (MonGen.nRace > 0)
                 {
-                    short nX;
-                    short nY;
-                    if (M2Share.RandomNumber.Random(100) < MonGen.nMissionGenRate)
+                    // 战神 spawns one monster per iteration with one coordinate jitter
+                    // each, and nothing else.  The jitter lives in the factory
+                    // sub_679F8C, whose first two Random calls are the only ones on the
+                    // spawn path before the per-race body rolls:
+                    //   00679FBD  85 F6              test esi,esi          ; range
+                    //   00679FC1  8B C6 / 03 C0 / 40 mov eax,esi / add eax,eax / inc eax
+                    //   00679FC9  8B 45 F4           mov eax,[ebp-0xC]     ; 2*range+1
+                    //   00679FCC  E8 7B 9B D8 FF     call 0x403B4C
+                    //   00679FD1  03 45 14 / 2B C6   add eax,[ebp+0x14] / sub eax,esi
+                    //   00679FD9  8B 45 F4           mov eax,[ebp-0xC]
+                    //   00679FDC  E8 6B 9B D8 FF     call 0x403B4C
+                    //   00679FE1  03 45 10 / 2B C6   add eax,[ebp+0x10] / sub eax,esi
+                    // i.e. base + Random(2r+1) - r, x first then y, which is what the two
+                    // lines below compute.
+                    //
+                    // Removed with this commit: a `Random(100) < nMissionGenRate` gate
+                    // selecting a "cluster" branch, and that branch's two Random(20) - 10
+                    // per-monster offsets.  Neither exists natively.  The regen worker
+                    // sub_67C9E0 (0x67C9E0-0x67CC74) and ProcessMonsters sub_67C150
+                    // (0x67C150-0x67C2EA) each contain ZERO Random call sites by
+                    // full-image E8 census, the modulus 20 appears nowhere on the spawn
+                    // path (native jitter is always 2*range+1), and the config key
+                    // "MissionGenRate" is 0-hit across the image in case-insensitive
+                    // ASCII and UTF-16LE.
+                    for (var i = 0; i < nCount; i++)
                     {
-                        nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        for (var i = 0; i < nCount; i++)
-                        {
-                            CreateGeneratedMonster(MonGen,
-                                (short)(nX - 10 + M2Share.RandomNumber.Random(20)),
-                                (short)(nY - 10 + M2Share.RandomNumber.Random(20)));
-                            if ((HUtil32.GetTickCount() - dwStartTick) > M2Share.g_dwZenLimit)
-                            {
-                                result = false;
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        for (var i = 0; i < nCount; i++)
+                        // 0x679FBD `test esi,esi` / 0x679FBF `jle 0x679FE9` skips BOTH
+                        // draws when the range is not positive, so a point generator
+                        // (nRange == 0) consumes no randomness at all.  C# was calling
+                        // Random(1) twice, which returns 0 both times but still advances
+                        // the sequence twice per monster.
+                        var nX = (short)MonGen.nX;
+                        var nY = (short)MonGen.nY;
+                        if (MonGen.nRange > 0)
                         {
                             nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
                             nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                            CreateGeneratedMonster(MonGen, nX, nY);
-                            if (HUtil32.GetTickCount() - dwStartTick > M2Share.g_dwZenLimit)
-                            {
-                                result = false;
-                                break;
-                            }
+                        }
+                        CreateGeneratedMonster(MonGen, nX, nY);
+                        if (HUtil32.GetTickCount() - dwStartTick > M2Share.g_dwZenLimit)
+                        {
+                            result = false;
+                            break;
                         }
                     }
                 }
