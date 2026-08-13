@@ -1935,5 +1935,10 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === TaskBoard subsystem ===
+        // Task-dispatch board refresh reply. Worker sub_699B68 answers via [player+0x254]
+        // with Recog=Param=Tag=Series=0 and a fixed 873-byte (0x369) body.
+        public const int SM_TASKBOARD_REFRESH = 3452; // 0xD7C
     }
 }
