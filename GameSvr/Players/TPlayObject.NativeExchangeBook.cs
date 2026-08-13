@@ -231,7 +231,7 @@ namespace GameSvr
 
         internal void ClientExchangeBookGetPrize()
         {
-            if (Grobal2.MAXBAGITEM - m_ItemList.Count <
+            if (BagCapacity.Of(this) - m_ItemList.Count <
                 ExchangeBookRequiredClaimFreeSlots)
             {
                 SendDefMessage((short)Grobal2.SM_EXCHANGEBOOK_GET_PRIZE,
@@ -346,7 +346,7 @@ namespace GameSvr
 
         private bool CanRunExchangeBookAction() =>
             m_ItemList.Count + ExchangeBookRequiredActionFreeSlots <=
-            Grobal2.MAXBAGITEM;
+            BagCapacity.Of(this);
 
         private void SendExchangeBookOpenFailure(string message =
             NativeExchangeBookUnavailableMessage)

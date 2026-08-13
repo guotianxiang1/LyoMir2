@@ -45,7 +45,7 @@ namespace GameSvr
             }
             for (var i = 0; i < nCount; i++)
             {
-                if (PlayObject.m_ItemList.Count >= Grobal2.MAXBAGITEM) return;
+                if (PlayObject.m_ItemList.Count >= BagCapacity.Of(PlayObject)) return;
                 TUserItem UserItem = null;
                 if (M2Share.UserEngine.CopyToUserItemFromName(sItemName, ref UserItem))
                 {

@@ -3727,13 +3727,16 @@ namespace GameSvr
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 人物原生ScriptData分节格式损坏，灵游/身体状态/冷却/一次性标志无法回写: {PlayObject.m_sCharName}");
             }
-            if (PlayObject.m_ItemList.Count > Grobal2.MAXBAGITEM
+            // 背包这一路比对的是**能写回多少**而不是**能装多少**：存档记录固定 48 槽，
+            // 48 格以后的物品要靠大背包持久层，两者之和就是 PersistableOf。超出即拒绝
+            // 整次存盘 —— 原生在 0x6B171B 处是静默截断，那等于删物品。
+            if (PlayObject.m_ItemList.Count > BagCapacity.PersistableOf(PlayObject)
                 || PlayObject.m_StorageItemList.Count > TPlayObject.MAX_STORAGE_ITEM_COUNT
                 || PlayObject.m_MagicList.Count > Grobal2.MAXMAGIC)
             {
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 拒绝截断人物存档 {PlayObject.m_sCharName}: " +
-                    $"bag={PlayObject.m_ItemList.Count}/{Grobal2.MAXBAGITEM}, " +
+                    $"bag={PlayObject.m_ItemList.Count}/{BagCapacity.PersistableOf(PlayObject)}, " +
                     $"storage={PlayObject.m_StorageItemList.Count}/{TPlayObject.MAX_STORAGE_ITEM_COUNT}, " +
                     $"magic={PlayObject.m_MagicList.Count}/{Grobal2.MAXMAGIC}");
                 return;

@@ -609,7 +609,7 @@ namespace GameSvr.PasEngine
                 case "multitempexprate": result = PasValue.FromInt(CurrentPlayer.m_nNativeMultiTempExpRate); break;
                 case "dominatelevel":
                     return RejectUnsupportedNativeApi(out result);
-                case "freebagnum":      result = PasValue.FromInt(Math.Max(0, Grobal2.MAXBAGITEM - CurrentPlayer.m_ItemList.Count)); break;
+                case "freebagnum":      result = PasValue.FromInt(Math.Max(0, BagCapacity.Of(CurrentPlayer) - CurrentPlayer.m_ItemList.Count)); break;
                 case "bagitemcount":    result = PasValue.FromInt(CurrentPlayer.m_ItemList.Count()); break;
 
                 // Guild

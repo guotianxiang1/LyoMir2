@@ -310,7 +310,7 @@ namespace GameSvr
         
         public bool IsEnoughBag()
         {
-            return m_ItemList.Count < Grobal2.MAXBAGITEM;
+            return m_ItemList.Count < BagCapacity.Of(this);
         }
 
         
@@ -2964,7 +2964,7 @@ namespace GameSvr
         private void MakeMine()
         {
             TUserItem UserItem;
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count >= BagCapacity.Of(this))
             {
                 return;
             }
@@ -3259,11 +3259,16 @@ namespace GameSvr
                 if (m_UseItems[i] != null && m_UseItems[i].wIndex > 0)
                     HumItems[i] = new TUserItem(m_UseItems[i]);
 
-            var BagItems = new TUserItem[Grobal2.MAXBAGITEM];
+            var BagItems = new TUserItem[BagCapacity.NativeSlots];
             HumanRcd.Data.BagItems = BagItems;
             // 0x6B171B `cmp edi,0x30 / jne 0x6B16E9`: 原生循环在写满 48 槽后停止，
             // 第 49 件起静默丢弃。背包可经 GetBackDealItems 无余量退还而超过 48。
-            for (var i = 0; i < m_ItemList.Count && i < Grobal2.MAXBAGITEM; i++)
+            //
+            // 这里是**记录槽位数**不是容量：装了无限背包也仍然只有 48 槽，48 格以后
+            // 的物品走 bags\<角色名>.bin。绝不能改成 BagCapacity.Of —— 那会改存档
+            // 记录布局（REPLICATION_RULES §1.4）。越界那部分由 SaveHumanRcd 的
+            // BagCapacity.PersistableOf 闸门在到达这里之前拦下。
+            for (var i = 0; i < m_ItemList.Count && i < BagCapacity.NativeSlots; i++)
                 if (m_ItemList[i] != null && m_ItemList[i].wIndex > 0)
                     BagItems[i] = new TUserItem(m_ItemList[i]);
 

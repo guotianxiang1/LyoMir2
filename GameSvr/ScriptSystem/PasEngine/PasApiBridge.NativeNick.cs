@@ -16,7 +16,7 @@ namespace GameSvr.PasEngine
             var manager = M2Share.NickPrizeManager;
             if (manager == null) return true;
 
-            if (Grobal2.MAXBAGITEM - player.m_ItemList.Count < 6)
+            if (BagCapacity.Of(player) - player.m_ItemList.Count < 6)
             {
                 CurrentNpc.GotoLable(player, "@NotEnoughBag", false);
                 return true;

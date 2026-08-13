@@ -1825,7 +1825,7 @@ namespace GameSvr
                 // 而那四条消息字符串在二进制里 **GBK 零命中**（TCFP-22）。
                 // 删除四条非原版消息，改成原版的 fail-fast 结构。
                 bo11 = true;
-                if (Grobal2.MAXBAGITEM - m_ItemList.Count < m_DealCreat.m_DealItemList.Count)
+                if (BagCapacity.Of(this) - m_ItemList.Count < m_DealCreat.m_DealItemList.Count)
                 {
                     bo11 = false;
                 }
@@ -1833,7 +1833,7 @@ namespace GameSvr
                 {
                     bo11 = false;
                 }
-                if (bo11 && Grobal2.MAXBAGITEM - m_DealCreat.m_ItemList.Count < m_DealItemList.Count)
+                if (bo11 && BagCapacity.Of(m_DealCreat) - m_DealCreat.m_ItemList.Count < m_DealItemList.Count)
                 {
                     bo11 = false;
                 }

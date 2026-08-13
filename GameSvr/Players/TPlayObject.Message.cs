@@ -2958,7 +2958,7 @@ namespace GameSvr
                 SendDefMessage(Grobal2.SM_TOHUMBAG_FAIL, 0, 0, 0, 0, "");
                 return;
             }
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count >= BagCapacity.Of(this))
             {
                 SendDefMessage(Grobal2.SM_TOHUMBAG_FAIL, -3, 0, 0, 0, "");
                 return;

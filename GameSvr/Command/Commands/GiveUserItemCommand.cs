@@ -36,7 +36,7 @@ namespace GameSvr
             var nGiven = 0;
             for (var i = 0; i < nCount; i++)
             {
-                if (m_PlayObject.m_ItemList.Count >= Grobal2.MAXBAGITEM)
+                if (m_PlayObject.m_ItemList.Count >= BagCapacity.Of(m_PlayObject))
                 {
                     PlayObject.SysMsg($"{sHumanName} 的背包已满，已给予 {nGiven} 件。", MsgColor.Red, MsgType.Hint);
                     break;
