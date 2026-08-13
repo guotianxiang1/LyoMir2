@@ -291,5 +291,48 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1252, recog, 4, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        // SM 925 (0x39D, SM_HERO_HELPOP_OK) — @0x0068C854 via [obj+0x250], no body. The
+        // preceding call [edi+0xD4] (cx=0xFCFF) at 0x0068C837 is a separate SysMsg, not
+        // part of this frame.
+        //   0068C83D  56                 push esi           ; #1 Param  = esi
+        //   0068C83E  66 8B 45 FC        mov ax,[ebp-4]     ; #2 Tag    = word[ebp-4]
+        //   0068C842  50                 push eax
+        //   0068C843  6A 00              push 0             ; #3 Series = 0
+        //   0068C845  6A 00              push 0             ; #4 sMsg   = nil
+        //   0068C847  B9 02 00 00 00     mov ecx,2          ; Recog     = 2
+        //   0068C84C  66 BA 9D 03        mov dx,0x39D       ; ident 925
+        //   0068C854  FF 93 50 02 00 00  call [obj+0x250]
+        // (Native has a second 925 site @0x006D11B7 with Recog=1 and a different
+        // Param/Tag; only the Recog=2 form is byte-verified here.)
+        internal static (ClientPacket Header, byte[] Body) BuildSm925(int param, ushort tag)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_HERO_HELPOP_OK, 2, param, tag, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        // SM 966 (0x3C6) — @0x006D663E via [obj+0x250]. This one carries a text sMsg (the
+        // 4th stack arg is a string pointer, not a Buf), so it is sent through the
+        // SendSocket(ClientPacket, string) path rather than the byte[] body path.
+        //   006D661E  6A 01              push 1             ; #1 Param  = 1
+        //   006D6620  6A 00              push 0             ; #2 Tag    = 0
+        //   006D6622  6A 00              push 0             ; #3 Series = 0
+        //   006D6624  68 80 66 6D 00     push 0x006D6680    ; #4 sMsg   = const string ptr
+        //   006D6629  B8 34 08 00 00     mov eax,0x834      ; 2100
+        //   006D662E  2B C6              sub eax,esi        ; 2100 - countdown(esi)
+        //   006D6630  69 C8 E8 03 00 00  imul ecx,eax,0x3E8 ; Recog = (2100 - esi) * 1000
+        //   006D6636  66 BA C6 03        mov dx,0x3C6       ; ident 966
+        //   006D663E  FF 96 50 02 00 00  call [obj+0x250]
+        // The Delphi long string at 0x006D6680 (length dword 20 at ptr-4) is the GBK
+        // bytes C7 EB B8 FC D0 C2 B5 BD D7 EE D0 C2 B5 C4 BF CD BB A7 B6 CB =
+        // "请更新到最新的客户端". Recog is left to the caller because it is the runtime
+        // (2100 - countdown) * 1000 computed at the send site.
+        internal const string Sm966Text = "请更新到最新的客户端";
+
+        internal static (ClientPacket Header, string Text) BuildSm966(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_966, recog, 1, 0, 0);
+            return (header, Sm966Text);
+        }
     }
 }
