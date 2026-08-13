@@ -583,27 +583,23 @@ namespace GameSvr
                 if ((HUtil32.GetTickCount() - m_dwVerifyTick) > 30 * 1000)
                 {
                     m_dwVerifyTick = HUtil32.GetTickCount();
-                    
-                    if (m_GroupOwner != null)
-                    {
-                        if (m_GroupOwner.m_boDeath || m_GroupOwner.m_boGhost)
-                        {
-                            m_GroupOwner = null;
-                        }
-                    }
 
-                    if (m_GroupOwner == this)
-                    {
-                        for (var i = m_GroupMembers.Count - 1; i >= 0; i--)
-                        {
-                            TBaseObject BaseObject = m_GroupMembers[i];
-                            if (BaseObject.m_boDeath || BaseObject.m_boGhost)
-                            {
-                                m_GroupMembers.RemoveAt(i);
-                            }
-                        }
-                    }
-                    
+                    // 这里曾经有第三处自造的组队拆解：每 30 秒把「队长已死或已 ghost」
+                    // 的 m_GroupOwner 置空，再把队长名单里所有 dead/ghost 成员删掉。
+                    // 原生没有这道扫描，两条独立证据：
+                    //   ① 清组指针只有 sub_6C3200（6C3278 mov [ebx+0xA80],0 /
+                    //      6C3280 mov [ebx+0xA7C],0），全镜像 3 个 E8 调用者 ——
+                    //      0x6B3C26（BLACKROOM 图 [map+0x7C] 门）与 0x726F64 / 0x72716E
+                    //      （都在 TGroup.DelMember sub_726E68 内部），没有一个是 tick 扫描。
+                    //   ② 同一个 30 秒块的原生对应体 0x6B3B54 `cmp edx,0x7530` 只清
+                    //      [self+0xBAC]（0x6B3B87），0x6B3BB2 只清 [self+0x18A8]，
+                    //      都是单个对端指针；两处都没碰 [self+0xA80] 或槽数组 [group+0x48]。
+                    // 原生的做法是「保留成员、在每个消费点按 IsDead/ghost 过滤」：
+                    //   经验收集 726C84 call 0x772DA8（只测 IsDead）、
+                    //   GroupSetV 727790 cmp [eax+0x73],0、
+                    //   GroupFly 6CECFD/6CED06、同图计数 727A9D/727AA6。
+                    // 这道扫描一直在抵消「死亡不退组」那条修复：死者 30 秒内照样掉队。
+
                     // 战神 sub_6B3EAC @0x6B3B71-0x6B3B87：`eax=ebx(m_DealCreat)` ; `call sub_772DA8`
                     //   （= m_boDeath getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
                     //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boGhost 析取项）; 清零 [self+0xBAC]。
@@ -611,8 +607,8 @@ namespace GameSvr
                     // 于是一个「已死但尚未 ghost」的对端会把 m_DealCreat 一直挂着 ——
                     // 配合 ClientDealEnd 曾缺失的存活门，这就是「和尸体成交」的具体路径。
                     // （节流：原生用专属 tick 字段 [self+0x73C] 比 0x7530=30000ms；此处所在的
-                    //  `m_dwVerifyTick` 块周期同为 30*1000ms，与组队清扫共用一个 tick 字段 =
-                    //  周期等价，只是字段合并，不影响可观察行为。）
+                    //  `m_dwVerifyTick` 块周期同为 30*1000ms，只是字段合并，周期等价，
+                    //  不影响可观察行为。）
                     if ((m_DealCreat != null) && (m_DealCreat.m_boGhost || m_DealCreat.m_boDeath))
                     {
                         m_DealCreat = null;

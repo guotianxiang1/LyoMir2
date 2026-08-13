@@ -1,0 +1,31 @@
+Remove the 30s dead/ghost group sweeper — native has no such scan
+
+TBaseObject.Base.cs 的 30 秒 verify 块里有第三处自造的组队拆解:队长 dead/ghost 就把
+m_GroupOwner 置空,自己是队长就把名单里所有 dead/ghost 成员删掉。它一直在抵消上一轮
+「死亡不退组」的修复 —— 死者 30 秒内照样掉队。
+
+原生没有这道扫描,两条独立证据:
+
+① 清组指针的唯一函数是 sub_6C3200:
+     6C3278  89 83 80 0A 00 00   mov [ebx+0xA80],eax  (eax=0)
+     6C3280  89 83 7C 0A 00 00   mov [ebx+0xA7C],eax  (eax=0)
+   全镜像 3 个 E8 调用者:0x6B3C26(BLACKROOM 图 [map+0x7C] 门)、0x726F64 与
+   0x72716E(都在 TGroup.DelMember sub_726E68 内部)。没有一个是 tick 扫描。
+   而 sub_726E68 本身也只有 2 个 E8 调用者:0x6C3181(CM 1019 关组)、0x6C3D73(CM 1022)。
+   [player+0xA80] 全镜像写点普查(69 条指令,写形式 5 条):
+     6B9EE7 登录重挂、6C3278 主动离队、6C331D/6C36B5 建组、72739A 加成员。
+
+② 同一个 30 秒块的原生对应体 0x6B3B54 `81 FA 30 75 00 00 cmp edx,0x7530`
+   只做 6B3B87 清 [self+0xBAC];紧邻的 0x6B3BB2 只清 [self+0x18A8]。
+   两处都是单个对端指针,都没碰 [self+0xA80],也没碰槽数组 [group+0x48]。
+
+原生的做法是「保留成员,在每个消费点过滤」:
+   经验收集   726C84  E8 1F C1 04 00  call 0x772DA8   (只测 IsDead [+0x74])
+   GroupSetV  727790  80 78 73 00 / 75 0F             (ghost)
+   GroupFly   6CECFD / 6CED06                          (IsDead + ghost)
+   同图计数   727A9D / 727AA6                          (IsDead + ghost)
+   SM 667     727212  8B 71 10 mov esi,[ecx+0x10] / 74 1C —— 指针为空仍然发记录,
+              只是把「是队长」字节写 0(72723E),槽占用判据是 64 位角色 id
+              [slot+8]/[slot+0xC] 而不是对象指针。
+
+m_DealCreat 的 ghost||death 清理保持原样(sub_6B3EAC,InProcEngineRunCheck 钉住)。

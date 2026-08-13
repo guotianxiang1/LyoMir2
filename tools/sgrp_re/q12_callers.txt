@@ -1,0 +1,29 @@
+E8 callers of 0x6F5168 (re-bind wrapper): 1 -> 0x6B24FC
+E8 callers of 0x5F6D8C (gate open (login marker)): 1 -> 0x6B9EB9
+
+dword refs to 0x6F5168 (vmt slots): 
+
+=== 0x6F5168 re-bind wrapper full body ===
+0x6F5168  55                     push ebp
+0x6F5169  8BEC                   mov ebp, esp
+0x6F516B  53                     push ebx
+0x6F516C  8BD8                   mov ebx, eax
+0x6F516E  8B83800A0000           mov eax, dword ptr [ebx + 0xa80]
+0x6F5174  85C0                   test eax, eax
+0x6F5176  7429                   je 0x6f51a1
+0x6F5178  8BD3                   mov edx, ebx
+0x6F517A  E8412F0300             call 0x7280c0
+0x6F517F  C683A10B000001         mov byte ptr [ebx + 0xba1], 1
+0x6F5186  6A00                   push 0
+0x6F5188  6A00                   push 0
+0x6F518A  6A00                   push 0
+0x6F518C  6A00                   push 0
+0x6F518E  33C9                   xor ecx, ecx
+0x6F5190  66BA9302               mov dx, 0x293
+0x6F5194  8BC3                   mov eax, ebx
+0x6F5196  8B18                   mov ebx, dword ptr [eax]
+0x6F5198  FF9350020000           call dword ptr [ebx + 0x250]
+0x6F519E  5B                     pop ebx
+0x6F519F  5D                     pop ebp
+0x6F51A0  C3                     ret 
+
