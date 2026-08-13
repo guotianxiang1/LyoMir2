@@ -72,6 +72,14 @@ namespace GameSvr
         private bool TryExecuteNativeStallBoothSetup(NativeStallOp op, TProcessMessage msg,
             short responseIdent, NativeStallManager manager)
         {
+            // 眼神 关闭摆摊 memcpys a single C3 over sub_6E7C38's prologue (0x100AD0EE payload,
+            // 0x100AD113 push 0x6E7C38 / len 1 -> 0x10033340), so START returns before the map
+            // gate, before the ladder and before any reply. Bail ahead of GetOrCreate so no
+            // record is created either: Δgold = Δitems = Δrecords = 0.
+            if (op == NativeStallOp.StartStall
+                && new Plugins.YanshenApi(this, null, M2Share.PluginManager).IsStallClosed())
+                return true;
+
             var tier = SelectBoothTier();
             var record = manager.GetOrCreate(m_sCharName, GetCachedNativeUserId());
             long gold = m_nGold;
