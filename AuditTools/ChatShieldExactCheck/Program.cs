@@ -15,13 +15,14 @@ try
     CheckNativePersistence();
     CheckSwitchListen();
     CheckHearGate();
+    CheckCryAndGuildGates();
     CheckClientConfigPacket();
     CheckGateHasNoSyntheticConfig();
     CheckWhisperBit0Gate();
 
     Console.WriteLine(
         "ChatShieldExactCheck PASS CM3032 categories=1/2/3/4 masks=2/4/8/1 " +
-        "native-offset=0x4F8 RM_HEAR-mask=2 RM_WHISPER-mask=1 " +
+        "native-offset=0x4F8 RM_HEAR-mask=2 RM_CRY-mask=4 RM_GUILD-mask=8 RM_WHISPER-mask=1 " +
         "SM2953=full-dword slot=+0x250 gate=no-zero-injection");
     return 0;
 }
@@ -33,6 +34,8 @@ catch (Exception exception)
 
 static void CheckNativeContracts()
 {
+    // Reverse check vs native image, not client lua. The old ancestor-blind
+    // lua path FileNotFound-crashed (0xE0434352) from a worktree root.
     Equal(3032, Grobal2.CM_SWITCH_LISTEN, "CM_SWITCH_LISTEN");
     Equal(2953, Grobal2.SM_CLIENT_CONF, "SM_CLIENT_CONF");
     var persistOffset = typeof(TPlayObject).GetField("NativeChatShieldMaskOffset",
@@ -76,6 +79,26 @@ static void CheckNativeContracts()
         "0x6B4A63 RM_HEAR test bit1");
     Pin(image, imageBase, 0x6C9584, [0xF6, 0x87, 0x9C, 0x0B, 0x00, 0x00, 0x01],
         "0x6C9584 whisper test bit0");
+    Pin(image, imageBase, 0x6DC07E, [0x66, 0x83, 0xEA, 0x28],
+        "0x6DC07E ident 40");
+    Pin(image, imageBase, 0x6DC084, [0x66, 0x83, 0xEA, 0x3E],
+        "0x6DC084 ident 102");
+    Pin(image, imageBase, 0x6DC08A, [0x66, 0x83, 0xEA, 0x02],
+        "0x6DC08A ident 104");
+    Pin(image, imageBase, 0x6DC092, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x02],
+        "0x6DC092 hear bit1");
+    Pin(image, imageBase, 0x6DC09F, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x04],
+        "0x6DC09F cry bit2");
+    Pin(image, imageBase, 0x6DC0AC, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x08],
+        "0x6DC0AC guild bit3");
+    Pin(image, imageBase, 0x652CB5, [0x7F, 0x32],
+        "0x652CB5 jg skip abs>nWide");
+    Pin(image, imageBase, 0x6C513F, [0x6A, 0x32],
+        "0x6C513F push 50");
+    Pin(image, imageBase, 0x6BB34E, [0x81, 0xFF, 0xB0, 0x00, 0x00, 0x00],
+        "0x6BB34E cmp edi,0xB0");
+    Pin(image, imageBase, 0x6BB35B, [0x80, 0xBB, 0x75, 0x06, 0x00, 0x00, 0x04],
+        "0x6BB35B cmp priv,4");
 }
 
 static void CheckNativePersistence()
@@ -88,6 +111,9 @@ static void CheckNativePersistence()
 
     Invoke(player, "RestoreNativeChatShieldMask");
     Equal(0xA5F00F0Au, player.m_dwChatShieldMask, "native mask load");
+    Equal(true, player.m_boHearWhisper, "restore hear-whisper bit0 clear");
+    Equal(true, player.m_boBanShout, "restore shout bit2 clear");
+    Equal(false, player.m_boBanGuildChat, "restore guild bit3 set");
 
     player.m_dwChatShieldMask = 0x89ABCDEFu;
     Equal(true, (bool)Invoke(player, "PersistNativeChatShieldMask"),
@@ -131,6 +157,9 @@ static void CheckSwitchListen()
             $"category {mapping.Category} set mask");
     }
     Equal(0xA5F0000Fu, player.m_dwChatShieldMask, "all category masks");
+    Equal(false, player.m_boHearWhisper, "3032 cat4 mutes whisper flag");
+    Equal(false, player.m_boBanShout, "3032 cat2 mutes shout flag");
+    Equal(false, player.m_boBanGuildChat, "3032 cat3 mutes guild flag");
 
     foreach (var mapping in mappings)
     {
@@ -142,6 +171,9 @@ static void CheckSwitchListen()
         }), $"category {mapping.Category} clear dispatch");
     }
     Equal(0xA5F00000u, player.m_dwChatShieldMask, "all category clears");
+    Equal(true, player.m_boHearWhisper, "3032 clear restores whisper flag");
+    Equal(true, player.m_boBanShout, "3032 clear restores shout flag");
+    Equal(true, player.m_boBanGuildChat, "3032 clear restores guild flag");
 
     player.Operate(new TProcessMessage
     {
@@ -185,6 +217,52 @@ static void CheckHearGate()
     }), "allowed RM_HEAR dispatch");
     Packet(player.m_DefMsg, Grobal2.SM_HEAR, 0x12345678,
         HUtil32.MakeWord(0x12, 0x34), 0, 1, "allowed RM_HEAR");
+}
+
+static void CheckCryAndGuildGates()
+{
+    var player = NewPlayer();
+    player.m_dwChatShieldMask = 0x04;
+    player.m_DefMsg = null;
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.RM_CRY,
+        BaseObject = 0x12345678,
+        nParam1 = 0x97,
+        nParam2 = 0x00,
+        sMsg = "blocked cry"
+    }), "blocked RM_CRY dispatch");
+    Assert(player.m_DefMsg == null, "blocked RM_CRY packet");
+
+    player.m_dwChatShieldMask = 0;
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.RM_CRY,
+        BaseObject = 0x12345678,
+        sMsg = "allowed cry"
+    }), "allowed RM_CRY dispatch");
+    Packet(player.m_DefMsg, Grobal2.SM_CRY, 0x12345678, 0x9700, 0, 1,
+        "allowed RM_CRY");
+
+    player.m_DefMsg = null;
+    player.m_dwChatShieldMask = 0x08;
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.RM_GUILDMESSAGE,
+        BaseObject = 0x12345678,
+        sMsg = "blocked guild"
+    }), "blocked RM_GUILD dispatch");
+    Assert(player.m_DefMsg == null, "blocked RM_GUILD packet");
+
+    player.m_dwChatShieldMask = 0;
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.RM_GUILDMESSAGE,
+        BaseObject = 0x12345678,
+        sMsg = "allowed guild"
+    }), "allowed RM_GUILD dispatch");
+    Packet(player.m_DefMsg, Grobal2.SM_GUILDMESSAGE, 0x12345678, 0xFFD4, 0, 1,
+        "allowed RM_GUILD");
 }
 
 static void CheckClientConfigPacket()

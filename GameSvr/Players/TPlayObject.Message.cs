@@ -2759,6 +2759,9 @@ namespace GameSvr
                 m_dwChatShieldMask &= ~mask;
             else if (processMessage.nParam1 == 1)
                 m_dwChatShieldMask |= mask;
+            else
+                return;
+            ApplyChatShieldMaskToAllowFlags();
         }
 
         public override void Disappear()
