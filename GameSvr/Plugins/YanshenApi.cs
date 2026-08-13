@@ -3554,7 +3554,13 @@ namespace GameSvr.Plugins
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
         public bool IsNewMonsterDrop() => Enabled("新怪物爆率");
         public bool IsGetCastle() => Enabled("获取沙城归属");
-        public bool IsGuildShow() => Enabled("行会显示");
+        // 行会显示 is a host-code patch: plugin 0x100AACD8 / 0x100AAD29 memcpy
+        // 90 90 over both skip-jumps in GetShowName's non-castle guild branch
+        //   0x6C5BCB  74 49  je 0x6C5C16   (after cmp g_Config.boShowGuildName)
+        //   0x6C5BF7  74 1D  je 0x6C5C16   (after castle-war-area test)
+        // Restore arm 0x100AADC0 / 0x100AADFA writes 74 49 / 74 1D back.
+        // Both je gone ⇒ every path reaches 0x6C5BF9 and emits %guildname/%rankname.
+        public bool IsGuildShow() => PatchToggleOn("行会显示");
         public bool IsMultiFaction() => Enabled("角色多阵营");
         public bool IsSiegeScript() => Enabled("攻沙脚本控制");
         public bool IsSiegeModify() => Enabled("攻城修改");

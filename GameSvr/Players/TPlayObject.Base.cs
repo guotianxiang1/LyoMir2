@@ -1934,7 +1934,10 @@ namespace GameSvr
                     else
                     {
                         Castle = M2Share.CastleManager.InCastleWarArea(this);// 01/25 多城堡
-                        if (M2Share.g_Config.boShowGuildName || Castle != null && Castle.m_boUnderWar || m_boInFreePKArea)
+                        // 眼神 行会显示 memcpys 90 90 over both skip-jumps of this branch
+                        // (0x6C5BCB 74 49 and 0x6C5BF7 74 1D), leaving no path to 0x6C5C16.
+                        if (new YanshenApi(this, null, M2Share.PluginManager).IsGuildShow()
+                            || M2Share.g_Config.boShowGuildName || Castle != null && Castle.m_boUnderWar || m_boInFreePKArea)
                         {
                             sGuildName = M2Share.g_sNoCastleGuildName.Replace("%guildname", m_MyGuild.sGuildName);
                             sGuildName = sGuildName.Replace("%rankname", m_sGuildRankName);
