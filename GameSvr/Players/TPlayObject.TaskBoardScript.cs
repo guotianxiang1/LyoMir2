@@ -4,7 +4,7 @@ namespace GameSvr
 {
     /// <summary>
     /// 任务发布板 @Main 脚本接线 —— CM 4417（脚本命令）/ CM 4651（文本命令）的**忠实实现**，
-    /// 把 <see cref="TPlayObject.TaskBoard"/>（taskboard 代理）与 cm-4 Tail 分片此前对这两条 ident 的
+    /// 把 <c>TPlayObject.TaskBoard.cs</c>（taskboard 代理）与 cm-4 Tail 分片此前对这两条 ident 的
     /// fail-closed 处置升级为真正调用 HelperQuest.pas @Main 脚本对象。
     ///
     /// 全部偏移均取自 flat_image.bin（ImageBase 0x400000, capstone x86-32），反汇编原件与逐 worker
