@@ -88,6 +88,12 @@ namespace GameSvr
                 case Grobal2.CM_4417:
                     ClientNativeTaskBoardScriptCommand();
                     return true;
+                case Grobal2.CM_4446:
+                    ClientNativeYuanbaoConsignSettings();
+                    return true;
+                case Grobal2.CM_4496:
+                    ClientNativeFreshmanTaskCommand();
+                    return true;
                 default:
                     return false;
             }
@@ -415,6 +421,35 @@ namespace GameSvr
         private void ClientNativeTaskBoardScriptCommand()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4417, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4446, native leaf 0x6DBB37, worker 0x6F75C4.
+        ///
+        /// The leaf calls 0x6F75C4(Self). The worker reads the consignment
+        /// collection [Self+0x192C] (0x6F75CB); when it is null (0x6F75D3 `je`) it
+        /// does nothing, otherwise it counts the entries through 0x712BE4 and
+        /// answers SM 0x115E/4446 with Recog = that count. The [Self+0x192C]
+        /// sub-object is not modelled here, so the count that fills Recog cannot be
+        /// derived and the reply is withheld.
+        /// </summary>
+        private void ClientNativeYuanbaoConsignSettings()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4446, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4496, native leaf 0x6DBBDC, worker 0x6FAC8C.
+        ///
+        /// The leaf calls 0x6FAC8C(Self, Recog=[record]). The worker is the
+        /// freshman-task command entry (FreshmanTaskCommand), an 8-local SEH frame
+        /// that drives the freshman quest state through script hooks. That script
+        /// entry is not wired up in this port, so the command's outcome and reply
+        /// cannot be reproduced.
+        /// </summary>
+        private void ClientNativeFreshmanTaskCommand()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4496, m_sCharName);
         }
     }
 }
