@@ -4085,7 +4085,9 @@ namespace GameSvr
                     }
                     return;
                 }
-                for (var nC = 0; nC < m_VisibleHumanList.Count; nC++)
+                // 倒序：原生 0x765468 `8B D8 / 4B`（ebx := Count 后 dec）自尾向头走，
+                // 因为幽灵臂要就地 TList.Delete；正序删会漏掉被前移的那一项。
+                for (var nC = m_VisibleHumanList.Count - 1; nC >= 0; nC--)
                 {
                     BaseObject = m_VisibleHumanList[nC];
                     // 族 B —— 取用前的「这指针还能碰吗」门。原生 sub_76533C
@@ -4107,8 +4109,16 @@ namespace GameSvr
                     {
                         continue;
                     }
+                    // 幽灵臂与上面的失效臂处置**不同**：失效只跳过、表项留着
+                    // （0x7654E4 jmp 0x765527），幽灵则就地摘除 ——
+                    //   0x7654E9  80 7B 73 00    cmp byte [obj+0x73],0   ; m_boGhost
+                    //   0x7654FA  E8 31 F6 CB FF call 0x424B30           ; TList.Delete
+                    // 0x424B30 已实测为 TList.Delete（0x424B72 `dec dword [eax+8]`
+                    // 后走 System.Move 前移）。原先这里也写成 continue，幽灵会一直
+                    // 滞留在 m_VisibleHumanList 里，与原生「见到即摘」不符。
                     if (BaseObject.m_boGhost)
                     {
+                        m_VisibleHumanList.RemoveAt(nC);
                         continue;
                     }
                     if ((BaseObject.m_PEnvir == m_PEnvir) && (Math.Abs(BaseObject.m_nCurrX - m_nCurrX) < 11) && (Math.Abs(BaseObject.m_nCurrY - m_nCurrY) < 11))
