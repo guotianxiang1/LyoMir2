@@ -1707,10 +1707,32 @@ namespace GameSvr
                                 ClientItemID = (this as TPlayObject)?.EnsureClientItemId(destroyed) ?? destroyed.ClientItemID
                             });
                         }
-                        // 0x73FF0B `call sub_75F3E8` clears the slot (0x75F40F
-                        // `mov [esi+eax*4+8],0`) — the object leaves the slot and is freed,
-                        // it is NOT left as a zombie entry with wIndex = 0.
-                        m_UseItems[nC] = null;
+                        // ★ 原生缺陷，照抄，不要"顺手修好"（REPLICATION_RULES §3.1）★
+                        // 装备销毁支**不清槽位**。sub_73FC70 的这条支路末尾是：
+                        //   0x73FEB4  8B 4D 94 / 66 BA 5E 00 / 8B C6
+                        //   0x73FEBD  E8 1E 8D 02 00   call sub_768BE0   ; 日志 dx=0x5E
+                        //   0x73FEC2  8B C7            mov eax,edi       ; edi = 该 TUserItem
+                        //   0x73FEC4  E8 C7 47 CC FF   call sub_404690   ; TObject.Free
+                        //   0x73FEC9  E9 A1 00 00 00   jmp 0x73FF6F      ; -> inc ebx，下一格
+                        // Free 之后直接跳到 `inc ebx`，[self+0x4C0] 的第 ebx 格仍然指向
+                        // 已释放的对象 —— 这是真悬垂指针。
+                        // 同函数另外两条支路都清槽，所以这不是我读漏了：
+                        //   Reserved02&8 支 0x73FD86/0x73FD8C call sub_75F27C
+                        //                 (0x75F2BB `89 54 83 08  mov [ebx+eax*4+8],0`)
+                        //   落地支       0x73FF0B/0x73FF11 call sub_75F3E8
+                        //                 (0x75F40F `89 54 86 08  mov [esi+eax*4+8],0`)
+                        // 背包 worker 的同名销毁支也清：0x74019D `E8 8E 49 CE FF
+                        // call sub_424B30` 先从 [self+0x508] 摘除，再在 0x74021E 才 Free。
+                        // 唯独装备这一支漏了。
+                        // 此处原先写 `m_UseItems[nC] = null;`，并引用 0x73FF0B 当依据——
+                        // 那个 VA 属于**落地支**，不是这一支（§4.6 那类张冠李戴）。
+                        // C# 里照抄的方式就是保留槽位引用：Dispose(obj) 本身是空操作
+                        // （TBaseObject.cs `internal void Dispose(object obj) { obj = null; }`
+                        // 只赋值形参），对象不会被回收也不会被复用，所以保留引用等价于
+                        // 原生"槽位仍指向那块内存"，且不会引入别名/复制风险。
+                        // 玩家可见后果：未验证 / 赠品装备在死亡时被判销毁、10148 包告诉
+                        // 客户端它没了，但服务端这一格仍然装着它 —— 属性重算与存档都还算它。
+                        // 原版就是这个样子。
                         if (!string.IsNullOrEmpty(notice))
                         {
                             SysMsg(notice + " "
