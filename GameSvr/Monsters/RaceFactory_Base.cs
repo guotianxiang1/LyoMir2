@@ -27,6 +27,20 @@ namespace GameSvr
     //       if (Cert == null) TryCreateRaceBase(nMonRace, out Cert);
     //   命中即认领，未命中 Cert 保持 null 落回既有 switch，对既有 race 行为零影响。
     //
+    // ⚠️ 冲突登记（race 130，务必阅读）：本批 129/138-143 七个 race 在 legacy switch 中【无】
+    //   任何映射（含符号常量核验：与 129/138-143 同值的 M2Share.* 全是客户端消息码/脚本变量/
+    //   技能 id，非 race；M2Share.MONSTER_MAGUNGSA=143 仅定义、零引用），落 default→nil，故认领它们
+    //   对既有行为零影响。**唯一例外是 race 130**：UsrEngn.cs:3000 legacy switch 现有
+    //   `case 130: Cert = new DoubleCriticalMonster();`，而二进制铁证 race 130 = TTaoistEngine——
+    //   独立复算分派链：race130→idx 0x77→group 52→handler 0x67A845→classref [0x71A1B8]→
+    //   ctor 0x71C558→VMT 0x71A204(classname "TTaoistEngine")；相邻 race131 才落 default(0x67AE5E)。
+    //   legacy 的 DoubleCriticalMonster.cs 无任何字节证据头（未审计），且其 spit/double-crit AI 与
+    //   TTaoistEngine(hero 引擎，见 TaoistEngine.cs)是两个不同类。按上文推荐挂法（守卫行加在 switch
+    //   【之前】），本工厂会先认领 race130→TaoistEngine（= 二进制正确值），legacy 的 case 130 被
+    //   遮蔽（对 race130 变为死代码）。这是【纠正 legacy 误配】的预期结果，与 race 131→RonObject 等
+    //   其它 legacy/二进制不符项同理（本批不触碰）。DoubleCriticalMonster 的【真实 race 待考】——
+    //   不在本批范围，合并者请另行核查其归属，勿据本批推断。
+    //
     // 说明：与 RaceFactory_RaceA.cs 一致，刻意写成普通方法（不加 partial 关键字）。UserEngine
     //   本就是 partial class，普通方法放入分部文件可独立编译。行为与工厂内联等价。
     // ============================================================================
@@ -46,6 +60,8 @@ namespace GameSvr
 
                 // race 130 handler 0x67A845 classref 0x71A1B8 ctor 0x71C558 TTaoistEngine
                 //   parent TAIMon(=AiMon)。case body 无 ctor 后逻辑。ctor 已核验（见 TaoistEngine.cs）。
+                //   ⚠️ 与 legacy switch UsrEngn.cs:3000 `case 130 → DoubleCriticalMonster` 冲突：
+                //   二进制 race 130 = TTaoistEngine（见文件头冲突登记）。本认领为二进制正确值。
                 case 130:
                     cert = new TaoistEngine();
                     break;
