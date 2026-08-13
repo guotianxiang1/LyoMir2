@@ -1,0 +1,141 @@
+==============================================================================
+### 0x1031BCxx / 0x10310Dxx 全部写入点（mov [imm32], edx/eax/esi 形状）
+==============================================================================
+
+[1031BC4C]  写入点 0 个
+
+[1031BC50]  写入点 1 个
+   1006B136  89 15 50 BC 31 10  <- add edx,0x006C87B4
+
+[1031BC54]  写入点 1 个
+   1006B118  89 15 54 BC 31 10  <- add edx,0x006DF288
+
+[1031BC58]  写入点 1 个
+   1006B0FA  89 15 58 BC 31 10  <- add edx,0x006DF1E4
+
+[1031BC5C]  写入点 1 个
+   1006B0DC  89 15 5C BC 31 10  <- add edx,0x006D791C
+
+[1031BC60]  写入点 1 个
+   1006B0B8  89 15 60 BC 31 10  <- add edx,0x006DE7BC
+
+[1031BC64]  写入点 1 个
+   1006B09A  89 15 64 BC 31 10  <- add edx,0x006F8730
+
+[1031BC68]  写入点 1 个
+   1006B07C  89 0D 68 BC 31 10
+
+[1031BCC4]  写入点 0 个
+
+==============================================================================
+### 可叠材料分支 五路结算 0x1006BBD8..0x1006BD30
+==============================================================================
+1006BBD8  8B 5D 90                   mov      ebx, dword ptr [ebp - 0x70]
+1006BBDB  8B BD 74 FF FF FF          mov      edi, dword ptr [ebp - 0x8c]
+1006BBE1  85 DB                      test     ebx, ebx
+1006BBE3  7E 2D                      jle      0x1006bc12
+1006BBE5  85 FF                      test     edi, edi
+1006BBE7  7E 16                      jle      0x1006bbff
+1006BBE9  8B CF                      mov      ecx, edi
+1006BBEB  0F AF CB                   imul     ecx, ebx
+1006BBEE  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BBF3  F7 E9                      imul     ecx
+1006BBF5  C1 FA 05                   sar      edx, 5
+1006BBF8  8B DA                      mov      ebx, edx
+1006BBFA  C1 EB 1F                   shr      ebx, 0x1f
+1006BBFD  03 DA                      add      ebx, edx
+1006BBFF  8B 8D DC FE FF FF          mov      ecx, dword ptr [ebp - 0x124]
+1006BC05  8B C1                      mov      eax, ecx
+1006BC07  0F AF C3                   imul     eax, ebx
+1006BC0A  01 85 60 FF FF FF          add      dword ptr [ebp - 0xa0], eax
+1006BC10  EB 06                      jmp      0x1006bc18
+1006BC12  8B 8D DC FE FF FF          mov      ecx, dword ptr [ebp - 0x124]
+1006BC18  89 4D 90                   mov      dword ptr [ebp - 0x70], ecx
+1006BC1B  8B 9D 70 FF FF FF          mov      ebx, dword ptr [ebp - 0x90]
+1006BC21  85 DB                      test     ebx, ebx
+1006BC23  7E 28                      jle      0x1006bc4d
+1006BC25  85 FF                      test     edi, edi
+1006BC27  7E 19                      jle      0x1006bc42
+1006BC29  8B CF                      mov      ecx, edi
+1006BC2B  0F AF CB                   imul     ecx, ebx
+1006BC2E  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BC33  F7 E9                      imul     ecx
+1006BC35  C1 FA 05                   sar      edx, 5
+1006BC38  8B DA                      mov      ebx, edx
+1006BC3A  C1 EB 1F                   shr      ebx, 0x1f
+1006BC3D  03 DA                      add      ebx, edx
+1006BC3F  8B 4D 90                   mov      ecx, dword ptr [ebp - 0x70]
+1006BC42  8B C1                      mov      eax, ecx
+1006BC44  0F AF C3                   imul     eax, ebx
+1006BC47  01 85 5C FF FF FF          add      dword ptr [ebp - 0xa4], eax
+1006BC4D  8B 9D 6C FF FF FF          mov      ebx, dword ptr [ebp - 0x94]
+1006BC53  85 DB                      test     ebx, ebx
+1006BC55  7E 28                      jle      0x1006bc7f
+1006BC57  85 FF                      test     edi, edi
+1006BC59  7E 19                      jle      0x1006bc74
+1006BC5B  8B CF                      mov      ecx, edi
+1006BC5D  0F AF CB                   imul     ecx, ebx
+1006BC60  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BC65  F7 E9                      imul     ecx
+1006BC67  C1 FA 05                   sar      edx, 5
+1006BC6A  8B DA                      mov      ebx, edx
+1006BC6C  C1 EB 1F                   shr      ebx, 0x1f
+1006BC6F  03 DA                      add      ebx, edx
+1006BC71  8B 4D 90                   mov      ecx, dword ptr [ebp - 0x70]
+1006BC74  8B C1                      mov      eax, ecx
+1006BC76  0F AF C3                   imul     eax, ebx
+1006BC79  01 85 58 FF FF FF          add      dword ptr [ebp - 0xa8], eax
+1006BC7F  8B 75 88                   mov      esi, dword ptr [ebp - 0x78]
+1006BC82  85 F6                      test     esi, esi
+1006BC84  7E 31                      jle      0x1006bcb7
+1006BC86  85 FF                      test     edi, edi
+1006BC88  7E 22                      jle      0x1006bcac
+1006BC8A  8B CF                      mov      ecx, edi
+1006BC8C  0F AF CE                   imul     ecx, esi
+1006BC8F  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BC94  F7 E9                      imul     ecx
+1006BC96  C1 FA 05                   sar      edx, 5
+1006BC99  8B F2                      mov      esi, edx
+1006BC9B  C1 EE 1F                   shr      esi, 0x1f
+1006BC9E  03 F2                      add      esi, edx
+1006BCA0  89 75 88                   mov      dword ptr [ebp - 0x78], esi
+1006BCA3  89 B5 00 FF FF FF          mov      dword ptr [ebp - 0x100], esi
+1006BCA9  8B 4D 90                   mov      ecx, dword ptr [ebp - 0x70]
+1006BCAC  8B C1                      mov      eax, ecx
+1006BCAE  0F AF C6                   imul     eax, esi
+1006BCB1  01 85 54 FF FF FF          add      dword ptr [ebp - 0xac], eax
+1006BCB7  8B 45 98                   mov      eax, dword ptr [ebp - 0x68]
+1006BCBA  85 C0                      test     eax, eax
+1006BCBC  7E 6F                      jle      0x1006bd2d
+1006BCBE  85 FF                      test     edi, edi
+1006BCC0  7E 1C                      jle      0x1006bcde
+1006BCC2  0F AF F8                   imul     edi, eax
+1006BCC5  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BCCA  F7 EF                      imul     edi
+1006BCCC  C1 FA 05                   sar      edx, 5
+1006BCCF  8B C2                      mov      eax, edx
+1006BCD1  C1 E8 1F                   shr      eax, 0x1f
+1006BCD4  03 C2                      add      eax, edx
+1006BCD6  0F AF C1                   imul     eax, ecx
+1006BCD9  89 45 98                   mov      dword ptr [ebp - 0x68], eax
+1006BCDC  EB 06                      jmp      0x1006bce4
+1006BCDE  0F AF C8                   imul     ecx, eax
+1006BCE1  89 4D 98                   mov      dword ptr [ebp - 0x68], ecx
+1006BCE4  60                         pushal   
+1006BCE5  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006BCE8  8B 95 68 FF FF FF          mov      edx, dword ptr [ebp - 0x98]
+1006BCEE  8B 8D 64 FF FF FF          mov      ecx, dword ptr [ebp - 0x9c]
+1006BCF4  FF 15 58 BC 31 10          call     dword ptr [0x1031bc58]
+1006BCFA  83 F8 00                   cmp      eax, 0
+1006BCFD  7D 02                      jge      0x1006bd01
+1006BCFF  33 C0                      xor      eax, eax
+1006BD01  89 85 E0 FE FF FF          mov      dword ptr [ebp - 0x120], eax
+1006BD07  8B 45 98                   mov      eax, dword ptr [ebp - 0x68]
+1006BD0A  01 85 E0 FE FF FF          add      dword ptr [ebp - 0x120], eax
+1006BD10  8B 95 E0 FE FF FF          mov      edx, dword ptr [ebp - 0x120]
+1006BD16  52                         push     edx
+1006BD17  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006BD1A  8B 95 68 FF FF FF          mov      edx, dword ptr [ebp - 0x98]
+1006BD20  8B 8D 64 FF FF FF          mov      ecx, dword ptr [ebp - 0x9c]
+1006BD26  FF 15 54 BC 31 10          call     dword ptr [0x1031bc54]
+1006BD2C  61                         popal    

@@ -168,13 +168,19 @@ Equal(NativeGildConcernLadder.EnqueuesDelete(NativeGildConcernOp.AddConcernByNam
 Equal(NativeGildUnionFlagCell.NativeFieldOffset, 40, "union flag native offset gild+0x28");
 Equal(NativeGildUnionFlagCell.HasPersistentColumn, false, "union flag has NO gamedata.Gild column");
 
+// The walk below used to start from false, which contradicted the very first
+// assertion. sub_704EAC is symmetric (0x704EDE cmp bl,[esi+0x28] / 0x704EE1 je
+// skip / 0x704EE3 mov [esi+0x28],bl), so both NoChange cases and both Resave
+// cases are still covered -- only the starting state moved to the native one.
 var flag = new NativeGildUnionFlagCell();
 Equal(flag.Enabled, true, "union flag defaults true (native 0x70633A: C6 47 28 01, constructor sets TRUE)");
-Equal(flag.Set(false), NativeGildUnionFlagWrite.NoChange, "set false==current -> NoChange (no UPDATE)");
-Equal(flag.Set(true), NativeGildUnionFlagWrite.Resave, "set true (changed) -> Resave (standard UPDATE)");
-Equal(flag.Enabled, true, "flag now enabled in memory");
-Equal(flag.Set(true), NativeGildUnionFlagWrite.NoChange, "set true==current -> NoChange");
-Equal(flag.Set(false), NativeGildUnionFlagWrite.Resave, "toggle back -> Resave");
+Equal(flag.Set(true), NativeGildUnionFlagWrite.NoChange,
+    "set true==current -> NoChange (0x704EE1 je 0x704F02 skips the UPDATE)");
+Equal(flag.Set(false), NativeGildUnionFlagWrite.Resave, "set false (changed) -> Resave (standard UPDATE)");
+Equal(flag.Enabled, false, "flag now disabled in memory");
+Equal(flag.Set(false), NativeGildUnionFlagWrite.NoChange, "set false==current -> NoChange");
+Equal(flag.Set(true), NativeGildUnionFlagWrite.Resave, "toggle back -> Resave");
+Equal(flag.Enabled, true, "flag returns to the constructor default");
 
 // 4581 ladder: owner OR vice reach the flag; others 555; 5 / 12 / 0.
 Equal(NativeGildUnionFlagLadder.Evaluate(NativeGildRole.GildOwner, true, true), 0,

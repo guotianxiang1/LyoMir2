@@ -381,7 +381,7 @@ adjacent cases. The closest pairs, for consolidation review only:
 | --- | --- | --- | --- | --- |
 | `PasCreateMonInterpreterCheck` |  | 51 | p | PASS PasCreateMonInterpreterCheck entry=PasParser+PasInterpreter.ExecuteProcedure+This_Player/This_Npc.CreateMon native-abi=MapName,X,Y,Ranger,MonName |
 | `PasDispatchShadowCompatCheck` |  | 592 | p | PASS player-dispatch Group=published-property ClearMon=environment-object-lifecycle |
-| `PasGroupSetVCompatCheck` |  | 30 | p | PASS GroupSetV routes=method/function/bridge-standalone/interpreter group=leader+member solo=fallback |
+| `PasGroupSetVCompatCheck` |  | 30 | p | PASS GroupSetV routes=method/function/bridge-standalone/interpreter group=leader+member zero=stored-not-removed ghost=skipped ungrouped=false-no-write |
 | `PasNativeShadowP0CompatCheck` |  | 28 | p | PASS P0 native shadows=closed PlatLv=property-RW |
 | `PasNativeShadowP123CompatCheck` |  | 52 | p | PASS P1/P2/P3 native shadows=closed ABI=locked V/S=unchanged |
 | `PasScriptAudit` |  | 70 | - | UNKNOWN |

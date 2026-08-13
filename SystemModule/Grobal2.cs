@@ -1321,6 +1321,23 @@ namespace SystemModule
         public const int SM_OPEN_COMMIT_ITEM = 4635;
         public const int SM_PLAYER_AUTHEN = 4636;
 
+        // === 元宝寄售 (YB consignment) list queries ===
+        // Jump table 0x6D8315 entries 52/53/56/57 (base ident 1200, 0x6D8300 `add eax,-1200`).
+        // Each arm is `mov eax,[ebp-4] / call <thunk>`; the thunk takes self+0x106 (the char
+        // name) and calls one method on the manager at [[0x7D6ABC]]. No packet field is read.
+        //   1252 0x6DA685 -> 0x6E7E3C -> 0x632A14   1253 0x6DA692 -> 0x6E7E90 -> 0x632E7C
+        //   1256 0x6DA6D5 -> 0x6E83AC -> 0x632BEC   1257 0x6DA6E2 -> 0x6E8400 -> 0x632D34
+        public const int CM_YB_CONSIGN_INBOX = 1252;
+        public const int CM_YB_CONSIGN_OUTBOX = 1253;
+        public const int CM_YB_DEAL_BUY_HISTORY = 1256;
+        public const int CM_YB_DEAL_SELL_HISTORY = 1257;
+        // Reply idents. The manager passes sub_6E80CC a selector in ECX (0x47A/0x47B/0x480/0x481)
+        // and 0x6E80DE-0x6E8129 translates it into these before the vtbl+0x254 send.
+        public const int SM_YB_CONSIGN_INBOX = 3001;
+        public const int SM_YB_CONSIGN_OUTBOX = 3002;
+        public const int SM_YB_DEAL_BUY_HISTORY = 3005;
+        public const int SM_YB_DEAL_SELL_HISTORY = 3006;
+
         public const int SM_NEEDPASSWORD = 8003;
         public const int SM_GETREGINFO = 8004;
         public const int DATA_BUFSIZE = 1024;

@@ -4,13 +4,13 @@
 
 | 状态 | 计数 |
 |---|---|
-| IMPLEMENTED | 36 |
+| IMPLEMENTED | 73 |
 | SCRIPT_ONLY | 22 |
-| LABEL_ONLY | 321 |
+| LABEL_ONLY | 284 |
 | MISSING | 1 |
 | INVENTED | 1 |
 
-生产已开启（值 != 0）215 键；其中无行为的 177 键。
+生产已开启（值 != 0）215 键；其中无行为的 172 键。
 
 ## 生产已开启但 C# 无行为
 
@@ -21,19 +21,15 @@
 | `全服击杀提示` | 1 | 盘古1 | LABEL_ONLY | `0x102b0384` | 2 | - |
 | `召唤骷髅_数量` | 1 | 盘古1 | LABEL_ONLY | `0x102b0a30` | 2 | - |
 | `屏蔽属性提升提示` | 1 | 盘古1 | LABEL_ONLY | `0x102b043c` | 2 | `0x741a21` `0x741a5c` `0x741a97` `0x741ad2` `0x741b0d` `0x741b48` `0x741b83` `0x741bbe` `0x741bf9` `0x741c34` `0x741c6f` `0x741caa` `0x741ce5` `0x741d20` `0x741d5b` `0x741dfd` `0x74281d` `0x742835` `0x74284d` `0x742865` `0x74287d` `0x742895` `0x7428ad` `0x7428c5` `0x7428dd` `0x74290d` `0x742925` `0x74293d` `0x742955` `0x74296d` `0x74298c` |
-| `挖矿触发` | 1 | 盘古1 | LABEL_ONLY | `0x102b04fc` | 2 | `0x6ec111` |
 | `摆摊地图` | "3" | 盘古1 | LABEL_ONLY | `0x102b0a6c` | 3 | - |
 | `摆摊穿人` | 1 | 盘古1 | LABEL_ONLY | `0x102b0354` | 2 | `0x77931d` |
-| `死亡触发` | 1 | 盘古1 | LABEL_ONLY | `0x102b04a8` | 2 | `0x6c09b5` |
 | `盘古击杀触发` | 1 | 盘古1 | LABEL_ONLY | `0x102b004c` | 2 | - |
 | `盘古杀死宝宝` | 1 | 盘古1 | LABEL_ONLY | `0x102b02f4` | 2 | - |
-| `盘古穿戴触发` | 1 | 盘古1 | LABEL_ONLY | `0x102b04c4` | 2 | `0x6d8e35` `0x6d8e4d` |
 | `盘古给与封号` | 1 | 盘古1 | LABEL_ONLY | `0x102b0304` | 2 | - |
 | `盘古高级属性` | 1 | 盘古1 | LABEL_ONLY | `0x102b0748` | 2 | `0x6ba718` `0x6ba72d` `0x6f9ab0` |
 | `神兽_数量` | 1 | 盘古1 | LABEL_ONLY | `0x102b0a24` | 2 | - |
 | `脚本控制头发外显` | 1 | 盘古1 | LABEL_ONLY | `0x102b0538` | 2 | `0x740f85` |
 | `邮件防刷` | 1 | 盘古1 | LABEL_ONLY | `0x102b03b0` | 2 | `0x6e7810` |
-| `防0拆分` | 1 | 盘古1 | LABEL_ONLY | `0x102b03bc` | 2 | `0x6e0ff3` |
 | `限制摆摊_右x` | 340 | 盘古1 | LABEL_ONLY | `0x102b0778` | 3 | - |
 | `限制摆摊_右y` | 340 | 盘古1 | LABEL_ONLY | `0x102b0788` | 3 | - |
 | `限制摆摊_左x` | 280 | 盘古1 | LABEL_ONLY | `0x102b0758` | 3 | - |
@@ -85,103 +81,102 @@
 | `装备提升人物爆率` | 1 | 盘古3 | LABEL_ONLY | `0x102b0718` | 2 | `0x71fd37` |
 | `装备提升人物爆率_A值` | "10" | 盘古3 | LABEL_ONLY | `0x102b0988` | 3 | - |
 | `装备提升人物爆率_B值` | "10" | 盘古3 | LABEL_ONLY | `0x102b09a0` | 3 | - |
-| `头盔属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f44` | 3 | - |
-| `头盔属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e24` | 3 | - |
-| `头盔属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0efc` | 3 | - |
-| `头盔属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0eb4` | 3 | - |
-| `头盔属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e6c` | 3 | - |
-| `头盔最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0f5c` | 3 | - |
-| `头盔最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f14` | 3 | - |
-| `头盔最高点数_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0df4` | 3 | - |
-| `头盔最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0ecc` | 3 | - |
-| `头盔最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e84` | 3 | - |
-| `头盔最高点数_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e3c` | 3 | - |
-| `头盔点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0f2c` | 3 | - |
-| `头盔点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e0c` | 3 | - |
-| `头盔点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0ee4` | 3 | - |
-| `头盔点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e9c` | 3 | - |
-| `头盔点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e54` | 3 | - |
-| `戒指属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b13c4` | 3 | - |
-| `戒指属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b12a4` | 3 | - |
-| `戒指属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b137c` | 3 | - |
-| `戒指属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1334` | 3 | - |
-| `戒指属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b12ec` | 3 | - |
-| `戒指最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b13dc` | 3 | - |
-| `戒指最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1394` | 3 | - |
-| `戒指最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b134c` | 3 | - |
-| `戒指最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1304` | 3 | - |
-| `戒指点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b13ac` | 3 | - |
-| `戒指点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b128c` | 3 | - |
-| `戒指点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1364` | 3 | - |
-| `戒指点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b131c` | 3 | - |
-| `戒指点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b12d4` | 3 | - |
-| `手镯属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1244` | 3 | - |
-| `手镯属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1124` | 3 | - |
-| `手镯属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11fc` | 3 | - |
-| `手镯属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11b4` | 3 | - |
-| `手镯属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b116c` | 3 | - |
-| `手镯最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b125c` | 3 | - |
-| `手镯最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1214` | 3 | - |
-| `手镯最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11cc` | 3 | - |
-| `手镯最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1184` | 3 | - |
-| `手镯点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b122c` | 3 | - |
-| `手镯点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b110c` | 3 | - |
-| `手镯点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b11e4` | 3 | - |
-| `手镯点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b119c` | 3 | - |
-| `手镯点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1154` | 3 | - |
-| `武器属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0c44` | 3 | - |
-| `武器属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0b24` | 3 | - |
-| `武器属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0bfc` | 3 | - |
-| `武器属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0bb4` | 3 | - |
-| `武器属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0b6c` | 3 | - |
-| `武器最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0c5c` | 3 | - |
-| `武器最高点数_准确_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0c14` | 3 | - |
-| `武器最高点数_攻速_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0bcc` | 3 | - |
-| `武器最高点数_道术_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0b84` | 3 | - |
-| `武器最高点数_魔法_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0b3c` | 3 | - |
-| `武器点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0c2c` | 3 | - |
-| `武器点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b0c` | 3 | - |
-| `武器点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0be4` | 3 | - |
-| `武器点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b9c` | 3 | - |
-| `武器点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b54` | 3 | - |
-| `衣服属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0dc4` | 3 | - |
-| `衣服属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0ca4` | 3 | - |
-| `衣服属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d7c` | 3 | - |
-| `衣服属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d34` | 3 | - |
-| `衣服属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0cec` | 3 | - |
-| `衣服最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0ddc` | 3 | - |
-| `衣服最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d94` | 3 | - |
-| `衣服最高点数_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0c74` | 3 | - |
-| `衣服最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d4c` | 3 | - |
-| `衣服最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d04` | 3 | - |
-| `衣服最高点数_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0cbc` | 3 | - |
-| `衣服点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0dac` | 3 | - |
-| `衣服点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0c8c` | 3 | - |
-| `衣服点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0d64` | 3 | - |
-| `衣服点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0d1c` | 3 | - |
-| `衣服点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0cd4` | 3 | - |
+| `头盔属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f44` | 3 | `0x7612d2` |
+| `头盔属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e24` | 3 | `0x761237` |
+| `头盔属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0efc` | 3 | `0x7612af` |
+| `头盔属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0eb4` | 3 | `0x76128c` |
+| `头盔属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e6c` | 3 | `0x761269` |
+| `头盔最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0f5c` | 3 | `0x7611fb` |
+| `头盔最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f14` | 3 | `0x7612c6` |
+| `头盔最高点数_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0df4` | 3 | `0x76122b` |
+| `头盔最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0ecc` | 3 | `0x7612a3` |
+| `头盔最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e84` | 3 | `0x761280` |
+| `头盔最高点数_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0e3c` | 3 | `0x76125d` |
+| `头盔点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0f2c` | 3 | `0x7612c1` |
+| `头盔点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e0c` | 3 | `0x761226` |
+| `头盔点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0ee4` | 3 | `0x76129e` |
+| `头盔点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e9c` | 3 | `0x76127b` |
+| `头盔点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0e54` | 3 | `0x761258` |
+| `戒指属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b13c4` | 3 | `0x761dba` |
+| `戒指属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b12a4` | 3 | `0x761d2e` |
+| `戒指属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b137c` | 3 | `0x761d97` |
+| `戒指属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1334` | 3 | `0x761d74` |
+| `戒指属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b12ec` | 3 | `0x761d51` |
+| `戒指最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b13dc` | 3 | `0x761cf0` |
+| `戒指最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1394` | 3 | `0x761dae` |
+| `戒指最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b134c` | 3 | `0x761d8b` |
+| `戒指最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1304` | 3 | `0x761d68` |
+| `戒指点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b13ac` | 3 | `0x761da9` |
+| `戒指点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b128c` | 3 | `0x761d1d` |
+| `戒指点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1364` | 3 | `0x761d86` |
+| `戒指点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b131c` | 3 | `0x761d63` |
+| `戒指点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b12d4` | 3 | `0x761d40` |
+| `手镯属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1244` | 3 | `0x7626b2` |
+| `手镯属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1124` | 3 | `0x762626` |
+| `手镯属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11fc` | 3 | `0x76268f` |
+| `手镯属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11b4` | 3 | `0x76266c` |
+| `手镯属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b116c` | 3 | `0x762649` |
+| `手镯最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b125c` | 3 | `0x7625e8` |
+| `手镯最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1214` | 3 | `0x7626a6` |
+| `手镯最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b11cc` | 3 | `0x762683` |
+| `手镯最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1184` | 3 | `0x762660` |
+| `手镯点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b122c` | 3 | `0x7626a1` |
+| `手镯点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b110c` | 3 | `0x762615` |
+| `手镯点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b11e4` | 3 | `0x76267e` |
+| `手镯点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b119c` | 3 | `0x76265b` |
+| `手镯点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1154` | 3 | `0x762638` |
+| `武器属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0c44` | 3 | `0x7609d8` |
+| `武器属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0b24` | 3 | `0x760920` |
+| `武器属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0bfc` | 3 | `0x76098f` |
+| `武器属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0bb4` | 3 | `0x76096a` |
+| `武器属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0b6c` | 3 | `0x760945` |
+| `武器最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0c5c` | 3 | `0x7608f0` |
+| `武器最高点数_准确_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0c14` | 3 | `0x7609cc` |
+| `武器最高点数_攻速_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0bcc` | 3 | `0x760983` |
+| `武器最高点数_道术_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0b84` | 3 | `0x76095e` |
+| `武器最高点数_魔法_值` | "7" | 盘古4 | LABEL_ONLY | `0x102b0b3c` | 3 | `0x760939` |
+| `武器点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0c2c` | 3 | `0x7609c7` |
+| `武器点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b0c` | 3 | `0x76090f` |
+| `武器点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0be4` | 3 | `0x76097e` |
+| `武器点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b9c` | 3 | `0x760959` |
+| `武器点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0b54` | 3 | `0x760934` |
+| `衣服属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0dc4` | 3 | `0x783ff2` |
+| `衣服属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0ca4` | 3 | `0x783f66` |
+| `衣服属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d7c` | 3 | `0x783fcf` |
+| `衣服属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d34` | 3 | `0x783fac` |
+| `衣服属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0cec` | 3 | `0x783f89` |
+| `衣服最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b0ddc` | 3 | `0x7639f3` |
+| `衣服最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d94` | 3 | `0x783fe6` |
+| `衣服最高点数_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0c74` | 3 | `0x783f5a` |
+| `衣服最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d4c` | 3 | `0x783fc3` |
+| `衣服最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0d04` | 3 | `0x783fa0` |
+| `衣服最高点数_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0cbc` | 3 | `0x783f7d` |
+| `衣服点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0dac` | 3 | `0x783fe1` |
+| `衣服点数几率_攻击_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0c8c` | 3 | `0x783f55` |
+| `衣服点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0d64` | 3 | `0x783fbe` |
+| `衣服点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0d1c` | 3 | `0x783f9b` |
+| `衣服点数几率_魔法_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b0cd4` | 3 | `0x783f78` |
 | `随机极品` | 1 | 盘古4 | LABEL_ONLY | `0x102b073c` | 8 | - |
-| `项链属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b10c4` | 3 | - |
-| `项链属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fa4` | 3 | - |
-| `项链属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b107c` | 3 | - |
-| `项链属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1034` | 3 | - |
-| `项链属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fec` | 3 | - |
-| `项链最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b10dc` | 3 | - |
-| `项链最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1094` | 3 | - |
-| `项链最高点数_攻击_值` | "3" | 盘古4 | LABEL_ONLY | `0x102b0f74` | 3 | - |
-| `项链最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b104c` | 3 | - |
-| `项链最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1004` | 3 | - |
-| `项链最高点数_魔法_值` | "2" | 盘古4 | LABEL_ONLY | `0x102b0fbc` | 3 | - |
-| `项链点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b10ac` | 3 | - |
-| `项链点数几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f8c` | 3 | - |
-| `项链点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1064` | 3 | - |
-| `项链点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b101c` | 3 | - |
-| `项链点数几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fd4` | 3 | - |
+| `项链属性几率_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b10c4` | 3 | `0x76186e` |
+| `项链属性几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fa4` | 3 | `0x7617e2` |
+| `项链属性几率_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b107c` | 3 | `0x76184b` |
+| `项链属性几率_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1034` | 3 | `0x761828` |
+| `项链属性几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fec` | 3 | `0x761805` |
+| `项链最随机性_极品_值` | "80" | 盘古4 | LABEL_ONLY | `0x102b10dc` | 3 | `0x7617a3` |
+| `项链最高点数_准确_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1094` | 3 | `0x761862` |
+| `项链最高点数_攻击_值` | "3" | 盘古4 | LABEL_ONLY | `0x102b0f74` | 3 | `0x7617d6` |
+| `项链最高点数_攻速_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b104c` | 3 | `0x76183f` |
+| `项链最高点数_道术_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b1004` | 3 | `0x76181c` |
+| `项链最高点数_魔法_值` | "2" | 盘古4 | LABEL_ONLY | `0x102b0fbc` | 3 | `0x7617f9` |
+| `项链点数几率_准确_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b10ac` | 3 | `0x76185d` |
+| `项链点数几率_攻击_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0f8c` | 3 | `0x7617d1` |
+| `项链点数几率_攻速_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b1064` | 3 | `0x76183a` |
+| `项链点数几率_道术_值` | "5" | 盘古4 | LABEL_ONLY | `0x102b101c` | 3 | `0x761817` |
+| `项链点数几率_魔法_值` | "10" | 盘古4 | LABEL_ONLY | `0x102b0fd4` | 3 | `0x7617f4` |
 | `主号高级暴击` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b1578` | 2 | - |
 | `技能等级突破` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b0210` | 2 | - |
 | `技能等级突破_最大值` | 255 | 眼神2(第1页) | LABEL_ONLY | `0x102b0a40` | 2 | - |
 | `循环时间_值` | 2000 | 眼神2(第2页) | LABEL_ONLY | `0x102b1488` | 3 | - |
-| `新倍攻和暴击` | 1 | 配置1 | LABEL_ONLY | `0x102afd98` | 2 | `0x76c88b` |
 | `中毒飘血` | 1 | 配置2 | LABEL_ONLY | `0x102affe4` | 2 | `0x767e10` |
 | `免毒符` | 1 | 配置2 | LABEL_ONLY | `0x102affc8` | 2 | `0x6ed945` `0x6ed9d1` `0x6ed9eb` `0x6eda85` `0x6edab1` `0x6edadf` `0x6edb11` `0x6edb3e` `0x6edb65` `0x6edb8c` `0x6edc58` `0x6ede1d` |
 | `删除技能不提示` | 1 | 配置2 | LABEL_ONLY | `0x102afff0` | 2 | `0x6c7797` |
@@ -207,11 +202,11 @@
 | `全服击杀提示` | 1 | Y | toggle | LABEL_ONLY | IsKillNotice; ShouldSendKillNotice |
 | `关闭摆摊` | 0 |  | toggle | LABEL_ONLY | IsCloseStall |
 | `召唤神兽` | 0 |  | toggle | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
-| `召唤神兽触发` | 0 |  | toggle | LABEL_ONLY | IsShenShouTrigger; IsShenShouTriggerEnabled |
+| `召唤神兽触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `召唤骷髅` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
 | `召唤骷髅_数量` | 1 | Y | value | LABEL_ONLY | NativeSlaveCountImm8 |
-| `召唤骷髅触发` | 0 |  | toggle | LABEL_ONLY | IsKuLouTrigger; IsKuLouTriggerEnabled |
-| `回城按钮触发` | 0 |  | toggle | LABEL_ONLY | IsReturnBtnTrigger |
+| `召唤骷髅触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `回城按钮触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `土城摆摊` | 0 |  | toggle | LABEL_ONLY | IsTuChengStall |
 | `地面物品消失时间` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.ViewRange.cs |
 | `地面物品消失时间_时间` | 150 | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.ViewRange.cs |
@@ -220,20 +215,20 @@
 | `屏蔽元宝数据库日志` | 0 |  | toggle | LABEL_ONLY | IsHideGoldLog; ShouldHideGoldLog |
 | `屏蔽发言频繁禁言功能` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.Chat.cs |
 | `屏蔽属性提升提示` | 1 | Y | toggle | LABEL_ONLY | IsHideAttrUp; ShouldHideAttrUp |
-| `心灵启示触发` | 0 |  | toggle | LABEL_ONLY | IsMindRevealTrigger |
+| `心灵启示触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `指定地图编号摆摊` | 0 |  | toggle | LABEL_ONLY | IsMapStall |
-| `挖矿触发` | 1 | Y | toggle | LABEL_ONLY | IsMineTrigger |
+| `挖矿触发` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `摆摊地图` | "3" | Y | value | LABEL_ONLY | GetStallMapId; MapStallMap |
 | `摆摊穿人` | 1 | Y | toggle | LABEL_ONLY | IsStallPass; IsStallPassThrough |
 | `攻沙脚本控制` | 0 |  | toggle | LABEL_ONLY | IsSiegeScript; IsSiegeScriptEnabled |
-| `死亡触发` | 1 | Y | toggle | LABEL_ONLY | IsDeathTrigger |
+| `死亡触发` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `盘古击杀触发` | 1 | Y | toggle | LABEL_ONLY | IsPgKillTrigger |
 | `盘古杀死宝宝` | 1 | Y | toggle | LABEL_ONLY | IsPgKillPet |
 | `盘古物理攻击触发` | 0 |  | toggle | LABEL_ONLY | IsPgPhysTrigger |
-| `盘古穿戴触发` | 1 | Y | toggle | LABEL_ONLY | IsPgWearTrigger |
+| `盘古穿戴触发` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `盘古给与封号` | 1 | Y | toggle | LABEL_ONLY | IsPgGiveTitle; IsPgGiveTitleEnabled |
 | `盘古高级属性` | 1 | Y | toggle | LABEL_ONLY | IsPgAdvancedAttr; IsPgAdvancedAttrEnabled |
-| `盘古魔法攻击触发` | 0 |  | toggle | LABEL_ONLY | IsPgMagicTrigger |
+| `盘古魔法攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `神兽_序号` | 0 |  | value | LABEL_ONLY | ShenShouIdx |
 | `神兽_数量` | 1 | Y | value | LABEL_ONLY | NativeSlaveCountImm8 |
 | `禁止交易地图` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.Operate.cs |
@@ -243,7 +238,7 @@
 | `行会显示` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.Base.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `踢玩家下线` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `邮件防刷` | 1 | Y | toggle | LABEL_ONLY | IsMailAntiSpam; IsMailAntiSpamEnabled |
-| `防0拆分` | 1 | Y | toggle | LABEL_ONLY | IsZeroDefSplit |
+| `防0拆分` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.PileItems.cs |
 | `限制摆摊` | 0 |  | toggle | LABEL_ONLY | IsLimitStall; IsStallAllowed |
 | `限制摆摊_右x` | 340 | Y | value | LABEL_ONLY | LimitStall_RightX |
 | `限制摆摊_右y` | 340 | Y | value | LABEL_ONLY | LimitStall_RightY |
@@ -312,14 +307,14 @@
 | `中毒时间上限` | 1 | Y | toggle | LABEL_ONLY | IsPoisonTimeLimit |
 | `中毒时间上限_秒` | "60" | Y | value | LABEL_ONLY | PoisonTimeLimitSec |
 | `人物爆率调整` | 0 |  | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
-| `人物等级1_值` | 40 | Y | value | LABEL_ONLY | PlayerLv1 |
-| `人物等级2_值` | 45 | Y | value | LABEL_ONLY | PlayerLv2 |
-| `人物等级3_值` | 48 | Y | value | LABEL_ONLY | PlayerLv3 |
+| `人物等级1_值` | 40 | Y | value | LABEL_ONLY | IsCustomDmgPlus; PlayerLv1 |
+| `人物等级2_值` | 45 | Y | value | LABEL_ONLY | IsCustomDmgPlus; PlayerLv2 |
+| `人物等级3_值` | 48 | Y | value | LABEL_ONLY | IsCustomDmgPlus; PlayerLv3 |
 | `修改召唤神兽` | 1 | Y | toggle | LABEL_ONLY | IsModifyShenShou; IsModifyShenShouEnabled |
 | `屏蔽排行榜` | 0 |  | toggle | LABEL_ONLY | IsHideRank; ShouldHideRank |
 | `怪物名字1_值` | "强化神兽" | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterName1 |
-| `怪物名字2_值` | "强化神兽" | Y | value | LABEL_ONLY | MonsterName2 |
-| `怪物名字3_值` | "白虎" | Y | value | LABEL_ONLY | MonsterName3 |
+| `怪物名字2_值` | "强化神兽" | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterName2 |
+| `怪物名字3_值` | "白虎" | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterName3 |
 | `怪物数量1_值` | 1 | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterCount1; MonsterName3 |
 | `怪物数量2_值` | 2 | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterCount2 |
 | `怪物数量3_值` | 1 | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterCount3 |
@@ -457,37 +452,37 @@
 | 键 | 值 | 开 | 控件 | 状态 | C# 行为落点 / API 成员 |
 |---|---|---|---|---|---|
 | `AddLimLF函数修改` | 0 |  | toggle | LABEL_ONLY | IsAddLimLF; IsAddLimLFModified |
-| `BB杀怪触发` | 0 |  | toggle | LABEL_ONLY | IsPetKillTrigger |
-| `BB死亡触发` | 0 |  | toggle | LABEL_ONLY | IsPetDeathTrigger |
+| `BB杀怪触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `BB死亡触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `IncActivePoint函数修改` | 0 |  | toggle | LABEL_ONLY | IsIncActivePoint; IsIncActivePointModified |
 | `give极品` | 0 |  | toggle | LABEL_ONLY | IsGiveExtreme; IsGiveExtremeEnabled |
-| `上线触发` | 0 |  | toggle | LABEL_ONLY | IsLoginTrigger |
+| `上线触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `临时大背包` | 0 |  | toggle | LABEL_ONLY | IsTempBag; SwitchBigBag |
 | `全屏拾取` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `刀刀切割` | 0 |  | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.NativeSocialSlots.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `刀刀切割` | 0 |  | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.NativeSocialSlots.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `千分比免伤` | 0 |  | toggle | LABEL_ONLY | IsDmgReduction |
 | `复活戒指改cd` | 0 |  | toggle | LABEL_ONLY | IsReviveCD; IsReviveCDEnabled |
 | `复活戒指概率` | 0 |  | toggle | LABEL_ONLY | IsReviveChance; IsReviveChanceEnabled |
-| `复活触发脚本` | 0 |  | toggle | LABEL_ONLY | IsReviveScript |
-| `捡物触发` | 0 |  | toggle | LABEL_ONLY | IsPickupTrigger |
+| `复活触发脚本` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `捡物触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `攻击反伤` | 0 |  | toggle | LABEL_ONLY | IsReflectEnabled |
-| `攻击触发` | 0 |  | toggle | LABEL_ONLY | IsAttackTrigger |
-| `新倍攻和暴击` | 1 | Y | toggle | LABEL_ONLY | IsNewMultCrit |
-| `新穿戴触发` | 0 |  | toggle | LABEL_ONLY | IsWearTrigger |
+| `攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `新倍攻和暴击` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `新穿戴触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `永久属性` | 0 |  | toggle | LABEL_ONLY | IsPermAttr |
 | `永久攻速` | 0 |  | toggle | LABEL_ONLY | IsPermSpeed |
 | `特殊宝宝` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `特殊属性` | 0 |  | toggle | LABEL_ONLY | IsPetSpecial |
 | `禁止装备自动绑定` | 0 |  | toggle | LABEL_ONLY | IsBindDisabled |
 | `移动速度` | 0 |  | toggle | LABEL_ONLY | IsMoveSpeed |
-| `英雄倍攻和暴击` | 0 |  | toggle | LABEL_ONLY | IsHeroPowerCrit |
+| `英雄倍攻和暴击` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `英雄攻速移速` | 0 |  | toggle | LABEL_ONLY | IsHeroSpeed; IsHeroSpeedEnabled |
 | `英雄施法速度` | 0 |  | toggle | LABEL_ONLY | IsHeroCastSpeed |
-| `英雄穿戴触发` | 0 |  | toggle | LABEL_ONLY | IsHeroWearTrigger; IsHeroWearTriggerEnabled |
-| `被击杀触发` | 0 |  | toggle | LABEL_ONLY | IsBeKilledTrigger |
+| `英雄穿戴触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `被击杀触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `装备来源` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `读取英雄装备` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `魔法攻击触发` | 0 |  | toggle | LABEL_ONLY | IsMagicAttackTrigger |
+| `魔法攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `麻痹概率` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 
 ### 配置2（31）
@@ -496,23 +491,23 @@
 |---|---|---|---|---|---|
 | `中毒飘血` | 1 | Y | toggle | LABEL_ONLY | IsPoisonBleed |
 | `免毒符` | 1 | Y | toggle | LABEL_ONLY | IsAntiPoison |
-| `冰咆哮主属性切换` | 0 |  | toggle | LABEL_ONLY | IsIceStormSwitch |
-| `冰咆哮范围` | 0 |  | toggle | LABEL_ONLY | IsIceStormRange |
+| `冰咆哮主属性切换` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `冰咆哮范围` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `删除技能不提示` | 1 | Y | toggle | LABEL_ONLY | IsDelSkillSilent; ShouldDelSkillSilent |
 | `升级技能不提示` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Command/Commands/ChgHeroSkillCommand.cs; GameSvr/Command/Commands/TrainingMagicCommand.cs |
 | `双毒时间_最低` | 5 | Y | value | LABEL_ONLY | DualPoisonMin |
-| `嗜血术倍数` | 0 |  | toggle | LABEL_ONLY | IsBloodSuck |
-| `地狱雷光可换主属性` | 0 |  | toggle | LABEL_ONLY | IsHellLightSwitch |
-| `地狱雷光系数` | 0 |  | toggle | LABEL_ONLY | IsHellLightFactor |
-| `地狱雷光范围` | 0 |  | toggle | LABEL_ONLY | IsHellLightRange |
+| `嗜血术倍数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `地狱雷光可换主属性` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `地狱雷光系数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `地狱雷光范围` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `激光命中概率` | 0 |  | toggle | LABEL_ONLY | IsLaserHitRate |
-| `激光电影可换主属性` | 0 |  | toggle | LABEL_ONLY | IsLaserSwitch |
-| `激光范围及系数` | 0 |  | toggle | LABEL_ONLY | IsLaserRange |
-| `火球主属性切换` | 0 |  | toggle | LABEL_ONLY | IsFireBallSwitch |
-| `火球自定义范围` | 0 |  | toggle | LABEL_ONLY | IsFireBallRange |
-| `火雨主属切换` | 0 |  | toggle | LABEL_ONLY | IsFireRainSwitch |
-| `爆裂火焰可换主属性` | 0 |  | toggle | LABEL_ONLY | IsBlastFlameSwitch |
-| `爆裂火焰范围及系数` | 0 |  | toggle | LABEL_ONLY | IsBlastFlameRange |
+| `激光电影可换主属性` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `激光范围及系数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `火球主属性切换` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `火球自定义范围` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `火雨主属切换` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `爆裂火焰可换主属性` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `爆裂火焰范围及系数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `禁止发言不提示` | 1 | Y | toggle | LABEL_ONLY | IsBanChatSilent; ShouldBanChatSilent |
 | `红毒_A` | 1 | Y | value | LABEL_ONLY | IsRedPoisonA |
 | `红毒_B` | 1 | Y | value | LABEL_ONLY | IsRedPoisonB |
@@ -521,9 +516,9 @@
 | `绿毒_最低` | 5 | Y | value | LABEL_ONLY | GreenPoisonMin |
 | `群毒` | 0 |  | toggle | LABEL_ONLY | IsGroupPoison |
 | `群毒值` | 0 |  | toggle | LABEL_ONLY | IsGroupPoisonVal; IsGroupPoisonValEnabled |
-| `野蛮等级` | 0 |  | toggle | LABEL_ONLY | IsBarbarianLevelEnabled |
-| `雷电主属性切换` | 0 |  | toggle | LABEL_ONLY | IsLightningSwitch |
-| `雷电自定义范围` | 0 |  | toggle | LABEL_ONLY | IsLightningRange |
+| `野蛮等级` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `雷电主属性切换` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `雷电自定义范围` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `魔法盾修正` | 1 | Y | toggle | LABEL_ONLY | IsMagicShieldFix |
 
 ### 眼神2(第1页)（34）
@@ -638,9 +633,9 @@
 
 ## 生产 config 无但转储里有（合法，非臆造）
 
-- `怪物伤害触发技能特效` @ `0x102bcfdc` — GameSvr/Plugins/YanshenApi.cs:1380, GameSvr/Plugins/YanshenApi.cs:1409
-- `指定英雄放技能` @ `0x102b9048` — GameSvr/Plugins/YanshenApi.cs:1447
-- `火墙修改` @ `0x102bd07c` — GameSvr/Plugins/YanshenApi.cs:2904
+- `怪物伤害触发技能特效` @ `0x102bcfdc` — GameSvr/Plugins/YanshenApi.cs:1502, GameSvr/Plugins/YanshenApi.cs:1531
+- `指定英雄放技能` @ `0x102b9048` — GameSvr/Plugins/YanshenApi.cs:1569
+- `火墙修改` @ `0x102bd07c` — GameSvr/Plugins/YanshenApi.cs:3140
 
 ## INVENTED（生产 config 和转储字符串里都没有）
 

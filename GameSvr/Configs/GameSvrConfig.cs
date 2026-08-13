@@ -376,8 +376,6 @@ namespace GameSvr
         public int nMasterOKLevel;
         public int nMasterOKCreditPoint;
         public int nMasterOKBonusPoint;
-        public bool boPKLevelProtect;
-        public int nPKProtectLevel;
         public int nRedPKProtectLevel;
         public int nItemPowerRate;
         public int nItemExpRate;
@@ -571,7 +569,6 @@ namespace GameSvr
         public bool boDieRedScatterBagAll;
         public int nDieDropUseItemRate;
         public int nDieRedDropUseItemRate;
-        public bool boDieDropGold;
         public bool boKillByHumanDropUseItem;
         public bool boKillByMonstDropUseItem;
         public bool boKickExpireHuman;
@@ -1241,8 +1238,6 @@ namespace GameSvr
             nMasterOKLevel = 500;
             nMasterOKCreditPoint = 0;
             nMasterOKBonusPoint = 0;
-            boPKLevelProtect = false;
-            nPKProtectLevel = 10;
             nRedPKProtectLevel = 10;
             nItemPowerRate = 10000;
             nItemExpRate = 10000;
@@ -1424,7 +1419,6 @@ namespace GameSvr
             boDieRedScatterBagAll = true;
             nDieDropUseItemRate = 30;
             nDieRedDropUseItemRate = 15;
-            boDieDropGold = false;
             boKillByHumanDropUseItem = false;
             boKillByMonstDropUseItem = true;
             boKickExpireHuman = false;

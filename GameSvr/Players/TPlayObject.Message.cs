@@ -1084,6 +1084,15 @@ namespace GameSvr
                     else if (ProcessMsg.nParam2 == 1)
                         m_boNativeHeroRecordShared = true;
                     break;
+                case Grobal2.CM_YB_CONSIGN_INBOX:
+                case Grobal2.CM_YB_CONSIGN_OUTBOX:
+                case Grobal2.CM_YB_DEAL_BUY_HISTORY:
+                case Grobal2.CM_YB_DEAL_SELL_HISTORY:
+                    // Four two-instruction arms that share one shape; the per-ident differences
+                    // (throttle slot, throttle comparison, row cap, SQL, reply ident) live in
+                    // NativeYbConsignmentQuery.Descriptors.
+                    ClientYbConsignmentQuery(ProcessMsg.wIdent);
+                    break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
                 //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051
@@ -1188,14 +1197,40 @@ namespace GameSvr
                     ClientChangeMagicKey(ProcessMsg.nParam1, ProcessMsg.nParam2);
                     break;
                 case Grobal2.CM_SOFTCLOSE:
+                    // Handler 0x6D8ED0 is four instructions and reads NO packet field:
+                    //   0x6D8ED0  8B 45 FC              mov  eax,[ebp-4]
+                    //   0x6D8ED3  C6 80 10 07 00 00 01  mov  byte [self+0x710],1
+                    //   0x6D8EDA  8B 45 FC              mov  eax,[ebp-4]
+                    //   0x6D8EDD  C6 80 BB 04 00 00 01  mov  byte [self+0x4BB],1
+                    //   0x6D8EE4  E9 43 2D 00 00        jmp  0x6DBC2C
+                    // so the `wParam == 1 -> m_boEmergencyClose` arm that used to sit here had
+                    // no native counterpart, and it let the client pick the close mode.
+                    //
+                    // Both offsets are now pinned, which is what previously blocked the call.
+                    // The run loop at 0x651969 guards logout with the same three flags C# does
+                    // and then relocates exactly the same three fields:
+                    //   0x651969  cmp byte[p+0x4BB],0 / 75 1C jne 0x65198E
+                    //   0x651975  cmp byte[p+0x4BD],0 / 75 10 jne 0x65198E
+                    //   0x651981  cmp byte[p+0x4BC],0 / 0F 84 .. je (not logging out)
+                    //   0x651991  cmp byte[p+0x4BA],0 / 74 41 je            ; m_boSwitchData
+                    //   0x65199A  add eax,0x115 / 0x6519A5 add edx,0xC28    ; map name
+                    //   0x6519B5  [p+0xC38] -> [p+0x12C]                    ; CurrX
+                    //   0x6519C7  [p+0xC3C] -> [p+0x130]                    ; CurrY
+                    // which is line-for-line the `m_boEmergencyClose || m_boKickFlag ||
+                    // m_boSoftClose` guard and the m_boSwitchData block above at 463-470.
+                    // m_boEmergencyClose therefore lives in {0x4BB, 0x4BC, 0x4BD}, and 0x4BB is
+                    // already fixed as m_boSoftClose (RM 10000 writes it at 0x6B44A8).
+                    //
+                    // 0x710 is outside that trio. It has two writers — this handler and the
+                    // switch-server setter 0x6BD0AE, which also stores the target name/x/y and
+                    // raises 0x4BA and 0x4BB — and one reader, 0x6B64E4, choosing disconnect
+                    // reason 1 over 3 for sub_6B6510. C#'s m_boReconnection has the same two
+                    // writers (here and the GetMultiServerAddrPort path in UsrEngn) and is
+                    // likewise outside the trio. The mapping is no longer an inference.
                     if (!m_boOffLineFlag)
                     {
                         m_boReconnection = true;
                         m_boSoftClose = true;
-                        if (ProcessMsg.wParam == 1)
-                        {
-                            m_boEmergencyClose = true;
-                        }
                     }
                     break;
                 case Grobal2.CM_CLICKNPC:
@@ -1213,7 +1248,11 @@ namespace GameSvr
                     // edx = Recog (the NPC id) and ecx = Tag.
                     if (HasNativeActiveState(0x34))
                         break;
-                    ClientClickNPC(ProcessMsg.nParam1);
+                    // nParam3 is Tag on the default ingress arm (UsrEngn.ProcessUserMessage
+                    // passes DefMsg.Tag as lParam3), and 0x6D8EFE `0F B7 48 08 movzx ecx,
+                    // word [msg+8]` makes Tag the second argument to 0x6B8B28, where it picks
+                    // between the monster registry and the NPC registry.
+                    ClientClickNPC(ProcessMsg.nParam1, ProcessMsg.nParam3);
                     break;
                 case Grobal2.CM_MERCHANTDLGSELECT:
                     ClientMerchantDlgSelect(ProcessMsg.nParam1, ProcessMsg.sMsg);
@@ -2793,16 +2832,40 @@ namespace GameSvr
 
                 case Grobal2.CM_COMMIT_ITEM:
                 {
-                    if (m_boDeath || m_boGhost || M2Share.PasEngine == null)
+                    // Native handler 0x6DBB8A -> sub_6F9648(eax=self, edx=Recog,
+                    // ecx=MakeLong(Tag,Param), [ebp+8]=Series). The gate chain is
+                    // exactly these seven steps, every failure falling to the silent
+                    // exit at 0x6F9711:
+                    //   0x6F9672  E8 E1 03 F5 FF  call 0x649A58   ; esi = object by Recog
+                    //   0x6F9679  85 F6 / 0F 84   test esi,esi    ; null -> out
+                    //   0x6F9681  8B 8B D8 0C 00 00  mov ecx,[self+0xCD8]
+                    //   0x6F9687  85 C9 / 0F 84   test ecx,ecx    ; no open NPC -> out
+                    //   0x6F968F  3B BB D8 0C 00 00  cmp edi,[self+0xCD8]
+                    //   0x6F9695  75 7A              jne             ; not the open NPC -> out
+                    //   0x6F969D  3B 83 28 01 00 00  cmp [npc+0x128],[self+0x128]
+                    //   0x6F96BA  83 F8 0F / 7F 52   cmp abs(dX),0xF / jg  ; reject only when > 15
+                    //   0x6F96D0  83 F8 0F / 7F 3C   cmp abs(dY),0xF / jg
+                    //   0x6F96DA  E8 29 38 04 00     call 0x73CF08   ; item by id, null -> out
+                    // sub_6F9648 reads neither [self+0x73] nor [self+0x74], and an
+                    // exhaustive scan of the dispatcher body 0x6D7D68..0x6DBC2C finds
+                    // zero references to either offset, so there is no death/ghost gate
+                    // on this path at any level -- CM 4629's callee 0x6F7C40 does its own
+                    // test at 0x6F7C8D/0x6F7C9A precisely because the dispatcher has none.
+                    // The handler also never pushes the body string, so the native item
+                    // match at 0x73CF40 `cmp [item+0x18],id` is by id alone.
+                    if (M2Share.PasEngine == null)
                     {
                         break;
                     }
 
                     var npc = GetMerchantQueryNpc(ProcessMsg.nParam1);
-                    if (npc == null ||
-                        !(npc.m_boIsHide || npc.m_PEnvir == m_PEnvir &&
-                            Math.Abs(npc.m_nCurrX - m_nCurrX) < 15 &&
-                            Math.Abs(npc.m_nCurrY - m_nCurrY) < 15))
+                    if (npc == null || m_NPC == null || !ReferenceEquals(npc, m_NPC))
+                    {
+                        break;
+                    }
+                    if (npc.m_PEnvir != m_PEnvir ||
+                        Math.Abs(npc.m_nCurrX - m_nCurrX) > 15 ||
+                        Math.Abs(npc.m_nCurrY - m_nCurrY) > 15)
                     {
                         break;
                     }
@@ -2810,8 +2873,7 @@ namespace GameSvr
                     var clientItemId = HUtil32.MakeLong(ProcessMsg.nParam2, ProcessMsg.nParam3);
                     var commitItem = FindClientItemIn(m_ItemList, clientItemId, false)
                                      ?? FindClientItemIn(m_ItemList, clientItemId, true);
-                    if (commitItem == null || !string.Equals(ItmUnit.GetItemName(commitItem),
-                            ProcessMsg.sMsg, StringComparison.OrdinalIgnoreCase))
+                    if (commitItem == null)
                     {
                         break;
                     }
@@ -3047,10 +3109,18 @@ namespace GameSvr
             IList<TDeleteItem> delList = null;
             try
             {
-                if (m_boAngryRing || m_boNoDropUseItem)
-                {
-                    return;
-                }
+                // 战神 sub_73FC70 的序言同样没有任何早退。0x73FC70..0x73FCB6：
+                //   73FC70  55 / 8B EC / 83 C4 8C          栈帧
+                //   73FC76  53 56 57                       push ebx,esi,edi
+                //   73FC79  33 D2 + 七条 mov [ebp-…],edx   七个局部清零
+                //   73FC90  8B F0                          esi := self
+                //   73FC94  55 / 68 01 00 74 00 / 64 FF 30 / 64 89 20   SEH 帧
+                //   73FCA0  33 C0 / 89 45 F4 / C6 45 FF 00 计数与红名局部清零
+                //   73FCA9  A1 AC 5F 7D 00 / 8B 00 / 3B 86 60 01 00 00
+                //   73FCB6  7D 09                          jge 0x73FCC1  ← 全函数第一条条件跳转
+                // 原先这里的 `m_boAngryRing || m_boNoDropUseItem` 早退在原生无对应，
+                // 全镜像多编码零命中（GBK / 裸 ASCII 大小写不敏感 / UTF-16LE 三路皆 0）。
+                // 按 §3.1 删除：原版死亡就是照掉装备，没有不死戒指这一说。
                 GoodItem StdItem;
                 // 人物爆率调整 patches sub_73FC70, not a runtime multiplier:
                 //   0x100B9CCC A3 BB FC 73 00 -> imm32 of 0x73FCB8 C7 45 F8 15 00 00 00 (red K)
@@ -3132,11 +3202,21 @@ namespace GameSvr
                     {
                         continue;
                     }
-                    if (M2Share.InDisableTakeOffList(m_UseItems[i].wIndex))
-                    {
-                        continue;
-                    }
-                    
+                    // 原先这里还有一次 `InDisableTakeOffList(wIndex)` 查表。战神
+                    // sub_73FC70 的整个循环体 0x73FD29..0x73FF73 里没有任何按物品编号
+                    // 查表的动作，抽签之后紧接的就是分流：
+                    //   73FD99  E8 AE 3D CC FF        call sub_403B4C   ; Random(K)
+                    //   73FD9E  85 C0 / 74 0D         test eax,eax / je -> 通过
+                    //   73FDA2  80 BF FC 00 00 00 00  cmp byte [item+0xFC],0 / 0F 84 …
+                    //   73FDAF  80 BE 78 01 00 00 00  cmp byte [self+0x178],0
+                    //   73FDB6  0F 85 12 01 00 00     jne 0x73FECE      ; 非玩家 -> 落地支
+                    //   73FDBC  A1 34 65 7D 00 …      sub_617A38(…, cl=4) 实名认证
+                    //   73FDD0  80 BF D8 00 00 00 00  cmp byte [item+0xD8],0  ; 赠品
+                    // 剩下的过滤全部走 `[std+2]` / `[std+3]` 的位与 sub_78389C，
+                    // 没有第二张按 wIndex 索引的名单。
+                    // 全镜像多编码零命中：DisableTakeOffList / DisableTakeOffList.txt /
+                    // TakeOffList 三个名字在 GBK、裸 ASCII（大小写不敏感）、UTF-16LE
+                    // 三路皆 0。按 §3.1 删除。
                     if (DropItemDown(m_UseItems[i], 2, true, BaseObject, this))
                     {
                         StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);

@@ -582,6 +582,11 @@ namespace GameSvr
         public bool m_boUnLockPwd = false;
         public bool m_boUnLockStoragePwd = false;
         public bool m_boPasswordLocked = false;
+        /// <summary>
+        /// Native obj+0x674. SuperGm <c>0x006D785F C6 83 74 06 00 00 01</c> 是
+        /// 全镜像对该字节的唯一写入。尚未找到对应的 byte 读点（密码核对路径 BLOCKED）。
+        /// </summary>
+        public bool m_boWaitSuperGmPassword = false;
         
         public byte m_btPwdFailCount = 0;
         
@@ -855,6 +860,7 @@ namespace GameSvr
             m_boUnLockPwd = false;
             m_boUnLockStoragePwd = false;
             m_boPasswordLocked = false;
+            m_boWaitSuperGmPassword = false;
             
             m_btPwdFailCount = 0;
             m_sTempPwd = "";
@@ -2186,10 +2192,22 @@ namespace GameSvr
             TUserItem pu;
             const string sExceptionMsg = "[Exception] TPlayObject::ScatterBagItems";
             IList<TDeleteItem> DelList = null;
-            if (m_boAngryRing || m_boNoDropItem || m_PEnvir.Flag.boNODROPITEM)
-            {
-                return;// 不死戒指
-            }
+            // 战神 sub_740078 的序言里没有任何早退。0x740078..0x7400D4 依次是
+            //   740078  55 / 8B EC / 81 C4 24 FF FF FF    栈帧
+            //   740081  53 56 57                          push ebx,esi,edi
+            //   740084  33 D2 / 89 95 24 FF FF FF / 89 55 F4   两个局部清零
+            //   74008F  8B F0                             esi := self
+            //   740093  55 / 68 B4 02 74 00 / 64 FF 30 / 64 89 20   SEH 帧
+            //   74009F  8D 85 28 FF FF FF / 33 C9 / BA C8 00 00 00 / E8 …  FillChar(200)
+            //   7400B1  A1 AC 5F 7D 00 / 8B 00 / 3B 86 60 01 00 00 / 0F 9E 45 FF  红名判据
+            //   7400C7  8B 86 08 05 00 00 / 8B 78 08 / 4F / 83 FF 00 / 0F 8C …
+            // 整个函数的**第一条**条件跳转就是 0x7400D4 那句 `jl 0x740266`（背包为空），
+            // 之前一个字节的早退都没有。上游 sub_741368 的策略梯（0x7413F6..0x741492）
+            // 也只读六个地图旗标字节 [+0x5D] [+0x5E] [+0x76] [+0x77] [+0x8C] 与安全区，
+            // 从不读任何玩家侧的「不掉落」布尔。
+            // 原先这里的 `m_boAngryRing || m_boNoDropItem || Flag.boNODROPITEM` 早退
+            // 在原生无对应，且全镜像多编码零命中（GBK / 裸 ASCII 大小写不敏感 /
+            // UTF-16LE 三路皆 0）。按 §3.1 删除——原版就是不给这道保护。
             var boDropall = M2Share.g_Config.boDieRedScatterBagAll && PKLevel() >= 2;
             // 战神 sub_740078 @0x740140-0x740223 — the auth + gift DESTROY branch, absent
             // from C# until now.  Same three-part test as the manual drop:

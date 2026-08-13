@@ -1,0 +1,11 @@
+E8 callers of 0x726E68 (TGroup.DelMember): 2 -> 0x6C3181, 0x6C3D73
+E8 callers of 0x6C35E8 (free-group helper): 1 -> 0x6C3766
+E8 callers of 0x727754 (TGroup.GroupSetV): 1 -> 0x6E0847
+E8 callers of 0x7272EC (TGroup.AddMember): 3 -> 0x6C333B, 0x6C36BF, 0x6C38AD
+E8 callers of 0x726B80 (TGroup.Create): 2 -> 0x6C3318, 0x6C36AB
+E8 callers of 0x727FB0 (TGroup leader-transfer): 2 -> 0x726FBF, 0x727F85
+
+### disp 0xA80 TPlayObject group pointer : 0 write-form, 0 read-form
+-- WRITE FORM --
+-- READ FORM --
+

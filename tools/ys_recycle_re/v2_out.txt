@@ -1,0 +1,195 @@
+### 0x1006BB57 jle 目标 = 0x1006BD2D ；直落臂 0x1006BB5D 起（删除段）
+raw 0x1006BB5D..0x1006BBD8:
+  C7 85 E4 FE FF FF 64 00 00 00 60 8B 75 8C 8B 45 80 8B 40 04 03 85 D8 FE FF FF 8B 00 89 85 B8 FE FF FF 3B C6 75 45 8B 45 80 8B 40 08 83 F8 01 7F 0F 8B 45 A0 33 C9 33 D2 FF 15 0C 0D 31 10 EB 2B 8B 45 80 8B 95 FC FE FF FF FF 15 68 BC 31 10 8B 5D 8C 33 C9 8B D3 8B 45 A0 3E 8B 38 3E FF 97 68 02 00 00 8B C3 FF 15 4C BC 31 10 61 8B 85 B8 FE FF FF 3B 45 8C 0F 85 55 01 00 00
+
+1006BB5D  C7 85 E4 FE FF FF 64 00 00 00 mov      dword ptr [ebp - 0x11c], 0x64
+1006BB67  60                         pushal   
+1006BB68  8B 75 8C                   mov      esi, dword ptr [ebp - 0x74]
+1006BB6B  8B 45 80                   mov      eax, dword ptr [ebp - 0x80]
+1006BB6E  8B 40 04                   mov      eax, dword ptr [eax + 4]
+1006BB71  03 85 D8 FE FF FF          add      eax, dword ptr [ebp - 0x128]
+1006BB77  8B 00                      mov      eax, dword ptr [eax]
+1006BB79  89 85 B8 FE FF FF          mov      dword ptr [ebp - 0x148], eax
+1006BB7F  3B C6                      cmp      eax, esi
+1006BB81  75 45                      jne      0x1006bbc8
+1006BB83  8B 45 80                   mov      eax, dword ptr [ebp - 0x80]
+1006BB86  8B 40 08                   mov      eax, dword ptr [eax + 8]
+1006BB89  83 F8 01                   cmp      eax, 1
+1006BB8C  7F 0F                      jg       0x1006bb9d
+1006BB8E  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006BB91  33 C9                      xor      ecx, ecx
+1006BB93  33 D2                      xor      edx, edx
+1006BB95  FF 15 0C 0D 31 10          call     dword ptr [0x10310d0c]
+1006BB9B  EB 2B                      jmp      0x1006bbc8
+1006BB9D  8B 45 80                   mov      eax, dword ptr [ebp - 0x80]
+1006BBA0  8B 95 FC FE FF FF          mov      edx, dword ptr [ebp - 0x104]
+1006BBA6  FF 15 68 BC 31 10          call     dword ptr [0x1031bc68]
+1006BBAC  8B 5D 8C                   mov      ebx, dword ptr [ebp - 0x74]
+1006BBAF  33 C9                      xor      ecx, ecx
+1006BBB1  8B D3                      mov      edx, ebx
+1006BBB3  8B 45 A0                   mov      eax, dword ptr [ebp - 0x60]
+1006BBB6  3E 8B 38                   mov      edi, dword ptr ds:[eax]
+1006BBB9  3E FF 97 68 02 00 00       notrack call dword ptr ds:[edi + 0x268]
+1006BBC0  8B C3                      mov      eax, ebx
+1006BBC2  FF 15 4C BC 31 10          call     dword ptr [0x1031bc4c]
+1006BBC8  61                         popal    
+1006BBC9  8B 85 B8 FE FF FF          mov      eax, dword ptr [ebp - 0x148]
+1006BBCF  3B 45 8C                   cmp      eax, dword ptr [ebp - 0x74]
+1006BBD2  0F 85 55 01 00 00          jne      0x1006bd2d
+
+==============================================================================
+### D3 物品种类分支：从 0x1006CC40 对齐重扫
+==============================================================================
+1006CC40  42                         inc      edx
+1006CC41  07                         pop      es
+1006CC42  00 68 EC                   add      byte ptr [eax - 0x14], ch
+1006CC45  F7 2B                      imul     dword ptr [ebx]
+1006CC47  10 8B C8 E8 51 42          adc      byte ptr [ebx + 0x4251e8c8], cl
+1006CC4D  07                         pop      es
+1006CC4E  00 68 D4                   add      byte ptr [eax - 0x2c], ch
+1006CC51  F7 2B                      imul     dword ptr [ebx]
+1006CC53  10 8B C8 E8 45 42          adc      byte ptr [ebx + 0x4245e8c8], cl
+1006CC59  07                         pop      es
+1006CC5A  00 8B C8 E8 DE 31          add      byte ptr [ebx + 0x31dee8c8], cl
+1006CC60  07                         pop      es
+1006CC61  00 89 85 64 FF FF          add      byte ptr [ecx - 0x9b7b], cl
+1006CC67  FF 8B 45 98 85 F6          dec      dword ptr [ebx - 0x97a67bb]
+1006CC6D  7F 19                      jg       0x1006cc88
+1006CC6F  83 BD 70 FF FF FF 00       cmp      dword ptr [ebp - 0x90], 0
+1006CC76  7F 10                      jg       0x1006cc88
+1006CC78  85 FF                      test     edi, edi
+1006CC7A  7F 0C                      jg       0x1006cc88
+1006CC7C  85 C0                      test     eax, eax
+1006CC7E  7F 08                      jg       0x1006cc88
+1006CC80  85 DB                      test     ebx, ebx
+1006CC82  0F 8E 97 01 00 00          jle      0x1006ce1f
+1006CC88  C7 85 E4 FE FF FF 64 00 00 00 mov      dword ptr [ebp - 0x11c], 0x64
+1006CC92  60                         pushal   
+1006CC93  8B 75 8C                   mov      esi, dword ptr [ebp - 0x74]
+
+==============================================================================
+### 经验单价 [ebp-0x78]：循环前唯一清零点 0x1006B24F 附近
+==============================================================================
+1006B240  00 00                      add      byte ptr [eax], al
+1006B242  00 C7                      add      bh, al
+1006B244  85 04 FF                   test     dword ptr [edi + edi*8], eax
+
+==============================================================================
+### 每件循环头的重置块 0x1006B29C..0x1006B300（元宝/灵符/金币 有，经验 无）
+==============================================================================
+1006B29C  85 74 FF FF                test     dword ptr [edi + edi*8 - 1], esi
+1006B2A0  FF 00                      inc      dword ptr [eax]
+1006B2A2  00 00                      add      byte ptr [eax], al
+1006B2A4  00 C7                      add      bh, al
+1006B2A6  45                         inc      ebp
+1006B2A7  90                         nop      
+1006B2A8  00 00                      add      byte ptr [eax], al
+1006B2AA  00 00                      add      byte ptr [eax], al
+1006B2AC  C7 85 70 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x90], 0
+1006B2B6  C7 85 6C FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x94], 0
+1006B2C0  C7 45 8C 00 00 00 00       mov      dword ptr [ebp - 0x74], 0
+1006B2C7  C7 85 7C FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x84], 0
+1006B2D1  C7 85 78 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x88], 0
+1006B2DB  C7 85 68 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x98], 0
+1006B2E5  C7 85 64 FF FF FF 00 00 00 00 mov      dword ptr [ebp - 0x9c], 0
+1006B2EF  33 C0                      xor      eax, eax
+1006B2F1  89 45 98                   mov      dword ptr [ebp - 0x68], eax
+1006B2F4  C7 45 84 FE FF FF FF       mov      dword ptr [ebp - 0x7c], 0xfffffffe
+1006B2FB  89 85 50 FF FF FF          mov      dword ptr [ebp - 0xb0], eax
+1006B301  89 85 4C FF FF FF          mov      dword ptr [ebp - 0xb4], eax
+
+==============================================================================
+### 类型缺 经验 键时沿用上一件：0x1006B950..0x1006B990
+==============================================================================
+1006B950  55                         push     ebp
+1006B951  07                         pop      es
+1006B952  00 8B C8 E8 E6 44          add      byte ptr [ebx + 0x44e6e8c8], cl
+1006B958  07                         pop      es
+1006B959  00 8B F0 89 75 88          add      byte ptr [ebx - 0x778a7610], cl
+1006B95F  89 B5 00 FF FF FF          mov      dword ptr [ebp - 0x100], esi
+1006B965  EB 03                      jmp      0x1006b96a
+1006B967  8B 75 88                   mov      esi, dword ptr [ebp - 0x78]
+1006B96A  68 C4 F7 2B 10             push     0x102bf7c4
+1006B96F  68 BC F7 2B 10             push     0x102bf7bc
+1006B974  B9 10 C2 31 10             mov      ecx, 0x1031c210
+1006B979  E8 62 52 07 00             call     0x100e0be0
+1006B97E  8D 4D A4                   lea      ecx, [ebp - 0x5c]
+1006B981  51                         push     ecx
+1006B982  8B C8                      mov      ecx, eax
+1006B984  E8 47 55 07 00             call     0x100e0ed0
+1006B989  68 EC F7 2B 10             push     0x102bf7ec
+1006B98E  8B C8                      mov      ecx, eax
+
+==============================================================================
+### 乘过倍率的结果写回 [ebp-0x78]：0x1006BC80..0x1006BCB8
+==============================================================================
+1006BC80  75 88                      jne      0x1006bc0a
+1006BC82  85 F6                      test     esi, esi
+1006BC84  7E 31                      jle      0x1006bcb7
+1006BC86  85 FF                      test     edi, edi
+1006BC88  7E 22                      jle      0x1006bcac
+1006BC8A  8B CF                      mov      ecx, edi
+1006BC8C  0F AF CE                   imul     ecx, esi
+1006BC8F  B8 1F 85 EB 51             mov      eax, 0x51eb851f
+1006BC94  F7 E9                      imul     ecx
+1006BC96  C1 FA 05                   sar      edx, 5
+1006BC99  8B F2                      mov      esi, edx
+1006BC9B  C1 EE 1F                   shr      esi, 0x1f
+1006BC9E  03 F2                      add      esi, edx
+1006BCA0  89 75 88                   mov      dword ptr [ebp - 0x78], esi
+1006BCA3  89 B5 00 FF FF FF          mov      dword ptr [ebp - 0x100], esi
+1006BCA9  8B 4D 90                   mov      ecx, dword ptr [ebp - 0x70]
+1006BCAC  8B C1                      mov      eax, ecx
+1006BCAE  0F AF C6                   imul     eax, esi
+1006BCB1  01 85 54 FF FF FF          add      dword ptr [ebp - 0xac], eax
+
+==============================================================================
+### 0x1031BCxx 槽的运行期初始化：0x1006B0C0..0x1006B160
+==============================================================================
+1006B0C0  34 C1                      xor      al, 0xc1
+1006B0C2  31 10                      xor      dword ptr [eax], edx
+1006B0C4  A1 88 C1 31 10             mov      eax, dword ptr [0x1031c188]
+1006B0C9  8B 10                      mov      edx, dword ptr [eax]
+1006B0CB  2B 16                      sub      edx, dword ptr [esi]
+1006B0CD  33 16                      xor      edx, dword ptr [esi]
+1006B0CF  A1 8C C1 31 10             mov      eax, dword ptr [0x1031c18c]
+1006B0D4  2B 10                      sub      edx, dword ptr [eax]
+1006B0D6  81 C2 1C 79 6D 00          add      edx, 0x6d791c
+1006B0DC  89 15 5C BC 31 10          mov      dword ptr [0x1031bc5c], edx
+1006B0E2  A1 78 C1 31 10             mov      eax, dword ptr [0x1031c178]
+1006B0E7  8B 10                      mov      edx, dword ptr [eax]
+1006B0E9  2B 16                      sub      edx, dword ptr [esi]
+1006B0EB  33 16                      xor      edx, dword ptr [esi]
+1006B0ED  A1 7C C1 31 10             mov      eax, dword ptr [0x1031c17c]
+1006B0F2  2B 10                      sub      edx, dword ptr [eax]
+1006B0F4  81 C2 E4 F1 6D 00          add      edx, 0x6df1e4
+1006B0FA  89 15 58 BC 31 10          mov      dword ptr [0x1031bc58], edx
+1006B100  A1 70 C1 31 10             mov      eax, dword ptr [0x1031c170]
+1006B105  8B 10                      mov      edx, dword ptr [eax]
+1006B107  2B 16                      sub      edx, dword ptr [esi]
+1006B109  33 16                      xor      edx, dword ptr [esi]
+1006B10B  A1 74 C1 31 10             mov      eax, dword ptr [0x1031c174]
+1006B110  2B 10                      sub      edx, dword ptr [eax]
+1006B112  81 C2 88 F2 6D 00          add      edx, 0x6df288
+1006B118  89 15 54 BC 31 10          mov      dword ptr [0x1031bc54], edx
+1006B11E  A1 80 C1 31 10             mov      eax, dword ptr [0x1031c180]
+1006B123  8B 10                      mov      edx, dword ptr [eax]
+1006B125  2B 16                      sub      edx, dword ptr [esi]
+1006B127  33 16                      xor      edx, dword ptr [esi]
+1006B129  A1 84 C1 31 10             mov      eax, dword ptr [0x1031c184]
+1006B12E  2B 10                      sub      edx, dword ptr [eax]
+1006B130  81 C2 B4 87 6C 00          add      edx, 0x6c87b4
+1006B136  89 15 50 BC 31 10          mov      dword ptr [0x1031bc50], edx
+1006B13C  8B 0D E4 C0 31 10          mov      ecx, dword ptr [0x1031c0e4]
+1006B142  8B 71 18                   mov      esi, dword ptr [ecx + 0x18]
+1006B145  6A 0B                      push     0xb
+1006B147  E8 44 84 FC FF             call     0x10033590
+1006B14C  C1 E6 08                   shl      esi, 8
+1006B14F  33 30                      xor      esi, dword ptr [eax]
+1006B151  81 F6 D9 E0 CE F0          xor      esi, 0xf0cee0d9
+1006B157  89 35 18 C6 31 10          mov      dword ptr [0x1031c618], esi
+
+### [0x10310D0C] 静态值（FCount<=1 的清包分支目标）
+  [10310D0C] = 006C1ED8  bytes D8 1E 6C 00
+  [10310D08] = E9D1ADBE  bytes BE AD D1 E9   -> '-'
+  [10310CFC] = 10310D08  bytes 08 0D 31 10

@@ -1249,7 +1249,27 @@ namespace GameSvr
             return true;
         }
 
-        private void ClientClickNPC(int npcId)
+        /// <summary>
+        /// 战神 hands sub_6B8B28 three arguments, not two:
+        ///   0x6D8EFE  0F B7 48 08  movzx ecx, word [msg+8]   ; ECX = Tag
+        ///   0x6D8F05  8B 10        mov   edx, [msg]          ; EDX = Recog
+        ///   0x6D8F07  8B 45 FC     mov   eax, [ebp-4]        ; EAX = Self
+        /// and the Tag is a two-way selector, not decoration:
+        ///   0x6B8B5A  83 7D FC 01           cmp dword [ebp-4], 1
+        ///   0x6B8B5E  0F 85 8B 00 00 00     jne 0x6B8BEF
+        /// The two arms search two different registries and run two different script hosts:
+        ///   Tag == 1  0x6B8B64 `A1 9C 5D 7D 00` [[0x7D5D9C]] -> 0x67DBE8 (TList at mgr+0xD4,
+        ///             matched by pointer identity) -> click via 0x720444, whose script object
+        ///             is monster+0x4D0 and whose unit owns "monScript\" and "TAnimal.LoadScript"
+        ///   Tag != 1  0x6B8BEF `A1 84 67 7D 00` [[0x7D6784]] -> 0x649A58, then 0x64A844 on a
+        ///             miss -> click via 0x63DC74, script object npc+0x570, unit owns
+        ///             "点击NPC成功" and "TPsNpc.Run"
+        /// Both label literals are "@main" (0x720460 and 0x63DC90, declen 5 each).
+        ///
+        /// C# used to take only the id and always ran the NPC arm, so clicking a scripted
+        /// monster did nothing at all. On this deployment CM_CLICKNPC is 363,328 packets.
+        /// </summary>
+        private void ClientClickNPC(int npcId, int tag)
         {
             // PERF: diagnostic write removed from hot path (per-click)
             // TRADE-62: 战神 sub_6B8B28 的第一条可执行语句（SEH 序言之后）就是
@@ -1275,6 +1295,11 @@ namespace GameSvr
             if ((HUtil32.GetTickCount() - m_dwClickNpcTime) > M2Share.g_Config.dwClickNpcTime)
             {
                 m_dwClickNpcTime = HUtil32.GetTickCount();
+                if (tag == 1)
+                {
+                    ClickScriptedMonster(npcId);
+                    return;
+                }
                 var normNpc = (NormNpc)M2Share.UserEngine.FindMerchant(npcId) ?? (NormNpc)M2Share.UserEngine.FindNPC(npcId);
                 if (normNpc != null && normNpc.m_PEnvir == m_PEnvir && Math.Abs(normNpc.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(normNpc.m_nCurrY - m_nCurrY) <= 15)
                 {
@@ -1289,6 +1314,48 @@ namespace GameSvr
                     m_NPC = normNpc;
                 }
             }
+        }
+
+        /// <summary>
+        /// The Tag == 1 arm of CM_CLICKNPC, 0x6B8B64..0x6B8BAD:
+        ///   0x6B8B6D  E8 76 50 FC FF        call 0x67DBE8   ; find in [[0x7D5D9C]] by identity
+        ///   0x6B8B74  85 F6 / 74 3A         test esi,esi / je 0x6B8BB2
+        ///   0x6B8B78  8B 86 28 01 00 00     mov eax,[target+0x128]
+        ///   0x6B8B7E  3B 83 28 01 00 00     cmp eax,[self+0x128] / 75 2C jne 0x6B8BB2
+        ///   0x6B8B86  8B 8E 30 01 00 00     mov ecx,[target+0x130]     ; CurrY
+        ///   0x6B8B8C  8B 96 2C 01 00 00     mov edx,[target+0x12C]     ; CurrX
+        ///   0x6B8B94  E8 0B 29 0B 00        call 0x76B4A4
+        ///   0x6B8B99  83 F8 0F / 77 14      cmp eax,0x0F / ja 0x6B8BB2
+        ///   0x6B8BA2  E8 9D 78 06 00        call 0x720444              ; monster @main
+        ///   0x6B8BA7  89 B3 D8 0C 00 00     mov [self+0xCD8],esi
+        /// 0x76B4A4 is Chebyshev distance — `sub / cdq / xor / sub` twice then
+        /// 0x76B4C6 `3B C6 cmp eax,esi / 7D 02 jge` keeps the larger — so `cmp 0x0F / ja` is
+        /// exactly the `Abs(dx) &lt;= 15 &amp;&amp; Abs(dy) &lt;= 15` the NPC arm spells out longhand.
+        ///
+        /// Two differences from the NPC arm that are deliberate, not oversights:
+        ///  * no ghost test. 0x649A58 and 0x64A844 both reject `[obj+0x73] != 0`
+        ///    (0x649A64 / 0x64A873), but 0x67DBE8 only walks the TList at mgr+0xD4 comparing
+        ///    each element against the id (0x67DC19 `3B 45 FC cmp eax,[ebp-4]`). Adding one
+        ///    here would be stricter than native.
+        ///  * the map and range tests are unconditional. The NPC arm runs them only when
+        ///    0x6B8C17 `80 BE 5C 04 00 00 00 cmp byte[npc+0x45C],0` is non-zero.
+        ///
+        /// C# has one global actor registry rather than native's two, so membership of the
+        /// monster registry is approximated by the runtime type. That is narrower than native
+        /// in one case only: an object removed from the monster manager but still reachable
+        /// through ObjectManager would be found here and dropped there.
+        /// </summary>
+        private void ClickScriptedMonster(int monsterId)
+        {
+            if (M2Share.ObjectManager.Get(monsterId) is not Monster animal) return;
+            if (animal.m_PEnvir != m_PEnvir) return;
+            if (Math.Abs(animal.m_nCurrX - m_nCurrX) > 15 ||
+                Math.Abs(animal.m_nCurrY - m_nCurrY) > 15) return;
+            M2Share.PasEngine?.TryCallMonsterMain(animal, this);
+            // 0x6B8BA7 stores unconditionally, with no test of the script result, exactly as
+            // the NPC arm does at 0x6B8C48. player+0xCD8 is untyped in native and TBaseObject
+            // here, so a monster is as valid an occupant as an NPC.
+            m_NPC = animal;
         }
 
         private int GetRangeHumanCount()

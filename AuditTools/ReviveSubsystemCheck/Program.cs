@@ -367,12 +367,23 @@ static bool GrantsWindow(string outcomeName)
 static string Resolve(TMapFlag flag, bool equip, int lastTick, int tick,
     bool secondFlag = false, byte tier = 0, bool cooldownActive = false)
 {
-    var m = PolicyType().GetMethod("Resolve",
+    var policy = PolicyType();
+    var m = policy.GetMethod("Resolve",
         System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
         System.Reflection.BindingFlags.Public)
         ?? throw new MissingMethodException("NativeRevivePolicy.Resolve");
+    // Resolve grew a trailing equipReviveCooldownMs parameter. Reflection does not apply
+    // optional-parameter defaults, so a 7-argument Invoke threw
+    // TargetParameterCountException and killed the run half way through. Pass the
+    // product's own default (0xEA60 = 60000, the hard-coded CD pinned above at 0x743756)
+    // so this stays the same case the assertions were written for.
+    var cooldownField = policy.GetField("EquipReviveCooldownMilliseconds",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
+        System.Reflection.BindingFlags.Public)
+        ?? throw new MissingFieldException("NativeRevivePolicy.EquipReviveCooldownMilliseconds");
     return m.Invoke(null, new object[]
-        { flag, equip, lastTick, tick, secondFlag, tier, cooldownActive }).ToString();
+        { flag, equip, lastTick, tick, secondFlag, tier, cooldownActive,
+          cooldownField.GetValue(null) }).ToString();
 }
 
 static TMapFlag ParseToken(string token)

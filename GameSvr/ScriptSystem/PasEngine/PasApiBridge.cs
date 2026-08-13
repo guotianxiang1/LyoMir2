@@ -3637,12 +3637,10 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "groupsetv":
-                    if (args.Count >= 3)
-                    {
-                        SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                        result = PasValue.FromBool(true);
-                    }
-                    else result = PasValue.FromBool(false);
+                    // sub_6E0830 answers False for an ungrouped caller (6E083F je), so the
+                    // Boolean the script sees has to come from SetGroupPlayerVar itself.
+                    result = PasValue.FromBool(args.Count >= 3
+                        && SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]));
                     return true;
 
                 case "groupsets":
@@ -7791,9 +7789,8 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "groupsetv":
-                    if (args.Count >= 3 && CurrentPlayer != null)
-                        SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                    result = PasValue.FromBool(args.Count >= 3 && CurrentPlayer != null);
+                    result = PasValue.FromBool(args.Count >= 3 && CurrentPlayer != null
+                        && SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]));
                     return true;
 
                 case "groupsets":
@@ -8380,21 +8377,44 @@ namespace GameSvr.PasEngine
             return SetPlayerVar(CurrentPlayer, type, group, index, value);
         }
 
+        /// <summary>
+        /// `GroupSetV` is registered on the TPlayer PAS face at 0x7318AF
+        /// (<c>mov edx,0x6E0830 / mov ecx,0x732A98</c>, the name blob "GroupSetV"),
+        /// so the handler is sub_6E0830 and it forwards to TGroup's sub_727754:
+        /// <code>
+        ///   6E0835  33 DB                 xor ebx,ebx          ; result := False
+        ///   6E0837  8B B0 80 0A 00 00     mov esi,[eax+0xA80]  ; the caller's TGroup
+        ///   6E083D  85 F6 / 6E083F 74 0D  test esi,esi / je    ; no group -> keep False
+        ///   6E0847  E8 08 6F 04 00        call 0x727754
+        ///   727765  C6 45 F3 01           mov byte [ebp-0xD],1 ; result preset True
+        ///   72776C  8B 58 44              mov ebx,[eax+0x44]   ; bound = member count
+        ///   72777E  8B 40 10              mov eax,[eax+0x10]   ; slot -> player
+        ///   72778C  85 C0 / 72778E 74 15  test eax,eax / je    ; empty slot -> skip
+        ///   727790  80 78 73 00 / 75 0F   cmp [eax+0x73],0/jne ; GHOST -> skip
+        ///   7277A0  E8 E3 7A FB FF        call 0x6DF288        ; per-member SetV
+        /// </code>
+        /// Three contracts follow. An ungrouped caller writes NOTHING and answers
+        /// False - 0x6E083F jumps straight to the epilogue, there is no fall back to
+        /// a plain SetV on self. Ghost members are skipped. And the result byte
+        /// preset at 0x727765 is never cleared, so the answer is True whenever a
+        /// group exists, however many members the ghost gate skipped.
+        /// </summary>
         internal bool SetGroupPlayerVar(char type, int group, int index, PasValue value)
         {
             var members = CurrentPlayer?.m_GroupOwner?.m_GroupMembers;
-            if (members == null || members.Count == 0)
+            if (members == null)
             {
-                return SetPlayerVar(type, group, index, value);
+                return false;
             }
 
-            bool anySuccess = false;
-            foreach (var player in members)
+            for (var i = 0; i < members.Count; i++)
             {
-                if (SetPlayerVar(player, type, group, index, value))
-                    anySuccess = true;
+                var player = members[i];
+                if (player == null || player.m_boGhost)
+                    continue;
+                SetPlayerVar(player, type, group, index, value);
             }
-            return anySuccess;
+            return true;
         }
 
         /// <summary>
@@ -8601,7 +8621,11 @@ namespace GameSvr.PasEngine
         //      exactly two item ctors (0x788118 pile, plus 0x788C01/0x788C84/0x78B27C/
         //      0x78B2D8/0x78B328/0x78B544 which all chain through sub_7880F0), so the
         //      predicate is "was constructed by the pile ctor" == NativeItemFactory.IsPileItem
-        //      (StdMode >= 150 && a pile class name resolves) — NOT `StdMode == 7`
+        //      (CLASS ANCESTRY: the factory-reachable classes whose VMT parent chain ends at
+        //      TBasePileItem/0x781C24 — NOT a StdMode range, and NOT `StdMode == 7`).
+        //      StdMode >= 150 is only the DEFAULT arm 0x74D67E `3C 96 cmp al,0x96` /
+        //      0x74D680 `72 13 jb`; the explicitly-cased StdMode 3 / Shape 4 arm reaches the
+        //      same pile ctor at 0x74CCEC, so TLuckOil is a pile with StdMode 3.
         //      (StdMode 7 is TCharm/TMarkStoneCharm, a normal single item; see the audited
         //      note at TPlayObject.Operate.cs:771 for the same finding on the item-use tail).
         //      count  : 0x744852 cmp byte [ebx+0x14],7 / 0x744858 movzx eax,word [ebx+0x26]
@@ -8868,7 +8892,15 @@ namespace GameSvr.PasEngine
                 var itemDefinition = M2Share.UserEngine.GetStdItem(item.wIndex);
                 if (itemDefinition == null) continue;
 
-                if (itemDefinition.StdMode == 7)
+                // 原生 TakeEx = sub_74089C，两处堆叠闸读的都是【物品实例】+0x14：
+                //   0x740B8F  80 7B 14 07  cmp byte [ebx+0x14],7   ; 预清点循环
+                //   0x740C01  80 7B 14 07  cmp byte [ebx+0x14],7   ; 实际扣除循环
+                // ebx 是 0x740BE5 `call 0x424D4C`(TList.Get) 取出的背包物品实例，
+                // 不是模板；紧接着 0x740C57 `0F B7 43 26` 取的也是实例 +0x26(Dura)。
+                // 和两条 give 核心（0x6C89C6 / 0x6C85C5）是同一个谓词，
+                // 所以这里必须用类祖先判定：StdMode==7 是护身符族（实例 +0x14 恒为 0），
+                // 而真堆叠（TLuckOil 走 StdMode 3/Shape 4）会被漏判成整件删除。
+                if (NativeItemFactory.IsPileItem(itemDefinition))
                 {
                     var before = remaining;
                     AddNativeTakeExLog(itemName, item.MakeIndex,
@@ -8924,37 +8956,97 @@ namespace GameSvr.PasEngine
                 itemName, makeIndex, 1, description));
         }
 
-        // Native GiveItemWithDura (sub_6E15E0): make `count` items, each with current
-        // durability clamped to min(requestedDura, item.DuraMax [item+0x28]), then add
-        // to bag and notify. The native APPLIES the requested durability (clamped) — it
-        // does NOT discard it — so this is a real, faithful API (previously rejected on
-        // the false premise that it corrupts semantics). Stops per-item on a full bag,
-        // matching the native bag-space guard.
+        // Native GiveItemWithDura (sub_6E15E0, 声明见注册表 0x72B56D
+        // `function GiveItemWithDura(const itemName:string; ItemNum:Integer;
+        //  ItemDura:Word): Boolean`): 造 count 件, 每件 Dura = min(要求耐久, DuraMax),
+        // 入包并写日志。原生是**应用**这个耐久而不是丢弃它, 所以这是个真 API。
+        // 它全程不看堆叠标记 —— 对堆叠物这就是直接指定堆内件数。
+        //
+        // 全或无背包门（这条以前整条缺失）:
+        //   0x6E15F7  E8 DC 2B 06 00  call 0x7441D8   ; 空格数
+        //   0x6E15FC  3B 45 F8        cmp eax,[ebp-8] ; 空格数 vs count
+        //   0x6E15FF  0F 8C 96 00..   jl  0x6E169B    ; 装不下 -> 一件都不发
+        //   0x6E169B  66 B9 DB FF     mov cx,0xFFDB   ; 红字 '您包裹位不足' (0x6E16D8)
+        // 其中 0x7441D8 是 `mov eax,[eax+0x508] / mov edx,0x30 / sub edx,[eax+8]`,
+        // 即 48-背包件数; 本工程的容量权威是 BagCapacity(REPLICATION_RULES §4.18)。
+        // 预检不过直接返回 False, 不能像原来那样先塞满背包再停。
+        //
+        // 耐久取的是 **word**: 0x6E1631 `66 8B 40 28 mov ax,word [eax+0x28]`,
+        // 0x6E1635 `66 3B 45 08 cmp ax,word [ebp+8]`, 0x6E1639 `72 0D jb`,
+        // 0x6E163E `66 8B 55 08 mov dx,word [ebp+8]` —— 入参只按低 16 位取用,
+        // 所以脚本传 70000 时原生用的是 4464。旧写法 Math.Min(int, DuraMax) 在
+        // DuraMax > 4464 时会发出比原生更多的数量, 对堆叠物 Dura 就是件数, 那是刷物方向。
         private void TryGiveItemWithDura(List<PasValue> args, out bool gaveAny)
         {
             gaveAny = false;
             if (CurrentPlayer == null || args.Count < 3) return;
             var itemName = args[0].AsString();
             var count = args[1].AsInt();
-            var requestedDura = args[2].AsInt();
+            var requestedDura = (ushort)args[2].AsInt();
+
+            if (BagCapacity.Of(CurrentPlayer) - CurrentPlayer.m_ItemList.Count < count)
+            {
+                CurrentPlayer.SysMsg("您包裹位不足", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
             for (var c = 0; c < count; c++)
             {
                 var userItem = new TUserItem();
                 if (!M2Share.UserEngine.CopyToUserItemFromName(itemName, ref userItem)) break;
                 if (M2Share.UserEngine.GetStdItem(userItem.wIndex) == null) break;
-                userItem.Dura = (ushort)Math.Min(requestedDura, (int)userItem.DuraMax);
-                if (!CurrentPlayer.AddItemToBag(userItem)) break;
+                userItem.Dura = Math.Min(requestedDura, userItem.DuraMax);
+                // 0x6E1686 FreeAndNil / 0x6E168E `C6 45 F7 00` 把结果字节清回 0
+                // 再 0x6E1692 dec ebx 继续下一轮, 所以塞不进去的那一件不算成功,
+                // 但循环不中断。
+                if (!CurrentPlayer.AddItemToBag(userItem))
+                {
+                    CurrentPlayer.Dispose(userItem);
+                    gaveAny = false;
+                    continue;
+                }
                 CurrentPlayer.SendAddItem(userItem);
                 gaveAny = true;
             }
         }
 
+        /// <summary>
+        /// 原生 <c>SysGiveGift</c> = <c>sub_6C8548</c>（声明见注册表 0x72BCC4
+        /// <c>function SysGiveGift(const ItemStr: string;Num: integer;BoBind: Boolean)</c>）。
+        /// 它不是 <c>Give</c> 的共享核心 <c>sub_6C87B4</c>，所以**不做冒号拆分**：
+        /// 0x6C85AD <c>8B 55 FC mov edx,[ebp-4]</c> 把入参名原样交给 0x6C85B0
+        /// <c>E8 9F 58 08 00 call 0x74DE54</c>。
+        ///
+        /// 堆叠判据和 Give 核心是同一条，读的是**物品实例**的运行时类标记：
+        ///   0x6C85C2  8B 45 EC     mov eax,[ebp-0x14]   ; 0x74DE54 造出来的实例
+        ///   0x6C85C5  80 78 14 07  cmp byte [eax+0x14],7
+        /// 实例 +0x14 由构造器写死：根构造器 <c>sub_783788</c> @0x7837AE
+        /// <c>C6 43 14 00</c> 写 0，堆叠构造器 <c>sub_7880F0</c> @0x788118
+        /// <c>C6 46 14 07</c> 写 7。它**不是**模板的 StdMode ——
+        /// 模板 StdMode 只决定工厂 <c>sub_74C338</c> 选哪个构造器，而堆叠构造器
+        /// 并不只挂在 StdMode&gt;=150 的默认臂（0x74D67E <c>3C 96 cmp al,0x96</c> /
+        /// 0x74D680 <c>72 13 jb</c> / 0x74D68C <c>call 0x7880F0</c>）上：StdMode 3
+        /// 的 Shape 4 也直落堆叠构造器 ——
+        ///   0074CCE5  A1 AC 1C 78 00  mov  eax,[0x781CAC]  ; TLuckOil
+        ///   0074CCEC  E8 FF B3 03 00  call 0x7880F0        ; TBasePileItem.Create
+        /// 所以谓词是类祖先，即 <see cref="NativeItemFactory.IsPileItem"/>。
+        /// 写 <c>StdMode == 7</c> 是双向错：StdMode 7 是护身符族（0x74CE9E 按 Shape
+        /// 二级派发到 TCryCharm/THPCharm/...），实例 +0x14 恒为 0，会被误当堆叠塞进
+        /// 一格；而真堆叠（金条、幸运油）反而按件占满背包。
+        ///
+        /// 数量：0x6C85D5 <c>3B 55 F8 cmp edx,[ebp-8]</c>（DuraMax vs 剩余）/
+        /// 0x6C85D8 <c>7C 11 jl</c>。DuraMax &gt;= 剩余就 <c>Dura := 剩余</c>
+        /// （0x6C85E1）并置 0x6C85E5 的结束标记；否则 <c>Dura := DuraMax</c>
+        /// （0x6C85EE）且 0x6C85F9 <c>29 45 F8 sub [ebp-8],eax</c> 扣掉一整堆。
+        /// 非堆叠臂不动剩余量，靠 0x6C8713 的计数器跑满 count 次。
+        /// </summary>
         private bool TrySysGiveGift(IReadOnlyList<PasValue> args)
         {
             if (CurrentPlayer == null || args.Count < 2) return false;
 
             var itemName = args[0].AsString();
             var requestedCount = args[1].AsInt();
+            // 0x6C858C cmp [ebp-8],0 / 0x6C8590 jg / 0x6C8592 mov [ebp-8],1
             if (requestedCount <= 0) requestedCount = 1;
             var bind = args.Count >= 3 && args[2].AsBool();
             if (TryExecuteTunnelGive(itemName, requestedCount, bind)) return true;
@@ -8968,8 +9060,12 @@ namespace GameSvr.PasEngine
 
                 var stdItem = M2Share.UserEngine.GetStdItem(userItem.wIndex);
                 if (stdItem == null) break;
-                if (stdItem.StdMode == 7)
+                if (NativeItemFactory.IsPileItem(stdItem))
                 {
+                    // 原生没有这道闸：DuraMax==0 时 0x6C85D5 的比较走 jl 臂，
+                    // Dura:=0 且 0x6C85F9 扣 0，靠计数器跑满 count 次发出 count 份
+                    // 空堆。C# 用的是「剩余量」循环，扣 0 会原地打转，所以这里必须
+                    // 收手；少发不是刷物方向。
                     if (userItem.DuraMax == 0) break;
                     var quantity = Math.Min(remaining, userItem.DuraMax);
                     userItem.Dura = (ushort)quantity;
@@ -8981,7 +9077,14 @@ namespace GameSvr.PasEngine
                 }
 
                 if (bind) userItem.Bind = 1;
-                if (!CurrentPlayer.AddItemToBag(userItem)) break;
+                // 0x6C86CF lea eax,[ebp-0x14] / 0x6C86D2 call 0x414C24 (FreeAndNil)
+                // / 0x6C86D7 jmp 0x6C871A —— 装不下就丢弃这一件并整体退出，
+                // 已发出的那些保留，结果字节 [ebp-9] 不回滚。
+                if (!CurrentPlayer.AddItemToBag(userItem))
+                {
+                    CurrentPlayer.Dispose(userItem);
+                    break;
+                }
                 CurrentPlayer.SendAddItem(userItem);
                 gaveAny = true;
             }

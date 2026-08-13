@@ -1,0 +1,110 @@
+==============================================================================
+### 0x6F8730 全函数（到 0x6F8860）
+==============================================================================
+006F8730  55                         push     ebp
+006F8731  8B EC                      mov      ebp, esp
+006F8733  83 C4 B8                   add      esp, -0x48
+006F8736  53                         push     ebx
+006F8737  56                         push     esi
+006F8738  33 C9                      xor      ecx, ecx
+006F873A  89 4D BC                   mov      dword ptr [ebp - 0x44], ecx
+006F873D  89 4D B8                   mov      dword ptr [ebp - 0x48], ecx
+006F8740  89 4D FC                   mov      dword ptr [ebp - 4], ecx
+006F8743  89 4D C4                   mov      dword ptr [ebp - 0x3c], ecx
+006F8746  89 4D C0                   mov      dword ptr [ebp - 0x40], ecx
+006F8749  8B F2                      mov      esi, edx
+006F874B  8B D8                      mov      ebx, eax
+006F874D  33 C0                      xor      eax, eax
+006F874F  55                         push     ebp
+006F8750  68 45 88 6F 00             push     0x6f8845
+006F8755  64 FF 30                   push     dword ptr fs:[eax]
+006F8758  64 89 20                   mov      dword ptr fs:[eax], esp
+006F875B  6A FF                      push     -1
+006F875D  6A FF                      push     -1
+006F875F  6A 00                      push     0
+006F8761  6A 00                      push     0
+006F8763  6A 0A                      push     0xa
+006F8765  56                         push     esi
+006F8766  6A 00                      push     0
+006F8768  6A 1D                      push     0x1d
+006F876A  BA 54 88 6F 00             mov      edx, 0x6f8854
+006F876F  8D 45 E8                   lea      eax, [ebp - 0x18]
+006F8772  E8 61 B2 D0 FF             call     0x4039d8
+006F8777  8D 93 06 01 00 00          lea      edx, [ebx + 0x106]
+006F877D  8D 45 E8                   lea      eax, [ebp - 0x18]
+006F8780  B1 13                      mov      cl, 0x13
+006F8782  E8 21 B2 D0 FF             call     0x4039a8
+006F8787  8D 55 E8                   lea      edx, [ebp - 0x18]
+006F878A  8D 45 C8                   lea      eax, [ebp - 0x38]
+006F878D  E8 46 B2 D0 FF             call     0x4039d8
+006F8792  BA 5C 88 6F 00             mov      edx, 0x6f885c
+006F8797  8D 45 C8                   lea      eax, [ebp - 0x38]
+006F879A  B1 1C                      mov      cl, 0x1c
+006F879C  E8 07 B2 D0 FF             call     0x4039a8
+006F87A1  8D 55 C8                   lea      edx, [ebp - 0x38]
+006F87A4  8D 45 FC                   lea      eax, [ebp - 4]
+006F87A7  E8 C8 CF D0 FF             call     0x405774
+006F87AC  8B 45 FC                   mov      eax, dword ptr [ebp - 4]
+006F87AF  50                         push     eax
+006F87B0  8D 45 C4                   lea      eax, [ebp - 0x3c]
+006F87B3  8D 93 06 01 00 00          lea      edx, [ebx + 0x106]
+006F87B9  E8 B6 CF D0 FF             call     0x405774
+006F87BE  8B 45 C4                   mov      eax, dword ptr [ebp - 0x3c]
+006F87C1  50                         push     eax
+006F87C2  6A 00                      push     0
+006F87C4  6A 00                      push     0
+006F87C6  8D 45 C0                   lea      eax, [ebp - 0x40]
+006F87C9  8D 93 06 01 00 00          lea      edx, [ebx + 0x106]
+006F87CF  E8 A0 CF D0 FF             call     0x405774
+006F87D4  8B 55 C0                   mov      edx, dword ptr [ebp - 0x40]
+006F87D7  A1 B0 68 7D 00             mov      eax, dword ptr [0x7d68b0]
+006F87DC  8B 00                      mov      eax, dword ptr [eax]
+006F87DE  33 C9                      xor      ecx, ecx
+006F87E0  E8 C3 95 01 00             call     0x711da8
+006F87E5  53                         push     ebx
+006F87E6  68 A0 89 6F 00             push     0x6f89a0
+006F87EB  6A 00                      push     0
+006F87ED  6A 00                      push     0
+006F87EF  6A 00                      push     0
+006F87F1  8D 45 BC                   lea      eax, [ebp - 0x44]
+006F87F4  8D 93 06 01 00 00          lea      edx, [ebx + 0x106]
+006F87FA  E8 75 CF D0 FF             call     0x405774
+006F87FF  8B 45 BC                   mov      eax, dword ptr [ebp - 0x44]
+006F8802  50                         push     eax
+006F8803  8D 45 B8                   lea      eax, [ebp - 0x48]
+006F8806  8D 93 06 01 00 00          lea      edx, [ebx + 0x106]
+006F880C  E8 63 CF D0 FF             call     0x405774
+006F8811  8B 55 B8                   mov      edx, dword ptr [ebp - 0x48]
+006F8814  A1 B0 68 7D 00             mov      eax, dword ptr [0x7d68b0]
+006F8819  8B 00                      mov      eax, dword ptr [eax]
+006F881B  8B CE                      mov      ecx, esi
+006F881D  E8 5A 8F 01 00             call     0x71177c
+006F8822  33 C0                      xor      eax, eax
+006F8824  5A                         pop      edx
+006F8825  59                         pop      ecx
+006F8826  59                         pop      ecx
+006F8827  64 89 10                   mov      dword ptr fs:[eax], edx
+006F882A  68 4C 88 6F 00             push     0x6f884c
+006F882F  8D 45 B8                   lea      eax, [ebp - 0x48]
+006F8832  BA 04 00 00 00             mov      edx, 4
+006F8837  E8 E8 CC D0 FF             call     0x405524
+006F883C  8D 45 FC                   lea      eax, [ebp - 4]
+006F883F  E8 BC CC D0 FF             call     0x405500
+006F8844  C3                         ret      
+006F8845  E9 EE C5 D0 FF             jmp      0x404e38
+006F884A  EB E3                      jmp      0x6f882f
+006F884C  5E                         pop      esi
+006F884D  5B                         pop      ebx
+006F884E  8B E5                      mov      esp, ebp
+006F8850  5D                         pop      ebp
+006F8851  C3                         ret      
+006F8852  00 00                      add      byte ptr [eax], al
+006F8854  05 BD C5 B1 BE             add      eax, 0xbeb1c5bd
+006F8859  28 00                      sub      byte ptr [eax], al
+006F885B  00 09                      add      byte ptr [ecx], cl
+006F885D  29 C7                      sub      edi, eax
+
+==============================================================================
+### 0x6F8730 的 rel32 调用者
+==============================================================================
+   共 0 个

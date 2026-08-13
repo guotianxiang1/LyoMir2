@@ -348,6 +348,17 @@ static void PrepareRuntimeConfig()
         "[String]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
         "[Command]" + Environment.NewLine);
+
+    // M2Share's static ctor also builds ExpsConfig from ..\Share\PlayerUpgradeExp.ini
+    // (M2Share.cs:1690); without it IniFile.Load throws and every assertion below is
+    // skipped. Same skeleton the other GameSvr audits lay down.
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }
 
 sealed class ProbeIni : IniFile

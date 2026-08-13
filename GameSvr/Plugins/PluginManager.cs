@@ -747,9 +747,22 @@ namespace GameSvr.Plugins
 
         /// <summary>
         /// One 回收类型 entry. Field semantics come from the author's own annotated copy,
-        /// GS1\MyJson\recycle(详细说明).json — every 中文 key there is declared unchangeable
-        /// ("内部的中文字符key都不能随便更改")，所以未知键一律当配置错误处理，避免
-        /// 把 "极品开关" 写错就静默丢掉一道保护。
+        /// GS1\MyJson\recycle(详细说明).json。
+        ///
+        /// 未知字段一律忽略，这是原生行为，不是宽容：sub_1006B020 从头到尾只做「按名取」，
+        /// 没有任何成员枚举。全函数 0x1006B020..0x1006CF00 内 157 处 push 常量字符串，
+        /// 只涉及 16 个键名（可叠材料 0x102BF7B0 / 回收类型 0x102BF7BC / 总开关 0x102BF7C8 /
+        /// v1 0x102BF7D0 / v2 0x102BF7D4 / 关闭值 0x102BF7D8 / 回收倍率 0x102BF7E0 /
+        /// 元宝 0x102BF644 / 灵符 0x102BF64C / 金币 0x102BF654 / 经验 0x102B4130 /
+        /// 其他 0x102BF7EC / 值 0x102BF7F4 / 物品种类 0x102BF7F8 / 极品开关 0x102BF804 /
+        /// 元素开关 0x102BF810），全部喂给 jsoncpp 的按名访问族
+        /// （0x100E0BE0 / 0x100E0DC0 / 0x100E0EA0 / 0x100E0ED0 / 0x100E1210 / 0x100E1240，
+        /// 共 152 次调用）。装载期校验 sub_10090EF0 也只查两个根键
+        /// （0x1009103E 物品种类、0x10091056 回收类型），不看规则字段。
+        /// ⇒ 配置里多写一个键，原生连看都不会看。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。代价是把 "极品开关" 拼错
+        /// 会静默丢掉一道保护而不报错 —— 原版就是这样。
         /// </summary>
         private static RecycleRule ParseRecycleRule(string typeName, JsonElement value)
         {
@@ -793,7 +806,7 @@ namespace GameSvr.Plugins
                         rule.HasOther = true;
                         break;
                     default:
-                        throw new JsonException($"{path} is not a recognised 回收类型 field");
+                        break;
                 }
             }
 
