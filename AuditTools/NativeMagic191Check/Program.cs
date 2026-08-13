@@ -69,12 +69,12 @@ class Program
         // Test 2: nil target rejects (sub_767498 leads with `test esi,esi / je`)
         Assert(!caster.TryActivateNativeMagic191(null, 1000), "nil target rejected");
 
-        // Test 3: ghost target rejects (0x7674A7 call sub_772DA8 = byte [target+0x74])
+        // Test 3: ghost target rejects (0x7674B0 cmp byte [target+0x73],0)
         var ghostTarget = new TPlayObject();
         ghostTarget.m_boGhost = true;
         Assert(!caster.TryActivateNativeMagic191(ghostTarget, 2000), "ghost target rejected");
 
-        // Test 4: dead target rejects (0x7674B0 cmp byte [target+0x73],0)
+        // Test 4: dead target rejects (0x7674A7 call sub_772DA8 = byte [target+0x74])
         var deadTarget = new TPlayObject();
         deadTarget.m_boDeath = true;
         Assert(!caster.TryActivateNativeMagic191(deadTarget, 3000), "dead target rejected");

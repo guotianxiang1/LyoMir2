@@ -25,7 +25,7 @@ namespace GameSvr
     // TPlayObject field offsets touched by this family (verified from the case/sub decompiles):
     //   player + 0x071  gender/sex byte      (ChgSex toggles bit 0)                 [sub_6D77F0]
     //   player + 0x072  job/class byte       (ChgmanKind sets 0..3 by name)         [sub_6BE358]
-    //   player + 0x074  dead/ghost flag byte (Relive acts only when set)            [sub_772DA8]
+    //   player + 0x074  death flag byte (Relive acts only when set)                 [sub_772DA8]
     //   player + 0x155  name-colour byte     (ChgNameClr writes low byte of arg)
     //   player + 0x160  PK point  (DWORD)    (ChgPkZero=0; InComePk += 100; ShowPk reads)
     //   player + 0x164  body luck (DWORD)    (ChgBodyLuck += delta, CLAMP [-10, +5])[sub_7698BC]
@@ -468,7 +468,7 @@ namespace GameSvr
     }
 
     // ===================== Relive (idx 193, perm 4) =====================
-    // case @0x006259FB: sub_772DA8(self) just returns self[+0x74] (the dead/ghost flag).
+    // case @0x006259FB: sub_772DA8(self) just returns self[+0x74] (the death flag).
     //   flag == 0 (alive) -> silent no-op.
     //   flag != 0 (dead)  -> queue the DELAYED-REVIVE message, ident 0x27B1 (=10161), with a
     //                        500 ms delay (@0x625A3E `push 0x1F4`) via sub_766060 @0x625A4D,

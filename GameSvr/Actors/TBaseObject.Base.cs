@@ -599,11 +599,11 @@ namespace GameSvr
                     }
                     
                     // 战神 sub_6B3EAC @0x6B3B71-0x6B3B87：`eax=ebx(m_DealCreat)` ; `call sub_772DA8`
-                    //   （= m_boGhost getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
-                    //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boDeath 析取项）; 清零 [self+0xBAC]。
+                    //   （= m_boDeath getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
+                    //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boGhost 析取项）; 清零 [self+0xBAC]。
                     // 即原生在 **ghost 或 death** 任一为真时都清 m_DealCreat；旧 C# 只查 ghost，
                     // 于是一个「已死但尚未 ghost」的对端会把 m_DealCreat 一直挂着 ——
-                    // 配合 ClientDealEnd 曾缺失的 m_boDeath 门，这就是「和尸体成交」的具体路径。
+                    // 配合 ClientDealEnd 曾缺失的存活门，这就是「和尸体成交」的具体路径。
                     // （节流：原生用专属 tick 字段 [self+0x73C] 比 0x7530=30000ms；此处所在的
                     //  `m_dwVerifyTick` 块周期同为 30*1000ms，与组队清扫共用一个 tick 字段 =
                     //  周期等价，只是字段合并，不影响可观察行为。）

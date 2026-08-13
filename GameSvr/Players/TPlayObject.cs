@@ -2142,11 +2142,21 @@ namespace GameSvr
         
         private bool PileStones(int nX, int nY)
         {
-            // MINE-46: Hard-block when either tier byte == 3 (native 0x6BC202, 0x6BC21E)
-            // Anti-fatigue tier 3 OR cheat-penalty tier 3 completely disables mining.
-            if (m_btNativeFatigueTier == 3 || m_btNativeCheatPenaltyTier == 3)
+            // MINE-46: 三道早退全部 `je/jne 0x6BC366`，而 0x6BC366 是函数 epilogue
+            // （`5F 5E 5B 8B E5 5D C3` pop edi/esi/ebx / mov esp,ebp / pop ebp / ret），
+            // 不是另一段逻辑。RM_HEAVYHIT 广播在 try 块尾 0x6BC306（`66 BA 15 27`
+            // ident 0x2715 / `call [vmt+0xD8]`），早退到不了那里。
+            //   0x6BC202  80 BB 28 18 00 00 03   cmp byte [ebx+0x1828],3  ; fatigue
+            //   0x6BC209  0F 84 57 01 00 00      je  0x6BC366
+            //   0x6BC211  E8 72 B5 01 00         call 0x6D7788            ; HasState(0x19)=25
+            //   0x6BC216  84 C0                  test al,al
+            //   0x6BC218  0F 85 48 01 00 00      jne 0x6BC366
+            //   0x6BC21E  80 BB 29 18 00 00 03   cmp byte [ebx+0x1829],3  ; cheat
+            //   0x6BC225  0F 84 3B 01 00 00      je  0x6BC366
+            if (m_btNativeFatigueTier == 3
+                || HasNativeActiveState(25)
+                || m_btNativeCheatPenaltyTier == 3)
             {
-                SendRefMsg(Grobal2.RM_HEAVYHIT, m_btDirection, m_nCurrX, m_nCurrY, 0, string.Empty);
                 return false;
             }
 
