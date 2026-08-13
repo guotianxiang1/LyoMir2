@@ -362,4 +362,98 @@ public class TMapFlag
     /// </para>
     /// </summary>
     public bool boPAODIAN;
+
+    // ==================== MFLG-24 配置解析器补全（8 个真 token） ====================
+    // 以下 8 个 token 是双解析器（配置 sub_776008 / GM sub_774D98）都写字段、且不在
+    // Maps.cs §INVENTED 名单的真 token。每个 token 字面串各命中恰好 2 条 Delphi
+    // AnsiString 记录（池 A ~0x775xxx / 池 B ~0x776xxx，FF FF FF FF + len32 + chars +
+    // NUL），与"两 token 池各一份"的结构吻合，证明非发明。偏移逐一对上 eqv-18 普查。
+    // 比较器：带 `mov ecx,len` 的 0x4C6E94 = 前缀比较（ASCII UpCase，大小写不敏感）→
+    // C# HUtil32.CompareLStr；无 ecx 的 0x40BD78 = 全等（repe cmpsb + UpCase 折叠，
+    // 大小写不敏感）→ C# .Equals(OrdinalIgnoreCase)。
+    // 效果层：eqv-18 普查确认这 8 个 offset 均无已证 C# 消费者；按铁律 fail-closed，
+    // 本波仅 1:1 复刻解析写入，不臆造消费者、不接线效果。
+
+    /// <summary>
+    /// 战神 map flag <c>UserNoKill</c> -> native <c>byte[+0x71]=1</c>（另清 <c>word[+0x74]=0</c>）。
+    /// 前缀比较（len 10, 0x4C6E94）。
+    /// 配置 B <c>0x7768E6</c>: <c>mov ecx,0xA / edx=0x776EAC ("UserNoKill") / call 0x4C6E94</c> ->
+    /// <c>0x7768F7 mov byte [ebx+0x71],1</c> / <c>0x7768FB mov word [ebx+0x74],0</c>。
+    /// GM A <c>0x775938</c> 同前缀：置位臂 <c>0x77594D [+0x71]=1</c> + <c>0x775951 word[+0x74]=0</c>；
+    /// 取消臂 <c>0x775964 [+0x71]=0</c> + <c>0x775968 word[+0x74]=0</c>。
+    /// <para>
+    /// <c>word[+0x74]</c> 在置位/取消两臂恒被清 0；其 producer/consumer 未归因，且配置解析
+    /// 面对的是新建（全零）TMapFlag，清 0 为 no-op。按 fail-closed 不建模语义未证的独立字段
+    /// （不臆造），观测状态与原版一致。效果层 BLOCKED，无已证消费者，未接线。
+    /// </para>
+    /// </summary>
+    public bool boUserNoKill;
+
+    /// <summary>
+    /// 战神 map flag <c>DROPTOMAP(destMap)</c> -> native <c>byte[+0x65]=1</c> + AnsiString
+    /// <c>[+0x9c]=destMap</c>。前缀比较（len 9, 0x4C6E94），与 NORECONNECT 同形取括号参数。
+    /// 配置 B <c>0x7762B4</c>: <c>mov ecx,9 / edx=0x776C2C ("DROPTOMAP") / call 0x4C6E94</c> ->
+    /// <c>0x7762C5 mov byte [ebx+0x65],1</c> -> <c>0x7762DE call 0x4C6964</c>（取 "(...)"）->
+    /// <c>0x7762E3 lea eax,[ebx+0x9c] / 0x7762EC call 0x405554</c>（AnsiString 赋值）->
+    /// <c>0x7762F1 cmp dword [ebx+0x9c],0 / jne done</c>，空参数 <c>0x7762FE mov esi,0xFFFFFFF4</c>
+    /// （result=-12）。GM A <c>0x7750D7</c> 同形：置位臂写 <c>[+0x65]=1</c>+<c>[+0x9c]</c>，
+    /// 空参数 <c>0x775124 [ebp-4]=0xFFFFFFF4</c>；取消臂 <c>0x775138 [+0x65]=0</c> +
+    /// <c>0x77513C..call 0x405500</c> 清空 <c>[+0x9c]</c>。
+    /// 效果层 BLOCKED（+0x65/+0x9c 无已证 C# 消费者），仅复刻解析与存储。
+    /// </summary>
+    public bool boDROPTOMAP;
+
+    /// <summary>
+    /// <c>DROPTOMAP</c> 的目标地图名 -> native AnsiString <c>[+0x9c]</c>（见 <see cref="boDROPTOMAP"/>）。
+    /// </summary>
+    public string sDropToMap;
+
+    /// <summary>
+    /// 战神 map flag <c>NOHERO</c> -> native <c>byte[+0x6e]=1</c>。前缀比较（len 6, 0x4C6E94）。
+    /// 配置 B <c>0x77672D</c>: <c>mov ecx,6 / edx=0x776DE4 / call 0x4C6E94 -> 0x77673E mov byte [ebx+0x6e],1</c>。
+    /// GM A <c>0x77570B</c>: 置位 <c>0x775720 [+0x6e]=1</c> / 取消 <c>0x775731 [+0x6e]=0</c>。
+    /// 效果层 BLOCKED（无已证消费者；注意与 NativeRegisteredBodyScriptApiLadders 的 hero-gate
+    /// NoHero 无关，那是英雄存在性门，非本地图旗标）。
+    /// </summary>
+    public bool boNOHERO;
+
+    /// <summary>
+    /// 战神 map flag <c>DREAMCASTLEMAP</c> -> native <c>byte[+0x6f]=1</c>。前缀比较（len 14, 0x4C6E94）。
+    /// 配置 B <c>0x77674C</c>: <c>mov ecx,0xE / edx=0x776DF4 / call 0x4C6E94 -> 0x77675D mov byte [ebx+0x6f],1</c>。
+    /// GM A <c>0x77573F</c>: 置位 <c>0x775754 [+0x6f]=1</c> / 取消 <c>0x775765 [+0x6f]=0</c>。
+    /// 效果层 BLOCKED（无已证消费者）。
+    /// </summary>
+    public bool boDREAMCASTLEMAP;
+
+    /// <summary>
+    /// 战神 map flag <c>NEWMJNORMALPRIZE</c> -> native <c>byte[+0x78]=1</c>。前缀比较（len 16, 0x4C6E94）。
+    /// 配置 B <c>0x77694A</c>: <c>mov ecx,0x10 / edx=0x776ED4 / call 0x4C6E94 -> 0x77695B mov byte [ebx+0x78],1</c>。
+    /// GM A <c>0x7759DF</c>: 置位 <c>0x7759F4 [+0x78]=1</c> / 取消 <c>0x775A05 [+0x78]=0</c>。
+    /// 效果层 BLOCKED（无已证消费者）。
+    /// </summary>
+    public bool boNEWMJNORMALPRIZE;
+
+    /// <summary>
+    /// 战神 map flag <c>MINGJIANG</c> -> native <c>byte[+0x7a]=1</c>。全等比较（0x40BD78，大小写不敏感）。
+    /// 配置 B <c>0x776407</c>: <c>mov edx=0x776CCC / call 0x40BD78 / test eax,eax / jne -> 0x776418 mov byte [ebx+0x7a],1</c>。
+    /// GM A <c>0x7752A5</c>: 置位 <c>0x7752BA [+0x7a]=1</c> / 取消 <c>0x7752CB [+0x7a]=0</c>。
+    /// 效果层 BLOCKED（无已证消费者）。
+    /// </summary>
+    public bool boMINGJIANG;
+
+    /// <summary>
+    /// 战神 map flag <c>HACKQUEST</c> -> native <c>byte[+0x7b]=1</c>。全等比较（0x40BD78，大小写不敏感）。
+    /// 配置 B <c>0x776421</c>: <c>mov edx=0x776CE0 / call 0x40BD78 / test eax,eax / jne -> 0x776432 mov byte [ebx+0x7b],1</c>。
+    /// GM A <c>0x7752D4</c>: 置位 <c>0x7752E9 [+0x7b]=1</c> / 取消 <c>0x7752FA [+0x7b]=0</c>。
+    /// 效果层 BLOCKED（无已证消费者）。
+    /// </summary>
+    public bool boHACKQUEST;
+
+    /// <summary>
+    /// 战神 map flag <c>NOEXPLORE</c> -> native <c>byte[+0x80]=1</c>。全等比较（0x40BD78，大小写不敏感）。
+    /// 配置 B <c>0x776455</c>: <c>mov edx=0x776D08 / call 0x40BD78 / test eax,eax / jne -> 0x776466 mov byte [ebx+0x80],1</c>。
+    /// GM A <c>0x775332</c>: 置位 <c>0x775347 [+0x80]=1</c> / 取消 <c>0x77535B [+0x80]=0</c>。
+    /// 效果层 BLOCKED（无已证消费者）。
+    /// </summary>
+    public bool boNOEXPLORE;
 }

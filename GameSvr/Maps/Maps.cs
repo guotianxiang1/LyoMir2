@@ -169,6 +169,28 @@ namespace GameSvr
                                 }
                                 continue;
                             }
+                            // MFLG-24: DROPTOMAP(destMap) -> byte[+0x65]=1 + AnsiString[+0x9c]=destMap。
+                            // 与 NORECONNECT 同形（前缀 len9 比较 + 取括号参数 + 空参 result=负数），
+                            // 故内联于此以复用 result 写入；原生 token 序也是 15:NORECONNECT→16:DROPTOMAP。
+                            //   配置 B 0x7762B4: mov ecx,9 / edx="DROPTOMAP"(0x776C2C) / call 0x4C6E94(前缀)
+                            //     0x7762C5 mov byte [ebx+0x65],1
+                            //     0x7762DE call 0x4C6964            取 "(...)" 目标图名
+                            //     0x7762E3 lea eax,[ebx+0x9c] / 0x7762EC call 0x405554  存字符串
+                            //     0x7762F1 cmp dword [ebx+0x9c],0 / jne done
+                            //     0x7762FE mov esi,0xFFFFFFF4       空参数 -> result = -12
+                            //   GM A 0x7750D7 同形（空参 0x775124 [ebp-4]=-12；取消臂清空 [+0x9c]）。
+                            // 效果层 BLOCKED：+0x65/+0x9c 无已证 C# 消费者，仅解析与存储。
+                            if (HUtil32.CompareLStr(s34, "DROPTOMAP", "DROPTOMAP".Length))
+                            {
+                                MapFlag.boDROPTOMAP = true;
+                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
+                                MapFlag.sDropToMap = s38;
+                                if (MapFlag.sDropToMap == "")
+                                {
+                                    result = -12;
+                                }
+                                continue;
+                            }
                             if (HUtil32.CompareLStr(s34, "CHECKQUEST", "CHECKQUEST".Length))
                             {
                                 HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
@@ -730,6 +752,56 @@ namespace GameSvr
             // 但效果层 fail-closed BLOCKED —— 不臆造字段与消费者。
             if (HUtil32.CompareLStr(token, "GuildPK", "GuildPK".Length))
             {
+                return true;
+            }
+            // MFLG-24 补全：配置解析器缺失的 7 个 bool 真 token（双解析器均写字段，
+            // 非 §INVENTED；DROPTOMAP 因带括号参数 + 空参 result=-12，见 LoadMapInfo 内联臂）。
+            // 证据锚见 TMapFlag 各字段文档。比较器按原生逐 token 区分：
+            //   前缀 0x4C6E94(带 mov ecx,len，ASCII 大小写不敏感) -> HUtil32.CompareLStr
+            //   全等 0x40BD78(无 ecx，大小写不敏感) -> .Equals(OrdinalIgnoreCase)
+            // 效果层 BLOCKED：eqv-18 普查确认这些 offset 无已证 C# 消费者，仅解析不接线。
+
+            // UserNoKill -> byte[+0x71]=1（原生另清 word[+0x74]=0；配置解析对全零新 flag 为 no-op）
+            //   B 0x7768E6 前缀 len10 / A 0x775938
+            if (HUtil32.CompareLStr(token, "UserNoKill", "UserNoKill".Length))
+            {
+                mapFlag.boUserNoKill = true;
+                return true;
+            }
+            // NOHERO -> byte[+0x6e]=1   B 0x77672D 前缀 len6 / A 0x77570B
+            if (HUtil32.CompareLStr(token, "NOHERO", "NOHERO".Length))
+            {
+                mapFlag.boNOHERO = true;
+                return true;
+            }
+            // DREAMCASTLEMAP -> byte[+0x6f]=1   B 0x77674C 前缀 len14 / A 0x77573F
+            if (HUtil32.CompareLStr(token, "DREAMCASTLEMAP", "DREAMCASTLEMAP".Length))
+            {
+                mapFlag.boDREAMCASTLEMAP = true;
+                return true;
+            }
+            // NEWMJNORMALPRIZE -> byte[+0x78]=1   B 0x77694A 前缀 len16 / A 0x7759DF
+            if (HUtil32.CompareLStr(token, "NEWMJNORMALPRIZE", "NEWMJNORMALPRIZE".Length))
+            {
+                mapFlag.boNEWMJNORMALPRIZE = true;
+                return true;
+            }
+            // MINGJIANG -> byte[+0x7a]=1   B 0x776407 全等 0x40BD78 / A 0x7752A5
+            if (token.Equals("MINGJIANG", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boMINGJIANG = true;
+                return true;
+            }
+            // HACKQUEST -> byte[+0x7b]=1   B 0x776421 全等 0x40BD78 / A 0x7752D4
+            if (token.Equals("HACKQUEST", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boHACKQUEST = true;
+                return true;
+            }
+            // NOEXPLORE -> byte[+0x80]=1   B 0x776455 全等 0x40BD78 / A 0x775332
+            if (token.Equals("NOEXPLORE", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boNOEXPLORE = true;
                 return true;
             }
             return false;
