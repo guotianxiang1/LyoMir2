@@ -366,13 +366,28 @@ namespace GameSvr.PasEngine
             return seconds > int.MaxValue / 1000 ? int.MaxValue : seconds * 1000;
         }
 
+        /// <summary>
+        /// PlayDice sub_645200 fills its ten dice slots from the GROUP-0 V bank, never
+        /// from the keyed dictionary:
+        ///   0x64522F  33 F6           xor esi, esi        ; i = 0
+        ///   0x645231  8D 5D D0        lea ebx, [ebp-0x30] ; ten-dword local
+        ///   0x645234  8D 4E 01        lea ecx, [esi+1]    ; arg2 = index = i+1
+        ///   0x645237  33 D2           xor edx, edx        ; arg1 = group = 0
+        ///   0x645239  8B C7           mov eax, edi        ; Self = the Hum argument
+        ///   0x64523B  E8 A4 9F 09 00  call 0x6DF1E4       ; GetV(0, i+1)
+        ///   0x645246  83 FE 0A        cmp esi, 0xA / jne  ; indices 1..10
+        /// Group 0 lives in the object-inline slots, so reading m_ScriptVVars here packed
+        /// ten constant zeros no matter what the script had set.
+        /// The byte order is the native one: 0x645264/0x645270 `MakeWord` the pair
+        /// (slot n, slot n+1) and 0x645276 `MakeLong`s the low pair under the high pair,
+        /// i.e. slot k occupies bits 8k of its dword.
+        /// </summary>
         private static int PackDiceValues(TPlayObject player, int firstIndex, int count)
         {
             uint packed = 0;
             for (var offset = 0; offset < count; offset++)
             {
-                var value = 0;
-                player.m_ScriptVVars?.TryGetValue(firstIndex + offset, out value);
+                var value = GetPlayerVar(player, 'V', 0, firstIndex + offset).AsInt();
                 packed |= (uint)(byte)value << (offset * 8);
             }
             return unchecked((int)packed);
@@ -8213,13 +8228,25 @@ namespace GameSvr.PasEngine
         //   SetS 0x6DF251 `test edi,edi / jle 0x6DF27D` + 0x6DF255 `test esi,esi / jle`
         //        -> returns al=0 (xor eax,eax @0x6DF24F), sub_6E4140 never called.
         //   keyed GetV 0x6DF21B/0x6DF21F, keyed SetV 0x6DF2B3/0x6DF2B7 — identical pairs.
-        // Group 0 is NOT rejected: it takes the fast path whose only gate is the unsigned
-        // bound 0x6DF209 `dec edx` / 0x6DF20A `sub edx,0x64` / 0x6DF20D `jae` (SetV mirror
-        // 0x6DF29F..0x6DF2A3) = 1 <= index <= 100. Out of that range it falls through to
-        // the keyed path, where `group == 0` then trips the `jle` and yields -1 / no write.
-        // C# already keys group 0 as the bare `index` (0*1000+index), so only the missing
-        // 1..100 bound is restored here; the separate inline `player+0x808` storage model
-        // is a distinct, still-unconfirmed finding and is deliberately NOT restructured.
+        // Group 0 is NOT rejected BY V: it takes the fast path whose only gate is the
+        // unsigned bound 0x6DF209 `dec edx` / 0x6DF20A `sub edx,0x64` / 0x6DF20D `jae`
+        // (SetV mirror 0x6DF29F..0x6DF2A3) = 1 <= index <= 100. Out of that range it falls
+        // through to the keyed path, where `group == 0` then trips the `jle` and yields
+        // -1 / no write. S has no fast path at all, so group 0 is rejected outright there.
+        //
+        // GROUP 0 IS NOT IN THE DICTIONARY. It is an object-inline `array[1..100] of
+        // Integer` addressed off the +0x808 base with a 1-based subscript - 0x6DF20F
+        // `8B 84 83 08 08 00 00  mov eax,[ebx+eax*4+0x808]` and its SetV mirror 0x6DF2A8
+        // `89 84 B3 08 08 00 00  mov [ebx+esi*4+0x808],eax` - occupying +0x80C..+0x99B,
+        // whereas the keyed bank is the dynamic array whose POINTER lives at +0x808
+        // (0x6DF225 `mov edx,[ebx+0x808]`, S counterpart +0x804 @0x6DF1CF). The 1..100
+        // bound is precisely what keeps the inline subscript off that pointer word.
+        // Two consequences that a flat dictionary cannot reproduce: an unwritten slot
+        // reads back as Delphi's zero-init 0, not the -1 of a dictionary miss, and the
+        // region is session-scoped because the save decoder sub_6E448C only ever touches
+        // the two pointers (+0x804 type-0 arm @0x6E457C, +0x808 type-1 arm @0x6E462E) and
+        // never +0x80C..+0x99B. It is therefore modelled by TPlayObject.m_ScriptVGroup0,
+        // NOT by keying group 0 as the bare index.
 
         /// <summary>
         /// Native miss/reject result for `GetV`/`GetS` (0x6DF1BB, 0x6DF1F1, 0x6E427A).
@@ -8269,7 +8296,20 @@ namespace GameSvr.PasEngine
         /// </summary>
         public PasValue GetPlayerVar(char type, int group, int index)
         {
-            if (CurrentPlayer == null) return PasValue.FromInt(NativeScriptVarMiss);
+            return GetPlayerVar(CurrentPlayer, type, group, index);
+        }
+
+        /// <summary>
+        /// The single read authority for both banks. Native GetV/GetS take the object in
+        /// eax, so internal callers name their own target rather than the script's current
+        /// player - PlayDice sub_645200 passes its `Hum` argument (0x64520C `mov edi,edx`,
+        /// then 0x645239 `mov eax,edi` at the call). Anything reading V/S must come through
+        /// here; a raw dictionary lookup silently misses the whole group-0 bank.
+        /// </summary>
+        private static PasValue GetPlayerVar(TPlayObject player, char type, int group,
+            int index)
+        {
+            if (player == null) return PasValue.FromInt(NativeScriptVarMiss);
             if (!NativeScriptVarArgsAccepted(type, group, index))
                 return PasValue.FromInt(NativeScriptVarMiss);
             // Group-0 V reads come straight out of the inline slots, and an untouched
@@ -8280,12 +8320,12 @@ namespace GameSvr.PasEngine
             // dictionary inverted every downstream `= 0` quest test on a fresh
             // character.
             if (group == 0)
-                return PasValue.FromInt(CurrentPlayer.m_ScriptVGroup0[index]);
+                return PasValue.FromInt(player.m_ScriptVGroup0[index]);
             int flat = group * 1000 + index;
             var variables = char.ToUpperInvariant(type) switch
             {
-                'V' => CurrentPlayer.m_ScriptVVars,
-                'S' => CurrentPlayer.m_ScriptSVars,
+                'V' => player.m_ScriptVVars,
+                'S' => player.m_ScriptSVars,
                 _ => null
             };
             return variables != null && variables.TryGetValue(flat, out var value)

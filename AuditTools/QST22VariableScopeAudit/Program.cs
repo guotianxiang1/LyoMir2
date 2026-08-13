@@ -102,7 +102,7 @@ namespace QST22VariableScopeAudit
             // 0x6DF20F) rather than the -1 a dictionary miss produces.
             var getPlayerVarMatch = Regex.Match(content,
                 @"public\s+PasValue\s+GetPlayerVar\s*\([^)]+\).*?" +
-                @"if\s*\(\s*group\s*==\s*0\s*\)\s*return\s+PasValue\.FromInt\s*\(\s*CurrentPlayer\.m_ScriptVGroup0\s*\[\s*index\s*\]\s*\)",
+                @"if\s*\(\s*group\s*==\s*0\s*\)\s*return\s+PasValue\.FromInt\s*\(\s*player\.m_ScriptVGroup0\s*\[\s*index\s*\]\s*\)",
                 RegexOptions.Singleline);
 
             if (!getPlayerVarMatch.Success)
@@ -168,6 +168,37 @@ namespace QST22VariableScopeAudit
             else
             {
                 Console.WriteLine("[PASS] Assertion 7: m_ScriptVGroup0 is not persisted into HumData");
+                assertionCount++;
+            }
+
+            // Assertion 8: PlayDice sub_645200 is the one native internal consumer of the
+            // group-0 bank (0x645237 `xor edx,edx` / 0x64523B `call 0x6DF1E4`, indices
+            // 1..10 per 0x645234 `lea ecx,[esi+1]` and 0x645246 `cmp esi,0xA`). A scan of
+            // every E8 call to 0x6DF1E4 / 0x6DF288 / 0x6DF1B4 / 0x6DF240 finds 29 sites and
+            // this is the only one passing group 0. It must not read the keyed dictionary,
+            // which cannot hold that bank at all.
+            var packDiceMatch = Regex.Match(content,
+                @"private\s+static\s+int\s+PackDiceValues\s*\([^)]+\)\s*\{.*?\}",
+                RegexOptions.Singleline);
+            if (!packDiceMatch.Success)
+            {
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues not found");
+                failCount++;
+            }
+            else if (packDiceMatch.Value.Contains("m_ScriptVVars"))
+            {
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues reads the keyed dictionary - group 0 is never in it");
+                failCount++;
+            }
+            else if (!Regex.IsMatch(packDiceMatch.Value,
+                @"GetPlayerVar\s*\(\s*player\s*,\s*'V'\s*,\s*0\s*,"))
+            {
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues does not read group-0 V through GetPlayerVar");
+                failCount++;
+            }
+            else
+            {
+                Console.WriteLine("[PASS] Assertion 8: PackDiceValues reads group-0 V through the single accessor");
                 assertionCount++;
             }
 
