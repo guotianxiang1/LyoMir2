@@ -22,13 +22,20 @@ namespace GameSvr
         //   ident 240 -> 索引表[38]=0x15 -> 地址表[0x15] -> stub @0x65734F
         //                (mov ecx,[ebp+8]; mov edx,[ebp+0xC]; call 0x657F3C)
         //
-        // 形参坐标 (由唯一调用点 0x712F3F..0x712F56 的压栈次序坐实, 更正此前
-        // "[ebp+8]=len / [ebp+0xC]=二进制帧" 的判读):
-        //   push [ebx+8] -> [ebp+0x10]   第三个整型参数
-        //   push [ebp-4] -> [ebp+0xC]    body, Delphi AnsiString (文本, 非二进制帧)
-        //   push esi     -> [ebp+8]      serverIdx
-        // 两个 handler 的序言都只有 `mov ebx,edx` (0x657897 / 0x657F48), 从不读
-        // ecx, 故 native 无 serverNum 守卫 —— 与 217/218 同族, 不加守卫。
+        // 形参坐标 (由唯一调用点 0x712F3F..0x712F56 的压栈次序 + 上游
+        // 0x713EC0..0x713EF0 的取值坐实):
+        //   push [ebx+8] -> [ebp+0x10]   帧头第三个 dword
+        //   push [ebp-4] -> [ebp+0xC]    payload 指针 (= 帧基址+0xC)
+        //   push esi     -> [ebp+8]      payload 长度 (= [ebx+4]-0xC)
+        // 上游 0x713EC0 `cmp [ebx+4],0xC / jl` 先卡总长 >= 12, 再 0x713EC6
+        // `mov eax,[ebx+4]/sub eax,0xC` 算净荷长度、0x713ED5 `mov eax,[ebx]/
+        // add eax,0xC` 算净荷指针, 0x713EE4/0x713EEA 分别压栈/送 ecx。
+        // 注意 native 派发器**根本没有 serverIdx 形参** (C# 的 serverNum 是本仓
+        // 传输层自加的); 226/240 的序言又都只有 `mov ebx,edx` (0x657897 /
+        // 0x657F48), 连长度都不读, 故两者都无任何前置守卫。
+        // payload 是字节缓冲, 但 226/240 都用 0x405708 (_LStrFromPChar, 扫 NUL
+        // 定长) 取串, 即按**文本**解读 —— 与 222 用 0x405774 读 ShortString、
+        // 247 直接取三个 dword 的二进制解读不同。
         //
         // body 内子字段 native 用 '/' (0x2F) 拆分 (0x4C6AEC: eax=源串,
         // edx=@首段, cl=分隔符, 压栈=@余段)。C# 传输层已把 '/' 占用为

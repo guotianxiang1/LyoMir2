@@ -29,29 +29,26 @@ namespace GameSvr
         // 同一空桩也吃掉了 219 的第二条腿 (dx=0xE3, 0x658272), 故 219 只需移植
         // 它 SysMsg 那一条可观测腿。
         //
-        // 形参坐标同 NativeMirrorMentor2.cs 顶部所述: [ebp+8]=serverIdx,
-        // [ebp+0xC]=body (AnsiString 文本), [ebp+0x10]=第三个整型参数。
+        // 形参坐标同 NativeMirrorMentor2.cs 顶部所述: [ebp+8]=payload 长度,
+        // [ebp+0xC]=payload 指针, [ebp+0x10]=帧头第三个 dword。native 派发器没有
+        // serverIdx 形参。219/221 都用 0x405708 按文本取串。
         // body 内子字段 native 用 '/' 拆 (0x4C6AEC 单字符 / 0x4C6BA4 字符集,
         // 单字符集下二者等价); C# 传输层 '/' 已被顶层协议占用, 故沿用反斜杠。
         // ===================================================================
 
         /// <summary>
         /// 战神 sub_6575D8 (OthGs ident 221): 向本服某个 <b>GM</b> 转发一条文本
-        /// 通知。body="收信人名/正文"。native 有两道本 handler 独有的门:
-        /// serverIdx 必须 &gt; 0, 且收信人的 GMLevel 必须 &gt;= 3。
+        /// 通知。body="收信人名/正文"。native 独有的门是收信人 GMLevel &gt;= 3。
         /// </summary>
-        internal static void NativeMirrorGmNotice(int serverIndex,
-            string recipientName, string text)
+        internal static void NativeMirrorGmNotice(string recipientName,
+            string text)
         {
-            // 0x6575F8 test ecx,ecx / jle —— ecx=[ebp+8]=serverIdx 必须 > 0。
-            // 这是本簇唯一真正读 ecx 的 handler (216/217/218/226/240 的序言都只有
-            // `mov ebx,edx`), 故这道守卫必须照搬。
-            // (0x6575F4 `test ebx,ebx / je` 的 body 空串门在调用方 —— body 是那里
-            // 才有的原串, 拆完再判等价性会依赖拆分器行为, 不如就地判。)
-            if (serverIndex <= 0)
-            {
-                return;
-            }
+            // native 的两道前置门 0x6575F4 `test ebx,ebx / je` (payload 指针非空)
+            // 与 0x6575F8 `test ecx,ecx / jle` (payload 长度 > 0) 在 C# 的字符串
+            // 世界里都塌缩成"body 非空", 已由调用方 MsgGetGmNotice 就地判掉 ——
+            // body 原串只有那里才有。
+            // (ecx 不是 serverIdx: 上游 0x713EE4 压的是 [ebx+4]-0xC = 净荷长度,
+            //  native 派发器没有 serverIdx 形参。)
 
             // 0x65761E UserEngine.GetPlayObject(首段); 0x65762D test eax,eax / je
             var recipient = M2Share.UserEngine?.GetPlayObject(recipientName);

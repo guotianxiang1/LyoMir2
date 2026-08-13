@@ -607,7 +607,8 @@ namespace GameSvr
         private void MsgGetGmNotice(int sNum, string Body)
         {
             // 战神 sub_6575D8 (ident 221): body="收信人名/正文"。
-            // 0x6575F4 test ebx,ebx / je —— body 空串直接退。
+            // 0x6575F4 test ebx,ebx / je (净荷指针非空) + 0x6575F8 test ecx,ecx /
+            // jle (净荷长度 > 0) —— 两道门在 C# 都是 "body 非空"。
             if (string.IsNullOrEmpty(Body))
             {
                 return;
@@ -615,7 +616,7 @@ namespace GameSvr
             var recipientName = string.Empty;
             var text = HUtil32.GetValidStr3(Body, ref recipientName,
                 HUtil32.Backslash);
-            TPlayObject.NativeMirrorGmNotice(sNum, recipientName, text);
+            TPlayObject.NativeMirrorGmNotice(recipientName, text);
         }
 
         private void MsgGetGmRelay(int sNum, string Body)
