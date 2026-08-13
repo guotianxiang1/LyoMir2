@@ -403,6 +403,21 @@ namespace GameSvr
                     }
                     else
                     {
+                        // MOVE-35(a) — 原版 sub_7797CC 在摘链之前还要校验**旧**坐标，
+                        // C# 只校验了新坐标（:353）：
+                        //   007799F5  0F B7 45 FA     movzx eax,word [ebp-6]  ; 旧 X
+                        //   007799FC  3B 42 3C        cmp   eax,[edx+0x3C]    ; Width
+                        //   007799FF  0F 8D A8 00..   jge   0x779AAD          ; -> FALSE
+                        //   00779A05  0F B7 55 F8     movzx edx,word [ebp-8]  ; 旧 Y
+                        //   00779A0C  3B 51 40        cmp   edx,[ecx+0x40]    ; Height
+                        //   00779A0F  0F 8D 98 00..   jge   0x779AAD          ; -> FALSE
+                        // movzx 让旧坐标恒为非负，所以只有上界；TryGetMapCellIndex 的
+                        // 下界对原版能产出的取值域是恒真的。怪物 mover 放宽到 x==Width
+                        // （MOVE-42）之后，旧坐标同样可能落在界外。
+                        if (!TryGetMapCellIndex(nCX, nCY, out _))
+                        {
+                            return 0;
+                        }
                         if (GetMapCellInfo(nCX, nCY, ref MapCellInfo) && MapCellInfo.ObjList != null)
                         {
                             var i = 0;
