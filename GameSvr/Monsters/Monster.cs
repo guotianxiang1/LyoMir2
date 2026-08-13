@@ -8,7 +8,6 @@ namespace GameSvr
         protected bool bo554;
         private bool m_boDupMode;
 
-<<<<<<< HEAD
         /// <summary>
         /// 战神 TMonster 自有字段 <c>[+0x4E4]</c>（TMonster size 0x4E8，TAnimal size 0x4D8，
         /// 故 0x4D8..0x4E7 是 TMonster 自己的 16 字节）。全镜像只有两个写入点：
@@ -19,28 +18,11 @@ namespace GameSvr
         /// 即：置位后整段"行走 / 攻击 / 跟随主人 / 召回 / 游荡"逻辑被跳过，只剩 inherited Run。
         /// </summary>
         protected bool m_boNativeStaticMode;
-=======
-        // ✅ 战神字节证据 (Tier-1)：TMonster 自有字段 [+0x4E4]（TMonster size 0x4E8，
-        // 父 TAnimal size 0x4D8，故 0x4D8..0x4E8 这 16 字节是 TMonster 私有区）。
-        // TMonster 布局下全镜像只有三个站点碰它：
-        //   0x66612A  TMonster.Create       mov byte [esi+0x4E4],0
-        //   0x666302  TMonster.Run          cmp byte [edx+0x4E4],0 / jne 0x6666E0
-        //   0x66D0FE  TStoneMonster.Create  mov byte [esi+0x4E4],1
-        // 除 TStoneMonster(race 181) 外无人置位，故对既有怪物恒为 false、行为不变。
-        protected bool bo4E4;
->>>>>>> w/race-c
-
         public Monster() : base()
         {
             m_boDupMode = false;
             bo554 = false;
-<<<<<<< HEAD
-            m_boNativeStaticMode = false;
-=======
-            // 0x66612A `C6 86 E4 04 00 00 00  mov byte [esi+0x4E4],0`
-            bo4E4 = false;
->>>>>>> w/race-c
-            // MONAI-02 — TMonster.Create sub_66610C 的构造默认 race 是 80(RC_MONSTER)：
+            m_boNativeStaticMode = false;            // MONAI-02 — TMonster.Create sub_66610C 的构造默认 race 是 80(RC_MONSTER)：
             //   00666162  C6 86 78 01 00 00 50   mov byte [esi+0x178],0x50
             // （父类 TAnimal.Create 0071D851 C6 87 78 01 00 00 32 = 50/RC_ANIMAL）
             // [+0x178] 是 race 而不是 Level：工厂 sub_679F8C 用 `movzx eax,byte [edi+0x14]`
@@ -188,7 +170,6 @@ namespace GameSvr
                         m_boWalkWaitLocked = false;
                     }
                 }
-<<<<<<< HEAD
                 // 战神 sub_66622C 在"放行走等待"与"走路节拍"之间还有一道闸，顺序是固定的：
                 //   006662D6  80 BA D8 04 00 00 00  cmp byte [edx+0x4D8],0   ; m_boWalkWaitLocked
                 //   006662F8  C6 82 D8 04 00 00 00  mov byte [edx+0x4D8],0   ; 到时解锁
@@ -198,21 +179,7 @@ namespace GameSvr
                 //   00666324  2B 8A 84 03 00 00     sub ecx,[edx+0x384]      ; tick - m_dwWalkTick
                 //   0066632D  3B 8A 24 03 00 00     cmp ecx,[edx+0x324]      ; m_nWalkSpeed
                 // 0x4E4 闸排在 0x4D8 闸【之前】，所以它同样先于走路节拍生效。
-                if (!m_boNativeStaticMode && !m_boWalkWaitLocked && (HUtil32.GetTickCount() - m_dwWalkTick) > m_nWalkSpeed)
-=======
-                // MONAI-19 — 原生在【等待步解锁判定之后、m_boWalkWaitLocked 判定之前】还有一闸：
-                //   6662FF  80 BA E4 04 00 00 00  cmp byte [edx+0x4E4],0
-                //   666309  0F 85 D1 03 00 00     jne 0x6666E0   ; 真 -> 直接跳到 inherited TAnimal.Run
-                //   66630F  80 BA D8 04 00 00 00  cmp byte [edx+0x4D8],0   ; m_boWalkWaitLocked
-                //   666319  0F 85 C1 03 00 00     jne 0x6666E0
-                //   66631F  2B 8A 84 03 00 00     sub ecx,[edx+0x384]      ; now - m_dwWalkTick
-                //   66632D  3B 8A 24 03 00 00     cmp ecx,[edx+0x324]      ; m_nWalkSpeed
-                //   666333  0F 8E A7 03 00 00     jle 0x6666E0
-                // 缺这一闸时 TStoneMonster(race 181，ctor 0x66D0FE 把 [+0x4E4] 置 1)会照常
-                // 走位/索敌/出手。见 Monster/StoneMonster.cs。
-                if (!bo4E4 && !m_boWalkWaitLocked && (HUtil32.GetTickCount() - m_dwWalkTick) > m_nWalkSpeed)
->>>>>>> w/race-c
-                {
+                if (!m_boNativeStaticMode && !m_boWalkWaitLocked && (HUtil32.GetTickCount() - m_dwWalkTick) > m_nWalkSpeed)                {
                     m_dwWalkTick = HUtil32.GetTickCount();
                     m_nWalkCount++;
                     if (m_nWalkCount > m_nWalkStep)

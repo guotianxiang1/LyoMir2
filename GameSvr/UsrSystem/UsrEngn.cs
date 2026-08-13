@@ -3084,6 +3084,7 @@ namespace GameSvr
                 // 逐字节记录并 fail-closed。原先落 default(0x67AE5E) → nil，该怪不出现。
                 case 152:
                     Cert = new NoWinerAnimal();
+                    break;
                 // ✅ 战神字节证据 (Tier-1)：race 181 = TStoneMonster(VMT 0x65E2BC, parent TMonster,
                 // size 与父类同为 0x4E8 => 无自有字段)。索引表[181-0xB=0xAA]=0x61=97 ; jt[97]=0x67ABC9：
                 //   67ABC9  B2 01              mov  dl,1
