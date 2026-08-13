@@ -181,12 +181,12 @@ namespace GameSvr
                 unchecked((uint)hero.m_Abil.Exp) > NativeNaturalHeroLevel200Cap)
                 hero.m_Abil.Exp = unchecked((int)NativeNaturalHeroLevel200Cap);
 
-            while (hero.m_Abil.MaxExp != 0 &&
-                   unchecked((uint)hero.m_Abil.MaxExp) <= unchecked((uint)hero.m_Abil.Exp))
+            while (hero.m_WAbil.MaxExp != 0 &&
+                   unchecked((uint)hero.m_WAbil.MaxExp) <= unchecked((uint)hero.m_Abil.Exp))
             {
                 var previousLevel = hero.m_Abil.Level;
                 hero.m_Abil.Exp = unchecked((int)((uint)hero.m_Abil.Exp -
-                                                   (uint)hero.m_Abil.MaxExp));
+                                                   (uint)hero.m_WAbil.MaxExp));
                 if (directMode || hero.m_Abil.Level < 200)
                 {
                     hero.m_Abil.Level = unchecked((ushort)(hero.m_Abil.Level + 1));
@@ -198,7 +198,7 @@ namespace GameSvr
                 }
 
                 hero.HeroLevel = hero.m_Abil.Level;
-                // EXP-06: B.MaxExp is pinned at 100 at birth and never refreshed on level-up.
+                hero.m_Abil.MaxExp = hero.GetLevelExp(hero.m_Abil.Level);
                 hero.RecalcLevelAbilitys();
                 hero.RecalcAbilitys();
                 hero.SendMsg(hero, Grobal2.RM_LEVELUP, 0, hero.m_Abil.Exp,

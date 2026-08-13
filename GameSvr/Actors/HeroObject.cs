@@ -294,6 +294,13 @@ namespace GameSvr
             RecalcAbilitys();
         }
 
+        public override void RecalcAbilitys()
+        {
+            base.RecalcAbilitys();
+            // Native THeroAct Recalc (VMT+0x2C = 0x690300) never copies A.MaxExp onto B.
+            m_WAbil.MaxExp = 100;
+        }
+
         internal static ClientPacket BuildHeroRuntimePacket(TProcessMessage processMsg, int currentExp, int level)
         {
             switch (processMsg.wIdent)
@@ -592,8 +599,7 @@ namespace GameSvr
                 return;
             }
 
-            // If we're far from master, warp back
-            if (distToMaster > 12)
+            if (distToMaster >= 12)
             {
                 m_Action = HeroAction.ReturnToMaster;
                 return;
@@ -687,10 +693,10 @@ namespace GameSvr
                 return;
             }
 
-            // 原版目标有效性清扫 sub_68A610 @0x68A660 用 sub_76B4A4（切比雪夫）。
             int dist = NativeGridDistance(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
 
-            if (dist > 10)
+            // 0x68A665 83 F8 0F / 72 0A: drop when Chebyshev >= 15
+            if (dist >= 15)
             {
                 DelTargetCreat();
                 return;
@@ -2103,12 +2109,7 @@ namespace GameSvr
             var currentMp = m_WAbil.MP;
             m_Abil.Level = (ushort)level;
             HeroLevel = (ushort)level;
-            // EXP-06: Native B.MaxExp is pinned at 100 for hero's entire life.
-            // sub_6521BC @0x652479 sets A.MaxExp=100; @0x6524CA copies A→B (0x1F dword block).
-            // Level-up handler sub_6871E0 writes only A.MaxExp (+0x244); the exp-gain loop reads
-            // B.MaxExp (+0x2C0), so B.MaxExp remains 100 forever.
-            // A GM-forced level change must NOT pull MaxExp from the config table.
-            m_Abil.MaxExp = 100;
+            m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
             RecalcLevelAbilitys();
             m_Abil.HP = Math.Min(currentHp, m_Abil.MaxHP);
             m_Abil.MP = Math.Min(currentMp, m_Abil.MaxMP);
