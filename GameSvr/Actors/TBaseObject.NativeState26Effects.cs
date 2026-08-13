@@ -141,7 +141,7 @@ namespace GameSvr
             return Math.Clamp(chance, 30, 95);
         }
 
-        private bool NativeMagicHitApplies(TBaseObject target)
+        protected bool NativeMagicHitApplies(TBaseObject target)
         {
             if (target == null || target.m_btRaceServer == Grobal2.RC_GUARD)
                 return false;
