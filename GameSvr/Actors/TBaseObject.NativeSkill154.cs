@@ -39,7 +39,10 @@ namespace GameSvr
         // Native table at 0x7D3EF6 (strike counts), indexed by effective level
         // Note: staging doc shows only strike counts for 154, no separate damage table
         // The damage bonus calculation is likely inline or uses a different mechanism
-        private static readonly ushort[] NativeSkill154StrikeCounts = { 0, 3, 5, 8 };
+        // Native table read raw from flat_image.bin at 0x7D3EF8:
+        //   02 00 | 04 00 | 08 00   Int16, indexed by effective level 1..3.
+        // The previous { 0, 3, 5, 8 } was invented.
+        private static readonly ushort[] NativeSkill154StrikeCounts = { 0, 2, 4, 8 };
 
         private ushort m_nNativeSkill154StrikeCount;
 
@@ -96,9 +99,18 @@ namespace GameSvr
             if (m_nNativeSkill154StrikeCount > 0 && damage > 0)
             {
                 m_nNativeSkill154StrikeCount--;
-                // TODO: Determine the actual damage bonus calculation
-                // The native disassembly would need deeper analysis of the
-                // damage application path to find where this bonus is applied
+            // The bonus path is now identified: id 154 shares the consumer with
+            // id 151 at 0x746247, and its own block starts at 0x74628C:
+            //   0x74628C  cmp word [esi+0x3E0],0  ; remaining strikes, else skip
+            //   0x746296  cmp [ebp-8],0x400       ; only for this magic id
+            //   0x7462A3  call 0x76CD8C           ; class-dispatched power getter
+            //   0x7462A8  lea eax,[eax+eax*4]     ; * 5
+            // It is byte-for-byte the 151 sequence MINUS the
+            // `fmul dword [esi+0x3F8]` factor multiply, which is why 154 has no
+            // factor table - not because one is missing. Landing the real value
+            // still needs 0x76CD8C's four job branches and 0x76CD5C mapped to
+            // their C# counterparts, so this stays a pass-through rather than a
+            // guessed formula.
                 return damage;
             }
             return damage;

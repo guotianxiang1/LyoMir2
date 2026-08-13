@@ -38,9 +38,39 @@ namespace GameSvr
         private const int NativeSkill151CooldownMilliseconds = 30000;
         private const int NativeSkill151ColdTimeKey = 0x97;
 
-        // Native tables at 0x7D3EFE (strike counts) and 0x7D3F04 (bonus damage)
-        // Indexed by effective level (1-based, so [0] unused)
-        private static readonly ushort[] NativeSkill151StrikeCounts = { 0, 3, 5, 8 };
+        // Native tables, read raw from flat_image.bin. The previous values were
+        // invented: the old comment's addresses each pointed one entry short of
+        // the real table, and the damage table is Single, not Int32.
+        //   0x7D3F00  01 00 | 02 00 | 04 00              Int16 strike counts
+        //   0x7D3F08  00 00 80 3E | 00 00 00 3F | 00 00 80 3F
+        //                                                Single 0.25 / 0.5 / 1.0
+        // Both hold 3 entries indexed by effective level 1..3; slot [0] stays
+        // unused so the callers' 1-based indexing is unchanged.
+        private static readonly ushort[] NativeSkill151StrikeCounts = { 0, 1, 2, 4 };
+        private static readonly float[] NativeSkill151DamageFactors =
+            { 0f, 0.25f, 0.5f, 1.0f };
+
+        // DIVERGENT, deliberately not guessed. Native does NOT add a flat bonus.
+        // The consumer at 0x746247 (shared with id 154) computes it per hit:
+        //   0x746247  cmp word [esi+0x3F4],0   ; remaining strikes, else skip
+        //   0x746267  call 0x76CD8C            ; class-dispatched power getter:
+        //                                      ;   reads byte [self+0x72] (job)
+        //                                      ;   job 0 -> ([+0x28C],[+0x290])
+        //                                      ;   into 0x76CD5C; jobs 1/2/3 at
+        //                                      ;   0x76CDBD / 0x76CDD3 / 0x76CDE9
+        //   0x74626C  mov edx,0x1388           ; 5000
+        //   0x746271  call 0x4C700C            ; min(power, 5000)
+        //   0x746276  lea eax,[eax+eax*4]      ; * 5
+        //   0x74627F  fmul dword [esi+0x3F8]   ; * the stored Single factor
+        //   0x746285  call 0x403580            ; @TRUNC
+        //   0x74628A  add ebx,eax
+        // i.e. bonus = TRUNC(min(classPower, 5000) * 5 * factor[level]).
+        // Id 154's block at 0x74628C is the same shape with the fmul absent,
+        // which is why it has no factor table of its own.
+        // Landing this needs the four job branches of 0x76CD8C and the
+        // semantics of 0x76CD5C mapped to their C# counterparts first; until
+        // then the additive model below is knowingly wrong rather than
+        // speculatively rewritten.
         private static readonly int[] NativeSkill151BonusDamages = { 0, 50, 80, 120 };
 
         private ushort m_nNativeSkill151StrikeCount;
