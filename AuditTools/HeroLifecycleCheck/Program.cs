@@ -130,6 +130,14 @@ Assert(ContainsCall(runMasterGoneReap, removeHeroMethod),
 Assert(ContainsCall(runMasterGoneReap, sendDefMessage),
     "hero corpse/owner-gone reap no longer sends SM_HERO_LOGOUT to the owner "
     + "(native 0x6CCAE7 mov dx,0x396 through the +0x250 send slot)");
+
+// CM_HERO_LOGON 的副将槽门：原生 0x6D9337 `cmp word [msg+6],1` 命中后要求
+// GetV(group 87, index 3) == 100（0x6D934B call 0x6DF1E4 / 0x6D9350 cmp eax,0x64），
+// 否则发「请先召唤一次主将英雄」并中止。
+var viceHeroGate = playerType.GetMethod("NativeViceHeroSummonAllowed",
+    BindingFlags.Instance | BindingFlags.NonPublic)!;
+Assert(ContainsCall(playerOperate, viceHeroGate),
+    "CM_HERO_LOGON no longer consults the native vice-hero V(87,3)==100 gate");
 Assert(ContainsCall(queueForFree, queueHeroSave),
     "hero retirement releases runtime state before queuing a native save");
 Assert(ContainsCall(processHeroesMethod, processHeroData),
@@ -191,6 +199,23 @@ playerType.GetMethod("Initialize")!.Invoke(owner, null);
 Assert(CountMapReferences(environment, owner) == 1, "owner was not added to exactly one map cell");
 Assert((int)GetProperty(environmentType, environment, "HumCount") == 1,
     "map player count did not increment once");
+
+// 副将槽门的行为面：GetV 未命中 -> -1，V(87,3) 必须**恰好**是 100 才放行
+// （0x6D9350 `cmp eax,0x64` / `jne`，不是 >=）。
+var setScriptVar = playerType.GetMethod("SetScriptVar")!;
+Assert(!(bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate opened while V(87,3) was never written (native GetV miss = -1)");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 99 });
+Assert(!(bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate opened at V(87,3)=99 (native compares for equality with 100)");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 101 });
+Assert(!(bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate opened at V(87,3)=101 (native compares for equality with 100)");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 100 });
+Assert((bool)viceHeroGate.Invoke(owner, null)!,
+    "vice-hero gate stayed shut at V(87,3)=100");
+setScriptVar.Invoke(owner, new object[] { 'V', 87, 3, 0 });
+((IList)GetField(baseObjectType, owner, "m_MsgList")).Clear();
 
 var registerHero = userEngineType.GetMethod("RegisterHero")!;
 var removeHero = userEngineType.GetMethod("RemoveHero", new[] { playerType })!;

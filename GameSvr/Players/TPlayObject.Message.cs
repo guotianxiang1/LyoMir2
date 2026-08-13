@@ -60,6 +60,34 @@ namespace GameSvr
             return separator >= 0 ? mapName[..separator] : mapName;
         }
 
+        /// <summary>
+        /// 原生 CM_HERO_LOGON 的副将槽门（<c>Param == 1</c>）：脚本变量 <c>V(87,3)</c>
+        /// 必须恰好等于 100，否则拒绝并提示「请先召唤一次主将英雄」。
+        /// <code>
+        /// 6D933E  B9 03 00 00 00     mov  ecx,3        ; index
+        /// 6D9343  BA 57 00 00 00     mov  edx,0x57     ; group 87
+        /// 6D934B  E8 94 5E 00 00     call 0x6DF1E4     ; GetV
+        /// 6D9350  83 F8 64           cmp  eax,0x64
+        /// 6D9353  75 30              jne  0x6D9385
+        /// 6D9385  66 B9 FF 38        mov  cx,0x38FF
+        /// 6D9389  BA 68 BF 6D 00     mov  edx,0x6DBF68 ; declen 20 GBK
+        /// 6D9393  FF 93 D4 00 00 00  call [vmt+0xD4]   ; sub_73C8F4 -> RM 0x2774 拆成 FColor/BColor
+        /// </code>
+        /// 引擎自身从不写 <c>V(87,3)</c>（全镜像 SetV 调用点里没有 <c>edx=0x57</c>），
+        /// 它由脚本在玩家首次召唤主将后置位——这正是提示语的字面含义。
+        /// </summary>
+        private bool NativeViceHeroSummonAllowed()
+        {
+            // 0x6DF1F1 mov [ebp-4],0xFFFFFFFF：GetV 未命中答 -1，同样不等于 100。
+            if (!TryGetScriptVar('V', 87, 3, out var nFlag))
+                nFlag = -1;
+            if (nFlag == 100)
+                return true;
+            SendMsg(this, Grobal2.RM_SYSMESSAGE, 0, 0xFF, 0x38, 0,
+                "请先召唤一次主将英雄");
+            return false;
+        }
+
         private void SendMapNpcList(TProcessMessage processMsg)
         {
             var environment = processMsg.nParam2 == 0
@@ -2742,9 +2770,30 @@ namespace GameSvr
 
                 // === Hero System Client Messages (CM_HERO_*) ===
                 case Grobal2.CM_HERO_LOGON:
-                    if (ProcessMsg.nParam1 == ObjectId)
+                    // 原生分发臂 0x6D9324 起，门序就是下面这三步：
+                    //   6D9327  83 B8 B0 0B 00 00 00  cmp dword [player+0xBB0],0
+                    //   6D932E  0F 85 F8 28 00 00     jne 0x6DBC2C      ; 英雄已在场 -> 静默
+                    //   6D9334  8B 45 CC              mov eax,[msg]
+                    //   6D9337  66 83 78 06 01        cmp word [msg+6],1 ; Param==1 = 副将槽
+                    //   6D933C  75 60                 jne 0x6D939E      ; 主将槽跳过下面这道门
+                    //   6D933E  B9 03 00 00 00        mov ecx,3          ; index
+                    //   6D9343  BA 57 00 00 00        mov edx,0x57       ; group 87
+                    //   6D934B  E8 94 5E 00 00        call 0x6DF1E4      ; GetV
+                    //   6D9350  83 F8 64              cmp eax,0x64       ; == 100 ?
+                    //   6D9353  75 30                 jne 0x6D9385       ; -> 拒绝并提示
+                    //   6D9385  66 B9 FF 38 / BA 68 BF 6D 00 / call [vmt+0xD4]
+                    // 0x6DBF68 是 declen 20 的 GBK 串「请先召唤一次主将英雄」。
+                    // GetV(sub_6DF1E4) 的线性槽是 0x6E42CC `imul eax,edx,0x3E8 / add eax,ecx`，
+                    // 即 group*1000+index，所以 edx=group=87、ecx=index=3。未命中时
+                    // 0x6DF1F1 `mov [ebp-4],0xFFFFFFFF` 让它答 -1，而 -1 != 100 也是拒绝。
+                    // Param/Tag -> [player+0x9BD]/[player+0x9BE]（0x6D93A7/0x6D93B6），
+                    // 即 DB 请求 0x160 里的 HeroKind/HeroSlot 两个字段。
+                    if (m_HeroObject == null)
                     {
-                        if (m_HeroObject == null)
+                        if (ProcessMsg.nParam2 == 1 && !NativeViceHeroSummonAllowed())
+                            break;
+                        // Recog 的校验在原生 sub_6CC7C8 内部（0x6CC874 cmp ebx,[ebp-4]）。
+                        if (ProcessMsg.nParam1 == ObjectId)
                             HeroDataService.RequestLoad(this,
                                 (byte)ProcessMsg.nParam2, (byte)ProcessMsg.nParam3);
                     }
