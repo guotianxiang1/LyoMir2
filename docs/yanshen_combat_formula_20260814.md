@@ -14,9 +14,11 @@
 |---|---:|
 | 五项实现体反演 | **5 / 5 完整到 `ret`**（含 Themida 代码搬迁段，见 §1.2） |
 | 原生公式落到字节 | **5 / 5** |
-| 查出的数值语义差异 | **31 条** |
-| 本轮已修 | **24 条** |
-| 仍 fail-closed | **7 条**（§8） |
+| 逐条判定行 | **52**（施毒 9 + 麻痹 8 + 吸血 5 + 切割 12 + 自定义伤害 18） |
+| 其中 FAITHFUL（原本就对） | **5** |
+| **非 FAITHFUL 的数值语义差异** | **47** |
+| 本轮已按字节修正 | **38** |
+| 仍 fail-closed / 只做到部分 | **9 条判定行**，归并为 §8 的 **7 个条目** + 1 条结构性不可达（`-888` 元数哨兵） |
 
 **一句话**：五项的伤害层根本不是 C# 现在写的样子。C# 的 `CalcDamage = max(0,DC-AC) + baseHp*(magicLv+1)/10 + cuttingV`
 只对了 `baseHp*(magicLv+1)/10` 这**一个加项**；原生既不做 `max(0,DC-AC)`，也不掷 AC，
@@ -302,7 +304,7 @@ M2 自身的武器带毒路径给出同一形状的独立佐证（`0x76E620`）�
 |---|---|---|---|---|
 | P-1 | 返回值 | `shijian`（未命中 0） | 命中个数 | **DIVERGENT → 已修** |
 | P-2 | `Canl` | 离施法者最大距离，超出 **-999** | 当成 `players` 布尔传给 `FindTargets` | **DIVERGENT → 已修** |
-| P-3 | `isqun` | `==1` 逐格掷点；否则全区一次 | 完全忽略，逐目标掷点 | **DIVERGENT → 已修** |
+| P-3 | `isqun` | `==1` **逐格**掷点（格内所有对象共用一次）；否则全区一次，掷不中整体返回 | 完全忽略，**逐目标**掷点 | **DIVERGENT → 已修**（掷点在 x/y 双重循环体内、取对象 `sub_1006CF80` 之前，逐目标掷会多耗随机数并改变命中分布，故 C# 侧改成按格枚举） |
 | P-4 | 自身排除 | `target == caster → 跳过`（`10070933`） | 无 | **DIVERGENT → 已修** |
 | P-5 | `IsProperTarget` | 单体路径必过（`10070942`） | 无 | **DIVERGENT → 已修** |
 | P-6 | 毒型映射 | `leix+30` → `nType = 1-leix` | `type==0?DAMAGEARMOR:DECHEALTH` | **FAITHFUL** |
@@ -360,7 +362,7 @@ M2 自身的武器带毒路径给出同一形状的独立佐证（`0x76E620`）�
 | M-1 | 开关门 | 2 号臂**无门**（`100769B9` 开头就是 `mov ecx,[ebp+8]`） | `if (!Enabled("麻痹概率")) return 0;` | **DIVERGENT**（上一轮已记 偏差 1）→ 本轮不动，见 §8 F-7 |
 | M-2 | 返回值 | `timer` | 命中个数 | **DIVERGENT → 已修** |
 | M-3 | `Canl` | 距离门 / -999 | 当成 `players` 布尔 | **DIVERGENT → 已修** |
-| M-4 | `isqun` | `==1` 逐格；否则全区一次 | 忽略 | **DIVERGENT → 已修** |
+| M-4 | `isqun` | `==1` **逐格**（格内共用一次）；否则全区一次 | 忽略 | **DIVERGENT → 已修**（同 P-3） |
 | M-5 | `IsProperTarget` | 单体路径必过 | 无 | **DIVERGENT → 已修** |
 | M-6 | 状态号 | 26 | `POISON_STONE=5` → `31-5=26` | **FAITHFUL** |
 | M-7 | 时长 | `word(caster[+0x1A4] + timer)` 秒 | `timerSec` | **FAIL-CLOSED**（§8 F-2：本仓无该聚合字段） |
@@ -490,12 +492,12 @@ return total;
 | C-2 | `cuttingV<=0` | 钳成 **1** | `cuttingV>0` 才打 | **DIVERGENT → 已修** |
 | C-3 | 返回值 | `max(cuttingV,1)`；错误码 -999/-777/-666 | 伤害总和 | **DIVERGENT → 已修** |
 | C-4 | `canl` | 离施法者最大距离 / -999 | 当成 `players` 布尔 | **DIVERGENT → 已修** |
-| C-5 | `types` | 3/4/5 排除玩家、6/7/8 只打玩家、否则不过滤；不匹配 → -777 | 完全忽略 | **DIVERGENT → 已修** |
-| C-6 | `attId` | **对象指针**，且命中后只打一个 | 忽略 | **DIVERGENT → 已修**（按 ObjectId 语义安全化，见 §8 F-3） |
+| C-5 | `types` | 3/4/5 排除玩家、6/7/8 只打玩家、否则不过滤。**单格链表路径**首个不匹配即 -777（`1006EC93`/`1006ECC7`）；**方框路径**只跳过该格（`1006EFB0`/`1006EFBA` 都是 `je/jne 下一个`） | 完全忽略 | **DIVERGENT → 已修**（两条路径的不同返回行为一并复刻） |
+| C-6 | `attId` | **对象指针**，且命中后只打一个 | 忽略 | **部分修 → §8 F-3**（行为按 ObjectId 复刻，指针语义不可复刻） |
 | C-7 | `delay` | `SendDelayMsg(10101, …, delay)` | 忽略 | **DIVERGENT → 已修** |
 | C-8 | `lei==1` | 以施法者为中心 + 8 向朝向筛格 | 忽略 | **部分修**：中心切换已修；朝向筛格 **FAIL-CLOSED**（§8 F-5） |
 | C-9 | LastHiter | 为空则设 caster | 无 | **DIVERGENT → 已修** |
-| C-10 | 30 次链表上限 | 每格最多 30 | 无（C# 用 List） | **PARTIAL**（C# 逐格对象数远小于 30，实务等价；记账不修） |
+| C-10 | 30 次链表上限 | 每格最多 30（`1006EB9D B8 1E 00 00 00`） | 无 | **DIVERGENT → 已修**（`NativeChainWalkCap`，只在 `round<=0` 的单格链表路径生效） |
 | C-11 | HP<=0 跳过 | `1006EBFC` | 无 | **DIVERGENT → 已修** |
 | C-12 | `IsProperTarget` | 必过 | 无 | **DIVERGENT → 已修** |
 
@@ -638,9 +640,9 @@ int CalcDamage(int magicLv, int baseHp, int cuttingV, TBaseObject target) {
 | D-10 | 落血 | `DamageHealth` | `t.m_WAbil.HP -= min(HP,dmg)` | **DIVERGENT → 已修** |
 | D-11 | 返回值 | 最后一个目标的 `dmg`；错误码 -666/-777/-999 | 伤害总和 | **DIVERGENT → 已修** |
 | D-12 | `Canl` | 距离门 / -999 | 当 `players` 布尔 | **DIVERGENT → 已修** |
-| D-13 | `types` 类过滤 | 1 排除玩家 / 2 只打玩家 | 忽略 | **DIVERGENT → 已修** |
+| D-13 | `types` 类过滤 | 1 排除玩家 / 2 只打玩家。单格路径不匹配 → -777（`1006E14F`/`1006E184`）；方框路径只跳过（`1006E5E3`/`1006E5ED`） | 忽略 | **DIVERGENT → 已修** |
 | D-14 | `delay` | `SendDelayMsg(10101,…,delay)`，缺省 200 | 忽略 | **DIVERGENT → 已修** |
-| D-15 | `AttactId` | 对象指针，命中后只打一个 | 忽略 | **DIVERGENT → 已修**（按 ObjectId 语义安全化，§8 F-3） |
+| D-15 | `AttactId` | 对象指针，命中后只打一个 | 忽略 | **部分修 → §8 F-3** |
 | D-16 | LastHiter | 为空则设 caster | 无 | **DIVERGENT → 已修** |
 | D-17 | `lei` | **本函数不参与选属性**（防御索引来自 `types`）；`lei` 在 `ys_MyJn_plus2` 里是纯占位 | 注释写成"半径类型(0=圆形 1=直线)" | **注释错误 → 已修** |
 | D-18 | 命中档位残值 | `[ebp-0x1C]` 跨目标复用 | — | **FAIL-CLOSED**（§8 F-4） |
@@ -661,7 +663,37 @@ int CalcDamage(int magicLv, int baseHp, int cuttingV, TBaseObject target) {
 
 ---
 
-## 9. 复现
+## 9. 本轮改动落点
+
+只动了 `GameSvr/Plugins/YanshenApi.cs` 一个文件；`Grobal2.cs` / `TPlayObject.Message.cs` / `UsrEngn.cs` 未触碰，
+`TBaseObject` 的宿主原语一行没改 —— 修正全部是**组合既有的、已逐字节验证的原语**。
+
+| 提交 | 内容 |
+|---|---|
+| `d955b694` | 本文档 |
+| `9c1b7602` | 吸血：百分比口径 + `IncHealthSpell` 落地 |
+| `75342460` | 自定义伤害 + 切割：原生公式与三级落地管线、距离门/类过滤/错误码/`AttactId`/`delay` |
+| `89628128` | 施毒 + 麻痹：距离门、逐格掷点、单体路径、原生返回值 |
+
+新增的私有原语（都在 `YanshenApi.cs` 内，供五项共用）：
+
+| 成员 | 对应原生 |
+|---|---|
+| `YsErrRange` / `YsErrClass` / `YsErrNoTarget` | `-999` / `-777` / `-666` 三个哨兵 |
+| `NativeCanlGateFails` | `100708BB` / `1006EB10` / `1006DEAE` 的 `Canl` 距离门 |
+| `NativeTypeClassFilter` / `NativeClassFilterAccepts` | 跳表 `0x1006F0BC` / `0x1006E8B0` 的目标类过滤 |
+| `NativeCollectTargets` + `NativeChainWalkCap` | 单格链表（上限 30）/ 方框取目标，含 `HP>0` 与 `IsProperTarget` |
+| `NativeEnumerateAreaCells` | 施毒/麻痹的**按格**枚举（掷点粒度所必需） |
+| `NativeRollHit` | `Random(100) < 概率` |
+| `NativeLandDamage` | `LastHiter` → `sub_767BA8` → `DamageHealth` → `SendDelayMsg(10101)` |
+
+删除：`CalcDamage`（全仓已无引用）。`FindTargets` 保留 —— 它还有 9 个非战斗调用者。
+
+验证：`dotnet build GameSvr\GameSvr.csproj` **0 错误**（15 条既有 warning，均与本轮无关）。
+
+---
+
+## 10. 复现
 
 工具（均在 `%TEMP%`，只读）：
 
