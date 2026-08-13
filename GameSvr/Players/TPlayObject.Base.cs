@@ -535,6 +535,33 @@ namespace GameSvr
         public bool m_boNativeHeroCapHintEnabled = true;
 
         /// <summary>
+        /// native <c>Self+0x18AC</c> (Byte) — "let other players read my hero's
+        /// 28-byte record" permission, flipped by CM 1281 (<c>0x6DA9D7</c> = 0 when
+        /// Param == 0, <c>0x6DA9F0</c> = 1 when Param == 1, any other Param leaves it
+        /// alone). A whole-CODE scan finds three real references — those two writes
+        /// and one read — and NO constructor write, so Delphi zero-init leaves the
+        /// default at 0 (sharing OFF).
+        /// <para>
+        /// The single reader is <c>sub_68DAD0</c>, a hero virtual method
+        /// (<c>33 D2 / 8B 88 8C 06 00 00 mov ecx,[hero+0x68C] / 85 C9 / 74 06 /
+        /// 8A 91 AC 18 00 00 mov dl,[owner+0x18AC] / 8B C2 / C3</c>) that occupies VMT
+        /// slot <c>+0x27C</c> in all seven hero-family VMTs (anchored off
+        /// <c>sub_690B08</c> at slot +0x154: <c>0x685784 - 0x154 = 0x685630</c> base,
+        /// and <c>sub_68DAD0</c> sits at <c>0x6858AC = base + 0x27C</c>). Slot +0x27C
+        /// has exactly ONE call site in the whole image — <c>0x6DA96F</c>, inside the
+        /// CM 1280 hero-inspect handler — where a true result selects the
+        /// SM 3291 reply that carries <c>target+0x554</c> (28 bytes) and a false result
+        /// selects the empty-body SM 3291.
+        /// </para>
+        /// <para>
+        /// CM 1280 itself is still MISSING (the <c>+0x554</c> record layout has not
+        /// been reversed), so this flag has no live consumer yet; it is stored so the
+        /// preference the client sends today is not silently discarded.
+        /// </para>
+        /// </summary>
+        public bool m_boNativeHeroRecordShared;
+
+        /// <summary>
         /// native <c>Self+0x18A0</c> (Word) — 元宝 trade-protection amount, persisted
         /// at rec+0x050C. Setter <c>0x6D154E</c>; named by the in-function literals
         /// 「已成功设置交易保护金额为：」 / 「修改元宝交易金额」.

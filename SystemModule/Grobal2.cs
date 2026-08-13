@@ -208,6 +208,15 @@ namespace SystemModule
         /// 战神 has no symbolic name for it.
         /// </summary>
         public const int CM_1239 = 1239;
+        /// <summary>
+        /// Native handler 0x6DA9C8 (dispatch arm <c>0x6D8439</c>). Self-contained
+        /// three-way on Param: <c>0x6DA9CF 66 85 C0 test ax,ax / 75 0F</c> then
+        /// <c>0x6DA9D7 mov byte [self+0x18AC],0</c>; <c>0x6DA9E3 66 83 F8 01 cmp ax,1 /
+        /// 0F 85 jne default</c> then <c>0x6DA9F0 mov byte [self+0x18AC],1</c>.
+        /// Param values other than 0 and 1 leave the flag untouched.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1281 = 1281;
         public const int CM_COMMON_INFORMATION = 1099;
         public const int CM_YANHUA_TEXT = 1290;
         public const int CM_BUTCH = 1007;

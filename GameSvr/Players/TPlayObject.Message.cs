@@ -1020,6 +1020,22 @@ namespace GameSvr
                     // the native `jne` against a word is a plain equality test.
                     m_boNativeHeroCapHintEnabled = ProcessMsg.nParam2 == 0;
                     break;
+                case Grobal2.CM_1281:
+                    // Native 0x6DA9C8, whole handler:
+                    //   0x6DA9CB  66 8B 40 06           mov  ax, word [msg+6]  ; Param
+                    //   0x6DA9CF  66 85 C0 / 75 0F      test ax,ax / jne 0x6DA9E3
+                    //   0x6DA9D7  C6 80 AC 18 00 00 00  mov  byte [self+0x18AC],0
+                    //   0x6DA9E3  66 83 F8 01           cmp  ax,1
+                    //   0x6DA9E7  0F 85 3F 12 00 00     jne  0x6DBC2C          ; leave as-is
+                    //   0x6DA9F0  C6 80 AC 18 00 00 01  mov  byte [self+0x18AC],1
+                    // Unlike CM 1239 this is a THREE-way test: only 0 and 1 write, every
+                    // other Param falls through to the default label without touching the
+                    // flag, so it must not be written as a boolean assignment.
+                    if (ProcessMsg.nParam2 == 0)
+                        m_boNativeHeroRecordShared = false;
+                    else if (ProcessMsg.nParam2 == 1)
+                        m_boNativeHeroRecordShared = true;
+                    break;
                 // CM_QUERYUSERSET (3040) is not dispatched, because native does not
                 // dispatch it. The subtree that owns this range is
                 //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051
