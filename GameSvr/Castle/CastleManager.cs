@@ -87,16 +87,11 @@ namespace GameSvr
                 _castleList.Add(Castle);
                 Castle.Initialize();
                 Castle.m_sConfigDir = "0";
-                Castle.m_EnvirList.Add("0151");
-                Castle.m_EnvirList.Add("0152");
-                Castle.m_EnvirList.Add("0153");
-                Castle.m_EnvirList.Add("0154");
-                Castle.m_EnvirList.Add("0155");
-                Castle.m_EnvirList.Add("0156");
-                for (var i = 0; i < Castle.m_EnvirList.Count; i++)
-                {
-                    Castle.m_EnvirList[i] = M2Share.MapManager.FindMap(Castle.m_EnvirList[i]).sMapName;
-                }
+                // '0151'..'0156' are 0-hit in the whole image (raw ASCII and
+                // UTF-16LE); native Initialize 0x65AA90 resolves exactly two extra
+                // maps, '0150' -> [castle+0x20] (0x65AB0E) and WayMap/'D701' ->
+                // [castle+0x24] (0x65AB47), and InCastleWarArea 0x659FD4 consults
+                // only those two plus the castle map itself.
                 Save();
                 return;
             }

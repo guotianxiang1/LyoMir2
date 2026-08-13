@@ -205,7 +205,10 @@ namespace GameSvr.Services
         public const int NativeFieldOffset = 40;       // gild+0x28
         public const bool HasPersistentColumn = false; // no gamedata.Gild column exists
 
-        private bool _enabled;
+        // The gild constructor sub_7062D0 seeds the byte TRUE at 0x70633A `C6 47 28 01
+        // mov byte [edi+0x28],1` (EDI is the instance, loaded at 0x7062E6 `mov edi,eax`).
+        // Since there is no column, every gild starts each session accepting unions.
+        private bool _enabled = true;
 
         public bool Enabled => _enabled;
 
