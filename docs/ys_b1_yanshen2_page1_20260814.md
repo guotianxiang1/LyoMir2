@@ -325,13 +325,29 @@ damage -= trunc(damage * v / 1000.0)               ; divsd [0x102C8950]=1000.0�
 | # | 提交 | 内容 |
 |---|---|---|
 | 1 | `672130e6` | `tools/ys_page1_census.py` + `docs/ys_patch_label_atlas.tsv`（107 特性 / 407 站点）+ `docs/ys_page1_census.tsv`（34 键 × 字段 / 标签 / 消费者） |
-| 2 | 本文 | `docs/ys_b1_yanshen2_page1_20260814.md` |
+| 2 | `e126565b` | 本文 `docs/ys_b1_yanshen2_page1_20260814.md` |
+| 3 | `dd752cfd` | `AuditTools/YanshenPage1CensusCheck` —— 把上面三条结论钉成回归网，含反臆造闸门 |
 
-- `dotnet build GameSvr`：**0 错**（本轮未改 `.cs`，作为基线复核）。
-- 18 个 `AuditTools/Yanshen*`：**18 PASS / 0 FAIL**。
+- `dotnet build GameSvr`：**0 错**（本轮未改 `GameSvr` 下任何 `.cs`，作为基线复核）。
+- `AuditTools/Yanshen*`：**19 PASS / 0 FAIL**（原有 18 个 + 本轮新增 1 个）。
   注：审计报告 §4 记的 4 FAIL 现在全绿，其中 `Yanshen207ProtocolCheck` 已在 `master`
   上修好（现输出 `numeric=40 caret=15 chinese=7 give=5`），
   `ys_b1_pangu3` §4 提到的"唯一 FAIL 是 belt StdMode 54"在本基线上**也已不复现**。
+
+### `YanshenPage1CensusCheck` 守什么
+
+1. 本页 34 键的补丁标签必须全为 `no`、配置字段必须全部解出；
+2. 9 个消费者键的 VA 必须与两份转储一致；20 个惰性键必须仍然零消费者；
+3. **反臆造闸门**：这 20 个键的 `YanshenApi` 访问器（实测 30 个成员）一旦被任何
+   引擎/脚本 `.cs` 点名，检查就红 —— 要实现它们，得先拿出原版字节。
+   （盯访问器名而不是键名字面量：引擎代码是经访问器读开关的，键名只出现在
+   `YanshenApi.cs` 与面板里；口径同 `tools/ys_key_reachability.py` 的播种步骤，
+   并排除 `_keyMap` 那段纯别名管道。）
+4. 自检：引擎侧点得到的 `YanshenApi` 成员数必须 ≥ 20（当前 298），否则说明扫描面
+   塌了，第 3 条断言就没有意义。正反两向验证过：临时加一处 `IsLevelBreak` 调用 → FAIL，
+   撤掉 → PASS。
+5. 顺带钉住五条切割臂的原生常量（`magicId → S(1,116..120)` 与 tag/值槽偏移），
+   将来 `sub_100795C0` 的挂载点一解开就能照着落，不必重反一遍。
 
 ### 眼神2(第1页) 收口
 
