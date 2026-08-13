@@ -311,11 +311,6 @@ namespace GameSvr
             {
                 return false;
             }
-            // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-            if (m_DealCreat != null)
-            {
-                DealCancel();
-            }
             m_nGold -= nGold;
             if (!DropGoldDown(nGold, false, null, this))
             {
@@ -1692,10 +1687,19 @@ namespace GameSvr
         private void ClientChangeDealGold(int nGold)
         {
             bool bo09;
-            if (m_nDealGolds > 0 && M2Share.g_Config.boCanNotGetBackDeal)
+            // TRADE-13: 战神 sub_6C4454 的第一条判断 —— 押金只能升不能降，降就整单作废。
+            //   0x6C445F  C6 45 FF 00        mov byte [ebp-1], 0     ; bo09 := false
+            //   0x6C4463  3B B3 E0 06 00 00  cmp esi, [ebx+0x6E0]    ; 新值 vs 现押金
+            //   0x6C4469  7D 0C              jge 0x6C4477            ; >= 才继续往下
+            //   0x6C446B  8B C3              mov eax, ebx
+            //   0x6C446D  E8 52 FF FF FF     call 0x6C43C4           ; DealCancel
+            //   0x6C4472  E9 02 01 00 00     jmp 0x6C4579
+            // 0x6C4579 是 pop/pop/pop/pop/pop/ret 的收尾，**越过**了 0x6C4547 那段
+            // `cmp byte [ebp-1],0 / jne` + `mov dx,0x2AD` 的失败回包，所以取消这条路
+            // 不发 SM_DEALCHGGOLD_FAIL。此判断排在 nGold<=0 门（0x6C4477 test/jle）之前。
+            if (nGold < m_nDealGolds)
             {
-                SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sDealItemsDenyGetBackMsg);
-                SendDefMessage(Grobal2.SM_DEALDELITEM_FAIL, 0, 0, 0, 0, "");
+                DealCancel();
                 return;
             }
             if (nGold < 0)
@@ -1776,34 +1780,41 @@ namespace GameSvr
                 DealCancel();
                 return;
             }
-            // TRADE-22: Authentication verification script (战神 sub_6C4580 Phase C authority gates)
-            // Self gate @0x6C4650: call sub_617A38(cfg, self, cl=2) tests bit 2 in obj+0x193C bitset
-            // Partner gate @0x6C4693: call sub_617A38(cfg, partner, cl=2) on partner's bitset
-            // On failure with escrow: runs @PlayerActiveValidate script (@0x69B254) then DealCancel
-            // When boAuthOpen=false (default): CheckNativeAuthentication returns true (bypassed)
-            if (M2Share.g_Config.boAuthOpen)
-            {
-                // Self authority gate @0x6C4650
-                bool selfAuthenticated = CheckNativeAuthentication(1, 2) || CheckNativeAuthentication(2, 2);
-                if (!selfAuthenticated && (m_DealItemList.Count > 0 || m_nDealGolds > 0))
-                {
-                    M2Share.g_FunctionNPC?.GotoLable(this, "@PlayerActiveValidate", false);
-                    DealCancel();
-                    return;
-                }
-                // Partner authority gate @0x6C4693
-                var partner = m_DealCreat as TPlayObject;
-                bool partnerAuthenticated = partner != null &&
-                    (partner.CheckNativeAuthentication(1, 2) || partner.CheckNativeAuthentication(2, 2));
-                if (!partnerAuthenticated && (m_DealCreat.m_DealItemList.Count > 0 || m_DealCreat.m_nDealGolds > 0))
-                {
-                    M2Share.g_FunctionNPC?.GotoLable(partner, "@PlayerActiveValidate", false);
-                    DealCancel();
-                    return;
-                }
-            }
+            // TRADE-21: 对端确认门必须排在权限门之前。
+            //   0x6C463D  8B 83 AC 0B 00 00     mov eax, [ebx+0xBAC]
+            //   0x6C4643  80 B8 84 06 00 00 00  cmp byte [eax+0x684], 0   ; partner.m_boDealOK
+            //   0x6C464A  0F 84 71 03 00 00     je  0x6C49C1              ; 未确认 → 两条消息、不取消、返回
+            //   0x6C4650  权限门（自己）
+            //   0x6C4693  权限门（对端）
+            //   0x6C46E4  phase D 四道容量检查
             if (m_DealCreat.m_boDealOK)
             {
+                // TRADE-22: Authentication verification script (战神 sub_6C4580 Phase C authority gates)
+                // Self gate @0x6C4650: call sub_617A38(cfg, self, cl=2) tests bit 2 in obj+0x193C bitset
+                // Partner gate @0x6C4693: call sub_617A38(cfg, partner, cl=2) on partner's bitset
+                // On failure with escrow: runs @PlayerActiveValidate script (@0x69B254) then DealCancel
+                // When boAuthOpen=false (default): CheckNativeAuthentication returns true (bypassed)
+                if (M2Share.g_Config.boAuthOpen)
+                {
+                    // Self authority gate @0x6C4650
+                    bool selfAuthenticated = CheckNativeAuthentication(1, 2) || CheckNativeAuthentication(2, 2);
+                    if (!selfAuthenticated && (m_DealItemList.Count > 0 || m_nDealGolds > 0))
+                    {
+                        M2Share.g_FunctionNPC?.GotoLable(this, "@PlayerActiveValidate", false);
+                        DealCancel();
+                        return;
+                    }
+                    // Partner authority gate @0x6C4693
+                    var partner = m_DealCreat as TPlayObject;
+                    bool partnerAuthenticated = partner != null &&
+                        (partner.CheckNativeAuthentication(1, 2) || partner.CheckNativeAuthentication(2, 2));
+                    if (!partnerAuthenticated && (m_DealCreat.m_DealItemList.Count > 0 || m_DealCreat.m_nDealGolds > 0))
+                    {
+                        M2Share.g_FunctionNPC?.GotoLable(partner, "@PlayerActiveValidate", false);
+                        DealCancel();
+                        return;
+                    }
+                }
                 // 战神 sub_6C4580 四道检查：
                 //   @0x6C46E4-0x6C46FF: remote.CanAcceptItems(self.DealItemList.Count) → jmp 0x6C49B8
                 //   @0x6C4705-0x6C471A: remote.CanAcceptGold(self.m_nDealGolds)       → jmp 0x6C49B8
@@ -1843,15 +1854,13 @@ namespace GameSvr
                         (m_DealCreat as TPlayObject)?.ReassignClientItemId(UserItem);
                         (m_DealCreat as TPlayObject).SendAddItem(UserItem);
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        // TRADE-53: 原生 0x6C47AE 的 `test al,al / jne` 测的是
+                        // 0x6C47A9 `call 0x783984`，而 0x783984 全文是
+                        // `33 C0 xor eax,eax` / `C3 ret` —— 恒返回 0，所以 jne 永不成立，
+                        // 日志必发。C# 原有的 IsCheapStuff / NeedIdentify 双重门在原生无对应。
                         if (StdItem != null)
                         {
-                            if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                            {
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
-                                }
-                            }
+                            M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
                         }
                     }
                     if (m_nDealGolds > 0)
@@ -1873,15 +1882,11 @@ namespace GameSvr
                         ReassignClientItemId(UserItem);
                         this.SendAddItem(UserItem);
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        // TRADE-53: 镜像方向同理，0x6C48D6 的 `test al,al / jne` 测的是
+                        // 0x6C48D1 `call 0x783984`，同一个恒假桩，日志必发。
                         if (StdItem != null)
                         {
-                            if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                            {
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                }
-                            }
+                            M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
                         }
                     }
                     if (m_DealCreat.m_nDealGolds > 0)
@@ -2359,8 +2364,25 @@ namespace GameSvr
                 if (ClientItemIdMatches(UserItem, nItemIdx) && string.Compare(sUserItemName, sMsg, StringComparison.OrdinalIgnoreCase) == 0)
                 {
                     
-                    if (merchant != null && merchant.m_boStorage && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
+                    // TRADE-39: 战神 sub_6C2A34 @0x6C2AE8 `66 B9 0F 00 mov cx,0xF` /
+                    // 0x6C2AF0 `call 0x7743E0`, 该 helper @0x774400 `cmp eax,edi / jg 拒绝`
+                    // 与 @0x774415 `cmp edi,eax / jl 拒绝` 合起来是 |dx| <= 15 && |dy| <= 15，
+                    // 所以边界是 <= 15 不是 < 15。原生无 g_FunctionNPC 旁路。
+                    if (merchant != null && merchant.m_boStorage && merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) <= 15)
                     {
+                        // TRADE-42: 战神 sub_6C2A34 @0x6C2B34 `mov eax,esi` / 0x6C2B36
+                        // `E8 25 15 0C 00 call 0x784060` / 0x6C2B3B `84 C0 test al,al` /
+                        // 0x6C2B3D `0F 85 B1 01 00 00 jne 0x6C2CF4`.  sub_784060 is
+                        // `8B 40 1C mov eax,[eax+0x1C]` / `F6 40 02 80 test byte [eax+2],0x80`
+                        // / `0F 95 C0 setne al` — i.e. StdItem byte[+2] bit7, the low byte of
+                        // NativeReserved02, so the mask is 0x0080.  0x6C2CF4 is the shared
+                        // failure exit: bo19 stays false and SM_STORAGE_FAIL (dx=0x2BF) goes out.
+                        // Native runs this after the NPC gate and before the container switch.
+                        var storeStd = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        if (storeStd != null && (storeStd.NativeReserved02 & 0x0080) != 0)
+                        {
+                            break;
+                        }
                         if (m_StorageItemList.Count < Math.Clamp(m_nStorageSpaceCount,
                                 MIN_STORAGE_ITEM_COUNT, MAX_STORAGE_ITEM_COUNT))
                         {
@@ -2421,7 +2443,10 @@ namespace GameSvr
                     if (IsAddWeightAvailable(M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
                     {
                         
-                        if (merchant.m_boGetback && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
+                        // TRADE-39: 取仓 sub_6C2D7C @0x6C2DF8 `66 B9 0F 00 mov cx,0xF` /
+                        // 0x6C2E00 `call 0x7743E0` —— 与存仓同一道门、同一个 helper，
+                        // 同为 <= 15 且无 g_FunctionNPC 旁路。
+                        if (merchant.m_boGetback && merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) <= 15)
                         {
                             if (AddItemToBag(UserItem))
                             {
@@ -2433,7 +2458,11 @@ namespace GameSvr
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                                 if (StdItem.NeedIdentify == 1)
                                 {
-                                    M2Share.AddGameDataLog('0' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
+                                    // TRADE-51: 取仓日志类型是 2 不是 0。原生两处取仓日志
+                                    // 0x6C2F6A 与 0x6C2F92 都是 `66 BA 02 00 mov dx,2`，
+                                    // 随后 `call 0x768BE0`。对照存仓 0x6C2C88 / 0x6C2CAA
+                                    // 都是 `66 BA 01 00 mov dx,1`，与 C# 的 '1' 一致。
+                                    M2Share.AddGameDataLog('2' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
                                 }
                             }
                             else

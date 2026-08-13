@@ -804,11 +804,6 @@ namespace GameSvr
                 }
                 else
                 {
-                    // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                    if (m_DealCreat != null)
-                    {
-                        DealCancel();
-                    }
                     m_nGameGold -= m_nStep;
                     GameGoldChanged();
                     m_nStep = 0;

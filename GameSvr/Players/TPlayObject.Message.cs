@@ -239,6 +239,22 @@ namespace GameSvr
                 // pass is not observable; cadence is (one Run iteration, 10s gate).
                 TickNativeExpBuff(currentTick);
                 M2Share.CreditCardService?.TrySaveDue(this, currentTick);
+                // TRADE-48: 这段属于 Run，不是登出路径，不要外迁。判据在原生
+                // sub_6B2D38 @0x6B2E76-0x6B2EB2，而 sub_6B2D38 就是 TPlayer VMT
+                // 0x6AC8C8 槽 +0x88（每 tick）。同一函数、同一 [ebp-4] self 槽内，
+                // 0x6B3B68-0x6B3B87 正是 TRADE-47 的 m_DealCreat 清扫；两者共用
+                // 0x6B2D76 压入的外层 SEH 句柄 0x6B3D64，故同属一个函数体。
+                // 真正的登出取消是另一条：0x6518C8 `call 0x6B2C7C`，而 sub_6B2C7C
+                // 是 `mov edx,[eax+0x2AC]` / `mov [eax+0x230],edx` /
+                // `E8 call 0x6C43C4` / `ret` 的直线代码，无条件取消。
+                //
+                // 原生判据（cancel 当且仅当 dealing 且三者之一成立）：
+                //   0x6B2E79 cmp byte [eax+0x461],0  / je  0x6B2EB7  未在交易 → 跳过
+                //   0x6B2E85 cmp dword [eax+0xBAC],0 / je  0x6B2EAF  对端为空 → 取消
+                //   0x6B2E91 call 0x767E80 (前方对象)
+                //   0x6B2E99 cmp eax,[edx+0xBAC]     / jne 0x6B2EAF  前方非对端 → 取消
+                //   0x6B2EAA cmp eax,[ebp-4]         / jne 0x6B2EB7  对端非自己 → 不取消
+                //   0x6B2EAF call 0x6C43C4
                 if (m_boDealing)
                 {
                     if (GetPoseCreate() != m_DealCreat || m_DealCreat == this || m_DealCreat == null)
@@ -504,11 +520,6 @@ namespace GameSvr
             if (m_boDecGameGold && (HUtil32.GetTickCount() - m_dwDecGameGoldTick) > m_dwDecGameGoldTime)
             {
                 m_dwDecGameGoldTick = HUtil32.GetTickCount();
-                // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                if (m_DealCreat != null)
-                {
-                    DealCancel();
-                }
                 if (m_nGameGold >= m_nDecGameGold)
                 {
                     m_nGameGold -= m_nDecGameGold;
@@ -550,11 +561,6 @@ namespace GameSvr
                 if ((HUtil32.GetTickCount() - m_dwDecGameGoldTick) > m_PEnvir.Flag.nDECGAMEGOLDTIME * 1000)
                 {
                     m_dwDecGameGoldTick = HUtil32.GetTickCount();
-                    // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                    if (m_DealCreat != null)
-                    {
-                        DealCancel();
-                    }
                     if (m_nGameGold >= m_PEnvir.Flag.nDECGAMEGOLD)
                     {
                         m_nGameGold -= m_PEnvir.Flag.nDECGAMEGOLD;

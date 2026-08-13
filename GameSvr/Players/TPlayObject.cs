@@ -1302,11 +1302,6 @@ namespace GameSvr
             }
             if (m_nGold >= nGold)
             {
-                // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                if (m_DealCreat != null)
-                {
-                    DealCancel();
-                }
                 m_nGold -= nGold;
                 // 0x6C7D7B `call 0x6C19B4` -- sub_6C19B4 is SendMsg with
                 // cx=0x2798 (RM_GOLDCHANGED, 10136) and six zero slots, i.e.
@@ -3342,7 +3337,9 @@ namespace GameSvr
 
             var BagItems = new TUserItem[Grobal2.MAXBAGITEM];
             HumanRcd.Data.BagItems = BagItems;
-            for (var i = 0; i < m_ItemList.Count; i++)
+            // 0x6B171B `cmp edi,0x30 / jne 0x6B16E9`: 原生循环在写满 48 槽后停止，
+            // 第 49 件起静默丢弃。背包可经 GetBackDealItems 无余量退还而超过 48。
+            for (var i = 0; i < m_ItemList.Count && i < Grobal2.MAXBAGITEM; i++)
                 if (m_ItemList[i] != null && m_ItemList[i].wIndex > 0)
                     BagItems[i] = new TUserItem(m_ItemList[i]);
 
