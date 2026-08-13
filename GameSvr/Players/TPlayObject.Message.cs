@@ -1577,7 +1577,6 @@ namespace GameSvr
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
                         SendSocket(M2Share.GetGoodTick);
-                        SendDefMessage(Grobal2.SM_SITDOWN, m_nCurrX, m_nCurrY, m_btDirection, 0, "");
                     }
                     else
                     {
@@ -1816,19 +1815,13 @@ namespace GameSvr
                         horseDismountBody.Length, ProcessMsg.nParam3);
                     SendSocket(m_DefMsg, horseDismountBody);
                     break;
+                // RM_41 (9041) and RM_43 (9043) are below the dispatcher's window: native
+                // does 0x6B3EF8 `add eax,0xFFFFD8F0` then 0x6B3EFD `cmp eax,0x86` /
+                // 0x6B3F02 `ja 0x6B6241`, so both wrap to a huge unsigned value and land on
+                // the default label without sending anything. The labels stay because this
+                // switch's own default is not silent.
                 case Grobal2.RM_41:
-                    if (ProcessMsg.BaseObject != this.ObjectId)
-                    {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_41, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
-                        SendSocket(m_DefMsg);
-                    }
-                    break;
                 case Grobal2.RM_43:
-                    if (ProcessMsg.BaseObject != this.ObjectId)
-                    {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_43, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
-                        SendSocket(m_DefMsg);
-                    }
                     break;
                 case Grobal2.RM_TURN:
                 case Grobal2.RM_PUSH:
@@ -2001,6 +1994,11 @@ namespace GameSvr
                     if (ProcessMsg.wIdent == Grobal2.RM_GUILDMESSAGE
                         && (m_dwChatShieldMask & 0x08u) != 0)
                         break;
+                    // Native tag 10099 owns jump-table slot 99 at 0x6B3F0F+99*4, and that
+                    // slot points at the default label 0x6B6241 - the arm discards the
+                    // message without sending anything.
+                    if (ProcessMsg.wIdent == Grobal2.RM_MOVEMESSAGE)
+                        break;
                     switch (ProcessMsg.wIdent)
                     {
                         case Grobal2.RM_HEAR:
@@ -2038,9 +2036,6 @@ namespace GameSvr
                             break;
                         case Grobal2.RM_MERCHANTSAY:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MERCHANTSAY, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
-                            break;
-                        case Grobal2.RM_MOVEMESSAGE:
-                            this.m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MOVEMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), ProcessMsg.nParam3, ProcessMsg.wParam);
                             break;
                     }
                     if (ProcessMsg.wIdent == Grobal2.RM_MERCHANTSAY &&
