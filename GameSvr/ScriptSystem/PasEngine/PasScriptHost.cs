@@ -305,6 +305,53 @@ namespace GameSvr.PasEngine
             }
         }
 
+        /// <summary>
+        /// The monster-side @main entry, reached from CM_CLICKNPC when the packet's Tag is 1.
+        /// 0x6B8B5A `83 7D FC 01 cmp dword[ebp-4],1` / 0x6B8B5E `0F 85 8B 00 00 00 jne 0x6B8BEF`
+        /// picks the arm and 0x6B8BA2 `E8 9D 78 06 00 call 0x720444` runs
+        ///   0x720449  B9 60 04 72 00  mov ecx,0x720460     ; literal "@main", declen 5
+        ///   0x72044E  E8 15 00 00 00  call 0x720468
+        /// which dispatches through the script object at monster+0x4D0
+        /// (0x7204BE `8B 80 D0 04 00 00` then 0x7204CA `FF 56 44 call [vmt+0x44]`).
+        ///
+        /// That offset is what tells the two CM_CLICKNPC arms apart: the NPC arm's script object
+        /// is at npc+0x570 (0x63DCF2 `8B 80 70 05 00 00`), a different class. The owning unit is
+        /// the monster one — its literals are 0x71EBDC "monScript\", 0x71F338
+        /// "[Exception]:TAnimal.LoadScript:", 0x71E8A4 "怪物名: " and 0x720158
+        /// "@AfterScatterItems", the callback modelled directly above.
+        ///
+        /// Native runs a GM-only diagnostic when the script call returns False
+        /// (0x7204D0 `80 7D F7 00 cmp byte[ebp-9],0` / 0x7204DA `cmp byte[player+0x675],3 / jbe`,
+        /// then a four-part concat of 0x7205B4 "[ExecScript Fail]: " and monster+0x4CC). That is
+        /// not reproduced here: the identity of monster+0x4CC and the argument order of the
+        /// concat helper 0x405890 are both unproven, and the line is invisible below GM level 4.
+        /// </summary>
+        public bool TryCallMonsterMain(TBaseObject animal, TPlayObject player)
+        {
+            if (animal == null || animal.ObjectId <= 0 ||
+                !_monsterStates.TryGetValue(animal.ObjectId, out var state))
+                return false;
+
+            var procedure = FindProcedure(state.Program, "main");
+            if (procedure == null) return false;
+
+            lock (state.SyncRoot)
+            {
+                try
+                {
+                    using var context = _api.PushAnimalContext(player, animal);
+                    state.Interpreter.ExecuteProcedure(procedure.Name);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    LogMonsterMessage(
+                        $"[PasEngine] Monster script callback failed {animal.m_sCharName}:main - {ex.Message}");
+                    return false;
+                }
+            }
+        }
+
         public void ClearMonsterScriptState(int objectId)
         {
             if (objectId > 0) _monsterStates.TryRemove(objectId, out _);

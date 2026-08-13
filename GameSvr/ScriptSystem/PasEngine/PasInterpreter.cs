@@ -1769,10 +1769,13 @@ namespace GameSvr.PasEngine
                     return PasValue.FromInt(0);
 
                 // ===== Variable system (G/V/S) =====
+                // GetG = sub_699198: 未命中值是 -2（0x6991BF mov esi,-2，收尾
+                // 0x6992B2 mov eax,esi），且 index 有 1..50 的门。和 GetV/GetS 的 -1
+                // 不是同一个值，脚本里 `if GetG(a,b) = 0` 靠这个区分。
                 case "getg":
                     return args.Count >= 2
                         ? _api.GetGlobalVar(args[0].AsInt(), args[1].AsInt())
-                        : PasValue.FromInt(0);
+                        : PasValue.FromInt(-2);
 
                 // GetV/GetS = sub_6DF1E4 / sub_6DF1B4: the miss/reject result is -1
                 // (seeded at 0x6DF1F1 / 0x6DF1BB and by the keyed core at 0x6E427A),

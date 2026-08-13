@@ -11,7 +11,6 @@ var objectManagerPath = Path.Combine(repoRoot, "GameSvr", "UsrSystem", "ObjectMa
 var baseObjectPath = Path.Combine(repoRoot, "GameSvr", "Actors", "TBaseObject.Base.cs");
 var localDbPath = Path.Combine(repoRoot, "GameSvr", "LocalDB.cs");
 var memoryImagePath = FindNativeImage(stagingRoot);
-var memoryImage = File.ReadAllBytes(memoryImagePath);
 
 var lifecycle = Read(lifecyclePath);
 var manager = Read(managerPath);

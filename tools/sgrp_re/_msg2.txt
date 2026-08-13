@@ -1,0 +1,26 @@
+InProcSocialRunCheck: drive the real two-step party chain, not 1020 alone
+
+该工具的 TEAM 段断言「ClientCreateGroup 建出 2 人组且 m1.m_GroupOwner=leader」,
+钉的是 C# 修复前的强制入队行为,不是原生契约。字节:
+
+  sub_6C341C (1020) 穷举 E8 被调用者 = {405500 4059C0 40C140 652784 6C3380 6C33CC 6F39B4}
+  sub_6C34EC (1021) 穷举 E8 被调用者 = {405500 4059C0 40C140 652784 6B7BAC 6BBE84 6C33CC 6F39B4}
+
+两个集合都不含 sub_726B80(TGroup.Create)、sub_7272EC(插入成员)、sub_6C3648
+(accept 建组),唯一的状态变更是 6C348A / 6C3572 call 0x6F39B4 = 排队一条邀请。
+组只从 CM 4412 的同意分支产生:sub_6F3EA8 @6F3F21 cmp [edi+0xA80],0 / je ->
+6F3F2E call 0x6C3648,而 sub_6C3648 才真正接线:
+
+  6C36AB  call 0x726B80              ; TGroup.Create(ecx = 邀请人)
+  6C36B5  mov [eax+0xA80],esi        ; 邀请人 -> 新组
+  6C36BF  call 0x7272EC              ; 插入同意者
+  72739A  mov [eax+0xA80],ebx        ; 同意者 -> 同一个组
+  6C36E5  66 BA 94 02  mov dx,0x294  ; SM 660 发给邀请人
+  726BA6  mov [ebx+0x3C],edi         ; group.Owner = 邀请人
+  726BE2  call 0x728518              ; 槽 0 := owner
+
+结论断言(2 人组 + m1.m_GroupOwner=leader)本身是真契约,只是挂错了入口。
+现在让 harness 走完整链路(1020 排队 -> 4412 同意),终态断言原样保留,
+另外补钉两条中间契约:1020/1021 单独不得建组、必须把 type-0 请求排在目标身上。
+同一仓库里的 NativeGroupConsentCorpsChatCheck 早已按同一字节钉住这条链,
+两个工具此前互相矛盾,现在收敛。

@@ -38,6 +38,26 @@ var exactSites = new[]
 
 foreach (var site in exactSites)
 {
+    // d5198c6b deleted the 63 traditional-GOM command files, three of which are
+    // listed above. A deleted callsite cannot violate the contract, but it must
+    // not be able to hide either: assert the file really is gone and that the
+    // map-name form it used to be checked for exists nowhere in GameSvr.
+    if (!File.Exists(Path.Combine(repoRoot,
+            site.Path.Replace('/', Path.DirectorySeparatorChar))))
+    {
+        var offenders = Directory
+            .EnumerateFiles(Path.Combine(repoRoot, "GameSvr"), "*.cs",
+                SearchOption.AllDirectories)
+            .Where(f => Compact(File.ReadAllText(f))
+                .Contains(site.Forbidden, StringComparison.Ordinal))
+            .Select(f => Path.GetRelativePath(repoRoot, f))
+            .ToArray();
+        Assert(offenders.Length == 0,
+            $"{site.Path} was deleted but its map-name spawn form reappeared in: " +
+            string.Join(", ", offenders));
+        continue;
+    }
+
     var source = Compact(Read(site.Path));
     Assert(source.Contains(site.Required, StringComparison.Ordinal),
         $"actor-local spawn no longer uses its physical environment: {site.Path}");
@@ -100,6 +120,26 @@ var explicitNameSites = new[]
 
 foreach (var site in explicitNameSites)
 {
+    // MobPlaceCommand.cs went with the 63 traditional-GOM commands in
+    // d5198c6b. This half of the contract only says a surviving explicit-map
+    // spawn must go through the map name, so a removed file has nothing to
+    // check - but assert it really is removed rather than moved.
+    if (!File.Exists(Path.Combine(repoRoot,
+            site.Path.Replace('/', Path.DirectorySeparatorChar))))
+    {
+        var moved = Directory
+            .EnumerateFiles(Path.Combine(repoRoot, "GameSvr"), "*.cs",
+                SearchOption.AllDirectories)
+            .Where(f => Compact(File.ReadAllText(f))
+                .Contains(site.Required, StringComparison.Ordinal))
+            .Select(f => Path.GetRelativePath(repoRoot, f))
+            .ToArray();
+        Assert(moved.Length == 0,
+            $"{site.Path} was deleted but its spawn form resurfaced in: " +
+            string.Join(", ", moved));
+        continue;
+    }
+
     Assert(Compact(Read(site.Path)).Contains(site.Required,
             StringComparison.Ordinal),
         $"explicit configured-map spawn lost map-name lookup: {site.Path}");

@@ -1,0 +1,62 @@
+0x77AF40 len=11   b'PsMapQuest\\'   gbk=PsMapQuest\
+0x77AF54 len=4    b'.pas'   gbk=.pas
+0x77AF64 len=17   b'[\xc8\xb1MapQuest\xbd\xc5\xb1\xbe]:'   gbk=[缺MapQuest脚本]:
+0x776B30 len=1    b')'   gbk=)
+0x776B3C len=1    b'('   gbk=(
+[0x7D6530] global string ptr
+
+==============================================================================
+map-flag parser arm that binds QuestNPC -- context before 0x776333
+==============================================================================
+007762A0  7467                   je 0x776309
+007762A2  c9                     leave 
+007762A3  ff8983a00000           dec dword ptr [ecx + 0xa083]
+007762A9  00e9                   add cl, ch
+007762AB  2408                   and al, 8
+007762AD  0000                   add byte ptr [eax], al
+007762AF  b909000000             mov ecx, 9
+007762B4  ba2c6c7700             mov edx, 0x776c2c
+007762B9  8b45f8                 mov eax, dword ptr [ebp - 8]
+007762BC  e8d30bd5ff             call 0x4c6e94
+007762C1  84c0                   test al, al
+007762C3  7443                   je 0x776308
+007762C5  c6436501               mov byte ptr [ebx + 0x65], 1
+007762C9  8d45f4                 lea eax, [ebp - 0xc]
+007762CC  50                     push eax
+007762CD  8d45f0                 lea eax, [ebp - 0x10]
+007762D0  50                     push eax
+007762D1  b9306b7700             mov ecx, 0x776b30
+007762D6  ba3c6b7700             mov edx, 0x776b3c
+007762DB  8b45f8                 mov eax, dword ptr [ebp - 8]
+007762DE  e88106d5ff             call 0x4c6964
+007762E3  8d839c000000           lea eax, [ebx + 0x9c]
+007762E9  8b55f4                 mov edx, dword ptr [ebp - 0xc]
+007762EC  e863f2c8ff             call 0x405554
+007762F1  83bb9c00000000         cmp dword ptr [ebx + 0x9c], 0
+007762F8  0f85d5070000           jne 0x776ad3
+007762FE  bef4ffffff             mov esi, 0xfffffff4
+00776303  e9cb070000             jmp 0x776ad3
+00776308  b90a000000             mov ecx, 0xa
+0077630D  ba406c7700             mov edx, 0x776c40
+00776312  8b45f8                 mov eax, dword ptr [ebp - 8]
+00776315  e87a0bd5ff             call 0x4c6e94
+0077631A  84c0                   test al, al
+0077631C  742f                   je 0x77634d
+0077631E  8d45f4                 lea eax, [ebp - 0xc]
+00776321  50                     push eax
+00776322  8d45f0                 lea eax, [ebp - 0x10]
+00776325  50                     push eax
+00776326  b9306b7700             mov ecx, 0x776b30
+0077632B  ba3c6b7700             mov edx, 0x776b3c
+00776330  8b45f8                 mov eax, dword ptr [ebp - 8]
+00776333  e82c06d5ff             call 0x4c6964
+00776338  8b55f4                 mov edx, dword ptr [ebp - 0xc]
+0077633B  8bc3                   mov eax, ebx
+0077633D  e8924a0000             call 0x77add4
+00776342  8983a4000000           mov dword ptr [ebx + 0xa4], eax
+00776348  e986070000             jmp 0x776ad3
+0077634D  b907000000             mov ecx, 7
+00776352  ba546c7700             mov edx, 0x776c54
+00776357  8b45f8                 mov eax, dword ptr [ebp - 8]
+0077635A  e8350bd5ff             call 0x4c6e94
+0077635F  84                     (db)

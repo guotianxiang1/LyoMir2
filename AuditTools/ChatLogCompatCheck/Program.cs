@@ -4,6 +4,11 @@ using System.Text;
 using GameSvr;
 using SystemModule;
 
+// The very first M2Share reference runs its static ctor, which loads
+// !Setup.txt / String.ini / Command.conf plus ..\Share\PlayerUpgradeExp.ini and throws
+// when they are absent — this audit had none of them, so it died before assertion one.
+PrepareRuntimeConfig();
+
 try
 {
     Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -281,4 +286,25 @@ static void Equal<T>(T expected, T actual, string label) where T : IEquatable<T>
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+// Same minimal on-disk skeleton the other GameSvr audits lay down. No engine
+// threads, no network — it only satisfies the M2Share static ctor.
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }

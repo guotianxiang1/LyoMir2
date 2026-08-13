@@ -337,7 +337,60 @@ def accessor_consumers(repo, hits):
                 w = m.group(1)
                 if w in members:
                     use[w].add(rel)
+    propagate_within_api(repo, members, use)
     return use
+
+
+# Members in YanshenApi are written with and without an access modifier
+# (`int GetParamInt(...)` sits next to `public bool IsOn(...)`), so the modifier
+# run has to be optional -- otherwise the unmarked ones vanish from the graph
+# and any chain that runs through them breaks.
+MEMBER_DECL_RE = re.compile(
+    r"^[ \t]*(?:(?:public|private|internal|protected|static|readonly|override"
+    r"|virtual|sealed|abstract|async|unsafe|extern|partial|new)\s+)*"
+    r"[\w<>\[\],?\.]+\s+(\w+)\s*\(", re.M)
+NON_MEMBER_NAMES = frozenset((
+    "if", "for", "foreach", "while", "switch", "catch", "using", "return",
+    "lock", "fixed", "do", "else", "throw", "yield", "get", "set"))
+
+
+def propagate_within_api(repo, members, use):
+    """Carry liveness across one accessor calling another inside YanshenApi.
+
+    An accessor reached only through a private helper in the same file still
+    ends up driving whatever calls that helper, so treating it as dead reports
+    a live switch as a label.  The 随机极品 master toggle is the case that made
+    this show up: 96 live accessors read it through ExtremeParamInt.
+    """
+    for owner in API_FILES:
+        path = os.path.join(repo, owner.replace("/", os.sep))
+        if not os.path.exists(path):
+            continue
+        text = open(path, encoding="utf-8-sig").read()
+        decls = [d for d in MEMBER_DECL_RE.finditer(text)
+                 if d.group(1) not in NON_MEMBER_NAMES]
+        # Relays need to be in the graph too: the helper that reads a toggle on
+        # an accessor's behalf holds no key literal of its own, so restricting
+        # the graph to key-bearing members would break the chain at the relay.
+        declared = {d.group(1) for d in decls}
+        calls = collections.defaultdict(set)
+        for n, d in enumerate(decls):
+            end = decls[n + 1].start() if n + 1 < len(decls) else len(text)
+            body = text[d.end():end]
+            for m in IDENT_RE.finditer(body):
+                if m.group(1) in declared and m.group(1) != d.group(1):
+                    calls[d.group(1)].add(m.group(1))
+        for _ in range(len(declared) + 1):
+            grew = False
+            for caller, callees in calls.items():
+                if not use.get(caller):
+                    continue
+                for callee in callees:
+                    before = len(use[callee])
+                    use[callee] |= use[caller]
+                    grew = grew or len(use[callee]) != before
+            if not grew:
+                break
 
 
 # --------------------------------------------------------------------------
@@ -431,6 +484,26 @@ def dump_strings(dump_path, candidates):
     return out
 
 
+def load_extreme_map(repo):
+    """key -> host VA, for the 96 random-superior knobs.
+
+    These never show up in the memcpy/immediate atlas: the apply arm stores into
+    M2Server .text with a plain `mov [absolute], eax`, so a scan that only looks
+    for the patch helpers misses all 96.  See docs/ys_gui_extreme_20260813.md.
+    """
+    path = os.path.join(repo, "docs", "ys_extreme_map.tsv")
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    with open(path, encoding="utf-8") as fh:
+        next(fh, None)
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 4 and parts[3]:
+                out[parts[0]] = {int(parts[3], 16)}
+    return out
+
+
 def load_atlas(atlas_dir):
     """feature label -> set of M2Server target VAs the plugin writes."""
     out = collections.defaultdict(set)
@@ -471,6 +544,7 @@ def main():
     consumers = accessor_consumers(repo, hits)
     lookups = scan_lookups(repo)
     atlas = load_atlas(args.atlas)
+    atlas.update(load_extreme_map(repo))
     keystrings = load_keystrings(args.atlas)
 
     rows = []

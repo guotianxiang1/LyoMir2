@@ -249,7 +249,16 @@ byte[] CreateScriptData()
     BinaryPrimitives.WriteInt32LittleEndian(script, script.Length - 4);
     BinaryPrimitives.WriteUInt32LittleEndian(script.AsSpan(4, 4), 0xABCDEFAA);
     BinaryPrimitives.WriteUInt16LittleEndian(script.AsSpan(8, 2), 8);
-    script[10] = 1;
+    // Section type 0 == the S bank. The native decoder sub_6E448C dispatches
+    // through the 9-entry table at 0x6E4520 and the type-0 arm at 0x6E4544 names
+    // +0x804 (0x6E457C `add eax,0x804`, 0x6E459D `mov edx,[eax+0x804]`), which the
+    // script registry pins to GetS/SetS (0x6DF1CF `mov edx,[ebx+0x804]`, 0x6DF26D
+    // `lea edx,[ebx+0x804]`); the type-1 arm at 0x6E45F7 names +0x808 = GetV/SetV.
+    // NativeHumanDataCodec.TryParseScript agrees (`type == 0 ? scriptS : scriptV`).
+    // This byte was flipped to 1 while the assertions and the comment above them
+    // stayed on the S bank, which made all four ScriptS[7] reads throw
+    // KeyNotFoundException.
+    script[10] = 0;
     BinaryPrimitives.WriteInt32LittleEndian(script.AsSpan(11, 4), 7);
     BinaryPrimitives.WriteInt32LittleEndian(script.AsSpan(15, 4), 0x10203040);
     return script;

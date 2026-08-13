@@ -1,0 +1,29 @@
+GroupSetV: no solo fallback, skip ghost members, keep zero values
+
+战神 GroupSetV 注册在 TPlayer PAS 面 0x7318AF (mov edx,0x6E0830 / mov ecx,0x732A98
+= 名字块 "GroupSetV"),声明文本在 0x72DA45。handler sub_6E0830 只做一件事:
+
+  6E0835  33 DB                  xor ebx,ebx           ; result := False
+  6E0837  8B B0 80 0A 00 00      mov esi,[eax+0xA80]   ; caller 的 TGroup
+  6E083D  85 F6 / 6E083F 74 0D   test esi,esi / je     ; 无队 -> 直接到出口
+  6E0847  E8 08 6F 04 00         call 0x727754
+
+无队时它写零个字节并返回 False —— 原生根本没有「退化成对自己 SetV」这条路。
+C# 的 solo fallback 是 INVENTED,已移除。
+
+TGroup 侧 sub_727754 的三条:
+
+  727765  C6 45 F3 01            mov byte [ebp-0xD],1  ; 结果预置 True,全程不清零
+  72776C  8B 58 44               mov ebx,[eax+0x44]    ; 循环上界 = 成员数
+  72778C  85 C0 / 72778E 74 15   test eax,eax / je     ; 空槽跳过
+  727790  80 78 73 00 / 75 0F    cmp [eax+0x73],0/jne  ; ghost 成员跳过  <-- C# 缺这道门
+  7277A0  E8 E3 7A FB FF         call 0x6DF288         ; 逐成员 SetV
+
+所以返回值只取决于「有没有队」,不取决于实际写了几个人;三个 case 站点原先各自
+自造 Boolean,现在改成透传 SetGroupPlayerVar 的真实返回。
+
+零值:SetV sub_6DF288 (6DF2CC mov [ebp-4],eax = Value) 转 upsert sub_6E4140,
+该函数对 Value 只有存储、没有任何 test/cmp —— 命中键改值 6E41C2、未命中插入
+6E422A/6E4231 与 6E425A/6E4260、空数组首插 6E4182/6E4187,三条路径零个零值分支。
+PasGroupSetVCompatCheck 此前断言「写 0 会移除该键」,钉的正是 §4.19 (QST-30) 记录的
+C# 自造擦除,不是原生契约。断言按字节改正并加钉 ghost 门与无队 False,是加强不是放宽。

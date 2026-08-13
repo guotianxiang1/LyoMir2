@@ -1,0 +1,97 @@
+007437B0  0000                   add byte ptr [eax], al
+007437B2  66b90100               mov cx, 1
+007437B6  baf0397400             mov edx, 0x7439f0
+007437BB  8bc6                   mov eax, esi
+007437BD  e84e91ffff             call 0x73c910
+007437C2  b301                   mov bl, 1
+007437C4  e942010000             jmp 0x74390b
+007437C9  8bc6                   mov eax, esi
+007437CB  e8b4280000             call 0x746084
+007437D0  84c0                   test al, al
+007437D2  0f8433010000           je 0x74390b
+007437D8  b230                   mov dl, 0x30
+007437DA  8bc6                   mov eax, esi
+007437DC  e87ff10200             call 0x772960
+007437E1  84c0                   test al, al
+007437E3  0f85aa000000           jne 0x743893
+007437E9  6807b20100             push 0x1b207
+007437EE  6a01                   push 1
+007437F0  8bc6                   mov eax, esi
+007437F2  e8a5280000             call 0x74609c
+007437F7  8d55f4                 lea edx, [ebp - 0xc]
+007437FA  e89d90ccff             call 0x40c89c
+007437FF  8b4df4                 mov ecx, dword ptr [ebp - 0xc]
+00743802  8d45f8                 lea eax, [ebp - 8]
+00743805  ba143a7400             mov edx, 0x743a14
+0074380A  e80d20ccff             call 0x40581c
+0074380F  8b45f8                 mov eax, dword ptr [ebp - 8]
+00743812  50                     push eax
+00743813  b92c3a7400             mov ecx, 0x743a2c
+00743818  66ba4200               mov dx, 0x42
+0074381C  8bc6                   mov eax, esi
+0074381E  e8bd530200             call 0x768be0
+00743823  6a01                   push 1
+00743825  8bc6                   mov eax, esi
+00743827  e870280000             call 0x74609c
+0074382C  8bc8                   mov ecx, eax
+0074382E  b230                   mov dl, 0x30
+00743830  8bc6                   mov eax, esi
+00743832  8b18                   mov ebx, dword ptr [eax]
+00743834  ff93a8010000           call dword ptr [ebx + 0x1a8]
+0074383A  8b86b0020000           mov eax, dword ptr [esi + 0x2b0]
+00743840  8986ac020000           mov dword ptr [esi + 0x2ac], eax
+00743846  8b86b8020000           mov eax, dword ptr [esi + 0x2b8]
+0074384C  8986b4020000           mov dword ptr [esi + 0x2b4], eax
+00743852  c6869605000000         mov byte ptr [esi + 0x596], 0
+00743859  c6869705000000         mov byte ptr [esi + 0x597], 0
+00743860  ba01000000             mov edx, 1
+00743865  8bc6                   mov eax, esi
+00743867  e8bcb4ffff             call 0x73ed28
+0074386C  66b9fffc               mov cx, 0xfcff
+00743870  ba403a7400             mov edx, 0x743a40
+00743875  8bc6                   mov eax, esi
+00743877  8b18                   mov ebx, dword ptr [eax]
+00743879  ff93d4000000           call dword ptr [ebx + 0xd4]
+0074387F  66b90100               mov cx, 1
+00743883  ba643a7400             mov edx, 0x743a64
+00743888  8bc6                   mov eax, esi
+0074388A  e88190ffff             call 0x73c910
+0074388F  b301                   mov bl, 1
+00743891  eb78                   jmp 0x74390b
+00743893  a1886a7d00             mov eax, dword ptr [0x7d6a88]
+00743898  dd00                   fld qword ptr [eax]
+0074389A  d80d803a7400           fmul dword ptr [0x743a80]
+007438A0  e8cffccbff             call 0x403574
+007438A5  50                     push eax
+007438A6  6a01                   push 1
+007438A8  688c3a7400             push 0x743a8c
+007438AD  b230                   mov dl, 0x30
+007438AF  8bc6                   mov eax, esi
+007438B1  e862030300             call 0x773c18
+007438B6  b9e8030000             mov ecx, 0x3e8
+007438BB  99                     cdq 
+007438BC  f7f9                   idiv ecx
+007438BE  8d55ec                 lea edx, [ebp - 0x14]
+007438C1  e8d68fccff             call 0x40c89c
+007438C6  ff75ec                 push dword ptr [ebp - 0x14]
+007438C9  68a03a7400             push 0x743aa0
+007438CE  e8d1b7ccff             call 0x40f0a4
+007438D3  83c4f8                 add esp, -8
+007438D6  dd1c24                 fstp qword ptr [esp]
+007438D9  9b                     wait 
+007438DA  8d55e8                 lea edx, [ebp - 0x18]
+007438DD  b8ac3a7400             mov eax, 0x743aac
+007438E2  e855d2ccff             call 0x410b3c
+007438E7  ff75e8                 push dword ptr [ebp - 0x18]
+007438EA  8d45f0                 lea eax, [ebp - 0x10]
+007438ED  ba04000000             mov edx, 4
+007438F2  e8991fccff             call 0x405890
+007438F7  8b45f0                 mov eax, dword ptr [ebp - 0x10]
+007438FA  50                     push eax
+007438FB  b9c83a7400             mov ecx, 0x743ac8
+00743900  66ba1300               mov dx, 0x13
+00743904  8bc6                   mov eax, esi
+00743906  e8d5520200             call 0x768be0
+0074390B  84                     (db)
+
+0x7439F0 b'\xbf\xbf\xbd\xe4\xd6\xb8\xb5\xc4\xc1\xa6\xc1\xbf\xa3\xac\xc4\xfa\xb8\xb4\xbb\xee\xc1\xcb\xa1\xa3' gbk=靠戒指的力量，您复活了。

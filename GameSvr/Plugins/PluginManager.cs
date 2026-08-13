@@ -747,9 +747,22 @@ namespace GameSvr.Plugins
 
         /// <summary>
         /// One 回收类型 entry. Field semantics come from the author's own annotated copy,
-        /// GS1\MyJson\recycle(详细说明).json — every 中文 key there is declared unchangeable
-        /// ("内部的中文字符key都不能随便更改")，所以未知键一律当配置错误处理，避免
-        /// 把 "极品开关" 写错就静默丢掉一道保护。
+        /// GS1\MyJson\recycle(详细说明).json。
+        ///
+        /// 未知字段一律忽略，这是原生行为，不是宽容：sub_1006B020 从头到尾只做「按名取」，
+        /// 没有任何成员枚举。全函数 0x1006B020..0x1006CF00 内 157 处 push 常量字符串，
+        /// 只涉及 16 个键名（可叠材料 0x102BF7B0 / 回收类型 0x102BF7BC / 总开关 0x102BF7C8 /
+        /// v1 0x102BF7D0 / v2 0x102BF7D4 / 关闭值 0x102BF7D8 / 回收倍率 0x102BF7E0 /
+        /// 元宝 0x102BF644 / 灵符 0x102BF64C / 金币 0x102BF654 / 经验 0x102B4130 /
+        /// 其他 0x102BF7EC / 值 0x102BF7F4 / 物品种类 0x102BF7F8 / 极品开关 0x102BF804 /
+        /// 元素开关 0x102BF810），全部喂给 jsoncpp 的按名访问族
+        /// （0x100E0BE0 / 0x100E0DC0 / 0x100E0EA0 / 0x100E0ED0 / 0x100E1210 / 0x100E1240，
+        /// 共 152 次调用）。装载期校验 sub_10090EF0 也只查两个根键
+        /// （0x1009103E 物品种类、0x10091056 回收类型），不看规则字段。
+        /// ⇒ 配置里多写一个键，原生连看都不会看。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。代价是把 "极品开关" 拼错
+        /// 会静默丢掉一道保护而不报错 —— 原版就是这样。
         /// </summary>
         private static RecycleRule ParseRecycleRule(string typeName, JsonElement value)
         {
@@ -763,17 +776,35 @@ namespace GameSvr.Plugins
                 switch (field.Name)
                 {
                     // 「省略后失去开关效果」；GetV(v1,v2)==关闭值 时该类型停止回收。
+                    //
+                    // 【原生缺陷，照抄；勿"修"】子键缺一个就整段不解析，不是配置错误。
+                    // 四个门 0x1006B4A1(总开关 isMember) / 0x1006B4E2(v1) / 0x1006B523(v2) /
+                    // 0x1006B564(关闭值) 全部 je 0x1006B633，而 0x1006B633 紧接着就去解析
+                    // 回收倍率 —— 没有任何报错路径。关闭值 于是停在每件预置的 -2
+                    // （0x1006B2F4 C7 45 84 FE FF FF FF），消费端 0x1006B787 7C jl 判 < -1
+                    // 直接放行 ⇒ 这道门失效。
                     case "总开关":
-                        rule.MasterSwitchGroup = ReadRuleInt(field.Value, "v1", path);
-                        rule.MasterSwitchIndex = ReadRuleInt(field.Value, "v2", path);
-                        rule.MasterSwitchClosedValue = ReadRuleInt(field.Value, "关闭值", path);
-                        rule.HasMasterSwitch = true;
+                        if (TryReadRuleInt(field.Value, "v1", path, out var switchGroup) &&
+                            TryReadRuleInt(field.Value, "v2", path, out var switchIndex) &&
+                            TryReadRuleInt(field.Value, "关闭值", path, out var switchClosed))
+                        {
+                            rule.MasterSwitchGroup = switchGroup;
+                            rule.MasterSwitchIndex = switchIndex;
+                            rule.MasterSwitchClosedValue = switchClosed;
+                            rule.HasMasterSwitch = true;
+                        }
                         break;
                     // 「省略后永久1倍效果」；GetV(v1,v2)=200 表示 2 倍，小于等于 0 表示无效。
+                    // 同一形状：三个门 0x1006B660(回收倍率) / 0x1006B69F(v1) / 0x1006B6DE(v2)
+                    // 全部 je 0x1006B783，倍率停在每件重置的 0（0x1006B29B）⇒ 1 倍。
                     case "回收倍率":
-                        rule.RateGroup = ReadRuleInt(field.Value, "v1", path);
-                        rule.RateIndex = ReadRuleInt(field.Value, "v2", path);
-                        rule.HasRate = true;
+                        if (TryReadRuleInt(field.Value, "v1", path, out var rateGroup) &&
+                            TryReadRuleInt(field.Value, "v2", path, out var rateIndex))
+                        {
+                            rule.RateGroup = rateGroup;
+                            rule.RateIndex = rateIndex;
+                            rule.HasRate = true;
+                        }
                         break;
                     case "极品开关":
                         rule.ExtremeGroup = ReadRuleInt(field.Value, path);
@@ -786,14 +817,26 @@ namespace GameSvr.Plugins
                     case "灵符": rule.LingFu = ReadRuleInt(field.Value, path); break;
                     case "经验": rule.Exp = ReadRuleInt(field.Value, path); break;
                     // 「每件物品回收增加 This_player.SetV(v1,v2,值)」。
+                    //
+                    // 原生这一段的门不是齐步走的：其他 与 值 缺任一 ⇒ je 0x1006BB25 整段跳过
+                    // （0x1006B997 / 0x1006B9D6）；但 v1 缺席只 je 0x1006BAA6 跳过 v1 这一读、
+                    // 继续查 v2（0x1006BA60），v2 缺席才 je 0x1006BB25（0x1006BADF）。
+                    // 两个坐标都停在每件重置的 0（0x1006B2DB / 0x1006B2E5），而此时 值 已经
+                    // 读进 [ebp-0x68] —— 于是物品照删，SetV 被 0x6DF2B3/0x6DF2B7 两个 jle
+                    // 静默丢弃。又一个「只删不给」窗口，照抄。
                     case "其他":
-                        rule.OtherGroup = ReadRuleInt(field.Value, "v1", path);
-                        rule.OtherIndex = ReadRuleInt(field.Value, "v2", path);
-                        rule.OtherValue = ReadRuleInt(field.Value, "值", path);
-                        rule.HasOther = true;
+                        if (TryReadRuleInt(field.Value, "值", path, out var otherValue))
+                        {
+                            TryReadRuleInt(field.Value, "v1", path, out var otherGroup);
+                            TryReadRuleInt(field.Value, "v2", path, out var otherIndex);
+                            rule.OtherGroup = otherGroup;
+                            rule.OtherIndex = otherIndex;
+                            rule.OtherValue = otherValue;
+                            rule.HasOther = true;
+                        }
                         break;
                     default:
-                        throw new JsonException($"{path} is not a recognised 回收类型 field");
+                        break;
                 }
             }
 
@@ -807,13 +850,24 @@ namespace GameSvr.Plugins
             return number;
         }
 
-        private static int ReadRuleInt(JsonElement owner, string name, string path)
+        /// <summary>
+        /// 读复合字段的一个子键；缺席返回 false 并把 value 留在 0，由调用方决定整段是否生效。
+        /// 显式 null 与缺席同义：总开关 的三个子键门用的就是 jsoncpp 的 nullValue 测试
+        /// （0x1006B4DE / 0x1006B51F / 0x1006B560 <c>80 78 08 00 cmp byte [eax+8],0</c>，
+        /// 非 const operator[] 对缺失键会插入一个 nullValue 再返回引用），
+        /// 所以「键不在」和「键写了 null」在原生走的是同一条臂。
+        /// </summary>
+        private static bool TryReadRuleInt(JsonElement owner, string name, string path,
+            out int value)
         {
+            value = 0;
             if (owner.ValueKind != JsonValueKind.Object)
                 throw new JsonException($"{path} must be a JSON object");
-            if (!owner.TryGetProperty(name, out var value))
-                throw new JsonException($"{path} is missing '{name}'");
-            return ReadRuleInt(value, $"{path}.{name}");
+            if (!owner.TryGetProperty(name, out var element) ||
+                element.ValueKind == JsonValueKind.Null)
+                return false;
+            value = ReadRuleInt(element, $"{path}.{name}");
+            return true;
         }
 
         /// <summary>

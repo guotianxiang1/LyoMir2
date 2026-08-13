@@ -1939,6 +1939,15 @@ namespace GameSvr
         // level, `mov edx,0x76EEEC` = "神兽" (len@0x76EEE8 = 4), `call [esi+0xEC]`.
         private bool MagMakeSinSuSlave(TPlayObject PlayObject, TUserMagic UserMagic)
         {
+            // 眼神「召唤神兽触发」不是常量改写，是 trampoline：安装器 0x10032FD0 在
+            // 0x6EDC5E 把 `E8 19 12 08 00 call 0x76EE7C` 整条换成 `jmp <桩体>`，桩体只
+            // 派发 @SummonShinsu 然后 jmp 回 0x6EDC63。**它不重放那条 call**，所以开关
+            // 打开后原生神兽根本不产生。0x76EE7C 全镜像只有 0x6EDC5E 一个调用者，
+            // 所以拦在生产函数入口与拦在调用点等价。
+            if (YanshenTriggerDispatch.FireSummonShinsu(PlayObject))
+            {
+                return false;
+            }
             var result = false;
             if (!PlayObject.CheckServerMakeSlave())
             {
@@ -2025,6 +2034,16 @@ namespace GameSvr
         //    being dropped from both summon levels.
         private bool MagMakeSlave(TPlayObject PlayObject, TUserMagic UserMagic)
         {
+            // 眼神「召唤骷髅触发」同形：0x10032FD0 在 0x6EDB44 把
+            // `E8 B3 12 08 00 call 0x76EDFC` 换成 jmp 桩体，桩体派发 @SummonSkele 后
+            // jmp 0x6EDB49，不重放那条 call。0x76EDFC 全镜像同样只有 0x6EDB44 一个调用者。
+            // 注意：C# 把 SKILL_SKELLETON 与 SKILL_51 两个分支都接到本函数，而原生它们
+            // 分别走 sub_76EDFC 与 sub_76EFC0 两个生产函数；这条既有合并不是本次引入的，
+            // 拆分前把门放在生产函数入口是能拿到的最贴近映射。
+            if (YanshenTriggerDispatch.FireSummonSkele(PlayObject))
+            {
+                return false;
+            }
             var result = false;
             if (!PlayObject.CheckServerMakeSlave())
             {

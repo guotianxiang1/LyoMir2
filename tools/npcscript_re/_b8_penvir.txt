@@ -1,0 +1,58 @@
+==============================================================================
+VMT+0x00  DeleteObject -> @OnLeave    0 site(s) with receiver = [obj+0x128] (PEnvir)
+==============================================================================
+
+==============================================================================
+VMT+0x04  AddObject -> @OnEnter       0 site(s) with receiver = [obj+0x128] (PEnvir)
+==============================================================================
+
+==============================================================================
+VMT+0x08  slot8 -> @OnDie             1 site(s) with receiver = [obj+0x128] (PEnvir)
+==============================================================================
+
+---- call site 0x766351
+00766325  7401                   je 0x766328
+00766327  e81420caff             call 0x408340
+0076632C  898330030000           mov dword ptr [ebx + 0x330], eax
+00766332  33c0                   xor eax, eax
+00766334  894340                 mov dword ptr [ebx + 0x40], eax
+00766337  33c0                   xor eax, eax
+00766339  89433c                 mov dword ptr [ebx + 0x3c], eax
+0076633C  33c0                   xor eax, eax
+0076633E  894344                 mov dword ptr [ebx + 0x44], eax
+00766341  8bb328010000           mov esi, dword ptr [ebx + 0x128]
+00766347  85f6                   test esi, esi
+00766349  7409                   je 0x766354
+0076634B  8bd3                   mov edx, ebx
+0076634D  8bc6                   mov eax, esi
+0076634F  8b08                   mov ecx, dword ptr [eax]
+00766351  ff5108                 call dword ptr [ecx + 8]
+00766354  33d2                   xor edx, edx
+00766356  8bc3                   mov eax, ebx
+00766358  e8                     (db)
+
+==============================================================================
+VMT+0x10  slot10 -> @OnReLive         1 site(s) with receiver = [obj+0x128] (PEnvir)
+==============================================================================
+
+---- call site 0x74393B
+0074390F  6a01                   push 1
+00743911  66b90200               mov cx, 2
+00743915  b237                   mov dl, 0x37
+00743917  8bc6                   mov eax, esi
+00743919  8b38                   mov edi, dword ptr [eax]
+0074391B  ff97a8010000           call dword ptr [edi + 0x1a8]
+00743921  84db                   test bl, bl
+00743923  7523                   jne 0x743948
+00743925  8b8628010000           mov eax, dword ptr [esi + 0x128]
+0074392B  80787e00               cmp byte ptr [eax + 0x7e], 0
+0074392F  7417                   je 0x743948
+00743931  8bd6                   mov edx, esi
+00743933  8b8628010000           mov eax, dword ptr [esi + 0x128]
+00743939  8b08                   mov ecx, dword ptr [eax]
+0074393B  ff5110                 call dword ptr [ecx + 0x10]
+0074393E  83                     (db)
+0074393F  be                     (db)
+00743940  ac                     lodsb al, byte ptr [esi]
+00743941  0200                   add al, byte ptr [eax]
+

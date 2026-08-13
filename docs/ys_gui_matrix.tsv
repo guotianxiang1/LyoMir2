@@ -1,13 +1,13 @@
 key	value	prod_on	page	page_src	widget	state	n_sites	behavior_files	api_members	patch_target_vas	dump_str_va	dump_xrefs
 AddLimLF函数修改	0	0	配置1	catalog	toggle	LABEL_ONLY	5		IsAddLimLF;IsAddLimLFModified	0x6de8e3	0x102afd6c	2
-BB杀怪触发	0	0	配置1	catalog	toggle	LABEL_ONLY	6		IsPetKillTrigger	0x71f467	0x102afde0	2
-BB死亡触发	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsPetDeathTrigger	0x76631c	0x102afe08	2
+BB杀怪触发	0	0	配置1	catalog	toggle	IMPLEMENTED	9	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsPetKillTrigger	0x71f467	0x102afde0	2
+BB死亡触发	0	0	配置1	catalog	toggle	IMPLEMENTED	7	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsPetDeathTrigger	0x76631c	0x102afe08	2
 IncActivePoint函数修改	0	0	配置1	catalog	toggle	LABEL_ONLY	5		IsIncActivePoint;IsIncActivePointModified	0x6f91ba	0x102afd80	2
 ServerSay函数	1	1	盘古2	panel	toggle	LABEL_ONLY	11		IsServerSay;IsServerSayEnabled	0x728913	0x102b0034	2
 SetNoKillMapLv脚本触发	1	1	盘古2	panel	toggle	IMPLEMENTED	8	GameSvr/Command/Commands/SetNoKillMapLvCommand.cs	IsNoKillMapLv;IsNoKillMapLvEnabled		0x102b023c	2
 give极品	0	0	配置1	catalog	toggle	LABEL_ONLY	8		IsGiveExtreme;IsGiveExtremeEnabled	0x6c89ae	0x102afda8	2
 super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	CustomDamageEffect;IsSuperAttackTrigger;PoisonEffect;PullEnemy		0x102b0338	2
-上线触发	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsLoginTrigger	0x6548bd	0x102afe4c	2
+上线触发	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsLoginTrigger	0x6548bd	0x102afe4c	2
 下线宝宝死亡	0	0	盘古1	catalog	toggle	IMPLEMENTED	6	GameSvr/Players/TPlayObject.Message.cs	IsPetDieOffline;IsPetDieOfflineEnabled	0x6b5ba1	0x102b042c	2
 专职变性	0	0	盘古1	catalog	toggle	LABEL_ONLY	7		IsChangeJob;IsChangeJobEnabled		0x102b0394	2
 中毒时间上限	1	1	盘古3	panel	toggle	LABEL_ONLY	4		IsPoisonTimeLimit	0x76e5ce 0x76e675	0x102b06dc	2
@@ -19,9 +19,9 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 主号施法速度	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	7		IsMainCastSpeed;IsMainCastSpeedEnabled		0x102b02b4	2
 主号高级暴击	1	1	眼神2(第1页)	panel	toggle	LABEL_ONLY	7		IsMainAdvCrit;IsMainAdvCritEnabled		0x102b1578	2
 人物爆率调整	0	0	盘古3	panel	toggle	IMPLEMENTED	8	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	IsPlayerDropRate;TryGetDeathEquipDropPatch	0x73fcbb 0x73ff6c	0x102b0664	2
-人物等级1_值	40	1	盘古3	panel	value	LABEL_ONLY	3		PlayerLv1		0x102b1494	3
-人物等级2_值	45	1	盘古3	panel	value	LABEL_ONLY	3		PlayerLv2		0x102b14a4	3
-人物等级3_值	48	1	盘古3	panel	value	LABEL_ONLY	3		PlayerLv3		0x102b14b4	3
+人物等级1_值	40	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;PlayerLv1		0x102b1494	3
+人物等级2_值	45	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;PlayerLv2		0x102b14a4	3
+人物等级3_值	48	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;PlayerLv3		0x102b14b4	3
 伤害触发脚本_plus	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	4		IsDmgScriptPlus		0x102b159c	2
 修复刺杀位麻痹	1	1	盘古1	catalog	toggle	LABEL_ONLY	4		IsFixStabParalysis		0x102b03fc	2
 修复卡防御	1	1	盘古1	catalog	toggle	IMPLEMENTED	4	GameSvr/Actors/TBaseObject.NativeMagicDamage.cs	IsFixDefense	0x767910	0x102b040c	2
@@ -32,11 +32,11 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 全屏拾取	1	1	配置1	catalog	toggle	SCRIPT_ONLY	14	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	AutoPickup;IsAutoPickup	0x6b795c 0x6b796b 0x6b7a25 0x6b7a2f	0x102afca0	2
 全服击杀提示	1	1	盘古1	catalog	toggle	LABEL_ONLY	10		IsKillNotice;ShouldSendKillNotice		0x102b0384	2
 关闭摆摊	0	0	盘古1	panel	toggle	LABEL_ONLY	6		IsCloseStall	0x6e7c38	0x102b0490	2
-冰咆哮主属性切换	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsIceStormSwitch	0x76f2cb	0x102aff80	2
+冰咆哮主属性切换	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsIceStormSwitch	0x76f2cb	0x102aff80	2
 冰咆哮切割	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsIceStormCutting		0x102b01d4	2
 冰咆哮固定增伤	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsIceStormFixDmg		0x102b0190	2
-冰咆哮范围	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsIceStormRange	0x76f300	0x102aff94	2
-刀刀切割	0	0	配置1	catalog	toggle	IMPLEMENTED	25	GameSvr/Players/TPlayObject.NativeSocialSlots.cs;GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	AddTempAttr;AddTempAttrPro;CustomDamage;DirectAttack;Healing;HolyDamage;IsCuttingEnabled;SubTempAttr	0x767bae	0x102afcac	2
+冰咆哮范围	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsIceStormRange	0x76f300	0x102aff94	2
+刀刀切割	0	0	配置1	catalog	toggle	IMPLEMENTED	27	GameSvr/Players/TPlayObject.NativeSocialSlots.cs;GameSvr/Plugins/YanshenCommands.cs;GameSvr/Plugins/YanshenTriggerDispatch.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	AddTempAttr;AddTempAttrPro;CustomDamage;DirectAttack;Healing;HolyDamage;IsCuttingEnabled;SubTempAttr	0x767bae	0x102afcac	2
 切换暴击报文	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsSwitchCritMsg;IsSwitchCritMsgEnabled		0x102b02d4	2
 删除技能不提示	1	1	配置2	catalog	toggle	LABEL_ONLY	7		IsDelSkillSilent;ShouldDelSkillSilent	0x6c7797	0x102afff0	2
 删除英雄技能	0	0	盘古2	panel	toggle	LABEL_ONLY	7		IsDelHeroSkill;IsDelHeroSkillEnabled		0x102b0254	2
@@ -51,20 +51,20 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 半月弯刀_A值	"2"	1	盘古2	panel	value	IMPLEMENTED	10	GameSvr/Actors/TBaseObject.Attack.cs	HalfMoonA		0x102b0828	3
 半月弯刀_B值	"15"	1	盘古2	panel	value	IMPLEMENTED	4	GameSvr/Actors/TBaseObject.Attack.cs	HalfMoonB		0x102b0878	3
 双毒时间_最低	5	1	配置2	catalog-param	value	LABEL_ONLY	4		DualPoisonMin		0x102b0a08	3
-召唤神兽	0	0	盘古1	catalog	toggle	IMPLEMENTED	7	GameSvr/Spells/MagicManager.cs	IsSummonShenShou	0x76ee99 0x76eeec	0x102b036c	2
-召唤神兽触发	0	0	盘古1	panel	toggle	LABEL_ONLY	5		IsShenShouTrigger;IsShenShouTriggerEnabled	0x6edc5e	0x102b0518	2
-召唤骷髅	1	1	盘古1	catalog	toggle	IMPLEMENTED	7	GameSvr/Spells/MagicManager.cs	IsSummonKuLou	0x76ee1f	0x102b0378	2
+召唤神兽	0	0	盘古1	catalog	toggle	IMPLEMENTED	8	GameSvr/Spells/MagicManager.cs	IsSummonShenShou	0x76ee99 0x76eeec	0x102b036c	2
+召唤神兽触发	0	0	盘古1	panel	toggle	IMPLEMENTED	9	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsShenShouTrigger;IsShenShouTriggerEnabled	0x6edc5e	0x102b0518	2
+召唤骷髅	1	1	盘古1	catalog	toggle	IMPLEMENTED	8	GameSvr/Spells/MagicManager.cs	IsSummonKuLou	0x76ee1f	0x102b0378	2
 召唤骷髅_数量	1	1	盘古1	panel	value	LABEL_ONLY	4		NativeSlaveCountImm8		0x102b0a30	2
-召唤骷髅触发	0	0	盘古1	panel	toggle	LABEL_ONLY	5		IsKuLouTrigger;IsKuLouTriggerEnabled	0x6edb44	0x102b0508	2
+召唤骷髅触发	0	0	盘古1	panel	toggle	IMPLEMENTED	9	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsKuLouTrigger;IsKuLouTriggerEnabled	0x6edb44	0x102b0508	2
 名字变色	1	1	盘古2	panel	toggle	LABEL_ONLY	9		IsNameColor		0x102b0264	2
-嗜血术倍数	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsBloodSuck	0x76fc2b	0x102affbc	2
+嗜血术倍数	0	0	配置2	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenSkillPatches.cs	IsBloodSuck	0x76fc2b	0x102affbc	2
 嗜血术范围	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsBloodRange		0x102b028c	2
 噬魂沼泽绿毒修复	1	1	盘古2	panel	toggle	LABEL_ONLY	4		IsZhaoZeFix	0x691e2e	0x102b0558	2
-回城按钮触发	0	0	盘古1	panel	toggle	LABEL_ONLY	4		IsReturnBtnTrigger	0x6dbb80	0x102b04b4	2
+回城按钮触发	0	0	盘古1	panel	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsReturnBtnTrigger	0x6dbb80	0x102b04b4	2
 土城摆摊	0	0	盘古1	catalog	toggle	LABEL_ONLY	6		IsTuChengStall	0x6e7930 0x6e7c1c 0x6e7c5f	0x102b0348	2
-地狱雷光可换主属性	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsHellLightSwitch	0x76f5fb	0x102afef8	2
-地狱雷光系数	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsHellLightFactor	0x76f61a	0x102afeb0	2
-地狱雷光范围	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsHellLightRange	0x76f63d	0x102afec0	2
+地狱雷光可换主属性	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsHellLightSwitch	0x76f5fb	0x102afef8	2
+地狱雷光系数	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsHellLightFactor	0x76f61a	0x102afeb0	2
+地狱雷光范围	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsHellLightRange	0x76f63d	0x102afec0	2
 地面物品消失时间	1	1	盘古1	catalog	toggle	IMPLEMENTED	10	GameSvr/Actors/TBaseObject.ViewRange.cs	IsFloorItemTimeout;TryGetFloorItemTimeout	0x77a3ff	0x102b0418	2
 地面物品消失时间_时间	150	1	盘古1	panel	value	IMPLEMENTED	11	GameSvr/Actors/TBaseObject.ViewRange.cs	FloorItemTimeoutSec;TryGetFloorItemTimeout		0x102b0a54	3
 基本剑术	1	1	盘古2	panel	toggle	IMPLEMENTED	6	GameSvr/Actors/TBaseObject.cs	IsOneSword	0x76af96 0x76afa9	0x102b06c4	2
@@ -74,25 +74,25 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 复活戒指重设	0	0	盘古2	panel	toggle	IMPLEMENTED	8	GameSvr/Actors/TBaseObject.NativeRevive.cs	IsReviveReset;IsReviveResetEnabled;IsReviveResetPatchOn	0x73c480 0x743758	0x102b05a8	2
 复活戒指重设_无敌时间	0	0	盘古2	panel	value	IMPLEMENTED	7	GameSvr/Actors/TBaseObject.NativeRevive.cs	IsReviveImmune;IsReviveImmuneEnabled;ReviveResetImmuneSeconds		0x102b0adc	3
 复活戒指重设_重设时间	0	0	盘古2	panel	value	IMPLEMENTED	7	GameSvr/Actors/TBaseObject.NativeRevive.cs	IsReviveResetTime;IsReviveResetTimeEnabled;ReviveResetCooldownMs		0x102b0ac4	3
-复活触发脚本	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsReviveScript	0x73c484	0x102afcd0	2
+复活触发脚本	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsReviveScript	0x73c484	0x102afcd0	2
 多元伤害	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsMultiDmg		0x102b1694	2
 大背包	0	0	扩展/物品相关	fallback	toggle	SCRIPT_ONLY	9	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsBigBag;SwitchBigBag		0x102b0178	2
-头盔属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Acc		0x102b0f44	3
-头盔属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Atk		0x102b0e24	3
-头盔属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Spd		0x102b0efc	3
-头盔属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Tao		0x102b0eb4	3
-头盔属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetAttrChance_Mgc		0x102b0e6c	3
-头盔最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetRandExtreme		0x102b0f5c	3
-头盔最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Acc		0x102b0f14	3
-头盔最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Atk		0x102b0df4	3
-头盔最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Spd		0x102b0ecc	3
-头盔最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Tao		0x102b0e84	3
-头盔最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetMaxPts_Mgc		0x102b0e3c	3
-头盔点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Acc		0x102b0f2c	3
-头盔点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Atk		0x102b0e0c	3
-头盔点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Spd		0x102b0ee4	3
-头盔点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Tao		0x102b0e9c	3
-头盔点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		HelmetPtsChance_Mgc		0x102b0e54	3
+头盔属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetAttrChance_Acc	0x7612d2	0x102b0f44	3
+头盔属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetAttrChance_Atk	0x761237	0x102b0e24	3
+头盔属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetAttrChance_Spd	0x7612af	0x102b0efc	3
+头盔属性几率_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetAttrChance_Tao	0x76128c	0x102b0eb4	3
+头盔属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetAttrChance_Mgc	0x761269	0x102b0e6c	3
+头盔最随机性_极品_值	"80"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetRandExtreme	0x7611fb	0x102b0f5c	3
+头盔最高点数_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetMaxPts_Acc	0x7612c6	0x102b0f14	3
+头盔最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetMaxPts_Atk	0x76122b	0x102b0df4	3
+头盔最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetMaxPts_Spd	0x7612a3	0x102b0ecc	3
+头盔最高点数_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetMaxPts_Tao	0x761280	0x102b0e84	3
+头盔最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetMaxPts_Mgc	0x76125d	0x102b0e3c	3
+头盔点数几率_准确_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetPtsChance_Acc	0x7612c1	0x102b0f2c	3
+头盔点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetPtsChance_Atk	0x761226	0x102b0e0c	3
+头盔点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetPtsChance_Spd	0x76129e	0x102b0ee4	3
+头盔点数几率_道术_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetPtsChance_Tao	0x76127b	0x102b0e9c	3
+头盔点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	HelmetPtsChance_Mgc	0x761258	0x102b0e54	3
 安全区禁止丢物	1	1	盘古1	catalog	toggle	IMPLEMENTED	8	GameSvr/Actors/HeroObject.cs;GameSvr/Players/TPlayObject.Operate.cs	IsDropAllowed;IsSafeNoDrop	0x73cc98	0x102b03a0	2
 宝宝叛变属性a	0	0	扩展/角色相关	fallback	toggle	LABEL_ONLY	3		IsPetRebelAttr;IsPetRebelAttrEnabled		0x102b00f8	2
 宝宝自动叛变	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsPetAutoRebel;IsPetAutoRebelEnabled		0x102b022c	3
@@ -104,32 +104,32 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 屏蔽排行榜	0	0	盘古3	panel	toggle	LABEL_ONLY	5		IsHideRank;ShouldHideRank	0x6cba88	0x102b070c	2
 屏蔽自动绑定	1	1	盘古4	panel	toggle	SCRIPT_ONLY	14	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	BindUnbindItem;GiveItemBind;IsAutoBindOff	0x74dc57 0x74dd59 0x74ddc3 0x74ddef	0x102b072c	2
 循环时间_值	2000	1	眼神2(第2页)	panel	value	LABEL_ONLY	4		IsLoopTimeVal;IsLoopTimeValEnabled		0x102b1488	3
-心灵启示触发	0	0	盘古1	panel	toggle	LABEL_ONLY	4		IsMindRevealTrigger	0x6edc2b	0x102b0528	2
+心灵启示触发	0	0	盘古1	panel	toggle	IMPLEMENTED	7	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsMindRevealTrigger	0x6edc2b	0x102b0528	2
 怪物名字1_值	"强化神兽"	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;MonsterName1		0x102b14c4	3
-怪物名字2_值	"强化神兽"	1	盘古3	panel	value	LABEL_ONLY	3		MonsterName2		0x102b14d4	3
-怪物名字3_值	"白虎"	1	盘古3	panel	value	LABEL_ONLY	3		MonsterName3		0x102b14e4	3
+怪物名字2_值	"强化神兽"	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;MonsterName2		0x102b14d4	3
+怪物名字3_值	"白虎"	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;MonsterName3		0x102b14e4	3
 怪物数量1_值	1	1	盘古3	panel	value	LABEL_ONLY	7		IsCustomDmgPlus;MonsterCount1;MonsterName3		0x102b14f4	3
 怪物数量2_值	2	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;MonsterCount2		0x102b1504	3
 怪物数量3_值	1	1	盘古3	panel	value	LABEL_ONLY	4		IsCustomDmgPlus;MonsterCount3		0x102b1514	3
 怪物爆率A_值	0	0	眼神2(第2页)	panel	value	LABEL_ONLY	5		IsMonsterDropA		0x102b1458	3
 怪物爆率B_值	0	0	眼神2(第2页)	panel	value	LABEL_ONLY	3		IsMonsterDropB		0x102b1468	3
 怪物爆率K_值	0	0	眼神2(第2页)	panel	value	LABEL_ONLY	3		IsMonsterDropK		0x102b1478	3
-戒指属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Acc		0x102b13c4	3
-戒指属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Atk		0x102b12a4	3
-戒指属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Spd		0x102b137c	3
-戒指属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Tao		0x102b1334	3
-戒指属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingAttrChance_Mgc		0x102b12ec	3
-戒指最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingRandExtreme		0x102b13dc	3
-戒指最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Acc		0x102b1394	3
-戒指最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Atk		0x102b1274	3
-戒指最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Spd		0x102b134c	3
-戒指最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Tao		0x102b1304	3
-戒指最高点数_魔法_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		RingMaxPts_Mgc		0x102b12bc	3
-戒指点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Acc		0x102b13ac	3
-戒指点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Atk		0x102b128c	3
-戒指点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Spd		0x102b1364	3
-戒指点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Tao		0x102b131c	3
-戒指点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		RingPtsChance_Mgc		0x102b12d4	3
+戒指属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingAttrChance_Acc	0x761dba	0x102b13c4	3
+戒指属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingAttrChance_Atk	0x761d2e	0x102b12a4	3
+戒指属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingAttrChance_Spd	0x761d97	0x102b137c	3
+戒指属性几率_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingAttrChance_Tao	0x761d74	0x102b1334	3
+戒指属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingAttrChance_Mgc	0x761d51	0x102b12ec	3
+戒指最随机性_极品_值	"80"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingRandExtreme	0x761cf0	0x102b13dc	3
+戒指最高点数_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingMaxPts_Acc	0x761dae	0x102b1394	3
+戒指最高点数_攻击_值	""	0	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingMaxPts_Atk	0x761d22	0x102b1274	3
+戒指最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingMaxPts_Spd	0x761d8b	0x102b134c	3
+戒指最高点数_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingMaxPts_Tao	0x761d68	0x102b1304	3
+戒指最高点数_魔法_值	""	0	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingMaxPts_Mgc	0x761d45	0x102b12bc	3
+戒指点数几率_准确_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingPtsChance_Acc	0x761da9	0x102b13ac	3
+戒指点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingPtsChance_Atk	0x761d1d	0x102b128c	3
+戒指点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingPtsChance_Spd	0x761d86	0x102b1364	3
+戒指点数几率_道术_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingPtsChance_Tao	0x761d63	0x102b131c	3
+戒指点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	RingPtsChance_Mgc	0x761d40	0x102b12d4	3
 战士合击	1	1	盘古3	panel	toggle	LABEL_ONLY	5		IsWarriorCombo;IsWarriorComboEnabled	0x7d341c 0x7d3420	0x102b06f4	2
 战士合击_数值1	"1.5"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV1		0x102b08e8	3
 战士合击_数值2	"2"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV2		0x102b08f8	3
@@ -137,22 +137,22 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 战士合击_数值4	"2.6"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV4		0x102b0918	3
 战士合击_数值5	"2.8"	1	盘古3	panel	value	LABEL_ONLY	2		WarriorComboV5		0x102b0928	3
 战队职业限制	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	8		IsGamePartnerLimit;IsGamePartnerLimitEnabled		0x102b1548	2
-手镯属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Acc		0x102b1244	3
-手镯属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Atk		0x102b1124	3
-手镯属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Spd		0x102b11fc	3
-手镯属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Tao		0x102b11b4	3
-手镯属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletAttrChance_Mgc		0x102b116c	3
-手镯最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletRandExtreme		0x102b125c	3
-手镯最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Acc		0x102b1214	3
-手镯最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Atk		0x102b10f4	3
-手镯最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Spd		0x102b11cc	3
-手镯最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Tao		0x102b1184	3
-手镯最高点数_魔法_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletMaxPts_Mgc		0x102b113c	3
-手镯点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Acc		0x102b122c	3
-手镯点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Atk		0x102b110c	3
-手镯点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Spd		0x102b11e4	3
-手镯点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Tao		0x102b119c	3
-手镯点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		BraceletPtsChance_Mgc		0x102b1154	3
+手镯属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletAttrChance_Acc	0x7626b2	0x102b1244	3
+手镯属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletAttrChance_Atk	0x762626	0x102b1124	3
+手镯属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletAttrChance_Spd	0x76268f	0x102b11fc	3
+手镯属性几率_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletAttrChance_Tao	0x76266c	0x102b11b4	3
+手镯属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletAttrChance_Mgc	0x762649	0x102b116c	3
+手镯最随机性_极品_值	"80"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletRandExtreme	0x7625e8	0x102b125c	3
+手镯最高点数_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletMaxPts_Acc	0x7626a6	0x102b1214	3
+手镯最高点数_攻击_值	""	0	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletMaxPts_Atk	0x76261a	0x102b10f4	3
+手镯最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletMaxPts_Spd	0x762683	0x102b11cc	3
+手镯最高点数_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletMaxPts_Tao	0x762660	0x102b1184	3
+手镯最高点数_魔法_值	""	0	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletMaxPts_Mgc	0x76263d	0x102b113c	3
+手镯点数几率_准确_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletPtsChance_Acc	0x7626a1	0x102b122c	3
+手镯点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletPtsChance_Atk	0x762615	0x102b110c	3
+手镯点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletPtsChance_Spd	0x76267e	0x102b11e4	3
+手镯点数几率_道术_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletPtsChance_Tao	0x76265b	0x102b119c	3
+手镯点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	BraceletPtsChance_Mgc	0x762638	0x102b1154	3
 技能等级突破	1	1	眼神2(第1页)	panel	toggle	LABEL_ONLY	6		IsLevelBreak		0x102b0210	2
 技能等级突破_最大值	255	1	眼神2(第1页)	panel	value	LABEL_ONLY	6		IsLevelBreakMax;IsLevelBreakMaxEnabled		0x102b0a40	2
 技能触发脚本	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsSkillTrigger		0x102b0298	2
@@ -160,26 +160,26 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 护身触发报文a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsHolyShieldMsg		0x102b00b0	2
 护身触发概率a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsHolyShieldChance		0x102b00a0	2
 指定地图编号摆摊	0	0	盘古1	catalog	toggle	LABEL_ONLY	7		IsMapStall	0x6e7930 0x6e7934 0x6e7c1c 0x6e7c5f	0x102b047c	2
-挖矿触发	1	1	盘古1	panel	toggle	LABEL_ONLY	4		IsMineTrigger	0x6ec111	0x102b04fc	2
-捡物触发	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsPickupTrigger	0x6b770c	0x102afd24	2
+挖矿触发	1	1	盘古1	panel	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsMineTrigger	0x6ec111	0x102b04fc	2
+捡物触发	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsPickupTrigger	0x6b770c	0x102afd24	2
 摆摊地图	"3"	1	盘古1	panel	value	LABEL_ONLY	5		GetStallMapId;MapStallMap		0x102b0a6c	3
 摆摊穿人	1	1	盘古1	catalog	toggle	LABEL_ONLY	7		IsStallPass;IsStallPassThrough	0x77931d	0x102b0354	2
 攻击反伤	0	0	配置1	catalog	toggle	LABEL_ONLY	7		IsReflectEnabled	0x767bb4	0x102afd18	2
 攻击吸血	0	0	眼神2(第2页)	panel	toggle	IMPLEMENTED	11	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs;GameSvr/Services/NativeType2StdItemSnapshotState.cs	IsLifeSteal;LifeSteal		0x102b0314	2
-攻击触发	0	0	配置1	catalog	toggle	LABEL_ONLY	5		IsAttackTrigger	0x76e35d	0x102afd30	2
+攻击触发	0	0	配置1	catalog	toggle	IMPLEMENTED	7	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsAttackTrigger	0x76e35d	0x102afd30	2
 攻城修改	1	1	盘古2	panel	toggle	LABEL_ONLY	5		IsSiegeModify	0x65bc09 0x65be2c 0x65c3b1	0x102b059c	2
 攻城修改_分钟	0	0	盘古2	panel	value	LABEL_ONLY	5		GetSiegeModMinute;IsSiegeModMinute		0x102b0a98	3
 攻城修改_天数	3	1	盘古2	panel	value	LABEL_ONLY	5		GetSiegeModDay;IsSiegeModDay		0x102b0a78	3
 攻城修改_小时	20	1	盘古2	panel	value	LABEL_ONLY	5		GetSiegeModHour;IsSiegeModHour		0x102b0a88	3
 攻城时长_分钟	120	1	盘古2	panel	value	LABEL_ONLY	5		GetSiegeDuration;IsSiegeDuration		0x102b0aa8	3
-攻杀剑术	1	1	盘古2	panel	toggle	IMPLEMENTED	7	GameSvr/Actors/TBaseObject.Attack.cs	IsThrusting	0x76b02d	0x102b0688	2
+攻杀剑术	1	1	盘古2	panel	toggle	IMPLEMENTED	8	GameSvr/Actors/TBaseObject.Attack.cs	IsThrusting	0x76b02d	0x102b0688	2
 攻杀剑术_A值	"5"	1	盘古2	panel	value	IMPLEMENTED	3	GameSvr/Actors/TBaseObject.Attack.cs	ThrustingA		0x102b0808	3
 攻沙脚本控制	0	0	盘古1	catalog	toggle	LABEL_ONLY	5		IsSiegeScript;IsSiegeScriptEnabled	0x65c6b6 0x65c76d 0x65c785	0x102b027c	2
-新倍攻和暴击	1	1	配置1	catalog	toggle	LABEL_ONLY	5		IsNewMultCrit	0x76c88b	0x102afd98	2
+新倍攻和暴击	1	1	配置1	catalog	toggle	IMPLEMENTED	7	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsNewMultCrit	0x76c88b	0x102afd98	2
 新呼唤宝宝	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsNewCallPet;IsNewCallPetEnabled		0x102b0270	2
 新怪物爆率	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	6		IsNewMonsterDrop;IsNewMonsterDropEnabled		0x102b1630	2
-新穿戴触发	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsWearTrigger	0x75ea37 0x75f085	0x102afd4c	2
-施毒术	1	1	盘古3	panel	toggle	SCRIPT_ONLY	11	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsPoisonEnabled;Poison	0x76e599	0x102b06ec	2
+新穿戴触发	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsWearTrigger	0x75ea37 0x75f085	0x102afd4c	2
+施毒术	1	1	盘古3	panel	toggle	SCRIPT_ONLY	13	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsPoisonEnabled;Poison	0x76e599	0x102b06ec	2
 施毒术_公式值	"10"	1	盘古3	panel	value	LABEL_ONLY	2		PoisonFormulaVal		0x102b08d8	3
 无极真气	1	1	盘古3	panel	toggle	LABEL_ONLY	6		IsZhenQi	0x74587c	0x102b06d0	2
 无极真气_A值	"10"	1	盘古3	panel	value	LABEL_ONLY	2		ZhenQiA		0x102b08a8	3
@@ -187,27 +187,27 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 星耀专属切割a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsXyCutting		0x102b0130	2
 星耀倍功与暴击a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsXyPowerCrit		0x102b0140	2
 星耀攻击反伤a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsXyReflect		0x102b0150	2
-最大装备数量	""	0	盘古3	panel	value	LABEL_ONLY	4		MaxEquipCount		0x102b09cc	3
+最大装备数量	""	0	盘古3	panel	value	IMPLEMENTED	4	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	MaxEquipCount		0x102b09cc	3
 格位刺杀免伤a	0	0	扩展/脚本相关	fallback	toggle	LABEL_ONLY	2		IsLuckBlock		0x102b00dc	2
 概率格挡a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsProbBlock		0x102b00ec	2
-武器属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Acc		0x102b0c44	3
-武器属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Atk		0x102b0b24	3
-武器属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Spd		0x102b0bfc	3
-武器属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Tao		0x102b0bb4	3
-武器属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponAttrChance_Mgc		0x102b0b6c	3
-武器最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponRandExtreme		0x102b0c5c	3
-武器最高点数_准确_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Acc		0x102b0c14	3
-武器最高点数_攻击_值	""	0	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Atk		0x102b0af4	3
-武器最高点数_攻速_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Spd		0x102b0bcc	3
-武器最高点数_道术_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Tao		0x102b0b84	3
-武器最高点数_魔法_值	"7"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponMaxPts_Mgc		0x102b0b3c	3
-武器点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Acc		0x102b0c2c	3
-武器点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Atk		0x102b0b0c	3
-武器点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Spd		0x102b0be4	3
-武器点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Tao		0x102b0b9c	3
-武器点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		WeaponPtsChance_Mgc		0x102b0b54	3
+武器属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponAttrChance_Acc	0x7609d8	0x102b0c44	3
+武器属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponAttrChance_Atk	0x760920	0x102b0b24	3
+武器属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponAttrChance_Spd	0x76098f	0x102b0bfc	3
+武器属性几率_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponAttrChance_Tao	0x76096a	0x102b0bb4	3
+武器属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponAttrChance_Mgc	0x760945	0x102b0b6c	3
+武器最随机性_极品_值	"80"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponRandExtreme	0x7608f0	0x102b0c5c	3
+武器最高点数_准确_值	"7"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponMaxPts_Acc	0x7609cc	0x102b0c14	3
+武器最高点数_攻击_值	""	0	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponMaxPts_Atk	0x760914	0x102b0af4	3
+武器最高点数_攻速_值	"7"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponMaxPts_Spd	0x760983	0x102b0bcc	3
+武器最高点数_道术_值	"7"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponMaxPts_Tao	0x76095e	0x102b0b84	3
+武器最高点数_魔法_值	"7"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponMaxPts_Mgc	0x760939	0x102b0b3c	3
+武器点数几率_准确_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponPtsChance_Acc	0x7609c7	0x102b0c2c	3
+武器点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponPtsChance_Atk	0x76090f	0x102b0b0c	3
+武器点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponPtsChance_Spd	0x76097e	0x102b0be4	3
+武器点数几率_道术_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponPtsChance_Tao	0x760959	0x102b0b9c	3
+武器点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	WeaponPtsChance_Mgc	0x760934	0x102b0b54	3
 武器绿毒	1	1	盘古2	panel	toggle	LABEL_ONLY	4		IsWeaponGreenPoison	0x76e2bc	0x102b054c	2
-死亡触发	1	1	盘古1	panel	toggle	LABEL_ONLY	4		IsDeathTrigger	0x6c09b5	0x102b04a8	2
+死亡触发	1	1	盘古1	panel	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsDeathTrigger	0x6c09b5	0x102b04a8	2
 毫秒级cd记录	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	14	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	CDSet;IsCdMs;IsMsCDEnabled		0x102b1610	2
 永久属性	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsPermAttr	0x73d9cf 0x73d9d7 0x73d9e0 0x73d9e9 0x73d9f2 0x73d9fb 0x73da04 0x73da16 0x73da1f 0x73da28 0x73da31 0x73da3a	0x102afcb8	2
 永久攻速	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsPermSpeed	0x73d9a0	0x102afe64	2
@@ -219,25 +219,25 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 法道合击_数值4	""	0	盘古3	panel	value	LABEL_ONLY	2		WizTaoComboV4		0x102b0968	3
 法道合击_数值5	""	0	盘古3	panel	value	LABEL_ONLY	2		WizTaoComboV5		0x102b0978	3
 激光命中概率	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsLaserHitRate	0x76ea14	0x102aff30	2
-激光电影可换主属性	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsLaserSwitch	0x76e9b5	0x102aff0c	2
-激光范围及系数	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsLaserRange	0x76ea07	0x102aff20	2
+激光电影可换主属性	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLaserSwitch	0x76e9b5	0x102aff0c	2
+激光范围及系数	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLaserRange	0x76ea07	0x102aff20	2
 火墙_时间	120	1	盘古2	panel	value	LABEL_ONLY	6		FireWallTime		0x102b0ab8	3
 火墙不吸血	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	4		IsFireWallNoVamp		0x102b0320	2
 火墙切割	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsFireWallCutting		0x102b0204	2
 火墙固定增伤	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsFireWallFixDmg		0x102b01a0	2
 火墙设置时间上限	1	1	盘古2	panel	toggle	SCRIPT_ONLY	9	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsFireWallTimeLimit	0x7706b6	0x102b05cc	2
-火球主属性切换	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsFireBallSwitch	0x76e3e6	0x102aff40	2
-火球自定义范围	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsFireBallRange	0x76e425	0x102aff50	2
+火球主属性切换	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsFireBallSwitch	0x76e3e6	0x102aff40	2
+火球自定义范围	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsFireBallRange	0x76e425	0x102aff50	2
 火符切割	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsAmuletCutting		0x102b01f8	2
 火符固定增伤	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsAmuletFixDmg		0x102b01b0	2
-火雨主属切换	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsFireRainSwitch	0x76f365	0x102affa0	2
+火雨主属切换	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsFireRainSwitch	0x76f365	0x102affa0	2
 烈火切割	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsFireCutting		0x102b01ec	2
 烈火剑法	1	1	盘古2	panel	toggle	IMPLEMENTED	12	GameSvr/Actors/TBaseObject.Attack.cs	IsFireSword	0x76b0ec 0x76b0f0 0x77231d	0x102b06ac	2
 烈火剑法_A值	"4"	1	盘古2	panel	value	IMPLEMENTED	4	GameSvr/Actors/TBaseObject.Attack.cs	FireSwordA		0x102b0838	3
 烈火剑法_B值	"3"	1	盘古2	panel	value	IMPLEMENTED	4	GameSvr/Actors/TBaseObject.Attack.cs	FireSwordB		0x102b0888	3
 烈火固定增伤	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsFireFixDmg		0x102b0180	2
-爆裂火焰可换主属性	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsBlastFlameSwitch	0x76f23b	0x102afed0	2
-爆裂火焰范围及系数	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsBlastFlameRange	0x76f26b	0x102afee4	2
+爆裂火焰可换主属性	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsBlastFlameSwitch	0x76f23b	0x102afed0	2
+爆裂火焰范围及系数	0	0	配置2	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenSkillPatches.cs	IsBlastFlameRange	0x76f26b	0x102afee4	2
 物功带毒	0	0	盘古2	panel	toggle	LABEL_ONLY	4		IsPhysicalPoison	0x76e2bc	0x102b056c	2
 特殊宝宝	0	0	配置1	catalog	toggle	SCRIPT_ONLY	14	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	GetPetAttrByName;IsPetEnabled;KillPetByName;SummonPetRoyalty	0x7671a2 0x76de42	0x102afe14	2
 特殊属性	0	0	配置1	catalog	toggle	LABEL_ONLY	7		IsPetSpecial	0x6e41bd 0x73d951	0x102afcc4	15
@@ -252,13 +252,13 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 盘古爆裂火焰范围	1	1	盘古2	panel	toggle	LABEL_ONLY	4		IsPgBlastFlameRange	0x76f271	0x102b05e0	2
 盘古爆裂火焰范围_范围值	2	1	盘古2	panel	value	LABEL_ONLY	2		PgBlastFlameRangeVal		0x102b07a8	3
 盘古物理攻击触发	0	0	盘古1	panel	toggle	LABEL_ONLY	4		IsPgPhysTrigger		0x102b04d4	2
-盘古穿戴触发	1	1	盘古1	panel	toggle	LABEL_ONLY	4		IsPgWearTrigger	0x6d8e35 0x6d8e4d	0x102b04c4	2
+盘古穿戴触发	1	1	盘古1	panel	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsPgWearTrigger	0x6d8e35 0x6d8e4d	0x102b04c4	2
 盘古给与封号	1	1	盘古1	panel	toggle	LABEL_ONLY	5		IsPgGiveTitle;IsPgGiveTitleEnabled		0x102b0304	2
 盘古高级属性	1	1	盘古1	panel	toggle	LABEL_ONLY	5		IsPgAdvancedAttr;IsPgAdvancedAttrEnabled	0x6ba718 0x6ba72d 0x6f9ab0	0x102b0748	2
-盘古魔法攻击触发	0	0	盘古1	panel	toggle	LABEL_ONLY	4		IsPgMagicTrigger	0x76dec0 0x76e1af	0x102b04e8	2
-眼神特殊函数	1	1	眼神2(第2页)	panel	toggle	IMPLEMENTED	57	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs;SystemModule/Grobal2.cs	AutoPickup;CustomDamageEffect;DecExp;GetBagWeight;GetGroupMemberCount;GetGroupMemberName;GetGroupMemberRoleId;GetSkillDmgReduction;IsYanshenSpecial;PetFollowAttack;PoisonEffect;PullEnemy;Rename;SendDbMsg;SendDirectMessage;SendGroundMessage;SetPetAttr;SetSkillDmgReduction;SqlDbInsert;SqlDbSelect;SummonPet		0x102b02e4	2
+盘古魔法攻击触发	0	0	盘古1	panel	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsPgMagicTrigger	0x76dec0 0x76e1af	0x102b04e8	2
+眼神特殊函数	1	1	眼神2(第2页)	panel	toggle	IMPLEMENTED	56	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs;SystemModule/Grobal2.cs	AutoPickup;CustomDamageEffect;DecExp;GetBagWeight;GetGroupMemberCount;GetGroupMemberName;GetGroupMemberRoleId;GetSkillDmgReduction;IsYanshenSpecial;PetFollowAttack;PoisonEffect;PullEnemy;Rename;SendDbMsg;SendDirectMessage;SendGroundMessage;SetPetAttr;SetSkillDmgReduction;SqlDbInsert;SqlDbSelect;SummonPet		0x102b02e4	2
 破复活	0	0	盘古2	panel	toggle	LABEL_ONLY	4		IsBreakRevival		0x102b05b8	2
-神兽_序号	0	0	盘古1	panel	value	LABEL_ONLY	4		ShenShouIdx		0x102b0a18	3
+神兽_序号	0	0	盘古1	panel	value	LABEL_ONLY	6		ShenShouIdx		0x102b0a18	3
 神兽_数量	1	1	盘古1	panel	value	LABEL_ONLY	4		NativeSlaveCountImm8		0x102b0a24	2
 禁止交易地图	1	1	盘古1	catalog	toggle	IMPLEMENTED	8	GameSvr/Players/TPlayObject.Operate.cs	IsBanTradeMap;IsTradeBanned	0x6c3f00	0x102b03d0	2
 禁止发言不提示	1	1	配置2	catalog	toggle	LABEL_ONLY	7		IsBanChatSilent;ShouldBanChatSilent	0x6bb5cd 0x6bb625 0x6c94a9	0x102b0010	2
@@ -268,7 +268,7 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 穿人穿怪	0	0	盘古1	catalog	toggle	LABEL_ONLY	4		IsPassThrough	0x6b30a3 0x768454	0x102b03c4	2
 穿戴触发_plus	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsWearPlusTrigger		0x102b1678	2
 等级禁言	1	1	盘古2	panel	toggle	LABEL_ONLY	7		IsLevelMute;IsMailAntiSpamEnabled		0x102b1688	2
-红名K值	""	0	盘古3	panel	value	LABEL_ONLY	3		RedNameK		0x102b09c4	3
+红名K值	""	0	盘古3	panel	value	IMPLEMENTED	3	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	RedNameK		0x102b09c4	3
 红毒_A	1	1	配置2	catalog-param	value	LABEL_ONLY	4		IsRedPoisonA		0x102b09ec	3
 红毒_B	1	1	配置2	catalog-param	value	LABEL_ONLY	4		IsRedPoisonB		0x102b09f4	3
 绿毒_A	1	1	配置2	catalog-param	value	LABEL_ONLY	4		IsGreenPoisonA		0x102b09dc	3
@@ -283,12 +283,12 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 自定义元素	1	1	眼神2(第1页)	panel	toggle	SCRIPT_ONLY	37	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	EquipDura;GetPis;GiveDataItem;GiveItemWithDesc;GiveItemYS_JP;GiveNewItem;GivePis;IsElements;NpcGiveItemYs;UpdateBodyEquip		0x102b005c	2
 自定义召唤怪物a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	3		IsCustomCall;IsCustomCallEnabled		0x102b0108	2
 英雄修装备a	0	0	扩展/物品相关	fallback	toggle	LABEL_ONLY	3		IsHeroRepairEquip;RepairAllEquip		0x102b00d0	2
-英雄倍攻和暴击	0	0	配置1	catalog	toggle	LABEL_ONLY	6		IsHeroPowerCrit	0x76c816	0x102afdf8	2
+英雄倍攻和暴击	0	0	配置1	catalog	toggle	IMPLEMENTED	8	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsHeroPowerCrit	0x76c816	0x102afdf8	2
 英雄千分比免伤	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsHeroDmgReduction;IsHeroDmgReductionEnabled		0x102b02c4	2
 英雄攻速移速	0	0	配置1	catalog	toggle	LABEL_ONLY	5		IsHeroSpeed;IsHeroSpeedEnabled	0x73da43	0x102afdd0	2
 英雄施法速度	0	0	配置1	catalog	toggle	LABEL_ONLY	6		IsHeroCastSpeed	0x68dd60	0x102afe20	2
 英雄物理攻击触发	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	5		IsHeroPhysTrigger;IsHeroPhysTriggerEnabled		0x102b15d4	2
-英雄穿戴触发	0	0	配置1	catalog	toggle	LABEL_ONLY	5		IsHeroWearTrigger;IsHeroWearTriggerEnabled	0x75ea31 0x75f08c	0x102afdc0	2
+英雄穿戴触发	0	0	配置1	catalog	toggle	IMPLEMENTED	7	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsHeroWearTrigger;IsHeroWearTriggerEnabled	0x75ea31 0x75f08c	0x102afdc0	2
 英雄自动开盾	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	6		IsHeroAutoShield		0x102b0068	2
 英雄读取极品	0	0	眼神2(第1页)	panel	toggle	SCRIPT_ONLY	6	GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsHeroReadExtreme;IsHeroReadExtremeEnabled		0x102b1568	2
 英雄野蛮	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	5		IsHeroBarbarian;IsHeroBarbarianEnabled		0x102b032c	2
@@ -296,23 +296,23 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 获取沙城归属	0	0	眼神2(第1页)	panel	toggle	SCRIPT_ONLY	7	GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsGetCastle;IsGetCastleEnabled		0x102b1668	2
 获取玩家对象函数	1	1	扩展/脚本相关	fallback	toggle	MISSING	0			0x646f40 0x647d24 0x736b28 0x736ef8	0x102b063c	2
 行会显示	1	1	盘古1	catalog	toggle	IMPLEMENTED	10	GameSvr/Players/TPlayObject.Base.cs;GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	GetCreatureAttr;IsGuildShow	0x6c5bcb 0x6c5bf7	0x102b03f0	2
-衣服属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Acc		0x102b0dc4	3
-衣服属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Atk		0x102b0ca4	3
-衣服属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Spd		0x102b0d7c	3
-衣服属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Tao		0x102b0d34	3
-衣服属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorAttrChance_Mgc		0x102b0cec	3
-衣服最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorRandExtreme		0x102b0ddc	3
-衣服最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Acc		0x102b0d94	3
-衣服最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Atk		0x102b0c74	3
-衣服最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Spd		0x102b0d4c	3
-衣服最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Tao		0x102b0d04	3
-衣服最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorMaxPts_Mgc		0x102b0cbc	3
-衣服点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Acc		0x102b0dac	3
-衣服点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Atk		0x102b0c8c	3
-衣服点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Spd		0x102b0d64	3
-衣服点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Tao		0x102b0d1c	3
-衣服点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		ArmorPtsChance_Mgc		0x102b0cd4	3
-被击杀触发	0	0	配置1	catalog	toggle	LABEL_ONLY	4		IsBeKilledTrigger	0x766624	0x102afd00	2
+衣服属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorAttrChance_Acc	0x783ff2	0x102b0dc4	3
+衣服属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorAttrChance_Atk	0x783f66	0x102b0ca4	3
+衣服属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorAttrChance_Spd	0x783fcf	0x102b0d7c	3
+衣服属性几率_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorAttrChance_Tao	0x783fac	0x102b0d34	3
+衣服属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorAttrChance_Mgc	0x783f89	0x102b0cec	3
+衣服最随机性_极品_值	"80"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorRandExtreme	0x7639f3	0x102b0ddc	3
+衣服最高点数_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorMaxPts_Acc	0x783fe6	0x102b0d94	3
+衣服最高点数_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorMaxPts_Atk	0x783f5a	0x102b0c74	3
+衣服最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorMaxPts_Spd	0x783fc3	0x102b0d4c	3
+衣服最高点数_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorMaxPts_Tao	0x783fa0	0x102b0d04	3
+衣服最高点数_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorMaxPts_Mgc	0x783f7d	0x102b0cbc	3
+衣服点数几率_准确_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorPtsChance_Acc	0x783fe1	0x102b0dac	3
+衣服点数几率_攻击_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorPtsChance_Atk	0x783f55	0x102b0c8c	3
+衣服点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorPtsChance_Spd	0x783fbe	0x102b0d64	3
+衣服点数几率_道术_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorPtsChance_Tao	0x783f9b	0x102b0d1c	3
+衣服点数几率_魔法_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	ArmorPtsChance_Mgc	0x783f78	0x102b0cd4	3
+被击杀触发	0	0	配置1	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsBeKilledTrigger	0x766624	0x102afd00	2
 装备吸血	1	1	盘古3	panel	toggle	LABEL_ONLY	7		IsEquipSteal	0x76e2a3	0x102b0630	2
 装备多职业	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	7		IsMultiJob;IsMultiJobEquip		0x102b1530	2
 装备投保	0	0	扩展/物品相关	fallback	toggle	LABEL_ONLY	6		GiveItemBind;InsuranceItem;IsEquipInsurance		0x102b0160	2
@@ -336,46 +336,46 @@ super攻击触发	0	0	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	12	GameSvr/Plugi
 道士合击系数_数值4	""	0	眼神2(第2页)	suffix	value	LABEL_ONLY	1		TaoComboV4		0x102b1430	3
 道士合击系数_数值5	""	0	眼神2(第2页)	suffix	value	LABEL_ONLY	1		TaoComboV5		0x102b1444	3
 邮件防刷	1	1	盘古1	catalog	toggle	LABEL_ONLY	7		IsMailAntiSpam;IsMailAntiSpamEnabled	0x6e7810	0x102b03b0	2
-野蛮等级	0	0	配置2	catalog	toggle	LABEL_ONLY	5		IsBarbarianLevelEnabled	0x768f67	0x102affd8	2
+野蛮等级	0	0	配置2	catalog	toggle	IMPLEMENTED	6	GameSvr/Plugins/YanshenSkillPatches.cs	IsBarbarianLevelEnabled	0x768f67	0x102affd8	2
 野蛮麻痹	1	1	盘古2	panel	toggle	SCRIPT_ONLY	11	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsBarbarianParalysisEnabled;PullEnemy2;PushEnemy;RootTarget	0x6bc9e2	0x102b05c0	2
-防0拆分	1	1	盘古1	panel	toggle	LABEL_ONLY	4		IsZeroDefSplit	0x6e0ff3	0x102b03bc	2
+防0拆分	1	1	盘古1	panel	toggle	IMPLEMENTED	4	GameSvr/Players/TPlayObject.PileItems.cs	IsZeroDefSplit	0x6e0ff3	0x102b03bc	2
 限制摆摊	0	0	盘古1	panel	toggle	LABEL_ONLY	9		IsLimitStall;IsStallAllowed		0x102b049c	3
 限制摆摊_右x	340	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_RightX		0x102b0778	3
 限制摆摊_右y	340	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_RightY		0x102b0788	3
 限制摆摊_左x	280	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_LeftX		0x102b0758	3
 限制摆摊_左y	328	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_LeftY		0x102b0768	3
 限制摆摊_等级	20	1	盘古1	panel	value	LABEL_ONLY	3		LimitStall_Level		0x102b0798	3
-随机极品	1	1	盘古4	panel	toggle	LABEL_ONLY	10		IsRandomExtreme		0x102b073c	8
+随机极品	1	1	盘古4	panel	toggle	IMPLEMENTED	10	GameSvr/Items/NativeItemPlus28.cs	IsRandomExtreme		0x102b073c	8
 随身仓库	1	1	盘古1	catalog	toggle	LABEL_ONLY	8		IsPortableStorage;IsPortableStorageEnabled	0x6c2ab9 0x6c2dc9 0x6e087c	0x102b0360	2
-雷电主属性切换	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsLightningSwitch	0x76ea8a	0x102aff60	2
+雷电主属性切换	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLightningSwitch	0x76ea8a	0x102aff60	2
 雷电带毒	0	0	盘古2	panel	toggle	LABEL_ONLY	4		IsLightningPoison	0x76eb1d	0x102b0584	2
 雷电术切割	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	4		IsLightningCutting		0x102b01e0	2
 雷电术自定义伤害	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsLightningCustom		0x102b01c0	2
 雷电术自定义伤害_系数A	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsLightningCustomA		0x102afe70	2
 雷电术自定义伤害_系数B	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsLightningCustomB		0x102afe88	2
-雷电自定义范围	0	0	配置2	catalog	toggle	LABEL_ONLY	4		IsLightningRange	0x76eb06	0x102aff70	2
-非红名K值	""	0	盘古3	panel	value	LABEL_ONLY	3		NormalK		0x102b09b8	3
-项链属性几率_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Acc		0x102b10c4	3
-项链属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Atk		0x102b0fa4	3
-项链属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Spd		0x102b107c	3
-项链属性几率_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Tao		0x102b1034	3
-项链属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceAttrChance_Mgc		0x102b0fec	3
-项链最随机性_极品_值	"80"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceRandExtreme		0x102b10dc	3
-项链最高点数_准确_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Acc		0x102b1094	3
-项链最高点数_攻击_值	"3"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Atk		0x102b0f74	3
-项链最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Spd		0x102b104c	3
-项链最高点数_道术_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Tao		0x102b1004	3
-项链最高点数_魔法_值	"2"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklaceMaxPts_Mgc		0x102b0fbc	3
-项链点数几率_准确_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Acc		0x102b10ac	3
-项链点数几率_攻击_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Atk		0x102b0f8c	3
-项链点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Spd		0x102b1064	3
-项链点数几率_道术_值	"5"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Tao		0x102b101c	3
-项链点数几率_魔法_值	"10"	1	盘古4	equip-loop	value	LABEL_ONLY	1		NecklacePtsChance_Mgc		0x102b0fd4	3
+雷电自定义范围	0	0	配置2	catalog	toggle	IMPLEMENTED	5	GameSvr/Plugins/YanshenSkillPatches.cs	IsLightningRange	0x76eb06	0x102aff70	2
+非红名K值	""	0	盘古3	panel	value	IMPLEMENTED	3	GameSvr/Actors/TBaseObject.Base.cs;GameSvr/Players/TPlayObject.Message.cs	NormalK		0x102b09b8	3
+项链属性几率_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Acc	0x76186e	0x102b10c4	3
+项链属性几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Atk	0x7617e2	0x102b0fa4	3
+项链属性几率_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Spd	0x76184b	0x102b107c	3
+项链属性几率_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Tao	0x761828	0x102b1034	3
+项链属性几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceAttrChance_Mgc	0x761805	0x102b0fec	3
+项链最随机性_极品_值	"80"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceRandExtreme	0x7617a3	0x102b10dc	3
+项链最高点数_准确_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceMaxPts_Acc	0x761862	0x102b1094	3
+项链最高点数_攻击_值	"3"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceMaxPts_Atk	0x7617d6	0x102b0f74	3
+项链最高点数_攻速_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceMaxPts_Spd	0x76183f	0x102b104c	3
+项链最高点数_道术_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceMaxPts_Tao	0x76181c	0x102b1004	3
+项链最高点数_魔法_值	"2"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklaceMaxPts_Mgc	0x7617f9	0x102b0fbc	3
+项链点数几率_准确_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklacePtsChance_Acc	0x76185d	0x102b10ac	3
+项链点数几率_攻击_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklacePtsChance_Atk	0x7617d1	0x102b0f8c	3
+项链点数几率_攻速_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklacePtsChance_Spd	0x76183a	0x102b1064	3
+项链点数几率_道术_值	"5"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklacePtsChance_Tao	0x761817	0x102b101c	3
+项链点数几率_魔法_值	"10"	1	盘古4	equip-loop	value	IMPLEMENTED	1	GameSvr/Items/NativeItemPlus28.cs	NecklacePtsChance_Mgc	0x7617f4	0x102b0fd4	3
 高级回收	1	1	眼神2(第2页)	panel	toggle	SCRIPT_ONLY	13	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	AutoRecycle;IsAutoRecycle		0x102b164c	2
 高级物理攻击触发	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	4		IsAdvancedPhysTrigger		0x102b15c0	2
 高级英雄倍功暴击	0	0	眼神2(第1页)	panel	toggle	LABEL_ONLY	5		IsHeroAdvancedPowerCrit;IsHeroAdvancedPowerCritEnabled		0x102b1588	2
 高级魔法攻击触发	0	0	眼神2(第2页)	panel	toggle	LABEL_ONLY	4		IsAdvancedMagicTrigger		0x102b15e8	2
-魔法攻击触发	0	0	配置1	catalog	toggle	LABEL_ONLY	5		IsMagicAttackTrigger	0x76de84	0x102afd3c	2
+魔法攻击触发	0	0	配置1	catalog	toggle	IMPLEMENTED	7	GameSvr/Plugins/YanshenTriggerDispatch.cs	IsMagicAttackTrigger	0x76de84	0x102afd3c	2
 魔法盾修正	1	1	配置2	catalog	toggle	LABEL_ONLY	4		IsMagicShieldFix		0x102affb0	2
 麻痹中不被麻痹a	0	0	扩展/技能相关	fallback	toggle	LABEL_ONLY	2		IsParaImmune		0x102b00c0	2
 麻痹概率	0	0	配置1	catalog	toggle	SCRIPT_ONLY	10	GameSvr/Plugins/YanshenCommands.cs;GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs	IsParalysisEnabled;Paralysis	0x76e2d2	0x102afdb4	2

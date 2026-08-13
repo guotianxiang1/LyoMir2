@@ -212,17 +212,16 @@ static void TestDormantBoundary()
     Reject(dispatch, "NativeYbDealPurchaseStateMachine",
         "PAS invokes dormant YBDeal state machine");
 
-    var workspace = Directory.GetParent(root)?.FullName
-        ?? throw new DirectoryNotFoundException("workspace root not found");
-    var abiEvidence = File.ReadAllText(Path.Combine(workspace, "staging",
+    var staging = FindStagingRoot(root);
+    var abiEvidence = File.ReadAllText(Path.Combine(staging,
         "ida_ybdeal_632a14_deep.txt"));
-    var classicEvidence = File.ReadAllText(Path.Combine(workspace, "staging",
+    var classicEvidence = File.ReadAllText(Path.Combine(staging,
         "ida_ybdeal_core.txt"));
-    var transactionEvidence = File.ReadAllText(Path.Combine(workspace,
-        "staging", "ida_ybdeal_transaction_deep.txt"));
-    var queueEvidence = File.ReadAllText(Path.Combine(workspace, "staging",
+    var transactionEvidence = File.ReadAllText(Path.Combine(staging,
+        "ida_ybdeal_transaction_deep.txt"));
+    var queueEvidence = File.ReadAllText(Path.Combine(staging,
         "ida_client_ybbuylf_closure_20260718.txt"));
-    var externalEvidence = File.ReadAllText(Path.Combine(workspace, "staging",
+    var externalEvidence = File.ReadAllText(Path.Combine(staging,
         "ida_ybdb_6108_dispatch_matrix_20260720.txt"));
     Require(abiEvidence,
         "procedure YBDealDialogShowMode(APlayer: TPlayer; BoFirst: Boolean);",
@@ -268,6 +267,26 @@ static string FindRepositoryRoot()
         }
     }
     throw new DirectoryNotFoundException("repository root not found");
+}
+
+// staging/ is a sibling of the repository, but the repository is routinely checked out
+// through `git worktree` several levels deeper, so the parent of the repo root is not a
+// fixed anchor: repoRoot/../staging threw DirectoryNotFoundException from a worktree
+// before a single disassembly marker was compared. Walk up instead.
+static string FindStagingRoot(string repoRoot)
+{
+    var probed = new List<string>();
+    for (var directory = new DirectoryInfo(repoRoot);
+         directory != null; directory = directory.Parent)
+    {
+        var candidate = Path.Combine(directory.FullName, "staging");
+        if (File.Exists(Path.Combine(candidate, "ida_ybdeal_632a14_deep.txt")))
+            return candidate;
+        probed.Add(candidate);
+    }
+    throw new DirectoryNotFoundException(
+        "staging/ida_ybdeal_632a14_deep.txt not found; probed: "
+        + string.Join("; ", probed));
 }
 
 static void Sequence(IEnumerable<string> expected, IEnumerable<string> actual,

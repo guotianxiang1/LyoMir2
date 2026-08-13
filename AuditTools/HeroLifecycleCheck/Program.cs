@@ -492,6 +492,21 @@ static string FindGameSvrBuildUnder(string repositoryRoot)
 {
     if (repositoryRoot == null)
         return null;
+    // GameSvr.csproj's Debug OutputPath is ..\..\Build\Mir200 relative to GameSvr\,
+    // i.e. a Build\ tree one level ABOVE the checkout. GameSvr\bin therefore never
+    // exists in a normal build and probing only there always reported INCOMPLETE.
+    var parent = Directory.GetParent(repositoryRoot)?.FullName;
+    foreach (var configured in new[]
+             {
+                 parent == null ? null : Path.Combine(parent, "Build", "Mir200"),
+                 Path.Combine(repositoryRoot, "Build", "Mir200")
+             })
+    {
+        if (configured != null
+            && File.Exists(Path.Combine(configured, "GameSvr.dll"))
+            && File.Exists(Path.Combine(configured, "SystemModule.dll")))
+            return configured;
+    }
     var binRoot = Path.Combine(repositoryRoot, "GameSvr", "bin");
     if (!Directory.Exists(binRoot))
         return null;

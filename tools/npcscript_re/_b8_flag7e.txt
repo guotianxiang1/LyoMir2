@@ -1,0 +1,111 @@
+### map-flag parser arms that set [map+0x7E]
+00775660  61                     popal 
+00775661  05000085ff             add eax, 0xff850000
+00775666  0f8559050000           jne 0x775bc5
+0077566C  66c783ba0000000000     mov word ptr [ebx + 0xba], 0
+00775675  e94b050000             jmp 0x775bc5
+0077567A  b90a000000             mov ecx, 0xa
+0077567F  ba785e7700             mov edx, 0x775e78
+00775684  8bc6                   mov eax, esi
+00775686  e80918d5ff             call 0x4c6e94
+0077568B  84c0                   test al, al
+0077568D  741f                   je 0x7756ae
+0077568F  83ff01                 cmp edi, 1
+00775692  7509                   jne 0x77569d
+00775694  c6437e01               mov byte ptr [ebx + 0x7e], 1
+00775698  e928050000             jmp 0x775bc5
+0077569D  85ff                   test edi, edi
+0077569F  0f8520050000           jne 0x775bc5
+007756A5  c6437e00               mov byte ptr [ebx + 0x7e], 0
+007756A9  e917050000             jmp 0x775bc5
+007756AE  b9                     (db)
+007756AF  0d                     (db)
+
+007766D8  f4                     hlt 
+007766D9  e83a63c9ff             call 0x40ca18
+007766DE  668983ba000000         mov word ptr [ebx + 0xba], ax
+007766E5  e9e9030000             jmp 0x776ad3
+007766EA  b90a000000             mov ecx, 0xa
+007766EF  bab86d7700             mov edx, 0x776db8
+007766F4  8b45f8                 mov eax, dword ptr [ebp - 8]
+007766F7  e89807d5ff             call 0x4c6e94
+007766FC  84c0                   test al, al
+007766FE  7409                   je 0x776709
+00776700  c6437e01               mov byte ptr [ebx + 0x7e], 1
+00776704  e9ca030000             jmp 0x776ad3
+00776709  b90d000000             mov ecx, 0xd
+0077670E  ba                     (db)
+0077670F  cc                     int3 
+00776710  6d                     insd dword ptr es:[edi], dx
+00776711  77                     (db)
+
+### the @OnReLive caller function around 0x74393B
+007438C0  ec                     in al, dx
+007438C1  e8d68fccff             call 0x40c89c
+007438C6  ff75ec                 push dword ptr [ebp - 0x14]
+007438C9  68a03a7400             push 0x743aa0
+007438CE  e8d1b7ccff             call 0x40f0a4
+007438D3  83c4f8                 add esp, -8
+007438D6  dd1c24                 fstp qword ptr [esp]
+007438D9  9b                     wait 
+007438DA  8d55e8                 lea edx, [ebp - 0x18]
+007438DD  b8ac3a7400             mov eax, 0x743aac
+007438E2  e855d2ccff             call 0x410b3c
+007438E7  ff75e8                 push dword ptr [ebp - 0x18]
+007438EA  8d45f0                 lea eax, [ebp - 0x10]
+007438ED  ba04000000             mov edx, 4
+007438F2  e8991fccff             call 0x405890
+007438F7  8b45f0                 mov eax, dword ptr [ebp - 0x10]
+007438FA  50                     push eax
+007438FB  b9c83a7400             mov ecx, 0x743ac8
+00743900  66ba1300               mov dx, 0x13
+00743904  8bc6                   mov eax, esi
+00743906  e8d5520200             call 0x768be0
+0074390B  84db                   test bl, bl
+0074390D  7412                   je 0x743921
+0074390F  6a01                   push 1
+00743911  66b90200               mov cx, 2
+00743915  b237                   mov dl, 0x37
+00743917  8bc6                   mov eax, esi
+00743919  8b38                   mov edi, dword ptr [eax]
+0074391B  ff97a8010000           call dword ptr [edi + 0x1a8]
+00743921  84db                   test bl, bl
+00743923  7523                   jne 0x743948
+00743925  8b8628010000           mov eax, dword ptr [esi + 0x128]
+0074392B  80787e00               cmp byte ptr [eax + 0x7e], 0
+0074392F  7417                   je 0x743948
+00743931  8bd6                   mov edx, esi
+00743933  8b8628010000           mov eax, dword ptr [esi + 0x128]
+00743939  8b08                   mov ecx, dword ptr [eax]
+0074393B  ff5110                 call dword ptr [ecx + 0x10]
+0074393E  83beac02000000         cmp dword ptr [esi + 0x2ac], 0
+00743945  0f9fc3                 setg bl
+00743948  84db                   test bl, bl
+0074394A  7470                   je 0x7439bc
+0074394C  8b8628010000           mov eax, dword ptr [esi + 0x128]
+00743952  80787d00               cmp byte ptr [eax + 0x7d], 0
+00743956  7464                   je 0x7439bc
+00743958  80be7801000000         cmp byte ptr [esi + 0x178], 0
+0074395F  755b                   jne 0x7439bc
+00743961  b805000000             mov eax, 5
+00743966  e8e101ccff             call 0x403b4c
+0074396B  8b9648010000           mov edx, dword ptr [esi + 0x148]
+00743971  83ea02                 sub edx, 2
+00743974  03c2                   add eax, edx
+00743976  8d55e4                 lea edx, [ebp - 0x1c]
+00743979  e81e8fccff             call 0x40c89c
+0074397E  8b45e4                 mov eax, dword ptr [ebp - 0x1c]
+00743981  50                     push eax
+00743982  b805000000             mov eax, 5
+00743987  e8c001ccff             call 0x403b4c
+0074398C  8b                     (db)
+0074398D  96                     xchg esi, eax
+0074398E  44                     inc esp
+0074398F  01                     (db)
+
+### who creates TEnvironment (0x77477C) / TDynEnvir (0x5FB264) / TArenaRoom (0x612C70)
+  TEnvironment             VMT=0x77477C  dword xrefs: 0x774730
+  TDynEnvir                VMT=0x5FB264  dword xrefs: 0x5FB218
+  TArenaRoom               VMT=0x612C70  dword xrefs: 0x612C24
+  TDynSuperForceMapEnvir   VMT=0x5F7B58  dword xrefs: 0x5F7B0C
+  TFoxBossDungeonDynEnvir  VMT=0x5F9934  dword xrefs: 0x5F98E8

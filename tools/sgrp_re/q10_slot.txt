@@ -1,0 +1,141 @@
+E8 callers of 0x7284E8 (clear slot): 3 -> 0x726F4D, 0x72717E, 0x72841B
+E8 callers of 0x7280C0 (3rd slot-setter host): 1 -> 0x6F517A
+E8 callers of 0x72792C (roster name probe): 3 -> 0x6B7B9E, 0x6CE344, 0x72832D
+E8 callers of 0x726C14 (IsGroupOwner-ish): 6 -> 0x6A928D, 0x6B316D, 0x6B7BBF, 0x6C3165, 0x726655, 0x72721E
+
+=== 0x7284E8 clear slot ===
+0x7284E8  55                     push ebp
+0x7284E9  8BEC                   mov ebp, esp
+0x7284EB  53                     push ebx
+0x7284EC  8BD8                   mov ebx, eax
+0x7284EE  C74308FFFFFFFF         mov dword ptr [ebx + 8], 0xffffffff
+0x7284F5  C7430CFFFFFFFF         mov dword ptr [ebx + 0xc], 0xffffffff
+0x7284FC  33C0                   xor eax, eax
+0x7284FE  894310                 mov dword ptr [ebx + 0x10], eax
+0x728501  8D4314                 lea eax, [ebx + 0x14]
+0x728504  33C9                   xor ecx, ecx
+0x728506  BA34000000             mov edx, 0x34
+0x72850B  E81CB6CDFF             call 0x403b2c
+0x728510  C6432700               mov byte ptr [ebx + 0x27], 0
+0x728514  5B                     pop ebx
+0x728515  5D                     pop ebp
+0x728516  C3                     ret 
+0x728517  90                     nop 
+0x728518  55                     push ebp
+0x728519  8BEC                   mov ebp, esp
+0x72851B  81C400FFFFFF           add esp, 0xffffff00
+0x728521  53                     push ebx
+0x728522  56                     push esi
+0x728523  57                     push edi
+0x728524  8BF2                   mov esi, edx
+0x728526  8BD8                   mov ebx, eax
+
+=== 0x7280C0 3rd slot-setter host ===
+0x7280C0  55                     push ebp
+0x7280C1  8BEC                   mov ebp, esp
+0x7280C3  53                     push ebx
+0x7280C4  56                     push esi
+0x7280C5  57                     push edi
+0x7280C6  8BCA                   mov ecx, edx
+0x7280C8  8BF0                   mov esi, eax
+0x7280CA  85C9                   test ecx, ecx
+0x7280CC  7450                   je 0x72811e
+0x7280CE  33DB                   xor ebx, ebx
+0x7280D0  8B7C9E48               mov edi, dword ptr [esi + ebx*4 + 0x48]
+0x7280D4  8B4708                 mov eax, dword ptr [edi + 8]
+0x7280D7  8B570C                 mov edx, dword ptr [edi + 0xc]
+0x7280DA  52                     push edx
+0x7280DB  50                     push eax
+0x7280DC  8B8188050000           mov eax, dword ptr [ecx + 0x588]
+0x7280E2  8B918C050000           mov edx, dword ptr [ecx + 0x58c]
+0x7280E8  3B542404               cmp edx, dword ptr [esp + 4]
+0x7280EC  7503                   jne 0x7280f1
+0x7280EE  3B0424                 cmp eax, dword ptr [esp]
+0x7280F1  5A                     pop edx
+0x7280F2  58                     pop eax
+0x7280F3  7523                   jne 0x728118
+0x7280F5  8BD1                   mov edx, ecx
+0x7280F7  8BC7                   mov eax, edi
+0x7280F9  E81A040000             call 0x728518
+0x7280FE  8BC6                   mov eax, esi
+0x728100  E8F3EFFFFF             call 0x7270f8
+0x728105  84C0                   test al, al
+0x728107  7415                   je 0x72811e
+0x728109  6A00                   push 0
+0x72810B  6A00                   push 0
+0x72810D  B201                   mov dl, 1
+0x72810F  8BC6                   mov eax, esi
+0x728111  E8BAF0FFFF             call 0x7271d0
+0x728116  EB06                   jmp 0x72811e
+0x728118  43                     inc ebx
+0x728119  83FB0B                 cmp ebx, 0xb
+0x72811C  75B2                   jne 0x7280d0
+0x72811E  5F                     pop edi
+0x72811F  5E                     pop esi
+0x728120  5B                     pop ebx
+0x728121  5D                     pop ebp
+0x728122  C3                     ret 
+0x728123  90                     nop 
+0x728124  55                     push ebp
+0x728125  8BEC                   mov ebp, esp
+0x728127  83C4F8                 add esp, -8
+0x72812A  53                     push ebx
+0x72812B  56                     push esi
+0x72812C  57                     push edi
+0x72812D  8BF9                   mov edi, ecx
+0x72812F  8BF2                   mov esi, edx
+0x728131  8B5D08                 mov ebx, dword ptr [ebp + 8]
+0x728134  85DB                   test ebx, ebx
+0x728136  7E3A                   jle 0x728172
+0x728138  8D460A                 lea eax, [esi + 0xa]
+0x72813B  3BF8                   cmp edi, eax
+0x72813D  7D04                   jge 0x728143
+0x72813F  8BC3                   mov eax, ebx
+
+=== 0x72792C roster name probe ===
+0x72792C  55                     push ebp
+0x72792D  8BEC                   mov ebp, esp
+0x72792F  83C4BC                 add esp, -0x44
+0x727932  53                     push ebx
+0x727933  56                     push esi
+0x727934  57                     push edi
+0x727935  33C9                   xor ecx, ecx
+0x727937  894DF8                 mov dword ptr [ebp - 8], ecx
+0x72793A  894DBC                 mov dword ptr [ebp - 0x44], ecx
+0x72793D  894DF4                 mov dword ptr [ebp - 0xc], ecx
+0x727940  8BFA                   mov edi, edx
+0x727942  8BF0                   mov esi, eax
+0x727944  33C0                   xor eax, eax
+0x727946  55                     push ebp
+0x727947  68C2797200             push 0x7279c2
+0x72794C  64FF30                 push dword ptr fs:[eax]
+0x72794F  648920                 mov dword ptr fs:[eax], esp
+0x727952  C645FF00               mov byte ptr [ebp - 1], 0
+0x727956  33DB                   xor ebx, ebx
+0x727958  8D55C0                 lea edx, [ebp - 0x40]
+0x72795B  8B449E48               mov eax, dword ptr [esi + ebx*4 + 0x48]
+0x72795F  E8D80A0000             call 0x72843c
+0x727964  8D55C0                 lea edx, [ebp - 0x40]
+0x727967  8D45F4                 lea eax, [ebp - 0xc]
+0x72796A  E805DECDFF             call 0x405774
+0x72796F  8B45F4                 mov eax, dword ptr [ebp - 0xc]
+0x727972  8D55F8                 lea edx, [ebp - 8]
+0x727975  E84243CEFF             call 0x40bcbc
+0x72797A  8B45F8                 mov eax, dword ptr [ebp - 8]
+0x72797D  50                     push eax
+0x72797E  8D55BC                 lea edx, [ebp - 0x44]
+0x727981  8BC7                   mov eax, edi
+0x727983  E83443CEFF             call 0x40bcbc
+0x727988  8B55BC                 mov edx, dword ptr [ebp - 0x44]
+0x72798B  58                     pop eax
+0x72798C  E88BDFCDFF             call 0x40591c
+0x727991  7506                   jne 0x727999
+0x727993  C645FF01               mov byte ptr [ebp - 1], 1
+0x727997  EB06                   jmp 0x72799f
+0x727999  43                     inc ebx
+0x72799A  83FB0B                 cmp ebx, 0xb
+0x72799D  75B9                   jne 0x727958
+0x72799F  33C0                   xor eax, eax
+0x7279A1  5A                     pop edx
+0x7279A2  59                     pop ecx
+

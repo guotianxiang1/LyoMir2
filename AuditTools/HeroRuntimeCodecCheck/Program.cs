@@ -65,6 +65,11 @@ BinaryPrimitives.WriteInt32LittleEndian(
     raw.AsSpan(NativeHeroDbFrameCodec.ForceExpOffset, 4), unchecked((int)0x89ABCDEF));
 BinaryPrimitives.WriteInt32LittleEndian(
     raw.AsSpan(NativeHeroDbFrameCodec.ForceLvOffset, 4), 0x10203040);
+// 英雄模式是持久化字段：编码 sub_689034 @0x68910A/0x689110，解码 sub_6888FC
+// @0x688A9C/0x688AA5，两处 ebx 都是记录基址+8，故记录偏移 0x9C + 8 = 0xA4。
+Equal(0x9C, NativeHeroDbFrameCodec.HeroModeOffset - 8,
+    "hero mode record+8 relative offset");
+raw[NativeHeroDbFrameCodec.HeroModeOffset] = 2; // 休息
 raw[0x150] = 0xCE;
 BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.LevelOffset, 2), 77);
 BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(NativeHeroDbFrameCodec.GoldOffset, 4), 123456);
@@ -135,6 +140,8 @@ Equal((byte)2, hero.m_btJob, "native job mapping");
 Equal(raw[NativeHeroDbFrameCodec.RaceOffset], hero.m_btRaceImg, "native race appearance");
 Equal((byte)2, hero.HeroType, "hero type");
 Equal((byte)7, hero.HeroRank, "hero rank");
+// sub_6888FC @0x688A9C/0x688AA5 —— 模式来自存档，不是构造函数默认的 1=跟随。
+Equal((byte)2, (byte)hero.m_btNativeHeroMode, "hero mode restored from record+0xA4");
 Equal(unchecked((int)0x89ABCDEF), hero.m_nForceExp, "hero force experience");
 Equal(0x10203040, hero.m_nForceLv, "hero force level");
 Equal(900000, hero.m_nMaxForceExp, "hero force maximum after load");
@@ -188,6 +195,7 @@ hero.m_ItemList[0].jp4 = 44;
 hero.m_ItemList[0].desc2 = "hero-bag";
 hero.m_ItemList[0].killerName = "hero-killer";
 hero.m_ItemList[0].mapName = "hero-map";
+hero.m_btNativeHeroMode = (HeroObject.NativeHeroMode)0; // 攻击
 hero.m_MagicList.Single(x => x.wMagIdx == 10).nTranPoint = 4444;
 hero.m_MagicList.Single(x => x.wMagIdx == 69).nTranPoint = 9999;
 
@@ -197,6 +205,8 @@ var saved = snapshot.ToArray();
 Equal((byte)2, saved[NativeHeroDbFrameCodec.JobOffset], "snapshot native job");
 Equal(hero.m_btRaceImg, saved[NativeHeroDbFrameCodec.RaceOffset], "snapshot native race");
 Equal((byte)0xCE, saved[0x150], "fixed unknown byte");
+// sub_689034 @0x68910A/0x689110 —— 运行期模式必须回写记录 +0xA4。
+Equal((byte)0, saved[NativeHeroDbFrameCodec.HeroModeOffset], "snapshot hero mode");
 Equal(unchecked((int)0xFEDCBA98), snapshot.ForceExp,
     "snapshot hero force experience");
 Equal(0x50607080, snapshot.ForceLv, "snapshot hero force level");
@@ -435,4 +445,11 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+
+    // HeroObject.TrySetNativeLevel reaches TBaseObject.SendMsg, which locks
+    // M2Share.ProcessMsgCriticalSection (TBaseObject.cs:3532). Only GameApp assigns it in
+    // a real boot, so without it Monitor.Enter(null) threw and the level/exp assertions
+    // never ran. Nothing is queued out of the process.
+    M2Share.ProcessMsgCriticalSection ??= new object();
+    M2Share.LogMsgCriticalSection ??= new object();
 }

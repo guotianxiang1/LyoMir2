@@ -3841,8 +3841,17 @@ namespace GameSvr
             // is still cleared here, matching the save path in
             // TPlayObject.GetHumData - the two ends have to agree or a login
             // would resurrect what the logout dropped.
-            PlayObject.m_wStatusTimeArr.CopyFrom(HumData.wStatusTimeArr);
-            PlayObject.m_wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
+            // Zeroed before the replay, not after, so the restore stays silent:
+            // dropping the slot afterwards would go through the indexer and
+            // broadcast a removal for a player who is not on a map yet.
+            var restoredStatus = HumData.wStatusTimeArr == null
+                ? new ushort[TBaseObject.LegacyStatusSlotCount]
+                : (ushort[])HumData.wStatusTimeArr.Clone();
+            if (restoredStatus.Length > Grobal2.STATE_BUBBLEDEFENCEUP)
+            {
+                restoredStatus[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
+            }
+            PlayObject.m_wStatusTimeArr.CopyFrom(restoredStatus);
             PlayObject.m_sHomeMap = HumData.sHomeMap;
             PlayObject.m_nHomeX = HumData.wHomeX;
             PlayObject.m_nHomeY = HumData.wHomeY;

@@ -82,8 +82,6 @@ namespace GameSvr
         public byte m_btWineCount;
         // +0x08 clock-of-day seconds (hour*3600+min*60+sec), occupancy 0x65C6AF
         public int m_nClockOfDaySec;
-        public int m_nWarRangeX;
-        public int m_nWarRangeY;
         
         
         
@@ -144,8 +142,6 @@ namespace GameSvr
             m_AttackWarList = new List<TAttackerInfo>();
             m_AttackGuildList = new List<Association>();
             m_dwSaveTick = 0;
-            m_nWarRangeX = M2Share.g_Config.nCastleWarRangeX;
-            m_nWarRangeY = M2Share.g_Config.nCastleWarRangeY;
             m_EnvirList = new List<string>();
             // 0x6592C1 push 0x268 / 0x6592DD push 0x10C
             m_nPalaceDoorX = 0x268;
@@ -571,19 +567,28 @@ namespace GameSvr
             return configSaved && attackListSaved;
         }
 
+        // sub_659FD4, called with eax=castle, edx=envir, ecx=X, [esp+4]=Y:
+        //   00659FE0  3B 50 20        cmp edx,[eax+0x20]  ; PalaceMap  (0x65AB0E)
+        //   00659FE3  74 2A           je  .true
+        //   00659FE5  3B 50 24        cmp edx,[eax+0x24]  ; SecretMap  (0x65AB47)
+        //   00659FE8  74 25           je  .true
+        //   00659FEA  3B 50 1C        cmp edx,[eax+0x1c]  ; CastleMap  (0x65ABB2)
+        //   00659FED  75 22           jne .false
+        //   00659FEF  81 FF 05 02..   cmp edi,0x205 / 7E jle .false
+        //   00659FF7  81 FF EA 02..   cmp edi,0x2EA / 7D jge .false
+        //   00659FFF  81 FE BC 00..   cmp esi,0x0BC / 7E jle .false
+        //   0065A007  81 FE 90 01..   cmp esi,0x190 / 7D jge .false
+        // The rectangle is hard-coded and absolute, not a radius around Home:
+        // no CastleWarRange config key exists in the image (0 hits ASCII-ci and
+        // UTF-16LE), and neither does any castle envir list -- '0151'..'0156'
+        // are 0-hit too, so the old extra-map loop had no native counterpart.
+        // Native has no nil test on envir; with a nil envir on a server that does
+        // not host the castle every map field is nil too, so it answers true there.
         public bool InCastleWarArea(Envirnoment envir, int nX, int nY)
         {
-            if (envir == null)
-            {
-                return false;
-            }
-            if (envir == m_MapCastle && Math.Abs(m_nHomeX - nX) < m_nWarRangeX &&
-                Math.Abs(m_nHomeY - nY) < m_nWarRangeY) return true;
             if (envir == m_MapPalace || envir == m_MapSecret) return true;
-            for (var i = 0; i < m_EnvirList.Count; i++) 
-                if (m_EnvirList[i] == envir.sMapName)
-                    return true;
-            return false;
+            if (envir != m_MapCastle) return false;
+            return nX > 0x205 && nX < 0x2EA && nY > 0xBC && nY < 0x190;
         }
 
         public bool IsMember(TBaseObject cert)

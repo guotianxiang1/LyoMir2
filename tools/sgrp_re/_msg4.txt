@@ -1,0 +1,20 @@
+Round-2 report: two red audits typed, logout slot chain settled
+
+两条真红全部定性为「审计钉错」,并各自带出真缺陷:
+
+  InProcSocialRunCheck    —— 断言挂在 CM 1020 上,但 1020 只排队(穷举 E8 被调用者
+                             不含 726B80/7272EC/6C3648)。组只从 4412 同意的
+                             sub_6C3648 产生。终态断言原样保留,另加 4 条中间断言。
+  PasGroupSetVCompatCheck —— 断言「写 0 会移除键」,而 upsert sub_6E4140 对值
+                             没有任何 test/cmp。顺带查出 GroupSetV 三处真缺陷:
+                             单人回退(INVENTED)、缺 ghost 门(MISSING)、返回值自造。
+
+BLOCKED「下线清槽」解掉:原生不摘槽,并有登录重挂机制
+(0x6B9EE2 call 0x7282C8 恢复 [+0xA80];0x6B24FC call 0x6F5168 -> 0x7280C0
+按 64 位角色 id [player+0x588]/[+0x58C] 把新对象指针写回槽)。
+C# Disappear->DelMember 判 DIVERGENT、登录重挂判 MISSING,两半必须一起落地,
+最小方案已写进报告 §3.3。同时订正上一轮把 [+0xA7C] 当「队长镜像」的错误 ——
+它是组自身的 Handle(0x726BA3 mov [ebx+0x38],ebx)。
+
+新记 INVENTED 候选:GroupSetS 在 flat_image(ASCII/GBK/UTF-16LE/大小写不敏感)、
+眼神 AllFuc_208_DECRYPTED、生产脚本树全部 0 命中,触点已列全交主代理裁决。

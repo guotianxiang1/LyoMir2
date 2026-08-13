@@ -392,6 +392,22 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
+        /// Read one of the 96 随机极品 knobs. Every one of them exists only as an
+        /// immediate the plugin writes into M2Server's code, so three situations
+        /// all mean "leave the host alone": 随机极品 off (0x100BF6E3 `cmp
+        /// [esi+0x4F0],0 / je` jumps to the restore arm), the key absent, and the
+        /// key non-positive (0x100BFE2D `test eax,eax / jle` skips the store).
+        /// The stock immediate is therefore the answer in all three, and lives
+        /// here rather than at the call sites.
+        /// </summary>
+        int ExtremeParamInt(string chineseKey, int stockImmediate)
+        {
+            if (!IsRandomExtreme()) return stockImmediate;
+            var value = GetParamInt(chineseKey, stockImmediate);
+            return value > 0 ? value : stockImmediate;
+        }
+
+        /// <summary>
         /// Check if a feature is enabled by Chinese config key name (from config.json).
         /// Also supports dotted fallback keys via _keyMap for backward compatibility
         /// with external callers that still pass dotted keys.
@@ -594,17 +610,48 @@ namespace GameSvr.Plugins
             _player.SendAddItem(restored);
         }
 
-        /// <summary>NPCOK框给物品加17元素, ClientItemID=OK框物品ID</summary>
+        /// <summary>
+        /// Ys_NpcGiveItemYs / 数字隧道 24 —— 给 ClientItemID 指定的那件物品写 17 个元素值。
+        /// 处理函数 0x10073B40，字段 2 = ClientItemID，字段 3..19 = ys1..ys17。
+        ///
+        /// 寻址：10073BEA mov eax,[eax+0x508] 只遍历背包 m_ItemList，比 [item+0x18]
+        /// （= ClientItemID），取**第一个**命中的；身上装备和英雄容器都不在范围内。
+        /// 空背包或找不到走 10073BB5 BEFEFFFFFF mov esi,-2。
+        ///
+        /// 负值跳过而不是当 0 写：10073C8F 85C0 test eax,eax / 10073C91 0F88E0000000 js
+        /// 直接跳到 10073D77 inc edi，本轮什么都不写。官方文档同一句：
+        /// 「ys1~ys17：大于等于0表示设置这个元素值，小于0表示这个元素值不修改」。
+        ///
+        /// ys1 是 dword 且不夹取（10073CA4 89707C mov [eax+0x7C],esi），ys2..ys17 先
+        /// 夹到 255（10073CAC 3DFF000000 cmp eax,0xFF / 7E07 jle / C745E4FF000000）
+        /// 再按字节写。函数里没有任何发包调用，刷新是脚本自己的活（caret 29）。
+        /// </summary>
         public int NpcGiveItemYs(int clientItemId, int[] ys)
         {
             if (!Enabled("自定义元素")) return 0;
-            if (ys == null || ys.Length < 1) return 0;
-            var found = FindOwnedItemByClientId(clientItemId);
-            if (found == null) return 0;
-            for (int i = 0; i < Math.Min(ys.Length, 17); i++)
-                SetElementValue(found, i + 1, ys[i]);
-            RefreshOwnedItem(found);
-            return 1;
+            if (ys == null) return -2;
+            TUserItem found = null;
+            foreach (var item in _player.m_ItemList)
+            {
+                if (item == null || item.wIndex == 0) continue;
+                if (_player.EnsureClientItemId(item) != clientItemId) continue;
+                found = item;
+                break;
+            }
+            if (found == null) return -2;
+            // 10073C69 83FF12 cmp edi,0x12 / 0F8D0B010000 jge —— 循环 edi = 1..17，
+            // 每轮 10073C7B call 0x10018460 取 vector::at(edi+2)。处理器入口只要求
+            // 19 段（10073B8C 83F813 cmp eax,0x13），但 edi=17 要读第 20 段，所以
+            // 正好 19 段时 at() 抛 out_of_range，被 10073D9A 的 SEH 收成 -3。
+            for (var i = 0; i < 17; i++)
+            {
+                if (i >= ys.Length) return -3;
+                var value = ys[i];
+                if (value < 0) continue;
+                if (i == 0) found.ys1 = value;
+                else SetElementValue(found, i + 1, value);
+            }
+            return 1;                                   // 10073D7D BE01000000
         }
 
         private TUserItem FindOwnedItemByClientId(int clientItemId, bool allowMakeIndexFallback = true)
@@ -1641,6 +1688,16 @@ namespace GameSvr.Plugins
         /// 正常出口 <c>0x1006CECC B8 01 00 00 00</c> 恒返回 1
         /// （前一条 <c>0x1006CEC6 mov eax,0x3E7</c> 是作者留下的死代码，被这条盖掉）；
         /// 异常臂 <c>0x1006CEEA B8 19 FC FF FF</c> 同样是 -999。
+        ///
+        /// 【已删除的 INVENTED 门，勿重新加回】曾有一道 <c>RecycleBagModelResolved()</c>：
+        /// 「无限背包 勾选了但不是 固定格子 就整体拒绝回收」。原生没有这道门。
+        /// 入口 sub_1006CF10 全长 0x66 字节，只有一个 <c>call</c>（0x1006CF64 → 0x1006B020）
+        /// 和一个门（0x1006CF16 <c>80 3D C5 B8 31 10 00 cmp byte [0x1031B8C5],0</c>）；
+        /// 无限背包_是否勾选(0x102C2C7C) / 无限背包_是否固定(0x102BFAF0) / 固定格子(0x102BFB04) /
+        /// V变量控制格子(0x102C44AC) / 无限背包_额外格子(0x102BFB10) / 无限背包_变量v1(0x102BFB24) /
+        /// 无限背包_变量v2(0x102BFB34) 七个键的 VA 在 0x1006B020..0x1006CF80 内引用数 = 0
+        /// （对照组：背包容量 sub_1007E370 引用得到，扫描不是瞎的）。
+        /// 详见 tools/ys_recycle_re/v9_invented_scan.py 与 docs/ys_recycle_native_defects_20260813.md。
         /// </summary>
         public int AutoRecycle()
         {
@@ -1651,8 +1708,8 @@ namespace GameSvr.Plugins
             {
                 var recycleConfig = _pluginManager?.GetRecycleConfigSnapshot();
                 if (recycleConfig == null) return RecycleUnusable;
-                if (!RecycleBagModelResolved()) return RecycleUnusable;
 
+                var totals = new RecycleRunTotals();
                 for (int i = _player.m_ItemList.Count - 1; i >= 0; i--)
                 {
                     var item = _player.m_ItemList[i];
@@ -1662,8 +1719,12 @@ namespace GameSvr.Plugins
                         continue;
                     if (!RecycleTypeOpen(rule, stackable)) continue;
                     if (!stackable && !RecycleQualityAllowed(item, rule)) continue;
-                    TryRecycleOne(item, itemName, rule, stackable);
+                    RecycleOne(item, itemName, rule, stackable, ref totals);
                 }
+
+                // 空包也要走这一趟：0x1006B28E 0F 88 AE 1B 00 00 js 0x1006CE42 直接跳到
+                // 结算段，四路各自的 jle 会把它们全部跳过。
+                SettleRecycleTotals(in totals);
                 return RecycleDone;
             }
             catch (Exception ex)
@@ -1671,23 +1732,6 @@ namespace GameSvr.Plugins
                 M2Share.MainOutMessage("[异常] AutoRecycle " + ex.Message);
                 return RecycleUnusable;
             }
-        }
-
-        /// <summary>
-        /// 无限背包 把额外格子存在 M2 背包之外（Gs1\MyJson\bags\&lt;角色名&gt;.bin），C# 还没有
-        /// 复刻那个容器，所以回收只能看见 m_ItemList。生产 items\config.json 用的是
-        /// "无限背包_是否固定":"固定格子"（额外格子=144，变量v1=10/变量v2=1 在这条分支下不参与
-        /// 计算——V(10,1) 在生产里是"商店装备"回收开关，拿它算格子数显然不是本意）。
-        /// "V变量控制格子" 那条分支的格子数取自 GetV(变量v1,变量v2)，没有任何字节证据，
-        /// 保持关闭：宁可一件不回收，也不能对着一个没复刻的容量模型删东西。
-        /// </summary>
-        private bool RecycleBagModelResolved()
-        {
-            var manager = _pluginManager;
-            if (manager == null) return true;
-            if (!IsEnabledValue(manager.GetItemConfigValue("无限背包_是否勾选"))) return true;
-            return PluginManager.NormalizeConfigValue(
-                manager.GetItemConfigValue("无限背包_是否固定")) as string == "固定格子";
         }
 
         /// <summary>
@@ -1749,11 +1793,127 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// 结算一件物品。产出与删除必须一起成立：任何一路产出算不出来、落不了账，
-        /// 或者物品删不掉，都整件放弃，绝不出现删了不给的中间态。
+        /// 一次 AutoRecycle 调用内跨物品存活的四个货币累加器。
+        ///
+        /// 原生是 sub_1006B020 的四个栈槽，**只在进入循环之前清零一次**
+        /// （0x1006B24D 起 <c>xor eax,eax</c> 之后连续 <c>mov …,eax</c>：
+        /// 0x1006B258 <c>[ebp-0xA0]</c> 元宝、0x1006B25E <c>[ebp-0xA4]</c> 灵符、
+        /// 0x1006B264 <c>[ebp-0xA8]</c> 金币、0x1006B26A <c>[ebp-0xAC]</c> 经验），
+        /// 循环头在 0x1006B285 <c>dec edx</c>、回边在 0x1006CE3D <c>jmp 0x1006B285</c>，
+        /// 每件的重置块 0x1006B294..0x1006B30D 里没有这四个槽。
         /// </summary>
-        private bool TryRecycleOne(TUserItem item, string itemName, RecycleRule rule,
-            bool stackable)
+        private struct RecycleRunTotals
+        {
+            public int Yuanbao;
+            public int LingFu;
+            public int Gold;
+            public int Exp;
+        }
+
+        /// <summary>
+        /// 循环结束后的一次性落账，0x1006CE42..0x1006CEBD。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。四路各自 <c>&gt; 0</c> 才调、
+        /// 顺序固定 元宝 → 灵符 → 金币 → 经验、全部**不看返回值**。
+        /// 于是金币累计顶到 <c>m_nGoldMax</c> 时 <c>IncGold</c> 会**整笔拒绝**，
+        /// 而这一轮匹配到的物品早在循环里就删光了 ⇒ **整批只删不给**。
+        /// 这正是要复刻的行为，不要加上限预检、不要分批付。
+        ///
+        /// 槽 → 引擎函数的映射由插件自己的运行期解析块钉死（<c>add edx,imm32</c> 后
+        /// 紧跟 <c>mov [槽],edx</c>，每个槽全转储各只有一个写入点）：
+        /// 0x1006B09A→<c>[0x1031BC64]=0x6F8730</c>（元宝）、
+        /// 0x1006B0B8→<c>[0x1031BC60]=0x6DE7BC</c>（灵符）、
+        /// 0x1006B0DC→<c>[0x1031BC5C]=0x6D791C</c>（IncGold）、
+        /// 0x1006B136→<c>[0x1031BC50]=0x6C87B4</c>（经验）。
+        /// </summary>
+        private void SettleRecycleTotals(in RecycleRunTotals totals)
+        {
+            // 1006CE42  83 BD 60 FF FF FF 00  cmp  [ebp-0xA0],0
+            // 1006CE49  7E 11                 jle  0x1006CE5C
+            // 1006CE4B  8B 45 A0 / 33 C9      mov  eax,self / xor ecx,ecx
+            // 1006CE50  8B 95 60 FF FF FF     mov  edx,[ebp-0xA0]
+            // 1006CE56  FF 15 64 BC 31 10     call [0x1031BC64] = 0x6F8730  ; 元宝
+            if (totals.Yuanbao > 0) CreditRecycleYuanbao(totals.Yuanbao);
+
+            // 1006CE65  8B 45 A0              mov  eax,self
+            // 1006CE68  33 D2                 xor  edx,edx               ; reason = 0
+            // 1006CE6A  8B 8D 5C FF FF FF     mov  ecx,[ebp-0xA4]
+            // 1006CE70  FF 15 60 BC 31 10     call [0x1031BC60]          ; 灵符
+            if (totals.LingFu > 0)
+                _player.AddNativeLingFu(RecycleLingFuReason, totals.LingFu);
+
+            // 1006CE7F  8B 45 A0 / 33 C9      mov  eax,self / xor ecx,ecx
+            // 1006CE84  8B 95 58 FF FF FF     mov  edx,[ebp-0xA8]
+            // 1006CE8A  FF 15 5C BC 31 10     call [0x1031BC5C]          ; IncGold，返回值丢弃
+            if (totals.Gold > 0) _player.IncGold(totals.Gold);
+
+            // 1006CE99  8B 35 FC 0C 31 10     mov  esi,[0x10310CFC]      ; → "经验"
+            // 1006CE9F..1006CEAE            push 1 / 总额 / 0 / 1 / 0 / 0
+            // 1006CEB0  B1 01                 mov  cl,1
+            // 1006CEB7  FF 15 50 BC 31 10     call [0x1031BC50]          ; 经验
+            if (totals.Exp > 0) _player.GainExp(totals.Exp);
+        }
+
+        /// <summary>
+        /// 元宝落账。原生 <c>0x6F8730</c> 不是就地改字段，而是拼一条请求丢进异步链：
+        /// <code>
+        /// 006F8749  8B F2                 mov  esi,edx               ; 金额
+        /// 006F874B  8B D8                 mov  ebx,eax               ; Self
+        /// 006F8777  8D 93 06 01 00 00     lea  edx,[ebx+0x106]       ; 角色名
+        /// 006F87D7  A1 B0 68 7D 00        mov  eax,[0x7D68B0]        ; 全局服务单例
+        /// 006F87E0  E8 C3 95 01 00        call 0x711DA8
+        /// 006F881B  8B CE                 mov  ecx,esi
+        /// 006F881D  E8 5A 8F 01 00        call 0x71177C
+        /// </code>
+        /// <c>sub_711DA8</c> 在本仓已定性为「外部/异步的元宝通道，不是进程内改值」
+        /// （见 NativeStallBuyExecutor.cs 的同址判例），所以 C# 侧的等价物就是
+        /// <c>NativeYuanbaoManager</c> 的入队。
+        ///
+        /// 关键在于**不要等它的结果**：0x1006CE56 之后没有 test/cmp，插件把返回值丢掉，
+        /// 后面照样接着结算灵符/金币/经验。此前 C# 因为「结算成败要等回调」而把
+        /// 会产元宝的物品整件拒收（D4），那是 C# 自己加的门，原生没有。
+        ///
+        /// 仍未解开的部分（不影响本条）：0x6F8730 拼的那两条 GBK 字面量
+        /// （0x6F8854 / 0x6F885C）与它写进日志的确切文案。它在 M2Server 里 rel32 调用者
+        /// 为 0，只有插件硬编码调用它。
+        /// </summary>
+        private void CreditRecycleYuanbao(int amount)
+        {
+            _player.ScriptRequestNativeYuanbao(amount,
+                GameSvr.Services.NativeYuanbaoManager.AddOperation);
+        }
+
+        /// <summary>
+        /// 结算一件物品。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】REPLICATION_RULES §3.1。
+        /// 顺序是**先删后结算，且没有任何回滚**。删除段 0x1006BB5D..0x1006BBD2 整段跑完，
+        /// 0x1006BBD8 起才是四路累加，0x1006BCB7 起才是 其他 的 SetV：
+        /// <code>
+        /// 1006BB68  8B 75 8C              mov  esi,[ebp-0x74]        ; item
+        /// 1006BB6B  8B 45 80 / 8B 40 04   mov  eax,[TList] / [eax+4] ; FList
+        /// 1006BB71  03 85 D8 FE FF FF     add  eax, idx*4
+        /// 1006BB77  8B 00                 mov  eax,[eax]
+        /// 1006BB7F  3B C6                 cmp  eax,esi
+        /// 1006BB81  75 45                 jne  0x1006BBC8            ; 指针变了 ⇒ 不删
+        /// 1006BB89  83 F8 01 / 7F 0F      cmp  FCount,1 / jg
+        /// 1006BB95  FF 15 0C 0D 31 10     call [0x10310D0C]=0x6C1ED8 ; FCount<=1 清空整包
+        /// 1006BBA6  FF 15 68 BC 31 10     call [0x1031BC68]          ; TList.Delete(idx)
+        /// 1006BBB9  3E FF 97 68 02 00 00  call [player VMT+0x268]    ; 下发删除
+        /// 1006BBC2  FF 15 4C BC 31 10     call [0x1031BC4C]          ; Dispose(item)
+        /// 1006BBCF  3B 45 8C / 0F 85 …    cmp / jne 0x1006BD2D       ; 没删成 ⇒ 也不结算
+        /// 1006BBD8  …                                               ; 四路累加从这里开始
+        /// </code>
+        /// 唯一能让本件不结算的条件是「删除没发生」；反过来「结算失败」**不会**让物品回来。
+        /// 而且这里连「落账」都还没发生：四路货币只进累加器，真正付钱在整个循环跑完之后
+        /// 的 <see cref="SettleRecycleTotals"/>（0x1006CE42..0x1006CEBD），全都不看返回值。
+        /// IncGold 顶到 <c>[eax+0x68C]</c> 时 <c>0x6D7934 7F 0D jg</c> 整笔返回 FALSE，
+        /// 而这一轮的物品早已删光 —— 这就是「整批只删不给」。
+        ///
+        /// 所以删除之后不允许再有任何 return：算术必须像原生一样静默截断，不能中途放弃。
+        /// </summary>
+        private void RecycleOne(TUserItem item, string itemName, RecycleRule rule,
+            bool stackable, ref RecycleRunTotals totals)
         {
             // 倍率：GetV=200 表示 2 倍 ⇒ 单价*GetV/100，先乘后除；小于等于 0 表示无效，按 1 倍。
             var rate = rule.HasRate ? ReadPlayerV(rule.RateGroup, rule.RateIndex) : 0;
@@ -1764,112 +1924,88 @@ namespace GameSvr.Plugins
             // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
             // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
             var count = stackable ? (int)item.Dura : 1;
+            var otherUnit = rule.HasOther ? rule.OtherValue : 0;
 
-            if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
-                !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
-                !TryScaleRecyclePrice(rule.LingFu, rate, count, out var lingFu) ||
-                !TryScaleRecyclePrice(rule.Exp, rate, count, out var exp) ||
-                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, count,
-                    out var other))
-                return false;
+            // 至少一路产出为正才允许删除。
+            //
+            // 【原生缺陷，照抄；勿"修"】判的是**缩放前、未乘件数**的五个单价，不是实付金额。
+            // 可叠材料分支 0x1006BB3B..0x1006BB57：
+            //   1006BB3B  85 FF                 test edi,edi              ; 元宝单价 [ebp-0x70]
+            //   1006BB3D  7F 1E                 jg   0x1006BB5D
+            //   1006BB3F  83 BD 70 FF FF FF 00  cmp  [ebp-0x90],0         ; 灵符单价
+            //   1006BB46  7F 15                 jg   0x1006BB5D
+            //   1006BB48  83 BD 6C FF FF FF 00  cmp  [ebp-0x94],0         ; 金币单价
+            //   1006BB4F  7F 0C                 jg   0x1006BB5D
+            //   1006BB51  85 C9                 test ecx,ecx              ; 其他值 [ebp-0x68]
+            //   1006BB53  7F 08                 jg   0x1006BB5D
+            //   1006BB55  85 F6                 test esi,esi              ; 经验单价 [ebp-0x78]
+            //   1006BB57  0F 8E D0 01 00 00     jle  0x1006BD2D           ; 全 <=0 ⇒ 本件结束
+            // 物品种类分支 0x1006CC68..0x1006CC82 逐字节同构（jle 0x1006CE1F）。
+            // 第一条 imul 倍率在 0x1006BBEE、第一条 imul 件数在 0x1006BC07，
+            // 都在删除段 0x1006BB5D 之后 —— 判零时这五个值一次缩放都没做过。
+            //
+            // 后果：单价=1 且倍率=50 会过门，却只入账 ⌊1*50/100⌋=0 ⇒ 删了不给。
+            if (rule.Yuanbao <= 0 && rule.LingFu <= 0 && rule.Gold <= 0 &&
+                otherUnit <= 0 && rule.Exp <= 0)
+                return;
 
-            // 至少一路产出为正才允许删除：0x1006BB3B..0x1006BB57 是五连 test/cmp，
-            // 元宝 灵符 金币 其他值 经验 全部 <= 0 就 jle 0x1006BD2D 结束本件，不进删除段。
-            // 原生判的是缩放前的单价，于是 单价=1、倍率=50 这种配置会过门却只入账
-            // ⌊1*50/100⌋=0，删了不给。这里改判缩放后的金额，比原生紧一档。
-            if (yuanbao <= 0 && gold <= 0 && lingFu <= 0 && exp <= 0 && other <= 0)
-                return false;
+            // ── 删除段。此行之后不允许再出现任何 return，见方法头。 ──
+            if (!_player.DelBagItem(item.MakeIndex, itemName)) return;
 
-            // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
-            // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
-            if (yuanbao > 0) return false;
+            // 四路货币只累加，不在这里落账 —— 落账是循环结束后的一次性动作
+            // （SettleRecycleTotals / 0x1006CE42..0x1006CEBD）。
+            // 累加次序照 0x1006BBD8（元宝）→ 0x1006BC1B（灵符）→ 0x1006BC4D（金币）
+            // → 0x1006BC7F（经验），四条 add 分别是
+            // 0x1006BC0A / 0x1006BC47 / 0x1006BC79 / 0x1006BCB1，全是 32 位回绕的 add。
+            totals.Yuanbao = unchecked(
+                totals.Yuanbao + ScaleRecyclePrice(rule.Yuanbao, rate, count));
+            totals.LingFu = unchecked(
+                totals.LingFu + ScaleRecyclePrice(rule.LingFu, rate, count));
+            totals.Gold = unchecked(
+                totals.Gold + ScaleRecyclePrice(rule.Gold, rate, count));
+            totals.Exp = unchecked(
+                totals.Exp + ScaleRecyclePrice(rule.Exp, rate, count));
 
-            // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
-            if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
+            var other = ScaleRecyclePrice(otherUnit, rate, count);
 
             // 其他 走 0x1006BCB7（可叠材料）/ 0x1006CDB4（物品种类）两段同构代码：
-            //   0x1006BCBC 7E 6F        jle  —— 缩放后 <= 0 就整段不写 SetV
-            //   0x1006BCC2 0F AF F8     imul —— 和其余四路一样吃倍率
-            //   0x1006BCFD 7D 02 / 0x1006BCFF 33 C0  —— 累加基数的负值钳到 0
-            var otherStored = 0;
-            var otherTotal = 0;
-            var otherPays = other > 0;
-            if (otherPays)
+            //   1006BCB7  8B 45 98   mov eax,[ebp-0x68]   ; 其他值，**缩放前**
+            //   1006BCBA  85 C0      test eax,eax
+            //   1006BCBC  7E 6F      jle 0x1006BD2D       ; 缩放前 <=0 才整段不写 SetV
+            //   1006BCBE  85 FF      test edi,edi         ; 倍率，第一条 imul 在 0x1006BCC2
+            //   1006BCF4  FF 15 58 BC 31 10  call GetV
+            //   1006BCFD  7D 02 / 1006BCFF 33 C0          ; 累加基数的负值钳到 0
+            //   1006BD26  FF 15 54 BC 31 10  call SetV    ; 不看返回值
+            // 同 D3：闸门读的是缩放前的值。缩放后为 0 时原生照样写一次 SetV，
+            // 于是 GetV 原本是 -1 的槽会被钳零后写成 0 —— 这不是空操作，别"优化"掉。
+            // （此处原注释写的「缩放后 <= 0」与字节矛盾，已按字节订正。）
+            // 组/下标非法时 SetV 自己用 0x6DF2B3 / 0x6DF2B7 两个 jle 静默丢弃，
+            // 物品照删 —— 这一路的守卫在 WritePlayerV 里，不在这里，别提前 return。
+            if (otherUnit > 0)
             {
-                if (!PlayerVarWritable(rule.OtherGroup, rule.OtherIndex)) return false;
-                // 回滚要还原真实旧值，所以钳位只用于累加，不覆盖 otherStored。
-                otherStored = ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex);
-                var accumulated = (long)Math.Max(0, otherStored) + other;
-                if (accumulated > int.MaxValue) return false;
-                otherTotal = (int)accumulated;
+                var accumulated = unchecked(Math.Max(0,
+                    ReadStoredPlayerV(rule.OtherGroup, rule.OtherIndex)) + other);
+                WritePlayerV(rule.OtherGroup, rule.OtherIndex, accumulated);
             }
-
-            var goldPaid = 0;
-            var lingFuPaid = 0;
-            var otherWritten = false;
-
-            if (gold > 0)
-            {
-                if (!_player.IncGold(gold)) return false;
-                goldPaid = gold;
-            }
-
-            if (lingFu > 0)
-            {
-                if (!_player.AddNativeLingFu(RecycleLingFuReason, lingFu))
-                {
-                    RollbackRecycleGold(goldPaid);
-                    return false;
-                }
-                lingFuPaid = lingFu;
-            }
-
-            if (otherPays)
-            {
-                WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherTotal);
-                otherWritten = true;
-            }
-
-            // GainExp 没有返回值也撤不回来，所以放在删除之前：删除万一失败，玩家是多拿了经验
-            // 又留下了物品，方向上只会多给，不会少给。
-            if (exp > 0) _player.GainExp(exp);
-
-            if (_player.DelBagItem(item.MakeIndex, itemName)) return true;
-
-            if (otherWritten) WritePlayerV(rule.OtherGroup, rule.OtherIndex, otherStored);
-            RollbackRecycleLingFu(lingFuPaid);
-            RollbackRecycleGold(goldPaid);
-            return false;
         }
 
         /// <summary>
         /// 单价 → 实付。先按倍率缩放再乘件数，与 0x1006BBE9（缩放）后接 0x1006BC07（乘件数）
-        /// 的次序一致。原生两步都是 32 位 imul，溢出静默截断；这里放宽到 64 位并在越界时
-        /// 整件放弃，方向上只会少删不会错付。
+        /// 的次序一致。
+        ///
+        /// 【原生缺陷，照抄；勿"修"】两步都是 **32 位** imul，溢出静默截断，不会中止本件：
+        /// <c>0x1006BBEB 0F AF CB imul ecx,ebx</c>（倍率×单价）→
+        /// <c>0x1006BBEE B8 1F 85 EB 51 / F7 E9 / C1 FA 05 / C1 EB 1F / 03 DA</c>
+        /// （0x51EB851F 魔数除 100，向零截断）→ <c>0x1006BC07 0F AF C3 imul eax,ebx</c>
+        /// （×件数）→ <c>0x1006BC0A 01 85 60 FF FF FF add [ebp-0xA0],eax</c>（32 位累加）。
+        /// 此前 C# 用 64 位算并在越界时整件放弃 —— 那是删除段之后的一条 return，
+        /// 与「先删后结算、无回滚」直接冲突，所以必须回到 32 位回绕。
         /// </summary>
-        private static bool TryScaleRecyclePrice(int unitPrice, int rate, int count,
-            out int amount)
+        private static int ScaleRecyclePrice(int unitPrice, int rate, int count)
         {
-            amount = 0;
-            if (unitPrice <= 0) return true;
-            var scaled = (rate > 0 ? (long)unitPrice * rate / 100 : unitPrice) * count;
-            if (scaled < 0 || scaled > int.MaxValue) return false;
-            amount = (int)scaled;
-            return true;
-        }
-
-        private void RollbackRecycleGold(int amount)
-        {
-            if (amount <= 0) return;
-            _player.m_nGold -= amount;
-            _player.GoldChanged();
-        }
-
-        private void RollbackRecycleLingFu(int amount)
-        {
-            if (amount <= 0) return;
-            _player.m_nLingFu = unchecked(_player.m_nLingFu - amount);
-            _player.RefreshNativeLingFu();
+            if (unitPrice <= 0) return 0;
+            var scaled = rate > 0 ? unchecked(rate * unitPrice) / 100 : unitPrice;
+            return unchecked(scaled * count);
         }
 
         /// <summary>
@@ -2003,33 +2139,139 @@ namespace GameSvr.Plugins
             return 1;
         }
 
-        /// <summary>在地面丢弃物品</summary>
+        /// <summary>
+        /// ys_DropItem / 数字隧道 7 —— 在角色周围地面上**新产生** count 件 itemName。
+        /// 官方文档原话：「此函数是在角色周围地面上新产生物品，和角色背包有不有物品
+        /// 毫无关系」（AllFuc使用例子.pas:309）。原来的实现方向正好反了：它用
+        /// DelBagItem 把玩家背包里的同名物品删掉。
+        ///
+        /// 处理函数 0x10070D20，字段顺序 (num, range, name) = fields[2..4]；它把
+        /// (self, name, range, num) 交给宿主 0x0064E6F4（10070D98 mov [ebp-0x2C],0x64E6F4
+        /// / 10070E0A call [ebp-0x2C]），返回值是原样回传的 num（10070DB7 mov [ebp-0x1C],eax，
+        /// 之后再没被改过）。
+        ///
+        /// 宿主 0x0064E6F4 的阶梯：
+        ///   0064E71E 83FB01 cmp ebx,1 / 7D05 jge / BB01000000  —— num &lt; 1 提到 1
+        ///   0064E72B mov edx,0x64E7E0 / call 0x0040591C / 753D jne —— 名字等于「金币」
+        ///       （0x64E7DC 处的长度前缀是 4，正好两个汉字）走金币分支，每次最多 2000
+        ///   否则每轮 0064E784 call 0x0074DE54 造一件新物品，造不出来就跳出循环，
+        ///       造出来就 0064E79D call 0x007688A0 扔地上，扔失败 0064E7A8 call 0x00404690 释放
+        /// </summary>
         public int DropItem(int count, int range, string itemName)
         {
-            if (_npc == null) return 0;
-            // Drop items from bag to ground — uses DelBagItem to remove, item appears on ground via map system
-            for (int i = 0; i < count; i++)
+            if (string.IsNullOrEmpty(itemName)) return count;
+            var n = count < 1 ? 1 : count;
+
+            if (string.Equals(itemName, "金币", StringComparison.Ordinal))
             {
-                var userItem = _player.CheckItems(itemName);
-                if (userItem == null) break;
-                _player.DelBagItem(userItem.MakeIndex, M2Share.UserEngine.GetStdItemName(userItem.wIndex));
+                // 0064E737..0064E770 的三段判定原样转写：先切 2000，再补尾数。
+                do
+                {
+                    if (n > 2000) { _player.YanshenTunnelDropGold(2000); n -= 2000; }
+                    if (n <= 2000) _player.YanshenTunnelDropGold(n);
+                } while (n > 2000);
+                return count;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var userItem = new TUserItem();
+                if (!M2Share.UserEngine.CopyToUserItemFromName(itemName, ref userItem)) break;
+                // 宿主 0x007688A0 的第 3 个寄存器参就是 range；第 6 个栈参（[ebp+0xC]）
+                // 是 self，对应 C# 的 DropCreat。另外两个字节旗标（[ebp+0x14]=1 跳过
+                // 0x0078389C 的可丢弃校验、[ebp+0x10]=0）在 C# 的 DropItemDown 里没有
+                // 对应形参，本工程的模型只有 (boDieDrop, ItemOfCreat, DropCreat)。
+                _player.DropItemDown(userItem, range, false, null, _player);
             }
             return count;
         }
 
-        /// <summary>按身体部位爆装备</summary>
-        public int DropEquipByPos(int pos) { if (pos < 0 || pos >= _player.m_UseItems.Length) return 0; var it=_player.m_UseItems[pos]; if(it==null)return 0; _player.DelBagItem(it.MakeIndex,M2Share.UserEngine.GetStdItemName(it.wIndex)); return 1; }
+        /// <summary>
+        /// Ys_DropItembyId / caret ^33^ —— 把身体部位 pos 上的装备摘下来扔到地上。
+        /// 处理函数 0x1005CDD0。原来的实现调 DelBagItem 去背包里找 MakeIndex，而
+        /// 已装备的物品根本不在 m_ItemList 里，所以它既没摘装备也没掉东西，却照样返回 1。
+        /// </summary>
+        public int DropEquipByPos(int pos)
+        {
+            // 1005CE27 83F80F cmp eax,0xF / 1005CE2A 0F8762010000 ja
+            //   -> 1005CF92 分支，1005CFA1 33C0 xor eax,eax：整段不执行，返回 0
+            if ((uint)pos > 0xF) return 0;
+            // 两条隧道唯一的实质差别在第 6 个栈参：caret 33 推常量 0（1005CED0 6A00），
+            // caret 34 推玩家自己（1005D145 FF75B4）。
+            DropEquippedSlot(pos, null);
+            // 1005CF8D 8B45C8 mov eax,[ebp-0x38] —— 返回的是装备位下标本身，不是 1；
+            // 槽位为空也走这条，仍旧返回下标。
+            return pos;
+        }
 
-        /// <summary>按装备名字爆装备</summary>
+        /// <summary>
+        /// Ys_DropItembyName / caret ^34^ —— 按装备名字定位身体部位再扔。
+        /// 处理函数 0x1005CFF0。
+        /// </summary>
         public int DropEquipByName(string name)
         {
-            for (int i = 0; i < _player.m_UseItems.Length; i++)
+            var slot = -1;
+            // 1005D04E 83FE10 cmp esi,0x10 / 7D5A jge —— 只扫 0..15 号装备位，取第一个命中
+            for (var i = 0; i < 16 && i < _player.m_UseItems.Length; i++)
             {
                 var item = _player.m_UseItems[i];
-                if (item != null && string.Equals(M2Share.UserEngine.GetStdItemName(item.wIndex), name, StringComparison.OrdinalIgnoreCase))
-                { _player.DelBagItem(item.MakeIndex, M2Share.UserEngine.GetStdItemName(item.wIndex)); return 1; }
+                if (item == null || item.wIndex == 0) continue;
+                // 1005D07F call 0x10056970 取 [item+0x1C] 那条 Delphi 串（物品自己的显示名，
+                // 对应 C# 的 ItmUnit.GetItemName，而不是 std 名）；1005D08F call 0x10043E20
+                // 转 0x10018E20 是逐 dword / 逐字节比较，**区分大小写**。
+                if (!string.Equals(ItmUnit.GetItemName(item), name, StringComparison.Ordinal)) continue;
+                slot = i;
+                break;
             }
-            return 0;
+            // 1005D0AD 83FB0F cmp ebx,0xF / 0F8773010000 ja -> 1005D244 33C0：没找到返回 0
+            if ((uint)slot > 0xF) return 0;
+            DropEquippedSlot(slot, _player);
+            // 1005D20F 8B45B0 —— 返回装备位下标，所以「扔掉 0 号位」和「没找到」都是 0
+            return slot;
+        }
+
+        /// <summary>
+        /// caret ^33^ / ^34^ 共用的落地序列。两段原生码（1005CEAB..1005CF40 与
+        /// 1005D120..1005D1B6）逐条同构，caret 33 里被 Themida 虚拟化的只是三个宿主
+        /// 地址的立即数，调用形状本身是明文的：
+        ///   ① 宿主 0x0075F3E8(装备容器, 槽号, cl=0)：0075F409 取出物品、0075F40F 把槽
+        ///      置 0。第三参传 0，所以宿主自己的 RecalcAbilitys（0x0075EE78）和外观刷新
+        ///      都不执行。
+        ///   ② 宿主 0x007688A0(self, item, ecx=3, 1, 0, dropper, 来源串)：范围恒为 3；
+        ///      第一个栈参 1 让宿主跳过 0x0078389C 的可丢弃校验。
+        ///   ③ 宿主 0x00765F6C，cx=0x27A4=RM_SENDDELITEMLIST，包体 4 字节 = [item+0x18]
+        ///      = ClientItemID（1005D175 8B4718 / 1005D18C lea eax,[ebp-0x6C]）。
+        ///   ④ 只有装备位落在 {0,1,4,13} 时再调玩家虚函数 [+0x1CC]。这个集合来自
+        ///      1005CEE3 sub eax,2/jb → sub eax,2/je → sub eax,9/jne，与宿主自己的
+        ///      0x0075F1D8 逐字节相同。
+        /// 全程不碰 m_ItemList。
+        /// </summary>
+        private void DropEquippedSlot(int slot, TBaseObject dropper)
+        {
+            if (slot < 0 || slot >= _player.m_UseItems.Length) return;
+            var item = _player.m_UseItems[slot];
+            if (item == null || item.wIndex == 0) return;      // 1005CEBE 85FF / 747E je
+
+            var deleted = new List<TDeleteItem>
+            {
+                new TDeleteItem
+                {
+                    sItemName = M2Share.UserEngine.GetStdItemName(item.wIndex),
+                    MakeIndex = item.MakeIndex,
+                    ClientItemID = _player.EnsureClientItemId(item)
+                }
+            };
+
+            // 原生先清槽再扔（它握的是对象指针）；C# 的 DropItemDown 要靠 wIndex 反查
+            // StdItem，所以只能先扔后清槽。清的是槽位引用而不是物品的 wIndex——
+            // 物品对象已经挂在地图上了，改它的 wIndex 会把地面物品一并弄坏。
+            _player.DropItemDown(item, 3, false, null, dropper);
+            _player.m_UseItems[slot] = null;
+            _player.SendMsg(_player, Grobal2.RM_SENDDELITEMLIST, 0,
+                deleted.Count, 0, 0, "", deleted);
+            // [player]+0x1CC 不是 RecalcAbilitys（那是 +0x8C，本路径因为第三参传 0
+            // 而根本不走）。C# 侧对应的是 FeatureChanged —— 装备外观广播。
+            if (slot is 0 or 1 or 4 or 13) _player.FeatureChanged();
         }
 
         /// <summary>按stdmode修理背包物品: Dura=DuraMax</summary>
@@ -3686,7 +3928,10 @@ namespace GameSvr.Plugins
         public bool IsBigBag() => Enabled("大背包");
         public bool IsTempBag() => Enabled("临时大背包");
         public bool IsPortableStorage() => Enabled("随身仓库");
-        public bool IsRandomExtreme() => Enabled("随机极品");
+        // 0x100BF6E3 `cmp [esi+0x4F0],0 / je 0x100C3EE3` gates the whole 96-slot
+        // block: off restores the stock immediates rather than failing a call, so
+        // this reads as a patch toggle.
+        public bool IsRandomExtreme() => PatchToggleOn("随机极品");
         public bool IsGiveExtreme() => Enabled("give极品");
         // 0x100B9D3A `A2 6C FF 73 00` overwrites the imm8 of host
         // 0x0073FF69 `83 7D F4 02 cmp dword [ebp-0xc],2`. Plugin does
@@ -3695,108 +3940,112 @@ namespace GameSvr.Plugins
         public int MaxEquipCount() => ParamAtoi("最大装备数量", 3);
 
         // ── Equipment stat param readers (武器/衣服/头盔/项链/手镯/戒指) ──
+        // Defaults are the stock M2Server immediates the plugin overwrites,
+        // recovered in docs/ys_gui_extreme_20260813.md.  A missing key and a
+        // non-positive one both have to fall back to them: the apply arm is
+        // `test eax,eax / jle` (0x100BFE2D), so it leaves the host untouched.
         // 武器
-        public int WeaponAttrChance_Acc() => GetParamInt("武器属性几率_准确_值", 24);
-        public int WeaponAttrChance_Atk() => GetParamInt("武器属性几率_攻击_值", 30);
-        public int WeaponAttrChance_Spd() => GetParamInt("武器属性几率_攻速_值", 30);
-        public int WeaponAttrChance_Tao() => GetParamInt("武器属性几率_道术_值", 30);
-        public int WeaponAttrChance_Mgc() => GetParamInt("武器属性几率_魔法_值", 30);
-        public int WeaponRandExtreme() => GetParamInt("武器最随机性_极品_值", 20);
-        public int WeaponMaxPts_Acc() => GetParamInt("武器最高点数_准确_值", 13);
-        public int WeaponMaxPts_Atk() => GetParamInt("武器最高点数_攻击_值", 7);
-        public int WeaponMaxPts_Spd() => GetParamInt("武器最高点数_攻速_值", 13);
-        public int WeaponMaxPts_Tao() => GetParamInt("武器最高点数_道术_值", 13);
-        public int WeaponMaxPts_Mgc() => GetParamInt("武器最高点数_魔法_值", 13);
-        public int WeaponPtsChance_Acc() => GetParamInt("武器点数几率_准确_值", 15);
-        public int WeaponPtsChance_Atk() => GetParamInt("武器点数几率_攻击_值", 20);
-        public int WeaponPtsChance_Spd() => GetParamInt("武器点数几率_攻速_值", 15);
-        public int WeaponPtsChance_Tao() => GetParamInt("武器点数几率_道术_值", 15);
-        public int WeaponPtsChance_Mgc() => GetParamInt("武器点数几率_魔法_值", 15);
+        public int WeaponAttrChance_Acc() => ExtremeParamInt("武器属性几率_准确_值", 24);
+        public int WeaponAttrChance_Atk() => ExtremeParamInt("武器属性几率_攻击_值", 30);
+        public int WeaponAttrChance_Spd() => ExtremeParamInt("武器属性几率_攻速_值", 20);
+        public int WeaponAttrChance_Tao() => ExtremeParamInt("武器属性几率_道术_值", 30);
+        public int WeaponAttrChance_Mgc() => ExtremeParamInt("武器属性几率_魔法_值", 30);
+        public int WeaponRandExtreme() => ExtremeParamInt("武器最随机性_极品_值", 10);
+        public int WeaponMaxPts_Acc() => ExtremeParamInt("武器最高点数_准确_值", 12);
+        public int WeaponMaxPts_Atk() => ExtremeParamInt("武器最高点数_攻击_值", 6);
+        public int WeaponMaxPts_Spd() => ExtremeParamInt("武器最高点数_攻速_值", 12);
+        public int WeaponMaxPts_Tao() => ExtremeParamInt("武器最高点数_道术_值", 12);
+        public int WeaponMaxPts_Mgc() => ExtremeParamInt("武器最高点数_魔法_值", 12);
+        public int WeaponPtsChance_Acc() => ExtremeParamInt("武器点数几率_准确_值", 15);
+        public int WeaponPtsChance_Atk() => ExtremeParamInt("武器点数几率_攻击_值", 20);
+        public int WeaponPtsChance_Spd() => ExtremeParamInt("武器点数几率_攻速_值", 15);
+        public int WeaponPtsChance_Tao() => ExtremeParamInt("武器点数几率_道术_值", 15);
+        public int WeaponPtsChance_Mgc() => ExtremeParamInt("武器点数几率_魔法_值", 15);
         // 衣服
-        public int ArmorAttrChance_Acc() => GetParamInt("衣服属性几率_准确_值", 7);
-        public int ArmorAttrChance_Atk() => GetParamInt("衣服属性几率_攻击_值", 20);
-        public int ArmorAttrChance_Spd() => GetParamInt("衣服属性几率_攻速_值", 30);
-        public int ArmorAttrChance_Tao() => GetParamInt("衣服属性几率_道术_值", 30);
-        public int ArmorAttrChance_Mgc() => GetParamInt("衣服属性几率_魔法_值", 20);
-        public int ArmorRandExtreme() => GetParamInt("衣服最随机性_极品_值", 10);
-        public int ArmorMaxPts_Acc() => GetParamInt("衣服最高点数_准确_值", 10);
-        public int ArmorMaxPts_Atk() => GetParamInt("衣服最高点数_攻击_值", 7);
-        public int ArmorMaxPts_Spd() => GetParamInt("衣服最高点数_攻速_值", 7);
-        public int ArmorMaxPts_Tao() => GetParamInt("衣服最高点数_道术_值", 7);
-        public int ArmorMaxPts_Mgc() => GetParamInt("衣服最高点数_魔法_值", 7);
-        public int ArmorPtsChance_Acc() => GetParamInt("衣服点数几率_准确_值", 30);
-        public int ArmorPtsChance_Atk() => GetParamInt("衣服点数几率_攻击_值", 20);
-        public int ArmorPtsChance_Spd() => GetParamInt("衣服点数几率_攻速_值", 20);
-        public int ArmorPtsChance_Tao() => GetParamInt("衣服点数几率_道术_值", 20);
-        public int ArmorPtsChance_Mgc() => GetParamInt("衣服点数几率_魔法_值", 20);
+        public int ArmorAttrChance_Acc() => ExtremeParamInt("衣服属性几率_准确_值", 30);
+        public int ArmorAttrChance_Atk() => ExtremeParamInt("衣服属性几率_攻击_值", 20);
+        public int ArmorAttrChance_Spd() => ExtremeParamInt("衣服属性几率_攻速_值", 30);
+        public int ArmorAttrChance_Tao() => ExtremeParamInt("衣服属性几率_道术_值", 30);
+        public int ArmorAttrChance_Mgc() => ExtremeParamInt("衣服属性几率_魔法_值", 20);
+        public int ArmorRandExtreme() => ExtremeParamInt("衣服最随机性_极品_值", 10);
+        public int ArmorMaxPts_Acc() => ExtremeParamInt("衣服最高点数_准确_值", 6);
+        public int ArmorMaxPts_Atk() => ExtremeParamInt("衣服最高点数_攻击_值", 6);
+        public int ArmorMaxPts_Spd() => ExtremeParamInt("衣服最高点数_攻速_值", 6);
+        public int ArmorMaxPts_Tao() => ExtremeParamInt("衣服最高点数_道术_值", 6);
+        public int ArmorMaxPts_Mgc() => ExtremeParamInt("衣服最高点数_魔法_值", 6);
+        public int ArmorPtsChance_Acc() => ExtremeParamInt("衣服点数几率_准确_值", 20);
+        public int ArmorPtsChance_Atk() => ExtremeParamInt("衣服点数几率_攻击_值", 20);
+        public int ArmorPtsChance_Spd() => ExtremeParamInt("衣服点数几率_攻速_值", 20);
+        public int ArmorPtsChance_Tao() => ExtremeParamInt("衣服点数几率_道术_值", 20);
+        public int ArmorPtsChance_Mgc() => ExtremeParamInt("衣服点数几率_魔法_值", 20);
         // 头盔
-        public int HelmetAttrChance_Acc() => GetParamInt("头盔属性几率_准确_值", 20);
-        public int HelmetAttrChance_Atk() => GetParamInt("头盔属性几率_攻击_值", 30);
-        public int HelmetAttrChance_Spd() => GetParamInt("头盔属性几率_攻速_值", 20);
-        public int HelmetAttrChance_Tao() => GetParamInt("头盔属性几率_道术_值", 30);
-        public int HelmetAttrChance_Mgc() => GetParamInt("头盔属性几率_魔法_值", 30);
-        public int HelmetRandExtreme() => GetParamInt("头盔最随机性_极品_值", 10);
-        public int HelmetMaxPts_Acc() => GetParamInt("头盔最高点数_准确_值", 7);
-        public int HelmetMaxPts_Atk() => GetParamInt("头盔最高点数_攻击_值", 7);
-        public int HelmetMaxPts_Spd() => GetParamInt("头盔最高点数_攻速_值", 7);
-        public int HelmetMaxPts_Tao() => GetParamInt("头盔最高点数_道术_值", 7);
-        public int HelmetMaxPts_Mgc() => GetParamInt("头盔最高点数_魔法_值", 7);
-        public int HelmetPtsChance_Acc() => GetParamInt("头盔点数几率_准确_值", 20);
-        public int HelmetPtsChance_Atk() => GetParamInt("头盔点数几率_攻击_值", 20);
-        public int HelmetPtsChance_Spd() => GetParamInt("头盔点数几率_攻速_值", 20);
-        public int HelmetPtsChance_Tao() => GetParamInt("头盔点数几率_道术_值", 20);
-        public int HelmetPtsChance_Mgc() => GetParamInt("头盔点数几率_魔法_值", 20);
+        public int HelmetAttrChance_Acc() => ExtremeParamInt("头盔属性几率_准确_值", 30);
+        public int HelmetAttrChance_Atk() => ExtremeParamInt("头盔属性几率_攻击_值", 20);
+        public int HelmetAttrChance_Spd() => ExtremeParamInt("头盔属性几率_攻速_值", 30);
+        public int HelmetAttrChance_Tao() => ExtremeParamInt("头盔属性几率_道术_值", 30);
+        public int HelmetAttrChance_Mgc() => ExtremeParamInt("头盔属性几率_魔法_值", 20);
+        public int HelmetRandExtreme() => ExtremeParamInt("头盔最随机性_极品_值", 10);
+        public int HelmetMaxPts_Acc() => ExtremeParamInt("头盔最高点数_准确_值", 6);
+        public int HelmetMaxPts_Atk() => ExtremeParamInt("头盔最高点数_攻击_值", 6);
+        public int HelmetMaxPts_Spd() => ExtremeParamInt("头盔最高点数_攻速_值", 6);
+        public int HelmetMaxPts_Tao() => ExtremeParamInt("头盔最高点数_道术_值", 6);
+        public int HelmetMaxPts_Mgc() => ExtremeParamInt("头盔最高点数_魔法_值", 6);
+        public int HelmetPtsChance_Acc() => ExtremeParamInt("头盔点数几率_准确_值", 20);
+        public int HelmetPtsChance_Atk() => ExtremeParamInt("头盔点数几率_攻击_值", 20);
+        public int HelmetPtsChance_Spd() => ExtremeParamInt("头盔点数几率_攻速_值", 20);
+        public int HelmetPtsChance_Tao() => ExtremeParamInt("头盔点数几率_道术_值", 20);
+        public int HelmetPtsChance_Mgc() => ExtremeParamInt("头盔点数几率_魔法_值", 20);
         // 项链
-        public int NecklaceAttrChance_Acc() => GetParamInt("项链属性几率_准确_值", 7);
-        public int NecklaceAttrChance_Atk() => GetParamInt("项链属性几率_攻击_值", 40);
-        public int NecklaceAttrChance_Spd() => GetParamInt("项链属性几率_攻速_值", 30);
-        public int NecklaceAttrChance_Tao() => GetParamInt("项链属性几率_道术_值", 30);
-        public int NecklaceAttrChance_Mgc() => GetParamInt("项链属性几率_魔法_值", 40);
-        public int NecklaceRandExtreme() => GetParamInt("项链最随机性_极品_值", 20);
-        public int NecklaceMaxPts_Acc() => GetParamInt("项链最高点数_准确_值", 10);
-        public int NecklaceMaxPts_Atk() => GetParamInt("项链最高点数_攻击_值", 7);
-        public int NecklaceMaxPts_Spd() => GetParamInt("项链最高点数_攻速_值", 7);
-        public int NecklaceMaxPts_Tao() => GetParamInt("项链最高点数_道术_值", 7);
-        public int NecklaceMaxPts_Mgc() => GetParamInt("项链最高点数_魔法_值", 7);
-        public int NecklacePtsChance_Acc() => GetParamInt("项链点数几率_准确_值", 20);
-        public int NecklacePtsChance_Atk() => GetParamInt("项链点数几率_攻击_值", 20);
-        public int NecklacePtsChance_Spd() => GetParamInt("项链点数几率_攻速_值", 20);
-        public int NecklacePtsChance_Tao() => GetParamInt("项链点数几率_道术_值", 20);
-        public int NecklacePtsChance_Mgc() => GetParamInt("项链点数几率_魔法_值", 20);
+        public int NecklaceAttrChance_Acc() => ExtremeParamInt("项链属性几率_准确_值", 30);
+        public int NecklaceAttrChance_Atk() => ExtremeParamInt("项链属性几率_攻击_值", 40);
+        public int NecklaceAttrChance_Spd() => ExtremeParamInt("项链属性几率_攻速_值", 30);
+        public int NecklaceAttrChance_Tao() => ExtremeParamInt("项链属性几率_道术_值", 30);
+        public int NecklaceAttrChance_Mgc() => ExtremeParamInt("项链属性几率_魔法_值", 40);
+        public int NecklaceRandExtreme() => ExtremeParamInt("项链最随机性_极品_值", 10);
+        public int NecklaceMaxPts_Acc() => ExtremeParamInt("项链最高点数_准确_值", 6);
+        public int NecklaceMaxPts_Atk() => ExtremeParamInt("项链最高点数_攻击_值", 6);
+        public int NecklaceMaxPts_Spd() => ExtremeParamInt("项链最高点数_攻速_值", 6);
+        public int NecklaceMaxPts_Tao() => ExtremeParamInt("项链最高点数_道术_值", 6);
+        public int NecklaceMaxPts_Mgc() => ExtremeParamInt("项链最高点数_魔法_值", 6);
+        public int NecklacePtsChance_Acc() => ExtremeParamInt("项链点数几率_准确_值", 20);
+        public int NecklacePtsChance_Atk() => ExtremeParamInt("项链点数几率_攻击_值", 20);
+        public int NecklacePtsChance_Spd() => ExtremeParamInt("项链点数几率_攻速_值", 20);
+        public int NecklacePtsChance_Tao() => ExtremeParamInt("项链点数几率_道术_值", 20);
+        public int NecklacePtsChance_Mgc() => ExtremeParamInt("项链点数几率_魔法_值", 20);
         // 手镯
-        public int BraceletAttrChance_Acc() => GetParamInt("手镯属性几率_准确_值", 7);
-        public int BraceletAttrChance_Atk() => GetParamInt("手镯属性几率_攻击_值", 30);
-        public int BraceletAttrChance_Spd() => GetParamInt("手镯属性几率_攻速_值", 20);
-        public int BraceletAttrChance_Tao() => GetParamInt("手镯属性几率_道术_值", 20);
-        public int BraceletAttrChance_Mgc() => GetParamInt("手镯属性几率_魔法_值", 30);
-        public int BraceletRandExtreme() => GetParamInt("手镯最随机性_极品_值", 20);
-        public int BraceletMaxPts_Acc() => GetParamInt("手镯最高点数_准确_值", 10);
-        public int BraceletMaxPts_Atk() => GetParamInt("手镯最高点数_攻击_值", 7);
-        public int BraceletMaxPts_Spd() => GetParamInt("手镯最高点数_攻速_值", 7);
-        public int BraceletMaxPts_Tao() => GetParamInt("手镯最高点数_道术_值", 7);
-        public int BraceletMaxPts_Mgc() => GetParamInt("手镯最高点数_魔法_值", 7);
-        public int BraceletPtsChance_Acc() => GetParamInt("手镯点数几率_准确_值", 30);
-        public int BraceletPtsChance_Atk() => GetParamInt("手镯点数几率_攻击_值", 20);
-        public int BraceletPtsChance_Spd() => GetParamInt("手镯点数几率_攻速_值", 20);
-        public int BraceletPtsChance_Tao() => GetParamInt("手镯点数几率_道术_值", 20);
-        public int BraceletPtsChance_Mgc() => GetParamInt("手镯点数几率_魔法_值", 20);
+        public int BraceletAttrChance_Acc() => ExtremeParamInt("手镯属性几率_准确_值", 30);
+        public int BraceletAttrChance_Atk() => ExtremeParamInt("手镯属性几率_攻击_值", 20);
+        public int BraceletAttrChance_Spd() => ExtremeParamInt("手镯属性几率_攻速_值", 30);
+        public int BraceletAttrChance_Tao() => ExtremeParamInt("手镯属性几率_道术_值", 30);
+        public int BraceletAttrChance_Mgc() => ExtremeParamInt("手镯属性几率_魔法_值", 20);
+        public int BraceletRandExtreme() => ExtremeParamInt("手镯最随机性_极品_值", 10);
+        public int BraceletMaxPts_Acc() => ExtremeParamInt("手镯最高点数_准确_值", 6);
+        public int BraceletMaxPts_Atk() => ExtremeParamInt("手镯最高点数_攻击_值", 6);
+        public int BraceletMaxPts_Spd() => ExtremeParamInt("手镯最高点数_攻速_值", 6);
+        public int BraceletMaxPts_Tao() => ExtremeParamInt("手镯最高点数_道术_值", 6);
+        public int BraceletMaxPts_Mgc() => ExtremeParamInt("手镯最高点数_魔法_值", 6);
+        public int BraceletPtsChance_Acc() => ExtremeParamInt("手镯点数几率_准确_值", 20);
+        public int BraceletPtsChance_Atk() => ExtremeParamInt("手镯点数几率_攻击_值", 20);
+        public int BraceletPtsChance_Spd() => ExtremeParamInt("手镯点数几率_攻速_值", 20);
+        public int BraceletPtsChance_Tao() => ExtremeParamInt("手镯点数几率_道术_值", 20);
+        public int BraceletPtsChance_Mgc() => ExtremeParamInt("手镯点数几率_魔法_值", 20);
         // 戒指
-        public int RingAttrChance_Acc() => GetParamInt("戒指属性几率_准确_值", 20);
-        public int RingAttrChance_Atk() => GetParamInt("戒指属性几率_攻击_值", 30);
-        public int RingAttrChance_Spd() => GetParamInt("戒指属性几率_攻速_值", 20);
-        public int RingAttrChance_Tao() => GetParamInt("戒指属性几率_道术_值", 30);
-        public int RingAttrChance_Mgc() => GetParamInt("戒指属性几率_魔法_值", 30);
-        public int RingRandExtreme() => GetParamInt("戒指最随机性_极品_值", 10);
-        public int RingMaxPts_Acc() => GetParamInt("戒指最高点数_准确_值", 7);
-        public int RingMaxPts_Atk() => GetParamInt("戒指最高点数_攻击_值", 7);
-        public int RingMaxPts_Spd() => GetParamInt("戒指最高点数_攻速_值", 7);
-        public int RingMaxPts_Tao() => GetParamInt("戒指最高点数_道术_值", 7);
-        public int RingMaxPts_Mgc() => GetParamInt("戒指最高点数_魔法_值", 7);
-        public int RingPtsChance_Acc() => GetParamInt("戒指点数几率_准确_值", 30);
-        public int RingPtsChance_Atk() => GetParamInt("戒指点数几率_攻击_值", 20);
-        public int RingPtsChance_Spd() => GetParamInt("戒指点数几率_攻速_值", 30);
-        public int RingPtsChance_Tao() => GetParamInt("戒指点数几率_道术_值", 20);
-        public int RingPtsChance_Mgc() => GetParamInt("戒指点数几率_魔法_值", 20);
+        public int RingAttrChance_Acc() => ExtremeParamInt("戒指属性几率_准确_值", 30);
+        public int RingAttrChance_Atk() => ExtremeParamInt("戒指属性几率_攻击_值", 20);
+        public int RingAttrChance_Spd() => ExtremeParamInt("戒指属性几率_攻速_值", 30);
+        public int RingAttrChance_Tao() => ExtremeParamInt("戒指属性几率_道术_值", 30);
+        public int RingAttrChance_Mgc() => ExtremeParamInt("戒指属性几率_魔法_值", 20);
+        public int RingRandExtreme() => ExtremeParamInt("戒指最随机性_极品_值", 9);
+        public int RingMaxPts_Acc() => ExtremeParamInt("戒指最高点数_准确_值", 6);
+        public int RingMaxPts_Atk() => ExtremeParamInt("戒指最高点数_攻击_值", 6);
+        public int RingMaxPts_Spd() => ExtremeParamInt("戒指最高点数_攻速_值", 6);
+        public int RingMaxPts_Tao() => ExtremeParamInt("戒指最高点数_道术_值", 6);
+        public int RingMaxPts_Mgc() => ExtremeParamInt("戒指最高点数_魔法_值", 6);
+        public int RingPtsChance_Acc() => ExtremeParamInt("戒指点数几率_准确_值", 20);
+        public int RingPtsChance_Atk() => ExtremeParamInt("戒指点数几率_攻击_值", 20);
+        public int RingPtsChance_Spd() => ExtremeParamInt("戒指点数几率_攻速_值", 20);
+        public int RingPtsChance_Tao() => ExtremeParamInt("戒指点数几率_道术_值", 20);
+        public int RingPtsChance_Mgc() => ExtremeParamInt("戒指点数几率_魔法_值", 20);
 
         // ── System toggle checks ──
         public bool IsAddLimLF() => Enabled("AddLimLF函数修改");

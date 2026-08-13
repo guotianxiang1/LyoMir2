@@ -761,6 +761,12 @@ namespace GameSvr.PasEngine
 
             switch (name.ToLowerInvariant())
             {
+                case "level":
+                    // TAnimal.Level 0x73AED7 `Level : Word` 只读，与 TPlayer.Level
+                    // 0x72AB2F 是两条独立注册。C# 此前只有 GetPlayerProperty 那一半，
+                    // This_Animal.Level 会走到「函数找不到」。
+                    result = PasValue.FromInt(CurrentAnimal.m_Abil.Level);
+                    return true;
                 case "name":
                     result = PasValue.FromString(CurrentAnimal.m_sCharName ?? string.Empty);
                     return true;
@@ -2207,11 +2213,13 @@ namespace GameSvr.PasEngine
                     return true;
 
                 // === YB/元宝/Shop ===
+                // PsShopGetGoodsList / PsShopBuyGoods 在原生 654 条注册里一条都没有，
+                // 全镜像裸 ASCII 与 UTF-16LE 双 0 命中，D:\光头卧龙 生产树 3611 个脚本/配置
+                // 也 0 命中（tools/npcscript_re/_invented_items.py 可复跑）。属 INVENTED，
+                // 按 fail-closed 处理，别让脚本经这条路走购买发货。
                 case "psshopgetgoodslist":
-                    return true;
-
                 case "psshopbuygoods":
-                    return true;
+                    return RejectUnsupportedNativeApi();
 
                 case "psconsumeyb":
                     if (args.Count >= 1)
@@ -2315,21 +2323,11 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
+                // OpenStorageMax 不在原生注册表里（四重 0 命中）。原生只有
+                // OpenStorage 0x72BA3C `function OpenStorage(storageType: Integer): Integer`，
+                // C# 已在 CallNpcMethod 里实现那一条。
                 case "openstoragemax":
-                    // Open max-level storage: set storage page to the maximum available
-                    if (CurrentNpc != null)
-                    {
-                        var totalPages = HUtil32._MAX(1, (CurrentPlayer.m_StorageItemList.Count + TPlayObject.STORAGE_PAGE_SIZE - 1) / TPlayObject.STORAGE_PAGE_SIZE);
-                        var maxPages = HUtil32._MAX(1,
-                            (Math.Clamp(CurrentPlayer.m_nStorageSpaceCount,
-                                TPlayObject.MIN_STORAGE_ITEM_COUNT, TPlayObject.MAX_STORAGE_ITEM_COUNT) +
-                             TPlayObject.STORAGE_PAGE_SIZE - 1) /
-                            TPlayObject.STORAGE_PAGE_SIZE);
-                        var actualMax = Math.Min(totalPages, maxPages);
-                        CurrentPlayer.m_nStoragePage = Math.Max(0, actualMax - 1);
-                        CurrentPlayer.SendSaveItemList(CurrentNpc.ObjectId);
-                    }
-                    return true;
+                    return RejectUnsupportedNativeApi();
 
                 case "setweaponlucky":
                     // SetWeaponLucky(luckValue: Integer) - Sets the equipped weapon's luck value (btValue[3]).
@@ -2540,10 +2538,7 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
-                case "changegpswitch":
-                    // ChangeGPSwitch: toggle guild point switch (V25:11)
-                    if (args.Count >= 1) SetPlayerVar('V', 25, 11, PasValue.FromInt(args[0].AsInt()));
-                    return true;
+                // ChangeGPSwitch 原生只注册在 TPsNpc 0x734ADC 上，已搬到 CallNpcFunc。
 
                 // === Internal Skills (内功/LNJN) ===
                 case "learnlnjn":
@@ -3102,20 +3097,15 @@ namespace GameSvr.PasEngine
                     // 原版 giveheroforceexp (sub_6E2CBC) = `xor eax,eax; retn` 纯 no-op 桩(恒返回0)。reject 即忠实。
                     return RejectUnsupportedNativeApi();
 
+                // TakeHeroBagExItem / TakeFromHeroBagEx 四重 0 命中。原生的英雄背包取物
+                // 只有 TakeFromHeroBag 0x72B285
+                // `function TakeFromHeroBag(const ItemName: string; ItemCount: Byte): Boolean`，
+                // C# 已在 CallPlayerFunc 的 takefromherobag 上实现那一条。
                 case "takeherobagexitem":
                 case "takefromherobagex":
-                    if (args.Count < 2 || CurrentPlayer == null
-                        || (CurrentPlayer.m_btNativeHeroState & 3) == 0
-                        || CurrentPlayer.m_HeroObject == null)
-                        return false;
-                    return CurrentPlayer.m_HeroObject.TryTakeNativeBagItems(
-                        args[0].AsString(), args[1].AsInt(), out _);
+                    return RejectUnsupportedNativeApi();
 
-                case "herorename":
-                    if (args.Count >= 2)
-                        HeroDataService.RequestRename(CurrentPlayer,
-                            args[0].AsString(), args[1].AsString(), CurrentNpc);
-                    return true;
+                // HeroRename 原生只注册在 TPsNpc 0x734E90 上，已搬到 CallNpcFunc。
 
                 case "openequipmentmascottomax":
                     // OpenEquipmentMascotToMax(ALevel) - open mascot slots on player weapon to max
@@ -3456,6 +3446,68 @@ namespace GameSvr.PasEngine
 
             switch (method.ToLowerInvariant())
             {
+                // ===== 原生注册在 TPlayer 上的一批，此前只挂在 Npc/Standalone 表里 =====
+                // PasInterpreter.TryInvokePlayerMethod 只试 CallPlayerFunc/CallPlayerMethod，
+                // 所以 This_Player.Xxx 会抛「函数找不到」并中断整个标签。
+
+                case "buildguild":                  // TPlayer 0x72B1DD
+                    // BuildGuild(GuildStr): create a new guild
+                    if (args.Count >= 2)
+                        M2Share.GuildManager.AddGuild(args[0].AsString(), args[1].AsString());
+                    return true;
+
+                case "chgequipmentbreaklevel":      // TPlayer 0x72B741
+                    // ChgEquipmentBreakLevel(nPos, Value, bHero, bAdd): Integer
+                    if (args.Count >= 1 && CurrentPlayer != null)
+                    {
+                        var breakWeapon = CurrentPlayer.m_UseItems[Grobal2.U_WEAPON];
+                        if (breakWeapon != null && breakWeapon.wIndex > 0
+                            && breakWeapon.btValue != null && breakWeapon.btValue.Length > 4)
+                        {
+                            breakWeapon.btValue[4] = (byte)Math.Max(0, Math.Min(255, args[0].AsInt()));
+                            CurrentPlayer.RecalcAbilitys();
+                            CurrentPlayer.SendMsg(CurrentPlayer, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
+                        }
+                    }
+                    return true;
+
+                case "giveitemstoother":            // TPlayer 0x72B7E9
+                case "reqpieceupnewyearpicture":    // TPlayer 0x72B65D
+                case "startpaodian":                // TPlayer 0x72BAC0
+                    // Native cross-player delivery / New Year picture / paodian scheduler
+                    // all own validation and persistence that is not modelled.
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "inputdialog":                 // TPlayer 0x72B910（TPsNpc 0x734944 也注册）
+                    // TPlayer 版声明少一个 Hum 形参：InputDialog(MsgStr, DlgType, InputType)。
+                    if (args.Count >= 2 && CurrentNpc != null)
+                    {
+                        var inputMsg = args[0].AsString();
+                        var inputDlgType = args[1].AsInt();
+                        var inputKind = args.Count >= 3 ? args[2].AsInt() : 0;
+                        CurrentPlayer.SendDefMessage(Grobal2.SM_MERCHANT_QUERY,
+                            CurrentNpc.ObjectId, inputKind, inputDlgType, 0, inputMsg);
+                    }
+                    return true;
+
+                case "querytaskdispatch":           // TPlayer 0x72B9B8
+                {
+                    var acceptCnt = GetGlobalVar(100, 2);
+                    var dispatchCnt = GetGlobalVar(100, 3);
+                    result = PasValue.FromInt(dispatchCnt.AsInt() >= acceptCnt.AsInt() ? 0 : 1);
+                    return true;
+                }
+
+                case "requestguildwar":             // TPlayer 0x72B321
+                    // RequestGuildWar(TargGuildStr)
+                    if (CurrentPlayer?.m_MyGuild != null)
+                    {
+                        var warCastle = M2Share.CastleManager.GetCastle(0);
+                        if (warCastle != null)
+                            warCastle.AddAttackerInfo(CurrentPlayer.m_MyGuild);
+                    }
+                    return true;
+
                 case "agreebaishi":
                     result = PasValue.FromBool(TryAgreeBaiShi());
                     return true;
@@ -3527,12 +3579,7 @@ namespace GameSvr.PasEngine
                         : -4);
                     return true;
 
-                case "herorename":
-                    result = PasValue.FromInt(args.Count >= 2
-                        && HeroDataService.RequestRename(CurrentPlayer,
-                            args[0].AsString(), args[1].AsString(), CurrentNpc)
-                        ? 0 : 1);
-                    return true;
+                // HeroRename 原生只注册在 TPsNpc 0x734E90 上，已搬到 CallNpcFunc。
 
                 case "getmypositioninguild":
                     result = PasValue.FromInt(CurrentPlayer.m_MyGuild == null
@@ -3637,12 +3684,10 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "groupsetv":
-                    if (args.Count >= 3)
-                    {
-                        SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                        result = PasValue.FromBool(true);
-                    }
-                    else result = PasValue.FromBool(false);
+                    // sub_6E0830 answers False for an ungrouped caller (6E083F je), so the
+                    // Boolean the script sees has to come from SetGroupPlayerVar itself.
+                    result = PasValue.FromBool(args.Count >= 3
+                        && SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]));
                     return true;
 
                 case "groupsets":
@@ -3806,9 +3851,10 @@ namespace GameSvr.PasEngine
                 case "checkdiamond":
                     return RejectUnsupportedNativeApi(out result);
 
+                // CheckGameGold 四重 0 命中，原生注册表里没有任何 CheckGameGold /
+                // PsShop* / GameGold 命名的条目。元宝余额判断在原生走的是别的入口。
                 case "checkgamegold":
-                    result = PasValue.FromBool(CurrentPlayer.m_nGameGold >= args[0].AsInt());
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 // === Teleport with return values ===
                 case "flyto":
@@ -4431,9 +4477,11 @@ namespace GameSvr.PasEngine
                     result = PasValue.FromInt(ExpandStorageSpace(args[0].AsInt()));
                     return true;
 
+                // GetStorageItemCount 四重 0 命中；原生的仓库计数是
+                // GetStorageSpaceCount 0x72BBE0 / GetAccountStorageCnt 0x72B6D5。
+                // 此前这里恒返回 0，脚本无法区分「没有」与「不支持」。
                 case "getstorageitemcount":
-                    result = PasValue.FromInt(0);
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "findplayerbyname":
                     // Native signature returns TPlayer, not an object ID.
@@ -4554,37 +4602,15 @@ namespace GameSvr.PasEngine
                             CurrentPlayer.m_sCharName));
                     return true;
 
-                case "getcurrenteaperiod":
-                    if (args.Count >= 2)
-                        result = PasValue.FromInt(GetPlayerVarOrZero('V', 20, (args[0].AsInt() * 10 + args[1].AsInt()) % 50));
-                    else result = PasValue.FromInt(0);
-                    return true;
-
-                case "getcurrenteaidxbyname":
-                case "getcurrenteanamebyidx":
-                case "getcurrenteascorebyidx":
-                case "getlasteaidxbyname":
-                case "getlasteanamebyidx":
-                case "getlasteascorebyidx":
-                case "geteaorderinfo":
-                    // Native everyday-activity ranking records and pagination are absent.
-                    return RejectUnsupportedNativeApi(out result);
-
-                case "eaorderisstart":
-                    if (args.Count >= 2)
-                    {
-                        result = PasValue.FromBool(GetPlayerVarOrZero('V', 20, 49) != 0);
-                        return true;
-                    }
-                    else
-                    {
-                        result = PasValue.FromBool(false);
-                        return true;
-                    }
-
-                case "getscorebyname":
-                    // Native everyday-activity ranking records are absent.
-                    return RejectUnsupportedNativeApi(out result);
+                // 每日活动排行这一族原生一个都没注册在 TPlayer 上：
+                //   GetCurrentEAPeriod / GetCurrentEAIdxByName / GetCurrentEAScoreByIdx /
+                //   GetLastEAIdxByName / GetLastEANameByIdx / GetLastEAScoreByIdx
+                //     -> TPsNpc 0x734DF4 / 0x734E00 / 0x734E18 / 0x734E24 / 0x734E30 / 0x734E3C
+                //   GetCurrentEANameByIdx / GetEAOrderInfo / EAOrderIsStart
+                //     -> TPsNpc 0x734E0C / 0x734E48 / 0x734E54 **且** global
+                //        0x7299F6 / 0x729A18 / 0x729A3A
+                //   GetScoreByName -> 只有 global 0x729A29
+                // 已分别搬到 CallNpcFunc 与 CallStandaloneFunction。
 
                 // === CURRENCY (return value) ===
                 case "getvexptobeconverted":
@@ -4661,14 +4687,7 @@ namespace GameSvr.PasEngine
                     else result = PasValue.FromInt(NativeScriptVarExMiss);
                     return true;
 
-                case "getguildwargold":
-                    // 原生不是变量，是个常量桩：注册运 0x739043 把 handler 0x6468C0 与名字串
-                    // 0x73A200 "GetGuildWarGold" 配对，而 0x6468C0 全函数只有六个字节
-                    // B8 30 75 00 00 C3 —— mov eax,0x7530 / ret，即恒返回 30000，
-                    // 且全镜像对 0x6468C0 的引用就只有那处注册。此前读 V(23,3) 是影子实现，
-                    // 会跟运营脚本自己的 V 坐标抢地方。
-                    result = PasValue.FromInt(30000);
-                    return true;
+                // GetGuildWarGold 原生只注册在 TPsNpc 0x734D34 上，已搬到 CallNpcFunc。
 
                 case "getlistofwar":
                 case "getnormalcastleflagowner":
@@ -4721,16 +4740,8 @@ namespace GameSvr.PasEngine
                     return RejectUnsupportedNativeApi(out result);
 
                 // === Move/Kick (player-context func variants) ===
-                case "moveallhuminmap":
-                    // MoveAllHumInMap(desMap, x, y): move all players on current map to dest
-                    if (args.Count >= 3 && CurrentPlayer.m_PEnvir != null)
-                    {
-                        var dm = args[0].AsString(); var dx = (short)args[1].AsInt(); var dy = (short)args[2].AsInt();
-                        var hl = new List<TBaseObject>();
-                        M2Share.UserEngine.GetMapRageHuman(CurrentPlayer.m_PEnvir, 0, 0, 1000, hl);
-                        foreach (var o in hl) { if (o is TPlayObject pl) pl.SpaceMove(dm, dx, dy, 0); }
-                                            }
-                    return true;
+                // MoveAllHumInMap 原生只注册在 TPsNpc 0x734ECC 上，已搬到 CallNpcFunc
+                //（那边取的是 NPC 自己的地图，对应原生 Self = TPsNpc）。
 
                 case "moveallhuminmapbylevel":
                     // MoveAllHumInMapByLevel(desMap, x, y, humLv, humForceLv, humSuperForceLv, opType): move by level
@@ -4744,20 +4755,8 @@ namespace GameSvr.PasEngine
                                             }
                     return true;
 
-                case "kickallhumtomap":
-                    // KickAllHumToMap(srcMap, desMap, x, y): kick all players from src to dest
-                    if (args.Count >= 4)
-                    {
-                        var sm = M2Share.MapManager.FindMap(args[0].AsString());
-                        if (sm != null)
-                        {
-                            var dm = args[1].AsString(); var dx = (short)args[2].AsInt(); var dy = (short)args[3].AsInt();
-                            var hl = new List<TBaseObject>();
-                            M2Share.UserEngine.GetMapRageHuman(sm, 0, 0, 1000, hl);
-                            foreach (var o in hl) { if (o is TPlayObject pl) pl.SpaceMove(dm, dx, dy, 0); }
-                        }
-                                            }
-                    return true;
+                // KickAllHumToMap 原生是全局函数 0x7299E5，不是 TPlayer 方法，
+                // 已搬到 CallStandaloneFunction。
 
                 case "groupflytodynroom":
                 case "groupflytodynroominrange":
@@ -4767,27 +4766,11 @@ namespace GameSvr.PasEngine
                 // HERO FUNCTIONS (return value)
                 // =====================================================================
 
+                // GetHeroBagExItemCount / ...Ex 四重 0 命中。原生只有
+                // GetHeroBagItemCount 0x72B279，C# 已在下方实现那一条。
                 case "getherobagexitemcount":
                 case "getherobagexitemcountex":
-                    // GetHeroBagItemCount(itemName) - count items in hero bag
-                    if (args.Count >= 1 && CurrentPlayer != null && CurrentPlayer.m_HeroObject != null)
-                    {
-                        var hero = CurrentPlayer.m_HeroObject;
-                        var itemName = args[0].AsString();
-                        int cnt = 0;
-                        for (int i = 0; i < hero.m_ItemList.Count; i++)
-                        {
-                            var item = hero.m_ItemList[i];
-                            if (item != null && item.wIndex > 0 &&
-                                string.Equals(M2Share.UserEngine.GetStdItemName(item.wIndex), itemName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                cnt++;
-                            }
-                        }
-                        result = PasValue.FromInt(cnt);
-                    }
-                    else result = PasValue.FromInt(0);
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "getheroskillstr":
                     // GetHeroSkillStr - get hero skill string (concatenated skill names)
@@ -5357,28 +5340,11 @@ namespace GameSvr.PasEngine
                     return true;
 
                 // === YB/Shop Integration (NPC side) ===
+                // 与 CallPlayerMethod 那一半同理：PsShopGetGoodsList / PsShopBuyGoods
+                // 四重 0 命中，属 INVENTED，fail-closed。
                 case "psshopgetgoodslist":
-                    // PsShopGetGoodsList: query YB shop goods list, send to client
-                    if (CurrentPlayer != null && args.Count >= 1)
-                    {
-                        var shopId = args[0].AsInt();
-                        // Triggers client to request shop goods list for YB shop
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDGOODSLIST, 0, CurrentNpc.ObjectId, shopId, 0, "");
-                    }
-                    return true;
-
                 case "psshopbuygoods":
-                    // PsShopBuyGoods: buy goods from YB shop
-                    // The actual purchase is handled by client->server packet, this just records intent
-                    if (CurrentPlayer != null && args.Count >= 3)
-                    {
-                        var shopId = args[0].AsInt();
-                        var goodsIdx = args[1].AsInt();
-                        var count = args[2].AsInt();
-                        // The actual deduction happens via client buy packet handler
-                        // This NPC method just triggers the interaction
-                    }
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "createmon":
                     if (args.Count >= 6)
@@ -5699,25 +5665,8 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
-                case "buildguild":
-                    // BuildGuild(guildName, chiefName) - create a new guild
-                    if (args.Count >= 2)
-                    {
-                        var guildName = args[0].AsString();
-                        var chiefName = args[1].AsString();
-                        M2Share.GuildManager.AddGuild(guildName, chiefName);
-                    }
-                    return true;
-
-                case "requestguildwar":
-                    // RequestGuildWar - request guild war for player's guild
-                    if (CurrentPlayer?.m_MyGuild != null)
-                    {
-                        var castle = M2Share.CastleManager.GetCastle(0);
-                        if (castle != null)
-                            castle.AddAttackerInfo(CurrentPlayer.m_MyGuild);
-                    }
-                    return true;
+                // BuildGuild 0x72B1DD 与 RequestGuildWar 0x72B321 原生都注册在 TPlayer 上，
+                // 已搬到 CallPlayerFunc。
 
                 // === File operations ===
                 case "chkstrinfile":
@@ -5893,19 +5842,7 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
-                case "chgequipmentbreaklevel":
-                    // ChgEquipmentBreakLevel(newLevel: Integer) - change equipment break/upgrade level
-                    if (args.Count >= 1 && CurrentPlayer != null)
-                    {
-                        var weapon = CurrentPlayer.m_UseItems[Grobal2.U_WEAPON];
-                        if (weapon != null && weapon.wIndex > 0 && weapon.btValue != null && weapon.btValue.Length > 4)
-                        {
-                            weapon.btValue[4] = (byte)Math.Max(0, Math.Min(255, args[0].AsInt()));
-                            CurrentPlayer.RecalcAbilitys();
-                            CurrentPlayer.SendMsg(CurrentPlayer, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
-                        }
-                    }
-                    return true;
+                // ChgEquipmentBreakLevel 原生只注册在 TPlayer 0x72B741 上，已搬到 CallPlayerFunc。
 
                 case "upgradeselfmagicshield":
                     return ExecuteNativeMagicShieldUpgrade(args, false);
@@ -6127,9 +6064,7 @@ namespace GameSvr.PasEngine
                     return RejectUnsupportedNativeApi(out result);
 
                 // === ITEM / GIVE (NPC-side variants) ===
-                case "giveitemstoother":
-                    // Native cross-player delivery owns validation and persistence.
-                    return RejectUnsupportedNativeApi(out result);
+                // GiveItemsToOther 原生只注册在 TPlayer 0x72B7E9 上，已搬到 CallPlayerFunc。
 
                 case "giveconfigprizetemp":
                     if (args.Count != 3 || args[0].ObjVal is not TPlayObject tempPrizePlayer)
@@ -6303,8 +6238,8 @@ namespace GameSvr.PasEngine
                     return RejectUnsupportedNativeApi(out result);
 
                 // === PaoDian ===
+                // StartPaodian 原生只注册在 TPlayer 0x72BAC0 上，已搬到 CallPlayerFunc。
                 case "setpaodianprizeandperiod":
-                case "startpaodian":
                     // Native paodian reward scheduler and lifecycle are absent.
                     return RejectUnsupportedNativeApi(out result);
 
@@ -6436,9 +6371,9 @@ namespace GameSvr.PasEngine
                                             }
                     return true;
 
-                case "reqpieceupnewyearpicture":
+                // ReqPieceUpNewYearPicture 原生只注册在 TPlayer 0x72B65D 上，已搬到 CallPlayerFunc。
                 case "composeitem":
-                    // Native New Year picture and item-compose transactions are absent.
+                    // Native item-compose transaction is absent.
                     return RejectUnsupportedNativeApi(out result);
 
                 // === YB Shop ===
@@ -6526,39 +6461,8 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
-                // === Player Cry ===
-                case "playercry":
-                    // PlayerCry(chrName, iType, strMsg) - make player character cry/emote
-                    if (args.Count >= 1)
-                    {
-                        var chrName = args[0].AsString();
-                        var iType = args.Count >= 2 ? args[1].AsInt() : 0;
-                        var strMsg = args.Count >= 3 ? args[2].AsString() : "";
-                        var targetPlayer = M2Share.UserEngine.GetPlayObject(chrName);
-                        if (targetPlayer != null)
-                        {
-                            targetPlayer.SysMsg(strMsg, MsgColor.Green, MsgType.Hint);
-                            targetPlayer.SendRefMsg(Grobal2.RM_CRY, iType, 0, 0, 0, strMsg);
-                        }
-                    }
-                    return true;
-
-                // === Player Give (NPC-side) ===
-                case "playergive":
-                    // PlayerGive(chrName, ItemName, ItemCount) - NPC gives item to another player
-                    if (args.Count >= 3 && CurrentNpc != null)
-                    {
-                        var chrName = args[0].AsString();
-                        var itemName = args[1].AsString();
-                        var itemCount = args[2].AsInt();
-                        var targetPlayer = M2Share.UserEngine.GetPlayObject(chrName);
-                        if (targetPlayer != null)
-                        {
-                            for (int i = 0; i < itemCount; i++)
-                                CurrentNpc.GotoLable_GiveItem(targetPlayer, itemName, 1);
-                        }
-                    }
-                    return true;
+                // PlayerCry 0x729A4B 与 PlayerGive 0x729A5C 原生都是 AddFunction 注册的
+                // 全局函数，不是 TPsNpc 方法，已搬到 CallStandaloneFunction。
 
                 // === Route / Gate ===
                 case "enterroutewaybylf":
@@ -7029,6 +6933,101 @@ namespace GameSvr.PasEngine
 
             switch (method.ToLowerInvariant())
             {
+                // ===== 原生注册在 TPsNpc 上的一批，此前只挂在 Player/Standalone 表里 =====
+                // 解释器不跨接收者回落（PasInterpreter.TryInvokeNpcMethod 只试
+                // CallNpcFunc/CallNpcMethod），所以按原生写法 This_Npc.Xxx 调用会抛
+                // 「函数找不到」并中断整个标签。注册站点见
+                // docs/m_npcscript_native_registry_20260813.txt。
+
+                case "changegpswitch":              // TPsNpc 0x734ADC
+                    // 原生声明是 `function ChangeGPSwitch(Player: TPlayer): Integer` —— 唯一
+                    // 实参是玩家对象、返回 Integer。原先挂在 CallPlayerMethod 上的那份把
+                    // args[0] 当整数写进 V(25,11)，与声明矛盾（既不吃玩家对象也不返回值），
+                    // 所以不搬那份实现，按 fail-closed 处理。真正的公会点开关状态在哪一个
+                    // 原生字段上未反出来，属 B4。
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "getaroundmonnum":             // TPsNpc 0x7349EC（TPlayer 0x72B7AD 也注册）
+                    // TPsNpc 版声明 `GetAroundMonNum(const sMonName: string): Integer`，
+                    // TPlayer 版 `GetAroundMonNum(const sMonName: string; x,y,Rang: Integer)`
+                    // —— 两个重载的第一个实参都是**怪物名字符串**。CallPlayerMethod 里那份把
+                    // args[0] 当范围整数读，且只打日志不返回计数，与两个声明都对不上，所以
+                    // 不转发。按 fail-closed 处理，避免把错误的实参解读扩散到第二个接收者。
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "getcurrenteaperiod":          // TPsNpc 0x734DF4
+                    if (args.Count >= 2)
+                        result = PasValue.FromInt(GetPlayerVarOrZero('V', 20, (args[0].AsInt() * 10 + args[1].AsInt()) % 50));
+                    else result = PasValue.FromInt(0);
+                    return true;
+
+                case "getcurrenteaidxbyname":       // TPsNpc 0x734E00
+                case "getcurrenteanamebyidx":       // TPsNpc 0x734E0C（global 0x7299F6 也注册）
+                case "getcurrenteascorebyidx":      // TPsNpc 0x734E18
+                case "getlasteaidxbyname":          // TPsNpc 0x734E24
+                case "getlasteanamebyidx":          // TPsNpc 0x734E30
+                case "getlasteascorebyidx":         // TPsNpc 0x734E3C
+                case "geteaorderinfo":              // TPsNpc 0x734E48（global 0x729A18 也注册）
+                case "updateeverydayactorder":      // TPsNpc 0x734DE8（TPlayer/global 也注册）
+                    // Native everyday-activity ranking records and pagination are absent.
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "eaorderisstart":              // TPsNpc 0x734E54（global 0x729A3A 也注册）
+                    result = PasValue.FromBool(args.Count >= 2
+                        && GetPlayerVarOrZero('V', 20, 49) != 0);
+                    return true;
+
+                case "getguildwargold":             // TPsNpc 0x734D34
+                    // 原生不是变量，是个常量桩：注册运 0x739043 把 handler 0x6468C0 与名字串
+                    // 0x73A200 "GetGuildWarGold" 配对，而 0x6468C0 全函数只有六个字节
+                    // B8 30 75 00 00 C3 —— mov eax,0x7530 / ret，即恒返回 30000。
+                    result = PasValue.FromInt(30000);
+                    return true;
+
+                case "useguildpoint":               // TPsNpc 0x734AC4
+                case "getsomeguildpoint":           // TPsNpc 0x734AD0
+                case "setwinetreat":                // TPsNpc 0x734E6C
+                case "gettreatwine":                // TPsNpc 0x734E78
+                    // These native TPsNpc methods own dedicated player/subsystem state.
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "herorename":                  // TPsNpc 0x734E90
+                {
+                    var renameOwner = args.Count >= 1 && args[0].ObjVal is TPlayObject renamePlayer
+                        ? renamePlayer
+                        : CurrentPlayer;
+                    result = PasValue.FromInt(args.Count >= 3
+                        && HeroDataService.RequestRename(renameOwner,
+                            args[1].AsString(), args[2].AsString(), CurrentNpc)
+                        ? 0 : 1);
+                    return true;
+                }
+
+                case "moveallhuminmap":             // TPsNpc 0x734ECC
+                    // MoveAllHumInMap(desMap, x, y): move all players on current map to dest
+                    if (args.Count >= 3 && CurrentNpc.m_PEnvir != null)
+                    {
+                        var moveAllMap = args[0].AsString();
+                        var moveAllX = (short)args[1].AsInt();
+                        var moveAllY = (short)args[2].AsInt();
+                        var moveAllList = new List<TBaseObject>();
+                        M2Share.UserEngine.GetMapRageHuman(CurrentNpc.m_PEnvir, 0, 0, 1000, moveAllList);
+                        foreach (var moveAllObj in moveAllList)
+                        {
+                            if (moveAllObj is TPlayObject moveAllPlayer)
+                                moveAllPlayer.SpaceMove(moveAllMap, moveAllX, moveAllY, 0);
+                        }
+                    }
+                    return true;
+
+                case "newfullmailex":               // TPsNpc 0x735070（8 参：带收件人名）
+                    if (args.Count != 8) return false;
+                    _ = new global::GameSvr.Services.MailService().NewFullMailEx(
+                        args[0].AsString(), args[1].AsString(), args[2].AsString(),
+                        args[3].AsInt(), args[4].AsInt(), args[5].AsInt(),
+                        args[6].AsString(), args[7].AsString());
+                    return true;
+
                 case "submitballquest":
                     if (args.Count != 1
                         || args[0].Type != PasValueType.Object
@@ -7505,9 +7504,7 @@ namespace GameSvr.PasEngine
                     return true;
 
                 // === ITEM / GIVE (NPC-side, return value) ===
-                case "giveitemstoother":
-                    // Native cross-player delivery owns validation and persistence.
-                    return RejectUnsupportedNativeApi(out result);
+                // GiveItemsToOther 原生只注册在 TPlayer 0x72B7E9 上，已搬到 CallPlayerFunc。
 
                 case "giveconfigprizetemp":
                     // Native temporary-transfer prize transaction is absent.
@@ -7599,6 +7596,76 @@ namespace GameSvr.PasEngine
             result = PasValue.Nil;
             switch (name.ToLowerInvariant())
             {
+                // ===== 原生用 AddFunction (0x513A7C) 注册为全局函数的一批，此前只挂在
+                // Player/Npc 表里。PasInterpreter:778 先试 CallStandaloneFunction，
+                // 裸调用 Xxx(...) 走的就是这张表。
+
+                case "getscorebyname":              // global 0x729A29
+                    // Native everyday-activity ranking records are absent.
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "eaorderisstart":              // global 0x729A3A（TPsNpc 0x734E54 也注册）
+                    result = PasValue.FromBool(args.Count >= 2
+                        && GetPlayerVarOrZero('V', 20, 49) != 0);
+                    return true;
+
+                case "getcurrenteanamebyidx":       // global 0x7299F6（TPsNpc 0x734E0C 也注册）
+                case "geteaorderinfo":              // global 0x729A18（TPsNpc 0x734E48 也注册）
+                    // Native everyday-activity ranking records and pagination are absent.
+                    return RejectUnsupportedNativeApi(out result);
+
+                case "kickallhumtomap":             // global 0x7299E5
+                    // KickAllHumToMap(srcMap, desMap, x, y)
+                    if (args.Count >= 4)
+                    {
+                        var kickSrcMap = M2Share.MapManager.FindMap(args[0].AsString());
+                        if (kickSrcMap != null)
+                        {
+                            var kickMap = args[1].AsString();
+                            var kickX = (short)args[2].AsInt();
+                            var kickY = (short)args[3].AsInt();
+                            var kickList = new List<TBaseObject>();
+                            M2Share.UserEngine.GetMapRageHuman(kickSrcMap, 0, 0, 1000, kickList);
+                            foreach (var kickObj in kickList)
+                            {
+                                if (kickObj is TPlayObject kickPlayer)
+                                    kickPlayer.SpaceMove(kickMap, kickX, kickY, 0);
+                            }
+                        }
+                    }
+                    return true;
+
+                case "playercry":                   // global 0x729A4B
+                    // PlayerCry(chrName, iType, strMsg)
+                    if (args.Count >= 1)
+                    {
+                        var cryName = args[0].AsString();
+                        var cryType = args.Count >= 2 ? args[1].AsInt() : 0;
+                        var cryMsg = args.Count >= 3 ? args[2].AsString() : "";
+                        var cryTarget = M2Share.UserEngine.GetPlayObject(cryName);
+                        if (cryTarget != null)
+                        {
+                            cryTarget.SysMsg(cryMsg, MsgColor.Green, MsgType.Hint);
+                            cryTarget.SendRefMsg(Grobal2.RM_CRY, cryType, 0, 0, 0, cryMsg);
+                        }
+                    }
+                    return true;
+
+                case "playergive":                  // global 0x729A5C
+                    // PlayerGive(chrName, ItemName, ItemCount)
+                    if (args.Count >= 3 && CurrentNpc != null)
+                    {
+                        var giveTarget = M2Share.UserEngine.GetPlayObject(args[0].AsString());
+                        if (giveTarget != null)
+                        {
+                            var giveName = args[1].AsString();
+                            var giveCount = args[2].AsInt();
+                            for (var giveIdx = 0; giveIdx < giveCount; giveIdx++)
+                                CurrentNpc.GotoLable_GiveItem(giveTarget, giveName, 1);
+                        }
+                    }
+                    return true;
+
                 case "getdynroomhumnum":
                     if (args.Count != 2
                         || M2Share.DynamicRoomService?.IsInitialized != true)
@@ -7633,23 +7700,12 @@ namespace GameSvr.PasEngine
                             args[1].AsInt()));
                     return true;
 
-                case "useguildpoint":
-                case "getsomeguildpoint":
-                case "setwinetreat":
-                case "gettreatwine":
+                // UseGuildPoint 0x734AC4 / GetSomeGuildPoint 0x734AD0 / SetWineTreat 0x734E6C /
+                // GetTreatWine 0x734E78 / HeroRename 0x734E90 原生全部注册在 TPsNpc 上，
+                // 不是全局函数，已搬到 CallNpcFunc。
                 case "convertvexp":
-                    // These native globals own dedicated player/subsystem state.
+                    // This native global owns dedicated player/subsystem state.
                     return RejectUnsupportedNativeApi(out result);
-
-                case "herorename":
-                    var renameOwner = args.Count >= 1 && args[0].ObjVal is TPlayObject player
-                        ? player
-                        : CurrentPlayer;
-                    result = PasValue.FromInt(args.Count >= 3
-                        && HeroDataService.RequestRename(renameOwner,
-                            args[1].AsString(), args[2].AsString(), CurrentNpc)
-                        ? 0 : 1);
-                    return true;
 
                 case "delbagitemofall":
                     return CallPlayerMethod("delbagitemofall", args);
@@ -7703,7 +7759,9 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "getg":
-                    result = args.Count >= 2 ? GetGlobalVar(args[0].AsInt(), args[1].AsInt()) : PasValue.FromInt(0);
+                    result = args.Count >= 2
+                        ? GetGlobalVar(args[0].AsInt(), args[1].AsInt())
+                        : PasValue.FromInt(NativeGlobalVarMiss);
                     return true;
 
                 case "setg":
@@ -7791,9 +7849,8 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "groupsetv":
-                    if (args.Count >= 3 && CurrentPlayer != null)
-                        SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]);
-                    result = PasValue.FromBool(args.Count >= 3 && CurrentPlayer != null);
+                    result = PasValue.FromBool(args.Count >= 3 && CurrentPlayer != null
+                        && SetGroupPlayerVar('V', args[0].AsInt(), args[1].AsInt(), args[2]));
                     return true;
 
                 case "groupsets":
@@ -7932,13 +7989,9 @@ namespace GameSvr.PasEngine
                     // Native Magic Tower/challenge state is not a generic map scan.
                     return RejectUnsupportedNativeApi(out result);
 
-                case "newfullmailex":
-                    if (args.Count != 8) return false;
-                    _ = new global::GameSvr.Services.MailService().NewFullMailEx(
-                        args[0].AsString(), args[1].AsString(), args[2].AsString(),
-                        args[3].AsInt(), args[4].AsInt(), args[5].AsInt(),
-                        args[6].AsString(), args[7].AsString());
-                    return true;
+                // NewFullMailEx 原生只有两处注册，都是类方法：TPlayer 0x72BBF8（7 参）与
+                // TPsNpc 0x735070（8 参，多一个收件人名）。没有全局函数重载，8 参那份
+                // 已搬到 CallNpcFunc，7 参那份留在 CallPlayerMethod。
 
                 case "startsiege":
                 case "startcastlewar":
@@ -8065,14 +8118,7 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
-                case "querytaskdispatch":
-                    // QueryTaskDispatch — return current task dispatch status
-                    {
-                        var acceptCnt = GetGlobalVar(100, 2);
-                        var dispatchCnt = GetGlobalVar(100, 3);
-                        result = PasValue.FromInt(dispatchCnt.AsInt() >= acceptCnt.AsInt() ? 0 : 1);
-                    }
-                    return true;
+                // QueryTaskDispatch 原生只注册在 TPlayer 0x72B9B8 上，已搬到 CallPlayerFunc。
 
                 // === Date/Time utilities ===
                 case "psdecodedate":
@@ -8230,17 +8276,48 @@ namespace GameSvr.PasEngine
         // GLOBAL VARIABLE SYSTEM (G variables)
         // =====================================================================
 
-        // Delphi 战神 G 变量公式: paramNo * 100 + index (系统公共变量)
+        /// <summary>
+        /// `GetG` 的未命中值是 **-2**，不是 0。
+        /// sub_699198 一进门就 `0x6991BF BE FE FF FF FF mov esi,0xFFFFFFFE` 种下 -2，
+        /// 只有缓存命中或数据库查到才覆盖它，收尾 `0x6992B2 8B C6 mov eax,esi` 原样返回。
+        /// 缓存查找 sub_69B01C 自己的 miss 分支也是 -2（`0x69B040 B8 FE FF FF FF`）。
+        /// 脚本里的 `if GetG(a,b) = 0 then` 依赖这个区分——返回 0 会把判断整个反过来。
+        /// </summary>
+        private const int NativeGlobalVarMiss = -2;
+
+        /// <summary>
+        /// `GetG`/`SetG` 共有的 index 窗口 1..50，两侧都是先判范围再碰存储：
+        ///   GetG sub_699198  0x6991C4 `83 FB 01 cmp ebx,1`     / 0x6991C7 `0F 8C` jl  -> 0x699290
+        ///                    0x6991CD `83 FB 32 cmp ebx,0x32`  / 0x6991D0 `0F 8F` jg  -> 0x699290
+        ///   SetG sub_699310  0x6993FD `83 FE 01 cmp esi,1`     / 0x699400 `0F 8C` jl  -> 0x69949D
+        ///                    0x699406 `83 FE 32 cmp esi,0x32`  / 0x699409 `0F 8F` jg  -> 0x69949D
+        /// 50 就是底层 MySQL 表 `MirParams` 的列数 g1..g50，列名由
+        /// 0x6992C4 `'g'` + IntToStr(index) 拼出，行键是 ParamNo。
+        /// </summary>
+        private const int NativeGlobalVarMinIndex = 1;
+        private const int NativeGlobalVarMaxIndex = 50;
+
+        // 扁平键 = ParamNo * 100 + index：
+        //   0x6991DF  6B 55 FC 64  imul edx,[ebp-4],0x64   ; ParamNo * 100
+        //   0x6991E3  03 D3        add  edx,ebx            ; + index
+        // 注意 GameSvrConfig.cs 上 GlobalVal 那句 "nTaskNo*1000+nFieldNo" 的注释与这里的
+        // 字节矛盾，乘数是 100 不是 1000。
         public PasValue GetGlobalVar(int group, int index)
         {
-            if (M2Share.g_Config == null) return PasValue.FromInt(0);
+            if (index < NativeGlobalVarMinIndex || index > NativeGlobalVarMaxIndex)
+                return PasValue.FromInt(NativeGlobalVarMiss);
+            if (M2Share.g_Config == null) return PasValue.FromInt(NativeGlobalVarMiss);
             int flat = group * 100 + index;
-            if (flat < 0 || flat >= M2Share.g_Config.GlobalVal.Length) return PasValue.FromInt(0);
+            // 越出数组 = 原生那张表里没有这个 ParamNo 行，查询返回 0 行，esi 保持 -2。
+            if (flat < 0 || flat >= M2Share.g_Config.GlobalVal.Length)
+                return PasValue.FromInt(NativeGlobalVarMiss);
             return PasValue.FromInt(M2Share.g_Config.GlobalVal[flat]);
         }
 
         public bool SetGlobalVar(int group, int index, PasValue value)
         {
+            if (index < NativeGlobalVarMinIndex || index > NativeGlobalVarMaxIndex)
+                return false;
             if (M2Share.g_Config == null) return false;
             int flat = group * 100 + index;
             if (flat >= 0 && flat < M2Share.g_Config.GlobalVal.Length)
@@ -8380,21 +8457,44 @@ namespace GameSvr.PasEngine
             return SetPlayerVar(CurrentPlayer, type, group, index, value);
         }
 
+        /// <summary>
+        /// `GroupSetV` is registered on the TPlayer PAS face at 0x7318AF
+        /// (<c>mov edx,0x6E0830 / mov ecx,0x732A98</c>, the name blob "GroupSetV"),
+        /// so the handler is sub_6E0830 and it forwards to TGroup's sub_727754:
+        /// <code>
+        ///   6E0835  33 DB                 xor ebx,ebx          ; result := False
+        ///   6E0837  8B B0 80 0A 00 00     mov esi,[eax+0xA80]  ; the caller's TGroup
+        ///   6E083D  85 F6 / 6E083F 74 0D  test esi,esi / je    ; no group -> keep False
+        ///   6E0847  E8 08 6F 04 00        call 0x727754
+        ///   727765  C6 45 F3 01           mov byte [ebp-0xD],1 ; result preset True
+        ///   72776C  8B 58 44              mov ebx,[eax+0x44]   ; bound = member count
+        ///   72777E  8B 40 10              mov eax,[eax+0x10]   ; slot -> player
+        ///   72778C  85 C0 / 72778E 74 15  test eax,eax / je    ; empty slot -> skip
+        ///   727790  80 78 73 00 / 75 0F   cmp [eax+0x73],0/jne ; GHOST -> skip
+        ///   7277A0  E8 E3 7A FB FF        call 0x6DF288        ; per-member SetV
+        /// </code>
+        /// Three contracts follow. An ungrouped caller writes NOTHING and answers
+        /// False - 0x6E083F jumps straight to the epilogue, there is no fall back to
+        /// a plain SetV on self. Ghost members are skipped. And the result byte
+        /// preset at 0x727765 is never cleared, so the answer is True whenever a
+        /// group exists, however many members the ghost gate skipped.
+        /// </summary>
         internal bool SetGroupPlayerVar(char type, int group, int index, PasValue value)
         {
             var members = CurrentPlayer?.m_GroupOwner?.m_GroupMembers;
-            if (members == null || members.Count == 0)
+            if (members == null)
             {
-                return SetPlayerVar(type, group, index, value);
+                return false;
             }
 
-            bool anySuccess = false;
-            foreach (var player in members)
+            for (var i = 0; i < members.Count; i++)
             {
-                if (SetPlayerVar(player, type, group, index, value))
-                    anySuccess = true;
+                var player = members[i];
+                if (player == null || player.m_boGhost)
+                    continue;
+                SetPlayerVar(player, type, group, index, value);
             }
-            return anySuccess;
+            return true;
         }
 
         /// <summary>
@@ -8601,7 +8701,11 @@ namespace GameSvr.PasEngine
         //      exactly two item ctors (0x788118 pile, plus 0x788C01/0x788C84/0x78B27C/
         //      0x78B2D8/0x78B328/0x78B544 which all chain through sub_7880F0), so the
         //      predicate is "was constructed by the pile ctor" == NativeItemFactory.IsPileItem
-        //      (StdMode >= 150 && a pile class name resolves) — NOT `StdMode == 7`
+        //      (CLASS ANCESTRY: the factory-reachable classes whose VMT parent chain ends at
+        //      TBasePileItem/0x781C24 — NOT a StdMode range, and NOT `StdMode == 7`).
+        //      StdMode >= 150 is only the DEFAULT arm 0x74D67E `3C 96 cmp al,0x96` /
+        //      0x74D680 `72 13 jb`; the explicitly-cased StdMode 3 / Shape 4 arm reaches the
+        //      same pile ctor at 0x74CCEC, so TLuckOil is a pile with StdMode 3.
         //      (StdMode 7 is TCharm/TMarkStoneCharm, a normal single item; see the audited
         //      note at TPlayObject.Operate.cs:771 for the same finding on the item-use tail).
         //      count  : 0x744852 cmp byte [ebx+0x14],7 / 0x744858 movzx eax,word [ebx+0x26]
@@ -8868,7 +8972,15 @@ namespace GameSvr.PasEngine
                 var itemDefinition = M2Share.UserEngine.GetStdItem(item.wIndex);
                 if (itemDefinition == null) continue;
 
-                if (itemDefinition.StdMode == 7)
+                // 原生 TakeEx = sub_74089C，两处堆叠闸读的都是【物品实例】+0x14：
+                //   0x740B8F  80 7B 14 07  cmp byte [ebx+0x14],7   ; 预清点循环
+                //   0x740C01  80 7B 14 07  cmp byte [ebx+0x14],7   ; 实际扣除循环
+                // ebx 是 0x740BE5 `call 0x424D4C`(TList.Get) 取出的背包物品实例，
+                // 不是模板；紧接着 0x740C57 `0F B7 43 26` 取的也是实例 +0x26(Dura)。
+                // 和两条 give 核心（0x6C89C6 / 0x6C85C5）是同一个谓词，
+                // 所以这里必须用类祖先判定：StdMode==7 是护身符族（实例 +0x14 恒为 0），
+                // 而真堆叠（TLuckOil 走 StdMode 3/Shape 4）会被漏判成整件删除。
+                if (NativeItemFactory.IsPileItem(itemDefinition))
                 {
                     var before = remaining;
                     AddNativeTakeExLog(itemName, item.MakeIndex,
@@ -8924,37 +9036,97 @@ namespace GameSvr.PasEngine
                 itemName, makeIndex, 1, description));
         }
 
-        // Native GiveItemWithDura (sub_6E15E0): make `count` items, each with current
-        // durability clamped to min(requestedDura, item.DuraMax [item+0x28]), then add
-        // to bag and notify. The native APPLIES the requested durability (clamped) — it
-        // does NOT discard it — so this is a real, faithful API (previously rejected on
-        // the false premise that it corrupts semantics). Stops per-item on a full bag,
-        // matching the native bag-space guard.
+        // Native GiveItemWithDura (sub_6E15E0, 声明见注册表 0x72B56D
+        // `function GiveItemWithDura(const itemName:string; ItemNum:Integer;
+        //  ItemDura:Word): Boolean`): 造 count 件, 每件 Dura = min(要求耐久, DuraMax),
+        // 入包并写日志。原生是**应用**这个耐久而不是丢弃它, 所以这是个真 API。
+        // 它全程不看堆叠标记 —— 对堆叠物这就是直接指定堆内件数。
+        //
+        // 全或无背包门（这条以前整条缺失）:
+        //   0x6E15F7  E8 DC 2B 06 00  call 0x7441D8   ; 空格数
+        //   0x6E15FC  3B 45 F8        cmp eax,[ebp-8] ; 空格数 vs count
+        //   0x6E15FF  0F 8C 96 00..   jl  0x6E169B    ; 装不下 -> 一件都不发
+        //   0x6E169B  66 B9 DB FF     mov cx,0xFFDB   ; 红字 '您包裹位不足' (0x6E16D8)
+        // 其中 0x7441D8 是 `mov eax,[eax+0x508] / mov edx,0x30 / sub edx,[eax+8]`,
+        // 即 48-背包件数; 本工程的容量权威是 BagCapacity(REPLICATION_RULES §4.18)。
+        // 预检不过直接返回 False, 不能像原来那样先塞满背包再停。
+        //
+        // 耐久取的是 **word**: 0x6E1631 `66 8B 40 28 mov ax,word [eax+0x28]`,
+        // 0x6E1635 `66 3B 45 08 cmp ax,word [ebp+8]`, 0x6E1639 `72 0D jb`,
+        // 0x6E163E `66 8B 55 08 mov dx,word [ebp+8]` —— 入参只按低 16 位取用,
+        // 所以脚本传 70000 时原生用的是 4464。旧写法 Math.Min(int, DuraMax) 在
+        // DuraMax > 4464 时会发出比原生更多的数量, 对堆叠物 Dura 就是件数, 那是刷物方向。
         private void TryGiveItemWithDura(List<PasValue> args, out bool gaveAny)
         {
             gaveAny = false;
             if (CurrentPlayer == null || args.Count < 3) return;
             var itemName = args[0].AsString();
             var count = args[1].AsInt();
-            var requestedDura = args[2].AsInt();
+            var requestedDura = (ushort)args[2].AsInt();
+
+            if (BagCapacity.Of(CurrentPlayer) - CurrentPlayer.m_ItemList.Count < count)
+            {
+                CurrentPlayer.SysMsg("您包裹位不足", MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
             for (var c = 0; c < count; c++)
             {
                 var userItem = new TUserItem();
                 if (!M2Share.UserEngine.CopyToUserItemFromName(itemName, ref userItem)) break;
                 if (M2Share.UserEngine.GetStdItem(userItem.wIndex) == null) break;
-                userItem.Dura = (ushort)Math.Min(requestedDura, (int)userItem.DuraMax);
-                if (!CurrentPlayer.AddItemToBag(userItem)) break;
+                userItem.Dura = Math.Min(requestedDura, userItem.DuraMax);
+                // 0x6E1686 FreeAndNil / 0x6E168E `C6 45 F7 00` 把结果字节清回 0
+                // 再 0x6E1692 dec ebx 继续下一轮, 所以塞不进去的那一件不算成功,
+                // 但循环不中断。
+                if (!CurrentPlayer.AddItemToBag(userItem))
+                {
+                    CurrentPlayer.Dispose(userItem);
+                    gaveAny = false;
+                    continue;
+                }
                 CurrentPlayer.SendAddItem(userItem);
                 gaveAny = true;
             }
         }
 
+        /// <summary>
+        /// 原生 <c>SysGiveGift</c> = <c>sub_6C8548</c>（声明见注册表 0x72BCC4
+        /// <c>function SysGiveGift(const ItemStr: string;Num: integer;BoBind: Boolean)</c>）。
+        /// 它不是 <c>Give</c> 的共享核心 <c>sub_6C87B4</c>，所以**不做冒号拆分**：
+        /// 0x6C85AD <c>8B 55 FC mov edx,[ebp-4]</c> 把入参名原样交给 0x6C85B0
+        /// <c>E8 9F 58 08 00 call 0x74DE54</c>。
+        ///
+        /// 堆叠判据和 Give 核心是同一条，读的是**物品实例**的运行时类标记：
+        ///   0x6C85C2  8B 45 EC     mov eax,[ebp-0x14]   ; 0x74DE54 造出来的实例
+        ///   0x6C85C5  80 78 14 07  cmp byte [eax+0x14],7
+        /// 实例 +0x14 由构造器写死：根构造器 <c>sub_783788</c> @0x7837AE
+        /// <c>C6 43 14 00</c> 写 0，堆叠构造器 <c>sub_7880F0</c> @0x788118
+        /// <c>C6 46 14 07</c> 写 7。它**不是**模板的 StdMode ——
+        /// 模板 StdMode 只决定工厂 <c>sub_74C338</c> 选哪个构造器，而堆叠构造器
+        /// 并不只挂在 StdMode&gt;=150 的默认臂（0x74D67E <c>3C 96 cmp al,0x96</c> /
+        /// 0x74D680 <c>72 13 jb</c> / 0x74D68C <c>call 0x7880F0</c>）上：StdMode 3
+        /// 的 Shape 4 也直落堆叠构造器 ——
+        ///   0074CCE5  A1 AC 1C 78 00  mov  eax,[0x781CAC]  ; TLuckOil
+        ///   0074CCEC  E8 FF B3 03 00  call 0x7880F0        ; TBasePileItem.Create
+        /// 所以谓词是类祖先，即 <see cref="NativeItemFactory.IsPileItem"/>。
+        /// 写 <c>StdMode == 7</c> 是双向错：StdMode 7 是护身符族（0x74CE9E 按 Shape
+        /// 二级派发到 TCryCharm/THPCharm/...），实例 +0x14 恒为 0，会被误当堆叠塞进
+        /// 一格；而真堆叠（金条、幸运油）反而按件占满背包。
+        ///
+        /// 数量：0x6C85D5 <c>3B 55 F8 cmp edx,[ebp-8]</c>（DuraMax vs 剩余）/
+        /// 0x6C85D8 <c>7C 11 jl</c>。DuraMax &gt;= 剩余就 <c>Dura := 剩余</c>
+        /// （0x6C85E1）并置 0x6C85E5 的结束标记；否则 <c>Dura := DuraMax</c>
+        /// （0x6C85EE）且 0x6C85F9 <c>29 45 F8 sub [ebp-8],eax</c> 扣掉一整堆。
+        /// 非堆叠臂不动剩余量，靠 0x6C8713 的计数器跑满 count 次。
+        /// </summary>
         private bool TrySysGiveGift(IReadOnlyList<PasValue> args)
         {
             if (CurrentPlayer == null || args.Count < 2) return false;
 
             var itemName = args[0].AsString();
             var requestedCount = args[1].AsInt();
+            // 0x6C858C cmp [ebp-8],0 / 0x6C8590 jg / 0x6C8592 mov [ebp-8],1
             if (requestedCount <= 0) requestedCount = 1;
             var bind = args.Count >= 3 && args[2].AsBool();
             if (TryExecuteTunnelGive(itemName, requestedCount, bind)) return true;
@@ -8968,8 +9140,12 @@ namespace GameSvr.PasEngine
 
                 var stdItem = M2Share.UserEngine.GetStdItem(userItem.wIndex);
                 if (stdItem == null) break;
-                if (stdItem.StdMode == 7)
+                if (NativeItemFactory.IsPileItem(stdItem))
                 {
+                    // 原生没有这道闸：DuraMax==0 时 0x6C85D5 的比较走 jl 臂，
+                    // Dura:=0 且 0x6C85F9 扣 0，靠计数器跑满 count 次发出 count 份
+                    // 空堆。C# 用的是「剩余量」循环，扣 0 会原地打转，所以这里必须
+                    // 收手；少发不是刷物方向。
                     if (userItem.DuraMax == 0) break;
                     var quantity = Math.Min(remaining, userItem.DuraMax);
                     userItem.Dura = (ushort)quantity;
@@ -8981,7 +9157,14 @@ namespace GameSvr.PasEngine
                 }
 
                 if (bind) userItem.Bind = 1;
-                if (!CurrentPlayer.AddItemToBag(userItem)) break;
+                // 0x6C86CF lea eax,[ebp-0x14] / 0x6C86D2 call 0x414C24 (FreeAndNil)
+                // / 0x6C86D7 jmp 0x6C871A —— 装不下就丢弃这一件并整体退出，
+                // 已发出的那些保留，结果字节 [ebp-9] 不回滚。
+                if (!CurrentPlayer.AddItemToBag(userItem))
+                {
+                    CurrentPlayer.Dispose(userItem);
+                    break;
+                }
                 CurrentPlayer.SendAddItem(userItem);
                 gaveAny = true;
             }

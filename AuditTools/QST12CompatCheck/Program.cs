@@ -1,9 +1,9 @@
 ﻿using System;
-using System.IO;
 using System.Diagnostics;
 using System.IO;
 using GameSvr;
 using GameSvr.PasEngine;
+using SystemModule;
 
 namespace QST12CompatCheck
 {
@@ -221,6 +221,13 @@ namespace QST12CompatCheck
                 "[PlayerLevelExp]" + Environment.NewLine);
             File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
                 "[Integer]" + Environment.NewLine);
+
+            // TBaseObject's ctor ends in M2Share.ObjectManager.RegisterConstructed(this)
+            // (TBaseObject.cs:903), so the singleton must exist before a real actor can be
+            // built. Same minimal set the InProc harnesses boot: no threads, no network.
+            M2Share.g_Config ??= new GameSvrConfig();
+            M2Share.RandomNumber ??= RandomNumber.GetInstance();
+            M2Share.ObjectManager ??= new ObjectManager();
         }
     }
 }

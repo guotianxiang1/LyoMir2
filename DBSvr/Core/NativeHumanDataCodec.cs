@@ -21,12 +21,31 @@ namespace DBSvr.Core
         //   0x59881C call 0x5AD608               ; [mgr+0x14] lookup, 0 when absent
         //   0x598824 mov word ptr [rec+0x53C],ax
         // rec is the blob start (frame+0x54), so this is record-proper 0x53C-8 = 0x534.
-        // The value comes from the in-memory account object's +0x1C, whose meaning is
-        // UNPROVEN: its only two writers are 0x426436 and 0x5AD676, neither expanded.
-        // Do not synthesise a value here.  The constant exists so that nobody "cleans
-        // up" the codec on the assumption that blob and wire round-trip byte for byte;
-        // they do not, at this one offset.  A DBSvr swap is still migration-free because
-        // the field is recomputed at load time rather than persisted.
+        //
+        // acct+0x1C is now PROVEN to be nothing but a write-through cache OF THIS VERY
+        // FIELD, so the record stays the source of truth and carrying it verbatim is
+        // right.  There is exactly one writer, sub_5AD648 @0x5AD676
+        // (`66 89 50 1c  mov word [eax+0x1c],dx`), it has exactly one caller, and that
+        // caller is the SAVE handler sub_59C060 (type-1 0x0150, dispatcher arm
+        // 0x598BF7) feeding it the value it just read back out of the record:
+        //   0x59C0CF  mov eax,[ebp-0x10] / add eax,8   ; the record body
+        //   0x59C0DB  edx = record+0x20 -> call 0x404E5C ; the SS20 account name
+        //   0x59C0F3  66 8b 89 34 05 00 00  mov cx,word [record+0x534]
+        //   0x59C0FA  call 0x5AD648                     ; cache[account].w1C = cx
+        // and the LOAD side reads it straight back through sub_5AD608 (0x5AD62E
+        // `mov ax,[eax+0x1c]`, 0 when the account is not cached) into rec+0x53C.
+        //
+        // The previous note named 0x426436 as a second writer.  It is not one:
+        // 0x426436 sits in the Delphi RTL helper sub_4263C0, which walks a dynarray
+        // (`mov eax,[eax-4]`, `mov eax,[eax+edx*4]`) and masks a flags word
+        // (0x426424 `not edx` / 0x426426 `and dx,[eax+0x1c]`).  Different structure,
+        // same offset — a coincidence, not a writer of the account record.
+        //
+        // Still do not synthesise a value.  The one case where a pure carry differs
+        // from native is a load whose account is absent from the cache: native stamps
+        // 0 there, a carry keeps the stored word.  It is unobservable on the live data
+        // — record[0x534] is 0 in 30/30 golden records — but whether the cache is
+        // preloaded at startup or only filled by saves is not established.
         public const int AccountScopedWordOffset = 0x0534;
 
         public const int ItemRecordSize = 208;
