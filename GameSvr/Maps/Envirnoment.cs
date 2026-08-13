@@ -378,7 +378,7 @@ namespace GameSvr
                                         BaseObject = (TBaseObject)MapCellInfo.ObjList[i].CellObj;
                                         if (BaseObject != null)
                                         {
-                                            if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                            if (BaseObject.IsNativeCellBlocking())
                                             {
                                                 bo1A = false;
                                                 break;
@@ -403,6 +403,22 @@ namespace GameSvr
                     }
                     else
                     {
+                        // MOVE-35(a) — 原版 sub_7797CC 在摘链之前还要校验**旧**坐标，
+                        // C# 只校验了新坐标（:353）：
+                        //   007799F5  0F B7 45 FA     movzx eax,word [ebp-6]  ; 旧 X
+                        //   007799FC  3B 42 3C        cmp   eax,[edx+0x3C]    ; Width
+                        //   007799FF  0F 8D A8 00..   jge   0x779AAD          ; -> FALSE
+                        //   00779A05  0F B7 55 F8     movzx edx,word [ebp-8]  ; 旧 Y
+                        //   00779A0C  3B 51 40        cmp   edx,[ecx+0x40]    ; Height
+                        //   00779A0F  0F 8D 98 00..   jge   0x779AAD          ; -> FALSE
+                        // movzx 让旧坐标恒为非负，所以只有上界；TryGetMapCellIndex 的
+                        // 下界对原版能产出的取值域是恒真的。怪物 mover 放宽到 x==Width
+                        // （MOVE-42）之后，旧坐标同样可能落在界外。
+                        if (!TryGetMapCellIndex(nCX, nCY, out _))
+                        {
+                            return 0;
+                        }
+                        var boUnlinkedFromSource = false;
                         if (GetMapCellInfo(nCX, nCY, ref MapCellInfo) && MapCellInfo.ObjList != null)
                         {
                             var i = 0;
@@ -417,6 +433,7 @@ namespace GameSvr
                                 {
                                     if ((TBaseObject)OSObject.CellObj == Cert)
                                     {
+                                        boUnlinkedFromSource = true;
                                         MapCellInfo.Remove(i);
                                         OSObject = null;
                                         if (MapCellInfo.Count > 0)
@@ -429,6 +446,20 @@ namespace GameSvr
                                 }
                                 i++;
                             }
+                        }
+                        // MOVE-35(b) — 原版只有找到自己并摘链之后才会置 TRUE：
+                        //   00779A4C  83 7D EC 00  cmp dword [ebp-0x14],0 ; 旧格表头
+                        //   00779A50  74 5B        je  0x779AAD           ; 空表 -> FALSE
+                        //   00779A5B  8B 45 EC ..  mov eax,[node+4]
+                        //   00779A61  3B 45 0C     cmp eax,[ebp+0xC]      ; 是不是自己
+                        //   00779A64  75 35        jne 0x779A9B           ; 不是 -> 下一个
+                        //   00779A95  C6 45 F7 01  mov byte [ebp-9],1     ; 唯一置 TRUE 处
+                        //   00779AAD  33 C0        xor eax,eax            ; 遍历完 -> FALSE
+                        // C# 无论找没找到都 Add 并返回 1，于是"从一个自己并不在的格子
+                        // 搬走"会在目标格凭空多出一份登记 —— 旧格的幽灵占位就是这么来的。
+                        if (!boUnlinkedFromSource)
+                        {
+                            return 0;
                         }
                         if (GetMapCellInfo(nX, nY, ref MapCellInfo))
                         {
@@ -487,7 +518,7 @@ namespace GameSvr
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
-                                if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                if (BaseObject.IsNativeCellBlocking())
                                 {
                                     result = false;
                                     break;
@@ -532,7 +563,7 @@ namespace GameSvr
                             BaseObject = (TBaseObject)OSObject.CellObj;
                             if (BaseObject != null)
                             {
-                                if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                                if (BaseObject.IsNativeCellBlocking())
                                 {
                                     result = false;
                                     break;
@@ -552,7 +583,7 @@ namespace GameSvr
 
         private bool IsRunBlockingObject(TBaseObject baseObject)
         {
-            if (baseObject == null || baseObject.m_boGhost || !baseObject.bo2B9 || baseObject.m_boDeath || baseObject.m_boFixedHideMode || baseObject.m_boObMode)
+            if (baseObject == null || !baseObject.IsNativeCellBlocking())
             {
                 return false;
             }
@@ -1395,7 +1426,7 @@ namespace GameSvr
                         BaseObject = (TBaseObject)OSObject.CellObj;
                         if (BaseObject != null)
                         {
-                            if (!BaseObject.m_boGhost && BaseObject.bo2B9 && !BaseObject.m_boDeath && !BaseObject.m_boFixedHideMode && !BaseObject.m_boObMode)
+                            if (BaseObject.IsNativeCellBlocking())
                             {
                                 result++;
                             }

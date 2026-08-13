@@ -110,12 +110,7 @@ namespace GameSvr
             }
 
             m_bo316 = false;
-            var useMainRun = (!M2Share.ServerSwitches.IsBitSet(2, 0x80) ||
-                              m_PEnvir.NativeCanRunWhileOverweight ||
-                              m_WAbil.Weight < m_WAbil.MaxWeight) &&
-                             !HasNativeActiveState(67) &&
-                             !HasNativeActiveState(13);
-            if (!useMainRun)
+            if (!IsNativeRunLadderAllowed())
             {
                 return ClientNativeRun3Fallback(destinationX, destinationY);
             }
@@ -142,6 +137,33 @@ namespace GameSvr
             }
             return result;
         }
+
+        /// <summary>
+        /// Prologue of the run primitive, byte-identical in sub_6BBFBC (the
+        /// CM_RUN 3013 primitive) and its twin sub_6BC0D4 (CM_RUN3 4108):
+        /// <code>
+        /// 006BBFCB  A1 38 70 7D 00        mov  eax,[0x7D7038]
+        /// 006BBFD0  F6 40 02 80           test byte [eax+2],0x80  ; MOVE-17 switch
+        /// 006BBFD4  74 1D                 je   0x6BBFF3           ; off: no weight rule
+        /// 006BBFD6  8B 83 28 01 00 00     mov  eax,[ebx+0x128]    ; the actor's Envir
+        /// 006BBFDC  80 B8 B0 00 00 00 00  cmp  byte [eax+0xB0],0  ; MOVE-17 map RUNFLAG
+        /// 006BBFE3  75 0E                 jne  0x6BBFF3           ; exempt: no weight rule
+        /// 006BBFE5  8B 83 C4 02 00 00     mov  eax,[ebx+0x2C4]    ; bag weight
+        /// 006BBFEB  3B 83 C8 02 00 00     cmp  eax,[ebx+0x2C8]    ; weight limit
+        /// 006BBFF1  7D 0E                 jge  0x6BC001           ; MOVE-18: equal is overweight
+        /// 006BBFF3  FF 92 C0 00 00 00     call [edx+0xC0]         ; MOVE-16 CanRun sub_774348
+        /// 006BBFFF  75 3B                 jne  0x6BC03C           ; TRUE: take the real run
+        /// </code>
+        /// sub_774348 answers FALSE when bodyState 0x43 (0x77434E) or 0x0D
+        /// (0x77435B) is set. Anything that reaches 0x6BC001 instead falls into
+        /// the clamp-and-walk degrade of MOVE-19, never into a plain refusal.
+        /// </summary>
+        private bool IsNativeRunLadderAllowed() =>
+            (!M2Share.ServerSwitches.IsBitSet(2, 0x80) ||
+             m_PEnvir.NativeCanRunWhileOverweight ||
+             m_WAbil.Weight < m_WAbil.MaxWeight) &&
+            !HasNativeActiveState(67) &&
+            !HasNativeActiveState(13);
 
         private bool ClientNativeRun3Fallback(int destinationX,
             int destinationY)

@@ -593,6 +593,53 @@ namespace GameSvr
             return false;
         }
 
+        /// <summary>
+        /// Native sub_765D94 (TPlayer VMT+0x00), the single predicate every cell
+        /// scan reaches when it asks "does this actor block the cell?". Native
+        /// defaults to passable and only zeroes the answer at the bottom, so the
+        /// blocking case is the whole conjunction:
+        /// <code>
+        /// 00765D9B  B3 01                 mov  bl,1               ; default passable
+        /// 00765D9D  80 7E 73 00           cmp  byte [esi+0x73],0  ; m_boGhost
+        /// 00765DA1  75 2A                 jne  0x765DCD
+        /// 00765DA3  80 BE E6 02 00 00 00  cmp  byte [esi+0x2E6],0 ; bo2B9
+        /// 00765DAA  74 21                 je   0x765DCD
+        /// 00765DAE  E8 F5 CF 00 00        call 0x772DA8           ; byte [eax+0x74] death
+        /// 00765DB5  75 16                 jne  0x765DCD
+        /// 00765DB7  80 BE E3 02 00 00 00  cmp  byte [esi+0x2E3],0 ; m_boFixedHideMode
+        /// 00765DBE  75 0D                 jne  0x765DCD
+        /// 00765DC2  E8 F1 D0 00 00        call 0x772EB8           ; pass-through grant
+        /// 00765DC9  75 02                 jne  0x765DCD
+        /// 00765DCB  33 DB                 xor  ebx,ebx            ; blocks
+        /// </code>
+        /// MOVE-33: the sixth term was missing in C#, which had inlined only the
+        /// m_boObMode half of 0x772EB8 and dropped the bodyState 0x3C half. The
+        /// expression was also copied five times inside Envirnoment.cs, so the
+        /// term is added here once instead.
+        /// </summary>
+        internal bool IsNativeCellBlocking()
+        {
+            return !m_boGhost && bo2B9 && !m_boDeath && !m_boFixedHideMode
+                   && !HasNativeCellPassThroughGrant();
+        }
+
+        /// <summary>
+        /// Native sub_772EB8, the unconditional pass-through grant consumed by
+        /// sub_765D94 at 0x765DC2. It is a disjunction of two terms:
+        /// <code>
+        /// 00772EBE  80 BB E2 02 00 00 00  cmp  byte [ebx+0x2E2],0 ; m_boObMode
+        /// 00772EC5  75 12                 jne  0x772ED9           ; -> TRUE
+        /// 00772EC7  B2 3C                 mov  dl,0x3C
+        /// 00772ECB  E8 90 FA FF FF        call 0x772960           ; InBodyState(0x3C)
+        /// 00772ED2  75 05                 jne  0x772ED9           ; -> TRUE
+        /// 00772ED4  33 C0                 xor  eax,eax            ; FALSE
+        /// </code>
+        /// </summary>
+        internal bool HasNativeCellPassThroughGrant()
+        {
+            return m_boObMode || HasNativeActiveState(0x3C);
+        }
+
         public bool m_boAutoChangeColor = false;
         public int m_dwAutoChangeColorTick = 0;
         public int m_nAutoChangeIdx = 0;
@@ -1921,9 +1968,32 @@ namespace GameSvr
         /// here. This body previously used step 3/10 at Width&lt;80, margin 50/15/2 at
         /// Height 150/50, a retry count of 201 and a reseed of Random(Width) with no
         /// margin, and had no LinkPoint fallback at all — none of which native has.
-        private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
+        /// MOVE-61/62: the loop is preceded by two independent per-axis seeders.
+        /// MOVE-63: native keeps one body for all 11 callers, so this is the single
+        /// C# authority; SpaceMove_GetRandXY and TPlayObject's
+        /// TryResolveNativeUserMoveCoordinates are both adapters over it.
+        /// <code>
+        /// 7782E4  83 3F 00     cmp dword [edi],0    ; *pX, signed
+        /// 7782E7  7F 0B        jg  0x7782F4         ; only >0 keeps the caller value
+        /// 7782E9  8B 43 3C     mov eax,[ebx+0x3C]   ; Width
+        /// 7782EC  E8 5B B8 C8 FF call 0x403B4C      ; Random(Width)
+        /// 7782F1  40           inc eax              ; 1..Width (X==Width is possible)
+        /// 7782F2  89 07        mov [edi],eax
+        /// 7782F4..778308        the same against Height (+0x40) for *pY
+        /// </code>
+        /// The X seeder runs before the Y seeder, which fixes the RNG call order.
+        internal static bool NativeGetRandomXY(Envirnoment Envir,
+            ref int nX, ref int nY)
         {
-            var nStep = (short)(Envir.wWidth < 50 ? 2 : 3);
+            if (nX <= 0)
+            {
+                nX = M2Share.RandomNumber.Random(Envir.wWidth) + 1;
+            }
+            if (nY <= 0)
+            {
+                nY = M2Share.RandomNumber.Random(Envir.wHeight) + 1;
+            }
+            var nStep = Envir.wWidth < 50 ? 2 : 3;
             var nMargin = Envir.wHeight < 30
                 ? 2
                 : Envir.wHeight < 250 ? 20 : 50;
@@ -1939,16 +2009,16 @@ namespace GameSvr
                 }
                 else
                 {
-                    nX = (short)(M2Share.RandomNumber.Random(Envir.wWidth / 2)
-                        + nMargin);
+                    nX = M2Share.RandomNumber.Random(Envir.wWidth / 2)
+                        + nMargin;
                     if (nY < (Envir.wHeight - nMargin - 1))
                     {
                         nY += nStep;
                     }
                     else
                     {
-                        nY = (short)(M2Share.RandomNumber.Random(Envir.wHeight / 2)
-                            + nMargin);
+                        nY = M2Share.RandomNumber.Random(Envir.wHeight / 2)
+                            + nMargin;
                     }
                 }
             }
@@ -1958,15 +2028,34 @@ namespace GameSvr
             }
             var Point = Envir.m_PointList[
                 M2Share.RandomNumber.Random(Envir.m_PointList.Count)];
-            nX = Point.nX;
-            nY = Point.nY;
+            // 0x7783EC / 0x7783F4 read the record with movzx, so the word is
+            // zero-extended into the caller's Int32 slot.
+            nX = unchecked((ushort)Point.nX);
+            nY = unchecked((ushort)Point.nY);
             return true;
         }
 
+        private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
+        {
+            int nWideX = nX;
+            int nWideY = nY;
+            var result = NativeGetRandomXY(Envir, ref nWideX, ref nWideY);
+            nX = unchecked((short)nWideX);
+            nY = unchecked((short)nWideY);
+            return result;
+        }
+
+        // MOVE-52 — both space-move arms load the internal idents as immediates:
+        //   006BD3AA  66 B9 85 27  mov cx,0x2785 -> 006BD3B2 call 0x765E68
+        //   006BD3D3  66 B9 86 27  mov cx,0x2786 -> 006BD3DB call 0x765F6C
+        // and the cross-map arm repeats them at 0x6BD51B / 0x6BD544. Only
+        // ExecuteNativeUserMove used to ask for those; every other teleport took
+        // the default and queued the legacy 8097/8098 instead. The default is
+        // now the native pair, so all teleports agree.
         internal bool TrySpaceMoveToEnvironment(Envirnoment targetEnvironment,
             short nX, short nY, int showMode,
             bool coordinatesAlreadyResolved = false,
-            bool useNativeInternalMessages = false)
+            bool useNativeInternalMessages = true)
         {
             if (targetEnvironment == null
                 || M2Share.nServerIndex != targetEnvironment.nServerIndex)

@@ -44,54 +44,11 @@ namespace GameSvr
         }
 
         // Native sub_7782D0 keeps command coordinates as signed Int32 until
-        // it has selected a valid map cell.
+        // it has selected a valid map cell. MOVE-63: that is one function for
+        // all 11 native callers, so this forwards to the shared primitive
+        // rather than carrying a second copy of the search.
         private static bool TryResolveNativeUserMoveCoordinates(
-            Envirnoment environment, ref int x, ref int y)
-        {
-            if (x <= 0)
-                x = M2Share.RandomNumber.Random(environment.wWidth) + 1;
-            if (y <= 0)
-                y = M2Share.RandomNumber.Random(environment.wHeight) + 1;
-
-            var step = environment.wWidth < 50 ? 2 : 3;
-            var margin = environment.wHeight < 30
-                ? 2
-                : environment.wHeight < 250 ? 20 : 50;
-
-            for (var attempt = 0; attempt < 31; attempt++)
-            {
-                if (environment.CanWalk(x, y, true))
-                    return true;
-
-                if (x < environment.wWidth - margin - 1)
-                {
-                    x += step;
-                }
-                else
-                {
-                    x = M2Share.RandomNumber.Random(environment.wWidth / 2)
-                        + margin;
-                    if (y < environment.wHeight - margin - 1)
-                    {
-                        y += step;
-                    }
-                    else
-                    {
-                        y = M2Share.RandomNumber.Random(environment.wHeight / 2)
-                            + margin;
-                    }
-                }
-            }
-
-            if (environment.m_PointList == null
-                || environment.m_PointList.Count == 0)
-                return false;
-
-            var point = environment.m_PointList[
-                M2Share.RandomNumber.Random(environment.m_PointList.Count)];
-            x = unchecked((ushort)point.nX);
-            y = unchecked((ushort)point.nY);
-            return true;
-        }
+            Envirnoment environment, ref int x, ref int y) =>
+            NativeGetRandomXY(environment, ref x, ref y);
     }
 }

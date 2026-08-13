@@ -1858,11 +1858,14 @@ namespace GameSvr
             return result;
         }
 
+        // 战神 sub_764A90(eax=sx, edx=sy, ecx=dx, [ebp+8]=dy), ret 4.
+        // MOVE-47: the no-match sink is 0x764BB6 `33 C0 xor eax,eax`, i.e. 0
+        // (DR_UP), not 4. GetNextDirection(x,y,x,y) must answer "up".
         public static byte GetNextDirection(int sx, int sy, int dx, int dy)
         {
             int flagx;
             int flagy;
-            byte result = Grobal2.DR_DOWN;
+            byte result = Grobal2.DR_UP;
             if (sx < dx)
             {
                 flagx = 1;
@@ -1896,7 +1899,15 @@ namespace GameSvr
             }
             if (Math.Abs(sx - dx) > 2)
             {
-                if (sy > dy - 1 && sy <= dy + 1)
+                // MOVE-47: the Y suppressor is asymmetric with the X one above.
+                //   0x764B10  3B F0  cmp esi,eax   ; sy vs dy-1
+                //   0x764B12  7E 0A  jle  skip     ; run only when sy >  dy-1
+                //   0x764B14  47     inc edi       ; dy+1
+                //   0x764B15  3B F7  cmp esi,edi
+                //   0x764B17  7D 05  jge  skip     ; run only when sy <  dy+1
+                // `jge` makes the upper bound strict; `<=` let sy == dy+1 in and
+                // flattened diagonals (dir 1/7) into pure horizontals (dir 2/6).
+                if (sy > dy - 1 && sy < dy + 1)
                 {
                     flagy = 0;
                 }
