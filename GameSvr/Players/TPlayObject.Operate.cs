@@ -1672,6 +1672,18 @@ namespace GameSvr
                 HUtil32.GetValidStr3(sItemName, ref sItemName, new string[] { " " });
             }
             bo11 = false;
+            // TRADE-60：失败回包的 Recog 带的是不可交易判定的返回码，不是恒 0。
+            //   0x6C41A8  33 C0 / 89 45 F0        mov [ebp-0x10], 0    ; 码槽初值 0
+            //   0x6C4235  89 45 F0                mov [ebp-0x10], eax  ; ← sub_78389C 的返回值
+            //   0x6C4238  83 7D F0 00 / 7F 56     cmp [ebp-0x10],0 / jg 0x6C4294
+            //   0x6C42A2  8B 4D F0                mov ecx, [ebp-0x10]  ; ecx = Recog
+            //   0x6C42A5  66 BA A4 02             mov dx, 0x2A4        ; SM_DEALADDITEM_FAIL
+            // 码槽只在 0x6C4235 这一处被写，所以其余失败原因（对端已锁、背包空、
+            // 名字不匹配、押金格已满 12）Recog 一律是 0 —— 只有「这件东西不能交易」
+            // 才带非零码。CheckTransferPermission 现返回 1（绑定/0x0800/0x4000 前置阶）
+            // 或 3（mode 2 的 0x0200 禁交易位）。旧 C# 硬编码 0，客户端因此分不清
+            // 「没找到」和「这件不能交易」。
+            var dealAddFailCode = 0;
             if (!m_DealCreat.m_boDealOK)
             {
                 for (var i = 0; i < m_ItemList.Count; i++)
@@ -1688,11 +1700,14 @@ namespace GameSvr
                             //         83 7D F0 00 (cmp dword [ebp-0x10],0) / 7F 56 (jg reject)
                             // Returns non-zero when stdItem.Reserved02 & 0x02 (the no-trade flag).
                             var stdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                            if (NativeItemDropDestroy.CheckTransferPermission(UserItem, stdItem,
-                                NativeItemDropDestroy.TransferModeTrade) != 0)
+                            dealAddFailCode = NativeItemDropDestroy.CheckTransferPermission(
+                                UserItem, stdItem, NativeItemDropDestroy.TransferModeTrade);
+                            if (dealAddFailCode > 0)
                             {
                                 // Native rejects by jumping to 0x6C4294, which breaks out of the item
                                 // loop and falls through to send SM_DEALADDITEM_FAIL. No other message.
+                                // 0x6C4238 是 `jg`（> 0），不是 `!= 0`；sub_78389C 只返回 0/1/3/5，
+                                // 两者当前等价，照抄 `jg` 以免将来加入负返回码时方向反掉。
                                 break;
                             }
 
@@ -1707,7 +1722,7 @@ namespace GameSvr
             }
             if (!bo11)
             {
-                SendDefMessage(Grobal2.SM_DEALADDITEM_FAIL, 0, 0, 0, 0, "");
+                SendDefMessage(Grobal2.SM_DEALADDITEM_FAIL, dealAddFailCode, 0, 0, 0, "");
             }
         }
 
@@ -1751,7 +1766,19 @@ namespace GameSvr
                 DealCancel();
                 return;
             }
-            if (nGold < 0)
+            // TRADE-56: 零额度门是 `<= 0` 不是 `< 0`。
+            //   0x6C4477  85 F6                 test esi, esi           ; esi = nGold
+            //   0x6C4479  0F 8E C8 00 00 00     jle 0x6C4547            ; **jle** = nGold <= 0 → 失败回包
+            //   0x6C4547  80 7D FF 00           cmp byte [ebp-1], 0     ; bo09 仍为 0
+            //   0x6C456B  66 BA AD 02           mov dx, 0x2AD           ; SM_DEALCHGGOLD_FAIL
+            // 旧 C# 写 `< 0`，于是 nGold == 0 落到成功分支：发 SM_DEALCHGGOLD_OK +
+            // SM_DEALREMOTECHGGOLD(0) 并刷新双方 m_DealLastTick，而原生发的是 FAIL
+            // 且不碰 tick。两个可观测后果：(1) 双方收到的 ident 与原生不同（§1.4）；
+            // (2) 客户端可以刷 CM_DEALCHGGOLD 0 不断重置 m_DealLastTick，把
+            // ClientDealEnd 的 dwDealOKTime 门无限推后 —— 拖单，不是复制。
+            // 注意 nGold==0 只有在 m_nDealGolds==0 时才走到这里：否则上一道
+            // `nGold < m_nDealGolds` 已经 DealCancel 了。
+            if (nGold <= 0)
             {
                 SendDefMessage(Grobal2.SM_DEALCHGGOLD_FAIL, m_nDealGolds, HUtil32.LoWord(m_nGold), HUtil32.HiWord(m_nGold), 0, "");
                 return;
@@ -1982,6 +2009,28 @@ namespace GameSvr
                             M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + Grobal2.sSTRING_GOLDNAME + "\t" + m_DealCreat.m_nGold + "\t" + '1' + "\t" + m_sCharName);
                         }
                     }
+                    // 成交清理 = 战神 sub_6C4A98，对端先、自己后：
+                    //   0x6C49A4  8B 83 AC 0B 00 00  mov eax,[ebx+0xBAC] / call 0x6C4A98
+                    //   0x6C49AF  8B C3              mov eax,ebx        / call 0x6C4A98
+                    // sub_6C4A98 体内逐条（顺序即下面这七行 + 第八行）：
+                    //   0x6C4AA9  66 BA AF 02  mov dx,0x2AF   → SM_DEALSUCCESS via [vmt+0x250]
+                    //   0x6C4AB7  66 B9 DB FF  mov cx,0xFFDB / edx=0x6C4B08 → SysMsg via [vmt+0xD4]
+                    //   0x6C4ACC  89 83 AC 0B 00 00        m_DealCreat := nil
+                    //   0x6C4AD2  C6 83 61 04 00 00 00     m_boDealing := false
+                    //   0x6C4AD9  ... call [DealItemList.vmt+8]  m_DealItemList.Clear()
+                    //   0x6C4AE6  89 83 E0 06 00 00        m_nDealGolds := 0
+                    //   0x6C4AEC  C6 83 84 06 00 00 00     m_boDealOK := false
+                    //   0x6C4AF3  8B C3 / E8 EA 83 07 00   call 0x73CEE4   ← TRADE-58，旧 C# 缺
+                    // sub_73CEE4 = `call 0x73E8D4` / `mov [ebx+0x2C4],eax`(Weight) /
+                    // `mov byte [ebx+0x458],1`，本仓库一贯把它映射为 WeightChanged()
+                    // （TBaseObject.Base.cs:2790、HeroObject 等 8 处同样映射）。
+                    // 缺它的可观测后果：**只出不进的一方**（拿物品换金币的卖家）
+                    // 押金物品是在 ClientAddDealItem 里 m_ItemList.RemoveAt 掉的，
+                    // 那里不重算重量，而成交时他只收金币、不走 AddItemToBag，
+                    // 于是 m_WAbil.Weight 一直虚高着被交易掉的那几件的重量，
+                    // 直到下一次别的事件重算 —— 期间负重判定（拾取、移动惩罚）全按虚高值走。
+                    // 收物品的一方由 AddItemToBag 内部的 WeightChanged 顺带修正，所以
+                    // 这个缺口只在单向交易上暴露，容易漏测。
                     PlayObject = m_DealCreat as TPlayObject;
                     PlayObject.SendDefMessage(Grobal2.SM_DEALSUCCESS, 0, 0, 0, 0, "");
                     PlayObject.SysMsg(M2Share.g_sDealSuccessMsg, MsgColor.Green, MsgType.Hint);
@@ -1990,6 +2039,7 @@ namespace GameSvr
                     PlayObject.m_DealItemList.Clear();
                     PlayObject.m_nDealGolds = 0;
                     PlayObject.m_boDealOK = false;
+                    PlayObject.WeightChanged();
                     SendDefMessage(Grobal2.SM_DEALSUCCESS, 0, 0, 0, 0, "");
                     SysMsg(M2Share.g_sDealSuccessMsg, MsgColor.Green, MsgType.Hint);
                     m_DealCreat = null;
@@ -1997,6 +2047,7 @@ namespace GameSvr
                     m_DealItemList.Clear();
                     m_nDealGolds = 0;
                     m_boDealOK = false;
+                    WeightChanged();
                 }
                 else
                 {
