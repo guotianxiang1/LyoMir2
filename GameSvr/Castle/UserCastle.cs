@@ -981,9 +981,21 @@ namespace GameSvr
             }
             if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1)
             {
-                if (nGold <= PlayObject.m_nGold)
+                // ✅ 战神字节证据 (Tier-1) — CGLD-11: 存款 sub_65B458 先测【池上限】(→-3)再测
+                // 【玩家余额】(→-2)，两道门顺序与取款不同。EA @0x65B492-0x65B4AE:
+                //   0065B492  8b 43 80           mov eax,[ebx+0x80]          ; 池 m_nTotalGold(+0x80)
+                //   0065B498  03 c6              add eax,esi                 ; + nGold
+                //   0065B49A  3d 00 e1 f5 05     cmp eax,0x5f5e100           ; vs 上限(100,000,000)
+                //   0065B49F  7f 3d              jg  0x65b4de                ; 超上限 -> ret -3【先判】
+                //   0065B4A5  e8 ba c8 06 00     call 0x6c7d64 (DecGold)     ; 扣玩家(内含 nGold<=gold 判)
+                //   0065B4AA  84 c0 / 74 27      test al / je 0x65b4d5       ; 余额不足 -> ret -2【后判】
+                //   0065B4AE  01 b3 80 00 00 00  add [ebx+0x80],esi          ; 只有两门皆过才加池
+                // 原来的 C# 先判余额(→-2)再判上限(→-3)，两者【同时失败】时返回 -2，原生返回 -3
+                // (池满 100M 且玩家钱不足即命中；提示语 -3"存放限制"/-2"没那么多金币" 因此不同)。
+                // DecGold(0x6c7d64) 成功 <=> 0<nGold<=m_nGold(+0x15c)，故内联 `nGold<=m_nGold` 与其等价。
+                if (m_nTotalGold + nGold <= M2Share.g_Config.nCastleGoldMax)
                 {
-                    if (m_nTotalGold + nGold <= M2Share.g_Config.nCastleGoldMax)
+                    if (nGold <= PlayObject.m_nGold)
                     {
                         PlayObject.m_nGold -= nGold;
                         m_nTotalGold += nGold;
@@ -996,12 +1008,12 @@ namespace GameSvr
                     }
                     else
                     {
-                        result = -3;
+                        result = -2;
                     }
                 }
                 else
                 {
-                    result = -2;
+                    result = -3;
                 }
             }
             return result;
