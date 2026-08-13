@@ -42,7 +42,15 @@ void DecodeExactLoad()
     Check(load.HumanRecord.NativeData.SequenceEqual(fixture.Raw), "load raw bytes");
     Check(load.HumanRecord.NativeScriptData.SequenceEqual(fixture.Script),
         "load ScriptData bytes");
-    Equal(0x10203040, load.HumanRecord.Data.ScriptV[7], "ScriptData V value");
+    // The fixture section carries type 0, and type 0 is the S bank, not V. Native
+    // dispatches through the 9-entry table at 0x6E4520 and the type-0 arm names
+    // +0x804 (0x6E457C `add eax,0x804`, 0x6E459D `mov edx,[eax+0x804]`) while type 1
+    // names +0x808 (0x6E462E / 0x6E464F); the registry pins +0x804 to GetS/SetS
+    // (0x6DF1CF, 0x6DF26D) and +0x808 to GetV/SetV (0x6DF225, 0x6DF2CF). Asserting the
+    // OTHER bank is empty is what makes this a direction check rather than a presence
+    // check - a codec that swaps the two passes the presence check either way.
+    Equal(0x10203040, load.HumanRecord.Data.ScriptS[7], "ScriptData type-0 S value");
+    Equal(0, load.HumanRecord.Data.ScriptV.Count, "type 0 must not land in the V bank");
 }
 
 void DecodeLoadWithoutScript()
@@ -68,8 +76,10 @@ void DecodePaddedLoad()
         new LegacyDbServerFrame(1, 0, payload), out var load, out var error), error);
     Check(load.HumanRecord.NativeScriptData.SequenceEqual(fixture.Script),
         "padded load actual ScriptData bytes");
-    Equal(0x10203040, load.HumanRecord.Data.ScriptV[7],
-        "padded load ScriptData V value");
+    Equal(0x10203040, load.HumanRecord.Data.ScriptS[7],
+        "padded load ScriptData type-0 S value");
+    Equal(0, load.HumanRecord.Data.ScriptV.Count,
+        "padded load type 0 must not land in the V bank");
 }
 
 void EncodeExactSave()

@@ -169,6 +169,37 @@ namespace QST22VariableScopeAudit
                 assertionCount++;
             }
 
+            // Assertion 8: PlayDice sub_645200 is the one native internal consumer of the
+            // group-0 bank (0x645237 `xor edx,edx` / 0x64523B `call 0x6DF1E4`, indices
+            // 1..10 per 0x645234 `lea ecx,[esi+1]` and 0x645246 `cmp esi,0xA`). A scan of
+            // every E8 call to 0x6DF1E4 / 0x6DF288 / 0x6DF1B4 / 0x6DF240 finds 29 sites and
+            // this is the only one passing group 0. It must not read the keyed dictionary,
+            // which cannot hold that bank at all.
+            var packDiceMatch = Regex.Match(content,
+                @"private\s+static\s+int\s+PackDiceValues\s*\([^)]+\)\s*\{.*?\}",
+                RegexOptions.Singleline);
+            if (!packDiceMatch.Success)
+            {
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues not found");
+                failCount++;
+            }
+            else if (packDiceMatch.Value.Contains("m_ScriptVVars"))
+            {
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues reads the keyed dictionary - group 0 is never in it");
+                failCount++;
+            }
+            else if (!Regex.IsMatch(packDiceMatch.Value,
+                @"TryGetScriptVar\s*\(\s*'V'\s*,\s*0\s*,"))
+            {
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues does not read group-0 V through TryGetScriptVar");
+                failCount++;
+            }
+            else
+            {
+                Console.WriteLine("[PASS] Assertion 8: PackDiceValues reads group-0 V through the single accessor");
+                assertionCount++;
+            }
+
             Console.WriteLine($"\n=== Summary ===");
             Console.WriteLine($"Total assertions: {assertionCount + failCount}");
             Console.WriteLine($"Passed: {assertionCount}");
