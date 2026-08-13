@@ -1103,9 +1103,17 @@ namespace GameSvr
                 case "TGoldActCred":
                     return UseNativeGoldActCredential();
                 case "TSkillBook":
-                    if (!ReadBook(stdItem)) return false;
-                    EnableNewlyLearnedSkills();
-                    return true;
+                    // Learning a skill does NOT arm it. Native writes obj+0x94
+                    // (thrusting) in exactly two places -- the login gate at
+                    // 0x6B2241/0x6B224A and the xor toggle at 0x6BDFCE -- and
+                    // obj+0x95 (half moon) in exactly one, the xor at 0x6BE01E.
+                    // Both toggles live in sub_6BDFC8 / sub_6BE018, each of which
+                    // has exactly one caller (0x6BC7F0 / 0x6BC809, the magic
+                    // dispatcher arms for magic 12 and 25) and zero dword refs, so
+                    // no item path can reach them. A player who reads the book
+                    // mid-session gets the skill armed on the next cast or the
+                    // next login, never here.
+                    return ReadBook(stdItem);
                 case "TFixedCoordStone":
                     // 定位石 recall. Native reaches this through the class VMT slot +0x18
                     // (pointer at 0x7827D4 in VMT 0x7827BC) = sub_78A014; StdMode 1 /
@@ -1243,25 +1251,6 @@ namespace GameSvr
             if (!CanUseNativeDrug() || m_WAbil.HP == 0) return false;
             m_boUserUnLockDurg = true;
             return true;
-        }
-
-        private void EnableNewlyLearnedSkills()
-        {
-            if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null && !m_boUseThrusting)
-            {
-                ThrustingOnOff(true);
-                SendSocket("+LNG");
-            }
-            if (m_MagicArr[SpellsDef.SKILL_BANWOL] != null && !m_boUseHalfMoon)
-            {
-                HalfMoonOnOff(true);
-                SendSocket("+WID");
-            }
-            if (m_MagicArr[SpellsDef.SKILL_REDBANWOL] != null && !m_boRedUseHalfMoon)
-            {
-                RedHalfMoonOnOff(true);
-                SendSocket("+WID");
-            }
         }
 
         private static bool IsNativePileItem(GoodItem stdItem)
