@@ -1839,21 +1839,9 @@ namespace GameSvr
 
         private void SendAdjustBonus()
         {
-            var sSendMsg = string.Empty;
-            switch (m_btJob)
-            {
-                case M2Share.jWarr:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofWarr) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofWarr);
-                    break;
-                case M2Share.jWizard:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofWizard) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofWizard);
-                    break;
-                case M2Share.jTaos:
-                    sSendMsg = EDcode.EncodeBuffer(M2Share.g_Config.BonusAbilofTaos) + '/' + EDcode.EncodeBuffer(m_BonusAbil) + '/' + EDcode.EncodeBuffer(M2Share.g_Config.NakedAbilofTaos);
-                    break;
-            }
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ADJUST_BONUS, m_nBonusPoint, 0, 0, 0);
-            SendSocket(m_DefMsg, sSendMsg);
+            // Native CODE 0x401000..0x7A10D0 has zero 16-bit dx/cx loads of 811
+            // (0x032B) reaching a send slot. srv_AppearTimes.ini ident 811 = 0.
+            // Keep the RM_ADJUST_BONUS consumer so routing stays, but do not emit.
         }
 
         private void ShowMapInfo(string sMap, string sX, string sY)
