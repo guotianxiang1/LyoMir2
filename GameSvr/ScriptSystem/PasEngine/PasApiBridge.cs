@@ -8295,7 +8295,18 @@ namespace GameSvr.PasEngine
         /// </summary>
         public PasValue GetPlayerVar(char type, int group, int index)
         {
-            if (CurrentPlayer == null) return PasValue.FromInt(NativeScriptVarMiss);
+            return GetPlayerVar(CurrentPlayer, type, group, index);
+        }
+
+        /// <summary>
+        /// Same read for a player that is not the script's <see cref="CurrentPlayer"/>.
+        /// 眼神插件走的就是这条路：它的 GetV 跳板 <c>0x10065F00</c> 把玩家指针放进 eax
+        /// 后直接 <c>call 0x6DF1E4</c>（<c>0x10065F16 mov [ebp-0x10],0x6DF1E4</c> /
+        /// <c>0x10065F27 call [ebp-0x10]</c>），与脚本引擎共用同一个取值函数。
+        /// </summary>
+        internal static PasValue GetPlayerVar(TPlayObject player, char type, int group, int index)
+        {
+            if (player == null) return PasValue.FromInt(NativeScriptVarMiss);
             if (!NativeScriptVarArgsAccepted(type, group, index))
                 return PasValue.FromInt(NativeScriptVarMiss);
             // Group-0 V reads come straight out of the inline slots, and an untouched
@@ -8306,12 +8317,12 @@ namespace GameSvr.PasEngine
             // dictionary inverted every downstream `= 0` quest test on a fresh
             // character.
             if (group == 0)
-                return PasValue.FromInt(CurrentPlayer.m_ScriptVGroup0[index]);
+                return PasValue.FromInt(player.m_ScriptVGroup0[index]);
             int flat = group * 1000 + index;
             var variables = char.ToUpperInvariant(type) switch
             {
-                'V' => CurrentPlayer.m_ScriptVVars,
-                'S' => CurrentPlayer.m_ScriptSVars,
+                'V' => player.m_ScriptVVars,
+                'S' => player.m_ScriptSVars,
                 _ => null
             };
             return variables != null && variables.TryGetValue(flat, out var value)
