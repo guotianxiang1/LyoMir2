@@ -1935,5 +1935,24 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === Qiankun subsystem ===
+        // 乾坤包/鸿福袋 CM idents. Dispatch-tree leaves rooted at selector 0x6D805C
+        // (dispatcher sub_6D7D68). ImageBase 0x400000; file offset = VA - 0x400000.
+        // Handler arm -> worker (三件套证据见 TPlayObject.Qiankun.cs 头注释):
+        //   CM 3282 0x6DA600 -> 0x6E64BC  乾坤包列表查询/明细 (fail-closed: 依赖运行期配置)
+        //   CM 3283 0x6DA626 -> 0x6E67B0  鸿福袋开启 (fail-closed: 配置管理器 [0x7D64B8] 未移植)
+        //   CM 3284 0x6DA650 -> 0x6E6EA4  乾坤包选择列表重置 -> SM 2957(全零)
+        //   CM 3285 0x6DA638 -> 0x6E6DE8  乾坤包·荣耀点更换 (config 恒 null -> 静默返回)
+        //   CM 3286 0x6DA65D -> 0x6E6B54  乾坤包·领取奖励 (列表恒空 -> reset -> SM 2957)
+        //   CM 3287 0x6DA895 -> 0x6E8734  附近玩家展示物品 RM 0x3004 (独立特性, fail-closed)
+        //   CM 3288 0x6DA8C4 -> 0x6E8820  自身物品 RM 0x3005 (独立特性, fail-closed)
+        public const int CM_3282 = 3282; // 0xCD2  乾坤包列表查询
+        public const int CM_3283 = 3283; // 0xCD3  鸿福袋开启(填充列表)
+        public const int CM_3284 = 3284; // 0xCD4  乾坤包重置 -> SM_2957
+        public const int CM_3285 = 3285; // 0xCD5  乾坤包·荣耀点更换
+        public const int CM_3286 = 3286; // 0xCD6  乾坤包·领取奖励
+        public const int CM_3287 = 3287; // 0xCD7  附近玩家展示物品(RM 0x3004)
+        public const int CM_3288 = 3288; // 0xCD8  自身物品广播(RM 0x3005)
     }
 }
