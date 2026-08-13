@@ -212,6 +212,114 @@ namespace GameSvr
                     // 0x742E5C declen 10: C4 E3 D6 D0 B6 BE C1 CB A3 A1.
                     SendNativeStateDispatchHintRed("你中毒了！");
                     break;
+
+                case 56:
+                    // byte tbl[0x38] = 0x16 -> slot 22 -> 0x741E50.
+                    //   741E50  68 A0 2E 74 00        push 0x742EA0
+                    //   741E5B  0F B7 C7              movzx eax, di
+                    //   741E5E  E8 39 AA CC FF        call 0x40C89C
+                    //   741E69  68 94 2C 74 00        push 0x742C94   ; "秒"
+                    //   741E74  BA 03 00 00 00        mov edx, 3
+                    //   741E84  66 B9 FF 38           mov cx, 0x38FF
+                    //   741E8C  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742EA0 declen 24: C4 E3 B4 A6 D3 DA CA C8 D1 AA C9 B1
+                    // C2 BE D7 B4 CC AC A3 AC B3 D6 D0 F8.
+                    SendNativeStateDispatchHintRed(
+                        $"你处于嗜血杀戮状态，持续{n}秒");
+                    break;
+
+                case 62:
+                    // byte tbl[0x3E] = 0x17 -> slot 23 -> 0x741E97.
+                    //   741E97  66 B9 FF 38           mov cx, 0x38FF
+                    //   741E9B  BA C4 2E 74 00        mov edx, 0x742EC4
+                    //   741EA4  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742EC4 declen 12: C4 E3 B1 BB C4 FD B1 F9 C1 CB A3 A1.
+                    SendNativeStateDispatchHintRed("你被凝冰了！");
+                    break;
+
+                case 63:
+                    // byte tbl[0x3F] = 0x18 -> slot 24 -> 0x741EAF.
+                    //   741EAF  C6 86 10 03 00 00 01  mov byte [esi+0x310], 1
+                    //   741EB6  68 DC 2E 74 00        push 0x742EDC
+                    //   741EC1  0F B7 C7              movzx eax, di
+                    //   741EC4  E8 D3 A9 CC FF        call 0x40C89C
+                    //   741ECF  68 94 2C 74 00        push 0x742C94   ; "秒"
+                    //   741EDA  BA 03 00 00 00        mov edx, 3
+                    //   741EEA  66 B9 FF 38           mov cx, 0x38FF
+                    //   741EF2  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742EDC declen 24: C4 E3 B4 A6 D3 DA D5 E6 C1 FA BB A4
+                    // CC E5 D7 B4 CC AC A3 AC B3 D6 D0 F8.
+                    //
+                    // The `[Self+0x310] = 1` write is intentionally not mirrored,
+                    // and here that is provably lossless rather than a guess: an
+                    // image-wide scan for the disp32 finds exactly three sites
+                    // touching this object's byte — 0x741EAF (this arm, =1),
+                    // 0x7429EC (the state-63 lost arm, =0) and 0x73BF8F (a bulk
+                    // field reset that also zeroes +0x2F4/+0x2FC/+0x30C/+0x544)
+                    // — and no reader anywhere. The other hits (0x45E673
+                    // `call [ebx+0x310]`, 0x79664D/0x7997E8/0x799AEC dword loads)
+                    // belong to unrelated classes. The byte is a write-only
+                    // mirror of "state 63 is active", which HasNativeActiveState
+                    // already answers.
+                    SendNativeStateDispatchHintRed(
+                        $"你处于真龙护体状态，持续{n}秒");
+                    break;
+
+                case 71:
+                    // byte tbl[0x47] = 0x1C -> slot 28 -> 0x741FD2.
+                    //   741FD2  66 B9 DB FF           mov cx, 0xFFDB
+                    //   741FD6  BA 54 2F 74 00        mov edx, 0x742F54
+                    //   741FDF  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742F54 declen 14: C8 BC D1 AA C6 C6 BF D5 BF AA C6 F4
+                    // A3 A1.
+                    SendNativeStateDispatchHintGreen("燃血破空开启！");
+                    break;
+
+                case 76:
+                    // byte tbl[0x4C] = 0x1A -> slot 26 -> 0x741F44.
+                    //   741F44  68 1C 2F 74 00        push 0x742F1C
+                    //   741F4F  0F B7 C7              movzx eax, di
+                    //   741F52  E8 45 A9 CC FF        call 0x40C89C
+                    //   741F5D  68 94 2C 74 00        push 0x742C94   ; "秒"
+                    //   741F68  BA 03 00 00 00        mov edx, 3
+                    //   741F78  66 B9 DB FF           mov cx, 0xFFDB
+                    //   741F80  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742F1C declen 16: BA CF BB F7 BF B9 D0 D4 CB B2 BC E4
+                    // CC E1 B8 DF.
+                    SendNativeStateDispatchHintGreen($"合击抗性瞬间提高{n}秒");
+                    break;
+
+                case 77:
+                    // byte tbl[0x4D] = 0x1B -> slot 27 -> 0x741F8B.
+                    //   741F8B  68 38 2F 74 00        push 0x742F38
+                    //   741F96  0F B7 C7              movzx eax, di
+                    //   741F99  E8 FE A8 CC FF        call 0x40C89C
+                    //   741FA4  68 94 2C 74 00        push 0x742C94   ; "秒"
+                    //   741FAF  BA 03 00 00 00        mov edx, 3
+                    //   741FBF  66 B9 DB FF           mov cx, 0xFFDB
+                    //   741FC7  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742F38 declen 16: BD FC D5 BD BF B9 D0 D4 CB B2 BC E4
+                    // CC E1 B8 DF.
+                    SendNativeStateDispatchHintGreen($"近战抗性瞬间提高{n}秒");
+                    break;
+
+                case 78:
+                    // byte tbl[0x4E] = 0x01 -> slot 1 -> 0x741A21, the first arm
+                    // body after the dword table (which ends at 0x741A21).
+                    //   741A21  68 78 2C 74 00        push 0x742C78
+                    //   741A29  0F B7 C7              movzx eax, di
+                    //   741A2C  E8 6B AE CC FF        call 0x40C89C
+                    //   741A34  68 94 2C 74 00        push 0x742C94   ; "秒"
+                    //   741A3C  BA 03 00 00 00        mov edx, 3
+                    //   741A49  66 B9 DB FF           mov cx, 0xFFDB
+                    //   741A51  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x742C78 declen 18: B4 CC CA F5 C9 CF CF C2 CF DE CB B2
+                    // BC E4 CC E1 B8 DF — "刺术上下限瞬间提高", note this is the
+                    // 上下限 wording, unlike the plain "刺术回复正常" on the
+                    // lost side.
+                    SendNativeStateDispatchHintGreen(
+                        $"刺术上下限瞬间提高{n}秒");
+                    break;
             }
         }
     }
