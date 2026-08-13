@@ -2326,6 +2326,21 @@ namespace GameSvr
             SendRefMsg(Grobal2.RM_USERNAME, 0, 0, 0, 0, GetShowName());
         }
 
+        /// <summary>
+        /// Native SM 4469 (join) / 4470 (leave): name-only slave-list notify.
+        /// Sender sub_6F784C / sub_6F78B4: Recog=0, Param=Tag=Series=0, sMsg=[slave+0x106].
+        /// Only TPlayObject has the [+0x250] unicast slot this goes through
+        /// (TPlayer.MakeSlave = sub_6CB070). HeroObject is AnimalObject — skip.
+        /// </summary>
+        public void NotifyNativeSlaveListChanged(bool joining, TBaseObject slave)
+        {
+            if (slave == null || this is not TPlayObject player)
+                return;
+            player.SendDefMessage(
+                (short)(joining ? Grobal2.SM_SLAVE_JOIN : Grobal2.SM_SLAVE_LEAVE),
+                0, 0, 0, 0, slave.m_sCharName ?? "");
+        }
+
         public TBaseObject MakeSlave(string sMonName, int nMakeLevel, int nExpLevel, int nMaxMob, int dwRoyaltySec)
         {
             short nX = 0;
@@ -2348,6 +2363,9 @@ namespace GameSvr
                     }
                     MonObj.RefNameColor();
                     m_SlaveList.Add(MonObj);
+                    // MakeSlave = sub_6CB070: after TList.Add to [this+0x4FC],
+                    // 0x6CB357 call 0x6F784C -> SM 4469 name notify to the master.
+                    NotifyNativeSlaveListChanged(joining: true, MonObj);
                     result = MonObj;
                 }
             }
@@ -3210,6 +3228,41 @@ namespace GameSvr
             }
             else
             {
+                // 战神 sub_726E68 删的是队长时 @0x726FBF call 0x727FB0：
+                // 从槽 0..10 找第一个「72843C 记录有效且 player != 离队者」的成员，
+                // 写入 group+0x3C，再广播 ShortString 0x7280AC「 提升为小队队长!」。
+                // 旧 C# 把全队 LeaveGroup，等于队长一点删除就解散。
+                TPlayObject successor = null;
+                for (int i = 0; i < m_GroupMembers.Count; i++)
+                {
+                    var cand = m_GroupMembers[i];
+                    if (cand != null && cand != BaseObject && !cand.m_boGhost)
+                    {
+                        successor = cand;
+                        break;
+                    }
+                }
+                BaseObject.LeaveGroup();
+                m_GroupMembers.Remove(BaseObject as TPlayObject);
+                if (successor != null)
+                {
+                    var remaining = new List<TPlayObject>(m_GroupMembers);
+                    m_GroupMembers.Clear();
+                    successor.m_GroupMembers.Clear();
+                    successor.m_GroupMembers.Add(successor);
+                    successor.m_GroupOwner = successor;
+                    for (int i = 0; i < remaining.Count; i++)
+                    {
+                        var member = remaining[i];
+                        if (member == null || member == successor)
+                            continue;
+                        successor.m_GroupMembers.Add(member);
+                        member.m_GroupOwner = successor;
+                    }
+                    successor.SendGroupText(successor.m_sCharName + " 提升为小队队长!");
+                    successor.RefreshNativeGroupWire();
+                    return;
+                }
                 for (int i = m_GroupMembers.Count - 1; i >= 0; i--)
                 {
                     m_GroupMembers[i].LeaveGroup();
@@ -3223,7 +3276,9 @@ namespace GameSvr
             }
             else
             {
-                PlayObject.SendGroupMembers();
+                // 战神 726FE6 call 0x7270F8 仍存活则 726FF7 call 0x7271D0，
+                // 下发 SM 667 的 54 字节成员记录，不是斜杠拼名。
+                PlayObject.RefreshNativeGroupWire();
             }
         }
 
@@ -3526,7 +3581,7 @@ namespace GameSvr
         }
 
         public void SendMsg(TBaseObject BaseObject, int wIdent, int wParam, int nParam1, int nParam2, int nParam3,
-            string sMsg, object payload = null)
+            string sMsg, object payload = null, int nBodyLen = 0)
         {
             // CRAFT-34 — native enqueue family gates on ghost byte [self+0x73], NOT death [self+0x74].
             //   0x765E7D  80 7E 73 00           cmp byte [esi+0x73], 0
@@ -3558,7 +3613,8 @@ namespace GameSvr
                     dwDeliveryTime = 0,
                     BaseObject = BaseObject,
                     boLateDelivery = false,
-                    Payload = payload
+                    Payload = payload,
+                    nBodyLen = nBodyLen
                 };
                 if (!string.IsNullOrEmpty(sMsg))
                 {
@@ -3702,7 +3758,7 @@ namespace GameSvr
             SendDelayMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, dwDelay);
         }
 
-        public void SendUpdateMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, object payload = null)
+        public void SendUpdateMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, object payload = null, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             int i;
@@ -3731,10 +3787,10 @@ namespace GameSvr
 
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
-            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, payload);
+            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, payload, nBodyLen);
         }
 
-        public void SendActionMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg)
+        public void SendActionMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, int nBodyLen = 0)
         {
             SendMessage SendMessage;
             int i;
@@ -3762,7 +3818,7 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
-            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg);
+            SendMsg(BaseObject, wIdent, wParam, lParam1, lParam2, lParam3, sMsg, null, nBodyLen);
         }
 
         protected virtual bool GetMessage(ref TProcessMessage Msg)
@@ -3804,6 +3860,7 @@ namespace GameSvr
                     Msg.dwDeliveryTime = SendMessage.dwDeliveryTime;
                     Msg.boLateDelivery = SendMessage.boLateDelivery;
                     Msg.Payload = SendMessage.Payload;
+                    Msg.nBodyLen = SendMessage.nBodyLen;
                     if (!string.IsNullOrEmpty(SendMessage.Buff))
                     {
                         Msg.sMsg = SendMessage.Buff;
@@ -3931,17 +3988,20 @@ namespace GameSvr
                                                         BaseObject = OSObject.CellObj as TBaseObject;
                                                         if ((BaseObject != null) && !BaseObject.m_boGhost)
                                                         {
-                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                                                            // Cache membership is decided by the SCAN alone. Native
+                                                            // rebuilds [self+0x380] in sub_7651EC @0x765263-0x76528A
+                                                            // (Clear + Envirnoment VMT+0x1C), a step that knows
+                                                            // nothing about the ident, and the broadcast slot
+                                                            // sub_6DC590 only ever READS the list. Deciding
+                                                            // membership from the send made the cache depend on
+                                                            // which ident happened to trigger the refresh.
+                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT ||
+                                                                BaseObject.m_boWantRefMsg)
                                                             {
-                                                                BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
                                                                 m_VisibleHumanList.Add(BaseObject);
-                                                            }
-                                                            else if (BaseObject.m_boWantRefMsg)
-                                                            {
-                                                                if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
+                                                                if (CanNativeRefMsgReach(BaseObject, wIdent))
                                                                 {
                                                                     BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                                                                    m_VisibleHumanList.Add(BaseObject);
                                                                 }
                                                             }
                                                         }
@@ -3975,16 +4035,9 @@ namespace GameSvr
                     }
                     if ((BaseObject.m_PEnvir == m_PEnvir) && (Math.Abs(BaseObject.m_nCurrX - m_nCurrX) < 11) && (Math.Abs(BaseObject.m_nCurrY - m_nCurrY) < 11))
                     {
-                        if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                        if (CanNativeRefMsgReach(BaseObject, wIdent))
                         {
                             BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                        }
-                        else if (BaseObject.m_boWantRefMsg)
-                        {
-                            if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
-                            {
-                                BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                            }
                         }
                     }
                 }
@@ -3993,6 +4046,51 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
+        }
+
+        /// <summary>
+        /// The per-observer send test of a ref-broadcast, kept separate from
+        /// the visible-list refresh above so the two cannot influence each
+        /// other. Native keeps them apart the same way: the list is rebuilt
+        /// only in <c>sub_7651EC</c> @<c>0x765263</c>-@<c>0x76528A</c>, behind
+        /// its own 800 ms throttle on <c>[self+0x37C]</c>, while the broadcast
+        /// slot <c>sub_6DC590</c> walks <c>[self+0x380]</c> read-only and
+        /// applies its filters per item at <c>0x6DC6D1</c>-<c>0x6DC720</c>.
+        /// <para>
+        /// The stealth term is <c>sub_774288</c>, called at <c>0x6DC6F1</c>
+        /// with <c>eax</c> = the broadcaster and <c>edx</c> = the observer,
+        /// and a true result skips that observer outright
+        /// (<c>0x6DC6F8 jne</c>). The same filter sits at <c>0x6DC247</c> in
+        /// the VMT+0xE0 slot. Because it is applied here and not in the
+        /// refresh, a stealthed caster's observers stay in the cache and
+        /// resume receiving the moment the state lapses or they close inside
+        /// two cells.
+        /// </para>
+        /// <para>
+        /// Divergence left standing: native's cached loop rejects every
+        /// observer with <c>byte [item+0x178] != 0</c> at <c>0x6DC6D1</c>,
+        /// i.e. only race 0 is served from the cache, with no
+        /// <c>m_boWantRefMsg</c> branch at all. Dropping that branch here
+        /// would stop monsters reacting to STRUCK/HEAR/DEATH between refresh
+        /// ticks, which is a far wider change than this one; it is recorded
+        /// rather than made.
+        /// </para>
+        /// </summary>
+        private bool CanNativeRefMsgReach(TBaseObject observer, int wIdent)
+        {
+            if (observer.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
+            {
+                if (!observer.m_boWantRefMsg)
+                {
+                    return false;
+                }
+                if ((wIdent != Grobal2.RM_STRUCK) && (wIdent != Grobal2.RM_HEAR) &&
+                    (wIdent != Grobal2.RM_DEATH))
+                {
+                    return false;
+                }
+            }
+            return !IsNativeStealthedFrom(observer);
         }
 
         public int GetFeatureToLong()
@@ -5550,8 +5648,10 @@ namespace GameSvr
 
         private void LeaveGroup()
         {
-            const string sExitGropMsg = "{0} 已经退出了本组.";
-            SendGroupText(format(sExitGropMsg, m_sCharName));
+            // 战神 sub_6C3200 @0x6C3252 edx=0x6C32C4 ShortString len=9「 退出小组」
+            // （字节 09 20 CD CB B3 F6 D0 A1 D7 E9），拼在 [self+0x106] 名字后面，
+            // 经 sub_727068 用 RM 0x2776 广播给全队。全镜像「已经退出了本组」0 命中。
+            SendGroupText(m_sCharName + " 退出小组");
             m_GroupOwner = null;
             SendMsg(this, Grobal2.RM_GROUPCANCEL, 0, 0, 0, 0, "");
         }

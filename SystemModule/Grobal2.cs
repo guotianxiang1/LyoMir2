@@ -353,7 +353,10 @@ namespace SystemModule
         public const int CM_SWITCH_LISTEN = 3032;
         public const int CM_SPEEDHACKMSG = 3500;
         public const int SM_SWORD_HIT = 2;
-        public const int SM_41 = 4;
+        // SM_41 = 4 removed: the name promised wire ident 41 but held 4. Wire 41 is
+        // SM_FEATURECHANGED, sent at 0x6F2E2B `66 BA 29 00 mov dx,0x29` ->
+        // 0x6F2E33 `FF 93 54 02 00 00 call [ebx+0x254]` (134,873 production packets).
+        // 4 has no send-slot site anywhere in CODE and zero production packets.
         public const int SM_RUSH = 6;
         public const int SM_RUSHKUNG = 7;
         
@@ -1090,6 +1093,13 @@ namespace SystemModule
         public const int CM_SYSTEM_NEWMAIL = 4464;
         public const int CM_FETCH_ATTACH_OFFTM = 4468;
         public const int SM_FETCH_ATTACH_OFFTM = 4468;
+        // Native slave-list name notify. Recog=Param=Tag=Series=0, sMsg=[obj+0x106].
+        // JOIN  4469: 0x6F7883 66 BA 75 11 then [obj+0x250].
+        //   MakeSlave sub_6CB070 @0x6CB357, MakeSlaveEx sub_6BFC20 @0x6BFD02,
+        //   MagTamming sub_6ED2A4 @0x6ED528. srv_AppearTimes 261804.
+        // LEAVE 4470: 0x6F78EB 66 BA 76 11, same frame. srv_AppearTimes 123532.
+        public const int SM_SLAVE_JOIN = 4469;
+        public const int SM_SLAVE_LEAVE = 4470;
         public const int CM_CLEAR_ALLMAIL = 4495;
         public const int SM_CLEAR_ALLMAIL = 4495;
 
@@ -1245,6 +1255,11 @@ namespace SystemModule
 
         public const int CM_GILD_ACCEPT_REQUEST = 4611;
         public const int SM_GILD_ACCEPT_REQUEST = 4611;
+        // Login dump of offline social-request notices. UserLogon @0x6B24EE
+        // always calls sub_6F772C; even the empty-list arm (je 0x6F77EB) still
+        // sends via [obj+0x254]: 0x6F7813 66 BA 04 12, Recog=Param=Tag=Series=0,
+        // Len=count*17. srv_AppearTimes 50911.
+        public const int SM_PENDING_NOTICE = 4612;
         public const int SM_PENDING_REQUEST = 4613;
         public const int SM_CLEAR_PENDING_REQUEST = 4615;
         public const int CM_FIND_CORPS_BYNAME = 4616;
@@ -1387,7 +1402,14 @@ namespace SystemModule
         public const int RM_ABILITY = 10051;
         public const int RM_HEALTHSPELLCHANGED = 10052;
         public const int RM_DAYCHANGING = 10053;
-        public const int SM_LINGFU_CHANGED = 10054;
+        // Internal queue tag, never a wire ident. The only immediate load of 10054
+        // (0x2746) in CODE is 0x6B99F3 `66 B9 46 27 mov cx,0x2746` feeding
+        // `0x6B99F9 call 0x765E68` -- the record-allocating ENQUEUE helper, which
+        // contains no [+0x250]/[+0x254] send-slot call. The wire packet is emitted by
+        // the RM handler: dispatcher 0x6B3F08 `jmp [eax*4+0x6B3F0F]` routes tag 10054
+        // to arm 0x6B4DED, which builds a 24-byte body and sends
+        // 0x6B4E3A `66 BA B2 04 mov dx,0x4B2` = 1202 = SM_GETDIAMNUM_EXT.
+        public const int RM_LINGFU_CHANGED = 10054;
         public const int RM_USERMOVE = 10056;
         public const int RM_NATIVE_CLEAROBJECTS = 10117;
         public const int RM_NATIVE_CHANGEMAP = 10118;

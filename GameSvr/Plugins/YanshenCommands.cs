@@ -100,8 +100,6 @@ namespace GameSvr.Plugins
                     return new[] { "眼神特殊函数", "super攻击触发" };
                 case 19:
                     return new[] { "眼神特殊函数", "全屏拾取" };
-                case 23:
-                    return new[] { "眼神特殊函数", "怪物伤害触发技能特效" };
                 case 40:
                     return new[] { "眼神特殊函数", "指定技能id免伤" };
                 default:
@@ -213,7 +211,9 @@ namespace GameSvr.Plugins
                     17 => _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     18 => _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     19 => _api.AutoPickup(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3)),
-                    20 => _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
+                    20 => cmd.Parameters.Length < 2
+                        ? -1
+                        : _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
                     21 => _api.CheckItemBind(S(cmd,0))?1:0,
                     22 => _api.SendGroundMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),S(cmd,6)),
                     23 => _api.SetPetAttr(S(cmd,11),P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9),P(cmd,10)),
@@ -326,9 +326,14 @@ namespace GameSvr.Plugins
             switch (cmd.ChineseCommand)
             {
                 case "plus伤害": return _api.CustomDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,4),P(cmd,3),P(cmd,5),P(cmd,6),P(cmd,7));
+                // 两条隧道的第一个字段是元素类型、第二个才是装备位，而
+                // Set/GetEquipElement 的形参顺序是 (装备位, 元素类型)，所以这里要交换。
+                // 给与元素 1005E8DD 把字段0 拿去和 1/0x11 比（类型），1005E8B2 拿字段1
+                // 去索引 [[Self+0x4C0]+idx*4+8]（装备位）；获取元素 1005EB9B 把字段1
+                // 限制在 0xF 以内（装备位），1005EBA4 把字段0 限制在 1..17（类型）。
                 case "给与元素":
-                case "给予元素": return _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2));
-                case "获取元素": return _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2));
+                case "给予元素": return _api.SetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
+                case "获取元素": return _api.GetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
                 case "定义伤害":
                 case "攻击伤害": _api.DirectAttack(P(cmd,0),P(cmd,1)); return 0;
                 case "英雄极品": return _api.GetHeroExtreme(P(cmd,0),P(cmd,1));

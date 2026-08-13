@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using SystemModule.Packet;
 
@@ -20,6 +19,8 @@ internal sealed class NativeDbServerService
     private readonly ConcurrentDictionary<long, TcpClient> _clients = new();
     private readonly ConcurrentDictionary<long, Task> _sessionTasks = new();
     private readonly ConcurrentDictionary<long, LoginGateBackendState> _backends = new();
+    private readonly ConcurrentDictionary<long, NativeConnectionState> _liveConnections = new();
+    private readonly ConcurrentDictionary<uint, PendingSelect> _pendingSelects = new();
     private readonly SemaphoreSlim _connectionSlots = new(
         MaximumBackendConnections, MaximumBackendConnections);
     private readonly SemaphoreSlim _authenticationSlots = new(
@@ -29,6 +30,7 @@ internal sealed class NativeDbServerService
     private TcpListener? _listener;
     private Task? _acceptTask;
     private long _nextConnectionId;
+    private int _nextSessionId = 999;
 
     public NativeDbServerService(LoginGateConfig config,
         ILoginTicketAuthenticator authenticator, LoginGateCounters counters,
@@ -59,6 +61,92 @@ internal sealed class NativeDbServerService
 
         return routes.FirstOrDefault(route =>
             route.GroupIndex == group.Index && route.AreaIndex == area.AreaIdx);
+    }
+
+    /// <summary>
+    /// uGateListen.pas:197 ContinueSelectServer → uMainThread.pas:278-285
+    /// allocates ciSessionID and sends GDM_SELECT_SERVER (1001). The 2001
+    /// reply is the only source of GameGate IP/port for the client jump.
+    /// </summary>
+    public async Task<SelectServerResult> RequestSelectServerAsync(
+        LoginGateArea area, LoginGateGroup group, int encodeIndex,
+        ushort clientSocketHandle, CancellationToken cancellationToken)
+    {
+        var backend = FindRegisteredBackend(area, group);
+        if (backend == null)
+            return SelectServerResult.Fail(3);
+
+        if (!_liveConnections.TryGetValue(backend.ConnectionId, out var connection)
+            || connection.Stream == null)
+            return SelectServerResult.Fail(3);
+
+        var sessionId = NextSessionId();
+        if (_config.SecondZone)
+            sessionId ^= LoginGateWireProtocol.NativeSecondZoneSessionXor;
+
+        if (!LoginGateWireProtocol.TryCreateSelectGroupInfo(
+                sessionId, encodeIndex, clientSocketHandle,
+                checked((ushort)area.AreaIdx), checked((byte)group.Index),
+                area.Suffix, out var payload, out var buildError))
+            throw new InvalidDataException(buildError);
+
+        var pending = new PendingSelect(connection.ConnectionId, clientSocketHandle,
+            new TaskCompletionSource<NativeLoginGateProbeRoute?>(
+                TaskCreationOptions.RunContinuationsAsynchronously));
+        if (!_pendingSelects.TryAdd(sessionId, pending))
+            return SelectServerResult.Fail(2);
+
+        try
+        {
+            if (!LoginGateWireProtocol.TryCreateNativeProbeRequest(payload,
+                    out var request, out var error))
+                throw new InvalidDataException(error);
+            await SendFrameAsync(connection, connection.Stream, request,
+                cancellationToken).ConfigureAwait(false);
+
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, connection.Token);
+            var completed = await pending.Completion.Task.WaitAsync(linked.Token)
+                .ConfigureAwait(false);
+            if (completed == null)
+                return SelectServerResult.Fail(3);
+            if (completed.SessionId == 0)
+                return SelectServerResult.Fail(
+                    completed.ErrorType == 0 ? (byte)3 : completed.ErrorType);
+            return SelectServerResult.Ok(completed);
+        }
+        catch (OperationCanceledException)
+        {
+            return SelectServerResult.Fail(3);
+        }
+        finally
+        {
+            _pendingSelects.TryRemove(sessionId, out _);
+        }
+    }
+
+    private LoginGateBackendSnapshot? FindRegisteredBackend(
+        LoginGateArea area, LoginGateGroup group)
+    {
+        var routes = GetBackends();
+        if (!string.IsNullOrWhiteSpace(group.DbServerName))
+        {
+            return routes.FirstOrDefault(route => route.ServerName.Equals(
+                group.DbServerName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return routes.FirstOrDefault(route =>
+            route.GroupIndex == group.Index && route.AreaIndex == area.AreaIdx);
+    }
+
+    private uint NextSessionId()
+    {
+        while (true)
+        {
+            var next = unchecked((uint)Interlocked.Increment(ref _nextSessionId));
+            if (next >= 1000) return next;
+            Interlocked.CompareExchange(ref _nextSessionId, 1000, (int)next);
+        }
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -112,6 +200,10 @@ internal sealed class NativeDbServerService
             try { await Task.WhenAll(tasks).ConfigureAwait(false); }
             catch { }
         }
+        foreach (var pending in _pendingSelects.Values)
+            pending.Completion.TrySetResult(null);
+        _pendingSelects.Clear();
+        _liveConnections.Clear();
         _backends.Clear();
         stop?.Dispose();
         _stateChanged();
@@ -147,6 +239,8 @@ internal sealed class NativeDbServerService
                     {
                         try { completedClient.Dispose(); } catch { }
                     }
+                    _liveConnections.TryRemove(connectionId, out _);
+                    FailPendingSelects(connectionId);
                     _backends.TryRemove(connectionId, out _);
                     _connectionSlots.Release();
                     _stateChanged();
@@ -183,6 +277,8 @@ internal sealed class NativeDbServerService
         var parser = new YbDbLegacy77StreamParser();
         var buffer = new byte[8192];
         var stream = client.GetStream();
+        state.Stream = stream;
+        _liveConnections[connectionId] = state;
         _log("CONNECT", $"DBServer 已连接：{remote}");
 
         try
@@ -234,25 +330,36 @@ internal sealed class NativeDbServerService
                 await SendFrameAsync(connection, stream,
                     LoginGateWireProtocol.CreateNativeRegistrationAck(), cancellationToken)
                     .ConfigureAwait(false);
-                await SendProbeAsync(connection, stream, registration.ServerName,
-                    cancellationToken).ConfigureAwait(false);
+                // uDBListen.pas:306-312: a 2000 is answered with GDM_PING (1000)
+                // only. GDM_SELECT_SERVER (1001) is issued later from
+                // RequestSelectServer (uDBListen.pas:231), never from the
+                // heartbeat. Sending a random 1001 here invented ghost sessions.
                 _log("INFO", $"DBServer 注册：{registration.ServerName}，在线 {registration.OnlineCount}");
                 _stateChanged();
                 return;
 
             case LoginGateWireProtocol.NativeProbeResponseIdent:
-                if (!connection.Registered)
-                    throw new InvalidDataException("Native77 probe response arrived before registration");
                 if (!LoginGateWireProtocol.TryParseNativeProbeResponse(frame,
                         out var route, out var routeError))
-                    throw new InvalidDataException(routeError);
-                if (!connection.MatchesProbe(route.RawPayload))
-                    throw new InvalidDataException("Native77 probe challenge mismatch");
-                if (!_backends.TryGetValue(connection.ConnectionId, out var routeBackend))
-                    throw new InvalidDataException("Native77 backend state is missing");
-                routeBackend.ApplyRoute(route);
-                _log("INFO", $"GameGate 路由：{new IPAddress(route.Ipv4AddressBytes)}:{route.Port} " +
-                             $"Area={route.AreaIndex} Group={route.GroupIndex}");
+                {
+                    _log("WARN", $"忽略畸形 DGM_SELECT_SERVER(2001)：{routeError}");
+                    return;
+                }
+                // Success replies keep ciSessionID; failure zeros it and LoginGate
+                // finds the client by wSocketHandle (uMainThread.pas:194-196).
+                if (!TryTakePendingSelect(route, connection.ConnectionId, out var pending)
+                    || pending == null)
+                {
+                    _log("WARN", $"无对应选服请求的 2001，Session={route.SessionId}，不断连");
+                    return;
+                }
+                if (_backends.TryGetValue(connection.ConnectionId, out var routeBackend)
+                    && route.SessionId != 0)
+                    routeBackend.ApplyRoute(route);
+                pending.Completion.TrySetResult(route);
+                _log("INFO", $"选服应答：{new IPAddress(route.Ipv4AddressBytes)}:{route.Port} " +
+                             $"Area={route.AreaIndex} Group={route.GroupIndex} " +
+                             $"Session={route.SessionId}");
                 _stateChanged();
                 return;
 
@@ -265,6 +372,20 @@ internal sealed class NativeDbServerService
                 connection.TrackAuthentication(
                     AuthenticateAsync(connection, stream, request, cancellationToken),
                     exception => _log("ERROR", $"并发认证任务错误：{exception.GetType().Name}"));
+                return;
+
+            case LoginGateWireProtocol.NativeDirectStaticAuthIdent:
+            case LoginGateWireProtocol.NativeDirectECardAuthIdent:
+                if (frame.Payload.Length == LoginGateWireProtocol.NativeStatusAuthInfoSize)
+                    await ReplyModuleNotReadyAuthAsync(connection, stream, frame,
+                        cancellationToken).ConfigureAwait(false);
+                return;
+
+            case LoginGateWireProtocol.NativeDirectDynAuthIdent:
+                if (frame.Payload.Length == LoginGateWireProtocol.NativeOldDynamicAuthInfoSize
+                    || frame.Payload.Length == LoginGateWireProtocol.NativeDynamicAuthInfoSize)
+                    await ReplyModuleNotReadyAuthAsync(connection, stream, frame,
+                        cancellationToken).ConfigureAwait(false);
                 return;
 
             case LoginGateWireProtocol.NativeType2EnabledIdent:
@@ -284,21 +405,30 @@ internal sealed class NativeDbServerService
         }
     }
 
-    private async Task SendProbeAsync(NativeConnectionState connection,
-        NetworkStream stream, string serverName, CancellationToken cancellationToken)
+    /// <summary>
+    /// SDK module is unloaded in this build (uSDKAuth.pas:816-890 commented
+    /// out). DirectStaticAuth / DirectDynAuth / DirectECardAuth still answer
+    /// with 1004 / nResult = LC_AUTH_TIMEOUT (-2) via PushAuthHead
+    /// (uSDKAuth.pas:607-608). C# used to ignore 2011/2012/2013, which would
+    /// hang a real DBServer waiting for the reply.
+    /// </summary>
+    private async Task ReplyModuleNotReadyAuthAsync(NativeConnectionState connection,
+        NetworkStream stream, YbDbLegacy77Frame frame, CancellationToken cancellationToken)
     {
-        var mapping = ResolveGroup(serverName);
-        var payload = new byte[LoginGateWireProtocol.NativeProbePayloadSize];
-        RandomNumberGenerator.Fill(payload.AsSpan(0, 10));
-        RandomNumberGenerator.Fill(payload.AsSpan(20, 8));
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(16, 2),
-            checked((ushort)(mapping?.Area.AreaIdx ?? 0)));
-        payload[18] = checked((byte)(mapping?.Group.Index ?? 0));
-        connection.SetProbe(payload);
-        if (!LoginGateWireProtocol.TryCreateNativeProbeRequest(payload,
-                out var probe, out var error))
-            throw new InvalidDataException(error);
-        await SendFrameAsync(connection, stream, probe, cancellationToken)
+        if (frame.Payload.Length < LoginGateWireProtocol.NativeAuthResponseShortPayloadSize)
+            return;
+        var authType = frame.Payload[0];
+        var gateIndex = frame.Payload[1];
+        var queryId = BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(2, 4));
+        if (!LoginGateWireProtocol.TryCreateNativeAuthFailure(
+                authType, gateIndex, queryId,
+                LoginGateWireProtocol.NativeLcAuthTimeout, null,
+                out var response, out var error))
+        {
+            _log("WARN", $"无法构造 1004：{error}");
+            return;
+        }
+        await SendFrameAsync(connection, stream, response, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -448,20 +578,6 @@ internal sealed class NativeDbServerService
         }
     }
 
-    private LoginGateAreaGroup? ResolveGroup(string serverName)
-    {
-        var mappings = _config.GetConfiguredAreas()
-            .SelectMany(area => area.Groups.Select(group =>
-                new LoginGateAreaGroup(area, group))).ToArray();
-        return mappings.FirstOrDefault(mapping =>
-                   !string.IsNullOrWhiteSpace(mapping.Group.DbServerName)
-                   && mapping.Group.DbServerName.Equals(serverName,
-                       StringComparison.OrdinalIgnoreCase))
-               ?? mappings.FirstOrDefault(mapping => mapping.Group.Name.Equals(
-                   serverName, StringComparison.OrdinalIgnoreCase))
-               ?? mappings.FirstOrDefault();
-    }
-
     private bool IsAllowedBackend(TcpClient client)
     {
         if (client.Client.RemoteEndPoint is not IPEndPoint remote) return false;
@@ -473,9 +589,36 @@ internal sealed class NativeDbServerService
             && allowed.Equals(remoteAddress));
     }
 
+    private bool TryTakePendingSelect(NativeLoginGateProbeRoute route, long connectionId,
+        out PendingSelect? pending)
+    {
+        pending = null;
+        if (route.SessionId != 0)
+            return _pendingSelects.TryRemove(route.SessionId, out pending);
+
+        foreach (var pair in _pendingSelects)
+        {
+            if (pair.Value.ConnectionId != connectionId
+                || pair.Value.SocketHandle != route.SocketHandle)
+                continue;
+            if (_pendingSelects.TryRemove(pair.Key, out pending))
+                return true;
+        }
+        return false;
+    }
+
+    private void FailPendingSelects(long connectionId)
+    {
+        foreach (var pair in _pendingSelects)
+        {
+            if (pair.Value.ConnectionId != connectionId) continue;
+            if (_pendingSelects.TryRemove(pair.Key, out var pending))
+                pending.Completion.TrySetResult(null);
+        }
+    }
+
     private sealed class NativeConnectionState : IDisposable
     {
-        private byte[]? _probe;
         private readonly CancellationTokenSource _stop;
         private readonly ConcurrentDictionary<long, Task> _authenticationTasks = new();
         private long _nextAuthenticationId;
@@ -487,21 +630,10 @@ internal sealed class NativeDbServerService
         }
 
         public long ConnectionId { get; }
+        public NetworkStream? Stream { get; set; }
         public CancellationToken Token => _stop.Token;
         public bool Registered { get; set; }
         public SemaphoreSlim SendLock { get; } = new(1, 1);
-
-        public void SetProbe(byte[] probe) => _probe = (byte[])probe.Clone();
-
-        public bool MatchesProbe(byte[] response)
-        {
-            var probe = _probe;
-            if (probe == null || response.Length != probe.Length) return false;
-            return CryptographicOperations.FixedTimeEquals(
-                       probe.AsSpan(0, 10), response.AsSpan(0, 10))
-                   && CryptographicOperations.FixedTimeEquals(
-                       probe.AsSpan(20, 8), response.AsSpan(20, 8));
-        }
 
         public void TrackAuthentication(Task task, Action<Exception> onFailure)
         {
@@ -535,5 +667,18 @@ internal sealed class NativeDbServerService
         }
     }
 
-    private sealed record LoginGateAreaGroup(LoginGateArea Area, LoginGateGroup Group);
+    private sealed class PendingSelect
+    {
+        public PendingSelect(long connectionId, ushort socketHandle,
+            TaskCompletionSource<NativeLoginGateProbeRoute?> completion)
+        {
+            ConnectionId = connectionId;
+            SocketHandle = socketHandle;
+            Completion = completion;
+        }
+
+        public long ConnectionId { get; }
+        public ushort SocketHandle { get; }
+        public TaskCompletionSource<NativeLoginGateProbeRoute?> Completion { get; }
+    }
 }

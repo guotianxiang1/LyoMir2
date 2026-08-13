@@ -1,28 +1,35 @@
-// STATE-41: Audit RequiresTimedAbilityRecalc trigger bitmap.
+// STATE-41: Audit RequiresTimedAbilityRecalc against the native leaf.
 //
-// Native @ 0x773254 (sub_773254) checks a 14-byte inclusion bitmap @ 0x77326C.
-// The bitmap has 37 set bits covering state IDs:
-//   6, 13, 14, 24-31, 32-36, 38-40, 67-70, 77, 82-86, 88-93, 95, 96
+// Native @0x773254, verbatim:
+//   0x773254  80 C2 F8              add dl, 0xF8      ; dl = (internalType - 8) & 0xFF
+//   0x773257  80 FA 67              cmp dl, 0x67      ; unsigned, 103
+//   0x77325A  77 0A                 ja  0x773266      ; out of range -> CF = 0
+//   0x77325C  83 E2 7F              and edx, 0x7F
+//   0x77325F  0F A3 15 6C 32 77 00  bt  [0x77326C], edx
+//   0x773266  0F 92 C0              setb al
+//   0x773269  C3                    ret
 //
-// Bitmap bytes (EA → byte → states):
-//   0x77326C: 0x40 → state 6
-//   0x77326D: 0x60 → states 13,14
-//   0x77326E: 0x00 → (none)
-//   0x77326F: 0xFF → states 24,25,26,27,28,29,30,31
-//   0x773270: 0xDF → states 32,33,34,35,36,38,39  (bit5=0 excludes state37)
-//   0x773271: 0x01 → state 40
-//   0x773272: 0x00 → (none)
-//   0x773273: 0x00 → (none)
-//   0x773274: 0x78 → states 67,68,69,70
-//   0x773275: 0x20 → state 77
-//   0x773276: 0x7C → states 82,83,84,85,86
-//   0x773277: 0xBF → states 88,89,90,91,92,93,95  (bit6=0 excludes state94)
-//   0x773278: 0x01 → state 96
-//   0x773279: 0x00 → (none)
+// Bitmap @0x77326C, 14 bytes read out of flat_image.bin:
+//   40 60 00 FF DF 01 00 00 78 20 7C BF 01 00
 //
-// The buggy C# exclusion list {19,20,26,45,49,59} incorrectly excluded state 26
-// (which native INCLUDES via byte3=0xFF bit2) and incorrectly triggered ~70 states
-// native excludes. This audit verifies the C# source uses the bitmap, not the list.
+// THE BIT INDEX IS BIASED BY -8. `add dl,0xF8` is a byte add, so it wraps:
+// internalType 0..7 land on 0xF8..0xFF, all > 0x67, so they fall out of range.
+// The in-range domain is internalType [8, 111].
+//
+// This audit used to assert the OPPOSITE. Its header decoded the bitmap with no
+// bias (claiming states 6, 13, 14, 24..31, ...) and its predicates required the
+// source to read `internalType / 8` and `internalType % 8`, which is precisely
+// the defect that misjudged 41 of the 112 types. It also asserted "state 26 is
+// included" and "state 45 is excluded", both of which are backwards once the
+// bias is applied. Per REPLICATION_RULES 4.17 an audit that encodes the bug is
+// worse than no audit, so the checks below are rebuilt against the bytes.
+//
+// Independent confirmation that the bias is right: decoded with -8 the 37 set
+// bits are exactly the stat-modifying states named by the native state-gained
+// dispatch @0x7418C8 (21 "抗魔力增加", 22 "防御力增加", 32..41 the six
+// 上下限/攻速/生命/魔法/敏捷/魔躲 arms, 75..78 the 抗性/刺术 arms, 90..94,
+// 96..101, 103, 104). Decoded without the bias it would instead select 24..31,
+// which are the poison / petrify / freeze band and change no stat at all.
 
 using System;
 using System.Collections.Generic;
@@ -34,83 +41,94 @@ namespace State41RecalcBitmapCheck
 {
     internal static class Program
     {
-        private static readonly byte[] NativeBitmap = new byte[14]
+        /// <summary>flat_image.bin @0x77326C, verbatim.</summary>
+        private static readonly byte[] NativeBitmap =
         {
             0x40, 0x60, 0x00, 0xFF, 0xDF, 0x01, 0x00,
             0x00, 0x78, 0x20, 0x7C, 0xBF, 0x01, 0x00
         };
+
+        /// <summary><c>add dl, 0xF8</c> — the bit index is internalType - 8.</summary>
+        private const int NativeBias = 8;
+
+        /// <summary><c>cmp dl, 0x67 / ja</c> — inclusive upper bound on the biased index.</summary>
+        private const int NativeMaxBiased = 0x67;
 
         private static int _passed;
         private static int _failed;
 
         private static int Main()
         {
-            Console.WriteLine("[STATE-41] RecalcAbilitys trigger bitmap audit");
+            Console.WriteLine("[STATE-41] RequiresTimedAbilityRecalc vs native 0x773254");
             Console.WriteLine(new string('=', 70));
 
-            var expectedStates = ExtractBitmapStates(NativeBitmap);
-            Console.WriteLine($"Native bitmap (EA 0x77326C, 14 bytes) defines {expectedStates.Count} trigger states:");
-            Console.WriteLine($"  [{string.Join(", ", expectedStates.OrderBy(x => x))}]");
+            var expected = ExpectedStates();
+            Console.WriteLine($"Native bitmap 0x77326C decoded with bias -{NativeBias}: "
+                              + $"{expected.Count} states");
+            Console.WriteLine($"  [{string.Join(", ", expected.OrderBy(x => x))}]");
             Console.WriteLine();
 
             var source = ReadSource("GameSvr/Actors/TBaseObject.TimedAbility.cs");
 
-            // ---- the bitmap bytes must be present in source ---------------------
-            Assert("NativeRecalcBitmap array has the correct 14 bytes",
+            Assert("NativeRecalcBitmap holds the 14 bytes at 0x77326C",
                 source, s => Has(s, "byte[] NativeRecalcBitmap = new byte[14]")
                              && Has(s, "0x40, 0x60, 0x00, 0xFF, 0xDF, 0x01, 0x00")
                              && Has(s, "0x00, 0x78, 0x20, 0x7C, 0xBF, 0x01, 0x00"));
 
-            // ---- RequiresTimedAbilityRecalc uses the bitmap, not exclusion list -
-            Assert("RequiresTimedAbilityRecalc uses bitmap lookup",
+            Assert($"NativeRecalcBitmapBias = {NativeBias} (add dl,0xF8)",
+                source, s => Has(s, $"NativeRecalcBitmapBias = {NativeBias}"));
+
+            Assert("RequiresTimedAbilityRecalc subtracts the bias before indexing",
                 source, s => InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "NativeRecalcBitmap[byteIndex]")
+                    "internalType - NativeRecalcBitmapBias"));
+
+            Assert("RequiresTimedAbilityRecalc indexes with the BIASED value",
+                source, s => InBlock(s, "private static bool RequiresTimedAbilityRecalc",
+                                  "NativeRecalcBitmap[biased / 8]")
                              && InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "(1 << bitIndex)"));
+                                  "1 << (biased % 8)"));
 
-            Assert("RequiresTimedAbilityRecalc calculates byteIndex = internalType / 8",
+            Assert("RequiresTimedAbilityRecalc keeps the 0x67 upper bound",
                 source, s => InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "byteIndex = internalType / 8"));
+                    "biased > 0x67"));
 
-            Assert("RequiresTimedAbilityRecalc calculates bitIndex = internalType % 8",
+            // The old, unbiased form must never come back.
+            AssertFalse("no unbiased indexing remains",
                 source, s => InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "bitIndex = internalType % 8"));
-
-            // ---- the OLD exclusion list pattern must NOT exist ------------------
-            AssertFalse("no exclusion-list pattern remains (internalType != 19 etc)",
-                source, s => InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "internalType != 19")
+                                  "NativeRecalcBitmap[internalType / 8]")
                              || InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "internalType != 20")
-                             || InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "!= NativeState26Type")
-                             || InBlock(s, "private static bool RequiresTimedAbilityRecalc",
-                    "internalType != 45"));
+                                  "internalType % 8"));
 
-            // ---- state 26 is specifically covered by the bitmap -----------------
-            Assert("state 26 is set in byte 3 (0xFF includes bits 24-31)",
-                source, s => true);  // already checked via bitmap bytes above
-            if (expectedStates.Contains(26))
-            {
-                Pass("state 26 (bit 26%8=2 of byte 26/8=3) is included in native bitmap");
-            }
-            else
-            {
-                Fail("state 26 must be set in the bitmap");
-            }
+            // Byte 5 must stay 0x01. It had been hand-patched to 0x11 to force
+            // internalType 44 true under the unbiased index; 44 falls out
+            // correctly from the bias, and the extra bit would also recalc 52,
+            // which native never does.
+            Assert("bitmap byte 5 is 0x01, not the hand-patched 0x11",
+                source, s => NativeBitmap[5] == 0x01
+                             && !Has(s, "0xDF, 0x11,"));
 
-            // ---- state 19, 20, 45, 49, 59 must NOT be in the bitmap -------------
-            foreach (var excluded in new[] { 19, 20, 45, 49, 59 })
-            {
-                if (!expectedStates.Contains(excluded))
-                {
-                    Pass($"state {excluded} correctly excluded by native bitmap");
-                }
-                else
-                {
-                    Fail($"state {excluded} should be excluded but appears in bitmap");
-                }
-            }
+            Console.WriteLine();
+            Console.WriteLine("-- per-state expectations (spot checks against the bytes) --");
+
+            // 26 sits in the poison/petrify band: byte (26-8)/8 = 2 = 0x00.
+            // The previous audit asserted the opposite.
+            ExpectState(expected, 26, false, "petrify; byte2 = 0x00");
+            ExpectState(expected, 45, false, "biased 37 -> byte4 0xDF bit5 is the one clear bit");
+            ExpectState(expected, 44, true, "byte4 = 0xDF bit4; the 0x11 patch existed to force this");
+            ExpectState(expected, 52, false, "the 0x11 patch would have wrongly added this");
+            ExpectState(expected, 22, true, "防御力增加 — a stat state");
+            ExpectState(expected, 21, true, "抗魔力增加 — a stat state");
+            ExpectState(expected, 31, false, "green poison changes no stat");
+            ExpectState(expected, 7, false, "below the bias, add dl,0xF8 wraps to 0xFF");
+            ExpectState(expected, 8, false, "biased 0 -> byte0 bit0 of 0x40 is clear");
+            ExpectState(expected, 14, true, "biased 6 -> byte0 0x40 bit6");
+            ExpectState(expected, 111, false, "biased 0x67, the last in-range index; byte13 = 0x00");
+            ExpectState(expected, 112, false, "biased 0x68 > 0x67 -> out of range");
+
+            Console.WriteLine();
+            Console.WriteLine($"total set bits: {expected.Count} (native has 37)");
+            if (expected.Count == 37) Pass("bit population is 37");
+            else Fail($"bit population is {expected.Count}, native has 37");
 
             Console.WriteLine(new string('=', 70));
             Console.WriteLine($"Result: {_passed} passed, {_failed} failed");
@@ -121,21 +139,35 @@ namespace State41RecalcBitmapCheck
             return _failed == 0 ? 0 : 1;
         }
 
-        private static HashSet<int> ExtractBitmapStates(byte[] bitmap)
+        /// <summary>
+        /// Reimplements 0x773254 straight from the bytes so the expectation set
+        /// is derived, not transcribed.
+        /// </summary>
+        private static HashSet<int> ExpectedStates()
         {
             var states = new HashSet<int>();
-            for (int byteIndex = 0; byteIndex < bitmap.Length; byteIndex++)
+            for (var internalType = 0; internalType <= 255; internalType++)
             {
-                byte b = bitmap[byteIndex];
-                for (int bitIndex = 0; bitIndex < 8; bitIndex++)
-                {
-                    if ((b & (1 << bitIndex)) != 0)
-                    {
-                        states.Add(byteIndex * 8 + bitIndex);
-                    }
-                }
+                if (NativeRequiresRecalc(internalType)) states.Add(internalType);
             }
             return states;
+        }
+
+        private static bool NativeRequiresRecalc(int internalType)
+        {
+            // add dl, 0xF8 — byte arithmetic, wraps for internalType < 8.
+            var biased = (internalType + 0xF8) & 0xFF;
+            if (biased > NativeMaxBiased) return false;   // cmp/ja
+            biased &= 0x7F;                               // and edx, 0x7F
+            return (NativeBitmap[biased / 8] & (1 << (biased % 8))) != 0;
+        }
+
+        private static void ExpectState(HashSet<int> actual, int state, bool want,
+            string why)
+        {
+            var got = actual.Contains(state);
+            var label = $"state {state} {(want ? "IS" : "is NOT")} a recalc trigger ({why})";
+            if (got == want) Pass(label); else Fail(label + $"  [got {got}]");
         }
 
         private static void Assert(string name, string source,

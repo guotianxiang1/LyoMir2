@@ -1041,8 +1041,30 @@ namespace DBSvr.Core
                     }
                 }
             }
-            if (!foundS) sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptS)));
-            if (!foundV) sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptV)));
+            // An empty bank contributes NO section, not a zero-length one. The native
+            // encoder sub_6E4CD8 sizes each bank as DynArrayLength*8 and gates both the
+            // size accumulation and the emit on it being positive:
+            //   S  0x6E4CF8  mov eax,[eax+0x804] / 0x6E4CFE call 0x406A88 (DynArrayLength)
+            //      0x6E4D05  C1 E6 03  shl esi,3
+            //      0x6E4D08  85 F6 / 7E 07     test esi,esi / jle   -> skip 7+esi
+            //      0x6E4DCC  85 F6 / 7E 2E     test esi,esi / jle   -> skip the emit
+            //   V  0x6E4D23  C1 E7 03  shl edi,3
+            //      0x6E4D26  85 FF / 7E 07     test edi,edi / jle
+            //      0x6E4DFE  85 FF / 7E 2E     test edi,edi / jle
+            // and the same `jle` shape guards types 2/6/7/8 at 0x6E4D39 / 0x6E4D51 /
+            // 0x6E4D69 / 0x6E4D7F.
+            //
+            // Appending an unconditional pair mattered for the ordinary character who
+            // uses one bank and not the other: saving a V variable also wrote a
+            // zero-length type-0 header. The original DBServer does not read it back as
+            // an empty bank, it treats it as corrupt -- the type-0 arm opens with
+            // 0x6E4558 `cmp word [eax+4],0 / 76 58 jbe 0x6E45B2` straight into the
+            // log-and-skip branch (type 1 mirrors it at 0x6E4606 `76 57 jbe 0x6E4664`) --
+            // so the record stopped being byte-identical to what the original writes.
+            if (!foundS && scriptS != null && scriptS.Count > 0)
+                sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptS)));
+            if (!foundV && scriptV != null && scriptV.Count > 0)
+                sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptV)));
             if (!foundYanshen && yanshenPayload.Length > 0)
                 sections.Add(new ScriptSection(YanshenScriptSectionType, yanshenPayload));
 
@@ -1051,6 +1073,10 @@ namespace DBSvr.Core
             writer.Write(0);
             foreach (var section in sections)
             {
+                if (section.Payload.Length == 0)
+                {
+                    continue;
+                }
                 if (section.Payload.Length > ushort.MaxValue)
                 {
                     error = $"native ScriptData type {section.Type} exceeds 65535 bytes";
@@ -1098,6 +1124,23 @@ namespace DBSvr.Core
             // touches +0x804/+0x808), and the keyed path requires group>0 so
             // key = group*1000+index >= 1001. Old C# blobs that filed group-0
             // as flat keys 1..100 must not be round-tripped.
+            //
+            // Emitting ascending is required rather than merely tidy, because native
+            // reads the array back with a binary search (sub_6E4270: 0x6E428C lo = 0,
+            // 0x6E428E hi = len-1, 0x6E42A2 `cmp edi,[esi+eax*8]`, 0x6E42B3 `jle`
+            // descend left, seeded to -1 at 0x6E427A). Ascending is also what a native
+            // record always is: the upsert's grow-by-one arm picks an insertion side
+            // and memmoves to make room rather than appending —
+            //   0x6E41FD  8B 04 D8        mov eax,[eax+ebx*8]   ; key at the landing slot
+            //   0x6E4200  3B 45 F8        cmp eax,[ebp-8]       ; vs the new key
+            //   0x6E4203  7D 32           jge 0x6E4237
+            //   existing <  new -> shift slot ebx+1 to ebx+2 (0x6E4216 / 0x6E421C /
+            //                      0x6E4220 Move), store at ebx+1 (0x6E422A, 0x6E4231)
+            //   existing >= new -> shift slot ebx to ebx+1 (0x6E4247 / 0x6E424D /
+            //                      0x6E4250 Move), store at ebx (0x6E425A, 0x6E4260)
+            // Both arms preserve the order. (The ledger carries this as QST-10 BLOCKED,
+            // "the element-shift/insert-position logic is NOT in the captured dump" —
+            // it is at 0x6E41FB..0x6E4264 and it does keep the array sorted.)
             _ = original;
             current ??= new Dictionary<int, int>();
             var merged = new SortedDictionary<int, int>();

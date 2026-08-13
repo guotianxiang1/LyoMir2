@@ -3,8 +3,9 @@ using System.IO;
 using System.Runtime.CompilerServices;
 
 /// <summary>
-/// MINE-46 audit: Verify PileStones hard-blocks mining when tier==3.
-/// Native sub_6BC1EC @ 0x6BC202 and 0x6BC21E check two player bytes.
+/// MINE-46 audit: Verify PileStones hard-blocks mining when tier==3
+/// and does NOT broadcast RM_HEAVYHIT on that arm.
+/// Native sub_6BC1EC: 0x6BC202 / 0x6BC21E je 0x6BC366 (epilogue).
 /// </summary>
 class Program
 {
@@ -42,12 +43,12 @@ class Program
                 return 1;
             }
 
-            // Check for hard-block at function start (within 15 lines)
+            // Check for hard-block at function start (skip the evidence comment block)
             bool foundTier3Block = false;
             bool foundFatigueTierCheck = false;
             bool foundCheatPenaltyCheck = false;
 
-            for (int i = pileStonesFnLine; i < Math.Min(pileStonesFnLine + 15, lines.Length); i++)
+            for (int i = pileStonesFnLine; i < Math.Min(pileStonesFnLine + 30, lines.Length); i++)
             {
                 var line = lines[i];
                 if (line.Contains("//")) continue; // Skip comment lines
@@ -69,6 +70,39 @@ class Program
 
             Assert(foundTier3Block,
                 "PileStones must hard-block (return false) when m_btNativeFatigueTier==3 OR m_btNativeCheatPenaltyTier==3",
+                targetFile, pileStonesFnLine);
+            assertionsPassed++;
+
+            // MINE-46: native je 0x6BC366 is the function epilogue (pop/leave/ret),
+            // so the tier==3 arm must not emit RM_HEAVYHIT. Scan the first
+            // return-false block and reject any SendRefMsg / RM_HEAVYHIT in it.
+            bool tier3BlockBroadcasts = false;
+            int blockStart = -1;
+            for (int i = pileStonesFnLine; i < Math.Min(pileStonesFnLine + 30, lines.Length); i++)
+            {
+                var line = lines[i];
+                if (line.Contains("//")) continue;
+                if (blockStart < 0
+                    && line.Contains("m_btNativeFatigueTier")
+                    && line.Contains("== 3"))
+                {
+                    blockStart = i;
+                }
+                if (blockStart >= 0)
+                {
+                    if (line.Contains("SendRefMsg") || line.Contains("RM_HEAVYHIT"))
+                    {
+                        tier3BlockBroadcasts = true;
+                        break;
+                    }
+                    if (line.Contains("return false"))
+                    {
+                        break;
+                    }
+                }
+            }
+            Assert(!tier3BlockBroadcasts,
+                "PileStones tier==3 early-out must NOT broadcast RM_HEAVYHIT (native je 0x6BC366 = epilogue)",
                 targetFile, pileStonesFnLine);
             assertionsPassed++;
 

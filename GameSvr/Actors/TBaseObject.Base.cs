@@ -489,6 +489,9 @@ namespace GameSvr
                 {
                     if (m_SlaveList[i].m_boDeath || m_SlaveList[i].m_boGhost || (m_SlaveList[i].m_Master != this))
                     {
+                        // sub_6B3993: TList.Get [player+0x4FC] then SM 4470 (0x6F78B4)
+                        // before the slot is dropped.
+                        NotifyNativeSlaveListChanged(joining: false, m_SlaveList[i]);
                         m_SlaveList.RemoveAt(i);
                     }
                 }
@@ -556,6 +559,9 @@ namespace GameSvr
                             {
                                 if (m_Master.m_SlaveList[i] == this)
                                 {
+                                    // Royalty-expire drop: 0x71E6C4 call 0x6F78B4 -> SM 4470,
+                                    // then TList.Remove from [master+0x4FC].
+                                    m_Master.NotifyNativeSlaveListChanged(joining: false, this);
                                     m_Master.m_SlaveList.RemoveAt(i);
                                     break;
                                 }
@@ -599,11 +605,11 @@ namespace GameSvr
                     }
                     
                     // 战神 sub_6B3EAC @0x6B3B71-0x6B3B87：`eax=ebx(m_DealCreat)` ; `call sub_772DA8`
-                    //   （= m_boGhost getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
-                    //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boDeath 析取项）; 清零 [self+0xBAC]。
+                    //   （= m_boDeath getter `mov al,[eax+0x74]`）; `test al,al` / `jne 清零` ;
+                    //   **`cmp byte ptr [ebx+0x73], 0` / `je 跳过`**（= m_boGhost 析取项）; 清零 [self+0xBAC]。
                     // 即原生在 **ghost 或 death** 任一为真时都清 m_DealCreat；旧 C# 只查 ghost，
                     // 于是一个「已死但尚未 ghost」的对端会把 m_DealCreat 一直挂着 ——
-                    // 配合 ClientDealEnd 曾缺失的 m_boDeath 门，这就是「和尸体成交」的具体路径。
+                    // 配合 ClientDealEnd 曾缺失的存活门，这就是「和尸体成交」的具体路径。
                     // （节流：原生用专属 tick 字段 [self+0x73C] 比 0x7530=30000ms；此处所在的
                     //  `m_dwVerifyTick` 块周期同为 30*1000ms，与组队清扫共用一个 tick 字段 =
                     //  周期等价，只是字段合并，不影响可观察行为。）
@@ -1329,10 +1335,11 @@ namespace GameSvr
                 }
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
-                    if (m_GroupOwner != null)
-                    {
-                        m_GroupOwner.DelMember(this);// 人物死亡立即退组，以防止组队刷经验
-                    }
+                    // 战神死亡不退组。sub_726E68 (group.DelMember) 全镜像只有两处
+                    // E8：0x6C3181（CM_GROUPMODE 关组，非队长自退）和 0x6C3D73
+                    // （CM_DELGROUPMEMBER）。经验收集轮 0x726C84 call 0x772DA8
+                    // 只跳过 IsDead([+0x74])，尸体仍留在队里，复活后还在。
+                    // 旧 C# 死亡立刻 DelMember 是 INVENTED，玩家每次死亡都要重新组队。
                     if (m_LastHiter != null)
                     {
                         if (m_LastHiter.m_btRaceServer == Grobal2.RC_PLAYOBJECT)

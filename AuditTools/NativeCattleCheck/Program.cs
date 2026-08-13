@@ -525,8 +525,8 @@ static void CheckGlobalPrizeAccount()
         "cattle global prize reason buckets missing");
     Equal(5, buckets[9], "cattle global prize reason bucket 9");
     Assert(player.m_MsgList.Any(message =>
-            message.wIdent == Grobal2.SM_LINGFU_CHANGED),
-        "cattle global prize omitted SM_LINGFU_CHANGED");
+            message.wIdent == Grobal2.RM_LINGFU_CHANGED),
+        "cattle global prize omitted RM_LINGFU_CHANGED");
     var fields = M2Share.LogStringList[
         M2Share.LogStringList.Count - 1].ToString().Split('\t');
     Equal(9, fields.Length, "cattle global prize log field count");

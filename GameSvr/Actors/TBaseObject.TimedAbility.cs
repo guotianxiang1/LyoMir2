@@ -362,14 +362,32 @@ namespace GameSvr
                         //   773A66  01 87 14 03 00 00  add  [edi+0x314], eax
                         // 0x403580 sets RC=11 (`66 81 4C 24 02 00 0F  or word [esp+2],0xF00`)
                         // before fistp, so it truncates toward zero. The sibling helper
-                        // 0x403574 is a bare fistp on the default control word, which is
-                        // round-half-to-even - that is what MidpointRounding.ToEven modelled,
-                        // and this recompute never calls it.
-                        // Operand order is left as-is: native evaluates
-                        // current * (value / 100) in x87 extended precision, C# evaluates
-                        // (current * value) / 100 in double. Those can disagree in the last
-                        // bit right at an integer boundary; establishing which way needs a
-                        // measurement, so only the rounding mode is corrected here.
+                        // 0x403574 is a bare fistp on the default control word and therefore
+                        // rounds half to even; this recompute never calls it. `add [edi+0x314],
+                        // eax` consumes only the low dword of @TRUNC's qword result.
+                        //
+                        // Operand order and precision: native evaluates
+                        // current * (value / 100) on the x87 stack, C# evaluates
+                        // (current * value) / 100 in double. Delphi's control word lives at
+                        // 0x7A2024 = 0x1372 (fldcw sites 0x4034E8 / 0x4045C3), so PC=11 and
+                        // RC=00 - every native intermediate carries a 64-bit significand
+                        // rounded half-to-even, against double's 53.
+                        //
+                        // Measured, not assumed (staging/_x87_msched*.py emulates both
+                        // roundings with exact rationals):
+                        //  - The two forms agree wherever value/100 is exact in both widths,
+                        //    which covers every fixture this path is audited on.
+                        //  - They disagree by one unit on roughly 0.2% of (current, value)
+                        //    pairs even at small magnitudes. Smallest case: current=15,
+                        //    value=420. Native rounds 4.2 down to a 64-bit significand,
+                        //    15 * that = 62.999999999999999997, @TRUNC -> 62, result 77.
+                        //    C# gets 15*420 = 6300 then /100 = 63.0 exactly, result 78.
+                        //  - Merely swapping to current * (value / 100.0) in double does NOT
+                        //    close the gap; it mismatches on about the same fraction, because
+                        //    the residue comes from significand width, not from the order.
+                        // Reproducing native exactly needs 64-bit-significand emulation
+                        // (UInt128), which is a separate, separately audited change. The
+                        // ordering is left as-is because it is measurably no worse.
                         var percent = unchecked((int)(long)(
                             unchecked((uint)result) * (double)node.Value / 100.0));
                         result = unchecked(result + percent);

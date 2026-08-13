@@ -608,7 +608,7 @@ static void VerifyWiringContracts()
     string messageSwitch = ExtractControlBlock(operate,
         "switch (ProcessMsg.wIdent)", "player message switch");
     string pushCase = ExtractCaseRange(messageSwitch,
-        "NativeMagicProducerPushIdent", "Grobal2.SM_LINGFU_CHANGED");
+        "NativeMagicProducerPushIdent", "Grobal2.RM_LINGFU_CHANGED");
     Equal(1, Count(messageSource,
         "case NativeMagicProducerPushIdent:"),
         "message10417 case count");

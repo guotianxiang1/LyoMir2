@@ -67,7 +67,7 @@ Equal(20, ReadCache(player), "successful TakeDiamond changed transient cache");
 Equal(20, ReadCapitalDiamond(player),
     "successful TakeDiamond changed capital offset +8");
 Equal(1, player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED),
     "successful TakeDiamond capital refresh count");
 
 player.m_MsgList.Clear();
@@ -258,7 +258,7 @@ static void SetDefinitions(params GoodItem[] definitions)
 static void AssertRefreshOnly(TPlayObject player, string scenario)
 {
     Equal(1, player.m_MsgList.Count, $"{scenario} internal message count");
-    Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
         $"{scenario} internal capital refresh ident");
 }
 

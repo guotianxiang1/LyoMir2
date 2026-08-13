@@ -184,8 +184,8 @@ namespace GameSvr
         /// <summary>
         /// sub_767498, the shared target filter, in its own instruction order:
         ///   0x7674A1  test esi,esi / je                      ; nil
-        ///   0x7674A7  call sub_772DA8 -> byte [target+0x74]  ; ghost
-        ///   0x7674B0  cmp byte [target+0x73],0               ; death
+        ///   0x7674A7  call sub_772DA8 -> byte [target+0x74]  ; death
+        ///   0x7674B0  cmp byte [target+0x73],0               ; ghost
         ///   0x7674B6  cmp edi,esi                            ; target == self
         ///   0x7674BA  cmp byte [target+0x2E0],0              ; UNMAPPED
         ///   0x7674C3  cmp byte [target+0x2E5],0              ; UNMAPPED

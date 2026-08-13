@@ -536,15 +536,7 @@ static T ReadField<T>(object target, string name)
 
 static string FindRepositoryRoot()
 {
-    var directory = new DirectoryInfo(AppContext.BaseDirectory);
-    while (directory != null)
-    {
-        if (Directory.Exists(Path.Combine(directory.FullName, "GameSvr")) &&
-            Directory.Exists(Path.Combine(directory.FullName, "AuditTools")))
-            return directory.FullName;
-        directory = directory.Parent;
-    }
-    throw new DirectoryNotFoundException("LyoMir2-master root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static string Compact(string value) =>

@@ -5,6 +5,17 @@ namespace GameSvr
 {
     public partial class TPlayObject
     {
+        // Literal 0x6B63E0 / 0x6C9730, len 9: F1 F6 CC FD CB BD C1 C4 20.
+        // Both whisper-monitor copies are prefixed with it.
+        internal const string WhisperMonitorPrefix = "聆听私聊 ";
+
+        // Colour word of the monitor copy: 0x6B4AD8 / 0x6C963C mov cx,0x38FF,
+        // passed to sub_73C8F4 (= [VMT+0xD4]) which enqueues RM 10100 -> SM 100.
+        // This tree's RM_SYSMESSAGE arm packs the colour from nParam1/nParam2, so
+        // 0xFF/0x38 reproduces MakeWord = 0x38FF on the wire.
+        internal const byte WhisperMonitorFColor = 0xFF;
+        internal const byte WhisperMonitorBColor = 0x38;
+
         protected virtual void Whisper(string whostr, string saystr)
         {
             // 战神 sub_6BB864 @0x6BB8A4: cmp eax,0xFF; jle; clamps whisper to 255 bytes.
@@ -41,29 +52,32 @@ namespace GameSvr
                     }
                     return;
                 }
-                if (m_btPermission > 0)
+                // Native sub_6C94FC has no permission test here: after the 0x6C9584
+                // hear-whisper gate and the 0x6C95A0 IsBlockWhisper gate it falls
+                // straight into the 0x6C95CE concat and one single enqueue. The
+                // GM tier was invented - ident 103's Param is the literal 0xFFFC
+                // (0x6B4AE4 68 FC FF 00 00), which is what btWhisperMsgFColor/BColor
+                // (0xFC/0xFF) already produced on the non-GM branch.
+                //   0x6C95F6 66 8B 93 78 02 00 00 mov dx,[ebx+0x278] -> wParam = speaker level
+                //   0x6C95FE 0F B7 C0 / 50        movzx eax,ax; push -> nParam1 = 0 -> Series
+                //   0x6C9610 8B D3                mov edx,ebx        -> BaseObject = speaker
+                PlayObject.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0,
+                    m_sCharName + "=> " + saystr);
+                // The speaker's own whisper monitor gets a SysMsg, not a second
+                // ident 103, and it repeats the recipient's body verbatim:
+                //   0x6C9619 8B B3 44 19 00 00  mov esi,[ebx+0x1944]
+                //   0x6C9623 80 7E 73 00        cmp byte [esi+0x73],0   ; ghost gate
+                //   0x6C962C 8B 4D F8           mov ecx,[ebp-8]         ; "<name>=> <text>"
+                //   0x6C962F BA 30 97 6C 00     mov edx,0x6C9730        ; "聆听私聊 "
+                //   0x6C963C 66 B9 FF 38        mov cx,0x38FF
+                //   0x6C9644 FF 96 D4 00 00 00  call [VMT+0xD4]
+                // The recipient's monitor is served by the RM_WHISPER arm itself
+                // (0x6B4A99), so it is not sent from here.
+                if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
                 {
-                    PlayObject.SendMsg(PlayObject, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, m_sCharName + "=> " + saystr);
-                    if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
-                    {
-                        m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
-                    if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                    {
-                        PlayObject.m_GetWhisperHuman.SendMsg(PlayObject.m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
-                }
-                else
-                {
-                    PlayObject.SendMsg(PlayObject, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, m_sCharName + "=> " + saystr);
-                    if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
-                    {
-                        m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
-                    if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                    {
-                        PlayObject.m_GetWhisperHuman.SendMsg(PlayObject.m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, m_sCharName + "=>" + PlayObject.m_sCharName + ' ' + saystr);
-                    }
+                    m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_SYSMESSAGE, 0,
+                        WhisperMonitorFColor, WhisperMonitorBColor, 0,
+                        WhisperMonitorPrefix + m_sCharName + "=> " + saystr);
                 }
             }
             else
@@ -79,28 +93,23 @@ namespace GameSvr
             }
         }
 
-        public void WhisperRe(string SayStr, byte MsgType)
+        // Cross-server whisper delivery, native sub_6C976C
+        // (eax = Self, edx = sender name, ecx = text, word [ebp+8] = sender level).
+        // It has exactly one enqueue and no tier switch:
+        //   0x6C9785 66 8B 45 08  mov ax,[ebp+8]  / 50 push  -> wParam = sender level
+        //   0x6C978A 6A 00 x3                              -> nParam1..3 = 0
+        //   0x6C9793 66 B9 2F 27  mov cx,0x272F              -> RM 10031
+        //   0x6C9797 8B D3 / 8B C3 mov edx,ebx; mov eax,ebx  -> BaseObject = Self
+        // The 0/1/2 selector was a misreading of that level word; ident 103's Param
+        // is the literal 0xFFFC at 0x6B4AE4 and has no colour tier.
+        public void WhisperRe(string SayStr, int nSenderLevel)
         {
             var sendwho = string.Empty;
             HUtil32.GetValidStr3(SayStr, ref sendwho, new string[] { "[", " ", "=", ">" });
             if (m_boHearWhisper && !IsBlockWhisper(sendwho)
                 && (m_dwChatShieldMask & 0x01u) == 0)
             {
-                switch (MsgType)
-                {
-                    case 0:
-                        SendMsg(this, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor,
-                            M2Share.g_Config.btGMWhisperMsgBColor, 0, SayStr);
-                        break;
-                    case 1:
-                        SendMsg(this, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btWhisperMsgFColor,
-                            M2Share.g_Config.btWhisperMsgBColor, 0, SayStr);
-                        break;
-                    case 2:
-                        SendMsg(this, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btPurpleMsgFColor,
-                            M2Share.g_Config.btPurpleMsgBColor, 0, SayStr);
-                        break;
-                }
+                SendMsg(this, Grobal2.RM_WHISPER, nSenderLevel, 0, 0, 0, SayStr);
             }
         }
 

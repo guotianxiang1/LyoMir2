@@ -183,25 +183,7 @@ static void PrepareRuntimeFiles()
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[]
-             {
-                 AppContext.BaseDirectory,
-                 Environment.CurrentDirectory
-             })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                    "GameSvr.csproj")))
-                return current.FullName;
-            var nested = Path.Combine(current.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(nested, "GameSvr", "GameSvr.csproj")))
-                return nested;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void Equal<T>(T expected, T actual, string message)

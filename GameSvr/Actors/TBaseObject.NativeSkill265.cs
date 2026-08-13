@@ -123,18 +123,28 @@ namespace GameSvr
 
         /// <summary>
         /// Target VMT+0xB8 = sub_768F50, invoked at 0x774204 with edx = the
-        /// caster and ecx = 0. Two of its three terms are portable:
+        /// caster and ecx = 0. All three terms:
         ///   0x768F67/0x768F6E  casterLevel - targetLevel, `test edi,edi /
         ///                      jle` so the caster must be strictly higher
         ///                      (word[obj+0x278] is m_WAbil.Level)
+        ///   0x768FAE           `80 7E 75 00 / 75 12` — the TARGET's +0x75
         ///   0x768FB9           sub_767498 IsProperTarget(caster, target)
         ///
-        /// BLOCKED: the middle term `0x768FAE 80 7E 75 00 cmp byte [esi+0x75],0
-        /// / 75 12 jne` has no C# field. That byte is set to 1 by about a dozen
-        /// monster constructors (0x63D8CE, 0x668921, 0x674C0E, 0x68074C, ...)
-        /// and never cleared, and it also gates the CharPushed at 0x6747FD, but
-        /// nothing in the C# actor carries it. Its absence only makes 265 more
-        /// permissive against those specific monsters.
+        /// <c>+0x75</c> is <c>m_boStickMode</c>. An encoding-exact scan of the
+        /// byte (`C6 4x 75 01`, `80 7x 75 00`, `8A/88 4x 75`, `0F B6 4x 75`,
+        /// `84 4x 75`) finds thirteen writers, every one of them a constructor
+        /// storing the literal 1 — 0x5FABB4, 0x63D8CE, 0x668921, 0x66B2C1,
+        /// 0x674C0E, 0x674C6D, 0x68074C, 0x680CE7, 0x681C5D, 0x682003,
+        /// 0x68312B, 0x684A39, 0x684EC1 — and no store of 0 anywhere. Both of
+        /// its readers are push gates: this one, and 0x6747EC in the ident
+        /// 0x28B1 (10417, the delayed shove) handler, where a set byte skips
+        /// the VMT+0xA4 CharPushed at 0x6747FD. C# already models exactly that
+        /// shape — m_boStickMode is a permanent per-class flag raised by
+        /// NormNpc, BeeQueen, CastleDoor, SpiderHouseMonster, StickMonster and
+        /// WallStructure, it is not consulted inside CharPushed itself, and
+        /// every existing push site tests it before calling
+        /// (MagicManager.cs:20, :1353, :1544 and
+        /// TPlayObject.NativeMotaeboForcedMove.cs:136).
         ///
         /// The `0x768F89..0x768FA8` middle block compares two names against
         /// [0x73BBE8] and then throws its own result away (`84 C0` at 0x768FA8
@@ -144,6 +154,7 @@ namespace GameSvr
         private bool CanNativeSkill265Shove(TBaseObject target)
         {
             return m_WAbil.Level > target.m_WAbil.Level &&
+                   !target.m_boStickMode &&
                    IsProperTarget(target);
         }
     }

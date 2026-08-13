@@ -48,23 +48,71 @@ namespace GameSvr
                 delayMilliseconds, payload);
         }
 
+        /// <summary>
+        /// Native <c>sub_76E268</c> — the DIRECT carrier, one of the four
+        /// wrappers that call a target's <c>VMT+0x104</c>
+        /// (<c>TCreature 0x76470C</c> = <c>sub_76CFC4</c> =
+        /// <c>TBaseObject.ReceiveAttackDamge</c>, which its own exception
+        /// string @<c>0x76DDE4</c> names). Its three siblings are
+        /// <c>sub_76DE1C</c> (single, category 1/5), <c>sub_76DF5C</c> (line,
+        /// 2) and <c>sub_76E0B4</c> (area, 3); this one is told apart by the
+        /// state-26 contest ranges <c>0x76E2D2 mov edx,5</c> /
+        /// <c>0x76E313 mov edx,0xF</c>, against 7 / 0x15 in all three others
+        /// (<c>0x76DED6</c>/<c>0x76DF19</c>, <c>0x76E1C5</c>/<c>0x76E206</c>).
+        /// <para>
+        /// Argument roles re-read from the push site
+        /// <c>0x76E291-0x76E2A9</c>: <c>push edi</c> (rawDamage),
+        /// <c>push [ebp+0xC]</c> (flags), <c>push 4</c> (category),
+        /// <c>push [ebp-4]</c> (the TUserMagic), <c>push [ebp+8]</c> (arg0),
+        /// then <c>ecx = [ebp+0x14]</c> (the wIdent), <c>edx</c> = attacker,
+        /// <c>eax</c> = target.
+        /// </para>
+        /// </summary>
         internal int ApplyNativeDirectMagicEffect(TBaseObject target,
             ushort skillId, bool arg0, MagicDamageContext context, byte flags,
             int rawDamage)
         {
+            // 0x76E284 `call sub_767498` / 0x76E28B `je 0x76E36E` — a
+            // rejected target returns the [ebp-8] that was zeroed at
+            // 0x76E27A, i.e. 0.
             if (!IsNativeMagicEffectTarget(target))
                 return 0;
 
             int damage = target.ResolveFullMagicDamage(this, skillId, arg0,
                 context ?? MagicDamageContext.Empty, 4, flags, rawDamage);
-            if (damage > 0)
-            {
-                ConsumeNativeOneShotMagicDamage(skillId);
-            }
+
+            // 0x76E2B2 `cmp byte [ebp+8],0 / je 0x76E357`: the state block
+            // hangs off arg0 and runs BEFORE the delayed struck message.
             if (arg0)
             {
                 TryApplyNativeState26Direct(target);
+                // 0x76E33C `80 BB DB 01 00 00 00` would then add internal
+                // state 0x1D (29) for cx = 2 through the target's VMT+0xC8.
+                // NOT ported: that compare is the ONLY disp32 memory
+                // reference to +0x1DB anywhere in the image, so nothing
+                // ever raises the byte and the arm cannot be reached in
+                // this build.
             }
+
+            // 0x76E357 `cmp [ebp-8],0 / jle 0x76E36E`, then 0x76E35D
+            // `push 0xC8` and sub_76B4F8(eax = target, edx = attacker,
+            // ecx = damage, delay = 200). sub_76B4F8 @0x76B506 loads
+            // edx = 0x2724 (RM_STRUCK, the sentinel BaseObject) and
+            // cx = 0x2775 (RM_10101) before sub_766060, and its six pushes
+            // are wParam = damage, nParam1 = damage, nParam2 = 0,
+            // nParam3 = the attacker, sMsg = nil, delay.
+            if (damage > 0)
+            {
+                target.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101,
+                    unchecked((short)damage), damage, 0, ObjectId,
+                    string.Empty, 200);
+            }
+
+            // sub_76E268 does NOT call sub_772468, the one-shot magic damage
+            // reset: that call only exists in the other three carriers
+            // (0x76DEB1 in the single one and the matching spots in the
+            // line/area bodies). The ConsumeNativeOneShotMagicDamage that
+            // used to stand here had no counterpart in this body.
             return damage;
         }
 
@@ -93,7 +141,7 @@ namespace GameSvr
             return Math.Clamp(chance, 30, 95);
         }
 
-        private bool NativeMagicHitApplies(TBaseObject target)
+        protected bool NativeMagicHitApplies(TBaseObject target)
         {
             if (target == null || target.m_btRaceServer == Grobal2.RC_GUARD)
                 return false;

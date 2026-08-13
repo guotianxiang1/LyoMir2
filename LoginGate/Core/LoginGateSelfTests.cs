@@ -164,20 +164,8 @@ internal static class LoginGateSelfTests
         var ack = DecodeNative(await ReadNativeWireAsync(nativeStream, timeout.Token));
         Equal(LoginGateWireProtocol.NativeRegistrationAckIdent, ack.Ident,
             "registration ACK ident");
-        var probe = DecodeNative(await ReadNativeWireAsync(nativeStream, timeout.Token));
-        Equal(LoginGateWireProtocol.NativeProbeRequestIdent, probe.Ident,
-            "probe request ident");
-        var probePayload = (byte[])probe.Payload.Clone();
-        BinaryPrimitives.WriteUInt16LittleEndian(probePayload.AsSpan(10, 2), 7100);
-        IPAddress.Loopback.GetAddressBytes().CopyTo(probePayload, 12);
-        BinaryPrimitives.WriteUInt16LittleEndian(probePayload.AsSpan(16, 2), 180);
-        probePayload[18] = 1;
-        probePayload[19] = 0;
-        var probeResponse = new YbDbLegacy77Frame(0, 0,
-            LoginGateWireProtocol.NativeProbeResponseIdent, probePayload);
-        await nativeStream.WriteAsync(EncodeNative(probeResponse), timeout.Token);
         await WaitUntilAsync(() => server.GetBackends().Any(backend =>
-            backend.RouteReady && backend.Type2Enabled), timeout.Token);
+            backend.Type2Enabled), timeout.Token);
 
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, started.ClientListenPort,
@@ -194,13 +182,30 @@ internal static class LoginGateSelfTests
             "server-list inner ident");
         Equal((ushort)2, listInner.Param, "server-list group count");
         Equal(92, serverList.Payload.Length, "server-list multi-group payload length");
+
+        // uDBListen.pas:231: 1001 is issued by the select, not by registration.
+        var selectRequest = DecodeNative(await ReadNativeWireAsync(nativeStream, timeout.Token));
+        Equal(LoginGateWireProtocol.NativeSelectServerRequestIdent, selectRequest.Ident,
+            "select-server request ident");
+        Equal(28, selectRequest.Payload.Length, "TSelectGroupInfo size");
+        Equal(LoginGateWireProtocol.NativeMobileEncodeIndex,
+            BinaryPrimitives.ReadInt32LittleEndian(selectRequest.Payload.AsSpan(4, 4)),
+            "iEnCodeIdx mobile sentinel");
+        var selectPayload = (byte[])selectRequest.Payload.Clone();
+        BinaryPrimitives.WriteUInt16LittleEndian(selectPayload.AsSpan(10, 2), 7100);
+        IPAddress.Loopback.GetAddressBytes().CopyTo(selectPayload, 12);
+        selectPayload[19] = 0;
+        await nativeStream.WriteAsync(EncodeNative(new YbDbLegacy77Frame(0, 0,
+            LoginGateWireProtocol.NativeSelectServerResponseIdent, selectPayload)),
+            timeout.Token);
+
         var jump = DecodeClient(await ReadClientWireAsync(clientStream, timeout.Token));
         Check(LoginGateWireProtocol.TryParseInnerHeader(jump.Payload,
             out var jumpInner, out var jumpError), jumpError);
         Equal(LoginGateWireProtocol.SelectServerIdent, jumpInner.Ident,
             "jump inner ident");
         Equal((ushort)7100, jumpInner.Param, "jump GameGate port");
-        Check(jumpInner.Recog > 0, "jump session id is not positive");
+        Check(jumpInner.Recog != 0, "jump session id is non-zero");
 
         using var areaTwoClient = new TcpClient();
         await areaTwoClient.ConnectAsync(IPAddress.Loopback, started.ClientListenPort,

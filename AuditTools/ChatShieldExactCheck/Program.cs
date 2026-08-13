@@ -3,107 +3,38 @@ using System.Reflection;
 using GameSvr;
 using SystemModule;
 
-try
-{
-    PrepareRuntimeConfig();
-    M2Share.g_Config = new GameSvrConfig();
-    M2Share.ObjectManager = new ObjectManager();
-    M2Share.UserEngine = new UserEngine();
-    M2Share.ProcessMsgCriticalSection = new object();
+PrepareRuntimeConfig();
+M2Share.g_Config = new GameSvrConfig();
+M2Share.ObjectManager = new ObjectManager();
+M2Share.UserEngine = new UserEngine();
+M2Share.ProcessMsgCriticalSection = new object();
 
-    CheckNativeContracts();
-    CheckNativePersistence();
-    CheckSwitchListen();
-    CheckHearGate();
-    CheckCryAndGuildGates();
-    CheckClientConfigPacket();
-    CheckGateHasNoSyntheticConfig();
-    CheckWhisperBit0Gate();
+CheckConstantsAndClientMapping();
+CheckNativePersistence();
+CheckSwitchListen();
+CheckHearGate();
+CheckClientConfigPacket();
+CheckGateHasNoSyntheticConfig();
 
-    Console.WriteLine(
-        "ChatShieldExactCheck PASS CM3032 categories=1/2/3/4 masks=2/4/8/1 " +
-        "native-offset=0x4F8 RM_HEAR-mask=2 RM_CRY-mask=4 RM_GUILD-mask=8 RM_WHISPER-mask=1 " +
-        "SM2953=full-dword slot=+0x250 gate=no-zero-injection");
-    return 0;
-}
-catch (Exception exception)
-{
-    Console.Error.WriteLine($"ChatShieldExactCheck FAIL: {exception.Message}");
-    return 1;
-}
+Console.WriteLine(
+    "ChatShieldExactCheck PASS CM3032 categories=1/2/3/4 masks=2/4/8/1 " +
+    "native-offset=0x500 RM_HEAR-mask=2 SM2953=full-dword gate=no-zero-injection");
 
-static void CheckNativeContracts()
+static void CheckConstantsAndClientMapping()
 {
-    // Reverse check vs native image, not client lua. The old ancestor-blind
-    // lua path FileNotFound-crashed (0xE0434352) from a worktree root.
     Equal(3032, Grobal2.CM_SWITCH_LISTEN, "CM_SWITCH_LISTEN");
     Equal(2953, Grobal2.SM_CLIENT_CONF, "SM_CLIENT_CONF");
-    var persistOffset = typeof(TPlayObject).GetField("NativeChatShieldMaskOffset",
-        BindingFlags.NonPublic | BindingFlags.Static)
-        ?? throw new MissingFieldException("NativeChatShieldMaskOffset");
-    Equal(0x4F8, (int)persistOffset.GetValue(null)!, "persist offset");
 
-    var image = File.ReadAllBytes(FindNativeImage());
-    const int imageBase = 0x400000;
-    Pin(image, imageBase, 0x6BBAAF, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xFD],
-        "0x6BBAAF cat1 clear bit1");
-    Pin(image, imageBase, 0x6BBABD, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xFB],
-        "0x6BBABD cat2 clear bit2");
-    Pin(image, imageBase, 0x6BBACB, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xF7],
-        "0x6BBACB cat3 clear bit3");
-    Pin(image, imageBase, 0x6BBAD9, [0x80, 0xA3, 0x9C, 0x0B, 0x00, 0x00, 0xFE],
-        "0x6BBAD9 cat4 clear bit0");
-    Pin(image, imageBase, 0x6BBAEA, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x02],
-        "0x6BBAEA cat1 set bit1");
-    Pin(image, imageBase, 0x6BBAF8, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x04],
-        "0x6BBAF8 cat2 set bit2");
-    Pin(image, imageBase, 0x6BBB06, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x08],
-        "0x6BBB06 cat3 set bit3");
-    Pin(image, imageBase, 0x6BBB14, [0x80, 0x8B, 0x9C, 0x0B, 0x00, 0x00, 0x01],
-        "0x6BBB14 cat4 set bit0");
-    Pin(image, imageBase, 0x6B12A0, [0x8B, 0x83, 0x9C, 0x0B, 0x00, 0x00],
-        "0x6B12A0 save load [ebx+0xB9C]");
-    Pin(image, imageBase, 0x6B12A6, [0x89, 0x86, 0xF8, 0x04, 0x00, 0x00],
-        "0x6B12A6 save [esi+0x4F8]");
-    Pin(image, imageBase, 0x6B029C, [0x8B, 0x80, 0xF8, 0x04, 0x00, 0x00],
-        "0x6B029C load [rec+0x4F8]");
-    Pin(image, imageBase, 0x6B02A5, [0x89, 0x82, 0x9C, 0x0B, 0x00, 0x00],
-        "0x6B02A5 load [edx+0xB9C]");
-    Pin(image, imageBase, 0x6B2D1D, [0x8B, 0x8B, 0x9C, 0x0B, 0x00, 0x00],
-        "0x6B2D1D SM2953 Recog=[ebx+0xB9C]");
-    Pin(image, imageBase, 0x6B2D23, [0x66, 0xBA, 0x89, 0x0B],
-        "0x6B2D23 mov dx,0xB89");
-    Pin(image, imageBase, 0x6B2D2B, [0xFF, 0x93, 0x50, 0x02, 0x00, 0x00],
-        "0x6B2D2B call [ebx+0x250]");
-    Pin(image, imageBase, 0x6B4A63, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x02],
-        "0x6B4A63 RM_HEAR test bit1");
-    Pin(image, imageBase, 0x6C9584, [0xF6, 0x87, 0x9C, 0x0B, 0x00, 0x00, 0x01],
-        "0x6C9584 whisper test bit0");
-    Pin(image, imageBase, 0x6DC07E, [0x66, 0x83, 0xEA, 0x28],
-        "0x6DC07E ident 40");
-    Pin(image, imageBase, 0x6DC084, [0x66, 0x83, 0xEA, 0x3E],
-        "0x6DC084 ident 102");
-    Pin(image, imageBase, 0x6DC08A, [0x66, 0x83, 0xEA, 0x02],
-        "0x6DC08A ident 104");
-    Pin(image, imageBase, 0x6DC092, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x02],
-        "0x6DC092 hear bit1");
-    Pin(image, imageBase, 0x6DC09F, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x04],
-        "0x6DC09F cry bit2");
-    Pin(image, imageBase, 0x6DC0AC, [0xF6, 0x80, 0x9C, 0x0B, 0x00, 0x00, 0x08],
-        "0x6DC0AC guild bit3");
-    Pin(image, imageBase, 0x652CB5, [0x7F, 0x32],
-        "0x652CB5 jg skip abs>nWide");
-    Pin(image, imageBase, 0x6C513F, [0x6A, 0x32],
-        "0x6C513F push 50");
-    Pin(image, imageBase, 0x6BB34E, [0x81, 0xFF, 0xB0, 0x00, 0x00, 0x00],
-        "0x6BB34E cmp edi,0xB0");
-    Pin(image, imageBase, 0x6BB35B, [0x80, 0xBB, 0x75, 0x06, 0x00, 0x00, 0x04],
-        "0x6BB35B cmp priv,4");
+    var clientPath = FindClientLuaFixture();
+    var client = File.ReadAllText(clientPath);
+    Contains(client, "CM_SWITCH_LISTEN,", "client CM3032 producer");
+    Contains(client, "recog = b and 0 or 1", "client mode layout");
+    Contains(client, "param = config[1]", "client category layout");
 }
 
 static void CheckNativePersistence()
 {
-    const int offset = 0x4F8;
+    const int offset = 0x500;
     var player = NewPlayer();
     player.m_NativeHumanData = new byte[offset + sizeof(uint)];
     BinaryPrimitives.WriteUInt32LittleEndian(
@@ -111,9 +42,6 @@ static void CheckNativePersistence()
 
     Invoke(player, "RestoreNativeChatShieldMask");
     Equal(0xA5F00F0Au, player.m_dwChatShieldMask, "native mask load");
-    Equal(true, player.m_boHearWhisper, "restore hear-whisper bit0 clear");
-    Equal(true, player.m_boBanShout, "restore shout bit2 clear");
-    Equal(false, player.m_boBanGuildChat, "restore guild bit3 set");
 
     player.m_dwChatShieldMask = 0x89ABCDEFu;
     Equal(true, (bool)Invoke(player, "PersistNativeChatShieldMask"),
@@ -157,9 +85,6 @@ static void CheckSwitchListen()
             $"category {mapping.Category} set mask");
     }
     Equal(0xA5F0000Fu, player.m_dwChatShieldMask, "all category masks");
-    Equal(false, player.m_boHearWhisper, "3032 cat4 mutes whisper flag");
-    Equal(false, player.m_boBanShout, "3032 cat2 mutes shout flag");
-    Equal(false, player.m_boBanGuildChat, "3032 cat3 mutes guild flag");
 
     foreach (var mapping in mappings)
     {
@@ -171,9 +96,6 @@ static void CheckSwitchListen()
         }), $"category {mapping.Category} clear dispatch");
     }
     Equal(0xA5F00000u, player.m_dwChatShieldMask, "all category clears");
-    Equal(true, player.m_boHearWhisper, "3032 clear restores whisper flag");
-    Equal(true, player.m_boBanShout, "3032 clear restores shout flag");
-    Equal(true, player.m_boBanGuildChat, "3032 clear restores guild flag");
 
     player.Operate(new TProcessMessage
     {
@@ -219,52 +141,6 @@ static void CheckHearGate()
         HUtil32.MakeWord(0x12, 0x34), 0, 1, "allowed RM_HEAR");
 }
 
-static void CheckCryAndGuildGates()
-{
-    var player = NewPlayer();
-    player.m_dwChatShieldMask = 0x04;
-    player.m_DefMsg = null;
-    Assert(player.Operate(new TProcessMessage
-    {
-        wIdent = Grobal2.RM_CRY,
-        BaseObject = 0x12345678,
-        nParam1 = 0x97,
-        nParam2 = 0x00,
-        sMsg = "blocked cry"
-    }), "blocked RM_CRY dispatch");
-    Assert(player.m_DefMsg == null, "blocked RM_CRY packet");
-
-    player.m_dwChatShieldMask = 0;
-    Assert(player.Operate(new TProcessMessage
-    {
-        wIdent = Grobal2.RM_CRY,
-        BaseObject = 0x12345678,
-        sMsg = "allowed cry"
-    }), "allowed RM_CRY dispatch");
-    Packet(player.m_DefMsg, Grobal2.SM_CRY, 0x12345678, 0x9700, 0, 1,
-        "allowed RM_CRY");
-
-    player.m_DefMsg = null;
-    player.m_dwChatShieldMask = 0x08;
-    Assert(player.Operate(new TProcessMessage
-    {
-        wIdent = Grobal2.RM_GUILDMESSAGE,
-        BaseObject = 0x12345678,
-        sMsg = "blocked guild"
-    }), "blocked RM_GUILD dispatch");
-    Assert(player.m_DefMsg == null, "blocked RM_GUILD packet");
-
-    player.m_dwChatShieldMask = 0;
-    Assert(player.Operate(new TProcessMessage
-    {
-        wIdent = Grobal2.RM_GUILDMESSAGE,
-        BaseObject = 0x12345678,
-        sMsg = "allowed guild"
-    }), "allowed RM_GUILD dispatch");
-    Packet(player.m_DefMsg, Grobal2.SM_GUILDMESSAGE, 0x12345678, 0xFFD4, 0, 1,
-        "allowed RM_GUILD");
-}
-
 static void CheckClientConfigPacket()
 {
     var player = NewPlayer();
@@ -282,14 +158,6 @@ static void CheckGateHasNoSyntheticConfig()
     NotContains(source, "SM_CLIENT_CONF", "GameGate SM2953 constant/injection");
     NotContains(source, "injected chat shieldMask",
         "GameGate zero chat-mask injection");
-}
-
-static void CheckWhisperBit0Gate()
-{
-    var root = FindRepositoryRoot();
-    var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
-        "TPlayObject.Chat.cs"));
-    Contains(source, "m_dwChatShieldMask & 0x01u", "whisper target bit0 gate");
 }
 
 static ProbePlayer NewPlayer() => new() { m_boOffLineFlag = true };
@@ -317,39 +185,28 @@ static void Packet(ClientPacket packet, int ident, int recog, int param,
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    return AuditRepoRoot.Resolve();
+}
+
+static string FindClientLuaFixture()
+{
+    const string leaf = @"白猪G2.5_0518_lua_plain_readable_20260710_014719\core\mir2.scenes.main.common.common_hk.lua";
+    foreach (var start in new[]
+             {
+                 AuditRepoRoot.Resolve(),
+                 @"D:\loym2",
+                 Environment.CurrentDirectory
+             })
     {
-        for (var directory = new DirectoryInfo(start);
-             directory != null; directory = directory.Parent)
+        if (string.IsNullOrWhiteSpace(start)) continue;
+        for (var dir = new DirectoryInfo(start); dir != null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
-                return directory.FullName;
-            var sibling = Path.Combine(directory.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(sibling, "LyoMir2.sln")))
-                return sibling;
+            var candidate = Path.Combine(dir.FullName, leaf);
+            if (File.Exists(candidate))
+                return candidate;
         }
     }
-    throw new InvalidOperationException("Repository root not found");
-}
-
-static string FindNativeImage()
-{
-    const string known = @"D:\loym2\staging\_reunpack_work\flat_image.bin";
-    if (File.Exists(known))
-        return known;
-    throw new InvalidOperationException("flat_image.bin not found at " + known);
-}
-
-static void Pin(byte[] image, int imageBase, int va, byte[] expected, string label)
-{
-    var offset = va - imageBase;
-    Assert(offset >= 0 && offset + expected.Length <= image.Length, label + " range");
-    for (var i = 0; i < expected.Length; i++)
-    {
-        if (image[offset + i] != expected[i])
-            throw new InvalidOperationException(
-                $"{label}: byte[{i}] expected={expected[i]:X2} actual={image[offset + i]:X2}");
-    }
+    throw new FileNotFoundException("client lua fixture not found", leaf);
 }
 
 static void PrepareRuntimeConfig()

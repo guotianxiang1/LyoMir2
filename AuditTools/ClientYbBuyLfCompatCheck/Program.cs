@@ -356,7 +356,7 @@ static void CheckLivePlayerCallback(Assembly assembly)
     prepare.Invoke(null, new[] { request, failure });
     Equal(105, current.m_nGameGold,
         "failed account callback changed current player balance");
-    Equal(0, CountMessages(current, Grobal2.SM_LINGFU_CHANGED),
+    Equal(0, CountMessages(current, Grobal2.RM_LINGFU_CHANGED),
         "failed account callback queued capital refresh");
 
     var success = resultConstructor.Invoke(new object[] { 0, 777 });
@@ -367,9 +367,9 @@ static void CheckLivePlayerCallback(Assembly assembly)
     Equal(103, wrongAccount.m_nGameGold, "wrong-account player balance changed");
     Equal(104, wrongCharacter.m_nGameGold,
         "wrong-character player balance changed");
-    Equal(1, CountMessages(current, Grobal2.SM_LINGFU_CHANGED),
+    Equal(1, CountMessages(current, Grobal2.RM_LINGFU_CHANGED),
         "authoritative balance capital refresh count");
-    Equal(0, CountMessages(stale, Grobal2.SM_LINGFU_CHANGED),
+    Equal(0, CountMessages(stale, Grobal2.RM_LINGFU_CHANGED),
         "stale player received capital refresh");
 
     var finish = typeof(TPlayObject).GetMethod("CompleteNativeYbShopPurchase",
@@ -383,7 +383,7 @@ static void CheckLivePlayerCallback(Assembly assembly)
     Equal(13, wrongAccount.m_nLingFu, "wrong-account player received LingFu");
     Equal(14, wrongCharacter.m_nLingFu,
         "wrong-character player received LingFu");
-    Equal(2, CountMessages(current, Grobal2.SM_LINGFU_CHANGED),
+    Equal(2, CountMessages(current, Grobal2.RM_LINGFU_CHANGED),
         "balance and delivery capital refresh count");
 }
 

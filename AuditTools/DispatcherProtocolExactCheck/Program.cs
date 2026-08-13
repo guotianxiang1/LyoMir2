@@ -12,6 +12,7 @@ M2Share.ProcessMsgCriticalSection = new object();
 CheckAbilityPackets();
 CheckFeatureChanged();
 CheckCry();
+CheckWhisper();
 CheckGoldChanged();
 CheckChangeLight();
 CheckGroupCancel();
@@ -21,7 +22,7 @@ CheckMerchantPayloadProducers();
 CheckExactSequenceSource();
 
 Console.WriteLine(
-    "DispatcherProtocolExactCheck PASS ability=52/184 feature=41/10 cry=102 gold=653 light=654 group=666,659 repair=10152 third-batch=645,652,1103,1104,1105");
+    "DispatcherProtocolExactCheck PASS ability=52/184 feature=41/10 cry=102 whisper=103/param=0xFFFC/tag=level/series=nParam1/recog=speaker gold=653 light=654 group=666,659 repair=10152 third-batch=645,652,1103,1104,1105");
 
 static void CheckAbilityPackets()
 {
@@ -107,6 +108,86 @@ static void CheckCry()
     }), "RM_CRY dispatcher result");
     Packet(player.m_DefMsg, Grobal2.SM_CRY, sourceObjectId, 0x9700, 0, 1,
         "RM_CRY");
+}
+
+static void CheckWhisper()
+{
+    // Ident 103 has exactly one send point in the whole image, the RM 10031 arm:
+    //   0x6B4AE4 68 FC FF 00 00     push 0xFFFC        -> Param  (literal)
+    //   0x6B4AE9 66 8B 43 02        mov ax,[ebx+2]     -> Tag    = wParam
+    //   0x6B4AEE 66 8B 43 04        mov ax,[ebx+4]     -> Series = nParam1
+    //   0x6B4AFC 8B 4B 24           mov ecx,[ebx+0x24] -> Recog  = BaseObject
+    //   0x6B4AFF 66 BA 67 00        mov dx,0x67
+    //   0x6B4B08 FF 93 54 02 00 00  call [VMT+0x254]
+    // wParam is the speaker's level: the producer at 0x6C95F6 loads
+    // word[speaker+0x278], and +0x278 is the level because 0x68790C
+    // (66 FF 83 78 02 00 00 inc word [ebx+0x278]) is gated on
+    // 0x6878FB cmp word [ebx+0x278],0xC8 - the level cap.
+    var player = NewPlayer();
+    const int speakerObjectId = 0x0BADF00D;
+
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.RM_WHISPER,
+        BaseObject = speakerObjectId,
+        wParam = 42,
+        nParam1 = 0,
+        sMsg = "whisper"
+    }), "RM_WHISPER dispatcher result");
+    Packet(player.m_DefMsg, Grobal2.SM_WHISPER, speakerObjectId, 0xFFFC, 42, 0,
+        "RM_WHISPER");
+
+    // Param is an immediate on the only arm, so no config colour may reach it.
+    // The GM and purple tiers this tree used to carry had no native counterpart;
+    // 0x38FF (btGMWhisperMsg*) is the colour of the "聆听私聊" monitor SysMsg at
+    // 0x6B4AD8 / 0x6C963C, not of the whisper packet.
+    var whisperF = M2Share.g_Config.btWhisperMsgFColor;
+    var whisperB = M2Share.g_Config.btWhisperMsgBColor;
+    var gmF = M2Share.g_Config.btGMWhisperMsgFColor;
+    var gmB = M2Share.g_Config.btGMWhisperMsgBColor;
+    var purpleF = M2Share.g_Config.btPurpleMsgFColor;
+    var purpleB = M2Share.g_Config.btPurpleMsgBColor;
+    try
+    {
+        M2Share.g_Config.btWhisperMsgFColor = 0x11;
+        M2Share.g_Config.btWhisperMsgBColor = 0x22;
+        M2Share.g_Config.btGMWhisperMsgFColor = 0x33;
+        M2Share.g_Config.btGMWhisperMsgBColor = 0x44;
+        M2Share.g_Config.btPurpleMsgFColor = 0x55;
+        M2Share.g_Config.btPurpleMsgBColor = 0x66;
+
+        Assert(player.Operate(new TProcessMessage
+        {
+            wIdent = Grobal2.RM_WHISPER,
+            BaseObject = speakerObjectId,
+            wParam = 200,
+            nParam1 = 0,
+            sMsg = "whisper"
+        }), "RM_WHISPER dispatcher result (recoloured config)");
+        Packet(player.m_DefMsg, Grobal2.SM_WHISPER, speakerObjectId, 0xFFFC, 200, 0,
+            "RM_WHISPER colour-independent");
+    }
+    finally
+    {
+        M2Share.g_Config.btWhisperMsgFColor = whisperF;
+        M2Share.g_Config.btWhisperMsgBColor = whisperB;
+        M2Share.g_Config.btGMWhisperMsgFColor = gmF;
+        M2Share.g_Config.btGMWhisperMsgBColor = gmB;
+        M2Share.g_Config.btPurpleMsgFColor = purpleF;
+        M2Share.g_Config.btPurpleMsgBColor = purpleB;
+    }
+
+    // Series tracks nParam1 rather than the constant 1 this tree used to send.
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.RM_WHISPER,
+        BaseObject = speakerObjectId,
+        wParam = 7,
+        nParam1 = 5,
+        sMsg = "whisper"
+    }), "RM_WHISPER dispatcher result (series probe)");
+    Packet(player.m_DefMsg, Grobal2.SM_WHISPER, speakerObjectId, 0xFFFC, 7, 5,
+        "RM_WHISPER series follows nParam1");
 }
 
 static void CheckGoldChanged()

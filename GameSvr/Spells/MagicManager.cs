@@ -94,7 +94,7 @@ namespace GameSvr
         // would draw RandSeed twice.
         private ushort DoSpell_MPow(TUserMagic UserMagic)
         {
-            return (ushort)(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(Math.Max(1, UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower)));
+            return (ushort)unchecked(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower));
         }
 
         // Native sub_4C8658 (@0x4C8658-0x4C86B4), reached via the thin wrapper
@@ -1264,6 +1264,9 @@ namespace GameSvr
                                             }
                                             TargeTBaseObject.RefShowName();
                                             BaseObject.m_SlaveList.Add(TargeTBaseObject);
+                                            // MagTamming sub_6ED2A4 @0x6ED528: RecalcAbilitys then
+                                            // TList.Add [master+0x4FC] then SM 4469 (0x6F784C).
+                                            BaseObject.NotifyNativeSlaveListChanged(joining: true, TargeTBaseObject);
                                         }
                                         else
                                         {
@@ -1930,6 +1933,17 @@ namespace GameSvr
                 {
                     sMonName = ysShinsu.ShenShouName();
                     nCount = ysShinsu.ShenShouSlaveCount();
+                }
+                // 「修改召唤神兽」装的是 detour，不是常量覆盖：0x100BA4E0 / 0x100BA4F9
+                // 两次 call 0x10032B10 把 0x0076EE98 起 7 字节（push 数量 + push 叛变秒数）
+                // 和 0x0076EEAF 起 5 字节（mov edx,名字指针）整段换成跳转，所以它决定的是
+                // 最终交给 MakeSlave 的名字与数量，排在「召唤神兽」的常量覆盖之后——
+                // 补丁区间本身就吃掉了 0x0076EE99 这个 imm8。取值域见 TryGetModifyShenShou。
+                if (ysShinsu.TryGetModifyShenShou(PlayObject.m_Abil.Level,
+                        out var ysDragonName, out var ysDragonCount))
+                {
+                    sMonName = ysDragonName;
+                    nCount = ysDragonCount;
                 }
                 if (PlayObject.MakeSlave(sMonName, nMakelevel, nExpLevel, nCount, dwRoyaltySec) != null)
                 {

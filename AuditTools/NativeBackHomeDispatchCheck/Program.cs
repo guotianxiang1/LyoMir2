@@ -171,19 +171,16 @@ static void ApplyLimitItemMoveSourceContract()
     var root = FindRepositoryRoot();
     var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Maps",
         "Maps.cs"));
-    // Native parser B 0x7769D2 `mov ecx,0xD` / 0x7769D7 `mov edx,0x776F2C`
-    // ("LimitItemMove") / 0x7769DF `call 0x4C6E94` (CompareLStr). A full
-    // Equals rejects the prefix native accepts.
+    // Native parser B @0x7769D2: mov ecx,0xD / mov edx,0x776F2C ("LimitItemMove")
+    // / call 0x4C6E94 (CompareLStr). Same shape at parser A 0x775A42.
+    // A full-string Equals is the wrong contract: native is a length-13 prefix.
     var token = source.IndexOf(
-        "HUtil32.CompareLStr(s34, \"LimitItemMove\"",
+        "HUtil32.CompareLStr(s34, \"LimitItemMove\", \"LimitItemMove\".Length)",
         StringComparison.Ordinal);
-    Assert(token >= 0, "LimitItemMove CompareLStr parser branch missing");
+    Assert(token >= 0, "LimitItemMove parser branch missing");
     var end = source.IndexOf("continue;", token, StringComparison.Ordinal);
     Assert(end > token, "LimitItemMove parser branch has no terminator");
     var branch = source.Substring(token, end - token);
-    Assert(branch.Contains("\"LimitItemMove\".Length", StringComparison.Ordinal)
-           || branch.Contains(", 13)", StringComparison.Ordinal),
-        "LimitItemMove prefix length is no longer native 13");
     Assert(branch.Contains("MapFlag.boLIMITITEMMOVE = true;",
         StringComparison.Ordinal), "LimitItemMove independent flag missing");
     Assert(branch.Contains("MapFlag.boNORECALL = true;",
@@ -225,22 +222,7 @@ static void VerifySourceContract()
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[] { AppContext.BaseDirectory,
-                 Environment.CurrentDirectory })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                    "GameSvr.csproj")))
-                return current.FullName;
-            var nested = Path.Combine(current.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(nested, "GameSvr", "GameSvr.csproj")))
-                return nested;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void Equal<T>(T expected, T actual, string label)

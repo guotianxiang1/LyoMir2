@@ -182,25 +182,5 @@ static void Require(bool condition, string label)
 
 static string FindRepositoryRoot()
 {
-    foreach (var startPath in new[]
-             {
-                 Directory.GetCurrentDirectory(),
-                 Path.Combine(Directory.GetCurrentDirectory(),
-                     "LyoMir2-master"),
-                 AppContext.BaseDirectory
-             })
-    {
-        if (!Directory.Exists(startPath)) continue;
-        for (var directory = new DirectoryInfo(startPath);
-             directory != null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "GameSvr",
-                    "Players", "TPlayObject.NativeHorseDismount.cs")) &&
-                File.Exists(Path.Combine(directory.FullName, "SystemModule",
-                    "Grobal2.cs")))
-                return directory.FullName;
-        }
-    }
-
-    throw new DirectoryNotFoundException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }

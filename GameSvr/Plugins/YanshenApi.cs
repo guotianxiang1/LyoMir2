@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Globalization;
 using SystemModule;
 using GameSvr;
@@ -487,13 +488,23 @@ namespace GameSvr.Plugins
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>设置身体部位装备元素值。id:1-5元素类型(6=投保), pis:部位0-15, val:值</summary>
-        public void GivePis(int elementType, int bodyPos, int value)
+        /// <returns>写入的值；任何一道门没过都返回 0（1005E519 把结果槽初始化成 0）。</returns>
+        public int GivePis(int elementType, int bodyPos, int value)
         {
-            if (!Enabled("自定义元素")) return;
-            if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return;
+            if (!Enabled("自定义元素")) return 0;
+            if (bodyPos < 0 || bodyPos >= _player.m_UseItems.Length) return 0;
             var item = _player.m_UseItems[bodyPos];
-            if (item == null) return;
-            SetElementValue(item, elementType, value);
+            if (item == null) return 0;
+            // 负值在写入前就被拒掉，旧值保持不变：1005E8D5 85FF test edi,edi / 0F884601 js。
+            if (value < 0) return 0;
+            // 类型 <1 走 ys1 的 dword 槽，>17 夹到 17 而不是拒绝：
+            // 1005E8DD 83FE01 cmp esi,1 / 0F8C2201 jl；1005E8E6 83FE11 cmp esi,0x11 /
+            // 7E07 jle / BE11000000 mov esi,0x11；1005E8F2 83FE01 / 0F840D01 je。
+            if (elementType < 1) elementType = 1;
+            else if (elementType > 17) elementType = 17;
+            // 2..17 是单字节槽，原生 1005E9FA 880C10 mov byte[eax+edx],cl 直接截断低位。
+            SetElementValue(item, elementType, elementType == 1 ? value : (byte)value);
+            return value;
         }
 
         /// <summary>获取身体部位装备元素值</summary>
@@ -753,7 +764,7 @@ namespace GameSvr.Plugins
         public void GiveItem5El(string itemName, int ys1, int ys2, int ys3, int ys4, int ys5) { GiveNewItem(itemName, 0, new[] { ys1, ys2, ys3, ys4, ys5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); }
 
         /// <summary>设置装备元素</summary>
-        public int SetEquipElement(int bodyPos, int elemId, int value) { GivePis(elemId, bodyPos, value); return value; }
+        public int SetEquipElement(int bodyPos, int elemId, int value) { return GivePis(elemId, bodyPos, value); }
 
         /// <summary>获取装备元素</summary>
         public int GetEquipElement(int bodyPos, int elemId, int isHero) { return GetPis(elemId, bodyPos); }
@@ -776,7 +787,17 @@ namespace GameSvr.Plugins
                     if (it != null && it.MakeIndex == id) { item = it; break; }
             }
             if (item == null) return 0;
-            return GetExtremeValue(item, jpIdx);
+            return GetExtremeValue(item, ExtremeIndexFromJid(jpIdx));
+        }
+
+        /// <summary>
+        /// ^35^/^36^ 的 jid 是 1 基的：1005D363 / 1005D5CA `8D 43 FF lea eax,[ebx-1]`
+        /// 后 `83 F8 05 cmp eax,5` / `ja`。越界的 jid 不报错，落到 ja 之前预置的
+        /// 偏移 0x2A（1005D35C / 1005D5C3 `C7 45 EC 2A 00 00 00`），也就是 jp2 那一格。
+        /// </summary>
+        private static int ExtremeIndexFromJid(int jid)
+        {
+            return jid >= 1 && jid <= 6 ? jid - 1 : 1;
         }
 
         /// <summary>设置装备极品值</summary>
@@ -797,12 +818,10 @@ namespace GameSvr.Plugins
                     if (it != null && it.MakeIndex == id) { item = it; break; }
             }
             if (item == null) return 0;
-            if (SetExtremeValue(item, jpIdx, value))
-            {
-                if (types == 0) _player.SendUpdateItem(item);
-                return value;
-            }
-            return 0;
+            // 1005D6E4 `88 04 1E mov byte [esi+ebx], al` 只写低字节，但
+            // 1005D6E7 存回的是完整的 eax，所以返回值是原样的 val。
+            SetExtremeValue(item, ExtremeIndexFromJid(jpIdx), (byte)value);
+            return value;
         }
 
         /// <summary>装备持久操作: types 0=查询 1=增加 2=减少 3=设置</summary>
@@ -1306,7 +1325,7 @@ namespace GameSvr.Plugins
         /// <summary>召唤带属性的宝宝 — 生成怪物并设置指定属性</summary>
         public int SummonPet(string monName, int count, int level, int ac, int dc, int dcMax, int mac, int mc, int sc, int gs, int ys, int hp, int maxHp)
         {
-            if (!EnabledAll("眼神特殊函数", "怪物伤害触发技能特效")) return 0;
+            if (!Enabled("眼神特殊函数")) return 0;
             return SummonPetCore(monName, count, level, ac, dc, dcMax, mac, mc, sc,
                 gs, ys, hp, maxHp);
         }
@@ -1349,29 +1368,54 @@ namespace GameSvr.Plugins
                 gs, ys, hp, maxHp);
         }
 
-        /// <summary>设置宝宝属性</summary>
+        /// <summary>
+        /// 数字隧道 23 / <c>ys_SetPetV</c>。处理函数 <c>0x100735B0</c>（唯一调用
+        /// <c>0x10077289</c>）。向量长度 <c>0x100735FF 83 F8 0E cmp eax,0xE / jb</c>
+        /// 要求 ≥14 个 <c>std::string</c>（含 <c>!!!!集成函数</c> 与命令号）。
+        /// 字段 <c>at(2)=id … at(0xC)=Maxhp at(0xD)=MonName</c>。
+        /// 从宠表是宿主 <c>[player+0x4FC]</c>（<c>0x10073760 8B 83 FC 04 00 00</c>）。
+        /// 名字长度在 <c>[ebp-0x1C]</c>（MSVC string.size，<c>0x10073778 8B 55 E4</c>）：
+        /// 空名走 1-based 槽（<c>0x10073799 85 F6 / jle</c>、<c>0x100737A1 3B F0 / jg</c>、
+        /// <c>0x100737AC 8D 04 B5 FC FF FF FF lea eax,[esi*4-4]</c>）；
+        /// 非空名按名扫描全表（<c>0x10073970 3B F0 / 0x10073B15 46 inc esi</c>）。
+        /// 每项 <c>test/cmp ; jle</c> 仅 <c>&gt;0</c> 才写，偏移与 JSON 应用点相同。
+        /// 成功失败都 <c>0x10073936 83 C8 FF or eax,0xffffffff</c> 返回 -1。
+        /// gs/ys 的「怪物伤害触发技能特效」约束的是消费端，不挡写入。
+        /// </summary>
         public int SetPetAttr(string monName, int id, int ac, int dc, int dcMax, int mac, int mc, int sc, int gs, int ys, int hp, int maxHp)
         {
-            if (!EnabledAll("眼神特殊函数", "怪物伤害触发技能特效")) return 0;
-            int count = 0;
-            foreach (var slave in _player.m_SlaveList)
+            if (!Enabled("眼神特殊函数")) return 0;
+            return ApplySetPetV(_player?.m_SlaveList, monName, id, ac, dc, dcMax,
+                mac, mc, sc, gs, ys, hp, maxHp);
+        }
+
+        internal static int ApplySetPetV(IList<TBaseObject> slaves, string monName,
+            int id, int ac, int dc, int dcMax, int mac, int mc, int sc,
+            int gs, int ys, int hp, int maxHp)
+        {
+            if (slaves == null || slaves.Count <= 0)
+                return -1;
+
+            if (string.IsNullOrEmpty(monName))
+            {
+                if (id <= 0 || id > slaves.Count)
+                    return -1;
+                var slave = slaves[id - 1];
+                if (slave == null)
+                    return -1;
+                ApplyYanshenMonsterAttrs(slave, ac, mac, dc, dcMax, mc, sc,
+                    speed: 0, hit: 0, hp, maxHp, gs, ys);
+                return -1;
+            }
+
+            foreach (var slave in slaves)
             {
                 if (slave == null) continue;
-                if (string.IsNullOrEmpty(monName) || slave.m_sCharName == monName)
-                {
-                    slave.m_WAbil.AC = HUtil32.MakeLong(ac, ac);
-                    slave.m_WAbil.DC = HUtil32.MakeLong(dc, dcMax);
-                    slave.m_WAbil.MAC = HUtil32.MakeLong(mac, mac);
-                    slave.m_WAbil.MC = HUtil32.MakeLong(mc, mc);
-                    slave.m_WAbil.SC = HUtil32.MakeLong(sc, sc);
-                    slave.m_WAbil.HP = Math.Max(0, hp);
-                    slave.m_WAbil.MaxHP = Math.Max(0, maxHp);
-                    if (slave.m_WAbil.HP > slave.m_WAbil.MaxHP) slave.m_WAbil.HP = slave.m_WAbil.MaxHP;
-                    slave.RecalcAbilitys();
-                    count++;
-                }
+                if (slave.m_sCharName == monName)
+                    ApplyYanshenMonsterAttrs(slave, ac, mac, dc, dcMax, mc, sc,
+                        speed: 0, hit: 0, hp, maxHp, gs, ys);
             }
-            return count;
+            return -1;
         }
 
         /// <summary>给宝宝技能: magicId技能, gailv概率, shanghai伤害, del删除(1=删除)</summary>
@@ -2294,7 +2338,8 @@ namespace GameSvr.Plugins
         /// and smuggles it through <c>CheckMapMonByName('yanshen2.0.7', res)</c>.
         /// Attribute writes follow plugin JSON apply at <c>0x100884f0</c>
         /// (<c>0x100889D7..0x10088B56</c>): each field is skipped unless &gt; 0
-        /// (<c>test/cmp ; jle</c>).
+        /// (<c>test/cmp ; jle</c>). The same writer is reused by digital tunnel 23
+        /// / <c>ys_SetPetV</c> (<c>0x100735B0</c>) with Speed/Hit left 0.
         /// JSON key <c>Speed</c> @ <c>0x102BA7EC</c> writes word actor+0x1E8/+0x264
         /// (<c>0x10088ABB 66 89 83 e8 01 00 00</c>), the same word native 基本剑术
         /// adds 准确 into (<c>0x76AF99 66 01 83 64 02 00 00</c>). JSON <c>Hit</c>
@@ -2952,15 +2997,32 @@ namespace GameSvr.Plugins
         /// <summary>强制玩家下线</summary>
         public int KickPlayer() { if (!Enabled("踢玩家下线")) return 0; _player.m_boEmergencyClose = true; return 1; }
 
-        /// <summary>地图怪物数量查询</summary>
+        /// <summary>
+        /// 数字隧道 20 / <c>ys_CheckMapMonByName</c>。处理函数 <c>0x10073210</c>：
+        /// 向量 <c>0x1007325F 83 F8 04 cmp eax,4 / jae</c>，不足返回 -1
+        /// （<c>0x10073273 83 C8 FF</c>）。<c>at(2)=MapName at(3)=MonName</c>。
+        /// 空地图名与 <c>0x102B2918</c> 空串比较后 <c>edx=0</c>
+        /// （<c>0x100733AA BA 00000000</c>），转调宿主 CheckMapMonByName，
+        /// 宿主 <c>0x646B79 85 F6 / je</c> 时读 <c>[this+0x128]</c> 当前图。
+        /// </summary>
         public int CheckMapMonByName(string mapName, string monName)
         {
-            var map = M2Share.MapManager.FindMap(mapName);
+            Envirnoment map;
+            if (string.IsNullOrEmpty(mapName))
+                map = _player?.m_PEnvir ?? _npc?.m_PEnvir;
+            else
+                map = M2Share.MapManager?.FindMap(mapName);
             if (map == null) return 0;
             int count = 0;
             var list = new List<TBaseObject>();
             M2Share.UserEngine.GetMapMonster(map, list);
-            foreach (var m in list) if (m?.m_sCharName?.IndexOf(monName, StringComparison.OrdinalIgnoreCase) >= 0) count++;
+            foreach (var m in list)
+            {
+                if (m?.m_sCharName == null) continue;
+                if (string.IsNullOrEmpty(monName)
+                    || m.m_sCharName.IndexOf(monName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    count++;
+            }
             return count;
         }
 
@@ -3253,7 +3315,7 @@ namespace GameSvr.Plugins
         /// <c>push 0xFF</c> → <c>[ebp+0x14] = -1</c>（一只都不造），
         /// 用 <c>(byte)</c> 会算成 255（造 255 只）。
         /// </summary>
-        static int NativeSlaveCountImm8(int v) => (sbyte)(v > 0x7F ? 0x7F : v);
+        internal static int NativeSlaveCountImm8(int v) => (sbyte)(v > 0x7F ? 0x7F : v);
 
         /// <summary>
         /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
@@ -3422,6 +3484,51 @@ namespace GameSvr.Plugins
         public bool IsHeroBarbarian() => Enabled("英雄野蛮");
         public bool IsHeroSpeed() => Enabled("英雄攻速移速");
         public bool IsHeroCastSpeed() => Enabled("英雄施法速度");
+        /// <summary>
+        /// 英雄千分比免伤：<b>减的是守方的伤害</b>，读的是守方英雄自己的
+        /// <c>S(1,58)</c>。方向此前只有推断，现在有字节证据。
+        ///
+        /// 消费点在插件的伤害管线 <c>0x100795C0</c>（MSVC，栈参
+        /// <c>[ebp+8]</c>=对象A、<c>[ebp+0xC]</c>=对象B、<c>[ebp+0x10]</c>=伤害(in/out)、
+        /// <c>[ebp+0x14]</c>=A 的类、<c>[ebp+0x18]</c>=B 的类）。
+        /// 收尾 <c>0x1007BFDC 8B 45 10 mov eax,[ebp+0x10]</c> ⇒ 返回值就是伤害。
+        ///
+        /// 定方向的锚点是同一函数开头那段**英雄格挡**：
+        /// <code>
+        ///   100798CD  cmp [ebp+0x14], 0x685CA0 / 0x685968 / 0x685FD8
+        ///   100798EC  cmp [ebp+8], 0 / je
+        ///   100798FE  8B 45 08              mov eax,[ebp+8]
+        ///   10079901  8B 80 8C 06 00 00     mov eax,[eax+0x68C]    ; -> 英雄
+        ///   1007992C  cmp [ebp-0xAC], 0x006AC8C8                   ; 英雄类
+        ///   1007993C  push 0xE4 ; edx=1 ; call 0x10056040          ; S(英雄,1,228)
+        ///   1007996A  eax=0x3E8 ; call [0x1031BCC4]                ; Random(1000)
+        ///   10079983  cmp S, rand / jle skip
+        ///   1007999F  68 B4 F9 2B 10        push "@HeroBlocking"
+        ///   100799C5  B8 01 00 00 00        mov eax,1
+        ///   100799CB  E9 0F 26 00 00        jmp 0x1007BFDF          ; 绕过取伤害，直接返 1
+        /// </code>
+        /// 格挡只能是守方能力，而它取的英雄来自 <c>[ebp+8]</c>，
+        /// 所以 <c>[ebp+8]</c> = 守方、<c>[ebp+0xC]</c> = 攻方，
+        /// <c>[ebp+0x14]</c> = 守方的类。反向佐证：<c>高级英雄倍功暴击</c>
+        /// （加伤）在 <c>0x10079FF8</c> 取的是 <c>[ebp+0xC]</c> 的英雄。
+        ///
+        /// 公式（<c>0x1007A8A1..0x1007A95E</c>，与本键的门控
+        /// <c>cmp [单例+0x108],0x1F4</c> 同一分支）：
+        /// <code>
+        ///   守方类 ∈ {0x685CA0, 0x685968, 0x685FD8}
+        ///   hero = [守方+0x68C] ; 无英雄则跳过
+        ///   v = S(hero, 1, 58) ; v &lt;= 0 跳过 ; v &gt; 1000 整个丢弃(不钳位)
+        ///   damage -= (int)(damage * v / 1000.0)     ; cvttsd2si = 截断
+        /// </code>
+        ///
+        /// <b>未落地的原因已经换了一个</b>：证据齐了，缺的是 C# 侧的载体——
+        /// 脚本变量库只挂在 <c>TPlayObject</c>（<c>m_ScriptSVars</c> /
+        /// <c>TryGetScriptVar</c>）上，而 <c>HeroObject : AnimalObject</c> 没有。
+        /// 原生读的是英雄对象自己的 S 槽（英雄类 <c>0x006AC8C8</c> 的父链落在
+        /// <c>0x0073BBE8 -&gt; 0x0073B8DC</c> 这一族，和 <c>THumanKind</c>
+        /// <c>0x0073BC34</c> 同簇，所以英雄天然有 S 槽）。
+        /// 退而求其次去读主号的 <c>S(1,58)</c> 会读错对象，故维持 fail-closed。
+        /// </summary>
         public bool IsHeroDmgReduction() => Enabled("英雄千分比免伤");
         public bool IsHeroReadExtreme() => Enabled("英雄读取极品");
         public bool IsHeroRepairEquip() => Enabled("英雄修装备a");
@@ -3451,6 +3558,54 @@ namespace GameSvr.Plugins
         public bool IsMindRevealTrigger() => Enabled("心灵启示触发");
         public bool IsReturnBtnTrigger() => Enabled("回城按钮触发");
         public bool IsLureTrigger() => Enabled("诱惑之光触发脚本a");
+        /// <summary>
+        /// 召唤神兽触发 / 召唤骷髅触发。两者是**替换**，不是前置：开关一开，
+        /// 宿主的造宠函数就完全不再被调用，宝宝只能由脚本自己造出来。
+        ///
+        /// 安装器 <c>0x10032FD0</c> 的第 5/6 个参数是一张 dword 令牌表和令牌数
+        /// （每个 dword 的低字节是一个码字节；只有 <c>0xE8</c>/<c>0xE9</c> 且不是
+        /// 最后一个令牌时才吃掉下一个令牌当 rel32 重定位）。它先 VirtualAlloc
+        /// 0x400 字节，把令牌铺成桩体，末尾接一条 <c>E9 &lt;rel32&gt;</c> 指向续跑点
+        /// （<c>0x100331AF add ecx,[ebp+0x14]</c>），再在宿主起点写
+        /// <c>E9 rel32</c> 并用 <c>0x90</c> 补到 end（end 不含，
+        /// <c>0x10033267 cmp eax,[ebp+0x14] / jge</c>）。
+        ///
+        /// 骷髅：<c>0x100AE275 push 0x23</c>(=35 个令牌) /
+        /// <c>0x100AE285 push &amp;[ebp-0x6E4]</c> / <c>0x100AE29A push 0x6EDB49</c> /
+        /// <c>0x100AE2AD push 0x6EDB44</c> / <c>0x100AE2C0 push 0x6EDB44</c> /
+        /// <c>0x100AE2F6 call 0x10032FD0</c>。宿主 <c>0x006EDB44 E8 B3 12 08 00
+        /// call 0x76EDFC</c> 整条 5 字节被换掉，续跑 <c>0x006EDB49</c>。
+        /// 令牌由 8 张 16 字节 .rdata 模板 + 3 个立即数拼出，35/35 全部有出处：
+        /// <code>
+        ///   60 9C 8B D3 A1 20 5D 7D 00 8B 00 8B F0 8B 7E 08
+        ///   68 00 01 5D 01 6A 00 33 C9 8B C7 8B 18 FF 53 44 9D 61 E9
+        /// ⇒ pushal / pushfd
+        ///   mov edx,ebx                  ; ebx = 施法者(0x006EDB42 mov eax,ebx 现场)
+        ///   mov eax,[0x007D5D20] / mov eax,[eax] / mov esi,eax
+        ///   mov edi,[esi+8]
+        ///   push 0x015D0100              ; 神兽侧是 0x03170100
+        ///   push 0 / xor ecx,ecx
+        ///   mov eax,edi / mov ebx,[eax] / call [ebx+0x44]   ; 宿主脚本派发槽
+        ///   popfd / popal
+        ///   jmp 0x006EDB49               ; 安装器补的 E9 rel32
+        /// </code>
+        /// 桩体里**没有任何 E8 令牌**，重定位路径一次都没触发，也就没有对
+        /// <c>sub_76EDFC</c> 的调用——这就是「替换而非前置」的字节证据。
+        ///
+        /// 神兽：<c>0x100AE51F call 0x10032FD0</c>，宿主
+        /// <c>0x006EDC5E E8 19 12 08 00 call 0x76EE7C</c>，续跑 <c>0x006EDC63</c>，
+        /// 令牌表在 <c>[ebp-0x770]</c>，35 个字节与骷髅逐字节相同，只有那个
+        /// <c>push imm32</c> 从 <c>0x015D0100</c> 换成 <c>0x03170100</c>。
+        ///
+        /// 脚本名按 SSO std::string 拼在栈上后经 <c>call 0x10033450</c> 注册：
+        /// 骷髅 <c>[ebp-0x9C]=0xC</c> + <c>'@Sum','monS','kele'</c> ⇒ <c>@SummonSkele</c>；
+        /// 神兽 <c>[ebp-0xF8]=0xD</c> + <c>'@Sum','monS','hins'</c> + <c>'u'</c>
+        /// ⇒ <c>@SummonShinsu</c>。
+        ///
+        /// 仍未落地：<c>[ebx+0x44]</c> 这个宿主派发槽和那个 imm32 参数没解出来
+        /// （<c>[0x007D5D20]</c> 在运行时转储里为空），C# 也没有对应的脚本入口。
+        /// 生产两项都是 0，当前无可观测影响。
+        /// </summary>
         public bool IsShenShouTrigger() => Enabled("召唤神兽触发");
         public bool IsKuLouTrigger() => Enabled("召唤骷髅触发");
 
@@ -3618,8 +3773,15 @@ namespace GameSvr.Plugins
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");
         public bool IsPlayerDropRate() => PatchToggleOn("人物爆率调整");
-        public int PlayerLv1() => GetParamInt("人物等级1_值", 35);
-        public int PlayerLv2() => GetParamInt("人物等级2_值", 40);
+        // 人物等级1..3_值 挨着 人物爆率调整 只是行文顺序，它们**不是**爆率的参数：
+        // 加载器把三个键写进页面对象 0x66C/0x670/0x674，而这三格连同名字/数量六格
+        // 一起在「修改召唤神兽」的 ON 分支里被搬进单例（0x100BA3F7/0x100BA40E/
+        // 0x100BA425 -> [单例+0x86C/0x870/0x874]），GUI 对话框里也在同一个
+        // 「修改召唤神兽」框内（0x00030BEA/BEC/BEE 三个「人物等级:」标签）。
+        // 默认值来自构造函数 0x100B74AD "42" / 0x100B74F5 "45" / 0x100B753D "48"；
+        // 原来的 35/40 没有出处。生产 config.json 是 40/45/48。
+        public int PlayerLv1() => GetParamInt("人物等级1_值", 42);
+        public int PlayerLv2() => GetParamInt("人物等级2_值", 45);
         public int PlayerLv3() => GetParamInt("人物等级3_值", 48);
         public bool IsScriptDropRate() => Enabled("脚本控制人物爆率");
         public bool IsScriptHair() => Enabled("脚本控制头发外显");
@@ -3707,16 +3869,37 @@ namespace GameSvr.Plugins
 
         // ── Monster toggle checks ──
         //
-        // 怪物名字1..3_值 / 怪物数量1..3_值 是「修改召唤神兽」的三档参数。
-        // 六个键在同一个配置加载器里连续读出，名字走 asString、数量走 asInt：
-        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA0B call 0x100DFCF0 (asString)
-        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC57 mov [ecx+0x8C0],eax  (asInt 0x100DFE40)
-        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBCF2 mov [ecx+0x8C4],eax
-        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBD86 mov [ecx+0x8C8],eax
-        // 三个数量键用的是同一个 asInt 转换器、同一段连续偏移，语义完全相同。
-        public string MonsterName1() => ParamS("怪物名字1_值", "强化神兽");
-        public string MonsterName2() => ParamS("怪物名字2_值", "强化神兽");
-        public string MonsterName3() => ParamS("怪物名字3_值", "白虎");
+        // 怪物名字1..3_值 / 怪物数量1..3_值 与 人物等级1..3_值 合起来是
+        // 「修改召唤神兽」的九个参数，三档各一行 (人物等级, 怪物名字, 怪物数量)。
+        // 九个键在同一个配置加载器里连续读出，名字走 asString、等级/数量走
+        // asInt（0x100DFE40），落在页面对象的连续偏移上：
+        //   0x100BB7D3 push "人物等级1_值" -> 0x100BB84F lea ecx,[esi+0x66C]
+        //   0x100BB86E push "人物等级2_值" -> 0x100BB8E7 lea ecx,[esi+0x670]
+        //   0x100BB906 push "人物等级3_值" -> 0x100BB97F lea ecx,[esi+0x674]
+        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA62 lea ecx,[esi+0x678]
+        //   0x100BBA72 push "怪物名字2_值" -> 0x100BBB36 lea ecx,[esi+0x67C]
+        //   0x100BBB46 push "怪物名字3_值" -> 0x100BBC0F lea ecx,[esi+0x680]
+        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC9F lea ecx,[esi+0x684]
+        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBD33 lea ecx,[esi+0x688]
+        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBDC7 lea ecx,[esi+0x68C]
+        // 打补丁时再经 atoi(0x1022DC49) / std::string::assign(0x10018750) 搬进单例：
+        //   0x100BA3F7/0x100BA40E/0x100BA425 -> [单例+0x86C/0x870/0x874]  等级
+        //   0x100BA445/0x100BA46A/0x100BA49B -> [单例+0x878/0x890/0x8A8]  名字
+        //   0x100BA3B2/0x100BA3C9/0x100BA3E0 -> [单例+0x8C0/0x8C4/0x8C8]  数量
+        // 上一轮把 0x8C0/0x8C4/0x8C8 记成「页面对象偏移」是把两个对象混了
+        // （REPLICATION_RULES §4.22 的撞车坑），这里按实际基址寄存器订正。
+        //
+        // 默认值取自页面对象构造函数 0x100B7400..0x100B7710，每个字段的
+        // `lea esi,[edi+off]` 之后紧跟一次 `push <默认串> / call 0x100107D0`
+        // （空则 `call 0x1000BD60` 赋默认）：
+        //   0x66C "42"  0x670 "45"  0x674 "48"
+        //   0x678 "神兽" 0x67C "白虎" 0x680 "月灵"
+        //   0x684 "2"   0x688 "2"   0x68C "2"
+        // 原来这里填的是生产 config.json 的实测值（强化神兽/强化神兽/白虎、1/2/2），
+        // 那是「这台服务器现在填了什么」，不是键缺失时原生会取什么。
+        public string MonsterName1() => ParamS("怪物名字1_值", "神兽");
+        public string MonsterName2() => ParamS("怪物名字2_值", "白虎");
+        public string MonsterName3() => ParamS("怪物名字3_值", "月灵");
 
         /// <summary>
         /// 「怪物数量1_值」是数量，不是开关。原先的 <c>Enabled("怪物数量1_值")</c>
@@ -3726,9 +3909,68 @@ namespace GameSvr.Plugins
         /// 生产 <c>config.json</c> 三档实测是 1 / 2 / 1。
         /// 与 YS-SW-C1 修掉的 <c>IsShenShouCount()</c>/<c>IsKuLouCount()</c> 同一类缺陷。
         /// </summary>
-        public int MonsterCount1() => GetParamInt("怪物数量1_值", 1);
+        public int MonsterCount1() => GetParamInt("怪物数量1_值", 2);
         public int MonsterCount2() => GetParamInt("怪物数量2_值", 2);
         public int MonsterCount3() => GetParamInt("怪物数量3_值", 2);
+
+        /// <summary>
+        /// 「修改召唤神兽」：按人物等级挑一档，覆盖神兽的名字与数量。
+        /// 命中返回 true 并写出 <paramref name="name"/> / <paramref name="count"/>；
+        /// 一档都不满足则返回 false，调用方保持主干算出来的值不变。
+        ///
+        /// 原生不是改常量，是在神兽生成器 <c>sub_76EE7C</c> 上装两段 detour
+        /// （安装器 <c>0x10032B10</c>，<c>0x10032C00</c> 的 Themida 虚拟化孪生体，
+        /// 同为 <c>ret 0x10</c> 的 4 参 stdcall；写 <c>E9 rel32</c> 并用 <c>0x90</c>
+        /// 补到 end，end 不含）：
+        /// <code>
+        ///   0x100BA4CC push 0x100B7DE0 / push 0x76EE9F / push 0x76EE98 / push 0x76EE98
+        ///   0x100BA4E0 call 0x10032B10
+        ///     -> 改写 0x0076EE98 起 7 字节 `6A 01 68 00 2F 0D 00`
+        ///        = `push 1`(数量) + `push 0xD2F00`(叛变秒数)，续跑 0x0076EE9F
+        ///   0x100BA4E5 push 0x100B7EA0 / push 0x76EEB4 / push 0x76EEAF / push 0x76EEAF
+        ///   0x100BA4F9 call 0x10032B10
+        ///     -> 改写 0x0076EEAF 起 5 字节 `BA EC EE 76 00`
+        ///        = `mov edx,0x76EEEC`(名字指针)，续跑 0x0076EEB4
+        /// </code>
+        /// 门控 <c>0x100BA0C3 cmp [edi+0x710],0</c>，日志落点
+        /// <c>0x100BA504 push "修改召唤神兽(已启动)"</c> /
+        /// <c>0x100BA511 push "修改召唤神兽(未启动)"</c>。
+        ///
+        /// 两条关键的取值域差异，与 <c>召唤神兽</c>(<c>神兽_数量</c>/<c>神兽_序号</c>)**相反**：
+        /// 那一套是定长 blob 覆盖，所以数量受 imm8 上钳 127、名字恒两个汉字；
+        /// 这一套整条 <c>push</c>/<c>mov edx</c> 都被换掉了，数量是完整 dword、
+        /// 名字是指针，长度不受限——生产实测就填了四个汉字的「强化神兽」。
+        /// 所以这里既不钳 127 也不截两字。
+        ///
+        /// 两段补丁区间与 <c>神兽_数量</c> 的 <c>0x0076EE99</c>、
+        /// <c>神兽_序号</c> 的 <c>0x0076EEEC</c> 是重叠/失效关系
+        /// （<c>0x0076EE99</c> 就落在 <c>E9 rel32</c> 里面），所以两套开关同开时
+        /// 只有本键生效。生产 <c>召唤神兽=0</c> / <c>修改召唤神兽=1</c>，不冲突。
+        ///
+        /// 全镜像扫描 <c>0x0076EE7C..0x0076EF00</c> 的每个 imm32 引用：
+        /// <c>0x76EE98/0x76EE9F/0x76EEAF/0x76EEB4</c> 只被上面两处安装调用引用，
+        /// **没有任何还原支**——这是一次性安装，关掉开关不会写回宿主原字节。
+        /// </summary>
+        public bool TryGetModifyShenShou(int humanLevel, out string name, out int count)
+        {
+            name = null;
+            count = 0;
+            if (!IsModifyShenShou()) return false;
+            // 三档阈值升序（构造函数 42/45/48，生产 40/45/48），逐档比较、后命中的
+            // 覆盖先命中的，即「取满足条件的最高一档」——与主干 DragonArray 的
+            // 遍历形状一致。一档都不满足时不改动主干的取值。
+            var hit = false;
+            if (humanLevel >= PlayerLv1()) { name = MonsterName1(); count = MonsterCount1(); hit = true; }
+            if (humanLevel >= PlayerLv2()) { name = MonsterName2(); count = MonsterCount2(); hit = true; }
+            if (humanLevel >= PlayerLv3()) { name = MonsterName3(); count = MonsterCount3(); hit = true; }
+            if (!hit || string.IsNullOrEmpty(name))
+            {
+                name = null;
+                count = 0;
+                return false;
+            }
+            return true;
+        }
         public bool IsMonsterDropA() => Enabled("怪物爆率A_值");
         public bool IsMonsterDropB() => Enabled("怪物爆率B_值");
         public bool IsMonsterDropK() => Enabled("怪物爆率K_值");

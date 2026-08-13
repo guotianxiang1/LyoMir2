@@ -392,10 +392,16 @@ namespace GameSvr
                             {
                                 m_boInSafeArea = boInSafeArea;
                                 RefNameColor();
-                                // Notify 战神 client of safe zone entry/exit
+                                // 0x6B308B  8B 45 FC / E8 C1 53 0B 00  call 0x768454 (InSafeArea)
+                                // 0x6B3096  3A 82 FE 03 00 00  cmp al,[edx+0x3FE]   ; m_boInSafeArea
+                                // 0x6B309C  74 43              je  0x6B30E1         ; unchanged -> no packet
+                                // 0x6B30A3  88 91 FE 03 00 00  mov [ecx+0x3FE],dl
+                                // 0x6B30A9  84 D2 / 74 1B      test dl,dl / je 0x6B30C8
+                                //   true  0x6B30AD 6A 06 / 6A 01 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
+                                //   false 0x6B30C8 6A 06 / 6A 00 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
+                                // i.e. Recog=0, Param=6, Tag=(1|0), Series=0, no string.
                                 SendDefMessage(Grobal2.SM_COMMON_INFORMATION,
-                                    boInSafeArea ? 1 : 0, m_nCurrX, m_nCurrY, 0,
-                                    boInSafeArea ? "safe_enter" : "safe_exit");
+                                    0, 6, boInSafeArea ? 1 : 0, 0, string.Empty);
                             }
                         }
                     }
@@ -927,7 +933,7 @@ namespace GameSvr
                 case NativeMagicProducerPushIdent:
                     TryHandleNativeMagicProducerMessage(ProcessMsg);
                     break;
-                case Grobal2.SM_LINGFU_CHANGED:
+                case Grobal2.RM_LINGFU_CHANGED:
                     SendNativeCapitalInfo();
                     break;
                 case Grobal2.RM_NATIVE_EXP_CONTINUE:
@@ -1685,20 +1691,12 @@ namespace GameSvr
                             nMsgCount = GetSiteDownMsgCount();
                             if (nMsgCount >= M2Share.g_Config.nMaxSitDonwMsgCount)
                             {
-                                m_nOverSpeedCount++;
-                                if (m_nOverSpeedCount > M2Share.g_Config.nOverSpeedKickCount)
-                                {
-                                    if (M2Share.g_Config.boKickOverSpeed)
-                                    {
-                                        SysMsg(M2Share.g_sKickClientUserMsg, MsgColor.Red, MsgType.Hint);
-                                        m_boEmergencyClose = true;
-                                    }
-                                    if (M2Share.g_Config.boViewHackMessage)
-                                    {
-                                        M2Share.MainOutMessage(format(M2Share.g_sBunOverSpeed, m_sCharName, dwDelayTime, nMsgCount));
-                                    }
-                                }
-                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");// ����������͹���ʧ����Ϣ
+                                // MOVE-22: native pose (3012 / 0x6D9C7D) has no tick
+                                // interval and never kicks. Overflow just repeats the
+                                // four-zero 0x276 correction already used when
+                                // dwDelayTime==0 (0x6D9C8B push 0×4 / mov dx,0x276).
+                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
+                                SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
                             }
                             else
                             {
@@ -2108,7 +2106,37 @@ namespace GameSvr
                                 0, 1);
                             break;
                         case Grobal2.RM_WHISPER:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_WHISPER, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            // The recipient's whisper monitor is served here, ahead of
+                            // the packet, and it is a SysMsg rather than a second 103:
+                            //   0x6B4A9C 8B B0 44 19 00 00  mov esi,[eax+0x1944]
+                            //   0x6B4AA6 80 7E 73 00        cmp byte [esi+0x73],0
+                            //   0x6B4AB2 8B 43 10           mov eax,[ebx+0x10]  ; body
+                            //   0x6B4AC6 BA E0 63 6B 00     mov edx,0x6B63E0    ; "聆听私聊 "
+                            //   0x6B4AD8 66 B9 FF 38        mov cx,0x38FF
+                            //   0x6B4ADE FF 96 D4 00 00 00  call [VMT+0xD4]
+                            // Doing it on the arm rather than in Whisper() is what makes
+                            // the cross-server path (0x6C9793) reach the monitor too.
+                            if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
+                            {
+                                m_GetWhisperHuman.SendMsg(m_GetWhisperHuman,
+                                    Grobal2.RM_SYSMESSAGE, 0,
+                                    WhisperMonitorFColor, WhisperMonitorBColor, 0,
+                                    WhisperMonitorPrefix + ProcessMsg.sMsg);
+                            }
+                            // Native RM 10031 arm, the only send point for ident 103:
+                            //   0x6B4AE4 68 FC FF 00 00     push 0xFFFC        -> Param  (literal)
+                            //   0x6B4AE9 66 8B 43 02        mov ax,[ebx+2]     -> Tag    = wParam
+                            //   0x6B4AEE 66 8B 43 04        mov ax,[ebx+4]     -> Series = nParam1
+                            //   0x6B4AFC 8B 4B 24           mov ecx,[ebx+0x24] -> Recog  = BaseObject
+                            //   0x6B4AFF 66 BA 67 00        mov dx,0x67
+                            //   0x6B4B08 FF 93 54 02 00 00  call [VMT+0x254]
+                            // Param is an immediate with no alternate arm - a full-image
+                            // sweep finds exactly two RM 10031 producers (0x6C960C, 0x6C9793)
+                            // and one ident-103 send, so there is no colour-tier selector.
+                            // wParam carries the speaker's level (word[speaker+0x278]).
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_WHISPER,
+                                ProcessMsg.BaseObject, 0xFFFC,
+                                ProcessMsg.wParam, ProcessMsg.nParam1);
                             break;
                         case Grobal2.RM_CRY:
                             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_CRY,
@@ -3051,15 +3079,15 @@ namespace GameSvr
         {
             var requestClientItemId = ProcessMsg.nParam1;
             // 战神 sub_6D09D0 gate order, verbatim:
-            //   0x6D09E3  cmp byte [ebx+0x73],0   ; m_boDeath   -> -1
+            //   0x6D09E3  cmp byte [ebx+0x73],0   ; m_boGhost   -> -1
             //   0x6D09ED  cmp byte [ebx+0x461],0  ; m_boDealing -> -1   <-- WAS MISSING
             //   0x6D09FA  cmp dword [ebx+0xBB0],0 ; hero == nil -> -1
-            //   0x6D0A0D  call sub_772DA8         ; hero ghost  -> -1
+            //   0x6D0A0D  call sub_772DA8         ; hero death [+0x74] -> -1
             // Without the m_boDealing gate a player could stage an item in a trade and
             // then shunt the same object reference into the hero bag: the deal list and
             // the hero bag both hold it, the deal completes and hands it to the
             // counterparty while the hero bag keeps its copy -> two-container dupe.
-            if (m_HeroObject == null || m_boDeath || m_boDealing
+            if (m_HeroObject == null || m_boGhost || m_boDealing
                 || m_HeroObject.m_boDeath)
             {
                 SendDefMessage(Grobal2.SM_TOHEROBAG_FAIL, -1, 0, 0, 0, "");
@@ -3107,11 +3135,11 @@ namespace GameSvr
         {
             var requestClientItemId = ProcessMsg.nParam1;
             // 战神 sub_6D0B00 has the identical gate ladder:
-            //   0x6D0B13  cmp byte [ebx+0x73],0   ; m_boDeath   -> -1
+            //   0x6D0B13  cmp byte [ebx+0x73],0   ; m_boGhost   -> -1
             //   0x6D0B1D  cmp byte [ebx+0x461],0  ; m_boDealing -> -1   <-- WAS MISSING
             //   0x6D0B2A  cmp dword [ebx+0xBB0],0 ; hero == nil -> -1
-            //   0x6D0B3D  call sub_772DA8         ; hero ghost  -> -1
-            if (m_HeroObject == null || m_boDeath || m_boDealing
+            //   0x6D0B3D  call sub_772DA8         ; hero death [+0x74] -> -1
+            if (m_HeroObject == null || m_boGhost || m_boDealing
                 || m_HeroObject.m_boDeath)
             {
                 SendDefMessage(Grobal2.SM_TOHUMBAG_FAIL, -1, 0, 0, 0, "");

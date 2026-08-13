@@ -49,11 +49,7 @@ namespace GameSvr
                     ApplyArmRing(item, std);
                     return;
                 case "TJewelStone":
-                    ApplyDura80(item);
-                    // 0x78C6C9 mov eax,0xC / 0x78C6CE call Random / inc edx
-                    // then sub_78C5EC (table write). The helper has no Random
-                    // in its first 0x40; the draw is consumed to keep the seed.
-                    _ = Random(12);
+                    ApplyJewelStone(item, std);
                     return;
                 default:
                     ApplyDura80(item);
@@ -69,7 +65,8 @@ namespace GameSvr
         }
 
         // Shape 130/131/132: add al,0x7E / sub al,3 / jae normal → call [vmt+8].
-        // Those three skip 783EFC. The +0x08 body is not modelled here.
+        // Unsigned wrap: 130+0x7E=208, 208-3=205; 133+0x7E=211, 211-3=208.
+        // jae taken for Shape>=133; 130/131/132 fall through to +0x08.
         private static bool IsUnknownShape(GoodItem std)
         {
             return std != null && std.Shape is 130 or 131 or 132;
@@ -133,7 +130,11 @@ namespace GameSvr
         // 0x7611C8
         private static void ApplyHelmet(TUserItem item, GoodItem std)
         {
-            if (IsUnknownShape(std)) return;
+            if (IsUnknownShape(std))
+            {
+                ApplyUnknownHelmet08(item);
+                return;
+            }
             ApplyDura80(item);
             if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
             if (std.Shape == 1) item.btValue[0] = 0;
@@ -166,7 +167,11 @@ namespace GameSvr
         // 0x761CC4 → 0x761D08
         private static void ApplyRing(TUserItem item, GoodItem std)
         {
-            if (IsUnknownShape(std)) return;
+            if (IsUnknownShape(std))
+            {
+                ApplyUnknownRing08(item);
+                return;
+            }
             ApplyDura80(item);
             if (Random(9) != 0 || !HasExtraAttrFlag(std)) return;
             ApplyRingBody(item);
@@ -176,9 +181,169 @@ namespace GameSvr
         private static void ApplyArmRing(TUserItem item, GoodItem std)
         {
             ApplyDura80(item);
-            if (IsUnknownShape(std)) return;
+            if (IsUnknownShape(std))
+            {
+                ApplyUnknownArmRing08(item);
+                return;
+            }
             if (Random(10) != 0 || !HasExtraAttrFlag(std)) return;
             ApplyRingBody(item);
+        }
+
+        // THelmet VMT+0x08 @0x761338. No extra-attr flag, no Random(80).
+        // 49 draws: three GRR(4,3/8/20), three GRR(3,15/30), GRR(6,30), Random(30).
+        private static void ApplyUnknownHelmet08(TUserItem item)
+        {
+            var n0 = GetRandomRange(4, 3) + GetRandomRange(4, 8) + GetRandomRange(4, 20);
+            StoreIfPositive(item, 0, n0);
+            var sum = n0;
+            var n1 = GetRandomRange(4, 3) + GetRandomRange(4, 8) + GetRandomRange(4, 20);
+            StoreIfPositive(item, 1, n1);
+            sum += n1;
+            var n2 = GetRandomRange(3, 15) + GetRandomRange(3, 30);
+            StoreIfPositive(item, 2, n2);
+            sum += n2;
+            var n3 = GetRandomRange(3, 15) + GetRandomRange(3, 30);
+            StoreIfPositive(item, 3, n3);
+            sum += n3;
+            var n4 = GetRandomRange(3, 15) + GetRandomRange(3, 30);
+            StoreIfPositive(item, 4, n4);
+            sum += n4;
+            MaybeAddDura1000(item, GetRandomRange(6, 30));
+            if (Random(30) == 0) item.btValue[7] = 1;
+            if (sum < 3) return;
+            if (item.btValue[0] >= 5)
+            {
+                item.btValue[5] = 1;
+                item.btValue[6] = (byte)(item.btValue[0] * 3 + 0x19);
+                return;
+            }
+            if (item.btValue[2] >= 2)
+            {
+                item.btValue[5] = 1;
+                item.btValue[6] = (byte)((item.btValue[2] << 2) + 0x23);
+                return;
+            }
+            if (item.btValue[3] >= 2)
+            {
+                item.btValue[5] = 2;
+                item.btValue[6] = (byte)(item.btValue[3] * 2 + 0x12);
+                return;
+            }
+            if (item.btValue[4] >= 2)
+            {
+                item.btValue[5] = 3;
+                item.btValue[6] = (byte)(item.btValue[4] * 2 + 0x12);
+                return;
+            }
+            item.btValue[6] = (byte)(sum * 2 + 0x12);
+        }
+
+        // TRing VMT+0x08 @0x761E20. 43 draws. Writes slots 2/3/4, not 0/1.
+        private static void ApplyUnknownRing08(TUserItem item)
+        {
+            var n2 = GetRandomRange(3, 4) + GetRandomRange(3, 8) + GetRandomRange(6, 20);
+            StoreIfPositive(item, 2, n2);
+            var sum = n2;
+            var n3 = GetRandomRange(3, 4) + GetRandomRange(3, 8) + GetRandomRange(6, 20);
+            StoreIfPositive(item, 3, n3);
+            sum += n3;
+            var n4 = GetRandomRange(3, 4) + GetRandomRange(3, 8) + GetRandomRange(6, 20);
+            StoreIfPositive(item, 4, n4);
+            sum += n4;
+            MaybeAddDura1000(item, GetRandomRange(6, 30));
+            if (Random(30) == 0) item.btValue[7] = 1;
+            if (sum < 3) return;
+            if (item.btValue[2] >= 3)
+            {
+                item.btValue[5] = 1;
+                item.btValue[6] = (byte)(item.btValue[2] * 3 + 0x19);
+                return;
+            }
+            if (item.btValue[3] >= 3)
+            {
+                item.btValue[5] = 2;
+                item.btValue[6] = (byte)(item.btValue[3] * 2 + 0x12);
+                return;
+            }
+            if (item.btValue[4] >= 3)
+            {
+                item.btValue[5] = 3;
+                item.btValue[6] = (byte)(item.btValue[4] * 2 + 0x12);
+                return;
+            }
+            item.btValue[6] = (byte)(sum * 2 + 0x12);
+        }
+
+        // TArmRing VMT+0x08 @0x762718. Dura80 already done. 47 more draws.
+        // Sum threshold is 2 (0x762855 cmp esi,2 / jl), not 3.
+        private static void ApplyUnknownArmRing08(TUserItem item)
+        {
+            var n0 = GetRandomRange(3, 5) + GetRandomRange(5, 20);
+            StoreIfPositive(item, 0, n0);
+            var sum = n0;
+            var n1 = GetRandomRange(3, 5) + GetRandomRange(5, 20);
+            StoreIfPositive(item, 1, n1);
+            sum += n1;
+            var n2 = GetRandomRange(3, 15) + GetRandomRange(5, 30);
+            StoreIfPositive(item, 2, n2);
+            sum += n2;
+            var n3 = GetRandomRange(3, 15) + GetRandomRange(5, 30);
+            StoreIfPositive(item, 3, n3);
+            sum += n3;
+            var n4 = GetRandomRange(3, 15) + GetRandomRange(5, 30);
+            StoreIfPositive(item, 4, n4);
+            sum += n4;
+            MaybeAddDura1000(item, GetRandomRange(6, 30));
+            if (Random(30) == 0) item.btValue[7] = 1;
+            if (sum < 2) return;
+            if (item.btValue[0] >= 3)
+            {
+                item.btValue[5] = 1;
+                item.btValue[6] = (byte)(item.btValue[0] * 3 + 0x19);
+                return;
+            }
+            if (item.btValue[2] >= 2)
+            {
+                item.btValue[5] = 1;
+                item.btValue[6] = (byte)(item.btValue[2] * 3 + 0x1E);
+                return;
+            }
+            if (item.btValue[3] >= 2)
+            {
+                item.btValue[5] = 2;
+                item.btValue[6] = (byte)(item.btValue[3] * 2 + 0x14);
+                return;
+            }
+            if (item.btValue[4] >= 2)
+            {
+                item.btValue[5] = 3;
+                item.btValue[6] = (byte)(item.btValue[4] * 2 + 0x14);
+                return;
+            }
+            item.btValue[6] = (byte)(sum * 2 + 0x12);
+        }
+
+        // TJewelStone +0x28 @0x78C6BC. Ctor 0x78C70A writes [self+0x36]=[std+0x48]
+        // (WordParam1 low byte = jewel level 1..4) before this slot runs.
+        private static void ApplyJewelStone(TUserItem item, GoodItem std)
+        {
+            if (std != null)
+                item.btValue[12] = unchecked((byte)std.WordParam1);
+            ApplyDura80(item);
+            var index = Random(12) + 1;
+            NativeJewelStoneTable.Apply(item, index);
+        }
+
+        private static void StoreIfPositive(TUserItem item, int slot, int n)
+        {
+            if (n > 0) item.btValue[slot] = (byte)n;
+        }
+
+        private static void MaybeAddDura1000(TUserItem item, int n)
+        {
+            if (n <= 0) return;
+            AddDura(item, (n + 1) * 1000);
         }
 
         private static void ApplyRingBody(TUserItem item)
@@ -219,5 +384,75 @@ namespace GameSvr
         }
 
         private static int Random(int bound) => M2Share.RandomNumber.Random(bound);
+    }
+
+    /// <summary>
+    /// TJewelStone 9-byte rows at BSS 0x7DCBDC (4 types × 13 index × 9 = 0x1D4).
+    /// Loader sub_78C1DC FillChar-zeros the table, then reads INI <c>宝石配置</c>
+    /// (filename @0x756838, sole caller 0x756808). Missing file leaves zeros.
+    /// sub_78C5EC: type=[item+0x36] in 1..4, index=Random(12)+1, copy 6 bytes to
+    /// +0x36 and bytes 6..8 to +0x100/+0x101/+0x102. No Random inside the helper.
+    /// </summary>
+    internal static class NativeJewelStoneTable
+    {
+        public const int TypeCount = 4;
+        public const int IndexCount = 13;
+        public const int RecordSize = 9;
+        public const int NativeRecordSize = 208;
+        public const int ItemPlus36RecordOffset = 0x16; // item+0x36
+        public const int ItemPlus100RecordOffset = 0xE0; // item+0x100
+
+        // [type 1..4][index 0..12]; index 0 is unused (loader skips it).
+        private static readonly byte[][][] Rows = CreateEmpty();
+
+        private static byte[][][] CreateEmpty()
+        {
+            var rows = new byte[TypeCount + 1][][];
+            for (var type = 1; type <= TypeCount; type++)
+            {
+                rows[type] = new byte[IndexCount][];
+                for (var index = 0; index < IndexCount; index++)
+                    rows[type][index] = new byte[RecordSize];
+            }
+            return rows;
+        }
+
+        internal static void Reset()
+        {
+            for (var type = 1; type <= TypeCount; type++)
+                for (var index = 0; index < IndexCount; index++)
+                    Array.Clear(Rows[type][index]);
+        }
+
+        internal static void SetRow(int type, int index, byte[] record)
+        {
+            if (type < 1 || type > TypeCount || index < 0 || index >= IndexCount)
+                return;
+            if (record == null || record.Length < RecordSize)
+                return;
+            Buffer.BlockCopy(record, 0, Rows[type][index], 0, RecordSize);
+        }
+
+        // sub_78C5EC. index is already Random(12)+1.
+        internal static void Apply(TUserItem item, int index)
+        {
+            if (item?.btValue == null || item.btValue.Length < 14)
+                return;
+            var type = item.btValue[12];
+            if (type == 0 || type > TypeCount)
+                return;
+            if (index < 1 || index >= IndexCount)
+                return;
+
+            var rec = Rows[type][index];
+            item.btValue[12] = rec[0];
+            item.btValue[13] = rec[1];
+            if (item.NativeRecord == null || item.NativeRecord.Length != NativeRecordSize)
+                item.NativeRecord = new byte[NativeRecordSize];
+            Buffer.BlockCopy(rec, 0, item.NativeRecord, ItemPlus36RecordOffset, 6);
+            item.NativeRecord[ItemPlus100RecordOffset] = rec[6];
+            item.NativeRecord[ItemPlus100RecordOffset + 1] = rec[7];
+            item.NativeRecord[ItemPlus100RecordOffset + 2] = rec[8];
+        }
     }
 }
