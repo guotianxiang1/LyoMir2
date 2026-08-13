@@ -2120,6 +2120,10 @@ namespace GameSvr
             // sub_73D500 的 0x73D578 / 0x73DAC5 / 0x73DECF 三次赋值，见
             // TBaseObject.NativeDeathDropDenominator.cs 的文件头。
             NativeRecalcDropRareFields();
+            // sub_73D500 的 self+0x2DC（百分比物理减伤总量）三条 add
+            // （0x73DEA8/0x73DEB7/0x73DEC7），见
+            // TBaseObject.NativePhysicalPercentReduction.cs 的文件头。
+            NativeRecalcPhysicalReductionPercent();
             ResetNativeHqFastness();
             ResetNativeUnionFastness();
             ResetNativeNearHitFastness();

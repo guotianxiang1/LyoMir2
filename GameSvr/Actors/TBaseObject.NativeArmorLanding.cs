@@ -104,20 +104,22 @@ namespace GameSvr
         /// self+0x2DC(有符号 word)= 百分比物理减伤总量,管线阶段①的输入
         /// (0x73F903 `mov cx,[edi+0x2DC]`)。
         /// <para>
-        /// 其填充在 RecalcAbilitys(sub_73D500)内,由装备扩展属性聚合子系统
-        /// (sub_75EE78,容器+0x48/+0x1F8)累加,来源含 0x73DEB1
-        /// `add word[self+0x2DC],ax`(ax=m_btNativeDamageShare 零扩展)与 0x73DEC7
-        /// `add word[self+0x2DC],0x14`([self+0x1D5] 门控)。该聚合子系统 C# 尚未移植
-        /// (见 <c>TBaseObject.NativeDeathDropDenominator.cs</c> 文件头),因此 self+0x2DC
-        /// 当前无活字段、恒 0,与 C# 全部其它伤害路径读到的值一致。
+        /// 其填充在 RecalcAbilitys(sub_73D500)内,由 self+0x2DC 三条 add 累加而成:
+        /// write#1 0x73DEA8 `add word[self+0x2DC],word[agg1+0x58]`(装备扩展属性聚合,
+        /// 类型 0xAA..0xAE,BLOCKED)、write#2 0x73DEB7 `add word[self+0x2DC],ax`
+        /// (ax=m_btNativeDamageShare 零扩展,活字段)、write#3 0x73DEC7
+        /// `add word[self+0x2DC],0x14`([self+0x1D5]=NativeDropRareKillerBonusGate 门控,
+        /// BLOCKED)。种子经 sub_73D3E4(base[+0x260]=0)复位为 0。完整逐字节见
+        /// <c>TBaseObject.NativePhysicalPercentReduction.cs</c>。
         /// </para>
         /// <para>
-        /// ⚠️ 输入源 BLOCKED:恒返回 0 =&gt; 阶段① 不施加减伤(与「直调 DamageHealth」在减伤上
-        /// 等效,但本管线额外补上了阶段③ HasState(8) 缩放)。聚合子系统落地后,须让本访问器
-        /// 返回真实的 self+0x2DC(有符号 word)。
+        /// 现已作为真实字段 <see cref="m_wNativePhysicalDamageReductionPercent"/> 落地:
+        /// write#2(m_btNativeDamageShare, GM 359 @ChgDmgShare / 持久化)为活值;
+        /// write#1/#3 依赖的装备扩展属性聚合子系统仍 BLOCKED(≡0/false),补齐后本访问器
+        /// 自动返回其贡献。
         /// </para>
         /// </summary>
-        private int NativePhysicalPercentDamageReduction() => 0;
+        private int NativePhysicalPercentDamageReduction() => m_wNativePhysicalDamageReductionPercent;
 
         /// <summary>
         /// 战神 sub_73F8E0(VMT+0x1AC)物理落地伤害管线,建模为 param3=0/param4=0 形态

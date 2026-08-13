@@ -535,6 +535,14 @@ namespace GameSvr
         public byte m_btNativeDamageShare = 0;
 
         /// <summary>
+        /// write#2 源覆盖：0x73DEB1 <c>mov al,[esi+0x578]</c> 零扩展后 0x73DEB7
+        /// <c>add word[esi+0x2DC],ax</c>。self+0x578 = <see cref="m_btNativeDamageShare"/>
+        /// （unsigned byte），供 <see cref="NativeRecalcPhysicalReductionPercent"/> 累加进
+        /// self+0x2DC。见 TBaseObject.NativePhysicalPercentReduction.cs 文件头 write#2。
+        /// </summary>
+        protected override int NativePhysicalReductionDamageShare() => m_btNativeDamageShare;
+
+        /// <summary>
         /// 战神's capped accumulator for <see cref="m_nNativeYuanBaoTradeAccum"/>,
         /// implemented identically at two independent sites:
         /// <code>
