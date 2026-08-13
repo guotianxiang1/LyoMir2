@@ -2114,6 +2114,14 @@ namespace GameSvr
             TUserItem MakeItem;
             TUserItem UserItem;
             GoodItem StdItem;
+            // 原版货架循环体 0x63FE78..0x63FFA4，四个出口全部 jmp 0x63FFAA 跳出：
+            //   0x63FF7E  EB 2A                    result 0 (成功)
+            //   0x63FF8E  EB 1A                    result 2 (背包满，先 call 0x404690 释放)
+            //   0x63FF97  EB 11                    result 4 (材料不足)
+            //   0x63FFA0  EB 08                    result 3 (金币不足)
+            // 只有「本条货架不匹配」才落到 0x63FFA2 inc esi / dec edi / jne 继续扫。
+            // 之前只有成功路径 break：失败后继续扫，遇到第二条同名货架会把材料再扣
+            // 一次（材料在 ClientMakeDrugItem_sub_4A28FC 里已经消耗掉了）。
             var n14 = 1;
             for (var i = 0; i < m_GoodsList.Count; i++)
             {
@@ -2144,16 +2152,19 @@ namespace GameSvr
                             {
                                 DisPose(UserItem);
                                 n14 = 2;
+                                break;
                             }
                         }
                         else
                         {
                             n14 = 4;
+                            break;
                         }
                     }
                     else
                     {
                         n14 = 3;
+                        break;
                     }
                 }
             }
