@@ -38,6 +38,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeGildAcceptWiringCompatCheck")]
 [assembly: InternalsVisibleTo("InProcItemConservationCheck")]
 [assembly: InternalsVisibleTo("NativeHeroBehaviourCheck")]
+[assembly: InternalsVisibleTo("HeroRuntimeCodecCheck")]
 [assembly: InternalsVisibleTo("NativeLeaveMasterCheck")]
 [assembly: InternalsVisibleTo("NativeTimedExpBuffCheck")]
 [assembly: InternalsVisibleTo("NativeColdTimeRuntimeCheck")]

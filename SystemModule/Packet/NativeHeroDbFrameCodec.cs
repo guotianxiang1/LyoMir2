@@ -83,6 +83,13 @@ namespace SystemModule
         public const int GoldOffset = 0x0034;
         public const int HpLowOffset = 0x0038;
         public const int MpLowOffset = 0x003A;
+        /// <summary>
+        /// 英雄模式字节 <c>[hero+0x6A1]</c>（0 攻击 / 1 跟随 / 2 休息）的存档槽。
+        /// 编码 sub_689034 <c>0x68910A mov al,[esi+0x6A1] / 0x689110 mov [ebx+0x9C],al</c>，
+        /// 解码 sub_6888FC <c>0x688A9C mov al,[ebx+0x9C] / 0x688AA5 mov [edx+0x6A1],al</c>，
+        /// 两处的 <c>ebx</c> 都是记录基址 + 8，故记录偏移 = 0x9C + 8 = 0xA4。
+        /// </summary>
+        public const int HeroModeOffset = 0x00A4;
         public const int NativeUnionStateOffset = 0x00AD;
         public const int NativeUnionEnergyOffset = 0x00AE;
         public const int ForceExpOffset = 0x00B4;
