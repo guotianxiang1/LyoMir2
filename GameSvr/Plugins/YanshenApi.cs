@@ -1459,8 +1459,13 @@ namespace GameSvr.Plugins
         /// </summary>
         private const int RecycleElementSlots = 17;
 
-        /// <summary>与 NPC 给予灵符同一 reason（PasApiBridge.NativeGive / 魔塔奖励都用 23001）。</summary>
-        private const int RecycleLingFuReason = 23001;
+        /// <summary>
+        /// 回收的灵符 reason 是 0，不是 NPC 给予那套 23001。插件在 0x1006CE65 直接调
+        /// M2Server 的加灵符 0x6DE7BC，并在 0x1006CE68 用 <c>33 D2 xor edx,edx</c>
+        /// 把 reason 参数清零。23001 出自另一条路 —— NPC Give 派发器
+        /// <c>0x6C88FB BA D9 59 00 00 mov edx,0x59D9</c>。
+        /// </summary>
+        private const int RecycleLingFuReason = 0;
 
         /// <summary>自动回收 — 按JSON配置回收背包物品, -999=JSON语法错误</summary>
         public int AutoRecycle()
@@ -1588,9 +1593,6 @@ namespace GameSvr.Plugins
             // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
             // 放进同一次调用里确认 ⇒ 会产出元宝的物品一律不回收。
             if (yuanbao > 0) return false;
-
-            // 灵符在开了信用点服务时会改走限时灵符账户，落到哪个账户无从验证，同样不回收。
-            if (lingFu > 0 && M2Share.CreditCardService?.Enabled == true) return false;
 
             // 预检：IncGold 在超过每角色 m_nGoldMax 时返回 false（0x6D7930 cmp ebx,[eax+0x68C]）。
             if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
