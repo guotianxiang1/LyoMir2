@@ -59,6 +59,26 @@ if (failures.Count != 0)
 Console.WriteLine("All DBSvr service regression checks passed.");
 return 0;
 
+// Repository-relative source probes must not ride on the process CWD: the sweep harness
+// starts every tool in its own bin folder, and TestNativeNameValidation itself chdirs into
+// a temp filter directory. AppContext.BaseDirectory is stable under both.
+static string RepoRoot()
+{
+    foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+    {
+        for (var directory = new DirectoryInfo(start); directory != null;
+             directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "DBSvr", "DBSvr.csproj"))
+                && File.Exists(Path.Combine(directory.FullName, "GameSvr", "GameSvr.csproj")))
+                return directory.FullName;
+        }
+    }
+
+    throw new DirectoryNotFoundException(
+        "repository root not found above " + AppContext.BaseDirectory);
+}
+
 void Run(string name, Action test)
 {
     try
@@ -78,7 +98,7 @@ static void TestNativeLvChangeTimeUpdate()
     // the repo into CRLF on Windows), not part of the contract being asserted,
     // so normalise before matching. Without this the SQL probe below can never
     // hit on a Windows checkout and the audit reports a false red.
-    var source = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(),
+    var source = File.ReadAllText(Path.Combine(RepoRoot(),
         "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"))
         .Replace("\r\n", "\n");
     Check(source.Contains("WHERE idx=@idx AND\n                        (Level<>@oldLevel OR ForceLv<>@oldForceLv OR sfLevel<>@oldSfLevel)",
@@ -1552,7 +1572,7 @@ static void TestNativeNameValidation()
             "native hero 30-second reload tick gate");
 
         var mainFormSource = File.ReadAllText(Path.Combine(
-            originalDirectory, "DBSvr", "Forms", "MainForm.cs"));
+            RepoRoot(), "DBSvr", "Forms", "MainForm.cs"));
         var timedLoopStart = mainFormSource.IndexOf(
             "private async Task RunTimedLoop", StringComparison.Ordinal);
         var timedLoopEnd = mainFormSource.IndexOf(
@@ -2393,7 +2413,7 @@ static void TestNativeType2Protocol()
         "active Type2 command incorrectly treated as default no-op");
 
     var gameSvrDbServiceSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "GameSvr", "Services",
+        RepoRoot(), "GameSvr", "Services",
         "DBService.cs"));
     Check(gameSvrDbServiceSource.Contains("LegacyDbServerStreamParser",
             StringComparison.Ordinal),
@@ -2405,7 +2425,7 @@ static void TestNativeType2Protocol()
         "GameSvr DBService regressed from the captured native wire to the retired private parser");
 
     var gameSocSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "Services",
+        RepoRoot(), "DBSvr", "Services",
         "GameSocService.cs"));
     var registrationDispatchStart = gameSocSource.IndexOf(
         "if (command == NativeType2Protocol.RegisterCommand)",
@@ -2499,7 +2519,7 @@ static void TestNativeType2Protocol()
         "type2 relay can leak into private RequestServer connections");
 
     var mainFormSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "Forms", "MainForm.cs"));
+        RepoRoot(), "DBSvr", "Forms", "MainForm.cs"));
     Check(!mainFormSource.Contains("TryStartReload(",
               StringComparison.Ordinal)
           && !mainFormSource.Contains("RunRankingLoop",
@@ -2660,7 +2680,7 @@ static void TestNativeType2Admission()
     control.DrainQueue();
     Equal(1, drained, "0187 queue drain callback");
     var userSocSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "Services",
+        RepoRoot(), "DBSvr", "Services",
         "UserSocService.cs"));
     var disconnectStart = userSocSource.IndexOf(
         "private void DisconnectNativeGateByAddress",
@@ -4198,7 +4218,7 @@ static void TestNativeDbToolReads()
         "DB-tool 0104 did not concatenate Data/dynData");
 
     var gameSocSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "Services",
+        RepoRoot(), "DBSvr", "Services",
         "GameSocService.cs"));
     var toolDispatchStart = gameSocSource.IndexOf(
         "if (!NativeDbServerProtocol.UsesNormalType1Dispatcher(serverType))",
@@ -4491,7 +4511,7 @@ static void TestNativeDbToolWrites()
         "DB-tool 0103 exact write inherited a stale ForceLv override");
 
     var gameSocSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "Services",
+        RepoRoot(), "DBSvr", "Services",
         "GameSocService.cs"));
     var toolDispatchStart = gameSocSource.IndexOf(
         "if (!NativeDbServerProtocol.UsesNormalType1Dispatcher(serverType))",
@@ -4714,7 +4734,7 @@ static void TestNativeDbToolLifecycle()
         "native hero save merge retained an old generation");
 
     var gameSocSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "Services",
+        RepoRoot(), "DBSvr", "Services",
         "GameSocService.cs"));
     Check(gameSocSource.Contains("ProcessNativeDbToolDelete(serverInfo, frame)",
               StringComparison.Ordinal)
@@ -4729,7 +4749,7 @@ static void TestNativeDbToolLifecycle()
           && gameSocSource.Contains("HardDeleteNativeHeroIndex", StringComparison.Ordinal),
         "DB-tool 0100 dispatch or save-generation barrier is missing");
     var playRecordSource = File.ReadAllText(Path.Combine(
-        Directory.GetCurrentDirectory(), "DBSvr", "DB", "impl",
+        RepoRoot(), "DBSvr", "DB", "impl",
         "MySqlPlayRecordService.cs"));
     Check(playRecordSource.Contains("RenameNativeAccount", StringComparison.Ordinal)
           && playRecordSource.Contains("UPDATE gamedata.CreditCard SET PTID=@new",

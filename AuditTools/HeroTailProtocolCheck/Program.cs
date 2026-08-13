@@ -192,7 +192,7 @@ void CheckThreeSlotCodec()
 
 void CheckPersistenceSource()
 {
-    var root = Directory.GetCurrentDirectory();
+    var root = FindRepositoryRoot();
     var recordSource = File.ReadAllText(Path.Combine(root,
         "DBSvr", "DB", "impl", "MySqlHeroRecordService.cs"));
     var renameStart = recordSource.IndexOf("public bool RenameHero", StringComparison.Ordinal);
@@ -256,6 +256,27 @@ void CheckPersistenceSource()
            && service.Contains("_heroRecordService.IsHeroNameExists(request.NewHeroName)) return 4;",
                StringComparison.Ordinal),
         "rename status 2/3/4 mapping does not match the native checks");
+}
+
+// The sweep harness runs every tool with its working directory set to the tool's own bin
+// folder, so repository-relative source reads have to walk up to the checkout instead of
+// trusting the process CWD.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+    {
+        for (var directory = new DirectoryInfo(start); directory != null;
+             directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "GameSvr", "GameSvr.csproj"))
+                && Directory.Exists(Path.Combine(directory.FullName, "DBSvr")))
+                return directory.FullName;
+        }
+    }
+
+    throw new DirectoryNotFoundException(
+        "repository root not found (no GameSvr/GameSvr.csproj + DBSvr above "
+        + Directory.GetCurrentDirectory() + " or " + AppContext.BaseDirectory + ")");
 }
 
 static ushort ReadU16(byte[] data, int offset)

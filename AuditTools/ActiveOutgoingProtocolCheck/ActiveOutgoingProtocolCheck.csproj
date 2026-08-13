@@ -5,7 +5,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <OutputPath>..\..\..\tmp\active_producer2\ActiveOutgoingProtocolCheck\</OutputPath>
-  </PropertyGroup>
 </Project>
