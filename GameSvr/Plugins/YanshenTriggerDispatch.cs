@@ -315,6 +315,19 @@ namespace GameSvr.Plugins
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D3BC4 },
                 HostTargets = new uint[] { 0x0076C88B }, HostResumes = new uint[] { 0x0076C890 },
                 DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
+                Note = "BLOCKED（本轮）。宿主 sub_76C804 已定案 = C# TBaseObject.GetAttackPower"
+                     + "(nBasePower,nPower)（幸运掷点，TBaseObject.cs:1634），三个调用者 0x767F13/"
+                     + "0x76F491(魔法 [ebx+0x294..0x298])/0x770B6A(物理 [esi+0x28c..0x290]) 逐字节印证。"
+                     + "但 464 字节桩体（site 0x100D3BC4）不是纯通知——它是【伤害倍率修改器】，完整解码："
+                     + "①守卫 cmp [ebx],0x6AC8C8 只对 TPlayer 攻击者生效（怪物/守卫不发）；"
+                     + "②读扩展块 [player+0x804] 的三组『标签+值』：标签 0x428→值 +0x1FC=倍攻%、"
+                     + "标签 0x42B/0x42C→值 +0x214/+0x21C=暴击%/暴击概率；"
+                     + "③先按倍攻% 把 esi 缩放为 esi*pct/100（含 >1000 防溢出分支与 INT_MAX 上钳）；"
+                     + "④仅当暴击标签在且 Random(100)<=概率 时，才 push 标签 call [ebx+0x44] 发 @baoji，"
+                     + "并再乘暴击% ；⑤把改写后的 esi 作为 GetAttackPower 返回值（0x76C88B mov eax,esi）。"
+                     + "→ 这会改写最热的伤害掷点返回值，且依赖一个尚未定位写入来源的插件扩展块 "
+                     + "[player+0x804]（0x804 非 M2Server TPlayer 原生字段，疑似插件另立的带标签属性表）。"
+                     + "在该扩展块的来源与取值域定案前不接（避免污染主干伤害）。解码见 _analysis/t06_out.txt。",
             },
             new()
             {
