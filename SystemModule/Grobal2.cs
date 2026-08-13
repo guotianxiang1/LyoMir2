@@ -1951,6 +1951,12 @@ namespace SystemModule
         public const int SM_2812 = 2812; // 0xAFC  [obj+0x250] sMsg text; Recog/Param/Tag=args @0x645320
         public const int SM_2813 = 2813; // 0xAFD  [obj+0x250] empty; RM arm Recog=BaseObject @0x6B5D19
         public const int SM_2815 = 2815; // 0xAFF  [obj+0x250] sMsg text(local); all-0 frame @0x6D4ED7
+        // === MessageBoard subsystem ===
+        // CM 1280 自身/近身对象回显的回包（leaf 0x6DA8F3 → 0x6E9208 / path2 0x76C9D4）。
+        // [obj+0x254] SendSocket：Buf=[命中对象+0x554] Len=0x1C，Recog=Recog，all-0 frame
+        // @0x6DA925(self/hero) / 0x6DA99A(path2)。body 0x1C(28B) 字段块 [obj+0x554] 未建模，
+        // 故其忠实处理器（TPlayObject.MessageBoard.cs）对命中路径 fail-closed，不臆造 body。
+        public const int SM_3291 = 3291; // 0xCDB  [obj+0x254] Buf=[obj+0x554] Len=0x1C; Recog=Recog all-0 frame @0x6DA925 (CM 1280 自身/近身回显)
         public const int SM_2830 = 2830; // 0xB0E  [obj+0x254] Buf=[rec+0x10] Len=word[rec+0x14] forward; RM arm @0x6B555D
         public const int SM_2843 = 2843; // 0xB1B  [obj+0x250] empty; Recog=6 @0x6DE6FA
         public const int SM_2850 = 2850; // 0xB22  BLOCKED: [obj+0x254] Buf=&local[ebp-4] Len=Count*20 dyn-array built by 0x5F4D4C; body not resolvable at slot @0x6D30B7
