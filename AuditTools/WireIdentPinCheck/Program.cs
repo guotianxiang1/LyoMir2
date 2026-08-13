@@ -147,6 +147,21 @@ static int CheckPinnedIdents(Dictionary<string, long> consts)
          "0x6F2E2B `66 BA 29 00 mov dx,0x29` -> 0x6F2E33 call [ebx+0x254]"),
         ("SM_PHYSICAL_ATT", 1230L,
          "6 sites, first 0x690DE6 `66 BA CE 04 mov dx,0x4CE` -> call [esi+0xE0]"),
+        // 4415-4650 slice, round 2: the six traffic-bearing MISSING senders,
+        // back-solved to their native VMT classes. Deferred (no C# emit) but the
+        // wire fact is frozen here so a later port cannot drift the ident.
+        ("SM_RELATION_FRIEND_ENTRY", 4441L,
+         "TFriendRelation entry fn 0x6FF4D1 `66 BA 59 11 mov dx,0x1159` -> [ebx+0x254], Len 0x24"),
+        ("SM_RELATION_ATTENTION_ENTRY", 4442L,
+         "TAttentionRelation entry fn 0x6FFE28 `66 BA 5A 11 mov dx,0x115A`, Len 0x16"),
+        ("SM_RELATION_BLACKLIST_ENTRY", 4443L,
+         "TNormalBlackRelation entry fn 0x700910 `66 BA 5B 11 mov dx,0x115B`, Len 0x14"),
+        ("SM_RELATION_FRIEND_LOGON", 4444L,
+         "TFriendRelation logon broadcast 0x6FE921 `66 BA 5C 11 mov dx,0x115C` -> [ebx+0x250]"),
+        ("SM_RELATION_FRIEND_LOGOFF", 4445L,
+         "TFriendRelation logoff broadcast 0x6FE85D `66 BA 5D 11 mov dx,0x115D` -> [ebx+0x250]"),
+        ("SM_YBDEAL_SET_NOTIFY", 4446L,
+         "YB TYBDealSetInfo notify 0x6F75E7 `66 BA 5E 11 mov dx,0x115E`, Recog=[player+0x192C][+0xC]+0x26"),
     };
     foreach (var pin in pins)
     {
