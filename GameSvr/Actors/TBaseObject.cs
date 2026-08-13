@@ -3912,17 +3912,20 @@ namespace GameSvr
                                                         BaseObject = OSObject.CellObj as TBaseObject;
                                                         if ((BaseObject != null) && !BaseObject.m_boGhost)
                                                         {
-                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                                                            // Cache membership is decided by the SCAN alone. Native
+                                                            // rebuilds [self+0x380] in sub_7651EC @0x765263-0x76528A
+                                                            // (Clear + Envirnoment VMT+0x1C), a step that knows
+                                                            // nothing about the ident, and the broadcast slot
+                                                            // sub_6DC590 only ever READS the list. Deciding
+                                                            // membership from the send made the cache depend on
+                                                            // which ident happened to trigger the refresh.
+                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT ||
+                                                                BaseObject.m_boWantRefMsg)
                                                             {
-                                                                BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
                                                                 m_VisibleHumanList.Add(BaseObject);
-                                                            }
-                                                            else if (BaseObject.m_boWantRefMsg)
-                                                            {
-                                                                if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
+                                                                if (CanNativeRefMsgReach(BaseObject, wIdent))
                                                                 {
                                                                     BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                                                                    m_VisibleHumanList.Add(BaseObject);
                                                                 }
                                                             }
                                                         }
@@ -3956,16 +3959,9 @@ namespace GameSvr
                     }
                     if ((BaseObject.m_PEnvir == m_PEnvir) && (Math.Abs(BaseObject.m_nCurrX - m_nCurrX) < 11) && (Math.Abs(BaseObject.m_nCurrY - m_nCurrY) < 11))
                     {
-                        if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                        if (CanNativeRefMsgReach(BaseObject, wIdent))
                         {
                             BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                        }
-                        else if (BaseObject.m_boWantRefMsg)
-                        {
-                            if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
-                            {
-                                BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                            }
                         }
                     }
                 }
@@ -3974,6 +3970,51 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(M2Share.ProcessMsgCriticalSection);
             }
+        }
+
+        /// <summary>
+        /// The per-observer send test of a ref-broadcast, kept separate from
+        /// the visible-list refresh above so the two cannot influence each
+        /// other. Native keeps them apart the same way: the list is rebuilt
+        /// only in <c>sub_7651EC</c> @<c>0x765263</c>-@<c>0x76528A</c>, behind
+        /// its own 800 ms throttle on <c>[self+0x37C]</c>, while the broadcast
+        /// slot <c>sub_6DC590</c> walks <c>[self+0x380]</c> read-only and
+        /// applies its filters per item at <c>0x6DC6D1</c>-<c>0x6DC720</c>.
+        /// <para>
+        /// The stealth term is <c>sub_774288</c>, called at <c>0x6DC6F1</c>
+        /// with <c>eax</c> = the broadcaster and <c>edx</c> = the observer,
+        /// and a true result skips that observer outright
+        /// (<c>0x6DC6F8 jne</c>). The same filter sits at <c>0x6DC247</c> in
+        /// the VMT+0xE0 slot. Because it is applied here and not in the
+        /// refresh, a stealthed caster's observers stay in the cache and
+        /// resume receiving the moment the state lapses or they close inside
+        /// two cells.
+        /// </para>
+        /// <para>
+        /// Divergence left standing: native's cached loop rejects every
+        /// observer with <c>byte [item+0x178] != 0</c> at <c>0x6DC6D1</c>,
+        /// i.e. only race 0 is served from the cache, with no
+        /// <c>m_boWantRefMsg</c> branch at all. Dropping that branch here
+        /// would stop monsters reacting to STRUCK/HEAR/DEATH between refresh
+        /// ticks, which is a far wider change than this one; it is recorded
+        /// rather than made.
+        /// </para>
+        /// </summary>
+        private bool CanNativeRefMsgReach(TBaseObject observer, int wIdent)
+        {
+            if (observer.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
+            {
+                if (!observer.m_boWantRefMsg)
+                {
+                    return false;
+                }
+                if ((wIdent != Grobal2.RM_STRUCK) && (wIdent != Grobal2.RM_HEAR) &&
+                    (wIdent != Grobal2.RM_DEATH))
+                {
+                    return false;
+                }
+            }
+            return !IsNativeStealthedFrom(observer);
         }
 
         public int GetFeatureToLong()
