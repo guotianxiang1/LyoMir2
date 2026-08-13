@@ -200,7 +200,11 @@ namespace GameSvr
                                 {
                                     if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                     {
-                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
+                                        // 战神 0x77A2EB call 0x765D64 是本循环唯一的摘链谓词，
+                                        // 60 秒时限是移植期自造的替身。两者不等价，故并联而非替换：
+                                        // 见 docs/view_searchrange_predicate_20260814.md。
+                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
+                                            || IsNativeStaleCellActor(OSObject.CellObj))
                                         {
                                             OSObject = null;
                                             MapCellInfo.Remove(nIdx);
@@ -303,7 +307,9 @@ namespace GameSvr
                             {
                                 if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                 {
-                                    if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
+                                    // 同 SearchViewRange：0x77A2EB call 0x765D64 有效性谓词并联 60 秒时限。
+                                    if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
+                                        || IsNativeStaleCellActor(OSObject.CellObj))
                                     {
                                         OSObject = null;
                                         MapCellInfo.Remove(nIdx);
