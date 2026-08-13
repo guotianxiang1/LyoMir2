@@ -1842,9 +1842,11 @@ namespace GameSvr.PasEngine
                 if (entry.MonsterName.Length == 0 || entry.ItemName.Length != 0) continue;
                 if (!string.Equals(entry.MonsterName, monsterName, StringComparison.OrdinalIgnoreCase)) continue;
 
-                var flatIndex = entry.VariableGroup * 1000 + entry.VariableIndex;
-                var currentValue = player.m_ScriptVVars != null &&
-                                   player.m_ScriptVVars.TryGetValue(flatIndex, out var storedValue)
+                // VariableGroup comes from configuration, so it can be 0, and group 0 of
+                // the V bank is not in the dictionary - computing the flat key here read
+                // zero for every such entry regardless of what the script had stored.
+                var currentValue = player.TryGetScriptVar('V', entry.VariableGroup,
+                    entry.VariableIndex, out var storedValue)
                     ? storedValue
                     : 0;
                 if (currentValue < -1 || currentValue >= entry.UpperBound) continue;

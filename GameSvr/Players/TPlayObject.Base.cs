@@ -313,6 +313,68 @@ namespace GameSvr
         /// </summary>
         public int[] m_ScriptVGroup0;
 
+        /// <summary>
+        /// The single resolver for a (bank, group, index) triple. Everything that reads
+        /// script variables has to go through here, because the storage a triple lands
+        /// in is not derivable from a flat <c>group*1000+index</c> key alone: group 0 of
+        /// the V bank lives in <see cref="m_ScriptVGroup0"/>, not in the dictionary.
+        /// Code that computed the flat key itself and indexed the dictionary silently
+        /// read nothing for group 0 - a flat key below 1000 can only mean group 0, so it
+        /// can never match a dictionary entry either.
+        /// <para>
+        /// Returns false when native would report a miss. For the keyed path that is a
+        /// key that was never written; for V group 0 it is an index outside 1..100,
+        /// which native rejects at 0x6DF20A <c>sub edx,0x64</c> / <c>jae</c>. An in-range
+        /// group-0 slot always reports true, since the region is zero-filled rather than
+        /// sparse. Callers keep their own miss default: native GetV answers -1, but the
+        /// mall and the drop-script gate both treat a miss as 0.
+        /// </para>
+        /// </summary>
+        public bool TryGetScriptVar(char bank, int group, int index, out int value)
+        {
+            var upper = char.ToUpperInvariant(bank);
+            if (upper == 'V' && group == 0)
+            {
+                if (index >= 1 && index <= 100)
+                {
+                    value = m_ScriptVGroup0[index];
+                    return true;
+                }
+                value = 0;
+                return false;
+            }
+            var store = upper == 'V' ? m_ScriptVVars : m_ScriptSVars;
+            if (store != null && store.TryGetValue(group * 1000 + index, out value))
+            {
+                return true;
+            }
+            value = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// Write counterpart of <see cref="TryGetScriptVar"/>. A group-0 S write is
+        /// dropped rather than filed under a flat key, matching native SetS rejecting a
+        /// non-positive group outright at 0x6DF251 / 0x6DF255.
+        /// </summary>
+        public void SetScriptVar(char bank, int group, int index, int value)
+        {
+            var upper = char.ToUpperInvariant(bank);
+            if (group == 0)
+            {
+                if (upper == 'V' && index >= 1 && index <= 100)
+                {
+                    m_ScriptVGroup0[index] = value;
+                }
+                return;
+            }
+            var store = upper == 'V' ? m_ScriptVVars : m_ScriptSVars;
+            if (store != null)
+            {
+                store[group * 1000 + index] = value;
+            }
+        }
+
 
 
         public int[] m_nMval;

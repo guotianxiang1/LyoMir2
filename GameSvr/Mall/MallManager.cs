@@ -723,7 +723,7 @@ namespace GameSvr.Mall
                 1 => player.m_nGold,
                 2 => 0,
                 3 => player.m_nShengWan,
-                4 => GetPlayerVariable(player.m_ScriptVVars,
+                4 => GetPlayerVariable(player, 'V',
                     item.PaymentVariableGroup, item.PaymentVariableIndex),
                 _ => 0
             };
@@ -756,10 +756,10 @@ namespace GameSvr.Mall
                     {
                         return false;
                     }
-                    var balance = GetPlayerVariable(player.m_ScriptVVars,
+                    var balance = GetPlayerVariable(player, 'V',
                         item.PaymentVariableGroup, item.PaymentVariableIndex);
                     if (balance < amount) return false;
-                    SetPlayerVariable(player.m_ScriptVVars,
+                    SetPlayerVariable(player, 'V',
                         item.PaymentVariableGroup, item.PaymentVariableIndex,
                         balance - amount);
                     break;
@@ -769,10 +769,15 @@ namespace GameSvr.Mall
             return true;
         }
 
-        private static int GetPlayerVariable(Dictionary<int, int> variables, int group, int index)
+        // Taking the bank as a dictionary was the shape that broke: group 0 of V is not
+        // in a dictionary at all, so a caller handing over m_ScriptVVars read zero for
+        // every group-0 coordinate. Both helpers now name the bank and let the player
+        // object resolve where the triple lives.
+        private static int GetPlayerVariable(TPlayObject player, char bank, int group, int index)
         {
-            var key = group * 1000 + index;
-            return variables != null && variables.TryGetValue(key, out var value) ? value : 0;
+            return player != null && player.TryGetScriptVar(bank, group, index, out var value)
+                ? value
+                : 0;
         }
 
         // 这两个助手读写的是 GetV/GetS/SetV/SetS 的同一块每角色存储，且会随存档落盘，
@@ -782,13 +787,9 @@ namespace GameSvr.Mall
         // GetV 的 miss 哨兵 -1（0x6DF1F1 `mov [ebp-4],0xFFFFFFFF`），而存档编码器
         // NativeHumanDataCodec.MergeKeyValues 对盘上已有、内存已无的键补 0 —— 同一个
         // 坐标在重登前后会给出 -1 和 0 两种结果。
-        private static void SetPlayerVariable(Dictionary<int, int> variables, int group, int index, int value)
+        private static void SetPlayerVariable(TPlayObject player, char bank, int group, int index, int value)
         {
-            if (variables == null)
-            {
-                return;
-            }
-            variables[group * 1000 + index] = value;
+            player?.SetScriptVar(bank, group, index, value);
         }
 
         private static void ResetDailyLimitIfNeeded(TPlayObject player)
@@ -797,7 +798,7 @@ namespace GameSvr.Mall
             const int markerGroup = 302;
             const int markerIndex = 99;
             var today = (int)(DateTime.Now.Ticks / TimeSpan.TicksPerDay);
-            if (GetPlayerVariable(player.m_ScriptSVars, markerGroup, markerIndex) == today)
+            if (GetPlayerVariable(player, 'S', markerGroup, markerIndex) == today)
             {
                 return;
             }
@@ -814,15 +815,15 @@ namespace GameSvr.Mall
             {
                 player.m_ScriptSVars[key] = 0;
             }
-            SetPlayerVariable(player.m_ScriptSVars, markerGroup, markerIndex, today);
+            SetPlayerVariable(player, 'S', markerGroup, markerIndex, today);
         }
 
         private static int GetCurrentLimit(TPlayObject player, MallItem mallItem)
         {
             return mallItem.LimitType switch
             {
-                1 => GetPlayerVariable(player.m_ScriptSVars, 300, mallItem.Id),
-                2 => GetPlayerVariable(player.m_ScriptSVars, 301, mallItem.Id),
+                1 => GetPlayerVariable(player, 'S', 300, mallItem.Id),
+                2 => GetPlayerVariable(player, 'S', 301, mallItem.Id),
                 _ => 0
             };
         }
@@ -842,11 +843,11 @@ namespace GameSvr.Mall
         {
             if (mallItem.LimitType == 1)
             {
-                SetPlayerVariable(player.m_ScriptSVars, 300, mallItem.Id, value);
+                SetPlayerVariable(player, 'S', 300, mallItem.Id, value);
             }
             else if (mallItem.LimitType == 2)
             {
-                SetPlayerVariable(player.m_ScriptSVars, 301, mallItem.Id, value);
+                SetPlayerVariable(player, 'S', 301, mallItem.Id, value);
             }
         }
 
