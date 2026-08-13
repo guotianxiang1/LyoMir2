@@ -599,8 +599,7 @@ namespace GameSvr
                 return;
             }
 
-            // If we're far from master, warp back
-            if (distToMaster > 12)
+            if (distToMaster >= 12)
             {
                 m_Action = HeroAction.ReturnToMaster;
                 return;
