@@ -282,5 +282,37 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3367, recog, 0, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        /// <summary>
+        /// SM 3325 (0xCFD) - state-0x36 spirit/shape sync notice, the sibling that
+        /// the state dispatcher selects when <c>byte[self+0x178] == 0x36</c>
+        /// (0x00746A10). slot 0x250 (SendDefMessage); returns (header, message).
+        /// Native send site @0x00746A37:
+        /// <code>
+        /// 00746A10  80 BE 78 01 00 00 36 cmp byte [esi+0x178], 0x36
+        /// 00746A17  75 26                jne  0x746A3F        ; else -&gt; SM 3324
+        /// 00746A19  66 8B 86 10 06 00 00 mov ax, [esi+0x610]
+        /// 00746A20  50                   push eax             ; Param  = word[self+0x610]
+        /// 00746A21  6A 00                push 0               ; Tag    = 0
+        /// 00746A23  6A 01                push 1               ; Series = 1
+        /// 00746A25  8B 45 F8 / 50        mov eax,[ebp-8]; push eax ; sMsg = notice text
+        /// 00746A29  8B 8E 0C 06 00 00    mov ecx, [esi+0x60C] ; Recog = [self+0x60C]
+        /// 00746A2F  66 BA FD 0C          mov dx, 0xCFD        ; Ident = 3325
+        /// 00746A33  8B C6                mov eax, esi         ; self
+        /// 00746A35  8B 18                mov ebx, [eax]
+        /// 00746A37  FF 93 50 02 00 00    call [ebx+0x250]     ; SendDefMessage
+        /// </code>
+        /// The source fields <c>self+0x60C</c> / <c>self+0x610</c> belong to the
+        /// login-sync family that is not yet mapped in C#, so this builder is kept
+        /// isolated and takes the values as parameters; the packet layout itself is
+        /// fully evidenced.
+        /// </summary>
+        internal static (ClientPacket Header, string Msg) BuildSm3325(
+            int recog, ushort param, string msg)
+        {
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3325, recog, param, 0,
+                SmIdentConstsA.SM_3325_Series);
+            return (header, msg ?? string.Empty);
+        }
     }
 }

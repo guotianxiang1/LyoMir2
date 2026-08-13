@@ -62,5 +62,13 @@ namespace SystemModule
         // 0xD27 @0x6E987E slot 0x250 - validated-action result (Recog = result;
         // only sent for non-zero result: -1 no player / -5 level / -6 call failed).
         public const int SM_3367 = 3367;
+
+        // 0xCFD @0x746A37 slot 0x250 - state-0x36 spirit/shape sync notice:
+        // Recog = [self+0x60C], Param = word[self+0x610], Tag = 0, Series = 1,
+        // sMsg = notice text. Sibling of the login-sync 3324 family.
+        public const int SM_3325 = 3325;
+
+        // 0xCFD constant Series pushed at 0x746A23.
+        public const int SM_3325_Series = 1;
     }
 }
