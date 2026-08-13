@@ -513,6 +513,19 @@ namespace GameSvr
             return nPower + HUtil32.Round(nPower / 10.0 * nativeHitDouble);
         }
 
+        // Native builds the multiplier byte from a table and then divides with
+        // integer idiv; the override replaces the table lookup and the divisor
+        // literal, and deletes the clamp that guarded the lookup:
+        //   host   0x0076B13E  73 1D                  jae 0x0076B15D  (L>=4 -> Tbl[3])
+        //   host   0x0076B14C  8A 80 28 4B 7D 00      mov al,[eax+0x7D4B28]
+        //   host   0x0076B152  88 83 92 00 00 00      mov [ebx+0x92],al
+        //   host   0x00771DA0  F7 6D FC               imul [ebp-4]
+        //   host   0x00771DA3  B9 0A 00 00 00         mov ecx,0xA
+        //   host   0x00771DA9  F7 F9                  idiv ecx
+        //   plugin 0x100B4787  blob 2 bytes @0x0076B13E -> 90 90 (clamp gone)
+        //   plugin 0x100B4750  blob 6 bytes @0x0076B14C -> 04 07 90 90 90 90
+        //   plugin 0x100B47D9  A2 4D B1 76 00         -> the `add al` imm8 = A
+        //   plugin 0x100B4847  A3 A4 1D 77 00         -> the idiv divisor = B
         internal static int CalculateSunSwordAttackPower(int power, int effectiveLevel,
             Plugins.YanshenApi yanshenApi)
         {
@@ -521,8 +534,10 @@ namespace GameSvr
                 var divisor = yanshenApi.SunSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(power *
-                        Math.Min(yanshenApi.SunSwordA() + effectiveLevel, 255) / divisor);
+                    // `add al` is 8-bit, so the multiplier wraps at 256; and the
+                    // native division is idiv, which truncates toward zero.
+                    var multiplier = unchecked((byte)(effectiveLevel + yanshenApi.SunSwordA()));
+                    return power * multiplier / divisor;
                 }
             }
 
