@@ -351,6 +351,29 @@ namespace DBSvr
                     DBShare.MainOutMessage("原版LoginGate探测帧错误: " + error);
                 return;
             }
+            // GDM_SDK_AUTH_RESPONSE_FAIL. LoginGate answers every 2018 with either
+            // 1003 or 1004 and guarantees one within 20 s (uSDKAuth.pas:759); the
+            // failure branches are :608 module-not-ready, :766 timeout and :1624
+            // platform rejection. Dropping 1004 left the request to expire on our
+            // own AuthTimeoutMs instead of failing immediately.
+            if (frame.Ident == NativeLoginGateProtocol.AuthFailureIdent)
+            {
+                if (!NativeLoginGateProtocol.TryDecodeAuthFailure(frame,
+                        out var failure, out var failureError))
+                {
+                    DBShare.MainOutMessage("原版LoginGate认证失败帧错误: " + failureError);
+                    return;
+                }
+                PendingNativeAuth rejected;
+                lock (_nativeControlLock)
+                {
+                    if (!IsCurrentNativeGenerationNoLock(socket, generation)) return;
+                    _pendingNativeAuth.TryRemove(failure.QueryId, out rejected);
+                }
+                if (rejected != null)
+                    InvokeNativeCompletion(rejected, null, failure.Describe());
+                return;
+            }
             if (frame.Ident != NativeLoginGateProtocol.AuthResponseIdent) return;
             if (!NativeLoginGateProtocol.TryDecodeAuthResponse(frame,
                     out var authResponse, out var authError))
