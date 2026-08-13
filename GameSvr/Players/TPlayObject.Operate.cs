@@ -1151,14 +1151,19 @@ namespace GameSvr
                     // 1/2/3 -- matching the three-way select in the say path at
                     // 0x6C9448/0x6C9454. Duration comes from DuraMax, not Shape.
                     return GrantNativeColorSay(stdItem.Shape, stdItem.DuraMax);
-                case "TTimerBomb":
-                    // 定时炸弹水晶 (StdMode 3 / Shape 32). Native VMT 0x781304 slot +0x18
-                    // = TTimerBomb.UseNormalCrystal (0x789694) + inner sub_7896FC: on a
-                    // boTRIGGERBOMB map, every 300ms spawn "朱火弹(幻)"+Ac at the player and
-                    // charge 1000 dura; off-map -> SysMsg "在这里无法使用！". Returns true
-                    // (=remove item) only once the crystal's dura drops below 1000. See
-                    // TPlayObject.NativeTimerBomb.cs for the full byte-level derivation.
-                    return UseNativeTimerBomb(stdItem, item);
+                // MOVE-89 TRIGGERBOMB —— 刻意【不接线】。原生 TTimerBomb 的使用效果
+                // (VMT 0x781304 槽 +0x18 = sub_789694 → 内层 sub_7896FC：boTRIGGERBOMB 图上
+                // 每 300ms 生成"朱火弹(幻)"并扣 1000 耐久；非该图 SysMsg"在这里无法使用！")
+                // 已 1:1 移植到 TPlayObject.NativeTimerBomb.cs，但原生**永不可达**：
+                //   · classptr 0x781304 全镜像仅出现 2 次 —— 0x7812B8(VMT selfptr) 与
+                //     0x781370(RTTI)，从不作为代码立即数/classref 出现；
+                //   · 物品工厂跳表 0x74D07B 只按 byte[StdItem+0x15] 派发 0..10
+                //     (0x74D06B cmp eax,0xA / 0x74D06E ja 0x74D12B)，载入的类引用是
+                //     [0x75E4E8]=TPoisons、[0x75E3F8]=TBujuk 等 0x75Exxx 全局，不含 0x781304；
+                //   · 类名字符串无 FindClass 引用。
+                // 曾有一版按 "StdMode 3 / Shape 32" 在此接 `case "TTimerBomb"`，但该映射无任何
+                // 字节证据（Shape 32 超出跳表 0..10 界，落默认臂），接上等于凭空制造原版没有的
+                // 行为，违反"不得捏造"。死代码证明详见 TPlayObject.NativeTriggerBombMap.cs。
                 default:
                     return false;
             }
