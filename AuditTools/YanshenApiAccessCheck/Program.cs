@@ -160,20 +160,30 @@ try
             "YSGetG('shadowed')", "开关键缺失（眼神特殊函数）");
     });
 
-    Check("!!!! numeric, caret, Give, and Chinese tunnels reject missing switches", () =>
+    Check("!!!! numeric, Give, and Chinese tunnels reject missing switches", () =>
     {
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
             "NumericTunnel", tunnelSource, tunnelPath, "GetBagItemCount",
             "GetBagItemCount('!!!!集成函数,36,0$')", "开关键缺失（眼神特殊函数）");
-        ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
-            "CaretTunnel", tunnelSource, tunnelPath, "GetBagItemCount",
-            "GetBagItemCount('!!!!爱心分割^13^0$')", "开关键缺失（自定义元素）");
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
             "EmbeddedGive", tunnelSource, tunnelPath, "Give",
             "Give('AuditMissingItem!!!!1|2|3|4|5|'", "开关键缺失（自定义元素）");
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
             "ChineseTunnel", tunnelSource, tunnelPath, "GetBagItemCount",
             "GetBagItemCount('!!!!hq取sj戳')", "开关键缺失（毫秒级cd记录）");
+    });
+
+    // 爱心分割隧道原生没有开关门：入口选择器 sub_1005E4D0 给 `!!!!hq取sj戳`
+    // (0x1005E650 cmp [cfg+0x538],0x1F4)、`!!!!zd义回收` (0x1005E6C5 +0x954)、
+    // `!!!!给与元素`/`!!!!获取元素` (0x1005E752 +0x664)、`!!!!定义伤害` (0x1005EDA3 +0x510)、
+    // `!!!!英雄极品` (0x1005EF7B +0x514) 各配一道门，唯独 `!!!!爱心分割` 比中
+    // (0x1005E628 jne) 就直落 0x1005E63D call 0x1005E470 → sub_1005DBA0；
+    // 派发器 0x1005DBA0..0x1005E3D5 与 38 个实现体 0x10058ED0..0x1005DBA0 里
+    // `A1 <cfg glob>` + `81 38 F4 01 00 00` 门形态 0 命中（集成函数同扫描 40 命中）。
+    Check("caret tunnel stays ungated when switches are missing", () =>
+    {
+        Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
+            "CaretTunnel").AsInt(), "caret tunnel must run without any switch");
     });
 
     Check("lucker2, libmysql, and CD wrappers reject missing switches", () =>
@@ -218,9 +228,6 @@ try
             "NumericTunnel", tunnelSource, tunnelPath, "GetBagItemCount",
             "GetBagItemCount('!!!!集成函数,36,0$')", "开关未开启（眼神特殊函数）");
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
-            "CaretTunnel", tunnelSource, tunnelPath, "GetBagItemCount",
-            "GetBagItemCount('!!!!爱心分割^13^0$')", "开关未开启（自定义元素）");
-        ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
             "EmbeddedGive", tunnelSource, tunnelPath, "Give",
             "Give('AuditMissingItem!!!!1|2|3|4|5|'", "开关未开启（自定义元素）");
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
@@ -238,6 +245,12 @@ try
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
             "CdSetTunnel", tunnelSource, tunnelPath, "ys_SetCD_min",
             "ys_SetCD_min(501, 502)", "开关未开启（毫秒级cd记录）");
+    });
+
+    Check("caret tunnel stays ungated when switches are off", () =>
+    {
+        Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
+            "CaretTunnel").AsInt(), "caret tunnel must run with switches off");
     });
 
     var mainPath = Path.Combine(tempRoot, "MainAccessProbe.pas");

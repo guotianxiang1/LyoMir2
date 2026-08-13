@@ -72,17 +72,38 @@ namespace GameSvr.Plugins
             [41]=SharedTunnelGate,
         };
 
-        // Caret command toggles (^1^ ~ ^37^)
-        static readonly Dictionary<int, string> _caretToggles = new()
-        {
-            [1]="眼神特殊函数",[2]="大背包",[3]="眼神特殊函数",
-            [10]="装备来源",[13]="自定义元素",[20]="自定义元素",
-            [29]="自定义元素",[30]="高级回收",[31]="行会显示",
-            [32]="特殊宝宝",[33]="屏蔽自动绑定",[34]="屏蔽自动绑定",
-            [35]="自定义元素",[36]="自定义元素",[37]="特殊宝宝",
-            // ^38^ is the only tunnel 2.08 adds over 2.07 (Ys_GetItemDBData).
-            [38]="眼神特殊函数",
-        };
+        /// <summary>
+        /// 爱心分割隧道一把门都没有 —— 38 路臂全部无门，与集成函数的「一族一门」相反。
+        ///
+        /// 入口选择器 sub_1005E4D0 逐条比 `!!!!xxxx` 前缀，兄弟分支各自带门：
+        ///   0x1005E650 `81 B8 38 05 00 00 F4 01 00 00` cmp [cfg+0x538],0x1F4 → `!!!!hq取sj戳`
+        ///   0x1005E6C5 cmp [cfg+0x954],0x1F4 → `!!!!zd义回收`
+        ///   0x1005E752 cmp [cfg+0x664],0x1F4 → `!!!!给与元素` / `!!!!获取元素`
+        ///   0x1005EDA3 cmp [cfg+0x510],0x1F4 → `!!!!定义伤害`
+        ///   0x1005EF7B cmp [cfg+0x514],0x1F4 → `!!!!英雄极品`
+        /// 而 `!!!!爱心分割`（字面量 0x102BE82C `21 21 21 21 B0 AE D0 C4 B7 D6 B8 EE`）
+        /// 那条是 0x1005E621 call 0x10064BD0 / 0x1005E626 `85 C0` / 0x1005E628 `75 21` jne，
+        /// 比中就直落 0x1005E63D call 0x1005E470 → sub_1005DBA0，中间没有任何 cmp …,0x1F4。
+        /// cfg = [0x1031BEFC] = [0x1031C0E0] = 0x10319DA8：0x10001420 与 0x10001BB0
+        /// 都是 `call 0x1000D070` + `mov [glob],eax`，同一个 0x19B8 字节 magic-static 单例。
+        ///
+        /// 派发器体内同样干净。扫 0x1005DBA0..0x1005E3D5（派发器）与
+        /// 0x10058ED0..0x1005DBA0（38 个实现体，地址连续）：67 个 cfg 访问桩
+        /// (`A1 E0 C0 31 10` / `05 &lt;off&gt;` / `A3 &lt;glob&gt;` / `C3`) 产出的全局一个都没被引用，
+        /// `A1 &lt;glob&gt;` + `81 38 F4 01 00 00` 门形态命中 0 处；同一套扫描在集成函数
+        /// sub_100761A0 上命中 40 处。38 条臂形状逐字节一致：
+        /// `83 EC 0C` / `8B CC` / `8D 45 E0` `50` / call 0x10064A70 / `C6 45 FC nn` /
+        /// `C6 45 FC 05` / call &lt;impl&gt; / `83 C4 0C` / `8B F0` / jmp 0x1005E366。
+        /// 集成函数臂上那个门标志 `[ebp-0x18]`（0x10076A7D `C7 45 E8 64 00 00 00` 置 0x64、
+        /// 0x10076A85 `83 7D E8 64` 回读）在这里退化成 vector `[ebp-0x20]` 的 _Myend 字段：
+        /// 0x1005DC2C 写 0 之后全函数再无读取。
+        ///
+        /// 整个爱心分割代码区只有两个 0x1F4 立即数，在 33、34 号实现体
+        /// （0x1005CF46 与 0x1005D1BC `81 78 60 F4 01 00 00` cmp [cfg+0x60],0x1F4 / `7E 0F` jle）。
+        /// 它们只跳过一次附加的 call 0x1005C960，命令本体照跑照返回，不是命令门；
+        /// 且 cfg+0x60 在两段序列化 run 里都没有条目，键名静态不可证。
+        /// </summary>
+        private static string[] GetCaretCommandFeatures() => Array.Empty<string>();
 
         /// <summary>参数不足时原生返回的哨兵。三种取值都出现在实现体首部的短路支路上。</summary>
         const int SentinelShort = -888;   // B8 88 FC FF FF   mov eax,0xFFFFFC88
@@ -135,6 +156,27 @@ namespace GameSvr.Plugins
             [37]=(7,SentinelShort),  [39]=(3,SentinelShort),  [40]=(3,SentinelShort),
         };
 
+        /// <summary>
+        /// 爱心分割这一侧只有 1、2、3 号实现体在正文前查段数
+        /// （`8B 4D 0C` / `2B 4D 08` / `B8 AB AA AA 2A` / `F7 E9` / `C1 FA 02`）：
+        ///   ^1^ 0x10058F20 `83 F8 03` cmp eax,3 / 0x10058F23 `0F 82` jb 0x10059028
+        ///   ^2^ 0x100590B0 `83 F8 03` cmp eax,3 / 0x100590B3 `72 76`  jb 0x1005912B
+        ///   ^3^ 0x100591B3 `83 F8 02` cmp eax,2 / 0x100591B6 `0F 82` jb 0x1005926C
+        /// 三条短路支路都是 `33 C0` xor eax,eax —— 返回 0，不是 -888/-1。
+        /// 段 0 是 `!!!!爱心分割`、段 1 是操作码，所以下限 3 = 1 个必填实参；
+        /// ^3^ 的下限 2 已被派发器自己的「至少 2 段」检查覆盖，恒真，故不入表。
+        ///
+        /// 其余 35 个实现体没有元数检查：缺段时 vector::operator[]
+        /// （0x10018460 `3B C1` / `76 0B` → 0x10018730 push 0x102B3278
+        /// "invalid vector subscript" + call _Xout_of_range 0x10221BD4）直接抛，
+        /// 异常穿出 DLL；这里由 ExecuteCommand 的 catch 收成 -1。
+        /// </summary>
+        static readonly Dictionary<int, (int MinParams, int Sentinel)> _caretArity = new()
+        {
+            [1] = (1, 0),
+            [2] = (1, 0),
+        };
+
         static readonly Dictionary<string, string> _chineseToggles =
             new(StringComparer.OrdinalIgnoreCase)
         {
@@ -154,8 +196,7 @@ namespace GameSvr.Plugins
             string[] featureNames = null;
             if (cmd.Format == TunnelFormat.CaretSeparated)
             {
-                if (_caretToggles.TryGetValue(cmd.CommandId, out var featureName))
-                    featureNames = new[] { featureName };
+                featureNames = GetCaretCommandFeatures();
             }
             else if (cmd.Format == TunnelFormat.ChineseName)
             {
@@ -209,29 +250,6 @@ namespace GameSvr.Plugins
             return _toggles.TryGetValue(cmdId, out var key) ? key : $"cmd_{cmdId}";
         }
 
-        string GetCaretName(int caretId)
-        {
-            return _caretToggles.TryGetValue(caretId, out var key) ? key : $"caret_{caretId}";
-        }
-
-        bool IsCaretEnabled(int caretId)
-        {
-            if (!_caretToggles.TryGetValue(caretId, out var chineseKey)) return true;
-            if (_pm == null) return true;
-            var val = _pm.GetNativeConfigValue(chineseKey);
-            if (val is int i) return i != 0;
-            if (val is string s) return s != "0" && s != "0.0" && s != "";
-            if (val is System.Text.Json.JsonElement je)
-            {
-                if (je.ValueKind == System.Text.Json.JsonValueKind.False) return false;
-                if (je.ValueKind == System.Text.Json.JsonValueKind.Number) return je.GetDouble() != 0;
-                if (je.ValueKind == System.Text.Json.JsonValueKind.String)
-                { var str = je.GetString(); return !(str == "0" || str == "0.0" || str == ""); }
-                return je.ValueKind != System.Text.Json.JsonValueKind.Null;
-            }
-            return val != null && !(val is double d && d == 0);
-        }
-
         // ===== Parameter helpers =====
         int P(TunnelCommand c, int i) => i < c.Parameters.Length && int.TryParse(c.Parameters[i], out var v) ? v : 0;
         string S(TunnelCommand c, int i) => i < c.Parameters.Length ? c.Parameters[i] : "";
@@ -264,6 +282,12 @@ namespace GameSvr.Plugins
                 //     0x1007625E `C7 45 E4 88 FC FF FF` 把结果槽写成 -888 直接返回。
                 //   爱心分割 sub_1005DBA0: 0x1005DC79 `83 F8 02` / 0x1005DC7C `73 35` jae，
                 //     不足则 0x1005DC7E `C7 45 AC 88 FC FF FF`。
+                // 爱心分割在这之前还有一道更早的哨兵：0x1005DBD1 `8B 45 08` 取长度实参、
+                // 0x1005DBD4 `83 F8 02` / `7D 0A` jge，不足则 0x1005DBD9
+                // `B8 19 FC FF FF` = -999。该实参是整串命令文本的长度
+                // （0x1005DC1B call 0x10018650 构造 std::string(ptr, len-1)），而入口
+                // 选择器只在前缀等于 12 字节的 `!!!!爱心分割` 时才转到这里，len ≥ 12 恒成立，
+                // 故 -999 静态不可达，不建模。
                 if ((cmd.Format == TunnelFormat.NumericId
                         || cmd.Format == TunnelFormat.CaretSeparated)
                     && cmd.TokenCount < 2)
@@ -285,7 +309,12 @@ namespace GameSvr.Plugins
 
                 // Route by format
                 if (cmd.Format == TunnelFormat.CaretSeparated)
+                {
+                    if (_caretArity.TryGetValue(cmd.CommandId, out var caretArity)
+                        && cmd.Parameters.Length < caretArity.MinParams)
+                        return caretArity.Sentinel;
                     return ExecuteCaret(cmd);
+                }
 
                 // 门过了才轮到实现体自己的元数检查（原生门在臂上、检查在实现体首部）。
                 if (_nativeArity.TryGetValue(cmd.CommandId, out var arity)
