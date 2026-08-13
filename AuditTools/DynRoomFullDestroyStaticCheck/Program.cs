@@ -10,7 +10,8 @@ var pasBridgePath = Path.Combine(repoRoot, "GameSvr", "ScriptSystem", "PasEngine
 var objectManagerPath = Path.Combine(repoRoot, "GameSvr", "UsrSystem", "ObjectManager.cs");
 var baseObjectPath = Path.Combine(repoRoot, "GameSvr", "Actors", "TBaseObject.Base.cs");
 var localDbPath = Path.Combine(repoRoot, "GameSvr", "LocalDB.cs");
-var memoryImagePath = Path.Combine(stagingRoot, "questinfo_runtime_dump", "M2Server_exe.memory.bin");
+var memoryImagePath = FindNativeImage(stagingRoot);
+var memoryImage = File.ReadAllBytes(memoryImagePath);
 
 var lifecycle = Read(lifecyclePath);
 var manager = Read(managerPath);
@@ -190,6 +191,27 @@ static string FindStagingRoot(string repoRoot)
     throw new InvalidOperationException(
         "staging/pas-finish/ida-dynroom-lifecycle.txt not found; probed: "
         + string.Join("; ", probed));
+}
+
+// The questinfo runtime dump this used to pin is gone from staging. The six
+// VAs it locked (0x5FE1B4 / 0x5FE1C4 / 0x5FCD3C / 0x5FCE48 / 0x5FCE0A /
+// 0x5FCEA6) match the canonical unpack image byte-for-byte, so that is the
+// authority. Prefer it, fall back to the dump if a checkout still has it.
+static string FindNativeImage(string stagingRoot)
+{
+    var probed = new List<string>();
+    foreach (var relative in new[]
+             {
+                 Path.Combine("_reunpack_work", "flat_image.bin"),
+                 Path.Combine("questinfo_runtime_dump", "M2Server_exe.memory.bin")
+             })
+    {
+        var candidate = Path.Combine(stagingRoot, relative);
+        if (File.Exists(candidate)) return candidate;
+        probed.Add(candidate);
+    }
+    throw new InvalidOperationException(
+        "native M2 image not found; probed: " + string.Join("; ", probed));
 }
 
 static string Read(string path)
