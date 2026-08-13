@@ -263,6 +263,11 @@ static void PrepareRuntimeConfig()
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
     M2Share.RandomNumber ??= RandomNumber.GetInstance();
+    // TBaseObject 构造函数末尾 (TBaseObject.cs:907) 调用
+    // M2Share.ObjectManager.RegisterConstructed(this) 登记新对象；本工具在
+    // VerifyApplyGates/VerifySetPetVTargeting 里 new Monster()，缺了它会空引用。
+    // 与其他能跑的 harness（如 YanshenTriggerDispatchCheck）一致，补一个空实例即可。
+    M2Share.ObjectManager ??= new ObjectManager();
 }
 
 static void Equal<T>(T expected, T actual, string message)
