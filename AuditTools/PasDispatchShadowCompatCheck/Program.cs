@@ -20,10 +20,36 @@ M2Share.UserEngine.StdItemList.Add(new GoodItem
     StdMode = 0,
     DuraMax = 100
 });
+// 堆叠与否由【物品实例】的运行时类标记决定，不是模板 StdMode。两条 give 核心读的
+// 都是实例 +0x14（Give 核心 0x6C89C6 `80 78 14 07`、SysGiveGift 0x6C85C5 同样字节），
+// 而实例 +0x14 只由构造器写死：根构造器 sub_783788 @0x7837AE `C6 43 14 00` 写 0，
+// 堆叠构造器 sub_7880F0 @0x788118 `C6 46 14 07` 写 7。选哪个构造器由工厂 sub_74C338
+// 按模板 StdMode/Shape 派发，所以谓词是【类祖先】。
+//
+// 这里刻意选 StdMode 3 / Shape 4 = TLuckOil 作为堆叠样本，因为它是唯一能同时否掉两个
+// 错误谓词的形状：
+//   0074CCE5  A1 AC 1C 78 00  mov  eax,[0x781CAC]  ; TLuckOil
+//   0074CCEC  E8 FF B3 03 00  call 0x7880F0        ; TBasePileItem.Create
+// StdMode 3 < 150，所以「StdMode >= 150」判不出它（那条只是默认臂
+// 0x74D67E `3C 96 cmp al,0x96` / 0x74D680 `72 13 jb` / 0x74D68C `call 0x7880F0`）；
+// StdMode 3 != 7，所以「StdMode == 7」也判不出它。改回任一错误谓词都会让下面的
+// pile 断言红。
 M2Share.UserEngine.StdItemList.Add(new GoodItem
 {
     Name = "pile-gift",
+    StdMode = 3,
+    Shape = 4,
+    DuraMax = 100
+});
+// 反向对照：StdMode 恰好是 7 的护身符族（0x74CE9E 按 Shape 二级派发，Shape 0 ->
+// TCryCharm），走的是根构造器，实例 +0x14 恒为 0，必须【不】堆叠。
+// pile-gift 与 charm-gift 成对存在，任何单边谓词都过不了这两条。
+// 追加在 pile-gift 之后，wIndex 1/2 的既有 fixture（TakeEx 的 NewItem(..., 2, ...)）不变。
+M2Share.UserEngine.StdItemList.Add(new GoodItem
+{
+    Name = "charm-gift",
     StdMode = 7,
+    Shape = 0,
     DuraMax = 100
 });
 
@@ -177,6 +203,20 @@ Assert(player.m_ItemList.Select(item => item.Dura).SequenceEqual(new ushort[] { 
 Assert(player.m_ItemList.All(item => item.DuraMax == 100 && item.Bind == 1),
     "pile gift DuraMax or binding is incorrect");
 
+// 反向对照：同一条 SysGiveGift 核心、同一个数量，StdMode==7 只是护身符，
+// 必须发 3 件独立物品，Dura 保持模板 DuraMax 而不是被写成堆内件数。
+player.m_ItemList.Clear();
+Assert(bridge.CallPlayerFunc("SysGiveGift", Values("charm-gift", 3, false),
+        out giftResult),
+    "SysGiveGift StdMode=7 charm call was not dispatched");
+Assert(giftResult.AsBool(), "SysGiveGift rejected a StdMode=7 charm");
+Equal(3, player.m_ItemList.Count,
+    "SysGiveGift treated StdMode=7 as a pile (native pile gate is the instance "
+    + "kind byte at 0x6C85C5, written only by the pile ctor sub_7880F0 @0x788118, "
+    + "not the template StdMode)");
+Assert(player.m_ItemList.All(item => item.Dura == 100),
+    "SysGiveGift overwrote a StdMode=7 charm's Dura with a stack count");
+
 FillBag(player, Grobal2.MAXBAGITEM);
 var fullBag = player.m_ItemList.ToArray();
 Assert(bridge.CallPlayerFunc("SysGiveGift", Values("normal-gift", 1, false), out giftResult),
@@ -198,13 +238,35 @@ Equal(2, player.m_ItemList.Count, "Give normal item count");
 Assert(player.m_ItemList.All(item => item.wIndex == 1 && item.Bind == 0),
     "Give normal item identity or binding");
 
+// 共享 give 核心 sub_6C87B4 的冒号解析：0x6C8812 `B1 3A mov cl,0x3A` +
+// 0x6C8817 `call 0x4C6AEC` 按 ':' 一刀两段（头=物品名、尾=数量），
+// 0x6C8821 `call 0x40CA18` StrToIntDef(尾串, 入参 count)，
+// 0x6C882C `85 DB test ebx,ebx` / 0x6C882E `7F 05 jg` / 0x6C8830 `BB 01 00 00 00
+// mov ebx,1` 把非正数归一。
+// 堆叠拆分：0x6C89C6 `80 78 14 07` 判实例类标记，0x6C89CF `66 8B 40 28` 取实例
+// +0x28(DuraMax)，0x6C89D6 `3B DA cmp ebx,edx` / 0x6C89D8 `7F 0D jg` 决定是写满一堆
+// （0x6C89EA `Dura := DuraMax`、0x6C89F5 `2B D8 sub ebx,eax`）还是收尾一堆
+// （0x6C89DD `66 89 58 26 Dura := 剩余`、0x6C89E1 `C6 45 E7 01` 置结束标记，
+// 由 0x6C8AE4 检测后 0x6C8AE8 跳出）。250 / DuraMax=100 -> 100,100,50。
 player.m_ItemList.Clear();
 Assert(bridge.CallPlayerFunc("Give", Values("pile-gift:250", 1), out giveResult),
     "Give colon-count function was not dispatched");
 Assert(giveResult.AsBool(), "Give rejected a valid colon count");
 Assert(player.m_ItemList.Select(item => item.Dura)
         .SequenceEqual(new ushort[] { 100, 100, 50 }),
-    "Give colon count did not split StdMode=7 stacks");
+    "Give colon count did not split the pile through Dura");
+
+// 反向对照：同一条核心、同一个冒号计数，StdMode==7 只是护身符，必须发 3 件独立物品。
+player.m_ItemList.Clear();
+Assert(bridge.CallPlayerFunc("Give", Values("charm-gift:3", 1), out giveResult),
+    "Give StdMode=7 charm function was not dispatched");
+Assert(giveResult.AsBool(), "Give rejected a StdMode=7 charm");
+Equal(3, player.m_ItemList.Count,
+    "Give treated StdMode=7 as a pile (native reads the instance kind byte at "
+    + "0x6C89C6; sub_74C338 routes StdMode 7 to the charm family at 0x74CE9E, "
+    + "which never reaches the pile ctor)");
+Assert(player.m_ItemList.All(item => item.Dura == 100),
+    "Give overwrote a StdMode=7 charm's Dura with a stack count");
 
 player.m_ItemList.Clear();
 Assert(bridge.CallPlayerFunc("Give", Values("normal-gift:not-a-number", 2),
