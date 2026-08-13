@@ -2187,6 +2187,21 @@ namespace GameSvr
                 SendMsg(merchant, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sStorageIsLockedMsg + "\\ \\" + "浠撳簱寮€閿佸懡浠? @" + M2Share.g_GameCommand.UNLOCKSTORAGE.sCmd + '\\' + "浠撳簱鍔犻攣鍛戒护: @" + M2Share.g_GameCommand.__LOCK.sCmd + '\\' + "璁剧疆瀵嗙爜鍛戒护: @" + M2Share.g_GameCommand.SETPASSWORD.sCmd + '\\' + "淇敼瀵嗙爜鍛戒护: @" + M2Share.g_GameCommand.CHGPASSWORD.sCmd);
                 return;
             }
+            // TRADE-62: 战神 sub_6C2D7C 的第二道门，紧跟 0x6C2DAF 的 +0x683 之后：
+            //   0x6C2DBC  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6C2DC3  0F 85 0B 02 00 00     jne 0x6C2FD4
+            //   0x6C2FD4  BE FE FF FF FF        mov esi, 0xFFFFFFFE       ; ★ 失败码 -2
+            //   0x6C2FD9  EB 05                 jmp 0x6C2FE0
+            //   0x6C2FE0  85 F6 / 7F 1B         test esi,esi / jg 0x6C2FFF
+            //   0x6C2FEF  8B CE                 mov ecx, esi              ; Recog = -2
+            //   0x6C2FF1  66 BA C2 02           mov dx, 0x2C2             ; SM_TAKEBACKSTORAGEITEM_FAIL
+            // 与 +0x683（C# 的 m_boCanGetBackItem，原生失败码 -3）的先后次序照抄原生。
+            // −2 是这道门自身的可观测输出；TRADE-45 说的 −1/−3 属其它出口，未一并回填。
+            if (m_boDealing)
+            {
+                SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, -2, 0, 0, 0, "");
+                return;
+            }
             for (var i = 0; i < m_StorageItemList.Count; i++)
             {
                 UserItem = m_StorageItemList[i];
