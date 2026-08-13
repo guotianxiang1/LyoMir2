@@ -517,7 +517,7 @@ namespace GameSvr
                                                         }
                                                         else
                                                         {
-                                                            // PKD-10 —— 同 TPlayObject 版本：战神 sub_783988
+                                                            // PKD-11 —— 同 TPlayObject 版本：战神 sub_783988
                                                             // @0x7839C1 / @0x7839D9 读的是 [owner+0x73] =
                                                             // m_boGhost，不是 m_boDeath(+0x74)。
                                                             if (MapItem.OfBaseObject != null)

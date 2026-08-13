@@ -5,6 +5,10 @@
 VMT 归属用本次新写的 `staging/_pk_vmtwhere.py` / `_pk_slotdump.py`（只读）。
 所有结论都给 VA + 字节 + 反汇编；凡是没给的一律标 BLOCKED。
 
+同一分支上另有一份并行产出 `docs/m_ident_pk_death_drop_20260813.md`（PKD-01..07 与
+PKD-10）。两份是互补的：那一份写死亡爆装的抽签序列与谋杀惩罚链，这一份写可攻击性
+三层结构、善恶值规则表与落地归属。重叠的七条我做过独立字节复核，结论一致。
+
 ---
 
 ## 0. 三个入口的身份（先把层次钉死，否则后面全乱）
@@ -337,7 +341,7 @@ C: [vmt+0x21C]；THumanKind/THeroAct = sub_741620 = `55 8B EC 5D C2 08 00` 空�
 |---|---|---|---|
 | PKD-08 | `GameSvr/Actors/TBaseObject.NativeProperTargetGate.cs`（新）+ `TBaseObject.cs` | `IsProperTarget` 首句补 `sub_767498` 的九道门 | 0x7674A1-0x7674F1 |
 | PKD-09 | `GameSvr/Actors/TBaseObject.cs` | 宠物不打「主人的英雄」与「主人本人」 | 0x76736F-0x767384 |
-| PKD-10 | `GameSvr/Players/TPlayObject.Base.cs`、`GameSvr/RobotPlay/RobotPlayObject.Base.cs` | 地面物归属作废判据 `m_boDeath` → `m_boGhost` | `sub_783988` 0x7839C1 / 0x7839D9 |
+| PKD-11 | `GameSvr/Players/TPlayObject.Base.cs`、`GameSvr/RobotPlay/RobotPlayObject.Base.cs` | 地面物归属作废判据 `m_boDeath` → `m_boGhost` | `sub_783988` 0x7839C1 / 0x7839D9 |
 | 审计 | `AuditTools/NativeProperTargetGateCheck/`（新） | A 段行为驱动 11 条（含阳性对照与 239/242 反向锁），B 段源码契约 6 条 | 每条带 EA |
 | 审计 | `AuditTools/NativeFloorItemOwnerExpiryCheck/`（新） | 120000 / 严格大于 / `m_boGhost` 主断言 + `m_boDeath` 反向锁 | 每条带 EA |
 
@@ -366,7 +370,7 @@ C: [vmt+0x21C]；THumanKind/THeroAct = sub_741620 = `55 8B EC 5D C2 08 00` 空�
 ## 6. 复核中发现的前人错误
 
 1. **`deathpk_fix_20260804.md` 说「地面物归属过期这里 C# 已经 FAITHFUL」是错的** ——
-   当前树两处读的都是 `m_boDeath`，原生 `0x7839C1` 读的是 `[owner+0x73]` = `m_boGhost`。已修（PKD-10）。
+   当前树两处读的都是 `m_boDeath`，原生 `0x7839C1` 读的是 `[owner+0x73]` = `m_boGhost`。已修（PKD-11）。
 2. **`discovery_pkdeath_20260803.md` 第 41 行要求删掉 `DecPKPoint` 的 `nC > 0`** ——
    `dec ebx / sub ebx,2 / jae` 是 `x in [1..2]`，`dec` 不改 CF，`dec 0` 得 `0xFFFFFFFF` 不小于 2，
    所以 oldLevel 0 **不**刷色。C# 现状是对的。（`deathpk_fix` 第二遍已推翻，此处再次确认。）
