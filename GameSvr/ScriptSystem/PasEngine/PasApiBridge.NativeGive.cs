@@ -366,7 +366,14 @@ namespace GameSvr.PasEngine
 
         private void WriteNativeGiveAudit(string sourceName, int requestedCount)
         {
-            if (CurrentNpc == null) return;
+            // Native Give inner 0x6DF2E8 only emits the 经验/内功经验/荣耀点
+            // audit when player+0xCD8 is non-nil (0x6DF341 cmp [edi+0xCD8],0 /
+            // je 0x6DF454). CurrentNpc is the script context and is already
+            // bound during @main; m_NPC is not (click handler writes it after
+            // the vcall at 0x6B8BA7/0x6B8C48). Using CurrentNpc here made the
+            // first-click Give log a NPC native would omit.
+            var npc = CurrentPlayer?.m_NPC as NormNpc;
+            if (npc == null) return;
 
             string category;
             string reason;
@@ -394,7 +401,7 @@ namespace GameSvr.PasEngine
                 return;
             }
 
-            reason += CurrentNpc.m_sCharName + "-" + CurrentNpc.m_sMapName;
+            reason += npc.m_sCharName + "-" + npc.m_sMapName;
             M2Share.AddGameDataLog(string.Join('\t', 9, CurrentPlayer.m_sMapName,
                 CurrentPlayer.m_nCurrX, CurrentPlayer.m_nCurrY, CurrentPlayer.m_sCharName,
                 category, makeIndex, requestedCount, reason));
