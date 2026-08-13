@@ -74,9 +74,16 @@ namespace GameSvr
 
             var recipes = new List<Recipe>(lines.Length);
             var skippedRows = 0;
+            // sub_74F818 在函数入口一次性把 [ebp-0x10]（名字）与 [ebp-0x1C]（数量文本）
+            // 清零（0x74F847 / 0x74F850），此后只有 Pos(':', token) > 0 才重写它们
+            // （0x74F9E1 jle 0x74FA0B 跳过两次 Copy）。所以缺冒号的 token 会沿用上一个
+            // token 的名字与数量，而且因为清零在文件循环之外，这个沿用会跨行。
+            var carriedName = string.Empty;
+            var carriedNumber = string.Empty;
             foreach (var line in lines)
             {
-                if (TryParseRecipe(line, out var recipe))
+                if (TryParseRecipe(line, ref carriedName, ref carriedNumber,
+                        out var recipe))
                     recipes.Add(recipe);
                 else
                     skippedRows++;
@@ -238,7 +245,8 @@ namespace GameSvr
             return result.ToArray();
         }
 
-        private static bool TryParseRecipe(string line, out Recipe recipe)
+        private static bool TryParseRecipe(string line, ref string carriedName,
+            ref string carriedNumber, out Recipe recipe)
         {
             recipe = null;
             if (string.IsNullOrEmpty(line)) return false;
@@ -265,11 +273,14 @@ namespace GameSvr
                 descriptor = slash < 0 ? string.Empty : descriptor.Substring(slash + 1);
 
                 var colon = token.IndexOf(':');
-                if (colon < 0) continue;
-                var name = token.Substring(0, colon);
-                var numberText = DecodeGbk(TruncateGbkBytes(
-                    token.Substring(colon + 1), 10));
-                var amount = HUtil32.Str_ToInt(numberText, -1);
+                if (colon >= 0)
+                {
+                    carriedName = token.Substring(0, colon);
+                    carriedNumber = DecodeGbk(TruncateGbkBytes(
+                        token.Substring(colon + 1), 10));
+                }
+                var name = carriedName;
+                var amount = HUtil32.Str_ToInt(carriedNumber, -1);
                 if (amount <= 0) continue;
 
                 if (string.Equals(name, "金刚石", StringComparison.Ordinal))
