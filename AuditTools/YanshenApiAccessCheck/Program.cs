@@ -186,6 +186,22 @@ try
             "CaretTunnel").AsInt(), "caret tunnel must run without any switch");
     });
 
+    // 入口选择器 sub_1005E4D0 的 8 条前缀一条也比不中时，链尾 0x1005F1D6 →
+    // 0x1005F20F `mov eax,0xFFFFF988` 返回 -1656；挂在宿主
+    // TPlayObject.GetBagItemCount 0x007447C0 上的钩子 0x58A05264
+    // `cmp eax,0xFFFFF988` / 0x58BBAAF5 `je 0x58DBA7B2` 改跑原函数体：
+    // 0x7447E7 用名字查 std 物品表（sub_74C1E0 查不到给 -1）、
+    // 0x7447EF `jle 0x744868` 跳出口返回计数槽初值 0。
+    // `plus伤害` 是附录 A.3 判定的自造名（两版转储五编码全 0 命中），
+    // 而 AllFuc.pas 的 ys_MyJn_plus 真的会发它 —— 这条路径可达。
+    // 前缀链在所有 `cmp [cfg+disp],0x1F4` 门之前，故三种开关状态下都必须是 0。
+    Check("unregistered !!!! prefix falls back to the host bag count (switch missing)", () =>
+    {
+        Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
+            "FabricatedTunnel").AsInt(),
+            "fabricated tunnel must return the host bag count");
+    });
+
     Check("lucker2, libmysql, and CD wrappers reject missing switches", () =>
     {
         ExpectPlayerDiagnostic(tunnelBridge, player, tunnelInterpreter,
@@ -251,6 +267,13 @@ try
     {
         Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
             "CaretTunnel").AsInt(), "caret tunnel must run with switches off");
+    });
+
+    Check("unregistered !!!! prefix falls back to the host bag count (switch off)", () =>
+    {
+        Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
+            "FabricatedTunnel").AsInt(),
+            "fabricated tunnel must return the host bag count");
     });
 
     var mainPath = Path.Combine(tempRoot, "MainAccessProbe.pas");
@@ -355,6 +378,9 @@ try
             "NumericTunnel").AsInt(), "numeric !!!! tunnel result");
         Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
             "CaretTunnel").AsInt(), "caret tunnel result");
+        Equal(0, ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
+            "FabricatedTunnel").AsInt(),
+            "fabricated tunnel must return the host bag count even with switches on");
         _ = ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
             "ChineseTunnel").AsInt();
         Require(ExecuteWithPlayer(tunnelBridge, player, tunnelInterpreter,
@@ -683,6 +709,11 @@ static string BuildTunnelSource() => """
     function ChineseTunnel: Integer;
     begin
       Result := This_Player.GetBagItemCount('!!!!hq取sj戳');
+    end;
+
+    function FabricatedTunnel: Integer;
+    begin
+      Result := This_Player.GetBagItemCount('!!!!plus伤害1:2:3:4:5:6:7:8:');
     end;
 
     function EmbeddedGive: Boolean;

@@ -1199,6 +1199,97 @@ namespace GameSvr.Plugins
             input != null && input.StartsWith("!!!!");
 
         /// <summary>
+        /// 入口选择器 <c>sub_1005E4D0</c> 在截尾之前比的两条，走前缀比对。
+        /// </summary>
+        private static readonly string[] NativeEarlyPrefixNames = { "集成函数", "爱心分割" };
+
+        /// <summary>
+        /// 入口选择器在截尾之前比的两条，走**全等**比对（`sub_10043E20`）。
+        /// </summary>
+        private static readonly string[] NativeExactNames = { "hq取sj戳", "zd义回收" };
+
+        /// <summary>
+        /// 入口选择器在截尾之后比的四条，走前缀比对。
+        /// </summary>
+        private static readonly string[] NativeLatePrefixNames =
+            { "给与元素", "获取元素", "定义伤害", "英雄极品" };
+
+        /// <summary>
+        /// 原生入口选择器认得的 6 个中文命令名（不含 <c>集成函数</c> / <c>爱心分割</c>）。
+        /// </summary>
+        internal static readonly string[] NativeChineseCommandNames =
+            NativeLatePrefixNames.Concat(NativeExactNames).ToArray();
+
+        /// <summary>
+        /// 复刻 <c>sub_1005E4D0</c> 的前缀链：命中返回 true（隧道自己接管），
+        /// 不命中返回 false（原生回落到宿主真正的 <c>GetBagItemCount</c>）。
+        ///
+        /// 底本 `yanshen208_strparam_runtime_dump_delayed_20260719`（基 0x57C40000，
+        /// 减 0x47C40000 还原成 0x10000000 基）。链上一共 8 条比对，
+        /// 与全镜像里仅有的 8 条 `!!!!` 字面量一一对应（`0x102BE81C`..`0x102BE8A4`，
+        /// 每条只被选择器里的一处 push 引用）：
+        ///
+        ///   0x1005E5A0 集成函数 / 0x1005E613 爱心分割 —— `call 0x10064BD0`
+        ///   0x1005E67A hq取sj戳 / 0x1005E6EF zd义回收 —— `call 0x10043E20`
+        ///   0x1005E7C1 给与元素 / 0x1005EACB 获取元素 /
+        ///   0x1005EDCF 定义伤害 / 0x1005EFA7 英雄极品 —— `call 0x10064BD0`
+        ///
+        /// 两个比对函数都尾调 `_Traits_compare` `0x10018E20`，语义不同：
+        ///   `sub_10043E20` = `compare(const basic_string&)`（`ret 4`，两侧长度都进比较）
+        ///     ⇒ **全等**；
+        ///   `sub_10064BD0` = `compare(0, prefixLen, prefix)`（`ret 0xC`，
+        ///     `0x10064BE5 cmp [ecx+0x10],edx` / `cmovb` 把长度夹成 `min(自身长, prefixLen)`，
+        ///     第一个实参 off 编译期已知为 0、函数体里没用）⇒ **前缀**。
+        ///
+        /// `0x1005E737` 在 `zd义回收` 之后、`给与元素` 之前把命令串砍掉最后 1 字节
+        /// （`mov ecx,[ebp-0x1c]` / `dec ecx` / `mov byte [eax+ecx],0`），所以后四条
+        /// 前缀比对看到的是短一个字节的串：串正好等于 12 字节前缀时反而比不中。
+        /// 前四条在截尾之前，看到的是原串。
+        ///
+        /// 每道门前的 `cmp [cfg+disp],0x1F4` 开关不在这里建模：关掉的开关在原生那边
+        /// 同样落到 -1656 回落，但本仓对「已登记命令、开关缺失」一贯 fail-closed 抛出，
+        /// 本轮只处理前缀未命中，不动那条路径。
+        /// </summary>
+        /// <remarks>
+        /// 链尾 `0x1005F1D6` → `0x1005F20F mov eax,0xFFFFF988` = **-1656**。
+        /// 挂在宿主 `TPlayObject.GetBagItemCount` `0x007447C0` 上的钩子拿到 -1656 就
+        /// 执行原函数：`0x58A05256 call 0x57C9F2D0`（选择器的 `ret 0xC` 包装
+        /// `sub_1005F2D0`）→ `0x58A05264 cmp eax,0xFFFFF988` → `0x58BBAAF5 je 0x58DBA7B2`；
+        /// `0x58DBA7B2` 是 `55 8B EC 33 C9` + `push [0x1031B9A4]` / `ret`，
+        /// 即重放 `0x007447C0` 的前 5 字节再跳回保存下来的续址。
+        /// 同一个 `0x58DBA7B2` 还是 `0x58E64C9E cmp dword [edx],0x21212121` /
+        /// `0x58DB86BF jne` 的落点 —— 连 `!!!!` 都不打头的物品名走的也是它。
+        /// 该钩子在 2.0.7 运行期转储里被直接观测到：
+        /// `m2_yanshen_hooks.txt` `HOOK source=0x007447C0`。
+        /// 插件的 170 条宿主挂钩目标表（`0x102B22F4` 那条就是 `0x007447C0`）里，
+        /// 只有它的开头是 `55 8B EC 33 C9`，重放字节唯一对得上。
+        /// </remarks>
+        public static bool IsNativeSelectorHit(string input)
+        {
+            if (!IsTunnelCommand(input)) return false;
+
+            foreach (var name in NativeEarlyPrefixNames)
+                if (input.StartsWith("!!!!" + name, StringComparison.Ordinal))
+                    return true;
+
+            foreach (var name in NativeExactNames)
+                if (string.Equals(input, "!!!!" + name, StringComparison.Ordinal))
+                    return true;
+
+            foreach (var name in NativeLatePrefixNames)
+            {
+                var prefix = "!!!!" + name;
+                // 截尾少掉的那 1 字节必须落在前缀之外，否则 `min(自身长, prefixLen)`
+                // 夹出来比 prefixLen 短，`_Traits_compare` 拿长度差判负 —— 比不中。
+                if (input.Length > prefix.Length
+                    && input.StartsWith(prefix, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Parse a tunnel command string into command ID and parameters.
         /// Formats supported:
         ///   !!!!集成函数,commandID,param1,param2,...,paramN$
@@ -1273,13 +1364,10 @@ namespace GameSvr.Plugins
                 // 除去 `!!!!集成函数` 与 `!!!!爱心分割`，剩下的就是下面这 6 个。
                 // 曾经列在这里的 `plus伤害` 两版都 0 命中（ascii/GBK/UTF-16LE/
                 // UTF-8/Big5，含 Plus/PLUS 变体），不是原生命令名 —— AllFuc.pas 的
-                // ys_MyJn_plus 发的串在原生那边会落到宿主真正的 GetBagItemCount。
-                string[] knownNames =
-                {
-                    "给与元素", "获取元素", "定义伤害",
-                    "英雄极品", "hq取sj戳", "zd义回收"
-                };
-                var commandName = knownNames.FirstOrDefault(x => payload.StartsWith(x, StringComparison.Ordinal));
+                // ys_MyJn_plus 发的串在原生那边会落到宿主真正的 GetBagItemCount，
+                // 那条回落由 IsNativeSelectorHit 挡在隧道之外，见其注释。
+                var commandName = NativeChineseCommandNames
+                    .FirstOrDefault(x => payload.StartsWith(x, StringComparison.Ordinal));
                 if (commandName != null)
                 {
                     cmd.ChineseCommand = commandName;

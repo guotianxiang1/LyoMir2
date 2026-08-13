@@ -540,8 +540,10 @@ namespace GameSvr.Plugins
         /// 逐字节相同，不是延迟解密的串。
         ///
         /// 五个名字既无字面量也无门，门、臂、以及 PluginManager 的分词名单
-        /// 一起删掉；打过来会走 EnsureCommandEnabled 的「命令未登记」分支抛出，
-        /// 与本仓对无据行为一贯的 fail-closed 处置一致。
+        /// 一起删掉。打过来现在**根本进不到这里**：
+        /// PluginManager.IsNativeSelectorHit 复刻了选择器的 8 条前缀链，比不中就
+        /// 让 PasApiBridge.TryExecuteTunnelCommand 交还宿主 —— 与原生链尾
+        /// 0x1005F20F 返回 -1656、钩子 0x58BBAAF5 跳 0x58DBA7B2 跑原函数体一致。
         ///
         /// Execute Chinese-named commands (格式2: !!!!命令名 参数:参数:)
         /// </summary>

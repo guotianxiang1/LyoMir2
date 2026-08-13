@@ -16,6 +16,7 @@ var failures = new List<string>();
 Check("numeric AllFuc tunnel", CheckNumericTunnel);
 Check("caret AllFuc tunnel", CheckCaretTunnel);
 Check("Chinese AllFuc tunnel", CheckChineseTunnel);
+Check("!!!! selector miss falls back to the host API", CheckSelectorFallback);
 Check("five Give format classification", CheckGiveClassification);
 Check("dynamic TClientItem wire", CheckDynamicClientItemWire);
 Check("owned equipment slots 13..15 wire", CheckOwnedUseItemsWire);
@@ -133,6 +134,54 @@ static void CheckChineseTunnel()
         Require(command.ChineseCommand != name,
             $"{name} is not a native command name but was split out as one");
     }
+}
+
+// 入口选择器 sub_1005E4D0 的前缀链一条也比不中时，原生链尾 0x1005F1D6 →
+// 0x1005F20F `mov eax,0xFFFFF988` 返回 -1656；挂在宿主
+// TPlayObject.GetBagItemCount 0x007447C0 上的钩子 0x58A05264
+// `cmp eax,0xFFFFF988` / 0x58BBAAF5 `je 0x58DBA7B2` 就去跑原函数体
+// （0x58DBA7B2 重放 `55 8B EC 33 C9` 再 `push [0x1031B9A4]` / `ret`）。
+// 该钩子在 2.0.7 运行期转储里被直接观测到（HOOK source=0x007447C0）。
+// 守住「哪些串算命中」这条线：多一条都会把宿主行为吃掉，少一条会把已坐实的
+// 隧道命令误判成物品名。
+static void CheckSelectorFallback()
+{
+    string[] hits =
+    {
+        "!!!!\u96c6\u6210\u51fd\u6570,36,0$",              // !!!!集成函数
+        "!!!!\u7231\u5fc3\u5206\u5272^13^0$",              // !!!!爱心分割
+        "!!!!hq\u53d6sj\u6233",                            // !!!!hq取sj戳（全等）
+        "!!!!zd\u4e49\u56de\u6536",                        // !!!!zd义回收（全等）
+        "!!!!\u7ed9\u4e0e\u5143\u7d201:2:3:",              // !!!!给与元素
+        "!!!!\u83b7\u53d6\u5143\u7d201:2$",                // !!!!获取元素
+        "!!!!\u5b9a\u4e49\u4f24\u5bb3100:200:",            // !!!!定义伤害
+        "!!!!\u82f1\u96c4\u6781\u54c13:4:",                // !!!!英雄极品
+    };
+    foreach (var input in hits)
+        Require(PluginManager.IsNativeSelectorHit(input),
+            $"'{input}' must be taken by the native selector");
+
+    string[] misses =
+    {
+        // A.3 判定的五个自造名：两版运行期转储五编码全 0 命中。
+        "!!!!plus\u4f24\u5bb31:2:",                        // plus伤害
+        "!!!!\u653b\u51fb\u4f24\u5bb31:2:",                // 攻击伤害
+        "!!!!hq\u53d6sj\u95f4",                            // hq取sj间
+        "!!!!zd\u56de\u6536",                              // zd回收
+        "!!!!\u7ed9\u4e88\u5143\u7d201:2:3:",              // 给予元素
+        // 全等比对的两条多一个字符就比不中（sub_10043E20 = compare(const string&)）。
+        "!!!!hq\u53d6sj\u62331",
+        "!!!!zd\u4e49\u56de\u6536$",
+        // 0x1005E737 砍掉最后 1 字节后，串正好等于 12 字节前缀的反而比不中。
+        "!!!!\u7ed9\u4e0e\u5143\u7d20",
+        "!!!!\u82f1\u96c4\u6781\u54c1",
+        // 没有 `!!!!集成函数` 打头的裸数字串不在 8 条字面量里。
+        "!!!!36,0$",
+        "!!!!#ys,1,2$",
+    };
+    foreach (var input in misses)
+        Require(!PluginManager.IsNativeSelectorHit(input),
+            $"'{input}' must fall back to the host GetBagItemCount");
 }
 
 static void CheckGiveClassification()

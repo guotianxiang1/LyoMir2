@@ -43,6 +43,17 @@ namespace GameSvr.PasEngine
             if (string.IsNullOrEmpty(itemName) || !PluginManager.IsTunnelCommand(itemName))
                 return false;
 
+            // 入口选择器 sub_1005E4D0 的 8 条前缀一条也比不中时，原生不是报错，
+            // 而是把串原样交还给宿主：链尾 0x1005F20F 返回 -1656，钩子
+            // 0x58A05264 `cmp eax,0xFFFFF988` / 0x58BBAAF5 `je 0x58DBA7B2` 就去跑
+            // TPlayObject.GetBagItemCount 0x007447C0 的原函数体。原函数体先
+            // 0x7447E7 拿名字查 std 物品表（sub_74C1E0 查不到给 -1），
+            // 0x7447EF `cmp [ebp-0x10],0` / `jle 0x744868` 直接跳到出口返回计数槽
+            // 的初值 0 —— 也就是「按物品名查背包，`!!!!…` 不是物品，返回 0」。
+            // 这里 return false 让调用点落到 CountBagItem，即那条原函数体。
+            if (!PluginManager.IsNativeSelectorHit(itemName))
+                return false;
+
             var cmd = PluginManager.ParseTunnelCommand(itemName);
             if (cmd == null) return false;
 

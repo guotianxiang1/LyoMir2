@@ -639,10 +639,185 @@ Themida 垃圾对，不是字面量引用。该空档在两份 2.0.8 转储里�
 
 五个名字打过来现在走 `EnsureCommandEnabled` 的「命令未登记」分支抛出（fail-closed）。
 原生那边是前缀比不中、原样落到宿主真正的 `GetBagItemCount` 返回背包计数 ——
-这层宿主回落路径本轮没有复刻，登记为待办。
+这层宿主回落路径本轮没有复刻，登记为待办。**该挂账已由附录 B 结清。**
 
 ### A.5 顺带核对：五个「键名未证」偏移仍然无条目
 
 75 条表里出现过的偏移不含 `+0x084`、`+0x0FC`、`+0x940`、`+0x1B4`、`+0x6E0`、`+0x60`，
 `YanshenCommands._toggles` 里那五条「键名未证」的登记与 `爱心分割` §那条
 `cfg+0x60` 的说明**依旧成立**，本轮不动。
+
+---
+
+## 附录 B —— 未登记 `!!!!` 前缀的宿主回落路径
+
+结清 A.4 挂的那笔账。底本同 A：`yanshen208_strparam_runtime_dump_delayed_20260719`
+（`yanshen2_0_8_dll.memory.bin` 基 `0x57C40000`，减 `0x47C40000` 还原成 `0x10000000` 基；
+文件偏移直接等于 RVA），宿主用 `staging\_reunpack_work\flat_image.bin`（基 `0x400000`），
+另有 2.0.7 运行期转储 `questinfo_runtime_dump` 交叉验证。
+
+### B.1 选择器的收尾：`-1656`
+
+`sub_1005E4D0` 的八条比对全不中（或对应的 `cmp [cfg+disp],0x1F4` 门关着而被跳过）时，
+每条失配支路都先析构自己那个临时 `std::string`，然后**无一例外**落到同一个收尾：
+
+```
+1005EF6A / 1005F1CA …  析构 → 落到 1005F1D6
+1005F1D6  C6 45 FC 02              (析构 3 个 std::string)
+1005F200  EB 0D                    jmp 0x1005F20F
+1005F20F  B8 88 F9 FF FF           mov eax,0xFFFFF988      ; = -1656
+1005F214  …                        SEH 收尾 → ret
+```
+
+五道门的 `jle` 落点连成一条链，末端就是这里：
+`0x1005E65A → 0x1005E6C5 → 0x1005E6CF → 0x1005E737 → 0x1005E75C → 0x1005EDA3
+→ 0x1005EDAD → 0x1005EF7B → 0x1005EF85 → 0x1005F1D6`。
+
+### B.2 `-1656` 是谁在看：`GetBagItemCount` 的 5 字节 detour
+
+`sub_1005E4D0` 全镜像**只有一处**调用点 —— `0x1005F2FF`，在 `ret 0xC` 的三参包装
+`sub_1005F2D0` 里（`arg3 → edx` = player，`arg1/arg2` 拼成命令串）。
+`sub_1005F2D0` 又**只有一处**调用点，在 Themida 搬走的钩子体里：
+
+```
+58A05256  E8 75 A0 29 FF     call 0x57C9F2D0        ; = sub_1005F2D0
+58A0525B  89 44 24 1C        mov [esp+0x1C],eax
+58A05264  3D 88 F9 FF FF     cmp eax,0xFFFFF988     ; ← 全镜像唯一一处
+58A05269  E9 87 58 1B 00     jmp 0x58BBAAF5
+58BBAAF5  0F 84 B7 FC 1F 00  je  0x58DBA7B2         ; -1656 → 跑原函数
+58BBAAFB/AAFD                 …  → 0x57C82F95       ; 否则拿隧道的返回值
+```
+
+`0x58DBA7B2` 是这样一段：
+
+```
+58DBA7B2  55 8B EC 33 C9     push ebp / mov ebp,esp / xor ecx,ecx
+58DBA7B7  FF 35 A4 B9 F5 57  push dword [0x1031B9A4]
+58DBA7BD  C3                 ret                     ; 尾跳到保存下来的续址
+```
+
+前 5 字节 `55 8B EC 33 C9` 就是宿主 `TPlayObject.GetBagItemCount` `0x007447C0`
+被 `E9 <rel32>` 覆盖掉的那 5 字节，续址即 `0x007447C5`。三条独立佐证：
+
+1. **宿主注册表**：`0x0073140E` `mov ecx,0x73249C`（`"GetBagItemCount"`）/
+   `mov edx,0x7447C0` / `call 0x4F4180`（RegisterMethod）。
+   `0x007447C0` 的头 5 字节正是 `55 8B EC 33 C9`。
+2. **插件的宿主挂钩目标表** `0x102B2100..0x102B2700` 共 170 条宿主地址，
+   `0x102B22F4`/`0x102B22F8` 两格就是 `0x007447C0`；这 170 条里**只有它**
+   开头是 `55 8B EC 33 C9`（其余 `55 8B EC` 开头的九条后面分别是
+   `83 C4 EC` / `53 8B D8` / `53 56` / `6A 00` / `51 53` / `51 53 56 57` ×2 /
+   `81 C4` / `83 C4 F8`），重放字节唯一对得上。
+3. **2.0.7 运行期直接观测**：`questinfo_runtime_dump\m2_yanshen_hooks.txt`
+   里有 `HOOK source=0x007447C0 target=0x7A7B2D06`。
+
+同一个 `0x58DBA7B2` 还有第二个入口 —— 连 `!!!!` 都不打头的普通物品名：
+
+```
+58E64C9E  81 3A 21 21 21 21  cmp dword [edx],'!!!!'   ; 全镜像唯一一处 0x21212121 立即数
+58E64CA4  E9 16 3A F5 FF     jmp 0x58DB86BF
+58DB86BF  0F 85 ED 20 00 00  jne 0x58DBA7B2           ; 不是 !!!! 打头 → 跑原函数
+```
+
+⇒ 钩子的形状是「不是 `!!!!` 打头 → 原函数；是 → 进选择器；选择器给 -1656 → 原函数」。
+2.0.7 同一处 `cmp` 在 `0x7AE3DEEC`，也只有一处。
+
+**两份转储都是钩子尚未装上的状态**（`0x007447C0` 与 `flat_image.bin` 逐字节相同，
+`[0x1031B9A4]` 读出来是 0，与 §6-C1 记的 `cfg+4` 槽为 0 一致），
+所以 detour 只能静态判读；三条佐证互不依赖。
+
+### B.3 回落之后宿主返回什么：0
+
+`sub_7447C0` = `xor ecx,ecx` + 调 `sub_7447CC`（`ecx` 是第三个过滤参数，0 = 不过滤）：
+
+```
+007447DB  33 C0                    xor eax,eax
+007447DD  89 45 F4                 mov [ebp-0xC],eax        ; 计数槽 = 0
+007447E0  A1 6C 5D 7D 00           mov eax,[0x7D5D6C]       ; std 物品表
+007447E7  E8 F4 79 00 00           call 0x74C1E0            ; GetStdItemIdx(name)
+007447EF  83 7D F0 00              cmp [ebp-0x10],0
+007447F3  7E 73                    jle 0x744868             ; ← 索引 <= 0 直接跳出口
+…
+00744868  8B 45 F4                 mov eax,[ebp-0xC]        ; 返回计数槽
+```
+
+`sub_74C1E0` 起手 `or esi,-1`，只有在 `sub_49F5F4` 查到条目时才用 `movzx esi,word [eax]`
+覆盖，查不到就返回 **-1**；`-1 <= 0` 命中 `jle`，出口读的是从未被加过的计数槽。
+
+⇒ **未登记 `!!!!` 前缀的原生真值 = 按物品名查背包，查不到 → 返回 `0`**，
+不报错、不产生副作用、不写日志。
+
+### B.4 两个比对函数的语义（决定「哪些串算命中」）
+
+八条比对分两种，都尾调 `_Traits_compare` `0x10018E20`：
+
+| 比对点 | 命令 | 函数 | 语义 |
+|---|---|---|---|
+| `0x1005E5A0` | `!!!!集成函数` | `sub_10064BD0` `ret 0xC` | 前缀 |
+| `0x1005E613` | `!!!!爱心分割` | `sub_10064BD0` | 前缀 |
+| `0x1005E67A` | `!!!!hq取sj戳` | `sub_10043E20` `ret 4` | **全等** |
+| `0x1005E6EF` | `!!!!zd义回收` | `sub_10043E20` | **全等** |
+| `0x1005E7C1` | `!!!!给与元素` | `sub_10064BD0` | 前缀 |
+| `0x1005EACB` | `!!!!获取元素` | `sub_10064BD0` | 前缀 |
+| `0x1005EDCF` | `!!!!定义伤害` | `sub_10064BD0` | 前缀 |
+| `0x1005EFA7` | `!!!!英雄极品` | `sub_10064BD0` | 前缀 |
+
+`sub_10043E20` = MSVC `compare(const basic_string&)`：两侧长度都进 `_Traits_compare`，
+长度不等即非 0 ⇒ 全等。AllFuc.pas 那两条也确实是不带参数的整串
+（`GetBagItemCount('!!!!hq取sj戳')` / `('!!!!zd义回收')`）。
+
+`sub_10064BD0` = `compare(_Off, _Nx, _Right)` 的编译期 `_Off==0` 特化：
+第一个实参在函数体里根本没用，`0x10064BE5 cmp [ecx+0x10],edx` + `cmovb` 把
+比较长度夹成 `min(自身长, prefixLen)` ⇒ 前缀比对。
+
+还有一条容易漏的：`0x1005E737` 在 `zd义回收` 之后、`给与元素` 之前把命令串
+**砍掉最后 1 字节**（`mov ecx,[ebp-0x1C]` / `dec ecx` / `mov byte [eax+ecx],0`），
+所以后四条前缀比对看到的是短一个字节的串 —— 串正好等于 12 字节前缀（无参数）时
+`min` 夹出 11 < 12，`_Traits_compare` 拿长度差判负，**反而比不中**。
+AllFuc.pas 这四条一律带参数，正常调用不受影响。
+
+### B.5 另外两个寄生入口
+
+- **`Give`**（注册于 `0x0073142B`，实现 `0x006DF2E8`）：`0x006DF2E8` **不在**插件那
+  170 条挂钩目标表里，且 `AllFuc.pas` 的写法是 `ItemName+'!!!!'+…`，`!!!!` 永远在**串中**
+  而不是串首。全镜像 `!!!!` 字面量只有那 8 条命令名（每条只被选择器里的一处 `push`
+  引用），`0x21212121` 立即数只有 `0x58E64C9E` 一处且属于 `GetBagItemCount` 钩子。
+  ⇒ **`Give` 上不存在「`!!!!` 前缀未命中」这条路径**，本轮无可复刻。
+  它的物品元素解析走的是另一套后缀标签（`0x102BE6D0` 的
+  `data`/`,`/`jp2ys`/`zdyly`/`……`，xref `0x10058051`/`0x1005818D`/`0x10058422`/`0x1005845E`，
+  由 `cfg+0x664`「自定义元素」把门），不经过 `sub_1005E4D0`。
+- **`GetSignInActPrizer`**（注册于 `0x00731B6E`，实现 `0x006E2E34` → 尾调
+  `TUserEngine` 的 `0x00616D88`）：两处都被挂钩（表里有 `0x006E2E3B` 与 `0x00616DAA`，
+  2.0.7 观测到同样两条 `HOOK source=0x006E2E3B` / `0x00616DAA`）。
+  它的选择器不是 `!!!!` 前缀，而是**第二实参哨兵**：`sub_10087990` 里
+  `0x100879D8 mov edx,0x102C02EC`（`"lucker2"`）起手的内联 `strcmp`，
+  不等就 `0x10087A07 jne 0x10087C30` → `0x10087C37 xor eax,eax` **返回 0**；
+  `libmysql` 那条 `0x10087DD8` 的选择器助手用 `0x10087E00 cmovne esi,[ebp+8]`
+  在不等时改用默认值。**两条都不用 `-1656`** —— 全镜像 `cmp eax,0xFFFFF988` 只有一处。
+  ⇒ `-1656` 回落协议是 `GetBagItemCount` 钩子独有的，不能往这两个入口上套。
+
+顺带：`GetBagItemCountEx`（注册于 `0x00731419`，实现 `0x00744874`）**不在**挂钩表里，
+`0x00744874` 在插件镜像里 0 命中 ⇒ 原生根本不从 `Ex` 走隧道。
+C# 目前把 `getbagitemcountex` 也接到隧道上，属既有分歧，
+按「只处理前缀未命中」的边界本轮不动，登记为待办。
+
+### B.6 落地
+
+- 新增 `PluginManager.IsNativeSelectorHit(string)`：复刻 B.4 那张表（含全等/前缀
+  两种语义与 `0x1005E737` 的截尾），并把原先内联在 `ParseTunnelCommand` 里的
+  6 条中文名提升成 `NativeChineseCommandNames`，两处共用一份名单。
+- `PasApiBridge.TryExecuteTunnelCommand`：`IsTunnelCommand` 之后加一道
+  `IsNativeSelectorHit`，比不中就 `return false` —— 调用点随即落到
+  `CountBagItem(itemName)`，那正是 B.3 的原函数体（此仓早已按
+  `sub_7447CC` 逐条复刻，`GetStdItemIdx <= 0 → 0` 也在内）。
+  这一道同时覆盖原生的两个回落出口（`cmp dword [edx],'!!!!'` 与 `cmp eax,-1656`），
+  对任何输入的结果与原生一致。
+- `YanshenCommands` 里「五个自造名会走『命令未登记』抛出」的注释改成实况。
+- 回归网：`Yanshen207ProtocolCheck` 加 `CheckSelectorFallback`（8 命中 / 11 不命中，
+  含两条全等命令加一个字符、四条截尾边界、裸数字与 `#ys` 串）；
+  `YanshenApiAccessCheck` 加 `FabricatedTunnel`
+  （`GetBagItemCount('!!!!plus伤害1:2:…')`），在开关缺失 / 关闭 / 打开三种状态下
+  都断言返回 0 —— 前缀链在所有门之前，三态必须同值。
+
+**边界（本轮刻意不动）**：门关着时原生同样落 `-1656` 回宿主，而本仓对
+「已登记命令、开关缺失或关闭」一贯 `EnsureCommandEnabled` fail-closed 抛出。
+这条差异与前缀未命中是两回事，按任务边界保留原状，登记为待办。
