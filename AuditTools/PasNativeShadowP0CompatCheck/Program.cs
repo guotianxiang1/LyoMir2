@@ -19,10 +19,26 @@ var beforeV = player.m_ScriptVVars.OrderBy(item => item.Key).ToArray();
 var beforeS = player.m_ScriptSVars.OrderBy(item => item.Key).ToArray();
 var bridge = new PasApiBridge { CurrentPlayer = player };
 
-CheckClosedPropertyRead(bridge, "PlatLv");
+// PlatLv 是原生真实的**可读写**发布属性，不是 shadow。Delphi TPropInfo
+// （Name 在记录末尾，前缀 26 字节）@0x006AD1EE:
+//   PropType   0x006AD1EE  6c 10 40 00
+//   GetProc    0x006AD1F2  85 0b 00 ff  -> 高字节 FF = 直接字段，偏移 0x0B85
+//   SetProc    0x006AD1F6  85 0b 00 ff  -> 同偏移，可写
+//   StoredProc 0x006AD1FA  01 00 00 00
+//   NameIndex  0x006AD206  39 00
+//   Name       0x006AD208  06 "PlatLv"
+// 对照紧邻的 IsAStudent（0x006AD20F 起，GetProc 95 0b 00 ff / SetProc 全 0）
+// 可见「SetProc=0 才是只读」，PlatLv 两侧都填了偏移。
+player.m_btPlatLv = 7;
+Assert(bridge.GetPlayerProperty("PlatLv", out var platLvRead),
+    "PlatLv property read must serve the native +0xB85 field");
+Assert(platLvRead.AsInt() == 7, "PlatLv property read returned the wrong value");
+Assert(bridge.SetPlayerProperty("PlatLv", PasValue.FromInt(9)),
+    "PlatLv property write must serve the native +0xB85 field");
+Assert(player.m_btPlatLv == 9, "PlatLv property write did not reach the field");
+player.m_btPlatLv = 0;
+
 CheckClosedPropertyRead(bridge, "MyExpQuestValue");
-Assert(!bridge.SetPlayerProperty("PlatLv", PasValue.FromInt(9)),
-    "PlatLv write did not fail closed");
 Assert(!bridge.SetPlayerProperty("MyExpQuestValue", PasValue.FromInt(9)),
     "read-only MyExpQuestValue acquired a write path");
 CheckClosedFunction(bridge, "MyExpQuestValue", new List<PasValue>());
@@ -62,9 +78,9 @@ var methods = Slice(source, "public bool CallPlayerMethod",
 var functions = Slice(source, "public bool CallPlayerFunc",
     "public bool CallNpcMethod");
 
-CheckFailClosed(propertyReads, "platlv", true);
+CheckFieldBound(propertyReads, "platlv", "CurrentPlayer.m_btPlatLv");
+CheckFieldBound(propertyWrites, "platlv", "CurrentPlayer.m_btPlatLv");
 CheckFailClosed(propertyReads, "myexpquestvalue", true);
-CheckFailClosed(propertyWrites, "platlv", false);
 Assert(!propertyWrites.Contains("case \"myexpquestvalue\":",
         StringComparison.Ordinal),
     "read-only MyExpQuestValue acquired a property setter");
@@ -110,6 +126,23 @@ static void CheckClosedFunction(PasApiBridge bridge, string name,
     Assert(!bridge.CallPlayerFunc(name, args, out var result),
         name + " function did not fail closed");
     AssertNil(result, name + " function");
+}
+
+// A dedicated-field binding must reach the real player field and must never
+// borrow the shared V/S slots the way the old shadow implementation did.
+static void CheckFieldBound(string region, string name, string field)
+{
+    var body = ExtractCase(region, name);
+    Require(body, field, name + " is not bound to its dedicated native field");
+    foreach (var forbidden in new[]
+             {
+                 "GetPlayerVar(", "SetPlayerVar(", "m_ScriptVVars",
+                 "m_ScriptSVars"
+             })
+    {
+        Assert(!body.Contains(forbidden, StringComparison.Ordinal),
+            name + " still touches V/S storage: " + forbidden);
+    }
 }
 
 static void CheckFailClosed(string region, string name, bool hasResult)

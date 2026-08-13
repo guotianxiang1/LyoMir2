@@ -702,9 +702,21 @@ var unionBody = (byte[])unionBodyMethod.Invoke(null,
     new object[] { unionMagic })!;
 Equal(2885, unionHeader.Ident, "union progress packet ident");
 Equal(player.ObjectId, unionHeader.Recog, "union progress packet recog");
-Equal(0, unionHeader.Param, "union progress packet param");
+// 原来这里把 Param/Series 反了。sub_744E88 的推参与 sub_6D7BF8 的落位可以对死：
+//   0x00744ED7 e8 60 36 d8 ff  call 0x4C853C   -> ax = MagicInfo.wMagicID
+//   0x00744EDC 50              push eax        -> 栈第 1 个 = [ebp+0x18]
+//   0x00744EDD 6a 00           push 0          -> [ebp+0x14]
+//   0x00744EDF 6a 00           push 0          -> [ebp+0x10]
+//   0x00744EE9 66 ba 45 0b     mov dx,0xB45    -> Ident 2885
+// 收方 sub_6D7BF8（两张 VMT 的 +0x254 都是它）按 TDefaultMessage 逐字段落位：
+//   0x006D7C6D 66 8b 45 fe  mov ax,[ebp-2]     / 0x006D7C71 -> [ebp-0x10] Ident
+//   0x006D7C75 66 8b 45 18  mov ax,[ebp+0x18]  / 0x006D7C79 -> [ebp-0x0E] Param
+//   0x006D7C7D 66 8b 45 14  mov ax,[ebp+0x14]  / 0x006D7C81 -> [ebp-0x0C] Tag
+//   0x006D7C85 66 8b 45 10  mov ax,[ebp+0x10]  / 0x006D7C89 -> [ebp-0x0A] Series
+// 即 Param=wMagicID、Tag=0、Series=0。
+Equal(unionMagicInfo.wMagicID, unionHeader.Param, "union progress packet param");
 Equal(0, unionHeader.Tag, "union progress packet tag");
-Equal(unionMagicInfo.wMagicID, unionHeader.Series, "union progress packet series");
+Equal(0, unionHeader.Series, "union progress packet series");
 Equal(20, unionBody.Length, "union progress body size");
 Equal(unionMagicInfo.wMagicID,
     BinaryPrimitives.ReadInt32LittleEndian(unionBody.AsSpan(0, 4)),
@@ -1158,8 +1170,18 @@ static void RunPlayDiceDispatchRegression()
     var npc = new NormNpc();
     var explicitPlayer = new TPlayObject { m_sCharName = "dice-player" };
     var ambientPlayer = new TPlayObject { m_sCharName = "ambient-player" };
+    // 原来这里种的是 keyed m_ScriptVVars[1..10]，那块原生根本读不到。
+    // sub_645200 的十次取值走的是 GROUP-0 GetV：
+    //   0x0064522F  33 f6           xor esi,esi        ; i = 0
+    //   0x00645234  8d 4e 01        lea ecx,[esi+1]    ; index = i+1
+    //   0x00645237  33 d2           xor edx,edx        ; group = 0
+    //   0x0064523B  e8 a4 9f 09 00  call 0x6DF1E4      ; GetV(0, i+1)
+    //   0x00645246  83 fe 0a        cmp esi,0x0A       ; 十格
+    // 而 GetV 在 0x006DF203 `85 f6` test esi,esi / `75 14` jne 把 group 0 分到
+    // 内联区 0x006DF20F `mov eax,[ebx+eax*4+0x808]`，keyed 字典里的
+    // group*1000+index（sub_6E42CC `imul eax,edx,0x3E8`）永远命不中 <1000 的键。
     for (var index = 1; index <= 10; index++)
-        explicitPlayer.m_ScriptVVars[index] = 0x100 + index;
+        explicitPlayer.m_ScriptVGroup0[index] = 0x100 + index;
 
     var bridge = new PasApiBridge { CurrentNpc = npc, CurrentPlayer = ambientPlayer };
     var args = Values(explicitPlayer, 6, "dice-result");

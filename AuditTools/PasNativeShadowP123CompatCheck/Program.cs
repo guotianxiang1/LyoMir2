@@ -33,7 +33,7 @@ var bridge = new PasApiBridge
 
 foreach (var property in new[]
          {
-             "GuildPoint", "JiaYouPoint", "DominateLevel",
+             "GuildPoint", "DominateLevel",
              "TenYearImpress", "GetTrustByWine"
          })
 {
@@ -42,14 +42,56 @@ foreach (var property in new[]
 Assert(!bridge.SetPlayerProperty("DominateLevel", PasValue.FromInt(9)),
     "DominateLevel property write did not fail closed");
 
+// JiaYouPoint 不是 shadow：它是原生的**只读**发布属性。Delphi TPropInfo
+// （Name 在记录末尾）@0x006ACDBE:
+//   PropType   0x006ACDBE  94 10 40 00
+//   GetProc    0x006ACDC2  f0 0a 00 ff  -> FF = 直接字段，偏移 0x0AF0
+//   SetProc    0x006ACDC6  00 00 00 00  -> nil，只读
+//   StoredProc 0x006ACDCA  01 00 00 00
+//   NameIndex  0x006ACDD6  19 00
+//   Name       0x006ACDD8  0b "JiaYouPoint"
+player.m_dwJiaYouPoint = 1234;
+Assert(bridge.GetPlayerProperty("JiaYouPoint", out var jiaYouRead),
+    "JiaYouPoint property read must serve the native +0xAF0 field");
+Assert(jiaYouRead.AsInt() == 1234,
+    "JiaYouPoint property read returned the wrong value");
+Assert(!bridge.SetPlayerProperty("JiaYouPoint", PasValue.FromInt(7)),
+    "read-only JiaYouPoint acquired a write path");
+Assert(player.m_dwJiaYouPoint == 1234,
+    "a rejected JiaYouPoint write still mutated the field");
+player.m_dwJiaYouPoint = 0;
+
 foreach (var method in new[]
          {
-             "AddGuildPoint", "DecJiaYouPoint", "SetVExpToBeConverted"
+             "AddGuildPoint", "SetVExpToBeConverted"
          })
 {
     CheckClosedPlayerMethod(bridge, method,
         new List<PasValue> { PasValue.FromInt(7) });
 }
+
+// DecJiaYouPoint 是 JiaYouPoint 只读属性的专用变更器，原生 sub_6F28E8：
+//   0x006F28ED  85 db              test ebx,ebx
+//   0x006F28EF  7e 30              jle 0x6F2921        ; point<=0 直接返回
+//   0x006F28F6  8b 81 f0 0a 00 00  mov eax,[ecx+0xAF0]
+//   0x006F2909  73 10              jae 0x6F291B        ; 余额>=point 走减法
+//   0x006F2913  89 81 f0 0a 00 00  mov [ecx+0xAF0],eax ; 否则夹到 0
+//   0x006F291B  29 99 f0 0a 00 00  sub [ecx+0xAF0],ebx
+// 名字本身也在底本里：0x007301E1 "procedure DecJiaYouPoint(point: Integer);"
+// (FF FF FF FF 29 00 00 00)、0x00733653 "DecJiaYouPoint" (…0E 00 00 00)。
+player.m_dwJiaYouPoint = 10;
+Assert(bridge.CallPlayerMethod("DecJiaYouPoint",
+        new List<PasValue> { PasValue.FromInt(0) }),
+    "DecJiaYouPoint must accept its native ABI");
+Equal(10u, player.m_dwJiaYouPoint, "DecJiaYouPoint point<=0 must be a no-op");
+Assert(bridge.CallPlayerMethod("DecJiaYouPoint",
+        new List<PasValue> { PasValue.FromInt(4) }),
+    "DecJiaYouPoint must accept its native ABI");
+Equal(6u, player.m_dwJiaYouPoint, "DecJiaYouPoint subtraction");
+Assert(bridge.CallPlayerMethod("DecJiaYouPoint",
+        new List<PasValue> { PasValue.FromInt(100) }),
+    "DecJiaYouPoint must accept its native ABI");
+Equal(0u, player.m_dwJiaYouPoint, "DecJiaYouPoint underflow must clamp at 0");
 
 foreach (var function in new[]
          {
@@ -241,8 +283,18 @@ static void CheckSourceOwnership(string source)
         "getqiangtilv", "gettipolv", "getqiangtiphase", "gettipophase",
         "getliantilv_hero", "getqiangtilv_hero", "gettipolv_hero",
         "getqiangtiphase_hero", "gettipophase_hero");
-    RequireCases(standalone, "useguildpoint", "getsomeguildpoint",
-        "setwinetreat", "gettreatwine", "convertvexp");
+    // UseGuildPoint / GetSomeGuildPoint / SetWineTreat / GetTreatWine 是 NPC 面
+    // 的注册项，不是独立全局函数：注册运 0x0073472D..0x00735099 共 201 条
+    // `ba <declStr> / 8b c3 / e8 -> 0x00510FFC`，运头就是 My_X / My_Y / NPCSay /
+    // CreateMon / ClearMon 这批 NPC API。四条各自的记录与声明串：
+    //   0x00734ABD -> 0x00736608 "function UseGuildPoint(Player: TPlayer) : Integer;"
+    //   0x00734AC9 -> 0x00736644 "function GetSomeGuildPoint(Player: TPlayer) : Integer;"
+    //   0x00734E65 -> 0x007379F0 "procedure SetWineTreat(wtType: Byte; boDesk: Boolean);"
+    //   0x00734E71 -> 0x00737A30 "function GetTreatWine(Hum: TPlayer): Integer;"
+    // ConvertVExp 在底本里 0 命中，故留在 standalone。
+    RequireCases(npcFunctions, "useguildpoint", "getsomeguildpoint",
+        "setwinetreat", "gettreatwine");
+    RequireCases(standalone, "convertvexp");
 
     ForbidCases(methods, "useguildpoint", "getsomeguildpoint",
         "incvexptobeconverted", "decvexptobeconverted", "convertvexp",
@@ -251,7 +303,7 @@ static void CheckSourceOwnership(string source)
         "gettenyearimpress", "gettiplv", "gettipphase",
         "gettiplv_hero", "gettipphase_hero");
     ForbidCases(npcMethods, "addguildpoint", "setwinetreat", "gettreatwine");
-    ForbidCases(npcFunctions, "setwinetreat", "gettreatwine");
+    ForbidCases(npcFunctions, "addguildpoint", "convertvexp");
 
     foreach (var name in new[]
              {

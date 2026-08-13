@@ -1145,11 +1145,19 @@ namespace GameSvr
 
         public void HasLevelUp(int nLevel)
         {
-            // VMT+0x240 (sub_6BA140): caller 0x6C053C `mov dx,[level]; dec edx`
-            // passes the *previous* level in edx; 0x6BA14D `mov esi,edx` /
-            // 0x6BA15C `call 0x6AFCC8` looks up that, not the already-incremented
-            // word. HP/MP formulas use ecx = current level (`0x6BA149 mov [ebp-2],cx`).
-            m_Abil.MaxExp = GetLevelExp(nLevel);
+            // VMT+0x240 的真身是 sub_6BDBA0，它**忽略** edx 里的前一等级，直接
+            // 从对象重读已自增的等级：
+            //   0x006BDBC5  0f b7 93 78 02 00 00  movzx edx,word [ebx+0x278]
+            //   0x006BDBCE  e8 f5 20 ff ff        call 0x6AFCC8   (GetLevelExp)
+            //   0x006BDBD3  89 83 c0 02 00 00     mov [ebx+0x2C0],eax  (MaxExp)
+            // 归属证据：0x6BDBA0 在全镜像只有两处 dword 引用，0x0062F1CC 与
+            // 0x006ACB08，二者各自减 0x240 得到的 0x0062EF8C / 0x006AC8C8 都是
+            // 145/145 全代码指针的 VMT。被误引的 sub_6BA140（及其孪生
+            // sub_6BA7BC）**零 dword 引用**，根本不在任何 VMT 里，而且写的是
+            // [edi+0x1E8+0x5C]=+0x244、按 [edi+0x72] 分职业，是另一套对象布局。
+            // 0x6C0543 的 `dec edx` 只影响转发给 sub_73EE14 的第二个参数。
+            // nLevel（前一等级）因此不参与 MaxExp 计算。
+            m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
             RecalcLevelAbilitys();
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_LEVELUP, 0, m_Abil.Exp, 0, 0, "");
