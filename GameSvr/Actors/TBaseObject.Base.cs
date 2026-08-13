@@ -841,6 +841,15 @@ namespace GameSvr
 
             m_boDeath = true;
             m_dwDeathTick = HUtil32.GetTickCount();
+            // sub_76631C 在写完死亡位与死亡时间戳之后立刻派发地图 VMT+0x08：
+            //   00766323  C6 43 74 01           mov byte [obj+0x74],1   ; m_boDeath
+            //   0076632C  89 83 30 03 00 00     mov [obj+0x330],eax     ; m_dwDeathTick
+            //   00766341  8B B3 28 01 00 00     mov esi,[obj+0x128]     ; PEnvir
+            //   00766347  85 F6 / 74 09         test esi,esi / je       ; 无地图则跳过
+            //   00766351  FF 51 08              call [map_vmt+0x08]
+            // TEnvironment 的同槽实现 0x779F64 是裸 `C3`，只有 TDynEnvir 的 0x5FD4D4
+            // 会在 0x5FD50A 派发 @OnDie —— 类门在 NativeDynEnvirObjectDiedTrigger 里。
+            m_PEnvir?.NativeDynEnvirObjectDiedTrigger(this);
             if (m_Master != null)
             {
                 m_ExpHitter = null;

@@ -121,12 +121,12 @@ namespace GameSvr
             // produced here therefore gets NO state-55 window; that asymmetry is native.
             if (!revived && flag != null && flag.boAUTORELIVE)
             {
-                // 0x74393B `call dword ptr [ecx+0x10]` on the ENVIRONMENT's vtable, with
-                // edx = self.  BLOCKED: Envir vtbl slot +0x10 is not resolved, so the
-                // auto-revive worker cannot be invoked faithfully.  Left fail-closed —
-                // HP is unchanged, so the `cmp [self+0x2AC],0 / setg bl` below yields
-                // false, exactly as if the worker declined.
-                revived = m_WAbil.HP > 0;
+                // 0x74393B `FF 51 10 call dword ptr [ecx+0x10]` on the ENVIRONMENT's vtable,
+                // with edx = self.  该槽已解析：TEnvironment 是 0x77BB38，TDynEnvir 的重写
+                // 0x5FD384 与它字节级同构，两者都在 0x77BB66 / 0x5FD3B2 派发 @OnReLive，
+                // 然后 `cmp [obj+0x2AC],0 / setg dl` 把 HP>0 当返回值。脚本负责加血。
+                // 详见 Envirnoment.MapQuestTriggers.cs。
+                revived = m_PEnvir != null && m_PEnvir.NativeEnvirAutoReliveSlot(this);
             }
 
             // 0x743948 `test bl,bl` / je, then 0x743952 RELIVEBACK, then 0x743958 the race

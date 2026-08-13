@@ -1,0 +1,121 @@
+### TEnvironment VMT+0x28 = AddToMap  0x7776EC (prologue)
+007776EC  55                     push ebp
+007776ED  8bec                   mov ebp, esp
+007776EF  51                     push ecx
+007776F0  b90d000000             mov ecx, 0xd
+007776F5  6a00                   push 0
+007776F7  6a00                   push 0
+007776F9  49                     dec ecx
+007776FA  75f9                   jne 0x7776f5
+007776FC  51                     push ecx
+007776FD  874dfc                 xchg dword ptr [ebp - 4], ecx
+00777700  53                     push ebx
+00777701  56                     push esi
+00777702  57                     push edi
+00777703  894df4                 mov dword ptr [ebp - 0xc], ecx
+00777706  8955f8                 mov dword ptr [ebp - 8], edx
+00777709  8945fc                 mov dword ptr [ebp - 4], eax
+0077770C  8b5d08                 mov ebx, dword ptr [ebp + 8]
+0077770F  33c0                   xor eax, eax
+00777711  55                     push ebp
+00777712  68b07b7700             push 0x777bb0
+00777717  64ff30                 push dword ptr fs:[eax]
+0077771A  648920                 mov dword ptr fs:[eax], esp
+0077771D  33c0                   xor eax, eax
+0077771F  8945f0                 mov dword ptr [ebp - 0x10], eax
+00777722  837d0c00               cmp dword ptr [ebp + 0xc], 0
+00777726  7518                   jne 0x777740
+00777728  a1cc5e7d00             mov eax, dword ptr [0x7d5ecc]
+0077772D  8b00                   mov eax, dword ptr [eax]
+0077772F  b101                   mov cl, 1
+00777731  bacc7b7700             mov edx, 0x777bcc
+00777736  e839680200             call 0x79df74
+0077773B  e955040000             jmp 0x777b95
+
+### delete-from-map 0x7794A8 (prologue) -- direct-called at 0x768E47
+007794A8  55                     push ebp
+007794A9  8bec                   mov ebp, esp
+007794AB  83c4e0                 add esp, -0x20
+007794AE  53                     push ebx
+007794AF  56                     push esi
+007794B0  57                     push edi
+007794B1  33db                   xor ebx, ebx
+007794B3  895de4                 mov dword ptr [ebp - 0x1c], ebx
+007794B6  895de0                 mov dword ptr [ebp - 0x20], ebx
+007794B9  8bf9                   mov edi, ecx
+007794BB  8bf2                   mov esi, edx
+007794BD  8945fc                 mov dword ptr [ebp - 4], eax
+007794C0  8b5d08                 mov ebx, dword ptr [ebp + 8]
+007794C3  33c0                   xor eax, eax
+007794C5  55                     push ebp
+007794C6  68f7957700             push 0x7795f7
+007794CB  64ff30                 push dword ptr fs:[eax]
+007794CE  648920                 mov dword ptr fs:[eax], esp
+007794D1  c645fb00               mov byte ptr [ebp - 5], 0
+007794D5  33c0                   xor eax, eax
+007794D7  55                     push ebp
+007794D8  6877957700             push 0x779577
+007794DD  64ff30                 push dword ptr fs:[eax]
+007794E0  648920                 mov dword ptr fs:[eax], esp
+007794E3  8d45f4                 lea eax, [ebp - 0xc]
+007794E6  50                     push eax
+007794E7  8bcf                   mov ecx, edi
+007794E9  8bd6                   mov edx, esi
+007794EB  8b45fc                 mov eax, dword ptr [ebp - 4]
+007794EE  e8b5e1ffff             call 0x7776a8
+007794F3  84c0                   test al, al
+007794F5  7476                   je 0x77956d
+007794F7  8b                     (db)
+
+### around the AddObject call 0x777AC6 (full arm)
+00777A50  8b00                   mov eax, dword ptr [eax]
+00777A52  b101                   mov cl, 1
+00777A54  e81b650200             call 0x79df74
+00777A59  e88ed4c8ff             call 0x404eec
+00777A5E  33c0                   xor eax, eax
+00777A60  55                     push ebp
+00777A61  68d97a7700             push 0x777ad9
+00777A66  64ff30                 push dword ptr fs:[eax]
+00777A69  648920                 mov dword ptr fs:[eax], esp
+00777A6C  807ddf00               cmp byte ptr [ebp - 0x21], 0
+00777A70  755d                   jne 0x777acf
+00777A72  b810000000             mov eax, 0x10
+00777A77  e824b5c8ff             call 0x402fa0
+00777A7C  8945e8                 mov dword ptr [ebp - 0x18], eax
+00777A7F  8b450c                 mov eax, dword ptr [ebp + 0xc]
+00777A82  8a4004                 mov al, byte ptr [eax + 4]
+00777A85  8b55e8                 mov edx, dword ptr [ebp - 0x18]
+00777A88  8802                   mov byte ptr [edx], al
+00777A8A  8b45e8                 mov eax, dword ptr [ebp - 0x18]
+00777A8D  8b550c                 mov edx, dword ptr [ebp + 0xc]
+00777A90  895004                 mov dword ptr [eax + 4], edx
+00777A93  8b45e8                 mov eax, dword ptr [ebp - 0x18]
+00777A96  8b55d8                 mov edx, dword ptr [ebp - 0x28]
+00777A99  895008                 mov dword ptr [eax + 8], edx
+00777A9C  8b45ec                 mov eax, dword ptr [ebp - 0x14]
+00777A9F  8b4008                 mov eax, dword ptr [eax + 8]
+00777AA2  8b55e8                 mov edx, dword ptr [ebp - 0x18]
+00777AA5  89420c                 mov dword ptr [edx + 0xc], eax
+00777AA8  8b45ec                 mov eax, dword ptr [ebp - 0x14]
+00777AAB  8b55e8                 mov edx, dword ptr [ebp - 0x18]
+00777AAE  895008                 mov dword ptr [eax + 8], edx
+00777AB1  8b450c                 mov eax, dword ptr [ebp + 0xc]
+00777AB4  8a4004                 mov al, byte ptr [eax + 4]
+00777AB7  fec8                   dec al
+00777AB9  750e                   jne 0x777ac9
+00777ABB  8b4de8                 mov ecx, dword ptr [ebp - 0x18]
+00777ABE  8b550c                 mov edx, dword ptr [ebp + 0xc]
+00777AC1  8b45fc                 mov eax, dword ptr [ebp - 4]
+00777AC4  8b18                   mov ebx, dword ptr [eax]
+00777AC6  ff5304                 call dword ptr [ebx + 4]
+00777AC9  8b450c                 mov eax, dword ptr [ebp + 0xc]
+00777ACC  8945f0                 mov dword ptr [ebp - 0x10], eax
+00777ACF  33c0                   xor eax, eax
+00777AD1  5a                     pop edx
+00777AD2  59                     pop ecx
+00777AD3  59                     pop ecx
+00777AD4  648910                 mov dword ptr fs:[eax], edx
+00777AD7  eb59                   jmp 0x777b32
+00777AD9  e9a6d0c8ff             jmp 0x404b84
+00777ADE  68                     (db)
+00777ADF  10                     (db)

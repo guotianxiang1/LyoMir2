@@ -3,7 +3,7 @@ using SystemModule.Common;
 
 namespace GameSvr
 {
-    public class Envirnoment
+    public partial class Envirnoment
     {
         
         
@@ -270,6 +270,10 @@ namespace GameSvr
                                 movingObject.m_boAddToMaped = true;
                                 AddObject(movingObject);
                             }
+                            // 0x777AC6 `FF 53 04 call [map_vmt+0x04]` -> TDynEnvir.AddObject
+                            // 0x5FD534，其尾部 0x5FD56A 派发 @OnEnter。人数 0x5FD559
+                            // `inc [map+0xD8]` 在派发之前，所以这里必须排在两个计数器之后。
+                            NativeDynEnvirAddObjectTrigger(movingObject);
                         }
                     }
                 }
@@ -2053,8 +2057,18 @@ namespace GameSvr
                 removedCount = true;
             }
 
-            return RemoveDynamicRoomPlayer(actor, notifyDynamicRoomLifecycle)
-                || removedCount;
+            var removedDynamicRoomPlayer =
+                RemoveDynamicRoomPlayer(actor, notifyDynamicRoomLifecycle);
+            if (removedDynamicRoomPlayer)
+            {
+                // 0x779546 `FF 11 call [map_vmt+0x00]` -> TDynEnvir.DeleteObject 0x5FD574,
+                // 其 0x5FD592 `dec [map+0xD8]` 在 0x5FD5A3 派发 @OnLeave 之前。只在真的摘掉
+                // 了一份登记时派发：原生的 node 在 DeleteFromMap 里已经从格子摘链，
+                // DeleteObject 每次实际摘除只被调一次。
+                NativeDynEnvirDeleteObjectTrigger(actor);
+            }
+
+            return removedDynamicRoomPlayer || removedCount;
         }
 
         private bool RemoveDynamicRoomPlayer(TBaseObject actor,
