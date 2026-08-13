@@ -1302,11 +1302,6 @@ namespace GameSvr
             }
             if (m_nGold >= nGold)
             {
-                // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                if (m_DealCreat != null)
-                {
-                    DealCancel();
-                }
                 m_nGold -= nGold;
                 // 0x6C7D7B `call 0x6C19B4` -- sub_6C19B4 is SendMsg with
                 // cx=0x2798 (RM_GOLDCHANGED, 10136) and six zero slots, i.e.
