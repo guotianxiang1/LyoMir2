@@ -760,6 +760,75 @@ DBServer 只接受**恰好** `0xEF00` 字节的 blob。
 若照做，C# DBSvr 会比原版 DBServer 少发 4 类静态表，
 并且 `0x0059` / `0x00C9` / `0x0071` 三个常量也会被误删。
 
+## 8bis. 第三处更正：D8「`0x0041` 被 C# 归到 type-1」不成立
+
+上一轮据 `DBSvr/Core/NativeUserAdmissionControl.cs:134` 的**文件名**推断 C# 把 `0x0041`
+归入 type-1 族。逐行核对否定该推断：该常量在 `NativeType2AdmissionProtocol` 类里，
+分发发生在 `GameSocService.cs:578`，位于 `frame.Type == 1` 与 `frame.Type == 3`
+两个分支 **return 之后**的 type-2 分支内。
+
+逐字段与原生 `0x599A9E` 臂对照：
+
+| 项 | 原生 | C# | 判定 |
+|---|---|---|---|
+| 帧 type | 2 | type-2 分支（`GameSocService.cs:555+`） | `FAITHFUL` |
+| 体长 | `0x599A9E 83 7D 08 14 cmp dword[ebp+8],0x14` + `jne` | `Suffix.Length != DenyIpBodySize(20)` → false | `FAITHFUL` |
+| 体 `+0x00` | ShortString cap 15（`0x599AB4 call 0x404E5C`） | `Suffix[0]`，`length > 15 → false` | `FAITHFUL` |
+| 体 `+0x10` | i32（`0x599ABF 8B 48 10 mov ecx,[eax+0x10]`） | `body[16]` 起 4 字节 | `FAITHFUL` |
+
+**D8 撤销。** 原生帧几何 `DataLength = 0x20 = 0x0C 载荷头 + 0x14 体` 与 M2Server 发送侧
+`0x6BEF5F mov dword[ebp-0x34],0x20` 也吻合，三方一致。
+
+---
+
+## 9bis. 四态对账
+
+### 9bis.1 type-1 请求空间（GameServer 角色）
+
+自动比对（C# `const ushort` 声明值 vs 原生 40 个活命令）：
+
+| 状态 | 数量 | 明细 |
+|---|---|---|
+| `FAITHFUL` | **40 / 40** | 原生 40 个活命令 C# 全部有对应处理 |
+| `MISSING` | **0** | — |
+| `INVENTED` | **0** | — |
+
+初次比对报出 9 个"原生认、C# 无常量"（`0x0160..0x0167`、`0x0194`），
+系扫描范围只覆盖 `DBSvr/` 所致：这 9 个的常量在
+`SystemModule/Packet/NativeHeroDbFrameCodec.cs:22-30`，
+分发走 `GameSocService.cs:536-538` 的区间判断
+`command >= LoadCommand(0x0160) && command <= BuildThreeSlotCommand(0x0167)`
+加 `:531` 的 `DetachCommand(0x0194)`。**区间连续覆盖 8 个，无缺口。**
+
+初次比对报出的 24 个"C# 有、原生 type-1 表没有"全部可解释，**无一是 INVENTED**：
+
+- `0x0100..0x0104`（5 个）—— 正是 §2.1 发现的 **DBTool 命令空间**。
+  C# `NativeDbToolProtocol.cs:42-46` 命名为
+  `DeleteCommand / HumanWriteCommand / HumanReadCommand / HeroWriteCommand / HeroReadCommand`。
+  与原生 role-9 分支跳表 `0x598909` 的 5 项一一对应 —— **两边独立得出同一结论，互为交叉验证**。
+- `0x012E 0x012F 0x0131 0x0132 0x0136 0x0137 0x0138 0x0139 0x013A 0x013C 0x013D`（11 个）
+  —— 是**应答**码（DBServer→GameSvr），本就不该出现在 DBServer 的入站表；
+  全部能在 §6 的构造器表里找到。
+- `0x0177 0x0180 0x0184 0x0185 0x0186 0x0187 0x0191`（7 个）—— **type-2** 请求（§2.3）。
+- `0x0188`（1 个）—— **type-3** 请求（§2.4）。
+
+### 9bis.2 type-2 / type-3
+
+| 边界 | `FAITHFUL` | `MISSING` | `INVENTED` | `BLOCKED` |
+|---|---|---|---|---|
+| type-1 请求（40） | 40 | 0 | 0 | 0 |
+| type-1 应答（本构建 37 个构造器码） | 见 §6.1 | 6（原版接收侧遗留，非风险） | 0 | 变长体语义 N3 |
+| type-2 请求（14） | 14 | 0 | 0 | 0 |
+| type-2 静态记录（9） | 9 | 0 | **0（上一轮误判 4）** | 0 |
+| type-3（1 请求 + 1 应答） | 2 | 0 | 0 | 0 |
+| 人物记录布局（8 个尺寸量） | 8 | 1（`rec+0x53C`） | 0 | `acct+0x1C` 语义 N1 |
+
+`IsSilentNoOpCommand`（`NativeType2Protocol.cs:28-33`）声明
+`0x0181 0x0182 0x0183 0x0188..0x0190` 为静默无操作 ——
+与我从跳表 `0x5998E2` 算出的 12 个"在表内但落 default"**完全一致**（§2.3）。`FAITHFUL`。
+
+---
+
 ## 9. 仍然 BLOCKED
 
 | # | 项 | 缺什么 |
