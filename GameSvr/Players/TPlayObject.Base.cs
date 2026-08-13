@@ -2013,17 +2013,16 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject::MakeGhost";
             try
             {
-                if (new YanshenApi(this, null, M2Share.PluginManager).IsPetDieOffline())
-                {
-                    foreach (var slave in m_SlaveList)
-                    {
-                        if (slave == null || slave.m_boDeath || slave.m_boGhost) continue;
-                        slave.m_WAbil.HP = 0;
-                        slave.m_boDeath = true;
-                        slave.m_dwDeathTick = HUtil32.GetTickCount();
-                    }
-                }
-
+                // 「下线宝宝死亡」在这里没有原生对应物，不要再往 MakeGhost 加杀宠循环。
+                // 整个功能只有一处补丁：0x006B5BA1 的 RM_10401 守卫
+                //   0F 84 A5 06 00 00  je 0x006B624C   →   E9 A6 06 00 00 90  jmp + nop
+                // （安装点 0x100AB10B，还原支 0x100AB19B 写回 0F 84 A5 06 00 00，
+                //  开关字段 [edi+0xBF0] 在补丁函数 0x100A96C0 里只被读两次 ——
+                //  0x100AB0AA 使能守卫与 0x100AB134 还原守卫）。
+                // 也没有任何 trampoline 站点挂这个标签。所以原生的做法是**登录时
+                // 不重建从宠**，而不是下线时把从宠打死；后者会多跑一遍死亡路径
+                // （死亡动画、BB死亡触发、掉落），是 C# 自己加的。
+                // 消费点在 TPlayObject.Message.cs 的 RM_10401 分支。
                 M2Share.UserEngine?.RemoveHero(this);
                 lock (M2Share.HighStatLock)
                 {
