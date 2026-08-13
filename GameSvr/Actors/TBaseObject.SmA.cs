@@ -218,5 +218,30 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3341, 0, param, word278, 0);
             return (header, charName ?? string.Empty);
         }
+
+        /// <summary>
+        /// SM 3367 (0xD27) - validated-action result. slot 0x250 (SendDefMessage),
+        /// header only. Recog is the validation result; the caller only reaches the
+        /// send when it is non-zero (<c>test ebx,ebx / je</c> @0x006E9867). Native
+        /// send site @0x006E987E:
+        /// <code>
+        /// 006E9867  85 DB                test ebx, ebx      ; ebx = result
+        /// 006E9869  74 63                je   0x6E98CE      ; 0 -> no send
+        /// 006E986B  6A 00                push 0             ; Param  = 0
+        /// 006E986D  6A 00                push 0             ; Tag    = 0
+        /// 006E986F  6A 00                push 0             ; Series = 0
+        /// 006E9871  6A 00                push 0             ; sMsg   = nil
+        /// 006E9873  8B CB                mov  ecx, ebx      ; Recog  = result
+        /// 006E9875  66 BA 27 0D          mov  dx, 0xD27     ; Ident  = 3367
+        /// 006E9879  8B 45 FC             mov  eax, [ebp-4]  ; self
+        /// 006E987C  8B 30                mov  esi, [eax]
+        /// 006E987E  FF 96 50 02 00 00    call [esi+0x250]   ; SendDefMessage
+        /// </code>
+        /// </summary>
+        internal static (ClientPacket Header, byte[] Body) BuildSm3367(int recog)
+        {
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3367, recog, 0, 0, 0);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
