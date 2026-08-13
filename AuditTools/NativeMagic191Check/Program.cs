@@ -167,6 +167,8 @@ class Program
         var runtimeDirectory = AppContext.BaseDirectory;
         File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
             "[Server]" + Environment.NewLine);
+        File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+            "[String]" + Environment.NewLine);
         File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
             "[Command]" + Environment.NewLine);
 
