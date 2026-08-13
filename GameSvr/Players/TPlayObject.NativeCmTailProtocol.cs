@@ -82,6 +82,12 @@ namespace GameSvr
                 case Grobal2.CM_4410:
                     ClientNativeBeadInlayHero();
                     return true;
+                case Grobal2.CM_4411:
+                    ClientNativeJadeInlayHero();
+                    return true;
+                case Grobal2.CM_4417:
+                    ClientNativeTaskBoardScriptCommand();
+                    return true;
                 default:
                     return false;
             }
@@ -379,6 +385,36 @@ namespace GameSvr
         private void ClientNativeBeadInlayHero()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4410, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4411, native leaf 0x6DB0F8, worker 0x6F38A8 with the self/hero
+        /// selector DL = 1 (hero) — the same jade-inlay worker as CM 4409.
+        ///
+        /// The leaf calls 0x6F38A8(Self, DL=1, Param=word[record+6], body length
+        /// ESI, body string [ebp-8]). With DL=1 the worker resolves the hero
+        /// [Self+0xBB0], requires it valid (0x772DA8) and non-ghost, then runs the
+        /// jade inlay chain 0x748A18 and answers SM 0x113B/4411 through [vmt+0x250]
+        /// with the result code. The template table [[0x7D3F34]] and item element
+        /// bytes are unmodelled, so the reply is withheld.
+        /// </summary>
+        private void ClientNativeJadeInlayHero()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4411, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4417, native leaf 0x6DB1BF, worker 0x699EB4.
+        ///
+        /// The leaf calls 0x699EB4(taskBoard=[[0x7D5D20]], Self, callback=0x6DC000)
+        /// — a task-publish-board command that runs @Main-style script procedures
+        /// against the board object at [[0x7D5D20]] (its +0x2C script slot). That
+        /// script object and its procedures are not modelled in this port, so the
+        /// command's effect and any reply cannot be reproduced.
+        /// </summary>
+        private void ClientNativeTaskBoardScriptCommand()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4417, m_sCharName);
         }
     }
 }
