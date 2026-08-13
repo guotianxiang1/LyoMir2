@@ -237,13 +237,60 @@ namespace GameSvr
             return null;
         }
 
+        /// <summary>
+        /// 登记一条 MapInfo 连接行(TGateObj/OS_GATEOBJECT 传送门 + autogotomap route 边)。
+        /// 由 Maps.LoadMapInfo 末段的连接行第二遍(扫非 '['/非 ';' 行,原版 sub_69599C
+        /// @0x695C62 起)按「源图,X,Y -> 目标图,X,Y」拆分后调用。门登记 1:1 复刻原版
+        /// sub_696328(@0x696328) + sub_779328(@0x779328):
+        ///   1. 源图查不到(FindMap==null): 原版 sub_69599C @0x695CF7→@0x695D00 `je`
+        ///      静默跳过 —— 不记日志、不建门、不建 route 边。
+        ///   2. 目标图查不到: 原版 sub_696328 @0x69634B(sub_696228 按名查图)→@0x696354
+        ///      `je 0x696374` 记 [Warning] 无效连接点。
+        ///   3. 源格 attribute==0(可行走)校验: 原版 sub_779328 @0x77934D(GetMapCellInfo
+        ///      sub_7776A8, cell 12 字节, byte[cell+0]=attribute)→@0x77935D `cmp byte[eax],0`
+        ///      /@0x779360 `jne` 失败。C# 侧 MapCellinfo.Valid ⇔ Attribute==Walk(0),
+        ///      与原版逐位同构。
+        ///   4. 目标格 attribute==0 校验: 原版 sub_779328 @0x779382(对目标 Envir 再取格)
+        ///      →@0x77938E `cmp byte[eax],0`/@0x779391 `jne` 失败。此校验的前置门
+        ///      sub_78FE80(@0x77936B, `mov al,1; ret`)恒真,故目标格校验**恒执行**。
+        ///   5. 两格皆 attribute==0 → new TGateObj{DEnvir,nDMapX,nDMapY}(原版
+        ///      @0x7793B2 GetMem(16) kind=4 头插源格 cell+8、@0x7793D4 cell+2=1、
+        ///      @0x7793DA srcEnvir[+0x18].Add) —— C# 由 AddToMap 落格(MOVE-34 读取侧
+        ///      扫 objlist 找 OS_GATEOBJECT,已验)。
+        ///   6. sub_779328 返回 0(格无效/attribute!=0): 原版 sub_696328 @0x696372 `jne`
+        ///      落到 @0x696374 记 [Warning]。
+        /// autogotomap 的 route 边登记(RegisterNativeMapRoutePortal)对应原版 sub_5F48D4
+        /// (@0x695CAE,独立于门登记成败),仅在两图都已加载时建边 —— 触发条件保持不变。
+        /// </summary>
         public bool AddMapRoute(string sSMapNO, int nSMapX, int nSMapY, string sDMapNO, int nDMapX, int nDMapY)
         {
             bool result = false;
             Envirnoment SEnvir = FindMap(sSMapNO);
-            Envirnoment DEnvir = FindMap(sDMapNO);
-            if (SEnvir != null && DEnvir != null)
+            if (SEnvir == null)
             {
+                // (1) 源图查不到 —— 原版 sub_69599C @0x695D00 静默跳过
+                return false;
+            }
+            Envirnoment DEnvir = FindMap(sDMapNO);
+            if (DEnvir == null)
+            {
+                // (2) 目标图查不到 —— 原版 sub_696328 @0x696354 → 记 [Warning]
+                LogInvalidLinkPoint(SEnvir, nSMapX, nSMapY, sDMapNO, nDMapX, nDMapY);
+                return false;
+            }
+            // route/autogotomap 边(原版 sub_5F48D4,独立于门登记成败;仅两图都在时可建)
+            RegisterNativeMapRoutePortal(SEnvir, DEnvir, (short)nSMapX, (short)nSMapY,
+                (short)nDMapX, (short)nDMapY);
+            // (3)(4) 源格 + 目标格都必须 attribute==0(可行走) —— 原版 sub_779328
+            //        @0x77935D(源) / @0x77938E(目标),sub_78FE80 恒真故目标格恒查。
+            var srcInBounds = false;
+            MapCellinfo srcCell = SEnvir.GetMapCellInfo(nSMapX, nSMapY, ref srcInBounds);
+            var dstInBounds = false;
+            MapCellinfo dstCell = DEnvir.GetMapCellInfo(nDMapX, nDMapY, ref dstInBounds);
+            if (srcInBounds && srcCell.Attribute == CellAttribute.Walk
+                && dstInBounds && dstCell.Attribute == CellAttribute.Walk)
+            {
+                // (5) 造门落格 —— 原版 sub_779328 @0x7793B2..@0x7793DD
                 var GateObj = new TGateObj
                 {
                     boFlag = false,
@@ -252,11 +299,28 @@ namespace GameSvr
                     nDMapY = (short)nDMapY
                 };
                 SEnvir.AddToMap(nSMapX, nSMapY, CellType.OS_GATEOBJECT, GateObj);
-                RegisterNativeMapRoutePortal(SEnvir, DEnvir, (short)nSMapX, (short)nSMapY,
-                    (short)nDMapX, (short)nDMapY);
                 result = true;
             }
+            else
+            {
+                // (6) 格无效 / attribute!=0 —— 原版 sub_696328 @0x696374 记 [Warning]
+                LogInvalidLinkPoint(SEnvir, nSMapX, nSMapY, sDMapNO, nDMapX, nDMapY);
+            }
             return result;
+        }
+
+        /// <summary>
+        /// 原版 sub_696328 @0x6963B4-@0x6963D2 的无效连接点告警:
+        /// Format(格式串 @0x696404, GBK)="[Warning]: 无效连接点：%s %d:%d->%s %d:%d",
+        /// 6 个参数依次 = 源图名、源X、源Y、目标图名、目标X、目标Y,再 MainOutMessage(cl=1)。
+        /// ⚠ 源图名用【已加载 Envir 的规范名】(原版 [SEnvir+0x44]=Envirnoment.sMapName),
+        /// 目标图名用【route 行里的原始 token】(原版 sub_696328 [ebp+0x10]=未经查表的 sDMapNO)。
+        /// </summary>
+        private static void LogInvalidLinkPoint(Envirnoment SEnvir, int nSMapX, int nSMapY,
+            string sDMapNO, int nDMapX, int nDMapY)
+        {
+            M2Share.MainOutMessage(
+                $"[Warning]: 无效连接点：{SEnvir.sMapName} {nSMapX}:{nSMapY}->{sDMapNO} {nDMapX}:{nDMapY}");
         }
 
         /// <summary>
