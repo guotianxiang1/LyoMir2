@@ -1478,6 +1478,16 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_WALK:
+                    // MOVE-10: 双人坐骑乘客态(state 0x34)静默移动闸。原生跳表 0x6D8592 只在
+                    // walk(3011)/run(3013) 两臂带此闸（turn/pose 没有）；置位点唯一 —— 0x6EE8AF/
+                    // 0x6EE8B3(bts) 夹在 0x6EE8A0 写同伴指针 [+0x3C0] 与 0x6EE8DC 搬到驾驶者格
+                    // 之间，故 0x34 = 乘客态（0x33 = 驾驶者），本端为 NativeHorseBlockedState(52)。
+                    // 命中即静默 break：不能塞进 ClientWalkXY，因其返回 false 会发 0x276、
+                    // 返回 true 会发 0x275，都不是原生的"整臂丢弃、不发包"。
+                    if (IsNativeMoveBlockedByPassengerState())
+                    {
+                        break;
+                    }
                     if (ClientWalkXY(ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.boLateDelivery, ref dwDelayTime))
                     {
                         m_dwActionTick = HUtil32.GetTickCount();
@@ -1565,6 +1575,12 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_RUN:
+                    // MOVE-10: 同 CM_WALK —— 乘客态(state 0x34)静默丢弃整臂，不发任何包。
+                    // 跳表 0x6D8592 证明该闸只覆盖 walk(3011)/run(3013)。
+                    if (IsNativeMoveBlockedByPassengerState())
+                    {
+                        break;
+                    }
                     // Native 0x6D9CE4: CM_RUN(3013) shares the WEIGHT/RUNFLAG/CanRun
                     // ladder with CM_RUN3(4108) but NOT the inner mover. The twins
                     // differ in two places, not one:

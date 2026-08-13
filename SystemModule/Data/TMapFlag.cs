@@ -390,6 +390,18 @@ public class TMapFlag
     public bool boUserNoKill;
 
     /// <summary>
+    /// 战神 <c>word[map+0x74]</c> —— UserNoKill 的**等级上限**。上文注释原按 fail-closed 未建模，
+    /// 现已证语义：两个解析器的 on/off 臂都只写立即数 0（<c>66 C7 43 74 00 00</c>，
+    /// 配置 B <c>0x7768FB</c> / GM A <c>0x775951</c>、<c>0x775968</c>），
+    /// 全镜像**唯一**写非零值的是运行期 <c>sub_6CDBBC @0x6CDBE3 mov word [eax+0x74],si</c>：
+    /// 该函数先经 <c>0x6CDBD7</c> 由 <c>[人物+0x128]</c> 取地图，再 <c>0x6CDBDD cmp byte [eax+0x71],0</c>
+    /// —— 未置 UserNoKill 则回“该地图无法设定此命令”，置位才写等级上限并回“已成功设定等级上限为N级”。
+    /// 故解析层的 1:1 行为就是“命中则清零”，本字段承载运行期由 GM 命令写入的上限值。
+    /// 消费者（读 <c>+0x74</c> 做等级判定处）尚未归因，保持不接线。
+    /// </summary>
+    public ushort UserNoKillLevelCap;
+
+    /// <summary>
     /// 战神 map flag <c>DROPTOMAP(destMap)</c> -> native <c>byte[+0x65]=1</c> + AnsiString
     /// <c>[+0x9c]=destMap</c>。前缀比较（len 9, 0x4C6E94），与 NORECONNECT 同形取括号参数。
     /// 配置 B <c>0x7762B4</c>: <c>mov ecx,9 / edx=0x776C2C ("DROPTOMAP") / call 0x4C6E94</c> ->
