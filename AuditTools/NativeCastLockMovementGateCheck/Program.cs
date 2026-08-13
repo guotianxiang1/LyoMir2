@@ -53,7 +53,7 @@ CheckLockValuesThreeAndFive();
 Console.WriteLine(
     "NativeCastLockMovementGateCheck PASS " +
     "cast-lock=+0x574=m_nNativeForcedMoveRemaining(3/5) " +
-    "gated=3011-walk/3013-run/4108-run3/3010-turn/3012-pose(+3035-horserun-extension) " +
+    "gated=3011-walk/3013-run/4108-run3/3010-turn/3012-pose(+3035-hit-arm-no-step) " +
     "refusal=630 walk/run/run3 carry x/y/dir + turn/pose ident-only(MOVE-25 open) " +
     "player-only=TCreature-untouched gate-precedes-interval-bookkeeping " +
     "clear-lock=all-movement-allowed");
@@ -173,10 +173,15 @@ static void CheckPoseRefusedWhileLocked()
         "3012 refused: no pose broadcast");
 }
 
-// C#-only extension: no native 3035 movement handler exists (the dispatcher
-// jumptable at 0x6D858B stops at 3017; the only native 3035 is a broadcast
-// ident inside sub_6EC078 at 0x6EC29C). Gated anyway so the cast window cannot
-// be walked through via the one opcode native does not have.
+// ID3035 订正：早前这里写「原生没有 3035 的 handler，跳表 0x6D858B 到 3017 就停了」。
+// 前半句不成立 —— 3035 不走那张跳表，而是经累减链 0x6D85F0 `sub eax,0xBD4` /
+// 0x6D85FB / 0x6D8604 / 0x6D860D 在 0x6D8610 `je 0x6D9EAF` 落进 HIT CASE1，
+// 是攻击动作（sub_6EC078 字节表 0x6EC178[33]=0x09 → 0x6EC29C `mov cx,0x3F9`
+// = 动作码 1017，worker sub_772388 是活的）。原生的骑乘跑是 CM_RUN3(4108)。
+// 本用例的断言依然成立且仍有价值：3035 现在走 HIT 臂，原生对它只更新朝向
+// （0x7707E3 对 1000..1033 全窗口的无条件副作用），位移量为 0 —— 所以
+// 「锁定期间发 3035 不产生位移」这条不变，只是理由从「移动被闸挡住」
+// 变成了「它本来就不是移动」。
 static void CheckHorseRunRefusedWhileLocked()
 {
     var player = LockedPlayer("horserun-locked", 5, 5, Grobal2.DR_LEFT);

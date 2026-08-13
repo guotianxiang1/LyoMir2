@@ -899,6 +899,21 @@ namespace SystemModule
         public const int CM_PASSWORD = 2001;
         public const int CM_CHGPASSWORD = 2002;
         public const int CM_SETPASSWORD = 2004;
+        // ID3035: 值对，名字不对。3035 是真实可达的 ident，但派发器把它送进
+        // HIT CASE1，与另外十个攻击 opcode 同组 —— 0x6D8610
+        // `0F 84 99 18 00 00 je 0x6D9EAF`，经累减链 0x6D85F0 `sub eax,0xBD4` /
+        // 0x6D85FB `sub eax,2` / 0x6D8604 `sub eax,2` / 0x6D860D `sub eax,3` 到达。
+        // sub_6EC078 的窗口恰好收在它上面（0x6EC15D `add eax,-0xBBA` /
+        // 0x6EC162 `cmp eax,0x21`），字节表 0x6EC178[33]=0x09 选中槽
+        // 0x6EC19A[9]=0x6EC29C `66 B9 F9 03 mov cx,0x3F9`，即动作码 1017 ——
+        // 比 CM_CRSHIT 的 1018 小一号；而 1018 的 worker 0x771BB8 是空壳
+        // `55 8B EC 33 C0 5D C2 04 00`，1017 的 worker 0x772388 是活的。
+        // 原生的骑乘跑是 CM_RUN3(4108)，其 handler 0x6D9D99 开篇即
+        // `B2 33 mov dl,0x33` / `call 0x772960`，未骑乘就发 0x276 拒绝。
+        // 这个名字来自上游 Delphi 客户端头 MirClient/Common/Grobal2z.pas:1043，
+        // 那里的注释原字节 CE B4 D6 AA CF FB CF A2 C2 EB 按 GBK 解码是
+        // 「未知消息码」—— 上游自己就标了是占位名。保留名字是沿用本仓既有惯例
+        // （CM_3037 = 3027 同属"留上游名、纠上游值"）。
         public const int CM_HORSERUN = 3035;
         // 3026/3027/3028, not 3036/3037/3038. Native dispatch table 0x6D8592 is based
         // at ident 3010, and entry [16] (0x6D85D2) = 0x6D9EAF is 3026; 3027 is the

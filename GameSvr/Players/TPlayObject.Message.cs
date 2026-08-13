@@ -1523,44 +1523,6 @@ namespace GameSvr
                         }
                     }
                     break;
-                case Grobal2.CM_HORSERUN:
-                    if (ClientHorseRunXY((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.boLateDelivery, ref dwDelayTime))
-                    {
-                        m_dwActionTick = HUtil32.GetTickCount();
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
-                        SendSocket(M2Share.GetGoodTick);
-                    }
-                    else
-                    {
-                        if (dwDelayTime == 0)
-                        {
-                            SendMoveActionFail();
-                        }
-                        else
-                        {
-                            nMsgCount = GetRunMsgCount();
-                            if (nMsgCount >= M2Share.g_Config.nMaxRunMsgCount)
-                            {
-                                // MOVE-22: Native never disconnects, kicks or logs a fast client.
-                                // Simply send correction back to client.
-                                SendMoveActionFail();
-                                if (m_boTestSpeedMode)
-                                {
-                                    SysMsg(format("速度异常 Ident: {0} Time: {1}", ProcessMsg.wIdent, dwDelayTime), MsgColor.Red, MsgType.Hint);
-                                }
-                            }
-                            else
-                            {
-                                if (m_boTestSpeedMode)
-                                {
-                                    SysMsg(format("操作延迟 Ident: {0} Time: {1}", ProcessMsg.wIdent, dwDelayTime), MsgColor.Red, MsgType.Hint);
-                                }
-                                SendDelayMsg(this, (short)ProcessMsg.wIdent, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, "", dwDelayTime);
-                                result = false;
-                            }
-                        }
-                    }
-                    break;
                 case Grobal2.CM_RUN:
                     // MOVE-11: 原生 run 臂的第一件事不是乘客闸，而是 0x6D9CE4
                     // `mov eax,[ebp-4]` / 0x6D9CE7 `call 0x7742C0` —— 隐身态(0x40)
@@ -1668,6 +1630,18 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_FIREHIT:
                 case Grobal2.CM_SWORD_HIT:
+                // ID3035: 3035 是 CASE1 的第十一个 ident，不是骑乘跑。派发器经累减链
+                //   0x6D85F0 sub eax,0xBD4 / 0x6D85FB sub eax,2 /
+                //   0x6D8604 sub eax,2     / 0x6D860D sub eax,3 /
+                //   0x6D8610 0F 84 99 18 00 00  je 0x6D9EAF
+                // 到达它；sub_6EC078 的窗口也恰好收在它上面（0x6EC15D
+                // `add eax,-0xBBA` / 0x6EC162 `cmp eax,0x21`），字节表
+                // 0x6EC178[33]=0x09 选中槽 0x6EC19A[9]=0x6EC29C `mov cx,0x3F9`
+                // = 动作码 1017，比 CM_CRSHIT 的 0x3FA 小一号。原生骑乘跑是
+                // CM_RUN3(4108) @0x6D9D99，门在 bodyState 0x33。
+                // 原先那条独立臂走 ClientHorseRunXY，**一道骑乘态检查都没有**，
+                // 于是 3035 能白拿一次未骑乘的三格 HorseRunTo —— 已删除。
+                case Grobal2.CM_HORSERUN:
                 case Grobal2.CM_3037:
                     // Native masks the wire direction to 3 bits before handing it
                     // to the shared attack handler sub_6EC078. Both dispatch arms
