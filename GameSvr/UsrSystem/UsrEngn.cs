@@ -2318,9 +2318,13 @@ namespace GameSvr
                 }
                 // Stall (摆摊) 3-minute maintenance tick (sub_61BFB8). Owns its own 180000 ms interval gate
                 // and no-ops when the stall subsystem is dormant, so calling it every pass is cheap.
-                NativeStallExpiryTick.Run();
-            }
-            catch (Exception e)
+                    NativeStallExpiryTick.Run();
+                    // DROP-35 段3「世界掉落」的每秒计时器（原生 TWorldScatterMgr
+                    // sub_75307C）。它自带 1000ms 闸与开服 30 分钟静默期
+                    // （0x752C3A add eax,0x1B7740），未载入配置时空转，故每轮调用无代价。
+                    NativeWorldScatter.Instance.Run(HUtil32.GetTickCount());
+                }
+                catch (Exception e)
             {
                 M2Share.ErrorMessage(sExceptionMsg);
                 M2Share.ErrorMessage(e.Message);

@@ -128,10 +128,14 @@ NativeDropControlRuntime.Materialize(
 Equal(3, failedCreates, "placement failure consumes all quantity");
 Equal(3, failedPlacements, "placement attempted for every quantity");
 Equal(3, failedRandomCalls, "failed placement does not roll back init");
-// 0x71FF3D  B9 03 00 00 00  mov ecx,3  -> DropItemDown's ItemRange (ECX is the
-// third register param; 0x7688B4 `mov ebx,ecx` receives it).  Segment 3 of
-// sub_71FA20 hardcodes a radius of 3, not 4.
-Equal(3, failedRange, "native fixed scatter range");
+// 本测试跑的是 NativeDropControlRuntime.Materialize，即**掉落控制腿**，其原生本体
+// 是 sub_720278 而非 sub_71FA20 段3。两条腿半径不同，实测字节：
+//   0x720213  B9 04 00 00 00  mov ecx,4   ; sub_720278  掉落控制  -> call 0x7688A0
+//   0x71FF3D  B9 03 00 00 00  mov ecx,3   ; sub_71FA20 段3 世界掉落 -> call 0x7688A0
+// ECX 是 DropItemDown 的第三个寄存器参（0x7688B4 `mov ebx,ecx` 收）。
+// 段3 的 3 已由 NativeWorldScatter 及 NativeWorldScatterCheck 各自守着，
+// 不要拿它来钉这条腿 —— 那正是 f3354457 把 ScatterRange 从 4 改成 3 的误归属根源。
+Equal(4, failedRange, "native fixed scatter range");
 
 var stackPlaced = new List<TUserItem>();
 var stackLog = new List<KeyValuePair<string, string>>();
