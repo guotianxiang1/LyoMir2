@@ -774,6 +774,21 @@ namespace GameSvr
         }
 
         /// <summary>
+        /// 战神 sub_71FA20 @0x71FA50 / @0x71FA6C.  The arm-and-test sits at the very
+        /// top of @AfterScatterItems, ahead of both the drop-table gate (0x71FA8A) and
+        /// the anti-fatigue ladder (0x71FAD7), and the store at 0x71FA6C is
+        /// unconditional — a monster that goes on to scatter nothing still burns the
+        /// flag, which is what stops the sibling consumer sub_71EC88 from re-running
+        /// the same table.
+        /// </summary>
+        private bool TryEnterNativeScatter()
+        {
+            if (m_boNativeScatterConsumed) return false;
+            m_boNativeScatterConsumed = true;
+            return true;
+        }
+
+        /// <summary>
         /// 战神 <c>sub_71FA20</c> (@AfterScatterItems) @0x71FAD7-0x71FB19 — the three
         /// abort tests the whole scatter routine opens with.  Any one of them takes the
         /// 0x71FAF7 branch which ends in <c>jmp 0x720092</c>, and 0x720092 is the outer
@@ -813,21 +828,6 @@ namespace GameSvr
         /// established (SPWN-30 / SPWN-31 are BLOCKED on the ecx/pushed-parameter
         /// identities), so it is deliberately not reproduced here rather than guessed at.
         /// </summary>
-        /// <summary>
-        /// 战神 sub_71FA20 @0x71FA50 / @0x71FA6C.  The arm-and-test sits at the very
-        /// top of @AfterScatterItems, ahead of both the drop-table gate (0x71FA8A) and
-        /// the anti-fatigue ladder (0x71FAD7), and the store at 0x71FA6C is
-        /// unconditional — a monster that goes on to scatter nothing still burns the
-        /// flag, which is what stops the sibling consumer sub_71EC88 from re-running
-        /// the same table.
-        /// </summary>
-        private bool TryEnterNativeScatter()
-        {
-            if (m_boNativeScatterConsumed) return false;
-            m_boNativeScatterConsumed = true;
-            return true;
-        }
-
         private static bool NativeAfterScatterItemsBlocked(TBaseObject killer)
         {
             // 0x71FAB4 + 0x71FACE: only a non-nil, RC_PLAYOBJECT killer reaches the tests.
