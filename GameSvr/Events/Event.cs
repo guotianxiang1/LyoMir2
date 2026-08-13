@@ -79,6 +79,13 @@ namespace GameSvr
             m_dwOpenStartTick = HUtil32.GetTickCount();
             m_nEventType = nType;
             m_nEventParam = 0;
+            // TMapEvent ctor 0x717352  81 FE 80 FC 0A 00  cmp esi, 0xAFC80
+            //               0x717358  7E 05              jle 0x71735F  (signed)
+            //               0x71735A  BE 80 FC 0A 00     mov esi, 0xAFC80
+            //               0x71735F  89 73 20           mov [ebx+0x20], esi
+            // Negatives are kept (they compare below the ceiling). 720000 ms is 12 min.
+            if (dwETime > 0xAFC80)
+                dwETime = 0xAFC80;
             m_dwContinueTime = dwETime;
             m_boVisible = boVisible;
             m_boClosed = false;

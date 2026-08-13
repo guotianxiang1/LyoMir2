@@ -3959,6 +3959,10 @@ namespace GameSvr
             {
                 foreach (var variable in HumData.ScriptV)
                 {
+                    // group-0 V lives at +0x80C..+0x99B and is never in the
+                    // type1 dynarray. A flat key below 1001 can only be group 0
+                    // (sub_6E42CC imul 0x3E8), so it does not belong here.
+                    if (variable.Key < 1001) continue;
                     PlayObject.m_ScriptVVars[variable.Key] = variable.Value;
                 }
             }
@@ -3966,15 +3970,8 @@ namespace GameSvr
             {
                 foreach (var variable in HumData.ScriptS)
                 {
+                    if (variable.Key < 1001) continue;
                     PlayObject.m_ScriptSVars[variable.Key] = variable.Value;
-                }
-            }
-            if (PlayObject.m_ScriptVVars.Count == 0 && HumData.IntVar != null)
-            {
-                for (var i = 0; i < HumData.IntVar.Length; i++)
-                {
-                    if (HumData.IntVar[i] != 0)
-                        PlayObject.m_ScriptVVars[i] = HumData.IntVar[i];
                 }
             }
             HumItems = HumanRcd.Data.HumItems;

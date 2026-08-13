@@ -785,9 +785,8 @@ namespace GameSvr.Mall
         // 所以必须照原生 upsert sub_6E4140 的语义：它没有任何零值判断，四个存储点
         // （0x6E4187 / 0x6E41C2 / 0x6E4231 / 0x6E4260 `mov [..], edx`）一律原样写入，
         // 而且原生根本没有"删除某个键"的原语。此处一旦把 0 当成删除，内存里读回
-        // GetV 的 miss 哨兵 -1（0x6DF1F1 `mov [ebp-4],0xFFFFFFFF`），而存档编码器
-        // NativeHumanDataCodec.MergeKeyValues 对盘上已有、内存已无的键补 0 —— 同一个
-        // 坐标在重登前后会给出 -1 和 0 两种结果。
+        // GetV 的 miss 哨兵 -1（0x6DF1F1 `mov [ebp-4],0xFFFFFFFF`）。编码器
+        // 0x6E4DE7/0x6E4E19 是对当前动态数组的整块 Move，缺键就是缺键。
         private static void SetPlayerVariable(TPlayObject player, char bank, int group, int index, int value)
         {
             player?.SetScriptVar(bank, group, index, value);
