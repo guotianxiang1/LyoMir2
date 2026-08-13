@@ -117,7 +117,13 @@ namespace GameSvr
                 nOldY = this.m_nCurrY;
                 this.WalkTo(nDir, false);
                 n20 = M2Share.RandomNumber.Random(3);
-                for (var i = Grobal2.DR_UP; i <= Grobal2.DR_UPLEFT; i++)
+                // MONAI-12 — GotoTargetXY sub_71DDD0 的转向重试是 7 次，不是 8：
+                //   0071DE93  C7 45 F4 07 00 00 00  mov  [ebp-0xC],7
+                //   0071DE9A  ...（循环体：仍在原地才改向再 WalkTo）
+                //   0071DEDB  FF 4D F4              dec  [ebp-0xC]
+                //   0071DEDE  75 BA                 jne  0x71DE9A
+                // C# 原先 `for i = DR_UP..DR_UPLEFT`（0..7 含）多试一次方向。
+                for (var i = 0; i < 7; i++)
                 {
                     if (nOldX == this.m_nCurrX && nOldY == this.m_nCurrY)
                     {
