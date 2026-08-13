@@ -33,23 +33,35 @@ var bridge = new PasApiBridge
 
 foreach (var property in new[]
          {
-             "GuildPoint", "JiaYouPoint", "DominateLevel",
+             "GuildPoint", "DominateLevel",
              "TenYearImpress", "GetTrustByWine"
          })
 {
     CheckClosedPropertyRead(bridge, property);
 }
+player.m_dwJiaYouPoint = 40;
+Assert(bridge.GetPlayerProperty("JiaYouPoint", out var jiaYou),
+    "JiaYouPoint property read failed");
+Assert(jiaYou.AsInt() == 40, "JiaYouPoint getter did not return Self+0xAF0");
+Assert(!bridge.SetPlayerProperty("JiaYouPoint", PasValue.FromInt(9)),
+    "read-only JiaYouPoint acquired a write path");
+Assert(player.m_dwJiaYouPoint == 40, "JiaYouPoint setter mutated Self+0xAF0");
 Assert(!bridge.SetPlayerProperty("DominateLevel", PasValue.FromInt(9)),
     "DominateLevel property write did not fail closed");
 
 foreach (var method in new[]
          {
-             "AddGuildPoint", "DecJiaYouPoint", "SetVExpToBeConverted"
+             "AddGuildPoint", "SetVExpToBeConverted"
          })
 {
     CheckClosedPlayerMethod(bridge, method,
         new List<PasValue> { PasValue.FromInt(7) });
 }
+Assert(bridge.CallPlayerMethod("DecJiaYouPoint",
+        new List<PasValue> { PasValue.FromInt(15) }),
+    "DecJiaYouPoint native mutator was not dispatched");
+Assert(player.m_dwJiaYouPoint == 25,
+    "DecJiaYouPoint did not subtract from Self+0xAF0");
 
 foreach (var function in new[]
          {
@@ -348,16 +360,21 @@ static ProductionMatrix ScanProductionGbk(string directory)
 
 static string FindProductionEnvir(string repositoryRoot)
 {
-    var candidates = new[]
+    var candidates = new List<string>();
+    var env = Environment.GetEnvironmentVariable("LYOM2_PRODUCTION_ENVIR");
+    if (!string.IsNullOrWhiteSpace(env))
+        candidates.Add(env);
+    candidates.Add(@"D:\lyom2Release\mud2.0\Mir200\Envir");
+    var dir = new DirectoryInfo(repositoryRoot);
+    while (dir != null)
     {
-        Environment.GetEnvironmentVariable("LYOM2_PRODUCTION_ENVIR"),
-        @"D:\lyom2Release\mud2.0\Mir200\Envir",
-        Path.GetFullPath(Path.Combine(repositoryRoot, "..", "staging",
-            "pas-include-context-20260714", "Envir"))
-    };
-    return candidates.FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) &&
-        Directory.Exists(path)) ?? throw new DirectoryNotFoundException(
-        "production GBK Mir200/Envir corpus not found");
+        candidates.Add(Path.Combine(dir.FullName, "staging",
+            "pas-include-context-20260714", "Envir"));
+        dir = dir.Parent;
+    }
+    return candidates.FirstOrDefault(Directory.Exists)
+        ?? throw new DirectoryNotFoundException(
+            "production GBK Mir200/Envir corpus not found");
 }
 
 static void RequireCases(string region, params string[] names)
