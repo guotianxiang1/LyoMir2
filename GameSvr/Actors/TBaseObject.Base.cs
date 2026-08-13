@@ -1284,10 +1284,24 @@ namespace GameSvr
                             {
                                 ScatterBagItems(null);
                             }
-                            if (M2Share.g_Config.boDieDropGold)
-                            {
-                                ScatterGolds(null);
-                            }
+                            // 玩家死亡原生不掉金币，所以这里原先的 `boDieDropGold ->
+                            // ScatterGolds(null)` 已删除。判据是三条独立的：
+                            // ① 掉金币到地上的例程是 sub_768AAC（怪物结算 sub_71FA20
+                            //    @0x72000A `E8 9D 8A 04 00` 调它，之前是 0xBB8 上钳、
+                            //    idiv、0x7D0 分堆）。它全镜像只有 6 个 E8 调用者
+                            //    ——0x64E74A / 0x64E765 / 0x64F5C0 / 0x64F5DB / 0x6C30F9 /
+                            //    0x72000A，且 0 个字面 dword 引用（非虚派发）。
+                            //    0x6C30F9 是玩家手动丢金币那条短函数（0x6C30E1 与
+                            //    0x6C3102 两处 `29 B3 5C 01 00 00 sub [ebx+0x15C],esi`，
+                            //    0x6C3112 ret），与死亡无关。**六个里没有一个在死亡链上。**
+                            // ② 金币字段 [obj+0x15C] 的位移字节 `5C 01 00 00` 全镜像出现
+                            //    103 次，落在 TPlayer.Die(sub_6C07A0) / THumanKind.Die
+                            //    (sub_741368) / sub_73FC70 / sub_740078 里的是 **0** 次。
+                            // ③ 策略梯 sub_741368 的三条出口在 0x741498 汇合，之后只有
+                            //    0x7414DB `[self+0x37C] := 0` 和 0x741514 `dx=0x2725`
+                            //    (10021) 一个包，没有任何金币动作。
+                            // 配置名 DieDropGold / boDieDropGold 在 GBK、裸 ASCII
+                            // （大小写不敏感）、UTF-16LE 三路皆 0 命中。按 §3.1 删除。
                         }
                     }
                 }
