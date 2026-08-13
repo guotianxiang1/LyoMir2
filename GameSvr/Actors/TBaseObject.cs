@@ -1646,6 +1646,11 @@ namespace GameSvr
             {
                 nPower = 0;
             }
+            // 眼神「英雄倍攻和暴击」的桩体挂 0x76C816（`cmp [ebx+0x84],0`，7 字节），
+            // 也就是上面那道 nPower 钳零（0x76C810..0x76C814）之后、幸运掷点之前。
+            // 它改写的是 edi = nBasePower，与挂 0x76C88B 改返回值的 @baoji 是两条不同的臂：
+            // 类门只放行 TTaosHero/TWarHero/TMagHero，倍率取主人的 S(1,44/45/46)。
+            nBasePower = GameSvr.Plugins.YanshenTriggerDispatch.FireHerobaoji(this, nBasePower);
             if (m_nLuck > 0)
             {
                 if (M2Share.RandomNumber.Random(10 - HUtil32._MIN(9, m_nLuck)) == 0)

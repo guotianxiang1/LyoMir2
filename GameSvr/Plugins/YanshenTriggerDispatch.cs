@@ -51,7 +51,7 @@ namespace GameSvr.Plugins
     /// <para><b>惰性</b>：<see cref="Armed"/> 在插件缺席时只读两个字段就返回 false，
     /// 不分配、不查配置、不碰脚本引擎。所有 Fire* 入口的第一条语句都是这道门。</para>
     /// </summary>
-    public static class YanshenTriggerDispatch
+    public static partial class YanshenTriggerDispatch
     {
         /// <summary>桩体末尾的虚方法槽。数值就是原生 <c>call [ebx+0xNN]</c> 里的 NN。</summary>
         public enum Slot
@@ -176,7 +176,10 @@ namespace GameSvr.Plugins
                      + "④dword [[item+0x1C]+0x14]；⑤[item+0x1C]+4 处的 ShortString；⑥VType=2 值 0。"
                      + "【BLOCKED】②③是 208 字节物品记录 blob 偏移 0x08/0x0C 处的**整 dword**"
                      + "（跨 DuraMax 与 btValue 字段），④落在 TStdItem+0x14 —— 这三项的字段切分"
-                     + "没有逐字节证据，凑数就是臆造，故本条只留档不发射。",
+                     + "没有逐字节证据，凑数就是臆造，故本条只留档不发射。"
+                     + "本轮补上建桩坐标以便后续解码：站点①0x100D4417 count=0x134 缓冲 [ebp-0x75EC]、"
+                     + "站点②0x100D4469 count=0x140 缓冲 [ebp-0x4028]，两者都是 `movaps/movups` 逐 16 字节"
+                     + "拼装（不是 `rep movsd` 单模板），即审计 §5 C2 里点名的「8 个未回收模板」之二。",
             },
             new()
             {
@@ -187,7 +190,10 @@ namespace GameSvr.Plugins
                 DispatchSlot = Slot.WithParams, ParamCount = 6, Action = HostAction.Notify, Wired = false,
                 Note = "英雄穿戴的玩家版，桩体逐字节同形，只有两处不同："
                      + "门是 [[ebp+0x10]]==0x6AC8C8（必须是玩家），且 This_Player 直接用 esi "
-                     + "而不是 [esi+0x68C]。参数向量与 @HeroEquiepchange 同，同样 BLOCKED。",
+                     + "而不是 [esi+0x68C]。参数向量与 @HeroEquiepchange 同，同样 BLOCKED。"
+                     + "建桩坐标：站点①0x100D3509（host 0x75F085→0x75F08C）、"
+                     + "站点②0x100D355B count=0x12E 缓冲 [ebp-0x3844]（host 0x75EA37→0x75EA3C），"
+                     + "同为 `movaps` 拼装模板。",
             },
             new()
             {
@@ -200,7 +206,14 @@ namespace GameSvr.Plugins
                      + "「initys 在生产树 3326 个文件 0 命中」那条：initys 不是文件名也不是 API，"
                      + "是**上线触发**发出的脚本标签 @initys。"
                      + "【故意不接】§5.2 明令回收系统必须按门①→门②→配置快照→开关→产出的顺序推进，"
-                     + "在这条链修好之前放开 @initys 会直接打开删装备的闸门。",
+                     + "在这条链修好之前放开 @initys 会直接打开删装备的闸门。"
+                     + "本轮补齐桩体证据：77 dword 拼进 [ebp-0xC30]（`movaps` 拼装 + 尾 `mov dword "
+                     + "[ebp-0xB00],0xE9`）→ 81 字节，三道门后 `pushal/pushfd` → 派发 → `popfd/popal` → "
+                     + "尾部重放被覆盖的 5 字节 `5F 5E 5B 8B E5`(pop edi/esi/ebx + mov esp,ebp) → jmp 0x6548C2"
+                     + "(`5D C2 04 00` pop ebp / ret 4) → Notify。门①的 `[ebp+4]==0x6542D2` 已亲验："
+                     + "0x6542CD `E8 76 04 00 00 call 0x654748`，返回地址正是 0x6542D2，而 sub_654748 的"
+                     + "序言 0x65475A..0x65475F `mov [ebp-4],ecx / mov ebx,edx / mov esi,eax` 说明门②③"
+                     + "校验的 ebx 就是它的 edx 形参。所以这不是「函数级」通知，是「只认那一个调用点」的通知。",
             },
             new()
             {
@@ -249,7 +262,18 @@ namespace GameSvr.Plugins
                 Builder = 0x10032FD0, BuilderSites = new uint[] { 0x100AE7F5 },
                 HostTargets = new uint[] { 0x006EDC2B }, HostResumes = new uint[] { 0x006EDC30 },
                 DispatchSlot = Slot.WithParams, ParamCount = 2, Action = HostAction.Replace, Wired = false,
-                Note = "与两个召唤一样落在魔法分发臂上且不重放被覆盖的 call。",
+                Note = "与两个召唤一样落在魔法分发臂上且不重放被覆盖的 call。本轮把桩体解出来了："
+                     + "88 dword 由 0x100AE6xx 一串 `movaps/movups` 拼进 [ebp-0xC34]（不是 rep movsd 单模板）"
+                     + "→ 92 字节。确认 **Replace**：不重放 0x6EDC2B 的 `E8 F4 67 08 00 call 0x774424`，"
+                     + "直接 jmp 0x6EDC30（`jmp 0x6EE04B` = DEFAULT 汇聚）。0x774424 全镜像**只有 0x6EDC2B "
+                     + "一个调用者**，故「拦生产函数入口」与「拦调用点」等价（同 0x76EE7C / 0x76EDFC 的先例）。"
+                     + "This_Player = ebx。两个 Variant 由桩体**就地手搓**（不走 0x41AFE4）："
+                     + "+0x017 `mov [ebp-0x6C],3`(varInteger) / +0x01E 值 = 宿主帧的 `[ebp-4]`；"
+                     + "+0x024 `mov [ebp-0x5C],3` / +0x02B 值 = 宿主帧的 `[ebp-0xC]`。"
+                     + "【缺口】这两个整数是**魔法分发器自己的两个局部**，不是 0x774424 的三个实参"
+                     + "（实参是 eax=ebx / edx=esi / ecx=[ebp+8]）。分发器起点未定名、其 [ebp-4] 与 [ebp-0xC] "
+                     + "的语义未逐字节反出来，改在 C# 生产函数入口取参数就是换了两个不同的量 —— 凑数即臆造，"
+                     + "故只留档不发射。补齐所需：反出 0x6ED2A4 起那个魔法分发器的完整帧布局。",
             },
             new()
             {
@@ -257,21 +281,60 @@ namespace GameSvr.Plugins
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D1DE6 },
                 HostTargets = new uint[] { 0x0073C484 }, HostResumes = new uint[] { 0x0073C48A },
                 DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
-                Note = "门 [ebx]==0x6AC8C8；This_Player = ebx。",
+                Note = "门 [ebx]==0x6AC8C8；This_Player = ebx。本轮把桩体解出来了：59 dword 拼进 "
+                     + "[ebp-0x3D0]（`movaps` 拼装 + 三条 `mov dword` 尾巴 0x44/0x61/0xE9）→ 63 字节。"
+                     + "**开头就重放**被覆盖的 6 字节 `33 D2 52 50 8B C6`（xor edx,edx / push edx / push eax / "
+                     + "mov eax,esi），再 `test ebx,ebx / je` + `cmp [ebx],0x6AC8C8 / jne` 两道门，"
+                     + "`pushal`（**无 pushfd**）→ 派发 → `popal` → jmp 0x73C48A。"
+                     + "宿主 sub_73C208 = THumanKind.Run（VMT 槽由 0x73BCBC 落在 THumanKind VMT 0x73BC34+0x88 定案；"
+                     + "调用者 0x68A45A/0x68A5B8 英雄 Run、0x6B2DE0 玩家 Run）。钩子落在「复活机会倒计时」段："
+                     + "0x73C47A 引用 0x73C784「您将在 」、0x73C48A `sub eax,[ebx+0x450]` / `fild` / "
+                     + "`fdiv [0x73C78C]` 算剩余秒、0x73C4BC 引用 0x73C798「 秒后获得一次复活机会」。"
+                     + "【缺口】C# **没有移植这段倒计时**：全仓 grep「复活机会」「神龙附体状态结束」零命中，"
+                     + "THumanKind.Run 的这一臂在托管端不存在，没有等价落点可挂。"
+                     + "补齐所需：先把 sub_73C208 的复活倒计时臂移植过来，再在算剩余秒之前接一次 @OnDia。",
             },
             new()
             {
                 ConfigKey = "被击杀触发", ScriptLabel = "@MyKill",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D26FD },
                 HostTargets = new uint[] { 0x00766624 }, HostResumes = new uint[] { 0x00766629 },
-                DispatchSlot = Slot.WithParams, ParamCount = 2, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.WithParams, ParamCount = 2, Action = HostAction.Notify, Wired = true,
+                Note = "桩体 = .rdata 0x102CF4E8 x196 模板（`rep movsd` @0x100D26E9）→ 209 字节。"
+                     + "开头 `8B 45 FC 8B 10` 原样重放被覆盖的 5 字节 → Notify。三道门："
+                     + "+0x006 `cmp edx,0x6AC8C8`（[ebp-4] 必须是 TPlayer）、+0x018 "
+                     + "`cmp ebx,0x400000`、+0x024 `cmp [ebx],0x6AC8C8`，其中 "
+                     + "ebx = [victim+0x34C] = **m_ExpHitter**（+0x34C/+0x354/+0x344 = "
+                     + "ExpHitter/LastHiter/TargetCret，见 0x71E305 与 0x71E310 死亡时成对清零）。"
+                     + "This_Player = [ebp-4] = 死者本人；两个 Variant 都取自**凶手**："
+                     + "①+0x04A `lea edx,[ebx+0x106]` ShortString → m_sCharName；"
+                     + "②+0x07A `mov edx,[ebx+0x128]` / `mov edx,[edx+0x48]` = m_PEnvir.sMapDesc"
+                     + "（+0x128=m_PEnvir 全仓已定；+0x48 由 0x6EA471 的 Format 实参向量定案 —— "
+                     + "格式串 0x6EA584 `%s在%s[%d,%d]施放%s，请大家前往观看.` 的第二个 %s，"
+                     + "C# 既有端口 TPlayObject.NativeFireworkText.cs:59 用的正是 m_PEnvir.sMapDesc）。"
+                     + "宿主 sub_7663BC = TCreature.Run（异常串 0x766848 `[Exception]: TCreature.Run - `），"
+                     + "钩子在 `[self+0x74]==0`(未死) → `[self+0x2AC]<=0`(HP) → `call [vmt+8]`(复活尝试) "
+                     + "返回 false 之后、`call [vmt+0x84]`(Die) **之前**。"
+                     + "C# 落点：TBaseObject.Base.cs 的 Run —— `TryNativeRevive()` 后的 "
+                     + "`if (m_WAbil.HP == 0) { Die(); }` 里，紧挨 Die() 之前。",
             },
             new()
             {
                 ConfigKey = "捡物触发", ScriptLabel = "@pickpre",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D2BA2 },
                 HostTargets = new uint[] { 0x006B770C }, HostResumes = new uint[] { 0x006B7711 },
-                DispatchSlot = Slot.WithParams, ParamCount = 2, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.WithParams, ParamCount = 2, Action = HostAction.Notify, Wired = true,
+                Note = "桩体 = .rdata 0x102CCCE0 x140 模板（`rep movsd` @0x100D2B8E）→ 153 字节。"
+                     + "开头 `8B 55 FC 8B C3` 原样重放被覆盖的 5 字节 → Notify。**无门**。"
+                     + "This_Player = eax = ebx = self（+0x017 `push eax` … +0x06D `pop edx`）。"
+                     + "两个 Variant：①+0x01B `mov edx,[[ebp-4]+0x1C]` / `lea edx,[edx+4]` 处的 "
+                     + "ShortString = TStdItem 名（TStdItem +4 起是 ShortString，与 @HeroEquiepchange "
+                     + "第 5 参同源）；②+0x048 `mov edx,[ebx+0x128]` / `[edx+0x48]` = self.m_PEnvir.sMapDesc。"
+                     + "宿主 sub_6B74D8 = ClientPickUpItem（串 0x6B7800「一定时间范围内，不能拾取。」/ "
+                     + "0x6B7868「无法再拾取更多物品。」），钩子在 0x6B7708 `push 4` / 0x6B770A `mov cl,1` "
+                     + "之后、0x6B7713 `call [vmt+0x248]`(AddItemToBag) **之前**，且已过 DeleteFromMap。"
+                     + "C# 落点：TPlayObject.ClientPickUpItem，DeleteFromMap 成功且发过 RM_ITEMHIDE 之后、"
+                     + "AddItemToBag 之前。金币臂在此之前就 return，故不发。",
             },
             new()
             {
@@ -279,6 +342,15 @@ namespace GameSvr.Plugins
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D2D50 },
                 HostTargets = new uint[] { 0x0076E35D }, HostResumes = new uint[] { 0x0076E362 },
                 DispatchSlot = Slot.WithParams, ParamCount = 4, Action = HostAction.Notify, Wired = false,
+                Note = "桩体 = .rdata 0x102CC6F8 x206 模板 → 222 字节，尾部 +0x0D4 重放被覆盖的 5 字节 "
+                     + "`68 C8 00 00 00 push 0xC8` 后 jmp 0x76E362 → Notify，**无门**。This_Player = ebx。"
+                     + "四个 Variant：①`[ebp-8]` 经 0x41AFE4(cl=0xFC) → 伤害值；②`[esi+0x106]` ShortString "
+                     + "→ 被打者 m_sCharName；③`[[ebx+0x128]+0x48]` = 攻击者 m_PEnvir.sMapDesc；"
+                     + "④VType=2(varSmallint)，`cmp [esi],0x6AC8C8` 命中写 1、否则留 0 = 「被打者是玩家」。"
+                     + "宿主 sub_76E268（29 个调用者：怪物 0x66CBxx、英雄 0x690Dxx、魔法特效 0x771xxx…），"
+                     + "钩子在 0x76E357 `cmp [ebp-8],0 / jle` 之后、0x76E369 `call 0x76B4F8`（对 esi 落伤害）之前。"
+                     + "【缺口】sub_76E268 未定名、C# 对应方法未确认；它是**每次命中都跑**的热点，"
+                     + "接错位置会改变伤害链顺序。补齐所需：给 sub_76E268 定名并锁定其 C# 等价方法与 [ebp-8] 语义。",
             },
             new()
             {
@@ -286,6 +358,16 @@ namespace GameSvr.Plugins
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D2F0B },
                 HostTargets = new uint[] { 0x0076DE84 }, HostResumes = new uint[] { 0x0076DE8A },
                 DispatchSlot = Slot.WithParams, ParamCount = 5, Action = HostAction.Notify, Wired = false,
+                Note = "桩体 = .rdata 0x102CD3D0 x255 模板 → 277 字节。被覆盖的 6 字节是 "
+                     + "`8B F0 85 F6 7E 2C`，桩体**拆成两半重放**：开头 +0x000 `mov esi,eax`，"
+                     + "结尾 +0x0FE `test esi,esi` 后用两条 jmp 复现 `jle 0x76DEB6` / 直落 0x76DE8A → Notify。"
+                     + "This_Player = ebx。五个 Variant：①esi(=返回的伤害) 经 0x41AFE4；"
+                     + "②`[[ebp-4]+0x106]` ShortString = 被打者名；③`[[ebx+0x128]+0x48]` = 施法者 "
+                     + "m_PEnvir.sMapDesc；④varSmallint，`[[ebp-4]]==0x6AC8C8` 则 1 = 「被打者是玩家」；"
+                     + "⑤`[ebp-8]` 经 0x41AFE4。宿主钩子紧跟 0x76DE7E `call [target_vmt+0x104]`（算魔法伤害）。"
+                     + "【缺口】与 @MyAttack 同类：宿主函数（含 0x76DE84 的那个）连起点都没扫出来"
+                     + "（0x76DA00..0x76DE90 无可辨函数边界），[ebp-4]/[ebp-8] 的语义与 C# 对应方法未定。"
+                     + "同为每次施法都跑的热点，故 fail-closed。",
             },
             new()
             {
@@ -308,6 +390,16 @@ namespace GameSvr.Plugins
                 HostTargets = new uint[] { 0x0076E1AF, 0x0076DEC0 },
                 HostResumes = new uint[] { 0x0076E1B6, 0x0076DEC7 },
                 DispatchSlot = Slot.WithParams, ParamCount = 3, Action = HostAction.Notify, Wired = false,
+                Note = "第二个站点（0x76DEC0→0x76DEC7）本轮解出：140 dword 拼进 [ebp-0xE64] → 147 字节，"
+                     + "尾部重放被覆盖的 7 字节 `80 BB B6 01 00 00 00 cmp byte [ebx+0x1B6],0` → Notify。"
+                     + "This_Player = ebx。三个 Variant 全部**就地手搓**："
+                     + "①VType=0x100(varString)，值 = `[[ebp-4]+0x106]` ShortString 经 0x405774 转出的 AnsiString；"
+                     + "②VType=2(varSmallint)，`[[ebp-4]]==0x6AC8C8` 则 1；③VType=3(varInteger)，值 = `[ebp-8]`。"
+                     + "两个站点是同一条魔法链的前后两处（0x76E1AF 那支同形，只是判 `[esi+0x1B6]` 而非 `[ebx+0x1B6]`，"
+                     + "模板 0x8F dword、缓冲另开），所以同一个开关要在两处各发一次。"
+                     + "【缺口】与 @MyMagicAttack 共用同一批未定名宿主帧（[ebp-4]/[ebp-8]），且第一个站点 "
+                     + "0x76E1AF 的桩体缓冲基址尚未从 0x100ADBCD..0x100ADDBF 的 movaps 序列里解出来，"
+                     + "无法确认两处参数向量完全一致。fail-closed。",
             },
             new()
             {
@@ -360,7 +452,30 @@ namespace GameSvr.Plugins
                 ConfigKey = "英雄倍攻和暴击", ScriptLabel = "@Herobaoji",
                 Builder = 0x10032CC0, BuilderSites = new uint[] { 0x100D49B4 },
                 HostTargets = new uint[] { 0x0076C816 }, HostResumes = new uint[] { 0x0076C81D },
-                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = false,
+                DispatchSlot = Slot.Plain, ParamCount = 0, Action = HostAction.Notify, Wired = true,
+                Note = "桩体 = .rdata 0x102C8DA0 x354 模板（0x100D4985 `mov ecx,0x162` + 0x100D49A0 "
+                     + "`rep movsd`）→ 361 字节；标签串在 0x100D49E3 起现搭（refcnt=-1 / len=0xA / "
+                     + "'@Her'+'obao'+'ji'）。尾部 +0x15D 原样重放被覆盖的 7 字节 "
+                     + "`83 BB 84 00 00 00 00 cmp [ebx+0x84],0` 并 jmp 0x76C81D → 归类 Notify，"
+                     + "**但它在重放前改写了 edi**，所以与 @baoji 一样是掷点的倍率修改器，不是纯通知。"
+                     + "与 @baoji 的分工：@baoji 挂 0x76C88B 改 **esi=返回值**（只认 TPlayer）；"
+                     + "@Herobaoji 挂 0x76C816 改 **edi=nBasePower**（掷点之前），且类门是三个具体英雄类 "
+                     + "`cmp [ebx],0x685CA0/0x685968/0x685FD8` = TTaosHero/TWarHero/TMagHero"
+                     + "（THeroAct 0x685630 的全部直接子类，逐个从 VMT parent 槽枚举得出），"
+                     + "并显式排除 TPlayer(0x6AC8C8) 与 TWhiteSkeleton(0x660E80)。"
+                     + "取值链：主人 = [hero+0x68C]（须 >=0x410000 且为 TPlayer）→ 银行 [主人+0x804] → "
+                     + "**先验槽 48：key [bank+0x180]==0x419 且 value [bank+0x184]==0x522**"
+                     + "（S(1,49)==1314，就是插件 0x100CE4EA 播种留下的印记），随后按裸偏移直读 "
+                     + "0x15C/0x164/0x16C = 槽 43/44/45 的 value = S(1,44)/S(1,45)/S(1,46)，**不再逐个校验 key**。"
+                     + "语义：S(1,44)>0 → nBasePower 按百分比缩放；S(1,45)>0 且 S(1,46)>0 且 "
+                     + "Random(100)<=S(1,46) → 发 @Herobaoji 再按 S(1,45) 二次缩放。"
+                     + "两次缩放**不同形**，必须分别复刻：第一次 +0x0BC..+0x0DD 的溢出保护是**死代码**"
+                     + "（+0x0C1 `E9 0B 00 00 00 jmp +0x0D1` 直接跳过了 +0x0C6 的 `jo` 与 +0x0CC 的 "
+                     + "`mov eax,0x7FFFFFFF`）；第二次 +0x111..+0x130 的 `jo` 可达，且饱和值 0x7FFFFFFF "
+                     + "**仍要过那次 div 100**（落 21474836），与 @baoji 的 ScaleByPercentNative 直接返回 "
+                     + "int.MaxValue 不同；两次都没有 @baoji 的 `cmp …,0x3E8` 预压缩门。"
+                     + "C# 落点：TBaseObject.GetAttackPower —— nPower 钳零之后（0x76C810..0x76C814）、"
+                     + "幸运掷点之前，作用于 nBasePower。",
             },
         };
 

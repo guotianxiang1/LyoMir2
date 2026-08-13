@@ -96,6 +96,11 @@ namespace GameSvr
                         TryNativeRevive();
                         if (m_WAbil.HP == 0)
                         {
+                            // 眼神「被击杀触发」的桩体改写 0x766624 的 `8B 45 FC 8B 10`
+                            // ——即 `call [vmt+0x84]`(Die) 的两条实参装载——重放后 jmp
+                            // 0x766629，所以 @MyKill 发在 Die 之前。三道原生门（死者是
+                            // TPlayer、m_ExpHitter 非空且是 TPlayer）在 FireMyKill 内。
+                            GameSvr.Plugins.YanshenTriggerDispatch.FireMyKill(this);
                             Die();
                         }
                     }

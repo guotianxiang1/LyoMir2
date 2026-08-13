@@ -254,6 +254,11 @@ namespace GameSvr
                 // 战神 sub_6B74D8 @0x6B7708: `push 4; mov cl,1; call [vmt+0x248]`
                 // — the ground-pickup site routes through the OUTER AddItemToBag
                 // (sub_6B7378) with acquisitionReason = 4 and the stamper enabled.
+                //
+                // 眼神「捡物触发」的桩体改写的正是 0x6B770C 的 `8B 55 FC 8B C3`（那条
+                // call 的两个实参装载），重放后才 jmp 0x6B7711 —— 所以 @pickpre 发在
+                // AddItemToBag 之前、DeleteFromMap 之后。惰性门在 FirePickPre 内。
+                GameSvr.Plugins.YanshenTriggerDispatch.FirePickPre(this, StdItem.Name);
                 if (!AddItemToBag(UserItem,
                         NativeItemAcquisitionStamp.Reason.PickUp, true))
                 {

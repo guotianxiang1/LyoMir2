@@ -11,7 +11,8 @@
 //      是否顶掉原生动作 —— 任何一处被人「顺手改一下」都会 FAIL。
 //   B. 插件缺席时整层完全惰性：Armed=false、派发计数器纹丝不动、两个召唤门
 //      返回 false（= 原生造宠照跑）。
-//   C. 已接通触发点的门与参数顺序，包括 0x71F058 那段下标搜索的两个边角。
+//   C. 已接通触发点的门与参数顺序，包括 0x71F058 那段下标搜索的两个边角，
+//      以及第二批 @pickpre / @MyKill / @Herobaoji 的门。
 using System.Text;
 using GameSvr;
 using GameSvr.Plugins;
@@ -66,9 +67,9 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
     ("复活触发脚本", "@OnDia", 0x10032CC0, new uint[] { 0x0073C484 }, new uint[] { 0x0073C48A },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("被击杀触发", "@MyKill", 0x10032CC0, new uint[] { 0x00766624 }, new uint[] { 0x00766629 },
-        YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Notify, true),
     ("捡物触发", "@pickpre", 0x10032CC0, new uint[] { 0x006B770C }, new uint[] { 0x006B7711 },
-        YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.WithParams, 2, YanshenTriggerDispatch.HostAction.Notify, true),
     ("攻击触发", "@MyAttack", 0x10032CC0, new uint[] { 0x0076E35D }, new uint[] { 0x0076E362 },
         YanshenTriggerDispatch.Slot.WithParams, 4, YanshenTriggerDispatch.HostAction.Notify, false),
     ("魔法攻击触发", "@MyMagicAttack", 0x10032CC0, new uint[] { 0x0076DE84 }, new uint[] { 0x0076DE8A },
@@ -84,7 +85,7 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
     ("新倍攻和暴击", "@baoji", 0x10032CC0, new uint[] { 0x0076C88B }, new uint[] { 0x0076C890 },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("英雄倍攻和暴击", "@Herobaoji", 0x10032CC0, new uint[] { 0x0076C816 }, new uint[] { 0x0076C81D },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
 };
 
 Assert(YanshenTriggerDispatch.Registry.Count == expected.Length,
@@ -154,6 +155,13 @@ YanshenTriggerDispatch.FireSlaveDie(dormantSlave);
 YanshenTriggerDispatch.FireOnDie(dormantPlayer);
 YanshenTriggerDispatch.FireOnDig(dormantPlayer);
 YanshenTriggerDispatch.FireChangeEquip(dormantPlayer);
+// 第二批接通的三条同样必须完全惰性。
+var dormantVictim = new TPlayObject { m_sCharName = "惰性死者" };
+dormantVictim.m_ExpHitter = new TPlayObject { m_sCharName = "惰性凶手" };
+YanshenTriggerDispatch.FirePickPre(dormantPlayer, "惰性物品");
+YanshenTriggerDispatch.FireMyKill(dormantVictim);
+Assert(YanshenTriggerDispatch.FireHerobaoji(dormantPlayer, 100) == 100,
+    "插件缺席时 FireHerobaoji 必须原样返回 nBasePower");
 Assert(YanshenTriggerDispatch.DispatchCount == baseline,
     $"插件缺席时派发计数器必须不动，却从 {baseline} 变成 {YanshenTriggerDispatch.DispatchCount}");
 
@@ -168,7 +176,8 @@ try
     // BB死亡触发 的实际取值。
     File.WriteAllText(Path.Combine(tempRoot, "config.json"),
         "{\"召唤神兽触发\":0,\"召唤骷髅触发\":0,\"BB杀怪触发\":0,\"BB死亡触发\":0,"
-        + "\"死亡触发\":0,\"挖矿触发\":0,\"盘古穿戴触发\":0}",
+        + "\"死亡触发\":0,\"挖矿触发\":0,\"盘古穿戴触发\":0,"
+        + "\"捡物触发\":0,\"被击杀触发\":0,\"英雄倍攻和暴击\":0}",
         HUtil32.GbkEncoding);
     var pmOff = new PluginManager(envirPath);
     pmOff.RegisterBuiltinPlugins();
@@ -189,13 +198,16 @@ try
     YanshenTriggerDispatch.FireOnDie(dormantPlayer);
     YanshenTriggerDispatch.FireOnDig(dormantPlayer);
     YanshenTriggerDispatch.FireChangeEquip(dormantPlayer);
+    YanshenTriggerDispatch.FirePickPre(dormantPlayer, "关闭态物品");
+    YanshenTriggerDispatch.FireMyKill(dormantVictim);
     Assert(YanshenTriggerDispatch.DispatchCount == beforeOff,
         "开关为 0 时派发计数器必须不动");
 
     // 开关打开
     File.WriteAllText(Path.Combine(tempRoot, "config.json"),
         "{\"召唤神兽触发\":1,\"召唤骷髅触发\":1,\"BB杀怪触发\":1,\"BB死亡触发\":1,"
-        + "\"死亡触发\":1,\"挖矿触发\":1,\"盘古穿戴触发\":1}",
+        + "\"死亡触发\":1,\"挖矿触发\":1,\"盘古穿戴触发\":1,"
+        + "\"捡物触发\":1,\"被击杀触发\":1,\"英雄倍攻和暴击\":1}",
         HUtil32.GbkEncoding);
     var pmOn = new PluginManager(envirPath);
     pmOn.RegisterBuiltinPlugins();
@@ -237,6 +249,39 @@ try
     Assert(YanshenTriggerDispatch.DispatchCount == beforeNotify + 3,
         $"死亡/挖矿/盘古穿戴 开关全开时应恰好派发 3 次，实为 "
         + $"{YanshenTriggerDispatch.DispatchCount - beforeNotify}");
+
+    // 第二批接通的三条：捡物 / 被击杀 / 英雄倍攻和暴击。
+    var beforeWave2 = YanshenTriggerDispatch.DispatchCount;
+    YanshenTriggerDispatch.FirePickPre(dormantPlayer, "测试物品");
+    Assert(YanshenTriggerDispatch.LastDispatchedLabel == "@pickpre",
+        "捡物触发发出的标签必须是 @pickpre");
+    YanshenTriggerDispatch.FireMyKill(dormantVictim);
+    Assert(YanshenTriggerDispatch.LastDispatchedLabel == "@MyKill",
+        "被击杀触发发出的标签必须是 @MyKill");
+    Assert(YanshenTriggerDispatch.DispatchCount == beforeWave2 + 2,
+        $"捡物/被击杀 开关全开时应恰好派发 2 次，实为 "
+        + $"{YanshenTriggerDispatch.DispatchCount - beforeWave2}");
+
+    // 被击杀的三道原生门（0x100D26FD 桩体 +0x006 / +0x018 / +0x024）。
+    var beforeKillGate = YanshenTriggerDispatch.DispatchCount;
+    YanshenTriggerDispatch.FireMyKill(new TBaseObject());            // 死者不是 TPlayer -> bail
+    YanshenTriggerDispatch.FireMyKill(new TPlayObject());            // m_ExpHitter 为空 -> bail
+    YanshenTriggerDispatch.FireMyKill(new TPlayObject                // 凶手不是 TPlayer -> bail
+    {
+        m_ExpHitter = new TBaseObject { m_sCharName = "怪" },
+    });
+    Assert(YanshenTriggerDispatch.DispatchCount == beforeKillGate,
+        "被击杀触发的三道门必须挡下 非玩家死者 / 无 m_ExpHitter / 非玩家凶手");
+
+    // 英雄倍攻和暴击的类门：原生 `cmp [ebx],0x6AC8C8 / je bail` 显式排除 TPlayer，
+    // 只放行 TTaosHero/TWarHero/TMagHero（C# 的 HeroObject）。玩家攻击走 @baoji。
+    var beforeHero = YanshenTriggerDispatch.DispatchCount;
+    Assert(YanshenTriggerDispatch.FireHerobaoji(dormantPlayer, 137) == 137,
+        "TPlayer 被 @Herobaoji 的类门排除，nBasePower 必须原样返回");
+    Assert(YanshenTriggerDispatch.FireHerobaoji(new TBaseObject(), 137) == 137,
+        "非英雄对象必须被 @Herobaoji 的类门排除");
+    Assert(YanshenTriggerDispatch.DispatchCount == beforeHero,
+        "@Herobaoji 的类门未命中时不得派发");
 
     // 门：玩家自己死不算 BB死亡；无主的怪也不算。
     var beforeGate = YanshenTriggerDispatch.DispatchCount;
