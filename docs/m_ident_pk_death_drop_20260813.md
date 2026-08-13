@@ -337,13 +337,13 @@ C# 已有 `GameSvr/Actors/NativeRevivePolicy.cs` + `TBaseObject.NativeRevive.cs`
 | PKD-05 | `TBaseObject.Base.cs:1014` 缺 FREEPK；`PKLevel() < 2` | `0x6C0830`；`0x6C0863 jg` = PK **<= 200** | 补 `!boFREEPK`，改 `<=` |
 | PKD-06 | 同上 缺幽灵/自杀守卫 | `0x6C0875` / `0x6C087B` | 补两道 |
 | PKD-07 | 同上 `AddBodyLuck(-1)` 嵌在最内层 | `0x6C1019` 在 guildwarkill 之前 | 上提 |
-| PKD-11 | 同上 `tStr = "####"` | `0x6C09FC` 长度前缀 5 | 改 `"#####"` |
+| PKD-10 | 同上 `tStr = "####"` | `0x6C09FC` 长度前缀 5 | 改 `"#####"` |
 
-> 编号说明：`w/m-ident` 这条分支上有**另一个代理并行提交**（`e2c43355` PKD-08/09、
-> `54870fae` PKD-10、`ffb2a9bd` docs/pk_death_drop_chain_20260813.md），与本报告是同一份
-> 任务的两次独立执行。为避免撞号，本报告原先的 PKD-08 已改成 **PKD-11**。
-> 两边的改动落在不同函数上（对方：`sub_767498` 前置梯、宠物门、地面掉落归属；
-> 本方：两个爆装 worker 的抽签序列与 PK 惩罚链的门），已复核无覆盖冲突。
+> 编号说明：`w/m-ident` 这条分支上有**另一个代理并行提交**（`e2c43355` PKD-08/09
+> = `sub_767498` 前置梯 + 宠物不打主人/主人英雄；`87bf17f4` PKD-11 = 地面掉落归属作废
+> 判据；`ffb2a9bd` docs/pk_death_drop_chain_20260813.md），与本报告是同一份任务的两次
+> 独立执行。撞号已协调好：**PKD-08/09 归对方，PKD-10 归本报告（死亡日志占位符），
+> PKD-11 归对方（地面掉落归属）**。两边改动落在不同函数上，已复核无覆盖冲突。
 
 ### MISSING
 
