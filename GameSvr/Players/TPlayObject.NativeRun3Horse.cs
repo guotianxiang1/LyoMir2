@@ -90,6 +90,10 @@ namespace GameSvr
             m_wNativeHorseCallDelay = 0;
         }
 
+        // CM_RUN3 (4108) only. Handler 0x6D9D99 requires bodyState 0x33
+        // before it ever reaches sub_6BC0D4; the inner mover is always
+        // sub_767694 (×3 + ident 0xD58). CM_RUN (3013) must not call this:
+        // it has no mount gate and uses sub_76756C (×2 + ident 0x0D).
         private bool ClientNativeRun3(int destinationX, int destinationY)
         {
             if (!HasNativeActiveState(NativeHorseMountedState) ||
@@ -291,6 +295,9 @@ namespace GameSvr
 
             m_nCurrX = (short)destinationX;
             m_nCurrY = (short)destinationY;
+            // 0x767769 mov dx,0xD58 — broadcast ident is bound to this mover,
+            // not to HasNativeActiveState(51). The 2-step twin at 0x76763F
+            // sends 0x0D via RunTo → RM_RUN.
             CompleteNativeRun3Move(Grobal2.RM_RUN3);
             return true;
         }
