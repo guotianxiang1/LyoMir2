@@ -43,7 +43,11 @@ namespace GameSvr
                 BuildMobileActorStateBody(BaseObject.GetFeature(this), BaseObject));
         }
         public int dwTick57C = 0;
-        public bool m_boInSafeArea = false;
+        // MOVE-74: m_boInSafeArea 已删除。它是 stock-Mir2 遗留，不对应任何原生槽 ——
+        // 原生 Obj+0x3FE 的 28 个访问点(1 写 27 读)全部服务穿透判定
+        // (WalkTo 第三参 / CanWalkEx 第四参 / MoveToMovingObject 第六参 / 三道挤人闸 /
+        // tick 比较)，零个与名字颜色或 PK 显示相关，权威载体是
+        // m_boThroughOccupancyCache。详见 docs/move74_through_predicate_20260814.md。
         
         
         
@@ -836,7 +840,6 @@ namespace GameSvr
             m_dwCheckDupObjTick = HUtil32.GetTickCount();
             dwTick578 = HUtil32.GetTickCount();
             dwTick57C = HUtil32.GetTickCount();
-            m_boInSafeArea = false;
             m_dwMagicAttackTick = HUtil32.GetTickCount();
             m_dwMagicAttackInterval = 0;
             m_dwAttackTick = HUtil32.GetTickCount();

@@ -371,6 +371,10 @@ namespace GameSvr
                         normNpc.GotoLable(this, m_sDelayCallLabel, false);
                     }
                 }
+                // MOVE-73/74 —— 原生 sub_6B2D38 在 0x6B308B..0x6B30E1 无条件重算穿透
+                // 判定、仅变化时回写 Obj[+0x3FE] 并发 0xB05。位置在挤人块(0x6B3149)
+                // 之前、且不在任何时间闸内，故这里也放在 3000ms 块之前、每 Run 一次。
+                NativeTickThroughOccupancyTransition();
                 if ((HUtil32.GetTickCount() - m_dwCheckDupObjTick) > 3000)
                 {
                     m_dwCheckDupObjTick = HUtil32.GetTickCount();
@@ -415,28 +419,11 @@ namespace GameSvr
                             m_dLogonTime = DateTime.Now;
                         }
                     }
-                    if (m_MyGuild != null)
-                    {
-                        if (m_MyGuild.GuildWarList.Count > 0)
-                        {
-                            var boInSafeArea = InSafeArea();
-                            if (boInSafeArea != m_boInSafeArea)
-                            {
-                                m_boInSafeArea = boInSafeArea;
-                                RefNameColor();
-                                // 0x6B308B  8B 45 FC / E8 C1 53 0B 00  call 0x768454 (InSafeArea)
-                                // 0x6B3096  3A 82 FE 03 00 00  cmp al,[edx+0x3FE]   ; m_boInSafeArea
-                                // 0x6B309C  74 43              je  0x6B30E1         ; unchanged -> no packet
-                                // 0x6B30A3  88 91 FE 03 00 00  mov [ecx+0x3FE],dl
-                                // 0x6B30A9  84 D2 / 74 1B      test dl,dl / je 0x6B30C8
-                                //   true  0x6B30AD 6A 06 / 6A 01 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
-                                //   false 0x6B30C8 6A 06 / 6A 00 / 6A 00 / 6A 00 / 33 C9 / 66 BA 05 0B
-                                // i.e. Recog=0, Param=6, Tag=(1|0), Series=0, no string.
-                                SendDefMessage(Grobal2.SM_COMMON_INFORMATION,
-                                    0, 6, boInSafeArea ? 1 : 0, 0, string.Empty);
-                            }
-                        }
-                    }
+                    // MOVE-74 —— 这里原先用 InSafeArea() 驱动 0xB05，并且整块被
+                    // m_MyGuild.GuildWarList.Count > 0 包住。两者都不是原生：原生
+                    // 0x6B308B..0x6B30E1 由 sub_768454(穿透判定)驱动、无任何行会条件、
+                    // 也不调 RefNameColor()，且不在 1000ms 闸内。已移到本方法上方的
+                    // NativeTickThroughOccupancyTransition()。
                     if (castle == null || !castle.m_boUnderWar)
                     {
                         ChangePKStatus(false);
