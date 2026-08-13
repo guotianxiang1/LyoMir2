@@ -1064,6 +1064,15 @@ namespace GameSvr
                     if (Walk(Grobal2.RM_RUN))
                     {
                         m_dwSearchTick = 0;
+                        // MOVE-41 — sub_76756C 尾 0x76765B..0x767683 与 4108 mover
+                        // sub_767694 尾 0x767785..0x7677B4 同构：同样 InBodyState(0x33)
+                        // (mov dl,0x33 / call 0x772960) && [ebx+0x3C0]!=0 之后
+                        // call sub_6BBEE4(同伴, 新X, 新Y, 自己朝向)。唯一差别是 3013 传
+                        // 刚算出的局部量(edx=edi / ecx=[ebp-8])、4108 回读刚提交的
+                        // [ebx+0x12C]/[ebx+0x130]，同值。故复用同一移植体。
+                        // 位置对齐原生：在广播(0x76763F)与落格 sub_778EC0(0x767656)
+                        // 之后；Walk() 合并了这两步，返回 false 时本端要回滚，只挂成功臂。
+                        SyncNativeHorsePartnerAfterRun3();
                         result = true;
                     }
                     else

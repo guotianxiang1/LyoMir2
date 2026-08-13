@@ -62,7 +62,8 @@ namespace GameSvr
         internal static int ApplyPickupAttribute(Envirnoment environment,
             string attribute, int state)
         {
-            if (environment?.Flag == null || string.IsNullOrEmpty(attribute) ||
+            if (environment?.Flag == null || attribute == null ||
+                IsNativeTrimEmpty(attribute) ||
                 unchecked((uint)state) >= 2)
                 return 0;
 
@@ -154,12 +155,46 @@ namespace GameSvr
             // 其余 token（SAFE / MINE / NOMAGIC / CHECKQUEST / … 约 40 个）仍未移植：
             // parser A 对它们有臂并返 1，C# 这里落到 0x64。缩窄范围是刻意的，
             // NativeTempSetMapParamPickupCheck 用 `SAFE` 锁住这条边界。
-            if (!string.Equals(attribute, "pickup",
-                    StringComparison.OrdinalIgnoreCase))
+            // pickup -> [+0x66]；与上面 8 个臂共用 0x4C6E94，是**前缀**比较不是全等：
+            //   0x775A8E mov ecx,6 / 0x775A93 mov edx,0x775FCC ("pickup")
+            //   0x775A9A call 0x4C6E94
+            // sub_4C6E94(s1,s2,n) 只在 0x4C6ECC/0x4C6ED8 判两串 Length>=n，
+            // 没有 Length==n 那道门，随后逐字符过 @UpCase(0x4034D4) 比前 n 个，
+            // 所以 "pickupXYZ" 原版命中而 C# 的全等不命中。
+            // 安全性：parser A 全链 51 个 token 里没有第二个以 "pickup" 开头的字面串，
+            // 改成前缀不会抢走原版路由到别的臂的输入。
+            if (!HUtil32.CompareLStr(attribute, "pickup", "pickup".Length))
                 return UnsupportedAttribute;
 
             environment.Flag.boPICKUP = state == 1;
             return Success;
+        }
+
+        /// <summary>
+        /// 原生包装器 <c>sub_774D24</c> 的空串判定看的是 <b>Trim 之后</b>的串：
+        /// <c>0x774D50 call 0x40C140</c>(Trim) 写 <c>[ebp-8]</c>，
+        /// <c>0x774D55 cmp dword [ebp-8],0 / je</c> 为空则整条命令返 0。
+        /// Delphi <c>Trim</c>(0x40C140) 的边界是 <c>cmp byte [..],0x20 / jbe</c>
+        /// （0x40C171 与 0x40C193 两端各一处）——掐掉两端所有 &lt;= 0x20 的字节，
+        /// 与 .NET 的 Unicode 空白集并不等价（.NET 不掐 #01..#08，却掐 U+00A0），
+        /// 故这里按字节阈值自己判，不用 <c>string.IsNullOrWhiteSpace</c>。
+        /// <para>
+        /// Trim 的结果**只**用于这道判定：<c>0x774D64 mov edx,esi</c> 传给
+        /// <c>sub_774D98</c> 的仍是未 Trim 的原串，回显消息用的也是原串
+        /// （caller 0x62996B / 0x629A30 同取 <c>[ebp-0x38]</c>），所以下游一律不 Trim。
+        /// </para>
+        /// </summary>
+        private static bool IsNativeTrimEmpty(string value)
+        {
+            foreach (var character in value)
+            {
+                if (character > ' ')
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }
