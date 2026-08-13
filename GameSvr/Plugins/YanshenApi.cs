@@ -1787,20 +1787,36 @@ namespace GameSvr.Plugins
             // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
             // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
             var count = stackable ? (int)item.Dura : 1;
+            var otherUnit = rule.HasOther ? rule.OtherValue : 0;
+
+            // 至少一路产出为正才允许删除。
+            //
+            // 【原生缺陷，照抄；勿"修"】判的是**缩放前、未乘件数**的五个单价，不是实付金额。
+            // 可叠材料分支 0x1006BB3B..0x1006BB57：
+            //   1006BB3B  85 FF                 test edi,edi              ; 元宝单价 [ebp-0x70]
+            //   1006BB3D  7F 1E                 jg   0x1006BB5D
+            //   1006BB3F  83 BD 70 FF FF FF 00  cmp  [ebp-0x90],0         ; 灵符单价
+            //   1006BB46  7F 15                 jg   0x1006BB5D
+            //   1006BB48  83 BD 6C FF FF FF 00  cmp  [ebp-0x94],0         ; 金币单价
+            //   1006BB4F  7F 0C                 jg   0x1006BB5D
+            //   1006BB51  85 C9                 test ecx,ecx              ; 其他值 [ebp-0x68]
+            //   1006BB53  7F 08                 jg   0x1006BB5D
+            //   1006BB55  85 F6                 test esi,esi              ; 经验单价 [ebp-0x78]
+            //   1006BB57  0F 8E D0 01 00 00     jle  0x1006BD2D           ; 全 <=0 ⇒ 本件结束
+            // 物品种类分支 0x1006CC68..0x1006CC82 逐字节同构（jle 0x1006CE1F）。
+            // 第一条 imul 倍率在 0x1006BBEE、第一条 imul 件数在 0x1006BC07，
+            // 都在删除段 0x1006BB5D 之后 —— 判零时这五个值一次缩放都没做过。
+            //
+            // 后果：单价=1 且倍率=50 会过门，却只入账 ⌊1*50/100⌋=0 ⇒ 删了不给。
+            if (rule.Yuanbao <= 0 && rule.LingFu <= 0 && rule.Gold <= 0 &&
+                otherUnit <= 0 && rule.Exp <= 0)
+                return false;
 
             if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
                 !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
                 !TryScaleRecyclePrice(rule.LingFu, rate, count, out var lingFu) ||
                 !TryScaleRecyclePrice(rule.Exp, rate, count, out var exp) ||
-                !TryScaleRecyclePrice(rule.HasOther ? rule.OtherValue : 0, rate, count,
-                    out var other))
-                return false;
-
-            // 至少一路产出为正才允许删除：0x1006BB3B..0x1006BB57 是五连 test/cmp，
-            // 元宝 灵符 金币 其他值 经验 全部 <= 0 就 jle 0x1006BD2D 结束本件，不进删除段。
-            // 原生判的是缩放前的单价，于是 单价=1、倍率=50 这种配置会过门却只入账
-            // ⌊1*50/100⌋=0，删了不给。这里改判缩放后的金额，比原生紧一档。
-            if (yuanbao <= 0 && gold <= 0 && lingFu <= 0 && exp <= 0 && other <= 0)
+                !TryScaleRecyclePrice(otherUnit, rate, count, out var other))
                 return false;
 
             // 元宝走 NativeYuanbaoManager 的异步 DB 往返，结算成败要等回调，没法和 DelBagItem
@@ -1811,12 +1827,17 @@ namespace GameSvr.Plugins
             if (gold > 0 && (long)_player.m_nGold + gold > _player.m_nGoldMax) return false;
 
             // 其他 走 0x1006BCB7（可叠材料）/ 0x1006CDB4（物品种类）两段同构代码：
-            //   0x1006BCBC 7E 6F        jle  —— 缩放后 <= 0 就整段不写 SetV
-            //   0x1006BCC2 0F AF F8     imul —— 和其余四路一样吃倍率
-            //   0x1006BCFD 7D 02 / 0x1006BCFF 33 C0  —— 累加基数的负值钳到 0
+            //   1006BCB7  8B 45 98   mov eax,[ebp-0x68]   ; 其他值，**缩放前**
+            //   1006BCBA  85 C0      test eax,eax
+            //   1006BCBC  7E 6F      jle 0x1006BD2D       ; 缩放前 <=0 才整段不写 SetV
+            //   1006BCBE  85 FF      test edi,edi         ; 倍率，第一条 imul 在 0x1006BCC2
+            //   1006BCFD  7D 02 / 1006BCFF 33 C0          ; 累加基数的负值钳到 0
+            // 同 D3：闸门读的是缩放前的值。缩放后为 0 时原生照样写一次 SetV，
+            // 于是 GetV 原本是 -1 的槽会被钳零后写成 0 —— 这不是空操作，别"优化"掉。
+            // （此处原注释写的「缩放后 <= 0」与字节矛盾，已按字节订正。）
             var otherStored = 0;
             var otherTotal = 0;
-            var otherPays = other > 0;
+            var otherPays = otherUnit > 0;
             if (otherPays)
             {
                 if (!PlayerVarWritable(rule.OtherGroup, rule.OtherIndex)) return false;
