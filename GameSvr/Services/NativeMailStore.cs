@@ -370,7 +370,7 @@ namespace GameSvr.Services
         // VERIFIED values (the task's task-1 diligence — against the LIVE C# claim path + the native binary):
         //  * mailType   = 4  — settlement/trade. FetchNativeMailAttachments/DeliverNativeMailAttachments treat
         //                      MailType 4 as "money, no item delivery": the seller's claim credits the gold
-        //                      (m_nGold += MoneyCount) and marks attachstatus=2. (native claim core sub_70B664:
+        //                      IncGold(MoneyCount) and marks attachstatus=2. (native claim core sub_70B664:
         //                      "mail type 4 sets attachstatus=2 without delivery" then credits money.)
         //  * mailstatus = 1  (UNREAD).  NOT 0.  The live loader ONLY surfaces mailstatus IN (1,2)
         //                      (TryLoadSummaries/TryLoadStatus loop 1..2; TryReadUnreadCounts WHERE mailstatus=1;
@@ -378,7 +378,7 @@ namespace GameSvr.Services
         //                      would never see it and never claim. 1 = unread is the correct "new mail" value.
         //  * attachstatus = 1 (UNCLAIMED CONTENT).  The claim path credits gold for ANY attachStatus != 2
         //                      (FetchNativeMailAttachments: `if (record.AttachStatus == 2) return -2;` then, for
-        //                      MoneyType 0 + MoneyCount>0, `m_nGold += MoneyCount`). Native flags a mail that
+        //                      MoneyType 0 + MoneyCount>0, IncGold(MoneyCount) via VMT+0x28C). Native flags a mail that
         //                      carries CLAIMABLE content with attachstatus=1 (BuildEnvelope sub_70A9EC defaults
         //                      +0x4D=3; AppendAttachment sub_70A954 bumps it to 1 via sub_70CB24 —
         //                      `UPDATE mailitem SET attachstatus=1` — the native stall settlement mail, which

@@ -83,10 +83,17 @@ namespace GameSvr
                 }
 
                 var stdItem = MallManager.Instance.ResolveStdItem(item, out _);
-                if (stdItem == null || stdItem.Looks == 0)
-                {
-                    continue;
-                }
+                // 1101 Looks fill sub_639D24:
+                //   0x639DB5 e8 1a 25 11 00  call 0x74C2D4     ; std-item by name
+                //   0x639DC1 74 10           je  0x639DD3      ; miss -> fallback
+                //   0x639DC6 66 8b 40 18     mov ax,[std+0x18] ; Looks
+                //   0x639DCD 66 89 42 20     mov [rec+0x20],ax
+                //   0x639DD6 66 8b 40 30     mov ax,[rec+0x30] ; vEffectImg low word
+                //   0x639DDD 66 89 42 20     mov [rec+0x20],ax
+                // Native still emits the 180-byte record when the std-item is missing
+                // or Looks is 0. Skipping either case dropped production rows whose
+                // vEffectImg (520/410/380) is the documented fallback.
+                var looks = stdItem != null ? stdItem.Looks : item.EffectImg;
 
                 // 180-byte TClientShop, filled by native sub_636D68 at esi = record+0x58:
                 //   +0   0x637157 cl=0x0F   商品名 ShortString[15]
@@ -107,7 +114,7 @@ namespace GameSvr
                 var recordStart = stream.Position;
                 WriteClientFixedGbkString(writer, item.ItemName, 15);
                 WriteClientFixedGbkString(writer, item.CategoryName, 15);
-                writer.Write(ClampToShort(stdItem.Looks));
+                writer.Write(ClampToShort(looks));
                 writer.Write(ClampToShort(page));
                 writer.Write(ClampToShort(item.Price));
                 writer.Write(ClampToShort(item.CurPrice));
