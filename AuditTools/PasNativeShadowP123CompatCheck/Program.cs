@@ -421,13 +421,17 @@ static void Assert(bool condition, string message)
 
 static string FindRepositoryRoot()
 {
+    // argv[1] first: the hardcoded fallback is the main worktree, which is not always
+    // sitting on the branch under test.
     foreach (var start in new[]
              {
+                 Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(),
                  Environment.CurrentDirectory,
                  AppContext.BaseDirectory,
                  @"D:\loym2\LyoMir2-master"
              })
     {
+        if (string.IsNullOrWhiteSpace(start)) continue;
         var current = new DirectoryInfo(start);
         while (current != null)
         {
