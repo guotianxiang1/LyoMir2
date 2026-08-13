@@ -4087,7 +4087,32 @@ namespace GameSvr
                                         {
                                             if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                             {
-                                                if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
+                                                // 这条重建循环就是 sub_77A990
+                                                // （TEnvironment.DoSearchTargetList，VMT+0x1C =
+                                                // [0x774798] -> thunk 0x77B330）的内联体，三条硬证据：
+                                                //  ① 扫描窗半径取自全局 [[0x7D6754]]
+                                                //     （0x77A9DD / 0x77A9E7 / 0x77A9F2 / 0x77A9FF），
+                                                //     该全局 = INI [Setup] GlobalSeeZone，缺省 12
+                                                //     （0x794495 6A 0C push 0xC 作 ReadInteger 默认值、
+                                                //      0x7944B7 C7 00 0C 00 00 00 缺省写回），
+                                                //     正是 g_Config.nSendRefMsgRange；而
+                                                //     TBaseObject.SearchViewRange 用的是每对象 m_nViewRange。
+                                                //  ② sub_77A990 的 TList 出参 [ebp+0xC] 就是本表：
+                                                //     三个调用点 0x76528A / 0x765451 / 0x76589D 一律
+                                                //     先 TList.Clear（call [edx+8]）再 push [self+0x380]。
+                                                //  ③ 节点循环只有 CellType 1 一条臂
+                                                //     （0x77AAEE 80 38 01 / 0x77AAF1 0F 85 1C 01 00 00）。
+                                                // 摘链臂在 0x77AB07：
+                                                //   77AAFB  8B 45 E8 / 8B 70 04   esi := node^.POject
+                                                //   77AB01  85 F6 / 0F 84 0C 01.. POject = nil -> 只跳过
+                                                //   77AB07  E8 58 B2 FE FF        call 0x765D64
+                                                //   77AB0C  84 C0 / 0F 85 A3 00.. jne 0x77ABB5（有效臂）
+                                                //   77AB14-77AB23  摘链 / 77AB2E B3 01 bl := 1 /
+                                                //   77AB30 push 0x77AD00 记异常 -> continue
+                                                // 60 秒时限是移植期自造的替身，与谓词不等价，故并联而非替换
+                                                // （与四份 SearchViewRange 拷贝同一写法）。
+                                                if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
+                                                    || IsNativeStaleCellActor(OSObject.CellObj))
                                                 {
                                                     OSObject = null;
                                                     MapCellInfo.Remove(i);

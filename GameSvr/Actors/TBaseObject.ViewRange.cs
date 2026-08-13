@@ -200,13 +200,21 @@ namespace GameSvr
                                 {
                                     if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                     {
-                                        // 本方法（非玩家版）的原生对应体是 sub_77A990
-                                        // = TEnvironment.DoSearchTargetList，其摘链谓词在
-                                        // 0x77AB07 call 0x765D64。认定依据：sub_77A990 的节点
-                                        // 循环 0x77AAEE `cmp byte [node],1 / jne 0x77AC13`
+                                        // 本方法（非玩家版）承接的是 sub_77A990
+                                        // （TEnvironment.DoSearchTargetList）**可见性那一半**
+                                        // ——即 0x77AC01 `call [searcher.VMT+0x1BC]`；另一半
+                                        // （0x77ABC9 `call 0x424AB8` 往 [self+0x380] 收人）在
+                                        // TBaseObject.SendRefMsg 的重建循环里。移植期把这一个
+                                        // 原生函数拆成了两处，所以两处都带同一条节点循环。
+                                        // 摘链谓词在 0x77AB07 call 0x765D64；节点循环
+                                        // 0x77AAEE `cmp byte [node],1 / jne 0x77AC13`
                                         // **只有 CellType 1 一条臂**，没有地面物 / 事件臂，
                                         // 与本方法逐条对应；玩家版 sub_77A178（0x77A2EB）则有
                                         // 1/2/3 三条臂。两处的谓词与摘链臂逐字节相同。
+                                        // 注意扫描窗半径两边不同源：sub_77A990 用全局
+                                        // [[0x7D6754]]（INI [Setup] GlobalSeeZone，缺省 12），
+                                        // 本方法用每对象 m_nViewRange —— 这条差异登记在
+                                        // docs/addtomap_and_outparam_20260814.md。
                                         // 60 秒时限是移植期自造的替身，与谓词不等价，
                                         // 故并联而非替换：见 docs/view_searchrange_predicate_20260814.md。
                                         if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
