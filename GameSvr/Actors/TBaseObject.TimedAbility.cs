@@ -76,8 +76,24 @@ namespace GameSvr
 
             if (abilityChanged)
             {
-                if (node.InternalType == 45 && this is TPlayObject player)
+                if ((node.InternalType == 0 || node.InternalType == 45) &&
+                    this is TPlayObject player)
                 {
+                    // STATE-26(a) — SetState @0x772974 pre-hook, bytes verified:
+                    //   77297F  84 C0                 test al, al     ; id==0 ?
+                    //   772981  74 04                 je   0x772987   ; yes -> hook
+                    //   772983  2C 2D                 sub  al, 0x2D   ; id==0x2D ?
+                    //   772985  75 0C                 jne  0x772993
+                    //   772987  33 D2                 xor  edx, edx
+                    //   77298D  FF 91 D8 01 00 00     call [ecx+0x1D8]
+                    // edx is always 0, so both ids run the same virtual.
+                    // TPlayObject VMT 0x6AC8C8+0x1D8 = 0x6EE2AC (cmp byte
+                    // [self+0x1914],0 / clear pending / SM 0xD57=3415), which
+                    // is CancelNativeType51PendingForTimedAbility. Default
+                    // VMT+0x1D8 is 0x772A98 `ret`. The hook lives inside
+                    // abilityChanged because native SetState is only reached
+                    // from VMT+0x60 (0x77327C), which AddState calls only on
+                    // a new node or a higher value (0x773131 / 0x773189).
                     player.CancelNativeType51PendingForTimedAbility();
                 }
                 SetNativeActiveState(node.InternalType);
