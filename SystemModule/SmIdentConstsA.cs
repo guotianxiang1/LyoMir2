@@ -35,5 +35,11 @@ namespace SystemModule
         // NOTE: numerically equal to Grobal2.CM_HEAVYHIT, but this is the opposite
         // direction (server -> client SM), a distinct message.
         public const int SM_3015 = 3015;
+
+        // 0xCF0 @0x64F13B slot 0x250 - small helper: Recog + Series(=flag, default 4).
+        public const int SM_3312 = 3312;
+
+        // 0xCF0 default Series substituted at 0x64F125 when the flag argument is 0.
+        public const int SM_3312_DefaultSeries = 4;
     }
 }

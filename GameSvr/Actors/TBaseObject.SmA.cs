@@ -111,5 +111,33 @@ namespace GameSvr
             var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3015, recog, 0, 0, 0);
             return (header, Array.Empty<byte>());
         }
+
+        /// <summary>
+        /// SM 3312 (0xCF0) - a two-argument helper (eax = Recog, edx = self,
+        /// [ebp+8] = series flag). slot 0x250 (SendDefMessage), header only. The
+        /// send site substitutes Series = 4 when the flag argument is 0. Native
+        /// function @0x0064F114:
+        /// <code>
+        /// 0064F11E  8B 55 08             mov  edx, [ebp+8]  ; series flag
+        /// 0064F121  85 D2                test edx, edx
+        /// 0064F123  75 05                jne  0x64F12A
+        /// 0064F125  BA 04 00 00 00       mov  edx, 4        ; default Series = 4
+        /// 0064F12A  6A 00                push 0             ; Param  = 0
+        /// 0064F12C  6A 00                push 0             ; Tag    = 0
+        /// 0064F12E  52                   push edx           ; Series = flag|4
+        /// 0064F12F  6A 00                push 0             ; sMsg   = nil
+        /// 0064F131  8B CE                mov  ecx, esi      ; Recog  = eax arg
+        /// 0064F133  8B C7                mov  eax, edi      ; self   = edx arg
+        /// 0064F135  66 BA F0 0C          mov  dx, 0xCF0     ; Ident  = 3312
+        /// 0064F139  8B 18                mov  ebx, [eax]
+        /// 0064F13B  FF 93 50 02 00 00    call [ebx+0x250]   ; SendDefMessage
+        /// </code>
+        /// </summary>
+        internal static (ClientPacket Header, byte[] Body) BuildSm3312(int recog, int seriesFlag)
+        {
+            var series = seriesFlag != 0 ? seriesFlag : SmIdentConstsA.SM_3312_DefaultSeries;
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3312, recog, 0, 0, series);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
