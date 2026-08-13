@@ -1025,11 +1025,12 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// Send dialog message to client via SM_DLGMSG
+        /// Native CODE has zero 16-bit dx/cx loads of 772 (0x0304) reaching a send slot.
+        /// The only 32-bit hit is <c>0x61116B sub eax,0x304</c> (a case bound, not an SM ident).
+        /// srv_AppearTimes.ini 772=0. Constant kept.
         /// </summary>
         public void SendDlgMsg(string sMsg, int nType = 0)
         {
-            SendDefMessage(Grobal2.SM_DLGMSG, nType, 0, 0, 0, sMsg);
         }
 
         private void SendLogon()
