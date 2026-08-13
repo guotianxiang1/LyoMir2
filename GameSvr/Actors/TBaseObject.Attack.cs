@@ -362,12 +362,20 @@ namespace GameSvr
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
-            if (yanshenApi != null && yanshenApi.IsHalfMoon())
+            // Same two-constant swap as 刺杀 (0x100B42F2 -> imm8 of 0x00772044
+            // `83 C0 02`, 0x100B4360 -> [0x00772148]), with one asymmetry that
+            // matters: 半月 is the only one of the six whose high-level arm the
+            // plugin leaves alone. 刺杀 gets `EB 17` over 0x00771C25 and 烈火
+            // gets `EB 15` over 0x0077231D, but no blob patch targets the
+            // half-moon branch in either _Attack copy, so above the scaling
+            // level the native arm still wins and A/B never enter the result.
+            if (effectiveLevel <= 3 && yanshenApi != null && yanshenApi.IsHalfMoon())
             {
-                var divisor = yanshenApi.HalfMoonB();
+                float divisor = yanshenApi.HalfMoonB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + effectiveLevel) / divisor);
+                    return HUtil32.Round((double)nPower / divisor
+                        * (effectiveLevel + yanshenApi.HalfMoonA()));
                 }
             }
 
@@ -393,12 +401,21 @@ namespace GameSvr
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
+            // Override = the same native chain with two constants swapped:
+            //   0x00771C4E  83 C0 02              add eax,2   <- imm8 becomes A
+            //   0x00771C5A  D8 35 24 1D 77 00     fdiv [0x00771D24] <- becomes B
+            //   plugin 0x100B40BB / 0x100B4129 write those two
+            // Divide first, then multiply: that is the fdiv/fmulp order, and B
+            // is the float32 the patch stores, not a double.
+            // The btLevel==4 tier is patched out while the override is on --
+            // 0x100B417C splices `EB 17` over 0x00771C25 `75 17`.
             if (yanshenApi != null && yanshenApi.IsStabSword())
             {
-                var divisor = yanshenApi.StabSwordB();
+                float divisor = yanshenApi.StabSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + effectiveLevel) / divisor);
+                    return HUtil32.Round((double)nPower / divisor
+                        * (effectiveLevel + yanshenApi.StabSwordA()));
                 }
             }
 

@@ -2828,9 +2828,11 @@ namespace GameSvr.Plugins
 
         public bool IsStabSword() => Enabled("刺杀剑术");
         // 0x100B40BB `A2 50 1C 77 00` stores A over the imm8 of host
-        // 0x00771C4E `83 C0 02 add eax,2`. That imm8 is sign-extended, so
-        // 0x100B404E `cmp eax,0x7F` + 0x100B4069 `cmovg eax,ecx` caps it at 127.
-        public int StabSwordA() => Math.Min(ParamAtoi("刺杀剑术_A值", 2), 127);
+        // 0x00771C4E `83 C0 02 add eax,2`. That `add` is 32-bit with a
+        // sign-extended imm8, hence 0x100B404E `cmp eax,0x7F` + 0x100B4069
+        // `cmovg eax,ecx`, and hence the signed reading of the stored byte.
+        public int StabSwordA() =>
+            unchecked((sbyte)Math.Min(ParamAtoi("刺杀剑术_A值", 2), 127));
         // 0x100B4129 `A3 24 1D 77 00` overwrites [0x00771D24], the float32 the
         // host divides by at 0x00771C5A `D8 35 24 1D 77 00`. Stock value there
         // is `00 00 A0 40` = 5.0f.
@@ -2838,8 +2840,9 @@ namespace GameSvr.Plugins
 
         public bool IsHalfMoon() => Enabled("半月弯刀");
         // 0x100B42F2 `A2 46 20 77 00` -> imm8 of 0x00772044 `83 C0 02`, same
-        // sign-extension cap at 0x100B428E.
-        public int HalfMoonA() => Math.Min(ParamAtoi("半月弯刀_A值", 2), 127);
+        // 32-bit `add` with a sign-extended imm8, same cap at 0x100B428E.
+        public int HalfMoonA() =>
+            unchecked((sbyte)Math.Min(ParamAtoi("半月弯刀_A值", 2), 127));
         // 0x100B4360 `A3 48 21 77 00` -> [0x00772148], read by 0x00772050
         // `D8 35 48 21 77 00`. Stock value `00 00 70 41` = 15.0f.
         public float HalfMoonB() => ParamAtof32("半月弯刀_B值", 15f);
