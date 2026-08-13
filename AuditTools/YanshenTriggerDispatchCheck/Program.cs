@@ -82,7 +82,7 @@ var expected = new (string Key, string Label, uint Builder, uint[] Targets, uint
     ("刀刀切割", "@Cutting", 0x10032CC0, new uint[] { 0x00767BAE }, new uint[] { 0x00767BB4 },
         YanshenTriggerDispatch.Slot.WithParams, 0, YanshenTriggerDispatch.HostAction.Notify, false),
     ("新倍攻和暴击", "@baoji", 0x10032CC0, new uint[] { 0x0076C88B }, new uint[] { 0x0076C890 },
-        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
+        YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, true),
     ("英雄倍攻和暴击", "@Herobaoji", 0x10032CC0, new uint[] { 0x0076C816 }, new uint[] { 0x0076C81D },
         YanshenTriggerDispatch.Slot.Plain, 0, YanshenTriggerDispatch.HostAction.Notify, false),
 };
