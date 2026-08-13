@@ -3236,9 +3236,60 @@ namespace GameSvr.Plugins
         public bool IsSummonShenShou() => Enabled("召唤神兽");
         public bool IsSummonKuLou() => Enabled("召唤骷髅");
         public bool IsModifyShenShou() => Enabled("修改召唤神兽");
-        public bool IsShenShouCount() => Enabled("神兽_数量");
-        public bool IsKuLouCount() => Enabled("召唤骷髅_数量");
-        public int ShenShouIdx() => GetParamInt("神兽_序号", -1);
+        public int ShenShouIdx() => GetParamInt("神兽_序号", 0);
+
+        /// <summary>
+        /// 眼神写进宿主 imm8 的从宠数量。取值域由「被改写的那条指令能编码什么」决定：
+        /// 插件只做上钳 127（<c>0x100A9DE9 83 F8 7F cmp eax,0x7F</c> /
+        /// <c>0x100A9DEC 7E 07 jle</c> / <c>0x100A9DEE B8 7F000000 mov eax,0x7F</c>），
+        /// 没有下钳，随后写入的是 <c>al</c>（<c>0x100A9E0F 88 85 2A EF FF FF</c>），
+        /// 所以负数按 8 位回绕而不是饱和到 0。
+        /// </summary>
+        static int NativeSlaveCountImm8(int v) => (byte)(v > 0x7F ? 0x7F : v);
+
+        /// <summary>
+        /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
+        /// 改写宿主 <c>0x0076EE98 6A 01</c> 的 imm8（目标 <c>0x0076EE99</c>，原字节 <c>01</c>），
+        /// 即 <c>0x0076EEB6 call [esi+0xEC]</c> 造宠调用的第一个栈参。
+        /// 补丁点 <c>0x100A9E9B call 0x10033340(src, 1, 0x0076EE99, 0x0076EE99)</c>；
+        /// 还原支 <c>0x100A9F33 C6 85 2B EF FF FF 01</c> 写回 <c>01</c>，即关闭态宿主就是 1。
+        /// </summary>
+        public int ShenShouSlaveCount() => IsSummonShenShou()
+            ? NativeSlaveCountImm8(GetParamInt("神兽_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤骷髅的从宠数量。同构：宿主 <c>0x0076EE1E 6A 01</c> 的 imm8
+        /// （目标 <c>0x0076EE1F</c>，原字节 <c>01</c>），补丁点
+        /// <c>0x100AA04B call 0x10033340(src, 1, 0x0076EE1F, 0x0076EE1F)</c>，
+        /// 上钳同样在 <c>0x100A9FED cmp eax,0x7F</c>；还原支 <c>0x100AA0BC</c> 写回 <c>01</c>。
+        /// 注意名字常量 <c>0x0076EE70</c>「变异骷髅」全镜像没有任何补丁指向它，
+        /// 所以骷髅只能改数量、不能改名字。
+        /// </summary>
+        public int KuLouSlaveCount() => IsSummonKuLou()
+            ? NativeSlaveCountImm8(GetParamInt("召唤骷髅_数量", 1))
+            : 1;
+
+        /// <summary>
+        /// 召唤神兽的怪物名。眼神按 <c>神兽_序号</c> 覆盖宿主 <c>0x0076EEEC</c> 处的
+        /// 4 字节 GBK 串（原字节 <c>C9 F1 CA DE</c> =「神兽」）。Delphi 长度前缀
+        /// <c>[0x0076EEE8] = 4</c> 不在补丁范围内，所以候选名恒为两个汉字。
+        /// 选择链 <c>0x100A9E3E..0x100A9E5F</c>（sub/je 逐级比较）：
+        /// 0 →「神兽」（<c>0x100A9DD7</c> 预置 <c>C9F1CADE</c>）、
+        /// 1 →「月灵」（<c>0x100A9E59</c> 写 <c>D4C2C1E9</c>）、
+        /// 2 →「白虎」（<c>0x100A9E4D</c> 写 <c>A2BBD7B0</c> → 内存序 <c>B0D7BBA2</c>）、
+        /// 其余落回预置值。
+        /// </summary>
+        public string ShenShouName()
+        {
+            if (!IsSummonShenShou()) return "神兽";
+            return ShenShouIdx() switch
+            {
+                1 => "月灵",
+                2 => "白虎",
+                _ => "神兽",
+            };
+        }
 
         // ── Mage skill toggle checks ──
         public bool IsFireBallSwitch() => Enabled("火球主属性切换");
@@ -3621,10 +3672,27 @@ namespace GameSvr.Plugins
         public bool IsCustomDmgPlus() => Enabled("自定义伤害_plus");
 
         // ── Monster toggle checks ──
+        //
+        // 怪物名字1..3_值 / 怪物数量1..3_值 是「修改召唤神兽」的三档参数。
+        // 六个键在同一个配置加载器里连续读出，名字走 asString、数量走 asInt：
+        //   0x100BB99E push "怪物名字1_值" -> 0x100BBA0B call 0x100DFCF0 (asString)
+        //   0x100BBC1F push "怪物数量1_值" -> 0x100BBC57 mov [ecx+0x8C0],eax  (asInt 0x100DFE40)
+        //   0x100BBCBE push "怪物数量2_值" -> 0x100BBCF2 mov [ecx+0x8C4],eax
+        //   0x100BBD52 push "怪物数量3_值" -> 0x100BBD86 mov [ecx+0x8C8],eax
+        // 三个数量键用的是同一个 asInt 转换器、同一段连续偏移，语义完全相同。
         public string MonsterName1() => ParamS("怪物名字1_值", "强化神兽");
         public string MonsterName2() => ParamS("怪物名字2_值", "强化神兽");
         public string MonsterName3() => ParamS("怪物名字3_值", "白虎");
-        public bool IsMonsterCount1() => Enabled("怪物数量1_值");
+
+        /// <summary>
+        /// 「怪物数量1_值」是数量，不是开关。原先的 <c>Enabled("怪物数量1_值")</c>
+        /// 方向就是错的：数量 0 会被读成「关」，任何非 0 数量都读成「开」，
+        /// 而它的兄弟键 <c>怪物数量2_值</c>/<c>怪物数量3_值</c> 在同一段加载器里
+        /// 走的是同一个 <c>asInt</c>（<c>0x100DFE40</c>），C# 侧已经按 int 建模。
+        /// 生产 <c>config.json</c> 三档实测是 1 / 2 / 1。
+        /// 与 YS-SW-C1 修掉的 <c>IsShenShouCount()</c>/<c>IsKuLouCount()</c> 同一类缺陷。
+        /// </summary>
+        public int MonsterCount1() => GetParamInt("怪物数量1_值", 1);
         public int MonsterCount2() => GetParamInt("怪物数量2_值", 2);
         public int MonsterCount3() => GetParamInt("怪物数量3_值", 2);
         public bool IsMonsterDropA() => Enabled("怪物爆率A_值");
@@ -3746,11 +3814,34 @@ namespace GameSvr.Plugins
             return _player?.m_PEnvir?.sMapName?.Length == 15;
         }
 
-        /// <summary>禁止长度为 15 的地图内切换宝宝到休息状态。</summary>
+        /// <summary>
+        /// 禁止在地图名满 15 字的地图里切换宝宝休息状态。
+        ///
+        /// 眼神在宿主 <c>0x00623A73</c>（原字节 <c>80 B0 C7 04 00 00 01</c>
+        /// = <c>xor byte [eax+0x4C7],1</c>，即休息标志的翻转）装 trampoline，
+        /// 续跑点 <c>0x00623A7A</c>，安装点 <c>0x100AABB6 call 0x10032FD0</c>，
+        /// 门控 <c>0x100AAB35 cmp [edi+0x948],0 / je</c>。
+        /// 桩体模板存在 .rdata，每个 dword 存一个码字节
+        /// （<c>0x102D1700 / 0x102D2940 / 0x102D33B0 / 0x102D16C0</c> 各 4 个 +
+        /// <c>0x100AAB6C mov dword [ebp-0x4A4],0xE9</c>），拼出 17 字节：
+        /// <code>
+        ///   80 B8 15 01 00 00 0F   cmp byte [eax+0x115], 0x0F
+        ///   74 07                  je  skip
+        ///   80 B0 C7 04 00 00 01   xor byte [eax+0x4C7], 1     ← 原指令
+        ///   E9 &lt;rel32&gt;             jmp 0x00623A7A
+        /// </code>
+        /// <c>[obj+0x115]</c> 是 <c>m_sMapName: string[15]</c>（Delphi ShortString，
+        /// 长度字节就在 +0x115）：<c>0x006AFD1E lea eax,[ebx+0x115]</c> /
+        /// <c>0x006AFD27 mov cl,0x0F</c> / <c>0x006AFD29 call 0x004039E4</c> 之后
+        /// 紧接着写 <c>[ebx+0x12C]=CurrX</c>、<c>[ebx+0x130]=CurrY</c>。
+        ///
+        /// 因为赋值时按 <c>cl = 15</c> 截断，长度字节等于 15 的充要条件是
+        /// **原地图名长度 &gt;= 15**，不是恰好等于 15。
+        /// </summary>
         public bool IsPetRestBlocked()
         {
             if (!Enabled("禁止宝宝休息")) return false;
-            return _player?.m_PEnvir?.sMapName?.Length == 15;
+            return _player?.m_PEnvir?.sMapName?.Length >= 15;
         }
 
         /// <summary>限制摆摊区域检查 (返回true=允许摆摊)</summary>

@@ -1920,6 +1920,17 @@ namespace GameSvr
                         nCount = M2Share.g_Config.DragonArray[i].nCount;
                     }
                 }
+                // 眼神「召唤神兽」改写的是宿主读到的那两个常量本身：名字串
+                // 0x0076EEEC（4 字节 GBK，补丁点 0x100A9ED5）与数量 imm8
+                // 0x0076EE99（补丁点 0x100A9E9B）。宿主取常量是在
+                // 0x0076EEAF mov edx,0x76EEEC / 0x0076EE98 push 1，也就是造宠调用
+                // 的最后一步，所以覆盖必须放在 MakeSlave 之前、任何表查询之后。
+                var ysShinsu = new YanshenApi(PlayObject, null, M2Share.PluginManager);
+                if (ysShinsu.IsSummonShenShou())
+                {
+                    sMonName = ysShinsu.ShenShouName();
+                    nCount = ysShinsu.ShenShouSlaveCount();
+                }
                 if (PlayObject.MakeSlave(sMonName, nMakelevel, nExpLevel, nCount, dwRoyaltySec) != null)
                 {
                     result = true;
@@ -1983,6 +1994,13 @@ namespace GameSvr
                         nExpLevel = M2Share.g_Config.SkeletonArray[i].nLevel;
                         nCount = M2Share.g_Config.SkeletonArray[i].nCount;
                     }
+                }
+                // 眼神「召唤骷髅」只改数量 imm8 0x0076EE1F（补丁点 0x100AA04B）。
+                // 名字常量 0x0076EE70「变异骷髅」全镜像没有任何补丁指向它，不覆盖。
+                var ysSkele = new YanshenApi(PlayObject, null, M2Share.PluginManager);
+                if (ysSkele.IsSummonKuLou())
+                {
+                    nCount = ysSkele.KuLouSlaveCount();
                 }
                 if (PlayObject.MakeSlave(sMonName, nMakeLevel, nExpLevel, nCount, dwRoyaltySec) != null)
                 {
