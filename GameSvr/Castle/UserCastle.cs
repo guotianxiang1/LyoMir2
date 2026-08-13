@@ -874,12 +874,12 @@ namespace GameSvr
         public int ReceiptGolds(TPlayObject PlayObject, int nGold)
         {
             var result = -1;
+            // 0x65B465 mov [ebp-4],-1 ; 0x65B46C test esi,esi / 0x65B46E jle 0x65B4E5
             if (nGold <= 0)
             {
-                result = -4;
                 return result;
             }
-            if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1 && nGold > 0)
+            if (m_MasterGuild == PlayObject.m_MyGuild && PlayObject.m_nGuildRankNo == 1)
             {
                 if (nGold <= PlayObject.m_nGold)
                 {
