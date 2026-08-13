@@ -149,31 +149,23 @@ namespace GameSvr
 
             switch (internalType)
             {
-                case 44:
-                    // byte tbl[0x2C] = 0x0A -> slot 10 -> 0x741C34.
-                    //   741C34  68 78 2D 74 00        push 0x742D78
-                    //   741C3C  0F B7 C7              movzx eax, di
-                    //   741C3F  E8 58 AC CC FF        call 0x40C89C   ; IntToStr
-                    //   741C47  68 94 2C 74 00        push 0x742C94   ; "秒"
-                    //   741C4F  BA 03 00 00 00        mov edx, 3
-                    //   741C54  E8 37 3C CC FF        call 0x405890   ; _LStrCatN
-                    //   741C5C  66 B9 DB FF           mov cx, 0xFFDB
-                    //   741C64  FF 93 D4 00 00 00     call [ebx+0xD4]
-                    // 0x742D78 declen 12: C1 A6 C1 BF CB B2 BC E4 CC E1 B8 DF.
-                    // NOTE the LOST side of state 44 is byte tbl A[44-14] =
-                    // 0x742C42 = DEFAULT, i.e. native says nothing when it ends.
-                    SendNativeStateDispatchHintGreen($"力量瞬间提高{n}秒");
-                    break;
-
-                case 45:
-                    // byte tbl[0x2D] = 0x15 -> slot 21 -> 0x741E38.
-                    //   741E38  66 B9 FF 38           mov cx, 0x38FF
-                    //   741E3C  BA 88 2E 74 00        mov edx, 0x742E88
-                    //   741E45  FF 93 D4 00 00 00     call [ebx+0xD4]
-                    // 0x742E88 declen 12: C4 E3 B1 BB B6 A8 C9 ED C1 CB A3 A1.
-                    SendNativeStateDispatchHintRed("你被定身了！");
-                    break;
-
+                // DE-DUP (state-consolidate): gained states 44, 45 and 53 were
+                // ALSO spoken here, but native 0x741884's GAINED table has one
+                // arm per state and DispatchNativeStateGainedArm — the file that
+                // already owns the whole LOST table — carries all three:
+                //   44 @0x741C34 "力量瞬间提高{n}秒"  cx 0xFFDB
+                //   45 @0x741E38 "你被定身了！"        cx 0x38FF
+                //   53 @0x741DDE "你中毒了！"          cx 0x38FF (shared 30/31)
+                // Because every non-75 gained state runs BOTH this switch and
+                // DispatchNativeStateGainedArm off the live
+                // SendTimedAbilityState(removed:false) path, keeping them in both
+                // sent each line twice. The two sites are byte-for-byte identical
+                // in text and colour word (capstone-verified against the arms
+                // above), so the copies were dropped here and kept in
+                // DispatchNativeStateGainedArm, where 45's lost side and 53's
+                // 30/31 siblings already live. This switch stays the SOLE owner
+                // of gained 49/56/62/63/71/76/77/78 — none of which has an arm in
+                // DispatchNativeStateGainedArm — so no send is lost.
                 case 49:
                     // byte tbl[0x31] = 0x14 -> slot 20 -> 0x741DF6.
                     //   741DF6  C6 86 E1 02 00 00 01  mov byte [esi+0x2E1], 1
@@ -201,18 +193,8 @@ namespace GameSvr
                     SendNativeStateDispatchHintGreen($"进入无敌状态{n}秒");
                     break;
 
-                case 53:
-                    // byte tbl[0x35] = 0x13 -> slot 19 -> 0x741DDE. Slot 19 is
-                    // SHARED: byte tbl[0x1E] and byte tbl[0x1F] are also 0x13, so
-                    // states 30, 31 and 53 all land on the same arm. 30 and 31
-                    // belong to band A and are not wired here.
-                    //   741DDE  66 B9 FF 38           mov cx, 0x38FF
-                    //   741DE2  BA 5C 2E 74 00        mov edx, 0x742E5C
-                    //   741DEB  FF 93 D4 00 00 00     call [ebx+0xD4]
-                    // 0x742E5C declen 10: C4 E3 D6 D0 B6 BE C1 CB A3 A1.
-                    SendNativeStateDispatchHintRed("你中毒了！");
-                    break;
-
+                // (state 53 removed here — see the DE-DUP note above; it stays in
+                // DispatchNativeStateGainedArm case 30/31/53 @0x741DDE.)
                 case 56:
                     // byte tbl[0x38] = 0x16 -> slot 22 -> 0x741E50.
                     //   741E50  68 A0 2E 74 00        push 0x742EA0
