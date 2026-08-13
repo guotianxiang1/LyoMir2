@@ -318,6 +318,10 @@ namespace GameSvr
                         normNpc.GotoLable(this, m_sDelayCallLabel, false);
                     }
                 }
+                // MOVE-73/74 —— 原生 sub_6B2D38 在 0x6B308B..0x6B30E1 无条件重算穿透
+                // 判定、仅变化时回写 Obj[+0x3FE] 并发 0xB05。位置在挤人块(0x6B3149)
+                // 之前、且不在任何时间闸内，故这里也放在 3000ms 块之前、每 Run 一次。
+                NativeTickThroughOccupancyTransition();
                 if ((HUtil32.GetTickCount() - m_dwCheckDupObjTick) > 3000)
                 {
                     m_dwCheckDupObjTick = HUtil32.GetTickCount();
@@ -362,44 +366,12 @@ namespace GameSvr
                             m_dLogonTime = DateTime.Now;
                         }
                     }
-                    if (m_MyGuild != null)
-                    {
-                        if (m_MyGuild.GuildWarList.Count > 0)
-                        {
-                            var boInSafeArea = InSafeArea();
-                            if (boInSafeArea != m_boInSafeArea)
-                            {
-                                m_boInSafeArea = boInSafeArea;
-                                RefNameColor();
-                                // Notify 战神 client of safe zone entry/exit
-                                SendDefMessage(Grobal2.SM_COMMON_INFORMATION,
-                                    boInSafeArea ? 1 : 0, m_nCurrX, m_nCurrY, 0,
-                                    boInSafeArea ? "safe_enter" : "safe_exit");
-                            }
-                        }
-                    }
-                    if (castle != null && castle.m_boUnderWar)
-                    {
-                        if (m_PEnvir == castle.m_MapPalace && m_MyGuild != null)
-                        {
-                            if (!castle.IsMember(this))
-                            {
-                                if (castle.IsAttackGuild(m_MyGuild))
-                                {
-                                    if (castle.CanGetCastle(m_MyGuild))
-                                    {
-                                        castle.GetCastle(m_MyGuild);
-                                        M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_211, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                                        if (castle.InPalaceGuildCount() <= 1)
-                                        {
-                                            castle.StopWallconquestWar();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else
+                    // MOVE-74 —— 这里原先用 InSafeArea() 驱动 0xB05，并且整块被
+                    // m_MyGuild.GuildWarList.Count > 0 包住。两者都不是原生：原生
+                    // 0x6B308B..0x6B30E1 由 sub_768454(穿透判定)驱动、无任何行会条件、
+                    // 也不调 RefNameColor()，且不在 1000ms 闸内。已移到本方法上方的
+                    // NativeTickThroughOccupancyTransition()。
+                    if (castle == null || !castle.m_boUnderWar)
                     {
                         ChangePKStatus(false);
                     }
