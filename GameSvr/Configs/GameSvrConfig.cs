@@ -614,7 +614,6 @@ namespace GameSvr
         
         
         
-        public int nDropItemRage;
         public string sSkeleton;
         public int nSkeletonCount;
         public TRecallMigic[] SkeletonArray;
@@ -1450,7 +1449,6 @@ namespace GameSvr
             boShowPreFixMsg = false;
             nMagicAttackRage = 8; 
             nBoBoall = true;
-            nDropItemRage = 3; 
             sSkeleton = "变异骷髅";
             nSkeletonCount = 1;
             SkeletonArray = new TRecallMigic[10];
