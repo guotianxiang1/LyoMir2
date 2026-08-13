@@ -582,6 +582,11 @@ namespace GameSvr
         public bool m_boUnLockPwd = false;
         public bool m_boUnLockStoragePwd = false;
         public bool m_boPasswordLocked = false;
+        /// <summary>
+        /// Native obj+0x674. SuperGm <c>0x006D785F C6 83 74 06 00 00 01</c> 是
+        /// 全镜像对该字节的唯一写入。尚未找到对应的 byte 读点（密码核对路径 BLOCKED）。
+        /// </summary>
+        public bool m_boWaitSuperGmPassword = false;
         
         public byte m_btPwdFailCount = 0;
         
@@ -855,6 +860,7 @@ namespace GameSvr
             m_boUnLockPwd = false;
             m_boUnLockStoragePwd = false;
             m_boPasswordLocked = false;
+            m_boWaitSuperGmPassword = false;
             
             m_btPwdFailCount = 0;
             m_sTempPwd = "";

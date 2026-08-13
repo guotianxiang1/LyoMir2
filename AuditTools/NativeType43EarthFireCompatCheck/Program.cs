@@ -1044,55 +1044,32 @@ static void CheckNativeSearchAndUserMoveCommands()
         .GetCustomAttribute<GameSvr.CommandSystem.GameCommandAttribute>()
         ?? throw new MissingMemberException(typeof(SearchHumanCommand).FullName,
             "GameCommandAttribute");
-    Equal("UserMoveXY", userMoveRegistration.Name,
+    // Native registry ShortString is the source name (pre-FormGMCommand.ini).
+    // 0x007B65D4 `05 67 6f 77 67 6f` "gowgo"；0x007B66F4 `09 53 65 61 72 63 68 69 6e 67`
+    // "Searching". "UserMoveXY" / "SearchHuman" / "UserMove" 全镜像 GBK+UTF8+UTF16LE 0 命中。
+    // GetCustomAttribute 读的是类型上的 [GameCommand]，不是 ApplyNativeFormGmCommandIni
+    // 改过的运行时 hash 键（生产 ini 把 idx 29 改成 sdgo 发生在 Add 之前，见 0x622575 jl）。
+    Equal("gowgo", userMoveRegistration.Name,
         "UserMove registration source name");
-    Equal("SearchHuman", searchRegistration.Name,
+    Equal("Searching", searchRegistration.Name,
         "SearchHuman registration source name");
+    Assert(!string.Equals("UserMoveXY", userMoveRegistration.Name,
+            StringComparison.OrdinalIgnoreCase),
+        "UserMoveXY is not a native registry name");
+    Assert(!string.Equals("UserMove", userMoveRegistration.Name,
+            StringComparison.OrdinalIgnoreCase),
+        "UserMove is not a native registry name");
+    Assert(!string.Equals("SearchHuman", searchRegistration.Name,
+            StringComparison.OrdinalIgnoreCase),
+        "SearchHuman is not a native registry name");
 
-    var commandManagerType = typeof(GameSvr.CommandSystem.CommandManager);
-    var aliasesField = commandManagerType.GetField("CustomCommands",
+    var overlay = typeof(GameSvr.CommandSystem.CommandManager).GetMethod(
+        "ApplyNativeFormGmCommandIni",
         BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException(commandManagerType.FullName,
-            "CustomCommands");
-    var aliases = aliasesField.GetValue(null) as IDictionary<string, string>
-        ?? throw new InvalidOperationException(
-            "CommandManager.CustomCommands dictionary unavailable");
-    var registerAliases = commandManagerType.GetMethod(
-        "RegisterNativePlayerCommandAliases",
-        BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new MissingMethodException(commandManagerType.FullName,
-            "RegisterNativePlayerCommandAliases");
-    var originalCommands = M2Share.g_GameCommand;
-    try
-    {
-        aliases.Clear();
-        M2Share.g_GameCommand = new TGameCommand();
-        registerAliases.Invoke(null, null);
-        Equal("UserMove", aliases["UserMoveXY"],
-            "UserMove default command route");
-        Equal("Searching", aliases["SearchHuman"],
-            "SearchHuman default command route");
-
-        aliases.Clear();
-        M2Share.g_GameCommand.USERMOVE = new TGameCmd { sCmd = "@MoveHere" };
-        M2Share.g_GameCommand.SEARCHING = new TGameCmd { sCmd = "@FindHere" };
-        registerAliases.Invoke(null, null);
-        Equal("MoveHere", aliases["UserMoveXY"],
-            "UserMove configured command route");
-        Equal("FindHere", aliases["SearchHuman"],
-            "SearchHuman configured command route");
-
-        aliases["UserMoveXY"] = "CustomMove";
-        M2Share.g_GameCommand.USERMOVE = new TGameCmd { sCmd = "@Ignored" };
-        registerAliases.Invoke(null, null);
-        Equal("CustomMove", aliases["UserMoveXY"],
-            "explicit UserMove custom alias precedence");
-    }
-    finally
-    {
-        aliases.Clear();
-        M2Share.g_GameCommand = originalCommands;
-    }
+        ?? throw new MissingMethodException(
+            typeof(GameSvr.CommandSystem.CommandManager).FullName,
+            "ApplyNativeFormGmCommandIni");
+    Assert(overlay.IsStatic, "FormGMCommand.ini overlay is a post-register pass");
 
     var cooldown = typeof(SearchHumanCommand).GetMethod(
         "HasNativeSearchCooldownElapsed",
@@ -2010,23 +1987,24 @@ static void CheckSourceContracts()
     var commandManager = Compact(File.ReadAllText(Path.Combine(root,
         "GameSvr", "Command", "CommandManager.cs")));
     Contains(commandManager,
-        "M2Share.CommandConf.LoadConfig();RegisterNativePlayerCommandAliases();RegisterCommandGroups();",
-        "native player aliases installed before command registration");
+        "M2Share.CommandConf.LoadConfig();RegisterCommandGroups();",
+        "command groups registered from [GameCommand] source names");
     Contains(commandManager,
-        "RegisterNativePlayerCommandAlias(\x22UserMoveXY\x22,M2Share.g_GameCommand.USERMOVE.sCmd,\x22UserMove\x22);",
-        "UserMove configured command alias route");
+        "ApplyNativeFormGmCommandIni();",
+        "FormGMCommand.ini overlay after source-name registration");
     Contains(commandManager,
-        "RegisterNativePlayerCommandAlias(\x22SearchHuman\x22,M2Share.g_GameCommand.SEARCHING.sCmd,\x22Searching\x22);",
-        "SearchHuman configured command alias route");
+        "\"FormGMCommand.ini\"",
+        "native overlay file name");
     Contains(commandManager,
-        "if(CustomCommands.ContainsKey(command))return;",
-        "explicit custom command alias precedence");
+        "NativeGmCommandRegistry.DefaultNameByIndex.TryGetValue(idx,outvardefaultName)",
+        "overlay is keyed by dispatch index not English verb");
+    NotContains(commandManager, "RegisterNativePlayerCommandAliases",
+        "this build has no Command.conf UserMove/Searching hop");
+    NotContains(commandManager, "RegisterNativePlayerCommandAlias(",
+        "this build has no per-verb alias installer");
     Contains(commandManager,
-        "if(effectiveName.StartsWith('@'))effectiveName=effectiveName[1..];",
-        "native configured command at-sign normalization");
-    Contains(commandManager,
-        "M2Share.CommandConf.ReloadCustomAlias();RegisterNativePlayerCommandAliases();CommandMaps.Clear();",
-        "native aliases restored during hot reload");
+        "M2Share.CommandConf.ReloadCustomAlias();CommandMaps.Clear();",
+        "hot reload rebuilds maps then reapplies FormGMCommand.ini");
 
     var commandConfig = Compact(File.ReadAllText(Path.Combine(root,
         "GameSvr", "Configs", "GameCmdConfig.cs")));
