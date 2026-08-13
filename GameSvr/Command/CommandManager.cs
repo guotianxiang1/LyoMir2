@@ -180,12 +180,10 @@ namespace GameSvr.CommandSystem
                 found = true;
             }
 
-            if (!found)
-            {
-                output = $"未知命令: {command} {parameters}";
-            }
-
-            
+            // 未注册的 @命令 一律不回话。原生 0x00621F4F `mov byte [esi],0` 把「所需权限」出参清 0，
+            // 查表未命中时返回索引 0；回到 0x00622AB7 `jne` 不成立后 0x00622AC2 `jbe 0x622B09` 直接
+            // 跳过唯一的失败回复（"该命令需要"0x0062B768 + "级GM才能使用"0x0062B77C），落到
+            // jt[0]=0x0062B648 静默收尾。回一句"未知命令"等于把命令是否存在泄露给任意玩家。
             if (!string.IsNullOrEmpty(output))
             {
                 playObject.SysMsg(output, MsgColor.Red, MsgType.Hint);
@@ -266,53 +264,5 @@ namespace GameSvr.CommandSystem
             return true;
         }
 
-        [GameCommand("commands", "列出可用的命令")]
-        public class CommandsCommandGroup : BaseCommond
-        {
-            public override string Fallback(string[] parameters = null, TPlayObject PlayObject = null)
-            {
-                var commandList = CommandMaps.Values
-                    .Where(c => PlayObject == null ||
-                                c.GameCommand.nPermissionMin <=
-                                GetEffectivePermission(PlayObject))
-                    .OrderBy(c => c.GameCommand.nPermissionMin)
-                    .ThenBy(c => c.GameCommand.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                var sb = new System.Text.StringBuilder();
-                foreach (var cmd in commandList)
-                {
-                    sb.Append('@');
-                    sb.Append(cmd.GameCommand.Name);
-                    if (!string.IsNullOrWhiteSpace(cmd.GameCommand.Help))
-                    {
-                        sb.Append(' ');
-                        sb.Append(cmd.GameCommand.Help);
-                    }
-                    sb.Append("\r\n");
-                }
-                return sb.Length > 0 ? sb.ToString().TrimEnd() : "暂无可用命令。";
-            }
-        }
-
-        [GameCommand("help", "帮助命令")]
-        public class HelpCommandGroup : BaseCommond
-        {
-            public override string Fallback(string[] parameters = null, TPlayObject PlayObject = null)
-            {
-                return "usage: help <command>";
-            }
-
-            public override string Handle(string parameters, TPlayObject PlayObject = null)
-            {
-                if (parameters == string.Empty)
-                    return this.Fallback();
-                var @params = parameters.Split(' ');
-                var group = @params[0];
-                var command = @params.Count() > 1 ? @params[1] : string.Empty;
-                var output = $"Unknown command: {group} {command}";
-                return output;
-            }
-        }
     }
 }

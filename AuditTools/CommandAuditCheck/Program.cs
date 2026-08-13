@@ -154,24 +154,33 @@ foreach (var fileName in silentNativeSinkFiles)
 // the class-1 name. These files are now faithful SILENT no-ops: they must emit NO player-facing output
 // (no NativeCommandFailure.Report / SysMsg / SendDefMessage / MsgColor.Green) while keeping the
 // [GameCommand registration so the @command stays recognized by the C# dispatcher.
+// 2026-08-13 分裂：原来这张表要求「保留 [GameCommand 注册 + 命令体静默」。那个契约是错的。
+// 注册本身就是发散：BaseCommond.Handle 在调用命令体【之前】就用 nPermissionMin 短路，
+// 权限不足者收到 M2Share.g_sGameCommandPermissionTooLow("权限不够!!!") 红字。这批命令的
+// cs_perm 全是 10，而原生权限上限是 5，所以任何真实调用者都走短路分支——它们从来不是
+// 「静默 no-op」，而是稳定回一句红字。原生对表外 @命令 一个字都不回（0x00621F4F 把所需权限
+// 出参清 0 -> 0x00622AC2 `jbe 0x622B09` 跳过唯一失败回复 -> jt[0]=0x0062B648 静默收尾）。
+// 因此忠实做法是【不注册】。下表的命令必须在 GameSvr 全树查无 [GameCommand("名字" 注册。
+var absentCommandsMustNotBeRegistered = new[]
+{
+    "AdjustExp", "Announcement", "DelDenyAccountLogon", "DelDenyCharNameLogon",
+    "DelDenyIPaddrLogon", "DeleteChar", "DenyAccountLogon", "DenyCharNameLogon",
+    "DenyIPaddrLogon", "DisableSendMsg", "DisableSendMsgList", "EnableSendMsg",
+    "EndContest", "GameDiaMond", "GameGlory", "GuildWar",
+};
+
+var gameSvrSources = Directory.GetFiles(Path.Combine(root, "GameSvr"), "*.cs",
+    SearchOption.AllDirectories).Select(File.ReadAllText).ToArray();
+foreach (var command in absentCommandsMustNotBeRegistered)
+{
+    var needle = $"[GameCommand(\"{command}\"";
+    Assert(!gameSvrSources.Any(s => s.Contains(needle, StringComparison.OrdinalIgnoreCase)),
+        $"@{command} is absent from the 430-row native registry and must not be registered");
+}
+
+// 尚未处理的一批（命令名同样不在 430 行注册表里，但归属另一半命令区间）。
 var silentAbsentCommandFiles = new[]
 {
-    "AdjustExpCommand.cs",
-    "AnnouncementCommand.cs",
-    "DelDenyAccountLogonCommand.cs",
-    "DelDenyCharNameLogonCommand.cs",
-    "DelDenyIPaddrLogonCommand.cs",
-    "DeleteCharCommand.cs",
-    "DenyAccountLogonCommand.cs",
-    "DenyCharNameLogonCommand.cs",
-    "DenyIPaddrLogonCommand.cs",
-    "DisableSendMsgCommand.cs",
-    "DisableSendMsgListCommand.cs",
-    "EnableSendMsgCommand.cs",
-    "EndContestCommand.cs",
-    "GameDiaMondCommand.cs",
-    "GameGloryCommand.cs",
-    "GuildWarCommand.cs",
     "ReloadAbuseCommand.cs",
     "SbkDoorControlCommand.cs",
     "ShowDenyAccountLogonCommand.cs",
@@ -295,7 +304,7 @@ Assert(restart.Contains("RequestShutdown", StringComparison.Ordinal)
        && !restart.Contains("你的数据已保存", StringComparison.Ordinal),
     "RestartServer bypasses durable host shutdown or reports an unconfirmed save");
 
-Console.WriteLine($"PASS protected={protectedFiles.Length} silentNativeSink={silentNativeSinkFiles.Length} silentAbsent={silentAbsentCommandFiles.Length} commandFiles={allSources.Length}");
+Console.WriteLine($"PASS protected={protectedFiles.Length} silentNativeSink={silentNativeSinkFiles.Length} absentUnregistered={absentCommandsMustNotBeRegistered.Length} silentAbsent={silentAbsentCommandFiles.Length} commandFiles={allSources.Length}");
 return;
 
 string Read(string fileName) => File.ReadAllText(Path.Combine(commandDirectory, fileName));

@@ -486,8 +486,15 @@ foreach (var value in new[]
 
 Assert(!File.Exists(Path.Combine(commandDirectory, "GameGirdCommand.cs")),
     "non-native GameGird command remains registered");
-AssertCurrencyCommandFailsClosed(
-    File.ReadAllText(Path.Combine(commandDirectory, "GameGloryCommand.cs")), "GameGlory");
+// @GameGlory 不在原生 430 行注册表里（只有 SetGloryPoint 274 / chguserGlory 226），
+// 已整条移除；这里改钉「不得再被注册」，比原来校验它是不是静默 no-op 更强。
+foreach (var path in Directory.GetFiles(Path.Combine(root, "GameSvr"), "*.cs",
+             SearchOption.AllDirectories))
+{
+    Assert(!File.ReadAllText(path).Contains("[GameCommand(\"GameGlory\"",
+               StringComparison.OrdinalIgnoreCase),
+        "GameGlory is absent from the native registry and must not be registered");
+}
 
 Console.WriteLine(
     "PASS MyLFnum=property AddLF=procedure AddLimLF=procedure DecLF=procedure " +
@@ -507,31 +514,6 @@ static int[] ReadNativeLingFuReasonBuckets(TPlayObject player)
     Assert(parameters[0] is int[],
         "native LingFu reason-bucket snapshot type is invalid");
     return (int[])parameters[0];
-}
-
-static void AssertCurrencyCommandFailsClosed(string source, string command)
-{
-    // 2026-08-04: the `NativeCommandFailure.Report` requirement was RETIRED, not weakened.
-    // It directly contradicted `CommandAuditCheck:171`, which lists GameGloryCommand.cs in
-    // `silentAbsentCommandFiles` and asserts the OPPOSITE (no Report at all). Tier-1 settles
-    // it in CommandAuditCheck's favour: `@GameGlory` is ABSENT from the 430-row native command
-    // table (staging/ida_award_case584_command_registry_20260720.txt, TABLE=0x7B4654 exact-match
-    // scan; only SetGloryPoint / chguserGlory exist), so native routes it to the silent sink
-    // def_622B15 @0x0062B648 — a red Report would be an over-send. Production's pure silent
-    // no-op is correct. Two audits asserting opposite things is itself a defect; the loser is
-    // retired here rather than left to fail forever, and `CommandAuditCheck` remains the single
-    // owner of that contract.
-    //
-    // The currency-token half below is NOT retired: it still proves the handler never touches
-    // gold/point/script state, which is what makes the silent no-op safe.
-    foreach (var forbidden in new[]
-             {
-                 "m_nGamePoint", "m_nGameGold", "m_ScriptVVars", "m_ScriptSVars",
-                 "GameGoldChanged", "GamePointChanged", "MsgColor.Green"
-             })
-    {
-        Reject(source, forbidden, $"{command} command currency substitute");
-    }
 }
 
 static void AssertLingFuDispatchesHaveNoSubstitute(string source)
