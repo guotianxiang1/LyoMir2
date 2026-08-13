@@ -3,10 +3,16 @@ using SystemModule;
 
 namespace GameSvr
 {
-    
-    
-    
-    [GameCommand("UserMoveXY", "移动地图指定座标(需要戴传送装备)", 0)]
+    // 注册表记录 0x007B65D4 `05 "gowgo"`，+0x18 = 29，+0x1C = 0。
+    // jt[29] @0x00622B90 = 37 3b 62 00 -> 0x00623B37，该 case 只是
+    // `push p3 / ecx=p2 / edx=p1 / eax=self / call 0x006CE400`，下面的分支全在 0x006CE400 里：
+    //   0x006CE422 cmp byte [ebx+0x675],2 / jb  -> 权限 >= 2 走 GM 定点移动 (call 0x006D06C0)
+    //   0x006CE43F cmp byte [ebx+0x1BC],0 / je  -> 未戴传送装备则静默返回
+    //   0x006CE452 cmp byte [eax+0x6B],0  / jne -> 0x006CE4FE "在这里您无法使用" (cx=0x38FF)
+    //   0x006CE46D cmp eax,0x2710 / jbe        -> 未满 10 秒走 0x006CE4B7 倒计时提示
+    // 旧命令名 UserMoveXY / UserMove 在全镜像 GBK+UTF8+UTF16LE 三编码 0 命中。
+    [GameCommand("gowgo", "移动(GMLevel >= 2)，同一地图可以不指定地图名",
+        "[地图名|无] X坐标 Y坐标", 0)]
     public class UserMoveXYCommand : BaseCommond
     {
         [DefaultCommand]

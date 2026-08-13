@@ -1590,7 +1590,8 @@ namespace GameSvr
         public const string g_sGameCommandShutupReleaseHelpMsg = "人物名称";
         public const string g_sGameCommandShutupReleaseCanSendMsg = "你已经恢复聊天功?!!!";
         public const string g_sGameCommandShutupReleaseHumanCanSendMsg = "{0} 已经恢复聊天?";
-        public const string g_sGameCommandShutupListIsNullMsg = "禁言列表为空!!!";
+        // 0x0062BB24（长度前缀 12 = 六个汉字），由 @LookOutSay 的 0x006242CC 引用
+        public const string g_sGameCommandShutupListIsNullMsg = "禁言名单为空";
         public const string g_sGameCommandLevelConsoleMsg = "[等级调整] {0} ({1} -> {2})";
         public const string g_sGameCommandSbkGoldHelpMsg = "城堡名称 控制?(=?-?+) 金币?(1-100000000)";
         public const string g_sGameCommandSbkGoldCastleNotFoundMsg = "城堡{0}未找?!!!";

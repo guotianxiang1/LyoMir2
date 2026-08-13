@@ -20,31 +20,7 @@ namespace GameSvr.CommandSystem
         public void RegisterCommand()
         {
             M2Share.CommandConf.LoadConfig();
-            RegisterNativePlayerCommandAliases();
             RegisterCommandGroups();
-        }
-
-        private static void RegisterNativePlayerCommandAliases()
-        {
-            RegisterNativePlayerCommandAlias("UserMoveXY",
-                M2Share.g_GameCommand.USERMOVE.sCmd, "UserMove");
-            RegisterNativePlayerCommandAlias("SearchHuman",
-                M2Share.g_GameCommand.SEARCHING.sCmd, "Searching");
-        }
-
-        private static void RegisterNativePlayerCommandAlias(string command,
-            string configuredName, string defaultName)
-        {
-            if (CustomCommands.ContainsKey(command))
-                return;
-
-            var effectiveName = string.IsNullOrWhiteSpace(configuredName)
-                ? defaultName
-                : configuredName.Trim();
-            if (effectiveName.StartsWith('@'))
-                effectiveName = effectiveName[1..];
-            if (!string.IsNullOrWhiteSpace(effectiveName))
-                CustomCommands[command] = effectiveName;
         }
 
         
@@ -113,7 +89,6 @@ namespace GameSvr.CommandSystem
             CustomCommands.Clear();
             // 从磁盘重新读取别名并填充 CustomCommands。
             M2Share.CommandConf.ReloadCustomAlias();
-            RegisterNativePlayerCommandAliases();
 
             CommandMaps.Clear();
             foreach (var kv in OriginalCommandMaps)
