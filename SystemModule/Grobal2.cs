@@ -1935,5 +1935,14 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === Inlay subsystem ===
+        // 神珠/宝玉 镶嵌 reply idents. The numeric SM ident equals the CM ident for
+        // all four: the workers 0x6F37EC / 0x6F38A8 answer via [vmt+0x250]
+        // (SendDefMessage) with `mov dx,0x1138..0x113B` and ECX = the result code.
+        public const int SM_4408 = 4408; // 0x1138  神珠镶嵌(本人) reply @0x6F3897 [vmt+0x250]; Recog=result
+        public const int SM_4409 = 4409; // 0x1139  宝玉镶嵌(本人) reply @0x6F393A [vmt+0x250]; Recog=result
+        public const int SM_4410 = 4410; // 0x113A  神珠镶嵌(英雄) reply @0x6F387D [vmt+0x250]; Recog=result
+        public const int SM_4411 = 4411; // 0x113B  宝玉镶嵌(英雄) reply @0x6F3920 [vmt+0x250]; Recog=result
     }
 }
