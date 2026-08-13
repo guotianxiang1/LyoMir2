@@ -1672,6 +1672,16 @@ namespace GameSvr.Plugins
         /// 正常出口 <c>0x1006CECC B8 01 00 00 00</c> 恒返回 1
         /// （前一条 <c>0x1006CEC6 mov eax,0x3E7</c> 是作者留下的死代码，被这条盖掉）；
         /// 异常臂 <c>0x1006CEEA B8 19 FC FF FF</c> 同样是 -999。
+        ///
+        /// 【已删除的 INVENTED 门，勿重新加回】曾有一道 <c>RecycleBagModelResolved()</c>：
+        /// 「无限背包 勾选了但不是 固定格子 就整体拒绝回收」。原生没有这道门。
+        /// 入口 sub_1006CF10 全长 0x66 字节，只有一个 <c>call</c>（0x1006CF64 → 0x1006B020）
+        /// 和一个门（0x1006CF16 <c>80 3D C5 B8 31 10 00 cmp byte [0x1031B8C5],0</c>）；
+        /// 无限背包_是否勾选(0x102C2C7C) / 无限背包_是否固定(0x102BFAF0) / 固定格子(0x102BFB04) /
+        /// V变量控制格子(0x102C44AC) / 无限背包_额外格子(0x102BFB10) / 无限背包_变量v1(0x102BFB24) /
+        /// 无限背包_变量v2(0x102BFB34) 七个键的 VA 在 0x1006B020..0x1006CF80 内引用数 = 0
+        /// （对照组：背包容量 sub_1007E370 引用得到，扫描不是瞎的）。
+        /// 详见 tools/ys_recycle_re/v9_invented_scan.py 与 docs/ys_recycle_native_defects_20260813.md。
         /// </summary>
         public int AutoRecycle()
         {
@@ -1682,7 +1692,6 @@ namespace GameSvr.Plugins
             {
                 var recycleConfig = _pluginManager?.GetRecycleConfigSnapshot();
                 if (recycleConfig == null) return RecycleUnusable;
-                if (!RecycleBagModelResolved()) return RecycleUnusable;
 
                 for (int i = _player.m_ItemList.Count - 1; i >= 0; i--)
                 {
@@ -1702,23 +1711,6 @@ namespace GameSvr.Plugins
                 M2Share.MainOutMessage("[异常] AutoRecycle " + ex.Message);
                 return RecycleUnusable;
             }
-        }
-
-        /// <summary>
-        /// 无限背包 把额外格子存在 M2 背包之外（Gs1\MyJson\bags\&lt;角色名&gt;.bin），C# 还没有
-        /// 复刻那个容器，所以回收只能看见 m_ItemList。生产 items\config.json 用的是
-        /// "无限背包_是否固定":"固定格子"（额外格子=144，变量v1=10/变量v2=1 在这条分支下不参与
-        /// 计算——V(10,1) 在生产里是"商店装备"回收开关，拿它算格子数显然不是本意）。
-        /// "V变量控制格子" 那条分支的格子数取自 GetV(变量v1,变量v2)，没有任何字节证据，
-        /// 保持关闭：宁可一件不回收，也不能对着一个没复刻的容量模型删东西。
-        /// </summary>
-        private bool RecycleBagModelResolved()
-        {
-            var manager = _pluginManager;
-            if (manager == null) return true;
-            if (!IsEnabledValue(manager.GetItemConfigValue("无限背包_是否勾选"))) return true;
-            return PluginManager.NormalizeConfigValue(
-                manager.GetItemConfigValue("无限背包_是否固定")) as string == "固定格子";
         }
 
         /// <summary>
