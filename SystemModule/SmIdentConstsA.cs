@@ -24,5 +24,8 @@ namespace SystemModule
     {
         // 0xBBB @0x6329A5 slot 0x250 - YB-deal buyer result code (Recog = <=0 result).
         public const int SM_3003 = 3003;
+
+        // 0xBBC @0x632BC0 slot 0x250 - YB-deal result to a resolved target (Recog = result).
+        public const int SM_3004 = 3004;
     }
 }
