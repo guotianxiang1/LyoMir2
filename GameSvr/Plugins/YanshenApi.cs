@@ -3242,10 +3242,18 @@ namespace GameSvr.Plugins
         /// 眼神写进宿主 imm8 的从宠数量。取值域由「被改写的那条指令能编码什么」决定：
         /// 插件只做上钳 127（<c>0x100A9DE9 83 F8 7F cmp eax,0x7F</c> /
         /// <c>0x100A9DEC 7E 07 jle</c> / <c>0x100A9DEE B8 7F000000 mov eax,0x7F</c>），
-        /// 没有下钳，随后写入的是 <c>al</c>（<c>0x100A9E0F 88 85 2A EF FF FF</c>），
-        /// 所以负数按 8 位回绕而不是饱和到 0。
+        /// 没有下钳，随后写入的是 <c>al</c>（<c>0x100A9E0F 88 85 2A EF FF FF</c>）。
+        ///
+        /// 被改写的那条是 <c>6A xx</c>（<c>push imm8</c>），x86 定义它**符号扩展**成
+        /// dword，而 callee <c>sub_6CB070</c> 是按 dword 读这个槽的
+        /// （<c>0x006CB1F0 FF 45 14 inc dword [ebp+0x14]</c> /
+        /// <c>0x006CB297 3B 45 14 cmp eax,dword [ebp+0x14]</c>，`ret 0x10` 共 4 个栈参）。
+        /// 所以负配置值是 <c>(sbyte)</c> 截断后**保持负数**，不是回绕成 0..255：
+        /// <c>神兽_数量 = -1</c> → atoi 得 -1 → 不大于 0x7F → al = 0xFF →
+        /// <c>push 0xFF</c> → <c>[ebp+0x14] = -1</c>（一只都不造），
+        /// 用 <c>(byte)</c> 会算成 255（造 255 只）。
         /// </summary>
-        static int NativeSlaveCountImm8(int v) => (byte)(v > 0x7F ? 0x7F : v);
+        static int NativeSlaveCountImm8(int v) => (sbyte)(v > 0x7F ? 0x7F : v);
 
         /// <summary>
         /// 召唤神兽的从宠数量。眼神把 <c>神兽_数量</c> 经 atoi(<c>0x1022DC49</c>) 后
