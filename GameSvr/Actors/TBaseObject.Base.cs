@@ -730,11 +730,12 @@ namespace GameSvr
                         // resolver below is the single exit. Meat decay is unrelated to the
                         // damage call and stays on the legacy carrier.
                     }
-                    // POIS-09/POIS-10 — 战神 sub_76B6F0 @0x76BD4F-0x76BE1C 在同一个
-                    // 2500ms 闸后还服务另外四个 bodyState 档(0x06/0x01/0x1C/0x1F),
-                    // 一个 tick 只取优先级最高的那一档。上面那段走的是 legacy 12 槽
-                    // overlay(m_wStatusTimeArr),与 obj+0x168 位集是两套载体,故这里
-                    // 并列而非替换 —— 详见 TBaseObject.NativePoisonTick.cs 的字节表。
+                    // POIS-09/POIS-10 — 战神 sub_76B6F0 @0x76BD4F-0x76BE1C 在这个 2500ms
+                    // 闸后服务四个 bodyState 档(0x06/0x01/0x1C/0x1F),是 if/else-if 链,
+                    // 一个 tick 只取优先级最高的那一档,汇合于 0x76BDF5 后只打一次。
+                    // 自 MakePosion 改走 AddTimedAbilityInternal 之后,绿毒(0x1F)也由这条
+                    // 链服务,所以这里是本 tick 唯一的伤害出口 —— 详见
+                    // TBaseObject.NativePoisonTick.cs 的字节表。
                     // 伤害由 rec.Value+1 得出,其中 0x06 = MIN(MaxHP,5000000)/100、
                     // 0x01 = 同上/30,每 tick 覆写节点值;0x1C/0x1F 用施法者给的量。
                     if (TryResolveNativePoisonTickDamage(out var nNativePoisonDamage)
