@@ -696,7 +696,10 @@ namespace GameSvr
             }
             try
             {
-                if ((HUtil32.GetTickCount() - m_dwPoisoningTick) > M2Share.g_Config.dwPosionDecHealthTime)
+                // POIS-05: 战神 sub_76B6F0 @0x76BD39: cmp eax,0x9C4 / 0x76BD3E: jb skip
+                // jb = jump if below (unsigned <), so tick fires when elapsed >= 2500.
+                // C# used strict >, missing boundary tick when elapsed == 2500.
+                if ((HUtil32.GetTickCount() - m_dwPoisoningTick) >= M2Share.g_Config.dwPosionDecHealthTime)
                 {
                     m_dwPoisoningTick = HUtil32.GetTickCount();
                     if (m_wStatusTimeArr[Grobal2.POISON_DECHEALTH] > 0)
