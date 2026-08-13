@@ -6,6 +6,10 @@ namespace GameSvr
     public partial class TBaseObject
     {
         private const int TimedAbilityMessage = 3555;
+        // Native 0xDE2. The whole-list variant of TimedAbilityMessage(0xDE3): the
+        // login-state cluster leg sub_6E99B8 walks [self+0xDC] and emits one 10-byte
+        // record per node, identical layout to the single-state 3555 frame.
+        private const int TimedAbilitySnapshotMessage = 3554;
         private const uint TimedAbilityProcessInterval = 500;
         private const byte TimedAbilityValueGateState = 16;
         private const byte TimedAbilityGlobalBlockState = 52;
@@ -732,6 +736,48 @@ namespace GameSvr
             writer.Write(remainingMilliseconds);
             writer.Write(value);
             return (header, stream.ToArray());
+        }
+
+        // 战神 sub_6E99B8 (SM 3554, the login-state cluster's third leg). It walks the
+        // timed-ability list head [self+0xDC] (== m_TimedAbilityHead) and, per node,
+        // writes a 10-byte record whose layout is byte-identical to 3555:
+        //   0x6E9A14 8A 52 01        mov dl,[node+1]   -> byte  [+0]  = InternalType
+        //   0x6E9A1D C6 44 70 01 00  mov [buf+1],0     -> byte  [+1]  = 0
+        //   0x6E9A28 8B 52 02        mov edx,[node+2]  -> int32 [+2]  = RemainingMilliseconds
+        //   0x6E9A35 8B 52 0A        mov edx,[node+0xA]-> int32 [+6]  = Value
+        //   0x6E9A40 8B 40 0E        mov eax,[node+0xE]-> next
+        // Send frame (0x6E9A4C..0x6E9A68 via VMT+0x254):
+        //   push ebx(count)  -> Param = node count
+        //   6A 00 / 6A 00    -> Tag = Series = 0
+        //   push [ebp-0xC]   -> Buf  = the record array
+        //   push count*10    -> Len  (0x6E9A55 add eax,eax / lea eax,[eax+eax*4])
+        //   33 C9            -> Recog = 0
+        // An empty list still sends (0x6E99EB je 0x6E9A4C with ebx=0) -> Param=0, Len=0,
+        // which is why the login counter shows this ident once per login even for a
+        // player carrying no timed buffs.
+        internal (ClientPacket Header, byte[] Body) BuildNativeTimedAbilitySnapshot()
+        {
+            var count = 0;
+            for (var node = m_TimedAbilityHead; node != null; node = node.Next)
+            {
+                count++;
+            }
+
+            var body = new byte[count * 10];
+            using (var stream = new MemoryStream(body))
+            using (var writer = new BinaryWriter(stream))
+            {
+                for (var node = m_TimedAbilityHead; node != null; node = node.Next)
+                {
+                    writer.Write(node.InternalType);
+                    writer.Write((byte)0);
+                    writer.Write(node.RemainingMilliseconds);
+                    writer.Write(node.Value);
+                }
+            }
+
+            var header = Grobal2.MakeDefaultMsg(TimedAbilitySnapshotMessage, 0, count, 0, 0);
+            return (header, body);
         }
 
         private void ApplyTimedAbilityBonuses()

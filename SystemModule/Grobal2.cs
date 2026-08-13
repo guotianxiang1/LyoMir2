@@ -1502,6 +1502,21 @@ namespace SystemModule
         public const int RM_NATIVE_UNION_EFFECT = 10612;
         public const int RM_NATIVE_EXP_CONTINUE = 10625;
         public const int RM_NATIVE_MOOTEBO_CONTINUE = 12309;
+
+        /// <summary>
+        /// 登录状态同步 (native RM 0x3010 = 12304). UserLogon (sub_6B1D64) queues it at
+        /// 0x6B2358 (`66 B9 10 30 mov cx,0x3010` -> sub_765E68 with edx=eax=Self, six
+        /// zero params), so it is processed once, on the next Run tick after login.
+        /// The Operate loop routes it through the secondary dispatcher sub_743AD8
+        /// (`0x6B6247 call 0x743AD8`); case 0x3010 (`0x743B24 sub eax,0x75F / je 0x743BF3`)
+        /// runs `0x743BF7 call [edx+0x204]` which is the virtual cluster sub_6E9A98
+        /// (VMT base 0x62EF8C + 0x204; verified: [+0x250]=0x6D7CB0 is the unicast send).
+        /// The cluster fans out four legs in order: 3324, 1264, 3554, then 3556/4367.
+        /// Kept numerically equal to native because it neighbours RM_NATIVE_MOOTEBO_CONTINUE
+        /// (12309); RM_* stays process-local and never reaches the wire (REPLICATION_RULES §1.4).
+        /// </summary>
+        public const int RM_NATIVE_LOGON_STATE_SYNC = 12304;
+
         public const int RM_HEAR = 11001;
 
         /// <summary>
