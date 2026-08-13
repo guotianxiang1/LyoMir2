@@ -1,0 +1,45 @@
+# SM missing-ident batch 5 — CLASS(c) ascending rank 106..140 (highest 35 of 140)
+# Source census: staging/_sm1_work/classes.txt  (CLASS (c): native wire idents with
+#   NO constant of any prefix in Grobal2.cs, 140 total).
+# Base image: staging/_reunpack_work/flat_image.bin  (ImageBase 0x400000).
+# "first" VA = the address of the `call [obj+0x250|0x254]` (or wrapper) send instruction.
+#
+# rank  ident  hex     sites  first(send VA)
+  106   4349   0x10FD    1     0x6b5215
+  107   4350   0x10FE    1     0x68980d
+  108   4351   0x10FF    1     0x647f38
+  109   4352   0x1100    2     0x6e616a
+  110   4361   0x1109    1     0x64013c
+  111   4363   0x110B    1     0x767160
+  112   4407   0x1137    1     0x6b60f2
+  113   4408   0x1138    1     0x6f3897
+  114   4409   0x1139    1     0x6f393a
+  115   4410   0x113A    1     0x6f387d
+  116   4411   0x113B    1     0x6f3920
+  117   4441   0x1159    2     0x6ff4d9
+  118   4442   0x115A    2     0x6ffe30
+  119   4443   0x115B    2     0x700918
+  120   4444   0x115C    2     0x6fe929
+  121   4445   0x115D    2     0x6fe865
+  122   4446   0x115E    1     0x6f75ef
+  123   4455   0x1167    1     0x6a89e0
+  124   4456   0x1168    2     0x6a8aab
+  125   4457   0x1169    1     0x6a8c9f
+  126   4458   0x116A    1     0x6a8d22
+  127   4459   0x116B    1     0x6a8dc2
+  128   4469   0x1175    1     0x6f788b
+  129   4470   0x1176    1     0x6f78f3
+  130   4480   0x1180    1     0x7068af
+  131   4496   0x1190    1     0x6fad1b
+  132   4499   0x1193    1     0x6fbd25
+  133   4612   0x1204    4     0x6f781c
+  134   4614   0x1206   17     0x70214d
+  135   4626   0x1212    1     0x6ae363
+  136   4638   0x121E    1     0x64e832
+  137   4646   0x1226    1     0x6fbc4c
+  138   4647   0x1227    1     0x6fb7ff
+  139   4649   0x1229    1     0x6fbb5f
+  140   4650   0x122A    1     0x6fb610
+#
+# Boundary check: rank 105 = ident 4348 (0x6400c4), owned by batch sm-4 (71..105).
+# This batch starts at rank 106 = ident 4349. Clean, no overlap.
