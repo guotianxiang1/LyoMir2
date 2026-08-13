@@ -68,6 +68,13 @@ namespace GameSvr
                 || CheckNativeAuthentication(2, NativeItemDropDestroy.AuthenOrder);
         }
 
+        /// <summary>
+        /// 0x73FCEF 的 `is THumanKind`（类指针 [0x73BBE8]）。原生 THumanKind 只有
+        /// TPlayer 与 THeroAct 两支 —— 同一判据也解释了为什么 sub_741368 恰好只有
+        /// 0x6C07D8 与 0x687125 两个 E8 调用者。
+        /// </summary>
+        internal override bool IsNativeHumanKind() => true;
+
         internal bool CheckNativeAuthentication(int authenLevel, int authenOrder)
         {
             var status = authenLevel switch

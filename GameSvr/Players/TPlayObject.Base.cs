@@ -2244,8 +2244,13 @@ namespace GameSvr
                     // (b) 绑定物、Reserved02&0x0010/0x0200 的物品本来一件都不该动，
                     // 却照样被销毁 —— 两条都是净额外的玩家资产损失。
                     var bagStdItem = M2Share.UserEngine.GetStdItem(m_ItemList[i].wIndex);
+                    // 分母是**硬编码 3**：0x7400F8 `B8 03 00 00 00 mov eax,3` 紧接
+                    // 0x7400FD `E8 4A 3A CC FF call sub_403B4C`，没有任何全局读。
+                    // 这里原先读 g_Config.nDieScatterBagRate（默认也是 3，所以默认配置下
+                    // 行为不变），但 DieScatterBagRate 这个名字在全镜像 GBK、裸 ASCII
+                    // （大小写不敏感）、UTF-16LE 三路皆 0 命中，原生没有这个旋钮。
                     if (!boDropall
-                        && M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate) != 0)
+                        && M2Share.RandomNumber.Random(3) != 0)
                     {
                         continue;                                   // 0x740104 jne 0x74025C
                     }

@@ -3178,9 +3178,17 @@ namespace GameSvr
                         }
                     }
                 }
+                // 分母。战神 sub_73FC70 @0x73FCA9-0x73FD0D：红名恒 21（0x73FCB8 的 imm32
+                // 0x15），非红是 `[self+0x18C] + 0x5A(90)`（0x73FCC1/0x73FCC7），随后在
+                // LastHiter 是 THumanKind 时减 `byte [LastHiter+0x579]`（0x73FD02/0x73FD08），
+                // 最后 0x73FD0B 下钳 0。两个输入的完整来源链见
+                // TBaseObject.NativeDeathDropDenominator.cs 的文件头。
+                // 这里原先读的是 nDieRedDropUseItemRate(15) / nDieDropUseItemRate(30)：
+                // 两个配置名在全镜像 GBK、裸 ASCII（大小写不敏感）、UTF-16LE 三路皆 0 命中，
+                // 原生没有这对旋钮，数值也不对（15/30 vs 21/90）。
                 var nRate = deathDropPatched
                     ? patchedRate
-                    : (nativeRedName ? M2Share.g_Config.nDieRedDropUseItemRate : M2Share.g_Config.nDieDropUseItemRate);
+                    : NativeDeathEquipDropDenominator(nativeRedName, m_LastHiter);
                 for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
                 {
                     // PKD-03 抽签次数对齐。战神一次循环走 16 个装备位:

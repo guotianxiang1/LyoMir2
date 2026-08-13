@@ -25,6 +25,12 @@ namespace GameSvr
         /// different function, sub_773CA0.)</summary>
         internal override bool SupportsNativeColdTime => true;
 
+        /// <summary>
+        /// 0x73FCEF 的 `is THumanKind`（类指针 [0x73BBE8]）。英雄同样是 THumanKind 的一支，
+        /// 所以英雄当凶手时，它的 [+0x579] 一样会从受害者的爆装分母里减掉。
+        /// </summary>
+        internal override bool IsNativeHumanKind() => true;
+
         /// <summary>Hero's current level (mirrors or derives from master).</summary>
         public ushort HeroLevel;
 

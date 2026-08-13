@@ -1662,14 +1662,13 @@ namespace GameSvr
                         }
                     }
                 }
-                if (PKLevel() > 2)
-                {
-                    nRate = 15;
-                }
-                else
-                {
-                    nRate = 30;
-                }
+                // 分母与玩家侧同一条 sub_73FC70：红名 21、非红 [self+0x18C]+90，再减
+                // THumanKind 凶手的 [+0x579]，下钳 0。红名判据是 0x73FCB6 的 `jge`，
+                // 即**严格** MyPKpoint > nPKPunishPoint；这里原先写的 `PKLevel() > 2`
+                // 等价于 PK >= 300，把 201..299 整段判成非红。硬编码的 15/30 同样无原生
+                // 依据（见 TBaseObject.NativeDeathDropDenominator.cs 的文件头）。
+                nRate = NativeDeathEquipDropDenominator(
+                    m_nPkPoint > M2Share.g_Config.nPKPunishPoint, m_LastHiter);
                 // Heroes share THumanKind.Die -> sub_73FC70 with players. The
                 // plugin rewrite is a process-wide patch, so HeroObject must
                 // honour it too. Monsters do not enter this worker natively.
@@ -1679,7 +1678,9 @@ namespace GameSvr
                 if (this is HeroObject)
                 {
                     deathDropPatched = new YanshenApi(null, null, M2Share.PluginManager)
-                        .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out patchedCap);
+                        .TryGetDeathEquipDropPatch(
+                            m_nPkPoint > M2Share.g_Config.nPKPunishPoint,   // 0x73FCB6 jge
+                            out var patchedRate, out patchedCap);
                     if (deathDropPatched) nRate = patchedRate;
                 }
                 nC = 0;
@@ -2112,6 +2113,9 @@ namespace GameSvr
             m_wNativeDrugJobBonus = 0;
             m_nLuck = 0;
             m_nHitSpeed = 0;
+            // sub_73D500 的 0x73D578 / 0x73DAC5 / 0x73DECF 三次赋值，见
+            // TBaseObject.NativeDeathDropDenominator.cs 的文件头。
+            NativeRecalcDropRareFields();
             ResetNativeHqFastness();
             ResetNativeUnionFastness();
             ResetNativeNearHitFastness();
