@@ -314,7 +314,10 @@ namespace SystemModule
         public const int CM_SWITCH_LISTEN = 3032;
         public const int CM_SPEEDHACKMSG = 3500;
         public const int SM_SWORD_HIT = 2;
-        public const int SM_41 = 4;
+        // SM_41 = 4 removed: the name promised wire ident 41 but held 4. Wire 41 is
+        // SM_FEATURECHANGED, sent at 0x6F2E2B `66 BA 29 00 mov dx,0x29` ->
+        // 0x6F2E33 `FF 93 54 02 00 00 call [ebx+0x254]` (134,873 production packets).
+        // 4 has no send-slot site anywhere in CODE and zero production packets.
         public const int SM_RUSH = 6;
         public const int SM_RUSHKUNG = 7;
         
