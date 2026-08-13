@@ -2085,5 +2085,10 @@ namespace SystemModule
         public const int SM_4647 = 4647; // 0x1227 BLOCKED: [obj+0x254] 24-byte record via 0x69C514 (SS[20]@0x00..0x14, gap@0x15, word@0x16); gap uninit @0x6FB7FF
         public const int SM_4649 = 4649; // 0x1229 [obj+0x250] empty; Recog=esi(0/1 from 0x69C47C), all-0 @0x6FBB5F
         public const int SM_4650 = 4650; // 0x122A [obj+0x250] empty; Recog=[ebp-4](runtime), all-0 @0x6FB610
+
+        // === Inlay subsystem ===
+        // 神珠/宝玉 镶嵌 reply idents. The numeric SM ident equals the CM ident for
+        // all four: the workers 0x6F37EC / 0x6F38A8 answer via [vmt+0x250]
+        // (SendDefMessage) with `mov dx,0x1138..0x113B` and ECX = the result code.
     }
 }
