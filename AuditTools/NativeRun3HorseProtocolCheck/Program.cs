@@ -1025,7 +1025,12 @@ static void Position(TBaseObject actor, int x, int y, string label)
 
 static Envirnoment NewMap()
 {
-    var map = new Envirnoment();
+    // sMapName 必须非空：SPWN-56 的有效性谓词第三项对应原生
+    // 0x765D85 `cmp dword [eax+0x44],0`（PEnvir.MapName <> ''），
+    // 空名地图上的 actor 会在首次视野扫描时被判失效摘链。
+    // 生产地图一律经 Maps.cs:77（拒绝空名）或动态房间工厂
+    // （sMapName = definition.RoomName）建立，裸 new 是夹具特有的失真态。
+    var map = new Envirnoment { sMapName = "0" };
     var initialize = typeof(Envirnoment).GetMethod("Initialize",
         BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingMethodException("Envirnoment.Initialize");
