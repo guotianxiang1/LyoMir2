@@ -4612,8 +4612,14 @@ namespace GameSvr.Plugins
         public bool IsMultiJob() => Enabled("装备多职业");
         public bool IsRebirthWear() => Enabled("装备转生穿戴判定a");
         public bool IsBoostDropRate() => Enabled("装备提升人物爆率");
-        public double BoostDropRateA() => GetParam("装备提升人物爆率_A值", 10);
-        public double BoostDropRateB() => GetParam("装备提升人物爆率_B值", 10);
+        // 0x100B9E64 `push [edi+0x664]` / 0x100B9E6A `call 0x1022DC49`(atoi) 与
+        // 0x100B9E6F `push [edi+0x668]` / 0x100B9E7B 同 —— 是 atoi 不是 atof，
+        // 两个 dword 随后被逐字节拆进 0x71FD37 桩体的两处 `B9 imm32`
+        // （A → [ebp-0x1A8..-0x19C]，B → [ebp-0x168..-0x15C]）。
+        // 缺省取页面对象构造函数的出厂串 [edi+0x664]='10' / [edi+0x668]='10'。
+        // 语义见 YanshenEquipDropBoost。
+        public int BoostDropRateA() => ParamAtoi("装备提升人物爆率_A值", 10);
+        public int BoostDropRateB() => ParamAtoi("装备提升人物爆率_B值", 10);
         public bool IsBigBag() => Enabled("大背包");
         public bool IsTempBag() => Enabled("临时大背包");
         public bool IsPortableStorage() => Enabled("随身仓库");

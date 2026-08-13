@@ -55,3 +55,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeDropRngSequenceCheck")]
 [assembly: InternalsVisibleTo("YanshenMonsterAttrCheck")]
 [assembly: InternalsVisibleTo("YanshenLaserSlotsCheck")]
+[assembly: InternalsVisibleTo("YanshenEquipDropBoostCheck")]
