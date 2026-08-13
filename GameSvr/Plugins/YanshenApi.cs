@@ -3422,7 +3422,13 @@ namespace GameSvr.Plugins
         // Off means the unpatched luck-max armour roll, so this must not
         // raise inside a strict yanshen call the way Enabled() does.
         public bool IsFixDefense() => PatchToggleOn("修复卡防御");
-        public bool IsZeroDefSplit() => Enabled("防0拆分");
+        /// <summary>
+        /// 防0拆分. A detour, not a script API: 0x100AA6DA gates on the switch,
+        /// 0x100AA765 calls the trampoline builder 0x10032FD0 with begin/end
+        /// 0x6E0FF3/0x6E0FF9 over ClientSplitItem's prologue. Off is simply the
+        /// unpatched instruction, so reading it must not raise.
+        /// </summary>
+        public bool IsZeroDefSplit() => PatchToggleOn("防0拆分");
         public bool IsMagicShieldFix() => Enabled("魔法盾修正");
         public bool IsHolyShieldMsg() => Enabled("护身触发报文a");
         public bool IsHolyShieldChance() => Enabled("护身触发概率a");
