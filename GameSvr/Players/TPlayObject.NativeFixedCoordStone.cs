@@ -146,11 +146,17 @@ namespace GameSvr
                 return;
             }
 
-            // 0x6E9C00 `cmp byte ptr [esi+0x67],0` = the NORECALL map flag
-            // (parser 0x7751A6 str='NORECALL' -> 0x7751BB sets map+0x67).
+            // 0x6E9C00 `cmp byte ptr [esi+0x67],0`。map+0x67 由两个 token 各自
+            // 在两个池里置位：NORECALL(0x7751BB/0x776382, str 0x775D38/0x776C68)
+            // 以及复合 LimitItemMove(0x775A5C/0x7769E8, str 0x775FB4/0x776F2C，
+            // 同时置 +0x67/+0x68/+0x6B/+0x6C)。故此门 = boNORECALL ∨ boLIMITITEMMOVE，
+            // 缺 boLIMITITEMMOVE 会让 LimitItemMove 图上原本 setter 就拒绝(且不记录
+            // 定点)的用例变成"记录定点+入队、再由 consumer 静默拦截"，既漏发
+            // 0x6E9C18 的拒绝消息又多留了定点态。
             // 0x6E9C12 then rejects when the map name is listed in the
             // blacklist file; IndexOf returns -1 when absent (0x42812B).
             if (m_PEnvir.Flag.boNORECALL ||
+                m_PEnvir.Flag.boLIMITITEMMOVE ||
                 M2Share.IsNativeFixedCoordBannedMap(m_PEnvir.sMapName))
             {
                 SendNativeFixedCoordMapRefusal();
