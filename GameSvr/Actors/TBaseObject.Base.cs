@@ -708,10 +708,17 @@ namespace GameSvr
                         {
                             m_nMeatQuality -= 1000;
                         }
-                        DamageHealth(m_btGreenPoisoningPoint + 1);
-                        m_nHealthTick = 0;
-                        m_nSpellTick = 0;
-                        HealthSpellChanged();
+                        // POIS-08 — the DamageHealth(m_btGreenPoisoningPoint + 1) that
+                        // used to sit here was a second, parallel hit. Native runs one
+                        // if/else-if chain (0x06 > 0x01 > 0x1C > 0x1F) that converges on
+                        // 0x76BDF5 and calls [vmt+0x1B0] exactly once per tick:
+                        //   76BD86  EB 6D                 jmp 0x76BDF5   ; tier 0x06 -> converge
+                        //   76BDF5  83 7D F4 00 / 74 25   if (rec == nil) skip everything
+                        //   76BE0C  FF 91 B0 01 00 00     call [ecx+0x1B0]  ; the only damage
+                        // Now that MakePosion feeds the timed-ability layer, tier 0x1F
+                        // carries the same green poison this block used to serve, so the
+                        // resolver below is the single exit. Meat decay is unrelated to the
+                        // damage call and stays on the legacy carrier.
                     }
                     // POIS-09/POIS-10 — 战神 sub_76B6F0 @0x76BD4F-0x76BE1C 在同一个
                     // 2500ms 闸后还服务另外四个 bodyState 档(0x06/0x01/0x1C/0x1F),

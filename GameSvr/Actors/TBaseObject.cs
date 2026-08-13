@@ -4036,20 +4036,21 @@ namespace GameSvr
             switch (wordIndex)
             {
                 case 0:
-                    if (stateIndex <= 20)
-                    {
-                        m_nCharStatusEx = enabled
-                            ? m_nCharStatusEx | (uint)mask
-                            : m_nCharStatusEx & ~(uint)mask;
-                        m_nCharStatus = GetCharStatus();
-                    }
-                    else
-                    {
-                        // States 21..31 remain owned by m_wStatusTimeArr. Raw writes
-                        // affect the current body word only and the next status tick
-                        // deliberately rebuilds them from that legacy authority.
-                        m_nCharStatus = newValue;
-                    }
+                    // Native `bts dword [esi+0x168], ebx` @0x77299B writes one flat
+                    // bitset with no per-index ownership split. The former
+                    // `stateIndex <= 20` branch made 21..31 write only the cached
+                    // body word, so every later `m_nCharStatus = GetCharStatus()`
+                    // (Run tick, MakePosion, Initialize, ...) rebuilt those bits from
+                    // m_wStatusTimeArr alone and silently dropped anything the timed
+                    // layer had set: the TimedAbilityNode stayed on the list counting
+                    // down while HasNativeActiveState reported false, so
+                    // FindTimedAbilityInternal returned null and the effect died
+                    // without expiring. Durable store for the whole low word, with
+                    // NativePersistentLowStateMask widened to match.
+                    m_nCharStatusEx = enabled
+                        ? m_nCharStatusEx | (uint)mask
+                        : m_nCharStatusEx & ~(uint)mask;
+                    m_nCharStatus = GetCharStatus();
                     break;
                 case 1:
                     m_nCharStatus2 = newValue;
@@ -5692,6 +5693,34 @@ namespace GameSvr
             if (nType < Grobal2.MAX_STATUS_ATTRIBUTE)
             {
                 var nOldCharStatus = m_nCharStatus;
+                // POIS-08 / STATE-52 — native MakePosion is VMT+0xC8 @0x76B3C8 and owns
+                // no storage of its own; it is a seconds->milliseconds wrapper around the
+                // one and only state authority, AddState (VMT+0x1EC @0x7730D0):
+                //   76B3D8  E8 67 88 00 00        call 0x773C44          ; ImmuneCheck -> abort
+                //   76B3E1  B2 34 / E8 76 75 00 00 HasState(0x34)        ; global veto -> abort
+                //   76B3EE  80 FB 12 / 75 16      if id==0x12 && HasState(0x1A) -> RemoveState(0x1A)
+                //   76B409  0F B7 45 08 / 50      push word [ebp+8]      ; value/level
+                //   76B40E  6A 00                 push 0                 ; flag
+                //   76B413  69 C8 E8 03 00 00     imul ecx, eax, 0x3E8   ; seconds -> ms
+                //   76B41F  FF 93 EC 01 00 00     call [ebx+0x1EC]       ; AddState
+                // C# had grown a second authority (m_wStatusTimeArr, seconds) that
+                // AddTimedAbilityInternal never saw, so no code ever built a
+                // TimedAbilityNode for bodyStates 0x06/0x01/0x1C/0x1F and the four
+                // poison-tick tiers @0x76BD4F-0x76BDF5 were unreachable, while
+                // HasNativeActiveState(26) stayed false for a target the client was
+                // already drawing as petrified. Route through the native authority.
+                // GetCharStatus maps slot i to bit 31-i, so bodyState = 31 - nType.
+                // CanAddNativeTimedAbility inside AddTimedAbilityInternal already covers
+                // the ImmuneCheck and the 0x34 veto, and the 0x12 -> remove 0x1A companion
+                // lives in the same method.
+                // The legacy array stays as the save-record projection and as the carrier
+                // the ~300 existing m_wStatusTimeArr readers still depend on; it is not
+                // native, and collapsing it is a separate change.
+                if (!AddTimedAbilityInternal((byte)(31 - nType), nPoint,
+                        unchecked(nTime * 1000), 0))
+                {
+                    return false;
+                }
                 if (m_wStatusTimeArr[nType] > 0)
                 {
                     if (m_wStatusTimeArr[nType] < nTime)
