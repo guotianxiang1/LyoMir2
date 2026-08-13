@@ -191,6 +191,15 @@ namespace SystemModule
         public const int CM_EAT = 1006;
         public const int CM_QUEST_ORDER = 1060;
         public const int CM_1069 = 1069;
+        /// <summary>
+        /// Native handler 0x6DAC1C (jump-table slot <c>0x6D8482[0]</c>, base ident 1325).
+        /// It loads Param into <c>dx</c> and calls 0x6EE11C, whose ENTIRE body is
+        /// <c>55 8B EC 51 89 45 FC 59 5D C3</c> — an empty Delphi procedure that stores
+        /// Self into a stack local and returns without reading <c>dx</c>. 0x6EE11C has
+        /// exactly one caller (this handler), so the opcode is a proven no-op.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1325 = 1325;
         public const int CM_COMMON_INFORMATION = 1099;
         public const int CM_YANHUA_TEXT = 1290;
         public const int CM_BUTCH = 1007;

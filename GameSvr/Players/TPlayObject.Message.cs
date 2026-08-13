@@ -1160,6 +1160,21 @@ namespace GameSvr
                     // the server does not need to take any action in response. This explicit no-op case
                     // documents the native behavior (silent acknowledgment, no server-side state change).
                     break;
+                case Grobal2.CM_1325:
+                    // Unlike CM_LOGINNOTICEOK above, 1325 DOES have a real dispatch arm -
+                    // jump-table slot 0x6D8482[0] points at handler 0x6DAC1C:
+                    //   0x6DAC1F  66 8B 50 06  mov dx, word [msg+6]   ; Param
+                    //   0x6DAC23  8B 45 FC     mov eax,[ebp-4]        ; Self
+                    //   0x6DAC26  E8 F1 34 01 00  call 0x6EE11C
+                    //   0x6DAC2B  E9 FC 0F 00 00  jmp 0x6DBC2C
+                    // but 0x6EE11C is an empty procedure in full:
+                    //   55 8B EC 51 89 45 FC 59 5D C3
+                    //   push ebp / mov ebp,esp / push ecx / mov [ebp-4],eax / pop ecx / pop ebp / ret
+                    // It never reads dx and returns nothing. A whole-image scan finds
+                    // exactly one caller (0x6DAC26), so there is no other body that could
+                    // give the routine meaning. Param is therefore discarded and the
+                    // opcode has no server-side effect at all.
+                    break;
                 case Grobal2.CM_GROUPMODE:
                     if (ProcessMsg.nParam2 == 0)
                     {
