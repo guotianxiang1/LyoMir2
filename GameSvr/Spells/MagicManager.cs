@@ -997,6 +997,14 @@ namespace GameSvr
                 case SpellsDef.SKILL_316:
                     boSpellFail = true;
                     break;
+                // ids 66 and 67 are ONE native handler: TABLE2 slots 0x6ED839
+                // and 0x6ED83D both hold 0x6EDE39, which calls sub_745744 and
+                // inverts the result into [ebp-6] @0x6EDE47.
+                case SpellsDef.SKILL_66:
+                case SpellsDef.SKILL_67:
+                    boSpellFail = !PlayObject.TryActivateNativeSkill66Or67(
+                        UserMagic, TargeTBaseObject);
+                    break;
                 // id 167 @0x6EDEE1 -> 0x6EEE70. The trampoline stores the raw
                 // result into boSpellFire (@0x6EDEF1) and its complement into
                 // boSpellFail (@0x6EDEF9), so both flags move together.
