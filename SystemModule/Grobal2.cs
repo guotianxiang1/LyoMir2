@@ -1935,5 +1935,21 @@ namespace SystemModule
         public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
         public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
         public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
+
+        // === NewbieQuest/PageList subsystem ===
+        // Reply idents pinned off the two workers reversed for this subsystem.
+        // SM_4496 (0x1190): CM 4496 新手任务 worker sub_6FAC8C @0x6FAD13
+        //   `66 BA 90 11 mov dx,0x1190` before call [vmt+0x250]. Recog carries the
+        //   int returned by the FreshmanTaskCommand @Main script; that script entry
+        //   on the task-board admin object [[0x7D5D20]] (TTaskAdmin) is not modelled,
+        //   so nothing is sent (fail-closed) — the constant is documentation only.
+        public const int SM_4496 = 0x1190; // 4496
+        // SM_4626 (0x1212): CM 4626 分页列表查询 worker sub_6AE260 @0x6AE35D
+        //   `66 BA 12 12 mov dx,0x1212` before call [vmt+0x254]. It is the paged
+        //   RECRUITING-corps list: TCorpsManager[+0x28] (sub_5EC0D8 mirrors the
+        //   master [+0x24] list, keeping only corps whose member count < 30 —
+        //   predicate sub_705690 `cmp [members+8],0x1E / setge`). Same 64-byte
+        //   TCorps description record + pagination frame as CM_CORPS_LIST/4520.
+        public const int SM_4626 = 0x1212; // 4626
     }
 }
