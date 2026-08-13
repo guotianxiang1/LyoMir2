@@ -986,12 +986,18 @@ namespace GameSvr
                     boSpellFail = !PlayObject.TryActivateNativeSkill153Shield(
                         UserMagic);
                     break;
-                // Magic IDs 161, 162: Native hard rejects (per task description).
-                // These IDs require subsystems or mechanics not yet reverse-engineered.
-                // Implementation: set boSpellFail=true to send RM_MAGICFIREFAIL (0x27F).
+                // ids 161 and 162 reach the DEFAULT sink, not a reject. The
+                // 152..166 arm of the ladder is a three-step subtract chain and
+                // neither id is one of its three landing pads:
+                //   0x6ED89E  2d 98 00 00 00  sub eax,0x98   ; 152 -> 0x6EDD96
+                //   0x6ED8A9  48              dec eax        ; 153 -> 0x6EDDA9
+                //   0x6ED8B0  48              dec eax        ; 154 -> 0x6EDD83
+                //   0x6ED8B7  e9 8f 07 00 00  jmp 0x6EE04B   ; everything else
+                // The previous arm rejected both on the strength of a task
+                // description with no VA attached; the sink leaves boSpellFail
+                // at its 0x6ED6D9 zero, sends 0x27E and returns TRUE.
                 case SpellsDef.SKILL_161:
                 case SpellsDef.SKILL_162:
-                    boSpellFail = true;
                     break;
                 // Magic IDs 169 (0xA9), 170 (0xAA): Native DEFAULT convergence handlers.
                 // Both route to 0x6EE04B in DoSpell (sub_6ED62C). Verified via dispatch
@@ -1005,20 +1011,25 @@ namespace GameSvr
                 case SpellsDef.SKILL_169:
                 case SpellsDef.SKILL_170:
                     break;
-                // Magic IDs 171-174: Native hard rejects (per task description).
-                // These rely on a type-based subsystem not yet reverse-engineered.
-                // Implementation: set boSpellFail=true to faithfully reject.
+                // ids 171-174 take the same route 169/170 take, one arm down:
+                //   0x6ED891  cmp eax,0xA7 (167)  -> above, so jg 0x6ED8BC
+                //   0x6ED8BC  sub eax,0xBF (191)  -> not zero
+                //   0x6ED8C7  sub eax,0x16 (213)  -> not zero
+                //   0x6ED8D0  e9 76 07 00 00  jmp 0x6EE04B
+                // The rejecting arm they used to share cited "per task
+                // description" and a comparison at 0x6ED8A0 against 172; that
+                // address is the middle of `sub eax,0x98` and no compare
+                // against 172 exists anywhere in the ladder.
                 case SpellsDef.SKILL_171:
                 case SpellsDef.SKILL_172:
                 case SpellsDef.SKILL_173:
                 case SpellsDef.SKILL_174:
-                    boSpellFail = true;
                     break;
                 // ids 179 (0xB3) and 180 (0xB4) are convergence-routed no-ops.
-                // DoSpell multi-level dispatch (sub_6ED62C): the switch has eight
-                // comparison tiers: @0x6ED79A (151), @0x6ED884 (231), @0x6ED891
-                // (167), @0x6ED8A0 (172), @0x6ED8BC (191), @0x6ED8C7 (213),
-                // @0x6ED8D0 (default sink). For ids 179 and 180:
+                // DoSpell multi-level dispatch (sub_6ED62C) tiers above 151:
+                // @0x6ED79A (151), @0x6ED884 (231), @0x6ED891 (167),
+                // @0x6ED89E (152/153/154 subtract chain), @0x6ED8BC (191),
+                // @0x6ED8C7 (213), @0x6ED8D0 (default sink). For ids 179/180:
                 //   0x6ED79A: cmp eax, 0x97 (151) → 179 > 151, jmp 0x6ED884
                 //   0x6ED884: cmp eax, 0xE7 (231) → 179 < 231, fall through
                 //   0x6ED891: cmp eax, 0xA7 (167) → 179 > 167, jmp 0x6ED8BC
