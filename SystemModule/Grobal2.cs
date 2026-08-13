@@ -1890,5 +1890,50 @@ namespace SystemModule
         public const int SM_1261 = 1261;  // 0x4ED  fixed Recog=-1 mov dx @0x6F0E4E -> call [obj+0x250] @0x6F0E56 (empty body)
         public const int SM_1262 = 1262;  // 0x4EE  fixed Recog=-1 mov dx @0x6F0FC2 -> call [obj+0x250] @0x6F0FCA (empty body)
         public const int SM_1263 = 1263;  // 0x4EF  Param=5, Recog=<arg> mov dx @0x6F11F9 -> call [obj+0x250] @0x6F1201 (empty body)
+
+        // === SM missing batch 3 (ascending #36..#70 of classes.txt CLASS(c)) ===========
+        // Native server->client (SM) idents that fire through a real send slot
+        // ([obj+0x250] end sMsg / [obj+0x254] end (Buf,Len)) in flat_image.bin
+        // (ImageBase 0x400000) yet had NO C# constant of any prefix. Send builders
+        // (frame + body decoded byte-for-byte with capstone from each send site) live
+        // in GameSvr/Actors/TBaseObject.SmIdent_Sm3.cs. Three idents whose body is a
+        // local, runtime-composed variable-length record buffer that cannot be
+        // evaluated at the send slot are registered here but marked BLOCKED and have
+        // NO builder (fail-closed): SM_1729, SM_2850, SM_2956.
+        public const int SM_1264 = 1264; // 0x4F0  [obj+0x250] empty; Recog=0 Param=1 @0x6F0A73
+        public const int SM_1265 = 1265; // 0x4F1  [obj+0x250] empty; Recog=ecx(arg) Param/Tag=word args @0x6F1794
+        public const int SM_1726 = 1726; // 0x6BE  [obj+0x250] empty; Recog=edi(runtime) @0x6E3273
+        public const int SM_1727 = 1727; // 0x6BF  [obj+0x250] empty; Recog=1 @0x6E343A
+        public const int SM_1729 = 1729; // 0x6C1  BLOCKED: [obj+0x254] Buf=&local[ebp-0xFC] Len=0xE0; 8x28-byte records built by loop @0x613788; body not resolvable at slot @0x613925
+        public const int SM_1730 = 1730; // 0x6C2  [obj+0x250] empty; Recog=edx(runtime) @0x6E39BC
+        public const int SM_1731 = 1731; // 0x6C3  [obj+0x250] empty; Recog=esi(runtime) @0x6E3A0D
+        public const int SM_1732 = 1732; // 0x6C4  [obj+0x250] empty; all 0 @0x614AE8
+        public const int SM_1733 = 1733; // 0x6C5  [obj+0x250] empty; Param=byte[self+0xF2] @0x6149C7
+        public const int SM_1734 = 1734; // 0x6C6  [obj+0x250] empty; Param=byte[self+ebx+0xEC] @0x6145F0
+        public const int SM_1735 = 1735; // 0x6C7  [obj+0x250] empty; all 0 @0x61487F
+        public const int SM_1736 = 1736; // 0x6C8  [obj+0x250] empty; Param=byte[self+0xF3] @0x6144E4
+        public const int SM_1737 = 1737; // 0x6C9  [obj+0x250] empty; Recog/Param/Tag/Series=byte[self+0xEC..0xEF] @0x61478D
+        public const int SM_1738 = 1738; // 0x6CA  [obj+0x250] empty; all 0 @0x6152EE
+        public const int SM_2812 = 2812; // 0xAFC  [obj+0x250] sMsg text; Recog/Param/Tag=args @0x645320
+        public const int SM_2813 = 2813; // 0xAFD  [obj+0x250] empty; RM arm Recog=BaseObject @0x6B5D19
+        public const int SM_2815 = 2815; // 0xAFF  [obj+0x250] sMsg text(local); all-0 frame @0x6D4ED7
+        public const int SM_2830 = 2830; // 0xB0E  [obj+0x254] Buf=[rec+0x10] Len=word[rec+0x14] forward; RM arm @0x6B555D
+        public const int SM_2843 = 2843; // 0xB1B  [obj+0x250] empty; Recog=6 @0x6DE6FA
+        public const int SM_2850 = 2850; // 0xB22  BLOCKED: [obj+0x254] Buf=&local[ebp-4] Len=Count*20 dyn-array built by 0x5F4D4C; body not resolvable at slot @0x6D30B7
+        public const int SM_2865 = 2865; // 0xB31  [obj+0x250] sMsg text(local); Recog=self @0x6E1D39
+        public const int SM_2878 = 2878; // 0xB3E  [obj+0x250] sMsg text(local); Recog=id @0x624AC6
+        public const int SM_2880 = 2880; // 0xB40  [obj+0x250] empty; Recog=[ebp-8](runtime) @0x6E598B
+        public const int SM_2881 = 2881; // 0xB41  [obj+0x250] empty; Param=ebx(runtime) @0x6E5E10
+        public const int SM_2885 = 2885; // 0xB45  [obj+0x254] 20-byte struct body (5 dwords, layout proven from fill code) @0x744EF1
+        public const int SM_2896 = 2896; // 0xB50  [obj+0x254] Buf=[rec+0x10] Len=word[rec+0x14] forward; RM arm @0x6B5F8E
+        public const int SM_2897 = 2897; // 0xB51  [obj+0x254] Buf=[rec+0x10] Len=word[rec+0x14] forward; RM arm @0x6B5FC8
+        public const int SM_2898 = 2898; // 0xB52  [obj+0x250] empty; RM arm Recog=BaseObject @0x6B5FED
+        public const int SM_2951 = 2951; // 0xB87  [obj+0x250] empty; Recog=self Param/Tag=self fields @0x6E5376
+        public const int SM_2952 = 2952; // 0xB88  [obj+0x250] empty; Recog=self Param=word local @0x6E5567
+        public const int SM_2956 = 2956; // 0xB8C  BLOCKED: [obj+0x254] Buf=&local[ebp-0x488] Len=Count*24 record array built by loop @0x6E6A65; body not resolvable at slot @0x6E6AED
+        public const int SM_2957 = 2957; // 0xB8D  [obj+0x250] empty; all 0 @0x6E6EE7
+        public const int SM_2958 = 2958; // 0xB8E  [obj+0x250] empty; Param=1 @0x6E6CF6
+        public const int SM_2960 = 2960; // 0xB90  [obj+0x250] sMsg text=[rec+0x10]; RM arm Recog=BaseObject @0x6B5ECE
+        public const int SM_2968 = 2968; // 0xB98  [obj+0x250] empty; RM arm Recog=BaseObject Param=nParam1 @0x6B5F18
     }
 }
