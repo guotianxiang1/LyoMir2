@@ -435,12 +435,21 @@ namespace GameSvr
             return HUtil32.Round(scaled / 20.0);
         }
 
+        // The 攻杀 override is not a damage-time multiplier. The plugin rewrites
+        // the imm8 of the recalc site that produces m_nHitPlus:
+        //   host  0x0076B027  8B C6 E8 40 D9 D5 FF   mov eax,esi; call sub_4C896C
+        //   host  0x0076B02C  04 05                  add al,5
+        //   host  0x0076B02E  88 83 90 00 00 00      mov [ebx+0x90],al
+        //   plugin 0x100B3F5A A2 2D B0 76 00         mov byte[0x0076B02D],al
+        // Two consequences the old expression missed: the level is sub_4C896C's
+        // EFFECTIVE level, and `add al` is 8-bit, so (level + A) wraps at 256
+        // instead of saturating at 255.
         internal static int CalculateThrustingHitPlus(int nativeHitPlus, int skillLevel,
             Plugins.YanshenApi yanshenApi)
         {
             if (yanshenApi != null && yanshenApi.IsThrusting())
             {
-                return Math.Clamp(HUtil32.Round(yanshenApi.ThrustingA() + skillLevel), 0, 255);
+                return unchecked((byte)(yanshenApi.ThrustingA() + skillLevel));
             }
 
             return nativeHitPlus;
@@ -517,6 +526,19 @@ namespace GameSvr
             BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(10, 2),
                 unchecked((ushort)y));
             return body;
+        }
+
+        // sub_4C896C @0x004C896C:
+        //   8A 50 0C     mov dl,[eax+0x0C]        btLevel
+        //   02 50 18     add dl,[eax+0x18]        + NativeLevelBonus   (8-bit)
+        //   8B 08 / 8A 49 1A / 3A D1 / 76 02 / 8B D1   min(.., btTrainLv)
+        // Every recalc arm the plugin patches feeds off this, never off btLevel.
+        internal static int NativeEffectiveMagicLevel(TUserMagic magic)
+        {
+            return magic == null || magic.MagicInfo == null
+                ? magic?.btLevel ?? 0
+                : Math.Min(unchecked((byte)(magic.btLevel + magic.NativeLevelBonus)),
+                    magic.MagicInfo.btTrainLv);
         }
 
         private static int GetSunSwordEffectiveLevel(TUserMagic magic)
@@ -690,7 +712,7 @@ namespace GameSvr
                         var magic = m_MagicArr[SpellsDef.SKILL_YEDO];
                         nPower += CalculateThrustingHitPlus(
                             m_nHitPlus,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -704,7 +726,7 @@ namespace GameSvr
                         nPower = CalculateFireSwordAttackPower(
                             nPower,
                             m_nHitDouble,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -727,7 +749,7 @@ namespace GameSvr
                         var magic = m_MagicArr[SpellsDef.SKILL_YEDO];
                         nPower += CalculateThrustingHitPlus(
                             m_nHitPlus,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
