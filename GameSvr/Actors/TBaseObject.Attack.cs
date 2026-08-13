@@ -365,19 +365,61 @@ namespace GameSvr
             return HUtil32.Round((double)nPower / (trainLevel + 10) * (skillLevel + 2));
         }
 
+        // Native _Attack = sub_769F90, stab branch @0x0076A096-0x0076A0F8. That is
+        // the function AttackDir sub_76A5D4 actually calls
+        // (0x0076A76D E8 1E F8 FF FF call 0x769F90); sub_7707A8 is a separate
+        // entry used by the client command handlers and is NOT this code path.
+        //   0x0076A0AF / 0x0076A0D5  call sub_4C896C   -> effective level
+        //   0x0076A0B4  3C 04              cmp al,4
+        //   0x0076A0BB  DB 2D B8 A5 76 00  fld tbyte[0x76A5B8]   (80-bit 1.05)
+        //   0x0076A0CA  83 C3 05           add ebx,5
+        //   0x0076A0EB  D8 35 C4 A5 76 00  fdiv dword[0x76A5C4]
+        // [0x76A5C4] = 00 00 A0 40 = float32 5.0. The divisor is that literal;
+        // btTrainLv (+0x1A) is only ever the level cap inside sub_4C896C.
         internal static int CalculateStabSwordLongAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
+            int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
             if (yanshenApi != null && yanshenApi.IsStabSword())
             {
                 var divisor = yanshenApi.StabSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + skillLevel) / divisor);
+                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + effectiveLevel) / divisor);
                 }
             }
 
-            return HUtil32.Round((double)nPower / (trainLevel + 2) * (skillLevel + 2));
+            if (effectiveLevel == 4)
+            {
+                return MultiplyByNative105(nPower) + 5;
+            }
+            return HUtil32.Round((double)nPower / 5.0 * (effectiveLevel + 2));
+        }
+
+        // tbyte[0x76A5B8] = 66 66 66 66 66 66 66 86 FF 3F, exactly
+        // 4842270319348757299 / 2^62 = 21/20 - 1/(5*2^62): strictly below 1.05,
+        // whereas IEEE double 1.05 is strictly above it. The product differs from
+        // 21n/20 by less than the .5-boundary granularity except when 21n/20 is
+        // exactly a half-integer (n % 20 == 10), and there the deficit only
+        // survives the 64-bit-significand rounding when 4n > 5*2^e for
+        // 2^e <= 21n/20 < 2^(e+1). Checked against an exact-rational x87 model
+        // over n in 0..1000000: zero mismatches.
+        private static int MultiplyByNative105(int nPower)
+        {
+            long scaled = 21L * nPower;
+            if (nPower > 0 && nPower % 20 == 10)
+            {
+                long pow2 = 1;
+                while (pow2 * 40 <= scaled)
+                {
+                    pow2 <<= 1;
+                }
+                if (4L * nPower > 5L * pow2)
+                {
+                    return (int)(scaled / 20);
+                }
+            }
+            return HUtil32.Round(scaled / 20.0);
         }
 
         internal static int CalculateThrustingHitPlus(int nativeHitPlus, int skillLevel,
