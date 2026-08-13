@@ -744,6 +744,16 @@ namespace GameSvr
                 ? BinaryPrimitives.ReadUInt32LittleEndian(
                     m_NativeHumanData.AsSpan(NativeChatShieldMaskOffset, sizeof(uint)))
                 : 0;
+            ApplyChatShieldMaskToAllowFlags();
+        }
+
+        // Native has only obj+0xB9C. C# bools are mirrors so @ALLOWMSG/@LETSHOUT/@BANGUILDCHAT
+        // and CM 3032 last-writer-win the same bits (0x6236FE/0x6237AF/0x623984).
+        internal void ApplyChatShieldMaskToAllowFlags()
+        {
+            m_boHearWhisper = (m_dwChatShieldMask & 0x01u) == 0;
+            m_boBanShout = (m_dwChatShieldMask & 0x04u) == 0;
+            m_boBanGuildChat = (m_dwChatShieldMask & 0x08u) == 0;
         }
 
         internal bool PersistNativeChatShieldMask()

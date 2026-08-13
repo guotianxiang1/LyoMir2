@@ -714,10 +714,12 @@ namespace GameSvr
                     m_boHearWhisper = !m_boHearWhisper;
                     if (m_boHearWhisper)
                     {
+                        m_dwChatShieldMask &= ~0x01u;
                         SysMsg(M2Share.g_sEnableHearWhisper, MsgColor.Green, MsgType.Hint);
                     }
                     else
                     {
+                        m_dwChatShieldMask |= 0x01u;
                         SysMsg(M2Share.g_sDisableHearWhisper, MsgColor.Green, MsgType.Hint);
                     }
                     return;
@@ -727,10 +729,12 @@ namespace GameSvr
                     m_boBanShout = !m_boBanShout;
                     if (m_boBanShout)
                     {
+                        m_dwChatShieldMask &= ~0x04u;
                         SysMsg(M2Share.g_sEnableShoutMsg, MsgColor.Green, MsgType.Hint);
                     }
                     else
                     {
+                        m_dwChatShieldMask |= 0x04u;
                         SysMsg(M2Share.g_sDisableShoutMsg, MsgColor.Green, MsgType.Hint);
                     }
                     return;
@@ -753,10 +757,12 @@ namespace GameSvr
                     m_boBanGuildChat = !m_boBanGuildChat;
                     if (m_boBanGuildChat)
                     {
+                        m_dwChatShieldMask &= ~0x08u;
                         SysMsg(M2Share.g_sEnableGuildChat, MsgColor.Green, MsgType.Hint);
                     }
                     else
                     {
+                        m_dwChatShieldMask |= 0x08u;
                         SysMsg(M2Share.g_sDisableGuildChat, MsgColor.Green, MsgType.Hint);
                     }
                     return;
