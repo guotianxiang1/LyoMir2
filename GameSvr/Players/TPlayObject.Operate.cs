@@ -1598,6 +1598,23 @@ namespace GameSvr
             // GameSvrConfig.cs:1241），故单独成一次提交以便独立回退。
             // m_DealLastTick 字段保留：它还供 dwDealOKTime 门与 ClientDropItem
             // （Operate.cs 内 `> 3000` 那处）使用。
+            //
+            // 【四道门裁决 C / INVENTED-有意保留】自己的 m_boCanDeal。
+            // 原生无对应门：sub_6C3F00 里除 +0x461 外不测本对象的任何布尔位；
+            // 消息「当前无法进行此操作」的子串「无法进行此操」与「此操作」
+            // 全镜像三编码各 0 命中。
+            // 但它不是本移植自造的孤立开关，而是**密码锁族**的一员：
+            // TPlayObject.Base.cs:1396-1408 一次性设定 m_boCanDeal / m_boCanDrop /
+            // m_boCanUseItem / m_boCanWalk / m_boCanRun / m_boCanHit / m_boCanSpell /
+            // m_boCanSendMsg / m_boObMode 共九项，并配 @LOCKLOGON、@PASSWORDLOCK 等
+            // GM 命令。只删交易这两项会把一个整族功能改成半残，比保留更糟。
+            // 现状可证为惰性：族内各项在构造函数 Base.cs:876-883 全部置 true，
+            // 唯一的置 false 入口要求 boPasswordLockSystem && boLockHumanLogin，
+            // 而这两个配置和 boLockDealAction 一样只有 `= false` 一处赋值、无读取器，
+            // 故 m_boCanDeal 运行期恒 true，本门恒不触发。
+            // 另一活消费点在 TPlayObject.ClientClickNPC —— 注意那里的 !m_boCanDeal
+            // 占的是原生 0x6B8B4D(+0x461) 那道门的位置，两者不是同一件事。
+            // 处置：整族的去留应另开一次专项裁决，不在 TRADE 提交里动（§4.3）。
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
@@ -1610,6 +1627,14 @@ namespace GameSvr
                 {
                     if (TargetPlayObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                     {
+                        // m_boAllowDeal ≡ 原生 0x6C3F6B `cmp byte [esi+0xBA0],0 / je 0x6C3FE6`
+                        // （TRADE-04 FAITHFUL）。
+                        // 【四道门裁决 D / INVENTED-有意保留】TargetPlayObject.m_boCanDeal
+                        // 是与裁决 C 同一密码锁族的对端侧，原生 0x6C3F6B 只测 +0xBA0 一项。
+                        // 同样恒 true、同样随族一起另案处置。
+                        // 另注原生此处失败走的是独立消息 0x6C407C「对方拒绝和你交易。」
+                        // （len=18），而 C# else 分支发的 g_sPoseDisableDealMsg
+                        //「对方禁止进入交易」全镜像 0 命中 —— 属另一条待裁项，本次不动。
                         if (TargetPlayObject.m_boAllowDeal && TargetPlayObject.m_boCanDeal)
                         {
                             TargetPlayObject.SysMsg(m_sCharName + M2Share.g_sOpenedDealMsg, MsgColor.Green, MsgType.Hint);
