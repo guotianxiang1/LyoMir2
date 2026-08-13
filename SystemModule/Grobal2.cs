@@ -831,6 +831,10 @@ namespace SystemModule
         public const int SM_NPCWALK = 798;            // NPC walk animation
         public const int SM_FIREON = 779;             // Fire hit mode ON
         public const int SM_SWORDHIT_ON = 2819;       // Sword hit mode ON
+        // Outer id-65 arm 0x6BCA33 `66 BA 3B 0B mov dx,0xB3B` then
+        // `FF 93 50 02 00 00 call [ebx+0x250]` (SendDefMessage). Recog and
+        // the four stack words are all 0.
+        public const int SM_CHARGED_COUNTER = 2875;
         // 战神 thrusting (刺杀剑术) toggle notify = ident 624 (0x270), param1 = 1.
         // Native UserLogon @0x6B225B: gated on [obj+0xA8]!=0 && [obj+0x94]==0, latches
         // [obj+0x94]=1, then `push 1; push 0; push 0; push 0; xor ecx,ecx;

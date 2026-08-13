@@ -97,11 +97,9 @@ namespace GameSvr
         private int ResolveNativeChargedCounterPower(TBaseObject target,
             int now)
         {
-            // 0x74439C `mov byte [ebx+0xE8],0` also runs here. That byte is
-            // set by the id-65 arm of the outer dispatcher (0x6BCA22) just
-            // before it sends packet 0xB3B, so it is the "charged" indicator;
-            // nothing in this function reads it and no reader has been found,
-            // so it is recorded rather than modelled.
+            // 0x74439C `C6 83 E8 00 00 00 00`. Id 65 sets the same byte at
+            // 0x6BCA22 before sending 0xB3B. No reader has been found.
+            m_btNativeChargedIndicator = 0;
             TUserMagic cached = m_NativeChargedCounterMagic;
             if (cached?.MagicInfo == null)
             {
