@@ -109,6 +109,11 @@ namespace GameSvr
                     cert = new HolyMonster();
                     break;
 
+                // race 157 TMonSingleMagFox : AtMonster —— 见 Monster/MonSingleMagFox.cs
+                case 157:
+                    cert = new MonSingleMagFox();
+                    break;
+
                 // race 159 TTimerBombMon : AnimalObject —— 见 Monster/TimerBombMon.cs
                 case 159:
                     cert = new TimerBombMon();
