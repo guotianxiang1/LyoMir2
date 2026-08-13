@@ -98,7 +98,10 @@ namespace GameSvr
             cert = null;
             switch (nMonRace)
             {
-                // 认领 case 随各子类 .cs 逐个补入（见类头清单 A）。
+                // race 149 TFireCracker : AnimalObject —— 见 Monster/FireCracker.cs
+                case 149:
+                    cert = new FireCracker();
+                    break;
             }
             return cert != null;
         }
