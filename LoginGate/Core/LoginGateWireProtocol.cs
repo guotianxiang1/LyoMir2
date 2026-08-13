@@ -53,6 +53,31 @@ namespace LoginGate.Core
         public const int NativeAuthFailureMaximumPayloadSize = 112;
         public const int NativeAuthFailureMaximumTextBytes = 99;
 
+        /// <summary>
+        /// TSDKAuthHead.wAuthType value atLoginCenterAuth, the 7th member of
+        /// TSDKAuthType (uTypes.pas:204). uSDKAuth.pas:1476/1495 force it onto
+        /// every head that enters the 2018 path, and PushAuthHead stores that
+        /// mutated head (uSDKAuth.pas:591), so both the 1003 and the 1004 reply
+        /// carry 6 -- it is not a success/failure discriminator.
+        /// </summary>
+        public const byte NativeAuthTypeLoginCenter = 6;
+
+        // TSDKAuthHead.nResult codes on the LoginCenterAuth path (uSDKAuth.pas:38-43).
+        // Only these appear on the wire in this build; 0 means success and is
+        // therefore illegal on a 1004 frame.
+        public const int NativeLcAuthSuccess = 0;
+        public const int NativeLcAuthFailed = -1;
+        public const int NativeLcAuthTimeout = -2;
+        public const int NativeLcAuthSystemError = -3;
+        public const int NativeLcAuthSystemBusy = -4;
+        public const int NativeLcAuthNetError = -5;
+
+        /// <summary>
+        /// uSDKAuth.pas:759 sweeps the pending-auth queue and answers 1004 with
+        /// LC_AUTH_TIMEOUT once a request has been outstanding for 20 s.
+        /// </summary>
+        public static readonly TimeSpan NativeAuthTimeout = TimeSpan.FromSeconds(20);
+
         private static readonly Encoding Ascii;
         private static readonly Encoding Gbk;
 
@@ -319,6 +344,12 @@ namespace LoginGate.Core
             return true;
         }
 
+        // GDM_PING ack. uDBListen.pas:306-312 builds this from a stack local and
+        // only assigns Sign/Cmd/DataLength, so native ships whatever garbage is in
+        // rSocketHandle (+4) and Ident (+8) -- LoginCenterAuth_Spec, the only writer
+        // of Ident here, is off in this build (no LoginCenterAuthLogin in
+        // LoginGate.map). The DBServer reads neither field, so sending deterministic
+        // zeroes is compatible; do not reproduce the uninitialised bytes.
         public static YbDbLegacy77Frame CreateNativeRegistrationAck() =>
             new(0, 0, NativeRegistrationAckIdent, Array.Empty<byte>());
 
@@ -396,28 +427,38 @@ namespace LoginGate.Core
             return true;
         }
 
-        public static bool TryCreateNativeAuthResponse12(byte status, byte version,
+        // The 1003 variants all report success, and on the LoginCenterAuth path
+        // that is nResult = LC_AUTH_SUCCESS = 0 (uSDKAuth.pas:565 assigns the
+        // callback's nResult, which is 0 on the success branch at :549).
+        public static bool TryCreateNativeAuthResponse12(byte authType, byte gateIndex,
             int queryId, out YbDbLegacy77Frame frame, out string error) =>
-            TryCreateNativeAuthResponse(status, version, queryId,
+            TryCreateNativeAuthResponse(authType, gateIndex, queryId,
                 Array.Empty<byte>(), NativeAuthResponseShortPayloadSize,
                 out frame, out error);
 
-        public static bool TryCreateNativeAuthResponse20(byte status, byte version,
+        public static bool TryCreateNativeAuthResponse20(byte authType, byte gateIndex,
             int queryId, byte[]? opaque12To19,
             out YbDbLegacy77Frame frame, out string error) =>
-            TryCreateNativeAuthResponse(status, version, queryId,
+            TryCreateNativeAuthResponse(authType, gateIndex, queryId,
                 opaque12To19, NativeAuthResponseMediumPayloadSize,
                 out frame, out error);
 
-        public static bool TryCreateNativeAuthResponse124(byte status, byte version,
+        public static bool TryCreateNativeAuthResponse124(byte authType, byte gateIndex,
             int queryId, byte[]? opaque12To123,
             out YbDbLegacy77Frame frame, out string error) =>
-            TryCreateNativeAuthResponse(status, version, queryId,
+            TryCreateNativeAuthResponse(authType, gateIndex, queryId,
                 opaque12To123, NativeAuthResponseFullPayloadSize,
                 out frame, out error);
 
-        public static bool TryCreateNativeAuthFailure(byte status, byte version,
-            int queryId, string? message,
+        /// <summary>
+        /// GDM_SDK_AUTH_RESPONSE_FAIL. Every LoginCenterAuth-path sender ships
+        /// exactly sizeof(TSDKAuthHead) = 12 bytes (uSDKAuth.pas:608, :766, :1624);
+        /// the 13..112-byte form with a trailing message only exists on the
+        /// SDPT callback path (uSDKAuth.pas:1133-1138), which is unreachable in
+        /// this build because the SDPT.dll load is commented out at :816-890.
+        /// </summary>
+        public static bool TryCreateNativeAuthFailure(byte authType, byte gateIndex,
+            int queryId, int nResult, string? message,
             out YbDbLegacy77Frame frame, out string error)
         {
             frame = null!;
@@ -441,8 +482,11 @@ namespace LoginGate.Core
                 }
             }
 
-            var payloadLength = NativeAuthResponseShortPayloadSize
-                                + (message == null ? 0 : messageBytes.Length + 1);
+            // uSDKAuth.pas:1127-1129 computes StrLen(msg)+1 and zeroes it unless it
+            // lands in [2..100], so an empty message contributes nothing at all and
+            // the frame stays 12 bytes -- it does not become a lone NUL.
+            var textLength = messageBytes.Length == 0 ? 0 : messageBytes.Length + 1;
+            var payloadLength = NativeAuthResponseShortPayloadSize + textLength;
             if (payloadLength > NativeAuthFailureMaximumPayloadSize)
             {
                 error = $"native LoginGate failure payload exceeds {NativeAuthFailureMaximumPayloadSize} bytes";
@@ -450,7 +494,7 @@ namespace LoginGate.Core
             }
 
             var payload = new byte[payloadLength];
-            WriteNativeAuthCommon(payload, status, version, queryId);
+            WriteNativeAuthCommon(payload, authType, gateIndex, queryId, nResult);
             if (messageBytes.Length > 0)
                 messageBytes.CopyTo(payload, NativeAuthResponseShortPayloadSize);
             frame = new YbDbLegacy77Frame(0, 0, NativeAuthFailureIdent, payload);
@@ -476,7 +520,7 @@ namespace LoginGate.Core
             return true;
         }
 
-        private static bool TryCreateNativeAuthResponse(byte status, byte version,
+        private static bool TryCreateNativeAuthResponse(byte authType, byte gateIndex,
             int queryId, byte[]? opaqueTail, int payloadSize,
             out YbDbLegacy77Frame frame, out string error)
         {
@@ -490,19 +534,27 @@ namespace LoginGate.Core
             }
 
             var payload = new byte[payloadSize];
-            WriteNativeAuthCommon(payload, status, version, queryId);
+            WriteNativeAuthCommon(payload, authType, gateIndex, queryId,
+                NativeLcAuthSuccess);
             opaqueTail.CopyTo(payload, NativeAuthResponseShortPayloadSize);
             frame = new YbDbLegacy77Frame(0, 0, NativeAuthResponseIdent, payload);
             return true;
         }
 
+        /// <summary>
+        /// TSDKAuthHead (uTypes.pas:205-211, 12 bytes): wAuthType@0, GateIdx@1,
+        /// wSocketHandle@2, DynAuthIdent@4, two pad bytes, nResult@8. The caller's
+        /// queryId spans wSocketHandle+DynAuthIdent as one opaque dword, which is a
+        /// faithful round trip because LoginGate only ever echoes those two words.
+        /// </summary>
         private static void WriteNativeAuthCommon(Span<byte> payload,
-            byte status, byte version, int queryId)
+            byte authType, byte gateIndex, int queryId, int nResult)
         {
-            payload[0] = status;
-            payload[1] = version;
+            payload[0] = authType;
+            payload[1] = gateIndex;
             BinaryPrimitives.WriteInt32LittleEndian(payload.Slice(2, 4), queryId);
-            payload.Slice(6, 6).Clear();
+            payload.Slice(6, 2).Clear();
+            BinaryPrimitives.WriteInt32LittleEndian(payload.Slice(8, 4), nResult);
         }
 
         private static bool TryRequireNativeFrame(YbDbLegacy77Frame? frame,
