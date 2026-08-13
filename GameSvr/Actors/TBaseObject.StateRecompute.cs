@@ -91,5 +91,44 @@ namespace GameSvr
         {
             m_WAbil.SC = AddTimedRange(m_WAbil.SC, value);
         }
+
+        // STATE-32 H1B — band handler for state 0x67 @0x773ADC, byte-verified:
+        //   773ADC  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773ADF  01 87 90 02 00 00   add  [edi+0x290],eax   ; DC hi
+        //   773AE5  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773AE8  01 87 98 02 00 00   add  [edi+0x298],eax   ; MC hi
+        //   773AEE  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773AF1  01 87 A0 02 00 00   add  [edi+0x2A0],eax   ; SC hi
+        //   773AF7  EB 24               jmp  0x773B1D
+        // edi+0x290/0x298/0x2A0 are Self+0x290/0x298/0x2A0 = esi+0x2C/0x34/0x3C,
+        // i.e. the SAME DC/MC/SC HIGH dwords the seed writes at 0x60A877/0x60A88B/
+        // 0x60A89F (STATE-35) and that state 0x20/0x21/0x22 accumulate into
+        // (STATE-36: edi- and esi-relative alias the same fields). Only the HIGH
+        // word is touched, so this is AddTimedUpper on DC/MC/SC.
+        private void ApplyRecomputeState67_UpperCombat(int value)
+        {
+            m_WAbil.DC = AddTimedUpper(m_WAbil.DC, value);
+            m_WAbil.MC = AddTimedUpper(m_WAbil.MC, value);
+            m_WAbil.SC = AddTimedUpper(m_WAbil.SC, value);
+        }
+
+        // STATE-32 H1C — band handler for state 0x68 @0x773AF9, byte-verified:
+        //   773AF9  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773AFC  01 87 7C 02 00 00   add  [edi+0x27C],eax   ; AC lo
+        //   773B02  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773B05  01 87 80 02 00 00   add  [edi+0x280],eax   ; AC hi
+        //   773B0B  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773B0E  01 87 84 02 00 00   add  [edi+0x284],eax   ; MAC lo
+        //   773B14  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773B17  01 87 88 02 00 00   add  [edi+0x288],eax   ; MAC hi
+        //   (falls through into 0x773B1D)
+        // edi+0x27C/0x280 = AC lo/hi and edi+0x284/0x288 = MAC lo/hi (== esi+0x18/
+        // 0x1C/0x20/0x24, the fields state 0x28/0x29 use, STATE-36). Both words of
+        // each, so AddTimedRange on AC and MAC.
+        private void ApplyRecomputeState68_AcMac(int value)
+        {
+            m_WAbil.AC = AddTimedRange(m_WAbil.AC, value);
+            m_WAbil.MAC = AddTimedRange(m_WAbil.MAC, value);
+        }
     }
 }

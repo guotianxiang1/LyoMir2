@@ -964,6 +964,18 @@ namespace GameSvr
                         m_wEffectResistance = unchecked((ushort)(m_wEffectResistance +
                             (ushort)value));
                         break;
+                    case 71:
+                        // STATE-32 H1B — state 0x67 (internalType 103): DC/MC/SC
+                        // HIGH word += value (@0x773ADC). Body/evidence in
+                        // TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState67_UpperCombat(value);
+                        break;
+                    case 72:
+                        // STATE-32 H1C — state 0x68 (internalType 104): AC/MAC
+                        // lo+hi += value (@0x773AF9). Body/evidence in
+                        // TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState68_AcMac(value);
+                        break;
                 }
             }
         }
