@@ -64,6 +64,12 @@ namespace GameSvr
                 case Grobal2.CM_4204:
                     ClientNativeSmsAuthVerify();
                     return true;
+                case Grobal2.CM_4205:
+                    ClientNativeSmsAuthSend();
+                    return true;
+                case Grobal2.CM_4215:
+                    ClientNativeNeighbourInteract();
+                    return true;
                 default:
                     return false;
             }
@@ -268,6 +274,35 @@ namespace GameSvr
         private void ClientNativeSmsAuthVerify()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4204, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4205, native leaf 0x6DAFAF, worker 0x6F01E4.
+        ///
+        /// The leaf calls 0x6F01E4(Self, Param=word[record+6], Series=word
+        /// [record+0xA]). 0x6F01E4 opens a 0x20C-byte frame to compose the
+        /// verification-code SMS and hands it to the operator's SMS gateway. The
+        /// gateway is external to the image; issuing a code and the SM that reports
+        /// success are outside anything derivable here, so the request fails closed.
+        /// </summary>
+        private void ClientNativeSmsAuthSend()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4205, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4215, native leaf 0x6DAFCA, worker 0x6E8684.
+        ///
+        /// The leaf passes Recog ([record+0]), Param (word[record+6]),
+        /// Series (word[record+0xA]) and Tag (word[record+8]) to 0x6E8684, a
+        /// neighbour-object interaction worker that answers up to three distinct
+        /// SM packets through [vmt+0x250]. The reply selection and the target
+        /// object fields it reads are not modelled in this port, so no packet can
+        /// be reconstructed without inventing its body.
+        /// </summary>
+        private void ClientNativeNeighbourInteract()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4215, m_sCharName);
         }
     }
 }
