@@ -691,6 +691,19 @@ namespace GameSvr
                 mapFlag.boTRIGGERBOMB = true;
                 return true;
             }
+            // PAODIAN (pool-B only, token literal 0x776E68 len 7; MFLG-06 / MOVE-92).
+            // 原生解析器 B @0x77685F 识别后调 sub_77BEDC，后者 @0x77BEE2
+            // `mov byte [ebx+0x91],1`（set-only，无视入参），并在 [ebx+0x94]==0 时
+            // 惰性 new 一个管理器对象（0x77BF04 call 0x77CD18，classref
+            // [0x774800]=0x77484C，600000ms 定时器 + 两张列表）存入 +0x94。
+            // 这里 1:1 复刻已证实的 +0x91 置位；管理器与其消费者（0x76A077 /
+            // 0x772336 / 0x777D6B->0x77CDD0）语义未证，效果层 fail-closed BLOCKED
+            // （详见 TMapFlag.boPAODIAN 文档）。不要凭 boPAODIAN 接线消费者。
+            if (token.Equals("PAODIAN", StringComparison.OrdinalIgnoreCase))
+            {
+                mapFlag.boPAODIAN = true;
+                return true;
+            }
             return false;
         }
 
