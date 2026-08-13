@@ -1021,8 +1021,30 @@ namespace DBSvr.Core
                     }
                 }
             }
-            if (!foundS) sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptS)));
-            if (!foundV) sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptV)));
+            // An empty bank contributes NO section, not a zero-length one. The native
+            // encoder sub_6E4CD8 sizes each bank as DynArrayLength*8 and gates both the
+            // size accumulation and the emit on it being positive:
+            //   S  0x6E4CF8  mov eax,[eax+0x804] / 0x6E4CFE call 0x406A88 (DynArrayLength)
+            //      0x6E4D05  C1 E6 03  shl esi,3
+            //      0x6E4D08  85 F6 / 7E 07     test esi,esi / jle   -> skip 7+esi
+            //      0x6E4DCC  85 F6 / 7E 2E     test esi,esi / jle   -> skip the emit
+            //   V  0x6E4D23  C1 E7 03  shl edi,3
+            //      0x6E4D26  85 FF / 7E 07     test edi,edi / jle
+            //      0x6E4DFE  85 FF / 7E 2E     test edi,edi / jle
+            // and the same `jle` shape guards types 2/6/7/8 at 0x6E4D39 / 0x6E4D51 /
+            // 0x6E4D69 / 0x6E4D7F.
+            //
+            // Appending an unconditional pair mattered for the ordinary character who
+            // uses one bank and not the other: saving a V variable also wrote a
+            // zero-length type-0 header. The original DBServer does not read it back as
+            // an empty bank, it treats it as corrupt -- the type-0 arm opens with
+            // 0x6E4558 `cmp word [eax+4],0 / 76 58 jbe 0x6E45B2` straight into the
+            // log-and-skip branch (type 1 mirrors it at 0x6E4606 `76 57 jbe 0x6E4664`) --
+            // so the record stopped being byte-identical to what the original writes.
+            if (!foundS && scriptS != null && scriptS.Count > 0)
+                sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptS)));
+            if (!foundV && scriptV != null && scriptV.Count > 0)
+                sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptV)));
             if (!foundYanshen && yanshenPayload.Length > 0)
                 sections.Add(new ScriptSection(YanshenScriptSectionType, yanshenPayload));
 
@@ -1031,6 +1053,10 @@ namespace DBSvr.Core
             writer.Write(0);
             foreach (var section in sections)
             {
+                if (section.Payload.Length == 0)
+                {
+                    continue;
+                }
                 if (section.Payload.Length > ushort.MaxValue)
                 {
                     error = $"native ScriptData type {section.Type} exceeds 65535 bytes";
