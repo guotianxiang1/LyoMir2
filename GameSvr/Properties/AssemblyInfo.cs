@@ -46,6 +46,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeClassIsOperatorCheck")]
 [assembly: InternalsVisibleTo("NativeWinExpChainCheck")]
 [assembly: InternalsVisibleTo("NativeCastLockMovementGateCheck")]
+[assembly: InternalsVisibleTo("NativeMoveGateCheck")]
 [assembly: InternalsVisibleTo("PoisonIndexDivergenceCheck")]
 [assembly: InternalsVisibleTo("NativeNorideGateCheck")]
 [assembly: InternalsVisibleTo("NativeFixedAbilityBaselineCheck")]
