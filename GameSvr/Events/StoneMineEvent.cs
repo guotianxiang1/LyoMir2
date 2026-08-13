@@ -36,6 +36,12 @@ namespace GameSvr
 
         public void AddStoneMine()
         {
+            // MINE-16: 原版 sub_7176E8 直接复用构造期存下的补矿量，不重新抽样：
+            //   0x7176EE  8B 43 10   mov eax, [ebx+0x10]
+            //   0x7176F1  89 43 0C   mov [ebx+0x0C], eax
+            //   0x7176F4  E8 47 0C CF FF  call 0x408340
+            //   0x7176F9  89 43 14   mov [ebx+0x14], eax
+            // 因此补矿量为 0 的矿点会永久枯竭，这是原版行为，不得「修正」。
             MineCount = _addStoneCount;
             AddStoneMineTick = HUtil32.GetTickCount();
         }
