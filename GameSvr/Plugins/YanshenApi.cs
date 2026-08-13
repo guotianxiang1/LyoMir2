@@ -3745,7 +3745,10 @@ namespace GameSvr.Plugins
             timeoutMilliseconds = 0;
             if (!Enabled("地面物品消失时间")) return false;
 
-            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 600));
+            // 600 was the M2Server constant (0x77A3FD cmp edx,0x927C0), not the plugin's
+            // fallback: when the key is absent the loader seeds 300 seconds
+            // (0x100B01AA C7 80 00 0D 00 00 2C 01 00 00 -> mov [cfg+0xD00],0x12C).
+            var seconds = Math.Max(0, GetParamInt("地面物品消失时间_时间", 300));
             timeoutMilliseconds = seconds > int.MaxValue / 1000
                 ? int.MaxValue
                 : seconds * 1000;
