@@ -218,6 +218,12 @@ namespace GameSvr.Mall
                 throw new InvalidDataException("C_NeedLoadGoodsNames 未配置");
             }
 
+            var limitSlots = CollectLimitSlots(script);
+            lock (_lock)
+            {
+                _limitSlots = limitSlots;
+            }
+
             var configs = CollectGoodsConfigs(script);
             var items = new List<MallItem>();
             for (var order = 0; order < configuredNames.Count; order++)
@@ -872,7 +878,10 @@ namespace GameSvr.Mall
                     return false;
                 }
 
-                ResetDailyLimitIfNeeded(player);
+                // 脚本第 1 步的日期重置（EverydayClearLimitValue）是一段 for I := 1 to 50 的
+                // 变址循环，本进程没有 PAS 解释器跑它，按 fail-closed 不做替身：
+                // 生产脚本的 GetLimitValue/SetLimitValue 本来就是空桩，限购恒 0，无可重置。
+                // 见报告 MALL-08 BLOCKED。
                 var currentLimit = GetCurrentLimit(player, mallItem);
                 if (mallItem.LimitType > 0 && currentLimit + quantity > mallItem.LimitCount)
                 {
@@ -1000,62 +1009,121 @@ namespace GameSvr.Mall
             player?.SetScriptVar(bank, group, index, value);
         }
 
-        private static void ResetDailyLimitIfNeeded(TPlayObject player)
+        /// <summary>
+        /// 一件商品的限购计数存在哪个脚本变量里，由脚本的 <c>GetLimitValue</c> /
+        /// <c>SetLimitValue</c> 自己决定，引擎不参与——引擎只在发包前回调
+        /// <c>@GetLimitValue</c> 拿一个数写进 180 字节记录的 +44
+        /// （<c>sub_63CD0C</c>：<c>0x63CD68 66 83 78 28 00 cmp word [rec+0x28],0</c> /
+        /// <c>jbe</c> 只在 limitType &gt; 0 时回调，<c>0x63CDC3 66 89 42 2c</c> 存结果，
+        /// <c>0x63CDCC</c> 脚本没给值就写 0）。
+        /// </summary>
+        private readonly struct MallLimitSlot
         {
-            const int dailyGroup = 300;
-            const int markerGroup = 302;
-            const int markerIndex = 99;
-            var today = (int)(DateTime.Now.Ticks / TimeSpan.TicksPerDay);
-            if (GetPlayerVariable(player, 'S', markerGroup, markerIndex) == today)
+            public MallLimitSlot(char bank, int group, int index)
             {
-                return;
+                Bank = bank;
+                Group = group;
+                Index = index;
             }
 
-            var keysToReset = new List<int>();
-            foreach (var key in player.m_ScriptSVars.Keys)
-            {
-                if (key > dailyGroup * 1000 && key < dailyGroup * 1000 + 100)
-                {
-                    keysToReset.Add(key);
-                }
-            }
-            foreach (var key in keysToReset)
-            {
-                player.m_ScriptSVars[key] = 0;
-            }
-            SetPlayerVariable(player, 'S', markerGroup, markerIndex, today);
+            public char Bank { get; }
+            public int Group { get; }
+            public int Index { get; }
         }
 
-        private static int GetCurrentLimit(TPlayObject player, MallItem mallItem)
+        private Dictionary<string, MallLimitSlot> _limitSlots =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 从脚本里抽出 <c>GetLimitValue</c> / <c>SetLimitValue</c> 两个 case 分支声明的坐标。
+        /// 生产脚本把这两个函数整个注释掉了（<c>GetLimitValue</c> 只有 <c>Result := 0;</c>，
+        /// <c>SetLimitValue</c> 是空过程），所以生产环境下这张表是**空的**，
+        /// 限购读回 0、也不写任何变量——与原生逐字节一致。
+        /// <para>
+        /// 之前这里写死 <c>S(300,商品编号)</c> / <c>S(301,商品编号)</c> 以及日期标记
+        /// <c>S(302,99)</c>，三个坐标在原生里都不存在。而且它们会随 <c>HumData.ScriptS</c>
+        /// 落进人物存档，属 §1.4 的记录布局问题：换回原版 Delphi 跑时这些键就是垃圾。
+        /// 更糟的是 <c>GetCurrentLimitValue</c> 被商品列表渲染调用，生产里 1046 有 50,039 次，
+        /// 等于**每次打开商城面板都往存档里写一个原生没有的键**。
+        /// </para>
+        /// <para>
+        /// 顺带修掉旧重置逻辑自己的两个洞：它按 <c>key &gt; 300*1000 &amp;&amp; key &lt; 300*1000+100</c>
+        /// 扫字典，而生产商品编号是 218/222/247..251 全部 ≥ 100，所以"每日限购"其实从来不重置；
+        /// 编号 ≥ 1000 时 <c>S(300,1000)</c> 的平铺键 301000 还会撞上 <c>S(301,0)</c>。
+        /// </para>
+        /// </summary>
+        private static Dictionary<string, MallLimitSlot> CollectLimitSlots(string script)
         {
-            return mallItem.LimitType switch
+            var slots = new Dictionary<string, MallLimitSlot>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(script))
             {
-                1 => GetPlayerVariable(player, 'S', 300, mallItem.Id),
-                2 => GetPlayerVariable(player, 'S', 301, mallItem.Id),
-                _ => 0
-            };
+                return slots;
+            }
+
+            // 先去掉行注释，否则生产脚本里被注释掉的示例坐标会被当成真配置。
+            var live = Regex.Replace(script, @"//[^\r\n]*", string.Empty);
+            var body = Regex.Match(live,
+                @"\bfunction\s+GetLimitValue\b(?<body>.*?)\bend\s*;\s*(?:procedure|function|Begin)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!body.Success)
+            {
+                return slots;
+            }
+
+            foreach (Match match in Regex.Matches(body.Groups["body"].Value,
+                         @"'(?<name>[^']+)'\s*:\s*Result\s*:=\s*This_Player\.Get(?<bank>[VS])\s*\(\s*"
+                         + @"(?<group>-?\d+)\s*,\s*(?<index>-?\d+)\s*\)",
+                         RegexOptions.IgnoreCase))
+            {
+                slots[match.Groups["name"].Value.Trim()] = new MallLimitSlot(
+                    char.ToUpperInvariant(match.Groups["bank"].Value[0]),
+                    int.Parse(match.Groups["group"].Value),
+                    int.Parse(match.Groups["index"].Value));
+            }
+            return slots;
         }
 
+        private bool TryGetLimitSlot(MallItem mallItem, out MallLimitSlot slot)
+        {
+            slot = default;
+            if (mallItem == null || mallItem.LimitType <= 0)
+            {
+                return false;
+            }
+            lock (_lock)
+            {
+                return _limitSlots.TryGetValue(mallItem.ItemName, out slot);
+            }
+        }
+
+        private int GetCurrentLimit(TPlayObject player, MallItem mallItem)
+        {
+            // 脚本没声明坐标就是 0，对应生产 GetLimitValue 的 `Result := 0;`
+            // 以及原生 0x63CDCC `66 c7 40 2c 00 00` 那条"脚本没给值写 0"的臂。
+            return TryGetLimitSlot(mallItem, out var slot)
+                ? GetPlayerVariable(player, slot.Bank, slot.Group, slot.Index)
+                : 0;
+        }
+
+        /// <summary>
+        /// 只读。原生这条路径（<c>sub_63CD0C</c>）只回调脚本取值再写进要发出去的记录，
+        /// 不改任何玩家状态。日期重置是脚本 <c>ClientBuy</c> 的第 1 步，属购买路径，
+        /// 不是列表渲染路径。
+        /// </summary>
         public int GetCurrentLimitValue(TPlayObject player, MallItem mallItem)
         {
             if (player == null || mallItem == null)
             {
                 return 0;
             }
-
-            ResetDailyLimitIfNeeded(player);
             return GetCurrentLimit(player, mallItem);
         }
 
-        private static void SetCurrentLimit(TPlayObject player, MallItem mallItem, int value)
+        private void SetCurrentLimit(TPlayObject player, MallItem mallItem, int value)
         {
-            if (mallItem.LimitType == 1)
+            if (TryGetLimitSlot(mallItem, out var slot))
             {
-                SetPlayerVariable(player, 'S', 300, mallItem.Id, value);
-            }
-            else if (mallItem.LimitType == 2)
-            {
-                SetPlayerVariable(player, 'S', 301, mallItem.Id, value);
+                SetPlayerVariable(player, slot.Bank, slot.Group, slot.Index, value);
             }
         }
 
