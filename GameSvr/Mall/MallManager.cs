@@ -981,8 +981,8 @@ namespace GameSvr.Mall
             // 脚本第 9 步 PsYBConsumEx：外部元宝库异步扣费，本进程没有等价实现。
             // 没有它就没有"已扣款"这个事实，因此不能发货。
             // 这里不打日志：CM_DOSHOP 在生产计数器里是 290,008 次，属热路径。
-            _ = item;
-            _ = quantity;
+            // item / quantity 留在签名里，是因为 PsYBConsumEx 的实参就是
+            // (2, 'YBShopBuy_YB', GoodsName, vGoodsIdx, vCurPrice, WantNum)，接线时要用。
             errorMsg = "申请扣元宝失败！";
             return false;
         }
