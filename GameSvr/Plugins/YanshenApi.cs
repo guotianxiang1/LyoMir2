@@ -3266,7 +3266,10 @@ namespace GameSvr.Plugins
         public bool IsLuckBlock() => Enabled("格位刺杀免伤a");
         public bool IsProbBlock() => Enabled("概率格挡a");
         public bool IsFixStabParalysis() => Enabled("修复刺杀位麻痹");
-        public bool IsFixDefense() => Enabled("修复卡防御");
+        // Code patch at host 0x00767910 (jle → jmp), not a script API.
+        // Off means the unpatched luck-max armour roll, so this must not
+        // raise inside a strict yanshen call the way Enabled() does.
+        public bool IsFixDefense() => PatchToggleOn("修复卡防御");
         public bool IsZeroDefSplit() => Enabled("防0拆分");
         public bool IsMagicShieldFix() => Enabled("魔法盾修正");
         public bool IsHolyShieldMsg() => Enabled("护身触发报文a");
