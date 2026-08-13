@@ -2337,7 +2337,8 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_BUILDGUILD_FAIL, ProcessMsg.nParam1, 0, 0, 0, "");
                     break;
                 case Grobal2.RM_DONATE_OK:
-                    SendDefMessage(Grobal2.SM_DONATE_OK, ProcessMsg.nParam1, 0, 0, 0, "");
+                    // Native CODE has zero 16-bit dx/cx loads of 764 (0x02FC)
+                    // reaching a send slot. srv_AppearTimes.ini 764=0.
                     break;
                 case Grobal2.RM_MYSTATUS:
                     SendDefMessage(Grobal2.SM_MYSTATUS, 0, (short)GetMyStatus(), 0, 0, "");
