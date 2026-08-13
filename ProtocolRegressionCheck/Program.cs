@@ -2337,7 +2337,9 @@ static void TestGameSvrGateSingleWriter(Assembly gameSvr, Type globalType)
             "GameSvr control frame bypassed the per-gate send queue");
 
         gateServiceType.GetMethod("StartQueueService")!.Invoke(service, null);
-        var expectedLength = 24 + 28;
+        // 原版 16 字节头: 控制帧恒 16B (BodyLen=0), user-index 数据帧 16+4=20B。
+        // Cmd@+0x0C, BodyLen@+0x0E, payload@+0x10 (证据: 构造器 0x5F61C5/0x637AC1 与接收器 0x63B258)。
+        var expectedLength = 16 + 20;
         var bytes = new byte[expectedLength];
         receiver.ReceiveTimeout = 3000;
         var stream = receiver.GetStream();
@@ -2350,15 +2352,15 @@ static void TestGameSvrGateSingleWriter(Assembly gameSvr, Type globalType)
         }
 
         Assert(BitConverter.ToUInt32(bytes, 0) == 0x33AABB77 &&
-               BitConverter.ToUInt16(bytes, 12) == 24 &&
-               BitConverter.ToUInt16(bytes, 14) == checkCommand,
+               BitConverter.ToUInt16(bytes, 12) == checkCommand &&
+               BitConverter.ToUInt16(bytes, 14) == 0,
             "GameSvr queued check frame is malformed or out of order");
-        const int second = 24;
+        const int second = 16;
         Assert(BitConverter.ToUInt32(bytes, second) == 0x33AABB77 &&
                BitConverter.ToUInt32(bytes, second + 4) == 0x12345678 &&
-               BitConverter.ToUInt16(bytes, second + 12) == 28 &&
-               BitConverter.ToUInt16(bytes, second + 14) == userIndexCommand &&
-               BitConverter.ToInt32(bytes, second + 24) == 7,
+               BitConverter.ToUInt16(bytes, second + 12) == userIndexCommand &&
+               BitConverter.ToUInt16(bytes, second + 14) == 4 &&
+               BitConverter.ToInt32(bytes, second + 16) == 7,
             "GameSvr queued user-index frame is malformed or out of order");
     }
     finally
