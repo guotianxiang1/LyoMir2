@@ -1421,6 +1421,14 @@ namespace GameSvr
                 // (0x6AEE90 66 BA 14 12) Recog=0 Param=0 Tag=role Series=0.
                 // [obj+0xAE8]==0 -> role 0 (0x6AEE0B xor esi,esi / 0x6AEE15 je).
                 SendNativeSocialRoleRefresh();
+                // 战神 login-burst virtual sub_6E9A98 (VMT slots 0x62F190/0x6ACACC)
+                // fires SM 3554 (my whole timed-ability list) exactly once per login
+                // via sub_6E99B8 -> [obj+0x254]. srv_AppearTimes 3554 = 50,911 = the
+                // SM_LOGON count, so every player login emits it (empty list still
+                // sends, Len=0). The burst's exact intra-login position is a VMT call
+                // and not byte-pinned; the once-per-login contract is what matters, so
+                // it is grouped with the other login list packets here.
+                SendNativeTimedAbilityListOnLogon();
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
