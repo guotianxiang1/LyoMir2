@@ -321,6 +321,8 @@ namespace GameSvr
             int skillPower = CalculateNativeMagicProducerSkillPower(magic);
             int lowMagic = HUtil32.LoWord(m_WAbil.MC);
             int highMagic = HUtil32.HiWord(m_WAbil.MC);
+            Plugins.YanshenSkillPatches.MainAttr(this, magic.MagicInfo.wMagicID,
+                lowMagic, highMagic, out lowMagic, out highMagic);
             return NativeLuckOnlyRoll(unchecked(lowMagic + skillPower),
                 highMagic - lowMagic + 1);
         }
@@ -328,9 +330,14 @@ namespace GameSvr
         private void QueueNativeMagicProducerEffect(TUserMagic magic,
             TBaseObject target, int rawDamage)
         {
-            QueueNativeMagicEffect(1, target, rawDamage,
-                magic.MagicInfo.wMagicID, target.m_nCurrX,
-                target.m_nCurrY, 2, true, 0,
+            ushort magicId = magic.MagicInfo.wMagicID;
+            rawDamage = Plugins.YanshenSkillPatches.ScaleDamage(this, magicId,
+                rawDamage);
+            Plugins.YanshenSkillPatches.ProducerDispatch(this, magicId, 2, 1,
+                out byte range, out ushort category);
+            QueueNativeMagicEffect(category, target, rawDamage,
+                magicId, target.m_nCurrX,
+                target.m_nCurrY, range, true, 0,
                 MagicDamageContext.Capture(magic), 600);
         }
 
@@ -422,12 +429,18 @@ namespace GameSvr
         {
             if (range > 0)
                 return M2Share.RandomNumber.Random(range);
-            if (range < 0)
-                throw new ArgumentOutOfRangeException(nameof(range));
+            if (range == 0)
+            {
+                // Delphi Random(0) advances RandSeed and returns zero.
+                _ = M2Share.RandomNumber.Random();
+                return 0;
+            }
 
-            // Delphi Random(0) advances RandSeed and returns zero.
-            _ = M2Share.RandomNumber.Random();
-            return 0;
+            // Native sub_4C866E / 0x4C8683 pass wMax-wPower / defMax-defPower
+            // with no test. A negative bound is the UInt32 bit pattern of
+            // Random(n); the fused body then `add esi` / `imul (level+1)` /
+            // `fild` (signed) / `fdiv 4.0` / ROUND — no subsequent clamp.
+            return M2Share.RandomNumber.Random(range);
         }
     }
 }

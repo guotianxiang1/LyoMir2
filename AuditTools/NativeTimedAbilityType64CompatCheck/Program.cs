@@ -107,10 +107,37 @@ void CheckHeadInsertionOrder()
     Equal(int.MinValue, flatWrap.GetTimedHolyDefense(int.MaxValue),
         "internal96 dword wrap");
 
+    // internal100 recompute @0x773A45, bytes verified against flat_image.bin:
+    //   773A45  8B 87 14 03 00 00  mov  eax, [edi+0x314]
+    //   773A4B  89 45 C4           mov  [ebp-0x3C], eax
+    //   773A4E  33 C0 / 89 45 C8   mov  [ebp-0x38], 0      ; zero-extend -> (uint)
+    //   773A53  DF 6D C4           fild qword [ebp-0x3C]   ; 0xFFFFFFFF -> 4294967295
+    //   773A56  DB 43 0A           fild dword [ebx+0xA]    ; 50
+    //   773A59  D8 35 94 3B 77 00  fdiv dword [0x773B94]   ; 00 00 C8 42 = 100.0f -> 0.5
+    //   773A5F  DE C9              fmulp st(1)             ; 2147483647.5 exactly
+    //   773A61  E8 1A FB C8 FF     call 0x403580           ; @TRUNC
+    //   773A66  01 87 14 03 00 00  add  [edi+0x314], eax   ; low dword only
+    // @TRUNC 0x403580 forces RC=11 (`66 81 4C 24 02 00 0F  or word [esp+2],0xF00`)
+    // before `DF 7C 24 04  fistp qword [esp+4]`, i.e. toward zero: 2147483647.
+    // 0xFFFFFFFF + 0x7FFFFFFF = 0x17FFFFFFE, and `add` keeps the low dword
+    // 0x7FFFFFFE = 2147483646. This used to expect int.MaxValue, which is the
+    // value the *sibling* helper 0x403574 would give (bare fistp on the default
+    // control word 0x7A2024 = 0x1372, RC=00 round-half-to-even: 2147483647.5 ->
+    // 2147483648 -> low dword 0x80000000 -> -1 + -2147483648 = int.MaxValue).
+    // The product was corrected off 0x403580's bytes; this expectation was not,
+    // so the pin was measuring the discarded model.
     var unsignedPercent = new TBaseObject();
     unsignedPercent.AddTimedAbility(68, 50, 60);
-    Equal(int.MaxValue, unsignedPercent.GetTimedHolyDefense(-1),
-        "internal100 unsigned dword percentage and x87 rounding");
+    Equal(2147483646, unsignedPercent.GetTimedHolyDefense(-1),
+        "internal100 unsigned dword percentage and x87 truncation");
+
+    // Second, smaller discriminator so the truncation direction is not pinned
+    // only by the uint-wrap case: 3 * (50/100) = 1.5. @TRUNC 0x403580 gives 1
+    // (3+1=4); @ROUND 0x403574 would give 2 (3+2=5).
+    var halfwayTrunc = new TBaseObject();
+    halfwayTrunc.AddTimedAbility(68, 50, 60);
+    Equal(4, halfwayTrunc.GetTimedHolyDefense(3),
+        "internal100 must truncate 1.5 toward zero, not round half to even");
 }
 
 void CheckExpiryClear()
@@ -230,9 +257,18 @@ void CheckSourceContracts()
     Assert(timed.Contains("or 64 or 68 => true", StringComparison.Ordinal),
         "type64/type68 support gate was closed");
     Assert(timed.Contains("case 96:", StringComparison.Ordinal) &&
-           timed.Contains("case 100:", StringComparison.Ordinal) &&
-           timed.Contains("MidpointRounding.ToEven", StringComparison.Ordinal),
+           timed.Contains("case 100:", StringComparison.Ordinal),
         "type64/type68 ordered dword projection was removed");
+    // The old form of this contract required the literal "MidpointRounding.ToEven"
+    // to appear in the file. That models 0x403574, the helper this path does NOT
+    // call, and after the product moved to @TRUNC the string survived only inside
+    // a prose comment - so the assertion kept passing while asserting nothing
+    // (REPLICATION_RULES 4.17: grep-shaped contracts). Invert it: the round-half
+    // API must be absent and the truncating helper must be the one cited.
+    Assert(!timed.Contains("MidpointRounding", StringComparison.Ordinal),
+        "internal100 reverted to a round-half model; 0x773A61 calls @TRUNC 0x403580");
+    Assert(timed.Contains("0x403580", StringComparison.Ordinal),
+        "internal100 no longer cites the truncating helper @0x403580");
     Assert(fixedAbility.Contains("record.Slice(0xA8",
             StringComparison.Ordinal),
         "raw0xA8 healing baseline projection was removed");
@@ -260,13 +296,15 @@ static Type64ProbePlayer NewProbePlayer(string name, ushort amount,
     };
 }
 
+// The deterministic source is installed on M2Share.RandomNumber, the field the
+// server assigns at startup. It used to be installed by reflecting
+// RandomNumber's private `random` field, which POIS-26 removed when the facade
+// moved onto the Delphi LCG sub_403B4C; GetField then returned null and this
+// threw MissingFieldException instead of running the healing assertions.
 static int InvokeHealingDeterministically(TBaseObject actor)
 {
-    var randomField = typeof(RandomNumber).GetField("random",
-        BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException("RandomNumber.random");
-    object originalRandom = randomField.GetValue(null);
-    randomField.SetValue(null, new Type64DeterministicRandom());
+    RandomNumber originalRandom = M2Share.RandomNumber;
+    M2Share.RandomNumber = new Type64DeterministicRandom();
     try
     {
         var method = typeof(TBaseObject).GetMethod(
@@ -278,7 +316,7 @@ static int InvokeHealingDeterministically(TBaseObject actor)
     }
     finally
     {
-        randomField.SetValue(null, originalRandom);
+        M2Share.RandomNumber = originalRandom;
     }
 }
 
@@ -404,16 +442,16 @@ sealed class Type64ProbeHero : HeroObject
 {
 }
 
-sealed class Type64DeterministicRandom : Random
+sealed class Type64DeterministicRandom : RandomNumber
 {
-    public override int Next() => 0;
+    public override int Random() => 0;
 
-    public override int Next(int maxValue)
+    public override int Random(int Value)
     {
-        if (maxValue <= 0 || maxValue == 100)
+        if (Value <= 0 || Value == 100)
             return 0;
-        if (maxValue == 2)
+        if (Value == 2)
             return 1;
-        return maxValue - 1;
+        return Value - 1;
     }
 }

@@ -212,6 +212,23 @@ namespace GameSvr
         
         
         
+        /// <summary>
+        /// The legacy `$STR(P&lt;n&gt;)` text-substitution bank, n in 0..99 - see
+        /// M2Share.GetValNameNo and its only reader, NormNpc.ReplaceVariableText.
+        /// It is NOT the quest V bank, despite the sizing and the comment it used to
+        /// carry; nothing keys it by group*1000+index and nothing outside the `$STR`
+        /// path touches it.
+        /// <para>
+        /// A disp-aware census of every [base+disp] access with disp in [0x800,0xA00)
+        /// over 0x401000..0x7EFFFF finds the player object using +0x804 (6 sites, all
+        /// GetS/SetS/decoder/encoder), +0x808 (7 sites, all GetV/SetV/decoder/encoder),
+        /// then NOTHING until +0x99C - and 0x99C is exactly 0x80C + 100*4. The only
+        /// index-scaled accesses anywhere in that window are the two inline slot
+        /// instructions 0x6DF20F and 0x6DF2A8. So the 100 dwords behind the V pointer
+        /// are dedicated storage reached solely through GetV/SetV group 0, and there
+        /// is no second native array in the object for this field to be mirroring.
+        /// </para>
+        /// </summary>
         public int[] m_nVal;
         public Dictionary<int, int> m_ScriptVVars;
         public Dictionary<int, int> m_ScriptSVars;
@@ -881,7 +898,9 @@ namespace GameSvr
             m_sRankLevelName = M2Share.g_sRankLevelName;
             m_boFixedHideMode = true;
             m_nStep = 0;
-            m_nVal = new int[20000];  // Delphi 战神: nTaskNo*1000+nFieldNo
+            // Only 0..99 are addressable ($STR(P<n>), M2Share.GetValNameNo); the width
+            // is a leftover from a comment that mistook this for the quest V bank.
+            m_nVal = new int[20000];
             m_ScriptVVars = new Dictionary<int, int>();
             m_ScriptSVars = new Dictionary<int, int>();
             m_ScriptVGroup0 = new int[101];
@@ -1182,13 +1201,11 @@ namespace GameSvr
                         }
                     }
                 }
-                for (var i = m_dwStatusArrTick.GetLowerBound(0); i <= m_dwStatusArrTick.GetUpperBound(0); i++)
-                {
-                    if (m_wStatusTimeArr[i] > 0)
-                    {
-                        m_dwStatusArrTick[i] = HUtil32.GetTickCount();
-                    }
-                }
+                // The per-slot tick stamps this used to re-base belonged to the
+                // deleted seconds countdown. The node list carries its own
+                // LastTick, set by AddState @0x7731AB (`call 0x408340` then
+                // `mov [edx+6],eax`), so the CopyFrom during load already
+                // stamped every restored node with the current tick.
                 m_nCharStatus = GetCharStatus();
                 logonStage = "before-recalc";
                 RecalcLevelAbilitys();
@@ -1390,6 +1407,10 @@ namespace GameSvr
                 // 战神 UserLogon @0x6B24E7: call 0x6F769C always emits SM 4615
                 // (0x6F76F1 66 BA 07 12) with an 8-byte body.
                 SendNativeClearPendingRequestOnLogon();
+                // 战神 UserLogon @0x6B24EE: call 0x6F772C always emits SM 4612
+                // (0x6F7813 66 BA 04 12) via [obj+0x254], even when the notice
+                // list is empty (Len=0).
+                SendNativePendingNoticesOnLogon();
                 // 战神 UserLogon @0x6B24F5: call 0x6AEE04 always emits SM 4628
                 // (0x6AEE90 66 BA 14 12) Recog=0 Param=0 Tag=role Series=0.
                 // [obj+0xAE8]==0 -> role 0 (0x6AEE0B xor esi,esi / 0x6AEE15 je).
@@ -1792,18 +1813,38 @@ namespace GameSvr
                                                 }
                                                 else
                                                 {
+                                                    // PKD-11 —— 归属人作废的判据是**幽灵**，不是死亡。
+                                                    // 战神 sub_783988（地面物归属过期，唯一调用点
+                                                    // 0x77A476，在地图格 tick 里）：
+                                                    //   783988  cmp dword [item+0xF4],0 / 75 09 jne
+                                                    //   783991  cmp dword [item+0xF8],0 / 74 4D je   ; 两槽都空 -> 无事
+                                                    //   78399A  2B 50 08              sub edx,[item+8]  ; now - 落地tick
+                                                    //   78399D  81 FA C0 D4 01 00     cmp edx,0x1D4C0   ; 120000 ms
+                                                    //   7839A3  76 12                 jbe 0x7839B7      ; 严格 > 才清
+                                                    //   7839A5  两槽同时清零                            ; -> 变成公共物
+                                                    //   7839B7  mov edx,[item+0xF4] / test / je
+                                                    //   7839C1  80 7A 73 00           cmp byte [edx+0x73],0
+                                                    //   7839C5  74 08                 je 0x7839CF
+                                                    //   7839C7  清 [item+0xF4]
+                                                    //   7839CF  对 [item+0xF8] 重复同一段
+                                                    // +0x73 是 m_boGhost（全镜像唯一写入点 0x7680EF，在
+                                                    // MakeGhost sub_768060 里，且从不写 0）；m_boDeath 是
+                                                    // +0x74（0x766323，TCreature.Die 的第一条语句）。
+                                                    // C# 写成 m_boDeath 会把归属提前作废整整一个尸体周期：
+                                                    // 击杀者一死，他脚下的战利品立刻变公共，旁边的人可以直接
+                                                    // 捡走；原生要等他变成幽灵（或满 120 秒）才放开。
                                                     if (MapItem.OfBaseObject as TBaseObject != null)
                                                     {
-                                                        if ((MapItem.OfBaseObject as TBaseObject).m_boDeath)
+                                                        if ((MapItem.OfBaseObject as TBaseObject).m_boGhost)
                                                         {
-                                                            MapItem.OfBaseObject = null;
+                                                            MapItem.OfBaseObject = null;    // 0x7839C7
                                                         }
                                                     }
                                                     if (MapItem.DropBaseObject as TBaseObject != null)
                                                     {
-                                                        if ((MapItem.DropBaseObject as TBaseObject).m_boDeath)
+                                                        if ((MapItem.DropBaseObject as TBaseObject).m_boGhost)
                                                         {
-                                                            MapItem.DropBaseObject = null;
+                                                            MapItem.DropBaseObject = null;  // 0x7839DF
                                                         }
                                                     }
                                                 }
@@ -2167,9 +2208,46 @@ namespace GameSvr
             {
                 for (var i = m_ItemList.Count - 1; i >= 0; i--)
                 {
-                    // 0x740140: the destroy ladder runs BEFORE the drop, and it is not
-                    // subject to the 1/3 roll (native reaches 0x740140 both from the
-                    // always-drop class at 0x7400E9 and from the roll's fall-through).
+                    // PKD-04 —— 抽签与门的顺序。战神 sub_740078 每件物品的真实顺序是
+                    //   7400E9  80 BB FC 00 00 00 00  cmp byte [ebx+0xFC],0
+                    //   7400F0  75 4E                 jne 0x740140   ; 必爆类 -> 跳过抽签与三道门
+                    //   7400F2  80 7D FF 00           cmp byte [ebp-1],0
+                    //   7400F6  75 12                 jne 0x74010A   ; 红名 -> 跳过抽签
+                    //   7400F8  B8 03 00 00 00        mov eax,3
+                    //   7400FD  E8 4A 3A CC FF        call sub_403B4C   ; Random(3)
+                    //   740102  85 C0 / 0F 85 …       test eax,eax / jne 0x74025C  ; 非 0 -> 不掉
+                    //   74010A  8B 43 1C / F6 40 02 10 / jne 0x74025C  ; Reserved02 & 0x0010
+                    //   740117  8B 43 1C / F6 40 03 02 / jne 0x74025C  ; Reserved02 & 0x0200
+                    //   740124  call sub_784720 (Reserved02 & 0x4000) / je 0x740140
+                    //   74012F  call sub_784710 (绑定字 [item+0x34]) / cmp ax,1 / je 0x74025C
+                    //   740140  ← 销毁/落地分流从这里才开始
+                    // 也就是说销毁支**在抽签与三道门之后**。C# 之前把 ShouldDestroy 提到
+                    // 循环第一句，于是 (a) 未验证/赠品被 100% 销毁而不是原生的 1/3，
+                    // (b) 绑定物、Reserved02&0x0010/0x0200 的物品本来一件都不该动，
+                    // 却照样被销毁 —— 两条都是净额外的玩家资产损失。
+                    var bagStdItem = M2Share.UserEngine.GetStdItem(m_ItemList[i].wIndex);
+                    if (!boDropall
+                        && M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate) != 0)
+                    {
+                        continue;                                   // 0x740104 jne 0x74025C
+                    }
+                    if (bagStdItem != null)
+                    {
+                        if ((bagStdItem.NativeReserved02 & 0x0010) != 0)
+                        {
+                            continue;                               // 0x740111 jne 0x74025C
+                        }
+                        if ((bagStdItem.NativeReserved02 & 0x0200) != 0)
+                        {
+                            continue;                               // 0x74011E jne 0x74025C
+                        }
+                        if ((bagStdItem.NativeReserved02 & 0x4000) != 0
+                            && NativeItemAcquisitionStamp.ReadBindWord(m_ItemList[i]) == 1)
+                        {
+                            continue;                               // 0x74013A je 0x74025C
+                        }
+                    }
+                    // 0x740140: 分流点。
                     if (NativeItemDropDestroy.ShouldDestroy(isPlayerRace,
                             scatterAuthenticated, m_ItemList[i]))
                     {
@@ -2198,27 +2276,25 @@ namespace GameSvr
                         Dispose(destroyed);                     // 0x74021E sub_404690
                         continue;                               // 0x740223 jmp 0x74025C
                     }
-                    if (boDropall || M2Share.RandomNumber.Random(M2Share.g_Config.nDieScatterBagRate) == 0)
+                    // 0x740225: 落地支。抽签与三道门已在上面走过，这里不再重抽。
+                    if (DropItemDown(m_ItemList[i], DropWide, true, ItemOfCreat, this))
                     {
-                        if (DropItemDown(m_ItemList[i], DropWide, true, ItemOfCreat, this))
+                        pu = m_ItemList[i];
+                        if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
-                            pu = m_ItemList[i];
-                            if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                            if (DelList == null)
                             {
-                                if (DelList == null)
-                                {
-                                    DelList = new List<TDeleteItem>();
-                                }
-                                DelList.Add(new TDeleteItem()
-                                {
-                                    sItemName = M2Share.UserEngine.GetStdItemName(pu.wIndex),
-                                    MakeIndex = pu.MakeIndex,
-                                    ClientItemID = EnsureClientItemId(pu)
-                                });
+                                DelList = new List<TDeleteItem>();
                             }
-                            Dispose(m_ItemList[i]);
-                            m_ItemList.RemoveAt(i);
+                            DelList.Add(new TDeleteItem()
+                            {
+                                sItemName = M2Share.UserEngine.GetStdItemName(pu.wIndex),
+                                MakeIndex = pu.MakeIndex,
+                                ClientItemID = EnsureClientItemId(pu)
+                            });
                         }
+                        Dispose(m_ItemList[i]);
+                        m_ItemList.RemoveAt(i);
                     }
                 }
                 if (DelList != null)

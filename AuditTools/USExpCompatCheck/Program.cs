@@ -42,7 +42,7 @@ Equal(93, item.Dura, "basic union power");
 Equal(8, owner.m_nLingFu, "basic LingFu debit");
 Equal(2, owner.m_nUsedLingFu, "basic used LingFu");
 Assert(owner.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED) == 1,
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED) == 1,
     "capital refresh count");
 Equal(2, hero.m_MsgList.Count, "hero notification count");
 var magicMessage = hero.m_MsgList.Single(message =>

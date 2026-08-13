@@ -139,7 +139,8 @@ namespace GameSvr
                 unchecked((byte)(target.m_btRaceServer + 16)) < 2)
                 return false;
 
-            return m_Abil.Level - target.m_Abil.Level +
+            return Plugins.YanshenSkillPatches.BarbarianLevel(this,
+                       m_Abil.Level) - target.m_Abil.Level +
                        eligibilityBonus > 0 && IsProperTarget(target);
         }
 

@@ -461,12 +461,35 @@ namespace GameSvr
             if (!boSelfCorpseExpired && !boOwnerGone)
                 return;
 
-            // 68A051-68A057: 主人还在（未 ghost）时才通知它。
-            // 原版 sub_6CCA1C 的可见效果是向主人发一条 dx=0x2970 的线消息
-            // （0x6CCA6C `mov dx,0x2970` -> 0x6CCA72 `call [vmt+0xD8]`），并按
-            // [player+0x4BA] / 英雄 [+0x6C4] 做联动。这两样在 C# 端都还没有映射，
-            // 臆造协议号比不发更糟，所以此处保持 fail-closed：只做回收，不发包。
-            // BLOCKED 记录见 staging/herobehaviour_fix_20260804.md。
+            // 68A051-68A057: 主人还在（未 ghost）时才通知它，`call sub_6CCA1C` 的 eax
+            // 就是 [hero+0x68C]（0x68A04B `mov eax,[eax+0x68C]`），所以 sub_6CCA1C 是
+            // **主人**的方法。逐字节：
+            //   6CCA27  8B 98 B0 0B 00 00     mov  ebx,[master+0xBB0]   ; 英雄
+            //   6CCA2D  85 DB / 0F 84 ..      test ebx,ebx / je  ret    ; 无英雄直接返回
+            //   6CCA35  80 7B 73 00 / 0F 85   cmp  byte [hero+0x73],0 / jne ret ; 已 ghost 返回
+            //   6CCA41  E8 62 63 0A 00        call 0x772DA8             ; al = [hero+0x74] m_boDeath
+            //   6CCA48  75 7B                 jne  0x6CCAC5             ; 尸体 -> 跳过消失广播
+            //   6CCA6C  66 BA 70 29           mov  dx,0x2970 -> [vmt+0xD8]，参数是英雄格 [+0x12C]/[+0x130]
+            //   6CCAC5  E8 8D B5 09 00        call 0x768060             ; MarkDelete(英雄)
+            //   6CCAD6  C6 80 C8 04 00 00 00  mov  byte [master+0x4C8],0
+            //   6CCAE7  66 BA 96 03           mov  dx,0x396  = SM_HERO_LOGOUT(918)
+            //   6CCAF0  FF 93 50 02 00 00     call [master_vmt+0x250]   ; 单播发送槽 sub_6D7CB0
+            //   6CCAF7  E8 AC FE FF FF        call 0x6CC9A8             ; DB 存档请求 0x194
+            //   6CCB02  89 90 B0 0B 00 00     mov  [master+0xBB0],edx(=0)
+            // 也就是说：尸体满 60 秒这条路径**必须**清掉主人的英雄指针、下发
+            // SM_HERO_LOGOUT、并落一次存档。此前 C# 只 MakeGhost()，主人的
+            // m_HeroObject 永远非空，CM_HERO_LOGON 的 `m_HeroObject == null` 门就再也
+            // 打不开——英雄到下线为止无法重新召唤，客户端还留着英雄面板。
+            // RemoveHero(owner) -> QueueHeroForFreeLocked 覆盖 0x6CCAC5/0x6CCB02 三件事
+            // （QueueSave = 0x194、owner.m_HeroObject = null、MakeGhost = 0x768060）。
+            // 仍未映射：0x2970 消失广播（尸体路径上原版本来就跳过）、[master+0x4C8]、
+            // 英雄自己的联动对象 [hero+0x6C4]。
+            var master = owner as TPlayObject;
+            if (master != null && !master.m_boGhost)
+            {
+                if (M2Share.UserEngine?.RemoveHero(master) == true)
+                    master.SendDefMessage(Grobal2.SM_HERO_LOGOUT, 0, 0, 0, 0, "");
+            }
 
             // 68A05F-68A06C: MarkDelete —— 变 ghost 并从地图摘除，而非走 Die()。
             if (!m_boGhost)

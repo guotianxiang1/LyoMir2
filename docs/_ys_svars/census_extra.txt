@@ -1,0 +1,434 @@
+=== plugin .text [reg+0x804] + 8 ins lookahead ===
+
+0x1007af24 func 0x10079510
+  0x1007af24  8B B2 04 08 00 00      mov esi, dword ptr [edx + 0x804]
+  0x1007af2a  81 FE 00 00 41 00      cmp esi, 0x410000
+  0x1007af30  72 38                  jb 0x1007af6a
+  0x1007af32  8B 9E 80 01 00 00      mov ebx, dword ptr [esi + 0x180]
+  0x1007af38  81 FB 19 04 00 00      cmp ebx, 0x419
+  0x1007af3e  75 2A                  jne 0x1007af6a
+  0x1007af40  8B 9E 84 01 00 00      mov ebx, dword ptr [esi + 0x184]
+  0x1007af46  81 FB 22 05 00 00      cmp ebx, 0x522
+  0x1007af4c  75 1C                  jne 0x1007af6a
+  0x1007af4e  8B 9E 98 03 00 00      mov ebx, dword ptr [esi + 0x398]
+
+0x1007af8a func 0x10079510
+  0x1007af8a  8B B2 04 08 00 00      mov esi, dword ptr [edx + 0x804]
+  0x1007af90  81 FE 00 00 41 00      cmp esi, 0x410000
+  0x1007af96  72 38                  jb 0x1007afd0
+  0x1007af98  8B 9E 80 01 00 00      mov ebx, dword ptr [esi + 0x180]
+  0x1007af9e  81 FB 19 04 00 00      cmp ebx, 0x419
+  0x1007afa4  75 2A                  jne 0x1007afd0
+  0x1007afa6  8B 9E 84 01 00 00      mov ebx, dword ptr [esi + 0x184]
+  0x1007afac  81 FB 22 05 00 00      cmp ebx, 0x522
+  0x1007afb2  75 1C                  jne 0x1007afd0
+  0x1007afb4  8B 9E A0 03 00 00      mov ebx, dword ptr [esi + 0x3a0]
+
+0x1007afef func 0x10079510
+  0x1007afef  8B B2 04 08 00 00      mov esi, dword ptr [edx + 0x804]
+  0x1007aff5  81 FE 00 00 41 00      cmp esi, 0x410000
+  0x1007affb  72 38                  jb 0x1007b035
+  0x1007affd  8B 9E 80 01 00 00      mov ebx, dword ptr [esi + 0x180]
+  0x1007b003  81 FB 19 04 00 00      cmp ebx, 0x419
+  0x1007b009  75 2A                  jne 0x1007b035
+  0x1007b00b  8B 9E 84 01 00 00      mov ebx, dword ptr [esi + 0x184]
+  0x1007b011  81 FB 22 05 00 00      cmp ebx, 0x522
+  0x1007b017  75 1C                  jne 0x1007b035
+  0x1007b019  8B 9E A8 03 00 00      mov ebx, dword ptr [esi + 0x3a8]
+
+0x1007b055 func 0x10079510
+  0x1007b055  8B B2 04 08 00 00      mov esi, dword ptr [edx + 0x804]
+  0x1007b05b  81 FE 00 00 41 00      cmp esi, 0x410000
+  0x1007b061  72 38                  jb 0x1007b09b
+  0x1007b063  8B 9E 80 01 00 00      mov ebx, dword ptr [esi + 0x180]
+  0x1007b069  81 FB 19 04 00 00      cmp ebx, 0x419
+  0x1007b06f  75 2A                  jne 0x1007b09b
+  0x1007b071  8B 9E 84 01 00 00      mov ebx, dword ptr [esi + 0x184]
+  0x1007b077  81 FB 22 05 00 00      cmp ebx, 0x522
+  0x1007b07d  75 1C                  jne 0x1007b09b
+  0x1007b07f  8B 9E B0 03 00 00      mov ebx, dword ptr [esi + 0x3b0]
+
+0x1007b0b8 func 0x10079510
+  0x1007b0b8  8B B2 04 08 00 00      mov esi, dword ptr [edx + 0x804]
+  0x1007b0be  81 FE 00 00 41 00      cmp esi, 0x410000
+  0x1007b0c4  72 38                  jb 0x1007b0fe
+  0x1007b0c6  8B 9E 80 01 00 00      mov ebx, dword ptr [esi + 0x180]
+  0x1007b0cc  81 FB 19 04 00 00      cmp ebx, 0x419
+  0x1007b0d2  75 2A                  jne 0x1007b0fe
+  0x1007b0d4  8B 9E 84 01 00 00      mov ebx, dword ptr [esi + 0x184]
+  0x1007b0da  81 FB 22 05 00 00      cmp ebx, 0x522
+  0x1007b0e0  75 1C                  jne 0x1007b0fe
+  0x1007b0e2  8B 9E B8 03 00 00      mov ebx, dword ptr [esi + 0x3b8]
+
+0x100dba72 func 0x100dba50
+  0x100dba72  8B BB 04 08 00 00      mov edi, dword ptr [ebx + 0x804]
+  0x100dba78  8B BF E8 02 00 00      mov edi, dword ptr [edi + 0x2e8]
+  0x100dba7e  81 FF 46 04 00 00      cmp edi, 0x446
+  0x100dba84  75 76                  jne 0x100dbafc
+  0x100dba86  8B BB 04 08 00 00      mov edi, dword ptr [ebx + 0x804]
+  0x100dba8c  8B BF EC 02 00 00      mov edi, dword ptr [edi + 0x2ec]
+  0x100dba92  83 FF 00               cmp edi, 0
+  0x100dba95  7E 65                  jle 0x100dbafc
+  0x100dba97  2B C7                  sub eax, edi
+  0x100dba99  8B 55 FC               mov edx, dword ptr [ebp - 4]
+
+0x100dba86 func 0x100dba50
+  0x100dba86  8B BB 04 08 00 00      mov edi, dword ptr [ebx + 0x804]
+  0x100dba8c  8B BF EC 02 00 00      mov edi, dword ptr [edi + 0x2ec]
+  0x100dba92  83 FF 00               cmp edi, 0
+  0x100dba95  7E 65                  jle 0x100dbafc
+  0x100dba97  2B C7                  sub eax, edi
+  0x100dba99  8B 55 FC               mov edx, dword ptr [ebp - 4]
+  0x100dba9c  03 D7                  add edx, edi
+  0x100dba9e  2B D0                  sub edx, eax
+  0x100dbaa0  7C 5A                  jl 0x100dbafc
+  0x100dbaa2  42                     inc edx
+
+0x100dbb1d func 0x100dba50
+  0x100dbb1d  8B 93 04 08 00 00      mov edx, dword ptr [ebx + 0x804]
+  0x100dbb23  8B 82 F8 02 00 00      mov eax, dword ptr [edx + 0x2f8]
+  0x100dbb29  3D 48 04 00 00         cmp eax, 0x448
+  0x100dbb2e  75 0E                  jne 0x100dbb3e
+  0x100dbb30  8B 82 FC 02 00 00      mov eax, dword ptr [edx + 0x2fc]
+  0x100dbb36  83 F8 00               cmp eax, 0
+  0x100dbb39  7E 03                  jle 0x100dbb3e
+  0x100dbb3b  89 45 FC               mov dword ptr [ebp - 4], eax
+  0x100dbb3e  8B 82 28 03 00 00      mov eax, dword ptr [edx + 0x328]
+  0x100dbb44  3D 4E 04 00 00         cmp eax, 0x44e
+
+=== init 0x100CE4EA region (try 8 alignments) ===
+
+-- start 0x100ce4ea --
+  0x100ce4ea  6A 31                  push 0x31
+  0x100ce4ec  BA 01 00 00 00         mov edx, 1
+  0x100ce4f1  8B CF                  mov ecx, edi
+  0x100ce4f3  E8 48 7B F8 FF         call 0x10056040
+  0x100ce4f8  83 C4 04               add esp, 4
+  0x100ce4fb  3D 22 05 00 00         cmp eax, 0x522
+  0x100ce500  74 60                  je 0x100ce562
+  0x100ce502  BE 01 00 00 00         mov esi, 1
+  0x100ce507  89 B5 64 FF FF FF      mov dword ptr [ebp - 0x9c], esi
+  0x100ce50d  81 FE 96 00 00 00      cmp esi, 0x96
+  0x100ce513  7F 4D                  jg 0x100ce562
+  0x100ce515  8B CF                  mov ecx, edi
+  0x100ce517  83 FE 31               cmp esi, 0x31
+  0x100ce51a  75 11                  jne 0x100ce52d
+  0x100ce51c  68 22 05 00 00         push 0x522
+  0x100ce521  56                     push esi
+  0x100ce522  E8 D9 FC FF FF         call 0x100ce200
+  0x100ce527  83 C4 08               add esp, 8
+  0x100ce52a  46                     inc esi
+  0x100ce52b  EB DA                  jmp 0x100ce507
+  0x100ce52d  56                     push esi
+  0x100ce52e  BA 01 00 00 00         mov edx, 1
+  0x100ce533  E8 08 7B F8 FF         call 0x10056040
+  0x100ce538  83 C4 04               add esp, 4
+  0x100ce53b  85 C0                  test eax, eax
+  0x100ce53d  79 20                  jns 0x100ce55f
+  0x100ce53f  8B CF                  mov ecx, edi
+  0x100ce541  83 FE 09               cmp esi, 9
+  landed_on_known_calls=True
+
+-- start 0x100ce4e9 --
+  0x100ce4e9  FF 6A 31               jmp ptr [edx + 0x31]
+  0x100ce4ec  BA 01 00 00 00         mov edx, 1
+  0x100ce4f1  8B CF                  mov ecx, edi
+  0x100ce4f3  E8 48 7B F8 FF         call 0x10056040
+  0x100ce4f8  83 C4 04               add esp, 4
+  0x100ce4fb  3D 22 05 00 00         cmp eax, 0x522
+  0x100ce500  74 60                  je 0x100ce562
+  0x100ce502  BE 01 00 00 00         mov esi, 1
+  0x100ce507  89 B5 64 FF FF FF      mov dword ptr [ebp - 0x9c], esi
+  0x100ce50d  81 FE 96 00 00 00      cmp esi, 0x96
+  0x100ce513  7F 4D                  jg 0x100ce562
+  0x100ce515  8B CF                  mov ecx, edi
+  0x100ce517  83 FE 31               cmp esi, 0x31
+  0x100ce51a  75 11                  jne 0x100ce52d
+  0x100ce51c  68 22 05 00 00         push 0x522
+  0x100ce521  56                     push esi
+  0x100ce522  E8 D9 FC FF FF         call 0x100ce200
+  0x100ce527  83 C4 08               add esp, 8
+  0x100ce52a  46                     inc esi
+  0x100ce52b  EB DA                  jmp 0x100ce507
+  0x100ce52d  56                     push esi
+  0x100ce52e  BA 01 00 00 00         mov edx, 1
+  0x100ce533  E8 08 7B F8 FF         call 0x10056040
+  0x100ce538  83 C4 04               add esp, 4
+  0x100ce53b  85 C0                  test eax, eax
+  0x100ce53d  79 20                  jns 0x100ce55f
+  0x100ce53f  8B CF                  mov ecx, edi
+  0x100ce541  83 FE 09               cmp esi, 9
+  landed_on_known_calls=True
+
+-- start 0x100ce4e8 --
+  0x100ce4e8  F3 FF 6A 31            jmp ptr [edx + 0x31]
+  0x100ce4ec  BA 01 00 00 00         mov edx, 1
+  0x100ce4f1  8B CF                  mov ecx, edi
+  0x100ce4f3  E8 48 7B F8 FF         call 0x10056040
+  0x100ce4f8  83 C4 04               add esp, 4
+  0x100ce4fb  3D 22 05 00 00         cmp eax, 0x522
+  0x100ce500  74 60                  je 0x100ce562
+  0x100ce502  BE 01 00 00 00         mov esi, 1
+  0x100ce507  89 B5 64 FF FF FF      mov dword ptr [ebp - 0x9c], esi
+  0x100ce50d  81 FE 96 00 00 00      cmp esi, 0x96
+  0x100ce513  7F 4D                  jg 0x100ce562
+  0x100ce515  8B CF                  mov ecx, edi
+  0x100ce517  83 FE 31               cmp esi, 0x31
+  0x100ce51a  75 11                  jne 0x100ce52d
+  0x100ce51c  68 22 05 00 00         push 0x522
+  0x100ce521  56                     push esi
+  0x100ce522  E8 D9 FC FF FF         call 0x100ce200
+  0x100ce527  83 C4 08               add esp, 8
+  0x100ce52a  46                     inc esi
+  0x100ce52b  EB DA                  jmp 0x100ce507
+  0x100ce52d  56                     push esi
+  0x100ce52e  BA 01 00 00 00         mov edx, 1
+  0x100ce533  E8 08 7B F8 FF         call 0x10056040
+  0x100ce538  83 C4 04               add esp, 4
+  0x100ce53b  85 C0                  test eax, eax
+  0x100ce53d  79 20                  jns 0x100ce55f
+  0x100ce53f  8B CF                  mov ecx, edi
+  0x100ce541  83 FE 09               cmp esi, 9
+  landed_on_known_calls=True
+
+-- start 0x100ce4e7 --
+  0x100ce4e7  D2 F3                  sal bl, cl
+  0x100ce4e9  FF 6A 31               jmp ptr [edx + 0x31]
+  0x100ce4ec  BA 01 00 00 00         mov edx, 1
+  0x100ce4f1  8B CF                  mov ecx, edi
+  0x100ce4f3  E8 48 7B F8 FF         call 0x10056040
+  0x100ce4f8  83 C4 04               add esp, 4
+  0x100ce4fb  3D 22 05 00 00         cmp eax, 0x522
+  0x100ce500  74 60                  je 0x100ce562
+  0x100ce502  BE 01 00 00 00         mov esi, 1
+  0x100ce507  89 B5 64 FF FF FF      mov dword ptr [ebp - 0x9c], esi
+  0x100ce50d  81 FE 96 00 00 00      cmp esi, 0x96
+  0x100ce513  7F 4D                  jg 0x100ce562
+  0x100ce515  8B CF                  mov ecx, edi
+  0x100ce517  83 FE 31               cmp esi, 0x31
+  0x100ce51a  75 11                  jne 0x100ce52d
+  0x100ce51c  68 22 05 00 00         push 0x522
+  0x100ce521  56                     push esi
+  0x100ce522  E8 D9 FC FF FF         call 0x100ce200
+  0x100ce527  83 C4 08               add esp, 8
+  0x100ce52a  46                     inc esi
+  0x100ce52b  EB DA                  jmp 0x100ce507
+  0x100ce52d  56                     push esi
+  0x100ce52e  BA 01 00 00 00         mov edx, 1
+  0x100ce533  E8 08 7B F8 FF         call 0x10056040
+  0x100ce538  83 C4 04               add esp, 4
+  0x100ce53b  85 C0                  test eax, eax
+  0x100ce53d  79 20                  jns 0x100ce55f
+  0x100ce53f  8B CF                  mov ecx, edi
+  landed_on_known_calls=True
+
+-- start 0x100ce4e6 --
+  0x100ce4e6  26 D2 F3               sal bl, cl
+  0x100ce4e9  FF 6A 31               jmp ptr [edx + 0x31]
+  0x100ce4ec  BA 01 00 00 00         mov edx, 1
+  0x100ce4f1  8B CF                  mov ecx, edi
+  0x100ce4f3  E8 48 7B F8 FF         call 0x10056040
+  0x100ce4f8  83 C4 04               add esp, 4
+  0x100ce4fb  3D 22 05 00 00         cmp eax, 0x522
+  0x100ce500  74 60                  je 0x100ce562
+  0x100ce502  BE 01 00 00 00         mov esi, 1
+  0x100ce507  89 B5 64 FF FF FF      mov dword ptr [ebp - 0x9c], esi
+  0x100ce50d  81 FE 96 00 00 00      cmp esi, 0x96
+  0x100ce513  7F 4D                  jg 0x100ce562
+  0x100ce515  8B CF                  mov ecx, edi
+  0x100ce517  83 FE 31               cmp esi, 0x31
+  0x100ce51a  75 11                  jne 0x100ce52d
+  0x100ce51c  68 22 05 00 00         push 0x522
+  0x100ce521  56                     push esi
+  0x100ce522  E8 D9 FC FF FF         call 0x100ce200
+  0x100ce527  83 C4 08               add esp, 8
+  0x100ce52a  46                     inc esi
+  0x100ce52b  EB DA                  jmp 0x100ce507
+  0x100ce52d  56                     push esi
+  0x100ce52e  BA 01 00 00 00         mov edx, 1
+  0x100ce533  E8 08 7B F8 FF         call 0x10056040
+  0x100ce538  83 C4 04               add esp, 4
+  0x100ce53b  85 C0                  test eax, eax
+  0x100ce53d  79 20                  jns 0x100ce55f
+  0x100ce53f  8B CF                  mov ecx, edi
+  landed_on_known_calls=True
+
+-- start 0x100ce4e5 --
+  0x100ce4e5  E8 26 D2 F3 FF         call 0x1000b710
+  0x100ce4ea  6A 31                  push 0x31
+  0x100ce4ec  BA 01 00 00 00         mov edx, 1
+  0x100ce4f1  8B CF                  mov ecx, edi
+  0x100ce4f3  E8 48 7B F8 FF         call 0x10056040
+  0x100ce4f8  83 C4 04               add esp, 4
+  0x100ce4fb  3D 22 05 00 00         cmp eax, 0x522
+  0x100ce500  74 60                  je 0x100ce562
+  0x100ce502  BE 01 00 00 00         mov esi, 1
+  0x100ce507  89 B5 64 FF FF FF      mov dword ptr [ebp - 0x9c], esi
+  0x100ce50d  81 FE 96 00 00 00      cmp esi, 0x96
+  0x100ce513  7F 4D                  jg 0x100ce562
+  0x100ce515  8B CF                  mov ecx, edi
+  0x100ce517  83 FE 31               cmp esi, 0x31
+  0x100ce51a  75 11                  jne 0x100ce52d
+  0x100ce51c  68 22 05 00 00         push 0x522
+  0x100ce521  56                     push esi
+  0x100ce522  E8 D9 FC FF FF         call 0x100ce200
+  0x100ce527  83 C4 08               add esp, 8
+  0x100ce52a  46                     inc esi
+  0x100ce52b  EB DA                  jmp 0x100ce507
+  0x100ce52d  56                     push esi
+  0x100ce52e  BA 01 00 00 00         mov edx, 1
+  0x100ce533  E8 08 7B F8 FF         call 0x10056040
+  0x100ce538  83 C4 04               add esp, 4
+  0x100ce53b  85 C0                  test eax, eax
+  0x100ce53d  79 20                  jns 0x100ce55f
+  0x100ce53f  8B CF                  mov ecx, edi
+  landed_on_known_calls=True
+
+-- start 0x100ce4e4 --
+  landed_on_known_calls=False
+
+-- start 0x100ce4e3 --
+  landed_on_known_calls=False
+
+=== GetS wrapper 0x10056040 ===
+  0x10056040  55                     push ebp
+  0x10056041  8B EC                  mov ebp, esp
+  0x10056043  83 EC 10               sub esp, 0x10
+  0x10056046  53                     push ebx
+  0x10056047  56                     push esi
+  0x10056048  57                     push edi
+  0x10056049  89 55 F8               mov dword ptr [ebp - 8], edx
+  0x1005604c  89 4D F4               mov dword ptr [ebp - 0xc], ecx
+  0x1005604f  C7 45 F0 B4 F1 6D 00   mov dword ptr [ebp - 0x10], 0x6df1b4
+  0x10056056  C7 45 FC FF FF FF FF   mov dword ptr [ebp - 4], 0xffffffff
+  0x1005605d  60                     pushal 
+  0x1005605e  8B 55 F8               mov edx, dword ptr [ebp - 8]
+  0x10056061  8B 4D 08               mov ecx, dword ptr [ebp + 8]
+  0x10056064  8B 45 F4               mov eax, dword ptr [ebp - 0xc]
+  0x10056067  FF 55 F0               call dword ptr [ebp - 0x10]
+  0x1005606a  89 45 FC               mov dword ptr [ebp - 4], eax
+  0x1005606d  61                     popal 
+  0x1005606e  8B 45 FC               mov eax, dword ptr [ebp - 4]
+  0x10056071  5F                     pop edi
+  0x10056072  5E                     pop esi
+
+=== engine GetS/SetS ===
+
+# GetS @0x6df1b4 bytes 55 8B EC 53 56 8B D8 83 CE FF 85 C9 7E 1C 85 D2 7E 18 8B C3 E8 FF 50 00
+  0x6df1b4  55                     push ebp
+  0x6df1b5  8B EC                  mov ebp, esp
+  0x6df1b7  53                     push ebx
+  0x6df1b8  56                     push esi
+  0x6df1b9  8B D8                  mov ebx, eax
+  0x6df1bb  83 CE FF               or esi, 0xffffffff
+  0x6df1be  85 C9                  test ecx, ecx
+  0x6df1c0  7E 1C                  jle 0x6df1de
+  0x6df1c2  85 D2                  test edx, edx
+  0x6df1c4  7E 18                  jle 0x6df1de
+  0x6df1c6  8B C3                  mov eax, ebx
+  0x6df1c8  E8 FF 50 00 00         call 0x6e42cc
+  0x6df1cd  8B C8                  mov ecx, eax
+  0x6df1cf  8B 93 04 08 00 00      mov edx, dword ptr [ebx + 0x804]
+  0x6df1d5  8B C3                  mov eax, ebx
+  0x6df1d7  E8 94 50 00 00         call 0x6e4270
+
+# SetS @0x6df240 bytes 55 8B EC 83 C4 F8 53 56 57 8B F9 8B F2 8B D8 33 C0 85 FF 7E 28 85 F6 7E
+  0x6df240  55                     push ebp
+  0x6df241  8B EC                  mov ebp, esp
+  0x6df243  83 C4 F8               add esp, -8
+  0x6df246  53                     push ebx
+  0x6df247  56                     push esi
+  0x6df248  57                     push edi
+  0x6df249  8B F9                  mov edi, ecx
+  0x6df24b  8B F2                  mov esi, edx
+  0x6df24d  8B D8                  mov ebx, eax
+  0x6df24f  33 C0                  xor eax, eax
+  0x6df251  85 FF                  test edi, edi
+  0x6df253  7E 28                  jle 0x6df27d
+  0x6df255  85 F6                  test esi, esi
+  0x6df257  7E 24                  jle 0x6df27d
+  0x6df259  8B CF                  mov ecx, edi
+  0x6df25b  8B D6                  mov edx, esi
+
+# flat_key imul 1000 @0x6e42cc bytes 69 C2 E8 03 00 00 03 C1 C3 8D 40 00
+  0x6e42cc  69 C2 E8 03 00 00      imul eax, edx, 0x3e8
+  0x6e42d2  03 C1                  add eax, ecx
+  0x6e42d4  C3                     ret 
+  0x6e42d5  8D 40 00               lea eax, [eax]
+  0x6e42d8  55                     push ebp
+  0x6e42d9  8B EC                  mov ebp, esp
+  0x6e42db  53                     push ebx
+  0x6e42dc  83 FA 18               cmp edx, 0x18
+
+# S-bank binary search @0x6e4270 bytes 55 8B EC 51 56 57 8B F9 8B F2 C7 45 FC FF FF FF FF 8B C6 E8 00 28 D2 FF
+  0x6e4270  55                     push ebp
+  0x6e4271  8B EC                  mov ebp, esp
+  0x6e4273  51                     push ecx
+  0x6e4274  56                     push esi
+  0x6e4275  57                     push edi
+  0x6e4276  8B F9                  mov edi, ecx
+  0x6e4278  8B F2                  mov esi, edx
+  0x6e427a  C7 45 FC FF FF FF FF   mov dword ptr [ebp - 4], 0xffffffff
+  0x6e4281  8B C6                  mov eax, esi
+  0x6e4283  E8 00 28 D2 FF         call 0x406a88
+  0x6e4288  85 C0                  test eax, eax
+  0x6e428a  74 35                  je 0x6e42c1
+  0x6e428c  33 D2                  xor edx, edx
+  0x6e428e  8B C8                  mov ecx, eax
+  0x6e4290  49                     dec ecx
+  0x6e4291  3B CA                  cmp ecx, edx
+
+=== failed trampolines ===
+  site 0x100b39b3 label=火墙设置时间上限(已启动) builder=0x10032fd0 count=20
+  site 0x100b8776 label=中毒时间上限(已重设) builder=0x10032fd0 count=18
+  site 0x100b87bf label=中毒时间上限(已重设) builder=0x10032fd0 count=19
+  site 0x100b9f9e label=装备提升人物爆率(已重设) builder=0x10032fd0 count=46
+  site 0x100d120a label=永久属性(已启动) builder=0x10032cc0 count=184
+  site 0x100d3509 label=新穿戴触发(已启动) builder=0x10032cc0 count=304
+  site 0x100d4417 label=英雄穿戴触发(已启动) builder=0x10032cc0 count=308
+  site 0x100d569e label=装备来源(已启动) builder=0x10032cc0 count=219
+
+=== 0x100dba50 longer dump ===
+  0x100dba50  55                     push ebp
+  0x100dba51  8B EC                  mov ebp, esp
+  0x100dba53  53                     push ebx
+  0x100dba54  56                     push esi
+  0x100dba55  57                     push edi
+  0x100dba56  90                     nop 
+  0x100dba57  50                     push eax
+  0x100dba58  A1 F4 C5 31 10         mov eax, dword ptr [0x1031c5f4]
+  0x100dba5d  83 38 64               cmp dword ptr [eax], 0x64
+  0x100dba60  58                     pop eax
+  0x100dba61  0F 85 9A 00 00 00      jne 0x100dbb01
+  0x100dba67  60                     pushal 
+  0x100dba68  9C                     pushfd 
+  0x100dba69  33 C0                  xor eax, eax
+  0x100dba6b  50                     push eax
+  0x100dba6c  50                     push eax
+  0x100dba6d  50                     push eax
+  0x100dba6e  50                     push eax
+  0x100dba6f  8B 45 FC               mov eax, dword ptr [ebp - 4]
+  0x100dba72  8B BB 04 08 00 00      mov edi, dword ptr [ebx + 0x804]
+  0x100dba78  8B BF E8 02 00 00      mov edi, dword ptr [edi + 0x2e8]
+  0x100dba7e  81 FF 46 04 00 00      cmp edi, 0x446
+  0x100dba84  75 76                  jne 0x100dbafc
+  0x100dba86  8B BB 04 08 00 00      mov edi, dword ptr [ebx + 0x804]
+  0x100dba8c  8B BF EC 02 00 00      mov edi, dword ptr [edi + 0x2ec]
+  0x100dba92  83 FF 00               cmp edi, 0
+  0x100dba95  7E 65                  jle 0x100dbafc
+  0x100dba97  2B C7                  sub eax, edi
+  0x100dba99  8B 55 FC               mov edx, dword ptr [ebp - 4]
+  0x100dba9c  03 D7                  add edx, edi
+  0x100dba9e  2B D0                  sub edx, eax
+  0x100dbaa0  7C 5A                  jl 0x100dbafc
+  0x100dbaa2  42                     inc edx
+  0x100dbaa3  89 55 C0               mov dword ptr [ebp - 0x40], edx
+  0x100dbaa6  89 45 BC               mov dword ptr [ebp - 0x44], eax
+  0x100dbaa9  8B 45 0C               mov eax, dword ptr [ebp + 0xc]
+  0x100dbaac  2B C7                  sub eax, edi
+  0x100dbaae  8B 55 0C               mov edx, dword ptr [ebp + 0xc]
+  0x100dbab1  03 D7                  add edx, edi
+  0x100dbab3  2B D0                  sub edx, eax
+
+=== VM unique funcs: 255 / 275 entries ===
+  SETS-DETOUR push 0x102c6c70 / jmp 0x10c5fcd2 bytes 68 70 6C 2C 10 E9 81 11 B9 00

@@ -663,7 +663,7 @@ static void CheckNextSuccess(NormNpc npc)
     Equal(8, snapshot.PaidEntries, "Next success paid entries");
     Equal(8, snapshot.FreeEntries, "Next success free entries");
     Equal(2, player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        message.wIdent == Grobal2.RM_LINGFU_CHANGED),
         "Next success LingFu refreshes");
     Equal(1, M2Share.LogStringList.Count,
         "Next success selector 101 log count");

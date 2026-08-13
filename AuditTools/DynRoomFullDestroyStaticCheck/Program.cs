@@ -22,7 +22,6 @@ var pasBridge = Read(pasBridgePath);
 var objectManager = Read(objectManagerPath);
 var baseObject = Read(baseObjectPath);
 var localDb = Read(localDbPath);
-var memoryImage = File.ReadAllBytes(memoryImagePath);
 
 var fullDestroy = Slice(lifecycle, "FUNCTION 0x005FDD08-0x005FDEF1 sub_5FDD08", "XREFS TO 0x005FDD08");
 AssertOrdered(fullDestroy,

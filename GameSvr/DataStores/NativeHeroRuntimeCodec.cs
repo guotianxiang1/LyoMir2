@@ -149,6 +149,17 @@ namespace GameSvr
             hero.HeroRank = record.HeroRank;
             hero.m_nForceExp = record.ForceExp;
             hero.m_nForceLv = record.ForceLv;
+            // 英雄模式（0 攻击 / 1 跟随 / 2 休息）是**持久化字段**，不是每次召唤重置成
+            // 构造函数默认的 1。原生解码 sub_6888FC：
+            //   688A9C  8A 83 9C 00 00 00     mov al,[record+0x9C]   ; ebx = 记录+8 -> 记录 +0xA4
+            //   688AA5  88 82 A1 06 00 00     mov [hero+0x6A1],al
+            // 原生编码 sub_689034：
+            //   68910A  8A 86 A1 06 00 00     mov al,[hero+0x6A1]
+            //   689110  88 83 9C 00 00 00     mov [record+0x9C],al
+            // 逐字节拷贝、不夹取值域：Run 只做 `cmp byte [+0x6A1],0`（0x68A1F5）和
+            // `cmp byte [+0x6A1],2`（0x68A4DA），>2 的脏值在原生等同「非攻击且非休息」。
+            hero.m_btNativeHeroMode =
+                (HeroObject.NativeHeroMode)raw[NativeHeroDbFrameCodec.HeroModeOffset];
             hero.m_btNativeUnionState = raw[NativeHeroDbFrameCodec.NativeUnionStateOffset];
             hero.m_wNativeUnionEnergy = BinaryPrimitives.ReadUInt16LittleEndian(
                 raw.AsSpan(NativeHeroDbFrameCodec.NativeUnionEnergyOffset, 2));
@@ -247,6 +258,8 @@ namespace GameSvr
                 raw.AsSpan(NativeHeroDbFrameCodec.ForceExpOffset, 4), hero.m_nForceExp);
             BinaryPrimitives.WriteInt32LittleEndian(
                 raw.AsSpan(NativeHeroDbFrameCodec.ForceLvOffset, 4), hero.m_nForceLv);
+            // sub_689034 @0x68910A/0x689110：英雄模式回写记录 +0xA4。
+            raw[NativeHeroDbFrameCodec.HeroModeOffset] = (byte)hero.m_btNativeHeroMode;
             raw[NativeHeroDbFrameCodec.NativeUnionStateOffset] = hero.m_btNativeUnionState;
             BinaryPrimitives.WriteUInt16LittleEndian(
                 raw.AsSpan(NativeHeroDbFrameCodec.NativeUnionEnergyOffset, 2),

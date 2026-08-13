@@ -87,14 +87,38 @@ try
     Equal(1, ordered[1].Category, "强化 is the second distinct class -> 1");
     Equal(0, ordered[2].Category, "装饰 again reuses category 0");
 
-    // 4) 生产脚本必须能解析出商品；旧解析器在它上面是 0 条。
-    var productionPath = args.Length > 0 ? Path.GetFullPath(args[0]) : string.Empty;
+    // 4) 生产脚本必须能解析出商品，且每条字段与 case 分支逐字对得上。
+    //    旧解析器要求 `C_NeedLoadGoodsNames =` 与 `'名': Result := '…'`，生产文件
+    //    是 `C_NeedLoadGoodsNames_001 =` + case 赋值，整表 0 条。
+    var productionPath = args.Length > 0
+        ? Path.GetFullPath(args[0])
+        : @"D:\光头卧龙\mud2.0\Mir200\Envir\YBShop\YBShopScript.pas";
     var productionCount = -1;
-    if (productionPath.Length > 0 && File.Exists(productionPath))
+    if (File.Exists(productionPath))
     {
-        productionCount = LoadAll(load, manager, productionPath).Count;
-        Assert(productionCount > 0,
-            "production YBShopScript.pas still parses to zero goods");
+        var production = LoadAll(load, manager, productionPath);
+        productionCount = production.Count;
+        Equal(10, productionCount, "production YBShopScript.pas item count");
+        EqualStr("贵族斗笠", production[0].ItemName, "prod[0] name");
+        Equal(0, production[0].Category, "prod[0] 装饰 is first-seen category 0");
+        Equal(222, production[0].Id, "prod[0] vGoodsIdx");
+        Equal(2000, production[0].Price, "prod[0] vSrcPrice");
+        Equal(2000, production[0].CurPrice, "prod[0] vCurPrice");
+        Equal(0, production[0].LimitType, "prod[0] vLimitType");
+        Equal(0, production[0].LimitCount, "prod[0] vLimitCount");
+        Equal(520, production[0].EffectImg, "prod[0] vEffectImg");
+        Equal(18, production[0].EffectCount, "prod[0] vEffectCount");
+        Equal(1, production[4].Category, "prod 随机传送石 强化 is first-seen category 1, not 2");
+        Equal(247, production[4].Id, "prod 随机传送石 vGoodsIdx");
+        Equal(218, production[5].Id, "prod 盟重传送石 vGoodsIdx");
+        Equal(1, production[5].Category, "prod 盟重传送石 reuses 强化 = 1");
+        Equal(50, production[9].CurPrice, "prod 疗伤药包 vCurPrice");
+        // 生产限购槽位：GetLimitValue 是 `Result := 0;` 空桩，CollectLimitSlots 必须是空表。
+        var slotsField = managerType.GetField("_limitSlots",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert(slotsField != null, "_limitSlots field missing");
+        var slots = (System.Collections.IDictionary)slotsField.GetValue(manager)!;
+        Equal(0, slots.Count, "production GetLimitValue is a stub; no S/V slots may be invented");
     }
 
     // 5) 源码形状：不许有任何本地货币扣减，结算闸必须在建物品与入包之前。
@@ -105,6 +129,22 @@ try
     Reject(mallSource, "m_nGameGold -=", "local yuanbao debit");
     Reject(mallSource, "SetShengWan(", "local shengwan debit");
     Reject(mallSource, "SetPlayerVariable(player, 'V'", "local V-bank debit");
+    Assert(mallSource.Contains("mallItem.CurPrice * quantity", StringComparison.Ordinal),
+        "purchase total must use vCurPrice, not vSrcPrice");
+
+    var mailSource = File.ReadAllText(Path.Combine(repositoryRoot,
+        "GameSvr", "Players", "TPlayObject.Mail.cs"));
+    Reject(mailSource, "m_nGold += record.MoneyCount",
+        "mail claim gold bypasses IncGold");
+    Assert(mailSource.Contains("IncGold(record.MoneyCount)", StringComparison.Ordinal),
+        "mail claim gold must go through IncGold (native 0x70B7DB call [vmt+0x28C])");
+
+    var mallListSource = File.ReadAllText(Path.Combine(repositoryRoot,
+        "GameSvr", "Players", "TPlayObject.Mall.cs"));
+    Reject(mallListSource, "stdItem.Looks == 0",
+        "Looks==0 skip drops native-visible shop rows");
+    Assert(mallListSource.Contains("item.EffectImg", StringComparison.Ordinal),
+        "Looks miss fallback must read vEffectImg (native 0x639DD6 mov ax,[rec+0x30])");
 
     var settleGate = mallSource.IndexOf("if (!TrySettleYuanbaoPayment", StringComparison.Ordinal);
     var itemAllocation = mallSource.IndexOf("var userItems", StringComparison.Ordinal);
@@ -287,6 +327,12 @@ static void Reject(string source, string value, string message)
 static void Equal(int expected, int actual, string message)
 {
     if (expected != actual)
+        throw new InvalidOperationException($"{message}: expected {expected}, actual {actual}");
+}
+
+static void EqualStr(string expected, string actual, string message)
+{
+    if (!string.Equals(expected, actual, StringComparison.Ordinal))
         throw new InvalidOperationException($"{message}: expected {expected}, actual {actual}");
 }
 

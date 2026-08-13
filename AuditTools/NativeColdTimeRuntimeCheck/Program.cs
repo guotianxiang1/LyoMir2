@@ -689,31 +689,7 @@ void PrepareRuntimeConfig()
 
 string FindRepoRoot()
 {
-    // This project's OutputPath is ..\..\..\Build\, i.e. D:\loym2\Build\...,
-    // which is OUTSIDE the repo -- walking up from BaseDirectory alone never
-    // reaches the root and throws. Same shape as ChatShieldExactCheck: try
-    // the working directory first, and at each level also probe a
-    // LyoMir2-master sibling so a Build\-relative start still resolves.
-    foreach (var start in new[]
-             { Environment.CurrentDirectory, AppContext.BaseDirectory })
-    {
-        for (var directory = new DirectoryInfo(start);
-             directory != null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")) &&
-                Directory.Exists(Path.Combine(directory.FullName, "GameSvr")))
-            {
-                return directory.FullName;
-            }
-            var sibling = Path.Combine(directory.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(sibling, "LyoMir2.sln")) &&
-                Directory.Exists(Path.Combine(sibling, "GameSvr")))
-            {
-                return sibling;
-            }
-        }
-    }
-    throw new DirectoryNotFoundException("repository root");
+    return AuditRepoRoot.Resolve();
 }
 
 void Assert(bool condition, string name)

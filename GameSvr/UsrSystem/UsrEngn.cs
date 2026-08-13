@@ -2502,24 +2502,11 @@ namespace GameSvr
                                 // every one of the 116 dword references passes the Delphi
                                 // self-pointer test dword[VMT-0x4C]==VMT and the
                                 // slot-offset histogram over all of them is {0x28: 116}.
-                                // So this Random(80) is native and stays.
-                                //
-                                // What did NOT survive is the pair of stock-Mir2 rolls
-                                // that used to follow it: `Random(nMonRandomAddValue)==0
-                                // -> RandomUpgradeItem` and the StdMode/Shape gate into
-                                // RandomUpgradeUnknownItem.  Neither has a counterpart in
-                                // 战神 — the drop function has exactly three Random call
-                                // sites (0x71FB76, 0x71FD3D, 0x71FD6B, all in the two
-                                // gold branches), the factory sub_74C338 has none, and
-                                // every config key those two paths read
-                                // (MonRandomAddValue, WeaponDCAddValue*, UnknowHelMet*)
-                                // is 0-hit across the whole image in GBK, bare ASCII and
-                                // UTF-16LE.  战神 does randomise extra attributes on some
-                                // drops, but through per-class +0x28 overrides with
-                                // hardcoded moduli (e.g. 0x7617A7 calls sub_783EFC then
-                                // Random(10)), which is a different mechanism and belongs
-                                // with the NativeItemFactory class-dispatch work.
-                                UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
+                                // 0x71FD9B xor edx,edx / 0x71FDA2 call [ecx+0x28].
+                                // Base +0x28 is 783EFC (Random(80) dura). Equipment
+                                // overrides add Random(10)/Random(9) and, on 0, the
+                                // extra-attr body. Pile +0x28 is 7882B4 C3 (no draw).
+                                NativeItemPlus28.ApplyOnDrop(UserItem, GetStdItem(UserItem.wIndex));
                                 mon.m_ItemList.Add(UserItem);
                             }
                         }
@@ -3847,15 +3834,24 @@ namespace GameSvr
             PlayObject.m_Abil.MaxWearWeight = HumData.Abil.MaxWearWeight;
             PlayObject.m_Abil.HandWeight = HumData.Abil.HandWeight;
             PlayObject.m_Abil.MaxHandWeight = HumData.Abil.MaxHandWeight;
-            PlayObject.m_wStatusTimeArr = HumData.wStatusTimeArr == null
-                ? new ushort[12]
+            // Load path of the legacy-slot trio (REPLICATION_RULES 4.19). The
+            // slots no longer have storage of their own; CopyFrom replays the
+            // saved seconds onto the native Self+0xDC node list, which is the
+            // single authority. Slot 11 (STATE_BUBBLEDEFENCEUP, native state 20)
+            // is still cleared here, matching the save path in
+            // TPlayObject.GetHumData - the two ends have to agree or a login
+            // would resurrect what the logout dropped.
+            // Zeroed before the replay, not after, so the restore stays silent:
+            // dropping the slot afterwards would go through the indexer and
+            // broadcast a removal for a player who is not on a map yet.
+            var restoredStatus = HumData.wStatusTimeArr == null
+                ? new ushort[TBaseObject.LegacyStatusSlotCount]
                 : (ushort[])HumData.wStatusTimeArr.Clone();
-            if (PlayObject.m_wStatusTimeArr.Length >
-                Grobal2.STATE_BUBBLEDEFENCEUP)
+            if (restoredStatus.Length > Grobal2.STATE_BUBBLEDEFENCEUP)
             {
-                PlayObject.m_wStatusTimeArr[
-                    Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
+                restoredStatus[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
             }
+            PlayObject.m_wStatusTimeArr.CopyFrom(restoredStatus);
             PlayObject.m_sHomeMap = HumData.sHomeMap;
             PlayObject.m_nHomeX = HumData.wHomeX;
             PlayObject.m_nHomeY = HumData.wHomeY;

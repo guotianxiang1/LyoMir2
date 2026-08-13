@@ -45,7 +45,7 @@ namespace GameSvr
                 }
                 ElfMon.m_WAbil = new TAbility();
                 ElfMon.m_WAbil.CopyFrom(OldMon.m_WAbil);
-                ElfMon.m_wStatusTimeArr = (ushort[])OldMon.m_wStatusTimeArr.Clone();
+                ElfMon.m_wStatusTimeArr.CopyFrom(OldMon.m_wStatusTimeArr.ToArray());
                 ElfMon.m_TargetCret = OldMon.m_TargetCret;
                 ElfMon.m_dwTargetFocusTick = OldMon.m_dwTargetFocusTick;
                 ElfMon.m_LastHiter = OldMon.m_LastHiter;

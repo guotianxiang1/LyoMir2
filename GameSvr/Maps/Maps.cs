@@ -250,6 +250,12 @@ namespace GameSvr
                             // OrdinalIgnoreCase 在这一点上是对的，错的是全等。
                             // HUtil32.CompareLStr 与 0x4C6E94 逐条同构。
                             // 直接后果：地图里写 MINE2 在原版命中 MINE、置 +0x6A=1。
+                            // 解析器 A 的同形簇在 0x77523D：
+                            //   0x77523D  B9 04 00 00 00     mov ecx,4
+                            //   0x775242  BA 74 5D 77 00     mov edx,0x775D74   ; "MINE"
+                            //   0x775249  E8 46 1C D5 FF     call 0x4C6E94
+                            //   0x775257  C6 43 6A 01        mov byte [ebx+0x6A],1
+                            //   0x775268  C6 43 6A 00        同址写 0（GM toggle=0 臂）
                             if (HUtil32.CompareLStr(s34, "MINE", "MINE".Length))
                             {
                                 MapFlag.boMINE = true;
@@ -338,6 +344,25 @@ namespace GameSvr
                             // boRUNHUMAN / boRUNMON / boNOHORSE / boNOHUMNOMON，
                             // 删字段会让它们编译不过（BUILD-ERROR 是盲区，比
                             // FAIL 更糟）。**不要重新接线。**
+                            //
+                            // 上面这份名单已由本分支独立复扫一遍复核通过（六种形态：
+                            // Delphi 记录 FFFFFFFF+len32+chars+NUL / len32+chars+NUL /
+                            // len8+chars+NUL / chars+NUL / 裸串 / UTF-16LE，全部
+                            // 大小写不敏感）：26 个里 25 个六形态皆 0；EXPRATE 的
+                            // 3 处裸命中经逐字节展开确认全是子串——
+                            //   0x6AD5F6  10 'MultiTempExpRate'      (ShortString len 0x10)
+                            //   0x72C759  FF FF FF FF 10 00 00 00 'MultiTempExpRate'
+                            //   0x7D0618  0A 'MonExpRate'            (ShortString len 0x0A)
+                            // 同一扫描器对真 token 的对照组各命中恰好 2 条 Delphi
+                            // 记录（MINE 0x775D74/0x776CA4、pickup 0x775FCC/0x776F44、
+                            // NORECALL 0x775D38/0x776C68、LimitItemMove 0x775FB4/
+                            // 0x776F2C、LIMITHEROLEVEL 0x775F10/0x776E40、
+                            // UNIFIEDLEVEL 0x775EDC/0x776E0C、LIMITPLAYERLEVEL
+                            // 0x775EF4/0x776E24、MapSign 0x775E04/0x776D44、
+                            // MAPFIREWALLBURN 0x775DEC/0x776D2C、FLYDROPITEM
+                            // 0x775E14/0x776D54），NORIDE 命中 1 条（池 B 独有
+                            // 0x776E8C）——与「池 A / 池 B 各一份」的结构吻合，
+                            // 说明 0 命中是真缺席而不是扫描器坏了。
                             if (!string.IsNullOrEmpty(s34) && s34[0] == 'L')
                             {
                                 MapFlag.nL = HUtil32.Str_ToInt(s34.Substring(1, s34.Length - 1), 1);
@@ -594,19 +619,68 @@ namespace GameSvr
                     unchecked(HUtil32.Str_ToInt(value, 0) * 1000);
                 return true;
             }
-            // FLYDROPITEM(+0xB4) 故意不加字段：它**不是数值标记**。
-            //   0x775464 mov esi,[ebx+0xB4] / test esi,esi
-            //   0x775470 mov eax,[0x49EB3C] / 0x775475 call 0x404660  ; 惰性 new
-            //   0x49EB3C -> VMT 0x49EB88，vmtClassName（VMT-0x2C）= 'TMirStringList'
-            //   0x775492 mov cl,0x2F ('/') / 0x775497 call 0x4C6AEC   ; 按 '/' 切分
-            //   0x7754B8 call [ecx+0x38]                              ; TStrings.Add
-            //   0x775486 / 0x7754DE call [edx+0x44]                   ; Clear
-            //   0x7754E7 / 0x775514 call 0x414C24                     ; FreeAndNil
-            // 也就是说 FLYDROPITEM(a/b/c) 存的是一张斜杠分隔的字符串表。
-            // MFLG 报告把它归进「5 个数值 flag」是错的。表项语义（物品名？
-            // 编号？）尚未取证，按规矩标 BLOCKED，不臆造字段类型。
-            // DORMANT gate: 0 consumers in 战神 binary (image-wide scan). Parser recognizes
-            // the token to match native domain, but no runtime code reads this field.
+            //   FLYDROPITEM      len 11  +0xB4 —— **不是数值**，是一张字符串表。
+            //     B 0x77651D B9 0B 00 00 00 mov ecx,0xB
+            //       0x776522 BA 54 6D 77 00 mov edx,0x776D54  ; "FLYDROPITEM"
+            //       0x77652A call 0x4C6E94
+            //       0x77654C call 0x4C6964                    ; 取 "(...)"
+            //       0x776551 cmp dword [ebp-0xC],0 / je 0x7765C2   ; 空参数臂
+            //       0x776557 cmp dword [ebx+0xB4],0 / jne 0x776574
+            //       0x776560 mov dl,1 / mov eax,[0x49EB3C] / call 0x404660
+            //       0x77656C mov [ebx+0xB4],eax                    ; 惰性 new
+            //       0x776574 mov eax,[ebx+0xB4] / mov edx,[eax] / 0x77657C
+            //                call [edx+0x44]                       ; 已存在则 Clear
+            //       0x776581 循环：0x776588 B1 2F mov cl,0x2F ('/') / 0x77658D
+            //                call 0x4C6AEC 切分，0x776598 余串写回
+            //       0x77659D cmp dword [ebp-0x10],0 / je            ; 空片跳过
+            //       0x7765AE call [ecx+0x38]                        ; TStrings.Add
+            //       0x7765B4 call 0x4057D0 / test eax,eax / 0x7765BB jg 0x776581
+            //                                                       ; do..while Len>0
+            //       0x7765C2 空参数：Clear 后 0x7765DA lea eax,[ebx+0xB4] /
+            //                0x7765E0 call 0x414C24 (FreeAndNil) -> null
+            //     A 0x775452..0x7754C7 同形。
+            //   类型不是猜的：classref [0x49EB3C]=0x49EB88，VMT-0x2C=0x49EC20 处
+            //   的 ShortString 为 len=14 'TMirStringList'。
+            //   表项语义先前被标 BLOCKED（「物品名还是编号？」），消费点已经定案
+            //   是**物品名**：sub_77BA38(eax=mapflag, edx=name)
+            //       0x77BA59 mov esi,[ebx+0xB4] / test esi,esi / je    ; 无表 -> false
+            //       0x77BA67 call [edx+0x14] / test eax,eax / jle      ; Count<=0 -> false
+            //       0x77BA71 mov eax,[ebx+0xB4] / 0x77BA79 call [ecx+0x54]  ; IndexOf
+            //       0x77BA7C 40 inc eax / 0x77BA7D 0F 9F C0 setg al    ; IndexOf >= 0
+            //   其唯一调用点喂进去的就是物品名：0x6B73F9 mov eax,[edi+0x128] /
+            //   0x6B73FF cmp dword [eax+0xB4],0 / je 0x6B74A3（存在性门），再
+            //   0x6B740C lea edx,[ebp-8] / call 0x784568，而 sub_784568 是
+            //   0x784573 mov edx,[ebx+0x1C] / add edx,4，即取物品 StdItem 的 Name。
+            //   C# 侧只复刻解析与存储；0x6B73FF 那道门尚无对应实现（NOT WIRED）。
+            if (HUtil32.CompareLStr(token, "FLYDROPITEM", "FLYDROPITEM".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                if (string.IsNullOrEmpty(value))
+                {
+                    mapFlag.FlyDropItemNames = null;
+                    return true;
+                }
+                if (mapFlag.FlyDropItemNames == null)
+                {
+                    mapFlag.FlyDropItemNames = new List<string>();
+                }
+                else
+                {
+                    mapFlag.FlyDropItemNames.Clear();
+                }
+                var remaining = value;
+                var piece = string.Empty;
+                do
+                {
+                    remaining = HUtil32.GetValidStr3(remaining, ref piece, "/");
+                    if (piece != "")
+                    {
+                        mapFlag.FlyDropItemNames.Add(piece);
+                    }
+                } while (remaining.Length > 0);
+                return true;
+            }
             if (token.Equals("NOMAGIC", StringComparison.OrdinalIgnoreCase))
             {
                 mapFlag.boNOMAGIC = true;

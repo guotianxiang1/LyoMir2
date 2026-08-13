@@ -267,8 +267,14 @@ namespace GameSvr
         public static string g_sTheWeaponBroke = "武器破碎!!!";
         public static string sTheWeaponRefineSuccessfull = "升级成功!!!";
         public static string sYouPoisoned = "中毒?!!!";
-        public static string sPetRest = "下属：休?";
-        public static string sPetAttack = "下属：攻?";
+        // @Rest (dispatch index 27) receipts. Delphi long strings, length dword at ptr-4:
+        //   0x62B8D8 len 14  CF C2 CA F4 D0 D0 B6 AF 3A 20 D0 DD CF A2  '下属行动: 休息'
+        //   0x62B8F0 len 14  CF C2 CA F4 D0 D0 B6 AF 3A 20 B9 A5 BB F7  '下属行动: 攻击'
+        //   0x62B908 len 14  B8 C3 B5 D8 CD BC CE DE B7 A8 CA B9 D3 C3  '该地图无法使用'
+        // The separator is ASCII colon 0x3A + ASCII space 0x20, not a full-width colon.
+        public static string sPetRest = "下属行动: 休息";
+        public static string sPetAttack = "下属行动: 攻击";
+        public static string sPetRestMapForbidden = "该地图无法使用";
         public static string sWearNotOfWoMan = "非女性用?!!!";
         public static string sWearNotOfMan = "非男性用?!!!";
         public static string sHandWeightNot = "腕力不够!!!";

@@ -35,6 +35,28 @@ namespace GameSvr
             AddTimedAbilityInternal(internalType, value, duration, 0);
         }
 
+        /// <summary>
+        /// Native <c>MakePosion</c> = VMT+0xC8 @0x76B3C8 taken by state id rather
+        /// than by legacy poison slot. The public <see cref="MakePosion"/> gates on
+        /// <c>nType &lt; MAX_STATUS_ATTRIBUTE</c> (12) because it also mirrors into
+        /// the legacy <c>m_wStatusTimeArr</c>; native has no such gate — it hands
+        /// <c>dl</c> straight to AddState. TDebuffTrapEvent needs ids 0x11 and 0x18,
+        /// which have no legacy slot (slots 0..11 map to state ids 31..20), so there
+        /// is nothing to mirror and the gate would just swallow the call.
+        /// <para>
+        /// Body reproduced: @0x76B413 <c>imul ecx, eax, 0x3E8</c> (seconds to ms)
+        /// then @0x76B41F <c>call [ebx+0x1EC]</c> = AddState(id, ms, flag 0, value).
+        /// The ImmuneCheck (@0x76B3D8), the state-0x34 veto (@0x76B3E1) and the
+        /// "id 0x12 removes 0x1A" companion (@0x76B3EE) all live inside
+        /// CanAddNativeTimedAbility / AddTimedAbilityInternal already.
+        /// </para>
+        /// </summary>
+        internal bool ApplyNativeStateSeconds(byte stateId, int seconds, int value)
+        {
+            return AddTimedAbilityInternal(stateId, value,
+                unchecked(seconds * 1000), 0);
+        }
+
         private bool AddTimedAbilityInternal(byte internalType, int value,
             int duration, byte newNodeFlag)
         {
@@ -227,6 +249,7 @@ namespace GameSvr
             {
                 var next = node.Next;
                 SendTimedAbilityState(node, true);
+                OnNativeTimedStateLost(node.InternalType);
                 RemoveTimedAbilityCompanion(node.InternalType);
                 if (RequiresTimedAbilityRecalc(node.InternalType))
                 {
@@ -271,6 +294,7 @@ namespace GameSvr
                     }
 
                     SendTimedAbilityState(node, true);
+                    OnNativeTimedStateLost(node.InternalType);
                     RemoveTimedAbilityCompanion(node.InternalType);
                     if (RequiresTimedAbilityRecalc(node.InternalType))
                     {
@@ -290,6 +314,59 @@ namespace GameSvr
             if (internalType == 20)
             {
                 RemoveTimedAbilityInternal(19);
+            }
+        }
+
+        /// <summary>
+        /// Per-state work on expiry. Native runs this from the state-lost
+        /// virtual (base 0x77337C, TPlayObject override 0x741578) and dispatches
+        /// on the record's type byte at 0x742692:
+        ///   0x742692  33 C0                 xor eax, eax
+        ///   0x742694  8A C3                 mov al, bl          ; node type
+        ///   0x742696  83 C0 F2              add eax, -0xE
+        ///   0x742699  83 F8 5C              cmp eax, 0x5C
+        ///   0x74269C  0F 87 A0 05 00 00     ja  0x742C42        ; silent default
+        ///   0x7426A2  FF 24 85 A9 26 74 00  jmp [eax*4+0x7426A9]
+        /// so the message domain is state 14..106 and everything outside is
+        /// silent. Each speaking arm is `mov cx,0xFFDB / mov edx,&lt;str&gt; /
+        /// call [vmt+0xD4]`, i.e. colour 0xDB, type 0xFF - the same pair the
+        /// state-75 arm already uses.
+        ///
+        /// Only the arms the legacy per-second loop used to own are wired up
+        /// here; the rest of the 46-arm table is catalogued in
+        /// docs/m_state2_20260813.md and is still MISSING.
+        /// </summary>
+        private void OnNativeTimedStateLost(byte internalType)
+        {
+            switch (internalType)
+            {
+                case 23:
+                    // Legacy slot 8. Native has no separate hide flag - 0x76B438
+                    // derives it as `[self+0x2E4] != 0 || HasState(0x17)` - but
+                    // C# still carries m_boHideMode, so it has to be cleared
+                    // where the state dies.
+                    m_boHideMode = false;
+                    break;
+                case 22:
+                    // Legacy slot 9 (STATE_DEFENCEUP). Arm 0x74296D:
+                    //   74296D  66 B9 DB FF           mov cx, 0xFFDB
+                    //   742971  BA D8 33 74 00        mov edx, 0x7433D8
+                    //   74297A  FF 93 D4 00 00 00     call [ebx+0xD4]
+                    // 0x7433D8 is "防御力回复正常", Delphi length prefix 14.
+                    SysMsg("防御力回复正常", MsgColor.Green, MsgType.Hint);
+                    break;
+                case 21:
+                    // Legacy slot 10 (STATE_MAGDEFENCEUP). Arm 0x742955 points at
+                    // 0x7433BC "抗魔法力回复正常" (length prefix 16). C# said
+                    // "魔法防御力回复正常", which is a 0-hit string in the image
+                    // under GBK, raw ASCII and UTF-16LE.
+                    SysMsg("抗魔法力回复正常", MsgColor.Green, MsgType.Hint);
+                    break;
+                case 20:
+                    // Legacy slot 11 (STATE_BUBBLEDEFENCEUP). Silent in the
+                    // native table (index 20 - 14 = 6 maps to the default arm).
+                    m_boAbilMagBubbleDefence = false;
+                    break;
             }
         }
 
@@ -340,14 +417,32 @@ namespace GameSvr
                         //   773A66  01 87 14 03 00 00  add  [edi+0x314], eax
                         // 0x403580 sets RC=11 (`66 81 4C 24 02 00 0F  or word [esp+2],0xF00`)
                         // before fistp, so it truncates toward zero. The sibling helper
-                        // 0x403574 is a bare fistp on the default control word, which is
-                        // round-half-to-even - that is what MidpointRounding.ToEven modelled,
-                        // and this recompute never calls it.
-                        // Operand order is left as-is: native evaluates
-                        // current * (value / 100) in x87 extended precision, C# evaluates
-                        // (current * value) / 100 in double. Those can disagree in the last
-                        // bit right at an integer boundary; establishing which way needs a
-                        // measurement, so only the rounding mode is corrected here.
+                        // 0x403574 is a bare fistp on the default control word and therefore
+                        // rounds half to even; this recompute never calls it. `add [edi+0x314],
+                        // eax` consumes only the low dword of @TRUNC's qword result.
+                        //
+                        // Operand order and precision: native evaluates
+                        // current * (value / 100) on the x87 stack, C# evaluates
+                        // (current * value) / 100 in double. Delphi's control word lives at
+                        // 0x7A2024 = 0x1372 (fldcw sites 0x4034E8 / 0x4045C3), so PC=11 and
+                        // RC=00 - every native intermediate carries a 64-bit significand
+                        // rounded half-to-even, against double's 53.
+                        //
+                        // Measured, not assumed (staging/_x87_msched*.py emulates both
+                        // roundings with exact rationals):
+                        //  - The two forms agree wherever value/100 is exact in both widths,
+                        //    which covers every fixture this path is audited on.
+                        //  - They disagree by one unit on roughly 0.2% of (current, value)
+                        //    pairs even at small magnitudes. Smallest case: current=15,
+                        //    value=420. Native rounds 4.2 down to a 64-bit significand,
+                        //    15 * that = 62.999999999999999997, @TRUNC -> 62, result 77.
+                        //    C# gets 15*420 = 6300 then /100 = 63.0 exactly, result 78.
+                        //  - Merely swapping to current * (value / 100.0) in double does NOT
+                        //    close the gap; it mismatches on about the same fraction, because
+                        //    the residue comes from significand width, not from the order.
+                        // Reproducing native exactly needs 64-bit-significand emulation
+                        // (UInt128), which is a separate, separately audited change. The
+                        // ordering is left as-is because it is measurably no worse.
                         var percent = unchecked((int)(long)(
                             unchecked((uint)result) * (double)node.Value / 100.0));
                         result = unchecked(result + percent);

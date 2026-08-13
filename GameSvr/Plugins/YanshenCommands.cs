@@ -100,8 +100,6 @@ namespace GameSvr.Plugins
                     return new[] { "眼神特殊函数", "super攻击触发" };
                 case 19:
                     return new[] { "眼神特殊函数", "全屏拾取" };
-                case 23:
-                    return new[] { "眼神特殊函数", "怪物伤害触发技能特效" };
                 case 40:
                     return new[] { "眼神特殊函数", "指定技能id免伤" };
                 default:
@@ -160,7 +158,15 @@ namespace GameSvr.Plugins
         // ===== Parameter helpers =====
         int P(TunnelCommand c, int i) => i < c.Parameters.Length && int.TryParse(c.Parameters[i], out var v) ? v : 0;
         string S(TunnelCommand c, int i) => i < c.Parameters.Length ? c.Parameters[i] : "";
-        static int[] YS(TunnelCommand c, int s) { var r = new int[17]; for (int i = 0; i < 17 && s + i < c.Parameters.Length; i++) int.TryParse(c.Parameters[s + i], out r[i]); return r; }
+        // 数组按「实际存在的字段」定长，不补零：原生 0x10073B40 是逐段 vector::at()，
+        // 段数不够就抛异常，而不是把缺的当 0 写进物品。
+        static int[] YS(TunnelCommand c, int s)
+        {
+            var n = Math.Max(0, Math.Min(17, c.Parameters.Length - s));
+            var r = new int[n];
+            for (int i = 0; i < n; i++) int.TryParse(c.Parameters[s + i], out r[i]);
+            return r;
+        }
         static string PetAttrType(int flag) => flag switch
         {
             1 => "倍功", 2 => "暴击", 3 => "切割", 4 => "连击", 5 => "连击削弱", _ => ""
@@ -191,7 +197,11 @@ namespace GameSvr.Plugins
                     5 => cmd.Parameters.Length >= 10
                         ? _api.PoisonEffect(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9))
                         : _api.Poison(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8)),
-                    7 => _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2)),
+                    // 10070D7A 83F805 cmp eax,5 / 10070D7D 7319 jae —— 不足 5 段返回 -888
+                    // （10070D8E B888FCFFFF），和 15/24/33 的 -1 不是一个值。
+                    7 => cmd.Parameters.Length >= 3
+                        ? _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2))
+                        : -888,
                     8 => _api.LifeSteal(P(cmd,0),P(cmd,1)),
                     9 => cmd.Parameters.Length == 1
                         ? _api.RootTarget(P(cmd,0))
@@ -208,16 +218,26 @@ namespace GameSvr.Plugins
                         : cmd.Parameters.Length >= 9
                             ? _api.AddTempAttr(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8))
                             : _api.SubTempAttr(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7)),
-                    15 => _api.EquipDura(P(cmd,0),P(cmd,1),P(cmd,2)),
+                    // 10072650 处理器自带元数检查：1007269C 83F805 cmp eax,5 / 1007269F 7324 jae
+                    // 不足 5 段（前缀+id+3 参）走 100726B0 83C8FF or eax,-1。
+                    15 => cmd.Parameters.Length >= 3
+                        ? _api.EquipDura(P(cmd,0),P(cmd,1),P(cmd,2))
+                        : -1,
                     16 => _api.SendDirectMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),S(cmd,5)),
                     17 => _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     18 => _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     19 => _api.AutoPickup(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3)),
-                    20 => _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
+                    20 => cmd.Parameters.Length < 2
+                        ? -1
+                        : _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
                     21 => _api.CheckItemBind(S(cmd,0))?1:0,
                     22 => _api.SendGroundMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),S(cmd,6)),
                     23 => _api.SetPetAttr(S(cmd,11),P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9),P(cmd,10)),
-                    24 => _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1)),
+                    // 10073B8C 83F813 cmp eax,0x13 / 10073B8F 7324 jae —— 不足 19 段返回 -1
+                    // （10073BA0 83C8FF or eax,-1）。
+                    24 => cmd.Parameters.Length >= 17
+                        ? _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1))
+                        : -1,
                     25 => _api.SetLoopTimer(P(cmd,0),S(cmd,1)),
                     26 => _api.BounceSkill(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9)),
                     27 => _api.VacuumMonstersEx(P(cmd,0),P(cmd,1),P(cmd,2)),
@@ -226,7 +246,11 @@ namespace GameSvr.Plugins
                     30 => _api.GivePetSkill(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),S(cmd,4)),
                     31 => _api.GivePetSpecialAttr(P(cmd,1),P(cmd,2),PetAttrType(P(cmd,0)),S(cmd,3)),
                     32 => _api.GetItemExtreme(P(cmd,0),P(cmd,1),P(cmd,2)),
-                    33 => _api.BindUnbindItem(P(cmd,0),P(cmd,1)),
+                    // 100760AB 83F804 cmp eax,4 / 100760AE 7324 jae —— 不足 4 段返回 -1
+                    // （100760BF 83C8FF or eax,-1）。
+                    33 => cmd.Parameters.Length >= 2
+                        ? _api.BindUnbindItem(P(cmd,0),P(cmd,1))
+                        : -1,
                     34 => _api.HolyDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9)),
                     35 => _api.PetFollowAttack(P(cmd,0)),
                     36 => _api.GetBagWeight(P(cmd,0)),
@@ -326,9 +350,14 @@ namespace GameSvr.Plugins
             switch (cmd.ChineseCommand)
             {
                 case "plus伤害": return _api.CustomDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,4),P(cmd,3),P(cmd,5),P(cmd,6),P(cmd,7));
+                // 两条隧道的第一个字段是元素类型、第二个才是装备位，而
+                // Set/GetEquipElement 的形参顺序是 (装备位, 元素类型)，所以这里要交换。
+                // 给与元素 1005E8DD 把字段0 拿去和 1/0x11 比（类型），1005E8B2 拿字段1
+                // 去索引 [[Self+0x4C0]+idx*4+8]（装备位）；获取元素 1005EB9B 把字段1
+                // 限制在 0xF 以内（装备位），1005EBA4 把字段0 限制在 1..17（类型）。
                 case "给与元素":
-                case "给予元素": return _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2));
-                case "获取元素": return _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2));
+                case "给予元素": return _api.SetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
+                case "获取元素": return _api.GetEquipElement(P(cmd,1),P(cmd,0),P(cmd,2));
                 case "定义伤害":
                 case "攻击伤害": _api.DirectAttack(P(cmd,0),P(cmd,1)); return 0;
                 case "英雄极品": return _api.GetHeroExtreme(P(cmd,0),P(cmd,1));

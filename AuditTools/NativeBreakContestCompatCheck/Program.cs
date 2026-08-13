@@ -611,14 +611,16 @@ static FieldInfo FindField(Type type, string name)
     throw new MissingFieldException(type.FullName, name);
 }
 
+// The recorder rides M2Share.RandomNumber, the field the server assigns at
+// startup. It used to ride RandomNumber's private `random` field, which POIS-26
+// removed when the facade moved onto the Delphi LCG sub_403B4C (@0x403B4C
+// imul [0x7A2008],0x08088405 / inc / mul / take EDX); GetField then returned
+// null and this threw MissingFieldException out of the very first assertion
+// group, so none of the contest assertions below were running at all.
 static FixedRandom UseRandom(params int[] values)
 {
     var random = new FixedRandom(values);
-    FieldInfo randomField = typeof(RandomNumber).GetField("random",
-        BindingFlags.Static | BindingFlags.NonPublic) ??
-        throw new MissingFieldException(typeof(RandomNumber).FullName,
-            "random");
-    randomField.SetValue(null, random);
+    M2Share.RandomNumber = random;
     return random;
 }
 
@@ -706,7 +708,7 @@ static void Assert(bool condition, string message)
 
 readonly record struct ContestResult(int Bonus, ushort Combined, int Extra);
 
-sealed class FixedRandom : Random
+sealed class FixedRandom : RandomNumber
 {
     private readonly Queue<int> _values;
 
@@ -718,16 +720,28 @@ sealed class FixedRandom : Random
     internal List<int> MaxValues { get; } = new();
     internal int Calls => MaxValues.Count;
 
-    public override int Next(int maxValue)
+    public override int Random(int Value)
     {
-        MaxValues.Add(maxValue);
+        MaxValues.Add(Value);
         if (_values.Count == 0)
             throw new InvalidOperationException("unexpected RNG call");
         int value = _values.Dequeue();
-        if (value < 0 || value >= maxValue)
+        if (value < 0 || value >= Value)
             throw new ArgumentOutOfRangeException(nameof(value));
         return value;
     }
+
+    // The contest path draws only through the bounded entry. A parameterless
+    // advance or a min/max draw would never reach MaxValues, so the ordinal
+    // assertions would silently under-count instead of failing.
+    public override int Random() => throw new InvalidOperationException(
+        "unexpected parameterless RandSeed advance");
+
+    public override int Random(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected Random(min,max) draw");
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected GetRandomNumber draw");
 }
 
 sealed class FixedRecordActor : TBaseObject

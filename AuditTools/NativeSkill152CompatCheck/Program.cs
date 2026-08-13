@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using GameSvr;
 using SystemModule;
 
@@ -178,9 +179,21 @@ static void VerifySourceWiring()
 
     string effects = File.ReadAllText(Path.Combine(root, "GameSvr",
         "Actors", "TBaseObject.NativeState26Effects.cs"));
-    Equal(5, Count(effects,
+    // The one-shot reset is sub_772468 (`sub dx,1 / -0x22 / -0x18 / -0xAD`
+    // = ids 1, 35, 59, 232, then `mov [eax+0x3F0],0`). An E8 scan of the
+    // whole image finds exactly THREE call sites: 0x76DEB1 in sub_76DE1C
+    // (single), 0x76E0A3 in sub_76DF5C (line) and 0x76E24E in sub_76E0B4
+    // (area). The DIRECT carrier sub_76E268 (0x76E268-0x76E377) contains
+    // none, so the count is three call sites plus the declaration.
+    // Previously this asserted 5 and the direct carrier carried a call
+    // that native does not make.
+    Equal(4, Count(effects,
         "ConsumeNativeOneShotMagicDamage("),
-        "direct/single/line/area consumption plus declaration count");
+        "single/line/area consumption plus declaration count");
+    Assert(!Regex.IsMatch(effects,
+        @"ApplyNativeDirectMagicEffect[\s\S]{0,1600}?ConsumeNativeOneShotMagicDamage\("),
+        "sub_76E268 has no call to sub_772468; the direct carrier must not "
+        + "reset the one-shot damage");
     Contains(effects, "if (positiveCount > 0)",
         "batch positive consumption gate");
 

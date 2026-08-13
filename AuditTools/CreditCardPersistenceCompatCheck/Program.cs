@@ -24,7 +24,7 @@ Assert(combined.m_CreditCard.Dirty,
 Assert(!combined.m_CreditCard.GloryPointDirty,
     "GloryPoint dirty state was restored after a connection failure");
 Equal(2, combined.m_MsgList.Count(entry =>
-        entry.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        entry.wIdent == Grobal2.RM_LINGFU_CHANGED),
     "independent CreditCard/GloryPoint pre-save refresh count");
 
 var unloadedGlory = NewPlayer();
@@ -37,7 +37,7 @@ Assert(!service.TrySaveDue(unloadedGlory, 77, true),
 Assert(!unloadedGlory.m_CreditCard.GloryPointDirty,
     "Loaded=false blocked or restored GloryPoint dirty consumption");
 Equal(1, unloadedGlory.m_MsgList.Count(entry =>
-        entry.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        entry.wIdent == Grobal2.RM_LINGFU_CHANGED),
     "unloaded GloryPoint pre-save refresh count");
 
 var unloadedCredit = NewPlayer();
@@ -91,7 +91,7 @@ Equal(0, phaseChange.m_CreditCard.GloryPointValue,
 Assert(!phaseChange.m_CreditCard.GloryPointDirty,
     "periodic phase change introduced a GloryPoint save");
 Equal(1, phaseChange.m_MsgList.Count(entry =>
-        entry.wIdent == Grobal2.SM_LINGFU_CHANGED),
+        entry.wIdent == Grobal2.RM_LINGFU_CHANGED),
     "periodic phase change refresh count");
 
 var root = FindRepositoryRoot();

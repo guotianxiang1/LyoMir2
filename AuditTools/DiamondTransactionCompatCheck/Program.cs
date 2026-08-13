@@ -290,7 +290,7 @@ static void SetDefinitions(params GoodItem[] definitions)
 static void AssertRefreshOnly(TPlayObject player, string scenario)
 {
     Equal(1, player.m_MsgList.Count, $"{scenario} internal message count");
-    Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[0].wIdent,
         $"{scenario} internal capital refresh ident");
 }
 
@@ -299,7 +299,7 @@ static void AssertSuccessMessages(TPlayObject player, string scenario)
     Equal(2, player.m_MsgList.Count, $"{scenario} internal message count");
     Equal(Grobal2.RM_WEIGHTCHANGED, player.m_MsgList[0].wIdent,
         $"{scenario} WeightChanged order");
-    Equal(Grobal2.SM_LINGFU_CHANGED, player.m_MsgList[1].wIdent,
+    Equal(Grobal2.RM_LINGFU_CHANGED, player.m_MsgList[1].wIdent,
         $"{scenario} capital refresh order");
 }
 

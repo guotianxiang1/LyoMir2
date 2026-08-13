@@ -127,7 +127,7 @@ namespace GameSvr
         public override void Run()
         {
             TBaseObject BaseObject;
-            if (!m_boGhost && !m_boDeath && m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
+            if (!IsNativeCanActBlocked(1) && !m_boGhost && m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
             {
                 if ((HUtil32.GetTickCount() - m_dwWalkTick) > m_nWalkSpeed)
                 {
@@ -147,7 +147,9 @@ namespace GameSvr
                                 {
                                     if (!BaseObject.m_boHideMode || m_boCoolEye)
                                     {
-                                        if (Math.Abs(m_nCurrX - BaseObject.m_nCurrX) < nComeOutValue && Math.Abs(m_nCurrY - BaseObject.m_nCurrY) < nComeOutValue)
+                                        // MONAI-18 — TCentipedeKingMon.Run 出洞扫描同样走
+                                        // 0x680C1E mov cx,[ebx+0x4D8] / call 0x7743E0，闭区间。
+                                        if (Math.Abs(m_nCurrX - BaseObject.m_nCurrX) <= nComeOutValue && Math.Abs(m_nCurrY - BaseObject.m_nCurrY) <= nComeOutValue)
                                         {
                                             ComeOut();
                                             m_dwAttickTick = HUtil32.GetTickCount();

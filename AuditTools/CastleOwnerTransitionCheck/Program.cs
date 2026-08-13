@@ -2,14 +2,9 @@ using GameSvr;
 
 PrepareRuntimeConfig();
 
-// The default tree is not always sitting on the branch under test, so args[0]
-// takes precedence over the environment variable and over the default.
-var repoRoot = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
-    ? args[0]
-    : Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-      ?? @"D:\loym2\LyoMir2-master";
+var repoRoot = AuditRepoRoot.Resolve(args);
 var source = File.ReadAllText(Path.Combine(repoRoot, "GameSvr", "Castle", "UserCastle.cs"));
-var getCastle = Slice(source, "public void GetCastle(Association Guild)",
+var getCastle = Slice(source, "public void GetCastle(Association Guild, bool notifyServerGroup = false)",
     "public void StartWallconquestWar()");
 var loadAttackers = Slice(source, "private void LoadAttackSabukWall()",
     "private static bool TryParseAttackDate");
@@ -22,19 +17,18 @@ var reverseScan = At(getCastle, "for (var i = m_AttackWarList.Count - 1; i >= 0;
 var replaceGuild = At(getCastle, "attackerInfo.Guild = oldGuild;");
 var replaceName = At(getCastle, "attackerInfo.sGuildName = oldGuild.sGuildName;");
 var refreshOld = At(getCastle, "oldGuild.RefMemberName();");
-var persistAttackers = At(getCastle, "SaveAttackSabukWall();");
+var saveAttackers = At(getCastle, "SaveAttackSabukWall();");
 var refreshNew = At(getCastle, "m_MasterGuild.RefMemberName();");
 
 Assert(configSave < oldGuildBranch && oldGuildBranch < reverseScan,
     "GetCastle must save config before entering the old-owner path");
 Assert(reverseScan < replaceGuild && replaceGuild < replaceName && replaceName < refreshOld,
     "GetCastle must reverse-scan and replace the attacker record before old-guild refresh");
-Assert(refreshOld < persistAttackers && persistAttackers < refreshNew,
+Assert(refreshOld < saveAttackers && saveAttackers < refreshNew,
     "GetCastle must SAVE AttackSabukWall between old and new guild refreshes: "
-    + "0x65BF80 calls 0x65A3B8, which formats in-memory rows with "
-    + "'       \"' @0x65A4C8 + 'YYYY-MM-DD' @0x65A4DC + '\"\\r\\n' @0x65A4F0 "
-    + "and writes AttackSabukWall.txt. The loader is 0x65B22C "
-    + "(FileExists + parse 0x65C908), xref only from init 0x65AAD6");
+    + "0x65BF80 calls 0x65A3B8, which walks [ebx+0x8C] and writes "
+    + "'       \"'+YYYY-MM-DD+'\"\\r\\n' (0x65A4C8 / 0x65A4DC / 0x65A4F0). "
+    + "The loader 0x65B22C has a single E8 xref from init 0x65AAD6");
 
 // 战神 sub_65BEC0 has NO rollback on a failed save. 0x65A510 is a Delphi
 // `procedure` (never sets eax) and the next instruction 0x65BF22 `test edi,edi`
@@ -47,10 +41,8 @@ Assert(!getCastle.Contains("if (!SaveConfigFile())", StringComparison.Ordinal),
 Assert(!getCastle.Contains("m_MasterGuild = oldGuild;", StringComparison.Ordinal),
     "GetCastle must NOT roll the owner back; native has no restore path");
 Assert(!getCastle.Contains("LoadAttackSabukWall();", StringComparison.Ordinal),
-    "GetCastle must not RE-LOAD the attacker list -- native 0x65BF80 saves "
-    + "the in-memory reassignment via 0x65A3B8");
-Assert(getCastle.Contains("SaveAttackSabukWall();", StringComparison.Ordinal),
-    "GetCastle must persist the attacker reassignment (0x65BF80 call 0x65A3B8)");
+    "GetCastle must not RE-LOAD the attacker list -- that would discard the "
+    + "old-guild reassignment that 0x65BF5E just wrote");
 Assert(source.Contains("AttackDate.ToString(\"yyyy-MM-dd\", CultureInfo.InvariantCulture)",
         StringComparison.Ordinal),
     "AttackSabukWall must use the native YYYY-MM-DD date format");

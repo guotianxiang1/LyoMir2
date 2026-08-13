@@ -37,6 +37,12 @@ static void CheckConstantAndTimingBoundaries()
         now - 4501, now - 500), "500 boundary rejected");
     Assert(TPlayObject.IsNativeMotaeboTimingReady(now,
         now - 4501, now - 501), "4501/501 accepted");
+
+    // 0x6BC94C `2B 46 6C / 3D F4 01 00 00 / 0F 86 jbe` is unsigned.
+    // now=10, lastWalk=20: unsigned elapsed wraps past 500 and must pass;
+    // a signed subtract would yield -10 and wrongly refuse.
+    Assert(TPlayObject.IsNativeMotaeboTimingReady(10, 10 - 4501, 20),
+        "unsigned wrap: last walk tick 20, now 10 must pass 500 ms");
 }
 
 static void CheckState45ProducerGate()
