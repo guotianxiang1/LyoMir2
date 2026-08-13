@@ -1034,9 +1034,14 @@ namespace GameSvr.Plugins
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>麻痹: timer秒, rand概率(100=100%), round范围</summary>
+        /// <remarks>
+        /// 无开关门。原生 2 号臂 0x100769B9 的第一条指令就是 `8B 4D 08` mov ecx,[ebp+8]，
+        /// 紧接 0x100769EA `E8 A1 6C FF FF` call 0x1006D690 直接进正文；臂内没有
+        /// 其余 39 个臂开头那套 `A1 …C2 31 10` / `81 38 F4 01 00 00` cmp …,0x1F4 / `7E 07` jle。
+        /// 41 路表 0x10077A78 里只有 1、2 号臂无门。
+        /// </remarks>
         public int Paralysis(int timerSec, int probability, int range, int tx, int ty, int canl, bool isAoe)
         {
-            if (!Enabled("麻痹概率")) return 0;
             int count = 0;
             foreach (var t in FindTargets(tx, ty, range, canl != 0))
             {

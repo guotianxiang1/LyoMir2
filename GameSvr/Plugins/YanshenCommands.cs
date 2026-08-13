@@ -19,9 +19,16 @@ namespace GameSvr.Plugins
         readonly YanshenApi _api;
         public long TotalCommands, TotalErrors;
 
+        /// <summary>
+        /// 原生 41 路臂里没有开关门的操作码。2 号麻痹臂 0x100769B9 首指令即
+        /// `8B 4D 08` mov ecx,[ebp+8]，直落 0x100769EA call 0x1006D690，
+        /// 臂内无 `81 38 F4 01 00 00` cmp …,0x1F4 序列。
+        /// </summary>
+        static readonly HashSet<int> _ungatedCommands = new() { 2 };
+
         static readonly Dictionary<int, string> _toggles = new()
         {
-            [1]="刀刀切割",[2]="麻痹概率",[3]="刀刀切割",
+            [1]="刀刀切割",[3]="刀刀切割",
             [4]="野蛮麻痹",[5]="施毒术",[7]="高级回收",
             [8]="攻击吸血",[9]="野蛮麻痹",[10]="火墙设置时间上限",
             [11]="刀刀切割",[12]="自定义伤害",[13]="刀刀切割",
@@ -90,6 +97,7 @@ namespace GameSvr.Plugins
 
         private static string[] GetStandardCommandFeatures(TunnelCommand cmd)
         {
+            if (_ungatedCommands.Contains(cmd.CommandId)) return Array.Empty<string>();
             switch (cmd.CommandId)
             {
                 case 3 when cmd.Parameters.Length == 10:
