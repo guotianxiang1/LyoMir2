@@ -64,16 +64,14 @@ namespace GameSvr
                 case Grobal2.ISM_GUILDMSG:
                     MsgGetGuildMsg(serverNum, Body);
                     break;
-                case Grobal2.ISM_GUILDWAR:
-                    if (string.IsNullOrEmpty(Body))
-                    {
-                        (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
-                            .ResetOnlineAll();
-                    }
-                    else
-                    {
-                        MsgGetGuildWarInfo(serverNum, Body);
-                    }
+                case Grobal2.ISM_CREDITCARD_CLEARALL:
+                    // 战神 241 -> sub_655A18 (地址表 @0x657198[0x16], stub @0x65735C:
+                    // eax=[0x7D6D50]/[eax]=UserEngine; call 0x655A18)。native 无条件
+                    // 遍历在线玩家清信用卡, 从不解析 body (无 body 入参)。旧 C# 仅在
+                    // 空 body 时清、非空 body 走行会战——行会战为 C# 扩展 (native 241
+                    // 无此语义, 全仓亦无 241 发送侧), 移除以对齐 native。
+                    (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
+                        .ResetOnlineAll();
                     break;
                 case Grobal2.ISM_CHATPROHIBITION:
                     MsgGetChatProhibition(serverNum, Body);
@@ -102,11 +100,17 @@ namespace GameSvr
                 case Grobal2.ISM_DIVORCE:
                     MsgGetDivorce(serverNum, Body);
                     break;
+                case Grobal2.ISM_MENTOR_STUDENT_1:
+                    // 战神 217 -> sub_657CF0: 徒弟(在他服)自行离开, 更新本服师父
+                    MsgGetMentorStudentLeft(serverNum, Body);
+                    break;
+                case Grobal2.ISM_MENTOR_STUDENT_2:
+                    // 战神 218 -> sub_657AC0: 师父(在他服)逐出徒弟, 更新本服徒弟
+                    MsgGetMentorExpel(serverNum, Body);
+                    break;
                 case Grobal2.ISM_USER_INFO:
                 case Grobal2.ISM_FRIEND_INFO:
                 case Grobal2.ISM_FRIEND_DELETE:
-                case Grobal2.ISM_FRIEND_CLOSE:
-                case Grobal2.ISM_FRIEND_RESULT:
                 case Grobal2.ISM_TAG_SEND:
                 case Grobal2.ISM_TAG_RESULT:
                     MsgGetUserMgr(serverNum, Body, Ident);
@@ -469,6 +473,26 @@ namespace GameSvr
             spouse.m_sDearName = string.Empty;
             spouse.SysMsg("你的配偶与你离婚了", MsgColor.Red, MsgType.Hint);
             spouse.RefShowName();
+        }
+
+        private void MsgGetMentorStudentLeft(int sNum, string Body)
+        {
+            // 战神 sub_657CF0 (ident 217): body="师父名/徒弟名"。native 按 '/' 拆分;
+            // C# 文本传输层用反斜杠作 body 内分隔 (同 MsgGetWhisper 等), 语义等价。
+            // native 不校验 serverNum, GetPlayObject 空判即自然按服路由, 故不加守卫。
+            var masterName = string.Empty;
+            var studentName = HUtil32.GetValidStr3(Body, ref masterName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorStudentLeftMaster(masterName, studentName);
+        }
+
+        private void MsgGetMentorExpel(int sNum, string Body)
+        {
+            // 战神 sub_657AC0 (ident 218): body="师父名/徒弟名"。同上, 反斜杠拆分。
+            var masterName = string.Empty;
+            var studentName = HUtil32.GetValidStr3(Body, ref masterName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorMasterExpelStudent(masterName, studentName);
         }
 
         private void MsgGetReloadMakeItemList()
