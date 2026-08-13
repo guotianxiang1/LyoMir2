@@ -1557,8 +1557,28 @@ namespace GameSvr
         private void ClientDealTry(string sHumName)
         {
             TPlayObject TargetPlayObject;
-            var yanshenTradeBanned = new YanshenApi(this, null, M2Share.PluginManager).IsTradeBanned();
-            if (M2Share.g_Config.boDisableDeal || yanshenTradeBanned)
+            // 【ClientDealTry 四道门裁决 A】原「boDisableDeal || 眼神禁止交易」是一个
+            // 复合条件，两半来路完全不同，这里拆开分别处置。
+            //
+            // 已删：M2Share.g_Config.boDisableDeal —— INVENTED 且是死开关。
+            //   原生 opcode 1025 分派桩 0x6D913E 只有 `8B 45 FC mov eax,[ebp-4]` /
+            //   `E8 BD AD EE FF call 0x6C3F00`，无任何前置；sub_6C3F00 逐字节只有
+            //   0x6C3F1C(+0x461) / 0x6C3F32(前方对象空) / 0x6C3F3A(前方是自己) /
+            //   0x6C3F49(对端前方非我) / 0x6C3F51(对端+0x461) / 0x6C3F5E(+0x178) /
+            //   0x6C3F6B(+0xBA0) 这几道，无全局开关。GBK 全镜像扫描「交易功能」
+            //   0 命中（对照组「对方拒绝和你交易」1 命中 @0x6C407C）。
+            //   且 boDisableDeal 全仓库只有 GameSvrConfig.cs:1244 一处 `= false`，
+            //   没有任何 ini 读取器（GameSvrConfig 无 ReadBool/ReadString），
+            //   g_Config 由 M2Share.cs:1695 `new GameSvrConfig()` 构造 —— 运行期恒
+            //   为 false，删除的运行期差量为 0。字段本身保留，不动 Configs 层。
+            //
+            // 保留：眼神「禁止交易地图」（YanshenApi.IsTradeBanned，地图名长度 15）。
+            //   它同样不是 M2 原生门，但属插件扩展而非本移植自造，且此处是它在全仓库
+            //   唯一的活消费点。在一条 TRADE 提交里删掉它 = REPLICATION_RULES §4.3
+            //   点名禁止的夹带，也会让该 API 变成死代码（§3「死代码算 MISSING」）。
+            //   沿用原消息 g_sDisableDealItemsMsg：插件自己的提示文案在 Themida
+            //   虚拟化段内不可取证，改文案反而是新的臆造。
+            if (new YanshenApi(this, null, M2Share.PluginManager).IsTradeBanned())
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sDisableDealItemsMsg);
                 return;
