@@ -67,9 +67,9 @@ if (partnerField.FieldType != typeof(TPlayObject))
         + "not a scalar: 0x6C5A99 dereferences it and reads the name at +0x106");
 
 CheckShapeA("IsNativeGroupRestricted",
-    player => (bool)groupRestricted.Invoke(null, new object[] { player })!);
+    player => (bool)groupRestricted!.Invoke(null, new object[] { player })!);
 CheckShapeA("IsNativeFixedCoordMountBlocked",
-    player => (bool)fixedCoordBlocked.Invoke(player, null)!);
+    player => (bool)fixedCoordBlocked!.Invoke(player, null)!);
 CheckMountStateFlags();
 
 Console.WriteLine(
@@ -96,7 +96,7 @@ void CheckShapeA(string label, Func<TPlayObject, bool> predicate)
     var pairedRider = CreateTestPlayer();
     if (!pairedRider.SetNativeActiveState(0x33))
         throw new Exception($"{label}: could not set state 0x33");
-    partnerField.SetValue(pairedRider, CreateTestPlayer());
+    partnerField!.SetValue(pairedRider, CreateTestPlayer());
     if (!predicate(pairedRider))
         throw new Exception($"{label}: 0x33 plus a partner must block (0x6BBE9E jne 0x6BBEB2)");
 
@@ -110,7 +110,7 @@ void CheckShapeA(string label, Func<TPlayObject, bool> predicate)
     var passengerWithPartner = CreateTestPlayer();
     if (!passengerWithPartner.SetNativeActiveState(0x34))
         throw new Exception($"{label}: could not set state 0x34");
-    partnerField.SetValue(passengerWithPartner, CreateTestPlayer());
+    partnerField!.SetValue(passengerWithPartner, CreateTestPlayer());
     if (!predicate(passengerWithPartner))
         throw new Exception($"{label}: 0x34 plus a partner must block");
 
@@ -123,7 +123,7 @@ void CheckShapeA(string label, Func<TPlayObject, bool> predicate)
     var cleared = CreateTestPlayer();
     cleared.SetNativeActiveState(0x33);
     cleared.SetNativeActiveState(0x34);
-    partnerField.SetValue(cleared, CreateTestPlayer());
+    partnerField!.SetValue(cleared, CreateTestPlayer());
     if (!cleared.ClearNativeActiveState(0x33))
         throw new Exception($"{label}: could not clear state 0x33");
     if (!cleared.ClearNativeActiveState(0x34))
