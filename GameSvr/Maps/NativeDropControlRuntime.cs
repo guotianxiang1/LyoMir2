@@ -221,11 +221,23 @@ namespace GameSvr
             if (NativeItemFactory.GetClassName(stdItem) == null)
                 return (stdItem, null);
 
+            // Segment 3 builds its item through MakeItemByName sub_74DE54, which is
+            // just a name lookup (sub_74C2D4 @0x74DE62) feeding the class factory
+            // sub_74C338 @0x74DE77 — so the class constructor decides the seed.
+            // The root constructor sub_783788 @0x7837E2-EA copies word[std+0x1C]
+            // (DuraMax) into BOTH Dura and DuraMax, but the pile constructor
+            // sub_7880F0 overwrites it right after the chained call:
+            //   0078810D  E8 76 B6 FF FF     call 0x783788
+            //   00788112  66 C7 46 26 01 00  mov word [esi+0x26],1
+            // For a pile Dura is the stack count, so seeding it from DuraMax would
+            // hand out DuraMax units per configured drop instead of one.
             return (stdItem, new TUserItem
             {
                 wIndex = unchecked((ushort)itemIndex),
                 MakeIndex = makeIndex,
-                Dura = stdItem.DuraMax,
+                Dura = NativeItemFactory.IsPileItem(stdItem)
+                    ? (ushort)1
+                    : stdItem.DuraMax,
                 DuraMax = stdItem.DuraMax
             });
         }
@@ -243,15 +255,15 @@ namespace GameSvr
                 userItem.DuraMax / 100.0 * (20 + random(80))));
         }
 
+        /// <summary>
+        /// The pile classes all carry <c>[VMT+0x28] = 0x7882B4</c>, a bare
+        /// <c>ret</c>, so the drop hook leaves their Dura at the constructor's 1.
+        /// The membership list used to be duplicated here; it now defers to
+        /// <see cref="NativeItemFactory.IsPileItem"/> so the two cannot drift.
+        /// </summary>
         private static bool UsesPileInitialization(GoodItem stdItem)
         {
-            return NativeItemFactory.GetClassName(stdItem) is
-                "TBasePileItem" or "TLuckOil" or "TPneumaStone" or
-                "TTaoFaLingAddExpItem" or "TGoldAcus" or "TShiMenCall" or
-                "TSuperExpItem" or "TLevelBuffItem" or "TNewHappyCake" or
-                "THeroJingmaiDrug" or "TPileFlower" or "THeroHypericum" or
-                "THeroFileDragonScroll" or "THeroExpScroll" or
-                "TJingXiuBook";
+            return NativeItemFactory.IsPileItem(stdItem);
         }
 
         private static int NextRandom(int range)
