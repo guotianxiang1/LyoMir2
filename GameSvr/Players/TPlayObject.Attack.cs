@@ -72,34 +72,69 @@ namespace GameSvr
 
                     }
                 }
+                // MINE-07 / MINE-53: 区域限制门是 ClientHitXY 的第一条语句，对
+                // **所有** hit ident 生效，查的是**玩家自己站的格**，失败时弹绿字：
+                //   0x6EC08B  33 D2              xor edx,edx      ; 技能键 = 0
+                //   0x6EC08D  8B C3              mov eax,ebx
+                //   0x6EC08F  E8 BC 69 08 00     call 0x772A50
+                //     0x772A5C  8B 8E 30 01 00 00  mov ecx,[esi+0x130] ; ★ 自己的 Y
+                //     0x772A62  8B 96 2C 01 00 00  mov edx,[esi+0x12C] ; ★ 自己的 X
+                //     0x772A6E  E8 15 94 00 00     call 0x77BE88       ; 读 cell+4
+                //     0x772A83  E8 6C 92 00 00     call 0x77BCF4       ; LimitSkill 表含 0？
+                //   0x6EC094  84 C0              test al,al
+                //   0x6EC096  75 1C              jne 0x6EC0B4
+                //   0x6EC098  66 B9 DB FF        mov cx,0xFFDB          ; 绿
+                //   0x6EC09C  BA 7C C3 6E 00     mov edx,0x6EC37C       ; len 20
+                //   0x6EC0A5  FF 93 D4 00 00 00  call [vmt+0xD4]        ; SysMsg
+                //   0x6EC0AB  C6 45 FF 00        mov byte [ebp-1],0     ; 返回 false
+                // 0x6EC37C 的 Delphi 长串前缀 len=20，字节
+                //   B5 B1 C7 B0 C7 F8 D3 F2 B2 BB BF C9 CA B9 D3 C3 BC BC C4 DC
+                // 按 GBK 解正是「当前区域不可使用技能」。
+                // 原来 C# 查的是**目标格** (n14,n18) 且只在挖矿分支里、失败静默，
+                // 方向正好反了：站在受限格上照挖，站在正常格朝受限格挖反被拒。
+                // m_boCanHit / 死亡麻痹 / 测速这些前置在原版属于调用方
+                // (0x6D9EBC 派发器)，所以门排在它们之后、坐标校验之前。
+                if (!m_PEnvir.IsSkillAllowedAt(m_nCurrX, m_nCurrY, 0))
+                {
+                    SysMsg("当前区域不可使用技能", MsgColor.Green, MsgType.Hint);
+                    return result;
+                }
                 if (nX == m_nCurrX && nY == m_nCurrY)
                 {
                     result = true;
                     m_dwAttackTick = HUtil32.GetTickCount();
-                    if (wIdent == Grobal2.CM_HEAVYHIT && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
+                    // MINE-08: 原版在派发器里测 MINE 旗标，位置在一切之前——
+                    // 紧跟 ident 判断之后、取工具之前：
+                    //   0x6EC0F1  66 81 FF C7 0B     cmp di,0xBC7        ; CM_HEAVYHIT
+                    //   0x6EC0F6  75 62              jne 0x6EC15A
+                    //   0x6EC0F8  8B 83 28 01 00 00  mov eax,[ebx+0x128] ; map
+                    //   0x6EC0FE  80 78 6A 00        cmp byte [eax+0x6A],0
+                    //   0x6EC102  74 56              je  0x6EC15A        ; ★ 落回跳表
+                    //   0x6EC104  85 F6              test esi,esi        ; 武器非空
+                    //   0x6EC10B  80 78 15 13        cmp byte [std+0x15],0x13
+                    //   0x6EC111  66 83 7E 26 00     cmp word [item+0x26],0
+                    // 0x6EC15A 是普通 ident 跳表，3015 在表里落 slot3 = 普攻。
+                    // 所以非 MINE 图上手持 shape-19 镐子的重击**降级为普攻**，
+                    // 且不进 DigXY、不扣矿点次数、不抽任何签。
+                    if (wIdent == Grobal2.CM_HEAVYHIT && m_PEnvir.Flag.boMINE && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
                     {
                         if (GetFrontPosition(ref n14, ref n18) && !m_PEnvir.CanWalk(n14, n18, false))
                         {
                             GoodItem StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_WEAPON].wIndex);
                             if (StdItem != null && StdItem.Shape == 19)
                             {
-                                // MINE-07: native TPlayObject.PileStones (sub_6BC1EC) gates the dig
-                                // on two cell checks before touching the mine event, neither of
-                                // which existed here:
+                                // native TPlayObject.PileStones (sub_6BC1EC) gates the dig on
+                                // the terrain attribute of the TARGET cell:
                                 //   0x6BC23F call sub_7776A8   ; GetCellInfo(envir+0x128, nX, nY, &cell)
                                 //   0x6BC24A cmp byte [cell+0x00],0
                                 //   0x6BC24D je fail            ; terrain attribute must be NON-ZERO
                                 //     (Walk=0 rejects; only HighWall=1 / LowWall=2 may be dug)
-                                // The area-restriction byte at cell+0x04 is the same per-cell flag
-                                // IsSkillAllowedAt already reads via GetMapCellSkillFlag
-                                // (sub_77BE88 @ 0x77BEAB: mov cl,[eax+edx*4+4] -- same cell record,
-                                // offset +4). Native tests it earlier via sub_772A50 at the top of
-                                // ClientHitXY (0x6EC08F) for every hit ident, silently failing with
-                                // no dig-specific message when set.
+                                // The area-restriction byte at cell+0x04 is a DIFFERENT gate and
+                                // belongs to the player's own cell -- see MINE-07 at the top of
+                                // this method.
                                 var mapCell = false;
                                 var cellInfo = m_PEnvir.GetMapCellInfo(n14, n18, ref mapCell);
-                                if (mapCell && cellInfo.Attribute != CellAttribute.Walk &&
-                                    m_PEnvir.GetMapCellSkillFlag(n14, n18) == 0)
+                                if (mapCell && cellInfo.Attribute != CellAttribute.Walk)
                                 {
                                     if (PileStones(n14, n18))
                                     {

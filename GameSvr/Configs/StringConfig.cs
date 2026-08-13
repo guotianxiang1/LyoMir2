@@ -44,11 +44,7 @@ namespace GameSvr.Configs
             M2Share.g_Config.sSteelStone = ReadName("Names", "SteelStone", M2Share.g_Config.sSteelStone);
             M2Share.g_Config.sCopperStone = ReadName("Names", "CopperStone", M2Share.g_Config.sCopperStone);
             M2Share.g_Config.sBlackStone = ReadName("Names", "BlackStone", M2Share.g_Config.sBlackStone);
-            // Gems (may not exist in !Setup.txt, use defaults)
-            M2Share.g_Config.sGemStone1 = ReadName("Names", "Gem1Stone", M2Share.g_Config.sGemStone1);
-            M2Share.g_Config.sGemStone2 = ReadName("Names", "Gem2Stone", M2Share.g_Config.sGemStone2);
-            M2Share.g_Config.sGemStone3 = ReadName("Names", "Gem3Stone", M2Share.g_Config.sGemStone3);
-            M2Share.g_Config.sGemStone4 = ReadName("Names", "Gem4Stone", M2Share.g_Config.sGemStone4);
+            // MINE-01: Gem1Stone..Gem4Stone 已移除，它们只喂发明的 MINE2 宝石产线。
             // Zuma monster names
             M2Share.g_Config.sZuma[0] = ReadName("Names", "Zuma1", M2Share.g_Config.sZuma[0]);
             M2Share.g_Config.sZuma[1] = ReadName("Names", "Zuma2", M2Share.g_Config.sZuma[1]);

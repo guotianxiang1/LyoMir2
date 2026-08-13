@@ -2112,65 +2112,82 @@ namespace GameSvr
 
             var result = false;
             var s1C = string.Empty;
-            var mineEvent = (StoneMineEvent)m_PEnvir.GetEvent(nX, nY);
-            if (mineEvent != null && mineEvent.m_nEventType == Grobal2.ET_MINE)
+            // MINE-15: 原版取不到矿点就地创建，挖矿是唯一创建点（类引用单元
+            // 0x71683C 在全镜像只有 0x6BC277 一处代码引用）：
+            //   0x6BC25E  E8 15 ED 0B 00  call 0x77AF78     ; 按格取矿点
+            //   0x6BC263  8B F0           mov esi,eax
+            //   0x6BC265  85 F6           test esi,esi
+            //   0x6BC267  75 19           jne 0x6BC282      ; 已存在则直接用
+            //   0x6BC276  A1 3C 68 71 00  mov eax,[0x71683C]; TStoneMineEvent
+            //   0x6BC27B  E8 D8 B3 05 00  call 0x717658     ; ctor
+            // 创建点落在格子门之后、MineCount 判定之前，抽签序不变。
+            // 取矿点走带类型的重载而不是类强转：原版 0x77AF78 只认节点种类
+            // 字节 8（0x77AFB0 cmp byte[node],8），格上挂着别的 Event 时
+            // 原版走链继续、最终返回 null，不会当成矿点。
+            var mineEvent =
+                m_PEnvir.GetEvent(nX, nY, Grobal2.ET_MINE) as StoneMineEvent
+                ?? new StoneMineEvent(m_PEnvir, nX, nY, Grobal2.ET_MINE);
+            if (mineEvent.MineCount > 0)
             {
-                if (mineEvent.MineCount > 0)
+                mineEvent.MineCount -= 1;
+                // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
+                if (M2Share.RandomNumber.Random(4) == 0)
                 {
-                    mineEvent.MineCount -= 1;
-                    // MINE-61: Native @0x717715 hardcodes hit rate = 4 (mov eax,4; call 0x403B4C).
-                    if (M2Share.RandomNumber.Random(4) == 0)
+                    // MINE-55: 原版按 kind 判别取石堆，不做类判定；不匹配就继续
+                    // 走链、最终返回 null：
+                    //   0x717723  6A 03              push 3               ; 期望的 kind
+                    //   0x717737  E8 54 1A 06 00     call 0x779190
+                    //     0x7791CD  80 38 03         cmp byte [node],3    ; 节点种类
+                    //     0x7791E1  3A 58 0C         cmp bl,byte [obj+0xC]; 事件类型
+                    //     0x7791E4  75 04            jne next             ; 不匹配继续走链
+                    //   0x71773C  85 C0              test eax,eax
+                    //   0x71773E  75 33              jne 0x717773         ; 命中 → AddEventParam
+                    // C# 原来用 (PileStones) 强转 GetEvent(x,y) 的返回值，而
+                    // Envirnoment.GetEvent(x,y) 返回该格**最后一个**
+                    // OS_EVENTOBJECT、不区分类型，所以格上放过火墙/圣言术屏障
+                    // 等任何别的 Event 子类时会抛 InvalidCastException。
+                    // 强转在类型判断之前就炸了，下面那个 m_nEventType 判断因此
+                    // 是不可达的死代码；改成带类型的重载后它也不再需要。
+                    var pileEvent =
+                        m_PEnvir.GetEvent(m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES)
+                            as PileStones;
+                    if (pileEvent == null)
                     {
-                        var pileEvent = (PileStones)m_PEnvir.GetEvent(m_nCurrX, m_nCurrY);
-                        if (pileEvent == null)
-                        {
-                            pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
-                            M2Share.EventManager.AddEvent(pileEvent);
-                        }
-                        else
-                        {
-                            if (pileEvent.m_nEventType == Grobal2.ET_PILESTONES)
-                            {
-                                pileEvent.AddEventParam();
-                            }
-                        }
-                        // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
-                        // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
-                        // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
-                        int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
-                        // MINE-08: Native @0x6BC24A tests the map flag BEFORE drawing the
-                        // rate roll, so a non-mine map consumes no RNG at all.
-                        if (m_PEnvir.Flag.boMINE)
-                        {
-                            if (M2Share.RandomNumber.Random(mineRate) == 0)
-                            {
-                                MakeMine();
-                            }
-                        }
-                        else if (m_PEnvir.Flag.boMINE2)
-                        {
-                            if (M2Share.RandomNumber.Random(mineRate) == 0)
-                            {
-                                MakeMine2();
-                            }
-                        }
-                        // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
-                        //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
-                        //   0x6BC2E4  83 C2 05        add edx,5      ; +5
-                        //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
-                        //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
-                        //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
-                        DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
-                        SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
-                        result = true;
+                        pileEvent = new PileStones(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_PILESTONES, 5 * 60 * 1000);
+                        M2Share.EventManager.AddEvent(pileEvent);
                     }
+                    else
+                    {
+                        pileEvent.AddEventParam();
+                    }
+                    // MINE-21: Tier==2 halves ore output rate (native 0x6BC2A3, 0x6BC2AC, 0x6BC2C3)
+                    // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
+                    // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
+                    int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
+                    // MINE-08: MINE 旗标由派发器在 0x6EC0FE 测过了（非 MINE 图
+                    // 根本到不了这里），产出卷因此无条件抽。原来这里的注释把
+                    // 旗标地址写成 0x6BC24A —— 那是格子地形门 cmp byte[cell],0，
+                    // 不是旗标，以字节为准。
+                    if (M2Share.RandomNumber.Random(mineRate) == 0)
+                    {
+                        MakeMine();
+                    }
+                    // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
+                    //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
+                    //   0x6BC2E4  83 C2 05        add edx,5      ; +5
+                    //   0x6BC2E9  E8 16 25 08 00  call 0x73E804  ; DoDamageWeapon
+                    //   0x6BC2F8  66 BA 74 02     mov dx,0x274   ; ident 628
+                    //   0x6BC300  FF 96 50 02 00 00 call [esi+0x250] ; SendDefMessage
+                    DoDamageWeapon(M2Share.RandomNumber.Random(15) + 5);
+                    SendDefMessage(Grobal2.SM_MINESUCCESS, 0, 0, 0, 0, string.Empty);
+                    result = true;
                 }
-                else
+            }
+            else
+            {
+                if ((HUtil32.GetTickCount() - mineEvent.AddStoneMineTick) > 10 * 60 * 1000)
                 {
-                    if ((HUtil32.GetTickCount() - mineEvent.AddStoneMineTick) > 10 * 60 * 1000)
-                    {
-                        mineEvent.AddStoneMine();
-                    }
+                    mineEvent.AddStoneMine();
                 }
             }
             // MINE-51: Native @0x6BC306 broadcast RM_HEAVYHIT (0x2715) payload:
@@ -3084,74 +3101,9 @@ namespace GameSvr
             }
         }
 
-        
-        
-        
-        private void MakeMine2()
-        {
-            if (m_ItemList.Count >= Grobal2.MAXBAGITEM)
-            {
-                return;
-            }
-            TUserItem mineItem = null;
-            var mineRate = M2Share.RandomNumber.Random(120);
-            if (HUtil32.RangeInDefined(mineRate, 1, 2))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone1, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else if (HUtil32.RangeInDefined(mineRate, 3, 20))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone2, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else if (HUtil32.RangeInDefined(mineRate, 21, 45))
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone3, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-            else
-            {
-                if (M2Share.UserEngine.CopyToUserItemFromName(M2Share.g_Config.sGemStone4, ref mineItem))
-                {
-                    mineItem.Dura = MakeMineRandomDrua();
-                    m_ItemList.Add(mineItem);
-                    WeightChanged();
-                    SendAddItem(mineItem);
-                }
-                else
-                {
-                    Dispose(mineItem);
-                }
-            }
-        }
+        // MINE-01: MakeMine2()（金刚石矿/绿宝石矿/红宝石矿/白宝石矿 四选一的第二
+        // 条宝石产线）已移除。原版没有 MINE2 旗标，也没有第二条产线：挖矿产出的
+        // 唯一入口是 0x6BC3CC，五个分支全是 金矿/银矿/铁矿/黑铁矿石/铜矿。
 
         public TUserItem QuestCheckItem(string sItemName, ref int nCount, ref int nParam, ref int nDura)
         {
