@@ -164,6 +164,14 @@ namespace GameSvr
                     // 战神 218 -> sub_657AC0: 师父(在他服)逐出徒弟, 更新本服徒弟
                     MsgGetMentorExpel(serverNum, Body);
                     break;
+                case Grobal2.ISM_LM_DELETE:
+                    // 战神 226 (索引表 @0x657160[24]=0x12 -> 地址表 @0x657198[0x12]
+                    // -> stub @0x65731E -> sub_657888) = 徒弟出师的跨服镜像, 不是
+                    // "情侣删除"。常量名 ISM_LM_DELETE 系旧命名, 见报告接线清单。
+                    // 此前 C# 无该 case, 落 default 打印 "[Error]: ProcessOthGsMsg
+                    // Ident=226" —— 与 native 的 REAL handler 不符。
+                    MsgGetMentorGraduate(serverNum, Body);
+                    break;
                 case Grobal2.ISM_USER_INFO:
                 case Grobal2.ISM_FRIEND_INFO:
                 case Grobal2.ISM_FRIEND_DELETE:
@@ -200,6 +208,14 @@ namespace GameSvr
                     break;
                 case Grobal2.ISM_REQUEST_LOVERRECALL:
                     MsgGetRequestLoverRecall(serverNum, Body);
+                    break;
+                case Grobal2.ISM_STANDARDTICK:
+                    // 战神 240 (索引表 @0x657160[38]=0x15 -> 地址表 @0x657198[0x15]
+                    // -> stub @0x65734F -> sub_657F3C) = 宗派邀请提示, 不是
+                    // "标准时钟"。常量名 ISM_STANDARDTICK 系旧命名, 见报告接线清单。
+                    // 此前 C# 无该 case, 落 default 打印 "[Error]: ProcessOthGsMsg
+                    // Ident=240" —— 与 native 的 REAL handler 不符。
+                    MsgGetSectInvite(serverNum, Body);
                     break;
                 case Grobal2.ISM_GRUOPMESSAGE:
                     Console.WriteLine("跨服消息");
@@ -563,6 +579,28 @@ namespace GameSvr
             var studentName = HUtil32.GetValidStr3(Body, ref masterName,
                 HUtil32.Backslash);
             TPlayObject.NativeMirrorMasterExpelStudent(masterName, studentName);
+        }
+
+        private void MsgGetMentorGraduate(int sNum, string Body)
+        {
+            // 战神 sub_657888 (ident 226): body="师父名/徒弟名"。native 按 '/' 拆,
+            // C# 文本传输层用反斜杠作 body 内分隔 (同 217/218), 语义等价。
+            // sub_657888 序言仅 `mov ebx,edx` (0x657897), 从不读 ecx=serverNum,
+            // 故不加守卫。
+            var masterName = string.Empty;
+            var studentName = HUtil32.GetValidStr3(Body, ref masterName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorStudentGraduated(masterName, studentName);
+        }
+
+        private void MsgGetSectInvite(int sNum, string Body)
+        {
+            // 战神 sub_657F3C (ident 240): body="被邀请人名/邀请人名"。同上, 反斜杠
+            // 拆分; sub_657F3C 序言仅 `mov ebx,edx` (0x657F48), 无 serverNum 守卫。
+            var recipientName = string.Empty;
+            var inviterName = HUtil32.GetValidStr3(Body, ref recipientName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorSectInvite(recipientName, inviterName);
         }
 
         private void MsgGetReloadMakeItemList()
