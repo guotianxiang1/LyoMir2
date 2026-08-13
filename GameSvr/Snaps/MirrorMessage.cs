@@ -224,7 +224,12 @@ namespace GameSvr
                 {
                     if (hum.m_boHearWhisper)
                     {
-                        hum.WhisperRe(Str, 1);
+                        // Native carries the sender level as a separate argument of the
+                        // ISM_WHISPER send (0x652DA3 movzx eax,word[ebx+0x278] pushed
+                        // ahead of the body at 0x652DA7, 0x652DD6 mov dx,0xCB). This
+                        // tree's ISM body has no level field, so the whisper Tag goes
+                        // out as 0 on the cross-server path only.
+                        hum.WhisperRe(Str, 0);
                     }
                 }
             }
@@ -260,7 +265,7 @@ namespace GameSvr
                 {
                     if (hum.m_boHearWhisper)
                     {
-                        hum.WhisperRe(Str, 2);
+                        hum.WhisperRe(Str, 0);
                     }
                 }
             }

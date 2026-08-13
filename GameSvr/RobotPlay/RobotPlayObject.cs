@@ -344,31 +344,23 @@ namespace GameSvr
                 {
                     return;
                 }
-                if (m_btPermission > 0)
+                // Same frame as TPlayObject.Whisper: ident 103's Param is the literal
+                // 0xFFFC (0x6B4AE4), Tag is the speaker level (0x6C95F6
+                // mov dx,[ebx+0x278]), Series is nParam1 = 0 and Recog is the speaker
+                // (0x6C9610 mov edx,ebx). Native has no permission branch and no
+                // colour tier on this path.
+                var body = format("{0}[{1}级]=> {2}",
+                    new object[] { m_sCharName, m_Abil.Level, saystr });
+                PlayObject.SendMsg(this, Grobal2.RM_WHISPER, m_Abil.Level, 0, 0, 0, body);
+                // Speaker-side monitor copy, same shape as TPlayObject.Whisper:
+                // 0x6C9619 picks up [ebx+0x1944], 0x6C962F prefixes "聆听私聊 " and
+                // 0x6C963C mov cx,0x38FF sends it through [VMT+0xD4] as a SysMsg.
+                // The recipient's monitor is served by the RM_WHISPER arm at 0x6B4A99.
+                if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
                 {
-                    PlayObject.SendMsg(PlayObject, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, format("{0}[{1}级]=> {2}", new object[] { m_sCharName, m_Abil.Level, saystr }));
-                    
-                    
-                    if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
-                    {
-                        m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, format("{0}[{1}级]=> {2} {3}", new object[] { m_sCharName, m_Abil.Level, PlayObject.m_sCharName, saystr }));
-                    }
-                    if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                    {
-                        PlayObject.m_GetWhisperHuman.SendMsg(PlayObject.m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btGMWhisperMsgBColor, 0, format("{0}[{1}级]=> {2} {3}", new object[] { m_sCharName, m_Abil.Level, PlayObject.m_sCharName, saystr }));
-                    }
-                }
-                else
-                {
-                    PlayObject.SendMsg(PlayObject, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, format("{0}[{1}级]=> {2}", new object[] { m_sCharName, m_Abil.Level, saystr }));
-                    if (m_GetWhisperHuman != null && !m_GetWhisperHuman.m_boGhost)
-                    {
-                        m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, format("{0}[{1}级]=> {2} {3}", new object[] { m_sCharName, m_Abil.Level, PlayObject.m_sCharName, saystr }));
-                    }
-                    if (PlayObject.m_GetWhisperHuman != null && !PlayObject.m_GetWhisperHuman.m_boGhost)
-                    {
-                        PlayObject.m_GetWhisperHuman.SendMsg(PlayObject.m_GetWhisperHuman, Grobal2.RM_WHISPER, 0, M2Share.g_Config.btGMWhisperMsgFColor, M2Share.g_Config.btWhisperMsgBColor, 0, format("{0}[{1}级]=> {2} {3}", new object[] { m_sCharName, m_Abil.Level, PlayObject.m_sCharName, saystr }));
-                    }
+                    m_GetWhisperHuman.SendMsg(m_GetWhisperHuman, Grobal2.RM_SYSMESSAGE, 0,
+                        WhisperMonitorFColor, WhisperMonitorBColor, 0,
+                        WhisperMonitorPrefix + body);
                 }
             }
         }
