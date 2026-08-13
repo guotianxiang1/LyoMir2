@@ -73,6 +73,23 @@ Equal(-1, map.MoveToMovingObject(29, 29, edge, 30, 29, true),
 Equal(1, GetCellCount(map, 29, 29),
     "failed out-of-bounds move must leave the actor in its source cell");
 
+// MOVE-35(b): sub_7797CC has exactly one TRUE store, and it sits inside the branch
+// that matched the actor in the SOURCE cell list:
+//   00779A4C  83 7D EC 00  cmp dword [ebp-0x14], 0   ; source list head
+//   00779A50  74 5B        je  0x779AAD              ; empty -> FALSE
+//   00779A61  3B 45 0C     cmp eax, [ebp+0xC]        ; is this node the actor?
+//   00779A64  75 35        jne 0x779A9B              ; no -> next node
+//   00779A95  C6 45 F7 01  mov byte [ebp-9], 1       ; the only TRUE
+//   00779AAD  33 C0        xor eax, eax              ; ran off the end -> FALSE
+// So a move whose source cell does not hold the actor is FALSE, and must not publish
+// it at the destination either: doing that is how a cell acquires a registration for
+// an actor that lives somewhere else.
+var orphan = new Monster { m_PEnvir = map, m_nCurrX = 10, m_nCurrY = 11 };
+Equal(0, map.MoveToMovingObject(10, 11, orphan, 11, 11, true),
+    "moving out of a cell the actor was never in must fail");
+Equal(0, GetCellCount(map, 11, 11),
+    "failed source unlink must not publish the actor at the destination");
+
 // dir validation: 0x74123E sub 8 / jb, 0x71F115 sub 8 / jae
 Assert(Invoke1(dirValid, player, (byte)7), "dir 7 valid");
 Assert(!Invoke1(dirValid, player, (byte)8), "dir 8 rejected");

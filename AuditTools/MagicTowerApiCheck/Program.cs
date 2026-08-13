@@ -449,13 +449,20 @@ static void CheckRouteSuccessAndExplicitPlayerOwnership()
     Assert(explicitPlayer.m_MsgList.Count(message =>
             message.wIdent == Grobal2.SM_LINGFU_CHANGED) == 1,
         "EnterRouteWayByLF LingFu refresh count mismatch");
+    // MOVE-52: SpaceMove takes the default ident pair, and both native space-move arms
+    // load it as immediates - 0x6BD3AA `mov cx,0x2785` (10117) and 0x6BD3D3
+    // `mov cx,0x2786` (10118), repeated at 0x6BD51B / 0x6BD544 on the cross-map arm.
     Assert(explicitPlayer.m_MsgList.Count(message =>
-            message.wIdent == Grobal2.RM_CLEAROBJECTS) == 1,
+            message.wIdent == Grobal2.RM_NATIVE_CLEAROBJECTS) == 1,
         "EnterRouteWayByLF clear-objects message count mismatch");
     Assert(explicitPlayer.m_MsgList.Count(message =>
-            message.wIdent == Grobal2.RM_CHANGEMAP
+            message.wIdent == Grobal2.RM_NATIVE_CHANGEMAP
             && message.Buff == "D5071~0") == 1,
         "EnterRouteWayByLF change-map message mismatch");
+    Assert(explicitPlayer.m_MsgList.All(message =>
+            message.wIdent != Grobal2.RM_CLEAROBJECTS
+            && message.wIdent != Grobal2.RM_CHANGEMAP),
+        "EnterRouteWayByLF fell back to the legacy 8097/8098 idents");
     Assert(M2Share.LogStringList.Count == 1,
         "EnterRouteWayByLF LingFu debit log count mismatch");
     Assert((string)M2Share.LogStringList[0] ==
@@ -600,11 +607,15 @@ static void CheckRouteExFree()
     Assert(M2Share.LogStringList.Count == 0,
         "free EnterRouteWayByLFEx wrote a debit log");
     Assert(explicitPlayer.m_MsgList.Count(message =>
-            message.wIdent == Grobal2.RM_CLEAROBJECTS) == 1
+            message.wIdent == Grobal2.RM_NATIVE_CLEAROBJECTS) == 1
            && explicitPlayer.m_MsgList.Count(message =>
-               message.wIdent == Grobal2.RM_CHANGEMAP
+               message.wIdent == Grobal2.RM_NATIVE_CHANGEMAP
                && message.Buff == "D5071~0") == 1,
         "free EnterRouteWayByLFEx movement protocol mismatch");
+    Assert(explicitPlayer.m_MsgList.All(message =>
+            message.wIdent != Grobal2.RM_CLEAROBJECTS
+            && message.wIdent != Grobal2.RM_CHANGEMAP),
+        "free EnterRouteWayByLFEx fell back to the legacy 8097/8098 idents");
 }
 
 static void CheckRouteInsufficientLingFu()
@@ -708,7 +719,8 @@ static void CheckRouteMissingMapDoesNotRollback()
     Assert(player.m_MsgList.Count(message =>
             message.wIdent == Grobal2.SM_LINGFU_CHANGED) == 1
            && player.m_MsgList.All(message =>
-               message.wIdent != Grobal2.RM_CHANGEMAP),
+               message.wIdent != Grobal2.RM_NATIVE_CHANGEMAP
+               && message.wIdent != Grobal2.RM_CHANGEMAP),
         "missing-map EnterRouteWayByLF movement/refresh messages mismatch");
 }
 
