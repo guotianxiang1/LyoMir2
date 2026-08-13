@@ -144,8 +144,7 @@ Equal(87654321, hero.m_nNativeCommonInformationOption2,
     "hero common-information option 2 load");
 Assert(!hero.m_boNativeCommonInformationOption3,
     "hero common-information option 3 load");
-Equal(34567890, hero.m_Abil.MaxExp, "hero A.MaxExp must be level-derived");
-Equal(100, hero.m_WAbil.MaxExp, "hero B.MaxExp stays pinned at 100 after load");
+Equal(34567890, hero.m_Abil.MaxExp, "hero max exp must be level-derived");
 Equal(240573, hero.m_WAbil.HP, "hero 32-bit HP");
 Equal(131119, hero.m_WAbil.MP, "hero 32-bit MP");
 Equal(16, hero.m_UseItems.Length, "hero equipment slots after load");
@@ -262,9 +261,7 @@ Equal(-24680, second.m_nNativeCommonInformationOption2,
 Assert(second.m_boNativeCommonInformationOption3,
     "round-trip common-information option 3");
 Equal(34567890, second.m_Abil.MaxExp,
-    "round-trip A.MaxExp must remain level-derived");
-Equal(100, second.m_WAbil.MaxExp,
-    "round-trip B.MaxExp stays pinned at 100");
+    "round-trip max exp must remain level-derived");
 Equal(245000, second.m_WAbil.HP, "round-trip 32-bit HP");
 Equal((byte)1, second.m_UseItems[0].Bind, "round-trip equipment bind");
 Equal(2, second.m_MagicList.Count, "round-trip known magic count");
@@ -360,25 +357,25 @@ Assert(!NativeHeroRuntimeCodec.TryCreateSnapshot(magicOverflow, out _, out _, ou
        && error.Contains("magic capacity exceeded", StringComparison.Ordinal),
     "hero magic overflow ignored the reserved unknown record");
 
-// EXP-06: m_Abil = A(+0x1E8), m_WAbil = B(+0x264). Construction seeds A.MaxExp=100
-// then copies A→B (0x652479 / 0x6524CA). THeroAct VMT+0x240 = sub_6871E0 writes only
-// A.MaxExp (+0x244) from GetLevelExp; the gain loop at 0x687936 reads B.MaxExp (+0x2C0),
-// which is never rewritten on the hero path. TrySetNativeLevel must refresh A from the
-// table and leave B at 100.
+// EXP-06: the exp threshold tracks the level, it is not pinned at 100. The 100 written by
+// 0x652479 (A block, ctor) and 0x6B1A3E (B block) is a fresh-object default -- 0x6B1988 guards
+// it with `cmp word [obj+0x278],0 / jne`, so it only lands while the level is still 0. Both
+// copies are then rewritten from the level table: 0x68720E stores GetLevelExp(A.Level) into
+// A.MaxExp (+0x244), and the level-up loop calls [vtbl+0x240] at 0x687930 -- implemented at
+// 0x6BDBD3 as B.MaxExp (+0x2C0) = table[B.Level] -- before 0x687936 re-reads it.
+// A GM-forced level change therefore has to re-derive the threshold from the config table.
 var setLevelHero = new HeroObject();
 Assert(NativeHeroRuntimeCodec.TryApply(setLevelHero, snapshot, snapshotDyn, out error), error);
-Equal(34567890, setLevelHero.m_Abil.MaxExp, "set-level precondition: A.MaxExp is level-derived");
-Equal(100, setLevelHero.m_WAbil.MaxExp, "set-level precondition: B.MaxExp=100 after load");
+Equal(34567890, setLevelHero.m_Abil.MaxExp,
+    "set-level precondition: load derives MaxExp from the level-77 table entry");
 M2Share.g_Config.dwNeedExps[50] = 12345678;
 Assert(setLevelHero.TrySetNativeLevel(50, out error), error);
 Equal(12345678, setLevelHero.m_Abil.MaxExp,
-    "TrySetNativeLevel refreshes A.MaxExp from GetLevelExp");
-Equal(100, setLevelHero.m_WAbil.MaxExp,
-    "TrySetNativeLevel must preserve B.MaxExp pinned at 100");
+    "EXP-06: TrySetNativeLevel must re-derive MaxExp from the config table for the new level");
 Equal((ushort)50, setLevelHero.m_Abil.Level, "TrySetNativeLevel applied the level");
 
 Console.WriteLine(
-    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-pin");
+    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-rederives");
 
 void WriteShortString(byte[] destination, int offset, int maximumLength, string value)
 {

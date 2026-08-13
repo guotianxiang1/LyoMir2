@@ -181,12 +181,12 @@ namespace GameSvr
                 unchecked((uint)hero.m_Abil.Exp) > NativeNaturalHeroLevel200Cap)
                 hero.m_Abil.Exp = unchecked((int)NativeNaturalHeroLevel200Cap);
 
-            while (hero.m_WAbil.MaxExp != 0 &&
-                   unchecked((uint)hero.m_WAbil.MaxExp) <= unchecked((uint)hero.m_Abil.Exp))
+            while (hero.m_Abil.MaxExp != 0 &&
+                   unchecked((uint)hero.m_Abil.MaxExp) <= unchecked((uint)hero.m_Abil.Exp))
             {
                 var previousLevel = hero.m_Abil.Level;
                 hero.m_Abil.Exp = unchecked((int)((uint)hero.m_Abil.Exp -
-                                                   (uint)hero.m_WAbil.MaxExp));
+                                                   (uint)hero.m_Abil.MaxExp));
                 if (directMode || hero.m_Abil.Level < 200)
                 {
                     hero.m_Abil.Level = unchecked((ushort)(hero.m_Abil.Level + 1));
@@ -198,6 +198,9 @@ namespace GameSvr
                 }
 
                 hero.HeroLevel = hero.m_Abil.Level;
+                // 0x687930 calls [vtbl+0x240] before 0x687936 re-reads the threshold, and that
+                // slot (0x6BDBD3) rewrites it from the level table -- without this the loop
+                // keeps subtracting the stale threshold and grants one level per 100 exp.
                 hero.m_Abil.MaxExp = hero.GetLevelExp(hero.m_Abil.Level);
                 hero.RecalcLevelAbilitys();
                 hero.RecalcAbilitys();

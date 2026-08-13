@@ -294,13 +294,6 @@ namespace GameSvr
             RecalcAbilitys();
         }
 
-        public override void RecalcAbilitys()
-        {
-            base.RecalcAbilitys();
-            // Native THeroAct Recalc (VMT+0x2C = 0x690300) never copies A.MaxExp onto B.
-            m_WAbil.MaxExp = 100;
-        }
-
         internal static ClientPacket BuildHeroRuntimePacket(TProcessMessage processMsg, int currentExp, int level)
         {
             switch (processMsg.wIdent)
@@ -599,7 +592,8 @@ namespace GameSvr
                 return;
             }
 
-            if (distToMaster >= 12)
+            // If we're far from master, warp back
+            if (distToMaster > 12)
             {
                 m_Action = HeroAction.ReturnToMaster;
                 return;
@@ -693,10 +687,10 @@ namespace GameSvr
                 return;
             }
 
+            // 原版目标有效性清扫 sub_68A610 @0x68A660 用 sub_76B4A4（切比雪夫）。
             int dist = NativeGridDistance(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
 
-            // 0x68A665 83 F8 0F / 72 0A: drop when Chebyshev >= 15
-            if (dist >= 15)
+            if (dist > 10)
             {
                 DelTargetCreat();
                 return;
@@ -2109,6 +2103,11 @@ namespace GameSvr
             var currentMp = m_WAbil.MP;
             m_Abil.Level = (ushort)level;
             HeroLevel = (ushort)level;
+            // EXP-06: the 100 at 0x652479 / 0x6B1A3E is a fresh-object default, not a pin --
+            // 0x6B1988 only runs it when B.Level is still 0, and the level-up loop refreshes the
+            // threshold from the level table every iteration (0x687930 call [vtbl+0x240] ->
+            // 0x6BDBD3 B.MaxExp = table[B.Level]). A.MaxExp likewise tracks the level at
+            // 0x68720E (call 0x6884C0 GetLevelExp(A.Level) -> [obj+0x244]).
             m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
             RecalcLevelAbilitys();
             m_Abil.HP = Math.Min(currentHp, m_Abil.MaxHP);
