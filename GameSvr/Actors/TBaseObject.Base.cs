@@ -1005,7 +1005,13 @@ namespace GameSvr
                 //  * `jg` 只在 victimPK > 200 时跳过，所以门是 **victimPK <= 200**；
                 //    C# 写的 PKLevel() < 2 == victimPK < 200，恰好在 PK == 200 这一点上少判一次
                 //    （受害者 PK 正好 200 时原生仍然惩罚凶手，C# 放过）。
-                if (!M2Share.g_Config.boVentureServer && !m_PEnvir.Flag.boFightZone
+                // 原先这一行还有一个 `!M2Share.g_Config.boVentureServer` 全局门。
+                // 原生 0x6C081A..0x6C0865 只有三个地图旗标字节加一个 PK 阈值，
+                // 整段唯一的绝对地址读是 `0x6C085D 8B 15 AC 5F 7D 00 mov edx,[0x7D5FAC]`
+                // （PK 阈值 200），没有任何形如 `cmp byte [0x7Dxxxx],0` 的全局开关读。
+                // 全镜像多编码零命中：VentureServer / boVentureServer 在 GBK、
+                // 裸 ASCII（大小写不敏感）、UTF-16LE 三路皆 0。按 §3.1 删除。
+                if (!m_PEnvir.Flag.boFightZone
                     && !m_PEnvir.Flag.boFight3Zone && !m_PEnvir.Flag.boFREEPK)
                 {
                     if (m_btRaceServer == Grobal2.RC_PLAYOBJECT && m_LastHiter != null
