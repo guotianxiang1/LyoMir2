@@ -3108,33 +3108,80 @@ namespace GameSvr.Plugins
             return item.Bind;
         }
 
-        /// <summary>Ys_GetOther — 通过服务端物品id获取或设置装备的极品或元素值。
-        /// types=0 操作极品(id 1-6)，types=1 操作元素(id 1-17)。
-        /// val&gt;=0 表示赋值并返回设置值；val&lt;0 表示读取并返回当前值。
-        /// 物品未找到或 id/types 越界返回 -1（元素/极品值恒为非负，不与 -1 冲突）。</summary>
+        /// <summary>
+        /// Ys_GetOther / 数字隧道 32 —— 按服务端物品 id 读或写该物品的极品 / 元素。
+        /// AllFuc.pas: <c>'!!!!集成函数,32,'+itemid+','+id+','+val+','+types+'$'</c>，
+        /// 所以字段是 f[2]=itemid f[3]=id f[4]=val f[5]=types，**四个参数**。
+        ///
+        /// 处理函数 0x10075B70：
+        /// <code>
+        ///   10075BA5 段数 = (end-begin)/0x18；10075BBC cmp eax,6 / jb -> 10075BC1
+        ///                                     -> 83C8FF or eax,-1 / ret     ; 不足 6 段返回 -1
+        ///   10075BE9 at(2)->stoi->esi = itemid
+        ///   10075C03 at(3)->stoi->edi = id
+        ///   10075C1D at(4)->stoi->eax = val      -> [ebp-0x24] 结果槽 / [ebp-0x28] 待写值
+        ///   10075C3B at(5)->stoi->ebx = types
+        ///   10075C5A call 0x10075AE0(edx=itemid) -> item
+        ///   10075C62 test eax,eax / je 0x10075CCA                  ; 找不到物品：
+        ///            10075CCA mov ebx,[ebp-0x24] -> 结果 = val      ;   直接把 val 原样返回
+        ///   10075C66 cmp [ebp-0x24],0 / jl 0x10075DDF              ; val&lt;0 走读支
+        /// 写支 (val>=0):
+        ///   10075C70 test ebx,ebx / jne 0x10075CDC                 ; types!=0 -> 元素支
+        ///   10075C77 dec edi / cmp edi,5 / ja 0x10075CCA           ; 极品 id 越界：不写，返回 val
+        ///   10075C7D jmp [edi*4+0x10075FA4] -> 偏移 2B 2A 2F 2E 2D 2C
+        ///   10075CC4 mov byte [item+off],bl                        ; 只写一个字节，无任何发包
+        ///   10075CDC cmp ebx,1 / jne 0x10075CCA                    ; types 非 0/1：空操作，返回 val
+        ///   10075CE1 lea eax,[edi-1] / cmp eax,0x10 / ja 0x10075BC1; 元素 id 越界 -> -1
+        ///   10075CF9 元素1 = dword [item+0x7C]；10075D10 起 2..17 = 单字节 7B 7A 79 78 80 81 82 …
+        /// 读支 (val<0)：10075DDF 先把结果槽清 0，其余分支形状与写支一一对应
+        ///   （极品越界 -> 结果 0；元素越界 -> -1；types 非 0/1 -> 结果 0）。
+        /// </code>
+        /// 整个函数的 call 目标只有 <c>vector::at ×4 / stoi ×4 / vector 析构 ×3 /
+        /// 0x10075AE0(查物品) / 0x10066570</c>，最后那个在 SEH funclet 0x10075F5B 里
+        /// （异常时把结果置 <c>0xFFFFFD66</c> = −666 后 resume）。
+        /// <b>没有任何刷新/发包调用</b> —— 与 caret 36 同一结论。
+        /// </summary>
+        /// <remarks>
+        /// 元素槽偏移与 <see cref="GetElementValue"/> 的表、极品槽偏移与
+        /// <see cref="ExtremeIndexFromJid"/> 的表，在本函数里第三次独立复现
+        /// （前两次是 caret 35/36 与中文隧道「英雄极品」）。
+        /// </remarks>
         public int GetOther(int itemId, int id, int val, int types)
         {
-            var item = FindItemByItemId(itemId, out var owner);
-            if (item == null) return -1;
+            var item = FindItemByItemId(itemId, out _);
+            // 10075C62 找不到物品不是错误码，而是把 val 原样回吐
+            if (item == null) return val;
+
+            if (val >= 0)
+            {
+                if (types == 0)
+                {
+                    var index = id - 1;
+                    if ((uint)index > 5) return val;   // 10075C78 ja -> 返回 val，不写
+                    SetExtremeValue(item, index, val);
+                    return val;
+                }
+                if (types == 1)
+                {
+                    if (id < 1 || id > 17) return -1;  // 10075CE4 ja -> 0x10075BC1
+                    SetElementValue(item, id, val);
+                    return val;
+                }
+                return val;                            // 10075CDF jne -> 返回 val
+            }
 
             if (types == 0)
             {
-                var index = id - 1; // 极品位 1-6 → 内部索引 0-5
-                if (index < 0 || index > 5) return -1;
-                if (val < 0) return GetExtremeValue(item, index);
-                if (!SetExtremeValue(item, index, val)) return -1;
-                RefreshOwnedItem(owner, item);
-                return val;
+                var index = id - 1;
+                if ((uint)index > 5) return 0;         // 10075DEE ja -> 结果槽保持 0
+                return GetExtremeValue(item, index);
             }
             if (types == 1)
             {
-                if (id < 1 || id > 17) return -1; // 元素位 1-17
-                if (val < 0) return GetElementValue(item, id);
-                if (!SetElementValue(item, id, val)) return -1;
-                RefreshOwnedItem(owner, item);
-                return val;
+                if (id < 1 || id > 17) return -1;      // 10075E57 ja -> 0x10075BC1
+                return GetElementValue(item, id);
             }
-            return -1;
+            return 0;                                  // 10075E4E jne -> 结果槽保持 0
         }
 
         public int GetOnlinePlayerNum()
@@ -3752,11 +3799,61 @@ namespace GameSvr.Plugins
                 : string.Empty;
         }
 
-        /// <summary>获取英雄极品值</summary>
+        /// <summary>
+        /// ys_HeroJp / 中文隧道 `!!!!英雄极品` —— 读**英雄**身上某格的极品值。
+        ///
+        /// 处理体内联在 GetBagItemCount 钩子里，0x1005EF7B 起：
+        /// <code>
+        ///   1005EF7B 81B814050000F4010000  cmp [cfg+0x514],0x1F4 / jle 出   ; 键「英雄读取极品」
+        ///   1005EFBB 8B85E8FEFFFF          mov eax,[Self]
+        ///   1005EFC1 8B80B00B0000          mov eax,[eax+0xBB0]              ; 英雄对象
+        ///   1005EFCE 83BDECFEFFFF00 / je   英雄为空 -> 0x1005F1B3（返回结果槽初值）
+        ///   1005F07F 85F6 / 79             pos&lt;0  -> pos=0
+        ///   1005F08F 83FE0F / 7E           pos&gt;15 -> pos=15                ; 钳位，不是拒绝
+        ///   1005F09E 33C9 / 0F49C8         id&lt;0   -> id=0
+        ///   1005F0A5 B806.. / 0F4FC8       id&gt;6   -> id=6                   ; 同样是钳位
+        ///   1005F0BE 8B9EC0040000          mov ebx,[hero+0x4C0]
+        ///   1005F0C4 8B748308              mov esi,[ebx+pos*4+8]            ; 英雄身上格
+        ///   1005F0D1 …/je 0x1005F198       该格为空 -> 返回结果槽初值
+        ///   1005F0DE 49 / 83F905 / ja      id-1 无符号 &gt;5（即 id==0）-> 0x1005F177 同上
+        ///   1005F0E8 FF248DB0F2C957        jmp [.. + (id-1)*4 + 0x1005F2B0]
+        /// </code>
+        /// 结果槽 <c>[ebp-0x10C]</c> 在钩子序言 0x1005E519 一次性清零，所以上面三条
+        /// 早退路径统一返回 0。
+        ///
+        /// 六项跳表 0x1005F2B0 = {0x1005F106, 0x1005F0EF, 0x1005F162, 0x1005F14B,
+        /// 0x1005F134, 0x1005F11D}，各臂分别读 <c>byte [item+0x2B/0x2A/0x2F/0x2E/0x2D/0x2C]</c>。
+        /// 内存序 0x2A..0x2F = [jp2,jp1,jp6,jp5,jp4,jp3]，折算回极品序号就是
+        /// <c>index = id - 1</c>，与 caret 35/36 的 <see cref="ExtremeIndexFromJid"/> 同表。
+        ///
+        /// <para>与 caret 35/36 的**唯一**区别在越界处理，不能共用一个 helper：
+        /// caret 35/36 是 <c>[ebp-0x14]</c> 预置 0x2A 后 <c>lea eax,[ebx-1]/cmp 5/ja</c>，
+        /// 越界落 jp2；本处是先钳位到 [0,6] 再判 <c>id==0</c> 早退，越界落 jp6。</para>
+        /// </summary>
+        /// <remarks>
+        /// 旧实现转调 <c>GetItemExtreme(0, pos, id)</c> 读的是**主号**装备，注释写的理由
+        /// 「Hero not available on every server」是 C# 侧的假设而非原版事实：原生就是
+        /// 无英雄返回 0。<c>[player+0xBB0]</c> = 英雄对象在本仓已由多处独立佐证
+        /// （docs/cm_q2_missing_impl_20260813.md §、docs/m_cm_b_backhalf_impl_20260813.md §、
+        /// PasApiBridge.Yanshen.cs 的 TryReadHeroEquipName 同用 <c>[hero+0x4C0]+idx*4+8</c>）。
+        /// </remarks>
         public int GetHeroExtreme(int pos, int id)
         {
-            // Hero not available on every server — self only
-            return GetItemExtreme(0, pos, id);
+            var hero = _player?.m_HeroObject;
+            if (hero == null) return 0;
+
+            if (pos < 0) pos = 0;
+            else if (pos > 15) pos = 15;
+            if (id < 0) id = 0;
+            else if (id > 6) id = 6;
+            if (id == 0) return 0;
+
+            var slots = hero.m_UseItems;
+            if (slots == null || pos >= slots.Length) return 0;
+            var item = slots[pos];
+            if (item == null) return 0;
+
+            return GetExtremeValue(item, id - 1);
         }
 
         /// <summary>获取/设置技能经验: isMax=1满级, isHero=1英雄</summary>
