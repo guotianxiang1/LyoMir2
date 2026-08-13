@@ -1,0 +1,16 @@
+--- 006E3944 ---
+006E3944  55                         push      ebp
+006E3945  8BEC                       mov       ebp, esp
+006E3947  0FB78878020000             movzx     ecx, word ptr [eax + 0x278]
+006E394E  80B82A18000000             cmp       byte ptr [eax + 0x182a], 0
+006E3955  7406                       je        0x6e395d
+006E3957  81C900000100               or        ecx, 0x10000
+006E395D  51                         push      ecx
+006E395E  6A00                       push      0
+006E3960  6A00                       push      0
+006E3962  33C9                       xor       ecx, ecx
+006E3964  8ACA                       mov       cl, dl
+006E3966  66BA6700                   mov       dx, 0x67
+006E396A  E825FDFEFF                 call      0x6d3694
+006E396F  5D                         pop       ebp
+006E3970  C3                         ret       

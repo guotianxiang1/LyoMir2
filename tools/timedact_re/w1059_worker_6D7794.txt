@@ -1,0 +1,25 @@
+--- 006D7794 ---
+006D7794  55                         push      ebp
+006D7795  8BEC                       mov       ebp, esp
+006D7797  53                         push      ebx
+006D7798  56                         push      esi
+006D7799  8BF0                       mov       esi, eax
+006D779B  33DB                       xor       ebx, ebx
+006D779D  E89E0BD3FF                 call      0x408340
+006D77A2  80BE5707000000             cmp       byte ptr [esi + 0x757], 0
+006D77A9  7428                       je        0x6d77d3
+006D77AB  8BD0                       mov       edx, eax
+006D77AD  2B9644070000               sub       edx, dword ptr [esi + 0x744]
+006D77B3  81FA10270000               cmp       edx, 0x2710
+006D77B9  7218                       jb        0x6d77d3
+006D77BB  898644070000               mov       dword ptr [esi + 0x744], eax
+006D77C1  C6865707000000             mov       byte ptr [esi + 0x757], 0
+006D77C8  B201                       mov       dl, 1
+006D77CA  8BC6                       mov       eax, esi
+006D77CC  E873C10000                 call      0x6e3944
+006D77D1  8BD8                       mov       ebx, eax
+006D77D3  8BC3                       mov       eax, ebx
+006D77D5  5E                         pop       esi
+006D77D6  5B                         pop       ebx
+006D77D7  5D                         pop       ebp
+006D77D8  C3                         ret       

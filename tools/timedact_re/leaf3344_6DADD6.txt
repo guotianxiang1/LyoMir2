@@ -1,0 +1,53 @@
+--- 006DADD6 ---
+006DADD6  8B45FC                     mov       eax, dword ptr [ebp - 4]
+006DADD9  E8FA170100                 call      0x6ec5d8
+006DADDE  E9490E0000                 jmp       0x6dbc2c
+006DBC2C  33C0                       xor       eax, eax
+006DBC2E  5A                         pop       edx
+006DBC2F  59                         pop       ecx
+006DBC30  59                         pop       ecx
+006DBC31  648910                     mov       dword ptr fs:[eax], edx
+006DBC34  E9D5000000                 jmp       0x6dbd0e
+006DBD0E  33C0                       xor       eax, eax
+006DBD10  5A                         pop       edx
+006DBD11  59                         pop       ecx
+006DBD12  59                         pop       ecx
+006DBD13  648910                     mov       dword ptr fs:[eax], edx
+006DBD16  68DFBD6D00                 push      0x6dbddf
+006DBD1B  8D85E4FCFFFF               lea       eax, [ebp - 0x31c]
+006DBD21  BA02000000                 mov       edx, 2
+006DBD26  E8F997D2FF                 call      0x405524
+006DBD2B  8D8548FDFFFF               lea       eax, [ebp - 0x2b8]
+006DBD31  BA23000000                 mov       edx, 0x23
+006DBD36  E8E997D2FF                 call      0x405524
+006DBD3B  8D85D4FDFFFF               lea       eax, [ebp - 0x22c]
+006DBD41  E842AED3FF                 call      0x416b88
+006DBD46  8D85F4FDFFFF               lea       eax, [ebp - 0x20c]
+006DBD4C  E837AED3FF                 call      0x416b88
+006DBD51  8D8504FEFFFF               lea       eax, [ebp - 0x1fc]
+006DBD57  BA07000000                 mov       edx, 7
+006DBD5C  E8C397D2FF                 call      0x405524
+006DBD61  8D8520FEFFFF               lea       eax, [ebp - 0x1e0]
+006DBD67  8B1504114000               mov       edx, dword ptr [0x401104]
+006DBD6D  B902000000                 mov       ecx, 2
+006DBD72  E80DA4D2FF                 call      0x406184
+006DBD77  8D8540FEFFFF               lea       eax, [ebp - 0x1c0]
+006DBD7D  BA02000000                 mov       edx, 2
+006DBD82  E89D97D2FF                 call      0x405524
+006DBD87  8D8548FEFFFF               lea       eax, [ebp - 0x1b8]
+006DBD8D  E8F6ADD3FF                 call      0x416b88
+006DBD92  8D8558FEFFFF               lea       eax, [ebp - 0x1a8]
+006DBD98  BA09000000                 mov       edx, 9
+006DBD9D  E88297D2FF                 call      0x405524
+006DBDA2  8D8594FEFFFF               lea       eax, [ebp - 0x16c]
+006DBDA8  E85397D2FF                 call      0x405500
+006DBDAD  8D4598                     lea       eax, [ebp - 0x68]
+006DBDB0  BA02000000                 mov       edx, 2
+006DBDB5  E86A97D2FF                 call      0x405524
+006DBDBA  8D45C0                     lea       eax, [ebp - 0x40]
+006DBDBD  BA02000000                 mov       edx, 2
+006DBDC2  E85D97D2FF                 call      0x405524
+006DBDC7  8D45D0                     lea       eax, [ebp - 0x30]
+006DBDCA  BA04000000                 mov       edx, 4
+006DBDCF  E85097D2FF                 call      0x405524
+006DBDD4  C3                         ret       
