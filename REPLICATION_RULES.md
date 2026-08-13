@@ -20,6 +20,27 @@
 - 只读扫描、反汇编、grep 可以自由并行。
 - 同理，IDA（idat）也必须串行，一次只能开一个。
 
+**编译锁协议（确实需要跑审计的代理才适用）**：
+
+```powershell
+while (-not (New-Item -ItemType Directory "D:\loym2\staging\_buildlock" -ErrorAction SilentlyContinue)) { Start-Sleep 20 }
+# 抢到锁后，批量跑完一批再释放。不要一个工具抢一次锁。
+Remove-Item "D:\loym2\staging\_buildlock" -Recurse -Force
+```
+
+锁目录 `LastWriteTime` 超 15 分钟视为残留，可删掉重抢。每次持锁不要超过 10 分钟。
+
+**2026-08-13 实际事故**：某审计代理把同一个 sweep 脚本**并发起了 5 份**，每份各自派生
+`dotnet build`，锁形同虚设——机器 CPU 打满、20 个 dotnet 进程、15 个 MSBuild 常驻
+worker 堆积占掉 4 GB 内存。由此追加三条：
+
+1. **一个代理同一时刻只能有一个编译进程。** 写 sweep 脚本时要自查是不是已经有一份在跑
+   （检查自己的 pid 文件或进程列表），不要靠"我这次跑得快"来赌。
+2. **抢锁要覆盖整个批次**，不是覆盖单个 `dotnet run`。脚本从头到尾持一次锁。
+3. 环境已全局设置 `MSBUILDDISABLENODEREUSE=1` 和 `MSBUILDNODECOUNT=2`，
+   **不要在自己的命令里覆盖它们**。node reuse 打开时，每次构建都会留下常驻 worker，
+   几十次构建后就把内存吃光。
+
 ### 2. 不许捏造
 
 证据不足就写 `BLOCKED` 并说明缺什么。**宁可少一条结论，也不要给一条错的。**
