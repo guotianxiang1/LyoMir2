@@ -541,6 +541,11 @@ namespace GameSvr
             return player?.m_PEnvir != null && player.m_PEnvir.Flag.boBLACKROOM;
         }
 
+        internal void RefreshNativeGroupWire()
+        {
+            BroadcastNativeGroupMembers(this);
+        }
+
         private static void BroadcastNativeGroupMembers(TPlayObject leader)
         {
             if (leader?.m_GroupMembers == null)

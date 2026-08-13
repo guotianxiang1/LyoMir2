@@ -3210,6 +3210,41 @@ namespace GameSvr
             }
             else
             {
+                // 战神 sub_726E68 删的是队长时 @0x726FBF call 0x727FB0：
+                // 从槽 0..10 找第一个「72843C 记录有效且 player != 离队者」的成员，
+                // 写入 group+0x3C，再广播 ShortString 0x7280AC「 提升为小队队长!」。
+                // 旧 C# 把全队 LeaveGroup，等于队长一点删除就解散。
+                TPlayObject successor = null;
+                for (int i = 0; i < m_GroupMembers.Count; i++)
+                {
+                    var cand = m_GroupMembers[i];
+                    if (cand != null && cand != BaseObject && !cand.m_boGhost)
+                    {
+                        successor = cand;
+                        break;
+                    }
+                }
+                BaseObject.LeaveGroup();
+                m_GroupMembers.Remove(BaseObject as TPlayObject);
+                if (successor != null)
+                {
+                    var remaining = new List<TPlayObject>(m_GroupMembers);
+                    m_GroupMembers.Clear();
+                    successor.m_GroupMembers.Clear();
+                    successor.m_GroupMembers.Add(successor);
+                    successor.m_GroupOwner = successor;
+                    for (int i = 0; i < remaining.Count; i++)
+                    {
+                        var member = remaining[i];
+                        if (member == null || member == successor)
+                            continue;
+                        successor.m_GroupMembers.Add(member);
+                        member.m_GroupOwner = successor;
+                    }
+                    successor.SendGroupText(successor.m_sCharName + " 提升为小队队长!");
+                    successor.RefreshNativeGroupWire();
+                    return;
+                }
                 for (int i = m_GroupMembers.Count - 1; i >= 0; i--)
                 {
                     m_GroupMembers[i].LeaveGroup();
@@ -3223,7 +3258,9 @@ namespace GameSvr
             }
             else
             {
-                PlayObject.SendGroupMembers();
+                // 战神 726FE6 call 0x7270F8 仍存活则 726FF7 call 0x7271D0，
+                // 下发 SM 667 的 54 字节成员记录，不是斜杠拼名。
+                PlayObject.RefreshNativeGroupWire();
             }
         }
 
@@ -5550,8 +5587,10 @@ namespace GameSvr
 
         private void LeaveGroup()
         {
-            const string sExitGropMsg = "{0} 已经退出了本组.";
-            SendGroupText(format(sExitGropMsg, m_sCharName));
+            // 战神 sub_6C3200 @0x6C3252 edx=0x6C32C4 ShortString len=9「 退出小组」
+            // （字节 09 20 CD CB B3 F6 D0 A1 D7 E9），拼在 [self+0x106] 名字后面，
+            // 经 sub_727068 用 RM 0x2776 广播给全队。全镜像「已经退出了本组」0 命中。
+            SendGroupText(m_sCharName + " 退出小组");
             m_GroupOwner = null;
             SendMsg(this, Grobal2.RM_GROUPCANCEL, 0, 0, 0, 0, "");
         }
