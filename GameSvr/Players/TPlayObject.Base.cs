@@ -11,6 +11,7 @@ namespace GameSvr
         public ClientPacket m_DefMsg;
         public string m_sOldSayMsg = string.Empty;
         public int m_nSayMsgCount = 0;
+        public byte m_btSayRapidCount = 0;
         public int m_dwSayMsgTick = 0;
         public bool m_boDisableSayMsg = false;
         public int m_dwDisableSayMsgTick = 0;
@@ -842,6 +843,8 @@ namespace GameSvr
             m_dwMoveCountA = 0;
             m_nOverSpeedCount = 0;
             m_sOldSayMsg = "";
+            m_nSayMsgCount = 0;
+            m_btSayRapidCount = 0;
             m_dwSayMsgTick = HUtil32.GetTickCount();
             m_boDisableSayMsg = false;
             m_dwDisableSayMsgTick = HUtil32.GetTickCount();

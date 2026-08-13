@@ -124,21 +124,36 @@ namespace GameSvr
                     return;
                 if ((nGbk > 0xB0 || nGbk > 0x50) && m_btPermission < 4)
                     return;
-                if ((HUtil32.GetTickCount() - m_dwSayMsgTick) < M2Share.g_Config.dwSayMsgTime)
+                // 0x6BB526: dup [ebx+0xA74] same-text elapsed<0xBB8; rapid [ebx+0x682] elapsed<0x3E8.
+                // dup>=2 => 0x6C912C edx=0x3C + 0x6BB9B8; rapid>=5 => same + 0x6BB9F4.
+                var now = HUtil32.GetTickCount();
+                var elapsed = now - m_dwSayMsgTick;
+                if (sData == m_sOldSayMsg && elapsed < 0xBB8)
+                    m_nSayMsgCount++;
+                if (elapsed < 0x3E8)
+                    m_btSayRapidCount++;
+                if (m_nSayMsgCount >= 2)
                 {
-                    m_nSayMsgCount++;// 2
-                    if (m_nSayMsgCount >= M2Share.g_Config.nSayMsgCount)
-                    {
-                        m_boDisableSayMsg = true;
-                        m_dwDisableSayMsgTick = HUtil32.GetTickCount() + M2Share.g_Config.dwDisableSayMsgTime;// 60 * 1000
-                        SysMsg(format(M2Share.g_sDisableSayMsg, M2Share.g_Config.dwDisableSayMsgTime / (60 * 1000)), MsgColor.Red, MsgType.Hint);
-                    }
-                }
-                else
-                {
-                    m_dwSayMsgTick = HUtil32.GetTickCount();
                     m_nSayMsgCount = 0;
+                    m_boDisableSayMsg = true;
+                    m_dwDisableSayMsgTick = now + 60 * 1000;
+                    SysMsg("发送重复的话太频繁，当前已被禁言了。", MsgColor.Red, MsgType.Hint);
+                    return;
                 }
+                if (m_btSayRapidCount >= 5)
+                {
+                    m_btSayRapidCount = 0;
+                    m_boDisableSayMsg = true;
+                    m_dwDisableSayMsgTick = now + 60 * 1000;
+                    SysMsg("说话太频繁，当前已被禁言了。", MsgColor.Red, MsgType.Hint);
+                    return;
+                }
+                if (elapsed >= 0x7D0 && m_btSayRapidCount >= 1)
+                    m_btSayRapidCount--;
+                if (elapsed >= 0x1388 && m_nSayMsgCount >= 1)
+                    m_nSayMsgCount--;
+                m_dwSayMsgTick = now;
+                m_sOldSayMsg = sData;
                 if (HUtil32.GetTickCount() >= m_dwDisableSayMsgTick)
                 {
                     m_boDisableSayMsg = false;
