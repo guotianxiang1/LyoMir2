@@ -1760,21 +1760,21 @@ namespace SystemModule
         public const int ISM_CHANGECASTLEOWNER = 211;    // REAL - Change castle owner
         public const int ISM_RELOADCASTLEINFO = 212;     // REAL - Reload castle info
         public const int ISM_RELOADADMIN = 213;          // REAL - Reload admin
-        public const int ISM_FRIEND_INFO = 214;          // REAL - Friend info
+        public const int ISM_GLOBAL_MODE_SET = 214;      // REAL - sub_6579B0 写全局 [[0x7D6010]]=1/2/3
         public const int ISM_FRIEND_DELETE = 215;        // SINK - Friend delete (C# extension handler)
         public const int ISM_DIVORCE = 216;              // REAL - Divorce
         public const int ISM_MENTOR_STUDENT_1 = 217;     // REAL - Mentor/student handler 1 (EA 0x6572A4, calls sub_657CF0)
         public const int ISM_MENTOR_STUDENT_2 = 218;     // REAL - Mentor/student handler 2 (EA 0x6572B4, calls sub_657AC0)
-        public const int ISM_TAG_SEND = 219;             // REAL - Tag send
-        public const int ISM_TAG_RESULT = 220;           // REAL - Tag result
-        public const int ISM_USER_INFO = 221;            // REAL - User info
+        public const int ISM_TEXT_RELAY3 = 219;          // REAL - sub_6581A4 三段式文本转发
+        public const int ISM_DEAD_LEG_220 = 220;         // REAL - sub_657E08，输出终点 sub_7138CC 是空桩
+        public const int ISM_GM_NOTICE = 221;            // REAL - sub_6575D8 GMLevel([+0x675])>=3 通知
         public const int ISM_CHANGESERVERRECIEVEOK = 222;// REAL - Change server receive OK
         public const int ISM_RELOADCHATLOG = 223;        // SINK - Reload chat log (C# extension handler)
-        public const int ISM_MARKETOPEN = 224;           // REAL - Market open
+        public const int ISM_MENTOR_REPUTATION = 224;    // REAL - sub_6574B4 [师父+0x4F0] += n（声望）
         public const int ISM_MARKETCLOSE = 225;          // SINK - Market close (C# extension handler)
-        public const int ISM_LM_DELETE = 226;            // REAL - Lover manager delete
-        public const int ISM_RELOADMAKEITEMLIST = 227;   // REAL - Reload make item list
-        public const int ISM_GUILDMEMBER_RECALL = 228;   // REAL - Guild member recall
+        public const int ISM_MENTOR_GRADUATE = 226;      // REAL - sub_657888 徒弟出师（sub_6C5EC8 的跨服镜像）
+        public const int ISM_PLAYER_NOTICE = 227;        // REAL - sub_657670 给指定玩家发通知
+        public const int ISM_MENTOR_RECHARGE_REWARD = 228; // REAL - sub_657BCC 师徒充值奖励
         public const int ISM_RELOADGUILDAGIT = 229;      // SINK - Reload guild agit (C# extension handler)
         public const int ISM_LM_WHISPER = 230;           // SINK - Lover manager whisper (C# extension handler)
         public const int ISM_GMWHISPER = 231;            // SINK - GM whisper (C# extension handler)
@@ -1786,7 +1786,7 @@ namespace SystemModule
         public const int ISM_LM_KILLED_MSG = 237;        // SINK - Lover manager killed message (C# extension handler)
         public const int ISM_REQUEST_LOVERRECALL = 238;  // SINK - Request lover recall (C# extension handler)
         public const int ISM_STANDARDTICKREQ = 239;      // SINK - Standard tick request (C# extension handler)
-        public const int ISM_STANDARDTICK = 240;         // REAL - Standard tick
+        public const int ISM_SECT_INVITE = 240;          // REAL - sub_657F3C 宗派邀请
         public const int ISM_CREDITCARD_CLEARALL = 241;  // REAL - Credit card clear all (EA 0x657354)
         public const int ISM_GRUOPMESSAGE = 242;         // SINK - Group message (C# extension handler)
         public const int ISM_CREDITCARD_CLEARMONTHLY = 243; // REAL - Credit card clear monthly
@@ -1812,6 +1812,28 @@ namespace SystemModule
         public const int ISM_FRIEND_CLOSE = 217;
         [Obsolete("SGRP-26: Native 218 is ISM_MENTOR_STUDENT_2, not friend result. Use ISM_MENTOR_STUDENT_2.")]
         public const int ISM_FRIEND_RESULT = 218;
+
+        // mirror2: ProcessOthGsMsg 全表 dump（索引表 0x657160 / 地址表 0x657198，
+        // 基数 202、跨度 202..257、27 REAL / 29 SINK）后逐个 handler 反汇编所得。
+        // 详见 docs/mirror_crossserver_20260814.md。
+        [Obsolete("SGRP: Native 214 is ISM_GLOBAL_MODE_SET (sub_6579B0 writes [[0x7D6010]]), not friend info.")]
+        public const int ISM_FRIEND_INFO = 214;
+        [Obsolete("SGRP: Native 219 is ISM_TEXT_RELAY3 (sub_6581A4), not tag send.")]
+        public const int ISM_TAG_SEND = 219;
+        [Obsolete("SGRP: Native 220 is ISM_DEAD_LEG_220 (sub_657E08, output sink sub_7138CC is a stub), not tag result.")]
+        public const int ISM_TAG_RESULT = 220;
+        [Obsolete("SGRP: Native 221 is ISM_GM_NOTICE (sub_6575D8, gated on GMLevel>=3), not user info.")]
+        public const int ISM_USER_INFO = 221;
+        [Obsolete("SGRP: Native 224 is ISM_MENTOR_REPUTATION (sub_6574B4 adds to [master+0x4F0]), not market open.")]
+        public const int ISM_MARKETOPEN = 224;
+        [Obsolete("SGRP: Native 226 is ISM_MENTOR_GRADUATE (sub_657888), not lover-manager delete.")]
+        public const int ISM_LM_DELETE = 226;
+        [Obsolete("SGRP: Native 227 is ISM_PLAYER_NOTICE (sub_657670), not reload make-item list.")]
+        public const int ISM_RELOADMAKEITEMLIST = 227;
+        [Obsolete("SGRP: Native 228 is ISM_MENTOR_RECHARGE_REWARD (sub_657BCC), not guild member recall.")]
+        public const int ISM_GUILDMEMBER_RECALL = 228;
+        [Obsolete("SGRP: Native 240 is ISM_SECT_INVITE (sub_657F3C), not standard tick.")]
+        public const int ISM_STANDARDTICK = 240;
 
         public const int LA_UNDEAD = 1;
 

@@ -137,7 +137,7 @@ namespace GameSvr
                 case Grobal2.ISM_RELOADADMIN:
                     MsgGetReloadAdmin();
                     break;
-                case Grobal2.ISM_MARKETOPEN:
+                case Grobal2.ISM_MENTOR_REPUTATION:
                     MsgGetMarketOpen(true);
                     break;
                 case Grobal2.ISM_MARKETCLOSE:
@@ -164,7 +164,7 @@ namespace GameSvr
                     // 战神 218 -> sub_657AC0: 师父(在他服)逐出徒弟, 更新本服徒弟
                     MsgGetMentorExpel(serverNum, Body);
                     break;
-                case Grobal2.ISM_LM_DELETE:
+                case Grobal2.ISM_MENTOR_GRADUATE:
                     // 战神 226 (索引表 @0x657160[24]=0x12 -> 地址表 @0x657198[0x12]
                     // -> stub @0x65731E -> sub_657888) = 徒弟出师的跨服镜像, 不是
                     // "情侣删除"。常量名 ISM_LM_DELETE 系旧命名, 见报告接线清单。
@@ -172,26 +172,26 @@ namespace GameSvr
                     // Ident=226" —— 与 native 的 REAL handler 不符。
                     MsgGetMentorGraduate(serverNum, Body);
                     break;
-                case Grobal2.ISM_USER_INFO:
+                case Grobal2.ISM_GM_NOTICE:
                     // 战神 221 (索引表 @0x657160[19]=0x0F -> 地址表[0x0F] ->
                     // stub @0x6572EA -> sub_6575D8) = 给本服 GM 转发文本通知。
                     // 此前与 214/215/219/220 一起折进空的 MsgGetUserMgr。
                     MsgGetGmNotice(serverNum, Body);
                     break;
-                case Grobal2.ISM_TAG_SEND:
+                case Grobal2.ISM_TEXT_RELAY3:
                     // 战神 219 (索引表 @0x657160[17]=0x0D -> 地址表[0x0D] ->
                     // stub @0x6572C4 -> sub_6581A4) = 三段式文本转发, 只有 SysMsg
                     // 那条腿可观测 (回帧腿落 sub_7138CC 空桩)。
                     MsgGetGmRelay(serverNum, Body);
                     break;
-                case Grobal2.ISM_FRIEND_INFO:
+                case Grobal2.ISM_GLOBAL_MODE_SET:
                     // 战神 214 (stub @0x657287 -> sub_6579B0): 对第三个整型参数做
                     // 3 路 switch, 写全局 [[0x7D6010]] = 1/2/3。C# 传输层无第三个
                     // 整型参数载体, 且 [0x7D6010] 无 C# 模型 —— fail-closed, 保留
                     // 空处理 (不落 default sink: native 214 是 REAL handler,
                     // 打印 "[Error]" 反而与 native 不符)。见报告 214 条。
                     break;
-                case Grobal2.ISM_TAG_RESULT:
+                case Grobal2.ISM_DEAD_LEG_220:
                     // 战神 220 (stub @0x6572D9 -> sub_657E08): 通篇拼串, 终点
                     // `mov dx,0xDD; call 0x713890` -> sub_7138CC 是空桩
                     // (55 8B EC 5D C2 0C 00), 故本 build 上 220 无任何可观测效果。
@@ -202,10 +202,10 @@ namespace GameSvr
                     // 空处理, 与既有 C# 发送侧共存。
                     MsgGetUserMgr(serverNum, Body, Ident);
                     break;
-                case Grobal2.ISM_RELOADMAKEITEMLIST:
+                case Grobal2.ISM_PLAYER_NOTICE:
                     MsgGetReloadMakeItemList();
                     break;
-                case Grobal2.ISM_GUILDMEMBER_RECALL:
+                case Grobal2.ISM_MENTOR_RECHARGE_REWARD:
                     MsgGetGuildMemberRecall(serverNum, Body);
                     break;
                 case Grobal2.ISM_RELOADGUILDAGIT:
@@ -232,7 +232,7 @@ namespace GameSvr
                 case Grobal2.ISM_REQUEST_LOVERRECALL:
                     MsgGetRequestLoverRecall(serverNum, Body);
                     break;
-                case Grobal2.ISM_STANDARDTICK:
+                case Grobal2.ISM_SECT_INVITE:
                     // 战神 240 (索引表 @0x657160[38]=0x15 -> 地址表 @0x657198[0x15]
                     // -> stub @0x65734F -> sub_657F3C) = 宗派邀请提示, 不是
                     // "标准时钟"。常量名 ISM_STANDARDTICK 系旧命名, 见报告接线清单。
