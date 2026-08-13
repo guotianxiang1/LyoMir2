@@ -2081,19 +2081,92 @@ namespace GameSvr.Plugins
             return count;
         }
 
-        /// <summary>按身体部位爆装备</summary>
-        public int DropEquipByPos(int pos) { if (pos < 0 || pos >= _player.m_UseItems.Length) return 0; var it=_player.m_UseItems[pos]; if(it==null)return 0; _player.DelBagItem(it.MakeIndex,M2Share.UserEngine.GetStdItemName(it.wIndex)); return 1; }
+        /// <summary>
+        /// Ys_DropItembyId / caret ^33^ —— 把身体部位 pos 上的装备摘下来扔到地上。
+        /// 处理函数 0x1005CDD0。原来的实现调 DelBagItem 去背包里找 MakeIndex，而
+        /// 已装备的物品根本不在 m_ItemList 里，所以它既没摘装备也没掉东西，却照样返回 1。
+        /// </summary>
+        public int DropEquipByPos(int pos)
+        {
+            // 1005CE27 83F80F cmp eax,0xF / 1005CE2A 0F8762010000 ja
+            //   -> 1005CF92 分支，1005CFA1 33C0 xor eax,eax：整段不执行，返回 0
+            if ((uint)pos > 0xF) return 0;
+            // 两条隧道唯一的实质差别在第 6 个栈参：caret 33 推常量 0（1005CED0 6A00），
+            // caret 34 推玩家自己（1005D145 FF75B4）。
+            DropEquippedSlot(pos, null);
+            // 1005CF8D 8B45C8 mov eax,[ebp-0x38] —— 返回的是装备位下标本身，不是 1；
+            // 槽位为空也走这条，仍旧返回下标。
+            return pos;
+        }
 
-        /// <summary>按装备名字爆装备</summary>
+        /// <summary>
+        /// Ys_DropItembyName / caret ^34^ —— 按装备名字定位身体部位再扔。
+        /// 处理函数 0x1005CFF0。
+        /// </summary>
         public int DropEquipByName(string name)
         {
-            for (int i = 0; i < _player.m_UseItems.Length; i++)
+            var slot = -1;
+            // 1005D04E 83FE10 cmp esi,0x10 / 7D5A jge —— 只扫 0..15 号装备位，取第一个命中
+            for (var i = 0; i < 16 && i < _player.m_UseItems.Length; i++)
             {
                 var item = _player.m_UseItems[i];
-                if (item != null && string.Equals(M2Share.UserEngine.GetStdItemName(item.wIndex), name, StringComparison.OrdinalIgnoreCase))
-                { _player.DelBagItem(item.MakeIndex, M2Share.UserEngine.GetStdItemName(item.wIndex)); return 1; }
+                if (item == null || item.wIndex == 0) continue;
+                // 1005D07F call 0x10056970 取 [item+0x1C] 那条 Delphi 串（物品自己的显示名，
+                // 对应 C# 的 ItmUnit.GetItemName，而不是 std 名）；1005D08F call 0x10043E20
+                // 转 0x10018E20 是逐 dword / 逐字节比较，**区分大小写**。
+                if (!string.Equals(ItmUnit.GetItemName(item), name, StringComparison.Ordinal)) continue;
+                slot = i;
+                break;
             }
-            return 0;
+            // 1005D0AD 83FB0F cmp ebx,0xF / 0F8773010000 ja -> 1005D244 33C0：没找到返回 0
+            if ((uint)slot > 0xF) return 0;
+            DropEquippedSlot(slot, _player);
+            // 1005D20F 8B45B0 —— 返回装备位下标，所以「扔掉 0 号位」和「没找到」都是 0
+            return slot;
+        }
+
+        /// <summary>
+        /// caret ^33^ / ^34^ 共用的落地序列。两段原生码（1005CEAB..1005CF40 与
+        /// 1005D120..1005D1B6）逐条同构，caret 33 里被 Themida 虚拟化的只是三个宿主
+        /// 地址的立即数，调用形状本身是明文的：
+        ///   ① 宿主 0x0075F3E8(装备容器, 槽号, cl=0)：0075F409 取出物品、0075F40F 把槽
+        ///      置 0。第三参传 0，所以宿主自己的 RecalcAbilitys（0x0075EE78）和外观刷新
+        ///      都不执行。
+        ///   ② 宿主 0x007688A0(self, item, ecx=3, 1, 0, dropper, 来源串)：范围恒为 3；
+        ///      第一个栈参 1 让宿主跳过 0x0078389C 的可丢弃校验。
+        ///   ③ 宿主 0x00765F6C，cx=0x27A4=RM_SENDDELITEMLIST，包体 4 字节 = [item+0x18]
+        ///      = ClientItemID（1005D175 8B4718 / 1005D18C lea eax,[ebp-0x6C]）。
+        ///   ④ 只有装备位落在 {0,1,4,13} 时再调玩家虚函数 [+0x1CC]。这个集合来自
+        ///      1005CEE3 sub eax,2/jb → sub eax,2/je → sub eax,9/jne，与宿主自己的
+        ///      0x0075F1D8 逐字节相同。
+        /// 全程不碰 m_ItemList。
+        /// </summary>
+        private void DropEquippedSlot(int slot, TBaseObject dropper)
+        {
+            if (slot < 0 || slot >= _player.m_UseItems.Length) return;
+            var item = _player.m_UseItems[slot];
+            if (item == null || item.wIndex == 0) return;      // 1005CEBE 85FF / 747E je
+
+            var deleted = new List<TDeleteItem>
+            {
+                new TDeleteItem
+                {
+                    sItemName = M2Share.UserEngine.GetStdItemName(item.wIndex),
+                    MakeIndex = item.MakeIndex,
+                    ClientItemID = _player.EnsureClientItemId(item)
+                }
+            };
+
+            // 原生先清槽再扔（它握的是对象指针）；C# 的 DropItemDown 要靠 wIndex 反查
+            // StdItem，所以只能先扔后清槽。清的是槽位引用而不是物品的 wIndex——
+            // 物品对象已经挂在地图上了，改它的 wIndex 会把地面物品一并弄坏。
+            _player.DropItemDown(item, 3, false, null, dropper);
+            _player.m_UseItems[slot] = null;
+            _player.SendMsg(_player, Grobal2.RM_SENDDELITEMLIST, 0,
+                deleted.Count, 0, 0, "", deleted);
+            // [player]+0x1CC 不是 RecalcAbilitys（那是 +0x8C，本路径因为第三参传 0
+            // 而根本不走）。C# 侧对应的是 FeatureChanged —— 装备外观广播。
+            if (slot is 0 or 1 or 4 or 13) _player.FeatureChanged();
         }
 
         /// <summary>按stdmode修理背包物品: Dura=DuraMax</summary>
