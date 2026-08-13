@@ -2558,15 +2558,28 @@ namespace GameSvr
             switch (DefMsg.Ident)
             {
                 case Grobal2.CM_SPELL:
-                    if (M2Share.g_Config.boSpellSendUpdateMsg) 
+                    // Native handler 0x6DA04A hands four separate header fields to the
+                    // spell worker 0x6BC510:
+                    //   0x6DA0C1  0F B7 40 06  movzx eax, word [eax+6]   ; Param  -> pushed 1st
+                    //   0x6DA0C9  0F B7 40 08  movzx eax, word [eax+8]   ; Tag    -> pushed 2nd
+                    //   0x6DA0D1  8B 08        mov   ecx, [eax]          ; Recog  -> ECX
+                    //   0x6DA0D6  66 8B 50 0A  mov   dx,  word [eax+0xA] ; Series -> EDX
+                    // and each role is pinned inside 0x6BC510: EDX reaches the
+                    // "skill known / area allowed" gate at 0x6BC541-0x6BC546, so Series is
+                    // the skill index; Param and Tag reach GetNextDirection at 0x6BC637
+                    // (ECX) / 0x6BC633 (stack) alongside CurrX 0x12C and CurrY 0x130 at
+                    // 0x6BC640 / 0x6BC63A, so they are target X and Y; ECX is compared
+                    // against the map cells' object pointers at 0x76CA42 and then
+                    // dereferenced for target.CurrX at 0x6BC66B, so Recog is the target.
+                    if (M2Share.g_Config.boSpellSendUpdateMsg)
                     {
-                        PlayObject.SendUpdateMsg(PlayObject, DefMsg.Ident, DefMsg.Tag, HUtil32.LoWord(DefMsg.Recog),
-                            HUtil32.HiWord(DefMsg.Recog), HUtil32.MakeLong(DefMsg.Param, DefMsg.Series), "");
+                        PlayObject.SendUpdateMsg(PlayObject, DefMsg.Ident, DefMsg.Series,
+                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "");
                     }
                     else
                     {
-                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Tag, HUtil32.LoWord(DefMsg.Recog),
-                            HUtil32.HiWord(DefMsg.Recog), HUtil32.MakeLong(DefMsg.Param, DefMsg.Series), "");
+                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series,
+                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "");
                     }
                     break;
                 case Grobal2.CM_QUERYUSERNAME:
