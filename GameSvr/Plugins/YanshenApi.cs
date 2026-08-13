@@ -392,6 +392,22 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
+        /// Read one of the 96 随机极品 knobs. Every one of them exists only as an
+        /// immediate the plugin writes into M2Server's code, so three situations
+        /// all mean "leave the host alone": 随机极品 off (0x100BF6E3 `cmp
+        /// [esi+0x4F0],0 / je` jumps to the restore arm), the key absent, and the
+        /// key non-positive (0x100BFE2D `test eax,eax / jle` skips the store).
+        /// The stock immediate is therefore the answer in all three, and lives
+        /// here rather than at the call sites.
+        /// </summary>
+        int ExtremeParamInt(string chineseKey, int stockImmediate)
+        {
+            if (!IsRandomExtreme()) return stockImmediate;
+            var value = GetParamInt(chineseKey, stockImmediate);
+            return value > 0 ? value : stockImmediate;
+        }
+
+        /// <summary>
         /// Check if a feature is enabled by Chinese config key name (from config.json).
         /// Also supports dotted fallback keys via _keyMap for backward compatibility
         /// with external callers that still pass dotted keys.
@@ -3823,7 +3839,10 @@ namespace GameSvr.Plugins
         public bool IsBigBag() => Enabled("大背包");
         public bool IsTempBag() => Enabled("临时大背包");
         public bool IsPortableStorage() => Enabled("随身仓库");
-        public bool IsRandomExtreme() => Enabled("随机极品");
+        // 0x100BF6E3 `cmp [esi+0x4F0],0 / je 0x100C3EE3` gates the whole 96-slot
+        // block: off restores the stock immediates rather than failing a call, so
+        // this reads as a patch toggle.
+        public bool IsRandomExtreme() => PatchToggleOn("随机极品");
         public bool IsGiveExtreme() => Enabled("give极品");
         // 0x100B9D3A `A2 6C FF 73 00` overwrites the imm8 of host
         // 0x0073FF69 `83 7D F4 02 cmp dword [ebp-0xc],2`. Plugin does
@@ -3832,108 +3851,112 @@ namespace GameSvr.Plugins
         public int MaxEquipCount() => ParamAtoi("最大装备数量", 3);
 
         // ── Equipment stat param readers (武器/衣服/头盔/项链/手镯/戒指) ──
+        // Defaults are the stock M2Server immediates the plugin overwrites,
+        // recovered in docs/ys_gui_extreme_20260813.md.  A missing key and a
+        // non-positive one both have to fall back to them: the apply arm is
+        // `test eax,eax / jle` (0x100BFE2D), so it leaves the host untouched.
         // 武器
-        public int WeaponAttrChance_Acc() => GetParamInt("武器属性几率_准确_值", 24);
-        public int WeaponAttrChance_Atk() => GetParamInt("武器属性几率_攻击_值", 30);
-        public int WeaponAttrChance_Spd() => GetParamInt("武器属性几率_攻速_值", 30);
-        public int WeaponAttrChance_Tao() => GetParamInt("武器属性几率_道术_值", 30);
-        public int WeaponAttrChance_Mgc() => GetParamInt("武器属性几率_魔法_值", 30);
-        public int WeaponRandExtreme() => GetParamInt("武器最随机性_极品_值", 20);
-        public int WeaponMaxPts_Acc() => GetParamInt("武器最高点数_准确_值", 13);
-        public int WeaponMaxPts_Atk() => GetParamInt("武器最高点数_攻击_值", 7);
-        public int WeaponMaxPts_Spd() => GetParamInt("武器最高点数_攻速_值", 13);
-        public int WeaponMaxPts_Tao() => GetParamInt("武器最高点数_道术_值", 13);
-        public int WeaponMaxPts_Mgc() => GetParamInt("武器最高点数_魔法_值", 13);
-        public int WeaponPtsChance_Acc() => GetParamInt("武器点数几率_准确_值", 15);
-        public int WeaponPtsChance_Atk() => GetParamInt("武器点数几率_攻击_值", 20);
-        public int WeaponPtsChance_Spd() => GetParamInt("武器点数几率_攻速_值", 15);
-        public int WeaponPtsChance_Tao() => GetParamInt("武器点数几率_道术_值", 15);
-        public int WeaponPtsChance_Mgc() => GetParamInt("武器点数几率_魔法_值", 15);
+        public int WeaponAttrChance_Acc() => ExtremeParamInt("武器属性几率_准确_值", 24);
+        public int WeaponAttrChance_Atk() => ExtremeParamInt("武器属性几率_攻击_值", 30);
+        public int WeaponAttrChance_Spd() => ExtremeParamInt("武器属性几率_攻速_值", 20);
+        public int WeaponAttrChance_Tao() => ExtremeParamInt("武器属性几率_道术_值", 30);
+        public int WeaponAttrChance_Mgc() => ExtremeParamInt("武器属性几率_魔法_值", 30);
+        public int WeaponRandExtreme() => ExtremeParamInt("武器最随机性_极品_值", 10);
+        public int WeaponMaxPts_Acc() => ExtremeParamInt("武器最高点数_准确_值", 12);
+        public int WeaponMaxPts_Atk() => ExtremeParamInt("武器最高点数_攻击_值", 6);
+        public int WeaponMaxPts_Spd() => ExtremeParamInt("武器最高点数_攻速_值", 12);
+        public int WeaponMaxPts_Tao() => ExtremeParamInt("武器最高点数_道术_值", 12);
+        public int WeaponMaxPts_Mgc() => ExtremeParamInt("武器最高点数_魔法_值", 12);
+        public int WeaponPtsChance_Acc() => ExtremeParamInt("武器点数几率_准确_值", 15);
+        public int WeaponPtsChance_Atk() => ExtremeParamInt("武器点数几率_攻击_值", 20);
+        public int WeaponPtsChance_Spd() => ExtremeParamInt("武器点数几率_攻速_值", 15);
+        public int WeaponPtsChance_Tao() => ExtremeParamInt("武器点数几率_道术_值", 15);
+        public int WeaponPtsChance_Mgc() => ExtremeParamInt("武器点数几率_魔法_值", 15);
         // 衣服
-        public int ArmorAttrChance_Acc() => GetParamInt("衣服属性几率_准确_值", 7);
-        public int ArmorAttrChance_Atk() => GetParamInt("衣服属性几率_攻击_值", 20);
-        public int ArmorAttrChance_Spd() => GetParamInt("衣服属性几率_攻速_值", 30);
-        public int ArmorAttrChance_Tao() => GetParamInt("衣服属性几率_道术_值", 30);
-        public int ArmorAttrChance_Mgc() => GetParamInt("衣服属性几率_魔法_值", 20);
-        public int ArmorRandExtreme() => GetParamInt("衣服最随机性_极品_值", 10);
-        public int ArmorMaxPts_Acc() => GetParamInt("衣服最高点数_准确_值", 10);
-        public int ArmorMaxPts_Atk() => GetParamInt("衣服最高点数_攻击_值", 7);
-        public int ArmorMaxPts_Spd() => GetParamInt("衣服最高点数_攻速_值", 7);
-        public int ArmorMaxPts_Tao() => GetParamInt("衣服最高点数_道术_值", 7);
-        public int ArmorMaxPts_Mgc() => GetParamInt("衣服最高点数_魔法_值", 7);
-        public int ArmorPtsChance_Acc() => GetParamInt("衣服点数几率_准确_值", 30);
-        public int ArmorPtsChance_Atk() => GetParamInt("衣服点数几率_攻击_值", 20);
-        public int ArmorPtsChance_Spd() => GetParamInt("衣服点数几率_攻速_值", 20);
-        public int ArmorPtsChance_Tao() => GetParamInt("衣服点数几率_道术_值", 20);
-        public int ArmorPtsChance_Mgc() => GetParamInt("衣服点数几率_魔法_值", 20);
+        public int ArmorAttrChance_Acc() => ExtremeParamInt("衣服属性几率_准确_值", 30);
+        public int ArmorAttrChance_Atk() => ExtremeParamInt("衣服属性几率_攻击_值", 20);
+        public int ArmorAttrChance_Spd() => ExtremeParamInt("衣服属性几率_攻速_值", 30);
+        public int ArmorAttrChance_Tao() => ExtremeParamInt("衣服属性几率_道术_值", 30);
+        public int ArmorAttrChance_Mgc() => ExtremeParamInt("衣服属性几率_魔法_值", 20);
+        public int ArmorRandExtreme() => ExtremeParamInt("衣服最随机性_极品_值", 10);
+        public int ArmorMaxPts_Acc() => ExtremeParamInt("衣服最高点数_准确_值", 6);
+        public int ArmorMaxPts_Atk() => ExtremeParamInt("衣服最高点数_攻击_值", 6);
+        public int ArmorMaxPts_Spd() => ExtremeParamInt("衣服最高点数_攻速_值", 6);
+        public int ArmorMaxPts_Tao() => ExtremeParamInt("衣服最高点数_道术_值", 6);
+        public int ArmorMaxPts_Mgc() => ExtremeParamInt("衣服最高点数_魔法_值", 6);
+        public int ArmorPtsChance_Acc() => ExtremeParamInt("衣服点数几率_准确_值", 20);
+        public int ArmorPtsChance_Atk() => ExtremeParamInt("衣服点数几率_攻击_值", 20);
+        public int ArmorPtsChance_Spd() => ExtremeParamInt("衣服点数几率_攻速_值", 20);
+        public int ArmorPtsChance_Tao() => ExtremeParamInt("衣服点数几率_道术_值", 20);
+        public int ArmorPtsChance_Mgc() => ExtremeParamInt("衣服点数几率_魔法_值", 20);
         // 头盔
-        public int HelmetAttrChance_Acc() => GetParamInt("头盔属性几率_准确_值", 20);
-        public int HelmetAttrChance_Atk() => GetParamInt("头盔属性几率_攻击_值", 30);
-        public int HelmetAttrChance_Spd() => GetParamInt("头盔属性几率_攻速_值", 20);
-        public int HelmetAttrChance_Tao() => GetParamInt("头盔属性几率_道术_值", 30);
-        public int HelmetAttrChance_Mgc() => GetParamInt("头盔属性几率_魔法_值", 30);
-        public int HelmetRandExtreme() => GetParamInt("头盔最随机性_极品_值", 10);
-        public int HelmetMaxPts_Acc() => GetParamInt("头盔最高点数_准确_值", 7);
-        public int HelmetMaxPts_Atk() => GetParamInt("头盔最高点数_攻击_值", 7);
-        public int HelmetMaxPts_Spd() => GetParamInt("头盔最高点数_攻速_值", 7);
-        public int HelmetMaxPts_Tao() => GetParamInt("头盔最高点数_道术_值", 7);
-        public int HelmetMaxPts_Mgc() => GetParamInt("头盔最高点数_魔法_值", 7);
-        public int HelmetPtsChance_Acc() => GetParamInt("头盔点数几率_准确_值", 20);
-        public int HelmetPtsChance_Atk() => GetParamInt("头盔点数几率_攻击_值", 20);
-        public int HelmetPtsChance_Spd() => GetParamInt("头盔点数几率_攻速_值", 20);
-        public int HelmetPtsChance_Tao() => GetParamInt("头盔点数几率_道术_值", 20);
-        public int HelmetPtsChance_Mgc() => GetParamInt("头盔点数几率_魔法_值", 20);
+        public int HelmetAttrChance_Acc() => ExtremeParamInt("头盔属性几率_准确_值", 30);
+        public int HelmetAttrChance_Atk() => ExtremeParamInt("头盔属性几率_攻击_值", 20);
+        public int HelmetAttrChance_Spd() => ExtremeParamInt("头盔属性几率_攻速_值", 30);
+        public int HelmetAttrChance_Tao() => ExtremeParamInt("头盔属性几率_道术_值", 30);
+        public int HelmetAttrChance_Mgc() => ExtremeParamInt("头盔属性几率_魔法_值", 20);
+        public int HelmetRandExtreme() => ExtremeParamInt("头盔最随机性_极品_值", 10);
+        public int HelmetMaxPts_Acc() => ExtremeParamInt("头盔最高点数_准确_值", 6);
+        public int HelmetMaxPts_Atk() => ExtremeParamInt("头盔最高点数_攻击_值", 6);
+        public int HelmetMaxPts_Spd() => ExtremeParamInt("头盔最高点数_攻速_值", 6);
+        public int HelmetMaxPts_Tao() => ExtremeParamInt("头盔最高点数_道术_值", 6);
+        public int HelmetMaxPts_Mgc() => ExtremeParamInt("头盔最高点数_魔法_值", 6);
+        public int HelmetPtsChance_Acc() => ExtremeParamInt("头盔点数几率_准确_值", 20);
+        public int HelmetPtsChance_Atk() => ExtremeParamInt("头盔点数几率_攻击_值", 20);
+        public int HelmetPtsChance_Spd() => ExtremeParamInt("头盔点数几率_攻速_值", 20);
+        public int HelmetPtsChance_Tao() => ExtremeParamInt("头盔点数几率_道术_值", 20);
+        public int HelmetPtsChance_Mgc() => ExtremeParamInt("头盔点数几率_魔法_值", 20);
         // 项链
-        public int NecklaceAttrChance_Acc() => GetParamInt("项链属性几率_准确_值", 7);
-        public int NecklaceAttrChance_Atk() => GetParamInt("项链属性几率_攻击_值", 40);
-        public int NecklaceAttrChance_Spd() => GetParamInt("项链属性几率_攻速_值", 30);
-        public int NecklaceAttrChance_Tao() => GetParamInt("项链属性几率_道术_值", 30);
-        public int NecklaceAttrChance_Mgc() => GetParamInt("项链属性几率_魔法_值", 40);
-        public int NecklaceRandExtreme() => GetParamInt("项链最随机性_极品_值", 20);
-        public int NecklaceMaxPts_Acc() => GetParamInt("项链最高点数_准确_值", 10);
-        public int NecklaceMaxPts_Atk() => GetParamInt("项链最高点数_攻击_值", 7);
-        public int NecklaceMaxPts_Spd() => GetParamInt("项链最高点数_攻速_值", 7);
-        public int NecklaceMaxPts_Tao() => GetParamInt("项链最高点数_道术_值", 7);
-        public int NecklaceMaxPts_Mgc() => GetParamInt("项链最高点数_魔法_值", 7);
-        public int NecklacePtsChance_Acc() => GetParamInt("项链点数几率_准确_值", 20);
-        public int NecklacePtsChance_Atk() => GetParamInt("项链点数几率_攻击_值", 20);
-        public int NecklacePtsChance_Spd() => GetParamInt("项链点数几率_攻速_值", 20);
-        public int NecklacePtsChance_Tao() => GetParamInt("项链点数几率_道术_值", 20);
-        public int NecklacePtsChance_Mgc() => GetParamInt("项链点数几率_魔法_值", 20);
+        public int NecklaceAttrChance_Acc() => ExtremeParamInt("项链属性几率_准确_值", 30);
+        public int NecklaceAttrChance_Atk() => ExtremeParamInt("项链属性几率_攻击_值", 40);
+        public int NecklaceAttrChance_Spd() => ExtremeParamInt("项链属性几率_攻速_值", 30);
+        public int NecklaceAttrChance_Tao() => ExtremeParamInt("项链属性几率_道术_值", 30);
+        public int NecklaceAttrChance_Mgc() => ExtremeParamInt("项链属性几率_魔法_值", 40);
+        public int NecklaceRandExtreme() => ExtremeParamInt("项链最随机性_极品_值", 10);
+        public int NecklaceMaxPts_Acc() => ExtremeParamInt("项链最高点数_准确_值", 6);
+        public int NecklaceMaxPts_Atk() => ExtremeParamInt("项链最高点数_攻击_值", 6);
+        public int NecklaceMaxPts_Spd() => ExtremeParamInt("项链最高点数_攻速_值", 6);
+        public int NecklaceMaxPts_Tao() => ExtremeParamInt("项链最高点数_道术_值", 6);
+        public int NecklaceMaxPts_Mgc() => ExtremeParamInt("项链最高点数_魔法_值", 6);
+        public int NecklacePtsChance_Acc() => ExtremeParamInt("项链点数几率_准确_值", 20);
+        public int NecklacePtsChance_Atk() => ExtremeParamInt("项链点数几率_攻击_值", 20);
+        public int NecklacePtsChance_Spd() => ExtremeParamInt("项链点数几率_攻速_值", 20);
+        public int NecklacePtsChance_Tao() => ExtremeParamInt("项链点数几率_道术_值", 20);
+        public int NecklacePtsChance_Mgc() => ExtremeParamInt("项链点数几率_魔法_值", 20);
         // 手镯
-        public int BraceletAttrChance_Acc() => GetParamInt("手镯属性几率_准确_值", 7);
-        public int BraceletAttrChance_Atk() => GetParamInt("手镯属性几率_攻击_值", 30);
-        public int BraceletAttrChance_Spd() => GetParamInt("手镯属性几率_攻速_值", 20);
-        public int BraceletAttrChance_Tao() => GetParamInt("手镯属性几率_道术_值", 20);
-        public int BraceletAttrChance_Mgc() => GetParamInt("手镯属性几率_魔法_值", 30);
-        public int BraceletRandExtreme() => GetParamInt("手镯最随机性_极品_值", 20);
-        public int BraceletMaxPts_Acc() => GetParamInt("手镯最高点数_准确_值", 10);
-        public int BraceletMaxPts_Atk() => GetParamInt("手镯最高点数_攻击_值", 7);
-        public int BraceletMaxPts_Spd() => GetParamInt("手镯最高点数_攻速_值", 7);
-        public int BraceletMaxPts_Tao() => GetParamInt("手镯最高点数_道术_值", 7);
-        public int BraceletMaxPts_Mgc() => GetParamInt("手镯最高点数_魔法_值", 7);
-        public int BraceletPtsChance_Acc() => GetParamInt("手镯点数几率_准确_值", 30);
-        public int BraceletPtsChance_Atk() => GetParamInt("手镯点数几率_攻击_值", 20);
-        public int BraceletPtsChance_Spd() => GetParamInt("手镯点数几率_攻速_值", 20);
-        public int BraceletPtsChance_Tao() => GetParamInt("手镯点数几率_道术_值", 20);
-        public int BraceletPtsChance_Mgc() => GetParamInt("手镯点数几率_魔法_值", 20);
+        public int BraceletAttrChance_Acc() => ExtremeParamInt("手镯属性几率_准确_值", 30);
+        public int BraceletAttrChance_Atk() => ExtremeParamInt("手镯属性几率_攻击_值", 20);
+        public int BraceletAttrChance_Spd() => ExtremeParamInt("手镯属性几率_攻速_值", 30);
+        public int BraceletAttrChance_Tao() => ExtremeParamInt("手镯属性几率_道术_值", 30);
+        public int BraceletAttrChance_Mgc() => ExtremeParamInt("手镯属性几率_魔法_值", 20);
+        public int BraceletRandExtreme() => ExtremeParamInt("手镯最随机性_极品_值", 10);
+        public int BraceletMaxPts_Acc() => ExtremeParamInt("手镯最高点数_准确_值", 6);
+        public int BraceletMaxPts_Atk() => ExtremeParamInt("手镯最高点数_攻击_值", 6);
+        public int BraceletMaxPts_Spd() => ExtremeParamInt("手镯最高点数_攻速_值", 6);
+        public int BraceletMaxPts_Tao() => ExtremeParamInt("手镯最高点数_道术_值", 6);
+        public int BraceletMaxPts_Mgc() => ExtremeParamInt("手镯最高点数_魔法_值", 6);
+        public int BraceletPtsChance_Acc() => ExtremeParamInt("手镯点数几率_准确_值", 20);
+        public int BraceletPtsChance_Atk() => ExtremeParamInt("手镯点数几率_攻击_值", 20);
+        public int BraceletPtsChance_Spd() => ExtremeParamInt("手镯点数几率_攻速_值", 20);
+        public int BraceletPtsChance_Tao() => ExtremeParamInt("手镯点数几率_道术_值", 20);
+        public int BraceletPtsChance_Mgc() => ExtremeParamInt("手镯点数几率_魔法_值", 20);
         // 戒指
-        public int RingAttrChance_Acc() => GetParamInt("戒指属性几率_准确_值", 20);
-        public int RingAttrChance_Atk() => GetParamInt("戒指属性几率_攻击_值", 30);
-        public int RingAttrChance_Spd() => GetParamInt("戒指属性几率_攻速_值", 20);
-        public int RingAttrChance_Tao() => GetParamInt("戒指属性几率_道术_值", 30);
-        public int RingAttrChance_Mgc() => GetParamInt("戒指属性几率_魔法_值", 30);
-        public int RingRandExtreme() => GetParamInt("戒指最随机性_极品_值", 10);
-        public int RingMaxPts_Acc() => GetParamInt("戒指最高点数_准确_值", 7);
-        public int RingMaxPts_Atk() => GetParamInt("戒指最高点数_攻击_值", 7);
-        public int RingMaxPts_Spd() => GetParamInt("戒指最高点数_攻速_值", 7);
-        public int RingMaxPts_Tao() => GetParamInt("戒指最高点数_道术_值", 7);
-        public int RingMaxPts_Mgc() => GetParamInt("戒指最高点数_魔法_值", 7);
-        public int RingPtsChance_Acc() => GetParamInt("戒指点数几率_准确_值", 30);
-        public int RingPtsChance_Atk() => GetParamInt("戒指点数几率_攻击_值", 20);
-        public int RingPtsChance_Spd() => GetParamInt("戒指点数几率_攻速_值", 30);
-        public int RingPtsChance_Tao() => GetParamInt("戒指点数几率_道术_值", 20);
-        public int RingPtsChance_Mgc() => GetParamInt("戒指点数几率_魔法_值", 20);
+        public int RingAttrChance_Acc() => ExtremeParamInt("戒指属性几率_准确_值", 30);
+        public int RingAttrChance_Atk() => ExtremeParamInt("戒指属性几率_攻击_值", 20);
+        public int RingAttrChance_Spd() => ExtremeParamInt("戒指属性几率_攻速_值", 30);
+        public int RingAttrChance_Tao() => ExtremeParamInt("戒指属性几率_道术_值", 30);
+        public int RingAttrChance_Mgc() => ExtremeParamInt("戒指属性几率_魔法_值", 20);
+        public int RingRandExtreme() => ExtremeParamInt("戒指最随机性_极品_值", 9);
+        public int RingMaxPts_Acc() => ExtremeParamInt("戒指最高点数_准确_值", 6);
+        public int RingMaxPts_Atk() => ExtremeParamInt("戒指最高点数_攻击_值", 6);
+        public int RingMaxPts_Spd() => ExtremeParamInt("戒指最高点数_攻速_值", 6);
+        public int RingMaxPts_Tao() => ExtremeParamInt("戒指最高点数_道术_值", 6);
+        public int RingMaxPts_Mgc() => ExtremeParamInt("戒指最高点数_魔法_值", 6);
+        public int RingPtsChance_Acc() => ExtremeParamInt("戒指点数几率_准确_值", 20);
+        public int RingPtsChance_Atk() => ExtremeParamInt("戒指点数几率_攻击_值", 20);
+        public int RingPtsChance_Spd() => ExtremeParamInt("戒指点数几率_攻速_值", 20);
+        public int RingPtsChance_Tao() => ExtremeParamInt("戒指点数几率_道术_值", 20);
+        public int RingPtsChance_Mgc() => ExtremeParamInt("戒指点数几率_魔法_值", 20);
 
         // ── System toggle checks ──
         public bool IsAddLimLF() => Enabled("AddLimLF函数修改");
