@@ -149,6 +149,27 @@ public class TMapFlag
     /// </summary>
     public bool boNOC2C;
 
+    /// <summary>
+    /// 战神 map flag <c>RUNFLAG(n)</c> -> native <c>[flag+0xB0]</c>, the
+    /// over-encumbered run exemption. Non-zero means EXEMPT (the weight test
+    /// is skipped), which is why the constructor seeds it to 1.
+    /// <para>
+    /// Writers (all five write the same byte):
+    ///   ctor            0x774A5C  mov byte [esi+0xB0],1   -- default = EXEMPT
+    ///   MapInfo parser  0x77558A  call StrToIntDef, then
+    ///                   0x77559F  mov byte [ebx+0xB0],1   -- RUNFLAG(non-zero)
+    ///                   0x775593  mov byte [ebx+0xB0],0   -- RUNFLAG(0)
+    ///                   0x7755B3  mov byte [ebx+0xB0],0   -- bare RUNFLAG, no arg
+    ///   second parser   0x776653 / 0x776647 -- same pair, token @0x776D7C
+    ///   NORUN/CANRUN    0x77B842 mov 0 / 0x77B861 mov 1 (tokens @0x77B964/0x77B974)
+    /// Readers: 0x6BBFDC and 0x6BC0F4 -- <c>cmp byte [eax+0xB0],0 / jne</c>
+    /// skips the <c>[obj+0x2C4] vs [obj+0x2C8]</c> weight comparison.
+    /// </para>
+    /// NOTE the token semantics are direct, not inverted: value 0 stores 0
+    /// (restricted) and non-zero stores 1 (exempt).
+    /// </summary>
+    public bool boRUNFLAG = true;
+
     public byte BreakLevel;
     public ushort CrazyBreakLevel;
 

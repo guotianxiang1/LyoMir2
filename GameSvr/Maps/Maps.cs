@@ -379,6 +379,19 @@ namespace GameSvr
                                 MapFlag.boNOC2C = true;
                                 continue;
                             }
+                            // RUNFLAG(n) -> [flag+0xB0], over-encumbered run
+                            // exemption. Native parses the parenthesised argument
+                            // with StrToIntDef @0x77558A and stores 1 only when it
+                            // is non-zero (@0x77559F); a zero argument @0x775593 and
+                            // a bare RUNFLAG with no argument @0x7755B3 both store 0.
+                            // Str_ToInt on an empty capture yields 0, so the bare
+                            // form falls out correctly without a separate branch.
+                            if (HUtil32.CompareLStr(s34, "RUNFLAG", "RUNFLAG".Length))
+                            {
+                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
+                                MapFlag.boRUNFLAG = HUtil32.Str_ToInt(s38, 0) != 0;
+                                continue;
+                            }
                             // NOHUMNOMON REMOVED (2026-08-09, Tier-1 negative
                             // evidence). 战神 has no such map flag: an image-wide
                             // byte scan for NOHUMNOMON / NOHUMNOMONSTER / NOHUM /
@@ -401,9 +414,19 @@ namespace GameSvr
                         {
                             loadFailCount++;
                         }
-                        else if (limitSkillIds != null)
+                        else
                         {
-                            loadedMap.LimitSkillIds.UnionWith(limitSkillIds);
+                            // Native keeps ONE byte [flag+0xB0] that both the
+                            // MapInfo RUNFLAG token and the NORUN/CANRUN parser
+                            // write. Envirnoment.NativeCanRunWhileOverweight is
+                            // the C# read authority (the run ladder consults it),
+                            // so fold the parsed token into it rather than adding
+                            // a second authority for the same native field.
+                            loadedMap.NativeCanRunWhileOverweight = MapFlag.boRUNFLAG;
+                            if (limitSkillIds != null)
+                            {
+                                loadedMap.LimitSkillIds.UnionWith(limitSkillIds);
+                            }
                         }
                     }
                 }
