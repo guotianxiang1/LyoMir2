@@ -29,6 +29,18 @@ public sealed record LoginGateBackendSnapshot(
     bool Type2Enabled,
     DateTime LastSeenUtc);
 
+internal sealed class SelectServerResult
+{
+    public byte ErrorSeries { get; private init; }
+    public NativeLoginGateProbeRoute? Route { get; private init; }
+
+    public static SelectServerResult Ok(NativeLoginGateProbeRoute route) =>
+        new() { ErrorSeries = 0, Route = route };
+
+    public static SelectServerResult Fail(byte series) =>
+        new() { ErrorSeries = series };
+}
+
 internal sealed class LoginGateCounters
 {
     private int _activeClients;

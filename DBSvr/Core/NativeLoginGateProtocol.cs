@@ -154,13 +154,18 @@ namespace DBSvr.Core
                 return false;
             }
 
+            _ = zoneIndex;
+            _ = groupIndex;
+
             var payload = (byte[])request.Payload.Clone();
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(10, 2),
                 gameGatePort);
             addressBytes.CopyTo(payload, 12);
-            BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(16, 2),
-                zoneIndex);
-            payload[18] = groupIndex;
+            // Echo wAreaID@16 and bGroupNo@18 from the request. Native DB
+            // may overwrite them; C# used to stamp its own _zoneIndex/_groupIndex
+            // which broke a LoginGate that fronts more than one area.
+            // bErrorType@19 stays 0 (success). ciSessionID/iEnCodeIdx/
+            // wSocketHandle/szPostfix are already the cloned request bytes.
             payload[19] = 0;
             response = new YbDbLegacy77Frame(0, 0,
                 ProbeResponseIdent, payload);
