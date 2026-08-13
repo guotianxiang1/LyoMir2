@@ -950,6 +950,9 @@ namespace GameSvr
                 case Grobal2.RM_NATIVE_MOOTEBO_CONTINUE:
                     ContinueNativeMotaeboForcedMove(ProcessMsg);
                     break;
+                case Grobal2.RM_NATIVE_LOGON_STATE_SYNC:
+                    SendNativeLogonStateSync();
+                    break;
                 case Grobal2.RM_NATIVE_CHARGE_LAND:
                     ProcessNativeSkill68ChargeLanding(ProcessMsg.nParam1,
                         ProcessMsg.nParam2, ProcessMsg.wParam,

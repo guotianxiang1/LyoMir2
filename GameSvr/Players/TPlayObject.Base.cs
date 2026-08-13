@@ -1380,6 +1380,13 @@ namespace GameSvr
                 // `!IsNullOrEmpty(m_sDearName)` guard below excludes exactly the case
                 // that needs healing.
                 HealNativeRelationFlags();
+                // 战神 UserLogon @0x6B2358 queues RM 0x3010 (`66 B9 10 30 mov cx,0x3010`
+                // -> sub_765E68 with edx=eax=Self, six zero params), just ahead of the
+                // 0x6B23C6 SM 888 send below. Being an enqueue, the login-state cluster
+                // (SM 3324/1264/3554/3556) is delivered on the next Run tick, after every
+                // direct SM this UserLogon writes. C# currently emits only the 3554 leg;
+                // see TPlayObject.NativeLogonStateSync for the other three legs' status.
+                SendMsg(this, Grobal2.RM_NATIVE_LOGON_STATE_SYNC, 0, 0, 0, 0, "");
                 // Native UserLogon @0x6B23C6 call 0x6F05D8, immediately before the
                 // 定位石 replay at 0x6B23E3. sub_6F05D8 first sends SM 888:
                 //   0x6F05E2 68 E7 03 00 00  push 0x3E7   ; Param=999
