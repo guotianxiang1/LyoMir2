@@ -23,8 +23,8 @@ namespace GameSvr
         // FindNode,它内部先查 obj+0x168 位集再遍历 obj+0xDC 链表,节点 Value 在 rec+0x0A):
         //
         //  id    地址      动作                                                    广播
-        //  0x39  76B91C   GetStateValue(0x39) -> [vmt+0x1AC] 落地               无(广播在管线内)
-        //  0x47  76B942   HP>14000 ? [vmt+0x1AC](4000) : RemoveState(0x47)      无
+        //  0x39  76B91C   GetStateValue(0x39) -> [vmt+0x1AC]=sub_73F8E0 落地     无(管线内,param3=0 不播)
+        //  0x47  76B942   HP>14000 ? [vmt+0x1AC]=sub_73F8E0(4000) : RemoveState  无
         //  0x49  76B97D   Value>0 ? DamageHealth(Value)                         color 0x38FF " -N"
         //  0x4A  76B9D8   同上                                                   color 0x38FF " -N"
         //  0x4F  76BA33   同上                                                   color 0x38FF "灼烧 -N"
@@ -48,13 +48,14 @@ namespace GameSvr
         //   0x76BE90="惊魂 -" 0x76BEA0="封魔 -" 0x76BEB0="水元 -" 0x76BEC0="火元 -";
         //   0x40C89C=IntToStr(有符号十进制),0x40581C=LStrCat3(dest,fmt,valueStr)。
         //
-        // ⚠️ FAIL-CLOSED: 0x39 与 0x47 的伤害分支走 [vmt+0x1AC]=sub_73F8E0——一条独立的
-        //   落地管线(0x73F903 `mov cx,[edi+0x2DC]` 百分比减伤 / 上钳 0x4E20 / idiv 100;
-        //   0x73F941 `call [vmt+0x50]` 护甲掷点; 0x73F953 HasState(8) 随机放大;
-        //   0x73F9C1 `call 0x767BA8`; 末尾 0x73F9CE `call [vmt+0x1B0]` DamageHealth)。
-        //   其中 [vmt+0x50] 与 0x767BA8 尚未在 C# 落成单一可调入口,按铁律不臆造:
-        //   直调 DamageHealth 会漏掉减伤而打得更狠(反向失真),故这两处伤害保持 fail-closed。
-        //   0x47 的 RemoveState(HP<=14000) 分支证据充分,已忠实落地。
+        // ✅ 0x39 与 0x47 的伤害分支走 [vmt+0x1AC]=sub_73F8E0——一条独立的物理落地管线,现已
+        //   移植到 TBaseObject.NativeArmorLanding.cs 的 ApplyNativePhysicalLandingDamage(int)。
+        //   两个调用点均传 param3=0/param4=0,由此可证:护甲 [vmt+0x50]=sub_744894 在
+        //   0x7448B8 `test ebx,ebx / je 0x744C3F` 早退(retval/掷点全 0)、广播恒不触发、
+        //   0x73F9C1 sub_767BA8 在 0x767BB7 `test edx,edx / je` 原样返回。管线实际生效的是
+        //   ① self+0x2DC 百分比减伤(其源装备扩展属性聚合子系统 C# 未移植 → self+0x2DC 恒 0,
+        //   即当前不减伤,与 C# 其它伤害路径一致)与 ③ HasState(8) 随机缩放,末尾 DamageHealth。
+        //   0x47 的 RemoveState(HP<=14000) 分支证据充分,保留。
         // ============================================================================
 
         /// <summary>native TCreature 对象 +0x2C —— 本 1000ms 毒系结算块的锁存 tick。</summary>
@@ -101,8 +102,9 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// 0x39 (0x76B91C): HasState 命中即 <c>GetStateValue(0x39)</c> 经 [vmt+0x1AC] 落地。
-        /// [vmt+0x1AC]=sub_73F8E0 减伤管线未解 —— FAIL-CLOSED(见文件头字节表)。
+        /// 0x39 (0x76B91C): HasState 命中即 <c>GetStateValue(0x39)</c> 经 [vmt+0x1AC]=sub_73F8E0
+        /// 物理落地管线结算(param3=0/param4=0)。管线已移植,见
+        /// <c>TBaseObject.NativeArmorLanding.cs</c> 的 ApplyNativePhysicalLandingDamage。
         /// </summary>
         private void ApplyNativePoisonSecondArmorLandingState(byte stateId)
         {
@@ -110,14 +112,16 @@ namespace GameSvr
             {
                 return;
             }
-            // 0x76B92F call sub_773BEC(GetStateValue) -> 0x76B93C call [vmt+0x1AC]
-            // FAIL-CLOSED: sub_73F8E0 落地管线([vmt+0x50]/0x767BA8)未解,不臆造直调伤害。
+            // 0x76B929 push 0(param4) / 0x76B92F call sub_773BEC(GetStateValue) -> edx
+            // 0x76B936 xor ecx,ecx(param3) / 0x76B93C call [vmt+0x1AC](self, value, 0, 0)
+            var value = GetNativeTimedAbilityValue(stateId); // sub_773BEC(0x39)
+            ApplyNativePhysicalLandingDamage(value);
         }
 
         /// <summary>
         /// 0x47 (0x76B942): edi=0xFA0(4000);阈值=edi+0x2710=14000。
         ///   0x76B95A cmp 14000,HP / 0x76B960 jge: HP&lt;=14000 -&gt; RemoveState(0x47);
-        ///   否则 [vmt+0x1AC](self,4000) 落地(减伤管线未解,FAIL-CLOSED)。无广播。
+        ///   否则 [vmt+0x1AC](self,4000) 经 sub_73F8E0 物理落地管线结算(param3=0/param4=0)。无广播。
         /// </summary>
         private void ApplyNativePoisonSecondHighHpState(byte stateId)
         {
@@ -132,8 +136,9 @@ namespace GameSvr
                 RemoveTimedAbilityInternal(stateId);
                 return;
             }
-            // 0x76B96A mov edx,edi(4000) / 0x76B96C call [vmt+0x1AC]
-            // FAIL-CLOSED: sub_73F8E0 落地管线未解,不臆造 DamageHealth(4000)(会漏减伤)。
+            // 0x76B962 push 0(param4) / 0x76B964 xor ecx,ecx(param3) / 0x76B966 edx=edi=0xFA0(4000)
+            // 0x76B96C call [vmt+0x1AC](self, 4000, 0, 0) —— 见 TBaseObject.NativeArmorLanding.cs
+            ApplyNativePhysicalLandingDamage(0xFA0);
         }
 
         /// <summary>
