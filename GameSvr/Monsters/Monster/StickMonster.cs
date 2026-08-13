@@ -81,7 +81,11 @@ namespace GameSvr
                 {
                     if (!BaseObject.m_boHideMode || this.m_boCoolEye)
                     {
-                        if (Math.Abs(this.m_nCurrX - BaseObject.m_nCurrX) < nComeOutValue && Math.Abs(this.m_nCurrY - BaseObject.m_nCurrY) < nComeOutValue)
+                        // MONAI-18 — TStickMon hide-scan sub_6807E8 用 sub_7743E0(cx=[+0x4D8]=4)：
+                        //   00774400  3B C7 / 7F 17     |dx| > range → fail   (有符号 jg)
+                        //   00774415  3B F8 / 7C 02     range < |dy| → fail   (有符号 jl)
+                        // 即 |dx|<=range AND |dy|<=range。C# 原先严格 `<` 会在距离=4 时不出洞。
+                        if (Math.Abs(this.m_nCurrX - BaseObject.m_nCurrX) <= nComeOutValue && Math.Abs(this.m_nCurrY - BaseObject.m_nCurrY) <= nComeOutValue)
                         {
                             result = true;
                             break;
@@ -100,7 +104,10 @@ namespace GameSvr
         public override void Run()
         {
             bool bo05;
-            if (!this.m_boGhost && !this.m_boDeath && this.m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
+            // MONAI-18 — TStickMon.Run sub_680864 入口闸是 can-act(+0x40, dl=1)，
+            // 不是裸 m_boDeath：0068086C B2 01 / FF 51 40 / 0F 84 A4 00 00 00。
+            // ghost / POISON_STONE 与 Monster.Run（MONAI-10）同理由保留。
+            if (!this.IsNativeCanActBlocked(1) && !this.m_boGhost && this.m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
             {
                 if ((HUtil32.GetTickCount() - this.m_dwWalkTick) > this.m_nWalkSpeed)
                 {
