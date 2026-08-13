@@ -462,11 +462,13 @@ namespace LoginGate.Core
         {
             enabled = false;
             error = string.Empty;
-            if (frame == null || frame.Payload.Length != 0
+            // uDBListen.pas:373-374 switches on Cmd alone and never inspects
+            // DataLength, so a payload must not reject the frame.
+            if (frame == null
                 || (frame.Ident != NativeType2EnabledIdent
                     && frame.Ident != NativeType2DisabledIdent))
             {
-                error = "native LoginGate type-2 control must be an empty 0x07D2 or 0x07D3 frame";
+                error = "native LoginGate SDOA control must be a 0x07D2 or 0x07D3 frame";
                 return false;
             }
 
