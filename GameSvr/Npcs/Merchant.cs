@@ -14,8 +14,10 @@ namespace GameSvr
         
         
         
+        // ECON §4.18: 原生商人只有【唯一】费率字段 +0x468。SetRebate 处理器 sub_647438 写它,
+        // 买价阶段 sub_640208 @0x640232/@0x640278 `fild [ebx+0x468]` 读它,构造器 @0x63D888 默认 100。
+        // 原 C# 曾误拆出第二个 m_nRebate(违二元权威),现已并回本字段;PAS `setrebate` 亦改写本字段。
         public int m_nPriceRate = 0;
-        internal int m_nRebate = 100;  // Buy/sell price ratio: 100=full, 50=half
         public bool m_boCastle = false;
         public int dwRefillGoodsTick = 0;
         
@@ -1156,8 +1158,7 @@ namespace GameSvr
             {
                 result = HUtil32.Round(nPrice / 100 * m_nPriceRate);
             }
-            // ⚠ ECON-06 — 这一阶段在原生【不存在】,但【不要直接删】,理由见下。
-            // 本次新增字节证据,推翻"原生根本没有 rebate 概念"的旧表述:
+            // ✅ ECON §4.18 二元权威并回【已完成】。以下为字节证据,结论见末尾:
             //  1) 原生【确实有】PAS API `SetRebate`:
             //     帮助文本 @0x736B55 "procedure SetRebate(nRebate : Word);"
             //     名字串 @0x739EF4,注册点 @0x738E34:
@@ -1177,15 +1178,10 @@ namespace GameSvr
             //  3) 而费率阶段 sub_640208 读的【也是 +0x468】,全函数只有这一个费率字段:
             //       00640232  db 83 68 04 00 00  fild dword [ebx+0x468]  ; 城堡会员臂
             //       00640278  db 83 68 04 00 00  fild dword [ebx+0x468]  ; 普通臂
-            // => 原生只有【一个】费率字段,SetRebate 就是它的 PAS 设置器。C# 把它拆成了
-            //    m_nPriceRate 与 m_nRebate 【两个权威】(规则 §4.18 明令禁止的形态),
-            //    本阶段这一次多出来的 Round 正是拆分的产物,而不是凭空多加的一步。
-            // 正确修法【不是删本段】,而是:让 PAS `setrebate`(PasApiBridge.cs:5551)改写
-            // m_nPriceRate、补上 <=0 与 >=0xFFFF 复位 100 的校验,然后整体删除本段。
-            // 只删本段会让 setrebate 变成空操作 —— 比现状更糟。该改动跨 PasApiBridge
-            // 且会改变既有脚本语义,须单列任务处理,本批不动。
-            if (m_nRebate != 100)
-                result = HUtil32.Round(result * m_nRebate / 100.0);
+            // => 原生只有【一个】费率字段,SetRebate(sub_647438)就是它的 PAS 设置器。原 C# 误拆为
+            //    m_nPriceRate + m_nRebate 两个权威(违 §4.18)。现已并回【完成】:setrebate 改写
+            //    m_nPriceRate(钳制/复位见 PasApiBridge.cs),m_nRebate 字段删除,原本段多余的第二次
+            //    `if (m_nRebate!=100) result=Round(result*m_nRebate/100)` 一并删除 —— 买价只缩放一次。
             return result;
         }
 
@@ -1578,8 +1574,7 @@ namespace GameSvr
         {
             m_btRaceImg = Grobal2.RCC_MERCHANT;
             m_wAppr = 0;
-            m_nPriceRate = 100;
-            m_nRebate = 100;
+            m_nPriceRate = 100;  // 原生构造器 @0x63D888 `mov [esi+0x468],0x64`
             m_boCastle = false;
             m_ItemTypeList = new List<int>();
             m_RefillGoodsList = new List<TGoods>();
@@ -2113,18 +2108,13 @@ namespace GameSvr
             // `HUtil32.Round(nPrice/2.0)` 是银行家舍入,在【奇数价】上多付 1 金:
             //   n=7 → C# 4 / 原生 3;n=11 → C# 6 / 原生 5;n=3 → C# 2 / 原生 1(n=5/9 恰好同值)。
             // 每笔卖出都走这条路,故是全服系统性偏高。改为整数截断除 2。
-            // 另: 原生卖出侧【不经】 sub_640208(GetUserPrice),即卖价不吃 PriceRate —— 与本函数一致。
-            // m_nRebate 缩放: 整个 sub_63F200(300 字节全扫)无任何 fdiv/fmul/fild,也不读 rebate 形状字段;
-            // 但 m_nRebate 默认 100 且只由 PAS `setrebate`(PasApiBridge.cs:5551) 设置,默认配置下该分支不执行。
-            // 【已定案,原"战神 PAS 侧有无 setrebate 未核 → INCONCLUSIVE"作废】: 原生 PAS 确有
-            // `SetRebate`(名字串 @0x739EF4,注册点 @0x738E34 `mov edx,0x647438 / mov ecx,0x739EF4`),
-            // 但它写的是费率字段 +0x468 —— 与费率阶段 sub_640208 @0x640232/@0x640278
-            // `fild dword [ebx+0x468]` 读的是【同一个字段】。即原生只有一个费率权威,
-            // C# 拆成了 m_nPriceRate + m_nRebate 两个(规则 §4.18)。完整证据与修法见
-            // GetUserPrice() 内 ECON-06 注释;卖价侧同样【保留不动】,须与买价侧一并整改。
+            // 另: 原生卖出侧 sub_63F200 @0x63F22E `call GetUserItemPrice` → @0x63F235 `sar esi,1`
+            // (+ jns/adc 负数向零修正 = div 2),全函数【不读】费率字段 +0x468(全扫无 fild/fmul/fdiv),
+            // 即卖价不吃 rate/rebate —— 与本函数一致。
+            // ECON §4.18 二元权威并回【已完成】: 原生只有唯一费率字段 +0x468(= m_nPriceRate),
+            // 原 C# 误拆出 m_nRebate 并在此再乘一次(违 §4.18)。现 m_nRebate 已并回 m_nPriceRate
+            // (setrebate 改写它,见 PasApiBridge.cs),故下方多余的 m_nRebate 乘法整体删除。
             var result = (int)nPrice / 2;
-            if (m_nRebate != 100)
-                result = HUtil32.Round(result * m_nRebate / 100.0);
             return result;
         }
 

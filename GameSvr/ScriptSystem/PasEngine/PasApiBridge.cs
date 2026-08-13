@@ -5588,8 +5588,32 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "setrebate":
+                    // ✅ 战神字节证据 (Tier-1) — ECON §4.18 二元权威并回。
+                    // 原生 PAS `SetRebate(nRebate:Word)` 处理器 sub_647438 写的是【唯一】费率字段
+                    // +0x468(= C# m_nPriceRate);买价阶段 sub_640208 @0x640232/@0x640278
+                    // `fild dword [ebx+0x468]` 读的正是同一字段。原 C# 误拆出独立 m_nRebate,现并回。
+                    // 钳制/复位逐字复刻 sub_647438(入参 edx→ebx,仅看低 16 位 bx):
+                    //   00647450  66 85 db        test  bx,bx
+                    //   00647453  76 12           jbe   0x647467   ; bx==0     -> 非法
+                    //   00647455  66 81 fb ff ff  cmp   bx,0xFFFF
+                    //   0064745A  73 0b           jae   0x647467   ; bx>=0xFFFF-> 非法
+                    //   0064745C  0f b7 d3        movzx edx,bx
+                    //   0064745F  89 90 68 04..   mov   [eax+0x468],edx        ; 合法则写 Word 值
+                    //   00647467  c7 80 68 04.. 64 mov  dword [eax+0x468],100   ; 非法复位 100
+                    //             + MainOutMessage("[Rebate Err]:"@0x6474CC + IntToStr(bx))
                     if (CurrentNpc is Merchant srMerchant && args.Count >= 1)
-                        srMerchant.m_nRebate = args[0].AsInt();
+                    {
+                        var nRebate = args[0].AsInt() & 0xFFFF;
+                        if (nRebate > 0 && nRebate < 0xFFFF)
+                        {
+                            srMerchant.m_nPriceRate = nRebate;
+                        }
+                        else
+                        {
+                            srMerchant.m_nPriceRate = 100;
+                            M2Share.MainOutMessage("[Rebate Err]:" + nRebate);
+                        }
+                    }
                     return true;
 
                 // === Castle/Guild ===
