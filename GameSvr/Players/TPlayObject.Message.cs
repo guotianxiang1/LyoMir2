@@ -2378,7 +2378,8 @@ namespace GameSvr
                     break;
                 case Grobal2.RM_RECONNECTION:
                     m_boReconnection = true;
-                    SendDefMessage(Grobal2.SM_RECONNECT, 0, 0, 0, 0, ProcessMsg.sMsg);
+                    // Native CODE has zero 16-bit dx/cx loads of 802 (0x0322)
+                    // reaching a send slot. srv_AppearTimes.ini 802=0.
                     break;
                 case Grobal2.RM_HIDEEVENT:
                     SendDefMessage(Grobal2.SM_HIDEEVENT, ProcessMsg.nParam1, ProcessMsg.wParam, ProcessMsg.nParam2, ProcessMsg.nParam3, "");

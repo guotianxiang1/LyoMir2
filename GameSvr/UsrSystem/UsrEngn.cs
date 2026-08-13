@@ -3657,11 +3657,9 @@ namespace GameSvr
         {
             var sIPaddr = string.Empty;
             var nPort = 0;
-            const string sMsg = "{0}/{1}";
             if (M2Share.GetMultiServerAddrPort(nServerIndex, ref sIPaddr, ref nPort))
             {
                 PlayObject.m_boReconnection = true;
-                PlayObject.SendDefMessage(Grobal2.SM_RECONNECT, 0, 0, 0, 0, string.Format(sMsg, sIPaddr, nPort));
             }
         }
 
