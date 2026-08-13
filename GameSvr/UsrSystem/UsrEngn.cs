@@ -2461,20 +2461,46 @@ namespace GameSvr
                             TUserItem UserItem = null;
                             if (CopyToUserItemFromName(MonItem.ItemName, ref UserItem))
                             {
+                                // 战神's only per-item initialisation hook on the drop
+                                // path is the freshly-built object's virtual +0x28,
+                                // invoked once with edx=0 at 0x71FDA2 (this loop) and
+                                // 0x71FBD5 (the exclusive chain):
+                                //   71FD9B  33 D2              xor edx,edx
+                                //   71FD9D  8B 45 D8           mov eax,[ebp-0x28]
+                                //   71FDA0  8B 08              mov ecx,[eax]
+                                //   71FDA2  FF 51 28           call dword [ecx+0x28]
+                                // For the base item class that slot is sub_783EFC, and
+                                // sub_783EFC is exactly this line:
+                                //   783F05  B8 50 00 00 00     mov eax,0x50      ; 80
+                                //   783F0A  E8 3D FC C7 FF     call 0x403B4C     ; Random
+                                //   783F0F  83 C0 14           add eax,0x14      ; +20
+                                //   783F18  0F B7 43 28        movzx eax,word [ebx+0x28] ; DuraMax
+                                //   783F22  D8 35 38 3F 78 00  fdiv dword [0x783F38]     ; 100.0f
+                                //   783F28  DE C9              fmulp st(1)
+                                //   783F2A  E8 45 F6 C7 FF     call 0x403574     ; @ROUND
+                                //   783F2F  66 89 43 26        mov word [ebx+0x26],ax    ; Dura
+                                // sub_783EFC sits in VMT slot +0x28 of 116 item classes;
+                                // every one of the 116 dword references passes the Delphi
+                                // self-pointer test dword[VMT-0x4C]==VMT and the
+                                // slot-offset histogram over all of them is {0x28: 116}.
+                                // So this Random(80) is native and stays.
+                                //
+                                // What did NOT survive is the pair of stock-Mir2 rolls
+                                // that used to follow it: `Random(nMonRandomAddValue)==0
+                                // -> RandomUpgradeItem` and the StdMode/Shape gate into
+                                // RandomUpgradeUnknownItem.  Neither has a counterpart in
+                                // 战神 — the drop function has exactly three Random call
+                                // sites (0x71FB76, 0x71FD3D, 0x71FD6B, all in the two
+                                // gold branches), the factory sub_74C338 has none, and
+                                // every config key those two paths read
+                                // (MonRandomAddValue, WeaponDCAddValue*, UnknowHelMet*)
+                                // is 0-hit across the whole image in GBK, bare ASCII and
+                                // UTF-16LE.  战神 does randomise extra attributes on some
+                                // drops, but through per-class +0x28 overrides with
+                                // hardcoded moduli (e.g. 0x7617A7 calls sub_783EFC then
+                                // Random(10)), which is a different mechanism and belongs
+                                // with the NativeItemFactory class-dispatch work.
                                 UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
-                                var StdItem = GetStdItem(UserItem.wIndex);
-                                if (StdItem == null) continue;
-                                if (M2Share.RandomNumber.Random(M2Share.g_Config.nMonRandomAddValue) == 0)
-                                {
-                                    StdItem.RandomUpgradeItem(UserItem);
-                                }
-                                if (new ArrayList(new byte[] { 15, 19, 20, 21, 22, 23, 24, 26 }).Contains(StdItem.StdMode))
-                                {
-                                    if (StdItem.Shape == 130 || StdItem.Shape == 131 || StdItem.Shape == 132)
-                                    {
-                                        StdItem.RandomUpgradeUnknownItem(UserItem);
-                                    }
-                                }
                                 mon.m_ItemList.Add(UserItem);
                             }
                         }
