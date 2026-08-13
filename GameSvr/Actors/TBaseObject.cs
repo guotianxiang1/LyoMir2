@@ -1816,17 +1816,12 @@ namespace GameSvr
                             {
                                 m_UseItems[i].Dura = nDura;
                             }
-                            // Native sub_73E804 sends the display packet only when the
-                            // rounded value DROPPED, not on any change:
-                            //   0x73E89C  call 0x403574   ; @ROUND(nDura / 1000.0)
-                            //   0x73E8A1  mov edx,[ebp-8] ; old displayed dura
-                            //   0x73E8A4  sub edx, eax    ; old - new
-                            //   0x73E8A6  dec edx         ; old - new - 1
-                            //   0x73E8A7  jl 0x73E8C8     ; < 0  => skip the packet
-                            // (old - new - 1) < 0 is old <= new, so the send condition
-                            // is strictly old > new. A `!=` here also fires when the
-                            // value rises, emitting a packet native never sends.
-                            if (tDura > HUtil32.Round(nDura / 1000.0))
+                            // NOTE: this is ItemDamageRevivalRing, NOT DoDamageWeapon.
+                            // The `old > new` shape proven for sub_73E804 belongs to
+                            // DoDamageWeapon (see that method); it must not be copied
+                            // here without evidence for this function's own native
+                            // counterpart, which has not been identified yet.
+                            if (tDura != HUtil32.Round(nDura / 1000.0))
                             {
                                 SendMsg(this, Grobal2.RM_DURACHANGE, i, nDura, m_UseItems[i].DuraMax, 0, "");
                             }
@@ -3026,9 +3021,11 @@ namespace GameSvr
 
         public void DoDamageWeapon(int nWeaponDamage)
         {
-            // MINE-43: Native sub_73E804 @73E82F (bytes: 0F B7 73 26 85 F6 0F 8E 93 00 00 00)
-            // checks "jle 73E8C8" — if cur dura <= 0, return immediately.
-            // This prevents re-running the zero-dura path when the weapon is already at 0.
+            // MINE-43: 原版 sub_73E804 在取到武器后立刻判耐久：
+            //   0x73E829  0F B7 73 26              movzx esi, word [ebx+0x26]   ; Dura
+            //   0x73E82D  85 F6                    test esi, esi
+            //   0x73E82F  0F 8E 93 00 00 00        jle 0x73E8C8                 ; <=0 直接返回
+            // (0x7845A0: 66 8B 40 26 C3 证明 item+0x26 = Dura)
             if (m_UseItems[Grobal2.U_WEAPON] == null || m_UseItems[Grobal2.U_WEAPON].wIndex <= 0
                 || m_UseItems[Grobal2.U_WEAPON].Dura <= 0)
             {
@@ -3069,11 +3066,15 @@ namespace GameSvr
             {
                 m_UseItems[Grobal2.U_WEAPON].Dura = (ushort)nDura;
             }
-            // MINE-44: Native compares ROUND(before/1000.0) vs ROUND(after/1000.0) at EA 0x73E838
-            // and 0x73E893 (bytes: DB 45 F4 D8 35 D0 E8 73 00 E8 2E 4D CC FF) — both rounded integers.
-            // C# was comparing raw double (nDura/1000.0) with rounded int (nDuraPoint), causing
-            // near-constant packet spam. Fix: use HUtil32.Round for the comparison.
-            if (HUtil32.Round(nDura / 1000.0) != nDuraPoint)
+            // MINE-44: 原版两侧都取 ROUND(dura/1000.0)，再判「显示值是否变小」：
+            //   0x73E838  DB 45 F4 / D8 35 D0 E8 73 00 / E8 2E 4D CC FF  旧值 fild,fdiv,ROUND
+            //   0x73E893  DB 45 F4 / D8 35 D0 E8 73 00 / E8 D3 4C CC FF  新值 fild,fdiv,ROUND
+            //   0x73E8A1  8B 55 F8   mov edx,[ebp-8]   ; 旧显示值
+            //   0x73E8A4  2B D0      sub edx, eax      ; 旧-新
+            //   0x73E8A6  4A         dec edx
+            //   0x73E8A7  7C 1F      jl 0x73E8C8       ; (旧-新-1)<0 则不发包
+            // 即发包条件是「旧 > 新」而非「旧 != 新」。0x73E8D0 = 00 00 7A 44 = float32(1000.0)。
+            if (nDuraPoint > HUtil32.Round(nDura / 1000.0))
             {
                 SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_WEAPON, m_UseItems[Grobal2.U_WEAPON].Dura, m_UseItems[Grobal2.U_WEAPON].DuraMax, 0, "");
             }
