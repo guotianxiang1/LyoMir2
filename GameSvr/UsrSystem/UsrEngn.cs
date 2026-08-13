@@ -3071,6 +3071,28 @@ namespace GameSvr
                 case 247:
                     Cert = new ParalyzationMon();
                     break;
+                // ✅ 战神字节证据 (Tier-1)：race 181 = TStoneMonster(VMT 0x65E2BC,
+                // parent TMonster)。索引表[181-0xB=0xAA]=0x61=97 ; jt[97]=0x67ABC9 ；
+                // case body 全文 `B2 01 / A1 70 E2 65 00 / E8 0B 25 FF FF / 89 45 F8 /
+                // E9 62 01 00 00`，无额外 RNG。ctor 0x66D0E0 = TMonster.Create + 
+                // `mov byte [esi+0x4E4],1`。原先该 race 落 default 0x67AE5E → nil。
+                case 181:
+                    Cert = new StoneMonster();
+                    break;
+                // ✅ 战神字节证据 (Tier-1)：race 248 = TVolumeSkins(VMT 0x660BEC,
+                // parent TATMonster)。索引表[248-0xB=0xED]=0x74=116 ; jt[116]=0x67AD1F ；
+                // case body 全文 `B2 01 / A1 A0 0B 66 00 / E8 F1 CC FF FF / 89 45 F8 /
+                // EB 0F`，无额外 RNG（Random(30) 在 ctor 0x667A1C 内）。详见 VolumeSkins.cs。
+                case 248:
+                    Cert = new VolumeSkins();
+                    break;
+                // ✅ 战神字节证据 (Tier-1)：race 249 = TGoldbarPig(VMT 0x665EB4,
+                // parent TATMonster)。索引表[249-0xB=0xEE]=0x75=117 ; jt[117]=0x67AD30 ；
+                // case body 全文 `B2 01 / A1 68 5E 66 00 / E8 F8 24 00 00 / 89 45 F8`
+                // 后直接落在公共尾部 0x67AD3F，无 jmp、无额外 RNG。详见 GoldbarPig.cs。
+                case 249:
+                    Cert = new GoldbarPig();
+                    break;
             }
 
             if (Cert != null)
