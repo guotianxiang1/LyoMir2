@@ -997,6 +997,14 @@ namespace GameSvr
                 case SpellsDef.SKILL_316:
                     boSpellFail = true;
                     break;
+                // id 167 @0x6EDEE1 -> 0x6EEE70. The trampoline stores the raw
+                // result into boSpellFire (@0x6EDEF1) and its complement into
+                // boSpellFail (@0x6EDEF9), so both flags move together.
+                case SpellsDef.SKILL_167:
+                    boSpellFire = PlayObject.TryActivateNativeSkill167Prison(
+                        nTargetX, nTargetY);
+                    boSpellFail = !boSpellFire;
+                    break;
                 // id 191 @0x6EDFCF -> TPlayer VMT+0x148 = 0x6EF340, result
                 // inverted into [ebp-6] @0x6EDFED, so every refusal path in
                 // that function is a hard reject.
