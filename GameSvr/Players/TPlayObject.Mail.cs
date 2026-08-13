@@ -243,15 +243,26 @@ namespace GameSvr
         /// <c>0x70B48A</c> before the <c>0x70B4B7</c> loop head), not per-iteration;
         /// (2) native reaches the <c>AttachStatus := 2</c> write at <c>0x70B5E3</c>
         /// unconditionally after the loop, i.e. native ALSO marks claimed when an
-        /// individual add failed.
+        /// individual add failed.  The failed attachment is destroyed; native trades a
+        /// LOSS window for the guarantee that a mail is claimable at most once.
         ///
-        /// The <c>deliveredAll</c> guard below is therefore a DELIBERATE, documented
-        /// deviation from <c>sub_70B458</c>, not a port: in this rewrite
-        /// <c>SetNativeMailAttachStatus</c> is followed by
-        /// <c>NativeMailStore.ArchiveAndDeleteBestEffort</c> in
-        /// <c>ClientClearAllNativeMail</c>, so a mail marked claimed can be HARD-DELETED
-        /// — an amplification native does not have.  Leaving the mail unclaimed keeps the
-        /// attachment re-claimable instead of destroying it.
+        /// A <c>deliveredAll</c> guard used to sit here, justified by "marking claimed
+        /// lets ClientClearAllNativeMail hard-delete the mail, an amplification native
+        /// does not have".  That justification is false on the bytes: native's clear-all
+        /// <c>sub_70D2D0</c> accepts exactly <c>MailStatus==2 &amp;&amp; AttachStatus in {2,3}</c>
+        /// (<c>0x70D318 cmp byte[mail+0x4C],2</c>; <c>0x70D31E-0x70D327 add dl,0xFE / sub dl,2 / jae</c>)
+        /// and calls <c>sub_70D350</c>, which runs <c>sub_70B0F0</c> =
+        /// <c>sub_70AC7C</c> (<c>INSERT INTO %s.mailitem_b(...) SELECT ... FROM %s.mailitem
+        /// WHERE idx = %d</c>) then <c>sub_70B00C</c>, and finally frees the object at
+        /// <c>0x70D3C6</c>.  Native hard-deletes claimed mail exactly as this rewrite does.
+        ///
+        /// The guard's actual effect was an ITEM DUPLICATION window native does not have:
+        /// leaving <c>AttachStatus == 1</c> after a partial delivery lets the whole
+        /// attachment list — including the copies that already landed — be granted again on
+        /// the next claim.  It is reachable through <see cref="CompleteNativeMailYuanbaoClaim"/>,
+        /// which delivers on a re-resolved player without the pre-flight bag gate, exactly
+        /// like native's own async arm at <c>0x70B294 call sub_70B458</c>; re-claiming there
+        /// also re-credits the 元宝.
         /// </summary>
         private int DeliverNativeMailAttachments(NativeMailCacheEntry entry)
         {
@@ -266,7 +277,6 @@ namespace GameSvr
             // engine-unregistered player).
             if (m_boGhost) return -1;
 
-            var deliveredAll = true;
             if (entry.Record.MailType != 4)
             {
                 foreach (var attachment in entry.Attachments)
@@ -276,18 +286,14 @@ namespace GameSvr
                     // outer AddItemToBag with reason 0 and the stamper disabled.
                     if (!AddItemToBag(item,
                             NativeItemAcquisitionStamp.Reason.None, false))
-                    {
-                        // Native falls to the loop increment here (0x70B4F8 je 0x70B5D9).
-                        // We additionally remember the failure so the mail stays claimable.
-                        deliveredAll = false;
-                        continue;
-                    }
+                        continue;   // 0x70B4F8 je 0x70B5D9 — straight to the loop increment
                     SendAddItem(item);
                 }
             }
 
             // 0x70B5E3-0x70B5ED: `cmp byte[mail+0x4D],2; jne` then sub_70CB24(dl=2).
-            if (!deliveredAll) return -1;
+            // Reached unconditionally after the loop; a partial delivery still closes the
+            // mail, which is what keeps the attachment list one-shot.
             SetNativeMailAttachStatus(entry.Record, 2);
             return 1;   // 0x70B5F2 mov esi,1
         }
