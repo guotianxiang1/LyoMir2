@@ -379,6 +379,22 @@ namespace GameSvr
             ushort nSpellPoint;
             switch (UserMagic.wMagIdx)
             {
+                // ids 3, 4 and 7 are acknowledged and dropped. The outer
+                // ladder's own jump table (base id 3, `add eax,-3` /
+                // `cmp eax,0x18` @0x6BC69C, table at 0x6BC6AF) holds
+                // 0x6BC7DC in the slots for all three (0x6BC6AF, 0x6BC6B3,
+                // 0x6BC6BF), and 0x6BC7DC is two instructions:
+                //   006BC7DC  c6 45 fb 01     mov byte [ebp-5],1
+                //   006BC7E0  e9 1d 05 00 00  jmp 0x6BCD02
+                // i.e. return TRUE having sent nothing and spent nothing.
+                // Without this arm they reach the default below, where
+                // DoSpell refuses them for being warrior skills and the
+                // caller answers with a RM_MAGICFIREFAIL native never sends.
+                case SpellsDef.SKILL_ONESWORD:
+                case SpellsDef.SKILL_ILKWANG:
+                case SpellsDef.SKILL_YEDO:
+                    result = true;
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
