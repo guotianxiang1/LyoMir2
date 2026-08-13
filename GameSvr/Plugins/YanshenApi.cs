@@ -354,6 +354,16 @@ namespace GameSvr.Plugins
                     : RejectUnavailable(lookupKey, $"开关未开启（{lookupKey}）");
             }
 
+            // 火墙修改 / 指定英雄放技能 / 怪物伤害触发技能特效 are not written to config.json;
+            // native keeps them in MyJson/{skills,roles}/config.json as "<key>_是否勾选".
+            var subsystemValue = _pluginManager.GetSubsystemToggleValue(lookupKey);
+            if (subsystemValue != null)
+            {
+                return IsEnabledValue(subsystemValue)
+                    ? true
+                    : RejectUnavailable(lookupKey, $"开关未开启（{lookupKey}）");
+            }
+
             return RejectUnavailable(lookupKey, $"开关键缺失（{lookupKey}）");
         }
 

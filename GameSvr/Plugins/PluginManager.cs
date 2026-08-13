@@ -42,6 +42,9 @@ namespace GameSvr.Plugins
             EncoderFallback.ExceptionFallback,
             DecoderFallback.ExceptionFallback);
 
+        /// <summary>Suffix native appends to a feature name inside the MyJson subsystem documents.</summary>
+        private const string SubsystemToggleSuffix = "_是否勾选";
+
         private readonly ConcurrentDictionary<string, PluginInfo> _plugins = new(StringComparer.OrdinalIgnoreCase);
         private readonly string _pluginDir;
         private readonly string _configDir;
@@ -488,6 +491,30 @@ namespace GameSvr.Plugins
                 return _itemConfig != null && _itemConfig.TryGetValue(key, out var value)
                     ? CloneConfigValue(value)
                     : null;
+        }
+
+        /// <summary>
+        /// Resolve a feature switch that native stores in a per-subsystem MyJson document
+        /// instead of the top-level config.json, under "&lt;feature&gt;_是否勾选".
+        /// Returns null when no subsystem document carries the switch.
+        /// </summary>
+        public object GetSubsystemToggleValue(string feature)
+        {
+            if (string.IsNullOrEmpty(feature)) return null;
+            var key = feature + SubsystemToggleSuffix;
+
+            lock (_myJsonConfigLock)
+            {
+                var role = GetMyJsonConfigSnapshot(YanshenMyJsonKind.Role);
+                if (role != null && role.TryGetValue(key, out var roleValue))
+                    return CloneConfigValue(roleValue);
+
+                var skill = GetMyJsonConfigSnapshot(YanshenMyJsonKind.SkillConfig);
+                if (skill != null && skill.TryGetValue(key, out var skillValue))
+                    return CloneConfigValue(skillValue);
+            }
+
+            return GetItemConfigValue(key);
         }
 
         /// <summary>
