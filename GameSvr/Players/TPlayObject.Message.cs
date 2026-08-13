@@ -1676,6 +1676,17 @@ namespace GameSvr
                     // `mov dx,[msg+4]` (Ident) - so for 3027 the client names the
                     // action in Tag and sub_6EC078 range-checks that value instead.
                     // UsrEngn carries it here in nParam3.
+                    // MINE-49: 骑乘态攻击门。原生 HIT 派发器 sub_6D9EAF 在 ClientHitXY(0x6EC078)
+                    // 之前先调 sub_6BBEB8：0x6D9EBC call 0x6BBEB8 / 0x6D9EC3 jne 0x6DBC2C
+                    // == HasState(51)||HasState(52) → 放弃整个 HIT case、不发任何包（静默消费）。
+                    // 覆盖本 arm 全部 ident（CASE1 3002/3014/3015/3016/3018/3019/3024/3025/3026/3028
+                    // 命中 jne 0x6DBC2C 静默；CASE2 CM_3037 原生改跳 0x6D9FE7 先发 0x276 更正包——
+                    // 因该更正包精确载荷未取证，按 fail-closed 统一对齐 0x6DBC2C 静默放弃，
+                    // 记为有界偏差：CM_3037 骑乘态下少发一个 SM_ACT_FAIL 更正包）。
+                    if (IsNativeHitBlockedByMountState())
+                    {
+                        break;
+                    }
                     if (ClientHitXY(
                             ProcessMsg.wIdent == Grobal2.CM_3037
                                 ? ProcessMsg.nParam3
