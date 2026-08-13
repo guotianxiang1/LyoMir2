@@ -25,11 +25,8 @@ static void CheckConstantsAndClientMapping()
     Equal(3032, Grobal2.CM_SWITCH_LISTEN, "CM_SWITCH_LISTEN");
     Equal(2953, Grobal2.SM_CLIENT_CONF, "SM_CLIENT_CONF");
 
-    var root = FindRepositoryRoot();
-    var clientPath = Path.Combine(Directory.GetParent(root)!.FullName,
-        "白猪G2.5_0518_lua_plain_readable_20260710_014719", "core",
-        "mir2.scenes.main.common.common_hk.lua");
-    var client = File.ReadAllText(clientPath);
+    var client = File.ReadAllText(FindClientLua(
+        "mir2.scenes.main.common.common_hk.lua"));
     Contains(client, "CM_SWITCH_LISTEN,", "client CM3032 producer");
     Contains(client, "recog = b and 0 or 1", "client mode layout");
     Contains(client, "param = config[1]", "client category layout");
@@ -184,6 +181,24 @@ static void Packet(ClientPacket packet, int ident, int recog, int param,
     Equal((ushort)param, packet.Param, label + " Param");
     Equal((ushort)tag, packet.Tag, label + " Tag");
     Equal((ushort)series, packet.Series, label + " Series");
+}
+
+// The extracted client tree is a sibling of the repository, but the repository
+// is routinely checked out through `git worktree` several levels deeper, so the
+// parent of the repository root is not a fixed anchor.
+static string FindClientLua(string fileName)
+{
+    const string clientTree = "白猪G2.5_0518_lua_plain_readable_20260710_014719";
+    var probed = new List<string>();
+    for (var directory = new DirectoryInfo(FindRepositoryRoot());
+         directory != null; directory = directory.Parent)
+    {
+        var candidate = Path.Combine(directory.FullName, clientTree, "core", fileName);
+        if (File.Exists(candidate)) return candidate;
+        probed.Add(candidate);
+    }
+    throw new InvalidOperationException(
+        $"client lua {fileName} not found; probed: {string.Join("; ", probed)}");
 }
 
 static string FindRepositoryRoot()
