@@ -705,7 +705,17 @@ namespace GameSvr.Plugins
                     if (it != null && it.MakeIndex == id) { item = it; break; }
             }
             if (item == null) return 0;
-            return GetExtremeValue(item, jpIdx);
+            return GetExtremeValue(item, ExtremeIndexFromJid(jpIdx));
+        }
+
+        /// <summary>
+        /// ^35^/^36^ 的 jid 是 1 基的：1005D363 / 1005D5CA `8D 43 FF lea eax,[ebx-1]`
+        /// 后 `83 F8 05 cmp eax,5` / `ja`。越界的 jid 不报错，落到 ja 之前预置的
+        /// 偏移 0x2A（1005D35C / 1005D5C3 `C7 45 EC 2A 00 00 00`），也就是 jp2 那一格。
+        /// </summary>
+        private static int ExtremeIndexFromJid(int jid)
+        {
+            return jid >= 1 && jid <= 6 ? jid - 1 : 1;
         }
 
         /// <summary>设置装备极品值</summary>
@@ -726,12 +736,10 @@ namespace GameSvr.Plugins
                     if (it != null && it.MakeIndex == id) { item = it; break; }
             }
             if (item == null) return 0;
-            if (SetExtremeValue(item, jpIdx, value))
-            {
-                if (types == 0) _player.SendUpdateItem(item);
-                return value;
-            }
-            return 0;
+            // 1005D6E4 `88 04 1E mov byte [esi+ebx], al` 只写低字节，但
+            // 1005D6E7 存回的是完整的 eax，所以返回值是原样的 val。
+            SetExtremeValue(item, ExtremeIndexFromJid(jpIdx), (byte)value);
+            return value;
         }
 
         /// <summary>装备持久操作: types 0=查询 1=增加 2=减少 3=设置</summary>
