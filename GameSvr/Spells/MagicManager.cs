@@ -241,6 +241,11 @@ namespace GameSvr
             var boTrain = false;
             var boSpellFail = false;
             var boSpellFire = true;
+            // A7 槽②（战神 0x76EA14 `B8 03 00 00 00 mov eax,3`）：激光命中后训练技能
+            // 所用 Random 的实参。默认 3（原生 Random(3)+1），仅 SKILL_SHOOTLIGHTEN
+            // 段会按 S(1,82)/开关改写——S(1,82) 补丁只钩激光生产者 0x76EA14，故其余
+            // 法术的训练点保持原生 Random(3)+1，绝不受影响。
+            var laserTrainRandomArg = Plugins.YanshenLaserSlots.NativeTrainRandom;
             if (PlayObject.m_nSoftVersionDateEx == 0 &&
                 PlayObject.m_dwClientTick == 0 &&
                 UserMagic.MagicInfo.wMagicID > 40 &&
@@ -386,6 +391,20 @@ namespace GameSvr
                         {
                             boTrain = true;
                         }
+                        // A7 槽②（S(1,82)，战神 0x76EA14）：激光命中后 TrainSkill 的
+                        // Random 实参。原生在 beam（0x76EA0F call sub_76FE44）之后无条件
+                        // 执行 `mov eax,N / call Random / inc ecx`（=Random(N)+1）。C# 把
+                        // 该训练折叠到 DoMagic 尾部（下方 TrainSkill 处），故此处只求出 N，
+                        // 由尾部执行 Random(N)+1；仅激光段改写，别的法术仍是 Random(3)+1。
+                        laserTrainRandomArg = Plugins.YanshenLaserSlots.TrainRandomArg(PlayObject);
+                        // A7 槽①（S(1,81)，战神 0x76EA07 arg0 低 8 位）——**故意不接**。
+                        // 反汇编闭环：sub_76FE44 把 arg0 写进延迟魔法事件 0x27C1 的载荷
+                        // struct[0x2C]（0x76FEA7 mov al,[ebp+8] → [ebp-8]）；但事件处理器
+                        // 0x766D90 按 dispatchType=evt[2] 分派，激光生产者 0x76E9FF `push 2`
+                        // 令激光恒为 type 2，其分支 0x766E16 及伤害函数 0x76DF5C 都**从不
+                        // 读取 struct[0x2C]**（仅 type 1/5 分支 0x766DA5 的 0x76DF9 mov
+                        // al,[ebx+0x2c] 会读）。故 arg0/S(1,81) 对激光是死参，接入任何
+                        // C# 行为都会引入原生不存在的分歧——fail-closed 保持原生 push 1。
                     }
                     break;
                 case SpellsDef.SKILL_LIGHTENING:
@@ -1177,7 +1196,10 @@ namespace GameSvr
             {
                 if (UserMagic.btLevel < UserMagic.MagicInfo.TrainLevel.Length && UserMagic.MagicInfo.TrainLevel[UserMagic.btLevel] <= PlayObject.m_Abil.Level)
                 {
-                    PlayObject.TrainSkill(UserMagic, M2Share.RandomNumber.Random(3) + 1);
+                    // 原生每条法术 DoSpell 尾都是 Random(3)+1（0x76EA14 mov eax,3 / call
+                    // Random / inc）；laserTrainRandomArg 默认 3，仅激光段（A7 槽② S(1,82)）
+                    // 改写，故此折叠尾对非激光法术仍是 Random(3)+1。
+                    PlayObject.TrainSkill(UserMagic, M2Share.RandomNumber.Random(laserTrainRandomArg) + 1);
                     if (!PlayObject.CheckMagicLevelup(UserMagic))
                     {
                         PlayObject.SendDelayMsg(PlayObject, Grobal2.RM_MAGIC_LVEXP, 0, UserMagic.MagicInfo.wMagicID, UserMagic.btLevel, UserMagic.nTranPoint, "", 1000);

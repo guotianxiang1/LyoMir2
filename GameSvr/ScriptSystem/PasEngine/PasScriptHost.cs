@@ -990,6 +990,13 @@ namespace GameSvr.PasEngine
             var plugin = M2Share.PluginManager?.GetPlugin("YanshenCompat");
             if (plugin?.State != GameSvr.Plugins.PluginState.Running) return false;
 
+            // A6 登录播种（战神 DLL 0x100CE4EA，this=玩家）：登录初始化路径对玩家
+            // S 银行灌种一次，早于 shipped initys()。幂等（哨兵 S(1,49)==1314 时整段
+            // 跳过），且与 RunQuest.pas 是否存在无关——原生只要眼神 DLL 在场就播种，
+            // 故置于插件门内、脚本文件门外。仅在眼神插件运行时播种，避免污染
+            // 非眼神场景下的 S(1,1..150) 脚本变量。
+            player?.YanshenSeedLoginSVars();
+
             var scriptPath = Path.Combine(_envirPath, "PsMapQuest", "RunQuest.pas");
             return File.Exists(scriptPath) &&
                    TryCallProcedure(scriptPath, "initys", player, null);
