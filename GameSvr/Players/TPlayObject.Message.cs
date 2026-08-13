@@ -1151,6 +1151,20 @@ namespace GameSvr
                     }
                     break;
                 case Grobal2.CM_CLICKNPC:
+                    // Native handler 0x6D8EE9 opens with a two-seat-mount gate that C#
+                    // was missing, so a player riding pillion could still open NPC
+                    // dialogs here while 战神 drops the click outright:
+                    //   0x6D8EE9  B2 34              mov  dl,0x34
+                    //   0x6D8EEB  8B 45 FC           mov  eax,[ebp-4]
+                    //   0x6D8EEE  E8 6D 9A 09 00     call 0x772960   ; HasNativeActiveState
+                    //   0x6D8EF3  84 C0              test al,al
+                    //   0x6D8EF5  0F 85 31 2D 00 00  jne  0x6DBC2C   ; mounted -> silent drop
+                    // State 0x34 is the two-seat mount (SET 0x6EE8AF/0x6EE8B3, CLEAR
+                    // 0x6EEBC2-0x6EEBC6), the same one the group prechecks read at
+                    // 0x6BBEA0. Only after the gate does native call 0x6B8B28 with
+                    // edx = Recog (the NPC id) and ecx = Tag.
+                    if (HasNativeActiveState(0x34))
+                        break;
                     ClientClickNPC(ProcessMsg.nParam1);
                     break;
                 case Grobal2.CM_MERCHANTDLGSELECT:
