@@ -418,6 +418,22 @@ namespace GameSvr
                         MonGenInfo.dwZenTime = HUtil32.Str_ToInt(sData, -1) * 60 * 1000;
                         sLineText = HUtil32.GetValidStr3(sLineText, ref sData, new[] { " ", "\t" });
                         MonGenInfo.nMissionGenRate = HUtil32.Str_ToInt(sData, 0);// Focused coordinate spawn rate 1-100
+                        // SPWN-13 / SPWN-14: 第 8 列同时就是 [gen+0x28]，第 9 列是
+                        // [gen+0x40] 生成播报。原生 LoadMonGen (0x67B35C) 整个函数被
+                        // VMProtect 虚拟化（0x67B35C `E9 A3 2B 44 00` -> 0xABDF04 的
+                        // `push imm32 / call` VM 入口），无法直接读列序；列归属靠
+                        // TMonGen 记录 0x44 字节里唯一空闲的整型槽 +0x28 与唯一的
+                        // 1 字节 dyn array 槽 +0x40 反推，并与真实 mongen.txt 的
+                        // 「最多九列」实测吻合（ys207/ys208/pas-include 四份抓包合计
+                        // 43405 行七列 + 648 行八列 + 70 行九列，无十列）。
+                        MonGenInfo.nCorpseSeconds = MonGenInfo.nMissionGenRate;
+                        sLineText = HUtil32.GetValidStr3(sLineText, ref sData, new[] { " ", "\t" });
+                        // 第 9 列用与其余各列相同的分词器切；实测九列样本的播报文本
+                        // 全是无空格中文句子，所以「取剩余整行」与「取一个 token」
+                        // 在真实数据上不可区分。
+                        MonGenInfo.GenAnnounceBytes = string.IsNullOrEmpty(sData)
+                            ? null
+                            : HUtil32.GbkEncoding.GetBytes(sData);
                         if (!string.IsNullOrEmpty(MonGenInfo.sMapName) && !string.IsNullOrEmpty(MonGenInfo.sMonName) && MonGenInfo.dwZenTime != 0 && M2Share.MapManager.GetMapInfo(M2Share.nServerIndex, MonGenInfo.sMapName) != null)
                         {
                             MonGenInfo.CertList = new List<TBaseObject>();
