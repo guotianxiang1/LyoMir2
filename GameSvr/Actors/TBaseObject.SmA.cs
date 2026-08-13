@@ -184,5 +184,39 @@ namespace GameSvr
             writer.Write(bodyHigh);
             return (header, stream.ToArray());
         }
+
+        /// <summary>
+        /// SM 3341 (0xD0D) - name notice carrying the player name as the string
+        /// body. slot 0x250 (SendDefMessage); the payload is the <c>sMsg</c>
+        /// string, so this builder returns (header, message) exactly as
+        /// SendDefMessage splits it. Native function @0x0073FBF8:
+        /// <code>
+        /// 0073FC12  84 C9                test cl, cl            ; flag
+        /// 0073FC16  66 BB 02 00          mov  bx, 2             ; flag != 0 -> Param = 2
+        /// 0073FC1C  66 BB 01 00          mov  bx, 1             ; flag == 0 -> Param = 1
+        /// 0073FC20  8D 45 FC / 8D 97 06 01 00 00 / E8 ...   lea eax,[ebp-4]; lea edx,[edi+0x106]
+        ///                                                  call 0x405774  ; [ebp-4] = name copy
+        /// 0073FC2E  66 8B 87 78 02 00 00 mov  ax, [edi+0x278]
+        /// 0073FC35  53                   push ebx               ; Param  = flag?2:1
+        /// 0073FC36  50                   push eax               ; Tag    = word[edi+0x278]
+        /// 0073FC37  6A 00                push 0                 ; Series = 0
+        /// 0073FC39  8B 45 FC / 50        mov eax,[ebp-4]; push eax ; sMsg = name
+        /// 0073FC3D  33 C9                xor  ecx, ecx          ; Recog  = 0
+        /// 0073FC3F  66 BA 0D 0D          mov  dx, 0xD0D         ; Ident  = 3341
+        /// 0073FC43  8B C6                mov  eax, esi          ; self
+        /// 0073FC45  8B 18                mov  ebx, [eax]
+        /// 0073FC47  FF 93 50 02 00 00    call [ebx+0x250]       ; SendDefMessage
+        /// </code>
+        /// <paramref name="flag"/> is the <c>cl</c> argument, <paramref name="word278"/>
+        /// is <c>word[player+0x278]</c>, and <paramref name="charName"/> is the
+        /// player name at <c>player+0x106</c>.
+        /// </summary>
+        internal static (ClientPacket Header, string Msg) BuildSm3341(
+            bool flag, ushort word278, string charName)
+        {
+            var param = flag ? 2 : 1;
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3341, 0, param, word278, 0);
+            return (header, charName ?? string.Empty);
+        }
     }
 }

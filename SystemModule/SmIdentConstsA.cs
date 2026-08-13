@@ -49,5 +49,9 @@ namespace SystemModule
 
         // 0xD0C body length pushed at 0x6B46CF.
         public const int SM_3340_BodyLength = 8;
+
+        // 0xD0D @0x73FC47 slot 0x250 - name notice: Param = flag?2:1, Tag =
+        // word[player+0x278], Series = 0, sMsg = player name (player+0x106).
+        public const int SM_3341 = 3341;
     }
 }
