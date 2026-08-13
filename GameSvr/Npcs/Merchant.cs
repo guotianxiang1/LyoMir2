@@ -2159,6 +2159,13 @@ namespace GameSvr
             for (var i = 0; i < m_GoodsList.Count; i++)
             {
                 List1C = m_GoodsList[i];
+                // 0x63FE93 cmp [ebp-0x14],0 / je 0x63FFA2、0x63FEA0 cmp [group+0x10],0 / je、
+                // 0x63FEB0 cmp [inner+8],0 / jle —— 三道守卫都跳到 0x63FFA2 继续扫下一条货，
+                // 不是中止整个 1034。C# 把 group 与 inner 合并成一层，两道并成一道。
+                if (List1C == null || List1C.Count <= 0)
+                {
+                    continue;
+                }
                 MakeItem = List1C[0];
                 StdItem = M2Share.UserEngine.GetStdItem(MakeItem.wIndex);
                 if (StdItem != null && StdItem.Name == sItemName)
