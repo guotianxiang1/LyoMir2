@@ -846,6 +846,14 @@ namespace SystemModule
         // mov dx,0x270; call [ebx+0x250]` (SendDefMessage) — recog=0, nParam=1.
         public const int SM_THRUSTING = 624;
 
+        // 攻杀剑术 (SKILL_YEDO) charge-ready notify = ident 627 (0x273).
+        // Native sub_6EC078 @0x6EC2E4: `dec byte [ebx+0x9A]` (m_btAttackSkillCount),
+        // `mov al,[ebx+0x9B] / cmp al,[ebx+0x9A] / jne` (m_btAttackSkillPointCount ==
+        // m_btAttackSkillCount), then `mov byte [ebx+0x93],1` (m_boPowerHit) and
+        // `push 0 x4; xor ecx,ecx; mov dx,0x273; call [ebx+0x250]` — Recog and all
+        // four words are 0. Production srv_AppearTimes: 627 = 2,688,495.
+        public const int SM_POWERHITSKILL = 627;
+
         // NOT a 战神 ident: `mov dx,781` occurs ZERO times in the native image and no
         // native call site ever loads 781 into the SendDefMessage ident register.
         // The real native thrusting toggle is SM_THRUSTING=624 (@0x6B225B) above.

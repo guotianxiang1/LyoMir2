@@ -216,7 +216,11 @@ namespace GameSvr
                         if (m_btAttackSkillPointCount == m_btAttackSkillCount)
                         {
                             m_boPowerHit = true;
-                            SendSocket("+PWR");
+                            // 0x6EC2F8 mov byte [ebx+0x93],1 / 6A 00 x4 / 33 C9 /
+                            // 66 BA 73 02 mov dx,0x273 / FF 93 50 02 00 00.
+                            // "+PWR" appears zero times in the native image.
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_POWERHITSKILL, 0, 0, 0, 0));
                         }
                         if (m_btAttackSkillCount <= 0)
                         {
