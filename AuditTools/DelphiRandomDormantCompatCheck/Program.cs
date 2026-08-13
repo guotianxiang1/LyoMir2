@@ -430,7 +430,20 @@ static void Require(string source, string marker, string message)
 
 static void Reject(string source, string marker, string message)
 {
-    Assert(!source.Contains(marker, StringComparison.Ordinal), message);
+    // An anti-regression gate must read CODE. RandomNumber.cs documents the cutover by
+    // naming the field it no longer owns ("the `private static Random random` field this
+    // class no longer owns"), and matching that sentence reported the removal as a
+    // reappearance.
+    Assert(!StripComments(source).Contains(marker, StringComparison.Ordinal), message);
+}
+
+static string StripComments(string source)
+{
+    return string.Join("\n", source.Split('\n').Select(line =>
+    {
+        var slashes = line.IndexOf("//", StringComparison.Ordinal);
+        return slashes >= 0 ? line[..slashes] : line;
+    }));
 }
 
 static string Slice(string source, string startMarker, string endMarker)

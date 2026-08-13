@@ -383,8 +383,15 @@ Check(cfg.nKillHumanAddPKPoint == 100,
 // F12. sub_740078 @0x7400F8 `mov eax,3` is a HARDCODED 3. There is no config knob:
 // "DieScatterBagRate" is 0-hit across GBK / ASCII / UTF-16LE in the image, so the
 // faithful C# hardcodes Random(3) and must NOT re-introduce a config field for it.
-Check(bagSource.Contains("M2Share.RandomNumber.Random(3)", StringComparison.Ordinal)
-      && !bagSource.Contains("nDieScatterBagRate", StringComparison.Ordinal),
+// The negative half has to look at CODE only: the line right above the draw is a comment
+// that names the removed knob, and matching that comment made this闸门 report a false red.
+var bagCode = string.Join("\n", bagSource.Split('\n').Select(line =>
+{
+    var slashes = line.IndexOf("//", StringComparison.Ordinal);
+    return slashes >= 0 ? line[..slashes] : line;
+}));
+Check(bagCode.Contains("M2Share.RandomNumber.Random(3)", StringComparison.Ordinal)
+      && !bagCode.Contains("nDieScatterBagRate", StringComparison.Ordinal),
     "0x7400F8 mov eax,3: 背包爆率分母硬编码 3，不得引入配置旋钮");
 
 Console.WriteLine();
