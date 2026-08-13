@@ -1036,7 +1036,15 @@ namespace GameSvr
             sSilverStone = "银矿";
             sSteelStone = "铁矿";
             sCopperStone = "铜矿";
-            sBlackStone = "黑铁矿";
+            // Native MakeMine (sub_6BC3CC) pushes a Delphi long string whose length
+        // prefix at 0x6BC4F0 reads 8, i.e. four GBK characters, and the payload
+        // at 0x6BC4F4 is BA DA CC FA BF F3 CA AF = 黑铁矿石. The other four ore
+        // names are 4-byte/two-character and already matched; this one was a
+        // character short. A 3-character name resolves to no item at all: a scan
+        // of 118 MyISAM files found the 4-character name twice and the
+        // 3-character one zero times, so the short form would silently Dispose
+        // every black-iron drop.
+        sBlackStone = "黑铁矿石";
             sGemStone1 = "金刚石矿";
             sGemStone2 = "绿宝石矿";
             sGemStone3 = "红宝石矿";
