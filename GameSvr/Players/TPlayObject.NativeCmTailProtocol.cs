@@ -52,6 +52,69 @@ namespace GameSvr
                     ClientNativeNeighbourSoulStateQuery(processMessage.nParam1,
                         processMessage.nParam2, processMessage.nParam3);
                     return true;
+                case Grobal2.CM_4150:
+                    ClientNativeTaskBoardRefresh();
+                    return true;
+                case Grobal2.CM_4151:
+                    ClientNativeTaskBoardAction();
+                    return true;
+                case Grobal2.CM_4173:
+                    ClientNativeFreeRecycleEquip();
+                    return true;
+                case Grobal2.CM_4204:
+                    ClientNativeSmsAuthVerify();
+                    return true;
+                case Grobal2.CM_4205:
+                    ClientNativeSmsAuthSend();
+                    return true;
+                case Grobal2.CM_4215:
+                    ClientNativeNeighbourInteract();
+                    return true;
+                case Grobal2.CM_4218:
+                    ClientNativeItemTransferSelf();
+                    return true;
+                case Grobal2.CM_4408:
+                    ClientNativeBeadInlaySelf();
+                    return true;
+                case Grobal2.CM_4409:
+                    ClientNativeJadeInlaySelf();
+                    return true;
+                case Grobal2.CM_4410:
+                    ClientNativeBeadInlayHero();
+                    return true;
+                case Grobal2.CM_4411:
+                    ClientNativeJadeInlayHero();
+                    return true;
+                case Grobal2.CM_4417:
+                    ClientNativeTaskBoardScriptCommand();
+                    return true;
+                case Grobal2.CM_4446:
+                    ClientNativeYuanbaoConsignSettings();
+                    return true;
+                case Grobal2.CM_4496:
+                    ClientNativeFreshmanTaskCommand();
+                    return true;
+                case Grobal2.CM_4626:
+                    ClientNativePagedListQuery();
+                    return true;
+                case Grobal2.CM_4646:
+                    ClientNativePrizeList();
+                    return true;
+                case Grobal2.CM_4647:
+                    ClientNativePrizePrecheck();
+                    return true;
+                case Grobal2.CM_4648:
+                    ClientNativePrizeSettle();
+                    return true;
+                case Grobal2.CM_4649:
+                    ClientNativePrizeClaimWithItemDelete();
+                    return true;
+                case Grobal2.CM_4650:
+                    ClientNativeTreasureMapSynth();
+                    return true;
+                case Grobal2.CM_4651:
+                    ClientNativeTaskBoardTextCommand();
+                    return true;
                 default:
                     return false;
             }
@@ -193,6 +256,325 @@ namespace GameSvr
             }
 
             NativeCmTailFailClosed.Drop(Grobal2.CM_4128, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4150, native leaf 0x6DAF51 (`8B 45 FC` Self / `E8 CB 79 01 00`
+        /// call 0x6F2924), which is a thunk: 0x6F2924 loads the task-board object
+        /// [[0x7D5D20]] into EAX, swaps Self into EDX (`92 xchg`) and tail-calls
+        /// the real worker 0x699B68.
+        ///
+        /// 0x699B68 opens a 0xA4-dword frame and builds the task-board listing the
+        /// client renders; the native leaf then answers it as a single large SM
+        /// body. Neither the task-board object at [[0x7D5D20]] nor its per-entry
+        /// record layout exists in this port, so the body cannot be derived.
+        /// </summary>
+        private void ClientNativeTaskBoardRefresh()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4150, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4151, native leaf 0x6DAF5E, worker 0x6999D4.
+        ///
+        /// The leaf pushes Recog ([record+0]), Param (word[record+6]) and Tag
+        /// (word[record+8]), loads the task-board object [[0x7D5D20]] and Self,
+        /// then calls 0x6999D4 (a 0x13-dword-frame Delphi routine). That worker is
+        /// the task-board command entry (dispatch / accept / complete), all of
+        /// which run @Main-style script procedures against the [[0x7D5D20]] object.
+        /// None of that script machinery is ported, so the outcome and any reply
+        /// cannot be reproduced.
+        /// </summary>
+        private void ClientNativeTaskBoardAction()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4151, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4173, native leaf 0x6DB068, worker 0x6E600C.
+        ///
+        /// The leaf folds Param (word[record+6]) and Tag (word[record+8]) into a
+        /// single dword through 0x408D40 — that helper is exactly MakeLong(lo=ax,
+        /// hi=dx), i.e. HUtil32.MakeLong(Param, Tag) — and calls 0x6E600C(Self,
+        /// that dword). 0x6E600C is the free equipment-recycle worker; it resolves
+        /// the referenced bag item, deletes it and settles reputation. The item
+        /// selection and the recycle payout table are not modelled here, so the
+        /// deletion and the SM it would answer are withheld rather than guessed.
+        /// </summary>
+        private void ClientNativeFreeRecycleEquip()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4173, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4204, native leaf 0x6DAF87, worker 0x6F03E8.
+        ///
+        /// The leaf copies the packet body string ([ebp-8], via 0x405708) into a
+        /// local and calls 0x6F03E8(Self, code=that string, Param=word[record+6]).
+        /// 0x6F03E8 is the SMS verification-code CHECK: it compares the client's
+        /// code against one issued through the operator's SMS gateway. That gateway
+        /// is external to the image, so neither the stored code nor the pass/fail
+        /// result can be derived — the check is failed closed.
+        /// </summary>
+        private void ClientNativeSmsAuthVerify()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4204, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4205, native leaf 0x6DAFAF, worker 0x6F01E4.
+        ///
+        /// The leaf calls 0x6F01E4(Self, Param=word[record+6], Series=word
+        /// [record+0xA]). 0x6F01E4 opens a 0x20C-byte frame to compose the
+        /// verification-code SMS and hands it to the operator's SMS gateway. The
+        /// gateway is external to the image; issuing a code and the SM that reports
+        /// success are outside anything derivable here, so the request fails closed.
+        /// </summary>
+        private void ClientNativeSmsAuthSend()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4205, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4215, native leaf 0x6DAFCA, worker 0x6E8684.
+        ///
+        /// The leaf passes Recog ([record+0]), Param (word[record+6]),
+        /// Series (word[record+0xA]) and Tag (word[record+8]) to 0x6E8684, a
+        /// neighbour-object interaction worker that answers up to three distinct
+        /// SM packets through [vmt+0x250]. The reply selection and the target
+        /// object fields it reads are not modelled in this port, so no packet can
+        /// be reconstructed without inventing its body.
+        /// </summary>
+        private void ClientNativeNeighbourInteract()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4215, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4218, native leaf 0x6DB00C, worker 0x6F3104.
+        ///
+        /// The leaf calls 0x6F3104(Self, Recog=[record], MakeLong(Param,Tag) via
+        /// 0x408D40). The worker throttles on [Self+0xA6C] (1500 ms, 0x6F3118
+        /// `cmp edx,0x5DC`), then admits the move only when the item name matches
+        /// the type table [[0x780574]] (0x6F313D) AND the transfer gate 0x774378
+        /// passes (0x6F3154) AND the target is not a ghost ([+0x73]). Neither the
+        /// item-type table nor the 0x774378 gate is modelled, so the transfer and
+        /// its SM are withheld.
+        /// </summary>
+        private void ClientNativeItemTransferSelf()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4218, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4408, native leaf 0x6DB08A, worker 0x6F37EC with the self/hero
+        /// selector DL = 0 (self).
+        ///
+        /// The leaf calls 0x6F37EC(Self, DL=0, Recog=[record], MakeLong(Param,Tag)
+        /// via 0x408D40). With DL=0 the worker targets Self and, once the target is
+        /// valid, runs the spirit-bead inlay chain 0x7487A8 (0x6F385E) against the
+        /// item at the Recog slot. The inlay chain mutates per-item bead slots and
+        /// counters that this port does not model, so the mount and its reply are
+        /// withheld rather than invented.
+        /// </summary>
+        private void ClientNativeBeadInlaySelf()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4408, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4409, native leaf 0x6DB0B2, worker 0x6F38A8 with the self/hero
+        /// selector DL = 0 (self).
+        ///
+        /// The leaf calls 0x6F38A8(Self, DL=0, Param=word[record+6], body length
+        /// ESI, body string [ebp-8]). With DL=0 the target is Self; the worker then
+        /// runs the jade inlay chain 0x748A18 (0x6F3901), which reads the spirit-
+        /// bead template table [[0x7D3F34]] and the item's element bytes. None of
+        /// those are modelled, so the inlay and its SM (self leg at 0x6F3928) are
+        /// withheld.
+        /// </summary>
+        private void ClientNativeJadeInlaySelf()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4409, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4410, native leaf 0x6DB0D0, worker 0x6F37EC with the self/hero
+        /// selector DL = 1 (hero) — the same bead-inlay worker as CM 4408.
+        ///
+        /// The leaf calls 0x6F37EC(Self, DL=1, Recog=[record], MakeLong(Param,Tag)
+        /// via 0x408D40). With DL=1 the worker resolves the hero [Self+0xBB0],
+        /// requires it valid (0x772DA8) and non-ghost ([+0x73]), then runs the same
+        /// 0x7487A8 inlay chain against the hero's item. The hero's per-item bead
+        /// slots are not modelled, so the mount and reply are withheld (the no-hero
+        /// leg would answer with the -99 sentinel, which is folded into the drop).
+        /// </summary>
+        private void ClientNativeBeadInlayHero()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4410, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4411, native leaf 0x6DB0F8, worker 0x6F38A8 with the self/hero
+        /// selector DL = 1 (hero) — the same jade-inlay worker as CM 4409.
+        ///
+        /// The leaf calls 0x6F38A8(Self, DL=1, Param=word[record+6], body length
+        /// ESI, body string [ebp-8]). With DL=1 the worker resolves the hero
+        /// [Self+0xBB0], requires it valid (0x772DA8) and non-ghost, then runs the
+        /// jade inlay chain 0x748A18 and answers SM 0x113B/4411 through [vmt+0x250]
+        /// with the result code. The template table [[0x7D3F34]] and item element
+        /// bytes are unmodelled, so the reply is withheld.
+        /// </summary>
+        private void ClientNativeJadeInlayHero()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4411, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4417, native leaf 0x6DB1BF, worker 0x699EB4.
+        ///
+        /// The leaf calls 0x699EB4(taskBoard=[[0x7D5D20]], Self, callback=0x6DC000)
+        /// — a task-publish-board command that runs @Main-style script procedures
+        /// against the board object at [[0x7D5D20]] (its +0x2C script slot). That
+        /// script object and its procedures are not modelled in this port, so the
+        /// command's effect and any reply cannot be reproduced.
+        /// </summary>
+        private void ClientNativeTaskBoardScriptCommand()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4417, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4446, native leaf 0x6DBB37, worker 0x6F75C4.
+        ///
+        /// The leaf calls 0x6F75C4(Self). The worker reads the consignment
+        /// collection [Self+0x192C] (0x6F75CB); when it is null (0x6F75D3 `je`) it
+        /// does nothing, otherwise it counts the entries through 0x712BE4 and
+        /// answers SM 0x115E/4446 with Recog = that count. The [Self+0x192C]
+        /// sub-object is not modelled here, so the count that fills Recog cannot be
+        /// derived and the reply is withheld.
+        /// </summary>
+        private void ClientNativeYuanbaoConsignSettings()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4446, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4496, native leaf 0x6DBBDC, worker 0x6FAC8C.
+        ///
+        /// The leaf calls 0x6FAC8C(Self, Recog=[record]). The worker is the
+        /// freshman-task command entry (FreshmanTaskCommand), an 8-local SEH frame
+        /// that drives the freshman quest state through script hooks. That script
+        /// entry is not wired up in this port, so the command's outcome and reply
+        /// cannot be reproduced.
+        /// </summary>
+        private void ClientNativeFreshmanTaskCommand()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4496, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4626, native leaf 0x6DB394, worker 0x6AE260.
+        ///
+        /// The leaf calls 0x6AE260(Self, Param=word[record+6], Tag=word[record+8]).
+        /// The worker treats Param as a page offset and Tag as a page size capped
+        /// at 0x20 (0x6AE285 `cmp,0x20`), reads the total from the list source
+        /// [[0x7D5C60]] (0x6AE29C) and copies one page of records. Neither the list
+        /// source nor its per-record format is modelled, so the page body cannot be
+        /// built and the reply is withheld.
+        /// </summary>
+        private void ClientNativePagedListQuery()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4626, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4646, native leaf 0x6DBBEB, worker 0x6FBB90.
+        ///
+        /// The leaf calls 0x6FBB90(Self). The worker walks the reward-id array
+        /// [Self+0x62C] for [Self+0x658] entries (0x6FBBF0), resolves each against
+        /// the prize manager [[0x7D605C]] (0x6FBBE9) via 0x69C57C and packs the
+        /// claimable list into the reply. The reward-id array, its count and the
+        /// prize manager are not modelled, so the list body is withheld.
+        /// </summary>
+        private void ClientNativePrizeList()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4646, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4647, native leaf 0x6DBBF5, worker 0x6FB6FC.
+        ///
+        /// The leaf calls 0x6FB6FC(Self), the prize-claim precheck. It refuses when
+        /// the claimed count [Self+0x658] has reached 10 (0x6FB705 `cmp,0xa`), then
+        /// checks the diamond ceiling [Self+0x15C]+0xC350 against [Self+0x68C]
+        /// (0x6FB736), answering a fixed notice SM 0x38FF on either failure. Those
+        /// counters and the diamond-currency block are not modelled, so the gate
+        /// cannot be evaluated and no packet is emitted.
+        /// </summary>
+        private void ClientNativePrizePrecheck()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4647, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4648, native leaf 0x6DBBFF, worker 0x6FB874.
+        ///
+        /// The leaf calls 0x6FB874(Self), the prize settlement. It walks the reward
+        /// array [Self+0x62C]/[+0x62E] for [Self+0x658] entries (0x6FB8BA), resolves
+        /// each through the prize manager [[0x7D605C]] (0x6FB8B3) and credits the
+        /// payout onto [Self+0x4F0] (0x6FB8E6). The reward array, the prize manager
+        /// and the credited counters are not modelled, so the settlement and its
+        /// reply are withheld rather than invented.
+        /// </summary>
+        private void ClientNativePrizeSettle()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4648, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4649, native leaf 0x6DBC09, worker 0x6FBB28.
+        ///
+        /// The leaf calls 0x6FBB28(Self, Recog=[record]). The worker resolves the
+        /// prize manager [[0x7D605C]] (0x6FBB37) and calls 0x69C47C(manager,
+        /// Recog, Self) (0x6FBB42), which sweeps Self's bag for the item carrying
+        /// the client-supplied id and deletes it as the cost of the claim. The bag
+        /// sweep/delete rule and the manager are not modelled, so the deletion and
+        /// the SM it answers are withheld.
+        /// </summary>
+        private void ClientNativePrizeClaimWithItemDelete()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4649, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4650, native leaf 0x6DBC18, worker 0x6FB51C.
+        ///
+        /// The leaf calls 0x6FB51C(Self, Recog=[record], body string [ebp-8], body
+        /// length ESI). The worker resolves the prize manager [[0x7D605C]], calls
+        /// 0x69C648 then the synthesis state machine 0x69C03C (0x6FB54B), whose
+        /// 0..5 return code drives a six-way jump table at 0x6FB569 selecting the
+        /// SM result. The synthesis machine is not modelled, so the outcome code —
+        /// and therefore which of the six replies to send — cannot be derived.
+        /// </summary>
+        private void ClientNativeTreasureMapSynth()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4650, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4651, native leaf 0x6DB1D8, worker 0x6FC054.
+        ///
+        /// The leaf copies the packet body string ([ebp-8], via 0x405708) into a
+        /// local and calls 0x6FC054(Self, text=that string). The worker loads the
+        /// task-board script object [[0x7D5D20]] and only proceeds when its +0x2C
+        /// @Main slot is non-null (0x6FC064 `cmp [eax+0x2C],0` / `je`), then runs
+        /// the text command through that script. The board script object is not
+        /// modelled in this port, so the command is dropped rather than guessed.
+        /// </summary>
+        private void ClientNativeTaskBoardTextCommand()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4651, m_sCharName);
         }
     }
 }
