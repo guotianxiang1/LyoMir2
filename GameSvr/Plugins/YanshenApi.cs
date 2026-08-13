@@ -1793,14 +1793,22 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// 一次 AutoRecycle 调用内跨物品存活的四个货币累加器。
+        /// 一次 AutoRecycle 调用内跨物品存活的四个货币累加器，外加**经验单价泄漏槽**。
         ///
-        /// 原生是 sub_1006B020 的四个栈槽，**只在进入循环之前清零一次**
+        /// 原生是 sub_1006B020 的四个累加栈槽，**只在进入循环之前清零一次**
         /// （0x1006B24D 起 <c>xor eax,eax</c> 之后连续 <c>mov …,eax</c>：
         /// 0x1006B258 <c>[ebp-0xA0]</c> 元宝、0x1006B25E <c>[ebp-0xA4]</c> 灵符、
         /// 0x1006B264 <c>[ebp-0xA8]</c> 金币、0x1006B26A <c>[ebp-0xAC]</c> 经验），
         /// 循环头在 0x1006B285 <c>dec edx</c>、回边在 0x1006CE3D <c>jmp 0x1006B285</c>，
-        /// 每件的重置块 0x1006B294..0x1006B30D 里没有这四个槽。
+        /// 每件的重置块 0x1006B294..0x1006B30D 里没有这四个累加槽。
+        ///
+        /// <para>【原生缺陷 N1，照抄；勿"修"】REPLICATION_RULES §3.1。<see cref="ExpUnitCarry"/>
+        /// 对应经验**单价**槽 <c>[ebp-0x78]</c>。元宝/灵符/金币单价每件都在
+        /// 0x1006B2A5 <c>[ebp-0x70]=0</c> / 0x1006B2AC <c>[ebp-0x90]=0</c> /
+        /// 0x1006B2B6 <c>[ebp-0x94]=0</c> 重置，唯独经验单价 <c>[ebp-0x78]</c>
+        /// **只在循环前 0x1006B24F <c>mov [ebp-0x78],eax</c>（eax=0）清一次**，
+        /// 每件重置块 0x1006B294..0x1006B315 里没有它。于是它跨物品泄漏。见
+        /// <see cref="RecycleOne"/> 的实现。</para>
         /// </summary>
         private struct RecycleRunTotals
         {
@@ -1808,6 +1816,13 @@ namespace GameSvr.Plugins
             public int LingFu;
             public int Gold;
             public int Exp;
+
+            /// <summary>
+            /// 经验单价槽 <c>[ebp-0x78]</c>。原生只在循环前 0x1006B24F 清零一次，
+            /// 循环内永不重置 —— 这是 N1「经验单价跨件泄漏」的载体。默认 0 即等价于原生
+            /// 那次清零。
+            /// </summary>
+            public int ExpUnitCarry;
         }
 
         /// <summary>
@@ -1926,6 +1941,18 @@ namespace GameSvr.Plugins
             var count = stackable ? (int)item.Dura : 1;
             var otherUnit = rule.HasOther ? rule.OtherValue : 0;
 
+            // 【原生缺陷 N1，照抄；勿"修"】经验单价 [ebp-0x78] 跨物品泄漏。REPLICATION_RULES §3.1。
+            // 元宝/灵符/金币单价每件都在 0x1006B2A5 / 0x1006B2AC / 0x1006B2B6 重置为 0，
+            // 唯独经验单价 [ebp-0x78] 只在循环前 0x1006B24F mov [ebp-0x78],eax（eax=0）清一次，
+            // 每件重置块 0x1006B294..0x1006B315 里没有它。取值靠 totals.ExpUnitCarry 承载：
+            //   · 类型写了 经验 键 ⇒ SET 回槽（可叠 0x1006B95C mov [ebp-0x78],esi /
+            //     种类 0x1006CA8C mov [ebp-0x78],ebx）；写 0 也照压 0（HasExp 就是为区分
+            //     「写了 0」与「没写」而存在的）。
+            //   · 没写 经验 键 ⇒ 沿用上一件的槽值（可叠 0x1006B967 mov esi,[ebp-0x78] /
+            //     种类 0x1006CA97 mov ebx,[ebp-0x78]）—— 这就是泄漏发生的地方。
+            if (rule.HasExp) totals.ExpUnitCarry = rule.Exp;
+            var expUnit = totals.ExpUnitCarry;
+
             // 至少一路产出为正才允许删除。
             //
             // 【原生缺陷，照抄；勿"修"】判的是**缩放前、未乘件数**的五个单价，不是实付金额。
@@ -1946,7 +1973,7 @@ namespace GameSvr.Plugins
             //
             // 后果：单价=1 且倍率=50 会过门，却只入账 ⌊1*50/100⌋=0 ⇒ 删了不给。
             if (rule.Yuanbao <= 0 && rule.LingFu <= 0 && rule.Gold <= 0 &&
-                otherUnit <= 0 && rule.Exp <= 0)
+                otherUnit <= 0 && expUnit <= 0)
                 return;
 
             // ── 删除段。此行之后不允许再出现任何 return，见方法头。 ──
@@ -1963,8 +1990,33 @@ namespace GameSvr.Plugins
                 totals.LingFu + ScaleRecyclePrice(rule.LingFu, rate, count));
             totals.Gold = unchecked(
                 totals.Gold + ScaleRecyclePrice(rule.Gold, rate, count));
-            totals.Exp = unchecked(
-                totals.Exp + ScaleRecyclePrice(rule.Exp, rate, count));
+
+            // 经验不走 ScaleRecyclePrice —— 它比其它三路多一步 N1 写回，必须逐字节照搬
+            //（可叠分支 0x1006BC7F..0x1006BCB6，种类分支 0x1006CD8x 同构）：
+            //   0x1006BC7F  8B 75 88 mov esi,[ebp-0x78]              ; 载入泄漏槽（本件的经验单价）
+            //   0x1006BC82  85 F6 test esi,esi / 7E 31 jle 0x1006BCB7; expUnit<=0 整段跳过
+            //   0x1006BC86  85 FF test edi,edi / 7E 22 jle 0x1006BCAC; 倍率<=0 不缩放、不写回
+            //   0x1006BC8C  0F AF CE imul ecx,esi                    ; 倍率×单价（edi=倍率）
+            //   0x1006BC8F  B8 1F 85 EB 51 / F7 E9 / C1 FA 05 / …    ; 0x51EB851F 魔数除 100（向零截断）
+            //   0x1006BCA0  89 75 88 mov [ebp-0x78],esi              ; ★仅倍率>0 这条臂把缩放后单价写回槽
+            //   0x1006BCAE  0F AF C6 imul eax,esi                    ; ×件数
+            //   0x1006BCB1  01 85 54 FF FF FF add [ebp-0xAC],eax     ; 累加器 += 缩放后单价*件数
+            // 写回只在倍率>0 这条臂上（0x1006BCA0），倍率<=0 时槽保持不变。于是下一件若没写
+            // 经验 键，就会沿用这个「已乘过倍率」的单价，逐件复利 —— 这正是 N1 的可观测后果。
+            if (expUnit > 0)
+            {
+                int scaledExpUnit;
+                if (rate > 0)
+                {
+                    scaledExpUnit = unchecked(rate * expUnit) / 100;
+                    totals.ExpUnitCarry = scaledExpUnit; // 0x1006BCA0 的写回
+                }
+                else
+                {
+                    scaledExpUnit = expUnit;
+                }
+                totals.Exp = unchecked(totals.Exp + scaledExpUnit * count);
+            }
 
             var other = ScaleRecyclePrice(otherUnit, rate, count);
 
