@@ -15,6 +15,10 @@ namespace GameSvr
             _mirApp = serverApp;
             _applicationLifetime = applicationLifetime;
             Instance = this;
+            // TMainThread.Create @0x00792BEC seeds RandSeed here, before Execute
+            // @0x00792D2C enters the game loop: 0x00792C5A E8 4D 08 C7 FF call 0x004034AC.
+            // AppService is the same object — ctor then ExecuteAsync -> _mirApp.Run().
+            DelphiRandom.Randomize();
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
