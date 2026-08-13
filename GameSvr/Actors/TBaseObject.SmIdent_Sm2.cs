@@ -119,5 +119,43 @@ namespace GameSvr
                 nParam1, wParam, nParam2, nParam3);
             return (header, Array.Empty<byte>());
         }
+
+        // SM 959 (0x3BF) — RM arm @0x006B5761 via [obj+0x250], no body.
+        //   006B5748  66 8B 43 02        mov ax,[ebx+2]     ; #1 Param  = wParam
+        //   006B574C  50                 push eax
+        //   006B574D  66 8B 43 04        mov ax,[ebx+4]     ; #2 Tag    = LoWord(nParam1)
+        //   006B5751  50                 push eax
+        //   006B5752  6A 00              push 0             ; #3 Series = 0
+        //   006B5754  6A 00              push 0             ; #4 sMsg   = nil
+        //   006B5756  33 C9              xor ecx,ecx        ; Recog     = 0
+        //   006B5758  66 BA BF 03        mov dx,0x3BF       ; ident 959
+        //   006B5761  FF 93 50 02 00 00  call [ebx+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm959(
+            ushort wParam, ushort nParam1)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_959, 0, wParam, nParam1, 0);
+            return (header, Array.Empty<byte>());
+        }
+
+        // SM 1107 (0x453) — RM 10501 arm @0x006B5CF1 via [obj+0x250], no body. Same
+        // field mapping as SM 924 (Recog=BaseObject, Param=nParam1, Tag=nParam2,
+        // Series=wParam):
+        //   006B5CD4  66 8B 43 04        mov ax,[ebx+4]     ; #1 Param  = LoWord(nParam1)
+        //   006B5CD8  50                 push eax
+        //   006B5CD9  66 8B 43 08        mov ax,[ebx+8]     ; #2 Tag    = LoWord(nParam2)
+        //   006B5CDD  50                 push eax
+        //   006B5CDE  66 8B 43 02        mov ax,[ebx+2]     ; #3 Series = wParam
+        //   006B5CE2  50                 push eax
+        //   006B5CE3  6A 00              push 0             ; #4 sMsg   = nil
+        //   006B5CE5  8B 4B 24           mov ecx,[ebx+0x24] ; Recog     = BaseObject
+        //   006B5CE8  66 BA 53 04        mov dx,0x453       ; ident 1107
+        //   006B5CF1  FF 93 50 02 00 00  call [ebx+0x250]
+        internal static (ClientPacket Header, byte[] Body) BuildSm1107(
+            int baseObjectRecog, ushort nParam1, ushort nParam2, ushort wParam)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_1107,
+                baseObjectRecog, nParam1, nParam2, wParam);
+            return (header, Array.Empty<byte>());
+        }
     }
 }
