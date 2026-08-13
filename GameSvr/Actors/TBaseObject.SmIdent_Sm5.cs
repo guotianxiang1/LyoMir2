@@ -254,5 +254,69 @@ namespace GameSvr
         internal static (ClientPacket Header, string Text) BuildSm4480(string guildName)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_4480, 0, 0, 0, 0),
                 Sm4480Prefix + (guildName ?? string.Empty) + Sm4480Suffix);
+
+        // ---- fixed byte[] body ----
+
+        // SM 4614 (0x1206) — @0x70214D, broadcast through the member wrapper 0x7059D0
+        // (the [0x254] Buf/Len sibling of 0x705954; walks [group+0x30] and re-sends
+        // [member+0x254]). Fully determinate 8-byte body = the two dword ids at
+        // &[ebp+8] (the caller's [ebp+8] and [ebp+0xC], compared against [group+0x20]
+        // / [group+0x24] just above). Param=0, Tag=0, Series=1, Recog=0.
+        //   00702139 6A 00 push 0 (Param) ; 0070213B 6A 00 push 0 (Tag) ; 0070213D 6A 01 push 1 (Series)
+        //   0070213F 8D 45 08 lea eax,[ebp+8] / 50 push (Buf) ; 00702143 6A 08 push 8 (Len)
+        //   00702145 33 C9 xor ecx,ecx (Recog=0) ; 00702147 66 BA 06 12 mov dx,0x1206 ; 0070214D call 0x7059D0
+        internal static (ClientPacket Header, byte[] Body) BuildSm4614(int idA, int idB)
+        {
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_4614, 0, 0, 0, 1);
+            using var stream = new MemoryStream(8);
+            using var writer = new BinaryWriter(stream);
+            writer.Write(idA);   // body[0..3] = [ebp+8]
+            writer.Write(idB);   // body[4..7] = [ebp+0xC]
+            return (header, stream.ToArray());
+        }
+
+        // ------------------------------------------------------------------
+        // FAIL-CLOSED (batch-5 idents whose body cannot be evaluated at the
+        // send slot -> registered in Grobal2.cs, NO builder fabricated).
+        //
+        //  SM 4363 (0x110B) @0x767160 — send via [vmt+0xE0], a non-standard slot
+        //      with a 6-arg stack shape (push 0,0,0,[rec+0x10] Buf, word[rec+0x14]
+        //      Len, 1) plus ecx=[esi+4] Recog. Not the SendDefMessage/SendSocket
+        //      5-tuple; the +0xE0 virtual's signature is unproven (same class of
+        //      block as SM_554). Body/frame not reproducible without inventing.
+        //  SM 4441 (0x1159) @0x6FF4D9 [obj+0x254] Buf=[ebp-0x24] Len=0x24 (36) —
+        //      locally composed struct: name1 ShortString[15]@0x00, word[src+0x18]
+        //      @0x10, byte[src+0x1A]@0x12, name2 ShortString[15]@0x13 (from the
+        //      global by-name lookup [0x7D6D50]->0x652784->0x6ADAE4), flag@0x23.
+        //      Param=bl(mode 1/2/3), Recog=0. The two ShortString[15] fields are
+        //      filled by 0x4039E4 (writes length+chars only), so their tail bytes
+        //      are uninitialised stack -> body not byte-exact at the slot.
+        //  SM 4442 (0x115A) @0x6FFE30 [obj+0x254] Buf=[ebp-0x16] Len=0x16 (22) —
+        //      name SS[15]@0x00, word[src+0x18]@0x10, byte[src+0x1A]@0x12,
+        //      byte[src+0x1B]@0x13, online flag@0x14 (by-name lookup), pad@0x15.
+        //      Param=bl, Recog=0. SS tail padding + pad@0x15 uninitialised.
+        //  SM 4443 (0x115B) @0x700918 [obj+0x254] Buf=[ebp-0x14] Len=0x14 (20) —
+        //      name SS[15]@0x00, word[src+0x18]@0x10, online flag@0x12, pad@0x13.
+        //      Param=bl, Recog=0. SS tail padding + pad@0x13 uninitialised.
+        //  SM 4612 (0x1204) @0x6F781C [obj+0x254] Buf=[ebp-8] Len=[src+8]*0x11 —
+        //      a count*17 record array {byte flag; ShortString[15] name} copied by
+        //      the loop @0x6F779E from an unmapped source dyn-array (0x424D4C on
+        //      esi). Param/Tag/Series=0, Recog=0. Per-record ShortString tail bytes
+        //      uninitialised; source container not modeled.
+        //  SM 4626 (0x1212) @0x6AE363 [obj+0x254] Buf=[ebp-0x1C] Len=[ebp-0x14]*0x40
+        //      — a count*64 record array whose 64-byte elements are filled by the
+        //      opaque serializer 0x7060B8 (several ShortString[15] fields via
+        //      0x4039E4 + sub-calls 0x70570C/0x70569C). Param=word[ebp-0x1E],
+        //      Tag=word[ebp-0xC], Series=word[ebp-0x14], Recog=[ebp-8]. Element
+        //      layout not fully resolvable / padding uninitialised.
+        //  SM 4646 (0x1226) @0x6FBC4C [obj+0x254] Buf=[ebp-4] Len=[self+0x658] —
+        //      a Delphi dynamic array (elements filled by 0x69C57C then assigned via
+        //      0x403260 with a large stride); Len is the ELEMENT COUNT, not a byte
+        //      length, so the on-wire body size/layout is not resolvable at the slot.
+        //  SM 4647 (0x1227) @0x6FB7FF [obj+0x254] Buf=[ebp-0x32] Len=0x18 (24) —
+        //      a 24-byte record produced by 0x69C514: ShortString[20]@0x00..0x14,
+        //      an unwritten gap byte @0x15, word@0x16. The gap byte (and the
+        //      ShortString tail) are uninitialised -> body not byte-exact.
+        // ------------------------------------------------------------------
     }
 }
