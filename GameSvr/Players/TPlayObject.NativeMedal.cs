@@ -97,11 +97,18 @@ namespace GameSvr
                 NativeItemFactory.GetClassName(stdItem) == null)
                 return false;
 
+            // Native mints through the class factory sub_74C338, so the pile
+            // constructor's `mov word [esi+0x26],1` @0x788112 wins over the root
+            // constructor's Dura = DuraMax @0x7837E2-E6 whenever the class descends
+            // from TBasePileItem. Medal indices are not piles today, but the seed
+            // must follow the class, not the caller.
             item = new TUserItem
             {
                 wIndex = (ushort)itemIndex,
                 MakeIndex = M2Share.GetItemNumber(),
-                Dura = stdItem.DuraMax,
+                Dura = NativeItemFactory.IsPileItem(stdItem)
+                    ? (ushort)1
+                    : stdItem.DuraMax,
                 DuraMax = stdItem.DuraMax
             };
             return true;
