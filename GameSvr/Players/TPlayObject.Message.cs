@@ -998,9 +998,20 @@ namespace GameSvr
                 case Grobal2.CM_QUERYUSERSTATE:
                     ClientQueryUserState(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3);
                     break;
-                case Grobal2.CM_QUERYUSERSET:
-                    ClientQueryUserSet(ProcessMsg);
-                    break;
+                // CM_QUERYUSERSET (3040) is not dispatched, because native does not
+                // dispatch it. The subtree that owns this range is
+                //   0x6D85E3  3D EB 0B 00 00     cmp eax,0xBEB     ; 3051
+                //   0x6D85E8  7F 31              jg  0x6D861B
+                //   0x6D85EA  0F 84 CE 1C 00 00  je  0x6DA2BE
+                //   0x6D85F0  2D D4 0B 00 00     sub eax,0xBD4     ; 3028 -> 0x6D9EAF
+                //   0x6D85FB  83 E8 02           sub eax,2         ; 3030 -> 0x6DA1B1
+                //   0x6D8604  83 E8 02           sub eax,2         ; 3032 -> 0x6DA1D5
+                //   0x6D860D  83 E8 03           sub eax,3         ; 3035 -> 0x6D9EAF
+                //   0x6D8616  E9 11 36 00 00     jmp 0x6DBC2C      ; everything else
+                // 3040 has no arm in that chain, and no encoding of 3040 appears anywhere
+                // in CODE as an instruction immediate: the single byte-pattern hit at
+                // 0x6D2465 has zero converging decode starts because those bytes are the
+                // tail of `FF 84 BE E0 0B 00 00 inc [esi+edi*4+0xBE0]`.
                 case Grobal2.CM_DROPITEM:
                     if (ClientDropItem(ProcessMsg.sMsg, ProcessMsg.nParam1))
                     {

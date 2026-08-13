@@ -156,10 +156,16 @@ namespace GameSvr
                         // does not update the facing either. It still runs the shared
                         // position check, the SKILL_YEDO counter and the health/spell
                         // tick block below, and still answers SM_ACT_GOOD.
-                        case Grobal2.CM_42HIT:
-                            AttackDir(null, 10, nDir);
-                            AttackDir(null, 11, nDir);
-                            break;
+                        //
+                        // CM_42HIT (42) is gone from here as well. sub_6EC078 selects the
+                        // action with `0F B7 C7 movzx eax,di` / `05 46 F4 FF FF add
+                        // eax,-0xBBA` / `83 F8 21 cmp eax,0x21` / `0F 87 .. ja 0x6EC2C6`
+                        // at 0x6EC15A, so 42 underflows the 3002..3035 window and lands on
+                        // the default arm, which forwards 42 unchanged to sub_7707A8 -
+                        // where `05 18 FC FF FF add eax,-0x3E8` / `83 F8 21 cmp eax,0x21` /
+                        // `0F 87 AF 04 00 00 ja 0x770CC4` at 0x770803 rejects it again.
+                        // Native performs no swing for 42 by either route, and hit modes
+                        // 10/11 are not reachable from any client opcode.
                         case Grobal2.CM_SWORD_HIT:
                             if (!ReleaseSunSword(nDir))
                             {

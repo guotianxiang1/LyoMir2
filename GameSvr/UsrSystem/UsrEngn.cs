@@ -2549,7 +2549,6 @@ namespace GameSvr
                 case Grobal2.CM_DROPITEM:
                 case Grobal2.CM_TAKEONITEM:
                 case Grobal2.CM_TAKEOFFITEM:
-                case Grobal2.CM_1005:
                 case Grobal2.CM_MERCHANTDLGSELECT:
                 case Grobal2.CM_MERCHANT_QUERY:
                 case Grobal2.CM_PILEUPITEM:
