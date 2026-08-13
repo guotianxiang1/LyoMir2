@@ -3150,6 +3150,37 @@ namespace GameSvr.Plugins
         public bool IsOneSword() => PatchToggleOn("基本剑术");
         public int OneSwordN() => ParamAtoi("基本剑术_n值", 3);
 
+        // 复活戒指重设 is a host-code patch, same primitive as the six warrior
+        // skills. Plugin 0x100B3472 `83 BF B8 05 00 00 00 cmp [edi+0x5B8],0`
+        // (loader lag puts 复活戒指重设 at +0x5B8) / je 0x100B36D2 skips the
+        // writes when the toggle is off. On: atoi(重设时间) then
+        // `69 C0 E8 03 00 00 imul 0x3E8` is stored over the two `0xEA60`
+        // immediates, and atoi(无敌时间) `0F B7 C0 movzx eax,ax` is stored
+        // over `66 B9 02 00` at 0x743911.
+        //   0x100B3501 A3 FA C4 73 00 -> host 0x73C4FA of `81 FE 60 EA 00 00`
+        //   0x100B357B A3 58 37 74 00 -> host 0x743758 of `81 FA 60 EA 00 00`
+        //   0x100B35E9 A3 80 C4 73 00 -> host 0x73C480 of `B8 3C 00 00 00`
+        //   0x100B3657 66 A3 13 39 74 00 -> host 0x743913 of `mov cx,2`
+        // 0x7CC on the cfg struct is the already-applied latch (written 0x64
+        // after the patch, 0 when the toggle is off) — C# rereads the config
+        // each revive, which is the player-visible result of uncheck/recheck.
+        public bool IsReviveResetPatchOn() => PatchToggleOn("复活戒指重设");
+
+        /// <summary>
+        /// Milliseconds written over the two <c>cmp …,0xEA60</c> sites.
+        /// Native default 60000; plugin <c>imul eax,0x3E8</c> is 32-bit wrap.
+        /// </summary>
+        public int ReviveResetCooldownMs() =>
+            unchecked(ParamAtoi("复活戒指重设_重设时间", 60) * 1000);
+
+        /// <summary>
+        /// Seconds written over <c>mov cx,2</c> @0x743911. Plugin
+        /// <c>0x100B34B7 0F B7 C0 movzx eax,ax</c> keeps the low 16 bits of
+        /// atoi, including the zero-extended negative case (atoi -1 → 65535).
+        /// </summary>
+        public int ReviveResetImmuneSeconds() =>
+            ParamAtoi("复活戒指重设_无敌时间", 2) & 0xFFFF;
+
         /// <summary>
         /// Toggle read for a code-patch override. Unlike a script API, "off"
         /// here is not a failure: it is simply the unpatched native

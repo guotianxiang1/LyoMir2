@@ -187,7 +187,8 @@ namespace GameSvr
         /// </param>
         internal static Outcome Resolve(TMapFlag flag, bool hasEquipRevive,
             int lastEquipReviveTick, int tick, bool secondPathFlag, byte secondPathTier,
-            bool secondPathCooldownActive)
+            bool secondPathCooldownActive,
+            int equipReviveCooldownMs = EquipReviveCooldownMilliseconds)
         {
             // 0x743720 reads [self+0x128] unconditionally; a nil map would have faulted
             // natively, so "no map" cannot revive.
@@ -205,8 +206,10 @@ namespace GameSvr
             {
                 // 0x743747-0x74375C: a zero stamp always passes (test eax,eax / je), and
                 // an elapsed CD passes; otherwise fall THROUGH to path 2 (jb 0x7437C9).
+                // equipReviveCooldownMs is the imm32 at 0x743758 (`60 EA 00 00`); the
+                // yanshen 复活戒指重设 patch writes atoi(重设时间)*1000 over it.
                 var offCooldown = lastEquipReviveTick == 0 ||
-                    unchecked(tick - lastEquipReviveTick) >= EquipReviveCooldownMilliseconds;
+                    unchecked(tick - lastEquipReviveTick) >= equipReviveCooldownMs;
                 if (offCooldown) return Outcome.EquipRevive;
             }
 
