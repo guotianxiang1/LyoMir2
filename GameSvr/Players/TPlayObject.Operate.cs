@@ -2097,6 +2097,18 @@ namespace GameSvr
                 SysMsg(M2Share.g_sTryModeCanotUseStorage, MsgColor.Red, MsgType.Hint);
                 return;
             }
+            // TRADE-62: 战神 sub_6C2A34 在容器分派之后、NPC 门之前有一道「交易中拒收」：
+            //   0x6C2AAC  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6C2AB3  0F 85 3B 02 00 00     jne 0x6C2CF4              ; 共用失败出口
+            // 0x6C2CF4 处 `80 7D F5 00 cmp byte [ebp-0xB],0 / 75 1B jne` 测的是成功标志
+            // （此路仍为 0），于是落到 `66 BA BF 02 mov dx,0x2BF` 即 SM_STORAGE_FAIL，
+            // Recog=0（`33 C9 xor ecx,ecx`）、nParam1=word[ebp-0xA]（普通仓库恒 0）。
+            // 三个容器共用这一道门。缺它则托管中的物品可被同时存入仓库。
+            if (m_boDealing)
+            {
+                SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
             Merchant merchant = (Merchant)M2Share.UserEngine.FindMerchant(ObjectId);
             for (var i = m_ItemList.Count - 1; i >= 0; i--)
             {
