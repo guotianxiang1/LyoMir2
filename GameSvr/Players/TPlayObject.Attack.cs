@@ -486,6 +486,34 @@ namespace GameSvr
                 case SpellsDef.SKILL_65:
                     result = TryActivateNativeSkill65Charge();
                     break;
+                case SpellsDef.SKILL_290:
+                    result = TryActivateNativeSkill290(nTargetX);
+                    break;
+                case SpellsDef.SKILL_237:
+                    result = TryActivateNativeSkill237Dragon(UserMagic);
+                    break;
+                case SpellsDef.SKILL_261:
+                    result = TryActivateNativeSkill261(UserMagic);
+                    break;
+                case SpellsDef.SKILL_262:
+                    result = TryActivateNativeSkill262Poison(UserMagic);
+                    break;
+                case SpellsDef.SKILL_267:
+                    result = TryActivateNativeSkill267(UserMagic);
+                    break;
+                case SpellsDef.SKILL_273:
+                    TBaseObject skill273Target = null;
+                    if (CretInNearXY(TargeTBaseObject, nTargetX, nTargetY))
+                    {
+                        skill273Target = TargeTBaseObject;
+                    }
+                    TryActivateNativeSkill273DragonBreak(UserMagic,
+                        skill273Target);
+                    break;
+                case SpellsDef.SKILL_168:
+                    result = TryActivateNativeSkill168Charge(nTargetX,
+                        nTargetY);
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
