@@ -1603,7 +1603,7 @@ namespace GameSvr.Plugins
             // 0x1006BC07 / 0x1006BC44 / 0x1006BC76 / 0x1006BCAE / 0x1006BCD6 五路各乘一次。
             // 物品种类分支从 0x1006CD03 起整段没有这个乘法，件数恒为 1。
             // 原生这里是整件不做类型判断的：谁被写进 可叠材料，就按它的 Dura 乘。
-            var count = stackable ? item.Dura : 1;
+            var count = stackable ? (int)item.Dura : 1;
 
             if (!TryScaleRecyclePrice(rule.Yuanbao, rate, count, out var yuanbao) ||
                 !TryScaleRecyclePrice(rule.Gold, rate, count, out var gold) ||
