@@ -76,7 +76,20 @@ namespace GameSvr
                 {
                     result = true;
                     m_dwAttackTick = HUtil32.GetTickCount();
-                    if (wIdent == Grobal2.CM_HEAVYHIT && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
+                    // MINE-08: 原版在派发器里测 MINE 旗标，位置在一切之前——
+                    // 紧跟 ident 判断之后、取工具之前：
+                    //   0x6EC0F1  66 81 FF C7 0B     cmp di,0xBC7        ; CM_HEAVYHIT
+                    //   0x6EC0F6  75 62              jne 0x6EC15A
+                    //   0x6EC0F8  8B 83 28 01 00 00  mov eax,[ebx+0x128] ; map
+                    //   0x6EC0FE  80 78 6A 00        cmp byte [eax+0x6A],0
+                    //   0x6EC102  74 56              je  0x6EC15A        ; ★ 落回跳表
+                    //   0x6EC104  85 F6              test esi,esi        ; 武器非空
+                    //   0x6EC10B  80 78 15 13        cmp byte [std+0x15],0x13
+                    //   0x6EC111  66 83 7E 26 00     cmp word [item+0x26],0
+                    // 0x6EC15A 是普通 ident 跳表，3015 在表里落 slot3 = 普攻。
+                    // 所以非 MINE 图上手持 shape-19 镐子的重击**降级为普攻**，
+                    // 且不进 DigXY、不扣矿点次数、不抽任何签。
+                    if (wIdent == Grobal2.CM_HEAVYHIT && m_PEnvir.Flag.boMINE && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
                     {
                         if (GetFrontPosition(ref n14, ref n18) && !m_PEnvir.CanWalk(n14, n18, false))
                         {

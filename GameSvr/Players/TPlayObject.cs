@@ -2155,21 +2155,13 @@ namespace GameSvr
                     // Normal: Random(12) -> effective 1/4 * 1/12 = 1/48
                     // Tier 2: Random(24) -> effective 1/4 * 1/24 = 1/96
                     int mineRate = m_btNativeFatigueTier == 2 ? 24 : M2Share.g_Config.nMakeMineRate;
-                    // MINE-08: Native @0x6BC24A tests the map flag BEFORE drawing the
-                    // rate roll, so a non-mine map consumes no RNG at all.
-                    if (m_PEnvir.Flag.boMINE)
+                    // MINE-08: MINE 旗标由派发器在 0x6EC0FE 测过了（非 MINE 图
+                    // 根本到不了这里），产出卷因此无条件抽。原来这里的注释把
+                    // 旗标地址写成 0x6BC24A —— 那是格子地形门 cmp byte[cell],0，
+                    // 不是旗标，以字节为准。
+                    if (M2Share.RandomNumber.Random(mineRate) == 0)
                     {
-                        if (M2Share.RandomNumber.Random(mineRate) == 0)
-                        {
-                            MakeMine();
-                        }
-                    }
-                    else if (m_PEnvir.Flag.boMINE2)
-                    {
-                        if (M2Share.RandomNumber.Random(mineRate) == 0)
-                        {
-                            MakeMine2();
-                        }
+                        MakeMine();
                     }
                     // MINE-50: 原版顺序是先扣耐久再发成功包，不可颠倒：
                     //   0x6BC2D8  B8 0F 00 00 00  mov eax,0x0F   ; Random(15)
