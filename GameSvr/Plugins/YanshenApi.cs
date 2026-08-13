@@ -3577,7 +3577,11 @@ namespace GameSvr.Plugins
 
         // ── Trade/Stall toggle checks ──
         public bool IsStallPass() => Enabled("摆摊穿人");
-        public bool IsCloseStall() => Enabled("关闭摆摊");
+        // 关闭摆摊 is a host-code patch: plugin 0x100AD12A memcpy C3 over the
+        // first byte of CM_START_STALL (4424) at 0x6E7C38 (native 55 = push ebp).
+        // Restore arm 0x100AD1AE writes 55 back. SetTimeLevel (4419) is a
+        // different function and is not patched.
+        public bool IsCloseStall() => PatchToggleOn("关闭摆摊");
         public bool IsTuChengStall() => Enabled("土城摆摊");
         public bool IsLimitStall() => Enabled("限制摆摊");
         public int LimitStall_LeftX() => GetParamInt("限制摆摊_左x", 280);
@@ -3769,7 +3773,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>关闭摆摊检查</summary>
-        public bool IsStallClosed() => Enabled("关闭摆摊");
+        public bool IsStallClosed() => IsCloseStall();
 
         /// <summary>指定地图编号摆摊</summary>
         public int GetStallMapId() => GetParamInt("摆摊地图", 3);
