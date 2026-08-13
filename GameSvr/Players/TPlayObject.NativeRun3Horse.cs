@@ -202,6 +202,19 @@ namespace GameSvr
 
         private bool NativeRun3FallbackWalk(byte direction)
         {
+            // This is the human 1-step mover sub_741224, which both run
+            // primitives fall into via sub_6BBCD8 `call [edi+0x30]` at
+            // 0x6BBD16 (degrade 0x6BC02F / 0x6BC147). It is NOT WalkTo:
+            //   007412C8  call 0x7797cc          ; MoveToMovingObject
+            //   007412E8  mov  dl,0x17 / call 0x76b4d0
+            //   0074130D  mov  dx,0x2712         ; RM_WALK = 10002
+            //   00741315  call [edi+0xD8]        ; broadcast FIRST
+            //   00741323  call 0x778ec0          ; doors/events AFTER
+            //   00741328  mov  dl,0x33 / call InBodyState ; then partner
+            // 0x778EC0's return is discarded (next insn is mov dl,0x33).
+            // WalkTo would reverse broadcast/door order (MOVE-39) and add
+            // gates sub_741224 does not have. CompleteNativeRun3Move
+            // already matches this tail.
             if (direction >= 8 || m_PEnvir == null)
             {
                 return false;
