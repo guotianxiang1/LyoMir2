@@ -3073,6 +3073,18 @@ namespace GameSvr
                 // classref [0x65E270] 全 CODE 段 1 个加载点；ctor 0x66D0E0 的 E8 调用者全扫 = 1 个。
                 // ctor 唯一自定义写 = `mov byte [esi+0x4E4],1`；唯一 VMT 覆写 Run 是空转发。
                 // 原先落 default(0x67AE5E) → nil。详见 Monster/StoneMonster.cs。
+                // ✅ 战神字节证据 (Tier-1)：race 175 = TStoneFoxBossMon(VMT 0x5F9634, parent TAnimal,
+                // size 与父类同为 0x4D8 => 无自有字段)。索引表[175-0xB=0xA4]=0x5B=91 ; jt[91]=0x67AB51：
+                //   67AB51  B2 01              mov  dl,1
+                //   67AB53  A1 E8 95 5F 00     mov  eax,[0x5F95E8]   ; classref -> TStoneFoxBossMon
+                //   67AB58  E8 CB 2C 0A 00     call 0x71D828         ; = TAnimal.Create（本类无自有 ctor）
+                //   67AB5D  89 45 F8           mov  [ebp-8],eax
+                //   67AB60  E9 DA 01 00 00     jmp  0x67AD3F
+                // classref [0x5F95E8] 全镜像 1 个加载点。覆写只有 Initialize(+0x078)@0x5FABA0
+                // 与 +0x0B8@0x5FABD0。原先落 default(0x67AE5E) → nil。详见 Monster/StoneFoxBossMon.cs。
+                case 175:
+                    Cert = new StoneFoxBossMon();
+                    break;
                 case 181:
                     Cert = new StoneMonster();
                     break;
