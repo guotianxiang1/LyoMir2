@@ -1802,6 +1802,25 @@ namespace GameSvr
                                         {
                                             n14 = n14 + (UserItem.btValue[nC] - 10) * 2;
                                         }
+                                        else
+                                        {
+                                            // ✅ 战神字节证据 (Tier-1) — PRICE-06: StdMode 5/6 (武器族) 的 index==6
+                                            // 属性,当 v<=10 时走【明文加 v】臂,不是零贡献。EA: TBaseItem
+                                            // 价格虚方法 sub_783D70 @0x783DCC-0x783DED:
+                                            //   0x783DCC  8a5330        mov dl,byte [ebx+0x30]   ; v = btValue[6]
+                                            //   0x783DCF  80fa0a        cmp dl,0x0A
+                                            //   0x783DD2  7613          jbe 0x783DE7             ; v<=10 -> 明文臂
+                                            //   0x783DD4  81e2ff000000  and edx,0xFF             ; v>10 臂:
+                                            //   0x783DDA  83ea0a        sub edx,0x0A             ;   (v-10)
+                                            //   0x783DDD  03d2          add edx,edx              ;   *2
+                                            //   0x783DDF  0155f8        add [ebp-8],edx          ;   accum += (v-10)*2
+                                            //   0x783DE7  81e2ff000000  and edx,0xFF             ; 明文臂:
+                                            //   0x783DED  0155f8        add [ebp-8],edx          ;   accum += v
+                                            // 缺此 else 时,武器 index-6 属性值<=10(绝大多数属性的常态)对
+                                            // 加成累加项 accum【零贡献】,经下方 `n10 += (n10/5)*accum` 传导,
+                                            // 系统性压低武器的买/卖/修报价。
+                                            n14 = n14 + UserItem.btValue[nC];
+                                        }
                                     }
                                     else
                                     {
