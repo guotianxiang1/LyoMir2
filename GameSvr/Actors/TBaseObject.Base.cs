@@ -115,28 +115,31 @@ namespace GameSvr
                 }
                 else
                 {
-                    if (m_boCanReAlive && m_pMonGen != null)
+                    // 战神 TCreature.Run 的死亡分支 @0x766674..0x76669A —— 尸体存留
+                    // 时间只由 word[obj+0x38] 决定，既不读 MonGen.dwZenTime 也不读
+                    // 任何配置项：
+                    //   007665FD  80 78 74 00           cmp   byte [eax+0x74],0   ; m_boDeath
+                    //   00766601  75 71                 jne   0x766674
+                    //   00766674  8B 45 FC              mov   eax,[ebp-4]
+                    //   00766677  8B D6                 mov   edx,esi             ; esi=GetTickCount @0x76658A
+                    //   00766679  2B 90 30 03 00 00     sub   edx,[eax+0x330]     ; - m_dwDeathTick
+                    //   00766682  0F BF 40 38           movsx eax,word [eax+0x38] ; 尸体秒数
+                    //   00766686  69 C0 E8 03 00 00     imul  eax,eax,1000
+                    //   0076668C  3B D0 / 72 0F         cmp   edx,eax / jb 0x76669F
+                    //   0076669A  E8 C1 19 00 00        call  0x768060            ; TCreature.MarkDelete
+                    // 三条独立旁证钉死这里没有第二套计时：
+                    //   (1) 全镜像 `movsx r32,word [reg+0x38]` 只有 0x766682 一条；
+                    //   (2) 镜像里根本没有 "MakeGhostTime" / "ZenTime" 串（同区段的
+                    //       "Setup" 等 ini 键都是明文可搜的），战神没有这个配置键；
+                    //   (3) 其余 now-m_dwDeathTick→MakeGhost 组合全是硬编码常量且属
+                    //       派生类自己的 Run（0x66A66E 2000ms、0x66B7ED 5000ms、
+                    //       0x66C8D1 2000ms、0x68A06C 60000ms），不经过本基类分支。
+                    // 原先此处的 _MAX(10s, dwZenTime-20s) 截断到 g_Config.dwMakeGhostTime
+                    // 来自 LOMCN/GameOfMir 的 Delphi 血统（ObjBase.pas 只有 dwMakeGhostTime
+                    // 那一支，MonGen 那一支是上游 C# 端加的），不是战神二进制的行为。
+                    if (NativeCorpseGhostDue(HUtil32.GetTickCount()))
                     {
-                        // ✅ SPAWN-32: Use dwZenTime directly (no ProcessMonsters_GetZenTime scaling).
-                        // The formula (dwZenTime - 20sec) makes corpses become ghosts 20 seconds
-                        // before the next spawn cycle, preventing visual overlap. The _MAX(10sec, ...)
-                        // ensures minimum 10-second corpse display even for fast spawns.
-                        var dwMakeGhostTime = HUtil32._MAX(10 * 1000, m_pMonGen.dwZenTime - 20 * 1000);
-                        if (dwMakeGhostTime > M2Share.g_Config.dwMakeGhostTime)
-                        {
-                            dwMakeGhostTime = M2Share.g_Config.dwMakeGhostTime;
-                        }
-                        if ((HUtil32.GetTickCount() - m_dwDeathTick > dwMakeGhostTime))
-                        {
-                            MakeGhost();
-                        }
-                    }
-                    else
-                    {
-                        if ((HUtil32.GetTickCount() - m_dwDeathTick) > M2Share.g_Config.dwMakeGhostTime)// 3 * 60 * 1000
-                        {
-                            MakeGhost();
-                        }
+                        MakeGhost();
                     }
                 }
             }

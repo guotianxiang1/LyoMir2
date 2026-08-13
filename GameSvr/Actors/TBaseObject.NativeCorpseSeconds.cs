@@ -60,13 +60,19 @@ namespace GameSvr
 
         /// <summary>
         /// 0x766674..0x76668E 的判据：死亡后经过的毫秒数是否已达
-        /// <c>m_wNativeCorpseSeconds * 1000</c>。原生用 <c>movsx</c> 取有符号值，
-        /// 所以负数秒会让 <c>cmp/jb</c> 恒真（立即 MakeGhost），这里照搬。
+        /// <c>m_wNativeCorpseSeconds * 1000</c>。
+        ///
+        /// 取值用 <c>movsx</c>（有符号扩展）而比较用 <c>jb</c>（无符号），两者
+        /// 必须分别照搬：<c>0x3E8</c> 乘出来的负数在 <c>cmp edx,eax</c> 里被当成
+        /// 接近 2^32 的大数，<c>jb</c> 恒成立 → 跳过 <c>MakeGhost</c>。也就是说
+        /// 负数秒（例如 mongen.txt 第 8 列填 40000，低 16 位 = -25536）在战神里
+        /// 表示"尸体几乎永不消失"，不是"立刻消失"。秒数为 0 时 <c>edx &gt;= 0</c>
+        /// 恒真，死亡后第一次 Run 就变 ghost。
         /// </summary>
         public bool NativeCorpseGhostDue(int dwCurrentTick)
         {
-            return dwCurrentTick - m_dwDeathTick
-                   >= m_wNativeCorpseSeconds * 1000;
+            return unchecked((uint)(dwCurrentTick - m_dwDeathTick))
+                   >= unchecked((uint)(m_wNativeCorpseSeconds * 1000));
         }
     }
 }

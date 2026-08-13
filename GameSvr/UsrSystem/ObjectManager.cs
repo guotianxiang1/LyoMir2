@@ -284,8 +284,11 @@ namespace GameSvr
         //   (b) 该 FIFO 由 ProcessMon 循环1 在 0x67C1BD `cmp eax,0x493E0`
         //       （= 300000ms = 5 分钟）后排空，sub_404690 = TObject.Free 真正销毁。
         // 即：检测在逐类型循环，释放集中且延迟 5 分钟。ClearObject 的 3 分钟
-        // dwMakeGhostTime 门在战神中没有对应物（dwMakeGhostTime 本身仍用于
-        // TBaseObject.Base.cs 的"死亡→ghost"延迟，配置字段保留）。
+        // dwMakeGhostTime 门在战神中没有对应物。dwMakeGhostTime 现已【没有任何
+        // 消费者】：TBaseObject.Base.cs 的"死亡→ghost"延迟也已按 0x766682 改为
+        // 读 word[obj+0x38]（m_wNativeCorpseSeconds，构造默认 60 秒 @0x764E9E、
+        // 刷怪时由 mongen.txt 第 8 列覆盖）；镜像里根本没有 "MakeGhostTime" 串。
+        // 配置字段本身保留，仅为 ini 读写兼容。
         // 删除前置条件已补齐：MonGen 怪物/守卫/宝宝（UsrEngn.ProcessMonsters）、
         // QuestNPC（ProcessNpcs）、Merchant（ProcessMerchants）三处逐类型 reap 现在都
         // 调用 ObjectManager.Remove(id, expected)，其中的
