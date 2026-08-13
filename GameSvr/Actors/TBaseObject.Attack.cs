@@ -582,10 +582,10 @@ namespace GameSvr
         // Every recalc arm the plugin patches feeds off this, never off btLevel.
         internal static int NativeEffectiveMagicLevel(TUserMagic magic)
         {
-            return magic == null || magic.MagicInfo == null
-                ? magic?.btLevel ?? 0
-                : Math.Min(unchecked((byte)(magic.btLevel + magic.NativeLevelBonus)),
-                    magic.MagicInfo.btTrainLv);
+            if (magic == null) return 0;
+            if (magic.MagicInfo == null) return magic.btLevel;
+            return Math.Min(unchecked((byte)(magic.btLevel + magic.NativeLevelBonus)),
+                magic.MagicInfo.btTrainLv);
         }
 
         private static int GetSunSwordEffectiveLevel(TUserMagic magic)
