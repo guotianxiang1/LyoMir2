@@ -94,7 +94,7 @@ namespace GameSvr
         // would draw RandSeed twice.
         private ushort DoSpell_MPow(TUserMagic UserMagic)
         {
-            return (ushort)(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(Math.Max(1, UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower)));
+            return (ushort)unchecked(UserMagic.MagicInfo.wPower + M2Share.RandomNumber.Random(UserMagic.MagicInfo.wMaxPower - UserMagic.MagicInfo.wPower));
         }
 
         // Native sub_4C8658 (@0x4C8658-0x4C86B4), reached via the thin wrapper
