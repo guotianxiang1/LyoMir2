@@ -33,7 +33,10 @@ var playerSource = File.ReadAllText(Path.Combine(gameRoot, "Players", "TPlayObje
 Require(playerSource.Contains("if (Walk(Grobal2.RM_RUN))", StringComparison.Ordinal),
     "horse run no longer routes through native RM_RUN");
 
-var messageSource = File.ReadAllText(Path.Combine(gameRoot, "Players", "TPlayObject.Message.cs"));
+// The multi-line pattern below is written with '\n'; the checkout is CRLF, so
+// match against a normalized copy rather than the raw bytes.
+var messageSource = File.ReadAllText(Path.Combine(gameRoot, "Players",
+    "TPlayObject.Message.cs")).Replace("\r\n", "\n");
 Require(messageSource.Contains("case Grobal2.RM_RUN:", StringComparison.Ordinal),
     "native RM_RUN dispatcher is missing");
 Require(messageSource.Contains("case Grobal2.RM_TURN:", StringComparison.Ordinal),
@@ -95,12 +98,33 @@ foreach (var symbol in new[]
 }
 
 var allSource = string.Join('\n', sources.Select(File.ReadAllText));
-Require(allSource.Contains("SendSocket(\"+LNG\")", StringComparison.Ordinal),
-    "native long-hit text state path was removed");
+// 长刺(+LNG)/烈火(+UFIR) 的「文本状态包」是臆造物，已被换成原生的 ident 包。
+// 底本证据：
+//   "+UFIR" / "+FIR" 在 flat_image.bin 里 0 命中；
+//   "+LNG" 只有 1 处 0x011A86D0，落在 CODE 段之外且 dword 引用数为 0（死数据）。
+// 真正的发包：
+//   0x006B224A c6 86 94 00 00 00 01  mov byte [esi+0x94],1
+//   0x006B2251 6a 01 / 6a 00 x3      push 1,0,0,0
+//   0x006B2259 33 c9                 xor ecx,ecx
+//   0x006B225B 66 ba 70 02           mov dx,0x270   (SM_THRUSTING)
+//   0x006B2263 ff 93 50 02 00 00     call [ebx+0x250]
+//   0x006B2F33 c6 80 96 00 00 00 00  mov byte [eax+0x96],0
+//   0x006B2F42 b9 01 00 00 00        mov ecx,1
+//   0x006B2F47 66 ba 72 02           mov dx,0x272   (SM_FIREHITSKILL)
+//   0x006B2F50 ff 93 50 02 00 00     call [ebx+0x250]
+Require(!allSource.Contains("SendSocket(\"+LNG\")", StringComparison.Ordinal),
+    "invented long-hit text state packet is back");
+Require(!allSource.Contains("SendSocket(\"+UFIR\")", StringComparison.Ordinal),
+    "invented fire-hit text state packet is back");
+Require(allSource.Contains("Grobal2.SM_THRUSTING", StringComparison.Ordinal),
+    "native SM_THRUSTING(0x270) long-hit state packet was removed");
+Require(allSource.Contains("Grobal2.SM_FIREHITSKILL", StringComparison.Ordinal),
+    "native SM_FIREHITSKILL(0x272) fire-hit state packet was removed");
+// 半月(+WID/+UWID) 的两条串在底本里同样 0 命中，但 SKILL_REDBANWOL(56) 这条臂
+// 是否该整条删掉（TPlayObject.Attack.cs 的注释说 56 落在默认臂 0x6BCCA6、原生
+// 什么都不发）尚未定案，这里先钉住现状，见 docs/audit_triage_C_20260814.md。
 Require(allSource.Contains("SendSocket(\"+WID\")", StringComparison.Ordinal),
-    "native wide-hit text state path was removed");
-Require(allSource.Contains("SendSocket(\"+UFIR\")", StringComparison.Ordinal),
-    "native fire-hit text state path was removed");
+    "wide-hit text state path changed without a decision on skill 56");
 
 Console.WriteLine(
     "TargetActionExtensionCheck PASS horse=RM_RUN slave=TURN/DISAPPEAR " +
@@ -112,24 +136,4 @@ static void Require(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
 }
 
-static string FindRepositoryRoot()
-{
-    foreach (var start in new[]
-             {
-                 AppContext.BaseDirectory,
-                 Environment.CurrentDirectory
-             })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "Players",
-                    "TPlayObject.cs"))
-                && File.Exists(Path.Combine(current.FullName, "SystemModule",
-                    "Grobal2.cs")))
-                return current.FullName;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("repository root not found");
-}
+static string FindRepositoryRoot() => AuditRepoRoot.Resolve();

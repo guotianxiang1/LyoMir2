@@ -311,8 +311,13 @@ static void CheckBubbleTimedState()
     Assert(bubble.HasNativeActiveState(20), "bubble internal20 active");
     Assert(!bubble.HasNativeActiveState(19),
         "level2 bubble created internal19 companion");
-    Equal(0, bubble.m_wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP],
-        "bubble legacy slot11 authority");
+    // legacy 槽已经不是第二权威了，它是 Self+0xDC 节点链的转发视图
+    // （TBaseObject.LegacyStatusTimeView.cs）：slot i 就是 state 31-i，
+    // slot 11 == internal20，读数是同一个节点的剩余毫秒向上取整成秒。
+    // 上一行刚断言过 internal20 存在，下一行断言该节点 duration=2000ms，
+    // 所以这里必须读回 2 而不是 0；断言 0 是 4.18 双权威时代的旧契约。
+    Equal(2, bubble.m_wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP],
+        "bubble legacy slot11 must mirror the internal20 node");
     Equal(1, bubble.TimedStates.Count, "bubble add callback count");
     CheckTimedState(bubble.TimedStates[0], 20, 2_000, 2, false,
         "bubble add callback");
@@ -1869,8 +1874,22 @@ static void CheckSourceContracts()
     Contains(fire, "if(damage>0)", "FireBurn positive damage gate");
     Contains(fire, "Grobal2.RM_STRUCK_MAG,damage,0,0,owner.ObjectId",
         "FireBurn RM10027 tuple");
-    Contains(fire, ">3000", "FireBurn strict 3000ms gate");
-    NotContains(fire, "8030", "FireBurn legacy 8030 path");
+        // 3000ms 不再是硬编码常量，而是每子类各自的 [obj+0x54] 字段：
+    //   0x007178AC c7 43 54 b8 0b 00 00  mov [ebx+0x54],0xBB8   (TFireBurnEvent)
+    //   0x00717A81 c7 43 54 e8 03 00 00  mov [ebx+0x54],0x3E8   (TBTFireBurnEvent)
+    //   0x007179C5 2b 43 4c              sub eax,[ebx+0x4C]
+    //   0x007179C8 3b 43 54              cmp eax,[ebx+0x54]
+    //   0x007179CB 76 5c                 jbe                    ; 严格大于才触发
+    // 所以断言从「字面 >3000」改成「默认 0xBB8 + 对字段的严格大于比较」。
+    Contains(fire, "m_fireRunInterval=0xBB8",
+        "FireBurn default interval is no longer the native 0xBB8");
+    Contains(fire,
+        "if(unchecked((uint)(currentTick-m_fireRunTick))>unchecked((uint)m_fireRunInterval))",
+        "FireBurn strict interval gate");
+        // 查裸数字 "8030" 会被压缩后的字节证据注释误伤：TBTFireBurnEvent 的
+    // 0x00717A81 `C7 43 54 E8 03 00 00` 去掉空白就是 "C74354E8030000"，里面
+    // 正好含 "8030"。改查符号名（8030 = Grobal2.RM_MAGSTRUCK_MINE）。
+    NotContains(fire, "RM_MAGSTRUCK_MINE", "FireBurn legacy 8030 path");
 
     var context = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
         "Spells", "MagicDamageContext.cs")));
@@ -2112,17 +2131,28 @@ static void CheckSourceContracts()
     Contains(nativeUserMove,
         "ExecuteNativeUserMove(environment,processMsg.nParam1,processMsg.nParam2);",
         "UserMove completion coordinate move");
+    // MOVE-63：原生 sub_7782D0 是 11 个调用者共用的**同一个函数体**，C# 已把
+    // 那份搜索收口到 TBaseObject.NativeGetRandomXY，UserMove 只留一个转发器。
+    // 三条搜索契约（31 次重试 / 两个轴的非正坐标补种 / PointList 兜底）因此改到
+    // 共用体上查，并在这里钉住「UserMove 必须转发、不得自带第二份搜索」。
     Contains(nativeUserMove,
-        "for(varattempt=0;attempt<31;attempt++)",
+        "TryResolveNativeUserMoveCoordinates(Envirnomentenvironment,refintx,refinty)=>NativeGetRandomXY(environment,refx,refy);",
+        "UserMove must forward to the single native coordinate resolver");
+    NotContains(nativeUserMove, "for(",
+        "UserMove grew a second copy of the native coordinate search");
+    var randomXy = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
+        "Actors", "TBaseObject.cs")));
+    Contains(randomXy,
+        "for(varnRetry=0;nRetry<31;nRetry++)",
         "UserMove native resolver exact attempt count");
-    Contains(nativeUserMove,
-        "if(x<=0)x=M2Share.RandomNumber.Random(environment.wWidth)+1;",
+    Contains(randomXy,
+        "if(nX<=0){nX=M2Share.RandomNumber.Random(Envir.wWidth)+1;}",
         "UserMove native resolver nonpositive X randomization");
-    Contains(nativeUserMove,
-        "if(y<=0)y=M2Share.RandomNumber.Random(environment.wHeight)+1;",
+    Contains(randomXy,
+        "if(nY<=0){nY=M2Share.RandomNumber.Random(Envir.wHeight)+1;}",
         "UserMove native resolver nonpositive Y randomization");
-    Contains(nativeUserMove,
-        "x=unchecked((ushort)point.nX);y=unchecked((ushort)point.nY);returntrue;",
+    Contains(randomXy,
+        "nX=unchecked((ushort)Point.nX);nY=unchecked((ushort)Point.nY);returntrue;",
         "UserMove native resolver PointList fallback");
     Contains(nativeUserMove,
         "TrySpaceMoveToEnvironment(environment,unchecked((short)x),unchecked((short)y),0,true,true);",
@@ -2611,22 +2641,7 @@ static List<PasValue> Values(params int[] values) =>
 static string Compact(string source) =>
     string.Concat(source.Where(value => !char.IsWhiteSpace(value)));
 
-static string FindRepoRoot()
-{
-    foreach (var start in new[]
-             {
-                 Directory.GetCurrentDirectory(), AppContext.BaseDirectory
-             })
-    {
-        for (var directory = new DirectoryInfo(start);
-             directory != null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
-                return directory.FullName;
-        }
-    }
-    throw new InvalidOperationException("Repository root not found");
-}
+static string FindRepoRoot() => AuditRepoRoot.Resolve();
 
 static void InitializeRuntime()
 {
