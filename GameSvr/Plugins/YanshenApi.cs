@@ -3804,14 +3804,44 @@ namespace GameSvr.Plugins
         public bool IsXyReflect() => Enabled("星耀攻击反伤a");
 
         // ── Panggu toggle checks ──
-        public bool IsPgIceStormRange() => Enabled("盘古冰咆哮的范围");
-        public int PgIceStormRangeVal() => GetParamInt("盘古冰咆哮的范围_范围值", 2);
-        public bool IsPgHellLightRange() => Enabled("盘古地狱雷光范围");
-        public int PgHellLightRangeVal() => GetParamInt("盘古地狱雷光范围_范围值", 2);
-        public bool IsPgFireRainRange() => Enabled("盘古流星火雨范围");
-        public int PgFireRainRangeVal() => GetParamInt("盘古流星火雨范围_范围值", 2);
-        public bool IsPgBlastFlameRange() => Enabled("盘古爆裂火焰范围");
-        public int PgBlastFlameRangeVal() => GetParamInt("盘古爆裂火焰范围_范围值", 1);
+
+        // 盘古四范围不是脚本 API，是配置页一次性改写宿主 `6A imm8` 的立即数，
+        // 四条支路在插件 0x100B1FC0 里首尾相接，形状完全一样，以爆裂为例：
+        //   0x100B3A7B 83 BF 58 0C 00 00 00  cmp [edi+0xC58],0   ← 开关
+        //   0x100B3A82 BE FF 00 00 00        mov esi,0xFF
+        //   0x100B3A87 0F 84 D5 00 00 00     je  0x100B3B62      ← 关=一个字节都不写
+        //   0x100B3A8D 83 B8 DC 07 00 00 00  cmp [eax+0x7DC],0   ← 已写入闩
+        //   0x100B3A9A FF B7 88 0C 00 00     push [edi+0xC88]    ← _范围值 原始串
+        //   0x100B3AA0 E8 A4 A1 17 00        call 0x1022DC49     ← atoi
+        //   0x100B3AB2 3B C6 / 0F 4F C6      cmp eax,esi / cmovg eax,esi
+        //   0x100B3B06 A2 71 F2 76 00        mov byte [0x76F271],al
+        // 另外三条把 cmovg 的上界写成立即数（0x100B3BCB `3D FF 00 00 00`
+        // + 0x100B3BD0 `B9 FF 00 00 00` + `0F 4F C1`），上界同为 0xFF。
+        // 所以取值 = (byte)min(atoi(串), 255)，没有下钳；宿主
+        // 0x0076FE44 又只用 `8A 45 14 mov al,[ebp+0x14]` 取低 8 位。
+        //
+        //   键                  开关槽      串槽       闩         目标 VA    宿主原字节
+        //   盘古爆裂火焰范围     +0xC58     +0xC88    +0x7DC    0x76F271   6A 01
+        //   盘古地狱雷光范围     +0xC5C     +0xC8C    +0x7E0    0x76F643   6A 02
+        //   盘古冰咆哮的范围     +0xC60     +0xC90    +0x7E4    0x76F301   6A 01
+        //   盘古流星火雨范围     +0xC64     +0xC94    +0x7E8    0x76F3BE   6A 01
+        // 关闭态就是宿主自己的字面量，配置里那个值读都不会被读到，
+        // 所以这里没有「默认值」可填 —— 只有开启态才有取值。
+        public bool IsPgIceStormRange() => PatchToggleOn("盘古冰咆哮的范围");
+        public int PgIceStormRangeVal() => PgRangeImm8("盘古冰咆哮的范围_范围值");
+        public bool IsPgHellLightRange() => PatchToggleOn("盘古地狱雷光范围");
+        public int PgHellLightRangeVal() => PgRangeImm8("盘古地狱雷光范围_范围值");
+        public bool IsPgFireRainRange() => PatchToggleOn("盘古流星火雨范围");
+        public int PgFireRainRangeVal() => PgRangeImm8("盘古流星火雨范围_范围值");
+        public bool IsPgBlastFlameRange() => PatchToggleOn("盘古爆裂火焰范围");
+        public int PgBlastFlameRangeVal() => PgRangeImm8("盘古爆裂火焰范围_范围值");
+
+        /// <summary>
+        /// 缺键时 <c>push</c> 的是空串，atoi 得 0，写进去的就是 0；
+        /// 这与「关闭」不同，关闭是根本不写。
+        /// </summary>
+        int PgRangeImm8(string chineseKey) =>
+            (byte)Math.Min(ParamAtoi(chineseKey, 0), 0xFF);
         public bool IsPgKillTrigger() => Enabled("盘古击杀触发");
         public bool IsPgPhysTrigger() => Enabled("盘古物理攻击触发");
         public bool IsPgMagicTrigger() => Enabled("盘古魔法攻击触发");
