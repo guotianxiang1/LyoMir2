@@ -72,32 +72,37 @@ namespace GameSvr
         /// Returns 0 when the move is permitted; any non-zero value is the rejecting
         /// rung.  Byte-exact:
         /// <code>
-        /// 7838AE  call sub_784710 / test ax,ax / jne 0x7838CC     ; bind word != 0 -> allow-list
-        /// 7838B8  test byte [[item+0x1C]+3],8 / jne 0x7838CC      ; Reserved02 &amp; 0x0800 (mode-0 always-allow)
-        /// 7838C3  call sub_784720 / test al,al / je 0x7838D1      ; Reserved02 &amp; 0x4000 (bind-on-pickup)
-        /// 7838CC  mov esi,1                                       ; -> "free item" marker
-        /// 7838D1  test esi,esi / jne 0x783979                     ; marked -> return 0 (ALLOW)
+        /// 7838AA  xor esi,esi                                     ; esi = 0
+        /// 7838AE  call sub_784710 / test ax,ax / jne 0x7838CC     ; bind word != 0 -> REJECT
+        /// 7838B8  test byte [[item+0x1C]+3],8 / jne 0x7838CC      ; Reserved02 &amp; 0x0800 -> REJECT
+        /// 7838C3  call sub_784720 / test al,al / je 0x7838D1      ; Reserved02 &amp; 0x4000 -> REJECT
+        /// 7838CC  mov esi,1                                       ; any hit -> esi = 1
+        /// 7838D1  test esi,esi / jne 0x783979                     ; marked -> 0x783979 `mov eax,esi` = return 1 (REJECT)
         /// 7838D9  cmp edi,5 / ja 0x783979                         ; mode &gt; 5 -> return 0
         /// 7838E2  jmp [edi*4+0x7838E9]                            ; per-mode jumptable
         ///   mode 2 -> 0x783911: reject (esi=3) if [item+0xFC]!=0 OR Reserved02 &amp; 0x02
         ///   mode 5 -> 0x783940: reject (esi=5) unless [item+0xFC]!=0
         ///                       OR Reserved02 &amp; 0x0200 OR &amp; 0x0400 OR &amp; 0x0080
         /// </code>
-        /// Note the polarity: the mode-5 rung REJECTS the classes it names.  Because the
-        /// pre-ladder at <c>0x7838AE</c> returns 0 for any item whose bind word is set,
-        /// this gate only ever fires on an UNSTAMPED item of a bind/timed class.
+        /// Note the polarity: the pre-ladder REJECTS (returns 1) — <c>0x783979</c> is
+        /// <c>mov eax,esi</c> and <c>esi</c> is 1 on every pre-ladder hit.  Both callers
+        /// treat non-zero as reject: trade escrow <c>0x6C4238 cmp [ebp-0x10],0 / jg</c>,
+        /// drop <c>0x73CD63 test eax,eax / jne</c>.  The per-mode rungs are therefore only
+        /// reached by an UNSTAMPED item that is not 0x0800 / 0x4000.
         /// </summary>
         internal static int CheckTransferPermission(TUserItem item, GoodItem stdItem,
             int mode)
         {
             if (item == null || stdItem == null) return 0;
 
-            // 0x7838AE-0x7838CC: three ways to be classified "free"; any hit returns 0.
+            // 0x7838AA `xor esi,esi` then 0x7838AE-0x7838CA: three ways to reach
+            // 0x7838CC `mov esi,1`, which 0x7838D3 `jne 0x783979` carries straight to
+            // 0x783979 `mov eax,esi` — the pre-ladder REJECTS with 1, it is not a whitelist.
             if (NativeItemAcquisitionStamp.ReadBindWord(item) != 0
                 || (stdItem.NativeReserved02 & 0x0800) != 0
                 || (stdItem.NativeReserved02 & 0x4000) != 0)
             {
-                return 0;
+                return 1;
             }
 
             // 0x7838D9: only modes 0..5 have a jumptable entry.
