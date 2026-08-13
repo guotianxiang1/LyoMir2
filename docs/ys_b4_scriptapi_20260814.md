@@ -16,7 +16,7 @@
     `staging/ys208_original_capture/.../AllFuc.pas`（随包明文，`\r` 行尾 GBK，102 条声明）、
     官方《AllFuc 使用例子》`staging/_ys_out/AllFuc_examples.txt`
 - 工具：python 3.11 + capstone 5.0.7；新增 `tools/ys_b4_api_census.py`（可复跑，`--verify` 复核三张跳表）
-- `dotnet build GameSvr`：**0 错**；`AuditTools/Yanshen*` **21 个全 PASS**
+- `dotnet build GameSvr`：**0 错**；`AuditTools/Yanshen*` **20 个全 PASS**
 
 ---
 
@@ -308,7 +308,7 @@ B4 真实缺口 82（严格判据）
 | 5 | 本提交 | 普查判据从 ±70 行窗口改成成员自身跨度；本文 |
 
 - `dotnet build GameSvr`：**0 错**（15 个既有 warning，均与本轮无关）。
-- `AuditTools/Yanshen*`：**21 个全 PASS**。
+- `AuditTools/Yanshen*`：**20 个全 PASS**（`AuditTools` 下 `Yanshen*` 目录实测 20 个）。
   其中 `YanshenCdCompatCheck` 因为第 4 条改动一度红 —— 它原来断言存进 V 变量的时间戳落在
   `Environment.TickCount` 的 5 秒窗口内，那正是旧假设的固化（REPLICATION_RULES 4.17 那类）。
   已改成"给裸构造玩家播一个闩值，断言隧道回的恰好等于该闩，再把闩挪 12345 ms 复验隧道跟着动"。
