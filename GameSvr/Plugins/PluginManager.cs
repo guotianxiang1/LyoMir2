@@ -656,17 +656,22 @@ namespace GameSvr.Plugins
             if (recycleTypes.ValueKind != JsonValueKind.Object)
                 throw new JsonException("回收类型 must be a JSON object");
 
-            var typeNames = new HashSet<string>(StringComparer.Ordinal);
+            var rules = new Dictionary<string, RecycleRule>(StringComparer.Ordinal);
             foreach (var type in recycleTypes.EnumerateObject())
             {
                 if (string.IsNullOrWhiteSpace(type.Name))
                     throw new JsonException("回收类型 contains an empty type name");
-                if (!typeNames.Add(type.Name))
+                if (rules.ContainsKey(type.Name))
                     throw new JsonException($"duplicate recycle type: {type.Name}");
-                ValidateNumericRule(type.Value, $"回收类型.{type.Name}");
+                rules.Add(type.Name, ParseRecycleRule(type.Name, type.Value));
             }
 
-            var itemNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // 物品名按原字节匹配。生产 recycle.json 里既有 "破魂" 这类重复键，也有
+            // "  施毒术" 这种带前导空格的键（物品库里的真名是 "施毒术"，见
+            // MySQL\data\mir3\stditems.MYD：带空格变体 0 命中）。是否 trim / 是否忽略
+            // 大小写在原版都无从验证，取最窄的一种：不 trim、不折叠大小写，
+            // 匹配不上就不回收。
+            var items = new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
             var foundItemSection = false;
             foreach (var sectionName in new[] { "物品种类", "可叠材料" })
             {
@@ -675,6 +680,8 @@ namespace GameSvr.Plugins
                 if (section.ValueKind != JsonValueKind.Object)
                     throw new JsonException($"{sectionName} must be a JSON object");
 
+                // 作者原文（recycle(详细说明).json）：「可叠材料是自动忽略极品和元素的」。
+                var stackable = sectionName == "可叠材料";
                 foreach (var item in section.EnumerateObject())
                 {
                     if (string.IsNullOrWhiteSpace(item.Name))
@@ -683,17 +690,88 @@ namespace GameSvr.Plugins
                         throw new JsonException($"{sectionName}.{item.Name} must name a recycle type");
 
                     var typeName = item.Value.GetString();
-                    if (string.IsNullOrWhiteSpace(typeName) || !typeNames.Contains(typeName))
+                    if (string.IsNullOrWhiteSpace(typeName) || !rules.TryGetValue(typeName, out var rule))
                         throw new JsonException(
                             $"{sectionName}.{item.Name} references unknown recycle type '{typeName}'");
-                    itemNames.Add(item.Name);
+                    items[item.Name] = new RecycleItemRule(rule, stackable);
                 }
             }
 
             if (!foundItemSection)
                 throw new JsonException("recycle configuration requires 物品种类 or 可叠材料");
 
-            return new RecycleConfigSnapshot(itemNames);
+            return new RecycleConfigSnapshot(items);
+        }
+
+        /// <summary>
+        /// One 回收类型 entry. Field semantics come from the author's own annotated copy,
+        /// GS1\MyJson\recycle(详细说明).json — every 中文 key there is declared unchangeable
+        /// ("内部的中文字符key都不能随便更改")，所以未知键一律当配置错误处理，避免
+        /// 把 "极品开关" 写错就静默丢掉一道保护。
+        /// </summary>
+        private static RecycleRule ParseRecycleRule(string typeName, JsonElement value)
+        {
+            if (value.ValueKind != JsonValueKind.Object)
+                throw new JsonException($"回收类型.{typeName} must be a JSON object");
+
+            var rule = new RecycleRule { TypeName = typeName };
+            foreach (var field in value.EnumerateObject())
+            {
+                var path = $"回收类型.{typeName}.{field.Name}";
+                switch (field.Name)
+                {
+                    // 「省略后失去开关效果」；GetV(v1,v2)==关闭值 时该类型停止回收。
+                    case "总开关":
+                        rule.MasterSwitchGroup = ReadRuleInt(field.Value, "v1", path);
+                        rule.MasterSwitchIndex = ReadRuleInt(field.Value, "v2", path);
+                        rule.MasterSwitchClosedValue = ReadRuleInt(field.Value, "关闭值", path);
+                        rule.HasMasterSwitch = true;
+                        break;
+                    // 「省略后永久1倍效果」；GetV(v1,v2)=200 表示 2 倍，小于等于 0 表示无效。
+                    case "回收倍率":
+                        rule.RateGroup = ReadRuleInt(field.Value, "v1", path);
+                        rule.RateIndex = ReadRuleInt(field.Value, "v2", path);
+                        rule.HasRate = true;
+                        break;
+                    case "极品开关":
+                        rule.ExtremeGroup = ReadRuleInt(field.Value, path);
+                        break;
+                    case "元素开关":
+                        rule.ElementGroup = ReadRuleInt(field.Value, path);
+                        break;
+                    case "元宝": rule.Yuanbao = ReadRuleInt(field.Value, path); break;
+                    case "金币": rule.Gold = ReadRuleInt(field.Value, path); break;
+                    case "灵符": rule.LingFu = ReadRuleInt(field.Value, path); break;
+                    case "经验": rule.Exp = ReadRuleInt(field.Value, path); break;
+                    // 「每件物品回收增加 This_player.SetV(v1,v2,值)」。
+                    case "其他":
+                        rule.OtherGroup = ReadRuleInt(field.Value, "v1", path);
+                        rule.OtherIndex = ReadRuleInt(field.Value, "v2", path);
+                        rule.OtherValue = ReadRuleInt(field.Value, "值", path);
+                        rule.HasOther = true;
+                        break;
+                    default:
+                        throw new JsonException($"{path} is not a recognised 回收类型 field");
+                }
+            }
+
+            return rule;
+        }
+
+        private static int ReadRuleInt(JsonElement value, string path)
+        {
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var number))
+                throw new JsonException($"{path} must be a 32-bit integer");
+            return number;
+        }
+
+        private static int ReadRuleInt(JsonElement owner, string name, string path)
+        {
+            if (owner.ValueKind != JsonValueKind.Object)
+                throw new JsonException($"{path} must be a JSON object");
+            if (!owner.TryGetProperty(name, out var value))
+                throw new JsonException($"{path} is missing '{name}'");
+            return ReadRuleInt(value, $"{path}.{name}");
         }
 
         private static void ValidateNumericRule(JsonElement value, string path)
@@ -1239,19 +1317,89 @@ namespace GameSvr.Plugins
         }
     }
 
+    /// <summary>
+    /// Settlement rule for one 回收类型. A field that the document omits keeps its
+    /// Has* flag false, which is the author's documented "省略" behaviour, not a zero rule.
+    /// </summary>
+    internal sealed class RecycleRule
+    {
+        internal string TypeName;
+
+        internal bool HasMasterSwitch;
+        internal int MasterSwitchGroup;
+        internal int MasterSwitchIndex;
+        internal int MasterSwitchClosedValue;
+
+        internal bool HasRate;
+        internal int RateGroup;
+        internal int RateIndex;
+
+        /// <summary>极品开关 variable group; 0 means the document omitted the switch.</summary>
+        internal int ExtremeGroup;
+
+        /// <summary>元素开关 variable group; 0 means the document omitted the switch.</summary>
+        internal int ElementGroup;
+
+        internal int Yuanbao;
+        internal int Gold;
+        internal int LingFu;
+        internal int Exp;
+
+        internal bool HasOther;
+        internal int OtherGroup;
+        internal int OtherIndex;
+        internal int OtherValue;
+    }
+
+    internal readonly struct RecycleItemRule
+    {
+        internal RecycleItemRule(RecycleRule rule, bool stackable)
+        {
+            Rule = rule;
+            Stackable = stackable;
+        }
+
+        internal RecycleRule Rule { get; }
+
+        /// <summary>Item came from 可叠材料, which the author documents as skipping 极品/元素.</summary>
+        internal bool Stackable { get; }
+    }
+
     internal sealed class RecycleConfigSnapshot
     {
-        private readonly HashSet<string> _itemNames;
+        private readonly Dictionary<string, RecycleItemRule> _items;
+
+        internal RecycleConfigSnapshot(Dictionary<string, RecycleItemRule> items)
+        {
+            _items = items ?? new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
+        }
 
         internal RecycleConfigSnapshot(IEnumerable<string> itemNames)
         {
-            _itemNames = new HashSet<string>(itemNames, StringComparer.OrdinalIgnoreCase);
+            _items = new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
+            foreach (var itemName in itemNames)
+                _items[itemName] = default;
         }
 
-        internal int ItemCount => _itemNames.Count;
+        internal int ItemCount => _items.Count;
 
         internal bool ContainsItem(string itemName) =>
-            !string.IsNullOrEmpty(itemName) && _itemNames.Contains(itemName);
+            !string.IsNullOrEmpty(itemName) && _items.ContainsKey(itemName);
+
+        /// <summary>
+        /// Resolves the settlement rule for an item. A configured name without a rule
+        /// (legacy schema) reports false so that no payout-less deletion can happen.
+        /// </summary>
+        internal bool TryGetItemRule(string itemName, out RecycleRule rule, out bool stackable)
+        {
+            rule = null;
+            stackable = false;
+            if (string.IsNullOrEmpty(itemName) || !_items.TryGetValue(itemName, out var entry))
+                return false;
+            rule = entry.Rule;
+            stackable = entry.Stackable;
+            return rule != null;
+        }
     }
 
     // ===== Supporting Types =====
