@@ -23,9 +23,11 @@
 //   [vmt+0x0E0]  virtual sender, one extra trailing flag
 //
 // TWO KNOWN LIMITS, both deliberately handled by not over-claiming:
-//   1. Some arms forward the ident out of the queued record (`mov edx,[eax]`) rather
-//      than loading an immediate, so the static set is a LOWER BOUND. Idents 32 and
-//      34 reach the wire that way and are invisible to the scan.
+//   1. Some arms forward the ident out of the queued record (`mov edx,[eax]`) or out
+//      of a stack local (`mov dx,[ebp-0x10]`) rather than loading an immediate, so the
+//      static set is a LOWER BOUND. Idents 32 and 34 reach the wire that way and are
+//      invisible to the scan; the YB list quartet 3001/3002/3005/3006 was recovered by
+//      hand and lives in WireStackLocal.
 //   2. [vmt+0xE0] is a low VMT index that every Delphi class has, so VCL forms
 //      produce false hits. Sites below 0x600000 are therefore dropped; that removes
 //      exactly one value (0) and nothing else.
@@ -61,6 +63,7 @@ try
     var smCount = consts.Count(p => p.Key.StartsWith("SM_", StringComparison.Ordinal));
     Console.WriteLine(
         $"PASS WireIdentPinCheck wire={WireTables.Wire.Length} " +
+        $"stack-local={WireTables.WireStackLocal.Length} " +
         $"traffic={WireTables.Traffic.Length} sm={smCount} rm-space-collisions=0 " +
         $"baseline={WireTables.BaselineUnconfirmedSm.Length}");
     return 0;
@@ -102,6 +105,9 @@ static int CheckEmbeddedTables()
     if (WireTables.Traffic.Length != WireTables.ExpectedTrafficCount)
         bad += Fail($"traffic table has {WireTables.Traffic.Length} entries, expected " +
                     $"{WireTables.ExpectedTrafficCount}");
+    if (WireTables.WireStackLocal.Length != WireTables.ExpectedWireStackLocalCount)
+        bad += Fail($"stack-local wire table has {WireTables.WireStackLocal.Length} entries, " +
+                    $"expected {WireTables.ExpectedWireStackLocalCount}");
 
     // Anchors that must be present: every one was read off the image by hand.
     var mustHave = new (int Ident, string Where)[]
@@ -112,6 +118,10 @@ static int CheckEmbeddedTables()
         (1230, "0x690DE6 mov dx,0x4CE  physical att"),
         (629,  "0x6D9CD0 mov dx,0x275  act good"),
         (630,  "0x6D9B9E mov dx,0x276  act fail"),
+        (3001, "0x6E80F8 mov [ebp-0x10],0xBB9 -> 0x6E82D7 call [ebx+0x254]"),
+        (3002, "0x6E8109 mov [ebp-0x10],0xBBA -> same sink"),
+        (3005, "0x6E811A mov [ebp-0x10],0xBBD -> same sink"),
+        (3006, "0x6E8123 mov [ebp-0x10],0xBBE -> same sink"),
     };
     foreach (var entry in mustHave)
         if (!WireTables.WireSet.Contains(entry.Ident))
@@ -162,6 +172,16 @@ static int CheckPinnedIdents(Dictionary<string, long> consts)
          "TFriendRelation logoff broadcast 0x6FE85D `66 BA 5D 11 mov dx,0x115D` -> [ebx+0x250]"),
         ("SM_YBDEAL_SET_NOTIFY", 4446L,
          "YB TYBDealSetInfo notify 0x6F75E7 `66 BA 5E 11 mov dx,0x115E`, Recog=[player+0x192C][+0xC]+0x26"),
+        // The four YB list replies. Their ident never appears as `mov dx,imm`; see
+        // WireStackLocal below for the full selector -> ident -> sink chain.
+        ("SM_YB_CONSIGN_INBOX", 3001L,
+         "CM 1252 -> 0x632A14, 0x632B0E `B9 7A 04 00 00 mov ecx,0x47A` -> emitter arm 0x6E80F8"),
+        ("SM_YB_CONSIGN_OUTBOX", 3002L,
+         "CM 1253 -> 0x632E7C, 0x632F86 `B9 7B 04 00 00 mov ecx,0x47B` -> emitter arm 0x6E8109"),
+        ("SM_YB_DEAL_BUY_HISTORY", 3005L,
+         "CM 1256 -> 0x632BEC, 0x632CF3 `B9 80 04 00 00 mov ecx,0x480` -> emitter arm 0x6E811A"),
+        ("SM_YB_DEAL_SELL_HISTORY", 3006L,
+         "CM 1257 -> 0x632D34, 0x632E3E `B9 81 04 00 00 mov ecx,0x481` -> emitter arm 0x6E8123"),
     };
     foreach (var pin in pins)
     {
@@ -254,6 +274,7 @@ internal static class WireTables
 {
     public const int ExpectedWireCount = 503;
     public const int ExpectedTrafficCount = 198;
+    public const int ExpectedWireStackLocalCount = 4;
 
     // Idents recovered from the image by back-solving every send-slot call site.
     public static readonly int[] Wire =
@@ -295,6 +316,34 @@ internal static class WireTables
         4583, 4584, 4587, 4588, 4610, 4611, 4612, 4613, 4614, 4615, 4616, 4617, 4626, 4627,
         4628, 4629, 4631, 4632, 4634, 4635, 4636, 4637, 4638, 4646, 4647, 4649, 4650,
     };
+
+    // Idents that the generated table above structurally cannot contain -- this is
+    // header limit 1, hit for real. Kept in a separate array so `Wire` stays exactly
+    // what s08_final.py emits and regenerating it does not clobber hand work.
+    //
+    // 元宝寄售/交易四条列表回包 share one emitter, sub_6E80CC(Self=eax, rec=edx,
+    // selector=ecx, count=[ebp+8]). The selector is translated to the ident by a
+    // four-arm chain and parked in a stack local:
+    //   0x6E80E1  2D 7A 04 00 00        sub eax,0x47A
+    //   0x6E80F8  C7 45 F0 B9 0B 00 00  mov [ebp-0x10],0xBB9   -> 3001
+    //   0x6E8109  C7 45 F0 BA 0B 00 00  mov [ebp-0x10],0xBBA   -> 3002
+    //   0x6E811A  C7 45 F0 BD 0B 00 00  mov [ebp-0x10],0xBBD   -> 3005
+    //   0x6E8123  C7 45 F0 BE 0B 00 00  mov [ebp-0x10],0xBBE   -> 3006
+    // All four arms converge on the one send slot at the tail of the row loop:
+    //   0x6E82CE  66 8B 55 F0           mov dx,[ebp-0x10]
+    //   0x6E82D7  FF 93 54 02 00 00     call [ebx+0x254]
+    // The backward decode in s08_final.py sees a memory operand at 0x6E82CE and files
+    // the sink as dynamic; the forward simulator then discards it because it only
+    // promotes ARG-carried idents, and being path-insensitive it would in any case
+    // see just the last arm's write. Hence: recovered by hand, pinned here.
+    //
+    // Reachability, back-solved at each of the four direct callers of sub_6E80CC
+    // (the manager at [[0x7D6ABC]]; CM thunks per the jump table at 0x6D8315):
+    //   CM 1252 0x6E7E3C -> 0x632A14, 0x632B0E mov ecx,0x47A, call 0x632B17 -> 3001
+    //   CM 1253 0x6E7E90 -> 0x632E7C, 0x632F86 mov ecx,0x47B, call 0x632F8F -> 3002
+    //   CM 1256 0x6E83AC -> 0x632BEC, 0x632CF3 mov ecx,0x480, call 0x632CFC -> 3005
+    //   CM 1257 0x6E8400 -> 0x632D34, 0x632E3E mov ecx,0x481, call 0x632E47 -> 3006
+    public static readonly int[] WireStackLocal = { 3001, 3002, 3005, 3006 };
 
     // Idents the original Delphi deployment actually put on the wire, from
     // GameGate2/procMsgLog/srv_AppearTimes.ini (UpdateDate 2020/1/23).
@@ -357,6 +406,7 @@ internal static class WireTables
         "SM_WIDEHITONOFF",
     };
 
-    public static readonly HashSet<long> WireSet = new(Wire.Select(v => (long)v));
+    public static readonly HashSet<long> WireSet =
+        new(Wire.Concat(WireStackLocal).Select(v => (long)v));
     public static readonly HashSet<long> TrafficSet = new(Traffic.Select(v => (long)v));
 }
