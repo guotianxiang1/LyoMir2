@@ -2,39 +2,55 @@ using System.Text.RegularExpressions;
 
 var root = FindRepositoryRoot();
 var bridge = Read(root, "GameSvr", "ScriptSystem", "PasEngine", "PasApiBridge.cs");
-var ida = File.ReadAllText(Path.Combine(root, "..", "staging",
-    "ida_needkeybox_exact_20260720.txt"));
-var productionScript = File.ReadAllText(Path.Combine(
-    "D:\\lyom2Release\\mud2.0\\Mir200\\Envir",
-    "PsNpcscripts", "神秘宝藏-hero1.pas"));
+// The IDA transcript is the only thing pinning these constants to the exe, so a
+// missing one is red, not a skip: skipping would silently retire the native
+// evidence half of this check and leave the shape assertions grading themselves.
+var staging = FindAncestorStaging()
+    ?? throw new DirectoryNotFoundException(
+        "staging/ was not found by walking ancestors of the repository root; "
+        + "NeedKeyBox native evidence cannot be verified");
+var idaPath = Path.Combine(staging, "ida_needkeybox_exact_20260720.txt");
+if (!File.Exists(idaPath))
+    throw new FileNotFoundException(
+        "NeedKeyBox native evidence transcript is missing", idaPath);
+var ida = File.ReadAllText(idaPath);
+var needKeyBox = Read(root, "GameSvr", "Players", "TPlayObject.NativeNeedKeyBox.cs");
 
-TestShadowContracts();
+TestShadowContracts(needKeyBox);
 TestNativeEvidence(ida);
 TestBridgeFailClosed(bridge);
-TestProductionCallSurface(productionScript);
+// Operator content, not repository content: its absence says nothing about the
+// port, so it degrades to a reported gap rather than to red. It is reported in
+// the summary line so a run that skipped it cannot read as a full pass.
+var productionScriptPath = Path.Combine(
+    "D:\\lyom2Release\\mud2.0\\Mir200\\Envir",
+    "PsNpcscripts", "神秘宝藏-hero1.pas");
+var callSurface = "call-surface=not-checked(production script absent)";
+if (File.Exists(productionScriptPath))
+{
+    TestProductionCallSurface(File.ReadAllText(productionScriptPath));
+    callSurface = "call-surface=verified";
+}
 
 Console.WriteLine(
     "PASS NeedKeyBox shadow protocol ui=950/216 " +
-    "yb=125/10000/0/0/1 dispatch=fail-closed runtime=closed");
+    "yb=125/10000/0/0/1 procedure=native-open function=fail-closed " +
+    callSurface);
 return;
 
-static void TestShadowContracts()
+static void TestShadowContracts(string needKeyBox)
 {
-    var body = BuildValuedBoxUiBody();
-    Equal(216, body.Length, "valued-box UI body length");
-
-    var request = BuildNeedKeyBox2YuanbaoRequest();
-    Equal(125, request.Ident, "NeedKeyBox2 YBDB ident");
-    Equal(10000, request.Selector, "NeedKeyBox2 YBDB selector");
-    Equal(0, request.Param1, "NeedKeyBox2 YBDB param1");
-    Equal(0, request.Param2, "NeedKeyBox2 YBDB param2");
-    Equal(1, request.Amount, "NeedKeyBox2 YBDB amount");
+    Require(needKeyBox, "NativeNeedKeyBoxOpenMessage = 950",
+        "valued-box UI message id is not 950");
+    Require(needKeyBox, "NativeNeedKeyBoxWireBodySize = 216",
+        "valued-box UI body size is not 216");
+    Require(needKeyBox, "NativeNeedKeyBoxYuanbaoIdent = 125",
+        "NeedKeyBox2 YBDB ident is not 125");
+    Require(needKeyBox, "NativeNeedKeyBoxYuanbaoSelector = 10000",
+        "NeedKeyBox2 YBDB selector is not 10000");
+    Require(needKeyBox, "NativeNeedKeyBoxYuanbaoAmount = 1",
+        "NeedKeyBox2 YBDB amount is not 1");
 }
-
-static byte[] BuildValuedBoxUiBody() => new byte[216];
-
-static YbRequestTuple BuildNeedKeyBox2YuanbaoRequest() =>
-    new(125, 10000, 0, 0, 1);
 
 static void TestNativeEvidence(string ida)
 {
@@ -74,25 +90,30 @@ static void TestNativeEvidence(string ida)
 
 static void TestBridgeFailClosed(string bridge)
 {
-    var procedureCase = Slice(bridge,
+    var npcMethods = Slice(bridge, "public bool CallNpcMethod",
+        "public bool CallNpcFunc");
+    var npcFunctions = Slice(bridge, "public bool CallNpcFunc",
+        "public bool CallStandaloneFunction");
+
+    var procedureCase = Slice(npcMethods,
         "case \"openneedkeybox\":",
         "case \"openluckbox\":");
     Equal(1, Count(procedureCase, "case \"openneedkeybox\":"),
         "OpenNeedKeyBox procedure dispatch count");
     Equal(1, Count(procedureCase, "case \"openneedkeybox2\":"),
         "OpenNeedKeyBox2 procedure dispatch count");
-    Require(procedureCase, "Native valued-box state machine and reward transaction are absent.",
-        "NeedKeyBox procedure fail-closed comment changed");
-    Require(procedureCase, "return RejectUnsupportedNativeApi(out result);",
-        "NeedKeyBox procedure dispatch is no longer fail-closed");
+    Require(procedureCase, "TryOpenNativeNeedKeyBox(true, out _)",
+        "OpenNeedKeyBox procedure no longer calls the native opener");
+    Require(procedureCase, "TrySubmitNativeNeedKeyBoxYuanbao(",
+        "OpenNeedKeyBox2 procedure no longer submits the native YB request");
+    Require(procedureCase, "CurrentNpc",
+        "OpenNeedKeyBox2 procedure dropped the NPC argument");
+    Reject(procedureCase, "RejectUnsupportedNativeApi",
+        "NeedKeyBox procedure dispatch remained fail-closed");
     Reject(procedureCase, "BuildValuedBoxUiBody",
         "NeedKeyBox procedure dispatch started using the shadow encoder");
-    Reject(procedureCase, "ScriptRequestNativeYuanbao",
-        "NeedKeyBox procedure dispatch started submitting Yuanbao requests");
-    Reject(procedureCase, "DelBagItem",
-        "NeedKeyBox procedure dispatch started deleting items");
 
-    var functionCases = Regex.Matches(bridge,
+    var functionCases = Regex.Matches(npcFunctions,
         "case \"openneedkeybox\":\\s*case \"openneedkeybox2\":\\s*return RejectUnsupportedNativeApi\\(out result\\);",
         RegexOptions.CultureInvariant);
     Assert(functionCases.Count >= 1,
@@ -155,6 +176,19 @@ static void Assert(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
 }
 
+static string FindAncestorStaging()
+{
+    var dir = new DirectoryInfo(FindRepositoryRoot());
+    while (dir != null)
+    {
+        var staging = Path.Combine(dir.FullName, "staging");
+        if (Directory.Exists(staging))
+            return staging;
+        dir = dir.Parent;
+    }
+    return null;
+}
+
 static string FindRepositoryRoot()
 {
     foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
@@ -170,10 +204,3 @@ static string FindRepositoryRoot()
 
     throw new DirectoryNotFoundException("repository root not found");
 }
-
-internal readonly record struct YbRequestTuple(
-    int Ident,
-    int Selector,
-    int Param1,
-    int Param2,
-    int Amount);
