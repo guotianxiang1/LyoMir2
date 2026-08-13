@@ -747,6 +747,14 @@ namespace SystemModule
         /// Tag=0, Series=0, empty body. Always paired with SM_LOGIN_NOW (889).
         /// </summary>
         public const int SM_LOGIN_VER = 888;
+        /// <summary>
+        /// Login clock/now extension. Same sender sub_6F05D8 immediately after 888:
+        /// <c>0x6F063A 66 BA 79 03 mov dx,0x379</c> via [obj+0x254].
+        /// Recog=0x3F1 (1009), Param=0x3E7 (999), Tag=word at [[0x7D5FA0]]
+        /// (image snapshot 0x1009), Series=0, 24-byte body:
+        /// word 0x14, word 0x2E, 4 pad, TDateTime Now (0x40F0A4), dword [[0x7D6558]], 4 pad.
+        /// </summary>
+        public const int SM_LOGIN_NOW = 889;
         public const int SM_HERO_QUITMAGIC = 896;
         public const int SM_HERO_LOGMAGIC = 897;
         public const int SM_HERO_NAME = 898;

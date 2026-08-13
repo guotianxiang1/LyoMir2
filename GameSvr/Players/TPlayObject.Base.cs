@@ -1040,6 +1040,16 @@ namespace GameSvr
             SendSocket(m_DefMsg, body);
         }
 
+        private void SendNativeLoginNow()
+        {
+            var body = new byte[0x18];
+            BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(0), 0x14);
+            BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(2), 0x2E);
+            BitConverter.TryWriteBytes(body.AsSpan(8), DateTime.Now.ToOADate());
+            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_LOGIN_NOW, 0x3F1, 0x3E7, 0x1009, 0);
+            SendSocket(m_DefMsg, body);
+        }
+
         
         
         
@@ -1385,6 +1395,7 @@ namespace GameSvr
                 //   0x6F05F2 66 BA 78 03     mov dx,0x378  ; ident 888
                 //   0x6F05FA FF 96 50 02 00 00 call [esi+0x250]
                 SendDefMessage(Grobal2.SM_LOGIN_VER, 0x3EA, 0x3E7, 0, 0, "");
+                SendNativeLoginNow();
                 // 战神 replays the 定位石 marker in the same logon body, AFTER the social
                 // relink call at 0x6B21CF: 0x6B23E3 cmp byte [esi+0x18f8],0 / je skip,
                 // else re-push SM 0x3026 (0x6B23EC-0x6B2414) with X=[esi+0x1908] and
