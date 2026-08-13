@@ -937,8 +937,20 @@ namespace DBSvr.Core
                 }
                 var payload = raw.AsSpan(offset, length).ToArray();
                 sections.Add(new ScriptSection(type, payload));
+                // Section type 0 is the S bank and type 1 is the V bank, not the
+                // other way round. The native decoder sub_6E448C dispatches through
+                // the 9-entry table at 0x6E4520 and each arm names its own bank:
+                //   type0 arm 0x6E4544: 0x6E457C  05 04 08 00 00        add eax, 0x804
+                //                       0x6E459D  8B 90 04 08 00 00     mov edx,[eax+0x804]
+                //   type1 arm 0x6E45F7: 0x6E462E  05 08 08 00 00        add eax, 0x808
+                //                       0x6E464F  8B 90 08 08 00 00     mov edx,[eax+0x808]
+                // and the script API registry pins which offset is which bank:
+                //   GetS 0x6DF1CF  8B 93 04 08 00 00  mov edx,[ebx+0x804]
+                //   SetS 0x6DF26D  8D 93 04 08 00 00  lea edx,[ebx+0x804]
+                //   GetV 0x6DF225  8B 93 08 08 00 00  mov edx,[ebx+0x808]
+                //   SetV 0x6DF2CF  8D 93 08 08 00 00  lea edx,[ebx+0x808]
                 if ((type == 0 || type == 1) && !DecodeKeyValues(payload,
-                        type == 0 ? scriptV : scriptS, out error))
+                        type == 0 ? scriptS : scriptV, out error))
                     return false;
                 offset += length;
             }
@@ -988,13 +1000,13 @@ namespace DBSvr.Core
             {
                 if (sections[i].Type == 0)
                 {
-                    sections[i] = new ScriptSection(0, MergeKeyValues(sections[i].Payload, scriptV));
-                    foundV = true;
+                    sections[i] = new ScriptSection(0, MergeKeyValues(sections[i].Payload, scriptS));
+                    foundS = true;
                 }
                 else if (sections[i].Type == 1)
                 {
-                    sections[i] = new ScriptSection(1, MergeKeyValues(sections[i].Payload, scriptS));
-                    foundS = true;
+                    sections[i] = new ScriptSection(1, MergeKeyValues(sections[i].Payload, scriptV));
+                    foundV = true;
                 }
                 else if (sections[i].Type == YanshenScriptSectionType)
                 {
@@ -1009,8 +1021,8 @@ namespace DBSvr.Core
                     }
                 }
             }
-            if (!foundV) sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptV)));
-            if (!foundS) sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptS)));
+            if (!foundS) sections.Add(new ScriptSection(0, MergeKeyValues(null, scriptS)));
+            if (!foundV) sections.Add(new ScriptSection(1, MergeKeyValues(null, scriptV)));
             if (!foundYanshen && yanshenPayload.Length > 0)
                 sections.Add(new ScriptSection(YanshenScriptSectionType, yanshenPayload));
 
