@@ -2051,6 +2051,15 @@ namespace GameSvr
                             m_nIncHealing = 300;
                         }
                         break;
+                    case NativeAction1017StruckIdent:
+                        // ACT1017: ident 10048 (0x2740) has no Grobal2 name and
+                        // that file is off-limits, so the constant sits on
+                        // TBaseObject.NativeAction1017.cs next to its only
+                        // producer. Native routes it at 0x766AB3
+                        // `3D 40 27 00 00 cmp eax,0x2740` / 0x766ABA
+                        // `0F 84 B3 05 00 00 je 0x767073`.
+                        RunNativeAction1017StruckMessage();
+                        break;
                     case Grobal2.RM_10101:
                         SendRefMsg(ProcessMsg.BaseObject, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ProcessMsg.sMsg);
                         if ((ProcessMsg.BaseObject == Grobal2.RM_STRUCK) && (m_btRaceServer != Grobal2.RC_PLAYOBJECT))

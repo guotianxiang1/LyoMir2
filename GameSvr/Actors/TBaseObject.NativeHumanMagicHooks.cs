@@ -311,10 +311,24 @@ namespace GameSvr
                 damage * (1.0d + percent / 100.0d)));
         }
 
+        /// <summary>
+        /// The effect number is nParam1, not the opaque payload slot. Every
+        /// native emitter of ident 0x2905 pushes it FIRST and zeroes ecx:
+        /// <c>0x73FB37 6A 0B</c> (physical block, 11),
+        /// <c>0x6EC3FD 6A 0B</c> (the magic 护体神盾 entry, 11),
+        /// <c>0x7445CA 6A 1A</c> (the 65..68 crit, 26),
+        /// <c>0x674E74 6A 16</c> (AttackIceTower, 22),
+        /// <c>0x717F54 6A 20</c> (OnceDamageTrapEvent, 32) — all followed by
+        /// `6A 00` x4, `33 C9 xor ecx,ecx` and `66 BA 05 29 mov dx,0x2905`.
+        /// SendRefMsg's stack params are pushed left to right (calibrated on
+        /// TBigHeartMon @0x68105C, see AttackIceTower.cs), so push #1 is
+        /// nParam1. Passing it as the trailing `object payload` instead left
+        /// nParam1 at 0 and boxed the number where nothing reads it.
+        /// </summary>
         private void SendNativeHumanMagicEffect(int payload)
         {
-            SendRefMsg(NativeHumanMagicEffectMessage, 0, 0, 0, 0,
-                string.Empty, payload);
+            SendRefMsg(NativeHumanMagicEffectMessage, 0, payload, 0, 0,
+                string.Empty);
         }
     }
 }

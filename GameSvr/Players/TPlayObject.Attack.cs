@@ -227,24 +227,28 @@ namespace GameSvr
                             // which opens with `B2 33 mov dl,0x33` / `call 0x772960`
                             // and refuses with 0x276 when the rider is not mounted.
                             //
-                            // Only the facing update is ported here. It is the one
-                            // unconditional effect of sub_7707A8 for every code in
-                            // the 1000..1033 window (0x7707E3 `88 86 54 01 00 00
-                            // mov [esi+0x154],al`, [+0x154] = m_btDirection).
-                            //
-                            // The swing itself is NOT modelled: action 1017 runs
-                            // 0x770ABF -> `call 0x772388`, a worker with exactly one
-                            // caller that resolves a target two cells ahead
-                            // (0x7723A5 `push 2` into GetNextPosition 0x778BE8),
-                            // computes damage through VMT+0x4C = 0x744388 — itself
-                            // keyed on the same [Self+0xC4] skill record, written
-                            // only by 0x76B170 for magic ids 65/66/67/68 — applies
-                            // it via 0x76E268, sends ident 0x2740 to the target and
-                            // trains the skill by Random(3)+1 through VMT+0x3C.
-                            // None of 0x744388 has been transcribed, so emitting a
-                            // swing here would be invention; fail closed instead and
-                            // leave the damage half to a dedicated task.
+                            // The facing update is the one unconditional effect of
+                            // sub_7707A8 for every code in the 1000..1033 window
+                            // (0x7707E3 `88 86 54 01 00 00 mov [esi+0x154],al`,
+                            // [+0x154] = m_btDirection), and it runs BEFORE the
+                            // target lookup, which reads that same byte.
                             m_btDirection = nDir;
+                            // ACT1017: the swing half. Arm 0x770ABF ends in
+                            // `E8 90 18 00 00 call 0x772388`, a worker whose only
+                            // rel32 caller in the image is that instruction. It
+                            // takes the target sub_7707A8's prologue already
+                            // resolved (0x7707F6 `call 0x767E80` = GetPoseCreate),
+                            // falls back to a two-cell probe along the facing
+                            // (0x7723A5 `6A 02` into GetNextPosition 0x778BE8),
+                            // computes damage through VMT+0x4C = 0x744388, applies
+                            // it via 0x76E268 with the action code 0x3F9, sends
+                            // ident 0x2740 to the victim and trains the cached
+                            // 65..68 record by Random(3)+1 through VMT+0x3C.
+                            // Transcribed in TBaseObject.NativeAction1017.cs.
+                            //
+                            // 1018 (CM_CRSHIT) stays facing-only above because its
+                            // worker 0x771BB8 really is the empty stub.
+                            RunNativeAction1017();
                             break;
                         // CM_TWINHIT (3028) has no arm on purpose: 0x6EC178[26] = 0x0B
                         // selects jump-table slot 11 = 0x6EC2D7, which is the tail of
