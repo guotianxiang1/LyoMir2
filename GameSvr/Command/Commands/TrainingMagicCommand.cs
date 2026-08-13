@@ -1,4 +1,5 @@
 using GameSvr.CommandSystem;
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -18,7 +19,12 @@ namespace GameSvr
     //   when the skill was absent — native never creates one. Now: find-existing -> SET clamped btLevel
     //   (clamp = MagicInfo.btTrainLv, the same def cap the verified sub_73F500 sibling ChgHeroSkill uses)
     //   + optional raw exp + SendAddMagic + RecalcAbilitys; absent -> no-op.
-    [GameCommand("TrainingMagic", "调整指定玩家技能", "人物名称 技能名称 [等级] [经验]", 10)]
+    // 注册表记录 0x007C8394 `0B "UpUserSkill"`，+0x18 = 218，+0x1C = 5，
+    // 帮助文本「升级玩家技能 \t @UpUserSkill 角色名 技能名 技能等级 技能经验」。
+    // jt[218] @0x00622E84 = 6a 5f 62 00 -> 0x00625F6A -> 0x006C7644（上面那段 shim）。
+    // 旧命令名 TrainingMagic 三编码 0 命中，且权限被写成 10（本工程约定的 fail-closed），
+    // 与记录里的 5 不符。
+    [GameCommand("UpUserSkill", "升级玩家技能", "角色名 技能名 技能等级 技能经验", 5)]
     public class TrainingMagicCommand : BaseCommond
     {
         [DefaultCommand]
@@ -63,6 +69,14 @@ namespace GameSvr
                         }
                         m_PlayObject.SendAddMagic(UserMagic);
                         m_PlayObject.RecalcAbilitys();
+                        // sub_73F500 0x73F5EE: LStrCatN(edi=skillName, " 技能等级变更为：",
+                        // IntToStr(level)) then SysMsg cx=0xFFDB to the TARGET. 眼神
+                        // 升级技能不提示 writes EB 3A 90 90 over that site, landing on
+                        // RecalcAbilitys at 0x73F62A; the shim's own "改变角色技能等级命令被执行"
+                        // is not patched.
+                        if (!new YanshenApi(m_PlayObject, null, M2Share.PluginManager).IsUpSkillSilentPatchOn())
+                            m_PlayObject.SysMsg(sSkillName + " 技能等级变更为：" + UserMagic.btLevel,
+                                MsgColor.Green, MsgType.Hint);
                         break;
                     }
                 }

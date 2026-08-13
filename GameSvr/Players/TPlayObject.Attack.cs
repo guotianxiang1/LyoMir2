@@ -216,7 +216,11 @@ namespace GameSvr
                         if (m_btAttackSkillPointCount == m_btAttackSkillCount)
                         {
                             m_boPowerHit = true;
-                            SendSocket("+PWR");
+                            // 0x6EC2F8 mov byte [ebx+0x93],1 / 6A 00 x4 / 33 C9 /
+                            // 66 BA 73 02 mov dx,0x273 / FF 93 50 02 00 00.
+                            // "+PWR" appears zero times in the native image.
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_POWERHITSKILL, 0, 0, 0, 0));
                         }
                         if (m_btAttackSkillCount <= 0)
                         {
@@ -433,18 +437,114 @@ namespace GameSvr
             ushort nSpellPoint;
             switch (UserMagic.wMagIdx)
             {
+                // ids 3, 4 and 7 are acknowledged and dropped. The outer
+                // ladder's own jump table (base id 3, `add eax,-3` /
+                // `cmp eax,0x18` @0x6BC69C, table at 0x6BC6AF) holds
+                // 0x6BC7DC in the slots for all three (0x6BC6AF, 0x6BC6B3,
+                // 0x6BC6BF), and 0x6BC7DC is two instructions:
+                //   006BC7DC  c6 45 fb 01     mov byte [ebp-5],1
+                //   006BC7E0  e9 1d 05 00 00  jmp 0x6BCD02
+                // i.e. return TRUE having sent nothing and spent nothing.
+                // Without this arm they reach the default below, where
+                // DoSpell refuses them for being warrior skills and the
+                // caller answers with a RM_MAGICFIREFAIL native never sends.
+                case SpellsDef.SKILL_ONESWORD:
+                case SpellsDef.SKILL_ILKWANG:
+                case SpellsDef.SKILL_YEDO:
+                    result = true;
+                    break;
+                // ids 116, 234, 314 and 317 are refused by the ladder itself,
+                // each with its own `je 0x6BCD02` straight to the epilogue:
+                //   0x6BC713  83 f8 74  cmp eax,0x74      / 0x6BC717 je
+                //   0x6BC749  83 e8 42  sub eax,0x42 (234)/ 0x6BC74C je
+                //   0x6BC7C3  2d 3a 01 00 00  sub eax,0x13A (314) / 0x6BC7C8
+                //   0x6BC7CE  83 e8 03  sub eax,3 (317)   / 0x6BC7D1 je
+                // [ebp-5] was zeroed at 0x6BC59F and nothing on these paths
+                // touches it, so all four return FALSE without spending mana
+                // or sending an effect, and the CM_SPELL caller answers with
+                // RM_MOVEFAIL + SM_ACT_FAIL. 314 and 317 previously reached
+                // the default arm and were cast as ordinary spells.
+                case SpellsDef.SKILL_116:
+                case SpellsDef.SKILL_234:
+                case SpellsDef.SKILL_314:
+                case SpellsDef.SKILL_317:
+                    break;
+                // Four more outer ids whose callee is `33 C0 C3` (xor eax,eax
+                // / ret). Result stays the 0 written at 0x6BC59F.
+                //   115  0x6BCBAD E8 84 2E 03 00 call 0x6EFA38 (`33 C0 C3`)
+                //   269  0x6BCADF E8 E7 FE 02 00 call 0x6EC9D0 (`33 C0 C3`)
+                //   270  0x6BCB86 FF 91 60 01 00 00 call [ecx+0x160];
+                //        TPlayer VMT 0x6AC8C8+0x160 = 0x774154 (`33 C0 C3`)
+                //   287  0x6BCBBC FF 91 20 02 00 00 call [ecx+0x220];
+                //        TPlayer VMT+0x220 = 0x6ED268 (`33 C0 C3`); the
+                //        0x769258 tail at 0x6BCBD6 is behind
+                //        `cmp [ebp-5],0 / je 0x6BCD02` and never runs.
+                // Without these arms they fall into default, DoSpell DEFAULT
+                // succeeds, and the client sees a 0x27E fire native never
+                // sends. CM_SPELL answers RM_MOVEFAIL + SM_ACT_FAIL.
+                case SpellsDef.SKILL_115:
+                case SpellsDef.SKILL_269:
+                case SpellsDef.SKILL_270:
+                case SpellsDef.SKILL_287:
+                    break;
+                case SpellsDef.SKILL_65:
+                    result = TryActivateNativeSkill65Charge();
+                    break;
+                case SpellsDef.SKILL_290:
+                    result = TryActivateNativeSkill290(nTargetX);
+                    break;
+                case SpellsDef.SKILL_237:
+                    result = TryActivateNativeSkill237Dragon(UserMagic);
+                    break;
+                case SpellsDef.SKILL_261:
+                    result = TryActivateNativeSkill261(UserMagic);
+                    break;
+                case SpellsDef.SKILL_262:
+                    result = TryActivateNativeSkill262Poison(UserMagic);
+                    break;
+                case SpellsDef.SKILL_267:
+                    result = TryActivateNativeSkill267(UserMagic);
+                    break;
+                case SpellsDef.SKILL_273:
+                    TBaseObject skill273Target = null;
+                    if (CretInNearXY(TargeTBaseObject, nTargetX, nTargetY))
+                    {
+                        skill273Target = TargeTBaseObject;
+                    }
+                    TryActivateNativeSkill273DragonBreak(UserMagic,
+                        skill273Target);
+                    break;
+                case SpellsDef.SKILL_168:
+                    result = TryActivateNativeSkill168Charge(nTargetX,
+                        nTargetY);
+                    break;
+                case SpellsDef.SKILL_68:
+                    result = TryActivateNativeSkill68Charge(UserMagic,
+                        nTargetX, nTargetY);
+                    break;
+                case SpellsDef.SKILL_265:
+                    result = TryActivateNativeSkill265(UserMagic, nTargetX);
+                    break;
+                case SpellsDef.SKILL_266:
+                    result = TryActivateNativeSkill266Blink(UserMagic,
+                        nTargetX, nTargetY);
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
                         if (!m_boUseThrusting)
                         {
                             ThrustingOnOff(true);
-                            SendSocket("+LNG");
+                            // 0x6BDFE6 xor ecx,ecx / 66 BA 70 02 mov dx,0x270
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_THRUSTING, 0, 0, 0, 0));
                         }
                         else
                         {
                             ThrustingOnOff(false);
-                            SendSocket("+ULNG");
+                            // 0x6BE001 mov ecx,1 / 66 BA 70 02 mov dx,0x270
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_THRUSTING, 1, 0, 0, 0));
                         }
                     }
                     result = true;
@@ -455,16 +555,23 @@ namespace GameSvr
                         if (!m_boUseHalfMoon)
                         {
                             HalfMoonOnOff(true);
-                            SendSocket("+WID");
+                            // 0x6BE036 xor ecx,ecx / 66 BA 71 02 mov dx,0x271
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_HALFMOON, 0, 0, 0, 0));
                         }
                         else
                         {
                             HalfMoonOnOff(false);
-                            SendSocket("+UWID");
+                            // 0x6BE049 mov ecx,1 / 66 BA 71 02 mov dx,0x271
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_HALFMOON, 1, 0, 0, 0));
                         }
                     }
                     result = true;
                     break;
+                // SKILL_REDBANWOL (56) keeps the text markers: the native magic table
+                // at 0x6BC6AF only covers ids 3..27 (after `add eax,-3`) plus a separate
+                // `je` for 58, so 56 reaches the default arm 0x6BCCA6 and sends nothing.
                 case SpellsDef.SKILL_REDBANWOL:
                     if (m_MagicArr[SpellsDef.SKILL_REDBANWOL] != null)
                     {
@@ -494,7 +601,10 @@ namespace GameSvr
                                     DamageSpell(nSpellPoint);
                                     HealthSpellChanged();
                                 }
-                                SendSocket("+FIR");
+                                // 0x6BC856 6A00 x4 / 33 C9 / 66 BA 72 02 mov dx,0x272 /
+                                // FF 93 50 02 00 00.  "+FIR" is absent from the image.
+                                SendSocket(Grobal2.MakeDefaultMsg(
+                                    Grobal2.SM_FIREHITSKILL, 0, 0, 0, 0));
                             }
                         }
                     }

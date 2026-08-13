@@ -393,8 +393,7 @@ static void VerifyUserEngineAtomicPublication()
 
 static void VerifyProductionWiringSourceBoundaries()
 {
-    var repoRoot = Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-                   ?? @"D:\loym2\LyoMir2-master";
+    var repoRoot = AuditRepoRoot.Resolve();
     var heroObject = ReadSource(repoRoot, "GameSvr", "Actors",
         "HeroObject.cs");
     var heroCodec = ReadSource(repoRoot, "GameSvr", "DataStores",

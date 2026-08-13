@@ -1175,6 +1175,13 @@ static string FindRepositoryRoot()
 
 static void PrepareRuntimeConfig()
 {
+    // The fixture players are online (m_boOffLineFlag stays false), so every
+    // SendDefMessage reaches TPlayObject.SendSocket, which dereferences
+    // M2Share.GateManager. Only GameApp.cs assigns it in a real boot. The
+    // singleton registers no gate, so AddGateBuffer returns false for the
+    // fixture's gate index and nothing is actually transmitted.
+    M2Share.GateManager ??= GateManager.Instance;
+
     var runtimeDirectory = AppContext.BaseDirectory;
     File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
         "[Server]" + Environment.NewLine);

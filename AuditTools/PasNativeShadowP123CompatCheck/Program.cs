@@ -421,23 +421,7 @@ static void Assert(bool condition, string message)
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[]
-             {
-                 Environment.CurrentDirectory,
-                 AppContext.BaseDirectory,
-                 @"D:\loym2\LyoMir2-master"
-             })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName,
-                    "GameSvr", "GameSvr.csproj")))
-                return current.FullName;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("GameSvr repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void PrepareRuntimeConfig()

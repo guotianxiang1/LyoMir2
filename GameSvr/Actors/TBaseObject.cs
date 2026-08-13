@@ -266,6 +266,30 @@ namespace GameSvr
         public bool bo2BA = false;
         public bool m_boAnimal = false;
         public bool m_boNoItem = false;
+        /// <summary>
+        /// 战神 byte[self+0x47F].  Two consumers share it and each one both tests and
+        /// arms it, so the monster's drop table can be consumed exactly once per
+        /// instance no matter which of them runs first:
+        /// <code>
+        /// ; sub_71FA20 @AfterScatterItems
+        /// 71FA50  80 B8 7F 04 00 00 00  cmp byte [eax+0x47F],0
+        /// 71FA57  0F 85 35 06 00 00     jne 0x720092          ; whole function exits
+        /// 71FA6C  C6 80 7F 04 00 00 01  mov byte [eax+0x47F],1
+        /// ; sub_71EC88 (deliver-to-killer path)
+        /// 71ECB1  80 BB 7F 04 00 00 00  cmp byte [ebx+0x47F],0
+        /// 71ECB8  0F 85 B8 00 00 00     jne 0x71ED76
+        /// 71ECBE  C6 83 7F 04 00 00 01  mov byte [ebx+0x47F],1
+        /// </code>
+        /// Full-image scan of disp32 0x47F finds exactly these two writes, both
+        /// storing 1, and no clear site: the monster constructor's zero-fill at
+        /// 0x71D840.. is the only thing that ever puts it back to 0, so the flag is
+        /// per-instance and one-way.
+        ///
+        /// The two <c>call [esi+0x1FC]</c> sites in monster Die (0x71E3D2 / 0x71E3EF)
+        /// are the if/else arms of <c>0x71E3C2 je 0x71E3DA</c> and cannot both run,
+        /// so they are NOT what this guards; sub_71EC88 and any later re-entry are.
+        /// </summary>
+        public bool m_boNativeScatterConsumed = false;
         public bool m_boFixedHideMode = false;
         public bool m_boStickMode = false;
         public bool bo2BF = false;
@@ -1756,6 +1780,23 @@ namespace GameSvr
             {
                 m_btDirection = olddir;
             }
+            // TPlayer overrides CharPushed and cancels an open trade, but only when
+            // the player actually moved. VMT [0x6AC8C8+0xA4] holds 0x6BFD1C, and the
+            // override reads:
+            //   0x6BFD28  B2 34              mov dl, 0x34
+            //   0x6BFD2C  E8 2F 2C 0B 00     call 0x772960       ; state 0x34 set?
+            //   0x6BFD33  74 04              je  0x6BFD39
+            //   0x6BFD35  33 F6 / EB 18      xor esi,esi / jmp   ; blocked, no cancel
+            //   0x6BFD3F  E8 08 86 0A 00     call 0x76834C       ; inherited, eax=steps
+            //   0x6BFD46  85 F6              test esi, esi
+            //   0x6BFD48  7E 07              jle 0x6BFD51        ; 0 steps -> no cancel
+            //   0x6BFD4C  E8 73 46 00 00     call 0x6C43C4       ; DealCancel
+            // So the gate is "moved at least one cell", not "took damage": a push that
+            // was fully blocked leaves the trade standing.
+            if (result > 0 && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+            {
+                (this as TPlayObject)?.DealCancel();
+            }
             return result;
         }
 
@@ -2392,11 +2433,14 @@ namespace GameSvr
         /// VMT slot <c>+0x244</c> (<c>sub_6D0AE8</c>: <c>Count + 1 &lt;= 48</c>, i.e.
         /// <c>Count &lt; 48</c>) then <c>sub_73CEA8</c> = TList.Add and the weight refresh
         /// <c>sub_73CEE4</c>.
+        ///
+        /// 这是全树的主入包门。<see cref="BagCapacity.Of"/> 对非 <c>TPlayObject</c>
+        /// 返回 48，所以英雄/怪物走的仍是原生那条 <c>sub_6D0AE8</c>。
         /// </summary>
         public bool AddItemToBag(TUserItem UserItem)
         {
             bool result = false;
-            if (m_ItemList.Count < Grobal2.MAXBAGITEM)
+            if (m_ItemList.Count < BagCapacity.Of(this))
             {
                 m_ItemList.Add(UserItem);
                 WeightChanged();
@@ -2852,6 +2896,23 @@ namespace GameSvr
         
         
         
+        // The 基本剑术 override is a code patch on the recalc arm below, so it is
+        // not scoped to any one actor: whoever reaches 0x0076AF96 runs the
+        // rewritten lea. Only the plugin manager is consulted here.
+        private static bool NativeOneSwordOverrideActive()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsOneSword();
+        }
+
+        private static int NativeOneSwordAccuracyFactor()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsOneSword()
+                ? Plugins.YanshenApi.OneSwordLevelFactor(api.OneSwordN())
+                : 3;
+        }
+
         private void RecalcHitSpeed()
         {
             TUserMagic UserMagic;
@@ -2899,31 +2960,73 @@ namespace GameSvr
                 UserMagic = m_MagicList[i];
                 if (UserMagic.wMagIdx < m_MagicArr.Length)
                     m_MagicArr[UserMagic.wMagIdx] = UserMagic;
+                // Native recalc sub_76ADA0 feeds every one of these arms from
+                // sub_4C896C (`mov dl,[eax+0x0C]; add dl,[eax+0x18];
+                // mov cl,[[eax]+0x1A]; cmp dl,cl; jbe`), never from the raw
+                // btLevel: 0x0076AF81, 0x0076AFC6, 0x0076B009, 0x0076B027,
+                // 0x0076B036, 0x0076B0E7.
+                int effectiveLevel = UserMagic.MagicInfo == null
+                    ? UserMagic.btLevel
+                    : Math.Min(
+                        unchecked((byte)(UserMagic.btLevel + UserMagic.NativeLevelBonus)),
+                        UserMagic.MagicInfo.btTrainLv);
                 switch (UserMagic.wMagIdx)
                 {
                     case SpellsDef.SKILL_ONESWORD:// 基本剑法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076AF96 8D 04 40 lea eax,[eax+eax*2] then
+                        // 0x0076AF99 66 01 83 64 02 00 00 add word[ebx+0x264],ax
+                        // yanshen rewrites that lea's SIB byte (plugin
+                        // 0x100B49D9, 3 bytes @0x0076AF96) so n replaces the 3.
+                        // Only LEA-encodable scales exist; see OneSwordLevelFactor.
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(9 / 3 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint
+                                + NativeOneSwordAccuracyFactor() * effectiveLevel));
+                        }
+                        // 0x0076AFA7 3C 04 cmp al,4 /
+                        // 0x0076AFA9 0F 85 4F 03 00 00 jne 0x0076B2FE /
+                        // 0x0076AFAF 83 83 90 02 00 00 02 add dword[ebx+0x290],2
+                        // The same override deletes this tier: plugin 0x100B4A10
+                        // splices `E9 50 03 00 00 90` over 0x0076AFA9, turning the
+                        // conditional skip into an unconditional one.
+                        if (effectiveLevel == 4 && !NativeOneSwordOverrideActive())
+                        {
+                            m_WAbil.DC = HUtil32.MakeLong(HUtil32.LoWord(m_WAbil.DC),
+                                HUtil32.HiWord(m_WAbil.DC) + 2);
                         }
                         break;
                     case SpellsDef.SKILL_ILKWANG:// 精神力战法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076AFE5 DB 2D 14 B3 76 00 fld tbyte[0x76B314] = 8/3
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(8.0 / 3.0 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + HUtil32.Round(8.0 / 3.0 * effectiveLevel)));
                         }
                         break;
                     case SpellsDef.SKILL_YEDO:// 攻杀剑法
-                        if (UserMagic.btLevel > 0)
+                        // 0x0076B01E adds the level itself, then
+                        // 0x0076B02C 04 05 add al,5 / 0x0076B02E mov [ebx+0x90],al
+                        if (effectiveLevel > 0)
                         {
-                            m_btHitPoint = (byte)(m_btHitPoint + HUtil32.Round(3 / 3 * UserMagic.btLevel));
+                            m_btHitPoint = unchecked((ushort)(m_btHitPoint + effectiveLevel));
                         }
-                        m_nHitPlus = (byte)(M2Share.DEFHIT + UserMagic.btLevel);
-                        m_btAttackSkillCount = (byte)(7 - UserMagic.btLevel);
+                        m_nHitPlus = unchecked((byte)(M2Share.DEFHIT + effectiveLevel));
+                        m_btAttackSkillCount = unchecked((byte)(7 - effectiveLevel));
                         m_btAttackSkillPointCount = (byte)M2Share.RandomNumber.Random(m_btAttackSkillCount);
                         break;
                     case SpellsDef.SKILL_FIRESWORD:// 烈火剑法
-                        m_nHitDouble = (byte)(4 + UserMagic.btLevel * 4);
+                        // 0x0076B0EC C1 E0 02 shl eax,2 / 0x0076B0EF 04 04 add al,4
+                        m_nHitDouble = unchecked((byte)(4 + effectiveLevel * 4));
+                        break;
+                    // Native sub_76ADA0 reaches 0x76B16D through
+                    // `add eax,-7` / `sub eax,4` / `jb` at 0x76AF2B, i.e.
+                    // unsigned (id - 65) < 4, and stores the record with
+                    // 0x76B170 `mov [ebx+0xC4],eax`. Last one in list order
+                    // wins, and nothing ever clears the field.
+                    case 65:
+                    case SpellsDef.SKILL_66:
+                    case SpellsDef.SKILL_67:
+                    case 68:
+                        m_NativeChargedCounterMagic = UserMagic;
                         break;
                 }
             }
@@ -3391,28 +3494,30 @@ namespace GameSvr
 
         public void SendFirstMsg(TBaseObject BaseObject, short wIdent, short wParam, int lParam1, int lParam2, int lParam3, string sMsg)
         {
+            // CRAFT-34: same ghost gate as SendMsg / sub_765E68. Hit = return, queue untouched.
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = lParam1,
-                        nParam2 = lParam2,
-                        nParam3 = lParam3,
-                        dwDeliveryTime = 0,
-                        BaseObject = BaseObject
-                    };
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Insert(0, SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = lParam1,
+                    nParam2 = lParam2,
+                    nParam3 = lParam3,
+                    dwDeliveryTime = 0,
+                    BaseObject = BaseObject
+                };
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
                 }
+                m_MsgList.Insert(0, SendMessage);
             }
             finally
             {
@@ -3423,30 +3528,43 @@ namespace GameSvr
         public void SendMsg(TBaseObject BaseObject, int wIdent, int wParam, int nParam1, int nParam2, int nParam3,
             string sMsg, object payload = null)
         {
+            // CRAFT-34 — native enqueue family gates on ghost byte [self+0x73], NOT death [self+0x74].
+            //   0x765E7D  80 7E 73 00           cmp byte [esi+0x73], 0
+            //   0x765E81  0F 85 DB 00 00 00     jne 0x765F62   ; epilogue pop/leave/ret 0x18
+            // Same shape, same landing (allocate nothing, queue nothing, send nothing):
+            //   0x765F81 sub_765F6C / 0x766075 sub_766060 / 0x76614D sub_76613C
+            // The only [+0x73] write in the image is MarkDelete:
+            //   0x7680EF  C6 43 73 01           mov byte [ebx+0x73], 1
+            //   (string @0x768138 = "TCreature.MarkDelete"; also writes [+0x14C]=GetTickCount)
+            // Die writes a different byte:
+            //   0x766323  C6 43 74 01           mov byte [ebx+0x74], 1   ; corpse still enqueues
+            // 1034 success/fail both call this (0x63FFCE / 0x63FFED call 0x765E68), so a ghosted
+            // player gets no RM_MAKEDRUG_* either.
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = nParam1,
-                        nParam2 = nParam2,
-                        nParam3 = nParam3,
-                        dwDeliveryTime = 0,
-                        BaseObject = BaseObject,
-                        boLateDelivery = false,
-                        Payload = payload
-                    };
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Add(SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = nParam1,
+                    nParam2 = nParam2,
+                    nParam3 = nParam3,
+                    dwDeliveryTime = 0,
+                    BaseObject = BaseObject,
+                    boLateDelivery = false,
+                    Payload = payload
+                };
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
                 }
+                m_MsgList.Add(SendMessage);
             }
             finally
             {
@@ -3460,30 +3578,32 @@ namespace GameSvr
         public void SendDelayMsg(TBaseObject BaseObject, int wIdent, int wParam, int lParam1, int lParam2, int lParam3,
             string sMsg, int dwDelay, object payload = null)
         {
+            // CRAFT-34: sub_766060 @0x766075  80 7E 73 00 / 0x766079  0F 85 B1 00 00 00 jne 0x766130
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = lParam1,
-                        nParam2 = lParam2,
-                        nParam3 = lParam3,
-                        dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
-                        BaseObject = BaseObject,
-                        boLateDelivery = true,
-                        Payload = payload
-                    };
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Add(SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = lParam1,
+                    nParam2 = lParam2,
+                    nParam3 = lParam3,
+                    dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
+                    BaseObject = BaseObject,
+                    boLateDelivery = true,
+                    Payload = payload
+                };
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
                 }
+                m_MsgList.Add(SendMessage);
             }
             finally
             {
@@ -3496,36 +3616,38 @@ namespace GameSvr
         
         public void SendDelayMsg(int BaseObject, short wIdent, int wParam, int lParam1, int lParam2, int lParam3, string sMsg, int dwDelay)
         {
+            // CRAFT-34: sub_76613C @0x76614D  80 7E 73 00 / 0x766151  0F 85 86 00 00 00 jne 0x7661DD
+            if (m_boGhost)
+            {
+                return;
+            }
             SendMessage SendMessage;
             try
             {
                 HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
-                if (!m_boGhost)
+                SendMessage = new SendMessage
                 {
-                    SendMessage = new SendMessage
-                    {
-                        wIdent = wIdent,
-                        wParam = wParam,
-                        nParam1 = lParam1,
-                        nParam2 = lParam2,
-                        nParam3 = lParam3,
-                        dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
-                        boLateDelivery = true
-                    };
-                    if (BaseObject == Grobal2.RM_STRUCK)
-                    {
-                        SendMessage.ObjectId = Grobal2.RM_STRUCK;
-                    }
-                    else
-                    {
-                        SendMessage.BaseObject = M2Share.ObjectManager.Get(BaseObject);
-                    }
-                    if (!string.IsNullOrEmpty(sMsg))
-                    {
-                        SendMessage.Buff = sMsg;
-                    }
-                    m_MsgList.Add(SendMessage);
+                    wIdent = wIdent,
+                    wParam = wParam,
+                    nParam1 = lParam1,
+                    nParam2 = lParam2,
+                    nParam3 = lParam3,
+                    dwDeliveryTime = HUtil32.GetTickCount() + dwDelay,
+                    boLateDelivery = true
+                };
+                if (BaseObject == Grobal2.RM_STRUCK)
+                {
+                    SendMessage.ObjectId = Grobal2.RM_STRUCK;
                 }
+                else
+                {
+                    SendMessage.BaseObject = M2Share.ObjectManager.Get(BaseObject);
+                }
+                if (!string.IsNullOrEmpty(sMsg))
+                {
+                    SendMessage.Buff = sMsg;
+                }
+                m_MsgList.Add(SendMessage);
             }
             finally
             {
@@ -4794,13 +4916,11 @@ namespace GameSvr
                     if (MonStatus == MonStatus.MonGen)
                     {
                         M2Share.UserEngine.SendBroadCastMsg(sMsg, MsgType.Mon);
-                        SendRefMsg(Grobal2.SM_MONSTERSAY, 0, 0, 0, 0, sMsg);
                         break;
                     }
                     if (MonSayMsg.Color == MsgColor.White)
                     {
                         ProcessSayMsg(sMsg);
-                        SendRefMsg(Grobal2.SM_MONSTERSAY, 0, 0, 0, 0, sMsg);
                     }
                     else
                     {
@@ -5858,7 +5978,6 @@ namespace GameSvr
             bool result = false;
             if (nType < Grobal2.MAX_STATUS_ATTRIBUTE)
             {
-                var nOldCharStatus = m_nCharStatus;
                 // POIS-08 / STATE-52 — native MakePosion is VMT+0xC8 @0x76B3C8 and owns
                 // no storage of its own; it is a seconds->milliseconds wrapper around the
                 // one and only state authority, AddState (VMT+0x1EC @0x7730D0):
@@ -5922,10 +6041,14 @@ namespace GameSvr
                 {
                     RecordNativeRedPoisonLevel(nPoint);
                 }
-                if (nOldCharStatus != m_nCharStatus)
-                {
-                    StatusChanged();
-                }
+                // STATE-16 — native MakePosion (0x76B3C8 / TPlayObject override
+                // 0x746604) does not broadcast 657 itself. AddState @0x77318C
+                // notifies through VMT+0x14, which for the default class is
+                // 0x76B42C -> 0x7729C4 (`66 8B 90 74 02 00 00` word [Self+0x274]
+                // then ident 0x291). C# SendTimedAbilityState already sends that
+                // packet (nParam1 = m_nHitSpeed). The extra StatusChanged() here
+                // was a second 657 with wParam=m_nHitSpeed / nParam1=m_nCharStatus,
+                // a shape 0x7729C4 never uses.
                 if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                 {
                     SysMsg(format(M2Share.sYouPoisoned, nTime, nPoint), MsgColor.Red, MsgType.Hint);

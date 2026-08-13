@@ -6,7 +6,7 @@ using MySql.Data.MySqlClient;
 // was never supplied" is an environment gap, not a defect in the code under
 // test. Exit 2 is this tree's INCOMPLETE convention, so the run is still
 // visibly not-green and can never be mistaken for a pass.
-if (args.Length != 1)
+if (args.Length != 1 || !LooksLikeConnectionString(args[0]))
 {
     Console.WriteLine("SKIP NativeHonorDbCheck: no MySQL connection string given.");
     Console.WriteLine("  usage: NativeHonorDbCheck <MySQL connection string>");
@@ -56,6 +56,18 @@ return 0;
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+static bool LooksLikeConnectionString(string value)
+{
+    if (string.IsNullOrWhiteSpace(value)) return false;
+    if (Directory.Exists(value) || File.Exists(value)) return false;
+    return value.Contains('=', StringComparison.Ordinal)
+        && (value.Contains("Server", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Data Source", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Uid", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("User Id", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("Password", StringComparison.OrdinalIgnoreCase));
 }
 
 static void PrepareRuntimeConfig()

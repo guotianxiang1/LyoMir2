@@ -306,43 +306,78 @@ internal sealed class NativeDbServerService
         NetworkStream stream, NativeLoginGateAuthRequest request,
         CancellationToken cancellationToken)
     {
+        // uSDKAuth.pas:590 stamps AddTick when the request is queued, and the
+        // sweeper at :759 measures from there, so the 20 s budget has to cover the
+        // wait for a slot too -- native has no such cap and never delays the clock.
+        var deadline = Environment.TickCount64
+                       + (long)LoginGateWireProtocol.NativeAuthTimeout.TotalMilliseconds;
         await _authenticationSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
         _counters.AuthenticationStarted();
         _stateChanged();
         try
         {
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            var authentication = InvokeAuthenticatorAsync(request, budget.Token);
+            var remaining = deadline - Environment.TickCount64;
+            var timedOut = remaining <= 0;
+            if (!timedOut)
+            {
+                // Race a timer rather than relying on the authenticator to honour the
+                // token: uSDKAuth.pas:747 runs the sweep on the main loop, independent
+                // of whatever the vendor SDK is doing, and always answers within 20 s.
+                using var timer = CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken);
+                var elapsed = Task.Delay(TimeSpan.FromMilliseconds(remaining), timer.Token);
+                if (await Task.WhenAny(authentication, elapsed).ConfigureAwait(false)
+                    == authentication)
+                    timer.Cancel();
+                else
+                    timedOut = true;
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+
             LoginTicketAuthenticationResult result;
-            try
+            if (timedOut)
             {
-                result = await _authenticator.AuthenticateAsync(request, cancellationToken)
-                    .ConfigureAwait(false);
+                budget.Cancel();
+                _log("WARN", $"票据认证超时：QueryId={request.QueryId}");
+                result = LoginTicketAuthenticationResult.Rejected("native auth timeout");
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            else
             {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _log("ERROR", $"本地票据校验器错误：{ex.GetType().Name}");
-                result = LoginTicketAuthenticationResult.Rejected("authentication failed");
+                result = await authentication.ConfigureAwait(false);
             }
 
             YbDbLegacy77Frame response;
             string error;
             if (result.Success && TryCreateSuccessTail(result.Account, out var tail, out error))
             {
+                // GateIdx (+1) is echoed, not chosen: PushAuthHead stores the whole
+                // request head (uSDKAuth.pas:591) and the reply ships that copy.
                 if (!LoginGateWireProtocol.TryCreateNativeAuthResponse124(
-                        6, 1, request.QueryId, tail, out response, out error))
+                        LoginGateWireProtocol.NativeAuthTypeLoginCenter,
+                        request.ProtocolVersion, request.QueryId, tail,
+                        out response, out error))
                     throw new InvalidDataException(error);
                 _log("INFO", $"票据认证成功：QueryId={request.QueryId}");
             }
             else
             {
+                // 12 bytes, wAuthType still atLoginCenterAuth, and a real nResult:
+                // uSDKAuth.pas:1624 sends the stored head verbatim, so +0 stays 6 and
+                // +8 carries the LC code. 0 there would read as LC_AUTH_SUCCESS.
+                // The sweeper distinguishes itself with LC_AUTH_TIMEOUT (:762).
                 if (!LoginGateWireProtocol.TryCreateNativeAuthFailure(
-                        0, 1, request.QueryId, "authentication failed",
-                        out response, out error))
+                        LoginGateWireProtocol.NativeAuthTypeLoginCenter,
+                        request.ProtocolVersion, request.QueryId,
+                        timedOut
+                            ? LoginGateWireProtocol.NativeLcAuthTimeout
+                            : LoginGateWireProtocol.NativeLcAuthFailed,
+                        null, out response, out error))
                     throw new InvalidDataException(error);
-                _log("WARN", $"票据认证失败：QueryId={request.QueryId}");
+                if (!timedOut)
+                    _log("WARN", $"票据认证失败：QueryId={request.QueryId}");
             }
             await SendFrameAsync(connection, stream, response, cancellationToken)
                 .ConfigureAwait(false);
@@ -352,6 +387,25 @@ internal sealed class NativeDbServerService
             _counters.AuthenticationFinished();
             _authenticationSlots.Release();
             _stateChanged();
+        }
+    }
+
+    private async Task<LoginTicketAuthenticationResult> InvokeAuthenticatorAsync(
+        NativeLoginGateAuthRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _authenticator.AuthenticateAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return LoginTicketAuthenticationResult.Rejected("authentication cancelled");
+        }
+        catch (Exception ex)
+        {
+            _log("ERROR", $"本地票据校验器错误：{ex.GetType().Name}");
+            return LoginTicketAuthenticationResult.Rejected("authentication failed");
         }
     }
 

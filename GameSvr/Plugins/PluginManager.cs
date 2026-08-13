@@ -674,10 +674,15 @@ namespace GameSvr.Plugins
             if (root.ValueKind != JsonValueKind.Object)
                 throw new JsonException("recycle configuration root must be a JSON object");
 
-            if (!root.TryGetProperty("回收类型", out var recycleTypes) &&
-                !root.TryGetProperty("物品种类", out _) &&
-                !root.TryGetProperty("可叠材料", out _))
-                throw new JsonException("unrecognized recycle configuration schema");
+            // 原生把 物品种类 与 回收类型 两个根键都列为必需，缺一整份作废（回收入口
+            // 0x1006CF16 读的有效位 0x1031B8C5 只在两键齐备时才写 1：装载校验
+            // 0x1009103E 找 物品种类、0x10091056 找 回收类型，任一 je 0x1009107F 就置 0
+            // 并打 "物品种类和回收类型根字符不允许修改" @0x102C0A6C）。
+            // 可叠材料 不参与判定 —— 只写 可叠材料 的配置，原生是一件都不动的。
+            if (!root.TryGetProperty("回收类型", out var recycleTypes) ||
+                !root.TryGetProperty("物品种类", out _))
+                throw new JsonException(
+                    "recycle configuration requires both 物品种类 and 回收类型");
 
             return ParseNativeRecycleConfig(root, recycleTypes);
         }
@@ -705,11 +710,11 @@ namespace GameSvr.Plugins
             // 匹配不上就不回收。
             var items = new Dictionary<string, RecycleItemRule>(StringComparer.Ordinal);
             var unresolved = new List<string>();
-            var foundItemSection = false;
+            // 原生先判 可叠材料（0x1006B3E1）命中就走完整条堆叠分支、绝不回落到
+            // 物品种类，所以同名项以 可叠材料 为准 —— 这里靠后写覆盖得到同样次序。
             foreach (var sectionName in new[] { "物品种类", "可叠材料" })
             {
                 if (!root.TryGetProperty(sectionName, out var section)) continue;
-                foundItemSection = true;
                 if (section.ValueKind != JsonValueKind.Object)
                     throw new JsonException($"{sectionName} must be a JSON object");
 
@@ -736,9 +741,6 @@ namespace GameSvr.Plugins
                     items[item.Name] = new RecycleItemRule(rule, stackable);
                 }
             }
-
-            if (!foundItemSection)
-                throw new JsonException("recycle configuration requires 物品种类 or 可叠材料");
 
             return new RecycleConfigSnapshot(items, unresolved);
         }

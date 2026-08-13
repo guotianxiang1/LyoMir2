@@ -12,13 +12,16 @@ TestBoundaryBehavior();
 TestFloatingTruthTable();
 TestRandomizeTruthTable();
 TestConcurrentLinearization();
+TestGameplayFacadeIsTheLcg();
 TestDormantRuntimeGate();
 
 Console.WriteLine(
-    "PASS DelphiRandom dormant LCG=08088405 range0=advances " +
+    "PASS DelphiRandom LCG=08088405 range0=advances " +
     "negative=uint-bits float=seed/2^32 concurrent=linearized " +
     "image-seed=0 randomize=qpc-low32/fallback-gettickcount " +
-    "runtime=unwired live-delphirandom=0 old-access>=453 pas-shared=4 yb-shared=1 " +
+    "facade=sub_403B4C(v)/(0)/min+(max-min)/min+(max-min+1) " +
+    "direct-delphirandom-in-gamesvr=0(+appservice-seed-only) facade-access>=453 " +
+    "pas-shared=0(via-contract) yb-shared=0(via-contextid) " +
     "new-random=0");
 
 static void TestSeedAccess()
@@ -174,6 +177,51 @@ static void TestConcurrentLinearization()
         "concurrent calls did not linearize to one shared sequence");
 }
 
+// POIS-26 put the gameplay facade ON the LCG. The load-bearing fact is not which
+// field RandomNumber declares, it is that every draw M2Share.RandomNumber hands out
+// is the one sub_403B4C @0x00403B4C would have produced from the same seed:
+//   nextSeed = seed * 0x08088405 + 1;  result = high32((uint32)bound * nextSeed)
+// Every drop rate, poison chance and crit roll in the data files is tuned on that
+// generator's low-order bias, so an approximately-uniform substitute shifts all of
+// them. Pinning the sequence catches a silent swap back to System.Random, which no
+// amount of source-shape matching can do once the field is renamed.
+static void TestGameplayFacadeIsTheLcg()
+{
+    var facade = RandomNumber.GetInstance();
+    var seed = 0x12345678u;
+    DelphiRandom.Seed = seed;
+
+    foreach (var bound in new[] { 91_200, 800, 1, 0, -1, int.MinValue })
+    {
+        var expected = NextReference(ref seed, bound);
+        Equal(expected, facade.Random(bound), $"facade Random({bound})");
+        Equal(seed, DelphiRandom.Seed, $"facade Random({bound}) shared seed");
+    }
+
+    // Parameterless Random() is the original Random(0): it advances the seed and
+    // returns 0. Random.Next(0) returned 0 WITHOUT advancing, so the deliberate
+    // advance sites were silently no-ops.
+    var advance = NextReference(ref seed, 0);
+    Equal(advance, facade.Random(), "facade Random() advance result");
+    Equal(seed, DelphiRandom.Seed, "facade Random() did not advance the seed");
+
+    var halfOpen = NextReference(ref seed, 700 - 100);
+    Equal(100 + halfOpen, facade.Random(100, 700),
+        "facade Random(min,max) half-open contract");
+    Equal(seed, DelphiRandom.Seed, "facade Random(min,max) shared seed");
+
+    var inclusive = NextReference(ref seed, 700 - 100 + 1);
+    Equal(100 + inclusive, facade.GetRandomNumber(100, 700),
+        "facade GetRandomNumber(min,max) inclusive contract");
+    Equal(seed, DelphiRandom.Seed, "facade GetRandomNumber shared seed");
+
+    // Negative bounds participate as the UInt32 bit pattern; System.Random threw.
+    DelphiRandom.Seed = 0xCAFEBABEu;
+    seed = 0xCAFEBABEu;
+    var negative = NextReference(ref seed, -1);
+    Equal(negative, facade.Random(-1), "facade negative bound uses UInt32 bits");
+}
+
 static void TestDormantRuntimeGate()
 {
     var root = FindRepositoryRoot();
@@ -184,16 +232,21 @@ static void TestDormantRuntimeGate()
         .ToArray();
     var allGameText = string.Join('\n', gameSources.Select(File.ReadAllText));
 
-    // The dormant RandSeed models legitimately reference DelphiRandom (seed-injected, NOT wired
-    // to the live RandomNumber facade); NativeQuestDiamondProtocol only has a local method named
-    // NextDelphiRandom. The true invariant is that the LIVE gameplay path must not delegate to
-    // DelphiRandom — checked here (excluding these four) + at the RandomNumber.cs Reject below.
+    // Since POIS-26 the LCG is the live generator, so this is no longer a "keep it
+    // dormant" check: it is single-authority (rule 4.18). Gameplay draws go through
+    // M2Share.RandomNumber, which is the one place that owns the mapping onto
+    // sub_403B4C; a GameSvr call site reaching into DelphiRandom directly would be a
+    // second authority over the shared seed. The four files below are exempt for
+    // reasons unrelated to gameplay draws: three are seed-injected models that never
+    // touch the shared seed, and NativeQuestDiamondProtocol only has a local method
+    // whose NAME contains the string.
     var dormantOrLocal = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "NativePasRandomContract.cs",        // dormant PAS random/randomrange contract
+        "NativePasRandomContract.cs",        // PAS random/randomrange, now live on the shared seed
         "NativeUpdateClothesTransaction.cs", // dormant 4637 Randomize+Random(800) model
         "NativeYuanbaoContextId.cs",         // dormant YBDB-gated 30-step context-id model
         "NativeQuestDiamondProtocol.cs",     // local NextDelphiRandom method NAME only
+        "AppService.cs",                     // startup seeding, asserted exactly below
     };
     var liveText = string.Join('\n',
         gameSources.Where(p => !dormantOrLocal.Contains(Path.GetFileName(p)))
@@ -202,6 +255,29 @@ static void TestDormantRuntimeGate()
     Equal(0, Regex.Matches(liveText, @"\bDelphiRandom\b",
         RegexOptions.CultureInvariant).Count,
         "dormant owner leaked into LIVE GameSvr runtime (dormant/local models excluded)");
+
+    // AppService is the one live file allowed to name DelphiRandom, because native
+    // seeds the generator at startup and something has to model that. TMainThread.Create
+    // does it before Execute enters the game loop:
+    //   0x00792C5A  E8 4D 08 C7 FF     call 0x004034AC        ; Randomize
+    //   0x004034AC  83 C4 F8 / 54      add esp,-8 / push esp   ; function entry
+    //   0x004034B0  E8 BF E0 FF FF     call 0x00401574        ; time source
+    //   0x004034BC  A3 08 20 7A 00     mov [0x007A2008], eax  ; the seed global
+    // (0x004034BC is the store inside that function, not its entry - an earlier report
+    // cited it as the call target, which is what made the two accounts look inconsistent.)
+    //
+    // A blanket exemption would let a real draw hide in this file, so the allowance is
+    // exact: one reference, and it has to be the seeding call.
+    var appService = gameSources.FirstOrDefault(
+        p => string.Equals(Path.GetFileName(p), "AppService.cs", StringComparison.OrdinalIgnoreCase));
+    Assert(appService != null, "AppService.cs not found for the startup-seeding check");
+    var appServiceText = File.ReadAllText(appService!);
+    Equal(1, Regex.Matches(appServiceText, @"\bDelphiRandom\b",
+        RegexOptions.CultureInvariant).Count,
+        "AppService may name DelphiRandom exactly once, for the startup seed");
+    Equal(1, Regex.Matches(appServiceText, @"\bDelphiRandom\.Randomize\s*\(\s*\)",
+        RegexOptions.CultureInvariant).Count,
+        "AppService's single DelphiRandom use must be Randomize(), not a draw");
 
     var oldInvocations = Regex.Matches(allGameText,
         @"(?<![A-Za-z0-9_])(?:M2Share\.)?RandomNumber\.Random",
@@ -215,17 +291,32 @@ static void TestDormantRuntimeGate()
         $"legacy RandomNumber access floor: expected >= 453, actual {oldInvocations} " +
         "(a DROP below the floor means gameplay draws were removed = regression)");
 
+    // The PAS builtins used to draw from Random.Shared, a generator of their own. They
+    // now go through NativePasRandomContract onto the shared RandSeed, which is what
+    // native does - the script random is the engine random, not a second stream. This
+    // assertion used to require the four Random.Shared sites and so pinned the less
+    // faithful shape; it now requires them gone and the contract in their place.
     var pas = File.ReadAllText(Path.Combine(gameRoot, "ScriptSystem",
         "PasEngine", "PasInterpreter.cs"));
-    Equal(4, Regex.Matches(pas, @"Random\.Shared\.",
+    Equal(0, Regex.Matches(pas, @"Random\.Shared\.",
         RegexOptions.CultureInvariant).Count,
-        "PAS separate Random.Shared gate");
+        "PAS builtins must not own a second generator");
+    Assert(Regex.IsMatch(pas, @"NativePasRandomContract\.\s*Random\s*\("),
+        "PAS random builtin no longer routes through NativePasRandomContract");
+    Assert(Regex.IsMatch(pas, @"NativePasRandomContract\.\s*RandomRange\s*\("),
+        "PAS randomrange builtin no longer routes through NativePasRandomContract");
 
+    // Same move as the PAS builtins: the context id used to be drawn from Random.Shared
+    // inline and now comes from NativeYuanbaoContextId on the shared seed. Requiring the
+    // old inline draw pinned the second generator, so the requirement is inverted and
+    // paired with a positive check that the generator is still reached.
     var yuanbao = File.ReadAllText(Path.Combine(gameRoot, "Services",
         "NativeYuanbaoManager.cs"));
-    Equal(1, Regex.Matches(yuanbao, @"Random\.Shared\.",
+    Equal(0, Regex.Matches(yuanbao, @"Random\.Shared\.",
         RegexOptions.CultureInvariant).Count,
-        "yuanbao context-id Random.Shared gate");
+        "yuanbao manager must not own a second generator");
+    Assert(Regex.IsMatch(yuanbao, @"NativeYuanbaoContextId\.\s*Generate\s*\(\s*\)"),
+        "yuanbao context id no longer routes through NativeYuanbaoContextId");
 
     var newRandom = Regex.Matches(allGameText,
         @"new\s+System\.Random\s*\(",
@@ -234,10 +325,12 @@ static void TestDormantRuntimeGate()
 
     var randomNumber = File.ReadAllText(Path.Combine(root, "SystemModule",
         "RandomNumber.cs"));
-    Require(randomNumber, "private static Random random",
-        "legacy System.Random owner changed before execution-domain closure");
-    Reject(randomNumber, "DelphiRandom",
-        "legacy RandomNumber was wired to dormant Delphi owner");
+    Require(randomNumber, "DelphiRandomNumberFacade",
+        "gameplay facade stopped delegating to the native LCG");
+    Reject(randomNumber, "private static Random random",
+        "gameplay facade took its own System.Random back");
+    Reject(randomNumber, "random.Next",
+        "gameplay facade drew from System.Random instead of sub_403B4C");
 
     var delphiRandom = File.ReadAllText(Path.Combine(root, "SystemModule",
         "DelphiRandom.cs"));

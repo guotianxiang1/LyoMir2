@@ -239,7 +239,7 @@ byte[] CreateScriptData()
     BinaryPrimitives.WriteInt32LittleEndian(script, script.Length - 4);
     BinaryPrimitives.WriteUInt32LittleEndian(script.AsSpan(4, 4), 0xABCDEFAA);
     BinaryPrimitives.WriteUInt16LittleEndian(script.AsSpan(8, 2), 8);
-    script[10] = 0;
+    script[10] = 1;
     BinaryPrimitives.WriteInt32LittleEndian(script.AsSpan(11, 4), 7);
     BinaryPrimitives.WriteInt32LittleEndian(script.AsSpan(15, 4), 0x10203040);
     return script;

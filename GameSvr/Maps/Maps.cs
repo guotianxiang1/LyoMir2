@@ -261,6 +261,7 @@ namespace GameSvr
                             // pickup、NORECALL 等真 token 各命中 2 条 Delphi 记录，
                             // 即两个 token 池各一条）。配置里写 MINE2 在原版会被
                             // 上面那条长度 4 的前缀比较命中成 MINE。不要重新接线。
+                            //
                             // NOTHROWITEM / NODROPITEM 也是发明的（§INVENTED）。
                             if (s34.Equals("NOPOSITIONMOVE", StringComparison.OrdinalIgnoreCase))
                             {

@@ -244,6 +244,12 @@ static void SetCriticalFields(TBaseObject actor, short chance, int increase,
     SetField(actor, "m_sNativeCriticalDamageReduction", reduction);
 }
 
+// The recorder rides M2Share.RandomNumber, the field the server assigns at
+// startup. It used to ride RandomNumber's private `random` field, which
+// POIS-26 removed when the facade moved onto the Delphi LCG sub_403B4C
+// (@0x403B4C imul [0x7A2008],0x08088405 / inc / mul / take EDX); GetField then
+// returned null and every threshold, formula and resolver-order assertion
+// below stopped running. The expectations themselves are unchanged.
 static FixedRandom UseRandom(params int[] values)
 {
     var random = new FixedRandom(values);
@@ -251,16 +257,9 @@ static FixedRandom UseRandom(params int[] values)
     return random;
 }
 
-static void ResetRandom() => SetRandom(new Random());
+static void ResetRandom() => SetRandom(RandomNumber.GetInstance());
 
-static void SetRandom(Random random)
-{
-    var randomField = typeof(RandomNumber).GetField("random",
-        BindingFlags.Static | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException(typeof(RandomNumber).FullName,
-            "random");
-    randomField.SetValue(null, random);
-}
+static void SetRandom(RandomNumber random) => M2Share.RandomNumber = random;
 
 static T GetField<T>(TBaseObject actor, string name) =>
     (T)(typeof(TBaseObject).GetField(name,
@@ -366,7 +365,7 @@ static void Assert(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
 }
 
-sealed class FixedRandom : Random
+sealed class FixedRandom : RandomNumber
 {
     private readonly Queue<int> _values;
 
@@ -377,14 +376,26 @@ sealed class FixedRandom : Random
 
     internal int Calls { get; private set; }
 
-    public override int Next(int maxValue)
+    public override int Random(int Value)
     {
         Calls++;
         if (_values.Count == 0)
             throw new InvalidOperationException("unexpected RNG call");
         int value = _values.Dequeue();
-        if (value < 0 || value >= maxValue)
+        if (value < 0 || value >= Value)
             throw new ArgumentOutOfRangeException(nameof(value));
         return value;
     }
+
+    // The critical roll and the resolver steps in front of it are all bounded
+    // draws. A parameterless advance or a min/max draw would slip past the
+    // Calls counter, so refuse it instead of counting nothing.
+    public override int Random() => throw new InvalidOperationException(
+        "unexpected parameterless RandSeed advance");
+
+    public override int Random(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected Random(min,max) draw");
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        throw new InvalidOperationException("unexpected GetRandomNumber draw");
 }

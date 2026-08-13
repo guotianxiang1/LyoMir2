@@ -840,22 +840,9 @@ static void RequireContains(string path, string needle, string label)
 // walk depends on how deep the output happens to be and breaks whenever the
 // TFM or output layout changes. [CallerFilePath] is fixed at compile time and
 // points at AuditTools/NativeScriptSectionsCheck/Program.cs.
-static string FindRepositoryRoot([CallerFilePath] string sourcePath = "")
+static string FindRepositoryRoot()
 {
-    foreach (var start in new[] { sourcePath, AppContext.BaseDirectory })
-    {
-        if (string.IsNullOrEmpty(start))
-            continue;
-        var dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(start))
-            ?? start);
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, "GameSvr")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-    }
-    throw new InvalidOperationException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 // Where the corpus actually lives today: a sibling of the checkout, NOT inside
@@ -863,23 +850,18 @@ static string FindRepositoryRoot([CallerFilePath] string sourcePath = "")
 // D:/loym2/staging/golden_scriptdata. Reported verbatim in the SKIP message.
 static string CanonicalGoldenDirectory()
 {
-    var root = FindRepositoryRoot();
-    var parent = Directory.GetParent(root)?.FullName ?? root;
-    return Path.Combine(parent, "staging", "golden_scriptdata");
+    var found = ProbeGoldenDirectories(out _);
+    return found ?? Path.Combine(@"D:\loym2", "staging", "golden_scriptdata");
 }
 
-// Probe order: explicit M2_GOLDEN_SCRIPTDATA override, then the in-repo staging
-// path (so relocating the corpus into the checkout needs no code change), then
-// the sibling staging path where it lives today, then the legacy in-project
-// goldens/ directory. A directory that exists but holds no *.bin is treated as
-// absent, so an empty corpus cannot silently pass.
+// Probe order: explicit M2_GOLDEN_SCRIPTDATA override, then every ancestor's
+// staging/golden_scriptdata (worktrees sit several levels below D:\loym2),
+// then the in-project goldens/ directory. A directory that exists but holds
+// no *.bin is treated as absent, so an empty corpus cannot silently pass.
 static string GoldenDirectoryCandidates(out string[] candidates)
 {
-    var root = FindRepositoryRoot();
-    var parent = Directory.GetParent(root)?.FullName ?? root;
     var fromEnvironment = Environment.GetEnvironmentVariable(
         "M2_GOLDEN_SCRIPTDATA");
-    var probes = new List<string>();
     if (!string.IsNullOrWhiteSpace(fromEnvironment))
     {
         // The override is AUTHORITATIVE, not merely first in line. Falling
@@ -894,12 +876,19 @@ static string GoldenDirectoryCandidates(out string[] candidates)
             ? candidates[0]
             : null;
     }
-    probes.Add(Path.Combine(root, "staging", "golden_scriptdata"));
-    probes.Add(Path.Combine(parent, "staging", "golden_scriptdata"));
+    return ProbeGoldenDirectories(out candidates);
+}
+
+static string ProbeGoldenDirectories(out string[] candidates)
+{
+    var root = FindRepositoryRoot();
+    var probes = new List<string>();
+    for (var dir = new DirectoryInfo(root); dir != null; dir = dir.Parent)
+        probes.Add(Path.Combine(dir.FullName, "staging", "golden_scriptdata"));
     probes.Add(Path.Combine(root, "AuditTools", "NativeScriptSectionsCheck",
         "goldens"));
-    candidates = probes.ToArray();
-    foreach (var probe in probes)
+    candidates = probes.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    foreach (var probe in candidates)
         if (Directory.Exists(probe) && Directory.GetFiles(probe, "*.bin").Length > 0)
             return probe;
     return null;

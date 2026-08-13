@@ -164,7 +164,30 @@ namespace GameSvr
             if (hero.HeroType == 2)
             {
                 if (!type2Eligible)
+                {
+                    // 0x687815 jbe 0x687854 not taken -> 0x687817..0x68784F, which is
+                    // NOT a bare bail-out: it hints the OWNER before zeroing the result.
+                    //   0x687817  8B 83 8C 06 00 00     mov  eax,[hero+0x68C]   ; owner
+                    //   0x68781D  80 B8 98 18 00 00 00  cmp  byte [owner+0x1898],0
+                    //   0x687824  74 25                 je   0x68784B           ; hint off
+                    //   0x687826  B8 64 00 00 00        mov  eax,100
+                    //   0x68782B  E8 1C C3 D7 FF        call 0x403B4C           ; Random(100)
+                    //   0x687830  85 C0 / 75 17         test eax,eax / jne 0x68784B
+                    //   0x687834  66 B9 FF FC           mov  cx,0xFCFF          ; BColor 0xFC = Blue
+                    //   0x687838  BA 1C 7A 68 00        mov  edx,0x687A1C
+                    //   0x687845  FF 93 D4 00 00 00     call [owner_vmt+0xD4]
+                    //   0x68784B  C6 45 FE 00           mov  byte [ebp-2],0     ; result := false
+                    // Literal 0x687A1C is a declen-60 Delphi string, read byte-for-byte.
+                    // The `je` precedes the Random call, so a suppressed hint consumes no
+                    // RNG draw - the && short-circuit reproduces that call order exactly.
+                    if (m_boNativeHeroCapHintEnabled &&
+                        M2Share.RandomNumber.Random(100) == 0)
+                    {
+                        SysMsg("您的副将英雄等级受限于主将等级，主将等级提升后方能继续修炼！",
+                            MsgColor.Blue, MsgType.Hint);
+                    }
                     return;
+                }
                 applied = unchecked(accepted * 2u);
             }
 
@@ -181,12 +204,12 @@ namespace GameSvr
                 unchecked((uint)hero.m_Abil.Exp) > NativeNaturalHeroLevel200Cap)
                 hero.m_Abil.Exp = unchecked((int)NativeNaturalHeroLevel200Cap);
 
-            while (hero.m_WAbil.MaxExp != 0 &&
-                   unchecked((uint)hero.m_WAbil.MaxExp) <= unchecked((uint)hero.m_Abil.Exp))
+            while (hero.m_Abil.MaxExp != 0 &&
+                   unchecked((uint)hero.m_Abil.MaxExp) <= unchecked((uint)hero.m_Abil.Exp))
             {
                 var previousLevel = hero.m_Abil.Level;
                 hero.m_Abil.Exp = unchecked((int)((uint)hero.m_Abil.Exp -
-                                                   (uint)hero.m_WAbil.MaxExp));
+                                                   (uint)hero.m_Abil.MaxExp));
                 if (directMode || hero.m_Abil.Level < 200)
                 {
                     hero.m_Abil.Level = unchecked((ushort)(hero.m_Abil.Level + 1));
@@ -198,6 +221,9 @@ namespace GameSvr
                 }
 
                 hero.HeroLevel = hero.m_Abil.Level;
+                // 0x687930 calls [vtbl+0x240] before 0x687936 re-reads the threshold, and that
+                // slot (0x6BDBD3) rewrites it from the level table -- without this the loop
+                // keeps subtracting the stale threshold and grants one level per 100 exp.
                 hero.m_Abil.MaxExp = hero.GetLevelExp(hero.m_Abil.Level);
                 hero.RecalcLevelAbilitys();
                 hero.RecalcAbilitys();

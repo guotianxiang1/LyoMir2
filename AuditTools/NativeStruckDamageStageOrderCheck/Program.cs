@@ -269,26 +269,7 @@ void Equal<T>(T expected, T actual, string description)
 
 static string FindRepositoryRoot()
 {
-    var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (dir != null)
-    {
-        if (File.Exists(Path.Combine(dir.FullName, "LyoMir2.sln")))
-            return dir.FullName;
-        dir = dir.Parent;
-    }
-    // Fall back to walking up from the build output (Build/AuditTools/<name>/
-    // <tfm>/) so the audit works from either cwd, like its siblings.
-    dir = new DirectoryInfo(AppContext.BaseDirectory);
-    while (dir != null)
-    {
-        var candidate = Path.Combine(dir.FullName, "LyoMir2-master",
-            "LyoMir2.sln");
-        if (File.Exists(candidate))
-            return Path.Combine(dir.FullName, "LyoMir2-master");
-        dir = dir.Parent;
-    }
-    throw new InvalidOperationException(
-        "LyoMir2.sln not found above the current directory or the build dir");
+    return AuditRepoRoot.Resolve();
 }
 
 static void PrepareRuntimeConfig()

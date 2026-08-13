@@ -143,7 +143,7 @@ void RunHeroLifecycle(Envirnoment map)
 
     // Faithful hero mechanic: the MASTER engages the monster; the hero attacks the master's target.
     owner.SetTargetCreat(mon);                          // master.m_TargetCret = mon (player attacks it)
-    hero.SetTargetCreat(mon);                           // hero acquires master's target (HeroObject.DecideAction)
+    hero.SetTargetCreat(mon);                           // hero acquires master's target (HeroObject.Run attack mode)
     bool properAfter = hero.IsProperTarget(mon);
 
     int monHp0 = mon.m_WAbil.HP;

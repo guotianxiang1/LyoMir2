@@ -4,23 +4,17 @@ using System.Text.RegularExpressions;
 using DBSvr.Core;
 using SystemModule;
 
-if (args.Length > 1)
-{
-    Console.Error.WriteLine("Usage: HeroDbCheck [repository root]");
-    return 2;
-}
-
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 var gbk = Encoding.GetEncoding(936,
     EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
-var resolvedRoot = args.Length == 1 ? args[0] : FindRepositoryRoot();
-if (resolvedRoot == null)
+var root = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (root == null)
 {
-    Console.Error.WriteLine(
-        "INCOMPLETE HeroDbCheck: repository root not found (no LyoMir2.sln above cwd or binary)");
-    return 2;
+    Console.Error.WriteLine("INCOMPLETE: repository root was not supplied and could "
+        + "not be located from the working directory. "
+        + "Usage: HeroDbCheck [repository root]");
+    Environment.Exit(2);
 }
-var root = Path.GetFullPath(resolvedRoot);
 var dbSvr = Path.Combine(root, "DBSvr");
 var gameSvr = Path.Combine(root, "GameSvr");
 var systemModule = Path.Combine(root, "SystemModule");
@@ -41,21 +35,7 @@ CheckLogicalSnapshot();
 
 Console.WriteLine(
     "PASS hero-db native=33AABB77 commands=160..167/194/51/53/59/70 fixed=49D4 three=DD7C dyn=2,6,7 delete=index-only blob=zlib/crc32 sql=myisam-serialized");
-return 0;
-
-static string FindRepositoryRoot()
-{
-    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
-    {
-        for (var directory = new DirectoryInfo(start);
-             directory != null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "LyoMir2.sln")))
-                return directory.FullName;
-        }
-    }
-    return null;
-}
+return;
 
 void CheckSourceGuards()
 {
@@ -377,10 +357,17 @@ void CheckDynamicDataCodec()
         "dynData root length mismatch accepted");
     var badMagic = (byte[])encoded.Clone();
     badMagic[4] ^= 1;
-    Assert(!NativeHeroDbFrameCodec.TryDecodeDynamicData(badMagic, out _, out _),
-        "dynData bad section magic accepted");
-    Assert(!NativeHeroDbFrameCodec.TryDecodeDynamicData(encoded[..^1], out _, out _),
-        "truncated dynData accepted");
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(badMagic, out var badMagicDecoded, out _),
+        "dynData bad section magic must keep already-parsed sections (0x68B0B9 jne 0x68B396)");
+    Equal(0, badMagicDecoded.Sections.Count,
+        "first-section bad magic leaves no parsed sections");
+    var truncated = encoded[..^1];
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(truncated, out var truncatedDecoded, out _),
+        "truncated dynData must keep already-parsed sections (0x68B0C9 jl 0x68B354)");
+    Equal(2, truncatedDecoded.Sections.Count,
+        "truncated last section keeps the preceding 2/6");
+    Equal((byte)2, truncatedDecoded.Sections[0].Type, "truncated leftover type 2");
+    Equal((byte)6, truncatedDecoded.Sections[1].Type, "truncated leftover type 6");
     Assert(!NativeHeroDbFrameCodec.TryEncodeDynamicData(
         new NativeHeroDynamicData(new[]
         {
@@ -388,29 +375,39 @@ void CheckDynamicDataCodec()
             new NativeHeroDynamicSection(2, new byte[] { 2 })
         }), out _, out _), "out-of-order dynData accepted");
 
+    // Decoder jump table 0x68B0E5 has no order: 7 then 2 must parse.
+    var reordered = BuildDynDataBlob(
+        (7, new byte[] { 6 }),
+        (2, new byte[] { 1, 2, 3 }));
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(reordered, out var reorderedDecoded, out error),
+        error);
+    Equal(2, reorderedDecoded.Sections.Count, "out-of-order 7-then-2 section count");
+    Equal((byte)7, reorderedDecoded.Sections[0].Type, "out-of-order first type");
+    Equal((byte)2, reorderedDecoded.Sections[1].Type, "out-of-order second type");
+
+    // Encoder refuses type 4 / 0x0C (0x68AD4F/0x68AD78/0x68ADA3 emit only 2/6/7).
+    // Decoder skip 0x68B2EA/0x68B349 keeps the known sections.
     Assert(!NativeHeroDbFrameCodec.TryEncodeDynamicData(
         new NativeHeroDynamicData(new[]
         {
             new NativeHeroDynamicSection(2, new byte[] { 1 }),
             new NativeHeroDynamicSection(4, new byte[] { 2 }),
-            new NativeHeroDynamicSection(6, new byte[] { 3 })
-        }), out _, out _), "type4 dynData encoded (native encoder only emits 2,6,7)");
-
-    var skipBlob = BuildRawDynamicData(
+            new NativeHeroDynamicSection(6, new byte[] { 3 }),
+            new NativeHeroDynamicSection(7, new byte[] { 4 }),
+            new NativeHeroDynamicSection(0x0C, new byte[] { 5 })
+        }), out _, out _), "encoder accepted type 4 / 0x0C");
+    var skipBlob = BuildDynDataBlob(
         (2, new byte[] { 1 }),
         (4, new byte[] { 2 }),
         (6, new byte[] { 3 }),
         (7, new byte[] { 4 }),
         (0x0C, new byte[] { 5 }));
-    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(skipBlob,
-        out var skipped, out error), error);
-    Equal(3, skipped.Sections.Count,
-        "unknown dynData types 4/0xC must be skipped, not fail the blob");
-    Equal((byte)2, skipped.Sections[0].Type, "kept section 2 after skip");
-    Equal((byte)6, skipped.Sections[1].Type, "kept section 6 after skip");
-    Equal((byte)7, skipped.Sections[2].Type, "kept section 7 after skip");
-    SequenceEqual(new byte[] { 1 }, skipped.Sections[0].Payload, "section 2 payload after skip");
-    SequenceEqual(new byte[] { 4 }, skipped.Sections[2].Payload, "section 7 payload after skip");
+    Assert(NativeHeroDbFrameCodec.TryDecodeDynamicData(skipBlob, out var skipDecoded, out error),
+        error);
+    Equal(3, skipDecoded.Sections.Count, "type4/type12 dynData skip leaves 2/6/7");
+    Equal((byte)2, skipDecoded.Sections[0].Type, "skip leftover type 2");
+    Equal((byte)6, skipDecoded.Sections[1].Type, "skip leftover type 6");
+    Equal((byte)7, skipDecoded.Sections[2].Type, "skip leftover type 7");
 }
 
 void CheckLoadRequestCodec()
@@ -1198,23 +1195,23 @@ NativeHeroDynamicData BuildDynamicData() => new(new[]
     new NativeHeroDynamicSection(7, new byte[] { 0x20, 0x21, 0x22 })
 });
 
-byte[] BuildRawDynamicData(params (byte Type, byte[] Payload)[] sections)
+byte[] BuildDynDataBlob(params (byte type, byte[] payload)[] sections)
 {
     var size = 4;
     foreach (var section in sections)
-        size = checked(size + NativeHeroDbFrameCodec.DynamicHeaderSize + section.Payload.Length);
+        size += NativeHeroDbFrameCodec.DynamicHeaderSize + section.payload.Length;
     var data = new byte[size];
-    BinaryPrimitives.WriteUInt32LittleEndian(data, (uint)(size - 4));
+    BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(0, 4), (uint)(size - 4));
     var offset = 4;
     foreach (var section in sections)
     {
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(offset, 4),
             NativeHeroDbFrameCodec.DynamicSectionMagic);
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(offset + 4, 2),
-            (ushort)section.Payload.Length);
-        data[offset + 6] = section.Type;
-        section.Payload.CopyTo(data, offset + NativeHeroDbFrameCodec.DynamicHeaderSize);
-        offset += NativeHeroDbFrameCodec.DynamicHeaderSize + section.Payload.Length;
+            (ushort)section.payload.Length);
+        data[offset + 6] = section.type;
+        section.payload.CopyTo(data, offset + NativeHeroDbFrameCodec.DynamicHeaderSize);
+        offset += NativeHeroDbFrameCodec.DynamicHeaderSize + section.payload.Length;
     }
     return data;
 }
@@ -1259,4 +1256,23 @@ static void Equal<T>(T expected, T actual, string message) where T : IEquatable<
 static void Assert(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// its repository root reported FAIL without evaluating a single assertion. Falling
+// back to the enclosing checkout keeps the assertions exactly as they were and only
+// removes the "never ran" outcome.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

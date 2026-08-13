@@ -16,7 +16,7 @@ TestSourceContracts();
 
 Console.WriteLine(
     "PASS MyShengwan=native record=0xEC physical=0xF4 protobuf=60 " +
-    "PAS=get/set RM_ABILITY mall=currency3 CreditPoint=closed substitutes=0");
+    "PAS=get/set RM_ABILITY mall=no-shengwan-debit CreditPoint=closed substitutes=0");
 return;
 
 static void TestNativeRecordRoundTrip()
@@ -147,19 +147,17 @@ static void TestSourceContracts()
     RequireMatches(codec,
         "WriteInt32LittleEndian[\\s\\S]{0,120}?ShengWanOffset", 1,
         "native MyShengwan encode mapping");
-    RequireMatches(mall, "3 => player\\.m_nShengWan", 1,
-        "mall currency type 3 native balance");
-    RequireMatches(mall,
-        "if \\(!DeductCurrency\\(player, mallItem, totalPrice\\)\\)[\\s\\S]{0,180}?return false;",
-        1, "mall deduction failure gate before item grant");
-    RequireMatches(mall,
-        "private static bool DeductCurrency[\\s\\S]{0,160}?amount < 0[\\s\\S]{0,80}?" +
-        "return false;",
-        1, "mall negative amount rejection");
-    RequireMatches(mall,
-        "case 3:[\\s\\S]{0,160}?m_nShengWan < amount[\\s\\S]{0,160}?" +
-        "player\\.SetShengWan\\(player\\.m_nShengWan - amount\\)",
-        1, "mall currency type 3 native deduction");
+    // 原来这里钉的是"商城货币类型 3 = 声望，扣 m_nShengWan"。字节推翻了它：
+    // 原生商品表根本没有货币类型字段（加载器 sub_636D68 的 '$' 分隔 10 字段，
+    // 跳表 0x636FD6，上限 0x636FC6 cmp eax,0xA），CM_DOSHOP 处理器 sub_6CB7E4 只有
+    // 确认闸 + PAS @ClientBuy 调用，发货核心 sub_6CC420 里唯一一条余额加减是
+    // 0x6CC504 add [esi+0xBD8],eax（发灵符）。商城从不扣声望。
+    // 断言改成钉这一条：商城不许碰声望，付款只能走那个 fail-closed 的元宝结算闸。
+    Reject(mall, "m_nShengWan", "mall still reads or debits ShengWan");
+    Reject(mall, "SetShengWan", "mall still writes ShengWan");
+    Reject(mall, "DeductCurrency", "mall still has a local currency deduction path");
+    Assert(mall.Contains("if (!TrySettleYuanbaoPayment", StringComparison.Ordinal),
+        "mall purchase no longer goes through the single settlement gate");
 }
 
 static void PrepareRuntimeConfig()

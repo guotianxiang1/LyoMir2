@@ -125,11 +125,12 @@ namespace GameSvr
             }
             if (yanshenPayload.Length > 0
                 && !YanshenItemSidecarCodec.TryApply(yanshenPayload, equipped, bag,
-                    Array.Empty<TUserItem>(), out error))
+                    Array.Empty<TUserItem>(), clearUnlisted: false, out error))
             {
                 error = "native hero eye item data: " + error;
                 return false;
             }
+            YanshenNativeItemLayout.PackAll(equipped, bag);
 
             var magic = new List<TUserMagic>(
                 NativeHeroDbFrameCodec.NormalMagicCount + NativeHeroDbFrameCodec.SpecialMagicCount);
@@ -163,7 +164,7 @@ namespace GameSvr
             hero.m_Abil.Level = record.Level;
             hero.HeroLevel = record.Level;
             hero.m_Abil.Exp = unchecked((int)record.Exp);
-            hero.m_Abil.MaxExp = hero.GetLevelExp(hero.m_Abil.Level);
+            hero.m_Abil.MaxExp = hero.GetLevelExp(record.Level); // 0x68720E
             hero.m_Abil.HP = 0;
             hero.m_Abil.MP = 0;
             hero.RecalcLevelAbilitys();
@@ -366,6 +367,7 @@ namespace GameSvr
                 NativeRecord = source.ToArray()
             };
             source.Slice(10, 14).CopyTo(item.btValue);
+            YanshenNativeItemLayout.Unpack(item);
             return item;
         }
 
@@ -400,6 +402,8 @@ namespace GameSvr
             item.btValue.AsSpan().CopyTo(destination.Slice(10, 14));
             destination[UpgradeFlagsOffset] = item.UpgradeFlags;
             destination[BindOffset] = item.Bind;
+            YanshenNativeItemLayout.Pack(item, destination);
+            item.NativeRecord = destination.ToArray();
             return true;
         }
 

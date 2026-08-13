@@ -827,16 +827,17 @@ namespace GameSvr
             m_dwHitTick = (ushort)(m_dwHitTick + (150 - HUtil32._MIN(130, m_Abil.Level * 4)));
         }
 
-        protected override void SearchTarget()
+        protected override bool SearchTarget()
         {
             if ((m_TargetCret == null || HUtil32.GetTickCount() - m_dwSearchTargetTick > 1000) && m_boAIStart)
             {
                 m_dwSearchTargetTick = HUtil32.GetTickCount();
                 if (m_TargetCret == null || !(m_TargetCret != null && m_TargetCret.m_btRaceServer == Grobal2.RC_PLAYOBJECT) || m_TargetCret.m_Master != null && m_TargetCret.m_Master.m_btRaceServer == Grobal2.RC_PLAYOBJECT || (HUtil32.GetTickCount() - m_dwStruckTick) > 15000)
                 {
-                    base.SearchTarget();
+                    return base.SearchTarget();
                 }
             }
+            return false;
         }
 
         public override void Die()

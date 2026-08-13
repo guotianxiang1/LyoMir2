@@ -107,10 +107,7 @@ namespace GameSvr.Services
         internal void CreateContextIdForEnqueue()
         {
             if (ContextIdBytes.Length != 0) return;
-            var bytes = new byte[30];
-            for (var i = 0; i < bytes.Length; i++)
-                bytes[i] = (byte)Random.Shared.Next('A', 'Z' + 1);
-            ContextIdBytes = bytes;
+            ContextIdBytes = NativeYuanbaoContextId.Generate();
         }
 
         internal void SetScriptCallbackCharacterName(string characterName)

@@ -78,12 +78,7 @@ using SystemModule;
 //     the visible-list scan.  C# having no pre-pass is EQUIVALENT, and adding a
 //     *populated* one would invent aggro stickiness the original does not have.
 
-var repoRoot = args.Length > 0 ? args[0] : @"D:\loym2\LyoMir2-master";
-if (!Directory.Exists(repoRoot))
-{
-    Console.WriteLine("Usage: MonsterDomainRaceAndDropCheck <repoRoot>");
-    return 2;
-}
+var repoRoot = AuditRepoRoot.Resolve(args);
 
 var failures = new List<string>();
 void Check(bool cond, string msg)
@@ -343,7 +338,7 @@ if (copyFrom > 0 && fieldNames.Count > 0)
 // ---------------------------------------------------------------- F: sticky pre-pass
 Console.WriteLine("== F: TAnimal.SearchTarget sticky slot [+0x464] is dead in native ==");
 
-var search = animal.IndexOf("protected virtual void SearchTarget()", StringComparison.Ordinal);
+var search = animal.IndexOf("protected virtual bool SearchTarget()", StringComparison.Ordinal);
 Check(search > 0, "AnimalObject.SearchTarget found");
 if (search > 0)
 {
@@ -394,7 +389,7 @@ foreach (var (file, resetFn, ea) in new[]
     var src = StripComments(Read("GameSvr", "Monsters", "Monster", file + ".cs"));
     Check(src.Length > 0, $"{file}.cs readable");
     Check(System.Text.RegularExpressions.Regex.IsMatch(src,
-            @"protected\s+override\s+void\s+SearchTarget\s*\(\s*\)\s*\{[^}]*base\.SearchTarget\s*\(\s*\)\s*;[^}]*"
+            @"protected\s+override\s+bool\s+SearchTarget\s*\(\s*\)\s*\{[^}]*base\.SearchTarget\s*\(\s*\)\s*;[^}]*"
             + System.Text.RegularExpressions.Regex.Escape(resetFn) + @"\s*\(\s*\)\s*;"),
         $"{file} overrides SearchTarget as base.SearchTarget() then {resetFn}() — native "
         + $"{ea} does exactly `call sub_71DF70` then `call <resetFn>`");

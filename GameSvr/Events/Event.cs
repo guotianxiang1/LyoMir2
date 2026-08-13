@@ -21,6 +21,20 @@ namespace GameSvr
         protected int m_dwOpenStartTick = 0;
 
         internal int OpenStartTick => m_dwOpenStartTick;
+
+        /// <summary>
+        /// Native sub_7199B8, the whole body of which is
+        /// <c>mov ebx,eax / call GetTickCount / mov [ebx+8],eax</c>
+        /// (@0x7199BE-0x7199C3). Field +0x08 is the expiry baseline: the Run
+        /// body at 0x719985 computes <c>now - [obj+8]</c> and compares it
+        /// against the duration at <c>[obj+0x20]</c>, which is the same pair
+        /// this class calls m_dwOpenStartTick / m_dwContinueTime. Restamping
+        /// it restarts the lifetime WITHOUT re-adding the object to the map.
+        /// </summary>
+        internal void RefreshOpenStartTick(int tick)
+        {
+            m_dwOpenStartTick = tick;
+        }
         
         
         
@@ -65,6 +79,13 @@ namespace GameSvr
             m_dwOpenStartTick = HUtil32.GetTickCount();
             m_nEventType = nType;
             m_nEventParam = 0;
+            // TMapEvent ctor 0x717352  81 FE 80 FC 0A 00  cmp esi, 0xAFC80
+            //               0x717358  7E 05              jle 0x71735F  (signed)
+            //               0x71735A  BE 80 FC 0A 00     mov esi, 0xAFC80
+            //               0x71735F  89 73 20           mov [ebx+0x20], esi
+            // Negatives are kept (they compare below the ceiling). 720000 ms is 12 min.
+            if (dwETime > 0xAFC80)
+                dwETime = 0xAFC80;
             m_dwContinueTime = dwETime;
             m_boVisible = boVisible;
             m_boClosed = false;

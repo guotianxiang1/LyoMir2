@@ -1636,13 +1636,13 @@ namespace GameSvr.PasEngine
                 // Math
                 case "random":
                     return args.Count > 0
-                        ? PasValue.FromInt(Random.Shared.Next(args[0].AsInt()))
-                        : PasValue.FromDouble(Random.Shared.NextDouble());
+                        ? PasValue.FromInt(NativePasRandomContract.Random(args[0].AsInt()))
+                        : PasValue.FromDouble(NativePasRandomContract.RandomFloat());
 
                 case "randomrange":
                     if (args.Count >= 2)
-                        return PasValue.FromInt(args[0].AsInt() + Random.Shared.Next(args[1].AsInt() - args[0].AsInt()));
-                    return args.Count > 0 ? PasValue.FromInt(Random.Shared.Next(args[0].AsInt())) : PasValue.FromInt(0);
+                        return PasValue.FromInt(NativePasRandomContract.RandomRange(args[0].AsInt(), args[1].AsInt()));
+                    return args.Count > 0 ? PasValue.FromInt(NativePasRandomContract.Random(args[0].AsInt())) : PasValue.FromInt(0);
 
                 case "abs":
                     return args.Count > 0 ? PasValue.FromInt(Math.Abs(args[0].AsInt())) : PasValue.FromInt(0);

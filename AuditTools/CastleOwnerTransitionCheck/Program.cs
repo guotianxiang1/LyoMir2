@@ -2,8 +2,7 @@ using GameSvr;
 
 PrepareRuntimeConfig();
 
-var repoRoot = Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-    ?? @"D:\loym2\LyoMir2-master";
+var repoRoot = AuditRepoRoot.Resolve(args);
 var source = File.ReadAllText(Path.Combine(repoRoot, "GameSvr", "Castle", "UserCastle.cs"));
 var getCastle = Slice(source, "public void GetCastle(Association Guild)",
     "public void StartWallconquestWar()");

@@ -58,12 +58,16 @@ var chain = SelectMapCounted(chainState, _ => 0);
 Equal(new[] { 10, 30, 20 }, chain.Select(x => x.ItemIndex).ToArray(),
     "same-key native head insertion order");
 
+// sub_71FA20 runs the monster's own table (segment 2, 0x71FCFF-0x71FEA1) before
+// the controlled world drop (segment 3, head 0x71FEA7).  0x71FD0E `jl 0x71FEA7`
+// is the empty-table shortcut and names segment 3 as segment 2's successor, so
+// the ordinary drop takes the earlier draw off the shared stream.
 var sharedRandom = new Queue<int>(new[] { 11, 22 });
 var generationOrder = new List<string>();
 NativeDropControlRuntime.RunInNativeOrder(
-    () => generationOrder.Add("controlled:" + sharedRandom.Dequeue()),
-    () => generationOrder.Add("ordinary:" + sharedRandom.Dequeue()));
-Equal(new[] { "controlled:11", "ordinary:22" },
+    () => generationOrder.Add("ordinary:" + sharedRandom.Dequeue()),
+    () => generationOrder.Add("controlled:" + sharedRandom.Dequeue()));
+Equal(new[] { "ordinary:11", "controlled:22" },
     generationOrder.ToArray(), "shared RNG generation order");
 
 var failedCreates = 0;
@@ -138,7 +142,7 @@ Equal(new ushort[] { 777, 777 }, pileDurabilities.ToArray(),
 Console.WriteLine(
     "NativeDropControlRuntimeCheck PASS timed-uint-rollover " +
     "map-equality-reset world-greater-reset bucket-isolation chain=A,C,B " +
-    "rng-order=controlled,ordinary scatter-range=4 failure-lossy=true " +
+    "rng-order=ordinary,controlled scatter-range=4 failure-lossy=true " +
     "type7-final-dura=virtual pile-init=noop");
 
 static TUserItem Item(ushort index, ushort duraMax)

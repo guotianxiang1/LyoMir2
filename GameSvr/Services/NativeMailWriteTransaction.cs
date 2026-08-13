@@ -120,10 +120,12 @@ namespace GameSvr.Services
         public const int YbNegativeAmount = -1500004;
 
         // Categories the native mailbox recognises. sub_70DBCC gates on bit N of
-        // dword_7D3DE8 for N<=7; the set is 1,4,5,6 (same source as the in-tree
-        // NativeMailStore.IsSupportedTag). An unsupported tag makes the clear-all
-        // core fall straight through to its -1 default.
-        public static bool IsSupportedTag(int tag) => tag is 1 or 4 or 5 or 6;
+        // dword_7D3DE8 for N<=7; dword_7D3DE8 reads 7E 8D 40 00 and has exactly one
+        // reference image-wide (the read inside the bt at 0x70DBD7), so the set is
+        // 1..6 — 1 系统 / 2 任务奖励 / 3 离线补偿 / 4 物品售卖 / 5 过期返还 / 6 摊位留言,
+        // named at 0x7D3DEC[1..6]. An unsupported tag makes the clear-all core fall
+        // straight through to its -1 default.
+        public static bool IsSupportedTag(int tag) => tag is >= 1 and <= 6;
 
         // =====================================================================
         // Claim core: sub_70B664 (shared by 4462 and 4468 through sub_70D498).

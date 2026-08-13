@@ -12,12 +12,14 @@ CheckCopyDoesNotRandomize(definitions.Helmet);
 CheckUnknownModeDispatch(definitions);
 CheckConfiguredBagAndEquipment(definitions);
 CheckAutoRepairPath(definitions.Helmet);
+CheckMonsterDropDoesNotRandomize(definitions.Helmet);
 
 Console.WriteLine("PASS RobotUnknownItemInitCheck " +
     "paths=init-bag+init-equipped+15s-repair " +
     "guard=modes15/19/20/21/22/23/24/26+shape130/131/132 " +
     "dispatch=15+22/23+24/26 marker=btValue8 " +
-    "no-dispatch=19/20/21 copy=plain repair=single-instance");
+    "no-dispatch=19/20/21 copy=plain repair=single-instance " +
+    "mondrop=no-unknown-roll+dura=sub_783EFC(20+Random(80))%");
 
 static void PrepareRuntimeState()
 {
@@ -321,8 +323,53 @@ static void CheckSourceContract(string sourceRoot)
         StringComparison.Ordinal);
     Assert(dropStart >= 0 && copyStart > dropStart
            && Count(engineSource[dropStart..copyStart],
-               "RandomUpgradeUnknownItem(UserItem);") == 1,
-        "monster drop path no longer owns exactly one unknown randomization");
+               "RandomUpgradeUnknownItem(UserItem);") == 0,
+        "monster drop path reacquired an unknown randomization the original has no call site for");
+}
+
+// The only per-item initialisation the original's drop loop performs is the freshly
+// built object's virtual +0x28, invoked once with edx=0 at 0x71FDA2, and for the base
+// item class that slot is sub_783EFC:
+//   00783F05  B8 50 00 00 00  mov   eax, 0x50             ; 80
+//   00783F0A  E8 3D FC C7 FF  call  0x403B4C              ; Random
+//   00783F0F  83 C0 14        add   eax, 0x14             ; +20
+//   00783F18  0F B7 43 28     movzx eax, word [ebx+0x28]  ; DuraMax
+//   00783F22  D8 35 38 3F 78  fdiv  dword [0x783F38]      ; 100.0
+//   00783F28  DE C9           fmulp st(1)
+//   00783F2A  E8 45 F6 C7 FF  call  0x403574              ; @ROUND
+//   00783F2F  66 89 43 26     mov   word [ebx+0x26], ax   ; Dura
+// The drop function itself has exactly three Random call sites (0x71FB76, 0x71FD3D,
+// 0x71FD6B, all inside the two gold branches) and the factory sub_74C338 has none, so
+// the stock-Mir2 `StdMode/Shape -> RandomUpgradeUnknownItem` gate has no counterpart
+// here. A monster drop must leave btValue untouched however unknown-looking the
+// template is, and must set Dura from that one Random(80) band.
+static void CheckMonsterDropDoesNotRandomize(GoodItem definition)
+{
+    const string monsterName = "AuditDropMonster";
+    M2Share.UserEngine.MonsterList.Add(new TMonInfo
+    {
+        sName = monsterName,
+        ItemList = new List<TMonItem>
+        {
+            // high32(1 * seed) is 0 for every seed, so 0 <= SelPoint always drops.
+            new TMonItem
+            {
+                ItemName = definition.Name, MaxPoint = 1, SelPoint = 1, Count = 1
+            }
+        }
+    });
+
+    var monster = new TBaseObject { m_sCharName = monsterName };
+    M2Share.UserEngine.MonGetRandomItems(monster);
+
+    Equal(1, monster.m_ItemList.Count, "monster drop produced no item");
+    var dropped = monster.m_ItemList[0];
+    Assert(dropped.btValue.All(value => value == 0),
+        "monster drop path randomized unknown attributes");
+    Equal(definition.DuraMax, dropped.DuraMax, "monster drop DuraMax");
+    Assert(dropped.Dura >= definition.DuraMax / 100.0 * 20
+           && dropped.Dura <= definition.DuraMax / 100.0 * 99,
+        $"monster drop Dura {dropped.Dura} outside the sub_783EFC 20..99% band");
 }
 
 static int Count(string source, string value)

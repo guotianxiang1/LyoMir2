@@ -383,12 +383,14 @@ namespace GameSvr.PasEngine
         private static int PackDiceValues(TPlayObject player, int firstIndex, int count)
         {
             uint packed = 0;
-            var slots = player.m_ScriptVGroup0;
             for (var offset = 0; offset < count; offset++)
             {
                 var index = firstIndex + offset;
-                var value = slots != null && index >= 1 && index < slots.Length
-                    ? slots[index]
+                // Native seeds from GetV(0, i+1) (0x645237 xor edx,edx / 0x64523B call 0x6DF1E4).
+                // Group-0 V lives in the inline table, not the keyed dictionary — go through
+                // TryGetScriptVar so this cannot silently read a flat key < 1000.
+                var value = player != null && player.TryGetScriptVar('V', 0, index, out var slot)
+                    ? slot
                     : 0;
                 packed |= (uint)(byte)value << (offset * 8);
             }
@@ -609,7 +611,7 @@ namespace GameSvr.PasEngine
                 case "multitempexprate": result = PasValue.FromInt(CurrentPlayer.m_nNativeMultiTempExpRate); break;
                 case "dominatelevel":
                     return RejectUnsupportedNativeApi(out result);
-                case "freebagnum":      result = PasValue.FromInt(Math.Max(0, Grobal2.MAXBAGITEM - CurrentPlayer.m_ItemList.Count)); break;
+                case "freebagnum":      result = PasValue.FromInt(Math.Max(0, BagCapacity.Of(CurrentPlayer) - CurrentPlayer.m_ItemList.Count)); break;
                 case "bagitemcount":    result = PasValue.FromInt(CurrentPlayer.m_ItemList.Count()); break;
 
                 // Guild
@@ -2166,6 +2168,8 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "playernotice":
+                    if (args.Count >= 2 && TryExecuteNoticeTunnel(args[0].AsString()))
+                        return true;
                     if (args.Count >= 2 && !string.IsNullOrEmpty(args[0].AsString()))
                     {
                         var packedColor = args[1].AsInt() switch
@@ -3880,6 +3884,11 @@ namespace GameSvr.PasEngine
                 case "checkmapmonbyname":
                     if (args.Count >= 2)
                     {
+                        if (TryNpcCreatMonsTunnel(args[0].AsString(), args[1].AsString(), out var spawned))
+                        {
+                            result = PasValue.FromInt(spawned);
+                            return true;
+                        }
                         var map = M2Share.MapManager.FindMap(args[0].AsString());
                         if (map != null)
                         {
@@ -4448,6 +4457,19 @@ namespace GameSvr.PasEngine
                     if (args.Count >= 1)
                     {
                         int pos = args[0].AsInt();
+                        if (TryExecuteCastleNameTunnel(pos, out var castleName))
+                        {
+                            result = PasValue.FromString(castleName);
+                            return true;
+                        }
+                        // 眼神「读取英雄装备」把 50..65 号格改读英雄身上格 0..15
+                        // （桩 0x006E04E7，安装点 0x100D533D）。不命中就落回下面的
+                        // 原生路径，原生对 >= 16 的格恒返回 nil。
+                        if (TryReadHeroEquipName(pos, out var heroEquipName))
+                        {
+                            result = PasValue.FromString(heroEquipName);
+                            return true;
+                        }
                         if (pos >= 0 && pos < CurrentPlayer.m_UseItems.Length && CurrentPlayer.m_UseItems[pos] != null)
                         {
                             var stdItem = M2Share.UserEngine.GetStdItem(CurrentPlayer.m_UseItems[pos].wIndex);
@@ -4628,8 +4650,12 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "getguildwargold":
-                    // GetGuildWarGold: get war gold amount (V23:3)
-                    result = PasValue.FromInt(GetPlayerVarOrZero('V', 23, 3));
+                    // 原生不是变量，是个常量桩：注册运 0x739043 把 handler 0x6468C0 与名字串
+                    // 0x73A200 "GetGuildWarGold" 配对，而 0x6468C0 全函数只有六个字节
+                    // B8 30 75 00 00 C3 —— mov eax,0x7530 / ret，即恒返回 30000，
+                    // 且全镜像对 0x6468C0 的引用就只有那处注册。此前读 V(23,3) 是影子实现，
+                    // 会跟运营脚本自己的 V 坐标抢地方。
+                    result = PasValue.FromInt(30000);
                     return true;
 
                 case "getlistofwar":
@@ -7121,6 +7147,11 @@ namespace GameSvr.PasEngine
                 case "checkmapmonbyname":
                     if (args.Count >= 2)
                     {
+                        if (TryNpcCreatMonsTunnel(args[0].AsString(), args[1].AsString(), out var spawned))
+                        {
+                            result = PasValue.FromInt(spawned);
+                            return true;
+                        }
                         var map = M2Share.MapManager.FindMap(args[0].AsString());
                         if (map != null)
                         {
@@ -8234,9 +8265,8 @@ namespace GameSvr.PasEngine
         // bound 0x6DF209 `dec edx` / 0x6DF20A `sub edx,0x64` / 0x6DF20D `jae` (SetV mirror
         // 0x6DF29F..0x6DF2A3) = 1 <= index <= 100. Out of that range it falls through to
         // the keyed path, where `group == 0` then trips the `jle` and yields -1 / no write.
-        // C# already keys group 0 as the bare `index` (0*1000+index), so only the missing
-        // 1..100 bound is restored here; the separate inline `player+0x808` storage model
-        // is a distinct, still-unconfirmed finding and is deliberately NOT restructured.
+        // NativeScriptVarArgsAccepted restores that 1..100 window. Storage itself is
+        // TPlayObject.TryGetScriptVar / SetScriptVar (inline group-0 V + keyed bank).
 
         /// <summary>
         /// Native miss/reject result for `GetV`/`GetS` (0x6DF1BB, 0x6DF1F1, 0x6E427A).
@@ -8286,26 +8316,26 @@ namespace GameSvr.PasEngine
         /// </summary>
         public PasValue GetPlayerVar(char type, int group, int index)
         {
-            if (CurrentPlayer == null) return PasValue.FromInt(NativeScriptVarMiss);
+            return GetPlayerVar(CurrentPlayer, type, group, index);
+        }
+
+        /// <summary>
+        /// Same read for a player that is not the script's <see cref="CurrentPlayer"/>.
+        /// 眼神插件走的就是这条路：它的 GetV 跳板 <c>0x10065F00</c> 把玩家指针放进 eax
+        /// 后直接 <c>call 0x6DF1E4</c>（<c>0x10065F16 mov [ebp-0x10],0x6DF1E4</c> /
+        /// <c>0x10065F27 call [ebp-0x10]</c>），与脚本引擎共用同一个取值函数。
+        /// </summary>
+        internal static PasValue GetPlayerVar(TPlayObject player, char type, int group, int index)
+        {
+            if (player == null) return PasValue.FromInt(NativeScriptVarMiss);
             if (!NativeScriptVarArgsAccepted(type, group, index))
                 return PasValue.FromInt(NativeScriptVarMiss);
-            // Group-0 V reads come straight out of the inline slots, and an untouched
-            // slot yields 0 rather than the -1 a dictionary miss gives:
-            //   0x6DF20F  8B 84 83 08 08 00 00  mov eax, [ebx+eax*4+0x808]
-            //   0x6DF216  89 45 FC              mov [ebp-4], eax
-            // overwriting the -1 seeded at 0x6DF1F1. Serving these from the keyed
-            // dictionary inverted every downstream `= 0` quest test on a fresh
-            // character.
-            if (group == 0)
-                return PasValue.FromInt(CurrentPlayer.m_ScriptVGroup0[index]);
-            int flat = group * 1000 + index;
-            var variables = char.ToUpperInvariant(type) switch
-            {
-                'V' => CurrentPlayer.m_ScriptVVars,
-                'S' => CurrentPlayer.m_ScriptSVars,
-                _ => null
-            };
-            return variables != null && variables.TryGetValue(flat, out var value)
+            // Storage lives in two places (inline group-0 V at player+0x808, keyed
+            // bank elsewhere). TPlayObject.TryGetScriptVar is the only resolver —
+            // do not recompute group*1000+index here. Group-0 V still yields the
+            // inline slot (untouched = 0, 0x6DF20F mov eax,[ebx+eax*4+0x808] over
+            // the -1 seed at 0x6DF1F1); a keyed miss still maps to -1.
+            return player.TryGetScriptVar(type, group, index, out var value)
                 ? PasValue.FromInt(value)
                 : PasValue.FromInt(NativeScriptVarMiss);
         }
@@ -8355,34 +8385,13 @@ namespace GameSvr.PasEngine
         {
             if (player == null) return false;
             if (!NativeScriptVarArgsAccepted(type, group, index)) return false;
-            // Group-0 V writes land in the inline slots and report success without
-            // touching the dictionary:
-            //   0x6DF2A8  89 84 B3 08 08 00 00  mov [ebx+esi*4+0x808], eax
-            //   0x6DF2AF  B0 01                 mov al, 1
-            // Because the region lives in the object and not in the +0x808 dictionary,
-            // it is also absent from the save record - the decoder sub_6E448C touches
-            // +0x804 and +0x808 and nothing in +0x80C..+0x99B.
-            if (group == 0)
-            {
-                player.m_ScriptVGroup0[index] = value.AsInt();
-                return true;
-            }
-            int flat = group * 1000 + index;
-            var variables = char.ToUpperInvariant(type) switch
-            {
-                'V' => player.m_ScriptVVars,
-                'S' => player.m_ScriptSVars,
-                _ => null
-            };
-            if (variables == null) return false;
-
-            // 原生 upsert sub_6E4140 没有任何零值判断：四个存储点都原样写入。
-            //   0x6E4187 / 0x6E41C2 / 0x6E4231 / 0x6E4260  mov [..], edx
-            // 且无条件返回 TRUE（0x6E4152 mov byte [ebp-9],1 在入口，
-            // 0x6E4264 mov al,[ebp-9] 在每个出口）。
-            // 先前这里把 0 当作"删除键"，导致 SetV(n,f,0) 之后 GetV 读回 -1
-            // 而不是 0，反转了下游所有 "= 0" 的任务判断。
-            variables[flat] = value.AsInt();
+            // Native SetV group-0 lands in the inline table (0x6DF2A8
+            // mov [ebx+esi*4+0x808],eax / 0x6DF2AF mov al,1). Keyed upsert
+            // sub_6E4140 writes zero as zero (0x6E4187/0x6E41C2/0x6E4231/0x6E4260).
+            // Both paths are TPlayObject.SetScriptVar — do not recompute
+            // group*1000+index here (a flat key < 1000 is group 0, which is
+            // not in the dictionary).
+            player.SetScriptVar(type, group, index, value.AsInt());
             return true;
         }
 

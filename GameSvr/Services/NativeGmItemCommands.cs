@@ -55,9 +55,9 @@ namespace GameSvr
     // separate MakeItem currency path is covered by NativeMakeItemUseDiamTransactionCheck).
     //
     // C# STUB DRIFT (live GameSvr/Command/Commands, NOT this model — flagged for the port):
-    //   * GiveUserItemCommand.cs declares "人物名称 物品名称 数量(默认1)" and treats param[2] as Count and
-    //     param[1] as an item *name*. The native shim forwards param[1] as an item *ID* and param[2] as
-    //     绑定时间 (bind time). Different 2nd/3rd argument semantics.
+    //   * GiveUserItemCommand.cs 的参数错位已修（2026-08-13）：param[1] 现在按原生当物品 ID、
+    //     param[2] 当绑定时间；自造的现造道具 + RandomUpgradeItem + 50 件上限已移除，
+    //     整条改为明确拒绝，直到 sub_6C253C 的绑定写入与离线记录 0x154 被移植。
     //   * GetUserItemCommand.cs ("@GetUserItem <PlayerName> <ItemID>") matches the native (charName,itemId);
     //     its core is separately validated by NativeGetUserItemCompatCheck.
     //   * All live stubs use RequiredPermission 10; the native records use 3/4 (see registry below).

@@ -137,7 +137,11 @@ static void CheckRuntimeFailClosed(string repositoryRoot)
         "existing 132 accounting was removed with 104");
 
     var server = Read(repositoryRoot, "GameSvr", "GameServer.cs");
-    Require(server, "SaveHumanRcd(player)",
+    // Receiver included so an unrelated local helper of the same name cannot
+    // satisfy it; the arity is deliberately left open, because which overload
+    // carries the native save mode is a separate contract from which routine
+    // shutdown runs, and this assertion only guards the latter.
+    Require(server, "M2Share.UserEngine.SaveHumanRcd(player",
         "shutdown no longer snapshots players");
     Reject(server, "SaveFinalHumanRcd",
         "shutdown emits unsupported 104");

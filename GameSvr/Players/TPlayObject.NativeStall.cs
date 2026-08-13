@@ -72,6 +72,14 @@ namespace GameSvr
         private bool TryExecuteNativeStallBoothSetup(NativeStallOp op, TProcessMessage msg,
             short responseIdent, NativeStallManager manager)
         {
+            // 眼神 关闭摆摊 memcpys a single C3 over sub_6E7C38's prologue (0x100AD0EE payload,
+            // 0x100AD113 push 0x6E7C38 / len 1 -> 0x10033340), so START returns before the map
+            // gate, before the ladder and before any reply. Bail ahead of GetOrCreate so no
+            // record is created either: Δgold = Δitems = Δrecords = 0.
+            if (op == NativeStallOp.StartStall
+                && new Plugins.YanshenApi(this, null, M2Share.PluginManager).IsStallClosed())
+                return true;
+
             var tier = SelectBoothTier();
             var record = manager.GetOrCreate(m_sCharName, GetCachedNativeUserId());
             long gold = m_nGold;
@@ -246,6 +254,10 @@ namespace GameSvr
                 if (record.Status == StallRecordStatus.Running && record.Items.Count == 0)
                     record.Status = StallRecordStatus.PausedClosed;    // auto-pause a now-empty running booth
                 PersistStallHeader(record, store);                     // itemcnt (+ status) -> UpdateStall
+                // sub_61BECC @0x61BF43: after the stall-item lookup succeeds,
+                // edx=[ebp-8] (the DelItem ecx item-id) / eax=[ebp-4] (player)
+                // call 0x6E7D94 -> SendDefMessage(4427, Recog=itemId, 0,0,0,"").
+                SendDefMessage(Grobal2.SM_UPT_DEL_STALLITEM, clientItemId, 0, 0, 0, "");
             }
             SendDefMessage(responseIdent, code, 0, 0, 0, "");
             return true;
@@ -423,10 +435,20 @@ namespace GameSvr
         // SendDefMessage(recog = a2-as-passed, ident = 4429, 0, 0, 0, sMsg = a3).
         //
         // Two facts worth stating because prose elsewhere gets them wrong:
-        //  * The ident is 4429 (SM_UPT_OTHER_DEL_STALLITEM) at BOTH call sites — there is NO 4428 send
-        //    anywhere in the image (whole-dump scan for "4428" finds only unrelated addresses). The
-        //    "4428/4429 pushes" phrasing in the manager spec §7 is wrong; 4428's constant is declared by the
-        //    client and never sent by this server.
+        //  * The ident is 4429 (SM_UPT_OTHER_DEL_STALLITEM) at BOTH call sites of sub_6E7DB8. That is true of
+        //    THIS sender only — the earlier claim that "there is NO 4428 send anywhere in the image" is wrong.
+        //    4428 is sent by a different function, sub_6E7DE0 @0x006E7DE0:
+        //        006E7DEA  85C9          test ecx,ecx
+        //        006E7DEC  7E18          jle 0x6E7E06        ; length<=0 -> send nothing
+        //        006E7DEE  6A00 6A00 6A00              ; Param=0, Tag=0, Series=0
+        //        006E7DF4  57            push edi            ; Buf = arg2
+        //        006E7DF5  51            push ecx            ; Len = arg3
+        //        006E7DF6  66BA4C11      mov dx,0x114C       ; = 4428
+        //        006E7DFC  33C9          xor ecx,ecx         ; nRecog = 0
+        //        006E7E00  FF9354020000  call [ebx+0x254]
+        //    reached from 0x0061DF03 in sub_61DDF8, itself called once from 0x0061BE56. The prior scan looked
+        //    for the decimal text "4428" instead of the encoded immediate 4C 11, which is why it found nothing.
+        //    4428 is therefore MISSING here, not invented; see staging/m_sm2_impl_20260813.md.
         //  * The RECIPIENT is the BUYER, not the seller and not nearby viewers. Disasm at 0x0061E447 loads
         //    `eax, [ebp+var_4]`, and var_4 is the same object used as the AddItemToBag receiver at
         //    0x0061E22D..0x0061E232 (`mov eax,[ebp+var_4]; mov edi,[eax]; call dword ptr [edi+248h]`), which

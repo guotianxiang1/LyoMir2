@@ -296,26 +296,7 @@ static int Count(string source, string value)
 
 static string FindRepositoryRoot()
 {
-    foreach (var start in new[]
-             {
-                 AppContext.BaseDirectory,
-                 Environment.CurrentDirectory
-             })
-    {
-        var current = new DirectoryInfo(start);
-        while (current != null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "GameSvr",
-                    "ScriptSystem", "PasEngine", "PasApiBridge.cs")))
-                return current.FullName;
-            var nested = Path.Combine(current.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(nested, "GameSvr", "ScriptSystem",
-                    "PasEngine", "PasApiBridge.cs")))
-                return nested;
-            current = current.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("repository root not found");
+    return AuditRepoRoot.Resolve();
 }
 
 static void Require(bool condition, string message)

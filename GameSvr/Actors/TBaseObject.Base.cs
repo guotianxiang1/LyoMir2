@@ -1,4 +1,5 @@
 using System.Collections;
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -774,6 +775,21 @@ namespace GameSvr
         }
 
         /// <summary>
+        /// 战神 sub_71FA20 @0x71FA50 / @0x71FA6C.  The arm-and-test sits at the very
+        /// top of @AfterScatterItems, ahead of both the drop-table gate (0x71FA8A) and
+        /// the anti-fatigue ladder (0x71FAD7), and the store at 0x71FA6C is
+        /// unconditional — a monster that goes on to scatter nothing still burns the
+        /// flag, which is what stops the sibling consumer sub_71EC88 from re-running
+        /// the same table.
+        /// </summary>
+        private bool TryEnterNativeScatter()
+        {
+            if (m_boNativeScatterConsumed) return false;
+            m_boNativeScatterConsumed = true;
+            return true;
+        }
+
+        /// <summary>
         /// 战神 <c>sub_71FA20</c> (@AfterScatterItems) @0x71FAD7-0x71FB19 — the three
         /// abort tests the whole scatter routine opens with.  Any one of them takes the
         /// 0x71FAF7 branch which ends in <c>jmp 0x720092</c>, and 0x720092 is the outer
@@ -792,7 +808,7 @@ namespace GameSvr
         /// </code>
         ///
         /// <c>sub_6D7788</c> is a one-line thunk: <c>mov dl,0x19 / call 0x772960</c>, i.e.
-        /// active-state 25, so it maps to <see cref="HasNativeActiveState"/>(25).
+        /// active-state 25, so it maps to <see cref="HasNativeActiveState(int)"/> with 25.
         ///
         /// What the exit skips is exactly the four scatter segments (exclusive chain
         /// @0x71FB2E, the monster's own table @0x71FCFF, world drop @0x71FEA7, gold
@@ -1146,8 +1162,33 @@ namespace GameSvr
                     if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
-                        var scatterBlocked =
-                            NativeAfterScatterItemsBlocked(AttackBaseObject);
+                        // All three exits land on 0x720092, which is past the
+                        // @AfterScatterItems callback at 0x720062, so one boolean
+                        // covers segments 1-4 and the callback alike.  Order matters:
+                        // 0x71FA50 runs before 0x71FA8A and 0x71FAD7 and arms
+                        // unconditionally, so TryEnterNativeScatter must be leftmost.
+                        //
+                        //   71FA8A  83 B8 74 04 00 00 00  cmp dword [eax+0x474],0
+                        //   71FA91  0F 84 FB 05 00 00     je 0x720092
+                        //
+                        // A monster with no drop table leaves the function before
+                        // segment 1, so the exclusive chain, the world drop and the
+                        // gold settlement never run for it either — C# had this gate on
+                        // segment 2 alone.  A null UserEngine fails closed because the
+                        // three segments would fault on it anyway.
+                        //
+                        // m_boNoItem joins them because monster Die gates the whole
+                        // scatter on it one level up, immediately before the virtual
+                        // call, rather than on the gold segment alone:
+                        //   71E3B7  80 B8 7D 04 00 00 00  cmp byte [eax+0x47D],0
+                        //   71E3BE  75 35                 jne 0x71E3F5   ; skips both
+                        //   71E3C4  6A 00 / 6A 01         push 0 / push 1
+                        //   71E3D2  FF 96 FC 01 00 00     call [esi+0x1FC]
+                        var scatterBlocked = !TryEnterNativeScatter()
+                            || M2Share.UserEngine == null
+                            || !M2Share.UserEngine.NativeHasMonsterDropTable(m_sCharName)
+                            || m_boNoItem
+                            || NativeAfterScatterItemsBlocked(AttackBaseObject);
                         if (!scatterBlocked)
                         {
                             // 战神 sub_71FA20 segment 1, 0x71FB2E-0x71FCFF: the
@@ -1158,20 +1199,30 @@ namespace GameSvr
                             M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
                                 AttackBaseObject, this, scatteredItems);
                             NativeDropControlRuntime.RunInNativeOrder(
-                                () => NativeDropControlRuntime.TryScatter(this,
-                                    AttackBaseObject, scatteredItems),
                                 () =>
                                 {
                                     if (this is not HeroObject)
                                         M2Share.UserEngine.MonGetRandomItems(this, AttackBaseObject);
-                                });
+                                },
+                                () => NativeDropControlRuntime.TryScatter(this,
+                                    AttackBaseObject, scatteredItems));
                         }
                         DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {
                             ScatterBagItems(AttackBaseObject, scatteredItems);
                         }
-                        if (!scatterBlocked && m_btRaceServer >= Grobal2.RC_ANIMAL && m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
+                        // 战神 sub_71FA20 @0x71FFAD `cmp dword [ebp-0x14],0 / jle
+                        // 0x720049` is the whole entry condition for the gold
+                        // settlement — one test against the accumulator, which
+                        // ScatterGolds already makes as `m_nGold > 0`.  The race /
+                        // pet / map-flag terms that used to sit here have no
+                        // counterpart in either sub_71FA20 or monster Die sub_71E2BC
+                        // (which reads no map flag at all), and they left the gold of
+                        // anything below RC_ANIMAL, and of every pet, stranded in
+                        // m_nGold forever.  m_boNoItem moved up to scatterBlocked,
+                        // where 0x71E3B7 puts it.
+                        if (!scatterBlocked)
                         {
                             ScatterGolds(AttackBaseObject, scatteredItems,
                                 nativeMonsterScatter: true);
@@ -1562,6 +1613,18 @@ namespace GameSvr
                 {
                     nRate = 30;
                 }
+                // Heroes share THumanKind.Die -> sub_73FC70 with players. The
+                // plugin rewrite is a process-wide patch, so HeroObject must
+                // honour it too. Monsters do not enter this worker natively.
+                var dropCount = 0;
+                var deathDropPatched = false;
+                var patchedCap = 2;
+                if (this is HeroObject)
+                {
+                    deathDropPatched = new YanshenApi(null, null, M2Share.PluginManager)
+                        .TryGetDeathEquipDropPatch(PKLevel() > 2, out var patchedRate, out patchedCap);
+                    if (deathDropPatched) nRate = patchedRate;
+                }
                 nC = 0;
                 // 战神 sub_73FC70 @0x73FDAF-0x73FEC9 — the auth + gift DESTROY branch for
                 // EQUIPPED gear (the high-value tier), absent from C# until now:
@@ -1608,6 +1671,8 @@ namespace GameSvr
                                 MsgColor.Red, MsgType.Hint);
                         }
                         Dispose(destroyed);                 // 0x73FEC4 sub_404690
+                        // native 0x73FE4E inc [ebp-0xc] then jmp 0x73FF6F (destroy skips cap)
+                        if (deathDropPatched) dropCount++;
                         nC++;
                         if (nC >= 9) break;
                         continue;                           // 0x73FEC9 jmp 0x73FF6F
@@ -1643,6 +1708,12 @@ namespace GameSvr
                                     }
                                     m_UseItems[nC].wIndex = 0;
                                 }
+                            }
+                            // native 0x73FF66 inc [ebp-0xc] / 0x73FF69 cmp / jg exit
+                            if (deathDropPatched)
+                            {
+                                dropCount++;
+                                if (dropCount > patchedCap) break;
                             }
                         }
                     }
@@ -1939,12 +2010,17 @@ namespace GameSvr
             SeedNativeFixedAbility(ref m_AddAbil);
             var oldHp = m_WAbil.HP;
             var oldMp = m_WAbil.MP;
+            // 原生的重算全程不碰 Weight(player+0x2C4)：它唯一的写者是
+            // 0x73CEF1 mov [ebx+0x2C4],eax（WeightChanged 里 0x73CEEC call 0x73E8D4
+            // 遍历背包求和之后）。容器侧 sub_75EE78 只重置并重算 +0x370/+0x372，
+            // 也就是 WearWeight / HandWeight 两项。
+            var oldWeight = m_WAbil.Weight;
             // Bug1 fix 2026-04-22: deep copy so m_WAbil no longer aliases m_Abil,
             // otherwise every call accumulates equipment bonuses onto the base.
             m_WAbil.CopyFrom(m_Abil);
             m_WAbil.HP = oldHp;
             m_WAbil.MP = oldMp;
-            m_WAbil.Weight = 0;
+            m_WAbil.Weight = oldWeight;
             m_WAbil.WearWeight = 0;
             m_WAbil.HandWeight = 0;
             m_btAntiPoison = 0;
@@ -2073,13 +2149,19 @@ namespace GameSvr
                 ApplyNativeEffectItemParameters(m_UseItems[i], StdItem, ref m_AddAbil);
                 if ((i == Grobal2.U_WEAPON) || (i == Grobal2.U_RIGHTHAND) || (i == Grobal2.U_DRESS))
                 {
-                    if (i == Grobal2.U_DRESS)
+                    // 0x75EE4A  80 7D FF 01  cmp byte [ebp-1],1   ; 槽号
+                    // 0x75EE4E  74 10        je  0x75EE60
+                    // 0x75EE57  66 01 83 70 03 00 00  add word [ebx+0x370],ax  ; 其余槽累加
+                    // 0x75EE67  66 89 83 72 03 00 00  mov word [ebx+0x372],ax  ; 只有槽 1 是赋值
+                    // 两个容器字段随后被 0x73D661 / 0x73D674 原样搬进 WearWeight / HandWeight。
+                    // 槽 2（U_RIGHTHAND）在原生属于「其余槽」，进的是 +0x370。
+                    if (i == Grobal2.U_WEAPON)
                     {
-                        m_WAbil.WearWeight += StdItem.Weight;
+                        m_WAbil.HandWeight = StdItem.Weight;
                     }
                     else
                     {
-                        m_WAbil.HandWeight += StdItem.Weight;
+                        m_WAbil.WearWeight += StdItem.Weight;
                     }
                     
                     if (StdItem.AniCount == 120)
@@ -2277,7 +2359,6 @@ namespace GameSvr
                 {
                     m_WAbil.WearWeight += StdItem.Weight;
                 }
-                m_WAbil.Weight += StdItem.Weight;
                 if (i == Grobal2.U_WEAPON)
                 {
                     if ((StdItem.Source - 1 - 10) < 0)

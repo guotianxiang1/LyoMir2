@@ -44,8 +44,14 @@ foreach (var field in new[] { "MaxPoint", "SelPoint", "ItemName", "Count" })
     Require(monItem, field, $"native TMonItem field disappeared: {field}");
 Require(localDb, "SelPoint = n18 - 1", "native MonItems numerator mapping changed");
 Require(localDb, "MaxPoint = n1C", "native MonItems denominator mapping changed");
-Require(userEngine, "Random(MonItem.MaxPoint) <= MonItem.SelPoint",
-    "native monster drop selection changed");
+// What matters here is the roll's shape, not its exact text: MaxPoint is the denominator
+// handed to Random, SelPoint is the threshold, and the comparison is inclusive `<=`. Pinning
+// the literal made the audit fail the moment the anti-addiction tier-2 factor (obj+0x1828,
+// set to 1/2/3 at 0x6D2631 / 0x6D2628 / 0x6D2617) was folded into the denominator.
+Assert(Regex.IsMatch(userEngine,
+        @"Random\(MonItem\.MaxPoint\b[^)]*\)\s*<=\s*MonItem\.SelPoint"),
+    "native monster drop selection changed: the roll must stay "
+    + "Random(<MaxPoint-derived denominator>) <= MonItem.SelPoint");
 
 Console.WriteLine(
     "ChgMonItemPercentStaticCheck PASS dispatch=fail-closed " +

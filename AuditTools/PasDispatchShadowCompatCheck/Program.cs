@@ -1315,10 +1315,13 @@ static void RunGroupFlyRegressions()
             break;
         seed++;
     }
-    typeof(RandomNumber).GetField("random",
-            System.Reflection.BindingFlags.Static |
-            System.Reflection.BindingFlags.NonPublic)!
-        .SetValue(null, new Random(seed));
+    // The searched sequence is installed on M2Share.RandomNumber, the field the
+    // server assigns at startup. It used to be installed by reflecting
+    // RandomNumber's private `random` field, which POIS-26 removed when the
+    // facade moved onto the Delphi LCG sub_403B4C; the `!` then dereferenced
+    // null and this threw before the group-fly assertions ran. The seed search
+    // above is unchanged - the wrapper replays the very same System.Random.
+    M2Share.RandomNumber = new SeededProbeRandom(seed);
 
     const string sourceText = """
         program GroupFlyProbe;
@@ -2288,9 +2291,27 @@ static List<PasValue> Values(params object[] values) => values.Select(value => v
 static void RequireClosed(string source, string name, string description)
 {
     Equal(1, Count(source, $"case \"{name}\":"), description + " dispatch count");
-    Require(source,
-        $@"case\s+""{Regex.Escape(name)}""\s*:[\s\S]{{0,360}}?RejectUnsupportedNativeApi",
-        description + " fail-closed dispatch");
+    // The arm must *be* the reject, not merely mention it. A window-limited regex
+    // measures how many characters of commentary sit above the reject rather than
+    // whether the arm is closed, and it also matches the token inside a comment,
+    // so the label's whole body is sliced out and stripped of comments first.
+    var marker = $"case \"{name}\":";
+    var start = source.IndexOf(marker, StringComparison.Ordinal);
+    Assert(start >= 0, description + " case missing");
+    var next = source.IndexOf("case \"", start + marker.Length,
+        StringComparison.Ordinal);
+    var body = next < 0 ? source[start..] : source[start..next];
+    var code = string.Concat(body[marker.Length..]
+        .Split('\n')
+        .Select(line =>
+        {
+            var comment = line.IndexOf("//", StringComparison.Ordinal);
+            return (comment < 0 ? line : line[..comment]) + "\n";
+        }));
+    code = Regex.Replace(code, @"\s+", " ").Trim();
+    Assert(code == "return RejectUnsupportedNativeApi();",
+        $"{description} fail-closed dispatch: expected the arm to be exactly "
+        + $"`return RejectUnsupportedNativeApi();`, actual `{code}`");
 }
 
 static string Slice(string source, string startMarker, string endMarker)
@@ -2375,6 +2396,25 @@ static void Assert(bool condition, string message)
 sealed class RecalcProbePlayer : TPlayObject
 {
     public void ConsumePendingRecalc() => ConsumeAbilityRecalcPending();
+}
+
+// Replays a seeded System.Random through the RandomNumber facade, so the
+// group-fly seed search keeps predicting the exact draws the product will take.
+sealed class SeededProbeRandom : RandomNumber
+{
+    private readonly Random _inner;
+
+    internal SeededProbeRandom(int seed) => _inner = new Random(seed);
+
+    public override int Random(int Value) => _inner.Next(Value);
+
+    public override int Random() => 0;
+
+    public override int Random(int minValue, int maxValue) =>
+        minValue + _inner.Next(maxValue - minValue);
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        minValue + _inner.Next(maxValue - minValue + 1);
 }
 
 sealed record PlayerSnapshot(

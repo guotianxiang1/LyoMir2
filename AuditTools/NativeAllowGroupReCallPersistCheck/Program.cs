@@ -265,23 +265,9 @@ namespace NativeAllowGroupReCallPersistCheck
 
         // ---------- static source gates ----------
 
-        private static string RepoRoot()
+                private static string RepoRoot()
         {
-            foreach (var start in new[]
-                     { Environment.CurrentDirectory, AppContext.BaseDirectory })
-            {
-                for (var dir = new DirectoryInfo(start); dir != null; dir = dir.Parent)
-                {
-                    if (File.Exists(Path.Combine(dir.FullName, "LyoMir2.sln")) &&
-                        Directory.Exists(Path.Combine(dir.FullName, "GameSvr")))
-                        return dir.FullName;
-                    var sibling = Path.Combine(dir.FullName, "LyoMir2-master");
-                    if (File.Exists(Path.Combine(sibling, "LyoMir2.sln")) &&
-                        Directory.Exists(Path.Combine(sibling, "GameSvr")))
-                        return sibling;
-                }
-            }
-            throw new DirectoryNotFoundException("repository root");
+            return AuditRepoRoot.Resolve();
         }
 
         private static string[] UsrEngnLines() => File.ReadAllLines(

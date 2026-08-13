@@ -7,6 +7,7 @@ using SystemModule;
 try
 {
     Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    PrepareRuntimeConfig();
     var originalConfigPath = M2Share.sConfigPath;
     var originalChatLog = M2Share.g_ChatLoggingList;
     var originalCulture = CultureInfo.CurrentCulture;
@@ -203,25 +204,25 @@ static void InvokeAppendChatLog(string characterName, string message)
 
 static string FindRepositoryRoot()
 {
-    foreach (var seed in new[]
-             {
-                 Directory.GetCurrentDirectory(), AppContext.BaseDirectory
-             })
-    {
-        var directory = new DirectoryInfo(seed);
-        while (directory != null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName,
-                    "GameSvr", "GameSvr.csproj")))
-                return directory.FullName;
-            var nested = Path.Combine(directory.FullName, "LyoMir2-master");
-            if (File.Exists(Path.Combine(nested,
-                    "GameSvr", "GameSvr.csproj")))
-                return nested;
-            directory = directory.Parent;
-        }
-    }
-    throw new DirectoryNotFoundException("Could not locate the LyoMir2 repository root.");
+    return AuditRepoRoot.Resolve();
+}
+
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }
 
 static string ExtractMethodBody(string source, string signature)

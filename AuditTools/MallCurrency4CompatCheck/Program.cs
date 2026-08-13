@@ -4,6 +4,24 @@ using System.Text;
 using GameSvr;
 using GameSvr.Mall;
 
+// ---------------------------------------------------------------------------
+// 这个工具原来钉的是"货币类型 4 = 充值点，扣 V(group,index)"这条契约。逐字节复核推翻了它：
+//
+//   原生商品表压根没有货币类型字段。加载器 sub_636D68 把 PAS @GetYBShopConfig 的返回串按
+//   '$' 切（0x636F8F b1 24 mov cl,0x24），只认序号 1..10（0x636FC6 83 f8 0a cmp eax,0xA
+//   + ja 0x63709A），跳表 0x636FD6 的十个臂依次是 vClassName / vItemList / vGoodsIdx /
+//   vSrcPrice / vCurPrice / vLimitType / vLimitCount / vEffectImg / vEffectCount /
+//   vGoodsExplain。没有货币类型、没有绑定标志、没有全服广播标志。
+//
+//   付款侧同样没有本地扣款：CM_DOSHOP(1048) 处理器 sub_6CB7E4 只有确认闸 0x6CB816
+//   call 0x6C7D88，然后 0x6CB8C9 mov ecx,0x6CB940('@ClientBuy') / 0x6CB8D0 call 0x636BD8
+//   把活交给脚本；发货核心 sub_6CC420 从头到尾唯一一条余额加减是 0x6CC504
+//   add [esi+0xBD8],eax（发灵符），一条减法都没有。生产脚本 ClientBuy 的付款判定是
+//   This_Player.YBNum >= Price，扣费走外部元宝库 PsYBConsumEx。
+//
+// 断言不删，改成钉真正的契约：'$'/10 字段、六项 -1 校验、以及"本地不得有任何货币扣减"。
+// ---------------------------------------------------------------------------
+
 PrepareRuntimeConfig();
 M2Share.g_Config = new GameSvrConfig();
 M2Share.ObjectManager = new ObjectManager();
@@ -12,126 +30,218 @@ var managerType = typeof(MallManager);
 var manager = MallManager.Instance;
 var load = managerType.GetMethod("LoadPasMallItems",
     BindingFlags.Instance | BindingFlags.NonPublic)!;
-var parsePaymentVariable = managerType.GetMethod("ParsePaymentVariable",
-    BindingFlags.Static | BindingFlags.NonPublic)!;
-var getBalance = managerType.GetMethod("GetCurrencyBalance",
-    BindingFlags.Static | BindingFlags.NonPublic)!;
-var deduct = managerType.GetMethod("DeductCurrency",
-    BindingFlags.Static | BindingFlags.NonPublic)!;
-Assert(deduct.ReturnType == typeof(bool), "currency deduction does not report failure");
 
-var tempRoot = Path.Combine(Path.GetTempPath(), "mall-currency4-" + Guid.NewGuid().ToString("N"));
+Assert(managerType.GetMethod("DeductCurrency",
+        BindingFlags.Static | BindingFlags.NonPublic) == null,
+    "MallManager still exposes a local DeductCurrency path");
+Assert(managerType.GetMethod("GetCurrencyBalance",
+        BindingFlags.Static | BindingFlags.NonPublic) == null,
+    "MallManager still exposes a local GetCurrencyBalance path");
+Assert(typeof(MallItem).GetProperty("CurrencyType") == null,
+    "MallItem still carries the non-native CurrencyType field");
+Assert(typeof(MallItem).GetProperty("PaymentVariableGroup") == null,
+    "MallItem still carries the non-native PaymentVariableGroup field");
+
+var settle = managerType.GetMethod("TrySettleYuanbaoPayment",
+    BindingFlags.Static | BindingFlags.NonPublic);
+Assert(settle != null, "the single yuanbao settlement gate is missing");
+
+var tempRoot = Path.Combine(Path.GetTempPath(), "mall-goods-contract-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(tempRoot);
 try
 {
-    var customPath = Path.Combine(tempRoot, "YBShopScript.pas");
-    WriteGbk(customPath, BuildScript("7,8"));
-    var item = LoadSingle(load, manager, customPath);
-    Equal(4, item.CurrencyType, "custom item currency type");
-    Equal(7, item.PaymentVariableGroup, "FPayTask group was not parsed");
-    Equal(8, item.PaymentVariableIndex, "FPayTask index was not parsed");
+    var scriptPath = Path.Combine(tempRoot, "YBShopScript.pas");
 
-    var player = new TPlayObject();
-    player.m_ScriptVVars[7008] = 125;
-    player.m_ScriptVVars[99099] = 888;
-    Equal(125, (int)getBalance.Invoke(null, new object[] { player, item })!,
-        "currency 4 balance did not use configured V[7,8]");
-    Assert((bool)deduct.Invoke(null, new object[] { player, item, 25 })!,
-        "configured currency 4 deduction failed");
-    Equal(100, player.m_ScriptVVars[7008], "currency 4 deduction missed V[7,8]");
-    Equal(888, player.m_ScriptVVars[99099], "currency 4 deduction still touched V[99,99]");
-    Assert(!(bool)deduct.Invoke(null, new object[] { player, item, 101 })!,
-        "currency 4 overdraw was accepted");
-    Equal(100, player.m_ScriptVVars[7008], "currency 4 overdraw made the balance negative");
+    // 1) 完整的 10 字段记录必须被收下，且每个字段落到正确的属性上。
+    WriteGbk(scriptPath, BuildCaseScript(
+        className: "强化", itemList: "书页:3", goodsIdx: "218", srcPrice: "2000",
+        curPrice: "1500", limitType: "1", limitCount: "5",
+        effectImg: "520", effectCount: "18", explain: "测试商品"));
+    var item = LoadSingle(load, manager, scriptPath);
+    Equal(218, item.Id, "vGoodsIdx -> Id");
+    Equal(2000, item.Price, "vSrcPrice -> Price (record +36)");
+    Equal(1500, item.CurPrice, "vCurPrice -> CurPrice (record +38)");
+    Equal(1, item.LimitType, "vLimitType -> LimitType (record +40)");
+    Equal(5, item.LimitCount, "vLimitCount -> LimitCount (record +42)");
+    Equal(520, item.EffectImg, "vEffectImg -> EffectImg (record +48 DWORD)");
+    Equal(18, item.EffectCount, "vEffectCount -> EffectCount (record +46 WORD)");
+    Equal(3, item.ItemCount, "'名:数量' count");
+    Equal(0, item.Category, "first distinct class name is category 0");
 
-    foreach (var invalidPayTask in new string[] { "0,8", "not-a-variable", null })
-    {
-        WriteGbk(customPath, BuildScript(invalidPayTask));
-        var invalidItem = LoadSingle(load, manager, customPath);
-        Equal(0, invalidItem.PaymentVariableGroup, "invalid FPayTask group was accepted");
-        Equal(0, invalidItem.PaymentVariableIndex, "invalid FPayTask index was accepted");
-        Assert(!(bool)deduct.Invoke(null, new object[] { player, invalidItem, 10 })!,
-            "invalid FPayTask allowed a deduction");
-        Equal(100, player.m_ScriptVVars[7008], "invalid FPayTask changed configured balance");
-        Assert(!player.m_ScriptVVars.ContainsKey(0), "invalid FPayTask wrote V[0,0]");
-    }
+    // 2) 六项 -1 校验：0x6370AA..0x6370E0 命中任一条整条丢弃。
+    //    vLimitType / vLimitCount 不在校验清单里，缺了照收。
+    AssertDropped(load, manager, scriptPath, "vClassName", "空 vClassName 被收下了");
+    AssertDropped(load, manager, scriptPath, "vGoodsIdx", "缺 vGoodsIdx 被收下了");
+    AssertDropped(load, manager, scriptPath, "vSrcPrice", "缺 vSrcPrice 被收下了");
+    AssertDropped(load, manager, scriptPath, "vCurPrice", "缺 vCurPrice 被收下了");
+    AssertDropped(load, manager, scriptPath, "vEffectImg", "缺 vEffectImg 被收下了");
+    AssertDropped(load, manager, scriptPath, "vEffectCount", "缺 vEffectCount 被收下了");
+    AssertKept(load, manager, scriptPath, "vLimitType", "缺 vLimitType 被误丢");
+    AssertKept(load, manager, scriptPath, "vLimitCount", "缺 vLimitCount 被误丢");
 
+    // 3) 分类号是"首次出现顺序"，不是固定名字表（sub_635444 0x635502 mov [rec+0x7A],ax）。
+    WriteGbk(scriptPath, BuildTwoClassScript());
+    var ordered = LoadAll(load, manager, scriptPath);
+    Equal(3, ordered.Count, "two-class fixture item count");
+    Equal(0, ordered[0].Category, "装饰 is the first distinct class -> 0");
+    Equal(1, ordered[1].Category, "强化 is the second distinct class -> 1");
+    Equal(0, ordered[2].Category, "装饰 again reuses category 0");
+
+    // 4) 生产脚本必须能解析出商品；旧解析器在它上面是 0 条。
     var productionPath = args.Length > 0 ? Path.GetFullPath(args[0]) : string.Empty;
-    if (productionPath.Length > 0)
+    var productionCount = -1;
+    if (productionPath.Length > 0 && File.Exists(productionPath))
     {
-        var source = ReadGbk(productionPath);
-        var parseArgs = new object[] { source, 0, 0 };
-        parsePaymentVariable.Invoke(null, parseArgs);
-        Equal(99, (int)parseArgs[1], "production FPayTask group");
-        Equal(99, (int)parseArgs[2], "production FPayTask index");
+        productionCount = LoadAll(load, manager, productionPath).Count;
+        Assert(productionCount > 0,
+            "production YBShopScript.pas still parses to zero goods");
     }
 
+    // 5) 源码形状：不许有任何本地货币扣减，结算闸必须在建物品与入包之前。
     var repositoryRoot = FindRepositoryRoot();
     var mallSource = File.ReadAllText(Path.Combine(repositoryRoot,
         "GameSvr", "Mall", "MallManager.cs"));
-    Reject(mallSource, "GetPlayerVariable(player.m_ScriptVVars, 99, 99)",
-        "currency 4 hard-coded balance address");
-    Reject(mallSource, "SetPlayerVariable(player.m_ScriptVVars, 99, 99",
-        "currency 4 hard-coded deduction address");
-    var configGuard = mallSource.IndexOf("if (mallItem.CurrencyType == 4",
-        StringComparison.Ordinal);
-    var itemAllocation = mallSource.IndexOf("var userItems", configGuard,
-        StringComparison.Ordinal);
-    var deductionGuard = mallSource.IndexOf("if (!DeductCurrency", itemAllocation,
-        StringComparison.Ordinal);
-    var itemGrant = mallSource.IndexOf("player.m_ItemList.Add", deductionGuard,
-        StringComparison.Ordinal);
-    Assert(configGuard >= 0 && configGuard < itemAllocation,
-        "invalid FPayTask is not rejected before item creation");
-    Assert(deductionGuard > itemAllocation && itemGrant > deductionGuard,
-        "items can be granted before the guarded currency deduction");
+    Reject(mallSource, "m_nGold -=", "local gold debit");
+    Reject(mallSource, "m_nGameGold -=", "local yuanbao debit");
+    Reject(mallSource, "SetShengWan(", "local shengwan debit");
+    Reject(mallSource, "SetPlayerVariable(player, 'V'", "local V-bank debit");
 
-    Console.WriteLine(productionPath.Length > 0
-        ? "PASS custom=V[7,8] invalid=closed overdraw=closed production=V[99,99] hardcoded=0"
-        : "PASS custom=V[7,8] invalid=closed overdraw=closed hardcoded=0");
+    var settleGate = mallSource.IndexOf("if (!TrySettleYuanbaoPayment", StringComparison.Ordinal);
+    var itemAllocation = mallSource.IndexOf("var userItems", StringComparison.Ordinal);
+    var itemGrant = mallSource.IndexOf("player.m_ItemList.Add", StringComparison.Ordinal);
+    Assert(settleGate >= 0, "settlement gate call is missing from PurchaseItem");
+    Assert(settleGate < itemAllocation,
+        "items are created before the settlement gate");
+    Assert(itemAllocation < itemGrant,
+        "items reach the bag before they are created");
+
+    Console.WriteLine("PASS goods-contract=$/10 validated=6 limit-fields=tolerated "
+        + "categories=first-seen local-debits=0 settlement=fail-closed production="
+        + (productionCount >= 0 ? productionCount.ToString() : "skipped"));
 }
 finally
 {
     Directory.Delete(tempRoot, recursive: true);
 }
 
+static void AssertDropped(MethodInfo load, MallManager manager, string path,
+    string omittedField, string message)
+{
+    WriteGbk(path, BuildCaseScriptWithout(omittedField));
+    Assert(LoadAll(load, manager, path).Count == 0, message);
+}
+
+static void AssertKept(MethodInfo load, MallManager manager, string path,
+    string omittedField, string message)
+{
+    WriteGbk(path, BuildCaseScriptWithout(omittedField));
+    Assert(LoadAll(load, manager, path).Count == 1, message);
+}
+
+static List<MallItem> LoadAll(MethodInfo load, MallManager manager, string path)
+{
+    return ((IEnumerable)load.Invoke(manager, new object[] { path })!)
+        .Cast<MallItem>().ToList();
+}
+
 static MallItem LoadSingle(MethodInfo load, MallManager manager, string path)
 {
-    var items = ((IEnumerable)load.Invoke(manager, new object[] { path })!)
-        .Cast<MallItem>().ToList();
+    var items = LoadAll(load, manager, path);
     Equal(1, items.Count, "test PAS item count");
     return items[0];
 }
 
-static string BuildScript(string payTask)
+static string BuildCaseScriptWithout(string omittedField)
 {
-    var payTaskDeclaration = payTask == null ? string.Empty : $"FPayTask = '{payTask}';";
-    return $$"""
-        Program Mir2;
-        const
-          {{payTaskDeclaration}}
-          C_NeedLoadGoodsNames = '充值商品';
-        function GetGoods(const GoodsName: String): String;
-        begin
-          case GoodsName of
-            '充值商品': Result := '补给,书页:1,1,25,0,0,0,4,1,1,充值点商品';
-          end;
-        end;
-        Begin
-        end.
-        """;
+    return BuildCaseScript(
+        className: omittedField == "vClassName" ? null : "强化",
+        itemList: omittedField == "vItemList" ? null : "书页:3",
+        goodsIdx: omittedField == "vGoodsIdx" ? null : "218",
+        srcPrice: omittedField == "vSrcPrice" ? null : "2000",
+        curPrice: omittedField == "vCurPrice" ? null : "1500",
+        limitType: omittedField == "vLimitType" ? null : "1",
+        limitCount: omittedField == "vLimitCount" ? null : "5",
+        effectImg: omittedField == "vEffectImg" ? null : "520",
+        effectCount: omittedField == "vEffectCount" ? null : "18",
+        explain: "测试商品");
+}
+
+// 生产脚本的形状：case 分支里逐个 vXxx := ...;，函数开头没有初始化段，
+// 所以"省略某个字段"就等于该字段走 StrToIntDef 的 -1 缺省。
+static string BuildCaseScript(string className, string itemList, string goodsIdx,
+    string srcPrice, string curPrice, string limitType, string limitCount,
+    string effectImg, string effectCount, string explain)
+{
+    var body = new StringBuilder();
+    AppendString(body, "vClassName", className);
+    AppendString(body, "vItemList", itemList);
+    AppendNumber(body, "vGoodsIdx", goodsIdx);
+    AppendNumber(body, "vSrcPrice", srcPrice);
+    AppendNumber(body, "vCurPrice", curPrice);
+    AppendNumber(body, "vLimitType", limitType);
+    AppendNumber(body, "vLimitCount", limitCount);
+    AppendNumber(body, "vEffectImg", effectImg);
+    AppendNumber(body, "vEffectCount", effectCount);
+    AppendString(body, "vGoodsExplain", explain);
+
+    return "Program Mir2;\r\n"
+        + "const\r\n"
+        + "  C_NeedLoadGoodsNames_001 = '测试商品名';\r\n"
+        + "function GetYBShopConfig(GoodsName: string): string;\r\n"
+        + "begin\r\n"
+        + "  case GoodsName of\r\n"
+        + "    '测试商品名':\r\n"
+        + "    begin\r\n"
+        + body
+        + "    end;\r\n"
+        + "  end;\r\n"
+        + "end;\r\n"
+        + "Begin\r\n"
+        + "end.\r\n";
+}
+
+static string BuildTwoClassScript()
+{
+    return "Program Mir2;\r\n"
+        + "const\r\n"
+        + "  C_NeedLoadGoodsNames_001 = '甲|乙|丙';\r\n"
+        + "function GetYBShopConfig(GoodsName: string): string;\r\n"
+        + "begin\r\n"
+        + "  case GoodsName of\r\n"
+        + Branch("甲", "装饰")
+        + Branch("乙", "强化")
+        + Branch("丙", "装饰")
+        + "  end;\r\n"
+        + "end;\r\n"
+        + "Begin\r\n"
+        + "end.\r\n";
+}
+
+static string Branch(string goods, string className)
+{
+    return $"    '{goods}':\r\n    begin\r\n"
+        + $"      vClassName := '{className}';\r\n"
+        + $"      vItemList := '{goods}:1';\r\n"
+        + "      vGoodsIdx := 1;\r\n      vSrcPrice := 10;\r\n      vCurPrice := 10;\r\n"
+        + "      vLimitType := 0;\r\n      vLimitCount := 0;\r\n"
+        + "      vEffectImg := 380;\r\n      vEffectCount := 1;\r\n"
+        + $"      vGoodsExplain := '{goods}';\r\n    end;\r\n";
+}
+
+static void AppendString(StringBuilder body, string name, string value)
+{
+    if (value != null) body.Append($"      {name} := '{value}';\r\n");
+}
+
+static void AppendNumber(StringBuilder body, string name, string value)
+{
+    if (value != null) body.Append($"      {name} := {value};\r\n");
 }
 
 static void WriteGbk(string path, string value)
 {
     Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     File.WriteAllBytes(path, Encoding.GetEncoding(936).GetBytes(value));
-}
-
-static string ReadGbk(string path)
-{
-    Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-    return Encoding.GetEncoding(936).GetString(File.ReadAllBytes(path));
 }
 
 static string FindRepositoryRoot()

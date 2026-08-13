@@ -364,7 +364,8 @@ internal static class Program
         var snapshot = Path.GetFullPath(Option(args, "--snapshot") ??
             Path.Combine(AppContext.BaseDirectory, "yanshen-dedicated-sta-unaware.png"));
         var reference = Path.GetFullPath(Option(args, "--reference") ??
-            @"D:\loym2\LyoMir2-master\artifacts\yanshen_reference_half\legacy1.png");
+            Path.Combine(AuditRepoRoot.Resolve(args, firstArgIsRepoRoot: false),
+                "artifacts", "yanshen_reference_half", "legacy1.png"));
         Assert(File.Exists(source), "published Yanshen config was not found: " + source);
         Assert(File.Exists(reference), "legacy1 reference was not found: " + reference);
 
