@@ -2178,6 +2178,22 @@ namespace GameSvr
                         ref m_nCurrY))
                     return false;
 
+                // MOVE-54 — 创物(非玩家)传送的 boIgnoreOccupancy=0「终态占位复检」刻意不在此补：
+                // 补一道「占位即失败」的复检反而会偏离 native。VMT+0x1C0 分派 TPlayer=sub_6BD294 /
+                // 其余=sub_768D78(MOVE-59)；两者同图快臂都是 GetRandomXY(1,1)→MoveToMovingObject，
+                // 唯一差别是末参 boIgnoreOccupancy：玩家 push 1 @0x6BD35E(忽略)、创物 push 0 @0x768DC9
+                // (复检)。复检在 sub_7797CC @0x7799EB `cmp byte[ebp-0xA],0 / je 0x779AAD`：目标格有
+                // 阻挡对象(sub_765D64)时纯 no-op 返回 FALSE 且不摘旧格(不到 0x779A15 的重挂块)。但创物
+                // 快臂 MoveToMovingObject 失败(@0x768DE6 je 0x768E11)会落入稳健臂 @0x768E11：摘旧格→
+                // 拿刚那枚「地形可走但被占」的 (X1,Y1) 作 GetRandomXY 种子(@0x768E91 push 1,1)→
+                // CanWalk(flag=1 忽略占位, sub_777EF8 @0x777F70)对 (X1,Y1) 恒真→原样返回→AddToMap
+                // (VMT+0x28 @0x768EB0/@0x777A72 无占位复检头插)。净效果：无论目标占否，创物最终都落在
+                // 同一 (X1,Y1)。复检只切换「快臂静默移动(不发 clear/changemap/spacemove) vs 稳健臂全量
+                // 重挂(RM_SPACEMOVE)」，不改变落位格。C# 统一走稳健臂(DeleteFromMap→GetRandXY→AddToMap)，
+                // 落位与 native 已等价；此处若加「占位即 return false」，会让创物拒绝落在被占格 → 偏离
+                // native。残差仅为「同图未占静默快臂」的广播差，属传送原语热点(GetRandomXY 11 /
+                // MoveToMovingObject 17 caller, MOVE-63)且与 C# 统一 RM_NATIVE_* 广播适配(MOVE-52)冲突
+                // → 依铁律只报不改(详见 docs/eqv_shard22 MOVE-54 与本分支报告)。
                 targetAddAttempted = true;
                 if (!ReferenceEquals(targetEnvironment.AddToMap(m_nCurrX, m_nCurrY,
                     CellType.OS_MOVINGOBJECT, this), this))
