@@ -94,6 +94,12 @@ namespace GameSvr
                 case Grobal2.CM_4496:
                     ClientNativeFreshmanTaskCommand();
                     return true;
+                case Grobal2.CM_4626:
+                    ClientNativePagedListQuery();
+                    return true;
+                case Grobal2.CM_4646:
+                    ClientNativePrizeList();
+                    return true;
                 default:
                     return false;
             }
@@ -450,6 +456,35 @@ namespace GameSvr
         private void ClientNativeFreshmanTaskCommand()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4496, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4626, native leaf 0x6DB394, worker 0x6AE260.
+        ///
+        /// The leaf calls 0x6AE260(Self, Param=word[record+6], Tag=word[record+8]).
+        /// The worker treats Param as a page offset and Tag as a page size capped
+        /// at 0x20 (0x6AE285 `cmp,0x20`), reads the total from the list source
+        /// [[0x7D5C60]] (0x6AE29C) and copies one page of records. Neither the list
+        /// source nor its per-record format is modelled, so the page body cannot be
+        /// built and the reply is withheld.
+        /// </summary>
+        private void ClientNativePagedListQuery()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4626, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4646, native leaf 0x6DBBEB, worker 0x6FBB90.
+        ///
+        /// The leaf calls 0x6FBB90(Self). The worker walks the reward-id array
+        /// [Self+0x62C] for [Self+0x658] entries (0x6FBBF0), resolves each against
+        /// the prize manager [[0x7D605C]] (0x6FBBE9) via 0x69C57C and packs the
+        /// claimable list into the reply. The reward-id array, its count and the
+        /// prize manager are not modelled, so the list body is withheld.
+        /// </summary>
+        private void ClientNativePrizeList()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4646, m_sCharName);
         }
     }
 }
