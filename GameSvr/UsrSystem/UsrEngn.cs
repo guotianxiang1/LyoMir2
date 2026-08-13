@@ -2620,13 +2620,13 @@ namespace GameSvr
                     {
                         PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
                             DefMsg.Recog, DefMsg.Param,
-                            DefMsg.Ident == Grobal2.CM_3037 ? DefMsg.Tag : 0, "");
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
                     }
                     else
                     {
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
                             DefMsg.Recog, DefMsg.Param,
-                            DefMsg.Ident == Grobal2.CM_3037 ? DefMsg.Tag : 0, "");
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
                     }
                     break;
                 case Grobal2.CM_SAY:
