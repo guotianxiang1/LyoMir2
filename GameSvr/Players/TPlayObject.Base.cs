@@ -281,6 +281,23 @@ namespace GameSvr
         
         
         
+        /// <summary>
+        /// The legacy `$STR(P&lt;n&gt;)` text-substitution bank, n in 0..99 - see
+        /// M2Share.GetValNameNo and its only reader, NormNpc.ReplaceVariableText.
+        /// It is NOT the quest V bank, despite the sizing and the comment it used to
+        /// carry; nothing keys it by group*1000+index and nothing outside the `$STR`
+        /// path touches it.
+        /// <para>
+        /// A disp-aware census of every [base+disp] access with disp in [0x800,0xA00)
+        /// over 0x401000..0x7EFFFF finds the player object using +0x804 (6 sites, all
+        /// GetS/SetS/decoder/encoder), +0x808 (7 sites, all GetV/SetV/decoder/encoder),
+        /// then NOTHING until +0x99C - and 0x99C is exactly 0x80C + 100*4. The only
+        /// index-scaled accesses anywhere in that window are the two inline slot
+        /// instructions 0x6DF20F and 0x6DF2A8. So the 100 dwords behind the V pointer
+        /// are dedicated storage reached solely through GetV/SetV group 0, and there
+        /// is no second native array in the object for this field to be mirroring.
+        /// </para>
+        /// </summary>
         public int[] m_nVal;
         public Dictionary<int, int> m_ScriptVVars;
         public Dictionary<int, int> m_ScriptSVars;
@@ -834,7 +851,9 @@ namespace GameSvr
             m_sRankLevelName = M2Share.g_sRankLevelName;
             m_boFixedHideMode = true;
             m_nStep = 0;
-            m_nVal = new int[20000];  // Delphi 战神: nTaskNo*1000+nFieldNo
+            // Only 0..99 are addressable ($STR(P<n>), M2Share.GetValNameNo); the width
+            // is a leftover from a comment that mistook this for the quest V bank.
+            m_nVal = new int[20000];
             m_ScriptVVars = new Dictionary<int, int>();
             m_ScriptSVars = new Dictionary<int, int>();
             m_ScriptVGroup0 = new int[101];
