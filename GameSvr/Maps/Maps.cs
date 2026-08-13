@@ -704,6 +704,19 @@ namespace GameSvr
                 mapFlag.boPAODIAN = true;
                 return true;
             }
+            // GuildPK (pool-B only, token literal 0x776EF0 len 7; MFLG-06 / MOVE-93).
+            // 原生解析器 B @0x776969 识别后：0x77697A mov eax,[0x7D660C] / mov eax,[eax]
+            // 取全局管理器，0x776981 mov edx,Envir，0x776983 call sub_698484 —— 后者读
+            // Envir[+0x44]（图名串），非空则 0x6984B6 call 0x49F128 把 (图名->Envir)
+            // 注册进 manager[+0x54] 列表；随后以 0x776F0C '{' / 0x776F00 '}' 为定界符
+            // 抽参。原生**不在 Envir 上写任何字段**，且注册表的强制消费者（读
+            // manager[+0x54] 施加行会 PK 规则者）未定位。因此无对应 TMapFlag 字段：
+            // 识别该真 token（避免与凭空发明 token 混淆、避免落入 'L' 兜底臂），
+            // 但效果层 fail-closed BLOCKED —— 不臆造字段与消费者。
+            if (HUtil32.CompareLStr(token, "GuildPK", "GuildPK".Length))
+            {
+                return true;
+            }
             return false;
         }
 
