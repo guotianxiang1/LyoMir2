@@ -1233,38 +1233,11 @@ namespace GameSvr
                 case Grobal2.CM_USERMAKEDRUGITEM:
                     ClientMakeDrugItem(ProcessMsg.nParam1, ProcessMsg.sMsg);
                     break;
-                case Grobal2.CM_OPENGUILDDLG:
-                    ClientOpenGuildDlg();
-                    break;
-                case Grobal2.CM_GUILDHOME:
-                    ClientGuildHome();
-                    break;
-                case Grobal2.CM_GUILDMEMBERLIST:
-                    ClientGuildMemberList();
-                    break;
-                case Grobal2.CM_GUILDADDMEMBER:
-                    ClientGuildAddMember(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDDELMEMBER:
-                    ClientGuildDelMember(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDUPDATENOTICE:
-                    ClientGuildUpdateNotice(ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDUPDATERANKINFO:
-                    ClientGuildUpdateRankInfo(ProcessMsg.sMsg);
-                    break;
                 case Grobal2.CM_SPEEDHACKUSER:
                     M2Share.MainOutMessage("[Warning]: [使用加速外挂程序(客户端)] ");
                     break;
                 case Grobal2.CM_ADJUST_BONUS:
                     ClientAdjustBonus(ProcessMsg.nParam1, ProcessMsg.sMsg);
-                    break;
-                case Grobal2.CM_GUILDALLY:
-                    ClientGuildAlly();
-                    break;
-                case Grobal2.CM_GUILDBREAKALLY:
-                    ClientGuildBreakAlly(ProcessMsg.sMsg);
                     break;
                 case Grobal2.CM_TURN:
                     if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam, ref dwDelayTime))
