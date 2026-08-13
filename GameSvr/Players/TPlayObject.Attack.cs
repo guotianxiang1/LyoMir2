@@ -362,6 +362,15 @@ namespace GameSvr
             {
                 return result;
             }
+            // MAGIC-U0 / ID 200 hijack — native sub_6BC510 runs interceptor
+            // sub_6BCD48 @0x6BC52F, ahead of the sub_772A50 skill-forbid gate below
+            // and of GetMagicInfo. nKey==200 is swallowed: return TRUE, no normal
+            // dispatch (detonation branch fail-closed — see
+            // TPlayObject.NativeMagic200Hijack.cs).
+            if (TryNativeMagic200Hijack(nKey))
+            {
+                return true;
+            }
             // Native sub_6BC510 @0x6BC541-0x6BC566 — the per-map / per-cell
             // skill-forbid gate, which sits BEFORE every other stage: before the
             // +0xA24/+0xA4C switch-cleanup calls (0x6BC576/0x6BC586), before
