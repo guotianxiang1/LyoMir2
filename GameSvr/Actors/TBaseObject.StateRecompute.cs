@@ -163,5 +163,64 @@ namespace GameSvr
                     break;
             }
         }
+
+        // =================================================================
+        // STATE-32 FAIL-CLOSED REGISTRY
+        //
+        // The five arms below are byte-proven but deliberately NOT wired,
+        // each for a concrete reason. They are registered here (not silently
+        // dropped) so that when their producer/consumer domains are ported
+        // the recompute contract is already on record. None of these states
+        // is admitted by IsSupportedTimedAbilityType, so none can enter the
+        // C# node list today; the switch simply never reaches them.
+        //
+        // ---- H02 state 0x15 @0x7734FE / H01 state 0x16 @0x7734E3 ----------
+        //   7734E3  0F B7 87 78 02 00 00 movzx eax,word [edi+0x278] ; Level
+        //   7734EA  B9 07 00 00 00       mov   ecx,7
+        //   7734F1  F7 F1                div   ecx                  ; Level/7
+        //   7734F3  83 C0 02             add   eax,2                ; +2
+        //   7734F6  01 46 1C             add   [esi+0x1C],eax       ; 0x16 -> AC hi
+        //   (0x15 is the same body with `add [esi+0x24],eax` -> MAC hi.)
+        // edi+0x278 is the object Level word (RTTI 'LevelOrder', cross-checked
+        // at 0x784300 in NativeItemAcquisitionStamp). Both write existing fields
+        // (AC-hi / MAC-hi) but stay fail-closed because their ONLY native
+        // producer is state 0x15 from ArmLightGuard's VMT+0x198 hit-transform,
+        // which GameSvr/Monsters/Monster/ArmLightGuard.cs already documents as
+        // wholesale fail-closed (the monster VMT+0x14/+0x198 folding leaves no
+        // override entry). Wiring the consumer half alone would be exactly the
+        // asymmetry that file avoids; state 0x16 has no producer at all.
+        //
+        // ---- H11 state 0x4E @0x773625 ------------------------------------
+        //   773625  8B 43 0A            mov  eax,[ebx+0xA]
+        //   773628  01 46 40            add  [esi+0x40],eax   ; CC lo (Self+0x2A4)
+        //   77362B  8B 43 0A            mov  eax,[ebx+0xA]
+        //   77362E  01 46 44            add  [esi+0x44],eax   ; CC hi (Self+0x2A8)
+        // CC is the job-3 fourth combat range (Self+0x2A4/0x2A8). It has no
+        // m_WAbil field and its consumers — the job-3 CC attack resolvers
+        // 1024/260/264/268 and the type-46 endpoint selector — are the dormant
+        // fail-closed model in NativeTimedAbilityCombatConsumer.cs. Adding the
+        // carrier would be a dead field. Native producer: 0x78A6A4 (3600000 ms).
+        //
+        // ---- H13 state 0x55 @0x77376E ------------------------------------
+        //   77376E job-dispatched MaxHP(+0x4C)/MaxMP(+0x54) accumulation:
+        //     job 0 -> MaxHP += v, MaxMP += 0
+        //     job 1 -> MaxHP += trunc(v*0.1), MaxMP += trunc(v*0.9)
+        //     job 2/3 -> MaxHP += trunc(v*0.5), MaxMP += trunc(v*0.5)
+        //   then, if [edi+0x439] (a recompute-dirty byte) is set, it clears the
+        //   byte and emits an SM 0xFA client message built from the value (call
+        //   0x769DB4 / 0x76CB44). The x87 constants 0.1/0.9/0.5 are at
+        //   0x773B78 / 0x773B84 / 0x773B90. Fail-closed: the arm carries a
+        //   client-message side effect gated on a native-only dirty byte
+        //   (Self+0x439) that the C# recompute path does not model, and there is
+        //   no live C# producer (native producer 0x669051, 5000 ms).
+        //
+        // ---- H0E state 0x6A @0x7735BC ------------------------------------
+        //   7735BC  66 8B 43 0A         mov  ax,word [ebx+0xA]
+        //   7735C0  66 01 46 0E         add  word [esi+0x0E],ax  ; Self+0x272
+        // Self+0x272 is the type-74 magic-hit carrier read by the sub_7744B4
+        // contest in front of 15 spell-damage owners — again the dormant
+        // fail-closed model in NativeTimedAbilityCombatConsumer.cs. No m_WAbil
+        // field, consumer unwired, so wiring it would be a dead field.
+        // =================================================================
     }
 }
