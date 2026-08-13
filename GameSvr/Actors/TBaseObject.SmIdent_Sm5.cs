@@ -152,5 +152,107 @@ namespace GameSvr
         //   006FB5FD 6A00x4 push ; 006FB605 8B 4D FC mov ecx,[ebp-4] ; 006FB608 66 BA 2A 12 mov dx,0x122A
         internal static (ClientPacket Header, byte[] Body) BuildSm4650(int recog)
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_4650, recog, 0, 0, 0), Array.Empty<byte>());
+
+        // ---- sMsg (string) bodies: sent through the SendDefMessage string path ----
+        // For string-body idents the payload is the sMsg push (4th stack arg); the
+        // builder returns (header, text) and the SendSocket(ClientPacket,string) path
+        // performs the ANSI/GBK encoding, exactly as the SmA/Sm3 text builders do.
+
+        // SM 4407 (0x1137) — RM arm @0x6B60F2 via [obj+0x250]. sMsg = a local copy of
+        // the RM record's message string [rec+0x10] (via 0x405708); Recog = wParam
+        // (movzx word[rec+2]); Param/Tag/Series = 0.
+        //   006B60C4 6A00x3 push (Param/Tag/Series=0) ; 006B60CA..D6 copy [rec+0x10]->[ebp-0x1C4]
+        //   006B60E1 push [ebp-0x1C4] (sMsg) ; 006B60E5 0F B7 48 02 movzx ecx,word[rec+2] (Recog)
+        //   006B60E9 66 BA 37 11 mov dx,0x1137 ; 006B60F2 FF 93 50 02 00 00 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4407(ushort wParam, string sMsg)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4407, wParam, 0, 0, 0), sMsg ?? string.Empty);
+
+        // SM 4444 (0x115C) — @0x6FE929 via [obj+0x250], per-target loop. sMsg = the
+        // recipient's char name ([tgt+0x106]); Recog=0; Param = byte[rec+4]
+        // (movzx byte). Tag/Series = 0.
+        //   006FE8FE 0F B6 40 04 movzx eax,byte[rec+4] / 50 push (Param) ; 006FE906 6A00x2 push (Tag/Series)
+        //   006FE90A..1B build name string [ebp-0x10] -> push (sMsg) ; 006FE91F 33 C9 xor ecx,ecx (Recog=0)
+        //   006FE921 66 BA 5C 11 mov dx,0x115C ; 006FE929 FF 93 50 02 00 00 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4444(byte param, string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4444, 0, param, 0, 0), charName ?? string.Empty);
+
+        // SM 4445 (0x115D) — @0x6FE865 via [obj+0x250], per-target loop. Same shape as
+        // SM 4444 (Recog=0, Param=byte[rec+4], sMsg=char name).
+        //   006FE83A 0F B6 40 04 movzx eax,byte[rec+4] (Param) ; 006FE85A push name (sMsg)
+        //   006FE85B 33 C9 xor ecx,ecx ; 006FE85D 66 BA 5D 11 mov dx,0x115D ; 006FE865 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4445(byte param, string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4445, 0, param, 0, 0), charName ?? string.Empty);
+
+        // SM 4455 (0x1167) — @0x6A89E0 via [obj+0x250], per-nearby-player loop. sMsg =
+        // char name; Recog=0; Param/Tag are two 7-bit stat values (word[ebp-6]/[ebp-8],
+        // each an "&0x7F" of a computed stat).
+        //   006A89B5 push word[ebp-6] (Param) ; 006A89BA push word[ebp-8] (Tag) ; 006A89BF 6A 00 push (Series)
+        //   006A89C1..D2 name -> push (sMsg) ; 006A89D6 33 C9 xor ecx,ecx (Recog=0) ; 006A89D8 mov dx,0x1167
+        internal static (ClientPacket Header, string Text) BuildSm4455(int param, int tag, string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4455, 0, param, tag, 0), charName ?? string.Empty);
+
+        // SM 4456 (0x1168) — @0x6A8AAB via [obj+0x250]. sMsg = char name; Recog=0;
+        // Param = a 7-bit stat (word[ebp-8]); Tag = a byte (byte[ebp-5]).
+        //   006A8A7F push word[ebp-8] (Param) ; 006A8A84 33 C0 / 8A 45 FB mov al,[ebp-5] / push (Tag)
+        //   006A8A8A 6A 00 push (Series) ; 006A8A8C..9D name -> push (sMsg) ; 006A8AA1 xor ecx,ecx (Recog=0)
+        //   006A8AA3 66 BA 68 11 mov dx,0x1168 ; 006A8AAB FF 93 50 02 00 00 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4456(int param, byte tag, string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4456, 0, param, tag, 0), charName ?? string.Empty);
+
+        // SM 4458 (0x116A) — @0x6A8D22 via [obj+0x250]. sMsg = char name; Recog=0;
+        // Param = a byte flag (byte[ebp-5], the cl argument).
+        //   006A8CF9 33 C0 / 8A 45 FB mov al,[ebp-5] / push (Param) ; 006A8CFE 6A00x2 push (Tag/Series)
+        //   006A8D03..14 name -> push (sMsg) ; 006A8D18 33 C9 xor ecx,ecx (Recog=0) ; 006A8D1A mov dx,0x116A
+        internal static (ClientPacket Header, string Text) BuildSm4458(byte param, string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4458, 0, param, 0, 0), charName ?? string.Empty);
+
+        // SM 4459 (0x116B) — @0x6A8DC2 via [obj+0x250]. Same shape as SM 4458
+        // (Recog=0, Param=byte[ebp-5], sMsg=char name).
+        //   006A8D99 mov al,[ebp-5] / push (Param) ; 006A8DB4 push name (sMsg) ; 006A8DB8 xor ecx,ecx
+        //   006A8DBA 66 BA 6B 11 mov dx,0x116B ; 006A8DC2 FF 93 50 02 00 00 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4459(byte param, string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4459, 0, param, 0, 0), charName ?? string.Empty);
+
+        // SM 4469 (0x1175) — @0x6F788B via [obj+0x250]. All-0 frame; sMsg = char name
+        // ([arg+0x106]); sent only when the arg object (esi) is non-nil.
+        //   006F7869 6A00x3 push (Param/Tag/Series=0) ; 006F786F..7D name -> push (sMsg)
+        //   006F7881 33 C9 xor ecx,ecx (Recog=0) ; 006F7883 66 BA 75 11 mov dx,0x1175 ; 006F788B call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4469(string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4469, 0, 0, 0, 0), charName ?? string.Empty);
+
+        // SM 4470 (0x1176) — @0x6F78F3 via [obj+0x250]. Same shape as SM 4469 (all-0
+        // frame, sMsg = char name [arg+0x106]).
+        //   006F78D1 6A00x3 push ; 006F78D7..E5 name -> push (sMsg) ; 006F78E9 xor ecx,ecx
+        //   006F78EB 66 BA 76 11 mov dx,0x1176 ; 006F78F3 FF 93 50 02 00 00 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4470(string charName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4470, 0, 0, 0, 0), charName ?? string.Empty);
+
+        // SM 4499 (0x1193) — @0x6FBD25 via [obj+0x250]. sMsg = esi (a string argument,
+        // the ecx arg); Recog = edi (an int argument, the edx arg); Param/Tag/Series=0.
+        // Sent only when the string (esi) is non-nil.
+        //   006FBD14 6A00x3 push (Param/Tag/Series=0) ; 006FBD1A 56 push esi (sMsg)
+        //   006FBD1B 8B CF mov ecx,edi (Recog) ; 006FBD1D 66 BA 93 11 mov dx,0x1193 ; 006FBD25 call [ebx+0x250]
+        internal static (ClientPacket Header, string Text) BuildSm4499(int recog, string sMsg)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4499, recog, 0, 0, 0), sMsg ?? string.Empty);
+
+        // SM 4480 (0x1180) — @0x7068AF, broadcast through the member wrapper 0x705954
+        // (walks [group+0x30] and re-sends [member+0x250] to each; the same wrapper
+        // SM_108 uses). All-0 frame; sMsg = _LStrCatN(3) of three parts. Per the
+        // _LStrCatN stack order (first-pushed = leftmost), the parts are the const
+        // prefix "与" (@0x7068F4), the variable middle string [ebp-4], and the const
+        // suffix "行会的行会战结束" (@0x706900):
+        //   00706882 6A00x3 push (Param/Tag/Series=0) ; 00706888 push "与" ; push [ebp-4] ; push "行会…束"
+        //   00706895 lea eax,[ebp-0x14]; mov edx,3; call 0x405890 (_LStrCatN) ; 007068A2 push [ebp-0x14] (sMsg)
+        //   007068A6 33 C9 xor ecx,ecx (Recog=0) ; 007068A8 66 BA 80 11 mov dx,0x1180 ; 007068AF call 0x705954
+        // Const strings decoded from the image (Delphi long strings, GBK / cp936):
+        //   0x7068F4 len=2  D3 EB          = "与"
+        //   0x706900 len=16 D0 D0 BB E1 B5 C4 D0 D0 BB E1 D5 BD BD E1 CA F8 = "行会的行会战结束"
+        // The middle string is the trigger-side guild name (caller-supplied).
+        internal const string Sm4480Prefix = "与";
+        internal const string Sm4480Suffix = "行会的行会战结束";
+
+        internal static (ClientPacket Header, string Text) BuildSm4480(string guildName)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_4480, 0, 0, 0, 0),
+                Sm4480Prefix + (guildName ?? string.Empty) + Sm4480Suffix);
     }
 }
