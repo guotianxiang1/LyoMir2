@@ -58,7 +58,11 @@ namespace GameSvr
                 unchecked(seconds * 1000), 0);
         }
 
-        private bool AddTimedAbilityInternal(byte internalType, int value,
+        // 原生 AddState = VMT+0x1EC @0x7730D0，形参 (eax=self, edx=stateId,
+        // ecx=durationMs, [ebp+0xC]=value, [ebp+8]=flag)。它是**虚槽**，直接调用点遍布
+        // 引擎（0x76B41F MakePosion、0x7732C3/0x773342/0x77335B 状态联动、0x5FABC5
+        // TStoneFoxBossMon.Initialize 等），不止 poison 一条路，所以子类需要能直接调它。
+        internal bool AddTimedAbilityInternal(byte internalType, int value,
             int duration, byte newNodeFlag)
         {
             if (!CanAddNativeTimedAbility(internalType))

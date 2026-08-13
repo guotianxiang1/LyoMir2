@@ -3084,7 +3084,28 @@ namespace GameSvr
                 // 逐字节记录并 fail-closed。原先落 default(0x67AE5E) → nil，该怪不出现。
                 case 152:
                     Cert = new NoWinerAnimal();
-                    break;
+                // ✅ 战神字节证据 (Tier-1)：race 181 = TStoneMonster(VMT 0x65E2BC, parent TMonster,
+                // size 与父类同为 0x4E8 => 无自有字段)。索引表[181-0xB=0xAA]=0x61=97 ; jt[97]=0x67ABC9：
+                //   67ABC9  B2 01              mov  dl,1
+                //   67ABCB  A1 70 E2 65 00     mov  eax,[0x65E270]   ; classref -> TStoneMonster
+                //   67ABD0  E8 0B 25 FF FF     call 0x66D0E0         ; TStoneMonster.Create
+                //   67ABD5  89 45 F8           mov  [ebp-8],eax
+                //   67ABD8  E9 62 01 00 00     jmp  0x67AD3F
+                // classref [0x65E270] 全 CODE 段 1 个加载点；ctor 0x66D0E0 的 E8 调用者全扫 = 1 个。
+                // ctor 唯一自定义写 = `mov byte [esi+0x4E4],1`；唯一 VMT 覆写 Run 是空转发。
+                // 原先落 default(0x67AE5E) → nil。详见 Monster/StoneMonster.cs。
+                // ✅ 战神字节证据 (Tier-1)：race 175 = TStoneFoxBossMon(VMT 0x5F9634, parent TAnimal,
+                // size 与父类同为 0x4D8 => 无自有字段)。索引表[175-0xB=0xA4]=0x5B=91 ; jt[91]=0x67AB51：
+                //   67AB51  B2 01              mov  dl,1
+                //   67AB53  A1 E8 95 5F 00     mov  eax,[0x5F95E8]   ; classref -> TStoneFoxBossMon
+                //   67AB58  E8 CB 2C 0A 00     call 0x71D828         ; = TAnimal.Create（本类无自有 ctor）
+                //   67AB5D  89 45 F8           mov  [ebp-8],eax
+                //   67AB60  E9 DA 01 00 00     jmp  0x67AD3F
+                // classref [0x5F95E8] 全镜像 1 个加载点。覆写只有 Initialize(+0x078)@0x5FABA0
+                // 与 +0x0B8@0x5FABD0。原先落 default(0x67AE5E) → nil。详见 Monster/StoneFoxBossMon.cs。
+                  case 175:
+                      Cert = new StoneFoxBossMon();
+                      break;
                 // ✅ 战神字节证据 (Tier-1)：race 247 = TParalyzationMon(VMT 0x665C18,
                 // parent TGasMothMonster)。工厂 jt[115]=0x67AD0E → classref [0x665BCC]。
                 // ctor sub_66D1F8 纯转调 GasMoth ctor；唯一覆写 Attack(+0x204)=0x66D1EC 是空
