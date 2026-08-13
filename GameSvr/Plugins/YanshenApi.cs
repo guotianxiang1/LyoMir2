@@ -2926,8 +2926,26 @@ namespace GameSvr.Plugins
         // not float: this one goes through atoi, not atof.
         public int SunSwordB() => ParamAtoi("逐日剑法_B值", 6);
 
-        public bool IsOneSword() => Enabled("基本剑术");
+        public bool IsOneSword() => PatchToggleOn("基本剑术");
         public int OneSwordN() => ParamAtoi("基本剑术_n值", 3);
+
+        /// <summary>
+        /// Toggle read for a code-patch override. Unlike a script API, "off"
+        /// here is not a failure: it is simply the unpatched native
+        /// instruction. Reading it must therefore never raise, because the
+        /// recalc path that consults it can run inside a strict direct-call
+        /// scope opened by some unrelated yanshen script function.
+        /// </summary>
+        public bool PatchToggleOn(string chineseKey)
+        {
+            if (_pluginManager == null) return false;
+            var plugin = _pluginManager.GetPlugin("YanshenCompat");
+            if (plugin?.State != PluginState.Running) return false;
+            if (!plugin.IsInitialized && !IsInitializing(plugin)) return false;
+            var lookupKey = _keyMap.TryGetValue(chineseKey, out var mapped) ? mapped : chineseKey;
+            var nativeVal = _pluginManager.GetNativeConfigValue(lookupKey);
+            return nativeVal != null && IsEnabledValue(nativeVal);
+        }
 
         /// <summary>
         /// 烈火 multiplies the level with `shl eax,k`, so A survives only as a

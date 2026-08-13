@@ -113,9 +113,13 @@ static void Run()
 
         Equal(7, InvokeThrusting(nativeHitPlus, skillLevel, api),
             "enabled thrusting formula A=5 level=2");
+        // The plugin caps A at 255 before the write (0x100B3F04 cmp eax,0xFF +
+        // cmovg), then host 0x0076B02C `04 05 add al,5` adds it in 8 bits and
+        // 0x0076B02E `88 83 90 00 00 00` stores the byte. So 300 becomes 255
+        // and 255 + level wraps; it does not stick at 255.
         manager.SetNativeConfigValue("攻杀剑术_A值", "300");
-        Equal(255, InvokeThrusting(nativeHitPlus, skillLevel, api),
-            "thrusting hit bonus must be capped at 255");
+        Equal(1, InvokeThrusting(nativeHitPlus, skillLevel, api),
+            "thrusting hit bonus must wrap at 256, not saturate (0x0076B02C add al)");
         manager.SetNativeConfigValue("攻杀剑术", 0L);
         Assert(!api.IsThrusting(), "disabled thrusting switch remained enabled");
         Equal(nativeHitPlus, InvokeThrusting(nativeHitPlus, skillLevel, api),
@@ -123,10 +127,20 @@ static void Run()
 
         Equal(220, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
             "enabled fire-sword formula A=4 B=4 level=2");
+        // A only ever becomes a shift count. 200 is not one of the encodable
+        // values (0x100B44BB-0x100B44FD handles 0/2/4/8/16), so the staged
+        // default `C1 E0 02` survives and the level is multiplied by 4, not by
+        // 200. B=100 lands in the imm8 of 0x0076B0EF `04 04`, giving
+        // hitDouble = (byte)(2*4 + 100) = 108, and the untouched native chain
+        // at 0x0076A06C then yields 100 + Round(100/10.0*108).
         manager.SetNativeConfigValue("烈火剑法_A值", "200");
         manager.SetNativeConfigValue("烈火剑法_B值", "100");
-        Equal(2550, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
-            "fire-sword multiplier must be capped at 25.5");
+        Equal(1180, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
+            "unencodable fire-sword A must fall back to shl eax,2 (0x0076B0EC)");
+        manager.SetNativeConfigValue("烈火剑法_A值", "8");
+        manager.SetNativeConfigValue("烈火剑法_B值", "4");
+        Equal(300, InvokeFireSword(power, nativeHitDouble, skillLevel, api),
+            "encodable fire-sword A=8 must select shl eax,3");
         manager.SetNativeConfigValue("烈火剑法", 0L);
         Assert(!api.IsFireSword(), "disabled fire-sword switch remained enabled");
         Equal(nativeFire, InvokeFireSword(power, nativeHitDouble, skillLevel, api),

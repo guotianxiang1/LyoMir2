@@ -81,6 +81,14 @@ static void Run()
         // Plugin GUI control 0x00030B2C: 默认系数A=2,B=15,伤害倍数=(A+Level)/B
         Equal(27, InvokeHelper(power, trainLevel, skillLevel, api),
             "enabled half-moon formula A=2 B=15 level=2");
+        // 半月 is the only one of the six overrides whose high-level arm the
+        // plugin leaves standing. 刺杀 loses its btLevel==4 arm to `EB 17` at
+        // 0x00771C25 (plugin 0x100B417C) and 烈火 loses its to `EB 15` at
+        // 0x0077231D (plugin 0x100B45DA), but no blob patch targets the
+        // half-moon arm at 0x0076A13D or in the 0x00771F30 region, so above the
+        // scaling level A and B never enter the result.
+        Equal(nativeFallbackAboveCap, InvokeHelper(power, 8, 4, api),
+            "enabled half-moon must still swing unscaled above level 3");
 
         manager.SetNativeConfigValue("半月弯刀", 0L);
         Assert(!api.IsHalfMoon(), "disabled half-moon switch remained enabled");
