@@ -116,11 +116,21 @@ Assert(Snapshot(player.m_CreditCard, gloryVersion, creditVersion)
 Reset(player, gloryVersion, creditVersion, loaded: false, glory: 100,
     gloryVersionValue: 40, creditVersionValue: 404);
 M2Share.CreditCardService = NativeCreditCardService.Disabled;
-bridge.CurrentNpc = new NormNpc
+// The native audit gate is the CLICKED npc at player+0xCD8, not the script context:
+//   0x6DF341 83 BF D8 0C 00 00 00  cmp dword [edi+0xCD8],0
+//   0x6DF348 0F 84 06 01 00 00     je 0x6DF454        ; nil -> no 经验/内功经验/荣耀点 audit
+//   0x6DF34E 8B 87 D8 0C 00 00     mov eax,[edi+0xCD8]
+// and the click handler only writes that field AFTER the dispatch vcall
+//   0x6B8BA2 E8 9D 78 06 00        call 0x720444
+//   0x6B8BA7 89 B3 D8 0C 00 00     mov [ebx+0xCD8],esi
+// so a fixture that binds only the script NPC is asking for a log native would omit.
+var gloryNpc = new NormNpc
 {
     m_sCharName = "glory-npc",
     m_sMapName = "npc-map"
 };
+bridge.CurrentNpc = gloryNpc;
+player.m_NPC = gloryNpc;
 var giveArgs = new List<PasValue>
 {
     PasValue.FromString("荣耀点"),
