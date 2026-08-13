@@ -1060,6 +1060,7 @@ namespace SystemModule
         public const int CM_GILD_ACCEPT_REQUEST = 4611;
         public const int SM_GILD_ACCEPT_REQUEST = 4611;
         public const int SM_PENDING_REQUEST = 4613;
+        public const int SM_CLEAR_PENDING_REQUEST = 4615;
         public const int CM_FIND_CORPS_BYNAME = 4616;
         public const int SM_FIND_CORPS_BYNAME = 4616;
         public const int CM_FIND_GILD_BYNAME = 4617;

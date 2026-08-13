@@ -32,5 +32,17 @@ namespace GameSvr
             SendSocket(Grobal2.MakeDefaultMsg(Grobal2.SM_PENDING_REQUEST, 0, 0, 0, 0),
                 body);
         }
+
+        // sub_6F769C @0x006F769C, reached from UserLogon @0x6B24E7.
+        // Always sends SM 4615 (0x1207) via [obj+0x254], Recog=0, Len=8.
+        // Body is zeros when [player+0xAE8]==0 (0x6F76BA test esi / je 0x6F76E3)
+        // or when the subsequent 0x6A52A0 lookup fails. The non-zero path needs
+        // 0x705660's return (two dwords used as the lookup key) which is not
+        // wired here; login still emits the packet, matching the always-send.
+        private void SendNativeClearPendingRequestOnLogon()
+        {
+            SendSocket(Grobal2.MakeDefaultMsg(Grobal2.SM_CLEAR_PENDING_REQUEST, 0, 0, 0, 0),
+                new byte[8]);
+        }
     }
 }

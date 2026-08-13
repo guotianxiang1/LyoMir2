@@ -1394,6 +1394,9 @@ namespace GameSvr
                 // 战神 UserLogon @0x6B24E0: call 0x6F7638 always emits SM 4613
                 // (0x6F7687 66 BA 05 12) with an 8-byte body.
                 SendNativePendingRequestOnLogon();
+                // 战神 UserLogon @0x6B24E7: call 0x6F769C always emits SM 4615
+                // (0x6F76F1 66 BA 07 12) with an 8-byte body.
+                SendNativeClearPendingRequestOnLogon();
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
