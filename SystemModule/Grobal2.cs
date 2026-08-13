@@ -1966,5 +1966,39 @@ namespace SystemModule
         public const int CM_1258 = 1258;   // 元宝寄售, leaf 0x6DA6C3
         public const int CM_1259 = 1259;   // 元宝寄售(开启提交), leaf 0x6DA6EF
         public const int CM_1260 = 1260;   // 设置元宝交易金额, leaf 0x6DA6FC
+        // === CM missing Q2 (ascending 26..50 of the CM missing set, ident 1265..3179) ===
+        // Every ident below owns a real arm in 战神's CM dispatcher sub_6D7D68
+        // (selector tree rooted at 0x6D805C, shared exit label 0x6DBC2C); none of
+        // them carries a symbolic name in the image, so the handler (leaf) VA and
+        // the worker VA it tail-calls are recorded inline. Wire record roles the
+        // dispatcher keeps at [ebp-0x34]: [msg+0]=Recog->nParam1, [msg+6]=Param->
+        // nParam2, [msg+8]=Tag->nParam3, [msg+0xA]=Series->wParam, body->sMsg,
+        // (total-0xC)->nBodyLen. See docs/cm_q2_missing_impl_20260813.md.
+        public const int CM_1265 = 1265;  // 0x6DA710 -> 0x6E8564  元宝交易设置
+        public const int CM_1280 = 1280;  // 0x6DA8F3 -> 0x6E9208  自身对象回显
+        public const int CM_1291 = 1291;  // 0x6DA3CA -> 0x69059C  英雄灵珠
+        public const int CM_1300 = 1300;  // 0x6DAA17 -> 0x63D980  分身点击NPC
+        public const int CM_1301 = 1301;  // 0x6DAA72 -> 0x63DC98  分身执行NPC过程
+        public const int CM_1316 = 1316;  // 0x6DAACF -> 0x746908  英雄生肖镶嵌
+        public const int CM_1320 = 1320;  // 0x6DAB6A -> 0x765E68  分身会话请求
+        public const int CM_1350 = 1350;  // 0x6DAC8E -> 0x6F09C4  元宝寄售·写
+        public const int CM_1351 = 1351;  // 0x6DACA7 -> 0x6F0A98  元宝寄售·写
+        public const int CM_1352 = 1352;  // 0x6DACD0 -> 0x6F0B84  元宝寄售·上架
+        public const int CM_1353 = 1353;  // 0x6DACE4 -> 0x6F0E0C  元宝寄售·写
+        public const int CM_1354 = 1354;  // 0x6DACF6 -> 0x6F0E64  元宝寄售·写
+        public const int CM_1355 = 1355;  // 0x6DAD08 -> 0x6F0EBC  元宝寄售·写
+        public const int CM_1356 = 1356;  // 0x6DAD21 -> 0x6F0F28  元宝寄售·写
+        public const int CM_1357 = 1357;  // 0x6DAD33 -> 0x6F0F80  元宝寄售·写
+        public const int CM_1358 = 1358;  // 0x6DAD45 -> 0x6F0FD8  元宝寄售·写
+        public const int CM_1359 = 1359;  // 0x6DAD57 -> 0x6F1028  元宝寄售·取回(cl=1)
+        public const int CM_1360 = 1360;  // 0x6DAD6B -> 0x6F1028  元宝寄售·取回(cl=0)
+        public const int CM_1361 = 1361;  // 0x6DAD7F -> 0x6F110C  元宝寄售·写
+        public const int CM_1362 = 1362;  // 0x6DAD91 -> 0x6F1164  元宝寄售·写
+        public const int CM_1363 = 1363;  // 0x6DADA3 -> 0x6F11BC  元宝寄售·写
+        public const int CM_1364 = 1364;  // 0x6DADB5 -> 0x6F120C  元宝寄售·写
+        public const int CM_1376 = 1376;  // 0x6DAFF3 -> 0x6F2E44  坐骑马牌
+        public const int CM_2815 = 2815;  // 0x6D9B52 -> 0x6D4E4C  消息板/relay
+        public const int CM_3179 = 3179;  // 0x6DA3F3 -> 0x6E320C  商人物品字节查询
+        // === end CM missing Q2 ===
     }
 }
