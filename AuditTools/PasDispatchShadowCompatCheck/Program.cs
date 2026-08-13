@@ -2288,9 +2288,27 @@ static List<PasValue> Values(params object[] values) => values.Select(value => v
 static void RequireClosed(string source, string name, string description)
 {
     Equal(1, Count(source, $"case \"{name}\":"), description + " dispatch count");
-    Require(source,
-        $@"case\s+""{Regex.Escape(name)}""\s*:[\s\S]{{0,360}}?RejectUnsupportedNativeApi",
-        description + " fail-closed dispatch");
+    // The arm must *be* the reject, not merely mention it. A window-limited regex
+    // measures how many characters of commentary sit above the reject rather than
+    // whether the arm is closed, and it also matches the token inside a comment,
+    // so the label's whole body is sliced out and stripped of comments first.
+    var marker = $"case \"{name}\":";
+    var start = source.IndexOf(marker, StringComparison.Ordinal);
+    Assert(start >= 0, description + " case missing");
+    var next = source.IndexOf("case \"", start + marker.Length,
+        StringComparison.Ordinal);
+    var body = next < 0 ? source[start..] : source[start..next];
+    var code = string.Concat(body[marker.Length..]
+        .Split('\n')
+        .Select(line =>
+        {
+            var comment = line.IndexOf("//", StringComparison.Ordinal);
+            return (comment < 0 ? line : line[..comment]) + "\n";
+        }));
+    code = Regex.Replace(code, @"\s+", " ").Trim();
+    Assert(code == "return RejectUnsupportedNativeApi();",
+        $"{description} fail-closed dispatch: expected the arm to be exactly "
+        + $"`return RejectUnsupportedNativeApi();`, actual `{code}`");
 }
 
 static string Slice(string source, string startMarker, string endMarker)
