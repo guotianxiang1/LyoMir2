@@ -1380,6 +1380,27 @@ namespace GameSvr
                 // else re-push SM 0x3026 (0x6B23EC-0x6B2414) with X=[esi+0x1908] and
                 // Y=[esi+0x190a]. Without it the client draws no marker after a relog.
                 ReplayNativeFixedCoordOnLogon();
+                // 战神 UserLogon @0x6B24D2: call 0x6F071C always emits SM 4501
+                // (0x1195) via [obj+0x254]. Empty [obj+0xAE8] -> Param=5 Len=0;
+                // otherwise Param=0 + 0x40-byte corps desc. C# SendNativePlayerCorps
+                // already matches that ladder; native fires it on login, not only
+                // on CM_PLAYER_CORPS.
+                SendNativePlayerCorps(Grobal2.SM_PLAYER_CORPS);
+                // 战神 UserLogon @0x6B24D9: call 0x6F07CC always emits SM 4500
+                // (0x1194) via [obj+0x254]. 0x6F07E3 cmp [ebx+0xAE8],0 / je
+                // Param=5; else 0x6ADAE4 fail -> Param=12; else Param=0 +
+                // 0x38-byte gild desc (0x6F0826 66 BA 94 11).
+                SendNativePlayerGuild();
+                // 战神 UserLogon @0x6B24E0: call 0x6F7638 always emits SM 4613
+                // (0x6F7687 66 BA 05 12) with an 8-byte body.
+                SendNativePendingRequestOnLogon();
+                // 战神 UserLogon @0x6B24E7: call 0x6F769C always emits SM 4615
+                // (0x6F76F1 66 BA 07 12) with an 8-byte body.
+                SendNativeClearPendingRequestOnLogon();
+                // 战神 UserLogon @0x6B24F5: call 0x6AEE04 always emits SM 4628
+                // (0x6AEE90 66 BA 14 12) Recog=0 Param=0 Tag=role Series=0.
+                // [obj+0xAE8]==0 -> role 0 (0x6AEE0B xor esi,esi / 0x6AEE15 je).
+                SendNativeSocialRoleRefresh();
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
