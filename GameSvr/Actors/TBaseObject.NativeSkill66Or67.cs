@@ -164,13 +164,31 @@ namespace GameSvr
             // UNCONDITIONALLY, ahead of the isHuman term at 0x74451E, so the
             // seed advances for monster targets too. When
             // `high > roll && targetIsHuman`, 0x74452C calls
-            // sub_76C89C(target, self, 5): that callee drains a fifth of the
-            // target's HP and/or MP (`fild [+0x2AC] / fdiv [0x76C988] /
-            // fild 5 / fmulp / 0x403580`) picked by the +0x1BA / +0x1D3 /
-            // +0x1BB shield bytes and the job byte, and its two tails are
-            // VMT+0x1B0 and sub_76B4F8(...,200), neither of which is
-            // resolved. The drain is left BLOCKED rather than half-ported;
-            // consuming the roll here keeps the RNG stream aligned.
+            // sub_76C89C(eax=target, edx=self, ecx=5). Its shape is now fully
+            // read; only one hop is still missing.
+            //
+            //   float32 [0x76C988] = 100.0, [0x76C98C] = 200.0, and every
+            //   quotient goes through 0x403580 = @TRUNC (not @ROUND).
+            //   0x76C8AC  if +0x1BA or +0x1D3 is set:
+            //     0x76C8BE   +0x72 == 1  -> mpDrain = TRUNC(MP/100 * 5)
+            //     else       hpDrain = TRUNC(HP/100 * 5), handed to target
+            //                VMT+0x1B0 and then ZEROED, so HP is not
+            //                subtracted here
+            //   0x76C906  else if +0x1BB is set: both drains use /200
+            //             else hpDrain = TRUNC(HP/100 * 5)
+            //   0x76C959  HP -= hpDrain when positive, MP -= mpDrain likewise
+            //   0x76C96D  sub_76B4F8(target, target, hpDrain, 200), which is
+            //             SendDelayMsg with BaseObject = 0x2724 = RM_STRUCK as
+            //             the sentinel, wIdent = 0x2775 = RM_10101,
+            //             wParam = nParam1 = hpDrain, nParam2 = 0,
+            //             nParam3 = the target, delay 200 ms
+            //
+            // BLOCKED: target VMT+0x1B0 = sub_767D14 (TPlayObject VMT
+            // 0x6AC8C8+0x1B0). That is the shared absorb path — state 0x3F
+            // halving at 0x767D2C, a percentage cut from +0x3DF at 0x767D37,
+            // then the magic-shield MP absorption on +0x1D3 / +0x1BA — and it
+            // has no mapped C# entry point, so the drain is not ported.
+            // Consuming the roll here keeps the RNG stream aligned.
             M2Share.RandomNumber.Random(high + 1000);
 
             int selfLevelTerm = Math.Min(150, (int)m_WAbil.Level);

@@ -956,6 +956,17 @@ namespace GameSvr
                         ProcessMsg.wParam);
                     SendSocket(m_DefMsg);
                     break;
+                // 0x6B6065: gate on sub_774288 first, then `66 BA 1E 00` +
+                // `6A 01 / 6A 00 / 6A 00 / 6A 00` through the unicast slot
+                // VMT+0x250, with the caster as Recog.
+                case Grobal2.RM_NATIVE_STEALTH_VANISH:
+                    if (BaseObject != null &&
+                        BaseObject.IsNativeStealthedFrom(this))
+                    {
+                        SendDefMessage(Grobal2.SM_DISAPPEAR,
+                            ProcessMsg.BaseObject, 0, 0, 0, "");
+                    }
+                    break;
                 case Grobal2.RM_USERMOVE:
                     CompleteNativeUserMove(ProcessMsg);
                     break;
