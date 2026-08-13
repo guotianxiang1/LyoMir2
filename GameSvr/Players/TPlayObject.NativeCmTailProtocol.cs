@@ -106,6 +106,12 @@ namespace GameSvr
                 case Grobal2.CM_4648:
                     ClientNativePrizeSettle();
                     return true;
+                case Grobal2.CM_4649:
+                    ClientNativePrizeClaimWithItemDelete();
+                    return true;
+                case Grobal2.CM_4650:
+                    ClientNativeTreasureMapSynth();
+                    return true;
                 default:
                     return false;
             }
@@ -521,6 +527,36 @@ namespace GameSvr
         private void ClientNativePrizeSettle()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4648, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4649, native leaf 0x6DBC09, worker 0x6FBB28.
+        ///
+        /// The leaf calls 0x6FBB28(Self, Recog=[record]). The worker resolves the
+        /// prize manager [[0x7D605C]] (0x6FBB37) and calls 0x69C47C(manager,
+        /// Recog, Self) (0x6FBB42), which sweeps Self's bag for the item carrying
+        /// the client-supplied id and deletes it as the cost of the claim. The bag
+        /// sweep/delete rule and the manager are not modelled, so the deletion and
+        /// the SM it answers are withheld.
+        /// </summary>
+        private void ClientNativePrizeClaimWithItemDelete()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4649, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4650, native leaf 0x6DBC18, worker 0x6FB51C.
+        ///
+        /// The leaf calls 0x6FB51C(Self, Recog=[record], body string [ebp-8], body
+        /// length ESI). The worker resolves the prize manager [[0x7D605C]], calls
+        /// 0x69C648 then the synthesis state machine 0x69C03C (0x6FB54B), whose
+        /// 0..5 return code drives a six-way jump table at 0x6FB569 selecting the
+        /// SM result. The synthesis machine is not modelled, so the outcome code —
+        /// and therefore which of the six replies to send — cannot be derived.
+        /// </summary>
+        private void ClientNativeTreasureMapSynth()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4650, m_sCharName);
         }
     }
 }
