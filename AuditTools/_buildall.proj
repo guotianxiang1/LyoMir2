@@ -1,0 +1,17 @@
+<Project DefaultTargets="BuildAll">
+  <ItemGroup>
+    <ToolProj Include="$(MSBuildThisFileDirectory)**\*.csproj" />
+  </ItemGroup>
+  <Target Name="RestoreAll">
+    <MSBuild Projects="@(ToolProj)"
+             BuildInParallel="true"
+             Targets="Restore"
+             ContinueOnError="WarnAndContinue" />
+  </Target>
+  <Target Name="BuildAll" DependsOnTargets="RestoreAll">
+    <MSBuild Projects="@(ToolProj)"
+             BuildInParallel="true"
+             Targets="Build"
+             ContinueOnError="WarnAndContinue" />
+  </Target>
+</Project>
