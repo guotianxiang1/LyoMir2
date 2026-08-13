@@ -5,7 +5,7 @@ namespace GameSvr
     public partial class TPlayObject
     {
         private const int NativeChannelMagicCancelRefMessage = Grobal2.SM_CHANNEL_MAGIC_CANCEL;
-        private const int NativeLocationChannelMagicCancelRefMessage = 1234;
+        private const int NativeLocationChannelMagicCancelRefMessage = Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL;
 
         internal uint m_dwNativeChannelMagicTick;
         internal ushort m_wNativeChannelMagicId;
