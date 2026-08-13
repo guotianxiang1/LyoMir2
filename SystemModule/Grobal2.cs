@@ -1365,6 +1365,13 @@ namespace SystemModule
         public const int RM_NATIVE_CHARGE_MOVE = 15321;
         /// <summary>Carrier for <see cref="SM_NATIVE_BLINK_MOVE"/>.</summary>
         public const int RM_NATIVE_BLINK_MOVE = 15322;
+        /// <summary>
+        /// In-process label for native ident 0x3042, broadcast by magic 261 at
+        /// 0x773D0A through VMT+0xD8 = sub_6DC590 and picked up in
+        /// TPlayObject.Operate at the 0x6B4391 table, slot 62 of base 0x3004,
+        /// arm 0x6B6065. Not a wire ident; the arm answers with SM_DISAPPEAR.
+        /// </summary>
+        public const int RM_NATIVE_STEALTH_VANISH = 15323;
         public const int RM_WWJATTACK = 10017;
         public const int RM_WSJATTACK = 10018;
         public const int RM_WTJATTACK = 10019;
