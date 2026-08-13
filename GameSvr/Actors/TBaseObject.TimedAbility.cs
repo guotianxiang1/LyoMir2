@@ -896,6 +896,12 @@ namespace GameSvr
                         m_WAbil.MaxHP = TruncMulNative(m_WAbil.MaxHP, 1.5);
                         m_WAbil.MaxMP = TruncMulNative(m_WAbil.MaxMP, 1.5);
                         break;
+                    case 11:
+                        // STATE-32 H08 — state 0x2B (internalType 43): SC += value
+                        // on both lo/hi words (@0x77356E, esi+0x38/0x3C = SC).
+                        // Body/evidence in TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState2B_ScBoost(value);
+                        break;
                     case 4:
                         m_WAbil.MaxHP = unchecked(m_WAbil.MaxHP + value);
                         break;
@@ -957,6 +963,24 @@ namespace GameSvr
                     case 62:
                         m_wEffectResistance = unchecked((ushort)(m_wEffectResistance +
                             (ushort)value));
+                        break;
+                    case 65:
+                        // STATE-32 H1A — state 0x61 (internalType 97): job-scaled
+                        // MaxHP/MaxMP (@0x773A71). Body/evidence in
+                        // TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState61_JobMaxHpMp(value);
+                        break;
+                    case 71:
+                        // STATE-32 H1B — state 0x67 (internalType 103): DC/MC/SC
+                        // HIGH word += value (@0x773ADC). Body/evidence in
+                        // TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState67_UpperCombat(value);
+                        break;
+                    case 72:
+                        // STATE-32 H1C — state 0x68 (internalType 104): AC/MAC
+                        // lo+hi += value (@0x773AF9). Body/evidence in
+                        // TBaseObject.StateRecompute.cs.
+                        ApplyRecomputeState68_AcMac(value);
                         break;
                 }
             }
