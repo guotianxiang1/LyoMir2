@@ -1921,9 +1921,32 @@ namespace GameSvr
         /// here. This body previously used step 3/10 at Width&lt;80, margin 50/15/2 at
         /// Height 150/50, a retry count of 201 and a reseed of Random(Width) with no
         /// margin, and had no LinkPoint fallback at all — none of which native has.
-        private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
+        /// MOVE-61/62: the loop is preceded by two independent per-axis seeders.
+        /// MOVE-63: native keeps one body for all 11 callers, so this is the single
+        /// C# authority; <see cref="SpaceMove_GetRandXY"/> and TPlayObject's
+        /// TryResolveNativeUserMoveCoordinates are both adapters over it.
+        /// <code>
+        /// 7782E4  83 3F 00     cmp dword [edi],0    ; *pX, signed
+        /// 7782E7  7F 0B        jg  0x7782F4         ; only >0 keeps the caller value
+        /// 7782E9  8B 43 3C     mov eax,[ebx+0x3C]   ; Width
+        /// 7782EC  E8 5B B8 C8 FF call 0x403B4C      ; Random(Width)
+        /// 7782F1  40           inc eax              ; 1..Width (X==Width is possible)
+        /// 7782F2  89 07        mov [edi],eax
+        /// 7782F4..778308        the same against Height (+0x40) for *pY
+        /// </code>
+        /// The X seeder runs before the Y seeder, which fixes the RNG call order.
+        internal static bool NativeGetRandomXY(Envirnoment Envir,
+            ref int nX, ref int nY)
         {
-            var nStep = (short)(Envir.wWidth < 50 ? 2 : 3);
+            if (nX <= 0)
+            {
+                nX = M2Share.RandomNumber.Random(Envir.wWidth) + 1;
+            }
+            if (nY <= 0)
+            {
+                nY = M2Share.RandomNumber.Random(Envir.wHeight) + 1;
+            }
+            var nStep = Envir.wWidth < 50 ? 2 : 3;
             var nMargin = Envir.wHeight < 30
                 ? 2
                 : Envir.wHeight < 250 ? 20 : 50;
@@ -1939,16 +1962,16 @@ namespace GameSvr
                 }
                 else
                 {
-                    nX = (short)(M2Share.RandomNumber.Random(Envir.wWidth / 2)
-                        + nMargin);
+                    nX = M2Share.RandomNumber.Random(Envir.wWidth / 2)
+                        + nMargin;
                     if (nY < (Envir.wHeight - nMargin - 1))
                     {
                         nY += nStep;
                     }
                     else
                     {
-                        nY = (short)(M2Share.RandomNumber.Random(Envir.wHeight / 2)
-                            + nMargin);
+                        nY = M2Share.RandomNumber.Random(Envir.wHeight / 2)
+                            + nMargin;
                     }
                 }
             }
@@ -1958,9 +1981,21 @@ namespace GameSvr
             }
             var Point = Envir.m_PointList[
                 M2Share.RandomNumber.Random(Envir.m_PointList.Count)];
-            nX = Point.nX;
-            nY = Point.nY;
+            // 0x7783EC / 0x7783F4 read the record with movzx, so the word is
+            // zero-extended into the caller's Int32 slot.
+            nX = unchecked((ushort)Point.nX);
+            nY = unchecked((ushort)Point.nY);
             return true;
+        }
+
+        private bool SpaceMove_GetRandXY(Envirnoment Envir, ref short nX, ref short nY)
+        {
+            int nWideX = nX;
+            int nWideY = nY;
+            var result = NativeGetRandomXY(Envir, ref nWideX, ref nWideY);
+            nX = unchecked((short)nWideX);
+            nY = unchecked((short)nWideY);
+            return result;
         }
 
         internal bool TrySpaceMoveToEnvironment(Envirnoment targetEnvironment,
