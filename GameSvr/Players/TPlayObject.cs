@@ -918,6 +918,25 @@ namespace GameSvr
             return m_PEnvir.MoveToMovingObjectForRun(m_nCurrX, m_nCurrY, this, nX, nY, ignoreObjects) > 0;
         }
 
+        // Walk() returning false means EnterAnotherMap failed after the run
+        // mover already committed the actor into the new cell. Native
+        // sub_741224 / sub_76756C / sub_767694 all ignore 0x778EC0's return
+        // (next insn is `mov dl,0x33`) and never roll back; C# still does.
+        // The rollback must name the COMMITTED cell as the source: MOVE-35(b)
+        // only succeeds from 0x779A95 after unlinking the actor from nCX/nCY,
+        // so passing the already-restored old coords looks up an empty list
+        // and returns 0, leaving the actor registered only at the new cell
+        // while CurrXY says the old one.
+        protected void RollbackCommittedRunMove(int oldX, int oldY)
+        {
+            var committedX = m_nCurrX;
+            var committedY = m_nCurrY;
+            m_nCurrX = (short)oldX;
+            m_nCurrY = (short)oldY;
+            m_PEnvir.MoveToMovingObject(committedX, committedY, this,
+                m_nCurrX, m_nCurrY, true);
+        }
+
         private bool RunTo(byte btDir, bool boFlag, int nDestX, int nDestY)
         {
             const string sExceptionMsg = "[Exception] TBaseObject::RunTo";
@@ -995,9 +1014,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)nOldX;
-                        m_nCurrY = (short)nOldY;
-                        m_PEnvir.MoveToMovingObject(nOldX, nOldY, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(nOldX, nOldY);
                     }
                 }
             }
@@ -1087,9 +1104,7 @@ namespace GameSvr
                     }
                     else
                     {
-                        m_nCurrX = (short)n10;
-                        m_nCurrY = (short)n14;
-                        m_PEnvir.MoveToMovingObject(n10, n14, this, m_nCurrX, m_nCurrY, true);
+                        RollbackCommittedRunMove(n10, n14);
                     }
                 }
             }
