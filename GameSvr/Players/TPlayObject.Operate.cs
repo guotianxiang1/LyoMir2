@@ -1557,8 +1557,28 @@ namespace GameSvr
         private void ClientDealTry(string sHumName)
         {
             TPlayObject TargetPlayObject;
-            var yanshenTradeBanned = new YanshenApi(this, null, M2Share.PluginManager).IsTradeBanned();
-            if (M2Share.g_Config.boDisableDeal || yanshenTradeBanned)
+            // 【ClientDealTry 四道门裁决 A】原「boDisableDeal || 眼神禁止交易」是一个
+            // 复合条件，两半来路完全不同，这里拆开分别处置。
+            //
+            // 已删：M2Share.g_Config.boDisableDeal —— INVENTED 且是死开关。
+            //   原生 opcode 1025 分派桩 0x6D913E 只有 `8B 45 FC mov eax,[ebp-4]` /
+            //   `E8 BD AD EE FF call 0x6C3F00`，无任何前置；sub_6C3F00 逐字节只有
+            //   0x6C3F1C(+0x461) / 0x6C3F32(前方对象空) / 0x6C3F3A(前方是自己) /
+            //   0x6C3F49(对端前方非我) / 0x6C3F51(对端+0x461) / 0x6C3F5E(+0x178) /
+            //   0x6C3F6B(+0xBA0) 这几道，无全局开关。GBK 全镜像扫描「交易功能」
+            //   0 命中（对照组「对方拒绝和你交易」1 命中 @0x6C407C）。
+            //   且 boDisableDeal 全仓库只有 GameSvrConfig.cs:1244 一处 `= false`，
+            //   没有任何 ini 读取器（GameSvrConfig 无 ReadBool/ReadString），
+            //   g_Config 由 M2Share.cs:1695 `new GameSvrConfig()` 构造 —— 运行期恒
+            //   为 false，删除的运行期差量为 0。字段本身保留，不动 Configs 层。
+            //
+            // 保留：眼神「禁止交易地图」（YanshenApi.IsTradeBanned，地图名长度 15）。
+            //   它同样不是 M2 原生门，但属插件扩展而非本移植自造，且此处是它在全仓库
+            //   唯一的活消费点。在一条 TRADE 提交里删掉它 = REPLICATION_RULES §4.3
+            //   点名禁止的夹带，也会让该 API 变成死代码（§3「死代码算 MISSING」）。
+            //   沿用原消息 g_sDisableDealItemsMsg：插件自己的提示文案在 Themida
+            //   虚拟化段内不可取证，改文案反而是新的臆造。
+            if (new YanshenApi(this, null, M2Share.PluginManager).IsTradeBanned())
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sDisableDealItemsMsg);
                 return;
@@ -1567,11 +1587,34 @@ namespace GameSvr
             {
                 return;
             }
-            if ((HUtil32.GetTickCount() - m_DealLastTick) < M2Share.g_Config.dwTryDealTime)
-            {
-                SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sPleaseTryDealLaterMsg);
-                return;
-            }
+            // 【四道门裁决 B / INVENTED-已删】dwTryDealTime 三秒节流门。
+            // 原生 sub_6C3F00 内对 tick 的引用数为 0：0x6C3F00..0x6C4055 全函数没有
+            // 任何 GetTickCount 调用、没有任何 `sub` 时间差比较。真正存在的 tick 门是
+            // 提交阶段的 dwDealOKTime（sub_6C4580，C# ClientDealEnd 内 dwDealOKTime，
+            // TRADE-20 已判 FAITHFUL），那道保留不动。
+            // 消息「请稍候再交易」GBK/裸/UTF-16LE 全镜像 0 命中（「稍候再交易」与
+            // 「再交易」两个子串各 0），对照组「交易取消」@0x6C4448 命中。
+            // 这是四道门里唯一有活运行期效果的一道（dwTryDealTime = 3000，
+            // GameSvrConfig.cs:1241），故单独成一次提交以便独立回退。
+            // m_DealLastTick 字段保留：它还供 dwDealOKTime 门与 ClientDropItem
+            // （Operate.cs 内 `> 3000` 那处）使用。
+            //
+            // 【四道门裁决 C / INVENTED-有意保留】自己的 m_boCanDeal。
+            // 原生无对应门：sub_6C3F00 里除 +0x461 外不测本对象的任何布尔位；
+            // 消息「当前无法进行此操作」的子串「无法进行此操」与「此操作」
+            // 全镜像三编码各 0 命中。
+            // 但它不是本移植自造的孤立开关，而是**密码锁族**的一员：
+            // TPlayObject.Base.cs:1396-1408 一次性设定 m_boCanDeal / m_boCanDrop /
+            // m_boCanUseItem / m_boCanWalk / m_boCanRun / m_boCanHit / m_boCanSpell /
+            // m_boCanSendMsg / m_boObMode 共九项，并配 @LOCKLOGON、@PASSWORDLOCK 等
+            // GM 命令。只删交易这两项会把一个整族功能改成半残，比保留更糟。
+            // 现状可证为惰性：族内各项在构造函数 Base.cs:876-883 全部置 true，
+            // 唯一的置 false 入口要求 boPasswordLockSystem && boLockHumanLogin，
+            // 而这两个配置和 boLockDealAction 一样只有 `= false` 一处赋值、无读取器，
+            // 故 m_boCanDeal 运行期恒 true，本门恒不触发。
+            // 另一活消费点在 TPlayObject.ClientClickNPC —— 注意那里的 !m_boCanDeal
+            // 占的是原生 0x6B8B4D(+0x461) 那道门的位置，两者不是同一件事。
+            // 处置：整族的去留应另开一次专项裁决，不在 TRADE 提交里动（§4.3）。
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
@@ -1584,6 +1627,14 @@ namespace GameSvr
                 {
                     if (TargetPlayObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                     {
+                        // m_boAllowDeal ≡ 原生 0x6C3F6B `cmp byte [esi+0xBA0],0 / je 0x6C3FE6`
+                        // （TRADE-04 FAITHFUL）。
+                        // 【四道门裁决 D / INVENTED-有意保留】TargetPlayObject.m_boCanDeal
+                        // 是与裁决 C 同一密码锁族的对端侧，原生 0x6C3F6B 只测 +0xBA0 一项。
+                        // 同样恒 true、同样随族一起另案处置。
+                        // 另注原生此处失败走的是独立消息 0x6C407C「对方拒绝和你交易。」
+                        // （len=18），而 C# else 分支发的 g_sPoseDisableDealMsg
+                        //「对方禁止进入交易」全镜像 0 命中 —— 属另一条待裁项，本次不动。
                         if (TargetPlayObject.m_boAllowDeal && TargetPlayObject.m_boCanDeal)
                         {
                             TargetPlayObject.SysMsg(m_sCharName + M2Share.g_sOpenedDealMsg, MsgColor.Green, MsgType.Hint);
@@ -1858,6 +1909,24 @@ namespace GameSvr
                         // 0x6C47A9 `call 0x783984`，而 0x783984 全文是
                         // `33 C0 xor eax,eax` / `C3 ret` —— 恒返回 0，所以 jne 永不成立，
                         // 日志必发。C# 原有的 IsCheapStuff / NeedIdentify 双重门在原生无对应。
+                        //
+                        // TRADE-53 数量字段 —— BLOCKED，保持现状的硬编码 1，勿改：
+                        //   0x6C47B2  80 7E 14 07     cmp byte [esi+0x14], 7   ; esi = 该 TUserItem
+                        //   0x6C47B6  75 3B           jne 0x6C47F3
+                        //   0x6C47BC  0F B7 46 26     movzx eax, word [esi+0x26]  ; ==7 → 数量 = Dura
+                        //   0x6C47F7  6A 01           push 1                      ; !=7 → 数量 = 1
+                        // +0x14 是 **item 自身**的字节，不是 StdItem 字段：同一函数用的
+                        // sub_784568 @0x784573 `8B 53 1C mov edx,[ebx+0x1C]` 才是取 StdItem。
+                        // 所以**不能**复用 NativeAccountStorageClient.GetGameDataLogQuantity
+                        // （那个用的是 stdItem.StdMode == 7）。
+                        // +0x14 目前无法映射到任何 C# 字段：物品基类构造器 sub_783788 在
+                        // 0x7837AE `C6 43 14 00` 把它写 0，且是在 0x7837BA 存 StdItem 指针
+                        // **之前**，全程不读 StdItem；各子类构造器各自硬写常量
+                        // （0x784D67→1、0x787CB5→4、0x788C01→7 且同时 `mov word [edi+0x26],1`、
+                        //  0x761A96→1）。它也不落盘：背包序列化 0x6B1712 `mov ecx,0x34` /
+                        // `rep movsd` 是从 item+0x20 起的 208 字节，+0x14 在其之前。
+                        // TUserItem 无对应字段，硬编码 1 = 原生 `!=7` 分支，fail-closed。
+                        // 要解锁需先钉死 +0x14 的语义，见 staging/m_trade2_20260813.md §5。
                         if (StdItem != null)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
@@ -1893,6 +1962,9 @@ namespace GameSvr
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                         // TRADE-53: 镜像方向同理，0x6C48D6 的 `test al,al / jne` 测的是
                         // 0x6C48D1 `call 0x783984`，同一个恒假桩，日志必发。
+                        // 数量字段同样 BLOCKED：0x6C48DA `80 7E 14 07 cmp byte [esi+0x14],7` /
+                        // 0x6C48E4 `0F B7 46 26 movzx eax,word [esi+0x26]` / 0x6C491D `6A 01`。
+                        // 理由与上一处相同，保持硬编码 1。
                         if (StdItem != null)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
@@ -2111,6 +2183,38 @@ namespace GameSvr
                 SysMsg(M2Share.g_sTryModeCanotUseStorage, MsgColor.Red, MsgType.Hint);
                 return;
             }
+            // TRADE-62: 战神 sub_6C2A34 在容器分派之后、NPC 门之前有一道「交易中拒收」：
+            //   0x6C2AAC  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6C2AB3  0F 85 3B 02 00 00     jne 0x6C2CF4              ; 共用失败出口
+            // 0x6C2CF4 处 `80 7D F5 00 cmp byte [ebp-0xB],0 / 75 1B jne` 测的是成功标志
+            // （此路仍为 0），于是落到 `66 BA BF 02 mov dx,0x2BF` 即 SM_STORAGE_FAIL，
+            // Recog=0（`33 C9 xor ecx,ecx`）、nParam1=word[ebp-0xA]（普通仓库恒 0）。
+            // 三个容器共用这一道门。缺它则托管中的物品可被同时存入仓库。
+            if (m_boDealing)
+            {
+                SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
+            // TRADE-39（收紧半）：原生用玩家自己缓存的 NPC 指针，不做全局查找。
+            //   0x6C2AB9  8B B3 D8 0C 00 00     mov esi, [ebx+0xCD8]   ; player.m_NPC
+            //   0x6C2ABF  85 F6                 test esi, esi
+            //   0x6C2AC1  0F 84 2D 02 00 00     je  0x6C2CF4
+            //   0x6C2AC7  8B 83 D8 0C 00 00     mov eax, [ebx+0xCD8]
+            //   0x6C2ACD  3B 45 FC              cmp eax, [ebp-4]       ; 包里的 NPC 标识
+            //   0x6C2AD0  0F 85 1E 02 00 00     jne 0x6C2CF4
+            // [ebp-4] 由分派桩 0x6D91ED `8B 10 mov edx,[eax]` 装入，即 msg.Recog。
+            // 语义是「必须先点过、且点的正是这一个 NPC」。C# 原先只有
+            // FindMerchant 全局查找 + 同图 + 距离，缺这条绑定，伪造包在从未点过
+            // 任何 NPC 时也能开仓库。形状照抄已判正确的账号仓库路径
+            // （TPlayObject.NativeAccountStorage.Operations.cs:196-200）。
+            // 注意 ObjectId 在本方法内是**参数**（遮蔽同名实例属性），比对的是包里的值。
+            // 本次只补这条收紧；原生 sub_6C2A34 内**没有** m_boStorage 测试，
+            // 删掉它是放宽，超出本轮授权，另案裁决（staging/m_trade2_20260813.md §3）。
+            if (m_NPC == null || m_NPC.ObjectId != ObjectId)
+            {
+                SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
             Merchant merchant = (Merchant)M2Share.UserEngine.FindMerchant(ObjectId);
             for (var i = m_ItemList.Count - 1; i >= 0; i--)
             {
@@ -2187,6 +2291,36 @@ namespace GameSvr
             if (!m_boCanGetBackItem)
             {
                 SendMsg(merchant, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sStorageIsLockedMsg + "\\ \\" + "浠撳簱寮€閿佸懡浠? @" + M2Share.g_GameCommand.UNLOCKSTORAGE.sCmd + '\\' + "浠撳簱鍔犻攣鍛戒护: @" + M2Share.g_GameCommand.__LOCK.sCmd + '\\' + "璁剧疆瀵嗙爜鍛戒护: @" + M2Share.g_GameCommand.SETPASSWORD.sCmd + '\\' + "淇敼瀵嗙爜鍛戒护: @" + M2Share.g_GameCommand.CHGPASSWORD.sCmd);
+                return;
+            }
+            // TRADE-62: 战神 sub_6C2D7C 的第二道门，紧跟 0x6C2DAF 的 +0x683 之后：
+            //   0x6C2DBC  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6C2DC3  0F 85 0B 02 00 00     jne 0x6C2FD4
+            //   0x6C2FD4  BE FE FF FF FF        mov esi, 0xFFFFFFFE       ; ★ 失败码 -2
+            //   0x6C2FD9  EB 05                 jmp 0x6C2FE0
+            //   0x6C2FE0  85 F6 / 7F 1B         test esi,esi / jg 0x6C2FFF
+            //   0x6C2FEF  8B CE                 mov ecx, esi              ; Recog = -2
+            //   0x6C2FF1  66 BA C2 02           mov dx, 0x2C2             ; SM_TAKEBACKSTORAGEITEM_FAIL
+            // 与 +0x683（C# 的 m_boCanGetBackItem，原生失败码 -3）的先后次序照抄原生。
+            // −2 是这道门自身的可观测输出；TRADE-45 说的 −1/−3 属其它出口，未一并回填。
+            if (m_boDealing)
+            {
+                SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, -2, 0, 0, 0, "");
+                return;
+            }
+            // TRADE-39（收紧半）：取仓侧与存仓同形，同样是玩家自持的 NPC 指针。
+            //   0x6C2DC9  8B BB D8 0C 00 00     mov edi, [ebx+0xCD8]
+            //   0x6C2DCF  85 FF                 test edi, edi
+            //   0x6C2DD1  0F 84 09 02 00 00     je  0x6C2FE0
+            //   0x6C2DD7  8B 83 D8 0C 00 00     mov eax, [ebx+0xCD8]
+            //   0x6C2DDD  3B 45 FC              cmp eax, [ebp-4]       ; msg.Recog
+            //   0x6C2DE0  0F 85 FA 01 00 00     jne 0x6C2FE0
+            // 0x6C2FE0 处 esi 仍是入口的 `33 F6 xor esi,esi`（0x6C2DA6），
+            // 故这两条走 Recog = 0，与已有失败出口一致（不是 -2、也不是 -3）。
+            // 同样只补收紧半；原生无 m_boGetback 测试，删它属放宽，另案裁决。
+            if (m_NPC == null || m_NPC.ObjectId != NPC)
+            {
+                SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, 0, 0, 0, 0, "");
                 return;
             }
             for (var i = 0; i < m_StorageItemList.Count; i++)

@@ -1216,6 +1216,17 @@ namespace GameSvr
         private void ClientClickNPC(int npcId)
         {
             // PERF: diagnostic write removed from hot path (per-click)
+            // TRADE-62: 战神 sub_6B8B28 的第一条可执行语句（SEH 序言之后）就是
+            //   0x6B8B4D  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6B8B54  0F 85 2A 01 00 00     jne 0x6B8C84
+            // 0x6B8C84 是 `33 C0 xor eax,eax` + SEH 拆除 + `C3 ret`，即**静默返回**，
+            // 不发任何消息。交易进行中点 NPC 会被整体忽略。
+            // 注意：紧随其后的 `!m_boCanDeal` 占的正是这道门的位置，但它不是原生门
+            // （见下），原生在此只测 +0x461。
+            if (m_boDealing)
+            {
+                return;
+            }
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
