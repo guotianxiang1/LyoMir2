@@ -565,7 +565,6 @@ namespace GameSvr
         
         public int nRepairItemDecDura;
         public bool boDieScatterBag;
-        public int nDieScatterBagRate;
         public bool boDieRedScatterBagAll;
         public bool boKillByHumanDropUseItem;
         public bool boKillByMonstDropUseItem;
@@ -1413,7 +1412,6 @@ namespace GameSvr
             nSuperRepairPriceRate = 3; 
             nRepairItemDecDura = 30; 
             boDieScatterBag = true;
-            nDieScatterBagRate = 3;
             boDieRedScatterBagAll = true;
             boKillByHumanDropUseItem = false;
             boKillByMonstDropUseItem = true;
