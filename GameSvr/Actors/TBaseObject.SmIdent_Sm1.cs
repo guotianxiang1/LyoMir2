@@ -266,5 +266,32 @@ namespace GameSvr
             => (Grobal2.MakeDefaultMsg(Grobal2.SM_1253, -2, 0,
                     (ushort)(packed >> 16), (ushort)packed),
                 Array.Empty<byte>());
+
+        // SM 1254 (0x4E6) — send @0x6F0F72. Recog hard -1, rest 0.
+        //   006F0F5F 6A00x4 push ; 006F0F67 83 C9 FF or ecx,-1 ; 006F0F6A 66 BA E6 04 mov dx,0x4E6
+        internal static (ClientPacket Header, byte[] Body) BuildSm1254()
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1254, -1, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 1255 (0x4E7) — send @0x6F0EAE. Recog hard -1, rest 0.
+        //   006F0E9B 6A00x4 push ; 006F0EA3 83 C9 FF or ecx,-1 ; 006F0EA6 66 BA E7 04 mov dx,0x4E7
+        internal static (ClientPacket Header, byte[] Body) BuildSm1255()
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1255, -1, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 1256 (0x4E8) — send @0x6F101D. Recog = caller int arg (edi=edx), rest 0.
+        //   006F100B 6A00x4 push ; 006F1013 8B CF mov ecx,edi (Recog) ; 006F1015 66 BA E8 04 mov dx,0x4E8
+        internal static (ClientPacket Header, byte[] Body) BuildSm1256(int recog)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1256, recog, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 1257 (0x4E9) — send @0x6F10C8. Recog = [ebp-4] (caller local), rest 0.
+        //   006F10B5 6A00x4 push ; 006F10BD 8B 4D FC mov ecx,[ebp-4] ; 006F10C0 66 BA E9 04 mov dx,0x4E9
+        internal static (ClientPacket Header, byte[] Body) BuildSm1257(int recog)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1257, recog, 0, 0, 0), Array.Empty<byte>());
+
+        // SM 1258 (0x4EA) — send @0x6F15A6. Param = a 0/1 result flag (bl); Recog = [ebp-4]; rest 0.
+        //   006F1590 33 C0 / 8A C3 mov al,bl / 50 push  ; Param = flag(0/1)
+        //   006F1595 6A 00 6A 00 6A 00 push 0 x3        ; Tag=Series=0 ; sMsg=nil
+        //   006F159B 8B 4D FC mov ecx,[ebp-4] (Recog) ; 006F159E 66 BA EA 04 mov dx,0x4EA
+        internal static (ClientPacket Header, byte[] Body) BuildSm1258(int recog, byte flag)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1258, recog, flag, 0, 0), Array.Empty<byte>());
     }
 }
