@@ -2742,6 +2742,9 @@ namespace GameSvr
                 case Grobal2.CM_3290:
                     ClientNativeCm3290ClockSnapshot();
                     break;
+                case Grobal2.CM_4629:
+                    ClientNativeCm4629GroupPositions();
+                    break;
 
                 // === 战神协议: 客户端发送但服务端仅确认的 CM_（不需要服务端逻辑）===
                 case Grobal2.CM_42HIT:

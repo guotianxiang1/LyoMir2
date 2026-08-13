@@ -1115,6 +1115,10 @@ namespace SystemModule
         public const int CM_QUERY_TITLE = 3202;
         public const int CM_QUERY_MAP_NPC = 4610;
         public const int SM_QUERY_MAP_NPC = 4610;
+        // Native CM 4629 handler 0x6DBB70 -> 0x6F7C40. Same-ident reply via
+        // vtbl+0x254 (0x6F7E81 66 BA 15 12 mov dx,0x1215).
+        public const int CM_4629 = 4629;
+        public const int SM_4629 = 4629;
         public const int CM_COMMIT_ITEM = 4634;
         public const int SM_COMMIT_ITEM = 4634;
         public const int SM_OPEN_COMMIT_ITEM = 4635;
