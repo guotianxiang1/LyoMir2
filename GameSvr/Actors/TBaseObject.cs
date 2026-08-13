@@ -4245,16 +4245,12 @@ namespace GameSvr
             {
                 case 0:
                     // Native `bts dword [esi+0x168], ebx` @0x77299B writes one flat
-                    // bitset with no per-index ownership split. The former
-                    // `stateIndex <= 20` branch made 21..31 write only the cached
-                    // body word, so every later `m_nCharStatus = GetCharStatus()`
-                    // (Run tick, MakePosion, Initialize, ...) rebuilt those bits from
-                    // m_wStatusTimeArr alone and silently dropped anything the timed
-                    // layer had set: the TimedAbilityNode stayed on the list counting
-                    // down while HasNativeActiveState reported false, so
-                    // FindTimedAbilityInternal returned null and the effect died
-                    // without expiring. Durable store for the whole low word, with
-                    // NativePersistentLowStateMask widened to match.
+                    // bitset with no per-index ownership split, so the whole low
+                    // word lives in the durable store. A `stateIndex <= 20` fork
+                    // used to sit here and hand 21..31 to the legacy seconds array
+                    // instead; that array is gone (see
+                    // TBaseObject.LegacyStatusTimeView.cs) and GetCharStatus now
+                    // just reads this word back.
                     m_nCharStatusEx = enabled
                         ? m_nCharStatusEx | (uint)mask
                         : m_nCharStatusEx & ~(uint)mask;
