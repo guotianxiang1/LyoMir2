@@ -2379,8 +2379,21 @@ namespace GameSvr.Plugins
             return count;
         }
 
-        /// <summary>无限定时器: timer=0清理所有, >0设置间隔(ms)</summary>
-        public int SetLoopTimer(int interval, string funcName) { if (!Enabled("全局循环函数")) return 0; return interval; }
+        /// <summary>
+        /// 无限定时器。插件面板说明：timer&gt;0 按毫秒间隔反复调用 RunQuest.pas 里
+        /// 的同名无参过程，timer=0 清理该名字的定时器，名字给 'ClearAll' 清理全部。
+        ///
+        /// 注册未实现：本工程没有回调派发层，注册成功也永远不会回调 funcName。
+        /// 旧实现直接 return interval，脚本拿到非零值会当成注册成功。
+        /// 清理路径本就是空操作，如实返回 0；注册路径必须报错而不是假装成功。
+        /// </summary>
+        public int SetLoopTimer(int interval, string funcName)
+        {
+            if (!Enabled("全局循环函数")) return 0;
+            if (interval <= 0) return 0;
+            throw new YanshenApiUnavailableException("Ys_SetTimerByName", "全局循环函数",
+                $"定时器注册未实现，'{funcName}' 不会被回调");
+        }
 
         /// <summary>沙巴克城主行会名</summary>
         public string GetCastleGuildName()
