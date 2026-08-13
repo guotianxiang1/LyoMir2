@@ -321,28 +321,50 @@ namespace GameSvr
                 return false;
             }
 
+            // Native @ 0x772F92: veto path 1 - state 52 blocks ALL states.
             if (HasNativeActiveState(TimedAbilityGlobalBlockState))
             {
                 return false;
             }
 
-            if (HasNativeActiveState(TimedAbilityValueGateState))
+            // Native @ 0x772FA1: veto path 2 - state 16 with value >= 5 blocks 45 and 53.
+            if (HasNativeActiveState(TimedAbilityValueGateState) &&
+                GetNativeTimedAbilityValue(TimedAbilityValueGateState) >= 5)
             {
-                if (IsBlockedByNativeState16(internalType))
-                {
-                    return false;
-                }
-
-                if ((internalType == 45 || internalType == 53) &&
-                    GetNativeTimedAbilityValue(TimedAbilityValueGateState) >= 5)
+                if (internalType == 45 || internalType == 53)
                 {
                     return false;
                 }
             }
 
-            return internalType != NativeState26Type ||
-                   !HasNativeActiveState(18) &&
-                   !IsNativeState26DeadlineActive(HUtil32.GetTickCount());
+            // Native @ 0x772FB8: veto path 3 - ImmuneCheck (sub_773C44).
+            if (IsImmuneToTimedAbility(internalType))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        // Native @ 0x773C44: ImmuneCheck - two independent immunity conditions.
+        private bool IsImmuneToTimedAbility(byte internalType)
+        {
+            // Native @ 0x773C51: state 16 present AND the incoming state is blockable.
+            if (HasNativeActiveState(TimedAbilityValueGateState) &&
+                IsBlockedByNativeState16(internalType))
+            {
+                return true;
+            }
+
+            // Native @ 0x773C70: petrify immunity window, state 26 only.
+            if (internalType == NativeState26Type &&
+                !HasNativeActiveState(18) &&
+                IsNativeState26DeadlineActive(HUtil32.GetTickCount()))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         internal int GetNativeTimedAbilityValue(byte internalType)
