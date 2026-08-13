@@ -112,6 +112,9 @@ namespace GameSvr
                 case Grobal2.CM_4650:
                     ClientNativeTreasureMapSynth();
                     return true;
+                case Grobal2.CM_4651:
+                    ClientNativeTaskBoardTextCommand();
+                    return true;
                 default:
                     return false;
             }
@@ -557,6 +560,21 @@ namespace GameSvr
         private void ClientNativeTreasureMapSynth()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4650, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4651, native leaf 0x6DB1D8, worker 0x6FC054.
+        ///
+        /// The leaf copies the packet body string ([ebp-8], via 0x405708) into a
+        /// local and calls 0x6FC054(Self, text=that string). The worker loads the
+        /// task-board script object [[0x7D5D20]] and only proceeds when its +0x2C
+        /// @Main slot is non-null (0x6FC064 `cmp [eax+0x2C],0` / `je`), then runs
+        /// the text command through that script. The board script object is not
+        /// modelled in this port, so the command is dropped rather than guessed.
+        /// </summary>
+        private void ClientNativeTaskBoardTextCommand()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4651, m_sCharName);
         }
     }
 }
