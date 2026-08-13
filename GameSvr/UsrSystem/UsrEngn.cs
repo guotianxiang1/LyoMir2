@@ -2794,6 +2794,12 @@ namespace GameSvr
             if (map == null) return result;
             try
             {
+            // 分批补入的 race 子类工厂映射。各批写在自己的 RaceFactory_*.cs 里（避免多个
+            // 代理争抢这个 switch 造成合并冲突）。命中即认领，未命中落回下面的 switch，
+            // 对既有 race 行为零影响。
+            TryCreateRaceA(nMonRace, out Cert);
+
+            if (Cert == null)
             switch (nMonRace)
             {
                 case M2Share.SUPREGUARD:
