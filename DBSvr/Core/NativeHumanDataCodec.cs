@@ -1105,6 +1105,27 @@ namespace DBSvr.Core
             // script introduces a key smaller than one already on disk; the search
             // then silently misses it on the next load and the variable reads back
             // as -1.
+            //
+            // Ascending is also what a native-written record always is, so sorting here
+            // does not reshape original data. The upsert's grow-by-one arm picks an
+            // insertion side and memmoves to make room rather than appending:
+            //   0x6E41FD  8B 04 D8        mov eax,[eax+ebx*8]     ; key at the landing slot
+            //   0x6E4200  3B 45 F8        cmp eax,[ebp-8]         ; vs the new key
+            //   0x6E4203  7D 32           jge 0x6E4237
+            //   existing < new  -> insert AFTER ebx
+            //     0x6E4216  8D 54 D8 10   lea edx,[eax+ebx*8+0x10]  ; dest = slot ebx+2
+            //     0x6E421C  8D 44 D8 08   lea eax,[eax+ebx*8+8]     ; src  = slot ebx+1
+            //     0x6E4220  E8 3B F0 D1 FF call 0x403260            ; Move
+            //     0x6E422A / 0x6E4231     store key,value at slot ebx+1
+            //   existing >= new -> insert AT ebx
+            //     0x6E4247  8D 54 D8 08   lea edx,[eax+ebx*8+8]     ; dest = slot ebx+1
+            //     0x6E424D  8D 04 D8      lea eax,[eax+ebx*8]       ; src  = slot ebx
+            //     0x6E4250  E8 0B F0 D1 FF call 0x403260
+            //     0x6E425A / 0x6E4260     store key,value at slot ebx
+            // Both arms preserve ascending order, which is the invariant the binary
+            // search above depends on. (This is the question the ledger left open as
+            // QST-10 "the element-shift/insert-position logic is NOT in the captured
+            // dump" - it is at 0x6E41FB..0x6E4264 and it does keep the array sorted.)
             current ??= new Dictionary<int, int>();
             var merged = new SortedDictionary<int, int>();
             if (original != null)
