@@ -907,6 +907,43 @@ Equal(0, staleGhostSource.DynamicRoomPlayerCount,
 Equal(1, staleGhostCleanupCount,
     "repeated stale-cell MakeGhost cleaned the dynamic room again");
 
+// MOVE-34 — the native cell+2 (LinkPoint) marker. cell+2 is written 1:1 with the
+// OS_GATEOBJECT node by the loader sub_779328 (@0x7793D4 `mov byte [cell+2],1`),
+// so the C# reader scans a cell's object list for a gate. Three readers:
+//   * drop/placement avoidance   — sub_778DB0 @0x778DEF  (GetItemEx / GetItem)
+//   * player gate-step teleport  — sub_778E48 @0x778F93  (TBaseObject.Walk)
+//   * walk-mover creature block  — sub_7797CC @0x7799D5/@0x7799DE (this check)
+// The walk-mover gate rejects a creature (Cert+0x178 != 0, =0x32 for TCreature
+// @0x764E5F, =0 for TPlayer @0x6AD76F) and fires even with boFlag set because it
+// sits after the boFlag short-circuit @0x779874. Players teleport instead.
+var linkPointGate = new TGateObj { DEnvir = environment, nDMapX = 7, nDMapY = 7 };
+Assert(ReferenceEquals(linkPointGate,
+        environment.AddToMap(7, 7, CellType.OS_GATEOBJECT, linkPointGate)),
+    "MOVE-34 LinkPoint gate placement failed");
+
+var linkPointDropCount = 0;
+environment.GetItemEx(7, 7, ref linkPointDropCount);
+Assert(!environment.bo2C,
+    "MOVE-34 drop/placement scan treated a LinkPoint cell as usable");
+
+var linkPointMonster = NewObject(environment, Grobal2.RC_MONSTER, 7, 6);
+Place(environment, linkPointMonster);
+Equal(0, environment.MoveToMovingObject(7, 6, linkPointMonster, 7, 7, false),
+    "MOVE-34 monster was allowed onto a LinkPoint cell");
+Equal(0, environment.MoveToMovingObject(7, 6, linkPointMonster, 7, 7, true),
+    "MOVE-34 monster crossed a LinkPoint cell when boFlag was set");
+Equal(1, GetCellObjectCount(environment, 7, 6),
+    "MOVE-34 blocked monster was unlinked from its source cell");
+Assert(!CellContains(environment, 7, 7, linkPointMonster),
+    "MOVE-34 blocked monster was committed onto the LinkPoint cell");
+
+var linkPointPlayer = NewObject(environment, Grobal2.RC_PLAYOBJECT, 7, 8);
+Place(environment, linkPointPlayer);
+Equal(1, environment.MoveToMovingObject(7, 8, linkPointPlayer, 7, 7, false),
+    "MOVE-34 player was blocked by a LinkPoint cell");
+Assert(CellContains(environment, 7, 7, linkPointPlayer),
+    "MOVE-34 player did not move onto the LinkPoint cell");
+
 Console.WriteLine("MovementCollisionCheck PASS");
 
 static TBaseObject NewObject(Envirnoment environment, byte race, short x, short y)

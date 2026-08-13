@@ -423,6 +423,31 @@ namespace GameSvr
                         bo1A = false;
                     }
                 }
+                // MOVE-34 — native cell+2 gate. MoveToMovingObject sub_7797CC
+                // @0x7799D5 `cmp byte [cell+2],0` and @0x7799DE
+                // `cmp byte [Cert+0x178],0`: the move is rejected
+                // (`mov byte [ebp-0xA],0` @0x7799E7 -> FALSE @0x7799EF) only when
+                // BOTH the target cell carries a LinkPoint (cell+2 != 0) AND the
+                // mover is a creature (Cert+0x178 != 0, written 0x32 by the
+                // TCreature ctor @0x764E5F and 0 by the TPlayer ctor @0x6AD76F,
+                // so it blocks every creature and never a player). The gate sits
+                // AFTER the boFlag short-circuit @0x779874 (`jne 0x7799C6`), so it
+                // fires even when boFlag(ignore-occupancy) is set. cell+2 is
+                // written 1:1 with the LinkPoint node insertion in the loader
+                // sub_779328 (@0x7793D4 `mov byte [cell+2],1`, right after the
+                // kind=4/OS_GATEOBJECT node is head-inserted into cell[8]), so a
+                // scan of the cell's object list for OS_GATEOBJECT reproduces the
+                // byte read exactly — the same idiom this file already uses for the
+                // other two cell+2 readers (GetItemEx drop/placement avoidance
+                // @0x778DEF and the Walk player gate-step @0x778F93). Walk-only:
+                // a full-image scan finds cell+2 read solely in the walk mover;
+                // the run path (useRunRules) has no cell+2 read and only ever runs
+                // players (CommitRunMove) anyway.
+                if (bo1A && !useRunRules
+                    && NativeLinkPointCellBlocksMover(MapCellInfo, Cert))
+                {
+                    bo1A = false;
+                }
                 if (bo1A)
                 {
                     if (GetMapCellInfo(nX, nY, ref MapCellInfo) && MapCellInfo.Attribute != 0)
@@ -526,13 +551,39 @@ namespace GameSvr
             return result;
         }
 
-        
-        
-        
-        
-        
-        
-        
+        /// <summary>
+        /// MOVE-34 — the C# reader for the native cell+2 (LinkPoint) marker used by
+        /// the walk mover. Native sub_7797CC @0x7799D5/@0x7799DE blocks a mover when
+        /// the target cell is a LinkPoint (cell+2 != 0) AND the mover is a creature
+        /// (Cert+0x178 != 0). Because the loader sub_779328 sets cell+2 = 1 in the
+        /// same breath as it head-inserts the kind=4 (OS_GATEOBJECT) node into the
+        /// cell (@0x7793D4), "cell+2 != 0" is equivalent to "the cell list contains
+        /// an OS_GATEOBJECT" — the exact idiom GetItemEx/Walk already use for the
+        /// two other cell+2 readers. The creature test maps Cert+0x178==0 (player)
+        /// to <c>m_btRaceServer == RC_PLAYOBJECT</c>, matching the existing gate-step
+        /// mapping in TBaseObject.Walk / ProcessNativeMoveActionWithoutBroadcast.
+        /// </summary>
+        private static bool NativeLinkPointCellBlocksMover(MapCellinfo mapCellInfo, TBaseObject mover)
+        {
+            if (mover == null || mover.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+            {
+                return false;
+            }
+            var objList = mapCellInfo.ObjList;
+            if (objList == null)
+            {
+                return false;
+            }
+            for (var i = 0; i < objList.Count; i++)
+            {
+                if (objList[i].CellType == CellType.OS_GATEOBJECT)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public bool CanWalk(int nX, int nY, bool boFlag)
         {
             CellObject OSObject;
