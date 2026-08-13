@@ -6008,43 +6008,33 @@ namespace GameSvr
             // Field map cross-checked vs DoDamageWeapon sub_73E804 (+0x26=Dura,
             // +0x28=DuraMax): that function is the ATTACKER's slot-1-only weapon wear
             // (`mov dl,1; call GetUseItems 0x75EC20`), a DIFFERENT path — not this one.
-            // NOTE (out of DURA-16 scope): the U_DRESS pre-pass just below has no native
-            // counterpart — native processes slot 0 exactly once inside the single loop,
-            // so slot 0 is presently rolled twice. Left as-is; flagged for a separate task.
-            // DURA-16: U_DRESS also requires 1/8 probability gate, matching other equipment slots
-            if (m_UseItems[Grobal2.U_DRESS] != null && m_UseItems[Grobal2.U_DRESS].wIndex > 0 && M2Share.RandomNumber.Random(8) == 0)
-            {
-                nDura = m_UseItems[Grobal2.U_DRESS].Dura;
-                nOldDura = HUtil32.Round(nDura / 1000.0);
-                nDura -= nDam;
-                if (nDura <= 0)
-                {
-                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                    {
-                        PlayObject = this as TPlayObject;
-                        PlayObject.SendDelItems(m_UseItems[Grobal2.U_DRESS]);
-                        StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_DRESS].wIndex);
-                        if (StdItem.NeedIdentify == 1)
-                        {
-                            M2Share.AddGameDataLog('3' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[Grobal2.U_DRESS].MakeIndex + "\t"
-                                + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
-                        }
-                        m_UseItems[Grobal2.U_DRESS].wIndex = 0;
-                        FeatureChanged();
-                    }
-                    m_UseItems[Grobal2.U_DRESS].wIndex = 0;
-                    m_UseItems[Grobal2.U_DRESS].Dura = 0;
-                    bo19 = true;
-                }
-                else
-                {
-                    m_UseItems[Grobal2.U_DRESS].Dura = (ushort)nDura;
-                }
-                if (nOldDura != HUtil32.Round(nDura / 1000.0))
-                {
-                    SendMsg(this, Grobal2.RM_DURACHANGE, Grobal2.U_DRESS, nDura, m_UseItems[Grobal2.U_DRESS].DuraMax, 0, "");
-                }
-            }
+            // === U_DRESS slot-0 pre-pass REMOVED — native-equivalence fix (U_DRESS task) ===
+            // A slot-0-only durability pre-pass used to sit here. It had NO native
+            // counterpart and made slot 0 (U_DRESS/armour) roll durability TWICE per
+            // struck: once in that pre-pass, then again as iteration i==0 of the
+            // 16-slot loop below. Re-disassembled from flat_image.bin (VA-0x400000):
+            //   sub_75EBC0 @0x75EBD2 `xor esi,esi`; @0x75EBD7 `mov eax,[eax+esi*4+8]`
+            //     (slot = container[i]); @0x75EBE3 `call sub_75EA40` once per non-nil
+            //     slot; @0x75EC03 `inc esi; cmp esi,0x10; jne 0x75EBD4` = ONE 0..15 loop.
+            //     Slot 0 is merely its first iteration — there is NO special/extra
+            //     handling and NO separate slot-0 pre-pass anywhere on the native struck
+            //     path (sub_73F9FC→sub_73FBE8→sub_75EBC0→sub_75EA40). Native therefore
+            //     wears slot 0 EXACTLY ONCE. With U_DRESS==0 and
+            //     HUMAN_EQUIPPED_ITEM_COUNT==16 the loop below (i=0..15) already covers
+            //     slot 0 identically (1/8 gate, Dura-=nDam, destroy, RM_DURACHANGE,
+            //     RecalcAbilitys via bo19), so deleting this pre-pass is the 1:1 fix.
+            // The removed pre-pass was NOT the byte[item+0xfc] "forced wear" flag: that
+            //   flag is read in sub_75EA40 @0x75EA74 `cmp byte[item+0xfc],0` / @0x75EA7B
+            //   `jne 0x75EA8F`, which BYPASSES the @0x75EA7D `Random(8)` 1/8 gate so the
+            //   item wears on every hit. It is set at item-build time in sub_74DAE4
+            //   @0x74DC58..0x74DDF0: an OVER-CAP/illegal-attribute detector dispatched on
+            //   StdMode=byte[StdItem+0x14] & Shape=byte[StdItem+0x15], comparing the
+            //   copied UserItem attribute bytes [+0x0A..+0x11] against per-type caps and
+            //   setting +0xfc=1 when any exceeds. It is a general, ALL-slot anti-over-limit
+            //   mechanism, unrelated to slot 0, and the deleted pre-pass used the ordinary
+            //   Random(8) gate — it never modelled 0xfc. A faithful 0xfc port would need
+            //   the off-limits 16-slot worker plus item-build over-cap modelling and is
+            //   left unimplemented (fail-closed), reported as a separate gap.
             for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
             {
                 if ((m_UseItems[i] != null) && (m_UseItems[i].wIndex > 0) && (M2Share.RandomNumber.Random(8) == 0))
