@@ -233,9 +233,14 @@ namespace GameSvr
 
             var body = response.ToArray();
             var count = body.Length / NativeGroupPlayerRecordSize;
+            // 战神 sub_6F4790 tail: 6F496F 66 8B 45 F8 mov ax,[ebp-8] (the accepted-record
+            // counter) / 50 push eax => Param, then 6A 00 / 6A 00 => Tag = Series = 0, and
+            // only the payload length is scaled: 6F497F C1 E0 02 shl eax,2 / 6F4982 8D 04 C0
+            // lea eax,[eax+eax*8] => Len = count*36. Param carries the COUNT, not the byte
+            // length, and Series is zero - this had them the other way round.
             SendNativeGroupPacket(this,
                 BuildNativeGroupHeader(Grobal2.CM_QUERY_NEARBYPLAYER, 0,
-                    body.Length, 0, count), body);
+                    count, 0, 0), body);
         }
 
         private void HandleNativeNearbyGroupQuery()
