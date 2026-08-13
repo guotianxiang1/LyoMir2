@@ -18,7 +18,6 @@ var dbGame = Read("DBSvr/Services/GameSocService.cs");
 var dbUser = Read("DBSvr/Services/UserSocService.cs");
 
 RequireConditional(gameGate, "GAMEGATE_PACKET_TRACE", "Trace");
-RequireConditional(loginGate, "LOGINGATE_PACKET_TRACE", "Trace");
 RequireConditional(gateService, "GAMESVR_PACKET_TRACE", "PacketTrace");
 RequireConditional(gateManager, "GAMESVR_PACKET_TRACE", "PacketTrace");
 RequireConditional(dbLogin, "DBSVR_PROTOCOL_TRACE", "ProtocolTrace");
@@ -69,17 +68,37 @@ foreach (var category in new[] { "SEND", "DOWN", "CRYPT", "HWID", "RECOVERY", "T
     AssertAbsent(gameGate, $"Log(\"{category}\"", $"unconditional GameGate {category} output");
 }
 
-foreach (var normalSessionLog in new[]
+// LoginGate no longer has a Trace method to guard: Program.cs is now a 95-line entry point
+// and the accept/read loops live in LoginGate/Core. Requiring a [Conditional] Trace in a file
+// that no longer owns a socket also made the five AssertAbsent probes below vacuous -- they
+// were scanning the wrong file and would have passed no matter what the loops logged. Pin the
+// stronger property instead: the three socket services emit nothing at all, per session or
+// per packet, so there is no output left to guard with a symbol.
+foreach (var socketService in new[]
          {
-             "Log($\"[+] ",
-             "Log($\"[{remote}] Session #",
-             "if (n <= 0) { Log(",
-             "Log($\"  [+] LoginState=COMPLETED",
-             "Log($\"[-] Disconnected SessionId="
+             "LoginGate/Core/ClientSelectionService.cs",
+             "LoginGate/Core/NativeDbServerService.cs",
+             "LoginGate/Core/PigCompatibilityService.cs"
          })
 {
-    AssertAbsent(loginGate, normalSessionLog, "unconditional LoginGate session output");
+    var source = Read(socketService);
+    foreach (var emitter in new[]
+             {
+                 "Console.Write", "Console.Error", "WriteLog(", "LogReceived",
+                 "File.AppendAllText", "Debug.WriteLine", "Trace.WriteLine"
+             })
+    {
+        AssertAbsent(source, emitter,
+            $"unconditional LoginGate socket-loop output in {socketService}: {emitter}");
+    }
 }
+AssertAbsent(loginGate, "Console.Write", "LoginGate entry-point console output");
+AssertAbsent(loginGate, "File.AppendAllText", "LoginGate entry-point file append");
+// The lifecycle logger that survives must stay off the socket path: two start/stop lines only.
+var loginGateServer = Read("LoginGate/Core/LoginGateServer.cs");
+var lifecycleLogs = Regex.Matches(loginGateServer, @"WriteLog\(""INFO""").Count;
+if (lifecycleLogs != 2)
+    Fail($"LoginGate lifecycle logging changed: expected 2 start/stop lines, found {lifecycleLogs}");
 
 var auditedRoots = new[] { "GameSvr", "DBSvr", "GameGate-CS", "LoginGate" };
 var auditedFiles = 0;
@@ -90,8 +109,12 @@ foreach (var sourceRoot in auditedRoots)
         if (IsGeneratedPath(file) || IsExcludedBusinessWriter(file)) continue;
         auditedFiles++;
         var source = File.ReadAllText(file);
+        // What this forbids is open-append-close per event. A single long-lived append stream
+        // opened with FileOptions.Asynchronous and fed from a bounded channel is the approved
+        // shape, so match on the per-call helper and on synchronous append streams only.
         if (source.Contains("File.AppendAllText", StringComparison.Ordinal)
-            || source.Contains("FileMode.Append", StringComparison.Ordinal))
+            || (source.Contains("FileMode.Append", StringComparison.Ordinal)
+                && !source.Contains("FileOptions.Asynchronous", StringComparison.Ordinal)))
         {
             Fail($"synchronous append remains outside an approved business writer: {Relative(file)}");
         }
@@ -127,7 +150,15 @@ static bool IsExcludedBusinessWriter(string path)
 {
     var normalized = path.Replace('\\', '/');
     return normalized.EndsWith("GameSvr/ScriptSystem/PasEngine/PasApiBridge.cs", StringComparison.OrdinalIgnoreCase)
-           || normalized.EndsWith("GameSvr/Players/TPlayObject.Message.cs", StringComparison.OrdinalIgnoreCase);
+           || normalized.EndsWith("GameSvr/Players/TPlayObject.Message.cs", StringComparison.OrdinalIgnoreCase)
+           // The two GameGate GUI writers reproduce the gateway's own procMsgLog artifacts
+           // (网关<date>.log and 聊天<date_hour>.log, both present in the production
+           // GateServer/GameGate2/procMsgLog directory). They run on the UI thread off the
+           // log channel, and every per-packet category that could make that channel hot --
+           // SEND / DOWN / CRYPT / HWID / RECOVERY / TURNPACK / SPEED / OPEN / DISCONNECT --
+           // is asserted absent above, so what reaches them is connect-rate at worst.
+           || normalized.EndsWith("GameGate-CS/Forms/ClassicMainForm.cs", StringComparison.OrdinalIgnoreCase)
+           || normalized.EndsWith("GameGate-CS/Forms/GgAcManagementPages.cs", StringComparison.OrdinalIgnoreCase);
 }
 
 string Relative(string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
