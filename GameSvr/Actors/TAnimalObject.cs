@@ -243,7 +243,7 @@ namespace GameSvr
             m_nTargetY = -1;
         }
 
-        protected virtual void SearchTarget()
+        protected virtual bool SearchTarget()
         {
             TBaseObject BaseObject = null;
             TBaseObject BaseObject18 = null;
@@ -252,6 +252,8 @@ namespace GameSvr
             for (var i = 0; i < this.m_VisibleActors.Count; i++)
             {
                 BaseObject = this.m_VisibleActors[i].BaseObject;
+                // MONAI-13 — sub_71DA70 扫描臂用 sub_772DA8 = `mov al,[eax+0x74]; ret`
+                // （TBaseObject.cs 已钉 +0x74 = m_boDeath），不是 +0x73 ghost。
                 if (!BaseObject.m_boDeath)
                 {
                     if (this.IsProperTarget(BaseObject) && (!BaseObject.m_boHideMode || this.m_boCoolEye))
@@ -274,7 +276,10 @@ namespace GameSvr
             if (BaseObject18 != null)
             {
                 this.SetTargetCreat(BaseObject18);
+                // 0071DC04  C6 45 FB 01  mov byte [ebp-5],1  then 0071DCA8  8A 45 FB  mov al,[ebp-5]
+                return true;
             }
+            return false;
         }
 
         protected void sub_4C959C()
