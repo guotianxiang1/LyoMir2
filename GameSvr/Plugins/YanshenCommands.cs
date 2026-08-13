@@ -160,7 +160,15 @@ namespace GameSvr.Plugins
         // ===== Parameter helpers =====
         int P(TunnelCommand c, int i) => i < c.Parameters.Length && int.TryParse(c.Parameters[i], out var v) ? v : 0;
         string S(TunnelCommand c, int i) => i < c.Parameters.Length ? c.Parameters[i] : "";
-        static int[] YS(TunnelCommand c, int s) { var r = new int[17]; for (int i = 0; i < 17 && s + i < c.Parameters.Length; i++) int.TryParse(c.Parameters[s + i], out r[i]); return r; }
+        // 数组按「实际存在的字段」定长，不补零：原生 0x10073B40 是逐段 vector::at()，
+        // 段数不够就抛异常，而不是把缺的当 0 写进物品。
+        static int[] YS(TunnelCommand c, int s)
+        {
+            var n = Math.Max(0, Math.Min(17, c.Parameters.Length - s));
+            var r = new int[n];
+            for (int i = 0; i < n; i++) int.TryParse(c.Parameters[s + i], out r[i]);
+            return r;
+        }
         static string PetAttrType(int flag) => flag switch
         {
             1 => "倍功", 2 => "暴击", 3 => "切割", 4 => "连击", 5 => "连击削弱", _ => ""
@@ -225,7 +233,11 @@ namespace GameSvr.Plugins
                     21 => _api.CheckItemBind(S(cmd,0))?1:0,
                     22 => _api.SendGroundMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),S(cmd,6)),
                     23 => _api.SetPetAttr(S(cmd,11),P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9),P(cmd,10)),
-                    24 => _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1)),
+                    // 10073B8C 83F813 cmp eax,0x13 / 10073B8F 7324 jae —— 不足 19 段返回 -1
+                    // （10073BA0 83C8FF or eax,-1）。
+                    24 => cmd.Parameters.Length >= 17
+                        ? _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1))
+                        : -1,
                     25 => _api.SetLoopTimer(P(cmd,0),S(cmd,1)),
                     26 => _api.BounceSkill(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9)),
                     27 => _api.VacuumMonstersEx(P(cmd,0),P(cmd,1),P(cmd,2)),
