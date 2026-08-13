@@ -1175,9 +1175,18 @@ namespace GameSvr
                         // gold settlement never run for it either — C# had this gate on
                         // segment 2 alone.  A null UserEngine fails closed because the
                         // three segments would fault on it anyway.
+                        //
+                        // m_boNoItem joins them because monster Die gates the whole
+                        // scatter on it one level up, immediately before the virtual
+                        // call, rather than on the gold segment alone:
+                        //   71E3B7  80 B8 7D 04 00 00 00  cmp byte [eax+0x47D],0
+                        //   71E3BE  75 35                 jne 0x71E3F5   ; skips both
+                        //   71E3C4  6A 00 / 6A 01         push 0 / push 1
+                        //   71E3D2  FF 96 FC 01 00 00     call [esi+0x1FC]
                         var scatterBlocked = !TryEnterNativeScatter()
                             || M2Share.UserEngine == null
                             || !M2Share.UserEngine.NativeHasMonsterDropTable(m_sCharName)
+                            || m_boNoItem
                             || NativeAfterScatterItemsBlocked(AttackBaseObject);
                         if (!scatterBlocked)
                         {
@@ -1202,7 +1211,17 @@ namespace GameSvr
                         {
                             ScatterBagItems(AttackBaseObject, scatteredItems);
                         }
-                        if (!scatterBlocked && m_btRaceServer >= Grobal2.RC_ANIMAL && m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
+                        // 战神 sub_71FA20 @0x71FFAD `cmp dword [ebp-0x14],0 / jle
+                        // 0x720049` is the whole entry condition for the gold
+                        // settlement — one test against the accumulator, which
+                        // ScatterGolds already makes as `m_nGold > 0`.  The race /
+                        // pet / map-flag terms that used to sit here have no
+                        // counterpart in either sub_71FA20 or monster Die sub_71E2BC
+                        // (which reads no map flag at all), and they left the gold of
+                        // anything below RC_ANIMAL, and of every pet, stranded in
+                        // m_nGold forever.  m_boNoItem moved up to scatterBlocked,
+                        // where 0x71E3B7 puts it.
+                        if (!scatterBlocked)
                         {
                             ScatterGolds(AttackBaseObject, scatteredItems,
                                 nativeMonsterScatter: true);
