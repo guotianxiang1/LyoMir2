@@ -56,7 +56,9 @@ namespace GameSvr.Services
             "modifyDate datetime,createDate datetime not null);"
         };
 
-        internal static bool IsSupportedTag(int tag) => tag is 1 or 4 or 5 or 6;
+        // sub_70DBCC @0x70DBD4 `bt dword [0x7D3DE8],edx` with dword_7D3DE8 = 7E 8D 40 00
+        // and a `cmp dl,7 / ja` guard in front: tags 1..6. See NativeMailCacheService.
+        internal static bool IsSupportedTag(int tag) => tag is >= 1 and <= 6;
 
         internal static bool EnsureNativeSchema(out string error)
         {

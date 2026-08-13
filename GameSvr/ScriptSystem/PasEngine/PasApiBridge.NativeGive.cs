@@ -238,7 +238,13 @@ namespace GameSvr.PasEngine
                 }
 
                 var quantity = 1;
-                if (stdItem.StdMode == 7)
+                // 原生 sub_6C87B4 @0x6C89C6 `80 78 14 07 cmp byte [eax+0x14],7` 读的是
+                // 【物品实例】的运行时 KIND 字节（基类构造器 sub_783788 @0x7837AE 写 0、
+                // 堆叠基类 sub_7880F0 @0x788118 写 7），不是模板 +0x14 的 StdMode。
+                // 随后 0x6C89CF movzx 用的也是实例 +0x28(DuraMax) / +0x26(Dura)。
+                // 按 StdMode==7 判会把护身符族（派发表 mode 7 -> TCharm 族）当成堆叠，
+                // 又漏掉真正的堆叠物，导致「给 100 个金条」占 100 个背包格。
+                if (NativeItemFactory.IsPileItem(stdItem))
                 {
                     if (item.DuraMax == 0)
                     {
@@ -360,7 +366,14 @@ namespace GameSvr.PasEngine
 
         private void WriteNativeGiveAudit(string sourceName, int requestedCount)
         {
-            if (CurrentNpc == null) return;
+            // Native Give inner 0x6DF2E8 only emits the 经验/内功经验/荣耀点
+            // audit when player+0xCD8 is non-nil (0x6DF341 cmp [edi+0xCD8],0 /
+            // je 0x6DF454). CurrentNpc is the script context and is already
+            // bound during @main; m_NPC is not (click handler writes it after
+            // the vcall at 0x6B8BA7/0x6B8C48). Using CurrentNpc here made the
+            // first-click Give log a NPC native would omit.
+            var npc = CurrentPlayer?.m_NPC as NormNpc;
+            if (npc == null) return;
 
             string category;
             string reason;
@@ -388,7 +401,7 @@ namespace GameSvr.PasEngine
                 return;
             }
 
-            reason += CurrentNpc.m_sCharName + "-" + CurrentNpc.m_sMapName;
+            reason += npc.m_sCharName + "-" + npc.m_sMapName;
             M2Share.AddGameDataLog(string.Join('\t', 9, CurrentPlayer.m_sMapName,
                 CurrentPlayer.m_nCurrX, CurrentPlayer.m_nCurrY, CurrentPlayer.m_sCharName,
                 category, makeIndex, requestedCount, reason));

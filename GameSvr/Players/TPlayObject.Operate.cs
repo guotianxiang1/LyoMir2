@@ -311,11 +311,6 @@ namespace GameSvr
             {
                 return false;
             }
-            // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-            if (m_DealCreat != null)
-            {
-                DealCancel();
-            }
             m_nGold -= nGold;
             if (!DropGoldDown(nGold, false, null, this))
             {
@@ -529,13 +524,11 @@ namespace GameSvr
                 return;
             }
             var Castle = M2Share.CastleManager.IsCastleEnvir(m_PEnvir);
+            // The locked-gate branch answers nothing: ident 613 has zero immediate-load
+            // sites in the whole code segment, so no native path can put it on the wire.
             if (Castle == null || Castle.m_DoorStatus != door.Status || m_btRaceServer != Grobal2.RC_PLAYOBJECT || Castle.CheckInPalace(m_nCurrX, m_nCurrY, this))
             {
                 M2Share.UserEngine.OpenDoor(m_PEnvir, nX, nY);
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_OPENDOOR_LOCK, nX, nY, 0, 0, "");
             }
         }
 
@@ -1562,8 +1555,28 @@ namespace GameSvr
         private void ClientDealTry(string sHumName)
         {
             TPlayObject TargetPlayObject;
-            var yanshenTradeBanned = new YanshenApi(this, null, M2Share.PluginManager).IsTradeBanned();
-            if (M2Share.g_Config.boDisableDeal || yanshenTradeBanned)
+            // 【ClientDealTry 四道门裁决 A】原「boDisableDeal || 眼神禁止交易」是一个
+            // 复合条件，两半来路完全不同，这里拆开分别处置。
+            //
+            // 已删：M2Share.g_Config.boDisableDeal —— INVENTED 且是死开关。
+            //   原生 opcode 1025 分派桩 0x6D913E 只有 `8B 45 FC mov eax,[ebp-4]` /
+            //   `E8 BD AD EE FF call 0x6C3F00`，无任何前置；sub_6C3F00 逐字节只有
+            //   0x6C3F1C(+0x461) / 0x6C3F32(前方对象空) / 0x6C3F3A(前方是自己) /
+            //   0x6C3F49(对端前方非我) / 0x6C3F51(对端+0x461) / 0x6C3F5E(+0x178) /
+            //   0x6C3F6B(+0xBA0) 这几道，无全局开关。GBK 全镜像扫描「交易功能」
+            //   0 命中（对照组「对方拒绝和你交易」1 命中 @0x6C407C）。
+            //   且 boDisableDeal 全仓库只有 GameSvrConfig.cs:1244 一处 `= false`，
+            //   没有任何 ini 读取器（GameSvrConfig 无 ReadBool/ReadString），
+            //   g_Config 由 M2Share.cs:1695 `new GameSvrConfig()` 构造 —— 运行期恒
+            //   为 false，删除的运行期差量为 0。字段本身保留，不动 Configs 层。
+            //
+            // 保留：眼神「禁止交易地图」（YanshenApi.IsTradeBanned，地图名长度 15）。
+            //   它同样不是 M2 原生门，但属插件扩展而非本移植自造，且此处是它在全仓库
+            //   唯一的活消费点。在一条 TRADE 提交里删掉它 = REPLICATION_RULES §4.3
+            //   点名禁止的夹带，也会让该 API 变成死代码（§3「死代码算 MISSING」）。
+            //   沿用原消息 g_sDisableDealItemsMsg：插件自己的提示文案在 Themida
+            //   虚拟化段内不可取证，改文案反而是新的臆造。
+            if (new YanshenApi(this, null, M2Share.PluginManager).IsTradeBanned())
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sDisableDealItemsMsg);
                 return;
@@ -1572,11 +1585,34 @@ namespace GameSvr
             {
                 return;
             }
-            if ((HUtil32.GetTickCount() - m_DealLastTick) < M2Share.g_Config.dwTryDealTime)
-            {
-                SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sPleaseTryDealLaterMsg);
-                return;
-            }
+            // 【四道门裁决 B / INVENTED-已删】dwTryDealTime 三秒节流门。
+            // 原生 sub_6C3F00 内对 tick 的引用数为 0：0x6C3F00..0x6C4055 全函数没有
+            // 任何 GetTickCount 调用、没有任何 `sub` 时间差比较。真正存在的 tick 门是
+            // 提交阶段的 dwDealOKTime（sub_6C4580，C# ClientDealEnd 内 dwDealOKTime，
+            // TRADE-20 已判 FAITHFUL），那道保留不动。
+            // 消息「请稍候再交易」GBK/裸/UTF-16LE 全镜像 0 命中（「稍候再交易」与
+            // 「再交易」两个子串各 0），对照组「交易取消」@0x6C4448 命中。
+            // 这是四道门里唯一有活运行期效果的一道（dwTryDealTime = 3000，
+            // GameSvrConfig.cs:1241），故单独成一次提交以便独立回退。
+            // m_DealLastTick 字段保留：它还供 dwDealOKTime 门与 ClientDropItem
+            // （Operate.cs 内 `> 3000` 那处）使用。
+            //
+            // 【四道门裁决 C / INVENTED-有意保留】自己的 m_boCanDeal。
+            // 原生无对应门：sub_6C3F00 里除 +0x461 外不测本对象的任何布尔位；
+            // 消息「当前无法进行此操作」的子串「无法进行此操」与「此操作」
+            // 全镜像三编码各 0 命中。
+            // 但它不是本移植自造的孤立开关，而是**密码锁族**的一员：
+            // TPlayObject.Base.cs:1396-1408 一次性设定 m_boCanDeal / m_boCanDrop /
+            // m_boCanUseItem / m_boCanWalk / m_boCanRun / m_boCanHit / m_boCanSpell /
+            // m_boCanSendMsg / m_boObMode 共九项，并配 @LOCKLOGON、@PASSWORDLOCK 等
+            // GM 命令。只删交易这两项会把一个整族功能改成半残，比保留更糟。
+            // 现状可证为惰性：族内各项在构造函数 Base.cs:876-883 全部置 true，
+            // 唯一的置 false 入口要求 boPasswordLockSystem && boLockHumanLogin，
+            // 而这两个配置和 boLockDealAction 一样只有 `= false` 一处赋值、无读取器，
+            // 故 m_boCanDeal 运行期恒 true，本门恒不触发。
+            // 另一活消费点在 TPlayObject.ClientClickNPC —— 注意那里的 !m_boCanDeal
+            // 占的是原生 0x6B8B4D(+0x461) 那道门的位置，两者不是同一件事。
+            // 处置：整族的去留应另开一次专项裁决，不在 TRADE 提交里动（§4.3）。
             if (!m_boCanDeal)
             {
                 SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sCanotTryDealMsg);
@@ -1589,6 +1625,14 @@ namespace GameSvr
                 {
                     if (TargetPlayObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                     {
+                        // m_boAllowDeal ≡ 原生 0x6C3F6B `cmp byte [esi+0xBA0],0 / je 0x6C3FE6`
+                        // （TRADE-04 FAITHFUL）。
+                        // 【四道门裁决 D / INVENTED-有意保留】TargetPlayObject.m_boCanDeal
+                        // 是与裁决 C 同一密码锁族的对端侧，原生 0x6C3F6B 只测 +0xBA0 一项。
+                        // 同样恒 true、同样随族一起另案处置。
+                        // 另注原生此处失败走的是独立消息 0x6C407C「对方拒绝和你交易。」
+                        // （len=18），而 C# else 分支发的 g_sPoseDisableDealMsg
+                        //「对方禁止进入交易」全镜像 0 命中 —— 属另一条待裁项，本次不动。
                         if (TargetPlayObject.m_boAllowDeal && TargetPlayObject.m_boCanDeal)
                         {
                             TargetPlayObject.SysMsg(m_sCharName + M2Share.g_sOpenedDealMsg, MsgColor.Green, MsgType.Hint);
@@ -1692,10 +1736,19 @@ namespace GameSvr
         private void ClientChangeDealGold(int nGold)
         {
             bool bo09;
-            if (m_nDealGolds > 0 && M2Share.g_Config.boCanNotGetBackDeal)
+            // TRADE-13: 战神 sub_6C4454 的第一条判断 —— 押金只能升不能降，降就整单作废。
+            //   0x6C445F  C6 45 FF 00        mov byte [ebp-1], 0     ; bo09 := false
+            //   0x6C4463  3B B3 E0 06 00 00  cmp esi, [ebx+0x6E0]    ; 新值 vs 现押金
+            //   0x6C4469  7D 0C              jge 0x6C4477            ; >= 才继续往下
+            //   0x6C446B  8B C3              mov eax, ebx
+            //   0x6C446D  E8 52 FF FF FF     call 0x6C43C4           ; DealCancel
+            //   0x6C4472  E9 02 01 00 00     jmp 0x6C4579
+            // 0x6C4579 是 pop/pop/pop/pop/pop/ret 的收尾，**越过**了 0x6C4547 那段
+            // `cmp byte [ebp-1],0 / jne` + `mov dx,0x2AD` 的失败回包，所以取消这条路
+            // 不发 SM_DEALCHGGOLD_FAIL。此判断排在 nGold<=0 门（0x6C4477 test/jle）之前。
+            if (nGold < m_nDealGolds)
             {
-                SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sDealItemsDenyGetBackMsg);
-                SendDefMessage(Grobal2.SM_DEALDELITEM_FAIL, 0, 0, 0, 0, "");
+                DealCancel();
                 return;
             }
             if (nGold < 0)
@@ -1776,34 +1829,41 @@ namespace GameSvr
                 DealCancel();
                 return;
             }
-            // TRADE-22: Authentication verification script (战神 sub_6C4580 Phase C authority gates)
-            // Self gate @0x6C4650: call sub_617A38(cfg, self, cl=2) tests bit 2 in obj+0x193C bitset
-            // Partner gate @0x6C4693: call sub_617A38(cfg, partner, cl=2) on partner's bitset
-            // On failure with escrow: runs @PlayerActiveValidate script (@0x69B254) then DealCancel
-            // When boAuthOpen=false (default): CheckNativeAuthentication returns true (bypassed)
-            if (M2Share.g_Config.boAuthOpen)
-            {
-                // Self authority gate @0x6C4650
-                bool selfAuthenticated = CheckNativeAuthentication(1, 2) || CheckNativeAuthentication(2, 2);
-                if (!selfAuthenticated && (m_DealItemList.Count > 0 || m_nDealGolds > 0))
-                {
-                    M2Share.g_FunctionNPC?.GotoLable(this, "@PlayerActiveValidate", false);
-                    DealCancel();
-                    return;
-                }
-                // Partner authority gate @0x6C4693
-                var partner = m_DealCreat as TPlayObject;
-                bool partnerAuthenticated = partner != null &&
-                    (partner.CheckNativeAuthentication(1, 2) || partner.CheckNativeAuthentication(2, 2));
-                if (!partnerAuthenticated && (m_DealCreat.m_DealItemList.Count > 0 || m_DealCreat.m_nDealGolds > 0))
-                {
-                    M2Share.g_FunctionNPC?.GotoLable(partner, "@PlayerActiveValidate", false);
-                    DealCancel();
-                    return;
-                }
-            }
+            // TRADE-21: 对端确认门必须排在权限门之前。
+            //   0x6C463D  8B 83 AC 0B 00 00     mov eax, [ebx+0xBAC]
+            //   0x6C4643  80 B8 84 06 00 00 00  cmp byte [eax+0x684], 0   ; partner.m_boDealOK
+            //   0x6C464A  0F 84 71 03 00 00     je  0x6C49C1              ; 未确认 → 两条消息、不取消、返回
+            //   0x6C4650  权限门（自己）
+            //   0x6C4693  权限门（对端）
+            //   0x6C46E4  phase D 四道容量检查
             if (m_DealCreat.m_boDealOK)
             {
+                // TRADE-22: Authentication verification script (战神 sub_6C4580 Phase C authority gates)
+                // Self gate @0x6C4650: call sub_617A38(cfg, self, cl=2) tests bit 2 in obj+0x193C bitset
+                // Partner gate @0x6C4693: call sub_617A38(cfg, partner, cl=2) on partner's bitset
+                // On failure with escrow: runs @PlayerActiveValidate script (@0x69B254) then DealCancel
+                // When boAuthOpen=false (default): CheckNativeAuthentication returns true (bypassed)
+                if (M2Share.g_Config.boAuthOpen)
+                {
+                    // Self authority gate @0x6C4650
+                    bool selfAuthenticated = CheckNativeAuthentication(1, 2) || CheckNativeAuthentication(2, 2);
+                    if (!selfAuthenticated && (m_DealItemList.Count > 0 || m_nDealGolds > 0))
+                    {
+                        M2Share.g_FunctionNPC?.GotoLable(this, "@PlayerActiveValidate", false);
+                        DealCancel();
+                        return;
+                    }
+                    // Partner authority gate @0x6C4693
+                    var partner = m_DealCreat as TPlayObject;
+                    bool partnerAuthenticated = partner != null &&
+                        (partner.CheckNativeAuthentication(1, 2) || partner.CheckNativeAuthentication(2, 2));
+                    if (!partnerAuthenticated && (m_DealCreat.m_DealItemList.Count > 0 || m_DealCreat.m_nDealGolds > 0))
+                    {
+                        M2Share.g_FunctionNPC?.GotoLable(partner, "@PlayerActiveValidate", false);
+                        DealCancel();
+                        return;
+                    }
+                }
                 // 战神 sub_6C4580 四道检查：
                 //   @0x6C46E4-0x6C46FF: remote.CanAcceptItems(self.DealItemList.Count) → jmp 0x6C49B8
                 //   @0x6C4705-0x6C471A: remote.CanAcceptGold(self.m_nDealGolds)       → jmp 0x6C49B8
@@ -1814,7 +1874,7 @@ namespace GameSvr
                 // 而那四条消息字符串在二进制里 **GBK 零命中**（TCFP-22）。
                 // 删除四条非原版消息，改成原版的 fail-fast 结构。
                 bo11 = true;
-                if (Grobal2.MAXBAGITEM - m_ItemList.Count < m_DealCreat.m_DealItemList.Count)
+                if (BagCapacity.Of(this) - m_ItemList.Count < m_DealCreat.m_DealItemList.Count)
                 {
                     bo11 = false;
                 }
@@ -1822,7 +1882,7 @@ namespace GameSvr
                 {
                     bo11 = false;
                 }
-                if (bo11 && Grobal2.MAXBAGITEM - m_DealCreat.m_ItemList.Count < m_DealItemList.Count)
+                if (bo11 && BagCapacity.Of(m_DealCreat) - m_DealCreat.m_ItemList.Count < m_DealItemList.Count)
                 {
                     bo11 = false;
                 }
@@ -1843,21 +1903,46 @@ namespace GameSvr
                         (m_DealCreat as TPlayObject)?.ReassignClientItemId(UserItem);
                         (m_DealCreat as TPlayObject).SendAddItem(UserItem);
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        // TRADE-53: 原生 0x6C47AE 的 `test al,al / jne` 测的是
+                        // 0x6C47A9 `call 0x783984`，而 0x783984 全文是
+                        // `33 C0 xor eax,eax` / `C3 ret` —— 恒返回 0，所以 jne 永不成立，
+                        // 日志必发。C# 原有的 IsCheapStuff / NeedIdentify 双重门在原生无对应。
+                        //
+                        // TRADE-53 数量字段 —— BLOCKED，保持现状的硬编码 1，勿改：
+                        //   0x6C47B2  80 7E 14 07     cmp byte [esi+0x14], 7   ; esi = 该 TUserItem
+                        //   0x6C47B6  75 3B           jne 0x6C47F3
+                        //   0x6C47BC  0F B7 46 26     movzx eax, word [esi+0x26]  ; ==7 → 数量 = Dura
+                        //   0x6C47F7  6A 01           push 1                      ; !=7 → 数量 = 1
+                        // +0x14 是 **item 自身**的字节，不是 StdItem 字段：同一函数用的
+                        // sub_784568 @0x784573 `8B 53 1C mov edx,[ebx+0x1C]` 才是取 StdItem。
+                        // 所以**不能**复用 NativeAccountStorageClient.GetGameDataLogQuantity
+                        // （那个用的是 stdItem.StdMode == 7）。
+                        // +0x14 目前无法映射到任何 C# 字段：物品基类构造器 sub_783788 在
+                        // 0x7837AE `C6 43 14 00` 把它写 0，且是在 0x7837BA 存 StdItem 指针
+                        // **之前**，全程不读 StdItem；各子类构造器各自硬写常量
+                        // （0x784D67→1、0x787CB5→4、0x788C01→7 且同时 `mov word [edi+0x26],1`、
+                        //  0x761A96→1）。它也不落盘：背包序列化 0x6B1712 `mov ecx,0x34` /
+                        // `rep movsd` 是从 item+0x20 起的 208 字节，+0x14 在其之前。
+                        // TUserItem 无对应字段，硬编码 1 = 原生 `!=7` 分支，fail-closed。
+                        // 要解锁需先钉死 +0x14 的语义，见 staging/m_trade2_20260813.md §5。
                         if (StdItem != null)
                         {
-                            if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                            {
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
-                                }
-                            }
+                            M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
                         }
                     }
                     if (m_nDealGolds > 0)
                     {
-                        m_DealCreat.m_nGold += m_nDealGolds;
-                        m_DealCreat.GoldChanged();
+                        // 战神 sub_6C4580 @0x6C4835 走的是虚调用而不是裸加：
+                        //   0x6C4835  mov edx,[ebx+0x6E0]   ; self.m_nDealGolds
+                        //   0x6C483D  jle 0x6C487E          ; <=0 跳过
+                        //   0x6C483F  mov eax,[ebx+0xBAC]   ; self.m_DealCreat
+                        //   0x6C4845  mov ecx,[eax]         ; 对方 VMT
+                        //   0x6C4847  call [ecx+0x28C]      ; = 0x6D791C IncGold
+                        // [0x6AC8C8+0x28C] == 0x6D791C，即带上限的 IncGold。裸 += 会
+                        // 绕过 `cmp ebx,[eax+0x68C] / jg` 这道 m_nGoldMax 门，且 IncGold
+                        // 只在**成功**分支里 `call 0x6C19B4`(GoldChanged)，所以刷新也
+                        // 不能在外面无条件发。
+                        (m_DealCreat as TPlayObject).IncGold(m_nDealGolds);
                         if (M2Share.g_boGameLogGold)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + Grobal2.sSTRING_GOLDNAME + "\t" + m_nGold + "\t" + '1' + "\t" + m_DealCreat.m_sCharName);
@@ -1873,21 +1958,25 @@ namespace GameSvr
                         ReassignClientItemId(UserItem);
                         this.SendAddItem(UserItem);
                         StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        // TRADE-53: 镜像方向同理，0x6C48D6 的 `test al,al / jne` 测的是
+                        // 0x6C48D1 `call 0x783984`，同一个恒假桩，日志必发。
+                        // 数量字段同样 BLOCKED：0x6C48DA `80 7E 14 07 cmp byte [esi+0x14],7` /
+                        // 0x6C48E4 `0F B7 46 26 movzx eax,word [esi+0x26]` / 0x6C491D `6A 01`。
+                        // 理由与上一处相同，保持硬编码 1。
                         if (StdItem != null)
                         {
-                            if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                            {
-                                if (StdItem.NeedIdentify == 1)
-                                {
-                                    M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                }
-                            }
+                            M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
                         }
                     }
                     if (m_DealCreat.m_nDealGolds > 0)
                     {
-                        m_nGold += m_DealCreat.m_nDealGolds;
-                        GoldChanged();
+                        // 镜像方向，战神 sub_6C4580 @0x6C4959 同样是虚调用：
+                        //   0x6C4959  mov eax,[ebx+0xBAC]   ; self.m_DealCreat
+                        //   0x6C495F  mov edx,[eax+0x6E0]   ; 对方 m_nDealGolds
+                        //   0x6C4967  jle 0x6C49A4
+                        //   0x6C4969  mov eax,ebx           ; 收款方 = self
+                        //   0x6C496D  call [ecx+0x28C]      ; = 0x6D791C IncGold
+                        IncGold(m_DealCreat.m_nDealGolds);
                         if (M2Share.g_boGameLogGold)
                         {
                             M2Share.AddGameDataLog('8' + "\t" + m_DealCreat.m_sMapName + "\t" + m_DealCreat.m_nCurrX + "\t" + m_DealCreat.m_nCurrY + "\t" + m_DealCreat.m_sCharName + "\t" + Grobal2.sSTRING_GOLDNAME + "\t" + m_DealCreat.m_nGold + "\t" + '1' + "\t" + m_sCharName);
@@ -1936,252 +2025,33 @@ namespace GameSvr
 
         private void ClientMakeDrugItem(int NPC, string nItemName)
         {
-            var Merchant = (Merchant)M2Share.UserEngine.FindMerchant(NPC);
-            if (Merchant == null || !Merchant.m_boMakeDrug)
+            // 原生 sub_6C4B14 的门，一道不多一道不少：
+            //   0x6C4B2D  83 7D 08 00           cmp dword [ebp+8],0        ; 物品名为空
+            //   0x6C4B33  83 BB D8 0C 00 00 00  cmp dword [ebx+0xCD8],0    ; 没有会话中的 NPC
+            //   0x6C4B3C  3B B3 D8 0C 00 00     cmp esi,[ebx+0xCD8]        ; 包里的 Recog 必须【就是】它
+            //   0x6C4B4D/0x6C4B5F 两个查找器都拒绝 byte[obj+0x73]<>0 的 ghost
+            //     (0x649A64 / 0x64A873 各一条 cmp byte [eax+0x73],0)
+            //   0x6C4B74  3B 83 28 01 00 00     cmp eax,[ebx+0x128]        ; 同地图
+            //   0x6C4B7C  66 B9 0F 00           mov cx,0xF  -> sub_7743E0  ; 半径 15
+            // 半径是【闭区间】：0x774402 jg 只在 |dx|>r 时失败，0x774417 jl 只在 r<|dy| 时失败。
+            // 原生【没有】任何「该商人开了合成」的标志位；0x6C4BA3 传给 sub_63FE2C 的 self
+            // 也是 [ebx+0xCD8] 本身，不是按 id 查回来的对象。C# 这里原本查全局商人表并要求
+            // m_boMakeDrug，而 m_boMakeDrug 全仓库无任何赋 true 的地方，整条 1034 通道恒不可达。
+            if (string.IsNullOrEmpty(nItemName))
             {
                 return;
             }
-            if (Merchant.m_PEnvir == m_PEnvir && Math.Abs(Merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(Merchant.m_nCurrY - m_nCurrY) < 15)
+            if (m_NPC == null || m_NPC.ObjectId != NPC || m_NPC.m_boGhost)
+            {
+                return;
+            }
+            if (m_NPC is not Merchant Merchant)
+            {
+                return;
+            }
+            if (Merchant.m_PEnvir == m_PEnvir && Math.Abs(Merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(Merchant.m_nCurrY - m_nCurrY) <= 15)
             {
                 Merchant.ClientMakeDrugItem(this, nItemName);
-            }
-        }
-
-        private void ClientOpenGuildDlg()
-        {
-            string sC;
-            if (m_MyGuild != null)
-            {
-                sC = m_MyGuild.sGuildName + '\r' + ' ' + '\r';
-                if (m_nGuildRankNo == 1)
-                {
-                    sC = sC + '1' + '\r';
-                }
-                else
-                {
-                    sC = sC + '0' + '\r';
-                }
-                sC = sC + "<Notice>" + '\r';
-                for (var I = 0; I < m_MyGuild.NoticeList.Count; I++)
-                {
-                    if (sC.Length > 5000)
-                    {
-                        break;
-                    }
-                    sC = sC + m_MyGuild.NoticeList[I] + '\r';
-                }
-                sC = sC + "<KillGuilds>" + '\r';
-                for (var I = 0; I < m_MyGuild.GuildWarList.Count; I++)
-                {
-                    if (sC.Length > 5000)
-                    {
-                        break;
-                    }
-                    sC = sC + m_MyGuild.GuildWarList[I] + '\r';
-                }
-                sC = sC + "<AllyGuilds>" + '\r';
-                for (var i = 0; i < m_MyGuild.GuildAllList.Count; i++)
-                {
-                    if (sC.Length > 5000)
-                    {
-                        break;
-                    }
-                    sC = sC + m_MyGuild.GuildAllList[i] + '\r';
-                }
-                m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_OPENGUILDDLG, 0, 0, 0, 1);
-                SendSocket(m_DefMsg, EDcode.EncodeString(sC));
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_OPENGUILDDLG_FAIL, 0, 0, 0, 0, "");
-            }
-        }
-
-        private void ClientGuildHome()
-        {
-            ClientOpenGuildDlg();
-        }
-
-        private void ClientGuildMemberList()
-        {
-            TGuildRank GuildRank;
-            var sSendMsg = string.Empty;
-            if (m_MyGuild == null)
-            {
-                return;
-            }
-            for (var i = 0; i < m_MyGuild.m_RankList.Count; i++)
-            {
-                GuildRank = m_MyGuild.m_RankList[i];
-                sSendMsg = sSendMsg + '#' + GuildRank.nRankNo + "/*" + GuildRank.sRankName + '/';
-                for (var j = 0; j < GuildRank.MemberList.Count; j++)
-                {
-                    if (sSendMsg.Length > 5000)
-                    {
-                        break;
-                    }
-                    sSendMsg = sSendMsg + GuildRank.MemberList[j].sMemberName + '/';
-                }
-            }
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SENDGUILDMEMBERLIST, 0, 0, 0, 1);
-            SendSocket(m_DefMsg, EDcode.EncodeString(sSendMsg));
-        }
-
-        private void ClientGuildAddMember(string sHumName)
-        {
-            var nC = 1; 
-            if (IsGuildMaster())
-            {
-                var PlayObject = M2Share.UserEngine.GetPlayObject(sHumName);
-                if (PlayObject != null)
-                {
-                    if (PlayObject.GetPoseCreate() == this)
-                    {
-                        if (PlayObject.m_boAllowGuild)
-                        {
-                            if (!m_MyGuild.IsMember(sHumName))
-                            {
-                                if (PlayObject.m_MyGuild == null && m_MyGuild.m_RankList.Count < 400)
-                                {
-                                    m_MyGuild.AddMember(PlayObject);
-                                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                                    PlayObject.m_MyGuild = m_MyGuild;
-                                    PlayObject.m_sGuildRankName = m_MyGuild.GetRankName(PlayObject, ref PlayObject.m_nGuildRankNo);
-                                    PlayObject.RefShowName();
-                                    PlayObject.SysMsg("浣犲凡鍔犲叆琛屼細: " + m_MyGuild.sGuildName + " 褰撳墠灏佸彿涓? " + PlayObject.m_sGuildRankName, MsgColor.Green, MsgType.Hint);
-                                    nC = 0;
-                                }
-                                else
-                                {
-                                    nC = 4; 
-                                }
-                            }
-                            else
-                            {
-                                nC = 3; 
-                            }
-                        }
-                        else
-                        {
-                            nC = 5; 
-                            PlayObject.SysMsg("浣犳嫆缁濆姞鍏ヨ浼氥€?[鍏佽鍛戒护涓?@" + M2Share.g_GameCommand.LETGUILD.sCmd + ']', MsgColor.Red, MsgType.Hint);
-                        }
-                    }
-                    else
-                    {
-                        nC = 2; 
-                    }
-                }
-                else
-                {
-                    nC = 2;
-                }
-            }
-            if (nC == 0)
-            {
-                SendDefMessage(Grobal2.SM_GUILDADDMEMBER_OK, 0, 0, 0, 0, "");
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_GUILDADDMEMBER_FAIL, nC, 0, 0, 0, "");
-            }
-        }
-
-        private void ClientGuildDelMember(string sHumName)
-        {
-            string s14;
-            TPlayObject PlayObject;
-            var nC = 1;
-            if (IsGuildMaster())
-            {
-                if (m_MyGuild.IsMember(sHumName))
-                {
-                    if (m_sCharName != sHumName)
-                    {
-                        if (m_MyGuild.DelMember(sHumName))
-                        {
-                            PlayObject = M2Share.UserEngine.GetPlayObject(sHumName);
-                            if (PlayObject != null)
-                            {
-                                PlayObject.m_MyGuild = null;
-                                PlayObject.RefRankInfo(0, "");
-                                PlayObject.RefShowName();
-                            }
-                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                            nC = 0;
-                        }
-                        else
-                        {
-                            nC = 4;
-                        }
-                    }
-                    else
-                    {
-                        nC = 3;
-                        s14 = m_MyGuild.sGuildName;
-                        if (m_MyGuild.CancelGuld(sHumName))
-                        {
-                            M2Share.GuildManager.DelGuild(s14);
-                            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_206, M2Share.nServerIndex, s14);
-                            m_MyGuild = null;
-                            RefRankInfo(0, "");
-                            RefShowName();
-                            SysMsg("琛屼細" + s14 + "宸茶鍙栨秷!!!", MsgColor.Red, MsgType.Hint);
-                            nC = 0;
-                        }
-                    }
-                }
-                else
-                {
-                    nC = 2;
-                }
-            }
-            if (nC == 0)
-            {
-                SendDefMessage(Grobal2.SM_GUILDDELMEMBER_OK, 0, 0, 0, 0, "");
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_GUILDDELMEMBER_FAIL, nC, 0, 0, 0, "");
-            }
-        }
-
-        private void ClientGuildUpdateNotice(string sNotict)
-        {
-            var sC = string.Empty;
-            if (m_MyGuild == null || m_nGuildRankNo != 1)
-            {
-                return;
-            }
-            m_MyGuild.NoticeList.Clear();
-            while (!string.IsNullOrEmpty(sNotict))
-            {
-                sNotict = HUtil32.GetValidStr3(sNotict, ref sC, new string[] { "\r" });
-                m_MyGuild.NoticeList.Add(sC);
-            }
-            m_MyGuild.SaveGuildInfoFile();
-            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-            ClientOpenGuildDlg();
-        }
-
-        private void ClientGuildUpdateRankInfo(string sRankInfo)
-        {
-            if (m_MyGuild == null || m_nGuildRankNo != 1)
-            {
-                return;
-            }
-            var nC = m_MyGuild.UpdateRank(sRankInfo);
-            if (nC == 0)
-            {
-                M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                ClientGuildMemberList();
-            }
-            else
-            {
-                if (nC <= -2)
-                {
-                    SendDefMessage(Grobal2.SM_GUILDRANKUPDATE_FAIL, nC, 0, 0, 0, "");
-                }
             }
         }
 
@@ -2190,7 +2060,6 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject::ClientGuildAlly";
             try
             {
-                var n8 = -1;
                 TBaseObject BaseObjectC = GetPoseCreate();
                 if (BaseObjectC != null && BaseObjectC.m_MyGuild != null && BaseObjectC.m_btRaceServer == Grobal2.RC_PLAYOBJECT && BaseObjectC.GetPoseCreate() == this)
                 {
@@ -2208,30 +2077,9 @@ namespace GameSvr
                                 BaseObjectC.m_MyGuild.RefMemberName();
                                 M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
                                 M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, BaseObjectC.m_MyGuild.sGuildName);
-                                n8 = 0;
-                            }
-                            else
-                            {
-                                n8 = -2;
                             }
                         }
-                        else
-                        {
-                            n8 = -3;
-                        }
                     }
-                    else
-                    {
-                        n8 = -4;
-                    }
-                }
-                if (n8 == 0)
-                {
-                    SendDefMessage(Grobal2.SM_GUILDMAKEALLY_OK, 0, 0, 0, 0, "");
-                }
-                else
-                {
-                    SendDefMessage(Grobal2.SM_GUILDMAKEALLY_FAIL, n8, 0, 0, 0, "");
                 }
             }
             catch (Exception e)
@@ -2243,7 +2091,6 @@ namespace GameSvr
 
         private void ClientGuildBreakAlly(string sGuildName)
         {
-            var n10 = -1;
             if (!IsGuildMaster())
             {
                 return;
@@ -2261,24 +2108,7 @@ namespace GameSvr
                     guild.RefMemberName();
                     M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
                     M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, guild.sGuildName);
-                    n10 = 0;
                 }
-                else
-                {
-                    n10 = -2;
-                }
-            }
-            else
-            {
-                n10 = -3;
-            }
-            if (n10 == 0)
-            {
-                SendDefMessage(Grobal2.SM_GUILDBREAKALLY_OK, 0, 0, 0, 0, "");
-            }
-            else
-            {
-                SendDefMessage(Grobal2.SM_GUILDBREAKALLY_FAIL, n10, 0, 0, 0, "");
             }
         }
 
@@ -2351,6 +2181,38 @@ namespace GameSvr
                 SysMsg(M2Share.g_sTryModeCanotUseStorage, MsgColor.Red, MsgType.Hint);
                 return;
             }
+            // TRADE-62: 战神 sub_6C2A34 在容器分派之后、NPC 门之前有一道「交易中拒收」：
+            //   0x6C2AAC  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6C2AB3  0F 85 3B 02 00 00     jne 0x6C2CF4              ; 共用失败出口
+            // 0x6C2CF4 处 `80 7D F5 00 cmp byte [ebp-0xB],0 / 75 1B jne` 测的是成功标志
+            // （此路仍为 0），于是落到 `66 BA BF 02 mov dx,0x2BF` 即 SM_STORAGE_FAIL，
+            // Recog=0（`33 C9 xor ecx,ecx`）、nParam1=word[ebp-0xA]（普通仓库恒 0）。
+            // 三个容器共用这一道门。缺它则托管中的物品可被同时存入仓库。
+            if (m_boDealing)
+            {
+                SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
+            // TRADE-39（收紧半）：原生用玩家自己缓存的 NPC 指针，不做全局查找。
+            //   0x6C2AB9  8B B3 D8 0C 00 00     mov esi, [ebx+0xCD8]   ; player.m_NPC
+            //   0x6C2ABF  85 F6                 test esi, esi
+            //   0x6C2AC1  0F 84 2D 02 00 00     je  0x6C2CF4
+            //   0x6C2AC7  8B 83 D8 0C 00 00     mov eax, [ebx+0xCD8]
+            //   0x6C2ACD  3B 45 FC              cmp eax, [ebp-4]       ; 包里的 NPC 标识
+            //   0x6C2AD0  0F 85 1E 02 00 00     jne 0x6C2CF4
+            // [ebp-4] 由分派桩 0x6D91ED `8B 10 mov edx,[eax]` 装入，即 msg.Recog。
+            // 语义是「必须先点过、且点的正是这一个 NPC」。C# 原先只有
+            // FindMerchant 全局查找 + 同图 + 距离，缺这条绑定，伪造包在从未点过
+            // 任何 NPC 时也能开仓库。形状照抄已判正确的账号仓库路径
+            // （TPlayObject.NativeAccountStorage.Operations.cs:196-200）。
+            // 注意 ObjectId 在本方法内是**参数**（遮蔽同名实例属性），比对的是包里的值。
+            // 本次只补这条收紧；原生 sub_6C2A34 内**没有** m_boStorage 测试，
+            // 删掉它是放宽，超出本轮授权，另案裁决（staging/m_trade2_20260813.md §3）。
+            if (m_NPC == null || m_NPC.ObjectId != ObjectId)
+            {
+                SendDefMessage(Grobal2.SM_STORAGE_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
             Merchant merchant = (Merchant)M2Share.UserEngine.FindMerchant(ObjectId);
             for (var i = m_ItemList.Count - 1; i >= 0; i--)
             {
@@ -2359,8 +2221,25 @@ namespace GameSvr
                 if (ClientItemIdMatches(UserItem, nItemIdx) && string.Compare(sUserItemName, sMsg, StringComparison.OrdinalIgnoreCase) == 0)
                 {
                     
-                    if (merchant != null && merchant.m_boStorage && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
+                    // TRADE-39: 战神 sub_6C2A34 @0x6C2AE8 `66 B9 0F 00 mov cx,0xF` /
+                    // 0x6C2AF0 `call 0x7743E0`, 该 helper @0x774400 `cmp eax,edi / jg 拒绝`
+                    // 与 @0x774415 `cmp edi,eax / jl 拒绝` 合起来是 |dx| <= 15 && |dy| <= 15，
+                    // 所以边界是 <= 15 不是 < 15。原生无 g_FunctionNPC 旁路。
+                    if (merchant != null && merchant.m_boStorage && merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) <= 15)
                     {
+                        // TRADE-42: 战神 sub_6C2A34 @0x6C2B34 `mov eax,esi` / 0x6C2B36
+                        // `E8 25 15 0C 00 call 0x784060` / 0x6C2B3B `84 C0 test al,al` /
+                        // 0x6C2B3D `0F 85 B1 01 00 00 jne 0x6C2CF4`.  sub_784060 is
+                        // `8B 40 1C mov eax,[eax+0x1C]` / `F6 40 02 80 test byte [eax+2],0x80`
+                        // / `0F 95 C0 setne al` — i.e. StdItem byte[+2] bit7, the low byte of
+                        // NativeReserved02, so the mask is 0x0080.  0x6C2CF4 is the shared
+                        // failure exit: bo19 stays false and SM_STORAGE_FAIL (dx=0x2BF) goes out.
+                        // Native runs this after the NPC gate and before the container switch.
+                        var storeStd = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                        if (storeStd != null && (storeStd.NativeReserved02 & 0x0080) != 0)
+                        {
+                            break;
+                        }
                         if (m_StorageItemList.Count < Math.Clamp(m_nStorageSpaceCount,
                                 MIN_STORAGE_ITEM_COUNT, MAX_STORAGE_ITEM_COUNT))
                         {
@@ -2412,6 +2291,36 @@ namespace GameSvr
                 SendMsg(merchant, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sStorageIsLockedMsg + "\\ \\" + "浠撳簱寮€閿佸懡浠? @" + M2Share.g_GameCommand.UNLOCKSTORAGE.sCmd + '\\' + "浠撳簱鍔犻攣鍛戒护: @" + M2Share.g_GameCommand.__LOCK.sCmd + '\\' + "璁剧疆瀵嗙爜鍛戒护: @" + M2Share.g_GameCommand.SETPASSWORD.sCmd + '\\' + "淇敼瀵嗙爜鍛戒护: @" + M2Share.g_GameCommand.CHGPASSWORD.sCmd);
                 return;
             }
+            // TRADE-62: 战神 sub_6C2D7C 的第二道门，紧跟 0x6C2DAF 的 +0x683 之后：
+            //   0x6C2DBC  80 BB 61 04 00 00 00  cmp byte [ebx+0x461], 0   ; m_boDealing
+            //   0x6C2DC3  0F 85 0B 02 00 00     jne 0x6C2FD4
+            //   0x6C2FD4  BE FE FF FF FF        mov esi, 0xFFFFFFFE       ; ★ 失败码 -2
+            //   0x6C2FD9  EB 05                 jmp 0x6C2FE0
+            //   0x6C2FE0  85 F6 / 7F 1B         test esi,esi / jg 0x6C2FFF
+            //   0x6C2FEF  8B CE                 mov ecx, esi              ; Recog = -2
+            //   0x6C2FF1  66 BA C2 02           mov dx, 0x2C2             ; SM_TAKEBACKSTORAGEITEM_FAIL
+            // 与 +0x683（C# 的 m_boCanGetBackItem，原生失败码 -3）的先后次序照抄原生。
+            // −2 是这道门自身的可观测输出；TRADE-45 说的 −1/−3 属其它出口，未一并回填。
+            if (m_boDealing)
+            {
+                SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, -2, 0, 0, 0, "");
+                return;
+            }
+            // TRADE-39（收紧半）：取仓侧与存仓同形，同样是玩家自持的 NPC 指针。
+            //   0x6C2DC9  8B BB D8 0C 00 00     mov edi, [ebx+0xCD8]
+            //   0x6C2DCF  85 FF                 test edi, edi
+            //   0x6C2DD1  0F 84 09 02 00 00     je  0x6C2FE0
+            //   0x6C2DD7  8B 83 D8 0C 00 00     mov eax, [ebx+0xCD8]
+            //   0x6C2DDD  3B 45 FC              cmp eax, [ebp-4]       ; msg.Recog
+            //   0x6C2DE0  0F 85 FA 01 00 00     jne 0x6C2FE0
+            // 0x6C2FE0 处 esi 仍是入口的 `33 F6 xor esi,esi`（0x6C2DA6），
+            // 故这两条走 Recog = 0，与已有失败出口一致（不是 -2、也不是 -3）。
+            // 同样只补收紧半；原生无 m_boGetback 测试，删它属放宽，另案裁决。
+            if (m_NPC == null || m_NPC.ObjectId != NPC)
+            {
+                SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, 0, 0, 0, 0, "");
+                return;
+            }
             for (var i = 0; i < m_StorageItemList.Count; i++)
             {
                 UserItem = m_StorageItemList[i];
@@ -2421,7 +2330,10 @@ namespace GameSvr
                     if (IsAddWeightAvailable(M2Share.UserEngine.GetStdItemWeight(UserItem.wIndex)))
                     {
                         
-                        if (merchant.m_boGetback && (merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) < 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) < 15 || merchant == M2Share.g_FunctionNPC))
+                        // TRADE-39: 取仓 sub_6C2D7C @0x6C2DF8 `66 B9 0F 00 mov cx,0xF` /
+                        // 0x6C2E00 `call 0x7743E0` —— 与存仓同一道门、同一个 helper，
+                        // 同为 <= 15 且无 g_FunctionNPC 旁路。
+                        if (merchant.m_boGetback && merchant.m_PEnvir == m_PEnvir && Math.Abs(merchant.m_nCurrX - m_nCurrX) <= 15 && Math.Abs(merchant.m_nCurrY - m_nCurrY) <= 15)
                         {
                             if (AddItemToBag(UserItem))
                             {
@@ -2433,7 +2345,11 @@ namespace GameSvr
                                 StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
                                 if (StdItem.NeedIdentify == 1)
                                 {
-                                    M2Share.AddGameDataLog('0' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
+                                    // TRADE-51: 取仓日志类型是 2 不是 0。原生两处取仓日志
+                                    // 0x6C2F6A 与 0x6C2F92 都是 `66 BA 02 00 mov dx,2`，
+                                    // 随后 `call 0x768BE0`。对照存仓 0x6C2C88 / 0x6C2CAA
+                                    // 都是 `66 BA 01 00 mov dx,1`，与 C# 的 '1' 一致。
+                                    M2Share.AddGameDataLog('2' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + '0');
                                 }
                             }
                             else

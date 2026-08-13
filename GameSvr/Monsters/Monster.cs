@@ -12,6 +12,14 @@ namespace GameSvr
         {
             m_boDupMode = false;
             bo554 = false;
+            // MONAI-02 — TMonster.Create sub_66610C 的构造默认 race 是 80(RC_MONSTER)：
+            //   00666162  C6 86 78 01 00 00 50   mov byte [esi+0x178],0x50
+            // （父类 TAnimal.Create 0071D851 C6 87 78 01 00 00 32 = 50/RC_ANIMAL）
+            // [+0x178] 是 race 而不是 Level：工厂 sub_679F8C 用 `movzx eax,byte [edi+0x14]`
+            // 分派同一个字段，MonInitialize 把它写进 [mon+0x178]。
+            // MonInitialize 之后会被 DB 记录覆盖（UsrEngn.cs MonInitialize），所以只有
+            // 不经 MonInitialize 创建的怪物看得到这个默认值。
+            m_btRaceServer = Grobal2.RC_MONSTER;
             m_dwThinkTick = HUtil32.GetTickCount();
             m_nViewRange = 5;
             m_nRunTime = 250;
@@ -70,10 +78,16 @@ namespace GameSvr
             }
             if (m_boDupMode)
             {
-                int nOldX = m_nCurrX;
-                int nOldY = m_nCurrY;
-                WalkTo((byte)M2Share.RandomNumber.Random(8), false);
-                if (nOldX != m_nCurrX || nOldY != m_nCurrY)
+                // MONAI-11 — TMonster.Think sub_666184 叠格走开走的是 WalkTo(Random(8), TRUE)：
+                //   006661FF  B8 08 00 00 00     mov  eax,8
+                //   00666204  E8 43 D9 D9 FF     call 0x403B4C        ; Random(8)
+                //   00666209  8B D0              mov  edx,eax         ; dir
+                //   0066620B  B1 01              mov  cl,1            ; boFlag = 1
+                //   00666211  FF 56 30           call [esi+0x30]      ; WalkTo
+                //   00666214  84 C0              test al,al
+                //   00666216  74 0B              je   0x666223        ; 假则仍留在 dup
+                // 原先 C# 传 false 且用坐标差当成功，叠格时不能走进已占用格，解不开。
+                if (WalkTo((byte)M2Share.RandomNumber.Random(8), true))
                 {
                     m_boDupMode = false;
                     result = true;
@@ -116,7 +130,23 @@ namespace GameSvr
 
         public override void Run()
         {
-            if (!m_boGhost && !m_boDeath && !m_boFixedHideMode && !m_boStoneMode && m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
+            // MONAI-10 — 原生 TMonster.Run sub_66622C 的入口闸是三段，第一段是虚派发的
+            // can-act 谓词，不是裸 m_boDeath：
+            //   0066626A  B2 01                 mov  dl,1
+            //   0066626F  8B 08                 mov  ecx,[eax]
+            //   00666271  FF 51 40              call [ecx+0x40]        ; = sub_76B354
+            //   00666276  0F 84 64 04 00 00     je   0x6666E0          ; 假 -> 只跑 inherited
+            //   0066627F  80 B8 E3 02 00 00 00  cmp  byte [eax+0x2E3],0 ; m_boFixedHideMode
+            //   00666286  0F 85 54 04 00 00     jne  0x6666E0
+            //   0066628F  80 B8 E5 02 00 00 00  cmp  byte [eax+0x2E5],0 ; m_boStoneMode
+            //   00666296  0F 85 44 04 00 00     jne  0x6666E0
+            // sub_76B354 = m_boDeath | bodyState{0x1D,0x01,0x1A,0x18(仅当实参非0),0x3E}，
+            // C# 已有等价实现 IsNativeCanActBlocked。原先只判 m_boDeath 时，处在那 5 个
+            // 状态里的怪照常搜敌/移动/出手。
+            // m_boGhost 与 m_wStatusTimeArr[POISON_STONE] 两项原生此处没有；保留是因为
+            // C# 的状态层与 native bodyState 层尚未收敛（REPLICATION_RULES §4.18），
+            // 删掉会让旧石化路径失效。收敛后应只留 IsNativeCanActBlocked(1)。
+            if (!IsNativeCanActBlocked(1) && !m_boGhost && !m_boFixedHideMode && !m_boStoneMode && m_wStatusTimeArr[Grobal2.POISON_STONE] == 0)
             {
                 if (Think())
                 {
@@ -185,7 +215,16 @@ namespace GameSvr
                             }
                             if (!m_Master.m_boSlaveRelax && (m_PEnvir != m_Master.m_PEnvir || Math.Abs(m_nCurrX - m_Master.m_nCurrX) > 20 || Math.Abs(m_nCurrY - m_Master.m_nCurrY) > 20))
                             {
-                                SpaceMove(m_Master.m_PEnvir.sMapName, m_nTargetX, m_nTargetY, 1);
+                                // MONAI-15 — TMonster.Run 召回传送 sub_66622C @0x6665AF：
+                                //   B8 04 / E8 Random / 03 83 30 01 00 00  ; Y = masterY + Random(4) 先抽
+                                //   50 / 6A 01 / 6A 00                     ; push Y, 1, 0
+                                //   B8 04 / E8 Random / 03 8B 2C 01 00 00  ; X = masterX + Random(4) 后抽
+                                //   8B 93 28 01 00 00 / FF 93 C0 01 00 00  ; edx=master.envir, vcall +0x1C0
+                                // 旧 C# 传到 GetBackPosition 写下的 m_nTargetX/Y，抽签次数为 0。
+                                // push 0 那一档 C# SpaceMove 没有对应形参，标 BLOCKED，nInt 仍传 1。
+                                var nRecallY = (short)(m_Master.m_nCurrY + M2Share.RandomNumber.Random(4));
+                                var nRecallX = (short)(m_Master.m_nCurrX + M2Share.RandomNumber.Random(4));
+                                SpaceMove(m_Master.m_PEnvir, nRecallX, nRecallY, 1);
                             }
                         }
                     }

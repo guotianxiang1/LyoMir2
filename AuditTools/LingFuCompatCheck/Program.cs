@@ -329,12 +329,24 @@ Reject(mallSource, "GetPlayerVariable(player.m_ScriptVVars, 10, 2)",
     "mall LingFu balance uses V[10,2]");
 Reject(mallSource, "SetPlayerVariable(player.m_ScriptVVars, 10, 2",
     "mall LingFu deduction uses V[10,2]");
-RequireMatches(mallSource,
-    "if \\(mallItem\\.CurrencyType == 2\\)[\\s\\S]{0,220}?return false;",
-    1, "mall LingFu purchases must fail closed before item grants");
-RequireMatches(mallSource,
-    "private static int GetCurrencyBalance[\\s\\S]{0,500}?2\\s*=>\\s*0,",
-    1, "mall LingFu balance fallback must remain zero");
+// 灵符在原生商城里是**被发放的商品**，不是付款货币。发货核心 sub_6CC420 对商品名等于
+// '灵符'（长串 0x6CC768，len=4，GBK c1 e9 b7 fb）的分支是一条加法：
+//   006CC4F1  ba 68 c7 6c 00     mov edx, 0x6CC768        ; '灵符'
+//   006CC4FB  0f 85 c9 00 00 00  jne 0x6CC5CA             ; 不是灵符 -> 物品路径
+//   006CC504  01 86 d8 0b 00 00  add [esi+0xBD8], eax     ; 余额 += count
+//   006CC518  68 0e 64 03 00     push 0x3640E             ; 日志 GoodsIdx = 222222
+//   006CC52B  66 ba 33 00        mov dx, 0x33             ; AddLogRec 类型 51
+// 整个商城链路（sub_6CB7E4 / sub_6CC420）没有任何一条余额减法，商品表也没有货币类型字段
+// （sub_636D68 的 10 个字段见 MallCurrency4CompatCheck）。所以这里钉的不再是"灵符付款要
+// fail closed"，而是更强的一条：MallManager 不许出现任何本地货币扣减。
+Reject(mallSource, "CurrencyType", "mall still models a non-native currency-type field");
+Reject(mallSource, "DeductCurrency", "mall still has a local currency deduction path");
+Reject(mallSource, "m_nLingFu -=", "mall debits the LingFu balance");
+Assert(mallSource.Contains("if (!TrySettleYuanbaoPayment", StringComparison.Ordinal),
+    "mall purchase no longer goes through the single settlement gate");
+Assert(mallSource.IndexOf("if (!TrySettleYuanbaoPayment", StringComparison.Ordinal)
+       < mallSource.IndexOf("player.m_ItemList.Add", StringComparison.Ordinal),
+    "mall grants items before the settlement gate");
 
 var addLinFuSource = File.ReadAllText(Path.Combine(commandDirectory, "AddLinFuCommand.cs"));
 RequireMatches(addLinFuSource,
@@ -486,8 +498,15 @@ foreach (var value in new[]
 
 Assert(!File.Exists(Path.Combine(commandDirectory, "GameGirdCommand.cs")),
     "non-native GameGird command remains registered");
-AssertCurrencyCommandFailsClosed(
-    File.ReadAllText(Path.Combine(commandDirectory, "GameGloryCommand.cs")), "GameGlory");
+// @GameGlory 不在原生 430 行注册表里（只有 SetGloryPoint 274 / chguserGlory 226），
+// 已整条移除；这里改钉「不得再被注册」，比原来校验它是不是静默 no-op 更强。
+foreach (var path in Directory.GetFiles(Path.Combine(root, "GameSvr"), "*.cs",
+             SearchOption.AllDirectories))
+{
+    Assert(!File.ReadAllText(path).Contains("[GameCommand(\"GameGlory\"",
+               StringComparison.OrdinalIgnoreCase),
+        "GameGlory is absent from the native registry and must not be registered");
+}
 
 Console.WriteLine(
     "PASS MyLFnum=property AddLF=procedure AddLimLF=procedure DecLF=procedure " +
@@ -507,31 +526,6 @@ static int[] ReadNativeLingFuReasonBuckets(TPlayObject player)
     Assert(parameters[0] is int[],
         "native LingFu reason-bucket snapshot type is invalid");
     return (int[])parameters[0];
-}
-
-static void AssertCurrencyCommandFailsClosed(string source, string command)
-{
-    // 2026-08-04: the `NativeCommandFailure.Report` requirement was RETIRED, not weakened.
-    // It directly contradicted `CommandAuditCheck:171`, which lists GameGloryCommand.cs in
-    // `silentAbsentCommandFiles` and asserts the OPPOSITE (no Report at all). Tier-1 settles
-    // it in CommandAuditCheck's favour: `@GameGlory` is ABSENT from the 430-row native command
-    // table (staging/ida_award_case584_command_registry_20260720.txt, TABLE=0x7B4654 exact-match
-    // scan; only SetGloryPoint / chguserGlory exist), so native routes it to the silent sink
-    // def_622B15 @0x0062B648 — a red Report would be an over-send. Production's pure silent
-    // no-op is correct. Two audits asserting opposite things is itself a defect; the loser is
-    // retired here rather than left to fail forever, and `CommandAuditCheck` remains the single
-    // owner of that contract.
-    //
-    // The currency-token half below is NOT retired: it still proves the handler never touches
-    // gold/point/script state, which is what makes the silent no-op safe.
-    foreach (var forbidden in new[]
-             {
-                 "m_nGamePoint", "m_nGameGold", "m_ScriptVVars", "m_ScriptSVars",
-                 "GameGoldChanged", "GamePointChanged", "MsgColor.Green"
-             })
-    {
-        Reject(source, forbidden, $"{command} command currency substitute");
-    }
 }
 
 static void AssertLingFuDispatchesHaveNoSubstitute(string source)

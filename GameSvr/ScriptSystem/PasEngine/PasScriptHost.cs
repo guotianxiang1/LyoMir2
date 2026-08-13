@@ -1108,14 +1108,17 @@ namespace GameSvr.PasEngine
             {
                 if (!HasLabelHandler(scriptPath, label)) continue;
                 var interaction = BindNpcInteraction(player, npc, resolution);
-                if (player != null) player.m_NPC = npc;
+                // Native click handler sub_6B8B28 writes player+0xCD8 AFTER the
+                // talk vcall (0x6B8BA7 / 0x6B8C48), and never writes 0. GotoLable
+                // 0x63DC98 itself does not touch +0xCD8. Do not bind or clear
+                // m_NPC here: a label miss would otherwise drop a binding native
+                // keeps, and a pre-call write would let Give's audit (0x6DF341
+                // cmp [edi+0xCD8],0) see the new NPC during @main.
                 var invoked = TryCallLabelCore(scriptPath, label, player, npc,
                     resolution.DynamicBindingHandle, out result);
                 if (!invoked)
                 {
                     RemoveNpcInteraction(interaction);
-                    if (player != null && ReferenceEquals(player.m_NPC, npc))
-                        player.m_NPC = null;
                 }
                 else if (ParseScriptLabel(label).Label.Equals("@exit",
                              StringComparison.OrdinalIgnoreCase))
@@ -1842,9 +1845,11 @@ namespace GameSvr.PasEngine
                 if (entry.MonsterName.Length == 0 || entry.ItemName.Length != 0) continue;
                 if (!string.Equals(entry.MonsterName, monsterName, StringComparison.OrdinalIgnoreCase)) continue;
 
-                var flatIndex = entry.VariableGroup * 1000 + entry.VariableIndex;
-                var currentValue = player.m_ScriptVVars != null &&
-                                   player.m_ScriptVVars.TryGetValue(flatIndex, out var storedValue)
+                // VariableGroup comes from configuration, so it can be 0, and group 0 of
+                // the V bank is not in the dictionary - computing the flat key here read
+                // zero for every such entry regardless of what the script had stored.
+                var currentValue = player.TryGetScriptVar('V', entry.VariableGroup,
+                    entry.VariableIndex, out var storedValue)
                     ? storedValue
                     : 0;
                 if (currentValue < -1 || currentValue >= entry.UpperBound) continue;

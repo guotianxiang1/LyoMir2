@@ -31,6 +31,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace GildWarCreateTimeCheck
 {
@@ -82,21 +83,17 @@ namespace GildWarCreateTimeCheck
                 store, s => Has(s, "TryAdd(key, (relation, createTime))"));
 
             // ---- write: both relation types stamp a timestamp -------------------
-            Assert("DeclareWar stamps (GildHostile, DateTime.Now) in memory",
-                service, s => Has(s,
-                    "_gildRelations[relationKey] = (GildHostile, DateTime.Now)"));
+            // These used to require the literal DateTime.Now at both sinks. GILD-04 hoisted
+            // the union timestamp into a local (RemoveGildRelationLocked, then one
+            // `var unionTime = DateTime.Now` feeding both writers) so the in-memory tuple and
+            // the gildrelation row can no longer straddle a millisecond boundary and disagree.
+            // The literal rejected that improvement, so pin the property instead: whatever the
+            // timestamp expression is, both sinks must receive the same one.
+            Assert("DeclareWar stamps the war in memory and persists the same instant",
+                service, s => StampsSameInstant(s, "GildHostile"));
 
-            Assert("DeclareWar forwards the timestamp to the DB insert",
-                service, s => Has(s,
-                    "InsertGildRelationFailSafe(relationKey, GildHostile, DateTime.Now)"));
-
-            Assert("union accept stamps (GildUnion, DateTime.Now) in memory",
-                service, s => Has(s,
-                    "_gildRelations[relationKey] = (GildUnion, DateTime.Now)"));
-
-            Assert("union accept forwards the timestamp to the DB insert",
-                service, s => Has(s,
-                    "InsertGildRelationFailSafe(relationKey, GildUnion, DateTime.Now)"));
+            Assert("union accept stamps the union in memory and persists the same instant",
+                service, s => StampsSameInstant(s, "GildUnion"));
 
             Assert("InsertGildRelationFailSafe takes createTime and binds it (no inline NOW)",
                 service, s => Has(s,
@@ -121,13 +118,19 @@ namespace GildWarCreateTimeCheck
             Assert("expiry deadline is CreateTime + duration",
                 expiry, s => Has(s, "pair.Value.CreateTime.AddMilliseconds(durationMs)"));
 
-            Assert("ExpireGildWars removes the relation in memory",
+            // Teardown goes through the shared RemoveGildRelationLocked (native
+            // delete_relation sub_5E90A4, which drops the map entry AND the row);
+            // both halves are pinned here so neither can be lost in the helper.
+            Assert("ExpireGildWars tears the relation down through the shared helper",
                 service, s => Has(s, "internal void ExpireGildWars(int durationMs)")
-                              && Has(s, "_gildRelations.Remove(relationKey)"));
+                              && InBlock(s, "internal void ExpireGildWars",
+                                  "RemoveGildRelationLocked(relationKey)"));
 
-            Assert("ExpireGildWars pushes the DB DELETE",
-                service, s => InBlock(s, "internal void ExpireGildWars",
-                    "DeleteGildRelationFailSafe(relationKey)"));
+            Assert("the shared teardown removes in memory and pushes the DB DELETE",
+                service, s => InBlock(s, "private void RemoveGildRelationLocked",
+                                  "_gildRelations.Remove(relationKey)")
+                              && InBlock(s, "private void RemoveGildRelationLocked",
+                                  "DeleteGildRelationFailSafe(relationKey)"));
 
             Assert("ExpireGildWars calls the shared expiry helper",
                 service, s => InBlock(s, "internal void ExpireGildWars",
@@ -196,6 +199,21 @@ namespace GildWarCreateTimeCheck
         // across lines, so both needle and haystack are collapsed before compare.
         private static bool Has(string source, params string[] needles) =>
             needles.All(n => Collapse(source).Contains(Collapse(n)));
+
+        // Both relation sinks -- the in-memory tuple and the DB insert -- must be handed the
+        // same timestamp expression, so a reload cannot produce a deadline that differs from
+        // the one the live map is using.
+        private static bool StampsSameInstant(string source, string relation)
+        {
+            var collapsed = Collapse(source);
+            var memory = Regex.Match(collapsed,
+                @"_gildRelations\[relationKey\] = \(" + relation
+                + @", (?<stamp>[A-Za-z0-9_.]+)\)");
+            if (!memory.Success) return false;
+            return Regex.IsMatch(collapsed,
+                @"InsertGildRelationFailSafe\(relationKey, " + relation + ", "
+                + Regex.Escape(memory.Groups["stamp"].Value) + @"\)");
+        }
 
         private static string Collapse(string value)
         {

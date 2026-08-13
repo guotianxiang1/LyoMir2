@@ -1165,10 +1165,17 @@ static TPlayObject NewGroundPlayer(string name, Envirnoment map, short x, short 
     };
 }
 
+// AddToMap, not MoveToMovingObject: the original's mover sub_7797CC only reports
+// success from 0x779A95, which is reached after unlinking the actor from the SOURCE
+// cell. Asking it to move an actor out of a cell it was never in walks the empty
+// list and falls through to `xor eax,eax` @0x779AAD, i.e. FALSE. A first placement
+// has no source cell, so the mover is the wrong primitive for it.
 static void PlaceGroundPlayer(Envirnoment map, TPlayObject player)
 {
-    Equal(1, map.MoveToMovingObject(player.m_nCurrX, player.m_nCurrY, player,
-        player.m_nCurrX, player.m_nCurrY, true), "place command 22 player");
+    player.m_boAddToMaped = false;
+    player.m_boDelFormMaped = false;
+    Require(ReferenceEquals(player, map.AddToMap(player.m_nCurrX, player.m_nCurrY,
+        CellType.OS_MOVINGOBJECT, player)), "place command 22 player");
 }
 
 static void InitializeGameState()

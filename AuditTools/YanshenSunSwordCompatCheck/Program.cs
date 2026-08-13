@@ -102,10 +102,21 @@ static void VerifyPowerFormula()
         Equal(150, InvokePower(100, 2, api),
             "enabled Yanshen A=7 B=6 effective-level=2 formula");
 
+        // The plugin caps A at 255 before the write (0x100B46F6 cmp eax,0xFF +
+        // cmovg) and then splices `04 07 add al,7` over host 0x0076B14C, so
+        // A + effective level is 8-bit: 254 + 2 wraps to 0, it does not stop at
+        // 255. The dialog's "(A+Level)不可超过255" is the width of [ebx+0x92].
         manager.SetNativeConfigValue("逐日剑法_A值", "254");
         manager.SetNativeConfigValue("逐日剑法_B值", "100");
-        Equal(255, InvokePower(100, 2, api),
-            "Yanshen A+effective-level multiplier must cap at 255");
+        Equal(0, InvokePower(100, 2, api),
+            "Yanshen A+effective-level multiplier must wrap at 256 (0x0076B14C add al)");
+        // B is the imm32 of host 0x00771DA3 `B9 0A 00 00 00`, consumed by the
+        // idiv at 0x00771DA9, so the division truncates instead of rounding.
+        // 100 * (2+7) / 7 = 128.57: truncation gives 128, Round gives 129.
+        manager.SetNativeConfigValue("逐日剑法_A值", "7");
+        manager.SetNativeConfigValue("逐日剑法_B值", "7");
+        Equal(128, InvokePower(100, 2, api),
+            "Yanshen B must divide with idiv truncation (0x00771DA9)");
 
         manager.SetNativeConfigValue("逐日剑法", 0L);
         Assert(!api.IsSunSword(), "disabled sun-sword switch remained enabled");

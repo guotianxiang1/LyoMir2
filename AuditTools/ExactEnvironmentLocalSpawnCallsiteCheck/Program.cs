@@ -1,7 +1,11 @@
 using System.Text.RegularExpressions;
 
-var repoRoot = Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
-    ?? @"D:\loym2\LyoMir2-master";
+// The default tree is not always sitting on the branch under test, so args[0]
+// takes precedence over the environment variable and over the default.
+var repoRoot = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
+    ? args[0]
+    : Environment.GetEnvironmentVariable("LYOMIR_REPO_ROOT")
+      ?? @"D:\loym2\LyoMir2-master";
 
 var exactSites = new[]
 {

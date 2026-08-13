@@ -263,8 +263,14 @@ namespace GameSvr
             if (!c.HasTarget) return NativeMonsterAttackAction.NoTarget;
             if (c.Adjacent)
             {
-                var elapsed = unchecked((uint)(c.TickNow - c.HitTick));
-                return elapsed > (uint)c.NextHitTime
+                // MONAI-16 — AttackTarget sub_71E914 @0x71E94B is SIGNED `jle`:
+                //   0071E945  2B 93 5C 03 00 00  sub edx,[ebx+0x35C]
+                //   0071E94B  3B 93 20 03 00 00  cmp edx,[ebx+0x320]
+                //   0071E951  7E 26              jle 0x71E979
+                // Live Monster.AttackTarget uses the same signed `>`. An unsigned
+                // wrap compare would swing on a future hit-tick (ctor + Random(3000)).
+                var elapsed = c.TickNow - c.HitTick;
+                return elapsed > c.NextHitTime
                     ? NativeMonsterAttackAction.Swing
                     : NativeMonsterAttackAction.HoldForCooldown;
             }

@@ -280,13 +280,13 @@ static void TestEverydayDrawContinuesAfterFailure()
 static void TestSourceContracts()
 {
     var root = FindRepositoryRoot();
-    var manager = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
+    var manager = ReadSource(Path.Combine(root, "GameSvr", "Services",
         "NativeSignActManager.cs"));
-    var store = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
+    var store = ReadSource(Path.Combine(root, "GameSvr", "Services",
         "NativeSignActStore.cs"));
-    var startup = File.ReadAllText(Path.Combine(root, "GameSvr", "GameApp.cs"));
-    var globals = File.ReadAllText(Path.Combine(root, "GameSvr", "M2Share.cs"));
-    var bridge = File.ReadAllText(Path.Combine(root, "GameSvr", "ScriptSystem",
+    var startup = ReadSource(Path.Combine(root, "GameSvr", "GameApp.cs"));
+    var globals = ReadSource(Path.Combine(root, "GameSvr", "M2Share.cs"));
+    var bridge = ReadSource(Path.Combine(root, "GameSvr", "ScriptSystem",
         "PasEngine", "PasApiBridge.cs"));
 
     foreach (var value in new[]
@@ -319,8 +319,10 @@ static void TestSourceContracts()
         "best-effort daily row update");
     Require(manager, "return NativeSignActDrawResult.UpdateFailed;",
         "SignAct draw stop-on-failure");
-    Require(manager, "? prizeType\n                : -1;",
-        "claim -1 update failure state");
+    Require(manager, "prizeType + 2",
+        "claim stores prizeType+2 on success");
+    Require(manager, ": -1",
+        "claim returns -1 when the prize update fails");
 
     foreach (var source in new[] { manager, store })
     foreach (var forbidden in new[]
@@ -389,6 +391,9 @@ static void EqualPrizeUpdates(IEnumerable<(int Index, int Prize)> expected,
         Assert(expectedArray[i] == actual[i],
             $"{message}[{i}]: expected {expectedArray[i]}, actual {actual[i]}");
 }
+
+static string ReadSource(string path) =>
+    File.ReadAllText(path).Replace("\r\n", "\n").Replace("\r", "\n");
 
 static string FindRepositoryRoot()
 {

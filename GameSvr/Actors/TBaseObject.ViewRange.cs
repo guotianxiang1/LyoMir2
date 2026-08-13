@@ -6,10 +6,10 @@ namespace GameSvr
     public partial class TBaseObject
     {
         /// <summary>
-        /// 战神 <c>sub_77A178</c> hardcodes <c>0xDBBA0</c> = 900_000 ms (15 min) at both
-        /// @0x77A4C7 and @0x77A5E6 — there is no config knob for it in the image.  C#
+        /// 战神 <c>sub_77A178</c> hardcodes <c>0x927C0</c> = 600_000 ms (10 min) at
+        /// @0x77A3FD for ground items — there is no config knob for it in the image.  C#
         /// defaulted to <c>dwClearDropOnFloorItemTime</c> = 3_600_000 (1 h), so ground
-        /// items outlived their native lifetime fourfold and stayed pickable.  The config
+        /// items outlived their native lifetime sixfold and stayed pickable.  The config
         /// value is now honoured only when a shard has explicitly moved it off the stock
         /// 1 h default; otherwise the native constant wins.  The Yanshen plugin override
         /// still takes precedence (it is an explicit operator choice).
@@ -21,33 +21,29 @@ namespace GameSvr
                 return timeoutMilliseconds;
             var configured = M2Share.g_Config.dwClearDropOnFloorItemTime;
             return configured == 60 * 60 * 1000 || configured <= 0
-                ? NativeMapItemExpiry.DefaultLifetimeMs      // 0x77A4C7 cmp edx,0xDBBA0
+                ? NativeMapItemExpiry.GroundItemLifetimeMs   // 0x77A3FD cmp edx,0x927C0
                 : configured;
         }
 
         /// <summary>
-        /// 战神 <c>sub_77A178</c> per-item expiry decision, shared by every C# sweep site.
-        /// Native gates on the map item's <c>+0x0D</c> "expirable" byte FIRST (@0x77A4A2 /
-        /// @0x77A54B / @0x77A5D4, <c>cmp byte …,0; je -&gt; skip</c>): zero means the item
-        /// never ages out.  StdMode 41 (@0x77A560) then substitutes the item's own stored
-        /// lifetime for the constant.  A non-<see cref="MapItem"/> cell object cannot carry
-        /// those fields, so it keeps the caller's flat timeout — the pre-existing behaviour.
+        /// 战神 <c>sub_77A178</c> ground-item expiry, tag 2 @0x77A3D9.  That branch is
+        /// four instructions of arithmetic and one <c>jb</c> against a literal — no
+        /// StdMode ladder, no <c>+0x0D</c> never-expire gate, no per-object lifetime
+        /// override.  Those three all belong to tag 3 (event objects, @0x77A480) and were
+        /// applied here only because C#'s <see cref="CellType"/> numbers ITEM as 3 while
+        /// 战神 numbers it 2; see <see cref="NativeMapItemExpiry"/> for the constructor
+        /// bytes that pin each tag.  <c>jb</c> keeps while strictly below, so expiry is
+        /// <c>age &gt;= limit</c>.
         /// </summary>
         protected static bool HasFloorItemExpired(object cellObj, int ageMs,
             int fallbackTimeoutMs)
         {
-            if (cellObj is not MapItem mapItem)
+            if (cellObj is not MapItem)
                 return ageMs >= fallbackTimeoutMs;
-            if (!NativeMapItemExpiry.TryResolveLifetimeMs(mapItem,
-                    mapItem.UserItem == null
-                        ? (byte)0
-                        : (M2Share.UserEngine?.GetStdItem(mapItem.UserItem.wIndex)?.StdMode ?? 0),
-                    out var lifetimeMs))
-            {
-                return false;   // +0x0D == 0 -> never expires
-            }
             // Honour an explicitly-retuned shard timeout when it is shorter than native's.
-            return ageMs >= Math.Min(lifetimeMs, Math.Max(fallbackTimeoutMs, 1));
+            return NativeMapItemExpiry.HasGroundItemExpired(ageMs,
+                Math.Min(NativeMapItemExpiry.GroundItemLifetimeMs,
+                    Math.Max(fallbackTimeoutMs, 1)));
         }
 
         protected virtual void UpdateVisibleGay(TBaseObject BaseObject)

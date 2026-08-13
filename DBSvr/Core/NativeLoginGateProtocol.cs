@@ -10,8 +10,34 @@ namespace DBSvr.Core
     {
         public const ushort AuthRequestIdent = 2018;
         public const ushort AuthResponseIdent = 1003;
+        public const ushort AuthFailureIdent = 1004;
+        /// <summary>
+        /// This is TSDKAuthHead.wAuthType, not a status: atLoginCenterAuth is the
+        /// 7th member of TSDKAuthType (LG uTypes.pas:204) and uSDKAuth.pas:1476
+        /// stamps it on every head that enters the 2018 path, so BOTH the 1003 and
+        /// the 1004 reply carry 6. Discriminate on the frame ident, never on this.
+        /// </summary>
         public const byte AuthSuccessStatus = 6;
         public const byte ProtocolVersion = 1;
+
+        /// <summary>sizeof(TSDKAuthHead), LG uTypes.pas:205-211.</summary>
+        public const int AuthHeadSize = 12;
+
+        /// <summary>
+        /// 1004 upper bound: uSDKAuth.pas:1127-1133 clamps the trailing message to
+        /// StrLen+1 in [2..100] and adds sizeof(TSDKAuthHead). The LoginCenterAuth
+        /// path always sends the bare 12 (:608, :766, :1624); the longer form comes
+        /// from the SDPT callback only.
+        /// </summary>
+        public const int AuthFailureMaximumPayloadSize = 112;
+
+        // TSDKAuthHead.nResult codes on the LoginCenterAuth path, LG uSDKAuth.pas:38-43.
+        public const int LcAuthSuccess = 0;
+        public const int LcAuthFailed = -1;
+        public const int LcAuthTimeout = -2;
+        public const int LcAuthSystemError = -3;
+        public const int LcAuthSystemBusy = -4;
+        public const int LcAuthNetError = -5;
         public const ushort RegistrationRequestIdent = 2000;
         public const ushort RegistrationResponseIdent = 1000;
         public const ushort ProbeRequestIdent = 1001;
@@ -216,6 +242,70 @@ namespace DBSvr.Core
             }
         }
 
+        /// <summary>
+        /// GDM_SDK_AUTH_RESPONSE_FAIL. Accepts the whole native size range so a
+        /// real LoginGate can never be dropped: 12 from the LoginCenterAuth
+        /// senders, up to 112 when the SDPT callback appends an error string.
+        /// </summary>
+        public static bool TryDecodeAuthFailure(YbDbLegacy77Frame frame,
+            out NativeLoginGateAuthFailure failure, out string error)
+        {
+            failure = null;
+            error = string.Empty;
+            if (frame == null)
+            {
+                error = "native LoginGate failure frame is null";
+                return false;
+            }
+            if (frame.Ident != AuthFailureIdent)
+            {
+                error = $"native LoginGate failure ident must be {AuthFailureIdent}";
+                return false;
+            }
+            if (frame.Payload.Length < AuthHeadSize
+                || frame.Payload.Length > AuthFailureMaximumPayloadSize)
+            {
+                error = $"native LoginGate failure payload must be {AuthHeadSize}"
+                        + $" to {AuthFailureMaximumPayloadSize} bytes";
+                return false;
+            }
+
+            // The trailing text is raw bytes from the vendor SDK (uSDKAuth.pas:1137
+            // Move()s them verbatim). Treat it as GBK like every other native
+            // string, but never let a decode failure discard the head.
+            var message = string.Empty;
+            if (frame.Payload.Length > AuthHeadSize)
+            {
+                var tail = frame.Payload.AsSpan(AuthHeadSize);
+                var terminator = tail.IndexOf((byte)0);
+                if (terminator < 0) terminator = tail.Length;
+                try { message = Gbk.GetString(tail.Slice(0, terminator)); }
+                catch (DecoderFallbackException) { message = string.Empty; }
+            }
+
+            failure = new NativeLoginGateAuthFailure(
+                frame.Payload[0], frame.Payload[1],
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(2, 4)),
+                BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(8, 4)),
+                message);
+            return true;
+        }
+
+        /// <summary>
+        /// Diagnostic wording only — never put this on the wire. Taken from the
+        /// LoginGate's own log strings for the same constants, uSDKAuth.pas:519-527.
+        /// </summary>
+        public static string DescribeAuthFailure(int nResult) => nResult switch
+        {
+            LcAuthFailed => "认证账号或密码错误",
+            LcAuthTimeout => "认证超时或授权到期",
+            LcAuthSystemError => "认证错误",
+            LcAuthSystemBusy => "认证系统繁忙",
+            LcAuthNetError => "网络错误或版本号不一致",
+            LcAuthSuccess => "认证失败帧携带了 LC_AUTH_SUCCESS(0)，发送端未写 nResult",
+            _ => $"未知认证结果 {nResult}"
+        };
+
         private static bool TryWriteCString(Span<byte> destination, string value,
             out string error)
         {
@@ -348,6 +438,38 @@ namespace DBSvr.Core
         public byte[] DeviceId { get; }
         public string GameType { get; }
         public string DeviceName { get; }
+    }
+
+    /// <summary>
+    /// TSDKAuthHead carried by GDM_SDK_AUTH_RESPONSE_FAIL (1004), plus the
+    /// optional SDPT error text. QueryId spans wSocketHandle+DynAuthIdent as one
+    /// dword, exactly as TryCreateAuthRequest wrote it.
+    /// </summary>
+    public sealed class NativeLoginGateAuthFailure
+    {
+        public NativeLoginGateAuthFailure(byte authType, byte gateIndex,
+            int queryId, int result, string message)
+        {
+            AuthType = authType;
+            GateIndex = gateIndex;
+            QueryId = queryId;
+            Result = result;
+            Message = message ?? string.Empty;
+        }
+
+        public byte AuthType { get; }
+        public byte GateIndex { get; }
+        public int QueryId { get; }
+
+        /// <summary>TSDKAuthHead.nResult at +8; one of the LcAuth* codes.</summary>
+        public int Result { get; }
+
+        public string Message { get; }
+
+        public string Describe() =>
+            Message.Length == 0
+                ? NativeLoginGateProtocol.DescribeAuthFailure(Result)
+                : $"{NativeLoginGateProtocol.DescribeAuthFailure(Result)}: {Message}";
     }
 
     public sealed class NativeLoginGateAuthResponse

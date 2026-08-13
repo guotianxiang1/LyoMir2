@@ -155,25 +155,20 @@ Census("SignInAct", 4);
 Census("TempSetMapParam", 5);
 
 // ============================================================
-// 14 name-drift ALIAS perm fixes (#17b) — the live C# command resolves to a
-// native command under a DIFFERENT name, so it was missed by the exact-name
-// census join; perm corrected from the C# default 10 to the confirmed native
-// alias perm. Evidence: staging/gm_alias_resolution_20260801.md.
+// Name-drift aliases (#17b). OpenMir2 names (KickHuman/Shutup/...) were
+// invented and deleted; the live [GameCommand] names are the native ones.
+// Census those. Native counterparts that still have no GameCommand
+// (KickOut/LookFor/HumNum/MonClear/reloadStditem/ChgCastleOwner/Die/IncSelfLv)
+// are product MISSING, not this census's job -- it never registered them
+// under the native name either.
+// Evidence: staging/gm_alias_resolution_20260801.md + 430-row registry.
 // ============================================================
-Census("KickHuman", 2);        // = native KickOut(59)
-Census("HumanInfo", 2);        // = native LookFor(52)
-Census("Shutup", 2);           // = native OutSay(62)
-Census("ShutupRelease", 2);    // = native ShifangSay(63)
-Census("HumanCount", 3);       // = native HumNum(54)
-Census("ShutupList", 3);       // = native LookOutSay(64)
-Census("RecallHuman", 3);      // = native CallMan(72)
-Census("ClearMapMonster", 4);  // = native MonClear(181)
-Census("ReloadItemDB", 4);     // = native reloadStditem(443)
-Census("ChangeSabukLord", 5);  // = native ChgCastleOwner(215)
-Census("LoadAdmin", 5);        // = native ReLoadGmFile(206)
-Census("ReLoadAdmin", 5);      // = native ReLoadGmFile(206) (2nd C# alias of one native)
-Census("Kill", 5);             // = native Die(358); body calls .Die()
-Census("ChangeLevel", 4);      // = native IncSelfLv(104); body sets m_Abil.Level
+Census("OutSay", 2);           // native OutSay(62); was C# Shutup
+Census("ShifangSay", 2);       // native ShifangSay(63); was C# ShutupRelease
+Census("LookOutSay", 3);       // native LookOutSay(64); was C# ShutupList
+Census("CallMan", 3);          // native CallMan(72); was C# RecallHuman
+Census("ReLoadGmFile", 5);     // native ReLoadGmFile(206); was C# ReLoadAdmin
+// LoadAdmin was a second invented alias of the same native command; gone.
 
 Console.WriteLine($"PASS NativeGmPermissionCensusCheck: {checks} checks");
 return 0;

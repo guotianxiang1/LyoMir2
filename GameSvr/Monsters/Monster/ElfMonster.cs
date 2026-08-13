@@ -65,10 +65,11 @@ namespace GameSvr
         //   66A304  mov [ebx+0x384],eax          ; m_dwWalkTick
         // => 挂在 RecalcAbilitys 上会在【装备/状态重算】时机触发，原版是在【搜敌】时机触发，
         //    两者调用频率与时点都不同（RecalcAbilitys 由 TBaseObject.Base.cs:2825 那条路径驱动）。
-        protected override void SearchTarget()
+        protected override bool SearchTarget()
         {
-            base.SearchTarget();
+            var result = base.SearchTarget();
             ResetElfMon();
+            return result;
         }
 
         private void ResetElfMon()

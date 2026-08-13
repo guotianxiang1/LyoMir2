@@ -354,10 +354,13 @@ namespace GameSvr.Services
         }
 
         // 4577 CM_GILD_QUERY_CONCERN record builder (native sub_6F66F0): per
-        // concerned gild -> [0..7] the concerned gild's own id, [8..23] its name
-        // (16-byte short string, capacity 15), [24] the relation byte between the
-        // caller's gild and the concerned gild (sub_5E7890: 0 none / 1 union /
-        // 2 hostile), [25..31] zero padding = 32 bytes.
+        // concerned gild -> [0..7] the concerned gild's own id (0x6F6706/0x6F6708),
+        // [8..23] its name (16-byte short string, capacity 15, written at 0x6F6729),
+        // [24] the relation byte between the caller's gild and the concerned gild
+        // (0x6F6750 call 0x5E7890 / 0x6F6755 `88 46 18 mov [esi+0x18],al`), [25..31]
+        // zero padding = 32 bytes. The byte is the RAW map value, so besides 0 none /
+        // 1 union / 2 hostile it also carries 3 for a pending alliance proposal --
+        // sub_5E7890 does no filtering and neither should this.
         internal static byte[] EncodeGildConcernSummaries(
             IReadOnlyList<(long Id, string Name, byte Relation)> gilds)
         {

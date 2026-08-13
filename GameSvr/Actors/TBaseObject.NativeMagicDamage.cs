@@ -271,12 +271,26 @@ namespace GameSvr
         /// @0x76793F plain path: <c>max(hi-lo,0)+1</c> then <c>Random</c> and
         /// <c>add eax,esi</c>.
         /// </para>
+        /// <para>
+        /// Yanshen 2.0.8 「修复卡防御」 is a code patch on this very byte, not a
+        /// runtime test: gate <c>0x100AAE6C cmp [edi+0xAE0],0</c> (page slot of
+        /// 「修复卡防御」, loader <c>0x100AFC5C</c>), enable arm
+        /// <c>0x100AAE81 mov byte [ebp-0x10AD],0xEB</c> →
+        /// <c>0x100AAEBD call 0x10033340(buf,1,0x767910,0x767910)</c> = a 1-byte
+        /// memcpy turning <c>7E</c> (jle) into <c>EB</c> (jmp); the disable arm
+        /// <c>0x100AAF13 mov byte [ebp-0x10D5],0x7E</c> /
+        /// <c>0x100AAF41</c> writes the original back. Because the jump becomes
+        /// unconditional, <c>+0x164</c> is never loaded and
+        /// <c>sub_403B4C</c> (Random) is never entered — so the enabled state
+        /// must not consume an RNG draw either.
+        /// </para>
         /// </summary>
         internal int RollNativeDefenceValue(int defenceRange)
         {
             int lowDefence = HUtil32.LoWord(defenceRange);
             int highDefence = HUtil32.HiWord(defenceRange);
-            if (m_btRaceServer == Grobal2.RC_PLAYOBJECT &&
+            if (!NativeFixDefenceLockActive() &&
+                m_btRaceServer == Grobal2.RC_PLAYOBJECT &&
                 m_nBodyLuckLevel > 0 &&
                 M2Share.RandomNumber.Random(6 -
                     Math.Min(5, m_nBodyLuckLevel)) == 0)
@@ -286,6 +300,15 @@ namespace GameSvr
 
             int defenceSpan = Math.Max(0, highDefence - lowDefence) + 1;
             return lowDefence + M2Share.RandomNumber.Random(defenceSpan);
+        }
+
+        // 「修复卡防御」 rewrites host code, so it is not scoped to an actor:
+        // whoever reaches 0x00767910 runs the rewritten branch. Only the plugin
+        // manager is consulted, same shape as NativeOneSwordOverrideActive().
+        private static bool NativeFixDefenceLockActive()
+        {
+            var api = new Plugins.YanshenApi(null, null, M2Share.PluginManager);
+            return api.IsFixDefense();
         }
 
         /// <summary>

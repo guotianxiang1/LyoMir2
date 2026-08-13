@@ -89,8 +89,10 @@ static void AcceptUnionSucceedsSwapsRelationAndConsumes()
         "target gild400 enables union (session flag)");
     Require(service.ApplyGildRequestUnion(1, "盟友行会") == 0,
         "union request seeded (gild200 -> gild400, Relation-3 pending, uniqueId=1)");
-    Require(GildRelation(service, 1, 41) == 0,
-        "pending union Relation-3 is DB-only (not in-memory) before accept");
+    // save_relation 0x5E6F1B `8ACB mov cl,bl` / 0x5E6F23 `call 0x49F9C8` stores the raw type, so
+    // the pending 3 sits in the relation map until accept's 0x70821C delete_relation clears it.
+    Require(GildRelation(service, 1, 41) == NativeCorpsService.GildPendingUnion,
+        "pending union Relation-3 is published in-memory before accept");
 
     var packet = DriveAccept(service, 41, 1);   // president p41 of gild400 accepts
     Equal(0, packet.Header.Param, "4611 UNION accept success code via the handler");

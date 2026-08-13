@@ -72,34 +72,69 @@ namespace GameSvr
 
                     }
                 }
+                // MINE-07 / MINE-53: 区域限制门是 ClientHitXY 的第一条语句，对
+                // **所有** hit ident 生效，查的是**玩家自己站的格**，失败时弹绿字：
+                //   0x6EC08B  33 D2              xor edx,edx      ; 技能键 = 0
+                //   0x6EC08D  8B C3              mov eax,ebx
+                //   0x6EC08F  E8 BC 69 08 00     call 0x772A50
+                //     0x772A5C  8B 8E 30 01 00 00  mov ecx,[esi+0x130] ; ★ 自己的 Y
+                //     0x772A62  8B 96 2C 01 00 00  mov edx,[esi+0x12C] ; ★ 自己的 X
+                //     0x772A6E  E8 15 94 00 00     call 0x77BE88       ; 读 cell+4
+                //     0x772A83  E8 6C 92 00 00     call 0x77BCF4       ; LimitSkill 表含 0？
+                //   0x6EC094  84 C0              test al,al
+                //   0x6EC096  75 1C              jne 0x6EC0B4
+                //   0x6EC098  66 B9 DB FF        mov cx,0xFFDB          ; 绿
+                //   0x6EC09C  BA 7C C3 6E 00     mov edx,0x6EC37C       ; len 20
+                //   0x6EC0A5  FF 93 D4 00 00 00  call [vmt+0xD4]        ; SysMsg
+                //   0x6EC0AB  C6 45 FF 00        mov byte [ebp-1],0     ; 返回 false
+                // 0x6EC37C 的 Delphi 长串前缀 len=20，字节
+                //   B5 B1 C7 B0 C7 F8 D3 F2 B2 BB BF C9 CA B9 D3 C3 BC BC C4 DC
+                // 按 GBK 解正是「当前区域不可使用技能」。
+                // 原来 C# 查的是**目标格** (n14,n18) 且只在挖矿分支里、失败静默，
+                // 方向正好反了：站在受限格上照挖，站在正常格朝受限格挖反被拒。
+                // m_boCanHit / 死亡麻痹 / 测速这些前置在原版属于调用方
+                // (0x6D9EBC 派发器)，所以门排在它们之后、坐标校验之前。
+                if (!m_PEnvir.IsSkillAllowedAt(m_nCurrX, m_nCurrY, 0))
+                {
+                    SysMsg("当前区域不可使用技能", MsgColor.Green, MsgType.Hint);
+                    return result;
+                }
                 if (nX == m_nCurrX && nY == m_nCurrY)
                 {
                     result = true;
                     m_dwAttackTick = HUtil32.GetTickCount();
-                    if (wIdent == Grobal2.CM_HEAVYHIT && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
+                    // MINE-08: 原版在派发器里测 MINE 旗标，位置在一切之前——
+                    // 紧跟 ident 判断之后、取工具之前：
+                    //   0x6EC0F1  66 81 FF C7 0B     cmp di,0xBC7        ; CM_HEAVYHIT
+                    //   0x6EC0F6  75 62              jne 0x6EC15A
+                    //   0x6EC0F8  8B 83 28 01 00 00  mov eax,[ebx+0x128] ; map
+                    //   0x6EC0FE  80 78 6A 00        cmp byte [eax+0x6A],0
+                    //   0x6EC102  74 56              je  0x6EC15A        ; ★ 落回跳表
+                    //   0x6EC104  85 F6              test esi,esi        ; 武器非空
+                    //   0x6EC10B  80 78 15 13        cmp byte [std+0x15],0x13
+                    //   0x6EC111  66 83 7E 26 00     cmp word [item+0x26],0
+                    // 0x6EC15A 是普通 ident 跳表，3015 在表里落 slot3 = 普攻。
+                    // 所以非 MINE 图上手持 shape-19 镐子的重击**降级为普攻**，
+                    // 且不进 DigXY、不扣矿点次数、不抽任何签。
+                    if (wIdent == Grobal2.CM_HEAVYHIT && m_PEnvir.Flag.boMINE && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
                     {
                         if (GetFrontPosition(ref n14, ref n18) && !m_PEnvir.CanWalk(n14, n18, false))
                         {
                             GoodItem StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_WEAPON].wIndex);
                             if (StdItem != null && StdItem.Shape == 19)
                             {
-                                // MINE-07: native TPlayObject.PileStones (sub_6BC1EC) gates the dig
-                                // on two cell checks before touching the mine event, neither of
-                                // which existed here:
+                                // native TPlayObject.PileStones (sub_6BC1EC) gates the dig on
+                                // the terrain attribute of the TARGET cell:
                                 //   0x6BC23F call sub_7776A8   ; GetCellInfo(envir+0x128, nX, nY, &cell)
                                 //   0x6BC24A cmp byte [cell+0x00],0
                                 //   0x6BC24D je fail            ; terrain attribute must be NON-ZERO
                                 //     (Walk=0 rejects; only HighWall=1 / LowWall=2 may be dug)
-                                // The area-restriction byte at cell+0x04 is the same per-cell flag
-                                // IsSkillAllowedAt already reads via GetMapCellSkillFlag
-                                // (sub_77BE88 @ 0x77BEAB: mov cl,[eax+edx*4+4] -- same cell record,
-                                // offset +4). Native tests it earlier via sub_772A50 at the top of
-                                // ClientHitXY (0x6EC08F) for every hit ident, silently failing with
-                                // no dig-specific message when set.
+                                // The area-restriction byte at cell+0x04 is a DIFFERENT gate and
+                                // belongs to the player's own cell -- see MINE-07 at the top of
+                                // this method.
                                 var mapCell = false;
                                 var cellInfo = m_PEnvir.GetMapCellInfo(n14, n18, ref mapCell);
-                                if (mapCell && cellInfo.Attribute != CellAttribute.Walk &&
-                                    m_PEnvir.GetMapCellSkillFlag(n14, n18) == 0)
+                                if (mapCell && cellInfo.Attribute != CellAttribute.Walk)
                                 {
                                     if (PileStones(n14, n18))
                                     {
@@ -138,15 +173,34 @@ namespace GameSvr
                             AttackDir(null, 7, nDir);
                             break;
                         case Grobal2.CM_CRSHIT:
-                            AttackDir(null, 8, nDir);
+                            // 3026 reaches sub_7707A8 with action code 1018
+                            // (0x6EC178[24] = 0x0A -> slot 0x6EC2B1 -> `mov cx,0x3FA`),
+                            // whose arm 0x77092A ends in `call 0x771BB8` — and 0x771BB8
+                            // is an empty stub: `55 8B EC 33 C0 5D C2 04 00`
+                            // (push ebp; mov ebp,esp; xor eax,eax; pop ebp; ret 4).
+                            // The only lasting effect is 0x7707E3
+                            // `88 86 54 01 00 00  mov [esi+0x154],al`, i.e. the facing
+                            // update ([+0x154] is m_btDirection: 0x771BE6 feeds it to
+                            // GetNextPosition alongside [+0x12C]/[+0x130] CurrX/CurrY).
+                            // No attack of any kind is performed.
+                            m_btDirection = nDir;
                             break;
-                        case Grobal2.CM_TWINHIT:
-                            AttackDir(null, 9, nDir);
-                            break;
-                        case Grobal2.CM_42HIT:
-                            AttackDir(null, 10, nDir);
-                            AttackDir(null, 11, nDir);
-                            break;
+                        // CM_TWINHIT (3028) has no arm on purpose: 0x6EC178[26] = 0x0B
+                        // selects jump-table slot 11 = 0x6EC2D7, which is the tail of
+                        // sub_6EC078 itself, so 3028 never even reaches sub_7707A8 and
+                        // does not update the facing either. It still runs the shared
+                        // position check, the SKILL_YEDO counter and the health/spell
+                        // tick block below, and still answers SM_ACT_GOOD.
+                        //
+                        // CM_42HIT (42) is gone from here as well. sub_6EC078 selects the
+                        // action with `0F B7 C7 movzx eax,di` / `05 46 F4 FF FF add
+                        // eax,-0xBBA` / `83 F8 21 cmp eax,0x21` / `0F 87 .. ja 0x6EC2C6`
+                        // at 0x6EC15A, so 42 underflows the 3002..3035 window and lands on
+                        // the default arm, which forwards 42 unchanged to sub_7707A8 -
+                        // where `05 18 FC FF FF add eax,-0x3E8` / `83 F8 21 cmp eax,0x21` /
+                        // `0F 87 AF 04 00 00 ja 0x770CC4` at 0x770803 rejects it again.
+                        // Native performs no swing for 42 by either route, and hit modes
+                        // 10/11 are not reachable from any client opcode.
                         case Grobal2.CM_SWORD_HIT:
                             if (!ReleaseSunSword(nDir))
                             {
@@ -162,7 +216,11 @@ namespace GameSvr
                         if (m_btAttackSkillPointCount == m_btAttackSkillCount)
                         {
                             m_boPowerHit = true;
-                            SendSocket("+PWR");
+                            // 0x6EC2F8 mov byte [ebx+0x93],1 / 6A 00 x4 / 33 C9 /
+                            // 66 BA 73 02 mov dx,0x273 / FF 93 50 02 00 00.
+                            // "+PWR" appears zero times in the native image.
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_POWERHITSKILL, 0, 0, 0, 0));
                         }
                         if (m_btAttackSkillCount <= 0)
                         {
@@ -379,18 +437,114 @@ namespace GameSvr
             ushort nSpellPoint;
             switch (UserMagic.wMagIdx)
             {
+                // ids 3, 4 and 7 are acknowledged and dropped. The outer
+                // ladder's own jump table (base id 3, `add eax,-3` /
+                // `cmp eax,0x18` @0x6BC69C, table at 0x6BC6AF) holds
+                // 0x6BC7DC in the slots for all three (0x6BC6AF, 0x6BC6B3,
+                // 0x6BC6BF), and 0x6BC7DC is two instructions:
+                //   006BC7DC  c6 45 fb 01     mov byte [ebp-5],1
+                //   006BC7E0  e9 1d 05 00 00  jmp 0x6BCD02
+                // i.e. return TRUE having sent nothing and spent nothing.
+                // Without this arm they reach the default below, where
+                // DoSpell refuses them for being warrior skills and the
+                // caller answers with a RM_MAGICFIREFAIL native never sends.
+                case SpellsDef.SKILL_ONESWORD:
+                case SpellsDef.SKILL_ILKWANG:
+                case SpellsDef.SKILL_YEDO:
+                    result = true;
+                    break;
+                // ids 116, 234, 314 and 317 are refused by the ladder itself,
+                // each with its own `je 0x6BCD02` straight to the epilogue:
+                //   0x6BC713  83 f8 74  cmp eax,0x74      / 0x6BC717 je
+                //   0x6BC749  83 e8 42  sub eax,0x42 (234)/ 0x6BC74C je
+                //   0x6BC7C3  2d 3a 01 00 00  sub eax,0x13A (314) / 0x6BC7C8
+                //   0x6BC7CE  83 e8 03  sub eax,3 (317)   / 0x6BC7D1 je
+                // [ebp-5] was zeroed at 0x6BC59F and nothing on these paths
+                // touches it, so all four return FALSE without spending mana
+                // or sending an effect, and the CM_SPELL caller answers with
+                // RM_MOVEFAIL + SM_ACT_FAIL. 314 and 317 previously reached
+                // the default arm and were cast as ordinary spells.
+                case SpellsDef.SKILL_116:
+                case SpellsDef.SKILL_234:
+                case SpellsDef.SKILL_314:
+                case SpellsDef.SKILL_317:
+                    break;
+                // Four more outer ids whose callee is `33 C0 C3` (xor eax,eax
+                // / ret). Result stays the 0 written at 0x6BC59F.
+                //   115  0x6BCBAD E8 84 2E 03 00 call 0x6EFA38 (`33 C0 C3`)
+                //   269  0x6BCADF E8 E7 FE 02 00 call 0x6EC9D0 (`33 C0 C3`)
+                //   270  0x6BCB86 FF 91 60 01 00 00 call [ecx+0x160];
+                //        TPlayer VMT 0x6AC8C8+0x160 = 0x774154 (`33 C0 C3`)
+                //   287  0x6BCBBC FF 91 20 02 00 00 call [ecx+0x220];
+                //        TPlayer VMT+0x220 = 0x6ED268 (`33 C0 C3`); the
+                //        0x769258 tail at 0x6BCBD6 is behind
+                //        `cmp [ebp-5],0 / je 0x6BCD02` and never runs.
+                // Without these arms they fall into default, DoSpell DEFAULT
+                // succeeds, and the client sees a 0x27E fire native never
+                // sends. CM_SPELL answers RM_MOVEFAIL + SM_ACT_FAIL.
+                case SpellsDef.SKILL_115:
+                case SpellsDef.SKILL_269:
+                case SpellsDef.SKILL_270:
+                case SpellsDef.SKILL_287:
+                    break;
+                case SpellsDef.SKILL_65:
+                    result = TryActivateNativeSkill65Charge();
+                    break;
+                case SpellsDef.SKILL_290:
+                    result = TryActivateNativeSkill290(nTargetX);
+                    break;
+                case SpellsDef.SKILL_237:
+                    result = TryActivateNativeSkill237Dragon(UserMagic);
+                    break;
+                case SpellsDef.SKILL_261:
+                    result = TryActivateNativeSkill261(UserMagic);
+                    break;
+                case SpellsDef.SKILL_262:
+                    result = TryActivateNativeSkill262Poison(UserMagic);
+                    break;
+                case SpellsDef.SKILL_267:
+                    result = TryActivateNativeSkill267(UserMagic);
+                    break;
+                case SpellsDef.SKILL_273:
+                    TBaseObject skill273Target = null;
+                    if (CretInNearXY(TargeTBaseObject, nTargetX, nTargetY))
+                    {
+                        skill273Target = TargeTBaseObject;
+                    }
+                    TryActivateNativeSkill273DragonBreak(UserMagic,
+                        skill273Target);
+                    break;
+                case SpellsDef.SKILL_168:
+                    result = TryActivateNativeSkill168Charge(nTargetX,
+                        nTargetY);
+                    break;
+                case SpellsDef.SKILL_68:
+                    result = TryActivateNativeSkill68Charge(UserMagic,
+                        nTargetX, nTargetY);
+                    break;
+                case SpellsDef.SKILL_265:
+                    result = TryActivateNativeSkill265(UserMagic, nTargetX);
+                    break;
+                case SpellsDef.SKILL_266:
+                    result = TryActivateNativeSkill266Blink(UserMagic,
+                        nTargetX, nTargetY);
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
                         if (!m_boUseThrusting)
                         {
                             ThrustingOnOff(true);
-                            SendSocket("+LNG");
+                            // 0x6BDFE6 xor ecx,ecx / 66 BA 70 02 mov dx,0x270
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_THRUSTING, 0, 0, 0, 0));
                         }
                         else
                         {
                             ThrustingOnOff(false);
-                            SendSocket("+ULNG");
+                            // 0x6BE001 mov ecx,1 / 66 BA 70 02 mov dx,0x270
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_THRUSTING, 1, 0, 0, 0));
                         }
                     }
                     result = true;
@@ -401,16 +555,23 @@ namespace GameSvr
                         if (!m_boUseHalfMoon)
                         {
                             HalfMoonOnOff(true);
-                            SendSocket("+WID");
+                            // 0x6BE036 xor ecx,ecx / 66 BA 71 02 mov dx,0x271
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_HALFMOON, 0, 0, 0, 0));
                         }
                         else
                         {
                             HalfMoonOnOff(false);
-                            SendSocket("+UWID");
+                            // 0x6BE049 mov ecx,1 / 66 BA 71 02 mov dx,0x271
+                            SendSocket(Grobal2.MakeDefaultMsg(
+                                Grobal2.SM_HALFMOON, 1, 0, 0, 0));
                         }
                     }
                     result = true;
                     break;
+                // SKILL_REDBANWOL (56) keeps the text markers: the native magic table
+                // at 0x6BC6AF only covers ids 3..27 (after `add eax,-3`) plus a separate
+                // `je` for 58, so 56 reaches the default arm 0x6BCCA6 and sends nothing.
                 case SpellsDef.SKILL_REDBANWOL:
                     if (m_MagicArr[SpellsDef.SKILL_REDBANWOL] != null)
                     {
@@ -440,7 +601,10 @@ namespace GameSvr
                                     DamageSpell(nSpellPoint);
                                     HealthSpellChanged();
                                 }
-                                SendSocket("+FIR");
+                                // 0x6BC856 6A00 x4 / 33 C9 / 66 BA 72 02 mov dx,0x272 /
+                                // FF 93 50 02 00 00.  "+FIR" is absent from the image.
+                                SendSocket(Grobal2.MakeDefaultMsg(
+                                    Grobal2.SM_FIREHITSKILL, 0, 0, 0, 0));
                             }
                         }
                     }
@@ -571,7 +735,23 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-13/14 — the other half of gate 4. Native case 3013 reaches
+            // the run primitive only through `mov dl,1 / call [ecx+0x40]` at
+            // 0x6D9D1C-0x6D9D23, i.e. TPlayer VMT+0x40 sub_6E6700, which chains
+            // into the base can-act ladder sub_76B354. Foot running went
+            // straight past it because the ladder lived only on the mounted
+            // CM_RUN3 path, so states 0x1D/0x01/0x1A/0x3E stopped a walk but not
+            // a run, and 0x18 (run-only, arg-dependent at 0x76B398) stopped
+            // nothing at all.
+            if (IsNativeCanActBlocked(1))
+            {
+                return result;
+            }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanRun)
+            {
+                return result;
+            }
+            if (m_PEnvir == null)
             {
                 return result;
             }
@@ -618,6 +798,29 @@ namespace GameSvr
             }
             m_dwMoveTick = HUtil32.GetTickCount();
             m_bo316 = false;
+            // MOVE-16/17/18/19 — sub_6BBFBC opens with the switch / map RUNFLAG
+            // / weight / CanRun ladder before it ever calls the run mover, and
+            // whatever fails it drops through 0x6BC001 into the clamp-and-walk
+            // degrade rather than refusing. Native 3013 never tests the mounted
+            // state 0x33 (only 4108 does, at 0x6D9D99), so foot runners belong
+            // on this ladder too; C# gated the whole ladder behind "is mounted"
+            // and left this path with no weight rule, no paralysis rule and no
+            // degrade. Sharing ClientNativeRun3Fallback mirrors native, where
+            // both run primitives fall into the same walk primitive sub_6BBCD8.
+            //
+            // Gate 3 first. Native runs `call [edx+0xBC]` at 0x6D9D12, i.e. at
+            // handler level ahead of the primitive, so a blocked actor never
+            // reaches either the run mover or the degrade. C# carries that term
+            // (internal state 0x2D) inside RunTo/WalkTo, which the degrade would
+            // otherwise walk straight past.
+            if (HasTimedAbility(13))
+            {
+                return result;
+            }
+            if (!IsNativeRunLadderAllowed())
+            {
+                return ClientNativeRun3Fallback(nX, nY);
+            }
             nDir = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, nX, nY);
             if (RunTo(nDir, false, nX, nY))
             {
@@ -765,11 +968,6 @@ namespace GameSvr
                 }
                 else
                 {
-                    // TRADE-09: Cancel active trade before gold reduction (战神 behavior).
-                    if (m_DealCreat != null)
-                    {
-                        DealCancel();
-                    }
                     m_nGameGold -= m_nStep;
                     GameGoldChanged();
                     m_nStep = 0;

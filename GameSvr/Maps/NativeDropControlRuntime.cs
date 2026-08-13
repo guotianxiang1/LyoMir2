@@ -9,11 +9,29 @@ namespace GameSvr
     {
         internal const int ScatterRange = 4;
 
-        internal static void RunInNativeOrder(Action controlledDrop,
-            Action ordinaryDrop)
+        /// <summary>
+        /// 战神 sub_71FA20 runs the monster's own drop table (segment 2) before the
+        /// controlled world drop (segment 3).  Segment 2 occupies 0x71FCFF-0x71FEA1
+        /// and 0x71FEA7 is its fallthrough successor, which the empty-table shortcut
+        /// spells out:
+        /// <code>
+        /// 71FCFF  8B 45 FC / 8B 80 74 04 00 00  mov eax,[self+0x474]   ; segment 2 head
+        /// 71FD08  8B 58 08                      mov ebx,[eax+8]        ; Count
+        /// 71FD0B  4B / 85 DB
+        /// 71FD0E  0F 8C 93 01 00 00             jl 0x71FEA7            ; empty -> segment 3
+        /// ...
+        /// 71FEA1  0F 85 70 FE FF FF             jne 0x71FD17           ; segment 2 loop tail
+        /// 71FEA7  8D 45 E8 / 50                 lea eax,[ebp-0x18]     ; segment 3 head
+        /// 71FEC8  E8 DF 2D 03 00                call 0x752CAC          ; world-drop lookup
+        /// </code>
+        /// Both segments feed the same RNG stream, so the order fixes which draw each
+        /// one gets.
+        /// </summary>
+        internal static void RunInNativeOrder(Action ordinaryDrop,
+            Action controlledDrop)
         {
-            controlledDrop?.Invoke();
             ordinaryDrop?.Invoke();
+            controlledDrop?.Invoke();
         }
 
         internal static void TryScatter(TBaseObject dyingObject,

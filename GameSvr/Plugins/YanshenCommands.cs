@@ -44,6 +44,8 @@ namespace GameSvr.Plugins
             [29]="自定义元素",[30]="高级回收",[31]="行会显示",
             [32]="特殊宝宝",[33]="屏蔽自动绑定",[34]="屏蔽自动绑定",
             [35]="自定义元素",[36]="自定义元素",[37]="特殊宝宝",
+            // ^38^ is the only tunnel 2.08 adds over 2.07 (Ys_GetItemDBData).
+            [38]="眼神特殊函数",
         };
 
         static readonly Dictionary<string, string> _chineseToggles =
@@ -308,6 +310,9 @@ namespace GameSvr.Plugins
 
                 // ^37^ — Ys_GetsxByName() — 按宝宝名字获取属性 (name, types)
                 37 => _api.GetPetAttrByName(S(cmd,0), P(cmd,1)),
+
+                // ^38^ — Ys_GetItemDBData() — 查物品数据库字段 (itemid, pid)
+                38 => _api.GetItemDbData(P(cmd,0), P(cmd,1)),
 
                 _ => 0
             };

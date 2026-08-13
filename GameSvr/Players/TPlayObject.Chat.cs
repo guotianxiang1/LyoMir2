@@ -1,3 +1,4 @@
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -21,7 +22,9 @@ namespace GameSvr
                     SysMsg(whostr + M2Share.g_sCanotSendmsg, MsgColor.Red, MsgType.Hint);
                     return;
                 }
-                if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName))
+                // 0x6C9584 F6 87 9C 0B 00 00 01 test byte [edi+0xB9C],1 / jne deny
+                if (!PlayObject.m_boHearWhisper || PlayObject.IsBlockWhisper(m_sCharName)
+                    || (PlayObject.m_dwChatShieldMask & 0x01u) != 0)
                 {
                     SysMsg(whostr + M2Share.g_sUserDenyWhisperMsg, MsgColor.Red, MsgType.Hint);
                     return;
@@ -80,7 +83,8 @@ namespace GameSvr
         {
             var sendwho = string.Empty;
             HUtil32.GetValidStr3(SayStr, ref sendwho, new string[] { "[", " ", "=", ">" });
-            if (m_boHearWhisper && !IsBlockWhisper(sendwho))
+            if (m_boHearWhisper && !IsBlockWhisper(sendwho)
+                && (m_dwChatShieldMask & 0x01u) == 0)
             {
                 switch (MsgType)
                 {
@@ -113,32 +117,47 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject.ProcessSayMsg Msg = {0}";
             try
             {
-                // 战神 sub_6BB2F8 @0x6BB2FE/0x6BBC38/0x6BBB0C/0x6BBA50: all chat types
-                // (say/shout/guild/group) clamp to 255 bytes (cmp eax,0xFF; jle).
-                // Apply native's hard limit first, then the configurable soft limit.
-                if (sData.Length > 255)
+                // 0x6BB345 83 FF 01 jl exit; 0x6BB34E 81 FF B0 00 00 00 jg priv;
+                // 0x6BB356 83 F8 50 jle ok; else 0x6BB35B 80 BB 75 06 00 00 04 jb exit.
+                // Common path edi==Length==GBK bytes: priv<4 rejects >80, does not truncate.
+                var nGbk = HUtil32.GbkEncoding.GetByteCount(sData);
+                if (nGbk < 1)
+                    return;
+                if ((nGbk > 0xB0 || nGbk > 0x50) && m_btPermission < 4)
+                    return;
+                // 0x6BB526: dup [ebx+0xA74] same-text elapsed<0xBB8; rapid [ebx+0x682] elapsed<0x3E8.
+                // dup>=2 => 0x6C912C edx=0x3C + 0x6BB9B8; rapid>=5 => same + 0x6BB9F4.
+                // 眼神 屏蔽发言频繁禁言功能 NOPs both incs (0x6BB56A / 0x6BB579, 6 bytes
+                // each → 90×6). Decay and the mute SysMsgs stay; counters just never rise.
+                var now = HUtil32.GetTickCount();
+                var elapsed = now - m_dwSayMsgTick;
+                var skipFloodInc = new YanshenApi(this, null, M2Share.PluginManager).IsBlockSpamPatchOn();
+                if (!skipFloodInc && sData == m_sOldSayMsg && elapsed < 0xBB8)
+                    m_nSayMsgCount++;
+                if (!skipFloodInc && elapsed < 0x3E8)
+                    m_btSayRapidCount++;
+                if (m_nSayMsgCount >= 2)
                 {
-                    sData = sData.Substring(0, 255);
-                }
-                if (sData.Length > M2Share.g_Config.nSayMsgMaxLen)
-                {
-                    sData = sData.Substring(0, M2Share.g_Config.nSayMsgMaxLen);
-                }
-                if ((HUtil32.GetTickCount() - m_dwSayMsgTick) < M2Share.g_Config.dwSayMsgTime)
-                {
-                    m_nSayMsgCount++;// 2
-                    if (m_nSayMsgCount >= M2Share.g_Config.nSayMsgCount)
-                    {
-                        m_boDisableSayMsg = true;
-                        m_dwDisableSayMsgTick = HUtil32.GetTickCount() + M2Share.g_Config.dwDisableSayMsgTime;// 60 * 1000
-                        SysMsg(format(M2Share.g_sDisableSayMsg, M2Share.g_Config.dwDisableSayMsgTime / (60 * 1000)), MsgColor.Red, MsgType.Hint);
-                    }
-                }
-                else
-                {
-                    m_dwSayMsgTick = HUtil32.GetTickCount();
                     m_nSayMsgCount = 0;
+                    m_boDisableSayMsg = true;
+                    m_dwDisableSayMsgTick = now + 60 * 1000;
+                    SysMsg("发送重复的话太频繁，当前已被禁言了。", MsgColor.Red, MsgType.Hint);
+                    return;
                 }
+                if (m_btSayRapidCount >= 5)
+                {
+                    m_btSayRapidCount = 0;
+                    m_boDisableSayMsg = true;
+                    m_dwDisableSayMsgTick = now + 60 * 1000;
+                    SysMsg("说话太频繁，当前已被禁言了。", MsgColor.Red, MsgType.Hint);
+                    return;
+                }
+                if (elapsed >= 0x7D0 && m_btSayRapidCount >= 1)
+                    m_btSayRapidCount--;
+                if (elapsed >= 0x1388 && m_nSayMsgCount >= 1)
+                    m_nSayMsgCount--;
+                m_dwSayMsgTick = now;
+                m_sOldSayMsg = sData;
                 if (HUtil32.GetTickCount() >= m_dwDisableSayMsgTick)
                 {
                     m_boDisableSayMsg = false;
@@ -220,7 +239,8 @@ namespace GameSvr
                                 }
                                 if (!m_PEnvir.Flag.boQUIZ)
                                 {
-                                    if ((HUtil32.GetTickCount() - m_dwShoutMsgTick) > 10 * 1000)
+                                    // 0x6BB7A0 C6 45 FF 0F mov byte [ebp-1],0xF / 0x6BB7BD 69 C0 E8 03 00 00 imul 1000 / 0x6BB7C6 77 ja wait if 15000>elapsed
+                                    if ((HUtil32.GetTickCount() - m_dwShoutMsgTick) >= 15 * 1000)
                                     {
                                         if (m_Abil.Level <= M2Share.g_Config.nCanShoutMsgLevel)
                                         {
@@ -240,7 +260,7 @@ namespace GameSvr
                                         }
                                         return;
                                     }
-                                    SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new[] { 10 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
+                                    SysMsg(format(M2Share.g_sYouCanSendCyCyLaterMsg, new[] { 15 - (HUtil32.GetTickCount() - m_dwShoutMsgTick) / 1000 }), MsgColor.Red, MsgType.Hint);
                                     return;
                                 }
                                 SysMsg(M2Share.g_sThisMapDisableSendCyCyMsg, MsgColor.Red, MsgType.Hint);
@@ -710,10 +730,12 @@ namespace GameSvr
                     m_boHearWhisper = !m_boHearWhisper;
                     if (m_boHearWhisper)
                     {
+                        m_dwChatShieldMask &= ~0x01u;
                         SysMsg(M2Share.g_sEnableHearWhisper, MsgColor.Green, MsgType.Hint);
                     }
                     else
                     {
+                        m_dwChatShieldMask |= 0x01u;
                         SysMsg(M2Share.g_sDisableHearWhisper, MsgColor.Green, MsgType.Hint);
                     }
                     return;
@@ -723,10 +745,12 @@ namespace GameSvr
                     m_boBanShout = !m_boBanShout;
                     if (m_boBanShout)
                     {
+                        m_dwChatShieldMask &= ~0x04u;
                         SysMsg(M2Share.g_sEnableShoutMsg, MsgColor.Green, MsgType.Hint);
                     }
                     else
                     {
+                        m_dwChatShieldMask |= 0x04u;
                         SysMsg(M2Share.g_sDisableShoutMsg, MsgColor.Green, MsgType.Hint);
                     }
                     return;
@@ -749,10 +773,12 @@ namespace GameSvr
                     m_boBanGuildChat = !m_boBanGuildChat;
                     if (m_boBanGuildChat)
                     {
+                        m_dwChatShieldMask &= ~0x08u;
                         SysMsg(M2Share.g_sEnableGuildChat, MsgColor.Green, MsgType.Hint);
                     }
                     else
                     {
+                        m_dwChatShieldMask |= 0x08u;
                         SysMsg(M2Share.g_sDisableGuildChat, MsgColor.Green, MsgType.Hint);
                     }
                     return;

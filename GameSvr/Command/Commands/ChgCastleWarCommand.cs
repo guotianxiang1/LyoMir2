@@ -27,9 +27,17 @@ namespace GameSvr
             var Castle = M2Share.CastleManager.Find(sCASTLENAME);
             if (Castle != null)
             {
-                Castle.StartWallconquestWar();
-                M2Share.MainOutMessage($"[攻城战] GM {PlayObject.m_sCharName} 开启了 {sCASTLENAME} 的攻城战");
-                PlayObject.SysMsg($"[{sCASTLENAME} 攻城战已开启]", MsgColor.Green, MsgType.Hint);
+                // 0x625EDC cmp byte [eax+0x29],0 / jne StopWall
+                // else 0x625EE9 mov byte [eax+0x2B],1  (force; Run skips the clock window)
+                if (Castle.m_boUnderWar)
+                {
+                    Castle.StopWallconquestWar();
+                }
+                else
+                {
+                    Castle.m_boForceWar = true;
+                    PlayObject.SysMsg("强制攻城设置成功，稍候生效...", MsgColor.Green, MsgType.Hint);
+                }
             }
             else
             {

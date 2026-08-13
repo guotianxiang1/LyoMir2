@@ -20,9 +20,13 @@ namespace GameSvr
         public int CumulativeWeight { get; set; }
 
         /// <summary>
-        /// [node+0x18] Item pointer from StdItem lookup (null for gold entries).
-        /// EA 0x67b20e: mov dword ptr [ebx + 0x18], eax (result of call 0x74c2d4 lookup).
-        /// EA 0x71fb5e-0x71fb6e: check node+0x18 != null AND word_at(item) == 0 for gold.
+        /// [node+0x18] StdItem template pointer, null when the name did not resolve.
+        /// EA 0x67b20e: mov dword ptr [ebx + 0x18], eax (result of call 0x74c2d4, a plain
+        /// hash lookup on the name table at [UserEngine+0x20] with no index exclusion).
+        /// A GOLD row is NOT a null pointer — the traversal at 0x71fb5e-0x71fb6e requires
+        /// the pointer to be non-null AND word_at(template) == 0, and that first word is
+        /// the record's wire index, so a gold row is one that resolved to the index-0
+        /// 金币 sentinel.  A null pointer takes the item arm and quietly does nothing.
         /// </summary>
         public GoodItem StdItem { get; set; }
 

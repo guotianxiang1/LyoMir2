@@ -90,6 +90,10 @@ namespace GameSvr
             m_wNativeHorseCallDelay = 0;
         }
 
+        // CM_RUN3 (4108) only. Handler 0x6D9D99 requires bodyState 0x33
+        // before it ever reaches sub_6BC0D4; the inner mover is always
+        // sub_767694 (×3 + ident 0xD58). CM_RUN (3013) must not call this:
+        // it has no mount gate and uses sub_76756C (×2 + ident 0x0D).
         private bool ClientNativeRun3(int destinationX, int destinationY)
         {
             if (!HasNativeActiveState(NativeHorseMountedState) ||
@@ -110,12 +114,7 @@ namespace GameSvr
             }
 
             m_bo316 = false;
-            var useMainRun = (!M2Share.ServerSwitches.IsBitSet(2, 0x80) ||
-                              m_PEnvir.NativeCanRunWhileOverweight ||
-                              m_WAbil.Weight < m_WAbil.MaxWeight) &&
-                             !HasNativeActiveState(67) &&
-                             !HasNativeActiveState(13);
-            if (!useMainRun)
+            if (!IsNativeRunLadderAllowed())
             {
                 return ClientNativeRun3Fallback(destinationX, destinationY);
             }
@@ -142,6 +141,33 @@ namespace GameSvr
             }
             return result;
         }
+
+        /// <summary>
+        /// Prologue of the run primitive, byte-identical in sub_6BBFBC (the
+        /// CM_RUN 3013 primitive) and its twin sub_6BC0D4 (CM_RUN3 4108):
+        /// <code>
+        /// 006BBFCB  A1 38 70 7D 00        mov  eax,[0x7D7038]
+        /// 006BBFD0  F6 40 02 80           test byte [eax+2],0x80  ; MOVE-17 switch
+        /// 006BBFD4  74 1D                 je   0x6BBFF3           ; off: no weight rule
+        /// 006BBFD6  8B 83 28 01 00 00     mov  eax,[ebx+0x128]    ; the actor's Envir
+        /// 006BBFDC  80 B8 B0 00 00 00 00  cmp  byte [eax+0xB0],0  ; MOVE-17 map RUNFLAG
+        /// 006BBFE3  75 0E                 jne  0x6BBFF3           ; exempt: no weight rule
+        /// 006BBFE5  8B 83 C4 02 00 00     mov  eax,[ebx+0x2C4]    ; bag weight
+        /// 006BBFEB  3B 83 C8 02 00 00     cmp  eax,[ebx+0x2C8]    ; weight limit
+        /// 006BBFF1  7D 0E                 jge  0x6BC001           ; MOVE-18: equal is overweight
+        /// 006BBFF3  FF 92 C0 00 00 00     call [edx+0xC0]         ; MOVE-16 CanRun sub_774348
+        /// 006BBFFF  75 3B                 jne  0x6BC03C           ; TRUE: take the real run
+        /// </code>
+        /// sub_774348 answers FALSE when bodyState 0x43 (0x77434E) or 0x0D
+        /// (0x77435B) is set. Anything that reaches 0x6BC001 instead falls into
+        /// the clamp-and-walk degrade of MOVE-19, never into a plain refusal.
+        /// </summary>
+        private bool IsNativeRunLadderAllowed() =>
+            (!M2Share.ServerSwitches.IsBitSet(2, 0x80) ||
+             m_PEnvir.NativeCanRunWhileOverweight ||
+             m_WAbil.Weight < m_WAbil.MaxWeight) &&
+            !HasNativeActiveState(67) &&
+            !HasNativeActiveState(13);
 
         private bool ClientNativeRun3Fallback(int destinationX,
             int destinationY)
@@ -176,6 +202,19 @@ namespace GameSvr
 
         private bool NativeRun3FallbackWalk(byte direction)
         {
+            // This is the human 1-step mover sub_741224, which both run
+            // primitives fall into via sub_6BBCD8 `call [edi+0x30]` at
+            // 0x6BBD16 (degrade 0x6BC02F / 0x6BC147). It is NOT WalkTo:
+            //   007412C8  call 0x7797cc          ; MoveToMovingObject
+            //   007412E8  mov  dl,0x17 / call 0x76b4d0
+            //   0074130D  mov  dx,0x2712         ; RM_WALK = 10002
+            //   00741315  call [edi+0xD8]        ; broadcast FIRST
+            //   00741323  call 0x778ec0          ; doors/events AFTER
+            //   00741328  mov  dl,0x33 / call InBodyState ; then partner
+            // 0x778EC0's return is discarded (next insn is mov dl,0x33).
+            // WalkTo would reverse broadcast/door order (MOVE-39) and add
+            // gates sub_741224 does not have. CompleteNativeRun3Move
+            // already matches this tail.
             if (direction >= 8 || m_PEnvir == null)
             {
                 return false;
@@ -269,6 +308,9 @@ namespace GameSvr
 
             m_nCurrX = (short)destinationX;
             m_nCurrY = (short)destinationY;
+            // 0x767769 mov dx,0xD58 — broadcast ident is bound to this mover,
+            // not to HasNativeActiveState(51). The 2-step twin at 0x76763F
+            // sends 0x0D via RunTo → RM_RUN.
             CompleteNativeRun3Move(Grobal2.RM_RUN3);
             return true;
         }

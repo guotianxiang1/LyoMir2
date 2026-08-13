@@ -151,12 +151,25 @@ namespace SystemModule
         public const int ET_FIRE = 5;
         public const int ET_SCULPEICE = 6;
         public const int ET_YANHUA_TEXT = 23;
+        /// <summary>TPrisonEvent.Create @0x7198E4 `6A 1D push 0x1D`.</summary>
+        public const int ET_PRISON = 0x1D;
+        /// <summary>TStallEvent.Create @0x719A20 `6A 29 push 0x29`.</summary>
+        public const int ET_STALL = 0x29;
         public const int RCC_MERCHANT = 50;
         public const int RCC_GUARD = 12;
         public const int RCC_USERHUMAN = 0;
         public const int CM_QUERYUSERSTATE = 82;
         public const int CM_QUERYUSERNAME = 80;
         public const int CM_QUERYBAGITEMS = 81;
+        /// <summary>
+        /// Native handler 0x6D8CA2 (dispatch arm <c>0x6D80DB</c>). The client's own
+        /// cheat self-report: header gate is <c>Series == 0xFF</c>
+        /// (<c>0x6D8CA5 66 81 78 0A FF 00 cmp word[msg+0xA],0xFF / 0x6D8CAB jne default</c>)
+        /// plus <c>Param &gt; 0</c> unsigned
+        /// (<c>0x6D8CB4 66 83 78 06 00 / 0x6D8CB9 jbe default</c>).
+        /// 战神 has no symbolic name for it, so it keeps the numeric form.
+        /// </summary>
+        public const int CM_205 = 205;
         public const int CM_QUERYCHR = 100;
         public const int CM_NEWCHR = 101;
         public const int CM_DELCHR = 102;
@@ -176,12 +189,45 @@ namespace SystemModule
         public const int CM_DROPITEM = 1000;
         public const int CM_PICKUP = 1001;
         public const int CM_PICKUP_RANGE = 4278;
+        // Native CM 4314 handler 0x6DB040: `66 8B 50 06 mov dx,[msg+6]` then
+        // `E8 ED 78 01 00 call 0x6F293C`. Callee 0x6F293C is a single `C3 ret`.
+        public const int CM_4314 = 4314;
+        // Native CM 4315 handler 0x6DB054: `66 8B 50 06 mov dx,[msg+6]` then
+        // `E8 DD 78 01 00 call 0x6F2940`. Callee 0x6F2940 is a single `C3 ret`
+        // (followed by `8D 40 00` alignment padding, not a second instruction).
+        public const int CM_4315 = 4315;
         public const int CM_TAKEONITEM = 1003;
         public const int CM_TAKEOFFITEM = 1004;
         public const int CM_1005 = 1005;
         public const int CM_EAT = 1006;
         public const int CM_QUEST_ORDER = 1060;
         public const int CM_1069 = 1069;
+        /// <summary>
+        /// Native handler 0x6DAC1C (jump-table slot <c>0x6D8482[0]</c>, base ident 1325).
+        /// It loads Param into <c>dx</c> and calls 0x6EE11C, whose ENTIRE body is
+        /// <c>55 8B EC 51 89 45 FC 59 5D C3</c> — an empty Delphi procedure that stores
+        /// Self into a stack local and returns without reading <c>dx</c>. 0x6EE11C has
+        /// exactly one caller (this handler), so the opcode is a proven no-op.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1325 = 1325;
+        /// <summary>
+        /// Native handler 0x6DA3A2 (jump-table slot <c>0x6D8315[39]</c>, base ident 1200).
+        /// Self-contained: <c>0x6DA3A5 66 83 78 06 00 cmp word [msg+6],0 / 0x6DA3AA jne</c>
+        /// then <c>0x6DA3AF mov byte [self+0x1898],1</c> or
+        /// <c>0x6DA3BE mov byte [self+0x1898],0</c>. Param == 0 turns the hint ON.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1239 = 1239;
+        /// <summary>
+        /// Native handler 0x6DA9C8 (dispatch arm <c>0x6D8439</c>). Self-contained
+        /// three-way on Param: <c>0x6DA9CF 66 85 C0 test ax,ax / 75 0F</c> then
+        /// <c>0x6DA9D7 mov byte [self+0x18AC],0</c>; <c>0x6DA9E3 66 83 F8 01 cmp ax,1 /
+        /// 0F 85 jne default</c> then <c>0x6DA9F0 mov byte [self+0x18AC],1</c>.
+        /// Param values other than 0 and 1 leave the flag untouched.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1281 = 1281;
         public const int CM_COMMON_INFORMATION = 1099;
         public const int CM_YANHUA_TEXT = 1290;
         public const int CM_BUTCH = 1007;
@@ -214,18 +260,9 @@ namespace SystemModule
         public const int CM_USERTAKEBACKSTORAGEITEM = 1032;
         public const int CM_WANTMINIMAP = 1033;
         public const int CM_USERMAKEDRUGITEM = 1034;
-        public const int CM_OPENGUILDDLG = 1035;
-        public const int CM_GUILDHOME = 1036;
-        public const int CM_GUILDMEMBERLIST = 1037;
-        public const int CM_GUILDADDMEMBER = 1038;
-        public const int CM_GUILDDELMEMBER = 1039;
-        public const int CM_GUILDUPDATENOTICE = 1040;
         public const int CM_MERCHANT_QUERY = 1110;
-        public const int CM_GUILDUPDATERANKINFO = 1041;
         public const int CM_SPEEDHACKUSER = 1042;
         public const int CM_ADJUST_BONUS = 1043;
-        public const int CM_GUILDALLY = 1044;
-        public const int CM_GUILDBREAKALLY = 1045;
         public const int CM_CATTLE_REVEAL_PRIZE = 1081;
         public const int CM_CATTLE_CLAIM_PRIZE = 1082;
         public const int CM_MERCHANTQUERYEXCHGBOOK = 1085;
@@ -529,23 +566,10 @@ namespace SystemModule
         public const int SM_CHANGEGUILDNAME = 750;
         public const int SM_SENDUSERSTATE = 751;
         public const int SM_SUBABILITY = 752;
-        public const int SM_OPENGUILDDLG = 753;
-        public const int SM_OPENGUILDDLG_FAIL = 754;
-        public const int SM_SENDGUILDMEMBERLIST = 756;
-        public const int SM_GUILDADDMEMBER_OK = 757;
-        public const int SM_GUILDADDMEMBER_FAIL = 758;
-        public const int SM_GUILDDELMEMBER_OK = 759;
-        public const int SM_GUILDDELMEMBER_FAIL = 760;
-        public const int SM_GUILDRANKUPDATE_FAIL = 761;
         public const int SM_BUILDGUILD_OK = 762;
         public const int SM_BUILDGUILD_FAIL = 763;
         public const int SM_DONATE_OK = 764;
-        public const int SM_DONATE_FAIL = 765;
         public const int SM_MENU_OK = 767;
-        public const int SM_GUILDMAKEALLY_OK = 768;
-        public const int SM_GUILDMAKEALLY_FAIL = 769;
-        public const int SM_GUILDBREAKALLY_OK = 770;
-        public const int SM_GUILDBREAKALLY_FAIL = 771;
         public const int SM_DLGMSG = 772;
         public const int SM_BUILDHERO = 773;
         public const int SM_HEROLISTINFO = 971;
@@ -568,6 +592,14 @@ namespace SystemModule
         public const int SM_TOHEROBAG_FAIL = 818;
         public const int SM_TOHUMBAG_OK = 819;
         public const int SM_TOHUMBAG_FAIL = 820;
+        /// <summary>
+        /// GP 禁售物品名表 (config\GPForbidItems.txt). Native sub_63C194
+        /// <c>0x63C1C3 66 BA 35 03 mov dx,0x335</c> via [obj+0x254].
+        /// Recog=player, Param=count, Tag=0, Series=0, body N×16 ShortString[15].
+        /// After SM_SHOPITEMS (0x63A2D4) and SM_RESHOPITEMS_OK (0x63A38A);
+        /// skipped when count&lt;=0 (0x63C1A4 jle).
+        /// </summary>
+        public const int SM_GPFORBIDITEMS = 821;
         public const int SM_OPENHEALTH = 1100;
         public const int SM_CLOSEHEALTH = 1101;
         public const int SM_CHANGEFACE = 1104;
@@ -623,21 +655,58 @@ namespace SystemModule
         public const int SM_SHANGMA_OK2 = 3418;
         public const int SM_XIAMA_2 = 3419;
         /// <summary>
+        /// 0xDE5. Broadcast when a caster teleports onto a cell: magic 266
+        /// (0x773FC6 `66 BA E5 0D` then VMT+0xE0) and magic 168 冲锋陷阵
+        /// (0x6EF206). Series carries the magic id, Param/Tag the destination.
+        /// VMT+0xE0 = 0x6DC0C0 -> sub_7651EC -> sub_5F7778 -> sub_5F6C24, the
+        /// `33 AA BB 77` gate multicast, so this is a real wire ident.
+        /// </summary>
+        public const int SM_NATIVE_BLINK_MOVE = 3557;
+        /// <summary>
+        /// 0xDE6. Same broadcast slot, emitted by magic 68 at 0x6EC8D4 with
+        /// Series = the charge direction rather than a magic id.
+        /// </summary>
+        public const int SM_NATIVE_CHARGE_MOVE = 3558;
+        /// <summary>
         /// 战神 CM opcode 3420 (0xD5C) — 定位石记录当前坐标 (TFixedCoordStone setter).
         /// Dispatch: M2Server.exe 0x6D873F `sub eax,0xD5C` / 0x6D8745 `je 0x6DADE3`.
         /// Handler body 0x6DADE3 -> setter sub_6E9BAC (call site 0x6DAE1B).
         /// </summary>
         public const int CM_SETFIXEDCOORD = 3420;
         /// <summary>
-        /// 战神 SM opcode 0x3026 (12326) — 定位石已记录坐标回包 (map name + X/Y).
-        /// Two senders, both `mov cx,0x3026` then `call sub_765E68`:
-        /// the setter 0x6E9CFE, and the login replay 0x6B2414 (inside UserLogon
-        /// fn~0x6B1AA0, guarded by `cmp byte [esi+0x18F8],0` at 0x6B23E3).
-        /// Args in both: (0, 0, X, Y) + saved map name as the string body.
-        /// sub_765E68 appends straight to the client send queue (0x76C11C), so
-        /// there is no server-side handler for this ident.
+        /// 定位石已记录坐标回包 (map name + X/Y). Same value as the request
+        /// <see cref="CM_SETFIXEDCOORD"/>: native answers on the ident it was asked on.
+        /// <para>
+        /// 0x3026 (12326) is the INTERNAL queue tag, not the wire ident. sub_765E68 is
+        /// an enqueue, not a send: it allocates a record via 0x764D68 and fills it,
+        ///   0x765E96  66 89 03        mov word [ebx],   ax   ; tag from cx
+        ///   0x765E9D  66 89 43 02     mov word [ebx+2],  ax
+        ///   0x765EA4  89 43 04        mov [ebx+4],  eax
+        ///   0x765EAA  89 43 08        mov [ebx+8],  eax
+        ///   0x765EB0  89 43 0C        mov [ebx+0xC], eax
+        ///   0x765EDA / 0x765EF9       [ebx+0x14] = len+1, [ebx+0x10] = body
+        /// with no call through the send slots [+0x250]/[+0x254] anywhere in it.
+        /// </para>
+        /// <para>
+        /// The wire packet is emitted later by the RM handler at 0x6B6036, which reads
+        /// back those very fields and only then sends:
+        ///   0x6B6036  66 8B 43 02        mov ax, word [ebx+2]
+        ///   0x6B603B  66 8B 43 08        mov ax, word [ebx+8]
+        ///   0x6B6040  66 8B 43 0C        mov ax, word [ebx+0xC]
+        ///   0x6B6045  8B 43 10           mov eax, [ebx+0x10]
+        ///   0x6B6049  0F B7 43 14        movzx eax, word [ebx+0x14]
+        ///   0x6B604E  8B 4B 04           mov ecx, [ebx+4]
+        ///   0x6B6051  66 BA 5C 0D        mov dx, 0xD5C          ; = 3420
+        ///   0x6B605A  FF 93 54 02 00 00  call [ebx+0x254]       ; send slot
+        /// </para>
+        /// A whole-image scan settles the split: `mov cx,0x3026` appears at exactly the
+        /// two enqueue sites, 0x6B2414 (login replay, inside UserLogon fn~0x6B1AA0,
+        /// guarded by `cmp byte [esi+0x18F8],0` at 0x6B23E3) and 0x6E9CFE (the setter),
+        /// while 0xD5C appears as an ident exactly once, at the send above.
+        /// Emitting 12326 on the wire, as this constant used to, means the original
+        /// client never recognises the reply and the recorded position never displays.
         /// </summary>
-        public const int SM_FIXEDCOORD = 12326;
+        public const int SM_FIXEDCOORD = 3420;
         public const int SM_HORSERUN = 5010;
         public const int UNKNOWMSG = 199;
         public const int SS_OPENSESSION = 100;
@@ -645,6 +714,13 @@ namespace SystemModule
         public const int SS_KEEPALIVE = 104;
         public const int SS_KICKUSER = 111;
         public const int SS_SERVERLOAD = 113;
+        // SS_200..214 reuse the same integers as SM_ADDITEM/BAGITEMS/DELITEM
+        // (200..203) and as ISM 200..214. Native ProcessOthGsMsg (0x657144
+        // add edx,-202 / cmp 0x37 / ja 0x6573A0) only accepts 202..257 on
+        // the DB type-2 OthGs channel. These SS_* aliases are not a second
+        // native ident family — sending them through [obj+0x250]/[+0x254]
+        // would collide with the live client SM_ item idents (srv_AppearTimes
+        // 200=2060999, 201=81693, 202=162358, 203=11067).
         public const int SS_200 = 200;
         public const int SS_201 = 201;
         public const int SS_202 = 202;
@@ -687,6 +763,10 @@ namespace SystemModule
         public const int GS_USERACCOUNT = 32102;
         public const int GS_CHANGEACCOUNTINFO = 32103;
         public const int WM_SENDPROCMSG = 32104;
+        // LOMCN process-local sentinel, not a wire magic. Full-image scan of
+        // 0xAA9AAA9A / 0xAA55AA55 / 0x55AA55AA = 0 hits. Live frame magic is
+        // 0x33AABB77 (26 sites, e.g. 0x7130B3 C7 00 77 BB AA 33). Do not
+        // change the value; do not treat this as a GameGate/SGRP ident.
         public const uint RUNGATECODE = 0xAA55AA55 + 0x00450045;
         public const int GM_OPEN = 1;
         public const int GM_CLOSE = 2;
@@ -704,9 +784,16 @@ namespace SystemModule
         public const int CM_CHGPASSWORD = 2002;
         public const int CM_SETPASSWORD = 2004;
         public const int CM_HORSERUN = 3035;
-        public const int CM_CRSHIT = 3036;
-        public const int CM_3037 = 3037;
-        public const int CM_TWINHIT = 3038;
+        // 3026/3027/3028, not 3036/3037/3038. Native dispatch table 0x6D8592 is based
+        // at ident 3010, and entry [16] (0x6D85D2) = 0x6D9EAF is 3026; 3027 is the
+        // `0x6D8502 3D D3 0B 00 00 cmp eax,0xBD3` / `0x6D850D je 0x6D9F4B` arm; 3028 is
+        // `0x6D85F0 2D D4 0B 00 00 sub eax,0xBD4` / `0x6D85F5 je 0x6D9EAF`.
+        // 3036/3037/3038 have zero comparison-form encodings anywhere in CODE
+        // (0x401000..0x7A10D0): no 3D/2D/05 imm32, no 81 /0 /5 /7 imm32, no 66-prefixed
+        // imm16 and no 83-form, so the native dispatcher cannot reach them at all.
+        public const int CM_CRSHIT = 3026;
+        public const int CM_3037 = 3027;
+        public const int CM_TWINHIT = 3028;
         public const int CM_QUERYUSERSET = 3040;
         public const int CM_QUERY_TASK_DETAIL = 3051;
         public const int CM_QUERY_TASK_ALL = 3052;
@@ -720,6 +807,21 @@ namespace SystemModule
         public const int SM_HERO_RUSHKUNG = 5;
         public const int SM_HERO_LONGHIT = 25;
         public const int SM_HERO_LASTHIT = 26;
+        /// <summary>
+        /// Login version handshake. Native UserLogon sub_6B1D64 @0x6B23C6
+        /// calls sub_6F05D8, which at <c>0x6F05F2 66 BA 78 03 mov dx,0x378</c>
+        /// sends via [obj+0x250]: Recog=0x3EA (1002), Param=0x3E7 (999),
+        /// Tag=0, Series=0, empty body. Always paired with SM_LOGIN_NOW (889).
+        /// </summary>
+        public const int SM_LOGIN_VER = 888;
+        /// <summary>
+        /// Login clock/now extension. Same sender sub_6F05D8 immediately after 888:
+        /// <c>0x6F063A 66 BA 79 03 mov dx,0x379</c> via [obj+0x254].
+        /// Recog=0x3F1 (1009), Param=0x3E7 (999), Tag=word at [[0x7D5FA0]]
+        /// (image snapshot 0x1009), Series=0, 24-byte body:
+        /// word 0x14, word 0x2E, 4 pad, TDateTime Now (0x40F0A4), dword [[0x7D6558]], 4 pad.
+        /// </summary>
+        public const int SM_LOGIN_NOW = 889;
         public const int SM_HERO_QUITMAGIC = 896;
         public const int SM_HERO_LOGMAGIC = 897;
         public const int SM_HERO_NAME = 898;
@@ -760,6 +862,20 @@ namespace SystemModule
         public const int SM_EXCHANGEBOOK_GET_PRIZE = 963;
         public const int SM_PHYSICAL_ATT = 1230;
         public const int SM_NATIVE_UNION_EFFECT = 1230;
+        /// <summary>
+        /// Channel-magic cancel broadcast. Native sub_6EE128
+        /// <c>0x6EE164 66 BA D0 04 mov dx,0x4D0</c> via [obj+0xE0].
+        /// Recog=Self, Param=magicId from [obj+0xA24], Tag=0, Series=0.
+        /// C# queues this ident through SendRefMsg; Operate must emit the wire packet.
+        /// </summary>
+        public const int SM_CHANNEL_MAGIC_CANCEL = 1232;
+        /// <summary>
+        /// Location-channel magic cancel. Native sub_6EF5D0
+        /// <c>0x6EF62E 66 BA D2 04 mov dx,0x4D2</c> via [obj+0xE0].
+        /// Recog=Self, Param=magicId from [obj+0xA4C], Tag=0, Series=0.
+        /// Skipped when magicId==0 (0x6EF5EA jbe).
+        /// </summary>
+        public const int SM_LOCATION_CHANNEL_MAGIC_CANCEL = 1234;
         public const int SM_SECHERO_PRACTICE = 1216;
 
         // === Native hero client commands ===
@@ -777,12 +893,6 @@ namespace SystemModule
         public const int SM_ORDER_LIST = 1108;           // Server response to CM_QUEST_ORDER
         public const int CM_HERO_SKILL_HOTKEY = 1109;    // Enable or disable a hero skill
         public const int CM_SECHERO_PRACTICE = 1216;
-
-        // Mobile protocol constants (from 战神 capture)
-        public const int SM_MOBILE_SURROUNDING = 0x3A;   // 58 - entity position sync
-        public const int SM_MOBILE_STATUSCHANGE = 0x1C;   // 28 - entity appear/disappear
-        public const int SM_MOBILE_ITEMS = 0x3E;          // 62 - backpack/equipment
-        public const int SM_MOBILE_NPCDIALOG = 0x4A;      // 74 - NPC dialog HTML
 
         // === 4000-series Mobile Login Protocol (战神 client) ===
         public const int SM_SERVER_LIST = 4001;   // Server sends server list to client
@@ -822,11 +932,44 @@ namespace SystemModule
         public const int SM_NPCWALK = 798;            // NPC walk animation
         public const int SM_FIREON = 779;             // Fire hit mode ON
         public const int SM_SWORDHIT_ON = 2819;       // Sword hit mode ON
+        // Outer id-65 arm 0x6BCA33 `66 BA 3B 0B mov dx,0xB3B` then
+        // `FF 93 50 02 00 00 call [ebx+0x250]` (SendDefMessage). Recog and
+        // the four stack words are all 0.
+        public const int SM_CHARGED_COUNTER = 2875;
         // 战神 thrusting (刺杀剑术) toggle notify = ident 624 (0x270), param1 = 1.
         // Native UserLogon @0x6B225B: gated on [obj+0xA8]!=0 && [obj+0x94]==0, latches
         // [obj+0x94]=1, then `push 1; push 0; push 0; push 0; xor ecx,ecx;
         // mov dx,0x270; call [ebx+0x250]` (SendDefMessage) — recog=0, nParam=1.
         public const int SM_THRUSTING = 624;
+
+        // 攻杀剑术 (SKILL_YEDO) charge-ready notify = ident 627 (0x273).
+        // Native sub_6EC078 @0x6EC2E4: `dec byte [ebx+0x9A]` (m_btAttackSkillCount),
+        // `mov al,[ebx+0x9B] / cmp al,[ebx+0x9A] / jne` (m_btAttackSkillPointCount ==
+        // m_btAttackSkillCount), then `mov byte [ebx+0x93],1` (m_boPowerHit) and
+        // `push 0 x4; xor ecx,ecx; mov dx,0x273; call [ebx+0x250]` — Recog and all
+        // four words are 0. Production srv_AppearTimes: 627 = 2,688,495.
+        public const int SM_POWERHITSKILL = 627;
+
+        // 烈火剑法 (SKILL_FIRESWORD) on/off notify = ident 626 (0x272).
+        // ON  0x6BC860 (magic-dispatcher arm for id 26, after AllowFireHitSkill and
+        //     the MP check): `push 0 x4; xor ecx,ecx; mov dx,0x272` — Recog = 0.
+        // OFF 0x6B2F47 (Run, 20 s after m_dwLatestFireHitTick, clears [obj+0x96]):
+        //     `push 0 x4; mov ecx,1; mov dx,0x272` — Recog = 1.
+        // Same Recog convention as SM_SWORDHIT_ON (0xB03) at 0x6BC8E5 / 0x6B2F8D.
+        // Production srv_AppearTimes: 626 = 56,720.
+        public const int SM_FIREHITSKILL = 626;
+
+        // 半月弯刀 (SKILL_BANWOL) toggle notify = ident 625 (0x271).
+        // Native sub_6BE018, the only producer, reached only from the magic-dispatcher
+        // arm 0x6BC809 (`cmp dword [esi+0xAC],0 / je / call 0x6BE018`):
+        //   006BE01E  80B29500000001  xor byte [edx+0x95],1   ; m_boUseHalfMoon
+        //   006BE025  80BA9500000000  cmp byte [edx+0x95],0
+        //   006BE02C  741B            je 0x6BE049
+        //   006BE036  33C9 / 66BA7102 xor ecx,ecx ; mov dx,0x271   ; now ON  -> Recog 0
+        //   006BE049  B901000000 / 66BA7102                        ; now OFF -> Recog 1
+        // Same shape as SM_THRUSTING (0x270) in sub_6BDFC8 on [obj+0x94].
+        // Production srv_AppearTimes: 625 = 405,926.
+        public const int SM_HALFMOON = 625;
 
         // NOT a 战神 ident: `mov dx,781` occurs ZERO times in the native image and no
         // native call site ever loads 781 into the SendDefMessage ident register.
@@ -1035,12 +1178,15 @@ namespace SystemModule
 
         public const int CM_GILD_ACCEPT_REQUEST = 4611;
         public const int SM_GILD_ACCEPT_REQUEST = 4611;
+        public const int SM_PENDING_REQUEST = 4613;
+        public const int SM_CLEAR_PENDING_REQUEST = 4615;
         public const int CM_FIND_CORPS_BYNAME = 4616;
         public const int SM_FIND_CORPS_BYNAME = 4616;
         public const int CM_FIND_GILD_BYNAME = 4617;
         public const int SM_FIND_GILD_BYNAME = 4617;
         public const int CM_GILD_CANCEL_JOIN = 4627;
         public const int SM_GILD_CANCEL_JOIN = 4627;
+        public const int SM_REFRESH_SOCIAL_ROLE = 4628;
         public const int CM_REFRESH_CORPSINFO = 4631;
         public const int SM_REFRESH_CORPSINFO = 4631;
         public const int CM_REFRESH_GILDINFO = 4632;
@@ -1073,12 +1219,21 @@ namespace SystemModule
         public const int CM_SPLITITEM = 1116;
         public const int CM_QUERY_FOCUS_ITEM = 1271;
         public const int SM_ITEM_PILEUP_RESULT = 3322;
+        // Native CM 3290 (handler 0x6DA34E) replies on SM 3289 via vtbl+0x254.
+        // C# previously used 3290 as an SM ident (SM_QUERY_FOCUS_ITEM); that is
+        // the opposite direction and is not this CM.
+        public const int CM_3290 = 3290;
+        public const int SM_3289 = 3289;
         public const int SM_QUERY_FOCUS_ITEM = 3290;
 
         // === Title / NPC / Item Commit ===
         public const int CM_QUERY_TITLE = 3202;
         public const int CM_QUERY_MAP_NPC = 4610;
         public const int SM_QUERY_MAP_NPC = 4610;
+        // Native CM 4629 handler 0x6DBB70 -> 0x6F7C40. Same-ident reply via
+        // vtbl+0x254 (0x6F7E81 66 BA 15 12 mov dx,0x1215).
+        public const int CM_4629 = 4629;
+        public const int SM_4629 = 4629;
         public const int CM_COMMIT_ITEM = 4634;
         public const int SM_COMMIT_ITEM = 4634;
         public const int SM_OPEN_COMMIT_ITEM = 4635;
@@ -1221,7 +1376,6 @@ namespace SystemModule
         public const int RM_BUILDGUILD_OK = 10303;
         public const int RM_BUILDGUILD_FAIL = 10304;
         public const int RM_DONATE_OK = 10305;
-        public const int RM_DONATE_FAIL = 10306;
         public const int RM_MENU_OK = 10309;
         public const int RM_RECONNECTION = 10332;
         public const int RM_HIDEEVENT = 10333;
@@ -1317,6 +1471,25 @@ namespace SystemModule
         public const int RM_NATIVE_INVITE_HORSE = 15317;
         public const int RM_NATIVE_SHANGMA_OK2 = 15318;
         public const int RM_NATIVE_XIAMA_2 = 15319;
+        /// <summary>
+        /// In-process label for native ident 0x3043, the delayed self-message
+        /// magic 68 posts at 0x6EC896 (`66 B9 43 30` / sub_766060) and picks up
+        /// in TPlayObject.Operate at the 0x6B4391 table, slot 63 of base 0x3004
+        /// (0x6B437C `add eax,0xFFFFCFFC`), arm 0x6B6097 -> sub_6EC8E8.
+        /// Not a wire ident.
+        /// </summary>
+        public const int RM_NATIVE_CHARGE_LAND = 15320;
+        /// <summary>Carrier for <see cref="SM_NATIVE_CHARGE_MOVE"/>.</summary>
+        public const int RM_NATIVE_CHARGE_MOVE = 15321;
+        /// <summary>Carrier for <see cref="SM_NATIVE_BLINK_MOVE"/>.</summary>
+        public const int RM_NATIVE_BLINK_MOVE = 15322;
+        /// <summary>
+        /// In-process label for native ident 0x3042, broadcast by magic 261 at
+        /// 0x773D0A through VMT+0xD8 = sub_6DC590 and picked up in
+        /// TPlayObject.Operate at the 0x6B4391 table, slot 62 of base 0x3004,
+        /// arm 0x6B6065. Not a wire ident; the arm answers with SM_DISAPPEAR.
+        /// </summary>
+        public const int RM_NATIVE_STEALTH_VANISH = 15323;
         public const int RM_WWJATTACK = 10017;
         public const int RM_WSJATTACK = 10018;
         public const int RM_WTJATTACK = 10019;

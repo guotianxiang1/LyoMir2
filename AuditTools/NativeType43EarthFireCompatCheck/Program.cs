@@ -2172,9 +2172,13 @@ static void CheckSourceContracts()
 
     var baseActor = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
         "Actors", "TBaseObject.cs")));
+    // MOVE-52: 0x6BD3AA and 0x6BD3D3 load 0x2785/0x2786 unconditionally, so the pair
+    // is the default for every teleport, not an opt-in for ExecuteNativeUserMove.
+    // ExactEnvironmentMoveCheck and DynRoomMasterRelocationCheck pin the queued
+    // sequence a default-argument caller actually gets; this is the signature tripwire.
     Contains(baseActor,
-        "boolcoordinatesAlreadyResolved=false,booluseNativeInternalMessages=false)",
-        "UserMove resolved-coordinate move controls");
+        "boolcoordinatesAlreadyResolved=false,booluseNativeInternalMessages=true)",
+        "space-move internal idents defaulted away from the native 10117/10118 pair");
     Contains(baseActor,
         "if(!coordinatesAlreadyResolved&&!SpaceMove_GetRandXY(targetEnvironment,refm_nCurrX,refm_nCurrY))returnfalse;",
         "UserMove resolved coordinates skip legacy resolver");
@@ -2280,13 +2284,20 @@ static TBaseObject NewDamageTarget(int hp, int maxHp, int mp)
     return target;
 }
 
+// AddToMap, not MoveToMovingObject: the original's mover sub_7797CC only reports
+// success from 0x779A95, which is reached after unlinking the actor from the SOURCE
+// cell. Asking it to move an actor out of a cell it was never in walks the empty list
+// and falls through to `xor eax,eax` @0x779AAD, i.e. FALSE. A first placement has no
+// source cell, so the mover is the wrong primitive for it.
 static TBaseObject Place(Envirnoment map, TBaseObject actor, short x, short y)
 {
     actor.m_PEnvir = map;
     actor.m_nCurrX = x;
     actor.m_nCurrY = y;
-    Equal(1, map.MoveToMovingObject(x, y, actor, x, y, true),
-        "map actor placement");
+    actor.m_boAddToMaped = false;
+    actor.m_boDelFormMaped = false;
+    Assert(ReferenceEquals(actor, map.AddToMap(x, y,
+        CellType.OS_MOVINGOBJECT, actor)), "map actor placement");
     return actor;
 }
 

@@ -24,6 +24,17 @@ namespace GameSvr
         public bool boObjectDisPose;
     }
 
+    /// <summary>
+    /// WARNING: these values are the stock-Mir2 numbering and do NOT match 战神's cell
+    /// tag.  战神 tags cells MOVING=1 / ITEM=2 / EVENT=3 — proven by the two constructors
+    /// that write the tag the linker later copies into the node
+    /// (<c>0x777DCF mov al,byte [esi+4]</c> / <c>0x777DD2 mov byte [ebx],al</c>):
+    /// <c>sub_783788</c> ground item @0x7837AA <c>C6 43 04 02  mov byte [ebx+4],2</c> and
+    /// <c>sub_717300</c> event object @0x717322 <c>C6 43 04 03  mov byte [ebx+4],3</c>.
+    /// Never use one of these enum values to index a native branch: doing exactly that
+    /// once moved the event-object expiry ladder (@0x77A480) onto ground items, which run
+    /// the much shorter @0x77A3D9 branch instead.
+    /// </summary>
     public enum CellType : byte
     {
         OS_EVENTOBJECT = 1,

@@ -179,12 +179,19 @@ static void CheckSuccess(PasApiBridge bridge, NormNpc npc)
     Equal(0, player.m_MsgList.Count(message =>
         message.wIdent == Grobal2.RM_MERCHANTSAY),
         "successful EnterGuan merchant messages");
+    // MOVE-52: FlyToDynamicRoom takes the default ident pair, and both native
+    // space-move arms load it as immediates - 0x6BD3AA `mov cx,0x2785` (10117) and
+    // 0x6BD3D3 `mov cx,0x2786` (10118).
     Equal(1, player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.RM_CLEAROBJECTS),
+        message.wIdent == Grobal2.RM_NATIVE_CLEAROBJECTS),
         "successful EnterGuan clear-object messages");
     Equal(1, player.m_MsgList.Count(message =>
-        message.wIdent == Grobal2.RM_CHANGEMAP),
+        message.wIdent == Grobal2.RM_NATIVE_CHANGEMAP),
         "successful EnterGuan change-map messages");
+    Equal(0, player.m_MsgList.Count(message =>
+        message.wIdent == Grobal2.RM_CLEAROBJECTS
+        || message.wIdent == Grobal2.RM_CHANGEMAP),
+        "successful EnterGuan fell back to the legacy 8097/8098 idents");
     Assert(RouteSnapshotEquals(routeBefore,
             M2Share.MagicTowerRouteSequencer.Snapshot()),
         "successful EnterGuan changed route counters");

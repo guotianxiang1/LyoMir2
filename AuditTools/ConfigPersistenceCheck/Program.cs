@@ -100,9 +100,10 @@ static void RunItemNumberSourceContracts()
            Convert.ToInt32(intervalField.GetRawConstantValue()) == 900_000,
         "item-number periodic save interval is not native 900000ms");
 
+    // GiveMineCommand.cs 已删除：@GiveMine 不在原生 430 行注册表里。
     foreach (var command in new[]
              {
-                 "GiveMineCommand.cs", "GiveUserItemCommand.cs",
+                 "GiveUserItemCommand.cs",
                  "MakeItemCommand.cs"
              })
     {

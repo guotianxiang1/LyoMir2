@@ -438,6 +438,17 @@ namespace GameSvr.Services
             return index is >= 0 and < 6;
         }
 
-        private static bool IsSupportedTag(int tag) => tag is 1 or 4 or 5 or 6;
+        // sub_70DBCC @0x70DBCC is the whole gate:
+        //   0x70DBCC 80 FA 07              cmp dl,7
+        //   0x70DBCF 77 0A                 ja 0x70DBDB        ; >7 -> CF=0 -> reject
+        //   0x70DBD1 83 E2 7F              and edx,0x7F
+        //   0x70DBD4 0F A3 15 E8 3D 7D 00  bt dword [0x7D3DE8],edx
+        //   0x70DBDB 0F 92 C0              setb al
+        // dword_7D3DE8 reads 7E 8D 40 00, so bits 1..6 are set and 0/7 are clear. The
+        // whole image contains exactly one reference to 0x7D3DE8 — the read encoded in
+        // the bt at 0x70DBD7 — so nothing writes the mask and 0x7E is the final value.
+        // Tags 2 (任务奖励) and 3 (离线补偿) are therefore live categories, named at
+        // 0x7D3DEC[2]=0x708BAC and [3]=0x708BC0; rejecting them silently dropped both.
+        private static bool IsSupportedTag(int tag) => tag is >= 1 and <= 6;
     }
 }

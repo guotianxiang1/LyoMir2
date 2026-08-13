@@ -19,10 +19,8 @@ var beforeV = player.m_ScriptVVars.OrderBy(item => item.Key).ToArray();
 var beforeS = player.m_ScriptSVars.OrderBy(item => item.Key).ToArray();
 var bridge = new PasApiBridge { CurrentPlayer = player };
 
-CheckClosedPropertyRead(bridge, "PlatLv");
+CheckOpenPlatLv(bridge, player);
 CheckClosedPropertyRead(bridge, "MyExpQuestValue");
-Assert(!bridge.SetPlayerProperty("PlatLv", PasValue.FromInt(9)),
-    "PlatLv write did not fail closed");
 Assert(!bridge.SetPlayerProperty("MyExpQuestValue", PasValue.FromInt(9)),
     "read-only MyExpQuestValue acquired a write path");
 CheckClosedFunction(bridge, "MyExpQuestValue", new List<PasValue>());
@@ -62,9 +60,11 @@ var methods = Slice(source, "public bool CallPlayerMethod",
 var functions = Slice(source, "public bool CallPlayerFunc",
     "public bool CallNpcMethod");
 
-CheckFailClosed(propertyReads, "platlv", true);
+Require(ExtractCase(propertyReads, "platlv"), "m_btPlatLv",
+    "PlatLv getter is not Self+0xB85");
+Require(ExtractCase(propertyWrites, "platlv"), "m_btPlatLv",
+    "PlatLv setter is not Self+0xB85");
 CheckFailClosed(propertyReads, "myexpquestvalue", true);
-CheckFailClosed(propertyWrites, "platlv", false);
 Assert(!propertyWrites.Contains("case \"myexpquestvalue\":",
         StringComparison.Ordinal),
     "read-only MyExpQuestValue acquired a property setter");
@@ -96,6 +96,17 @@ Console.WriteLine(
     "PASS P0 native shadows=closed PlatLv=property-RW " +
     "MyExpQuestValue=property-RO SSK=functions V/S=unchanged generic-V/S=present");
 return;
+
+static void CheckOpenPlatLv(PasApiBridge bridge, TPlayObject player)
+{
+    player.m_btPlatLv = 7;
+    Assert(bridge.GetPlayerProperty("PlatLv", out var read),
+        "PlatLv property read failed");
+    Assert(read.AsInt() == 7, "PlatLv getter did not return m_btPlatLv");
+    Assert(bridge.SetPlayerProperty("PlatLv", PasValue.FromInt(9)),
+        "PlatLv write did not store Self+0xB85");
+    Assert(player.m_btPlatLv == 9, "PlatLv setter did not write m_btPlatLv");
+}
 
 static void CheckClosedPropertyRead(PasApiBridge bridge, string name)
 {
@@ -189,13 +200,20 @@ static void Assert(bool condition, string message)
 
 static string FindRepositoryRoot()
 {
+    // args[0], reached through GetCommandLineArgs because this is a static local
+    // function. It must outrank the working directory: the default tree below is
+    // not always sitting on the branch under test.
+    var cli = Environment.GetCommandLineArgs();
     foreach (var start in new[]
              {
+                 cli.Length > 1 ? cli[1] : null,
                  Environment.CurrentDirectory,
                  AppContext.BaseDirectory,
                  @"D:\loym2\LyoMir2-master"
              })
     {
+        if (string.IsNullOrWhiteSpace(start))
+            continue;
         var current = new DirectoryInfo(start);
         while (current != null)
         {

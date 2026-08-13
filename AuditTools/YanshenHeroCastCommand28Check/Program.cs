@@ -199,8 +199,16 @@ static void VerifySourceContracts()
 
     var bridge = File.ReadAllText(Path.Combine(root, "GameSvr",
         "ScriptSystem", "PasEngine", "PasApiBridge.Yanshen.cs"));
-    Assert(bridge.Contains(
-               "AddYanshenFeature(features, \"指定英雄放技能\", \"ys_setheroskill\", \"herocastskill\")") &&
+    // 2.08 AllFuc.pas declares Ys_SetHeroCSkill; the earlier `ys_setheroskill` /
+    // `herocastskill` spellings were C#-invented and are gone, so this pins the
+    // authentic name instead of the old literal argument list.
+    var heroCastFeature = SliceMethod(bridge,
+        "private static IReadOnlyDictionary<string, string[]> BuildYanshenApiFeatures()");
+    Assert(heroCastFeature.Contains("\"指定英雄放技能\"") &&
+           heroCastFeature.Contains("\"ys_setherocskill\"") &&
+           !heroCastFeature.Contains("\"ys_setheroskill\"") &&
+           !heroCastFeature.Contains("\"herocastskill\"") &&
+           bridge.Contains("case \"ys_setherocskill\":") &&
            bridge.Contains("api.HeroCastSkill("),
         "direct Pascal command 28 feature/dispatch routing");
 

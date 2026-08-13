@@ -308,11 +308,11 @@ namespace GameSvr.Services
         //     gild); TargetKey [6,7] = the target GILD (sub_5E76D4(client-supplied id)). Ladder
         //     555(non-owner upstream) / 5 / 12 / 25 / 19(ally-self) / 34(target union flag clear) /
         //     15(already allied) / 33(at war) / 8(sub_7065B0 duplicate) / 0. NOTE: on the create path
-        //     sub_5E6E60 enqueues a Relation=3 (PENDING) gildrelation INSERT BEFORE the dup probe (its
-        //     return is discarded); type-3 does NOT enter the union/hostile in-memory lists (save_relation
-        //     only appends to those for type 1/2), so the pending INSERT is DB-only and inert for
-        //     QUERY_UNION/HOSTILE — mirror it via NativeGildStore.TryInsertGildRelation(...,3) without
-        //     touching _gildRelations.
+        //     sub_5E6E60 runs BEFORE the dup probe and its return is discarded. Type-3 does NOT enter the
+        //     union/hostile lists (the 0x5E6F45/0x5E6F49 `FECB dec bl` + `je` dispatch reaches an append
+        //     only for 1 and 2), so it stays out of QUERY_UNION/HOSTILE — but it DOES enter the relation
+        //     map itself (0x5E6F1B `8ACB mov cl,bl` / 0x5E6F23 `call 0x49F9C8`), where declare-war's
+        //     0x5E6F0D gate later sees it.
         public static NativeGildRequestKind KindFor(int typeDiscriminator) =>
             typeDiscriminator switch
             {

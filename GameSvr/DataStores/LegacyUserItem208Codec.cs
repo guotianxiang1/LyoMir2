@@ -1,16 +1,69 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using SystemModule;
 
 namespace GameSvr
 {
+    /// <summary>
+    /// The 208-byte 战神 item record — the verbatim image of <c>item+0x20 .. item+0xEF</c>
+    /// (LOAD <c>sub_74DAE4</c> @0x74DB3A <c>lea edi,[ebx+0x20]</c> / @0x74DB3D
+    /// <c>mov ecx,0x34</c> / @0x74DB42 <c>rep movsd</c>; SAVE @0x6B170F..0x6B1717 the
+    /// same three instructions in the opposite direction).
+    ///
+    /// Bytes 0x18..0x55 are NOT unmapped padding.  They are the 眼神 "装备出处"
+    /// provenance block, already reverse-engineered byte-for-byte in
+    /// <c>GameSvr.Plugins.BigBag.YanshenBigBagRecord</c> from 31 production files /
+    /// 1399 records, and independently re-confirmed here against the 30 golden M2
+    /// saves (1363 live items): DateDays u16 @0x1C, Minute @0x1E, Hour @0x1F,
+    /// map title GBK[12] @0x20, dword @0x2C, source-name length @0x30 with the name
+    /// split 7 bytes @0x31 + 7 bytes @0x3C around the always-zero hole @0x38,
+    /// map-code length @0x43, char-name length @0x44 + name[14] @0x45,
+    /// map-code-length copy @0x53, source kind @0x54, origin marker 0x00/0xFF @0x55.
+    /// All nine structural invariants hold with 0 violations on the golden corpus and
+    /// every map title / source name / character name decodes as clean GBK.
+    ///
+    /// Consequence for this codec: the old "everything past the core must be zero"
+    /// tail check rejected 1232 of 1363 real records (90.4%), every one of them at
+    /// offset 0x1C, which is the provenance date.  Since <see cref="TryEncode"/>
+    /// clones <c>NativeRecord</c> verbatim before patching, that check never
+    /// protected any byte — it only refused real data.  The fail-closed guard is now
+    /// scoped to the two spans that are genuinely zero in all 2762 sampled records.
+    /// </summary>
     internal static class LegacyUserItem208Codec
     {
         internal const int RecordSize = 208;
         internal const int HexLength = RecordSize * 2;
         internal const int CoreSize = 24;
+
+        /// <summary>
+        /// Native weapon-upgrade flag byte. Set with <c>or byte [esi+0x47],0x80</c>
+        /// (@0x6CA0F3, 不破碎) and <c>or byte [esi+0x47],0x40</c> (@0x6CA10D, 必成功);
+        /// read at @0x6D7A93 <c>mov al,[ebx+0x47]</c> + <c>and al,0x80</c>; cleared with
+        /// <c>mov byte [ebx+0x47],0</c> at @0x6D7AE5 and @0x6D7B07.  The offset is
+        /// correct, but in production the same byte is also the trail byte of the 4th
+        /// GBK character of the provenance map title, so its low six bits carry player
+        /// data and must be preserved rather than asserted to be zero.
+        /// </summary>
         internal const int UpgradeFlagsOffset = 0x27;
+
+        /// <summary>
+        /// NOT the bind flag.  <c>record[0xB8]</c> is <c>item+0xD8</c>, the native
+        /// 赠品 (gift) byte: zeroed by the item factory (@0x7837EE
+        /// <c>mov byte [ebx+0xD8],0</c>), set to 1 at @0x67D236 / @0x6C8611 / @0x709498 /
+        /// @0x7094A4, and read by all three drop paths (@0x73CD44, @0x740161, @0x73FDD0)
+        /// as <c>cmp byte [item+0xD8],0; je</c>.  The real bind/lock word is
+        /// <c>word[item+0x34]</c> = <c>btValue[10..11]</c> (<c>sub_784710</c> @0x784710
+        /// <c>mov ax,word [eax+0x34]</c>, <c>sub_784718</c> @0x784718
+        /// <c>mov word [eax+0x34],dx</c>).  The mapping is deliberately left alone:
+        /// every persisted store already writes bind here, so moving it would
+        /// re-interpret existing rows.  See staging/m_itemdb_20260813.md for the
+        /// migration plan.
+        /// </summary>
         internal const int BindOffset = 0xB8;
+
         internal const byte KnownUpgradeFlags = 0xC0;
+
+        /// <summary>First byte of the span that has no known owner in any sample.</summary>
+        internal const int UnownedSpanStart = 0x56;
 
         internal static bool TryEncode(TUserItem item, out string weaponData, out string error)
         {
@@ -24,11 +77,6 @@ namespace GameSvr
             if (HasUnmappedExtensionData(item))
             {
                 error = "item contains unmapped extended attributes";
-                return false;
-            }
-            if ((item.UpgradeFlags & ~KnownUpgradeFlags) != 0)
-            {
-                error = "item contains unknown native refine flags";
                 return false;
             }
 
@@ -45,10 +93,22 @@ namespace GameSvr
                     return false;
                 }
                 record = (byte[])item.NativeRecord.Clone();
-                if (!TryValidateNativeTail(record, out error))
-                {
-                    return false;
-                }
+            }
+            if (!TryValidateUnownedSpans(record, out error))
+            {
+                return false;
+            }
+
+            // Native only ever ORs bits 0x80/0x40 into this byte (@0x6CA0F3, @0x6CA10D) or
+            // clears it whole (@0x6D7AE5, @0x6D7B07); it never rewrites the low six bits,
+            // which in production hold the provenance map title. Refuse to do what native
+            // cannot rather than silently corrupting the title.
+            if ((item.UpgradeFlags & ~KnownUpgradeFlags) != 0
+                && (item.UpgradeFlags & ~KnownUpgradeFlags)
+                    != (record[UpgradeFlagsOffset] & ~KnownUpgradeFlags))
+            {
+                error = "item refine flags would rewrite bytes native never writes";
+                return false;
             }
 
             BinaryPrimitives.WriteInt32LittleEndian(record.AsSpan(0, 4), item.MakeIndex);
@@ -73,7 +133,7 @@ namespace GameSvr
             }
 
             var record = Convert.FromHexString(weaponData);
-            if (!TryValidateNativeTail(record, out error))
+            if (!TryValidateUnownedSpans(record, out error))
             {
                 return false;
             }
@@ -102,20 +162,19 @@ namespace GameSvr
             return true;
         }
 
-        private static bool TryValidateNativeTail(byte[] record, out string error)
+        /// <summary>
+        /// Fail-closed guard over the only bytes with no known owner: 0x56..0xB7 and
+        /// 0xB9..0xCF.  Both spans are zero in all 1363 golden M2 items and all 1399
+        /// production 眼神 extra-bag records; 0xB8 is excluded because it is the native
+        /// gift byte.  Everything from 0x18 to 0x55 is the provenance block and is
+        /// carried through verbatim, so it is deliberately NOT asserted zero — the
+        /// previous blanket check refused 1232 of 1363 real records, all at 0x1C.
+        /// </summary>
+        private static bool TryValidateUnownedSpans(byte[] record, out string error)
         {
             error = string.Empty;
-            for (var i = CoreSize; i < record.Length; i++)
+            for (var i = UnownedSpanStart; i < record.Length; i++)
             {
-                if (i == UpgradeFlagsOffset)
-                {
-                    if ((record[i] & ~KnownUpgradeFlags) != 0)
-                    {
-                        error = $"unknown native refine flags: 0x{record[i]:X2}";
-                        return false;
-                    }
-                    continue;
-                }
                 if (i == BindOffset) continue;
                 if (record[i] != 0)
                 {

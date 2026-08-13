@@ -11,6 +11,7 @@ namespace GameSvr
         public ClientPacket m_DefMsg;
         public string m_sOldSayMsg = string.Empty;
         public int m_nSayMsgCount = 0;
+        public byte m_btSayRapidCount = 0;
         public int m_dwSayMsgTick = 0;
         public bool m_boDisableSayMsg = false;
         public int m_dwDisableSayMsgTick = 0;
@@ -18,76 +19,6 @@ namespace GameSvr
         public int dwTick578 = 0;
         public int m_dwLastMobileHbTick = 0;
         public string m_sCallOutParam = string.Empty;
-
-        private int _surroundSeq = 0;
-        private HashSet<int> _prevNearby = new HashSet<int>();
-
-        private void SendMobileStatusChange(int actorId, int statusId, bool appear)
-        {
-            var body = new byte[28];
-            using (var ms = new MemoryStream(body))
-            using (var bw = new BinaryWriter(ms))
-            {
-                bw.Write(actorId);                           // [0-3] ActorID
-                bw.Write(statusId);                          // [4-7] StatusID
-                bw.Write((ushort)0);                         // [8-9]
-                bw.Write((ushort)(appear ? 1 : 0xFFFF));     // [10-11] flag
-                bw.Write(new byte[16]);                      // [12-27] extra
-            }
-            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MOBILE_STATUSCHANGE, ObjectId, m_nCurrX, m_nCurrY, HUtil32.MakeWord(m_btDirection, m_nLight));
-            SendSocket(m_DefMsg, body);
-        }
-
-        private void SendMobileSurrounding()
-        {
-            if (m_PEnvir == null) return;
-            // Get nearby objects within view range (18 cells)
-            var nearby = new List<TBaseObject>();
-            m_PEnvir.GetRangeBaseObject(m_nCurrX, m_nCurrY, 18, false, nearby);
-            var curIds = new HashSet<int>();
-            foreach (var obj in nearby)
-            {
-                if (obj == this || obj.m_boGhost) continue;
-                curIds.Add(obj.ObjectId);
-                // Send 0x1C appear if new
-                if (!_prevNearby.Contains(obj.ObjectId))
-                    SendMobileStatusChange(obj.ObjectId, 1, true);
-            }
-            // Send 0x1C disappear for removed objects
-            foreach (var oldId in _prevNearby)
-            {
-                if (!curIds.Contains(oldId))
-                    SendMobileStatusChange(oldId, 0x291, false);
-            }
-            _prevNearby = curIds;
-            foreach (var obj in nearby)
-            {
-                if (obj == this || obj.m_boGhost) continue;
-                // 0x3A standard frame: 58 bytes exactly
-                var body = new byte[58];
-                using (var ms = new MemoryStream(body))
-                using (var bw = new BinaryWriter(ms))
-                {
-                    bw.Write(++_surroundSeq);                // [0-3] frameId
-                    bw.Write(obj.ObjectId);                  // [4-7] EntityID
-                    bw.Write(obj.m_btDirection | (obj.m_nCharStatus << 8));  // [8-11] flags: dir + status
-                    bw.Write((ushort)obj.m_nCurrX);          // [12-13] X
-                    bw.Write((ushort)obj.m_nCurrY);          // [14-15] Y
-                    bw.Write((ushort)0);                     // [16-17]
-                    bw.Write((ushort)0);                     // [18-19]
-                    // [20-53] zeros + name tail
-                    bw.Write(new byte[34]);                  // zeros padding
-                    // [54-57] monster name tail GBK (4 bytes) at correct offset
-                    var nameBytes = HUtil32.GbkEncoding.GetBytes(obj.m_sCharName ?? "");
-                    var tail = nameBytes.Length > 4 ? nameBytes[^4..] : nameBytes;
-                    var tail4 = new byte[4];
-                    for (int t = 0; t < tail.Length && t < 4; t++) tail4[t] = tail[t];
-                    System.Buffer.BlockCopy(tail4, 0, body, 54, 4);
-                }
-                m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MOBILE_SURROUNDING, ObjectId, m_nCurrX, m_nCurrY, 0);
-                SendSocket(m_DefMsg, body);
-            }
-        }
 
         public void SendLogonPublic() { SendLogon(); }
         public void SendMobileHeartbeatPublic() { SendMobileHeartbeat(); }
@@ -330,6 +261,68 @@ namespace GameSvr
         /// </summary>
         public int[] m_ScriptVGroup0;
 
+        /// <summary>
+        /// The single resolver for a (bank, group, index) triple. Everything that reads
+        /// script variables has to go through here, because the storage a triple lands
+        /// in is not derivable from a flat <c>group*1000+index</c> key alone: group 0 of
+        /// the V bank lives in <see cref="m_ScriptVGroup0"/>, not in the dictionary.
+        /// Code that computed the flat key itself and indexed the dictionary silently
+        /// read nothing for group 0 - a flat key below 1000 can only mean group 0, so it
+        /// can never match a dictionary entry either.
+        /// <para>
+        /// Returns false when native would report a miss. For the keyed path that is a
+        /// key that was never written; for V group 0 it is an index outside 1..100,
+        /// which native rejects at 0x6DF20A <c>sub edx,0x64</c> / <c>jae</c>. An in-range
+        /// group-0 slot always reports true, since the region is zero-filled rather than
+        /// sparse. Callers keep their own miss default: native GetV answers -1, but the
+        /// mall and the drop-script gate both treat a miss as 0.
+        /// </para>
+        /// </summary>
+        public bool TryGetScriptVar(char bank, int group, int index, out int value)
+        {
+            var upper = char.ToUpperInvariant(bank);
+            if (upper == 'V' && group == 0)
+            {
+                if (index >= 1 && index <= 100)
+                {
+                    value = m_ScriptVGroup0[index];
+                    return true;
+                }
+                value = 0;
+                return false;
+            }
+            var store = upper == 'V' ? m_ScriptVVars : m_ScriptSVars;
+            if (store != null && store.TryGetValue(group * 1000 + index, out value))
+            {
+                return true;
+            }
+            value = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// Write counterpart of <see cref="TryGetScriptVar"/>. A group-0 S write is
+        /// dropped rather than filed under a flat key, matching native SetS rejecting a
+        /// non-positive group outright at 0x6DF251 / 0x6DF255.
+        /// </summary>
+        public void SetScriptVar(char bank, int group, int index, int value)
+        {
+            var upper = char.ToUpperInvariant(bank);
+            if (group == 0)
+            {
+                if (upper == 'V' && index >= 1 && index <= 100)
+                {
+                    m_ScriptVGroup0[index] = value;
+                }
+                return;
+            }
+            var store = upper == 'V' ? m_ScriptVVars : m_ScriptSVars;
+            if (store != null)
+            {
+                store[group * 1000 + index] = value;
+            }
+        }
+
 
 
         public int[] m_nMval;
@@ -474,6 +467,46 @@ namespace GameSvr
         /// Default 0 = not in effect.
         /// </summary>
         public byte m_btNativeCheatPenaltyTier = 0;
+
+        /// <summary>
+        /// native <c>Self+0x1898</c> (Byte) — "show the 副将 level-cap hint" preference.
+        /// Constructor default is ON (<c>0x6AD8C0 C6 87 98 18 00 00 01
+        /// mov byte [edi+0x1898],1</c>), the client flips it with CM 1239
+        /// (<c>0x6DA3AF</c> = 1 when Param == 0, <c>0x6DA3BE</c> = 0 otherwise), and the
+        /// single reader is the hero experience adder <c>sub_687714</c> at
+        /// <c>0x68781D 80 B8 98 18 00 00 00 cmp byte [owner+0x1898],0 / 0x687824 je</c>,
+        /// which suppresses the 1-in-100 「您的副将英雄等级受限于主将等级」 hint.
+        /// A whole-CODE scan finds exactly those four references and no persistence
+        /// site, so the flag is per-session and never reaches the character record.
+        /// </summary>
+        public bool m_boNativeHeroCapHintEnabled = true;
+
+        /// <summary>
+        /// native <c>Self+0x18AC</c> (Byte) — "let other players read my hero's
+        /// 28-byte record" permission, flipped by CM 1281 (<c>0x6DA9D7</c> = 0 when
+        /// Param == 0, <c>0x6DA9F0</c> = 1 when Param == 1, any other Param leaves it
+        /// alone). A whole-CODE scan finds three real references — those two writes
+        /// and one read — and NO constructor write, so Delphi zero-init leaves the
+        /// default at 0 (sharing OFF).
+        /// <para>
+        /// The single reader is <c>sub_68DAD0</c>, a hero virtual method
+        /// (<c>33 D2 / 8B 88 8C 06 00 00 mov ecx,[hero+0x68C] / 85 C9 / 74 06 /
+        /// 8A 91 AC 18 00 00 mov dl,[owner+0x18AC] / 8B C2 / C3</c>) that occupies VMT
+        /// slot <c>+0x27C</c> in all seven hero-family VMTs (anchored off
+        /// <c>sub_690B08</c> at slot +0x154: <c>0x685784 - 0x154 = 0x685630</c> base,
+        /// and <c>sub_68DAD0</c> sits at <c>0x6858AC = base + 0x27C</c>). Slot +0x27C
+        /// has exactly ONE call site in the whole image — <c>0x6DA96F</c>, inside the
+        /// CM 1280 hero-inspect handler — where a true result selects the
+        /// SM 3291 reply that carries <c>target+0x554</c> (28 bytes) and a false result
+        /// selects the empty-body SM 3291.
+        /// </para>
+        /// <para>
+        /// CM 1280 itself is still MISSING (the <c>+0x554</c> record layout has not
+        /// been reversed), so this flag has no live consumer yet; it is stored so the
+        /// preference the client sends today is not silently discarded.
+        /// </para>
+        /// </summary>
+        public bool m_boNativeHeroRecordShared;
 
         /// <summary>
         /// native <c>Self+0x18A0</c> (Word) — 元宝 trade-protection amount, persisted
@@ -667,7 +700,9 @@ namespace GameSvr
         public uint m_NativeScriptDataCrc;
         public uint m_dwChatShieldMask;
         public HeroObject m_HeroObject;
-        internal const int NativeChatShieldMaskOffset = 0x500;
+        // rec+0x4F8: 0x6B12A0 mov eax,[ebx+0xB9C] / 0x6B12A6 89 86 F8 04 00 00 mov [esi+0x4F8],eax
+        // load: 0x6B029C mov eax,[eax+0x4F8] / 0x6B02A5 mov [edx+0xB9C],eax
+        internal const int NativeChatShieldMaskOffset = 0x4F8;
         internal const int NativeHeroStateOffset = 0x52;
         public byte m_btNativeHeroState;
         public int m_dwHeroLogoutTick;
@@ -697,6 +732,16 @@ namespace GameSvr
                 ? BinaryPrimitives.ReadUInt32LittleEndian(
                     m_NativeHumanData.AsSpan(NativeChatShieldMaskOffset, sizeof(uint)))
                 : 0;
+            ApplyChatShieldMaskToAllowFlags();
+        }
+
+        // Native has only obj+0xB9C. C# bools are mirrors so @ALLOWMSG/@LETSHOUT/@BANGUILDCHAT
+        // and CM 3032 last-writer-win the same bits (0x6236FE/0x6237AF/0x623984).
+        internal void ApplyChatShieldMaskToAllowFlags()
+        {
+            m_boHearWhisper = (m_dwChatShieldMask & 0x01u) == 0;
+            m_boBanShout = (m_dwChatShieldMask & 0x04u) == 0;
+            m_boBanGuildChat = (m_dwChatShieldMask & 0x08u) == 0;
         }
 
         internal bool PersistNativeChatShieldMask()
@@ -785,6 +830,8 @@ namespace GameSvr
             m_dwMoveCountA = 0;
             m_nOverSpeedCount = 0;
             m_sOldSayMsg = "";
+            m_nSayMsgCount = 0;
+            m_btSayRapidCount = 0;
             m_dwSayMsgTick = HUtil32.GetTickCount();
             m_boDisableSayMsg = false;
             m_dwDisableSayMsgTick = HUtil32.GetTickCount();
@@ -905,7 +952,8 @@ namespace GameSvr
                 }
             }
             LoadList = null;
-            SendDefMessage(Grobal2.SM_SENDNOTICE, 2000, 0, 0, 0, sNoticeMsg.Replace("/r/n/r/n ", ""));
+            // 0x6B2CFE `33 C9 xor ecx,ecx` - nRecog is zero, not a duration.
+            SendDefMessage(Grobal2.SM_SENDNOTICE, 0, 0, 0, 0, sNoticeMsg.Replace("/r/n/r/n ", ""));
         }
 
         public void RunNotice()
@@ -967,11 +1015,12 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// Send dialog message to client via SM_DLGMSG
+        /// Native CODE has zero 16-bit dx/cx loads of 772 (0x0304) reaching a send slot.
+        /// The only 32-bit hit is <c>0x61116B sub eax,0x304</c> (a case bound, not an SM ident).
+        /// srv_AppearTimes.ini 772=0. Constant kept.
         /// </summary>
         public void SendDlgMsg(string sMsg, int nType = 0)
         {
-            SendDefMessage(Grobal2.SM_DLGMSG, nType, 0, 0, 0, sMsg);
         }
 
         private void SendLogon()
@@ -979,6 +1028,16 @@ namespace GameSvr
             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_LOGON, ObjectId,
                 m_nCurrX, m_nCurrY, m_btDirection);
             var body = BuildLogonBody();
+            SendSocket(m_DefMsg, body);
+        }
+
+        private void SendNativeLoginNow()
+        {
+            var body = new byte[0x18];
+            BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(0), 0x14);
+            BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(2), 0x2E);
+            BitConverter.TryWriteBytes(body.AsSpan(8), DateTime.Now.ToOADate());
+            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_LOGIN_NOW, 0x3F1, 0x3E7, 0x1009, 0);
             SendSocket(m_DefMsg, body);
         }
 
@@ -1317,11 +1376,43 @@ namespace GameSvr
                 // `!IsNullOrEmpty(m_sDearName)` guard below excludes exactly the case
                 // that needs healing.
                 HealNativeRelationFlags();
+                // Native UserLogon @0x6B23C6 call 0x6F05D8, immediately before the
+                // 定位石 replay at 0x6B23E3. sub_6F05D8 first sends SM 888:
+                //   0x6F05E2 68 E7 03 00 00  push 0x3E7   ; Param=999
+                //   0x6F05E7 6A 00           push 0       ; Tag
+                //   0x6F05E9 6A 00           push 0       ; Series
+                //   0x6F05EB 6A 00           push 0       ; sMsg=nil
+                //   0x6F05ED B9 EA 03 00 00  mov ecx,0x3EA ; Recog=1002
+                //   0x6F05F2 66 BA 78 03     mov dx,0x378  ; ident 888
+                //   0x6F05FA FF 96 50 02 00 00 call [esi+0x250]
+                SendDefMessage(Grobal2.SM_LOGIN_VER, 0x3EA, 0x3E7, 0, 0, "");
+                SendNativeLoginNow();
                 // 战神 replays the 定位石 marker in the same logon body, AFTER the social
                 // relink call at 0x6B21CF: 0x6B23E3 cmp byte [esi+0x18f8],0 / je skip,
                 // else re-push SM 0x3026 (0x6B23EC-0x6B2414) with X=[esi+0x1908] and
                 // Y=[esi+0x190a]. Without it the client draws no marker after a relog.
                 ReplayNativeFixedCoordOnLogon();
+                // 战神 UserLogon @0x6B24D2: call 0x6F071C always emits SM 4501
+                // (0x1195) via [obj+0x254]. Empty [obj+0xAE8] -> Param=5 Len=0;
+                // otherwise Param=0 + 0x40-byte corps desc. C# SendNativePlayerCorps
+                // already matches that ladder; native fires it on login, not only
+                // on CM_PLAYER_CORPS.
+                SendNativePlayerCorps(Grobal2.SM_PLAYER_CORPS);
+                // 战神 UserLogon @0x6B24D9: call 0x6F07CC always emits SM 4500
+                // (0x1194) via [obj+0x254]. 0x6F07E3 cmp [ebx+0xAE8],0 / je
+                // Param=5; else 0x6ADAE4 fail -> Param=12; else Param=0 +
+                // 0x38-byte gild desc (0x6F0826 66 BA 94 11).
+                SendNativePlayerGuild();
+                // 战神 UserLogon @0x6B24E0: call 0x6F7638 always emits SM 4613
+                // (0x6F7687 66 BA 05 12) with an 8-byte body.
+                SendNativePendingRequestOnLogon();
+                // 战神 UserLogon @0x6B24E7: call 0x6F769C always emits SM 4615
+                // (0x6F76F1 66 BA 07 12) with an 8-byte body.
+                SendNativeClearPendingRequestOnLogon();
+                // 战神 UserLogon @0x6B24F5: call 0x6AEE04 always emits SM 4628
+                // (0x6AEE90 66 BA 14 12) Recog=0 Param=0 Tag=role Series=0.
+                // [obj+0xAE8]==0 -> role 0 (0x6AEE0B xor esi,esi / 0x6AEE15 je).
+                SendNativeSocialRoleRefresh();
                 if (!string.IsNullOrEmpty(m_sDearName))
                 {
                     CheckMarry();
@@ -1692,9 +1783,9 @@ namespace GameSvr
                                     {
                                         if (OSObject.CellType == CellType.OS_ITEMOBJECT)
                                         {
-                                            // 战神 sub_77A178: `cmp byte [item+0x0D],0; je`
-                                            // (never-expire class) then `cmp edx,0xDBBA0`
-                                            // (15 min), or the per-item dword for StdMode 41.
+                                            // 战神 sub_77A178 cell tag 2 @0x77A3D9:
+                                            // `cmp edx,0x927C0 / jb keep` @0x77A3FD — one
+                                            // flat 600_000 ms, no StdMode ladder.
                                             if (HasFloorItemExpired(OSObject.CellObj,
                                                     HUtil32.GetTickCount() - OSObject.dwAddTime,
                                                     floorItemClearTimeout))
@@ -1876,7 +1967,10 @@ namespace GameSvr
                     else
                     {
                         Castle = M2Share.CastleManager.InCastleWarArea(this);// 01/25 多城堡
-                        if (M2Share.g_Config.boShowGuildName || Castle != null && Castle.m_boUnderWar || m_boInFreePKArea)
+                        // 眼神 行会显示 memcpys 90 90 over both skip-jumps of this branch
+                        // (0x6C5BCB 74 49 and 0x6C5BF7 74 1D), leaving no path to 0x6C5C16.
+                        if (new YanshenApi(this, null, M2Share.PluginManager).IsGuildShow()
+                            || M2Share.g_Config.boShowGuildName || Castle != null && Castle.m_boUnderWar || m_boInFreePKArea)
                         {
                             sGuildName = M2Share.g_sNoCastleGuildName.Replace("%guildname", m_MyGuild.sGuildName);
                             sGuildName = sGuildName.Replace("%rankname", m_sGuildRankName);
@@ -1955,17 +2049,16 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TPlayObject::MakeGhost";
             try
             {
-                if (new YanshenApi(this, null, M2Share.PluginManager).IsPetDieOffline())
-                {
-                    foreach (var slave in m_SlaveList)
-                    {
-                        if (slave == null || slave.m_boDeath || slave.m_boGhost) continue;
-                        slave.m_WAbil.HP = 0;
-                        slave.m_boDeath = true;
-                        slave.m_dwDeathTick = HUtil32.GetTickCount();
-                    }
-                }
-
+                // 「下线宝宝死亡」在这里没有原生对应物，不要再往 MakeGhost 加杀宠循环。
+                // 整个功能只有一处补丁：0x006B5BA1 的 RM_10401 守卫
+                //   0F 84 A5 06 00 00  je 0x006B624C   →   E9 A6 06 00 00 90  jmp + nop
+                // （安装点 0x100AB10B，还原支 0x100AB19B 写回 0F 84 A5 06 00 00，
+                //  开关字段 [edi+0xBF0] 在补丁函数 0x100A96C0 里只被读两次 ——
+                //  0x100AB0AA 使能守卫与 0x100AB134 还原守卫）。
+                // 也没有任何 trampoline 站点挂这个标签。所以原生的做法是**登录时
+                // 不重建从宠**，而不是下线时把从宠打死；后者会多跑一遍死亡路径
+                // （死亡动画、BB死亡触发、掉落），是 C# 自己加的。
+                // 消费点在 TPlayObject.Message.cs 的 RM_10401 分支。
                 M2Share.UserEngine?.RemoveHero(this);
                 lock (M2Share.HighStatLock)
                 {

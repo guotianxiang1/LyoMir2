@@ -3,14 +3,19 @@ using DBSvr;
 using GameSvr;
 using SystemModule;
 
-if (args.Length != 1)
-    throw new ArgumentException("Usage: DurabilitySecurityCheck <repository root>");
+var root = args.Length > 0 ? Path.GetFullPath(args[0]) : FindRepositoryRoot();
+if (root == null)
+{
+    Console.Error.WriteLine("INCOMPLETE: repository root was not supplied and could "
+        + "not be located from the working directory. "
+        + "Usage: DurabilitySecurityCheck [repository root]");
+    return 2;
+}
 
-var root = Path.GetFullPath(args[0]);
 var failures = new List<string>();
 
 Run("debug builds do not grant GM permission", CheckCommandPermission);
-Run("robot creation is privileged and bounded", CheckRobotCommand);
+Run("robot creation GM verb stays unregistered", CheckRobotCommand);
 Run("save queue keeps only the newest immutable snapshot", CheckSaveCoalescing);
 Run("old save attempts cannot remove a newer snapshot", CheckSaveAttemptCompletionGuard);
 Run("offline gold requests remain queued and ordered", CheckGoldQueue);
@@ -49,16 +54,16 @@ void CheckCommandPermission()
 
 void CheckRobotCommand()
 {
-    var source = Read("GameSvr", "Command", "Commands", "CreateAIUserCommand.cs");
-    Check(source.Contains("\"AddRebotsPlay\", \"增加机器人玩家\", \"数量\", 10",
-        StringComparison.Ordinal), "AddRebotsPlay permission is not 10");
-    Check(source.Contains("int.TryParse", StringComparison.Ordinal) &&
-          source.Contains("userCount <= 0", StringComparison.Ordinal),
-        "robot count is not strictly validated");
-    Check(source.Contains("MaxPerRequest", StringComparison.Ordinal) &&
-          source.Contains("MaxRobots", StringComparison.Ordinal) &&
-          source.Contains("RobotPopulation", StringComparison.Ordinal),
-        "robot request or population cap is missing");
+    // @AddRebotsPlay 不在原生 430 行 GM 注册表里（0x007B4654 起，stride 0x120，全镜像
+    // GBK/长度前缀/NUL/UTF-16LE 四种形式 0 命中），原版根本没有这个刷机器人的 GM 动词。
+    // 与其校验「上限够不够严」，不如钉死它不存在——上限再严也是自造的攻击面。
+    foreach (var path in Directory.GetFiles(Path.Combine(root, "GameSvr"), "*.cs",
+                 SearchOption.AllDirectories))
+    {
+        Check(!File.ReadAllText(path).Contains("[GameCommand(\"AddRebotsPlay\"",
+                  StringComparison.OrdinalIgnoreCase),
+            "AddRebotsPlay is absent from the native registry and must not be registered: " + path);
+    }
 }
 
 void CheckSaveCoalescing()
@@ -169,4 +174,23 @@ static void Same(object expected, object actual, string message)
 {
     if (!ReferenceEquals(expected, actual))
         throw new InvalidOperationException(message);
+}
+
+// run_audits.py invokes every audit with no arguments, so a tool that hard-requires
+// its repository root reported FAIL without evaluating a single assertion. Falling
+// back to the enclosing checkout keeps the assertions exactly as they were and only
+// removes the "never ran" outcome.
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

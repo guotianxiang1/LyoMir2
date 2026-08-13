@@ -350,61 +350,182 @@ namespace GameSvr
             return result;
         }
 
+        // Native _Attack = sub_769F90, half-moon branch @0x0076A11D-0x0076A16D.
+        //   0x0076A136  E8 31 E8 D5 FF     call sub_4C896C   -> effective level
+        //   0x0076A13B  3C 03              cmp al,3
+        //   0x0076A13D  76 05              jbe 0x0076A144
+        //   0x0076A13F  8B 5D F8           mov ebx,[ebp-8]   (level > 3: unscaled)
+        //   0x0076A154  83 C0 02           add eax,2
+        //   0x0076A160  D8 35 C8 A5 76 00  fdiv dword ptr [0x76A5C8]
+        // [0x76A5C8] = 00 00 70 41 = float32 15.0, a literal, not btTrainLv + 10.
         internal static int CalculateHalfMoonWideAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
-            if (yanshenApi != null && yanshenApi.IsHalfMoon())
+            int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
+            // Same two-constant swap as 刺杀 (0x100B42F2 -> imm8 of 0x00772044
+            // `83 C0 02`, 0x100B4360 -> [0x00772148]), with one asymmetry that
+            // matters: 半月 is the only one of the six whose high-level arm the
+            // plugin leaves alone. 刺杀 gets `EB 17` over 0x00771C25 and 烈火
+            // gets `EB 15` over 0x0077231D, but no blob patch targets the
+            // half-moon branch in either _Attack copy, so above the scaling
+            // level the native arm still wins and A/B never enter the result.
+            if (effectiveLevel <= 3 && yanshenApi != null && yanshenApi.IsHalfMoon())
             {
-                var divisor = yanshenApi.HalfMoonB();
+                float divisor = yanshenApi.HalfMoonB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.HalfMoonA() + skillLevel) / divisor);
+                    return HUtil32.Round((double)nPower / divisor
+                        * (effectiveLevel + yanshenApi.HalfMoonA()));
                 }
             }
 
-            return HUtil32.Round((double)nPower / (trainLevel + 10) * (skillLevel + 2));
+            if (effectiveLevel > 3)
+            {
+                return nPower;
+            }
+            return HUtil32.Round((double)nPower / 15.0 * (effectiveLevel + 2));
         }
 
+        // Native _Attack = sub_769F90, stab branch @0x0076A096-0x0076A0F8. That is
+        // the function AttackDir sub_76A5D4 actually calls
+        // (0x0076A76D E8 1E F8 FF FF call 0x769F90); sub_7707A8 is a separate
+        // entry used by the client command handlers and is NOT this code path.
+        //   0x0076A0AF / 0x0076A0D5  call sub_4C896C   -> effective level
+        //   0x0076A0B4  3C 04              cmp al,4
+        //   0x0076A0BB  DB 2D B8 A5 76 00  fld tbyte[0x76A5B8]   (80-bit 1.05)
+        //   0x0076A0CA  83 C3 05           add ebx,5
+        //   0x0076A0EB  D8 35 C4 A5 76 00  fdiv dword[0x76A5C4]
+        // [0x76A5C4] = 00 00 A0 40 = float32 5.0. The divisor is that literal;
+        // btTrainLv (+0x1A) is only ever the level cap inside sub_4C896C.
         internal static int CalculateStabSwordLongAttackPower(int nPower, int trainLevel,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
+            int effectiveLevel = Math.Min(unchecked((byte)skillLevel), trainLevel);
+            // Override = the same native chain with two constants swapped:
+            //   0x00771C4E  83 C0 02              add eax,2   <- imm8 becomes A
+            //   0x00771C5A  D8 35 24 1D 77 00     fdiv [0x00771D24] <- becomes B
+            //   plugin 0x100B40BB / 0x100B4129 write those two
+            // Divide first, then multiply: that is the fdiv/fmulp order, and B
+            // is the float32 the patch stores, not a double.
+            // The btLevel==4 tier is patched out while the override is on --
+            // 0x100B417C splices `EB 17` over 0x00771C25 `75 17`.
             if (yanshenApi != null && yanshenApi.IsStabSword())
             {
-                var divisor = yanshenApi.StabSwordB();
+                float divisor = yanshenApi.StabSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(nPower * (yanshenApi.StabSwordA() + skillLevel) / divisor);
+                    return HUtil32.Round((double)nPower / divisor
+                        * (effectiveLevel + yanshenApi.StabSwordA()));
                 }
             }
 
-            return HUtil32.Round((double)nPower / (trainLevel + 2) * (skillLevel + 2));
+            if (effectiveLevel == 4)
+            {
+                return MultiplyByNative105(nPower) + 5;
+            }
+            return HUtil32.Round((double)nPower / 5.0 * (effectiveLevel + 2));
         }
 
+        // tbyte[0x76A5B8] = 66 66 66 66 66 66 66 86 FF 3F, exactly
+        // 4842270319348757299 / 2^62 = 21/20 - 1/(5*2^62): strictly below 1.05,
+        // whereas IEEE double 1.05 is strictly above it. The product differs from
+        // 21n/20 by less than the .5-boundary granularity except when 21n/20 is
+        // exactly a half-integer (n % 20 == 10), and there the deficit only
+        // survives the 64-bit-significand rounding when 4n > 5*2^e for
+        // 2^e <= 21n/20 < 2^(e+1). Checked against an exact-rational x87 model
+        // over n in 0..1000000: zero mismatches.
+        private static int MultiplyByNative105(int nPower)
+        {
+            long scaled = 21L * nPower;
+            if (nPower > 0 && nPower % 20 == 10)
+            {
+                long pow2 = 1;
+                while (pow2 * 40 <= scaled)
+                {
+                    pow2 <<= 1;
+                }
+                if (4L * nPower > 5L * pow2)
+                {
+                    return (int)(scaled / 20);
+                }
+            }
+            return HUtil32.Round(scaled / 20.0);
+        }
+
+        // The 攻杀 override is not a damage-time multiplier. The plugin rewrites
+        // the imm8 of the recalc site that produces m_nHitPlus:
+        //   host  0x0076B027  8B C6 E8 40 D9 D5 FF   mov eax,esi; call sub_4C896C
+        //   host  0x0076B02C  04 05                  add al,5
+        //   host  0x0076B02E  88 83 90 00 00 00      mov [ebx+0x90],al
+        //   plugin 0x100B3F5A A2 2D B0 76 00         mov byte[0x0076B02D],al
+        // Two consequences the old expression missed: the level is sub_4C896C's
+        // EFFECTIVE level, and `add al` is 8-bit, so (level + A) wraps at 256
+        // instead of saturating at 255.
         internal static int CalculateThrustingHitPlus(int nativeHitPlus, int skillLevel,
             Plugins.YanshenApi yanshenApi)
         {
             if (yanshenApi != null && yanshenApi.IsThrusting())
             {
-                return Math.Clamp(HUtil32.Round(yanshenApi.ThrustingA() + skillLevel), 0, 255);
+                return unchecked((byte)(yanshenApi.ThrustingA() + skillLevel));
             }
 
             return nativeHitPlus;
         }
 
+        // The plugin rewrites the two instructions that build m_nHitDouble and
+        // nothing else -- the damage arithmetic below is untouched native code,
+        // so the override changes only the byte fed into it:
+        //   host   0x0076B0EC  C1 E0 02        shl eax,2   <- A picks the shift
+        //   host   0x0076B0EF  04 04           add al,4    <- imm8 becomes B
+        //   plugin 0x100B45A3  blob patch 3 bytes @0x0076B0EC
+        //   plugin 0x100B4550  A2 F0 B0 76 00  mov byte[0x0076B0F0],al
+        // `shl eax,k` cannot encode an arbitrary A, so FireSwordLevelFactor
+        // holds the five representable multipliers; and because the addend is
+        // 8-bit the result wraps at 256 rather than stopping at the 25.5x the
+        // dialog text advertises (that number is just 255/10).
+        //
+        // The plugin also kills the btLevel==4 arm outright:
+        //   host   0x0077231D  75 15   jne 0x00772334
+        //   plugin 0x100B45DA  blob patch 2 bytes @0x0077231D with EB 15 (jmp)
+        // so the fixed 1.8x tier is unreachable while the override is on.
         internal static int CalculateFireSwordAttackPower(int nPower, int nativeHitDouble,
             int skillLevel, Plugins.YanshenApi yanshenApi)
         {
             if (yanshenApi != null && yanshenApi.IsFireSword())
             {
-                var multiplier = Math.Min(
-                    (yanshenApi.FireSwordA() * skillLevel + yanshenApi.FireSwordB()) / 10 + 1,
-                    25.5);
-                return HUtil32.Round(nPower * multiplier);
+                var factor = Plugins.YanshenApi.FireSwordLevelFactor(yanshenApi.FireSwordA());
+                nativeHitDouble = unchecked((byte)(
+                    unchecked((byte)(skillLevel * factor)) + yanshenApi.FireSwordB()));
             }
 
-            return nPower + HUtil32.Round(nPower / 100.0 * (nativeHitDouble * 10));
+            // Native _Attack = sub_769F90, fire branch @0x0076A06C-0x0076A08A:
+            //   0x0076A06C  DB 45 F8           fild dword ptr [ebp-8]
+            //   0x0076A06F  D8 35 B4 A5 76 00  fdiv dword ptr [0x76A5B4]
+            //   0x0076A080  DB 45 E0           fild dword ptr [ebp-0x20]  (hitDouble)
+            //   0x0076A083  DE C9              fmulp st(1)
+            //   0x0076A085  E8 EA 94 C9 FF     call @ROUND
+            //   0x0076A08A  01 45 F8           add dword ptr [ebp-8], eax
+            // [0x76A5B4] = 00 00 20 41 = float32 10.0. Dividing by 100 and
+            // pre-multiplying hitDouble by 10 is algebraically the same but
+            // rounds differently: 601 of the sampled pairs disagreed with the
+            // x87 chain, versus 9 for this order (all at hitDouble 255, which
+            // only the plugin's 倍功 override can produce).
+            return nPower + HUtil32.Round(nPower / 10.0 * nativeHitDouble);
         }
 
+        // Native builds the multiplier byte from a table and then divides with
+        // integer idiv; the override replaces the table lookup and the divisor
+        // literal, and deletes the clamp that guarded the lookup:
+        //   host   0x0076B13E  73 1D                  jae 0x0076B15D  (L>=4 -> Tbl[3])
+        //   host   0x0076B14C  8A 80 28 4B 7D 00      mov al,[eax+0x7D4B28]
+        //   host   0x0076B152  88 83 92 00 00 00      mov [ebx+0x92],al
+        //   host   0x00771DA0  F7 6D FC               imul [ebp-4]
+        //   host   0x00771DA3  B9 0A 00 00 00         mov ecx,0xA
+        //   host   0x00771DA9  F7 F9                  idiv ecx
+        //   plugin 0x100B4787  blob 2 bytes @0x0076B13E -> 90 90 (clamp gone)
+        //   plugin 0x100B4750  blob 6 bytes @0x0076B14C -> 04 07 90 90 90 90
+        //   plugin 0x100B47D9  A2 4D B1 76 00         -> the `add al` imm8 = A
+        //   plugin 0x100B4847  A3 A4 1D 77 00         -> the idiv divisor = B
         internal static int CalculateSunSwordAttackPower(int power, int effectiveLevel,
             Plugins.YanshenApi yanshenApi)
         {
@@ -413,8 +534,10 @@ namespace GameSvr
                 var divisor = yanshenApi.SunSwordB();
                 if (divisor > 0)
                 {
-                    return HUtil32.Round(power *
-                        Math.Min(yanshenApi.SunSwordA() + effectiveLevel, 255) / divisor);
+                    // `add al` is 8-bit, so the multiplier wraps at 256; and the
+                    // native division is idiv, which truncates toward zero.
+                    var multiplier = unchecked((byte)(effectiveLevel + yanshenApi.SunSwordA()));
+                    return power * multiplier / divisor;
                 }
             }
 
@@ -450,6 +573,19 @@ namespace GameSvr
             BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(10, 2),
                 unchecked((ushort)y));
             return body;
+        }
+
+        // sub_4C896C @0x004C896C:
+        //   8A 50 0C     mov dl,[eax+0x0C]        btLevel
+        //   02 50 18     add dl,[eax+0x18]        + NativeLevelBonus   (8-bit)
+        //   8B 08 / 8A 49 1A / 3A D1 / 76 02 / 8B D1   min(.., btTrainLv)
+        // Every recalc arm the plugin patches feeds off this, never off btLevel.
+        internal static int NativeEffectiveMagicLevel(TUserMagic magic)
+        {
+            if (magic == null) return 0;
+            if (magic.MagicInfo == null) return magic.btLevel;
+            return Math.Min(unchecked((byte)(magic.btLevel + magic.NativeLevelBonus)),
+                magic.MagicInfo.btTrainLv);
         }
 
         private static int GetSunSwordEffectiveLevel(TUserMagic magic)
@@ -623,7 +759,7 @@ namespace GameSvr
                         var magic = m_MagicArr[SpellsDef.SKILL_YEDO];
                         nPower += CalculateThrustingHitPlus(
                             m_nHitPlus,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -637,7 +773,7 @@ namespace GameSvr
                         nPower = CalculateFireSwordAttackPower(
                             nPower,
                             m_nHitDouble,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -660,7 +796,7 @@ namespace GameSvr
                         var magic = m_MagicArr[SpellsDef.SKILL_YEDO];
                         nPower += CalculateThrustingHitPlus(
                             m_nHitPlus,
-                            magic?.btLevel ?? 0,
+                            NativeEffectiveMagicLevel(magic),
                             m_btRaceServer == Grobal2.RC_PLAYOBJECT && magic != null
                                 ? new Plugins.YanshenApi(this as TPlayObject, null, M2Share.PluginManager)
                                 : null);
@@ -792,10 +928,29 @@ namespace GameSvr
                     AttackTarget.StruckDamage(nPower, this);
                     AttackTarget.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101, nPower, AttackTarget.m_WAbil.HP, AttackTarget.m_WAbil.MaxHP, ObjectId, "", 200);
                     TryApplyNativeState26AfterPhysicalDamage(AttackTarget, nPower);
-                    if (!AttackTarget.m_boUnParalysis && m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_btAntiPoison + M2Share.g_Config.nAttackPosionRate) == 0))
+                    // POIS-36/37 — native hit-poison @0x666D2F-0x666D4E, bytes verified:
+                    //   666D2F  0F B7 86 6C 02 00 00  movzx eax, word [esi+0x26C]  ; target resistance
+                    //   666D36  83 C0 14              add   eax, 0x14              ; +20, hardcoded
+                    //   666D39  E8 0E CE D9 FF        call  0x403B4C               ; Random(res+20)
+                    //   666D3E  85 C0 / 75 12         test  eax,eax / jne skip     ; only ==0 passes
+                    //   666D42  6A 01                 push  1                      ; level 1
+                    //   666D44  66 B9 1E 00           mov   cx, 0x1E               ; 30 seconds
+                    //   666D48  B2 1F                 mov   dl, 0x1F               ; bodyState 0x1F = green poison
+                    //   666D4E  FF 93 C8 00 00 00     call  [ebx+0xC8]             ; MakePosion wrapper
+                    // Three corrections against the previous line:
+                    //  1. dl=0x1F is the damage-over-time green poison. POISON_STONE (slot 5)
+                    //     maps to bit 26 = bodyState 0x1A = petrify, a hard disable that no
+                    //     native site applies with 30s/level 1. The slot->bit mapping
+                    //     (0x80000000 >> slot, so slot 0 -> bit 31 -> 0x1F) is correct, so the
+                    //     "different index spaces" premise behind POISON_STONE does not hold.
+                    //  2. the roll reads Self+0x26C. Band state 0x5E (@0x773A2A `add word
+                    //     [esi+8], ax`, esi = Self+0x264) buffs that same word and is modelled
+                    //     as m_wEffectResistance, so Self+0x26C == m_wEffectResistance,
+                    //     not m_btAntiPoison.
+                    //  3. +20 and 30 seconds are immediates, not configuration.
+                    if (!AttackTarget.m_boUnParalysis && m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_wEffectResistance + 20) == 0))
                     {
-                        // Native 0x666D42: push 1 (level), not 0. C# applies POISON_STONE due to different index spaces (POIS-37).
-                        AttackTarget.MakePosion(Grobal2.POISON_STONE, M2Share.g_Config.nAttackPosionTime, 1);
+                        AttackTarget.MakePosion(Grobal2.POISON_DECHEALTH, 30, 1);
                     }
                     if (m_nHongMoSuite > 0)// 虹魔，吸血
                     {

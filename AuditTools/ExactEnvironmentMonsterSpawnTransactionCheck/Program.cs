@@ -614,6 +614,11 @@ static Fixture NewFixture(IList<TBaseObject> certificateList = null)
         nX = 6,
         nY = 6,
         nRange = 0,
+        // nCount doubles as the certificate-list capacity (native [gen+0x24] is both
+        // the target population and the length of the slot array at [gen+0x3C]).  The
+        // fixture left it at 0, so the capacity test rejected every spawn before it
+        // reached the transaction under test and the success case could never publish.
+        nCount = 1,
         nRace = M2Share.MONSTER_OMA,
         nMissionGenRate = 0,
         Envir = environment,

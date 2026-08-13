@@ -137,9 +137,9 @@ static void DormantProductionBoundary()
 
 static void NativeEvidenceAnchors()
 {
-    var root = FindRepositoryRoot();
-    var evidence = File.ReadAllText(Path.GetFullPath(Path.Combine(root, "..",
-        "staging", "ida_gild_write_inventory_20260731.txt")));
+    var evidencePath = FindEvidenceFile(
+        Path.Combine("staging", "ida_gild_write_inventory_20260731.txt"));
+    var evidence = File.ReadAllText(evidencePath);
     foreach (var anchor in new[]
              {
                  "FUNCTION 4578_cancel_concern 006F68AC-006F68F0",
@@ -189,8 +189,29 @@ static string FindRepositoryRoot()
                 return directory.FullName;
         }
     }
-    throw new InvalidOperationException("repository root not found");
-}
+        throw new InvalidOperationException("repository root not found");
+    }
+
+    static string FindEvidenceFile(string relativePath)
+    {
+        var probed = new List<string>();
+        foreach (var start in new[]
+                 {
+                     FindRepositoryRoot(), Environment.CurrentDirectory,
+                     AppContext.BaseDirectory
+                 })
+        {
+            for (var directory = new DirectoryInfo(start); directory != null;
+                 directory = directory.Parent)
+            {
+                var candidate = Path.Combine(directory.FullName, relativePath);
+                if (File.Exists(candidate)) return candidate;
+                probed.Add(candidate);
+            }
+        }
+        throw new InvalidOperationException(
+            relativePath + " not found; probed: " + string.Join("; ", probed));
+    }
 
 static void Equal<T>(T expected, T actual, string context)
 {

@@ -102,7 +102,7 @@ namespace QST22VariableScopeAudit
             // 0x6DF20F) rather than the -1 a dictionary miss produces.
             var getPlayerVarMatch = Regex.Match(content,
                 @"public\s+PasValue\s+GetPlayerVar\s*\([^)]+\).*?" +
-                @"if\s*\(\s*group\s*==\s*0\s*\)\s*return\s+PasValue\.FromInt\s*\(\s*player\.m_ScriptVGroup0\s*\[\s*index\s*\]\s*\)",
+                @"if\s*\(\s*group\s*==\s*0\s*\)\s*return\s+PasValue\.FromInt\s*\(\s*CurrentPlayer\.m_ScriptVGroup0\s*\[\s*index\s*\]\s*\)",
                 RegexOptions.Singleline);
 
             if (!getPlayerVarMatch.Success)
@@ -191,9 +191,9 @@ namespace QST22VariableScopeAudit
                 failCount++;
             }
             else if (!Regex.IsMatch(packDiceMatch.Value,
-                @"GetPlayerVar\s*\(\s*player\s*,\s*'V'\s*,\s*0\s*,"))
+                @"TryGetScriptVar\s*\(\s*'V'\s*,\s*0\s*,"))
             {
-                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues does not read group-0 V through GetPlayerVar");
+                Console.WriteLine("[FAIL] Assertion 8: PackDiceValues does not read group-0 V through TryGetScriptVar");
                 failCount++;
             }
             else

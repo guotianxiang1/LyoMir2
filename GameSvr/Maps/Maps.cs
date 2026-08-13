@@ -160,120 +160,16 @@ namespace GameSvr
                                 QuestNPC = LoadMapInfo_LoadMapQuest(s38);
                                 continue;
                             }
-                            if (HUtil32.CompareLStr(s34, "NEEDSET_ON", "NEEDSET_ON".Length))
-                            {
-                                MapFlag.nNeedONOFF = 1;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nNEEDSETONFlag = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "NEEDSET_OFF", "NEEDSET_OFF".Length))
-                            {
-                                MapFlag.nNeedONOFF = 0;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nNEEDSETONFlag = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "MUSIC", "MUSIC".Length))
-                            {
-                                MapFlag.boMUSIC = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nMUSICID = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "EXPRATE", "EXPRATE".Length))
-                            {
-                                MapFlag.boEXPRATE = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nEXPRATE = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKWINLEVEL", "PKWINLEVEL".Length))
-                            {
-                                MapFlag.boPKWINLEVEL = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKWINLEVEL = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKWINEXP", "PKWINEXP".Length))
-                            {
-                                MapFlag.boPKWINEXP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKWINEXP = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKLOSTLEVEL", "PKLOSTLEVEL".Length))
-                            {
-                                MapFlag.boPKLOSTLEVEL = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKLOSTLEVEL = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "PKLOSTEXP", "PKLOSTEXP".Length))
-                            {
-                                MapFlag.boPKLOSTEXP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nPKLOSTEXP = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "DECHP", "DECHP".Length))
-                            {
-                                MapFlag.boDECHP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nDECHPPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nDECHPTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "INCHP", "INCHP".Length))
-                            {
-                                MapFlag.boINCHP = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nINCHPPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nINCHPTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "DECGAMEGOLD", "DECGAMEGOLD".Length))
-                            {
-                                MapFlag.boDECGAMEGOLD = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nDECGAMEGOLD = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nDECGAMEGOLDTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "DECGAMEPOINT", "DECGAMEPOINT".Length))
-                            {
-                                MapFlag.boDECGAMEPOINT = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nDECGAMEPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nDECGAMEPOINTTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "INCGAMEGOLD", "INCGAMEGOLD".Length))
-                            {
-                                MapFlag.boINCGAMEGOLD = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nINCGAMEGOLD = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nINCGAMEGOLDTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "INCGAMEPOINT", "INCGAMEPOINT".Length))
-                            {
-                                MapFlag.boINCGAMEPOINT = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nINCGAMEPOINT = HUtil32.Str_ToInt(HUtil32.GetValidStr3(s38, ref s38, HUtil32.Backslash), -1);
-                                MapFlag.nINCGAMEPOINTTIME = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
-                            if (s34.Equals("RUNHUMAN", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boRUNHUMAN = true;
-                                continue;
-                            }
-                            if (s34.Equals("RUNMON", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boRUNMON = true;
-                                continue;
-                            }
+                            // 以下 14 个 token 全部是凭空发明的，解析臂已移除，
+                            // 见本文件下方 §INVENTED 说明：
+                            //   NEEDSET_ON NEEDSET_OFF MUSIC EXPRATE
+                            //   PKWINLEVEL PKWINEXP PKLOSTLEVEL PKLOSTEXP
+                            //   DECHP INCHP DECGAMEGOLD DECGAMEPOINT
+                            //   INCGAMEGOLD INCGAMEPOINT
+                            // 原版解析器 B 对未识别 token 是静默忽略：
+                            //   0x776AD3  83 7D FC 00        cmp dword [ebp-4],0
+                            //   0x776AD7  0F 85 62 F5 FF FF  jne 0x77603F   ; 下一轮
+                            // 不写任何字段、不报错。
                             if (s34.Equals("NEEDHOLE", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNEEDHOLE = true;
@@ -284,27 +180,31 @@ namespace GameSvr
                                 MapFlag.boNORECALL = true;
                                 continue;
                             }
-                            if (s34.Equals("NOGUILDRECALL", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOGUILDRECALL = true;
-                                continue;
-                            }
-                            if (s34.Equals("NODEARRECALL", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNODEARRECALL = true;
-                                continue;
-                            }
-                            if (s34.Equals("NOMASTERRECALL", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOMASTERRECALL = true;
-                                continue;
-                            }
+                            // NOGUILDRECALL / NODEARRECALL / NOMASTERRECALL 同样是
+                            // 发明的（§INVENTED）。注意生产 MapInfo.txt 确实写了
+                            // 它们（22 / 24 / 24 处），但原版对它们静默忽略，所以
+                            // 线上真实行为一直是「没有效果」——移除解析臂正是与线上
+                            // 对齐，不是改变线上行为。
                             if (s34.Equals("NORANDOMMOVE", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNORANDOMMOVE = true;
                                 continue;
                             }
-                            if (s34.Equals("LimitItemMove", StringComparison.OrdinalIgnoreCase))
+                            // LimitItemMove 是一个 token 写四个字节的复合开关，
+                            // 四个偏移里三个与别的 token 共享：
+                            //   0x775A5C  C6 43 67 01  mov byte [ebx+0x67],1  ; NORECALL
+                            //   0x775A60  C6 43 68 01  mov byte [ebx+0x68],1  ; NORANDOMMOVE
+                            //   0x775A64  C6 43 6B 01  mov byte [ebx+0x6B],1  ; NOPOSITIONMOVE
+                            //   0x775A68  C6 43 6C 01  mov byte [ebx+0x6C],1  ; 自有字节
+                            //   0x775A79/7D/81/85     同四址写 0（GM toggle=0 臂）
+                            //   parser B 0x7769E8/EC/F0/F4 同样四址置 1
+                            // 四路联动已经在 3d23493 落地；这里补最后一处差异：
+                            // 原版用的是**长度 13 的前缀比较**，不是全等——
+                            //   0x7769D2  B9 0D 00 00 00  mov ecx,0xD
+                            //   0x7769D7  BA 2C 6F 77 00  mov edx,0x776F2C  ; "LimitItemMove"
+                            //   0x7769DF  E8 B0 04 D5 FF  call 0x4C6E94
+                            // 与 parser A 的 0x775A42/47/4E 同形。
+                            if (HUtil32.CompareLStr(s34, "LimitItemMove", "LimitItemMove".Length))
                             {
                                 MapFlag.boLIMITITEMMOVE = true;
                                 MapFlag.boNORECALL = true;
@@ -327,53 +227,56 @@ namespace GameSvr
                                 MapFlag.boNODRUG = true;
                                 continue;
                             }
-                            if (s34.Equals("MINE", StringComparison.OrdinalIgnoreCase))
+                            // MINE-12: 原版 MINE 走的是**长度 4 的前缀比较**，不是全等。
+                            //   0x7763C9  B9 04 00 00 00     mov ecx,4
+                            //   0x7763CE  BA A4 6C 77 00     mov edx,0x776CA4   ; "MINE"
+                            //   0x7763D6  E8 B9 0A D5 FF     call 0x4C6E94
+                            //   0x7763DF  C6 43 6A 01        mov byte [ebx+0x6A],1
+                            // 比较器 0x4C6E94 只比前 ecx 个字符，且要求
+                            // ecx <= Len(两侧)，逐字符过 UpCase：
+                            //   0x4C6EC9  Length(a); cmp esi,eax; jg  fail   ; N <= Len(a)
+                            //   0x4C6ED5  Length(b); cmp esi,eax; jg  fail   ; N <= Len(b)
+                            //   0x4C6EE1  B3 01              mov bl,1
+                            //   0x4C6EEF  8A 44 38 FF        mov al,[a+edi-1]
+                            //   0x4C6EF3  E8 DC C5 F3 FF     call 0x4034D4    ; UpCase
+                            //   0x4C6EFC  8A 44 38 FF        mov al,[b+edi-1]
+                            //   0x4C6F00  E8 CF C5 F3 FF     call 0x4034D4
+                            //   0x4C6F06  3A D0 / 74 04      cmp dl,al / je 继续
+                            //   0x4C6F0A  33 DB              xor ebx,ebx      ; 失配
+                            //   0x4C6F0F  4E / 75 DA         dec esi / jne 循环
+                            // 而 0x4034D4 是 UpCase（cmp al,'a' / jb / cmp al,'z' /
+                            // ja / sub al,0x20），所以**大小写不敏感**——台账
+                            // MINE-12 写的「CASE-SENSITIVE」与字节矛盾，C# 原来的
+                            // OrdinalIgnoreCase 在这一点上是对的，错的是全等。
+                            // HUtil32.CompareLStr 与 0x4C6E94 逐条同构。
+                            // 直接后果：地图里写 MINE2 在原版命中 MINE、置 +0x6A=1。
+                            if (HUtil32.CompareLStr(s34, "MINE", "MINE".Length))
                             {
                                 MapFlag.boMINE = true;
                                 continue;
                             }
-                            if (s34.Equals("MINE2", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boMINE2 = true;
-                                continue;
-                            }
-                            if (s34.Equals("NOTHROWITEM", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOTHROWITEM = true;
-                                continue;
-                            }
-                            if (s34.Equals("NODROPITEM", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNODROPITEM = true;
-                                continue;
-                            }
+                            // MINE-01: MINE2 是凭空发明的，已移除。全镜像三种编码
+                            // 各 0 命中（Delphi AnsiString 记录 / 裸 ASCII 大小写
+                            // 不敏感 / UTF-16LE 大小写不敏感；同一扫描器对 MINE、
+                            // pickup、NORECALL 等真 token 各命中 2 条 Delphi 记录，
+                            // 即两个 token 池各一条）。配置里写 MINE2 在原版会被
+                            // 上面那条长度 4 的前缀比较命中成 MINE。不要重新接线。
+                            //
+                            // NOTHROWITEM / NODROPITEM 也是发明的（§INVENTED）。
                             if (s34.Equals("NOPOSITIONMOVE", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNOPOSITIONMOVE = true;
                                 continue;
                             }
-                            if (s34.Equals("NOHORSE", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOHORSE = true;
-                                continue;
-                            }
+                            // NOHORSE 是发明的（§INVENTED）；真 token 是下面的
+                            // NORIDE（池 B 独有，0x776E8C，写 [flag+0x85]）。
                             if (s34.Equals("NORIDE", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNORIDE = true;
                                 continue;
                             }
-                            if (s34.Equals("NOCHAT", StringComparison.OrdinalIgnoreCase))
-                            {
-                                MapFlag.boNOCHAT = true;
-                                continue;
-                            }
-                            if (HUtil32.CompareLStr(s34, "KILLFUNC", "KILLFUNC".Length))
-                            {
-                                MapFlag.boKILLFUNC = true;
-                                HUtil32.ArrestStringEx(s34, '(', ')', ref s38);
-                                MapFlag.nKILLFUNCNO = HUtil32.Str_ToInt(s38, -1);
-                                continue;
-                            }
+                            // NOCHAT / KILLFUNC 也是发明的（§INVENTED）。生产
+                            // MapInfo.txt 里有 2 处 KILLFUNC(1)，原版静默忽略。
                             if (s34.Equals("NOC2C", StringComparison.OrdinalIgnoreCase))
                             {
                                 MapFlag.boNOC2C = true;
@@ -392,18 +295,49 @@ namespace GameSvr
                                 MapFlag.boRUNFLAG = HUtil32.Str_ToInt(s38, 0) != 0;
                                 continue;
                             }
-                            // NOHUMNOMON REMOVED (2026-08-09, Tier-1 negative
-                            // evidence). 战神 has no such map flag: an image-wide
-                            // byte scan for NOHUMNOMON / NOHUMNOMONSTER / NOHUM /
-                            // NOMON / NoHumNoMon / NOHUMANNOMON / NOHUM_NOMON
-                            // returns 0 hits, and the complete map-flag token
-                            // census -- the two parallel literal blocks at
-                            // 0x775BFC and 0x776B20, 46 tokens each (SAFE,
-                            // NOTHROUGH, DARK, FIGHT, FIGHT3, FREEPK, DAY, QUIZ,
-                            // DARE, MONATTACK, ... LIMITHEROLEVEL, NOMAGIC,
-                            // TRIGGERBOMB, FOXMAP, ...) -- contains no equivalent.
-                            // Parsing it let a map file silently suppress monster
-                            // regeneration in a way native never does.
+                            // §INVENTED — 本解析器移除的 26 个凭空发明 token
+                            // -----------------------------------------------
+                            // 判定方法：对每个 token 做全镜像三编码扫描
+                            //   (1) Delphi AnsiString 记录 FF FF FF FF | len32 |
+                            //       chars，chars 大小写不敏感比较
+                            //   (2) 裸 ASCII 大小写不敏感
+                            //   (3) UTF-16LE 大小写不敏感
+                            // 三者皆 0 才判发明。同一扫描器对真 token（MINE /
+                            // pickup / NORECALL / LimitItemMove / LIMITHEROLEVEL
+                            // / UNIFIEDLEVEL / LIMITPLAYERLEVEL / MapSign /
+                            // MAPFIREWALLBURN / FLYDROPITEM）各命中恰好 2 条
+                            // Delphi 记录（两个 token 池各一条），说明 0 是真的
+                            // 缺席而不是扫描器坏了。
+                            //
+                            // 名单（26 个）：MINE2 NOHUMNOMON MUSIC EXPRATE
+                            //   PKWINLEVEL PKWINEXP PKLOSTLEVEL PKLOSTEXP
+                            //   DECHP INCHP DECGAMEGOLD DECGAMEPOINT
+                            //   INCGAMEGOLD INCGAMEPOINT RUNHUMAN RUNMON
+                            //   NOGUILDRECALL NODEARRECALL NOMASTERRECALL
+                            //   NOTHROWITEM NODROPITEM NOHORSE NOCHAT
+                            //   KILLFUNC NEEDSET_ON NEEDSET_OFF
+                            //
+                            // 注意 PICKUP **不是**发明：原生 token 是小写
+                            // pickup（0x775FCC / 0x776F44），大小写不敏感能匹配。
+                            // EXPRATE 的 3 处裸 ASCII 命中（0x6AD5F6 /
+                            // 0x72C759 / 0x7D0618）全是 MultiTempExpRate 与
+                            // MonExpRate 的子串，不是独立 token。
+                            //
+                            // 为什么不是无害冗余：原版解析器 B 对未识别 token
+                            // 静默忽略（0x776AD3 cmp dword[ebp-4],0 / 0x776AD7
+                            // jne 0x77603F 直接进下一轮），既不写字段也不报错。
+                            // 所以 DECHP(10/5) 在原版毫无效果，在 C# 却真的开启
+                            // 掉血——这是会改变玩法的行为分歧。
+                            //
+                            // TMapFlag 上对应的字段暂时保留（沿用 NOHUMNOMON 的
+                            // 既有先例）：解析臂一去，它们永远停在默认值，消费点
+                            // 变成不可达死代码，可观测行为已与原版一致。字段与
+                            // 消费点的物理删除留给能编译的集成方，因为
+                            // MovementCollisionCheck / DynRoomFlagMapperCheck /
+                            // NativeCastleWarFiveCheck 三个审计工具直接引用
+                            // boRUNHUMAN / boRUNMON / boNOHORSE / boNOHUMNOMON，
+                            // 删字段会让它们编译不过（BUILD-ERROR 是盲区，比
+                            // FAIL 更糟）。**不要重新接线。**
                             if (!string.IsNullOrEmpty(s34) && s34[0] == 'L')
                             {
                                 MapFlag.nL = HUtil32.Str_ToInt(s34.Substring(1, s34.Length - 1), 1);
@@ -591,11 +525,86 @@ namespace GameSvr
                 mapFlag.boMONATTACK = true;
                 return true;
             }
-            if (token.Equals("LIMITHEROLEVEL", StringComparison.OrdinalIgnoreCase))
+            // MFLG-27: 数值型地图标记。原版这一族的形状完全一致——
+            //   mov ecx,<literal len> / mov edx,<literal> / call 0x4C6E94  ; 前缀比较
+            //   push &out2 / push &out1 / mov ecx,')' / mov edx,'(' /
+            //   call 0x4C6964                                             ; 取括号参数
+            //   xor edx,edx / call 0x40CA18                               ; StrToIntDef(...,0)
+            //   mov word/dword [ebx+off], ax/eax
+            // 注意比较器必须是**前缀**：token 串本身带着 "(30)" 后缀，
+            // 全等比较对 LIMITHEROLEVEL(30) 一次都匹配不上——所以旧代码
+            // 不只是丢了阈值，带参数的写法根本没被识别过。
+            //   LIMITHEROLEVEL   len 14  +0xC0 word
+            //     A 0x775831 mov edx,0x775F10 / 0x775838 call 0x4C6E94
+            //       0x775869 66 89 83 C0 00 00 00  mov word [ebx+0xC0],ax
+            //       0x77587D                       mov word [ebx+0xC0],0   (toggle=0)
+            //     B 0x77682C 66 89 83 C0 00 00 00  mov word [ebx+0xC0],ax
+            //     读取点 0x690315 cmp word[edx+0xC0],0 / jbe 跳过；
+            //            0x690339 cmp cx,word[edx+0xC0] / jbe 跳过；
+            //            0x690342 mov cx,word[edx+0xC0]  ——数值比较无疑。
+            if (HUtil32.CompareLStr(token, "LIMITHEROLEVEL", "LIMITHEROLEVEL".Length))
             {
-                mapFlag.boLIMITHEROLEVEL = true;
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.LimitHeroLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
                 return true;
             }
+            //   LIMITPLAYERLEVEL len 16  +0xBE word
+            //     A 0x77580A 66 89 83 BE 00 00 00 / 0x77581E 写 0
+            //     B 0x7767E6 66 89 83 BE 00 00 00
+            //     读取点 0x69032C cmp cx,word[edx+0xBE]（与 +0xC0 同一函数）
+            if (HUtil32.CompareLStr(token, "LIMITPLAYERLEVEL", "LIMITPLAYERLEVEL".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.LimitPlayerLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+            //   UNIFIEDLEVEL     len 12  +0xBC word
+            //     A 0x7757AB 66 89 83 BC 00 00 00 / 0x7757BF 写 0
+            //     B 0x7767A0 66 89 83 BC 00 00 00
+            if (HUtil32.CompareLStr(token, "UNIFIEDLEVEL", "UNIFIEDLEVEL".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.UnifiedLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+            //   MapSign          len 7   +0x62 word
+            //     A 0x775407 66 89 43 62 / 0x775418 写 0
+            //     B 0x776514 66 89 43 62
+            if (HUtil32.CompareLStr(token, "MapSign", "MapSign".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.MapSign = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+            //   MAPFIREWALLBURN  len 15  +0x88 dword，**参数要乘 1000**：
+            //     A 0x7753A4 69 C0 E8 03 00 00  imul eax,eax,0x3E8
+            //       0x7753AA 89 83 88 00 00 00  mov dword [ebx+0x88],eax
+            //       0x7753BD xor eax,eax / 0x7753BF 同址写 0（toggle=0）
+            //     B 0x7764C9 imul eax,eax,0x3E8 / 0x7764CF mov dword[ebx+0x88],eax
+            //   即配置写的是秒，字段存的是毫秒。MFLG 报告漏了这次 imul。
+            if (HUtil32.CompareLStr(token, "MAPFIREWALLBURN", "MAPFIREWALLBURN".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(token, '(', ')', ref value);
+                mapFlag.MapFireWallBurnMs =
+                    unchecked(HUtil32.Str_ToInt(value, 0) * 1000);
+                return true;
+            }
+            // FLYDROPITEM(+0xB4) 故意不加字段：它**不是数值标记**。
+            //   0x775464 mov esi,[ebx+0xB4] / test esi,esi
+            //   0x775470 mov eax,[0x49EB3C] / 0x775475 call 0x404660  ; 惰性 new
+            //   0x49EB3C -> VMT 0x49EB88，vmtClassName（VMT-0x2C）= 'TMirStringList'
+            //   0x775492 mov cl,0x2F ('/') / 0x775497 call 0x4C6AEC   ; 按 '/' 切分
+            //   0x7754B8 call [ecx+0x38]                              ; TStrings.Add
+            //   0x775486 / 0x7754DE call [edx+0x44]                   ; Clear
+            //   0x7754E7 / 0x775514 call 0x414C24                     ; FreeAndNil
+            // 也就是说 FLYDROPITEM(a/b/c) 存的是一张斜杠分隔的字符串表。
+            // MFLG 报告把它归进「5 个数值 flag」是错的。表项语义（物品名？
+            // 编号？）尚未取证，按规矩标 BLOCKED，不臆造字段类型。
             // DORMANT gate: 0 consumers in 战神 binary (image-wide scan). Parser recognizes
             // the token to match native domain, but no runtime code reads this field.
             if (token.Equals("NOMAGIC", StringComparison.OrdinalIgnoreCase))

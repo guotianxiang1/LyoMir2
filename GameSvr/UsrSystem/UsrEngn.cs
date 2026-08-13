@@ -89,6 +89,12 @@ namespace GameSvr
         private const int NativeMagicTowerDeferredSpawnBudget = 5;
         private const int NativeMagicTowerRuntimeBudgetCheckInterval = 20;
         private const int NativeMagicTowerRuntimeTimeBudget = 25;
+        /// <summary>0x67C252 <c>mov edi,0x50</c> — generators examined per regen pass.</summary>
+        private const int NativeMonGenScanPerTick = 0x50;
+        /// <summary>0x67CAAC <c>cmp dword [ebp-0x10],0x19</c> — monsters one worker call may add.</summary>
+        private const int NativeMonGenSpawnBudget = 0x19;
+        /// <summary>0x67CA2B <c>cmp dword [ebx+0x38],5</c> — failures before placement relaxes.</summary>
+        private const int NativeMonGenFailRelaxThreshold = 5;
         private int dwProcessMapDoorTick;
         public int dwProcessMerchantTimeMax;
         public int dwProcessMerchantTimeMin;
@@ -396,6 +402,22 @@ namespace GameSvr
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// 战神 <c>dword[self+0x474]</c>, the monster's own drop table.  It is a straight
+        /// copy of the template's list pointer — <c>0x71EB5E mov eax,[esi+0x48] /
+        /// 0x71EB61 mov [ebx+0x474],eax</c> in the template-to-instance blit, whose
+        /// neighbours (<c>[esi+0x3A]→[ebx+0x24E]</c>, <c>[esi+0x3C]→[ebx+0x244]</c>)
+        /// identify esi as the TMonInfo record — so the C# equivalent is the shared
+        /// <c>TMonInfo.ItemList</c> reference, and a nil pointer is a null list, not an
+        /// empty one.  The constructor leaves it nil (<c>0x71D870 mov [edi+0x474],eax</c>
+        /// with eax just zeroed at 0x71D86E).
+        /// </summary>
+        public bool NativeHasMonsterDropTable(string monsterName)
+        {
+            return TryGetMonsterInfo(monsterName, out var monster)
+                   && monster.ItemList != null;
         }
 
         private static void ReleaseUnpublishedObject(TBaseObject baseObject)
@@ -1654,82 +1676,78 @@ namespace GameSvr
                 if ((HUtil32.GetTickCount() - dwRegenMonstersTick) > M2Share.g_Config.dwRegenMonstersTime)
                 {
                     dwRegenMonstersTick = HUtil32.GetTickCount();
-                    if (m_nCurrMonGen < m_MonGenList.Count)
+                    // 战神 ProcessMon sub_67C150 Phase-B, 0x67C245-0x67C2C1.  The whole
+                    // block is a cursor scan over up to 80 generators per pass, not a
+                    // single generator per pass:
+                    //   67C248  8B 40 2C        mov eax,[self+0x2C]   ; MonGenList
+                    //   67C24B  E8 40 A8 D8 FF  call 0x406A90         ; @DynArrayHigh
+                    //   67C250  8B D8           mov ebx,eax           ; ebx = Count-1
+                    //   67C252  BF 50 00 00 00  mov edi,0x50          ; 80 iterations
+                    //   67C25A  3B 58 48        cmp ebx,[self+0x48]   ; High vs cursor
+                    //   67C25D  7D 0A           jge 0x67C269
+                    //   67C264  89 50 48        mov [self+0x48],edx   ; wrap: cursor = 0
+                    //   67C267  EB 5A           jmp 0x67C2C3          ;   ...and stop
+                    //   67C275  8B 04 82        mov eax,[edx+eax*4]   ; gen = list[cursor]
+                    //   67C27A  8B 46 24 / 3B 46 2C / 7E 38  nCount > nActiveCount
+                    //   67C282  80 7E 0C 00 / 74 32          sMonName length byte
+                    //   67C288  83 7E 1C 00 / 74 2C          template record resolved
+                    //   67C28E  8B 45 EC / 2B 46 34 / 3B 46 30 / 76 21   elapsed > ZenTime
+                    //   67C2AB  E8 30 07 00 00  call 0x67C9E0         ; worker
+                    //   67C2B0  84 C0 / 74 0F   test al,al / je 0x67C2C3
+                    //   67C2B7  89 46 34        mov [gen+0x34],eax    ; dwStartTick = now
+                    //   67C2BD  FF 40 48        inc dword [self+0x48] ; cursor++
+                    //   67C2C0  4F / 75 94      dec edi / jne 0x67C257
+                    //
+                    // Three things the old one-generator-per-pass shape got wrong and
+                    // this restores: the cursor advances once per generator examined
+                    // (it used to advance twice on a successful regen and once
+                    // otherwise); a worker returning false leaves the scan WITHOUT
+                    // advancing the cursor and WITHOUT refreshing dwStartTick, so the
+                    // same generator is retried immediately next pass; and running off
+                    // the end resets the cursor and ends the pass rather than wrapping
+                    // into a second lap.
+                    //
+                    // [ebp-0x14] is one GetTickCount from 0x67C198 reused at 0x67C28E
+                    // and 0x67C2B4, so the scan reads a single "now".
+                    for (var nGenScan = 0; nGenScan < NativeMonGenScanPerTick; nGenScan++)
                     {
-                        MonGen = m_MonGenList[m_nCurrMonGen];
-                    }
-                    else if (m_MonGenList.Count > 0)
-                    {
-                        MonGen = m_MonGenList[0];
-                    }
-                    if (m_nCurrMonGen < m_MonGenList.Count - 1)
-                    {
-                        m_nCurrMonGen++;
-                    }
-                    else
-                    {
-                        m_nCurrMonGen = 0;
-                    }
-                    if (MonGen != null && !string.IsNullOrEmpty(MonGen.sMonName) && !M2Share.g_Config.boVentureServer)
-                    {
-                        var nTemp = HUtil32.GetTickCount() - MonGen.dwStartTick;
-                        // ✅ SPAWN-32: Native uses dwZenTime directly without player-count scaling.
-                        // Tier-1 evidence at 0x67C28E-0x67C297:
-                        //   67C28E  mov eax,[ebp-0x14]     ; current tick
-                        //   67C291  sub eax,[esi+0x34]     ; subtract dwStartTick
-                        //   67C294  cmp eax,[esi+0x30]     ; compare with [MonGen+0x30]=dwZenTime
-                        //   67C297  jbe 0x67C2BA           ; skip spawn if elapsed <= dwZenTime
-                        // No function call, no x87 instructions, no player-count scaling.
-                        if (MonGen.dwStartTick == 0 || nTemp > MonGen.dwZenTime)
+                        if (m_MonGenList.Count - 1 < m_nCurrMonGen)
                         {
-                            var nGenCount = MonGen.nActiveCount;
-                            var boRegened = true;
-                            // ✅ 战神字节证据 (Tier-1)。EA: ProcessMon sub_67C150 Phase-2 @0x67C27A-0x67C297:
-                            //   67C278  mov   esi,eax                 ; ESI = MonGen 记录(round-robin 取自 [+0x48] 游标)
-                            //   67C27A  mov   eax,[esi+0x24]          ; <== 想要数 nCount
-                            //   67C27D  cmp   eax,[esi+0x2C]          ; <== 存活数 nActiveCount
-                            //   67C280  jle   0x67C2BA                ; want <= alive -> 本 tick 不刷
-                            //   67C282  cmp byte [esi+0x0C],0 / je    ; sMonName 非空
-                            //   67C28E  mov eax,[ebp-0x14] ; sub eax,[esi+0x34] ; cmp eax,[esi+0x30] ; jbe  ; now-start > ZenTime
-                            //   67C2AB  call  sub_67C9E0              ; regen worker —— 【不接收数量参数】
-                            // 目标数就是 [gen+0x24] 的【原值】,与存活数【裸整数比较】:
-                            // 没有 /10.0、没有 Round、没有 _MAX 钳位,整段 0x67C27A-0x67C297 无一条 x87 指令。
-                            // worker sub_67C9E0 只扫 CertList([gen+0x3C]) 找空位逐格补齐
-                            // (@0x67CA15 找空位 → @0x67CA3B call sub_679F8C 工厂 → @0x67CA9B inc nActiveCount)。
-                            // => nMonGenRate 这个比率缩放在战神【不存在】,是 ref 分支特性。
-                            //
-                            // DROP-30: 移除非原生的 nMonGenRate 缩放，改用原版的直接整数比较。
-                            // 验证: _verify_mongen_rate.py 确认 EA 0x67C27A-0x67C297 无 x87/div 指令。
-                            // 原版逻辑: if (nCount > nActiveCount) spawn (nCount - nActiveCount)
-                            var nTargetCount = MonGen.nCount;
-                            // The boNOHUMNOMON half of this gate is GONE (Tier-1
-                            // negative evidence): 战神 has no such map flag —
-                            // 0 byte hits image-wide for every spelling, and the
-                            // complete 46-token map-flag census at 0x775BFC /
-                            // 0x776B20 has no equivalent. Suppressing regeneration
-                            // on an empty map is not native behaviour, so the flag
-                            // could only ever make C# spawn FEWER monsters than the
-                            // original. The map==null guard stays: it is a C#
-                            // null-safety necessity, not a behavioural gate.
-                            var map = M2Share.MapManager.FindMap(MonGen.sMapName);
-                            boCanCreate = map != null;
-                            if (nTargetCount > nGenCount && boCanCreate)
+                            m_nCurrMonGen = 0;
+                            break;
+                        }
+                        MonGen = m_MonGenList[m_nCurrMonGen];
+                        // 0x67C288 `cmp dword [esi+0x1C],0` is the resolved template
+                        // record, not the range: sub_679F8C dispatches on
+                        // `byte[edi+0x14]` through the race jump table at 0x67A115
+                        // (0x67A008-0x67A01F) with edi = ecx = [gen+0x1C], while the
+                        // coordinate jitter uses [gen+0x20] instead.  nRace is what
+                        // Initialize() resolves that pointer into.
+                        if (MonGen != null
+                            && MonGen.nCount > MonGen.nActiveCount
+                            && !string.IsNullOrEmpty(MonGen.sMonName)
+                            && MonGen.nRace > 0
+                            && !M2Share.g_Config.boVentureServer
+                            && (MonGen.dwStartTick == 0
+                                || dwCurrentTick - MonGen.dwStartTick > MonGen.dwZenTime))
+                        {
+                            // 战神 resolves the map once at load time into [gen+0x00];
+                            // C# looks it up by name, so the null test is a C#
+                            // necessity rather than a native gate and sits after the
+                            // four native gates.
+                            boCanCreate =
+                                M2Share.MapManager.FindMap(MonGen.sMapName) != null;
+                            if (boCanCreate)
                             {
-                                boRegened = RegenMonsters(MonGen, nTargetCount - nGenCount);
-                            }
-                            if (boRegened)
-                            {
-                                MonGen.dwStartTick = HUtil32.GetTickCount();
-                                if (m_nCurrMonGen < m_MonGenList.Count - 1)
+                                if (!RegenMonsters(MonGen,
+                                        MonGen.nCount - MonGen.nActiveCount))
                                 {
-                                    m_nCurrMonGen++;
+                                    break;
                                 }
-                                else
-                                {
-                                    m_nCurrMonGen = 0;
-                                }
+                                MonGen.dwStartTick = dwCurrentTick;
                             }
                         }
+                        m_nCurrMonGen++;
                     }
                 }
                 
@@ -2428,8 +2446,9 @@ namespace GameSvr
             for (var i = 0; i < m_PlayObjectList.Count; i++)
             {
                 PlayObject = m_PlayObjectList[i];
+                // 0x652CB2 3B 45 10 cmp eax,[ebp+0x10] / 0x652CB5 7F 32 jg skip: include abs==nWide
                 if (!PlayObject.m_boGhost && PlayObject.m_PEnvir == pMap && PlayObject.m_boBanShout &&
-                    Math.Abs(PlayObject.m_nCurrX - nX) < nWide && Math.Abs(PlayObject.m_nCurrY - nY) < nWide)
+                    Math.Abs(PlayObject.m_nCurrX - nX) <= nWide && Math.Abs(PlayObject.m_nCurrY - nY) <= nWide)
                     PlayObject.SendMsg(null, wIdent, 0, btFColor, btBColor, 0, sMsg);
             }
         }
@@ -2461,20 +2480,33 @@ namespace GameSvr
                             TUserItem UserItem = null;
                             if (CopyToUserItemFromName(MonItem.ItemName, ref UserItem))
                             {
-                                UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
-                                var StdItem = GetStdItem(UserItem.wIndex);
-                                if (StdItem == null) continue;
-                                if (M2Share.RandomNumber.Random(M2Share.g_Config.nMonRandomAddValue) == 0)
-                                {
-                                    StdItem.RandomUpgradeItem(UserItem);
-                                }
-                                if (new ArrayList(new byte[] { 15, 19, 20, 21, 22, 23, 24, 26 }).Contains(StdItem.StdMode))
-                                {
-                                    if (StdItem.Shape == 130 || StdItem.Shape == 131 || StdItem.Shape == 132)
-                                    {
-                                        StdItem.RandomUpgradeUnknownItem(UserItem);
-                                    }
-                                }
+                                // 战神's only per-item initialisation hook on the drop
+                                // path is the freshly-built object's virtual +0x28,
+                                // invoked once with edx=0 at 0x71FDA2 (this loop) and
+                                // 0x71FBD5 (the exclusive chain):
+                                //   71FD9B  33 D2              xor edx,edx
+                                //   71FD9D  8B 45 D8           mov eax,[ebp-0x28]
+                                //   71FDA0  8B 08              mov ecx,[eax]
+                                //   71FDA2  FF 51 28           call dword [ecx+0x28]
+                                // For the base item class that slot is sub_783EFC, and
+                                // sub_783EFC is exactly this line:
+                                //   783F05  B8 50 00 00 00     mov eax,0x50      ; 80
+                                //   783F0A  E8 3D FC C7 FF     call 0x403B4C     ; Random
+                                //   783F0F  83 C0 14           add eax,0x14      ; +20
+                                //   783F18  0F B7 43 28        movzx eax,word [ebx+0x28] ; DuraMax
+                                //   783F22  D8 35 38 3F 78 00  fdiv dword [0x783F38]     ; 100.0f
+                                //   783F28  DE C9              fmulp st(1)
+                                //   783F2A  E8 45 F6 C7 FF     call 0x403574     ; @ROUND
+                                //   783F2F  66 89 43 26        mov word [ebx+0x26],ax    ; Dura
+                                // sub_783EFC sits in VMT slot +0x28 of 116 item classes;
+                                // every one of the 116 dword references passes the Delphi
+                                // self-pointer test dword[VMT-0x4C]==VMT and the
+                                // slot-offset histogram over all of them is {0x28: 116}.
+                                // 0x71FD9B xor edx,edx / 0x71FDA2 call [ecx+0x28].
+                                // Base +0x28 is 783EFC (Random(80) dura). Equipment
+                                // overrides add Random(10)/Random(9) and, on 0, the
+                                // extra-attr body. Pile +0x28 is 7882B4 C3 (no draw).
+                                NativeItemPlus28.ApplyOnDrop(UserItem, GetStdItem(UserItem.wIndex));
                                 mon.m_ItemList.Add(UserItem);
                             }
                         }
@@ -2532,15 +2564,28 @@ namespace GameSvr
             switch (DefMsg.Ident)
             {
                 case Grobal2.CM_SPELL:
-                    if (M2Share.g_Config.boSpellSendUpdateMsg) 
+                    // Native handler 0x6DA04A hands four separate header fields to the
+                    // spell worker 0x6BC510:
+                    //   0x6DA0C1  0F B7 40 06  movzx eax, word [eax+6]   ; Param  -> pushed 1st
+                    //   0x6DA0C9  0F B7 40 08  movzx eax, word [eax+8]   ; Tag    -> pushed 2nd
+                    //   0x6DA0D1  8B 08        mov   ecx, [eax]          ; Recog  -> ECX
+                    //   0x6DA0D6  66 8B 50 0A  mov   dx,  word [eax+0xA] ; Series -> EDX
+                    // and each role is pinned inside 0x6BC510: EDX reaches the
+                    // "skill known / area allowed" gate at 0x6BC541-0x6BC546, so Series is
+                    // the skill index; Param and Tag reach GetNextDirection at 0x6BC637
+                    // (ECX) / 0x6BC633 (stack) alongside CurrX 0x12C and CurrY 0x130 at
+                    // 0x6BC640 / 0x6BC63A, so they are target X and Y; ECX is compared
+                    // against the map cells' object pointers at 0x76CA42 and then
+                    // dereferenced for target.CurrX at 0x6BC66B, so Recog is the target.
+                    if (M2Share.g_Config.boSpellSendUpdateMsg)
                     {
-                        PlayObject.SendUpdateMsg(PlayObject, DefMsg.Ident, DefMsg.Tag, HUtil32.LoWord(DefMsg.Recog),
-                            HUtil32.HiWord(DefMsg.Recog), HUtil32.MakeLong(DefMsg.Param, DefMsg.Series), "");
+                        PlayObject.SendUpdateMsg(PlayObject, DefMsg.Ident, DefMsg.Series,
+                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "");
                     }
                     else
                     {
-                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Tag, HUtil32.LoWord(DefMsg.Recog),
-                            HUtil32.HiWord(DefMsg.Recog), HUtil32.MakeLong(DefMsg.Param, DefMsg.Series), "");
+                        PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series,
+                            DefMsg.Param, DefMsg.Tag, DefMsg.Recog, "");
                     }
                     break;
                 case Grobal2.CM_QUERYUSERNAME:
@@ -2549,7 +2594,6 @@ namespace GameSvr
                 case Grobal2.CM_DROPITEM:
                 case Grobal2.CM_TAKEONITEM:
                 case Grobal2.CM_TAKEOFFITEM:
-                case Grobal2.CM_1005:
                 case Grobal2.CM_MERCHANTDLGSELECT:
                 case Grobal2.CM_MERCHANT_QUERY:
                 case Grobal2.CM_PILEUPITEM:
@@ -2569,10 +2613,6 @@ namespace GameSvr
                 case Grobal2.CM_USERSTORAGEITEM:
                 case Grobal2.CM_USERTAKEBACKSTORAGEITEM:
                 case Grobal2.CM_USERMAKEDRUGITEM:
-                case Grobal2.CM_GUILDADDMEMBER:
-                case Grobal2.CM_GUILDDELMEMBER:
-                case Grobal2.CM_GUILDUPDATENOTICE:
-                case Grobal2.CM_GUILDUPDATERANKINFO:
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series, DefMsg.Recog, DefMsg.Param, DefMsg.Tag,
                             sMsg, payload);
                     break;
@@ -2600,6 +2640,7 @@ namespace GameSvr
                 case Grobal2.CM_TWINHIT:
                 case Grobal2.CM_WIDEHIT:
                 case Grobal2.CM_FIREHIT:
+                case Grobal2.CM_3037:
                     // The shared native action handler at 0x6D9EAF takes X, Y and the
                     // direction from three separate header fields:
                     //   0x6D9EE9  0F B7 40 06  movzx eax, word [eax+6]   ; Param  -> Y
@@ -2613,15 +2654,24 @@ namespace GameSvr
                     // This used to read Y out of the high word of Recog and the
                     // direction out of Tag, which only worked because GameGate-CS
                     // repacked the header to suit; that repack is gone.
+                    //
+                    // CM_3037 (3027) has its own native arm at 0x6D9F4B which is
+                    // byte-identical to 0x6D9EAF apart from one instruction: where
+                    // 0x6D9EFF `66 8B 50 04 mov dx,[msg+4]` hands 0x6EC078 the Ident,
+                    // 0x6D9F9B `66 8B 50 08 mov dx,[msg+8]` hands it the Tag. Tag is
+                    // therefore the action selector for 3027 and has to survive the
+                    // hop into the player message queue.
                     if (M2Share.g_Config.boActionSendActionMsg)
                     {
                         PlayObject.SendActionMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
-                            DefMsg.Recog, DefMsg.Param, 0, "");
+                            DefMsg.Recog, DefMsg.Param,
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
                     }
                     else
                     {
                         PlayObject.SendMsg(PlayObject, DefMsg.Ident, DefMsg.Series & 7,
-                            DefMsg.Recog, DefMsg.Param, 0, "");
+                            DefMsg.Recog, DefMsg.Param,
+                            DefMsg.Ident == Grobal2.CM_3037 ? (int)DefMsg.Tag : 0, "");
                     }
                     break;
                 case Grobal2.CM_SAY:
@@ -2711,15 +2761,17 @@ namespace GameSvr
         
         
         private TBaseObject AddBaseObject(string sMapName, short nX, short nY,
-            int nMonRace, string sMonName, bool initializeMonsterScript = true)
+            int nMonRace, string sMonName, bool initializeMonsterScript = true,
+            bool ignoreCellBlockers = false)
         {
             return AddBaseObject(M2Share.MapManager.FindMap(sMapName), nX, nY,
-                nMonRace, sMonName, initializeMonsterScript);
+                nMonRace, sMonName, initializeMonsterScript,
+                ignoreCellBlockers: ignoreCellBlockers);
         }
 
         private TBaseObject AddBaseObject(Envirnoment map, short nX, short nY,
             int nMonRace, string sMonName, bool initializeMonsterScript = true,
-            bool exactPosition = false)
+            bool exactPosition = false, bool ignoreCellBlockers = false)
         {
             TBaseObject result = null;
             TBaseObject Cert = null;
@@ -3054,8 +3106,13 @@ namespace GameSvr
                     n1C = 0;
                     while (true)
                     {
+                        // 0x77834B `mov al,[ebp+0xC] / push eax` feeds CanWalk
+                        // sub_777EF8, whose 0x777F70 `cmp byte [ebp+8],0 / jne`
+                        // short-circuits the cell's object scan.  The generator raises
+                        // it after five consecutive failures; every other caller
+                        // passes 0.
                         if (!Cert.m_PEnvir.CanWalk(Cert.m_nCurrX,
-                                Cert.m_nCurrY, false))
+                                Cert.m_nCurrY, ignoreCellBlockers))
                         {
                             if (exactPosition) break;
                             if (Cert.m_PEnvir.wWidth - n24 - 1 > Cert.m_nCurrX)
@@ -3185,7 +3242,7 @@ namespace GameSvr
 
 
         private TBaseObject CreateGeneratedMonster(MonGenInfo monGen, short x,
-            short y)
+            short y, bool ignoreCellBlockers = false)
         {
             // SPAWN-15: Check capacity before spawning (native slot check at 0x67CA15).
             // Native: fixed-size array with NULL check: cmp dword [eax+edi*4],0
@@ -3198,7 +3255,8 @@ namespace GameSvr
             }
 
             var cert = AddBaseObject(monGen.sMapName, x, y, monGen.nRace,
-                monGen.sMonName, false);
+                monGen.sMonName, ignoreCellBlockers: ignoreCellBlockers,
+                initializeMonsterScript: false);
             if (cert == null) return null;
             var mapPublication = CaptureMapPublication(cert);
 
@@ -3257,41 +3315,91 @@ namespace GameSvr
         {
             const string sExceptionMsg = "[Exception] TUserEngine::RegenMonsters";
             var result = true;
-            var dwStartTick = HUtil32.GetTickCount();
             try
             {
                 if (MonGen.nRace > 0)
                 {
-                    short nX;
-                    short nY;
-                    if (M2Share.RandomNumber.Random(100) < MonGen.nMissionGenRate)
+                    // 战神 spawns one monster per iteration with one coordinate jitter
+                    // each, and nothing else.  The jitter lives in the factory
+                    // sub_679F8C, whose first two Random calls are the only ones on the
+                    // spawn path before the per-race body rolls:
+                    //   00679FBD  85 F6              test esi,esi          ; range
+                    //   00679FC1  8B C6 / 03 C0 / 40 mov eax,esi / add eax,eax / inc eax
+                    //   00679FC9  8B 45 F4           mov eax,[ebp-0xC]     ; 2*range+1
+                    //   00679FCC  E8 7B 9B D8 FF     call 0x403B4C
+                    //   00679FD1  03 45 14 / 2B C6   add eax,[ebp+0x14] / sub eax,esi
+                    //   00679FD9  8B 45 F4           mov eax,[ebp-0xC]
+                    //   00679FDC  E8 6B 9B D8 FF     call 0x403B4C
+                    //   00679FE1  03 45 10 / 2B C6   add eax,[ebp+0x10] / sub eax,esi
+                    // i.e. base + Random(2r+1) - r, x first then y, which is what the two
+                    // lines below compute.
+                    //
+                    // Removed with this commit: a `Random(100) < nMissionGenRate` gate
+                    // selecting a "cluster" branch, and that branch's two Random(20) - 10
+                    // per-monster offsets.  Neither exists natively.  The regen worker
+                    // sub_67C9E0 (0x67C9E0-0x67CC74) and ProcessMonsters sub_67C150
+                    // (0x67C150-0x67C2EA) each contain ZERO Random call sites by
+                    // full-image E8 census, the modulus 20 appears nowhere on the spawn
+                    // path (native jitter is always 2*range+1), and the config key
+                    // "MissionGenRate" is 0-hit across the image in case-insensitive
+                    // ASCII and UTF-16LE.
+                    //
+                    // The per-call budget is a COUNT, not a stopwatch.  sub_67C9E0
+                    // keeps the tally in [ebp-0x10], bumps it only after a successful
+                    // factory return, and turns the whole call into "false" the moment
+                    // it reaches 25:
+                    //   67CAA4  FF 45 F0        inc dword [ebp-0x10]
+                    //   67CAAC  83 7D F0 19     cmp dword [ebp-0x10],0x19
+                    //   67CAB0  7C 09           jl 0x67CABB          ; keep filling
+                    //   67CAB2  C6 45 F7 00     mov byte [ebp-9],0   ; result = FALSE
+                    //   67CAB6  EB 0B           jmp 0x67CAC3
+                    // C# used a g_dwZenLimit millisecond budget in this slot, which has
+                    // no native counterpart; the caller's reaction to "false" (retry
+                    // the same generator next tick without touching its cursor or its
+                    // dwStartTick) only makes sense against the count.
+                    var nSpawned = 0;
+                    for (var i = 0; i < nCount; i++)
                     {
-                        nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        for (var i = 0; i < nCount; i++)
+                        // An occupied slot is not a failure: 0x67CA15
+                        // `cmp dword [eax+edi*4],0 / jne 0x67CABB` skips it without
+                        // touching [gen+0x38] and without drawing coordinates, and
+                        // running out of slots just ends the worker's loop.  Only a nil
+                        // factory return reaches 0x67CAB8, so the capacity test has to
+                        // happen here rather than being folded into the factory's null
+                        // return.
+                        if (MonGen.CertList == null
+                            || MonGen.CertList.Count >= MonGen.nCount)
                         {
-                            CreateGeneratedMonster(MonGen,
-                                (short)(nX - 10 + M2Share.RandomNumber.Random(20)),
-                                (short)(nY - 10 + M2Share.RandomNumber.Random(20)));
-                            if ((HUtil32.GetTickCount() - dwStartTick) > M2Share.g_dwZenLimit)
-                            {
-                                result = false;
-                                break;
-                            }
+                            break;
                         }
-                    }
-                    else
-                    {
-                        for (var i = 0; i < nCount; i++)
+                        // 0x67CA2B..0x67CA32 computes the relax flag from the CURRENT
+                        // failure tally, before the factory call that may reset it.
+                        var boIgnoreCellBlockers =
+                            MonGen.nFailCount >= NativeMonGenFailRelaxThreshold;
+                        // 0x679FBD `test esi,esi` / 0x679FBF `jle 0x679FE9` skips BOTH
+                        // draws when the range is not positive, so a point generator
+                        // (nRange == 0) consumes no randomness at all.  C# was calling
+                        // Random(1) twice, which returns 0 both times but still advances
+                        // the sequence twice per monster.
+                        var nX = (short)MonGen.nX;
+                        var nY = (short)MonGen.nY;
+                        if (MonGen.nRange > 0)
                         {
                             nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
                             nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                            CreateGeneratedMonster(MonGen, nX, nY);
-                            if (HUtil32.GetTickCount() - dwStartTick > M2Share.g_dwZenLimit)
-                            {
-                                result = false;
-                                break;
-                            }
+                        }
+                        if (CreateGeneratedMonster(MonGen, nX, nY,
+                                boIgnoreCellBlockers) == null)
+                        {
+                            MonGen.nFailCount++;              // 0x67CAB8
+                            continue;                         // 0x67CABB, keeps scanning
+                        }
+                        MonGen.nFailCount = 0;                // 0x67CAA7 / 0x67CAA9
+                        nSpawned++;
+                        if (nSpawned >= NativeMonGenSpawnBudget)
+                        {
+                            result = false;
+                            break;
                         }
                     }
                 }
@@ -3536,11 +3644,9 @@ namespace GameSvr
         {
             var sIPaddr = string.Empty;
             var nPort = 0;
-            const string sMsg = "{0}/{1}";
             if (M2Share.GetMultiServerAddrPort(nServerIndex, ref sIPaddr, ref nPort))
             {
                 PlayObject.m_boReconnection = true;
-                PlayObject.SendDefMessage(Grobal2.SM_RECONNECT, 0, 0, 0, 0, string.Format(sMsg, sIPaddr, nPort));
             }
         }
 
@@ -3607,13 +3713,16 @@ namespace GameSvr
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 人物原生ScriptData分节格式损坏，灵游/身体状态/冷却/一次性标志无法回写: {PlayObject.m_sCharName}");
             }
-            if (PlayObject.m_ItemList.Count > Grobal2.MAXBAGITEM
+            // 背包这一路比对的是**能写回多少**而不是**能装多少**：存档记录固定 48 槽，
+            // 48 格以后的物品要靠大背包持久层，两者之和就是 PersistableOf。超出即拒绝
+            // 整次存盘 —— 原生在 0x6B171B 处是静默截断，那等于删物品。
+            if (PlayObject.m_ItemList.Count > BagCapacity.PersistableOf(PlayObject)
                 || PlayObject.m_StorageItemList.Count > TPlayObject.MAX_STORAGE_ITEM_COUNT
                 || PlayObject.m_MagicList.Count > Grobal2.MAXMAGIC)
             {
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 拒绝截断人物存档 {PlayObject.m_sCharName}: " +
-                    $"bag={PlayObject.m_ItemList.Count}/{Grobal2.MAXBAGITEM}, " +
+                    $"bag={PlayObject.m_ItemList.Count}/{BagCapacity.PersistableOf(PlayObject)}, " +
                     $"storage={PlayObject.m_StorageItemList.Count}/{TPlayObject.MAX_STORAGE_ITEM_COUNT}, " +
                     $"magic={PlayObject.m_MagicList.Count}/{Grobal2.MAXMAGIC}");
                 return;
@@ -3836,6 +3945,10 @@ namespace GameSvr
             {
                 foreach (var variable in HumData.ScriptV)
                 {
+                    // group-0 V lives at +0x80C..+0x99B and is never in the
+                    // type1 dynarray. A flat key below 1001 can only be group 0
+                    // (sub_6E42CC imul 0x3E8), so it does not belong here.
+                    if (variable.Key < 1001) continue;
                     PlayObject.m_ScriptVVars[variable.Key] = variable.Value;
                 }
             }
@@ -3843,15 +3956,8 @@ namespace GameSvr
             {
                 foreach (var variable in HumData.ScriptS)
                 {
+                    if (variable.Key < 1001) continue;
                     PlayObject.m_ScriptSVars[variable.Key] = variable.Value;
-                }
-            }
-            if (PlayObject.m_ScriptVVars.Count == 0 && HumData.IntVar != null)
-            {
-                for (var i = 0; i < HumData.IntVar.Length; i++)
-                {
-                    if (HumData.IntVar[i] != 0)
-                        PlayObject.m_ScriptVVars[i] = HumData.IntVar[i];
                 }
             }
             HumItems = HumanRcd.Data.HumItems;
