@@ -43,6 +43,10 @@ void Check(bool cond, string msg)
     Console.WriteLine("  FAIL  " + msg);
 }
 
+// 构造 GameSvrConfig 会拉起 M2Share 的静态构造器（它要读配置文件），
+// 沿用 InProcItemConservationCheck / DeathDropPolicyCheck 的最小引导。
+PrepareConfig();
+
 var cfg = new GameSvrConfig();
 Check(cfg.dwFloorItemCanPickUpTime == 120000,
     "0x78399D cmp edx,0x1D4C0: 归属保留窗口 = 120000 ms");
@@ -76,6 +80,15 @@ if (failures.Count == 0)
 Console.WriteLine($"NativeFloorItemOwnerExpiryCheck: FAIL ({failures.Count})");
 foreach (var f in failures) Console.WriteLine("  - " + f);
 return 1;
+
+// 最小配置引导（只写进本审计自己的 bin 目录）。
+static void PrepareConfig()
+{
+    var baseDir = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(baseDir, "!Setup.txt"), "[Server]\r\n");
+    File.WriteAllText(Path.Combine(baseDir, "String.ini"), "[String]\r\n");
+    File.WriteAllText(Path.Combine(baseDir, "Command.conf"), "[Command]\r\n");
+}
 
 static string ReadRepoFile(string relative)
 {
