@@ -173,10 +173,33 @@ namespace GameSvr
                     MsgGetMentorGraduate(serverNum, Body);
                     break;
                 case Grobal2.ISM_USER_INFO:
-                case Grobal2.ISM_FRIEND_INFO:
-                case Grobal2.ISM_FRIEND_DELETE:
+                    // 战神 221 (索引表 @0x657160[19]=0x0F -> 地址表[0x0F] ->
+                    // stub @0x6572EA -> sub_6575D8) = 给本服 GM 转发文本通知。
+                    // 此前与 214/215/219/220 一起折进空的 MsgGetUserMgr。
+                    MsgGetGmNotice(serverNum, Body);
+                    break;
                 case Grobal2.ISM_TAG_SEND:
+                    // 战神 219 (索引表 @0x657160[17]=0x0D -> 地址表[0x0D] ->
+                    // stub @0x6572C4 -> sub_6581A4) = 三段式文本转发, 只有 SysMsg
+                    // 那条腿可观测 (回帧腿落 sub_7138CC 空桩)。
+                    MsgGetGmRelay(serverNum, Body);
+                    break;
+                case Grobal2.ISM_FRIEND_INFO:
+                    // 战神 214 (stub @0x657287 -> sub_6579B0): 对第三个整型参数做
+                    // 3 路 switch, 写全局 [[0x7D6010]] = 1/2/3。C# 传输层无第三个
+                    // 整型参数载体, 且 [0x7D6010] 无 C# 模型 —— fail-closed, 保留
+                    // 空处理 (不落 default sink: native 214 是 REAL handler,
+                    // 打印 "[Error]" 反而与 native 不符)。见报告 214 条。
+                    break;
                 case Grobal2.ISM_TAG_RESULT:
+                    // 战神 220 (stub @0x6572D9 -> sub_657E08): 通篇拼串, 终点
+                    // `mov dx,0xDD; call 0x713890` -> sub_7138CC 是空桩
+                    // (55 8B EC 5D C2 0C 00), 故本 build 上 220 无任何可观测效果。
+                    // 空处理即忠实。
+                    break;
+                case Grobal2.ISM_FRIEND_DELETE:
+                    // 215 在 native 是 SINK (索引表 @0x657160[13]=0)。C# 扩展保留
+                    // 空处理, 与既有 C# 发送侧共存。
                     MsgGetUserMgr(serverNum, Body, Ident);
                     break;
                 case Grobal2.ISM_RELOADMAKEITEMLIST:
@@ -579,6 +602,34 @@ namespace GameSvr
             var studentName = HUtil32.GetValidStr3(Body, ref masterName,
                 HUtil32.Backslash);
             TPlayObject.NativeMirrorMasterExpelStudent(masterName, studentName);
+        }
+
+        private void MsgGetGmNotice(int sNum, string Body)
+        {
+            // 战神 sub_6575D8 (ident 221): body="收信人名/正文"。
+            // 0x6575F4 test ebx,ebx / je —— body 空串直接退。
+            if (string.IsNullOrEmpty(Body))
+            {
+                return;
+            }
+            var recipientName = string.Empty;
+            var text = HUtil32.GetValidStr3(Body, ref recipientName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorGmNotice(sNum, recipientName, text);
+        }
+
+        private void MsgGetGmRelay(int sNum, string Body)
+        {
+            // 战神 sub_6581A4 (ident 219): body="收信人名/第二字段/正文"。native 连
+            // 拆两次 '/' (0x6581E0 / 0x6581FC), 第二字段只喂死腿, 正文是两次拆分后
+            // 的余段。sub_6581A4 不读 serverNum。
+            var recipientName = string.Empty;
+            var rest = HUtil32.GetValidStr3(Body, ref recipientName,
+                HUtil32.Backslash);
+            var secondField = string.Empty;
+            var text = HUtil32.GetValidStr3(rest, ref secondField,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorGmRelayThreeField(recipientName, text);
         }
 
         private void MsgGetMentorGraduate(int sNum, string Body)
