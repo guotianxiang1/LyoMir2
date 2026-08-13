@@ -2,9 +2,11 @@ namespace GameSvr
 {
     // MOVE-11 —— 原生 sub_6BCE2C(Self, wIdent)。它是"玩家发起动作即取消挂起通道"的公共钩子，
     // 由 8 个 handler 在各自可行性门之前无条件调用：
-    //   0x6D98DF(双人坐骑相关臂) / 0x6D9BEC(CM_WALK 3011) / 0x6D9D08(CM_RUN 3013) /
-    //   0x6D9ED3(HIT 族 CASE1) / 0x6D9F7D(CM_3037 CASE2) / 0x6DA017(CM_SPELL 3017) /
-    //   0x6EC635 / 0x6EE201(sub_6EE174 召唤坐骑 = CM_HERO_POWERUP 臂)。
+    //   0x6D98DF(CM_HERO_POWERUP 1108) / 0x6D9BEC(CM_WALK 3011) / 0x6D9D08(CM_RUN 3013) /
+    //   0x6D9ED3(HIT 族 CASE1) / 0x6D9F7D(CM_3037 CASE2) / 0x6DA017(CM 4105) /
+    //   0x6EC635(sub_6EC5D8，唯一入口 CM 3344) / 0x6EE201(sub_6EE174 召唤坐骑，由 CM 4105 进入)。
+    // 注：0x6DA017 不是 CM_SPELL。跳表 0x6D8592(基 ident 3010) idx 7 = 3017 -> 0x6DA04A，
+    // 该臂走的是 0x6DA054 call 0x6F2D48，通篇不调 0x6BCE2C。
     //
     // 函数体只有三条调用（0x6BCE2C..0x6BCE52 单 ret）：
     //   0x6BCE37  call 0x6EE128

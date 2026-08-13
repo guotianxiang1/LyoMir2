@@ -326,11 +326,16 @@ namespace GameSvr
         private void Q3Cm4102() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_4102, m_sCharName);
 
         /// <summary>
-        /// CM 4105, leaf 0x6DA005, which fires three workers in order: 0x7742C0(Self)
-        /// refreshes [Self+0x12C/0x130/0x154/0x388/0x178/0x270/0x272], 0x6BCE2C(Self,
-        /// Ident=word[+4]) answers SM 0x20 off [+0x1C8]/[+0x1D8]/[+0xC28].., and
-        /// 0x6EE174(Self, Ident) drives [+0x4C0]/[+0xA24]/[+0x1914]. Those fields and
-        /// the SM 0x20 body are not modelled, so the whole refresh is withheld.
+        /// CM 4105, leaf 0x6DA005, which fires three workers in order.
+        /// 0x7742C0(Self) drops stealth state 0x40 and re-broadcasts RM_TURN
+        /// (0x774317 `mov dx,0x2711`) — modelled as BreakNativeStealthOnAction.
+        /// 0x6BCE2C(Self, Ident=word[+4]) cancels the pending channels, emitting
+        /// 0x4D0 / 0x4D2 / 0xD57 (0x6EE164, 0x6EF62E, 0x6EE2DF) — modelled as
+        /// CancelNativeActionChannels; note its Ident argument is dead, since all
+        /// three callees open with `mov edx,eax`. 0x6EE174(Self, Ident) is the mount
+        /// summon and drives [+0x4C0]/[+0xA24]/[+0x1914]. Only that third worker is
+        /// still unmodelled, but it is the bulk of the leaf, so the arm stays
+        /// withheld rather than emitting two thirds of a native response.
         /// </summary>
         private void Q3Cm4105() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_4105, m_sCharName);
 

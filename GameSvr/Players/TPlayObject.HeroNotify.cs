@@ -202,13 +202,17 @@ namespace GameSvr
         /// CM 4105, leaf 0x6DA005 fires three workers in program order, every one of
         /// which drives an unmodelled subsystem:
         ///
-        ///   0x7742C0(Self) — combat-state refresh. Gates on state 0x40
+        ///   0x7742C0(Self) — stealth reveal. Gates on state 0x40
         ///     (0x7742D6 `mov dl,0x40` / 0x772960 getter); when set it clears it
-        ///     (0x7731C0) and sends SM 0x2711 built from [Self+0x12C]/[+0x130] via
-        ///     vmt+0x90 and byte [Self+0x154] via vmt+0xD8.
-        ///   0x6BCE2C(Self,Ident=word[rec+4]) — appearance refresh. Runs 0x6EE128 /
-        ///     0x6EF5D0 then dispatches vmt+0x1D8, which sends SM 0x20 from the
-        ///     16-byte appearance block [obj+0x168] plus vmt+0x1C8 / vmt+0x70.
+        ///     (0x7731C0) and broadcasts RM_TURN 0x2711 built from [Self+0x12C]/
+        ///     [+0x130] plus vmt+0x90 (GetShowName) and byte [Self+0x154], through
+        ///     vmt+0xD8. Modelled as TBaseObject.BreakNativeStealthOnAction.
+        ///   0x6BCE2C(Self,Ident=word[rec+4]) — cancel the pending action channels.
+        ///     0x6BCE2C..0x6BCE52 is a single-ret body holding exactly three calls:
+        ///     0x6EE128 (0x6EE164 `mov dx,0x4D0`), 0x6EF5D0 (0x6EF62E `mov dx,0x4D2`)
+        ///     and vmt+0x1D8 = 0x6EE2AC (0x6EE2DF `mov dx,0xD57`). Modelled as
+        ///     TPlayObject.CancelNativeActionChannels. The Ident argument is dead:
+        ///     all three callees start by overwriting edx with eax.
         ///   0x6EE174(Self,Ident) — mount summon. Gates on state 0x33 (0x6BBEB8),
         ///     the mount object [Self+0x128].[0x85], [Self+0x4C0] via 0x75EC20, and
         ///     [Self+0xA24]==0x72, each raising its own notice (SM 0xFCFF strings
@@ -217,12 +221,12 @@ namespace GameSvr
         ///     success it re-refreshes (0x6BCE2C), stamps the timer [Self+0x1914] and
         ///     sends SM 0xD54 via vmt+0xE0.
         ///
-        /// The state table (0x772960/0x7731C0/0x6BBEB8), the mount fields
-        /// [+0x128]/[+0x4C0]/[+0xA24]/[+0x1914], the appearance block [+0x168] and
-        /// the SM 0x2711/0x20/0xD54 bodies are all unmodelled, and there is no leg
-        /// derivable from modelled state (worker 0x6BCE2C fires unconditionally), so
-        /// the whole refresh is withheld. The evidence is already in cm-3's ledger,
-        /// so this reuses that throttled record rather than duplicating it.
+        /// Workers one and two are now modelled, but the mount-summon fields
+        /// [+0x4C0]/[+0xA24]/[+0x1914] behind worker three still are not, and that
+        /// worker is the point of the command. Emitting only the two refreshes would
+        /// answer CM 4105 with neither the mount nor any of its three refusal
+        /// notices, so the arm stays withheld. The evidence is already in cm-3's
+        /// ledger, so this reuses that throttled record rather than duplicating it.
         /// </summary>
         private void HeroNotifyCm4105()
         {
