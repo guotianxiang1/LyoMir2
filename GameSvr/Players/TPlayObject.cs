@@ -1621,7 +1621,7 @@ namespace GameSvr
 
         public void ClearStatusTime()
         {
-            this.m_wStatusTimeArr = new ushort[12];
+            ClearLegacyStatusSlots();
         }
 
         private void SendMapDescription()
@@ -3260,14 +3260,13 @@ namespace GameSvr
             HumData.Abil.MaxHandWeight = m_Abil.MaxHandWeight;
             HumData.Abil.HP = m_WAbil.HP;
             HumData.Abil.MP = m_WAbil.MP;
-            HumData.wStatusTimeArr = m_wStatusTimeArr == null
-                ? Array.Empty<ushort>()
-                : (ushort[])m_wStatusTimeArr.Clone();
-            if (HumData.wStatusTimeArr.Length >
-                Grobal2.STATE_BUBBLEDEFENCEUP)
-            {
-                HumData.wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
-            }
+            // Save path of the legacy-slot trio. ToArray projects the live node
+            // list down to the 12 legacy seconds the record has always carried,
+            // so the on-disk layout is unchanged (12 x ushort, slot i = native
+            // state 31 - i). Slot 11 is zeroed to match the load path in
+            // UsrEngn.LoadPlayObject.
+            HumData.wStatusTimeArr = m_wStatusTimeArr.ToArray();
+            HumData.wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
             HumData.sHomeMap = m_sHomeMap;
             HumData.wHomeX = m_nHomeX;
             HumData.wHomeY = m_nHomeY;

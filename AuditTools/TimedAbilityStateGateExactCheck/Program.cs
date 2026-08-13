@@ -84,16 +84,28 @@ static void CheckState20AndLegacyWordAuthority()
     Assert(actor.HasNativeActiveState(20),
         "state20 timed carrier lost during status rebuild");
 
+    // Legacy slot 11 IS native state 20 (slot i = state 31 - i). Writing the
+    // slot must land on the one authority, not on a parallel one.
     actor.m_wStatusTimeArr[11] = 1;
     actor.m_nCharStatus = actor.GetCharStatus();
     Assert(actor.HasNativeActiveState(20),
-        "slot11 compatibility overlay did not expose state20");
-    Assert(actor.ClearNativeActiveState(20), "state20 timed carrier clear");
+        "slot11 write did not reach native state 20");
     Equal((ushort)1, actor.m_wStatusTimeArr[11],
-        "state20 carrier clear mutated slot11 overlay");
+        "slot11 read-back after write");
+
+    // ...and clearing the state must actually clear it. This block used to
+    // assert the opposite - that GetCharStatus would resurrect the bit from the
+    // legacy overlay on the next rebuild - which is the 4.18 dual authority
+    // written down as a contract. Native has no second carrier to resurrect
+    // from: RemoveState @0x7731F2 does `btr [esi+0x168]` before it even walks
+    // the list, and FindState @0x773BB1 gates on `bt` first, so a record whose
+    // bit is clear is invisible.
+    Assert(actor.ClearNativeActiveState(20), "state20 carrier clear");
     actor.m_nCharStatus = actor.GetCharStatus();
-    Assert(actor.HasNativeActiveState(20),
-        "slot11 overlay did not restore cleared state20 carrier");
+    Assert(!actor.HasNativeActiveState(20),
+        "GetCharStatus resurrected a cleared state - the legacy overlay is back");
+    Equal((ushort)0, actor.m_wStatusTimeArr[11],
+        "slot11 still reports time for a state whose bit was cleared");
 
     // Native keeps one flat bitset at [obj+0x168] and reaches it through three
     // primitives that share a single domain guard and split ownership nowhere:

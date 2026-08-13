@@ -3834,15 +3834,15 @@ namespace GameSvr
             PlayObject.m_Abil.MaxWearWeight = HumData.Abil.MaxWearWeight;
             PlayObject.m_Abil.HandWeight = HumData.Abil.HandWeight;
             PlayObject.m_Abil.MaxHandWeight = HumData.Abil.MaxHandWeight;
-            PlayObject.m_wStatusTimeArr = HumData.wStatusTimeArr == null
-                ? new ushort[12]
-                : (ushort[])HumData.wStatusTimeArr.Clone();
-            if (PlayObject.m_wStatusTimeArr.Length >
-                Grobal2.STATE_BUBBLEDEFENCEUP)
-            {
-                PlayObject.m_wStatusTimeArr[
-                    Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
-            }
+            // Load path of the legacy-slot trio (REPLICATION_RULES 4.19). The
+            // slots no longer have storage of their own; CopyFrom replays the
+            // saved seconds onto the native Self+0xDC node list, which is the
+            // single authority. Slot 11 (STATE_BUBBLEDEFENCEUP, native state 20)
+            // is still cleared here, matching the save path in
+            // TPlayObject.GetHumData - the two ends have to agree or a login
+            // would resurrect what the logout dropped.
+            PlayObject.m_wStatusTimeArr.CopyFrom(HumData.wStatusTimeArr);
+            PlayObject.m_wStatusTimeArr[Grobal2.STATE_BUBBLEDEFENCEUP] = 0;
             PlayObject.m_sHomeMap = HumData.sHomeMap;
             PlayObject.m_nHomeX = HumData.wHomeX;
             PlayObject.m_nHomeY = HumData.wHomeY;

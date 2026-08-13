@@ -111,8 +111,9 @@ namespace GameSvr
         
         public int m_nViewRange = 0;
 
-        public ushort[] m_wStatusTimeArr = new ushort[12];
-        public int[] m_dwStatusArrTick = new int[12];
+        // m_wStatusTimeArr is now a forwarding view onto the native Self+0xDC
+        // node list; see TBaseObject.LegacyStatusTimeView.cs. It has no storage,
+        // so there is nothing to declare here and nothing to allocate.
         public ushort[] m_wStatusArrValue = null;
         public int[] m_dwStatusArrTimeOutTick = null;
         public ushort m_wAppr = 0;
@@ -764,7 +765,7 @@ namespace GameSvr
             m_nGoldMax = M2Share.g_Config.nHumanMaxGold;
             m_nCharStatus = 0;
             m_nCharStatusEx = 0;
-            m_wStatusTimeArr = new ushort[12];// FillChar(m_wStatusTimeArr, sizeof(grobal2.short), '\0');
+            ClearLegacyStatusSlots();
             m_BonusAbil = new TNakedAbility();// FillChar(m_BonusAbil, sizeof(TNakedAbility), '\0');
             m_CurBonusAbil = new TNakedAbility();// FillChar(m_CurBonusAbil, sizeof(TNakedAbility), '\0');
             m_wStatusArrValue = new ushort[6];// FillChar(m_wStatusArrValue, sizeof(m_wStatusArrValue), 0);
@@ -4249,33 +4250,21 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// 状态字低 32 位。战神从不"重建"这个字：<c>sub_7729C4</c> 直接把
+        /// <c>[Self+0x168]</c> 起的 16 字节位集当 blob 发出（<c>lea edx,[eax+0x168]</c>,
+        /// RefMsg 0x291 = 657），位 s 就是 state s，没有任何合成或超界归零逻辑。
+        ///
+        /// 这里只剩把持久位集回读出来。原先叠在上面的 legacy overlay
+        /// （<c>m_wStatusTimeArr[i] &gt; 0 =&gt; 0x80000000 &gt;&gt; i</c>）已经删除：
+        /// slot i 就是 state 31 - i，而 state 31 - i 的位由
+        /// <c>SetNativeActiveState</c> / <c>ClearNativeActiveState</c> 在同一个
+        /// <c>m_nCharStatusEx</c> 里维护，overlay 只是把同一位再算一遍，
+        /// 且用的是另一套（秒级、自己倒计时的）过期判据——正是 4.18 说的双权威。
+        /// </summary>
         public int GetCharStatus()
         {
-            long nStatus = 0;
-            for (int i = m_wStatusTimeArr.GetLowerBound(0); i <= m_wStatusTimeArr.GetUpperBound(0); i++)
-            {
-                if (m_wStatusTimeArr[i] > 0)
-                {
-                    nStatus = (0x80000000 >> i) | nStatus;
-                }
-            }
-            var status = (m_nCharStatusEx & NativePersistentLowStateMask) |
-                         nStatus;
-            // ✅ 结论已由战神侧独立支撑:战神从不"重建"状态字 —— sub_7729C4 直接把 [Self+0x168] 起的
-            // 16 字节位集当 blob 发出(RefMsg 0x291=657),没有任何"超界归零"逻辑。故旧写法
-            // `status >= int.MaxValue ? 0 : ...` 无论如何都不是战神语义,unchecked 截断是正确方向。
-            // 证据: staging/statuslayer_migration_plan_20260803.md 行 80(GetCharStatus 一栏:
-            // "native never rebuilds; sub_7729C4 just ships [+0x168]") 与 spec_statustable_
-            // ghostsweep_20260803.md A.15.3(ident 657 匹配)。
-            // 并列 ref 引用(保留,勿删;来源=GameOfMir 参考分支,非战神,仅算术形态线索):
-            //   ObjBase.pas:20074 返回的是 32 位【截断】后的 Integer，不是"超界就归零"。
-            // 旧 bug 的实际后果: 状态槽 0(POISON_DECHEALTH 绿毒)会置位 0x80000000 = 2147483648
-            // > int.MaxValue，旧写法会把【整个状态字清零】——玩家一中绿毒，中毒/护体/隐身/防御等
-            // 所有状态图标全部消失（且 Run tick 里高频 StatusChanged 广播）。
-            // ⚠️ 但本方法【整体】仍是 C# 独有的合成层,战神没有对应函数:legacy 12 槽 overlay 占用
-            // 线上 bit 20..31,与战神 state 20..31 撞位;`0x80000000 >> i` 的 slot→bit 映射【不是 bug】
-            // (它就是客户端期望的线位,由 LoginProtocolExactCheck / NativeState26CompatCheck 断言),
-            // 详见 statuslayer_migration_plan_20260803.md §2.3 —— 勿按 spec A.15.2 的"位反转"措辞去改。
+            var status = m_nCharStatusEx & NativePersistentLowStateMask;
             return unchecked((int)status);
         }
 
@@ -6149,27 +6138,19 @@ namespace GameSvr
                 // CanAddNativeTimedAbility inside AddTimedAbilityInternal already covers
                 // the ImmuneCheck and the 0x34 veto, and the 0x12 -> remove 0x1A companion
                 // lives in the same method.
-                // The legacy array stays as the save-record projection and as the carrier
-                // the ~300 existing m_wStatusTimeArr readers still depend on; it is not
-                // native, and collapsing it is a separate change.
+                // The legacy array is now a view onto that same node
+                // (m_wStatusTimeArr[nType] IS state 31 - nType), so the
+                // max()-and-stamp block that used to follow this call has been
+                // deleted: it was the second authority writing the same state a
+                // second time, in seconds, on its own clock. AddState already
+                // owns the refresh rule - 0x773117 `cmp edi,eax / jle` takes the
+                // higher value, 0x773140 `cmp eax,[ebp-4] / jge` extends only to
+                // a longer duration - and native MakePosion adds nothing on top.
                 if (!AddTimedAbilityInternal((byte)(31 - nType), nPoint,
                         unchecked(nTime * 1000), 0))
                 {
                     return false;
                 }
-                if (m_wStatusTimeArr[nType] > 0)
-                {
-                    if (m_wStatusTimeArr[nType] < nTime)
-                    {
-                        m_wStatusTimeArr[nType] = (ushort)nTime;
-                    }
-                }
-                else
-                {
-                    m_wStatusTimeArr[nType] = (ushort)nTime;
-                }
-                m_dwStatusArrTick[nType] = HUtil32.GetTickCount();
-                m_nCharStatus = GetCharStatus();
                 m_btGreenPoisoningPoint = (byte)nPoint;
                 // POIS-12. 红毒(state 0x1E=30)的伤害放大档位由 **level** 选择，
                 // 而这个 level 在原版是【链表记录】里的值，不是位:
@@ -6508,7 +6489,6 @@ namespace GameSvr
                 m_wStatusTimeArr[Grobal2.STATE_DEFENCEUP] = nSec;
                 result = true;
             }
-            m_dwStatusArrTick[Grobal2.STATE_DEFENCEUP] = HUtil32.GetTickCount();
             SysMsg(format(M2Share.g_sDefenceUpTime, nSec), MsgColor.Green, MsgType.Hint);
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
@@ -6543,7 +6523,6 @@ namespace GameSvr
                 m_wStatusTimeArr[Grobal2.STATE_MAGDEFENCEUP] = nSec;
                 result = true;
             }
-            m_dwStatusArrTick[Grobal2.STATE_MAGDEFENCEUP] = HUtil32.GetTickCount();
             SysMsg(format(M2Share.g_sMagDefenceUpTime, nSec), MsgColor.Green, MsgType.Hint);
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
