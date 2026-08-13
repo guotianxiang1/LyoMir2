@@ -1222,7 +1222,11 @@ namespace GameSvr
                     // edx = Recog (the NPC id) and ecx = Tag.
                     if (HasNativeActiveState(0x34))
                         break;
-                    ClientClickNPC(ProcessMsg.nParam1);
+                    // nParam3 is Tag on the default ingress arm (UsrEngn.ProcessUserMessage
+                    // passes DefMsg.Tag as lParam3), and 0x6D8EFE `0F B7 48 08 movzx ecx,
+                    // word [msg+8]` makes Tag the second argument to 0x6B8B28, where it picks
+                    // between the monster registry and the NPC registry.
+                    ClientClickNPC(ProcessMsg.nParam1, ProcessMsg.nParam3);
                     break;
                 case Grobal2.CM_MERCHANTDLGSELECT:
                     ClientMerchantDlgSelect(ProcessMsg.nParam1, ProcessMsg.sMsg);
