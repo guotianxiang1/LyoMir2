@@ -2213,11 +2213,13 @@ namespace GameSvr.PasEngine
                     return true;
 
                 // === YB/元宝/Shop ===
+                // PsShopGetGoodsList / PsShopBuyGoods 在原生 654 条注册里一条都没有，
+                // 全镜像裸 ASCII 与 UTF-16LE 双 0 命中，D:\光头卧龙 生产树 3611 个脚本/配置
+                // 也 0 命中（tools/npcscript_re/_invented_items.py 可复跑）。属 INVENTED，
+                // 按 fail-closed 处理，别让脚本经这条路走购买发货。
                 case "psshopgetgoodslist":
-                    return true;
-
                 case "psshopbuygoods":
-                    return true;
+                    return RejectUnsupportedNativeApi();
 
                 case "psconsumeyb":
                     if (args.Count >= 1)
@@ -2321,21 +2323,11 @@ namespace GameSvr.PasEngine
                     }
                     return true;
 
+                // OpenStorageMax 不在原生注册表里（四重 0 命中）。原生只有
+                // OpenStorage 0x72BA3C `function OpenStorage(storageType: Integer): Integer`，
+                // C# 已在 CallNpcMethod 里实现那一条。
                 case "openstoragemax":
-                    // Open max-level storage: set storage page to the maximum available
-                    if (CurrentNpc != null)
-                    {
-                        var totalPages = HUtil32._MAX(1, (CurrentPlayer.m_StorageItemList.Count + TPlayObject.STORAGE_PAGE_SIZE - 1) / TPlayObject.STORAGE_PAGE_SIZE);
-                        var maxPages = HUtil32._MAX(1,
-                            (Math.Clamp(CurrentPlayer.m_nStorageSpaceCount,
-                                TPlayObject.MIN_STORAGE_ITEM_COUNT, TPlayObject.MAX_STORAGE_ITEM_COUNT) +
-                             TPlayObject.STORAGE_PAGE_SIZE - 1) /
-                            TPlayObject.STORAGE_PAGE_SIZE);
-                        var actualMax = Math.Min(totalPages, maxPages);
-                        CurrentPlayer.m_nStoragePage = Math.Max(0, actualMax - 1);
-                        CurrentPlayer.SendSaveItemList(CurrentNpc.ObjectId);
-                    }
-                    return true;
+                    return RejectUnsupportedNativeApi();
 
                 case "setweaponlucky":
                     // SetWeaponLucky(luckValue: Integer) - Sets the equipped weapon's luck value (btValue[3]).
@@ -3105,14 +3097,13 @@ namespace GameSvr.PasEngine
                     // 原版 giveheroforceexp (sub_6E2CBC) = `xor eax,eax; retn` 纯 no-op 桩(恒返回0)。reject 即忠实。
                     return RejectUnsupportedNativeApi();
 
+                // TakeHeroBagExItem / TakeFromHeroBagEx 四重 0 命中。原生的英雄背包取物
+                // 只有 TakeFromHeroBag 0x72B285
+                // `function TakeFromHeroBag(const ItemName: string; ItemCount: Byte): Boolean`，
+                // C# 已在 CallPlayerFunc 的 takefromherobag 上实现那一条。
                 case "takeherobagexitem":
                 case "takefromherobagex":
-                    if (args.Count < 2 || CurrentPlayer == null
-                        || (CurrentPlayer.m_btNativeHeroState & 3) == 0
-                        || CurrentPlayer.m_HeroObject == null)
-                        return false;
-                    return CurrentPlayer.m_HeroObject.TryTakeNativeBagItems(
-                        args[0].AsString(), args[1].AsInt(), out _);
+                    return RejectUnsupportedNativeApi();
 
                 // HeroRename 原生只注册在 TPsNpc 0x734E90 上，已搬到 CallNpcFunc。
 
@@ -3862,9 +3853,10 @@ namespace GameSvr.PasEngine
                 case "checkdiamond":
                     return RejectUnsupportedNativeApi(out result);
 
+                // CheckGameGold 四重 0 命中，原生注册表里没有任何 CheckGameGold /
+                // PsShop* / GameGold 命名的条目。元宝余额判断在原生走的是别的入口。
                 case "checkgamegold":
-                    result = PasValue.FromBool(CurrentPlayer.m_nGameGold >= args[0].AsInt());
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 // === Teleport with return values ===
                 case "flyto":
@@ -4487,9 +4479,11 @@ namespace GameSvr.PasEngine
                     result = PasValue.FromInt(ExpandStorageSpace(args[0].AsInt()));
                     return true;
 
+                // GetStorageItemCount 四重 0 命中；原生的仓库计数是
+                // GetStorageSpaceCount 0x72BBE0 / GetAccountStorageCnt 0x72B6D5。
+                // 此前这里恒返回 0，脚本无法区分「没有」与「不支持」。
                 case "getstorageitemcount":
-                    result = PasValue.FromInt(0);
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "findplayerbyname":
                     // Native signature returns TPlayer, not an object ID.
@@ -4774,27 +4768,11 @@ namespace GameSvr.PasEngine
                 // HERO FUNCTIONS (return value)
                 // =====================================================================
 
+                // GetHeroBagExItemCount / ...Ex 四重 0 命中。原生只有
+                // GetHeroBagItemCount 0x72B279，C# 已在下方实现那一条。
                 case "getherobagexitemcount":
                 case "getherobagexitemcountex":
-                    // GetHeroBagItemCount(itemName) - count items in hero bag
-                    if (args.Count >= 1 && CurrentPlayer != null && CurrentPlayer.m_HeroObject != null)
-                    {
-                        var hero = CurrentPlayer.m_HeroObject;
-                        var itemName = args[0].AsString();
-                        int cnt = 0;
-                        for (int i = 0; i < hero.m_ItemList.Count; i++)
-                        {
-                            var item = hero.m_ItemList[i];
-                            if (item != null && item.wIndex > 0 &&
-                                string.Equals(M2Share.UserEngine.GetStdItemName(item.wIndex), itemName, StringComparison.OrdinalIgnoreCase))
-                            {
-                                cnt++;
-                            }
-                        }
-                        result = PasValue.FromInt(cnt);
-                    }
-                    else result = PasValue.FromInt(0);
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "getheroskillstr":
                     // GetHeroSkillStr - get hero skill string (concatenated skill names)
@@ -5364,28 +5342,11 @@ namespace GameSvr.PasEngine
                     return true;
 
                 // === YB/Shop Integration (NPC side) ===
+                // 与 CallPlayerMethod 那一半同理：PsShopGetGoodsList / PsShopBuyGoods
+                // 四重 0 命中，属 INVENTED，fail-closed。
                 case "psshopgetgoodslist":
-                    // PsShopGetGoodsList: query YB shop goods list, send to client
-                    if (CurrentPlayer != null && args.Count >= 1)
-                    {
-                        var shopId = args[0].AsInt();
-                        // Triggers client to request shop goods list for YB shop
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDGOODSLIST, 0, CurrentNpc.ObjectId, shopId, 0, "");
-                    }
-                    return true;
-
                 case "psshopbuygoods":
-                    // PsShopBuyGoods: buy goods from YB shop
-                    // The actual purchase is handled by client->server packet, this just records intent
-                    if (CurrentPlayer != null && args.Count >= 3)
-                    {
-                        var shopId = args[0].AsInt();
-                        var goodsIdx = args[1].AsInt();
-                        var count = args[2].AsInt();
-                        // The actual deduction happens via client buy packet handler
-                        // This NPC method just triggers the interaction
-                    }
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "createmon":
                     if (args.Count >= 6)
