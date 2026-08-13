@@ -1687,12 +1687,6 @@ namespace GameSvr
         private void ClientChangeDealGold(int nGold)
         {
             bool bo09;
-            if (m_nDealGolds > 0 && M2Share.g_Config.boCanNotGetBackDeal)
-            {
-                SendMsg(M2Share.g_ManageNPC, Grobal2.RM_MENU_OK, 0, ObjectId, 0, 0, M2Share.g_sDealItemsDenyGetBackMsg);
-                SendDefMessage(Grobal2.SM_DEALDELITEM_FAIL, 0, 0, 0, 0, "");
-                return;
-            }
             if (nGold < 0)
             {
                 SendDefMessage(Grobal2.SM_DEALCHGGOLD_FAIL, m_nDealGolds, HUtil32.LoWord(m_nGold), HUtil32.HiWord(m_nGold), 0, "");
