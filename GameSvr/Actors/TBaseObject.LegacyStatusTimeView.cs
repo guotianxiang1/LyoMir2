@@ -72,12 +72,11 @@ namespace GameSvr
         /// Array-shaped facade over the native state list. Holds no storage of
         /// its own; every read and write lands on the <c>Self+0xDC</c> node.
         /// <para>
-        /// A class rather than a struct, because the 24 existing call sites write
-        /// through it as <c>m_wStatusTimeArr[slot] = value</c>. Reaching a struct
-        /// indexer's setter through a property mutates the temporary the getter
-        /// returned, which C# rejects outright (CS1612) - and had it been reached
-        /// through a field instead, it would have compiled and silently dropped
-        /// every write.
+        /// A class rather than a struct, because the call sites write through it
+        /// as <c>m_wStatusTimeArr[slot] = value</c>. Reaching a struct indexer's
+        /// setter through a property mutates the temporary the getter returned,
+        /// which C# rejects outright (CS1612) - and had it been reached through a
+        /// field instead, it would have compiled and silently dropped every write.
         /// </para>
         /// </summary>
         public sealed class LegacyStatusTimeView
@@ -167,10 +166,17 @@ namespace GameSvr
             }
         }
 
+        private LegacyStatusTimeView _legacyStatusTimeView;
+
         /// <summary>
         /// Native's only timed-state store, addressed the legacy way. Slot i is
         /// native state 31 - i and the unit is seconds; the backing node is in
         /// milliseconds.
+        ///
+        /// Deliberately a get-only property. The old <c>ushort[12]</c> field
+        /// could be reassigned, and several call sites did exactly that while
+        /// leaving the node list untouched; making it unassignable turns every
+        /// one of those into a compile error rather than a silent divergence.
         /// </summary>
         private LegacyStatusTimeView _legacyStatusTimeView;
 
