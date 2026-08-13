@@ -70,6 +70,12 @@ namespace GameSvr
                 case Grobal2.CM_4215:
                     ClientNativeNeighbourInteract();
                     return true;
+                case Grobal2.CM_4218:
+                    ClientNativeItemTransferSelf();
+                    return true;
+                case Grobal2.CM_4408:
+                    ClientNativeBeadInlaySelf();
+                    return true;
                 default:
                     return false;
             }
@@ -303,6 +309,38 @@ namespace GameSvr
         private void ClientNativeNeighbourInteract()
         {
             NativeCmTailFailClosed.Drop(Grobal2.CM_4215, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4218, native leaf 0x6DB00C, worker 0x6F3104.
+        ///
+        /// The leaf calls 0x6F3104(Self, Recog=[record], MakeLong(Param,Tag) via
+        /// 0x408D40). The worker throttles on [Self+0xA6C] (1500 ms, 0x6F3118
+        /// `cmp edx,0x5DC`), then admits the move only when the item name matches
+        /// the type table [[0x780574]] (0x6F313D) AND the transfer gate 0x774378
+        /// passes (0x6F3154) AND the target is not a ghost ([+0x73]). Neither the
+        /// item-type table nor the 0x774378 gate is modelled, so the transfer and
+        /// its SM are withheld.
+        /// </summary>
+        private void ClientNativeItemTransferSelf()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4218, m_sCharName);
+        }
+
+        /// <summary>
+        /// CM 4408, native leaf 0x6DB08A, worker 0x6F37EC with the self/hero
+        /// selector DL = 0 (self).
+        ///
+        /// The leaf calls 0x6F37EC(Self, DL=0, Recog=[record], MakeLong(Param,Tag)
+        /// via 0x408D40). With DL=0 the worker targets Self and, once the target is
+        /// valid, runs the spirit-bead inlay chain 0x7487A8 (0x6F385E) against the
+        /// item at the Recog slot. The inlay chain mutates per-item bead slots and
+        /// counters that this port does not model, so the mount and its reply are
+        /// withheld rather than invented.
+        /// </summary>
+        private void ClientNativeBeadInlaySelf()
+        {
+            NativeCmTailFailClosed.Drop(Grobal2.CM_4408, m_sCharName);
         }
     }
 }
