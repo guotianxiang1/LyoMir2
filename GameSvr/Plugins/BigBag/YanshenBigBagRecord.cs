@@ -390,10 +390,10 @@ namespace GameSvr.Plugins.BigBag
 
         public byte[] ToBytes()
         {
-            var record = new byte[RecordSize];
-            if (!TryWrite(record, out var error))
+            var buffer = new byte[RecordSize];
+            if (!TryWrite(buffer, out var error))
                 throw new InvalidOperationException(error);
-            return record;
+            return buffer;
         }
 
         /// <summary>Deep copy, so a caller can stage edits without touching the loaded record.</summary>
