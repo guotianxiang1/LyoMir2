@@ -1189,13 +1189,13 @@ namespace GameSvr
                             M2Share.UserEngine.TraverseMonItemsTree(m_sCharName,
                                 AttackBaseObject, this, scatteredItems);
                             NativeDropControlRuntime.RunInNativeOrder(
-                                () => NativeDropControlRuntime.TryScatter(this,
-                                    AttackBaseObject, scatteredItems),
                                 () =>
                                 {
                                     if (this is not HeroObject)
                                         M2Share.UserEngine.MonGetRandomItems(this, AttackBaseObject);
-                                });
+                                },
+                                () => NativeDropControlRuntime.TryScatter(this,
+                                    AttackBaseObject, scatteredItems));
                         }
                         DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
