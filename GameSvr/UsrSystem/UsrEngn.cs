@@ -3291,8 +3291,18 @@ namespace GameSvr
                     // ASCII and UTF-16LE.
                     for (var i = 0; i < nCount; i++)
                     {
-                        var nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
-                        var nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
+                        // 0x679FBD `test esi,esi` / 0x679FBF `jle 0x679FE9` skips BOTH
+                        // draws when the range is not positive, so a point generator
+                        // (nRange == 0) consumes no randomness at all.  C# was calling
+                        // Random(1) twice, which returns 0 both times but still advances
+                        // the sequence twice per monster.
+                        var nX = (short)MonGen.nX;
+                        var nY = (short)MonGen.nY;
+                        if (MonGen.nRange > 0)
+                        {
+                            nX = (short)(MonGen.nX - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
+                            nY = (short)(MonGen.nY - MonGen.nRange + M2Share.RandomNumber.Random(MonGen.nRange * 2 + 1));
+                        }
                         CreateGeneratedMonster(MonGen, nX, nY);
                         if (HUtil32.GetTickCount() - dwStartTick > M2Share.g_dwZenLimit)
                         {
