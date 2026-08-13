@@ -50,7 +50,7 @@ namespace GameSvr
         /// the whole process lifetime. Modelled as a field rather than a const so the
         /// two policy arms below stay reachable code and keep documenting the contract.
         /// </summary>
-        internal static byte NativeCheatReportPolicyTier;
+        internal static byte NativeCheatReportPolicyTier = 0;
 
         /// <summary>
         /// Header gate value native requires in Series (<c>0x6D8CA5</c>).
@@ -77,14 +77,14 @@ namespace GameSvr
             m_btNativeCheatPenaltyTier = NativeCheatReportPolicyTier;
             if (NativeCheatReportPolicyTier == 2)
             {
-                // 0x6D8D06 mov edx,0x6DBEC4 (declen 84), 0x6D8CEC-style cx=0x38FF = Red/Hint.
+                // 0x6D8D02 mov cx,0x38FF (Red) / 0x6D8D06 mov edx,0x6DBEC4 (declen 84).
                 SysMsg("由于检测到第三方软件，影响到游戏的正常运行，连接中断，"
                     + "请立即关闭第三方软件后重新登陆", MsgColor.Red, MsgType.Hint);
                 m_boSoftClose = true;
             }
             else if (NativeCheatReportPolicyTier == 3)
             {
-                // 0x6D8CF0 mov edx,0x6DBE54 (declen 100), cx=0x38FF = Red/Hint.
+                // 0x6D8CEC mov cx,0x38FF (Red) / 0x6D8CF0 mov edx,0x6DBE54 (declen 100).
                 SysMsg("由于检测到第三方软件，影响到游戏的正常运行，你已进入强制和平攻击模式。"
                     + "请立即关闭第三方软件后重新登陆", MsgColor.Red, MsgType.Hint);
             }
