@@ -50,12 +50,50 @@ namespace GameSvr.Plugins
         public static int Range(TPlayObject player, int magicId, int nativeDefault)
         {
             if (player == null || !MapRange(magicId, out var toggle, out var index))
-                return nativeDefault;
+                return PanguRange(player, magicId, nativeDefault);
             if (!ToggleOn(player, toggle))
-                return nativeDefault;
+                return PanguRange(player, magicId, nativeDefault);
             if (!player.TryGetScriptVar('S', 1, index, out int v) || v <= 0)
-                return nativeDefault;
+                return PanguRange(player, magicId, nativeDefault);
             return v;
+        }
+
+        /// <summary>
+        /// 盘古页的四个范围开关改写的是同一个 range 槽，但走的是配置立即数而不是
+        /// S 变量：插件 0x100B1FC0 里 <c>mov byte [0x76F271|0x76F643|0x76F301|
+        /// 0x76F3BE], al</c> 覆盖宿主 <c>6A imm8</c>（爆裂/冰咆哮/火雨原版 1，
+        /// 雷光原版 2），al = min(atoi(_范围值), 0xFF)。
+        ///
+        /// 与上面的 S 变量支路互斥：眼神的 trampoline 挂在
+        /// 0x76F26B(7B)/0x76F300(9B)/0x76F63D(9B)，字节跨度把盘古的目标地址整个
+        /// 罩住，同一时刻只会有一边生效。生产 config 里三个眼神键
+        /// （爆裂火焰范围及系数 / 冰咆哮范围 / 地狱雷光范围）都是 0，所以这里把
+        /// 盘古放在 S 变量之后：S 没给出覆盖值时才落到盘古的立即数。
+        /// 火雨（59/63）没有对应的眼神键，只有盘古这一路。
+        /// </summary>
+        public static int PanguRange(TPlayObject player, int magicId,
+            int nativeDefault)
+        {
+            if (player == null || !MapPanguRange(magicId, out var toggle))
+                return nativeDefault;
+            if (M2Share.PluginManager == null)
+                return nativeDefault;
+            var api = new YanshenApi(player, null, M2Share.PluginManager);
+            switch (toggle)
+            {
+                case "盘古爆裂火焰范围":
+                    return api.IsPgBlastFlameRange()
+                        ? api.PgBlastFlameRangeVal() : nativeDefault;
+                case "盘古地狱雷光范围":
+                    return api.IsPgHellLightRange()
+                        ? api.PgHellLightRangeVal() : nativeDefault;
+                case "盘古冰咆哮的范围":
+                    return api.IsPgIceStormRange()
+                        ? api.PgIceStormRangeVal() : nativeDefault;
+                default:
+                    return api.IsPgFireRainRange()
+                        ? api.PgFireRainRangeVal() : nativeDefault;
+            }
         }
 
         /// <summary>
@@ -225,6 +263,30 @@ namespace GameSvr.Plugins
                     toggle = "冰咆哮范围"; index = 88; return true;
                 default:
                     toggle = null; index = 0; return false;
+            }
+        }
+
+        /// <summary>
+        /// 站点归属由 <c>call sub_76FE44</c> 的实参序列定回宿主函数：
+        /// 0x76F270 在 sub_76F21C（爆裂火焰 23），0x76F300 在 sub_76F2AC
+        /// （冰咆哮 33），0x76F3BD 在 sub_76F33C（59/63 共用体），
+        /// 0x76F642 在地狱雷光体（0x76F61A `mov ecx,10` 的除法之后）。
+        /// </summary>
+        static bool MapPanguRange(int magicId, out string toggle)
+        {
+            switch (magicId)
+            {
+                case SpellsDef.SKILL_FIREBOOM:
+                    toggle = "盘古爆裂火焰范围"; return true;
+                case SpellsDef.SKILL_LIGHTFLOWER:
+                    toggle = "盘古地狱雷光范围"; return true;
+                case SpellsDef.SKILL_SNOWWIND:
+                    toggle = "盘古冰咆哮的范围"; return true;
+                case SpellsDef.SKILL_59:
+                case SpellsDef.SKILL_63:
+                    toggle = "盘古流星火雨范围"; return true;
+                default:
+                    toggle = null; return false;
             }
         }
 

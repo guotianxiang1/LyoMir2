@@ -1708,8 +1708,13 @@ namespace GameSvr
                 rawDamage = unchecked(rawDamage +
                     HUtil32.Round(highMagic * 0.1d) + 5);
             }
+            // 0x76F3BD `6A 01` is the range slot the 盘古流星火雨范围 arm
+            // overwrites (plugin 0x100B3E47 `mov byte [0x76F3BE],al`).
             PlayObject.QueueNativeMagicEffect(3, null, rawDamage,
-                UserMagic.MagicInfo.wMagicID, nTargetX, nTargetY, 1, true, 0,
+                UserMagic.MagicInfo.wMagicID, nTargetX, nTargetY,
+                Plugins.YanshenSkillPatches.RangeByte(PlayObject,
+                    UserMagic.MagicInfo.wMagicID, 1),
+                true, 0,
                 MagicDamageContext.Capture(UserMagic), 600);
             // Native trains UNCONDITIONALLY @0x76F3D2-0x76F3E5, outside the
             // DoSpell tail's `btLevel < 3 && boTrain` gate — same shape as the
