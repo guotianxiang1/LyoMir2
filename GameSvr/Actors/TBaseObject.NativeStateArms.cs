@@ -149,6 +149,24 @@ namespace GameSvr
                     SendNativeStateArmMsg("你被永恒冰牢困住了！",
                         NativeStateArmAlertColor, NativeStateArmAlertType);
                     break;
+                case 21:
+                    // 0x741D20  68 DC 2D 74 00        push 0x742DDC
+                    //           0FB7C7 movzx eax,di / E8 .. call 0x40C89C
+                    //           68 94 2C 74 00        push 0x742C94
+                    //           BA 03 00 00 00        mov edx,3  ; 3-part concat
+                    //           E8 .. call 0x405890 / mov cx,0xFFDB
+                    // 0x742DDC len 12 BFB9C4A7C1A6D4F6BCD3 3A 20 — note the
+                    // trailing ":" + space are part of the literal.
+                    // 0x742C94 len 2 C3EB "秒"
+                    SendNativeStateArmMsg("抗魔力增加: " + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 22:
+                    // 0x741D5B  68 F4 2D 74 00 ... same 3-part shape
+                    // 0x742DF4 len 12 B7C0D3F9C1A6D4F6BCD3 3A 20
+                    SendNativeStateArmMsg("防御力增加: " + seconds + "秒",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
                 case 26:
                     // 0x741DC6  66 B9 FF 38 / BA 44 2E 74 00
                     // 0x742E44 len 12 C4E3B1BBCAAFBBAFC1CBA3A1
@@ -192,6 +210,18 @@ namespace GameSvr
         {
             switch (internalType)
             {
+                case 21:
+                    // 0x742955  66 B9 DB FF / BA BC 33 74 00
+                    // 0x7433BC len 16 BFB9C4A7B7A8C1A6BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("抗魔法力回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
+                case 22:
+                    // 0x74296D  66 B9 DB FF / BA D8 33 74 00
+                    // 0x7433D8 len 14 B7C0D3F9C1A6BBD8B8B4D5FDB3A3
+                    SendNativeStateArmMsg("防御力回复正常",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                    break;
             }
         }
     }

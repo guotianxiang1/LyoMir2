@@ -348,21 +348,16 @@ namespace GameSvr
                     // where the state dies.
                     m_boHideMode = false;
                     break;
-                case 22:
-                    // Legacy slot 9 (STATE_DEFENCEUP). Arm 0x74296D:
-                    //   74296D  66 B9 DB FF           mov cx, 0xFFDB
-                    //   742971  BA D8 33 74 00        mov edx, 0x7433D8
-                    //   74297A  FF 93 D4 00 00 00     call [ebx+0xD4]
-                    // 0x7433D8 is "防御力回复正常", Delphi length prefix 14.
-                    SysMsg("防御力回复正常", MsgColor.Green, MsgType.Hint);
-                    break;
-                case 21:
-                    // Legacy slot 10 (STATE_MAGDEFENCEUP). Arm 0x742955 points at
-                    // 0x7433BC "抗魔法力回复正常" (length prefix 16). C# said
-                    // "魔法防御力回复正常", which is a 0-hit string in the image
-                    // under GBK, raw ASCII and UTF-16LE.
-                    SysMsg("抗魔法力回复正常", MsgColor.Green, MsgType.Hint);
-                    break;
+                // Legacy slots 9 and 10 (STATE_DEFENCEUP / STATE_MAGDEFENCEUP)
+                // used to send their "回复正常" text from here. Those are arms
+                // 0x74296D and 0x742955 of the lost table, which native reaches
+                // through VMT+0x14, not through this virtual — 0x77337C's whole
+                // body is `call [edi+0x14]`, the 0x773254 recalc probe and the
+                // state-20 companion, with no message call of its own. They now
+                // live in DispatchNativeStateLostArm with the literal 0xDB/0xFF
+                // pair the arms encode, instead of SysMsg's configurable colours
+                // and boShowPreFixMsg prefix. Leaving them here as well would
+                // have sent each text twice once the table landed.
                 case 20:
                     // Legacy slot 11 (STATE_BUBBLEDEFENCEUP). Silent in the
                     // native table (index 20 - 14 = 6 maps to the default arm).
