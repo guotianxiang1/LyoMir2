@@ -957,7 +957,12 @@ namespace GameSvr
 
         private bool CommitRunMove(int nX, int nY)
         {
-            var ignoreObjects = M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll;
+            // 原生 run mover（sub_76756C 2 格 / sub_767694 3 格）把 Obj+0x3FE（穿透缓存）
+            // 作为移动原语 sub_7797CC(MoveToMovingObjectForRun) 的 boIgnoreOccupancy——
+            // 移动读点 0x767601(run2) / 0x76772B(run3) 均 `mov al,[ebx+0x3fe]; push eax`。
+            // 调用方 RunTo/HorseRunTo/NativeRun3To 已在入口刷新该字段（tick 写等价），此处只读。
+            // 改前误用 boDiableHumanRun||(perm>9&&boGMRunAll)（stock-Mir2 污染，原生 mover 无此参）。
+            var ignoreObjects = m_boThroughOccupancyCache;
             return m_PEnvir.MoveToMovingObjectForRun(m_nCurrX, m_nCurrY, this, nX, nY, ignoreObjects) > 0;
         }
 
@@ -993,55 +998,61 @@ namespace GameSvr
                 int nOldX = m_nCurrX;
                 int nOldY = m_nCurrY;
                 m_btDirection = btDir;
+                // run mover sub_76756C 在 0x7675BA(探测 sub_777EF8)与 0x767601(移动 sub_7797CC)
+                // 两处都 `mov al,[ebx+0x3fe]` 读 Obj+0x3FE(穿透缓存) 作 boIgnoreOccupancy——
+                // 与 walk(0x6BBD0C) 同一缓存判定。原生每 tick 由 sub_6B2D38 回写该字段、mover 只读；
+                // 本端无法挂 tick，故在 mover 入口刷新一次(tick 写等价)，随后各探测与 CommitRunMove
+                // 统一读 m_boThroughOccupancyCache。改前误用 boDiableHumanRun||GMRunAll(stock-Mir2 污染)。
+                NativeRefreshThroughOccupancyCache();
                 switch (btDir)
                 {
                     case Grobal2.DR_UP:
-                        if (m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX, m_nCurrY - 2))
+                        if (m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY - 2))
                         {
                             m_nCurrY -= 2;
                         }
                         break;
                     case Grobal2.DR_UPRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY - 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY - 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX + 2, m_nCurrY - 2))
+                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY - 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY - 2))
                         {
                             m_nCurrX += 2;
                             m_nCurrY -= 2;
                         }
                         break;
                     case Grobal2.DR_RIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX + 2, m_nCurrY))
+                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY))
                         {
                             m_nCurrX += 2;
                         }
                         break;
                     case Grobal2.DR_DOWNRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY + 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY + 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX + 2, m_nCurrY + 2))
+                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY + 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY + 2))
                         {
                             m_nCurrX += 2;
                             m_nCurrY += 2;
                         }
                         break;
                     case Grobal2.DR_DOWN:
-                        if (m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX, m_nCurrY + 2))
+                        if (m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY + 2))
                         {
                             m_nCurrY += 2;
                         }
                         break;
                     case Grobal2.DR_DOWNLEFT:
-                        if (m_nCurrX > 1 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY + 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY + 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX - 2, m_nCurrY + 2))
+                        if (m_nCurrX > 1 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY + 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY + 2))
                         {
                             m_nCurrX -= 2;
                             m_nCurrY += 2;
                         }
                         break;
                     case Grobal2.DR_LEFT:
-                        if (m_nCurrX > 1 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX - 2, m_nCurrY))
+                        if (m_nCurrX > 1 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY))
                         {
                             m_nCurrX -= 2;
                         }
                         break;
                     case Grobal2.DR_UPLEFT:
-                        if (m_nCurrX > 1 && m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY - 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY - 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX - 2, m_nCurrY - 2))
+                        if (m_nCurrX > 1 && m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY - 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY - 2))
                         {
                             m_nCurrX -= 2;
                             m_nCurrY -= 2;
@@ -1083,55 +1094,58 @@ namespace GameSvr
                 n10 = m_nCurrX;
                 n14 = m_nCurrY;
                 m_btDirection = btDir;
+                // 3 格马跑 mover sub_767694 同样在 0x7676E2(探测)/0x76772B(移动)读 Obj+0x3FE
+                // 作 boIgnoreOccupancy。刷新一次(tick 写等价)后探测与 CommitRunMove 统一读缓存。
+                NativeRefreshThroughOccupancyCache();
                 switch (btDir)
                 {
                     case Grobal2.DR_UP:
-                        if (m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 3, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX, m_nCurrY - 3))
+                        if (m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY - 3))
                         {
                             m_nCurrY -= 3;
                         }
                         break;
                     case Grobal2.DR_UPRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY - 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY - 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY - 3, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX + 3, m_nCurrY - 3))
+                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY - 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY - 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY - 3))
                         {
                             m_nCurrX += 3;
                             m_nCurrY -= 3;
                         }
                         break;
                     case Grobal2.DR_RIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX + 3, m_nCurrY))
+                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY))
                         {
                             m_nCurrX += 3;
                         }
                         break;
                     case Grobal2.DR_DOWNRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY + 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY + 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY + 3, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX + 3, m_nCurrY + 3))
+                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY + 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY + 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY + 3))
                         {
                             m_nCurrX += 3;
                             m_nCurrY += 3;
                         }
                         break;
                     case Grobal2.DR_DOWN:
-                        if (m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 3, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX, m_nCurrY + 3))
+                        if (m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY + 3))
                         {
                             m_nCurrY += 3;
                         }
                         break;
                     case Grobal2.DR_DOWNLEFT:
-                        if (m_nCurrX > 2 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY + 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY + 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY + 3, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX - 3, m_nCurrY + 3))
+                        if (m_nCurrX > 2 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY + 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY + 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY + 3))
                         {
                             m_nCurrX -= 3;
                             m_nCurrY += 3;
                         }
                         break;
                     case Grobal2.DR_LEFT:
-                        if (m_nCurrX > 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX - 3, m_nCurrY))
+                        if (m_nCurrX > 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY))
                         {
                             m_nCurrX -= 3;
                         }
                         break;
                     case Grobal2.DR_UPLEFT:
-                        if (m_nCurrX > 2 && m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY - 1, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY - 2, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY - 3, M2Share.g_Config.boDiableHumanRun || m_btPermission > 9 && M2Share.g_Config.boGMRunAll) && CommitRunMove(m_nCurrX - 3, m_nCurrY - 3))
+                        if (m_nCurrX > 2 && m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY - 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY - 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY - 3))
                         {
                             m_nCurrX -= 3;
                             m_nCurrY -= 3;

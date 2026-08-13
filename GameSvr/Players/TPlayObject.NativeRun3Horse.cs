@@ -295,11 +295,13 @@ namespace GameSvr
             };
 
             m_btDirection = direction;
-            var ignoreObjects = M2Share.g_Config.boDiableHumanRun ||
-                                m_btPermission > 9 &&
-                                M2Share.g_Config.boGMRunAll;
+            // sub_767694 在 0x7676E2(探测 sub_777EF8)/0x76772B(移动 sub_7797CC)都读 Obj+0x3FE
+            // (穿透缓存) 作 boIgnoreOccupancy——与 walk / 2 格 run(sub_76756C) 同一缓存判定。
+            // 刷新一次(原生 tick sub_6B2D38 写点等价)后，探测与 CommitRunMove 统一读该字段。
+            // 改前误用 boDiableHumanRun||(perm>9&&boGMRunAll)(stock-Mir2 污染，原生 mover 无此参)。
+            NativeRefreshThroughOccupancyCache();
             if (!m_PEnvir.CanWalkEx(m_nCurrX + offsetX,
-                    m_nCurrY + offsetY, ignoreObjects))
+                    m_nCurrY + offsetY, m_boThroughOccupancyCache))
             {
                 return false;
             }
