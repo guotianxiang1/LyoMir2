@@ -263,6 +263,9 @@ namespace GameSvr
         public const int SKILL_66 = 66;
         public const int SKILL_67 = 67;
         public const int SKILL_111 = 111;
+        // Refused outright by the client-cast ladder before DoSpell is
+        // reached: 0x6BC713 `cmp eax,0x74` / 0x6BC717 `je 0x6BCD02`.
+        public const int SKILL_116 = 116;
         public const int SKILL_117 = 117;
         public const int SKILL_118 = 118;
         public const int SKILL_125 = 125;
@@ -274,6 +277,9 @@ namespace GameSvr
         // (0x6ED8C7 sub eax,0x16 / 0x6ED8CA je 0x6EDE0F).
         public const int SKILL_213 = 213;
         public const int SKILL_231 = 231;
+        // Same treatment as 116: 0x6BC749 `sub eax,0x42` (running total 234)
+        // / 0x6BC74C `je 0x6BCD02`.
+        public const int SKILL_234 = 234;
         public const int SKILL_236 = 236;
         public const int SKILL_288 = 288;
         public const int SKILL_289 = 289;

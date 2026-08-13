@@ -395,6 +395,22 @@ namespace GameSvr
                 case SpellsDef.SKILL_YEDO:
                     result = true;
                     break;
+                // ids 116, 234, 314 and 317 are refused by the ladder itself,
+                // each with its own `je 0x6BCD02` straight to the epilogue:
+                //   0x6BC713  83 f8 74  cmp eax,0x74      / 0x6BC717 je
+                //   0x6BC749  83 e8 42  sub eax,0x42 (234)/ 0x6BC74C je
+                //   0x6BC7C3  2d 3a 01 00 00  sub eax,0x13A (314) / 0x6BC7C8
+                //   0x6BC7CE  83 e8 03  sub eax,3 (317)   / 0x6BC7D1 je
+                // [ebp-5] was zeroed at 0x6BC59F and nothing on these paths
+                // touches it, so all four return FALSE without spending mana
+                // or sending an effect, and the CM_SPELL caller answers with
+                // RM_MOVEFAIL + SM_ACT_FAIL. 314 and 317 previously reached
+                // the default arm and were cast as ordinary spells.
+                case SpellsDef.SKILL_116:
+                case SpellsDef.SKILL_234:
+                case SpellsDef.SKILL_314:
+                case SpellsDef.SKILL_317:
+                    break;
                 case SpellsDef.SKILL_ERGUM:
                     if (m_MagicArr[SpellsDef.SKILL_ERGUM] != null)
                     {
