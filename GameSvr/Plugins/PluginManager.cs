@@ -1240,6 +1240,7 @@ namespace GameSvr.Plugins
             {
                 cmd.Format = TunnelFormat.CaretSeparated;
                 var parts = payload.TrimEnd('$').Split('^');
+                cmd.TokenCount = parts.Length;
                 if (parts.Length >= 2 && int.TryParse(parts[1], out var caretId))
                 {
                     cmd.CommandId = caretId;
@@ -1251,6 +1252,7 @@ namespace GameSvr.Plugins
                 cmd.Format = TunnelFormat.NumericId;
                 var clean = payload.TrimEnd('$');
                 var parts = clean.Split(',');
+                cmd.TokenCount = parts.Length;
                 var idIndex = string.Equals(parts[0], "集成函数", StringComparison.Ordinal) ? 1 : 0;
                 if (parts.Length > idIndex && int.TryParse(parts[idIndex], out var numId))
                 {
@@ -1526,5 +1528,13 @@ namespace GameSvr.Plugins
         public string ItemName { get; set; }
         public string[] Parameters { get; set; } = Array.Empty<string>();
         public string RawPayload { get; set; }
+
+        /// <summary>
+        /// 原生切分出来的段数（含 <c>!!!!集成函数</c> 前缀段与操作码段），即
+        /// <c>sub_100761A0</c> / <c>sub_1005DBA0</c> 里 <c>(end-begin)/24</c> 算出的
+        /// <c>std::vector&lt;std::string&gt;</c> 元素数。两个派发器都拿它先做一次
+        /// 「至少 2 段」检查，实现体再各自做一次自己的下限检查。
+        /// </summary>
+        public int TokenCount { get; set; }
     }
 }

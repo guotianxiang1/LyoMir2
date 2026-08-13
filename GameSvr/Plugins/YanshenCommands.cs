@@ -83,6 +83,57 @@ namespace GameSvr.Plugins
             [38]="眼神特殊函数",
         };
 
+        /// <summary>参数不足时原生返回的哨兵。三种取值都出现在实现体首部的短路支路上。</summary>
+        const int SentinelShort = -888;   // B8 88 FC FF FF   mov eax,0xFFFFFC88
+        const int SentinelMinus1 = -1;    // 83 C8 FF         or  eax,-1
+        /// <summary>操作码越界（不在 1..41）时派发器自己返回的值。</summary>
+        const int SentinelBadOpcode = -777;   // C7 45 E4 F7 FC FF FF
+
+        /// <summary>
+        /// 每个操作码的实现体在进入正文前都会先算段数
+        /// （<c>(end-begin)/24</c>，`B8 AB AA AA 2A` / `F7 E9` / `C1 FA 02`）
+        /// 再和一个下限比，不足就走短路支路返回哨兵。下限是**段数**，
+        /// 段 0 是 <c>!!!!集成函数</c>、段 1 是操作码，所以必填实参数 = 下限 − 2。
+        ///
+        /// 下表 (必填实参数, 哨兵) 逐条取自实现体首部的 `cmp eax,N` / `jae` / 返回值三件套：
+        ///
+        ///   op  cmpVA       cmp eax,N   短路返回      op  cmpVA       cmp eax,N   短路返回
+        ///    3  0x1006DB0C  0x0B  1006DB20 -888       21  0x1007348C  0x03  100734A0 -1
+        ///    4  0x100700FF  0x0A  10070113 -888       22  0x10072A81  0x05  10072A95 -1
+        ///    5  0x10070700  0x0B  10070714 -888       23  0x100735FF  0x0E  10073936 -1
+        ///    7  0x10070D7A  0x05  10070D8E -888       24  0x10073B8C  0x13  10073BA0 -1
+        ///    8  0x10070EC8  0x04  10070EDC -888       25  0x10073E6F  0x04  10073E83 -1
+        ///    9  0x10071020  0x0A  10071034 -888       26  0x10074105  0x0C  10074119 -1
+        ///   10  0x10071761  0x05  1007176A -1         27  0x10074CAC  0x05  10074CC0 -1
+        ///   11  0x1007196F  0x04  10071983 -1         28  0x10074F2F  0x04  10074F43 -1
+        ///   12  0x1006FE22  0x07  1006FE2E -1         29  0x100750DC  0x03  10075142 -1
+        ///   13  0x10071AAE  0x09  10071ABA -1         30  0x100751C1  0x07  100751D5 -1
+        ///   14  0x10071F5C  0x09  10071F9A  0         31  0x10075651  0x06  10075665 -1
+        ///   15  0x1007269C  0x05  100726B0 -1         32  0x10075BBC  0x06  10075BD0 -1
+        ///   16  0x100728EF  0x05  10072903 -1         33  0x100760AB  0x04  100760BF -1
+        ///   17  0x10072D1C  0x05  10072D30 -1         34  0x1006E928  0x0C  1006E93C -888
+        ///   18  0x10072FDC  0x05  10072FF0  0         37  0x1006F319  0x09  1006F32D -888
+        ///   20  0x1007325F  0x04  10073273 -1         39  0x1006F7DD  0x05  1006F7F1 -888
+        ///                                             40  0x1006F935  0x05  1006F949 -888
+        ///
+        /// 1、2、6、19 号实现体没有元数检查（首部无 `cmp eax,N` / `jae` 三件套）。
+        /// 35/36/38/41 的下限是 2 段（= 0 个必填实参），检查恒真，故不入表。
+        /// </summary>
+        static readonly Dictionary<int, (int MinParams, int Sentinel)> _nativeArity = new()
+        {
+            [3]=(9,SentinelShort),   [4]=(8,SentinelShort),   [5]=(9,SentinelShort),
+            [7]=(3,SentinelShort),   [8]=(2,SentinelShort),   [9]=(8,SentinelShort),
+            [10]=(3,SentinelMinus1), [11]=(2,SentinelMinus1), [12]=(5,SentinelMinus1),
+            [13]=(7,SentinelMinus1), [14]=(7,0),              [15]=(3,SentinelMinus1),
+            [16]=(3,SentinelMinus1), [17]=(3,SentinelMinus1), [18]=(3,0),
+            [20]=(2,SentinelMinus1), [21]=(1,SentinelMinus1), [22]=(3,SentinelMinus1),
+            [23]=(12,SentinelMinus1),[24]=(17,SentinelMinus1),[25]=(2,SentinelMinus1),
+            [26]=(10,SentinelMinus1),[27]=(3,SentinelMinus1), [28]=(2,SentinelMinus1),
+            [29]=(1,SentinelMinus1), [30]=(5,SentinelMinus1), [31]=(4,SentinelMinus1),
+            [32]=(4,SentinelMinus1), [33]=(2,SentinelMinus1), [34]=(10,SentinelShort),
+            [37]=(7,SentinelShort),  [39]=(3,SentinelShort),  [40]=(3,SentinelShort),
+        };
+
         static readonly Dictionary<string, string> _chineseToggles =
             new(StringComparer.OrdinalIgnoreCase)
         {
@@ -205,11 +256,40 @@ namespace GameSvr.Plugins
             {
                 YanshenApi.EnsureDirectCallReady(_pm, apiName);
                 using var directCall = YanshenApi.BeginStrictDirectCall(apiName);
+
+                // 两个派发器都先做「至少 2 段」检查，早于取操作码、早于开关门。
+                //   集成函数 sub_100761A0: 0x10076254 call 0x100184A0 (vector::size) /
+                //     0x10076259 `83 F8 02` cmp eax,2 / 0x1007625C `73 45` jae，不足则
+                //     0x1007625E `C7 45 E4 88 FC FF FF` 把结果槽写成 -888 直接返回。
+                //   爱心分割 sub_1005DBA0: 0x1005DC79 `83 F8 02` / 0x1005DC7C `73 35` jae，
+                //     不足则 0x1005DC7E `C7 45 AC 88 FC FF FF`。
+                if ((cmd.Format == TunnelFormat.NumericId
+                        || cmd.Format == TunnelFormat.CaretSeparated)
+                    && cmd.TokenCount < 2)
+                    return SentinelShort;
+
+                // 操作码越界。集成函数 0x100766E7 `83 E8 01` sub eax,1 /
+                // 0x100766F0 `83 BD AC FE FF FF 28` cmp [ebp-0x154],0x28 /
+                // 0x100766F7 `0F 87 F5 12 00 00` ja 0x100779F2 ->
+                // `C7 45 E4 F7 FC FF FF` = -777。爱心分割同理：0x1005DD0A
+                // `83 FF 25` cmp edi,0x25 / `ja 0x1005E361` -> `BE F7 FC FF FF` = -777。
+                if (cmd.Format == TunnelFormat.CaretSeparated
+                    && (cmd.CommandId < 1 || cmd.CommandId > 38))
+                    return SentinelBadOpcode;
+                if (cmd.Format == TunnelFormat.NumericId
+                    && (cmd.CommandId < 1 || cmd.CommandId > 41))
+                    return SentinelBadOpcode;
+
                 EnsureCommandEnabled(cmd, apiName);
 
                 // Route by format
                 if (cmd.Format == TunnelFormat.CaretSeparated)
                     return ExecuteCaret(cmd);
+
+                // 门过了才轮到实现体自己的元数检查（原生门在臂上、检查在实现体首部）。
+                if (_nativeArity.TryGetValue(cmd.CommandId, out var arity)
+                    && cmd.Parameters.Length < arity.MinParams)
+                    return arity.Sentinel;
 
                 return cmd.CommandId switch
                 {
@@ -222,11 +302,7 @@ namespace GameSvr.Plugins
                     5 => cmd.Parameters.Length >= 10
                         ? _api.PoisonEffect(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9))
                         : _api.Poison(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8)),
-                    // 10070D7A 83F805 cmp eax,5 / 10070D7D 7319 jae —— 不足 5 段返回 -888
-                    // （10070D8E B888FCFFFF），和 15/24/33 的 -1 不是一个值。
-                    7 => cmd.Parameters.Length >= 3
-                        ? _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2))
-                        : -888,
+                    7 => _api.DropItem(P(cmd,0),P(cmd,1),S(cmd,2)),
                     8 => _api.LifeSteal(P(cmd,0),P(cmd,1)),
                     9 => cmd.Parameters.Length == 1
                         ? _api.RootTarget(P(cmd,0))
@@ -243,26 +319,16 @@ namespace GameSvr.Plugins
                         : cmd.Parameters.Length >= 9
                             ? _api.AddTempAttr(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8))
                             : _api.SubTempAttr(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7)),
-                    // 10072650 处理器自带元数检查：1007269C 83F805 cmp eax,5 / 1007269F 7324 jae
-                    // 不足 5 段（前缀+id+3 参）走 100726B0 83C8FF or eax,-1。
-                    15 => cmd.Parameters.Length >= 3
-                        ? _api.EquipDura(P(cmd,0),P(cmd,1),P(cmd,2))
-                        : -1,
+                    15 => _api.EquipDura(P(cmd,0),P(cmd,1),P(cmd,2)),
                     16 => _api.SendDirectMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),S(cmd,5)),
                     17 => _api.SetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     18 => _api.GetEquipElement(P(cmd,0),P(cmd,1),P(cmd,2)),
                     19 => _api.AutoPickup(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3)),
-                    20 => cmd.Parameters.Length < 2
-                        ? -1
-                        : _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
+                    20 => _api.CheckMapMonByName(S(cmd,0),S(cmd,1)),
                     21 => _api.CheckItemBind(S(cmd,0))?1:0,
                     22 => _api.SendGroundMessage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),S(cmd,6)),
                     23 => _api.SetPetAttr(S(cmd,11),P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9),P(cmd,10)),
-                    // 10073B8C 83F813 cmp eax,0x13 / 10073B8F 7324 jae —— 不足 19 段返回 -1
-                    // （10073BA0 83C8FF or eax,-1）。
-                    24 => cmd.Parameters.Length >= 17
-                        ? _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1))
-                        : -1,
+                    24 => _api.NpcGiveItemYs(P(cmd,0),YS(cmd,1)),
                     25 => _api.SetLoopTimer(P(cmd,0),S(cmd,1)),
                     26 => _api.BounceSkill(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9)),
                     27 => _api.VacuumMonstersEx(P(cmd,0),P(cmd,1),P(cmd,2)),
@@ -271,11 +337,7 @@ namespace GameSvr.Plugins
                     30 => _api.GivePetSkill(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),S(cmd,4)),
                     31 => _api.GivePetSpecialAttr(P(cmd,1),P(cmd,2),PetAttrType(P(cmd,0)),S(cmd,3)),
                     32 => _api.GetItemExtreme(P(cmd,0),P(cmd,1),P(cmd,2)),
-                    // 100760AB 83F804 cmp eax,4 / 100760AE 7324 jae —— 不足 4 段返回 -1
-                    // （100760BF 83C8FF or eax,-1）。
-                    33 => cmd.Parameters.Length >= 2
-                        ? _api.BindUnbindItem(P(cmd,0),P(cmd,1))
-                        : -1,
+                    33 => _api.BindUnbindItem(P(cmd,0),P(cmd,1)),
                     34 => _api.HolyDamage(P(cmd,0),P(cmd,1),P(cmd,2),P(cmd,3),P(cmd,4),P(cmd,5),P(cmd,6),P(cmd,7),P(cmd,8),P(cmd,9)),
                     35 => _api.PetFollowAttack(P(cmd,0)),
                     36 => _api.GetBagWeight(P(cmd,0)),
