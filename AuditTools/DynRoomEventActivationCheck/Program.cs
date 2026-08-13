@@ -216,6 +216,11 @@ try
     var alreadyClosedEvent = ActiveEvents(integratedEventManager)
         .Single(value => value.m_nEventType == 7);
     alreadyClosedEvent.Close();
+    // EventManager.Run only walks the active list when more than 250 ms have passed since
+    // its last pass, and the constructor seeds that stamp with GetTickCount(). A Run() issued
+    // microseconds after construction is therefore a no-op and the migration below never
+    // ran. Age the stamp so the pass this case is about actually executes.
+    AgeEventManagerRunTick(integratedEventManager, 251);
     integratedEventManager.Run();
     Assert(ClosedEvents(integratedEventManager).Contains(alreadyClosedEvent),
         "closed activation event did not reach the manager closed list");
@@ -551,6 +556,13 @@ static IReadOnlyList<Event> ClosedEvents(EventManager manager)
         .GetField("_closedEventList",
             BindingFlags.Instance | BindingFlags.NonPublic)!
         .GetValue(manager)!;
+}
+
+static void AgeEventManagerRunTick(EventManager manager, int milliseconds)
+{
+    var field = typeof(EventManager).GetField("_runTick",
+        BindingFlags.Instance | BindingFlags.NonPublic)!;
+    field.SetValue(manager, unchecked((int)field.GetValue(manager)! - milliseconds));
 }
 
 static int GetDuration(Event value)
