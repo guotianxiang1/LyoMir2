@@ -50,3 +50,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeNorideGateCheck")]
 [assembly: InternalsVisibleTo("NativeFixedAbilityBaselineCheck")]
 [assembly: InternalsVisibleTo("NativeMagic191Check")]
+[assembly: InternalsVisibleTo("YanshenMonsterAttrCheck")]
