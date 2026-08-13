@@ -9,7 +9,7 @@ namespace GameSvr.Plugins
     ///
     /// 基于逆向分析完整还原:
     /// - 40 数字命令ID (格式: !!!!集成函数,ID,参数,参数$；2.07未使用ID 6)
-    /// - 15 分隔符命令 (格式: !!!!爱心分割^ID^参数^参数$)
+    /// - 16 分隔符命令 (格式: !!!!爱心分割^ID^参数^参数$)
     /// - 7 中文命令名 (格式: !!!!命令名参数:参数:)
     /// - 5 物品给予格式 (物品名!!!!元素数据)
     /// </summary>
@@ -36,7 +36,7 @@ namespace GameSvr.Plugins
             [39]="眼神特殊函数",[40]="眼神特殊函数",[41]="踢玩家下线",
         };
 
-        // Caret command toggles (^1^ ~ ^37^)
+        // Caret command toggles (^1^ ~ ^38^)
         static readonly Dictionary<int, string> _caretToggles = new()
         {
             [1]="眼神特殊函数",[2]="大背包",[3]="眼神特殊函数",
@@ -44,6 +44,7 @@ namespace GameSvr.Plugins
             [29]="自定义元素",[30]="高级回收",[31]="行会显示",
             [32]="特殊宝宝",[33]="屏蔽自动绑定",[34]="屏蔽自动绑定",
             [35]="自定义元素",[36]="自定义元素",[37]="特殊宝宝",
+            [38]="自定义元素",
         };
 
         static readonly Dictionary<string, string> _chineseToggles =
@@ -256,9 +257,10 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// Execute caret-separated commands (^1^ ~ ^37^).
-        /// Format: !!!!^commandID^param1^param2^...$
-        /// Reversed from yanshen2.0.7.dll Pascal wrappers.
+        /// Execute caret-separated commands (^1^ ~ ^38^).
+        /// Format: !!!!爱心分割^commandID^param1^param2^...$
+        /// The bare !!!!^N^ form is a different namespace on GetSignInActPrizer
+        /// and must not reach here (PasApiBridge.Yanshen.cs TryCallYanshenSignInTunnel).
         /// </summary>
         int ExecuteCaret(TunnelCommand cmd)
         {
@@ -308,6 +310,9 @@ namespace GameSvr.Plugins
 
                 // ^37^ — Ys_GetsxByName() — 按宝宝名字获取属性 (name, types)
                 37 => _api.GetPetAttrByName(S(cmd,0), P(cmd,1)),
+
+                // ^38^ — Ys_GetItemDBData() — 按物品id取 StdItem 字段 (itemid, pid)
+                38 => _api.GetItemDbData(P(cmd,0), P(cmd,1)),
 
                 _ => 0
             };
