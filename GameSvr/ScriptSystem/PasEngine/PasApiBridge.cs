@@ -5711,12 +5711,12 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "reqcastlewar":
-                    // ReqCastleWar - request castle war for player's guild
-                    if (CurrentPlayer?.m_MyGuild != null)
+                    // ReqCastleWar — native sub_6CA6AC @0x006CA6AC
+                    if (CurrentPlayer != null)
                     {
                         var castle = M2Share.CastleManager.GetCastle(0);
                         if (castle != null)
-                            castle.AddAttackerInfo(CurrentPlayer.m_MyGuild);
+                            Services.NativeReqCastleWar.TryApply(CurrentPlayer, castle);
                     }
                     return true;
 
@@ -8060,16 +8060,13 @@ namespace GameSvr.PasEngine
 
                 case "startsiege":
                 case "startcastlewar":
-                    if (CurrentPlayer?.m_MyGuild != null)
+                    if (CurrentPlayer != null)
                     {
                         var castle = M2Share.CastleManager.GetCastle(0);
                         if (castle != null)
-                        {
-                            castle.AddAttackerInfo(CurrentPlayer.m_MyGuild);
-                                                        return true;
-                        }
+                            Services.NativeReqCastleWar.TryApply(CurrentPlayer, castle);
                     }
-                                        return true;
+                    return true;
 
                 case "endsiege":
                 case "endcastlewar":

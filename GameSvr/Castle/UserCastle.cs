@@ -1171,6 +1171,8 @@ namespace GameSvr
             return true;
         }
 
+        internal bool IsAttackerGuild(Association guild) => InAttackerList(guild);
+
         private bool InAttackerList(Association Guild)
         {
             var result = false;
