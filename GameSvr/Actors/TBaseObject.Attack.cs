@@ -547,7 +547,7 @@ namespace GameSvr
                     continue;
                 }
 
-                var damage = (int)target.GetHitStruckDamage(this,
+                var damage = target.GetHitStruckDamage(this,
                     CalculateSunSwordDistancePower(scaledPower, distance));
                 damage = target.ApplyNativePhysicalCritical(this, damage);
                 // Native supplies the attacker in ecx at every +0xA8 site, e.g.

@@ -1,0 +1,266 @@
+using System;
+
+namespace GameSvr.StatusEffects
+{
+    /// <summary>
+    /// High-level status effect manager for TBaseObject
+    ///
+    /// Integrates all 11 migration phases:
+    /// ✓ Phase 1: Bitset data structure
+    /// ✓ Phase 2: State application
+    /// ✓ Phase 3: State removal
+    /// ✓ Phase 4: State queries
+    /// ✓ Phase 5: State persistence
+    /// ✓ Phase 6: State countdown/expiry
+    /// □ Phase 7: State broadcast (delegated to actor)
+    /// □ Phase 8: State mutex (TODO)
+    /// □ Phase 9: State hierarchy (TODO)
+    /// □ Phase 10: State effect calculation (TODO)
+    /// □ Phase 11: State UI sync (delegated to actor)
+    ///
+    /// USAGE:
+    /// - Replace m_wStatusTimeArr usage with this manager
+    /// - Call ProcessExpiry() in actor's Run() tick (>= 500ms interval)
+    /// - Implement callbacks for StateGained/StateLost/Notify
+    /// </summary>
+    public class StatusEffectManager
+    {
+        private readonly NativeBodyState _state = new NativeBodyState();
+        private readonly object _owner;
+
+        // Callbacks (set by owner actor)
+        public Func<byte, bool> ApplyGateCallback { get; set; }
+        public Action<byte, int> StateGainedCallback { get; set; }
+        public Action<byte> StateLostCallback { get; set; }
+        public Action<byte, int> NotifyClientCallback { get; set; }
+        public Func<uint> GetTickCountCallback { get; set; }
+
+        public StatusEffectManager(object owner)
+        {
+            _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        }
+
+        #region Basic Operations (Phase 1, 3, 4)
+
+        /// <summary>
+        /// Test if a state is active
+        /// </summary>
+        public bool HasState(byte stateId)
+        {
+            return _state.HasState(stateId);
+        }
+
+        /// <summary>
+        /// Get the level/value of an active state (0 if not active)
+        /// </summary>
+        public int GetStateLevel(byte stateId)
+        {
+            return _state.GetStateLevel(stateId);
+        }
+
+        /// <summary>
+        /// Get remaining duration in milliseconds (-1 for permanent, 0 if not found)
+        /// </summary>
+        public int GetStateRemainingMs(byte stateId)
+        {
+            return _state.GetStateRemainingMs(stateId);
+        }
+
+        /// <summary>
+        /// Remove a state by ID
+        /// </summary>
+        public bool RemoveState(byte stateId)
+        {
+            return _state.RemoveState(stateId, StateLostCallback);
+        }
+
+        #endregion
+
+        #region State Application (Phase 2)
+
+        /// <summary>
+        /// Apply a state with duration and value
+        ///
+        /// Native signature (Delphi register convention):
+        ///   eax      = Self
+        ///   dl       = stateId
+        ///   ecx      = durationMs      ; -1 = PERMANENT
+        ///   [ebp+8]  = byte  -> callerFlag
+        ///   [ebp+0xC]= dword -> value/level
+        ///
+        /// CRITICAL NATIVE BEHAVIOR:
+        /// - Gate (immunity) can silently abort
+        /// - When new value > old: duration updated unconditionally (can shorten)
+        /// - When new value == old: duration only lengthened (monotonic)
+        /// - When new value < old: no update at all
+        /// </summary>
+        public void ApplyState(byte stateId, int durationMs, int value = 0, byte callerFlag = 0)
+        {
+            if (GetTickCountCallback == null)
+                throw new InvalidOperationException("GetTickCountCallback not set");
+
+            _state.ApplyState(
+                stateId,
+                durationMs,
+                callerFlag,
+                value,
+                ApplyGateCallback,
+                StateGainedCallback,
+                NotifyClientCallback,
+                GetTickCountCallback
+            );
+        }
+
+        /// <summary>
+        /// Apply a permanent state
+        /// </summary>
+        public void ApplyStatePermanent(byte stateId, int value = 0, byte callerFlag = 0)
+        {
+            ApplyState(stateId, -1, value, callerFlag);
+        }
+
+        /// <summary>
+        /// Apply a timed state (duration in seconds, converted to ms)
+        /// </summary>
+        public void ApplyStateSeconds(byte stateId, int durationSeconds, int value = 0, byte callerFlag = 0)
+        {
+            ApplyState(stateId, durationSeconds * 1000, value, callerFlag);
+        }
+
+        #endregion
+
+        #region Expiry Processing (Phase 6)
+
+        /// <summary>
+        /// Process state expiry (call from actor's Run() tick)
+        ///
+        /// Contract from §3.2:
+        /// - Interval: 500ms (0x1F4)
+        /// - Comparison: >= (not strictly >)
+        /// - Latch: hard reset to now (residue discarded)
+        /// - Two-phase: collect expired, then fire callbacks
+        /// - StateLost observes bitset with bit already cleared
+        ///
+        /// IMPORTANT: Must be called regularly from actor tick
+        /// Native calls this from vmt+0x100 (Run)
+        /// </summary>
+        public void ProcessExpiry()
+        {
+            if (GetTickCountCallback == null)
+                throw new InvalidOperationException("GetTickCountCallback not set");
+
+            _state.ProcessExpiry(GetTickCountCallback, StateLostCallback);
+        }
+
+        #endregion
+
+        #region Persistence (Phase 5)
+
+        /// <summary>
+        /// Serialize states for ScriptData (type 6)
+        ///
+        /// Only persists states where BodyStatePersistFilter.ShouldPersist(id) is true
+        /// 57 states are persisted (see bodystate-persist-filter-polarity.md)
+        ///
+        /// Format: caller must implement the ScriptData encoding
+        /// This method provides the filtered state records
+        /// </summary>
+        public void GetPersistableStates(Action<byte, int, int> callback)
+        {
+            if (callback == null)
+                throw new ArgumentNullException(nameof(callback));
+
+            // Walk all states 0x00..0x6F (112)
+            for (byte stateId = BodyStateConstants.STATE_MIN; stateId <= BodyStateConstants.STATE_MAX; stateId++)
+            {
+                // Check if state is active
+                if (!HasState(stateId))
+                    continue;
+
+                // Check persistence filter
+                if (!BodyStatePersistFilter.ShouldPersist(stateId))
+                    continue;
+
+                // Get state data
+                int level = GetStateLevel(stateId);
+                int remainingMs = GetStateRemainingMs(stateId);
+
+                // Invoke callback with (stateId, level, remainingMs)
+                callback(stateId, level, remainingMs);
+            }
+        }
+
+        /// <summary>
+        /// Restore states from ScriptData (type 6)
+        /// </summary>
+        public void RestoreState(byte stateId, int durationMs, int value)
+        {
+            // Restoration bypasses gate checks (already validated when saved)
+            if (GetTickCountCallback == null)
+                throw new InvalidOperationException("GetTickCountCallback not set");
+
+            _state.ApplyState(
+                stateId,
+                durationMs,
+                0, // callerFlag
+                value,
+                null, // no gate for restoration
+                StateGainedCallback,
+                NotifyClientCallback,
+                GetTickCountCallback
+            );
+        }
+
+        #endregion
+
+        #region Protocol Support (Phase 7, 11)
+
+        /// <summary>
+        /// Get the raw 14-byte presence bitset for protocol message 657
+        /// (SM_CHARSTATUSCHANGED)
+        ///
+        /// Native: sub_7729C4 sends only 16-byte bitset + word[obj+0x274]
+        /// Per-state durations are sent via notify text, not in 657
+        /// </summary>
+        public void GetPresenceBitsetForProtocol(byte[] buffer, int offset)
+        {
+            _state.GetPresenceBitset(buffer, offset);
+        }
+
+        #endregion
+
+        #region Diagnostics
+
+        /// <summary>
+        /// Get count of active states (for debugging/auditing)
+        /// </summary>
+        public int GetActiveStateCount()
+        {
+            return _state.GetActiveStateCount();
+        }
+
+        /// <summary>
+        /// Dump all active states (for debugging)
+        /// </summary>
+        public string DumpActiveStates()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"Active states: {GetActiveStateCount()}");
+
+            for (byte i = BodyStateConstants.STATE_MIN; i <= BodyStateConstants.STATE_MAX; i++)
+            {
+                if (HasState(i))
+                {
+                    int level = GetStateLevel(i);
+                    int ms = GetStateRemainingMs(i);
+                    string duration = ms == -1 ? "PERM" : $"{ms}ms";
+                    sb.AppendLine($"  State 0x{i:X2}: level={level}, remaining={duration}");
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        #endregion
+    }
+}

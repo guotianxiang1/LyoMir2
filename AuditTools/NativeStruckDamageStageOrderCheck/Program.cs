@@ -56,7 +56,7 @@ int struckAt = combat.IndexOf("public void StruckDamage(int nDamage, "
     + "TBaseObject attacker)", StringComparison.Ordinal);
 Check(struckAt > 0, "StruckDamage(int, TBaseObject) overload is missing "
     + "(native +0x0A8 is ret 8 with ecx = the attacker)");
-int gettersAt = combat.IndexOf("public ushort GetHitStruckDamage(",
+int gettersAt = combat.IndexOf("public int GetHitStruckDamage(",
     StringComparison.Ordinal);
 Check(gettersAt > 0 && gettersAt < struckAt,
     "GetHitStruckDamage must precede StruckDamage in the file");
@@ -209,7 +209,7 @@ plain.m_nNativeMonsterSuperForceMask = 2;
 plain.m_nNativeMonsterSuperForceReductionPercent = 25;
 SetShieldCharges(plain, 2);
 plain.SetNativeActiveState(59);
-Equal((ushort)100, plain.GetHitStruckDamage(mage, 100),
+Equal(100, plain.GetHitStruckDamage(mage, 100),
     "0x7679AE ret 4: sub_767958 applies neither super-force nor the shield");
 Equal(100, plain.GetMagStruckDamage(mage, 100),
     "0x767A0E ret 4: sub_7679B8 applies neither either");

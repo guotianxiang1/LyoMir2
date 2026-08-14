@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using GameSvr.Services;
 using SystemModule;
 using SystemModule.Packet;
 
@@ -581,7 +582,7 @@ namespace GameSvr
                     continue;
                 }
 
-                var hero = new HeroObject();
+                var hero = HeroFactory.CreateFromRecord(response.Record);
                 if (!NativeHeroRuntimeCodec.TryApply(hero, response.Record, response.DynamicData, out var error))
                 {
                     M2Share.ErrorMessage($"[HeroDB] 英雄记录还原失败 {pending.MasterName}: {error}");

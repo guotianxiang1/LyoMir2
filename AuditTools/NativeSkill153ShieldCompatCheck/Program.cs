@@ -203,11 +203,11 @@ static void VerifyPhysicalResolverConsumption()
     // The charge is consumed in StruckDamage (sub_73F9FC @0x73FB5F), NOT in
     // the armour getter: sub_767958 ends `call sub_76FFE8` + `ret 4`
     // (@0x7679A9-0x7679B2) and never reads word [+0x3FC].
-    Equal((ushort)0, actor.GetHitStruckDamage(null, 0),
+    Equal(0, actor.GetHitStruckDamage(null, 0),
         "zero physical damage");
     Equal((ushort)2, Charges(actor),
         "armour getter must not consume a charge");
-    Equal((ushort)200, actor.GetHitStruckDamage(null, 200),
+    Equal(200, actor.GetHitStruckDamage(null, 200),
         "armour getter must pass damage through unshielded");
     Equal((ushort)2, Charges(actor),
         "armour getter consumed a charge on a positive hit");

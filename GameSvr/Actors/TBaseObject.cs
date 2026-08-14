@@ -5281,7 +5281,7 @@ namespace GameSvr
         /// @0x7679A9 tail-calls <c>sub_76FFE8</c> (bubble) and returns.
         /// </para>
         /// </summary>
-        public ushort GetHitStruckDamage(TBaseObject Target, int nDamage)
+        public int GetHitStruckDamage(TBaseObject Target, int nDamage)
         {
             // sub_7678F4 is shared with the magic entry; state 0x11 skips it.
             if (!HasNativeActiveState(17))
@@ -5307,7 +5307,7 @@ namespace GameSvr
             // attacker parameter in either armour getter — confirmed by the
             // dispatcher @0x76C449-0x76C455 (`mov ecx,[ebp+0xC]` = damage,
             // `movzx edx,bx` = skill id).
-            return (ushort)nDamage;
+            return nDamage;
         }
 
         /// <summary>

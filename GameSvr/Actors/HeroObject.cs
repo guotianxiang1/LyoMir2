@@ -295,6 +295,16 @@ namespace GameSvr
             m_WAbil.HP = currentHp;
             m_WAbil.MP = currentMp;
             RecalcAbilitys();
+            InitializeJobSpecificAbilities();
+        }
+
+        /// <summary>
+        /// Hook for job-specific ability initialization.
+        /// Subclasses (WarriorHero, WizardHero, TaoistHero) can override to add
+        /// class-specific logic. Base implementation does nothing.
+        /// </summary>
+        protected virtual void InitializeJobSpecificAbilities()
+        {
         }
 
         internal static ClientPacket BuildHeroRuntimePacket(TProcessMessage processMsg, int currentExp, int level)
