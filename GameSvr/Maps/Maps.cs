@@ -374,6 +374,26 @@ namespace GameSvr
                                 MapFlag.boNOC2C = true;
                                 continue;
                             }
+                            if (s34.Equals("NOHERO", StringComparison.OrdinalIgnoreCase))
+                            {
+                                MapFlag.boNOHERO = true;
+                                continue;
+                            }
+                            if (s34.Equals("MINGJIANG", StringComparison.OrdinalIgnoreCase))
+                            {
+                                MapFlag.boMINGJIANG = true;
+                                continue;
+                            }
+                            if (s34.Equals("HACKQUEST", StringComparison.OrdinalIgnoreCase))
+                            {
+                                MapFlag.boHACKQUEST = true;
+                                continue;
+                            }
+                            if (s34.Equals("NOEXPLORE", StringComparison.OrdinalIgnoreCase))
+                            {
+                                MapFlag.boNOEXPLORE = true;
+                                continue;
+                            }
                             // NOHUMNOMON REMOVED (2026-08-09, Tier-1 negative
                             // evidence). 战神 has no such map flag: an image-wide
                             // byte scan for NOHUMNOMON / NOHUMNOMONSTER / NOHUM /
