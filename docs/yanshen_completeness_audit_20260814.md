@@ -264,34 +264,40 @@ YanshenApi.cs 内原生 VA 记号总数   : 526
 
 ### 2.6 F3 S 变量坐标面（34）
 
-本轮实测 C# 侧 `TryGetScriptVar('S', …)` 的**全部** 11 个调用点：
+**本轮复核（`ddf7fd1a` + capstone 亲验 `0x100CE4EA`）**：C# 侧 `TryGetScriptVar('S', …)` 已扩至
+`YanshenSkillPatches` / `YanshenTriggerDispatch` / `YanshenTriggerDispatch.Wave2` /
+`YanshenPage1PostDamage` / `YanshenLaserSlots` / `TPlayObject.YanshenSVarSeed`。
+
+已接线坐标（逐字节对账）：
 
 ```
-YanshenSkillPatches.cs:33,56,122,140,156,172,181,197   → S(1, 74..92) 子集 + S(1,95)
-YanshenTriggerDispatch.cs:575,580,581                  → S(1,64) / S(1,67) / S(1,68)
-```
-
-从 `MapMainAttr` / `MapRange` / `MapScale`（`YanshenSkillPatches.cs:224-304`）解出实际覆盖的下标：
-
-```
-主属性 83 84 80 76 79 87 90 | 范围 86 85 77 75 88 | 除数 74 | 系数 78 89
-嗜血 91 92 | 野蛮 95 | 倍攻暴击 64 67 68            ⇒ 共 21 个坐标
+登录灌种 S(1,1..150)+哨兵 S(1,49)     → TPlayObject.YanshenSVarSeed.cs:70-99（0x100CE4EA）
+倍攻暴击 S(1,64/67/68)               → YanshenTriggerDispatch.cs:773-779（0x100D3BC4）
+英雄倍攻 S(1,44/45/46)               → YanshenTriggerDispatch.Wave2.cs:66-78（0x100D49B4）
+技能主/范/除/系数 S(1,74..92) 子集   → YanshenSkillPatches.cs（0x100D8A3D 等）
+激光槽② S(1,82)                       → YanshenLaserSlots+MagicManager.cs:423（0x76EA14）
+激光槽① S(1,81)                       → YanshenLaserSlots 读取器已钉住、**故意不接**
+                                       （0x76FEA7 arg0 写 struct[0x2C] 但 type=2 伤害链不读 ——
+                                       YanshenLaserSlotsCheck + MagicManager.cs:424-431）
+野蛮 S(1,95)                           → YanshenSkillPatches.cs:197（0x100DB11C）
+五法术切割 S(1,116..120)               → YanshenPage1PostDamage.cs:54-65（0x1007AF46 cmp 0x522）
 ```
 
 对照 `ys_svars` §4.1 的 33 行 + §5 的 `S(1,123)/S(1,124)`：
 
 | 判定 | 数 | 条目 |
 |---|---:|---|
-| FAITHFUL | **2** | `S(1,64/67/68)`；`S(1,95)` |
-| PARTIAL | **1** | `S(1,74..92)`：17 个接了，`S(1,81)`（激光 arg0 低 8 位）与 `S(1,82)`（TrainSkill 的 `Random` 实参）**明确未接** |
+| FAITHFUL | **4** | `S(1,49)+登录灌种`（`0x100CE4EA`）；`S(1,64/67/68)`；`S(1,74..92)`（81 死参 fail-closed、82 已接线）；`S(1,95)` |
+| PARTIAL | **0** | — |
 | UNPROVEN-BLOCKED | **3** | `S(1,1)` 禁言模式 6/7/8（SetS detour `0x100CEB40` 跳进全零 16 MB）；`S(1,12)/S(1,30)`（模板 `0x100D120A` 未回收）；`S(1,123)/S(1,124)`（C# `PasApiBridge.Yanshen.cs:477-478` 有消费者，三条原生路径都没找到读点） |
-| MISSING | **28** | 其余全部 |
+| MISSING | **27** | 其余全部（含 `S(1,9..11,50..53,62,63)` 刀刀切割族、`S(1,13..23,31..41)` 永久属性 22 槽、`S(7/8/9,magicid)` 变址等） |
 | 合计 | **34** | ✓ |
 
-28 条 MISSING 里最要紧的两块：
+27 条 MISSING 里最要紧的三块（播种已落地，不再阻塞下游门控）：
 
-1. **`S(1,1..150)` 登录播种缺失。** 原生 `0x100CE4EA` 起：读 `S(1,49)`，`!= 0x522`(1314) 就跑 150 轮循环，把 `S(1,1..8)` 的负值写 `-1`、`S(1,9..150)` 的负值写 `0`、`S(1,49)` 写 `1314`。**全仓无任何 `1314`/`0x522` 写入 `S(1,49)`**（本轮 grep 确认，三处 `1314` 命中全是无关文本）。后果：原生切割函数 `0x1007AF24` 起先核对 `S(1,49)==1314` 才继续读 `bank+0x398..0x3B8`，C# 既没有这道门也没有这段直读。
-2. **永久属性 22 槽**（`S(1,13..23)` 主号 / `S(1,31..41)` 英雄经 `[hero+0x68C]`，宿主 `0x73D9CF..0x73DA3A` 12 个 memcpy 站点）与**切割族**（`S(1,9..11,50..53,62,63)`）、**技能变址** `S(7/8/9, magicid)`——全部无消费者。
+1. **刀刀切割族** `S(1,9..11,50..53,62,63)` + 派发门 `S(1,65)==100`：原生 `0x100CF36E` 用裸银行偏移 + 对象字段合成伪随机（`+0x18/+0x470`），C# 无对应模型，仍 fail-closed。
+2. **永久属性 22 槽**（`S(1,13..23)` 主号 / `S(1,31..41)` 英雄经 `[hero+0x68C]`，宿主 `0x73D9CF..0x73DA3A` 12 个 memcpy 站点）——模板 `0x100D120A` 未回收，C# 无消费者。
+3. **技能变址** `S(7/8/9, magicid)` 与 §4.1 其余 R 行——路径 1/2 已证实读点，C# 未接。
 
 ### 2.7 F4 回收子系统（28）—— 本轮最大的好消息
 
@@ -322,35 +328,27 @@ YanshenTriggerDispatch.cs:575,580,581                  → S(1,64) / S(1,67) / S
 
 ### 2.8 F5 协议 / 结构编解码（21）
 
-`dotnet run --project AuditTools/Yanshen207ProtocolCheck` 的 21 个具名检查：**20 PASS / 1 FAIL**。
+`dotnet run --project AuditTools/Yanshen207ProtocolCheck` 的 21 个具名检查：**21 PASS / 0 FAIL**（本轮亲跑 `ddf7fd1a`）。
 
 PASS 覆盖：`!!!!` 三种隧道（数字 / `^` / 中文）、五种给予格式、动态 `TClientItem` 线格式、13..15 号装备槽、
 `SM_DEALREMOTEADDITEM` 原生头、`CM_DEALDELITEM` 整单撤销、`SM_STORAGE_OK`、物品生产包逐字节、
 `SM_SAVEITEMLIST` 容量头、物品来源字段 55..108、英雄动态 `TClientEquip`、英雄能力头与空表、
-`SM_SENDUSERSTATE` 16 动态槽、13..15 槽参与属性、命令 16 / 命令 22 语义、绑定传播。
+`SM_SENDUSERSTATE` 16 动态槽、13..15 槽参与属性、命令 16 / 命令 22 语义、绑定传播、
+**白猪 16 槽装备规则**（A8 裁决见下）。
 
-FAIL 一条：
+**A8 裁决（2026-08-14，capstone 亲验）**：腰带/鞋子/宝石各只收一个 StdMode（27/28/7），扩展号拒收。
+工具 `Program.cs:901-947` 与 `M2Share.CheckUserItems`（DURA-16/17）已对齐，不再要求 `{54,52,62,53,63,64}`。
 
-```
-- white-pig 16-slot equipment rules:
-  InvalidOperationException: belt StdMode 54
-  Program.cs:832 → M2Share.CheckUserItems(U_BELT, StdMode=54) == false
-```
+原生证据（`flat_image.bin` @0x400000）：
 
-**这是一处跨车道契约冲突，不是简单漏实现**：
-
-- 工具（`Yanshen207ProtocolCheck/Program.cs:831-839`）按 2.07 白猪规则要求
-  腰带接受 `{27,54,64}`、鞋子 `{28,52,62}`、宝石 `{7,53,63}`。
-- 引擎 `M2Share.cs:2105-2122` 只接受 `27 / 28 / 7`，且 `M2Share.cs:2073-2079` 的 DURA-16/17 注释**用 `flat_image.bin` 字节论证**了
-  `StdMode 51/52/53/54/63/64` 落到默认臂 `0x74D67E`（TBaseItem）、`62` 走 `TAnimalMascot`，
-  两者父链都不是 `TEquipItem`，VMT 里根本没有 `+0x60` 谓词槽 ⇒ **原生穿不上**。
-
-两边都拿了证据，但指向相反。**需要裁决**：眼神/白猪是否在插件里给这三槽加了扩展 StdMode（图谱 121 功能面里未见对应补丁站点）。在裁决之前，本条计 **MISSING**（工具断言未满足）。
+- StdMode 派发表 `0x74C374`：27→TBelt / 28→TBoots / 7→TCharm；51-54/62-64→TBasePileItem/TAnimalMascot（VMT 无 +0x60 谓词）。
+- 谓词体：`0x762D30 cmp dl,0xA`（腰带 slot10）、`0x7630CC cmp dl,0xB`（鞋子 slot11）、`0x763390 cmp dl,0xC`（宝石 slot12）。
+- 眼神插件转储对以上 20 个 VA 做 dword 引用普查 = **0 命中**（插件不扩展装备资格）。
 
 | 判定 | 数 |
 |---|---:|
-| FAITHFUL | 20 |
-| MISSING | 1 |
+| FAITHFUL | 21 |
+| MISSING | 0 |
 | 合计 | 21 |
 
 ### 2.9 F6 `!!!!` 命令隧道（72）
@@ -384,32 +382,32 @@ FAIL 一条：
 |---|---:|---:|---:|---:|---:|---:|
 | F1 配置键 → 宿主行为 | 380 | 172 | 32 | 167 | 0 | 9 |
 | F2 脚本 API 名 | 125 | 39 | 0 | 17 | 1 | 68 |
-| F3 S 变量坐标组 | 34 | 2 | 1 | 28 | 0 | 3 |
+| F3 S 变量坐标组 | 34 | 4 | 0 | 27 | 0 | 3 |
 | F4 回收语义契约 | 28 | 24 | 1 | 0 | 0 | 3 |
-| F5 协议 / 结构断言 | 21 | 20 | 0 | 1 | 0 | 0 |
+| F5 协议 / 结构断言 | 21 | 21 | 0 | 0 | 0 | 0 |
 | F6 `!!!!` 命令隧道 | 72 | 41 | 0 | 0 | 1 | 30 |
-| **合计** | **660** | **298** | **34** | **213** | **2** | **113** |
+| **合计** | **660** | **300** | **33** | **212** | **2** | **113** |
 
-校验：`298 + 34 + 213 + 2 + 113 = 660` ✓
+校验：`300 + 33 + 212 + 2 + 113 = 660` ✓
 
-- 严格有据完成度 `298 / 660 = 45.2%`
-- 广义可交付度 `(298 + 2 + 113) / 660 = 413 / 660 = 62.6%`
-- 真实可证行为缺口 `(213 + 34) / 660 = 247 / 660 = 37.4%`
+- 严格有据完成度 `300 / 660 = 45.5%`
+- 广义可交付度 `(300 + 2 + 113) / 660 = 415 / 660 = 62.9%`
+- 真实可证行为缺口 `(212 + 33) / 660 = 245 / 660 = 37.1%`
 - UNPROVEN 二分：`UNPROVEN-IMPL 98`（F2 68 + F6 30）/ `UNPROVEN-BLOCKED 15`（F1 9 + F3 3 + F4 3）
 
-> **最保守口径**：若把 98 条 `UNPROVEN-IMPL` 全部当作"未证即未成"，广义可交付度降到 `(298+2+15)/660 = 47.7%`；
-> 若反过来把它们全部当作"已实现即算数"，严格完成度升到 `(298+98)/660 = 60.0%`。
-> **真值在 45.2% ~ 60.0% 之间**，收敛它的唯一办法是给那 98 条补原生 VA。
+> **最保守口径**：若把 98 条 `UNPROVEN-IMPL` 全部当作"未证即未成"，广义可交付度降到 `(300+2+15)/660 = 48.0%`；
+> 若反过来把它们全部当作"已实现即算数"，严格完成度升到 `(300+98)/660 = 60.3%`。
+> **真值在 45.5% ~ 60.3% 之间**，收敛它的唯一办法是给那 98 条补原生 VA。
 
 ---
 
 ## 4. 17 个专用审计工具：PASS / FAIL 汇总
 
-全部 `dotnet run`（基线 `186ef170`）。**13 PASS / 4 FAIL**。
+全部 `dotnet run`（基线 `ddf7fd1a`）。**14 PASS / 3 FAIL**。
 
 | # | 工具 | 结果 | 关键输出 / 失败原因 |
 |---|---|---|---|
-| 1 | `Yanshen207ProtocolCheck` | **FAIL** | 21 检查 20 过 1 败：`belt StdMode 54` —— §2.8 的契约冲突 |
+| 1 | `Yanshen207ProtocolCheck` | **PASS** | 21 检查全过；A8 白猪 16 槽 StdMode 27/28/7 与 DURA-16/17 对齐 |
 | 2 | `Yanshen208ApiSurfaceCheck` | PASS | `interpreter=no-player item=outlook+object+bind role=speed+npc-reject equipment=slot15 hero=live-weight save=slot15` |
 | 3 | `YanshenApiAccessCheck` | PASS | `plugin=running+initys switches=missing+off+on calls=…+alias+player+main+wrapper init=rollback+concurrent` |
 | 4 | `YanshenCdCompatCheck` | PASS | |
