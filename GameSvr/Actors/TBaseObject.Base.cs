@@ -1339,7 +1339,7 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TBaseObject::ScatterBagItems";
             try
             {
-                var DropWide = HUtil32._MIN(M2Share.g_Config.nDropItemRage, 7);
+                const int DropWide = 5; // 原版硬编码 @0x71EB1E push 5
                 if ((m_btRaceServer == Grobal2.RC_PLAYCLONE) && (m_Master != null))
                 {
                     return;

@@ -2459,9 +2459,15 @@ namespace GameSvr
                                 TUserItem UserItem = null;
                                 if (CopyToUserItemFromName(MonItem.ItemName, ref UserItem))
                                 {
-                                    UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
                                     var StdItem = GetStdItem(UserItem.wIndex);
                                     if (StdItem == null) continue;
+                                    // DROP-36: Skip durability randomization for stackable items (StdMode=7)
+                                    // Native: sub_71EC88 @0x71ED0A: cmp byte [eax+0x14],7 / je
+                                    // For stackable items, Dura field represents quantity, not durability
+                                    if (StdItem.StdMode != 7)
+                                    {
+                                        UserItem.Dura = (ushort)HUtil32.Round(UserItem.DuraMax / 100.0 * (20 + M2Share.RandomNumber.Random(80)));
+                                    }
                                     if (M2Share.RandomNumber.Random(M2Share.g_Config.nMonRandomAddValue) == 0)
                                     {
                                         StdItem.RandomUpgradeItem(UserItem);
