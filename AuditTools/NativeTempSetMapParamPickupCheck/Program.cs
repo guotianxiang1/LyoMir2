@@ -48,11 +48,11 @@ try
         "state 2 must be silent like the native wrapper");
 
     player.m_MsgList.Clear();
-    command.Handle("TARGET SAFE 0", player);
+    command.Handle("TARGET CHECKQUEST 0", player);
     Require(target.Flag.boPICKUP,
         "unsupported attribute changed the implemented PICKUP flag");
     AssertLastMessage(player,
-        "该GM命令目前不支持此地图属性=SAFE",
+        "该GM命令目前不支持此地图属性=CHECKQUEST",
         M2Share.g_Config.btRedMsgFColor,
         M2Share.g_Config.btRedMsgBColor, "unsupported attribute");
 

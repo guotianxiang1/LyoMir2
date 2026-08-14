@@ -1178,7 +1178,7 @@ namespace GameSvr
                 var deathDropOutcome = NativeDeathDropPolicy.Outcome.NormalEquipThenBag;
                 if (nativeHumanKindDeath)
                 {
-                    deathDropOutcome = NativeDeathDropPolicy.Resolve(m_PEnvir.Flag, InSafeZone());
+                    deathDropOutcome = NativeDeathDropPolicy.Resolve(m_PEnvir.Flag, InNativeSafeZone12());
                 }
                 var deathDropsAnything = nativeHumanKindDeath
                     ? deathDropOutcome != NativeDeathDropPolicy.Outcome.DropNothing

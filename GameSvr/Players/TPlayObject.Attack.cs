@@ -133,40 +133,20 @@ namespace GameSvr
                     // 且不进 DigXY、不扣矿点次数、不抽任何签。
                     if (wIdent == Grobal2.CM_HEAVYHIT && m_PEnvir.Flag.boMINE && m_UseItems[Grobal2.U_WEAPON] != null && m_UseItems[Grobal2.U_WEAPON].Dura > 0)// 挖矿
                     {
-                        if (GetFrontPosition(ref n14, ref n18) && !m_PEnvir.CanWalk(n14, n18, false))
+                        if (GetFrontPosition(ref n14, ref n18))
                         {
                             GoodItem StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[Grobal2.U_WEAPON].wIndex);
                             if (StdItem != null && StdItem.Shape == 19)
                             {
-                                // native TPlayObject.PileStones (sub_6BC1EC) gates the dig on
-                                // the terrain attribute of the TARGET cell:
-                                //   0x6BC23F call sub_7776A8   ; GetCellInfo(envir+0x128, nX, nY, &cell)
-                                //   0x6BC24A cmp byte [cell+0x00],0
-                                //   0x6BC24D je fail            ; terrain attribute must be NON-ZERO
-                                //     (Walk=0 rejects; only HighWall=1 / LowWall=2 may be dug)
-                                // The area-restriction byte at cell+0x04 is a DIFFERENT gate and
-                                // belongs to the player's own cell -- see MINE-07 at the top of
-                                // this method.
-                                var mapCell = false;
-                                var cellInfo = m_PEnvir.GetMapCellInfo(n14, n18, ref mapCell);
-                                if (mapCell && cellInfo.Attribute != CellAttribute.Walk)
-                                {
-                                    // MINE-50/51: native ClientHitXY mining arm @0x6EC131
-                                    // `call 0x6BC1EC`(PileStones) DISCARDS the return value
-                                    // (no `test al,al`) and sends NOTHING after it — the dig
-                                    // feedback is the 0x2715 broadcast emitted inside
-                                    // PileStones itself (0x6BC32D). The old
-                                    // `if (PileStones(...)) SendSocket("=DIG")` invented an
-                                    // extra text packet: the literal "=DIG" has ZERO
-                                    // occurrences anywhere in flat_image.bin and no native
-                                    // send site, so it is not part of the native success
-                                    // sequence (0x274 then 0x2715). Call and drop the result.
-                                    PileStones(n14, n18);
-                                    m_nHealthTick -= 30;
-                                    m_nSpellTick -= 50;
-                                    m_nSpellTick = HUtil32._MAX(0, m_nSpellTick);
-                                    DecreaseHealthSpellRecoveryStep(2);
-                                }
+                                // MINE-06: native ClientHitXY @0x6EC131 call 0x6BC1EC DISCARDS
+                                // the return; 0x6EC136-0x6EC155 unconditionally deducts 30/50 tick
+                                // and jmp 0x6EC366 — no CanWalk pre-filter here. Terrain gate
+                                // lives inside PileStones/DigXY @0x6BC24A only.
+                                PileStones(n14, n18);
+                                m_nHealthTick -= 30;
+                                m_nSpellTick -= 50;
+                                m_nSpellTick = HUtil32._MAX(0, m_nSpellTick);
+                                DecreaseHealthSpellRecoveryStep(2);
                                 return result;
                             }
                         }

@@ -1565,7 +1565,8 @@ namespace GameSvr
             {
                 return result;
             }
-            if (cert1.InSafeArea() || cert2.InSafeArea())
+            // 0x6C1392 / 0x6C139D call sub_76858C on cert1/cert2 (not sub_7684DC).
+            if (cert1.InNativeSafeZone12() || cert2.InNativeSafeZone12())
             {
                 return result;
             }
@@ -3598,36 +3599,69 @@ namespace GameSvr
             }
         }
 
-        protected bool InSafeArea()
+        /// <summary>
+        /// Native <c>sub_76858C</c> @0x76858C — boSAFE OR SafeZoneList polygon OR
+        /// start-point within hardcoded range 12 (<c>0x7685BE push 0xC</c>). No RedHome arm.
+        /// Eleven image call sites use this predicate (death drop 0x741405, consign 0x6F103D,
+        /// corps/gild exit 0x6F57AE/0x6F6C02, GetGuildRelation 0x6C1392/0x6C139D, …).
+        /// Do not confuse with <see cref="InSafeZone()"/> which ports sibling
+        /// <c>sub_7684DC</c> (caller-supplied range, RedHome map '3' @845/674).
+        /// </summary>
+        public bool InNativeSafeZone12()
         {
-            bool result = false;
-            int n14;
-            int n18;
-            if (m_PEnvir == null)
+            return InNativeSafeZone12(m_PEnvir, m_nCurrX, m_nCurrY);
+        }
+
+        public bool InNativeSafeZone12(Envirnoment Envir, int nX, int nY)
+        {
+            if (Envir == null)
             {
-                return result;
+                return false;
             }
-            result = m_PEnvir.Flag.boSAFE;
-            if (result)
+            // 0x768598 mov al,[map+0x5C] / 0x76859D jne return-true
+            if (Envir.Flag.boSAFE)
             {
-                return result;
+                return true;
             }
-            for (int i = 0; i < M2Share.StartPointList.Count; i++)
+            // 0x7685AD call 0x7684A0 (SafeZoneList polygon)
+            if (M2Share.SafeZoneList != null)
             {
-                if (M2Share.StartPointList[i].m_sMapName == m_PEnvir.sMapName)
+                for (var i = 0; i < M2Share.SafeZoneList.Count; i++)
                 {
-                    if (M2Share.StartPointList[i] != null)
+                    if (M2Share.SafeZoneList[i].Contains(Envir.sMapName, nX, nY))
                     {
-                        n14 = M2Share.StartPointList[i].m_nCurrX;
-                        n18 = M2Share.StartPointList[i].m_nCurrY;
-                        if ((Math.Abs(m_nCurrX - n14) <= 60) && (Math.Abs(m_nCurrY - n18) <= 60))
-                        {
-                            result = true;
-                        }
+                        return true;
                     }
                 }
             }
-            return result;
+            // 0x7685BE push 0xC / 0x7685D7 call 0x696E48 (start points, per-entry range)
+            const int nativeRange = 12;
+            for (int i = 0; i < M2Share.StartPointList.Count; i++)
+            {
+                var startPoint = M2Share.StartPointList[i];
+                if (startPoint != null && startPoint.m_sMapName == Envir.sMapName)
+                {
+                    int range = startPoint.m_nRange > 0
+                        ? startPoint.m_nRange
+                        : nativeRange;
+                    if ((Math.Abs(nX - startPoint.m_nCurrX) <= range) &&
+                        (Math.Abs(nY - startPoint.m_nCurrY) <= range))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Legacy name kept for stock-Mir2 call sites; now delegates to
+        /// <see cref="InNativeSafeZone12()"/> (native sub_76858C, range 12).
+        /// The old radius-60 start-point scan had no native counterpart.
+        /// </summary>
+        protected bool InSafeArea()
+        {
+            return InNativeSafeZone12();
         }
 
         public void MonsterRecalcAbilitys()
