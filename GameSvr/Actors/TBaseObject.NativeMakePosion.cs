@@ -131,6 +131,14 @@ namespace GameSvr
                 return false;
             }
 
+            // 眼神 · 麻痹中不被麻痹a：208 0x100902B4 / 207 0x100827A4。
+            if ((stateId == NativeParalysisStateId || stateId == 0x1A) &&
+                Plugins.YanshenPage2ExtBehaviors
+                    .ShouldImmuneParalysisWhileStatusActive(this))
+            {
+                return true;
+            }
+
             // 0x746620 .. 0x74663B
             if (stateId == NativeParalysisStateId &&
                 IsRefusedByNativeParalysisResist())
