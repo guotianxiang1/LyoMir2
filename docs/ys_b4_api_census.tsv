@@ -119,7 +119,7 @@ YsGetStr	官方例子	yes	no
 YSKillMon	官方例子	yes	no			
 YSKillRole	官方例子	yes	no			
 YsNewtuitui	官方例子	yes	no			
-YSSafeZone	官方例子	yes	no			
+YSSafeZone	官方例子	yes	yes			
 YSSay	官方例子	yes	no			
 YsSetG	官方例子	yes	no			
 YsSetStr	官方例子	yes	no			
