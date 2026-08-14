@@ -61,6 +61,9 @@ namespace GameSvr
         /// </summary>
         internal const int AuthenOrder = 4;
 
+        /// <summary><c>sub_78389C</c> mode 1 used by sell (<c>mov edx,1</c> @0x63F1E8).</summary>
+        internal const int TransferModeSell = 1;
+
         /// <summary><c>sub_78389C</c> mode 2 used by trade (<c>mov edx,2</c>).</summary>
         internal const int TransferModeTrade = 2;
 
@@ -107,6 +110,17 @@ namespace GameSvr
 
             // 0x7838D9: only modes 0..5 have a jumptable entry.
             if ((uint)mode > 5) return 0;
+
+            // 0x783901 (mode 1): reject when byte[std+3] & 0x01 (no-sell flag).
+            // Native bytes @0x783901: 8B 43 1C / F6 40 03 01 / 74 6F / BE 02 00 00 00
+            // byte[std+3] bit 0 == NativeReserved02 & 0x0100.
+            if (mode == TransferModeSell)
+            {
+                if ((stdItem.NativeReserved02 & 0x0100) != 0)
+                {
+                    return 2;
+                }
+            }
 
             // 0x783911 (mode 2): reject when byte[std+3] & 0x02 (no-trade flag).
             // Native bytes: 80 BB FC 00 00 00 00 (cmp byte [ebx+0xFC],0) / 75 09 (jne 0x783923)
