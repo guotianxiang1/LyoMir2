@@ -1953,8 +1953,13 @@ namespace GameSvr
                                     BaseObject.SendDelayMsg(BaseObject, Grobal2.RM_DELAYMAGIC, (short)nPower, HUtil32.MakeLong(nTargetX, nTargetY), 2, TargeTBaseObject.ObjectId, "", 600);
                                     if (!TargeTBaseObject.m_boUnParalysis)
                                     {
-                                        
-                                        TargeTBaseObject.SendDelayMsg(BaseObject, Grobal2.RM_POISON, Grobal2.POISON_STONE, nPower / M2Share.g_Config.nMabMabeHitMabeTimeRate + M2Share.RandomNumber.Random(nLevel), BaseObject.ObjectId, nLevel, "", 650);
+                                        // G3 / STATE-19 D9 — native state 0x1A (26) is always VMT+0xC8,
+                                        // never 10300 (§3.2: no wParam=0x1A; immscan: 0×8037, 0×push-650).
+                                        // DoSpell wMagicID 50 -> DEFAULT @0x6EE04B (table @0x6ED7CD idx 11);
+                                        // native MabMabe duration formula UNPROVEN — drop nPower/
+                                        // nMabMabeHitMabeTimeRate, keep Random(nLevel) from Delphi nParam1 tail.
+                                        TargeTBaseObject.NativeMakePosion(0x1A,
+                                            (ushort)M2Share.RandomNumber.Random(nLevel), 0);
                                     }
                                     result = true;
                                 }
