@@ -148,9 +148,6 @@ namespace GameSvr
                         unchecked((uint)item.MakeIndex), 1, "英雄合击技能升级"));
 
                     // 通知客户端删除物品
-                    player.DeleteItem(item, 1);
-                    player.Dispose(item);
-                    player.WeightChanged();
 
                     return item;
                 }
