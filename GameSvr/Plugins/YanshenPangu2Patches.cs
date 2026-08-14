@@ -1,4 +1,5 @@
 using GameSvr;
+using SystemModule;
 
 namespace GameSvr.Plugins
 {
@@ -90,12 +91,7 @@ namespace GameSvr.Plugins
             if (M2Share.UserEngine == null)
                 return;
             var msgColor = (MsgColor)ResolveServerSayColor(color);
-            for (var i = 0; i < M2Share.UserEngine.m_PlayObjectList.Count; i++)
-            {
-                var player = M2Share.UserEngine.m_PlayObjectList[i];
-                if (!player.m_boGhost)
-                    player.SysMsg(msg, msgColor, MsgType.Notice);
-            }
+            M2Share.UserEngine.SendBroadCastMsgWithColor(msg, msgColor, MsgType.Notice);
         }
 
         // --- 火墙_时间：仅当 火墙设置时间上限 开时替换 0x7706B6 imul 前的秒数 ---

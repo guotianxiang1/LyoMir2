@@ -4872,6 +4872,18 @@ namespace GameSvr
             }
         }
 
+        // Yanshen ServerSay: broadcast with a caller-chosen color (native @0x728913
+        // keeps the low 16 bits when the custom-color toggle is on).
+        public void SendBroadCastMsgWithColor(string sMsg, MsgColor MsgColor, MsgType MsgType)
+        {
+            for (var i = 0; i < m_PlayObjectList.Count; i++)
+            {
+                var PlayObject = m_PlayObjectList[i];
+                if (!PlayObject.m_boGhost)
+                    PlayObject.SysMsg(sMsg, MsgColor, MsgType);
+            }
+        }
+
         public void sub_4AE514(TGoldChangeInfo GoldChangeInfo)
         {
             if (GoldChangeInfo == null) return;
