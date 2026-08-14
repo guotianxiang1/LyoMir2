@@ -154,6 +154,11 @@ namespace GameSvr
             }
 
             damage = ApplyNativeMagicCritical(source, damage);
+            // 眼神2第1页 · 五法术切割：sub_100795C0 内 0x10079FB1(crit) 先于
+            // 0x1007AEAD(切割分发)；键关=cmp [cfg+off],0x1F4/jle 整段跳过。
+            // 宿主 sub_100795C0 入口仍不可证(0x10F2D759@Themida)，此处按函数内序落点。
+            damage = Plugins.YanshenPage1PostDamage.ApplySpellCutting(
+                source, this, damage, skillId);
             damage = ApplyStandardEarthFireSuperForce(source, damage);
 
             int result = ApplyStandardEarthFireLanding(damage);
