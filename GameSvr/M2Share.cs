@@ -87,6 +87,7 @@ namespace GameSvr
             NativeServerSwitchStore.Unavailable;
         public static NativeSignActManager SignActManager = null;
         public static NativeFestivalConfig FestivalConfig = null;
+        public static NativeSuperMerchantManager SuperMerchantManager = null;
         public static NativeNickLinFuState NickLinFuState = NativeNickLinFuState.Disabled;
         public static NativeCreditCardService CreditCardService = NativeCreditCardService.Disabled;
         internal static NativeCorpsService CorpsService = NativeCorpsService.Unavailable;

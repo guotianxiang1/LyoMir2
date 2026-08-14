@@ -646,6 +646,9 @@ namespace GameSvr
         public bool m_boCanDeal = false;
         public bool m_boCanDrop = false;
         public bool m_boCanGetBackItem = false;
+
+        /// <summary>战神 obj+0x454：TPercentResumeDrug 冷却 tick（sub_747E80）。</summary>
+        internal int m_dwNativePercentResumeDrugTick;
         public bool m_boCanWalk = false;
         public bool m_boCanRun = false;
         public bool m_boCanHit = false;
