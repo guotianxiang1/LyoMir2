@@ -41,7 +41,29 @@ namespace GameSvr.Plugins
             if (pm == null) return false;
             if (!new YanshenApi(null, null, pm).PatchToggleOn("屏蔽属性提升提示")) return false;
             return text.Contains("瞬间提高", StringComparison.Ordinal)
-                || text.Contains("回复正常", StringComparison.Ordinal);
+                || text.Contains("回复正常", StringComparison.Ordinal)
+                || text.Contains("提高恢复正常", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 屏蔽元宝数据库日志：启用时 <c>0x70F6DC</c> 序言 <c>55</c>→<c>C3</c>，
+        /// <c>sub_70F6B4</c>→<c>sub_70F6DC</c> 的 DB 写路径整体 stub；C# 落点 =
+        /// <c>LOG_GAMEGOLD</c> 的 <see cref="M2Share.AddGameDataLog"/> 四处。
+        /// </summary>
+        internal static bool ShouldSuppressGameGoldDbLog()
+        {
+            var pm = M2Share.PluginManager;
+            return pm != null && new YanshenApi(null, null, pm).PatchToggleOn("屏蔽元宝数据库日志");
+        }
+
+        /// <summary>
+        /// 摆摊穿人：启用时 <c>0x77931D</c> 的 <c>C6 00 02</c>→<c>C6 00 00</c>，
+        /// 摊格 claim 仍走 sub_7792EC 但属性写 Walk 而非 LowWall。
+        /// </summary>
+        internal static bool StallCellsAllowPassThrough()
+        {
+            var pm = M2Share.PluginManager;
+            return pm != null && new YanshenApi(null, null, pm).PatchToggleOn("摆摊穿人");
         }
 
         /// <summary>
@@ -57,26 +79,19 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>
-        /// 土城摆摊 / 指定地图编号摆摊：启用时改 <c>sub_6E78D4</c> 的地图名比较
-        /// （<c>0x6E7900</c> 一带与 <c>0x6E7934</c> 字面量 <c>"3"</c> / 配置地图编号）。
+        /// 指定地图编号摆摊：改 <c>sub_6E78D4</c> 在 <c>0x6E7900</c> 比较的地图名
+        /// （配置写入 <c>0x6E7934</c>）；键关时出厂字面量 <c>"GA0"</c> @0x6E7934。
         /// </summary>
         internal static bool MapMatchesStallPolicy(TPlayObject player)
         {
             var pm = M2Share.PluginManager;
             if (pm == null || player?.m_PEnvir == null) return true;
             var api = new YanshenApi(player, null, pm);
-            if (api.PatchToggleOn("指定地图编号摆摊"))
-            {
-                var id = api.GetStallMapId().ToString();
-                return string.Equals(player.m_PEnvir.sMapName, id,
-                    StringComparison.OrdinalIgnoreCase);
-            }
-            if (api.PatchToggleOn("土城摆摊"))
-            {
-                return string.Equals(player.m_PEnvir.sMapName, "3",
-                    StringComparison.OrdinalIgnoreCase);
-            }
-            return true;
+            var expected = api.PatchToggleOn("指定地图编号摆摊")
+                ? api.GetStallMapId().ToString()
+                : "GA0"; // 0x6E7934 stock Delphi short-string literal
+            return string.Equals(player.m_PEnvir.sMapName, expected,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

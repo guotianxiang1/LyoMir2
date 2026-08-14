@@ -753,6 +753,13 @@ namespace GameSvr
                 var text = removed
                     ? "火墙抗性回复正常"
                     : $"火墙抗性瞬间提高{unchecked((ushort)(node.RemainingMilliseconds / 1000))}秒";
+                // 0x741EFD gained / 0x742A0B lost — 同属 31×属性提升提示 jmp 族。
+                if (Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint(text))
+                {
+                    SendTimedAbilityClientState(node.InternalType,
+                        node.RemainingMilliseconds, node.Value, removed);
+                    return;
+                }
                 if (this is HeroObject hero)
                 {
                     if (hero.m_Master is TPlayObject master)
