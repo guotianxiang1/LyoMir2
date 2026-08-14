@@ -1590,6 +1590,9 @@ namespace DBSvr
                                                - userInfo.dwTick34));
                         var loginDateTimeBits = Interlocked.Read(
                             ref userInfo.NativeLoginDateTimeBits);
+                        // P0-1 BLOCKED: AuthByte56 bit4 (IsNetCafeUser) 需 DBServer 证实的
+                        // [0x5D9B04]+0x78 IP 名单 + 0x5C9A24 IndexOf 门；未移植前保持 0。
+                        // 接线点：命中名单时 AuthByte56 |= 0x10 — 见 docs/dbsvr_p0p1_gap_closure_20260814.md
                         var context = new NativeHumanSessionContext
                         {
                             UserIp = userInfo.sUserIPaddr,
