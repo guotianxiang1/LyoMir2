@@ -1377,6 +1377,8 @@ namespace GameSvr
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
+                        // MOVE-11: 移动成功后刷新外观
+                        RefNameColor();
                     }
                     else
                     {
@@ -1426,6 +1428,8 @@ namespace GameSvr
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
+                        // MOVE-11: 移动成功后刷新外观
+                        RefNameColor();
                     }
                     else
                     {
