@@ -303,10 +303,11 @@ namespace GameSvr
         
         public int m_dwReAliveTick = 0;
         public MonGenInfo m_pMonGen = null;
+        public ushort m_wSpawnTag = 0;
 
-        
-        
-        
+
+
+
         public byte m_btMonsterWeapon = 0;
         public int m_dwStruckTick = 0;
         public bool m_boWantRefMsg = false;
