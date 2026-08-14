@@ -63,6 +63,11 @@ namespace GameSvr.Services
         internal static bool EnsureNativeSchema(out string error)
         {
             error = string.Empty;
+            if (!NativeStartupConfigValidation.TryEnsureGamedataSchema(out error))
+            {
+                NativeStartupConfigValidation.ReportMailGamedataMissing();
+                return false;
+            }
             if (!TryOpenConnection(out var connection, out error)) return false;
             try
             {

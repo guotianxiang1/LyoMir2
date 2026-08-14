@@ -1,5 +1,5 @@
-using GameSvr.Plugins;
 using SystemModule;
+using SystemModule.Common;
 
 namespace GameSvr
 {
@@ -450,6 +450,71 @@ namespace GameSvr
             for (var type = 1; type <= TypeCount; type++)
                 for (var index = 0; index < IndexCount; index++)
                     Array.Clear(Rows[type][index]);
+        }
+
+        /// <summary>
+        /// sub_78C1DC @0x0078C1DC: FillChar table then load INI section keys
+        /// <c>宝石</c>/<c>品级</c> from <c>Share\config\宝石配置.ini</c>.
+        /// Success path logs MainOutMessage @0x0078C508.
+        /// </summary>
+        internal static bool TryLoadFromShareConfig(string shareConfigDirectory)
+        {
+            Reset();
+            var path = Path.GetFullPath(Path.Combine(
+                shareConfigDirectory, "宝石配置.ini"));
+            if (!File.Exists(path))
+                return false;
+
+            try
+            {
+                var ini = new NativeJewelStoneIni(path);
+                for (var type = 1; type <= TypeCount; type++)
+                {
+                    for (var index = 1; index < IndexCount; index++)
+                    {
+                        var section = "宝石" + type;
+                        var key = "品级" + index;
+                        var value = ini.ReadString(section, key, string.Empty);
+                        if (string.IsNullOrWhiteSpace(value))
+                            continue;
+                        var record = ParseRecord(value);
+                        if (record != null)
+                            SetRow(type, index, record);
+                    }
+                }
+                M2Share.MainOutMessage(
+                    "加载宝石配置文件 Thread Local(2052) : " + path);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                M2Share.ErrorMessage(
+                    "[Exception] NativeJewelStoneTable.Load: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static byte[] ParseRecord(string value)
+        {
+            var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < RecordSize)
+                return null;
+            var record = new byte[RecordSize];
+            for (var i = 0; i < RecordSize; i++)
+            {
+                if (!int.TryParse(parts[i].Trim(), out var parsed))
+                    return null;
+                record[i] = unchecked((byte)parsed);
+            }
+            return record;
+        }
+
+        private sealed class NativeJewelStoneIni : IniFile
+        {
+            internal NativeJewelStoneIni(string path) : base(path)
+            {
+                Load();
+            }
         }
 
         internal static void SetRow(int type, int index, byte[] record)
