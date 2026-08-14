@@ -246,13 +246,19 @@ namespace GameSvr
             var Castle = M2Share.CastleManager.GetCastle(nIndex);
             if (PlayObject.IsGuildMaster() && !Castle.IsMember(PlayObject))
             {
-                var UserItem = PlayObject.CheckItems(M2Share.g_Config.sZumaPiece);
-                if (UserItem != null)
+                var zumaItem = PlayObject.CheckItems(M2Share.g_Config.sZumaPiece);
+                var goldBrickItem = PlayObject.CheckItems(
+                    Services.NativeReqCastleWar.NativeGoldBrickItemName);
+                if (zumaItem != null && goldBrickItem != null)
                 {
                     if (Castle.AddAttackerInfo(PlayObject.m_MyGuild))
                     {
-                        PlayObject.SendDelItems(UserItem);
-                        PlayObject.DelBagItem(UserItem.MakeIndex, M2Share.g_Config.sZumaPiece);
+                        PlayObject.SendDelItems(zumaItem);
+                        PlayObject.DelBagItem(zumaItem.MakeIndex,
+                            M2Share.g_Config.sZumaPiece);
+                        PlayObject.SendDelItems(goldBrickItem);
+                        PlayObject.DelBagItem(goldBrickItem.MakeIndex,
+                            Services.NativeReqCastleWar.NativeGoldBrickItemName);
                         this.GotoLable(PlayObject, "~@request_ok", false);
                     }
                     else
@@ -262,7 +268,9 @@ namespace GameSvr
                 }
                 else
                 {
-                    PlayObject.SysMsg("你没有" + M2Share.g_Config.sZumaPiece + "!!!", MsgColor.Red, MsgType.Hint);
+                    PlayObject.SysMsg(
+                        "你的材料不足，申请攻城必须提交1个祖玛头像和1个金砖",
+                        MsgColor.Red, MsgType.Hint);
                 }
             }
             else
