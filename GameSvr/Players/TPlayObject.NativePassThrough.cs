@@ -53,6 +53,9 @@ namespace GameSvr
         //   0x76848A  call 0x7684DC     ; 委派安全区子判定 sub_7684DC(Self, X, Y, range)
         internal bool NativeComputeThroughOccupancy()
         {
+            // 穿人穿怪 @0x768454：插件把序言改成 B0 01 C3，谓词恒真。
+            if (Plugins.YanshenPangu1Patches.ForcesPassThrough())
+                return true;
             // sub_772EB8：m_boObMode || 处于体状态 0x3C(60)。已在 TBaseObject 建模。
             if (HasNativeCellPassThroughGrant())
             {
