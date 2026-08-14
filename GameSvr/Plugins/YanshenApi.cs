@@ -541,6 +541,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>获取身体部位装备元素值</summary>
+        /// <remarks>中文隧道「获取元素」内联 <c>0x1005EAE3</c>；门 cfg2+0x664「自定义元素」；段数下限 <c>0x1005EB4E cmp eax,0x18</c>。</remarks>
         public int GetPis(int elementType, int bodyPos)
         {
             if (!Enabled("自定义元素")) return 0;
@@ -830,10 +831,10 @@ namespace GameSvr.Plugins
         /// <summary>旧版5元素给予</summary>
         public void GiveItem5El(string itemName, int ys1, int ys2, int ys3, int ys4, int ys5) { GiveNewItem(itemName, 0, new[] { ys1, ys2, ys3, ys4, ys5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); }
 
-        /// <summary>设置装备元素</summary>
+        /// <summary>ys_SetYs — 数字隧道 17，handler <c>0x10072CD0</c>，臂 <c>0x10077099</c>；段不足 <c>0x10072D30 or eax,-1</c>。</summary>
         public int SetEquipElement(int bodyPos, int elemId, int value) { return GivePis(elemId, bodyPos, value); }
 
-        /// <summary>获取装备元素</summary>
+        /// <summary>ys_GetYs — 数字隧道 18，handler <c>0x10072F90</c>，臂 <c>0x10077099</c>。</summary>
         public int GetEquipElement(int bodyPos, int elemId, int isHero) { return GetPis(elemId, bodyPos); }
 
         /// <summary>获取装备极品值: types 0=身体 1=背包 2=itemId</summary>
@@ -1421,9 +1422,14 @@ namespace GameSvr.Plugins
         public int SuperDamage14(int magicLv, int baseHp, int range, int tx, int ty, int canl, int types, int cuttingV, int ysId, int v1, int doubling, string lei) { return CustomDamageCore(magicLv, baseHp, range, tx, ty, canl, types, cuttingV, 0, 0, -1, 0, 0, 0, 200) * doubling / 1000; }
 
         /// <summary>Ys_Attact — 直接攻击指定RoleId造成hp伤害</summary>
+        /// <remarks>
+        /// 中文隧道 <c>!!!!定义伤害</c>，比对通过后内联 <c>0x1005EDDC</c>。
+        /// 门在 <c>0x1005EDA3</c> 读 cfg2+<b>0x510</b>（序列化器键「自定义伤害」，
+        /// 不是「刀刀切割」）。C# 旧映射错键已在 YanshenCommands 修正，此处同步。
+        /// </remarks>
         public void DirectAttack(int roleId, int hp)
         {
-            if (!Enabled("刀刀切割")) return;
+            if (!Enabled("自定义伤害")) return;
             var list = new List<TBaseObject>();
             _player.m_PEnvir?.GetRangeBaseObject(_player.m_nCurrX, _player.m_nCurrY, 20, true, list);
             foreach (var t in list)
@@ -2113,12 +2119,33 @@ namespace GameSvr.Plugins
             t.SendMsg(t, Grobal2.RM_ABILITY, 0, 0, 0, 0, "");
         }
 
-        /// <summary>增加HP/MP上限</summary>
-        public int AddMaxHp(int amount) { _player.m_WAbil.MaxHP = TBaseObject.ClampAbility((long)_player.m_WAbil.MaxHP + amount); _player.m_WAbil.HP = TBaseObject.ClampAbility((long)_player.m_WAbil.HP + amount); _player.RecalcAbilitys(); return amount; }
-        public int AddMaxMp(int amount) { _player.m_WAbil.MaxMP = TBaseObject.ClampAbility((long)_player.m_WAbil.MaxMP + amount); _player.m_WAbil.MP = TBaseObject.ClampAbility((long)_player.m_WAbil.MP + amount); _player.RecalcAbilitys(); return amount; }
+        /// <summary>ys_AddHp / ys_AddMp — 数字隧道 11，共用 handler <c>0x10071920</c>，臂 <c>0x10076D4E</c>。</summary>
+        /// <remarks>段数 <c>&lt;3</c> 时 <c>0x10071983 or eax,-1</c>（`0x1007198C cmp eax,3 / jae`）。</remarks>
+        public int AddMaxHp(int amount)
+        {
+            if (!TunnelGate()) return 0;
+            _player.m_WAbil.MaxHP = TBaseObject.ClampAbility((long)_player.m_WAbil.MaxHP + amount);
+            _player.m_WAbil.HP = TBaseObject.ClampAbility((long)_player.m_WAbil.HP + amount);
+            _player.RecalcAbilitys();
+            return amount;
+        }
 
-        /// <summary>给予经验</summary>
-        public int GiveExp(int amount) { _player.m_Abil.Exp += amount; return amount; }
+        public int AddMaxMp(int amount)
+        {
+            if (!TunnelGate()) return 0;
+            _player.m_WAbil.MaxMP = TBaseObject.ClampAbility((long)_player.m_WAbil.MaxMP + amount);
+            _player.m_WAbil.MP = TBaseObject.ClampAbility((long)_player.m_WAbil.MP + amount);
+            _player.RecalcAbilitys();
+            return amount;
+        }
+
+        /// <summary>ys_GiveExp — 数字隧道 29，handler <c>0x10075090</c>，臂 <c>0x100774B2</c>。</summary>
+        public int GiveExp(int amount)
+        {
+            if (!TunnelGate()) return 0;
+            _player.m_Abil.Exp += amount;
+            return amount;
+        }
 
         /// <summary>减少经验: downLevel是否可降级, tips是否提示</summary>
         public int DecExp(int amount, int downLevel, int tips)
@@ -2259,7 +2286,7 @@ namespace GameSvr.Plugins
             return -1;
         }
 
-        /// <summary>给宝宝技能: magicId技能, gailv概率, shanghai伤害, del删除(1=删除)</summary>
+        /// <summary>给宝宝技能: ys_GiveBBSkill — 数字 30，handler <c>0x10075170</c>；门 cfg2+0x1B4「怪物伤害触发技能特效」。</summary>
         public int GivePetSkill(int magicId, int probability, int damage, int del, string petName)
         {
             if (!Enabled("怪物伤害触发技能特效")) return 0;
@@ -2288,7 +2315,7 @@ namespace GameSvr.Plugins
             return magicId;
         }
 
-        /// <summary>给宝宝特殊属性: '倍功'/'切割'/'暴击'/'连击'/'连击削弱'</summary>
+        /// <summary>ys_GiveBB_SX — 数字 31，handler <c>0x10075600</c>；门 cfg2+0x1B4。</summary>
         public int GivePetSpecialAttr(int key1, int key2, string attrType, string petName)
         {
             if (!Enabled("怪物伤害触发技能特效")) return 0;
@@ -2309,10 +2336,11 @@ namespace GameSvr.Plugins
             return key1;
         }
 
-        /// <summary>宝宝跟随攻击指定目标</summary>
+        /// <summary>ys_BBflowme — 数字隧道 35，handler <c>0x1006F0E0</c>，臂 <c>0x10077728</c>。</summary>
+        /// <remarks>段数 <c>&lt;2</c> → <c>0x1006F141 mov eax,0xFFFFFC88</c>（-888）。</remarks>
         public int PetFollowAttack(int roleId)
         {
-            if (!Enabled("眼神特殊函数")) return 0;
+            if (!TunnelGate()) return 0;
             foreach (var slave in _player.m_SlaveList)
             {
                 if (slave == null) continue;
@@ -2326,7 +2354,7 @@ namespace GameSvr.Plugins
             return roleId;
         }
 
-        /// <summary>指定英雄释放技能</summary>
+        /// <summary>ys_SetHeroCSkill — 数字 28，handler <c>0x10074EE0</c>；专用门 cfg2+0x940（键「指定英雄放技能」）。</summary>
         public int HeroCastSkill(int magicId, int isRun)
         {
             if (!Enabled("指定英雄放技能")) return 0;
@@ -2334,7 +2362,7 @@ namespace GameSvr.Plugins
                 isRun);
         }
 
-        /// <summary>按名字杀死宝宝</summary>
+        /// <summary>ys_KillBBbyName — caret ^32^，handler <c>0x1005C810</c>。</summary>
         public int KillPetByName(string name)
         {
             if (!Enabled("特殊宝宝")) return 0;
@@ -3075,7 +3103,7 @@ namespace GameSvr.Plugins
             if (slot is 0 or 1 or 4 or 13) _player.FeatureChanged();
         }
 
-        /// <summary>按stdmode修理背包物品: Dura=DuraMax</summary>
+        /// <summary>按stdmode修理背包物品: ys_RepairInBag / caret ^30^，handler <c>0x1005C330</c>。</summary>
         public int RepairBagByStdMode(int stdMode, int isHero)
         {
             int count = 0;
@@ -3097,14 +3125,14 @@ namespace GameSvr.Plugins
             return FindOwnedItemByClientId(clientItemId)?.MakeIndex ?? 0;
         }
 
-        /// <summary>物品ID互转: ItemID → ClientItemID</summary>
+        /// <summary>ys_GetClientItemIDByItemid — caret ^20^，handler <c>0x1005AD40</c>。</summary>
         public int GetClientItemIdByItemId(int itemId)
         {
             var item = FindOwnedItemByItemId(itemId);
             return item == null ? 0 : _player.EnsureClientItemId(item);
         }
 
-        /// <summary>修改装备描述/来源</summary>
+        /// <summary>ys_Change_ly — caret ^10^，handler <c>0x1005A1D0</c>，臂 <c>0x1005DD42</c>。</summary>
         public int ModifyItemDesc(int clientItemId, string pname, string desc1, string desc2)
         {
             if (!Enabled("装备来源")) return clientItemId;
@@ -3117,7 +3145,7 @@ namespace GameSvr.Plugins
             return clientItemId;
         }
 
-        /// <summary>更新身体装备数据到客户端 (发送装备刷新包)</summary>
+        /// <summary>ys_UpDataBody — caret ^29^，handler <c>0x1005C220</c>；段 <c>&lt;0xF</c> 早退（<c>0x1005C274 cmp eax,0xF</c>）。</summary>
         public int UpdateBodyEquip(int playerId)
         {
             if (!Enabled("自定义元素")) return 0;
@@ -3167,6 +3195,7 @@ namespace GameSvr.Plugins
         /// </summary>
         public int CheckItemBindRaw(string makeIndex)
         {
+            if (!TunnelGate()) return -1;
             if (!int.TryParse(makeIndex, out int idx)) return -1;
             var list = _player?.m_ItemList;
             if (list == null || list.Count <= 0) return -1;
@@ -3200,9 +3229,10 @@ namespace GameSvr.Plugins
         // 6.7 物品数据操作 (GetSignInActPrizer隧道) — 5 functions
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>获取背包所有物品MakeIndex列表: isAll=true含绑定物品</summary>
+        /// <summary>ys_WupinMakeIndex — GetSignInActPrizer lucker2 op1，handler <c>0x100863B0</c>，臂 <c>0x10087AD1</c>。</summary>
         public string GetBagMakeIndexList(bool isAll)
         {
+            if (!TunnelGate()) return "NULL";
             var indices = new System.Text.StringBuilder();
             foreach (var item in _player.m_ItemList)
             {
@@ -3212,27 +3242,30 @@ namespace GameSvr.Plugins
             return indices.Length == 0 ? "NULL" : indices.ToString().TrimEnd(',');
         }
 
-        /// <summary>通过MakeIndex获取物品完整数据。</summary>
+        /// <summary>ys_WupinGetData — lucker2 ^2^，handler <c>0x10086860</c>（flag=0）。</summary>
         public string GetItemDataByMakeIndex(int makeIndex)
         {
+            if (!TunnelGate()) return string.Empty;
             foreach (var item in _player.m_ItemList)
                 if (item != null && item.MakeIndex == makeIndex)
                     return SerializeItemData(item);
             return "";
         }
 
-        /// <summary>获取物品数据并回收该物品</summary>
+        /// <summary>ys_WupinGetData2Take — lucker2 ^3^，同体 <c>0x10086860</c>（flag=1）。</summary>
         public string GetItemDataAndRecycle(int makeIndex)
         {
+            if (!TunnelGate()) return string.Empty;
             var data = GetItemDataByMakeIndex(makeIndex);
             if (!string.IsNullOrEmpty(data))
                 _player.DelBagItem(makeIndex, ""); // delete item by makeIndex
             return data;
         }
 
-        /// <summary>通过ClientItemID获取物品数据</summary>
+        /// <summary>ys_GetDataByClientItemID — lucker2 ^4^，handler <c>0x10086E60</c>。</summary>
         public string GetItemDataByClientId(int clientItemId)
         {
+            if (!TunnelGate()) return string.Empty;
             var item = FindOwnedItemByClientId(clientItemId);
             return item == null ? string.Empty : SerializeItemData(item);
         }
@@ -3243,6 +3276,7 @@ namespace GameSvr.Plugins
             return GetItemDbData(_player, itemId, pid);
         }
 
+        /// <summary>ys_GetItemDBData — caret ^38^，handler <c>0x1005D9F0</c>，臂 <c>0x1005E33C</c>。</summary>
         public int GetItemDbData(TPlayObject player, int itemId, int pid)
         {
             var item = FindOwnedItemByItemId(player, itemId);
@@ -3764,6 +3798,11 @@ namespace GameSvr.Plugins
             return damage;
         }
 
+        /// <summary>
+        /// 官方例子文档名 <c>ysgetg</c>/<c>yssetg</c>/<c>ysgetstr</c>/<c>yssetstr</c> 等 ——
+        /// 2.08 转储与 AllFuc.pas **均无**按名注册或隧道串（见 <c>docs/ys_f2rest_verify_20260814.md</c> §5）。
+        /// 下列四个方法是 C# 扩展内存字典，非原生复刻；登记在 <c>YanshenApiNames</c> 仅为脚本兼容。
+        /// </summary>
         public int SetGlobalInt(string key, int value)
         {
             if (string.IsNullOrWhiteSpace(key)) return -1;
@@ -3941,7 +3980,8 @@ namespace GameSvr.Plugins
         // 6.8 角色属性/组队 — 8 functions
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>获取角色/怪物属性: types 0=X 1=Y 2=curHP 3=maxHP 4=curMP 5=maxMP 6=minDC 7=maxDC 8=minMC 9=maxMC 10=minSC 11=maxSC 12=minAC 13=maxAC 14=minMAC 15=maxMAC</summary>
+        /// <summary>ys_Getshuxing — caret ^31^，handler <c>0x1005C4E0</c>，臂 <c>0x1005E218</c>。</summary>
+        /// <remarks>段数下限 <c>0x1005C56C cmp eax,0x20</c>；types 0..15 与原生跳表一致。</remarks>
         public int GetCreatureAttr(int roleId, int type)
         {
             if (!Enabled("行会显示")) return 0;
@@ -3970,27 +4010,27 @@ namespace GameSvr.Plugins
             };
         }
 
-        /// <summary>组队成员数量</summary>
+        /// <summary>组队成员数量 — 数字隧道 38，handler <c>0x1006F630</c>。</summary>
         public int GetGroupMemberCount()
         {
-            if (!Enabled("眼神特殊函数")) return 0;
+            if (!TunnelGate()) return 0;
             return _player.m_GroupOwner?.m_GroupMembers?.Count ?? 0;
         }
 
         /// <summary>组队成员roleId(按索引)</summary>
         public int GetGroupMemberRoleId(int index)
         {
-            if (!Enabled("眼神特殊函数")) return 0;
+            if (!TunnelGate()) return 0;
             var members = _player.m_GroupOwner?.m_GroupMembers;
             return members != null && index < members.Count && members[index] != null
                 ? members[index].ObjectId
                 : 0;
         }
 
-        /// <summary>组队成员角色名(按索引)</summary>
+        /// <summary>组队成员角色名(按索引) — lucker2 ^5^，handler <c>0x100872A0</c>。</summary>
         public string GetGroupMemberName(int index)
         {
-            if (!Enabled("眼神特殊函数")) return string.Empty;
+            if (!TunnelGate()) return string.Empty;
             var members = _player.m_GroupOwner?.m_GroupMembers;
             return members != null && index < members.Count && members[index] != null
                 ? members[index].m_sCharName
@@ -4054,9 +4094,10 @@ namespace GameSvr.Plugins
             return GetExtremeValue(item, id - 1);
         }
 
-        /// <summary>获取/设置技能经验: isMax=1满级, isHero=1英雄</summary>
+        /// <summary>ys_MySkillExp — 数字 10，handler <c>0x10071710</c>，臂 <c>0x10076CE5</c>。</summary>
         public int SetSkillExp(string skillName, int isMax, int isHero)
         {
+            if (!TunnelGate()) return 0;
             foreach (var magic in _player.m_MagicList)
             {
                 if (magic.MagicInfo != null && string.Equals(magic.MagicInfo.sMagicName, skillName, StringComparison.OrdinalIgnoreCase))
@@ -4080,7 +4121,7 @@ namespace GameSvr.Plugins
         // 6.9 数据库操作 — 3 functions
         // ═══════════════════════════════════════════════════════════════
 
-        /// <summary>执行SQL(INSERT/UPDATE/DELETE): fg=true返回查询的ID值</summary>
+        /// <summary>ys_SqlDbInsert — caret ^1^，handler <c>0x10058ED0</c>；段 <c>&lt;3</c> jb（<c>0x10058F20 cmp eax,3</c>）。</summary>
         public int SqlDbInsert(string sql, bool returnId)
         {
             if (!Enabled("眼神特殊函数")) return 0;
@@ -4100,7 +4141,7 @@ namespace GameSvr.Plugins
             catch (Exception ex) { M2Share.MainOutMessage("[异常] SqlDbInsert " + ex.Message); return 0; }
         }
 
-        /// <summary>SQL查询返回字符串 (通过GetSignInActPrizer实现)</summary>
+        /// <summary>ys_SqlDbSelect — GetSignInActPrizer 第二实参 <c>libmysql</c>（<c>0x102C0324</c>），选择器 <c>0x10087DC0</c> / <c>0x10087DD8</c>。</summary>
         public string SqlDbSelect(string sql)
         {
             if (!Enabled("眼神特殊函数")) return "";
@@ -4129,7 +4170,7 @@ namespace GameSvr.Plugins
             catch (Exception ex) { M2Share.MainOutMessage("[异常] SqlDbSelect " + ex.Message); return ""; }
         }
 
-        /// <summary>向DBServer发送消息 — 通过插件系统发送DB操作消息</summary>
+        /// <summary>ys_SendDBMsg — caret ^3^，handler <c>0x10059160</c>；段 <c>&lt;2</c> jb（<c>0x100591B3 cmp eax,2</c>）。</summary>
         public int SendDbMsg(int id, string sql)
         {
             if (!Enabled("眼神特殊函数")) return 0;
@@ -4163,7 +4204,7 @@ namespace GameSvr.Plugins
             return effectId;
         }
 
-        /// <summary>弹射/溅射技能: js 0=弹射 1=溅射</summary>
+        /// <summary>Ys_TanTanSkill — 数字 26，handler <c>0x100740B0</c>；专用门 cfg2+0x0FC「自定义伤害」。</summary>
         public int BounceSkill(int magicId, int x, int y, int roleId, int times, int range, int double_, int cutting, int effectId, int js)
         {
             if (!Enabled("自定义伤害")) return 0;
@@ -4189,7 +4230,7 @@ namespace GameSvr.Plugins
             return count;
         }
 
-        /// <summary>自定义火墙: 在指定位置创建火焰事件</summary>
+        /// <summary>ys_Magic_huoqiang — 数字 37，handler <c>0x1006F2C0</c>；专用门 cfg2+0x6E0「火墙修改」。</summary>
         public int CustomFireWall(int magicId, int damage, int duration, int range, int x, int y, int flag)
         {
             if (!Enabled("火墙修改")) return 0;
