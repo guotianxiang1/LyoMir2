@@ -44,7 +44,8 @@ namespace GameSvr
                                 BaseObject.SendDelayMsg(Grobal2.RM_STRUCK, Grobal2.RM_10101, (short)nDamage, BaseObject.m_WAbil.HP, BaseObject.m_WAbil.MaxHP, this.ObjectId, "", 300);
                                 if (m_boUsePoison)
                                 {
-                                    if (M2Share.RandomNumber.Random(BaseObject.m_btAntiPoison + 20) == 0)
+                                    // POIS-37 — native AOE poison @0x666D2F reads target word[+0x26C].
+                                    if (M2Share.RandomNumber.Random(BaseObject.m_wEffectResistance + 20) == 0)
                                     {
                                         BaseObject.MakePosion(Grobal2.POISON_DECHEALTH, 30, 1);
                                     }

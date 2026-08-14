@@ -951,7 +951,9 @@ namespace GameSvr
                     //     as m_wEffectResistance, so Self+0x26C == m_wEffectResistance,
                     //     not m_btAntiPoison.
                     //  3. +20 and 30 seconds are immediates, not configuration.
-                    if (!AttackTarget.m_boUnParalysis && m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_wEffectResistance + 20) == 0))
+                    // POIS-37 — native paralysis-weapon roll @0x6670AB: no UnParalysis gate
+                    // (contrast AOE green poison @0x666D26, same +0x26C/+0x14/==0 shape).
+                    if (m_boParalysis && (M2Share.RandomNumber.Random(AttackTarget.m_wEffectResistance + 20) == 0))
                     {
                         AttackTarget.MakePosion(Grobal2.POISON_DECHEALTH, 30, 1);
                     }

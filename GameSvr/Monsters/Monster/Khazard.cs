@@ -28,11 +28,6 @@ namespace GameSvr
                             GetFrontPosition(ref nx, ref ny);
                             m_TargetCret.SendRefMsg(Grobal2.RM_SPACEMOVE_FIRE, 0, 0, 0, 0, "");
                             m_TargetCret.SpaceMove(m_sMapName, nx, ny, 0);
-                            if (M2Share.RandomNumber.Random(1) == 0 && M2Share.RandomNumber.Random(m_TargetCret.m_btAntiPoison + 7) <= 6)
-                            {
-                                m_TargetCret.MakePosion(Grobal2.POISON_DECHEALTH, 35, 2);
-                                return;
-                            }
                         }
                         else
                         {
@@ -42,11 +37,6 @@ namespace GameSvr
                             }
                             m_TargetCret.SendRefMsg(Grobal2.RM_SPACEMOVE_FIRE, 0, 0, 0, 0, "");
                             m_TargetCret.SpaceMove(m_sMapName, nx, ny, 0);
-                            if (M2Share.RandomNumber.Random(1) == 0 && M2Share.RandomNumber.Random(m_TargetCret.m_btAntiPoison + 7) <= 6)
-                            {
-                                m_TargetCret.MakePosion(Grobal2.POISON_DECHEALTH, 35, 2);
-                                return;
-                            }
                         }
                     }
                 }
