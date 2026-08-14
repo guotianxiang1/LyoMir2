@@ -556,10 +556,10 @@ static NativeCorpsDataSnapshot BuildSnapshot()
 
     snapshot.GildRelations.Add(
         NativeCorpsDataSnapshot.GildRelationKey(200, 400),
-        NativeCorpsService.GildUnion);
+        (NativeCorpsService.GildUnion, new DateTime(2020, 1, 2)));
     snapshot.GildRelations.Add(
         NativeCorpsDataSnapshot.GildRelationKey(200, 700),
-        NativeCorpsService.GildHostile);
+        (NativeCorpsService.GildHostile, new DateTime(2020, 1, 2)));
     snapshot.GildConcerns[200] = new List<long> { 400 };
     return snapshot;
 }

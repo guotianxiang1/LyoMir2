@@ -237,7 +237,8 @@ void RunGildLifecycle()
     AddGild(snapshot, 400, 410, "盟友行会", vice: 0, members: new long[] { 410 });
     AddGild(snapshot, 600, 610, "路人行会", vice: 0, members: new long[] { 610 });
     snapshot.GildRelations.Add(
-        NativeCorpsDataSnapshot.GildRelationKey(200, 400), NativeCorpsService.GildUnion);   // 200<->400 allied
+        NativeCorpsDataSnapshot.GildRelationKey(200, 400),
+        (NativeCorpsService.GildUnion, new DateTime(2020, 1, 2)));   // 200<->400 allied
 
     var service = BuildService(snapshot);
     Log("GILD service built from fake stores (gild 200 owner-corps=100/vice-corps=300/members{500,550}; allied "
@@ -449,7 +450,14 @@ NativeCorpsService BuildService(NativeCorpsDataSnapshot snapshot)
     var packets = new List<(ClientPacket Header, byte[] Body)>();
     var player = new TPlayObject
     {
-        m_boOffLineFlag = true, m_sCharName = "op" + operatorId, m_nGold = gold
+        m_boOffLineFlag = true,
+        m_sCharName = "op" + operatorId,
+        m_nGold = gold,
+        m_PEnvir = new Envirnoment
+        {
+            sMapName = "测试地图",
+            Flag = new TMapFlag { boSAFE = true }
+        }
     };
     player.LoadNativeMailRecipientId(operatorId);
     player.SetNativeCorpsServiceForTests(service, (header, body) => packets.Add((header, body)), resolver);
