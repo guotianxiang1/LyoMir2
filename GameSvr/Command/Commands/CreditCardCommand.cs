@@ -28,7 +28,7 @@ namespace GameSvr
                 if (!service.TrySetEnabled(enabled, out var switchWord))
                     return;
 
-                M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_SERVERSWITCH, 0,
+                M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_SERVERSWITCH, 0,
                     switchWord.ToString(CultureInfo.InvariantCulture));
                 PlayObject.SysMsg(enabled ? " 扩展灵符  : 开" : " 扩展灵符  : 关",
                     MsgColor.Red, MsgType.Hint);
