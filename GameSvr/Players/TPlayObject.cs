@@ -2440,7 +2440,7 @@ namespace GameSvr
             return stream.ToArray();
         }
 
-        private void SendDelItemList(IList<TDeleteItem> ItemList, int itemCount)
+        internal void SendDelItemList(IList<TDeleteItem> ItemList, int itemCount)
         {
             var body = BuildDelItemListBody(ItemList);
             m_DefMsg = Grobal2.MakeDefaultMsg(
