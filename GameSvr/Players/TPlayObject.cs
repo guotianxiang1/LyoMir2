@@ -2804,6 +2804,11 @@ namespace GameSvr
                         BaseObjectMove(m_sMapName, 0, 0);
                         result = true;
                     }
+                    else
+                    {
+                        // Native: 0x7856F0, string@0x785864 "在这里你无法使用" Red 0x38FF
+                        SysMsg("在这里你无法使用", MsgColor.Red, MsgType.Hint);
+                    }
                     break;
                 case 3:
                     SendRefMsg(Grobal2.RM_SPACEMOVE_FIRE, 0, 0, 0, 0, "");
