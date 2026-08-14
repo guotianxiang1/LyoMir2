@@ -28,8 +28,6 @@ namespace GameSvr
                 if (m_MagicArr != null && magicId < m_MagicArr.Length &&
                     ReferenceEquals(m_MagicArr[magicId], userMagic))
                     m_MagicArr[magicId] = null;
-                if (m_CurMagic != null && ReferenceEquals(m_CurMagic, userMagic))
-                    m_CurMagic = null;
                 m_MagicList.RemoveAt(i);
                 RecalcAbilitys();
                 return true;

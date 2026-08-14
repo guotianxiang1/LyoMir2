@@ -27,8 +27,6 @@ namespace GameSvr
             }
 
             var target = M2Share.UserEngine.GetPlayObject(charName);
-            if (target == null)
-                target = M2Share.UserEngine.GetPlayObject(charName, true);
             if (target == null || target.m_boGhost)
             {
                 PlayObject.SysMsg(charName + " 不在线或者不在本服务器", MsgColor.Red, MsgType.Hint);
