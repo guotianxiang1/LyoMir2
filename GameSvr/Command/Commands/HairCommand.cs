@@ -25,6 +25,8 @@ namespace GameSvr
             {
                 m_PlayObject.m_btHair = (byte)nHair;
                 m_PlayObject.FeatureChanged();
+                // Persist the hair change to DBSvr immediately so it survives logout/login
+                M2Share.UserEngine.SaveHumanRcd(m_PlayObject);
                 PlayObject.SysMsg(sHumanName + " 的头发已改变。", MsgColor.Green, MsgType.Hint);
             }
             else
