@@ -8,7 +8,7 @@ namespace GameSvr
     
     
     
-    public class Merchant : NormNpc
+    public partial class Merchant : NormNpc
     {
         public string m_sScript = string.Empty;
         
@@ -314,7 +314,22 @@ namespace GameSvr
 
         internal string StorageAllBagItems(TPlayObject sender)
         {
+            // ✅ 战神字节证据 (Tier-1) — ECON-17 同族门。sub_64392C 的两道前置门是
+            // 【先权限、后属性】,原先只补了后者:
+            //   00643962  8b 45 f8 / e8 96 1b dc ff       mov eax,[ebp-8] / call @LStrClr  ; Result := ''
+            //   0064396A  80 bf 75 06 00 00 03            cmp byte [edi+0x675],3   ; edi = PlayObject
+            //   00643971  0f 86 2d 01 00 00               jbe 0x643AA4             ; <=3 直接返回空串
+            //   00643977  8b 45 fc                        mov eax,[ebp-4]          ; Self = Merchant
+            //   0064397A  f6 80 55 04 00 00 02            test byte [eax+0x455],2  ; property 9
+            //   00643981  0f 84 1d 01 00 00               je  0x643AA4
+            //   0064399E  8b 87 08 05 00 00               mov eax,[edi+0x508]      ; PlayObject.m_ItemList
+            // +0x675 = m_btPermission(setter 0x6B1E80 `mov [esi+0x675],al` 紧接
+            // GetHumPermission sub_65583C 的返回值)。property-9 商人的四个操作
+            // ——本函数、列表查询 sub_643B20 @0x643B71、取回 sub_644244 @0x644274、
+            // 寄存 sub_644488 @0x6444AC——全部以同一道 `>3` 门为前置,
+            // 即这是一整套 GM 专用寄存子系统,普通玩家在原生上完全无法触发。
             if (sender == null || !sender.m_boReadyRun ||
+                sender.m_btPermission <= 3 ||
                 !HasNativePasProperty(9))
                 return string.Empty;
 

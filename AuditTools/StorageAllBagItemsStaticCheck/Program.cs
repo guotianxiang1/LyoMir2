@@ -62,6 +62,13 @@ void StrictFunctionAbiAndTransferOrder()
     Equal(3, explicitPlayer.m_ItemList.Count, "player-ready gate changed bag");
 
     explicitPlayer.m_boReadyRun = true;
+    explicitPlayer.m_btPermission = 3;
+    Assert(bridge.CallNpcFunc("StorageAllBagItems", args, out result),
+        "recognized function rejected before permission gate");
+    Equal(string.Empty, result.AsString(), "permission gate return value");
+    Equal(3, explicitPlayer.m_ItemList.Count, "permission gate changed bag");
+
+    explicitPlayer.m_btPermission = 4;
     Assert(bridge.CallNpcFunc("StorageAllBagItems", args, out result),
         "valid function ABI rejected");
     Equal("一共收取了您背包里的 3 件物品。", result.AsString(),
@@ -515,7 +522,8 @@ void SourceContract()
         "private void CheckItemPrice");
     foreach (var required in new[]
              {
-                 "sender.m_boReadyRun", "HasNativePasProperty(9)",
+                 "sender.m_boReadyRun", "sender.m_btPermission <= 3",
+                 "HasNativePasProperty(9)",
                  "NativeMerchantGoodsCodec.TryEncode(item, out _",
                  "sender.m_ItemList.Count - 1", "sender.m_ItemList.RemoveAt(i)",
                  "AddItemToGoodsList(item)", "MarkNativeGoodsDirty()",
@@ -645,13 +653,16 @@ Merchant MerchantNpc(string script, string map) => new()
     m_sCharName = script
 };
 
+// 原生 sub_64392C @0x64396A `cmp byte [edi+0x675],3; jbe` 要求 m_btPermission > 3,
+// 即整个 property-9 寄存子系统是 GM 专用的;测试主体默认满足该前置。
 TPlayObject Player(string name, bool ready) => new()
 {
     m_sCharName = name,
     m_sMapName = "test-map",
     m_nCurrX = 10,
     m_nCurrY = 20,
-    m_boReadyRun = ready
+    m_boReadyRun = ready,
+    m_btPermission = 4
 };
 
 TUserItem Item(int makeIndex, ushort itemIndex)

@@ -143,4 +143,17 @@ public class TMapFlag
 
     public byte BreakLevel;
     public ushort CrazyBreakLevel;
+
+    /// <summary>
+    /// MFLG-27 FIX: 战神 map flag LIMITPLAYERLEVEL
+    /// Limits player level on the map.
+    /// </summary>
+    public ushort LimitPlayerLevel;
+
+    /// <summary>
+    /// MFLG-27 FIX: 战神 map flag LIMITHEROLEVEL
+    /// Limits hero level on the map.
+    /// Consumer: NativeHeroJobAbilityCurve.ResolveLevelPair already exists.
+    /// </summary>
+    public ushort LimitHeroLevel;
 }

@@ -27,6 +27,24 @@ namespace GameSvr
                 return true;
             }
 
+            // MFLG-27 FIX: Add missing LIMITPLAYERLEVEL flag
+            if (HUtil32.CompareLStr(rawFlag, "LIMITPLAYERLEVEL", "LIMITPLAYERLEVEL".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(rawFlag, '(', ')', ref value);
+                mapFlag.LimitPlayerLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+
+            // MFLG-27 FIX: Add missing LIMITHEROLEVEL flag
+            if (HUtil32.CompareLStr(rawFlag, "LIMITHEROLEVEL", "LIMITHEROLEVEL".Length))
+            {
+                var value = string.Empty;
+                HUtil32.ArrestStringEx(rawFlag, '(', ')', ref value);
+                mapFlag.LimitHeroLevel = unchecked((ushort)HUtil32.Str_ToInt(value, 0));
+                return true;
+            }
+
             return false;
         }
     }
