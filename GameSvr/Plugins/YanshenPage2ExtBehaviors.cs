@@ -53,7 +53,26 @@ namespace GameSvr.Plugins
                 attacker.IncHealthSpell(vamp, 0);
         }
 
-        static bool ToggleOn(TPlayObject player, string chineseKey)
+        /// <summary>
+        /// 麻痹中不被麻痹a：目标 <c>[+0x168]</c> 状态位图首 dword 非零时拒绝再次麻痹。
+        /// </summary>
+        /// <remarks>
+        /// 208 <c>0x1009029D</c> <c>cmp [cfg+0x6C0],0x1F4</c> /
+        /// <c>0x100902B4 cmp [target+0x168],0</c> → 早退 <c>ret 1</c>。
+        /// 207 交叉核实：<c>0x100827A4</c> 同一 <c>cmp [esi+0x168],0</c> 臂（键位
+        /// <c>cfg+0x6A0</c> vs 208 <c>+0x6C0</c>，以 208 键名为准）。
+        /// </remarks>
+        internal static bool ShouldImmuneParalysisWhileStatusActive(TBaseObject target)
+        {
+            if (target == null)
+                return false;
+            if (!ToggleOn(null, "麻痹中不被麻痹a"))
+                return false;
+            // 208/207 均只测 bitset 首 dword（obj+0x168）。
+            return target.m_nCharStatus != 0;
+        }
+
+        static bool ToggleOn(TPlayObject? player, string chineseKey)
         {
             var pm = M2Share.PluginManager;
             if (pm == null)

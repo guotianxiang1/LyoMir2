@@ -4858,13 +4858,9 @@ namespace GameSvr.Plugins
         ///   damage -= (int)(damage * v / 1000.0)     ; cvttsd2si = 截断
         /// </code>
         ///
-        /// <b>未落地的原因已经换了一个</b>：证据齐了，缺的是 C# 侧的载体——
-        /// 脚本变量库只挂在 <c>TPlayObject</c>（<c>m_ScriptSVars</c> /
-        /// <c>TryGetScriptVar</c>）上，而 <c>HeroObject : AnimalObject</c> 没有。
-        /// 原生读的是英雄对象自己的 S 槽（英雄类 <c>0x006AC8C8</c> 的父链落在
-        /// <c>0x0073BBE8 -&gt; 0x0073B8DC</c> 这一族，和 <c>THumanKind</c>
-        /// <c>0x0073BC34</c> 同簇，所以英雄天然有 S 槽）。
-        /// 退而求其次去读主号的 <c>S(1,58)</c> 会读错对象，故维持 fail-closed。
+        /// C# 落点：<see cref="YanshenPage1PostDamage.ApplyHeroPermilleReduction"/>
+        /// （208 <c>0x1007A8A7</c> / 207 <c>0x1006DAD4</c> 交叉核实：读<b>主人</b>
+        /// <c>S(1,58)</c>，不是英雄自身 S 银行）。
         /// </summary>
         public bool IsHeroDmgReduction() => Enabled("英雄千分比免伤");
         public bool IsHeroReadExtreme() => Enabled("英雄读取极品");

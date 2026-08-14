@@ -154,9 +154,10 @@ namespace GameSvr
             }
 
             damage = ApplyNativeMagicCritical(source, damage);
-            // 眼神2第1页 · 五法术切割：sub_100795C0 内 0x10079FB1(crit) 先于
-            // 0x1007AEAD(切割分发)；键关=cmp [cfg+off],0x1F4/jle 整段跳过。
-            // 宿主 sub_100795C0 入口仍不可证(0x10F2D759@Themida)，此处按函数内序落点。
+            // sub_100795C0 序：crit → 英雄千分比免伤(0x1007A8A7) → 切割(0x1007AEAD)。
+            // 207 同流水线在 0x1006D3EF/0x1006DA87；宿主入口仍不可证(0x10F2D759@Themida)。
+            damage = Plugins.YanshenPage1PostDamage.ApplyHeroPermilleReduction(
+                this, damage);
             damage = Plugins.YanshenPage1PostDamage.ApplySpellCutting(
                 source, this, damage, skillId);
             // sub_100795C0：切割臂之后、返伤害之前 — 0x1007AAC9 攻击吸血 /

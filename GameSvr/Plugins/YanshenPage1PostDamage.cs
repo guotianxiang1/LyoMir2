@@ -39,6 +39,38 @@ namespace GameSvr.Plugins
         };
 
         /// <summary>
+        /// 英雄千分比免伤。守方是英雄类时读<b>主人</b>的 <c>S(1,58)</c>，向零截断减伤。
+        /// </summary>
+        /// <remarks>
+        /// 208 <c>0x1007A8A7</c> <c>cmp [cfg+0x108],0x1F4</c> → 守方类
+        /// <c>0x685CA0/0x685968/0x685FD8</c> → <c>[守方+0x68C]</c> 主人 →
+        /// <c>GetS(主人,1,0x3A)</c> → <c>0 &lt; v ≤ 0x3E8</c> →
+        /// <c>damage -= cvttsd2si(damage*v/1000.0)</c>。
+        /// 207 交叉核实：同流水线 <c>0x1006DA87</c> 门 <c>[cfg+0x104],0x1F4</c>（208 键位
+        /// <c>+0x108</c>，以 208 生产键为准）/ <c>0x1006DAD4 push 0x3A</c> 同一
+        /// <c>S(1,58)</c> 语义。
+        /// </remarks>
+        internal static int ApplyHeroPermilleReduction(TBaseObject defender, int damage)
+        {
+            if (damage <= 0 || defender is not HeroObject hero)
+                return damage;
+
+            var master = hero.m_Master as TPlayObject;
+            if (master == null || !ToggleOn(master, "英雄千分比免伤"))
+                return damage;
+
+            if (!master.TryGetScriptVar('S', 1, 58, out int permille) ||
+                permille <= 0 || permille > 1000)
+            {
+                return damage;
+            }
+
+            int reduction = unchecked((int)Math.Truncate(
+                damage * (permille / 1000.0d)));
+            return unchecked(damage - reduction);
+        }
+
+        /// <summary>
         /// 五法术切割。C# 落点：<see cref="TBaseObject.ResolveFullMagicDamage"/> 内
         /// <c>ApplyNativeMagicCritical</c> 之后（与 DLL 内 crit→切割序一致）。
         /// 键关 ⇒ 整段跳过（<c>cmp …,0x1F4 / jle</c>）。
@@ -68,7 +100,7 @@ namespace GameSvr.Plugins
             return damage;
         }
 
-        static bool ToggleOn(TPlayObject player, string chineseKey)
+        static bool ToggleOn(TPlayObject? player, string chineseKey)
         {
             var pm = M2Share.PluginManager;
             if (pm == null)
