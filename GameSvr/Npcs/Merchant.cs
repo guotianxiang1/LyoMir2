@@ -2142,7 +2142,12 @@ namespace GameSvr
         {
             var result = true;
             var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-            if (StdItem != null && StdItem.StdMode == 25)
+            // ECON sell gate sub_63F194 @0x63F1B8-0x63F1D4 (byte-verified): the durability
+            // floor applies to StdMode 25 (`cmp al,0x19`) OR StdMode 30 (`cmp al,0x1e`);
+            // `cmp word [item+0x26],0xFA0 / jae` then `xor ebx,ebx` rejects Dura < 4000.
+            // Prior code only checked StdMode 25, so right-hand/torch items (StdMode 30)
+            // could be sold at half durability.
+            if (StdItem != null && (StdItem.StdMode == 25 || StdItem.StdMode == 30))
             {
                 if (UserItem.Dura < 4000)
                 {

@@ -6050,7 +6050,6 @@ namespace GameSvr
             int nDam;
             int nDura;
             int nOldDura;
-            TPlayObject PlayObject;
             GoodItem StdItem;
             bool bo19;
             // sub_73F9FC @0x73FA0C-0x73FA28: `mov dl,0x34; call sub_772960; jne`
@@ -6177,20 +6176,22 @@ namespace GameSvr
                     bool boSendDuraChange;
                     if (nDura <= 0)
                     {
+                        // DURA-39: sub_75EA40 destroy arm @0x75EB45-0x75EB57 (byte-verified)
+                        // sends the "item expired" notice (cx=0xFFDB via VMT+0xD4) then
+                        // `mov word [ebx+0x26],0` (Dura=0) and `mov byte [esi],1` (changed).
+                        // It does NOT null the slot, NOT SendDelItems, NOT Free/FeatureChanged
+                        // — the broken item stays equipped (greyed) and RecalcAbilitys
+                        // (@0x75EE9B `jbe` skips Dura<=0) drops its stat contribution. The
+                        // prior C# deleted the item, which native never does on struck-destroy.
                         if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
-                            PlayObject = this as TPlayObject;
-                            PlayObject.SendDelItems(m_UseItems[i]);
                             StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
-                            if (StdItem.NeedIdentify == 1)
+                            if ((StdItem != null) && (StdItem.NeedIdentify == 1))
                             {
                                 M2Share.AddGameDataLog('3' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[i].MakeIndex + "\t"
                                     + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
                             }
-                            m_UseItems[i].wIndex = 0;
-                            FeatureChanged();
                         }
-                        m_UseItems[i].wIndex = 0;
                         m_UseItems[i].Dura = 0;
                         bo19 = true;
                         boSendDuraChange = true;

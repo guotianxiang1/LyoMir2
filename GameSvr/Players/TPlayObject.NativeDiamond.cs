@@ -81,7 +81,11 @@ namespace GameSvr
 
         private static bool IsNativeDiamondPileItem(GoodItem stdItem)
         {
-            return stdItem.StdMode == 7 || NativeItemFactory.IsPileItem(stdItem);
+            // CRAFT-14: native pile test is the INSTANCE kind byte [item+0x14]==7
+            // (TBasePileItem.Create @0x788118), NOT template StdMode. StdMode 7 is the
+            // TCharm family (NativeItemFactory case 7), never a pile — the prior
+            // `StdMode == 7 ||` wrongly treated charms/gems as stackable.
+            return NativeItemFactory.IsPileItem(stdItem);
         }
 
         private static bool TryResolveNativeItem(string itemName,

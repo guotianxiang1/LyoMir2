@@ -70,6 +70,25 @@ namespace GameSvr
         /// than guessed at — see docs/dura_writers_census_20260814.md.
         /// </para>
         /// </summary>
-        private static bool NativeStruckWearsOnHit(TUserItem item) => item.Dura > 0;
+        private static bool NativeStruckWearsOnHit(TUserItem item)
+        {
+            if (item.Dura <= 0)
+            {
+                return false;
+            }
+            // DURA-39: sub_75EA40 @0x75EA69 `call [item_vmt+0x74]`. The TCharm family
+            // (0x763344) and the TEquipBujuk family (0x762C18) both `xor eax,eax/ret`
+            // = never wear; all other equippable classes use 0x75F6C8 = `Dura > 0`.
+            // Item class comes from the native factory (0x74C338) via NativeItemFactory.
+            var stdItem = M2Share.UserEngine.GetStdItem(item.wIndex);
+            return NativeItemFactory.GetClassName(stdItem) switch
+            {
+                "TCharm" or "THPCharm" or "TMPCharm" or "THPMPCharm" or "TCryCharm"
+                    or "TMarkStoneCharm" => false,
+                "TBujuk" or "TDragonHeart" or "TSuperDragonHeart" or "TPoisons"
+                    or "TVessel" or "TUnionItem" => false,
+                _ => true
+            };
+        }
     }
 }

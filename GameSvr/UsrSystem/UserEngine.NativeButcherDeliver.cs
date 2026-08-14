@@ -103,11 +103,16 @@ namespace GameSvr
                 }
 
                 // 0x71ED4E  push 0 / 0x71ED50 mov cl,1 / 0x71ED5A call [killer_vmt+0x248]
-                //   = killer.AddItemToBag(item, reason=1, stampEnable=false)（sub_6B7378）。
+                //   = killer.AddItemToBag(item, ...). Native AddItemToBag (sub_6B7378):
+                //   ECX (param2) is stampEnable — @0x6B739F `test al,bl` gates the stamper
+                //   on it — and the pushed stack arg (param3) is reason. So `mov cl,1`
+                //   = stampEnable=TRUE, `push 0` = reason=0. C# param order is
+                //   (UserItem, reason, stampEnable) → (userItem, 0, true). The earlier
+                //   (1, false) had both values inverted, so butchered loot went unstamped.
                 // 0x71ED60  test al,al / 0x71ED62 jne skip —— 入包失败：0x71ED67 call 0x404690(Free)。
                 // DROP-35：**失败即丢弃物品，绝不落地兜底**。C# 中未挂接的 userItem 由 GC 回收，
                 // 等价 Free；返回值仅决定 native 是否 Free，此处无需分支（result 已在建物时置位）。
-                killer.AddItemToBag(userItem, 1, false);
+                killer.AddItemToBag(userItem, 0, true);
             }
 
             // 0x71ED76  8A 45 FB              mov al,[ebp-5] —— 返回是否建出过任意物品。

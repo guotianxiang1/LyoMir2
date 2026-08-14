@@ -243,7 +243,10 @@ namespace GameSvr
                 var userItem = created.UserItem;
 
                 ushort emittedQuantity;
-                if (stdItem?.StdMode == 7 && userItem != null)
+                // DROP-36: pile = native instance kind [item+0x14]==7 (TBasePileItem
+                // ctor @0x788118), not template StdMode 7 (= TCharm family). Use the
+                // canonical pile predicate so charms/gems drop per-item.
+                if (userItem != null && NativeItemFactory.IsPileItem(stdItem))
                 {
                     emittedQuantity = remaining;
                     userItem.Dura = remaining;
