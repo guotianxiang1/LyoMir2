@@ -4390,6 +4390,9 @@ namespace GameSvr.Plugins
             9 => 9,
             _ => 3,
         };
+        // BLOCKED: 插件 g11 唯一站点 0x74587C 是 AnsiString 长度域（memcpy 覆盖
+        // 「，持续 6 秒」文案），消费者 sub_7457D7 @0x745825 只发 SysMsg，不改数值；
+        // 真正的时长/系数写入点在本底本补丁图谱中未找到。见 docs/ys_b1_pangu3_20260814.md §3.3。
         public bool IsZhenQi() => Enabled("无极真气");
         public double ZhenQiA() => GetParam("无极真气_A值", 10);
         public int ZhenQiTime() => GetParamInt("无极真气_时间", 6);
@@ -4505,8 +4508,13 @@ namespace GameSvr.Plugins
         public bool IsCuttingEnabled() => Enabled("刀刀切割");
         public bool IsReflectEnabled() => Enabled("攻击反伤");
         public bool IsLifeSteal() => Enabled("攻击吸血");
+        // BLOCKED: trampoline 0x100B92FD→0x76E2A3 完整，读 [攻击者+0x184] word 调 IncHealthSpell；
+        // 该字段唯一写点 0x73DE9D 来自 RecalcAbilitys 装备聚合块，C# 侧整套不存在，
+        // shape 136/137/138 累加规则亦未定位。见 docs/ys_b1_pangu3_20260814.md §3.3。
         public bool IsEquipSteal() => Enabled("装备吸血");
         public bool IsPoisonEnabled() => Enabled("施毒术");
+        // BLOCKED: 31B 整段替换 0x76E599，语义 v=(effLevel&0xFF)+1+(2*RPow(SC))/V；
+        // C# nParam3 走 HUtil32.Round 链（MagicManager），基座不同，非 1:1。见 §3.3。
         public int PoisonFormulaVal() => GetParamInt("施毒术_公式值", 10);
         public bool IsParalysisEnabled() => Enabled("麻痹概率");
         public bool IsParaImmune() => Enabled("麻痹中不被麻痹a");

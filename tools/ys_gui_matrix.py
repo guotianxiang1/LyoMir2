@@ -304,6 +304,33 @@ def scan_sources(repo, keys):
 
 IDENT_RE = re.compile(r"\b([A-Za-z_]\w{2,})\b")
 
+PROP_RE = re.compile(
+    r"^[ \t]*(?:(?:public|private|internal|protected|static|readonly|override"
+    r"|virtual|sealed|abstract|partial|new)\s+)+[\w<>\[\],?\.]+\s+(\w+)\s*(?:=>|\{)",
+    re.M)
+
+
+def all_api_members(repo):
+    """Every method/property declared in YanshenApi, including relays.
+
+    Relays such as TryGetModifyShenShou hold no key literal but are named by
+    engine code; seeding only from key-bearing members mis-reports their
+    accessors as LABEL_ONLY (see tools/ys_key_reachability.py).
+    """
+    declared = set()
+    for owner in API_FILES:
+        path = os.path.join(repo, owner.replace("/", os.sep))
+        if not os.path.exists(path):
+            continue
+        text = open(path, encoding="utf-8-sig").read()
+        for d in MEMBER_DECL_RE.finditer(text):
+            if d.group(1) not in NON_MEMBER_NAMES:
+                declared.add(d.group(1))
+        for d in PROP_RE.finditer(text):
+            if d.group(1) not in NON_MEMBER_NAMES:
+                declared.add(d.group(1))
+    return declared
+
 
 def accessor_consumers(repo, hits):
     """member name -> set of files that name it, outside its declaring file.
@@ -311,12 +338,11 @@ def accessor_consumers(repo, hits):
     YanshenApi.cs declares one `IsXxx` / `XxxEnabled` accessor per config key.
     Most are never called; an accessor nobody calls is not behaviour, it is a
     differently-shaped label.  This resolves which ones are live.
+
+    Seeding uses every declared YanshenApi member referenced from engine or
+    script code, not only members that literally contain a key string.
     """
-    members = set()
-    for sites in hits.values():
-        for rel, _, member in sites:
-            if role_of(rel) == "API" and member:
-                members.add(member)
+    members = all_api_members(repo)
     if not members:
         return {}
     use = collections.defaultdict(set)
@@ -328,6 +354,8 @@ def accessor_consumers(repo, hits):
             path = os.path.join(root, name)
             rel = os.path.relpath(path, repo).replace(os.sep, "/")
             if rel in API_FILES:
+                continue
+            if consumer_tier(rel) not in ("ENGINE", "SCRIPT"):
                 continue
             try:
                 text = open(path, encoding="utf-8-sig").read()

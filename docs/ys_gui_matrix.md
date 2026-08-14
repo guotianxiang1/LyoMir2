@@ -4,13 +4,13 @@
 
 | 状态 | 计数 |
 |---|---|
-| IMPLEMENTED | 173 |
-| SCRIPT_ONLY | 22 |
-| LABEL_ONLY | 184 |
+| IMPLEMENTED | 222 |
+| SCRIPT_ONLY | 19 |
+| LABEL_ONLY | 138 |
 | MISSING | 1 |
 | INVENTED | 1 |
 
-生产已开启（值 != 0）215 键；其中无行为的 80 键。
+生产已开启（值 != 0）215 键；其中无行为的 47 键。
 
 ## 生产已开启但 C# 无行为
 
@@ -38,53 +38,20 @@
 | `随身仓库` | 1 | 盘古1 | LABEL_ONLY | `0x102b0360` | 2 | `0x6c2ab9` `0x6c2dc9` `0x6e087c` |
 | `ServerSay函数` | 1 | 盘古2 | LABEL_ONLY | `0x102b0034` | 2 | `0x728913` |
 | `名字变色` | 1 | 盘古2 | LABEL_ONLY | `0x102b0264` | 2 | - |
-| `噬魂沼泽绿毒修复` | 1 | 盘古2 | LABEL_ONLY | `0x102b0558` | 2 | `0x691e2e` |
 | `攻城修改` | 1 | 盘古2 | LABEL_ONLY | `0x102b059c` | 2 | `0x65bc09` `0x65be2c` `0x65c3b1` |
 | `攻城修改_天数` | 3 | 盘古2 | LABEL_ONLY | `0x102b0a78` | 3 | - |
 | `攻城修改_小时` | 20 | 盘古2 | LABEL_ONLY | `0x102b0a88` | 3 | - |
 | `攻城时长_分钟` | 120 | 盘古2 | LABEL_ONLY | `0x102b0aa8` | 3 | - |
-| `武器绿毒` | 1 | 盘古2 | LABEL_ONLY | `0x102b054c` | 2 | `0x76e2bc` |
 | `火墙_时间` | 120 | 盘古2 | LABEL_ONLY | `0x102b0ab8` | 3 | - |
-| `盘古冰咆哮的范围` | 1 | 盘古2 | LABEL_ONLY | `0x102b0608` | 2 | `0x76f301` |
-| `盘古冰咆哮的范围_范围值` | 3 | 盘古2 | LABEL_ONLY | `0x102b07d8` | 3 | - |
-| `盘古地狱雷光范围` | 1 | 盘古2 | LABEL_ONLY | `0x102b05f4` | 2 | `0x76f643` |
-| `盘古地狱雷光范围_范围值` | 3 | 盘古2 | LABEL_ONLY | `0x102b07c0` | 3 | - |
-| `盘古流星火雨范围` | 1 | 盘古2 | LABEL_ONLY | `0x102b061c` | 2 | `0x76f3be` |
-| `盘古流星火雨范围_范围值` | 4 | 盘古2 | LABEL_ONLY | `0x102b07f0` | 3 | - |
-| `盘古爆裂火焰范围` | 1 | 盘古2 | LABEL_ONLY | `0x102b05e0` | 2 | `0x76f271` |
-| `盘古爆裂火焰范围_范围值` | 2 | 盘古2 | LABEL_ONLY | `0x102b07a8` | 3 | - |
 | `等级禁言` | 1 | 盘古2 | LABEL_ONLY | `0x102b1688` | 2 | - |
-| `中毒时间上限` | 1 | 盘古3 | LABEL_ONLY | `0x102b06dc` | 2 | `0x76e5ce` `0x76e675` |
-| `中毒时间上限_秒` | "60" | 盘古3 | LABEL_ONLY | `0x102b08c8` | 3 | - |
-| `人物等级1_值` | 40 | 盘古3 | LABEL_ONLY | `0x102b1494` | 3 | - |
-| `人物等级2_值` | 45 | 盘古3 | LABEL_ONLY | `0x102b14a4` | 3 | - |
-| `人物等级3_值` | 48 | 盘古3 | LABEL_ONLY | `0x102b14b4` | 3 | - |
-| `修改召唤神兽` | 1 | 盘古3 | LABEL_ONLY | `0x102b1658` | 2 | - |
-| `怪物名字1_值` | "强化神兽" | 盘古3 | LABEL_ONLY | `0x102b14c4` | 3 | - |
-| `怪物名字2_值` | "强化神兽" | 盘古3 | LABEL_ONLY | `0x102b14d4` | 3 | - |
-| `怪物名字3_值` | "白虎" | 盘古3 | LABEL_ONLY | `0x102b14e4` | 3 | - |
-| `怪物数量1_值` | 1 | 盘古3 | LABEL_ONLY | `0x102b14f4` | 3 | - |
-| `怪物数量2_值` | 2 | 盘古3 | LABEL_ONLY | `0x102b1504` | 3 | - |
-| `怪物数量3_值` | 1 | 盘古3 | LABEL_ONLY | `0x102b1514` | 3 | - |
-| `战士合击` | 1 | 盘古3 | LABEL_ONLY | `0x102b06f4` | 2 | `0x7d341c` `0x7d3420` |
-| `战士合击_数值1` | "1.5" | 盘古3 | LABEL_ONLY | `0x102b08e8` | 3 | - |
-| `战士合击_数值2` | "2" | 盘古3 | LABEL_ONLY | `0x102b08f8` | 3 | - |
-| `战士合击_数值3` | "2.4" | 盘古3 | LABEL_ONLY | `0x102b0908` | 3 | - |
-| `战士合击_数值4` | "2.6" | 盘古3 | LABEL_ONLY | `0x102b0918` | 3 | - |
-| `战士合击_数值5` | "2.8" | 盘古3 | LABEL_ONLY | `0x102b0928` | 3 | - |
 | `施毒术_公式值` | "10" | 盘古3 | LABEL_ONLY | `0x102b08d8` | 3 | - |
 | `无极真气` | 1 | 盘古3 | LABEL_ONLY | `0x102b06d0` | 2 | `0x74587c` |
 | `无极真气_A值` | "10" | 盘古3 | LABEL_ONLY | `0x102b08a8` | 3 | - |
 | `无极真气_时间` | "10" | 盘古3 | LABEL_ONLY | `0x102b08b8` | 3 | - |
-| `法道合击` | 1 | 盘古3 | LABEL_ONLY | `0x102b0700` | 2 | `0x7d3298` `0x7d329c` |
 | `装备吸血` | 1 | 盘古3 | LABEL_ONLY | `0x102b0630` | 2 | `0x76e2a3` |
-| `装备提升人物爆率` | 1 | 盘古3 | LABEL_ONLY | `0x102b0718` | 2 | `0x71fd37` |
-| `装备提升人物爆率_A值` | "10" | 盘古3 | LABEL_ONLY | `0x102b0988` | 3 | - |
-| `装备提升人物爆率_B值` | "10" | 盘古3 | LABEL_ONLY | `0x102b09a0` | 3 | - |
 | `主号高级暴击` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b1578` | 2 | - |
 | `技能等级突破` | 1 | 眼神2(第1页) | LABEL_ONLY | `0x102b0210` | 2 | - |
 | `技能等级突破_最大值` | 255 | 眼神2(第1页) | LABEL_ONLY | `0x102b0a40` | 2 | - |
-| `循环时间_值` | 2000 | 眼神2(第2页) | LABEL_ONLY | `0x102b1488` | 3 | - |
 | `中毒飘血` | 1 | 配置2 | LABEL_ONLY | `0x102affe4` | 2 | `0x767e10` |
 | `免毒符` | 1 | 配置2 | LABEL_ONLY | `0x102affc8` | 2 | `0x6ed945` `0x6ed9d1` `0x6ed9eb` `0x6eda85` `0x6edab1` `0x6edadf` `0x6edb11` `0x6edb3e` `0x6edb65` `0x6edb8c` `0x6edc58` `0x6ede1d` |
 | `删除技能不提示` | 1 | 配置2 | LABEL_ONLY | `0x102afff0` | 2 | `0x6c7797` |
@@ -108,7 +75,7 @@
 | `修复刺杀位麻痹` | 1 | Y | toggle | LABEL_ONLY | IsFixStabParalysis |
 | `修复卡防御` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.NativeMagicDamage.cs |
 | `全服击杀提示` | 1 | Y | toggle | LABEL_ONLY | IsKillNotice; ShouldSendKillNotice |
-| `关闭摆摊` | 0 |  | toggle | LABEL_ONLY | IsCloseStall |
+| `关闭摆摊` | 0 |  | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.NativeStall.cs |
 | `召唤神兽` | 0 |  | toggle | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
 | `召唤神兽触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `召唤骷髅` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
@@ -136,7 +103,7 @@
 | `盘古穿戴触发` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `盘古给与封号` | 1 | Y | toggle | LABEL_ONLY | IsPgGiveTitle; IsPgGiveTitleEnabled |
 | `盘古高级属性` | 1 | Y | toggle | LABEL_ONLY | IsPgAdvancedAttr; IsPgAdvancedAttrEnabled |
-| `盘古魔法攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `盘古魔法攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.Wave3.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `神兽_序号` | 0 |  | value | LABEL_ONLY | ShenShouIdx |
 | `神兽_数量` | 1 | Y | value | LABEL_ONLY | NativeSlaveCountImm8 |
 | `禁止交易地图` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.Operate.cs |
@@ -144,7 +111,7 @@
 | `穿人穿怪` | 0 |  | toggle | LABEL_ONLY | IsPassThrough |
 | `脚本控制头发外显` | 1 | Y | toggle | LABEL_ONLY | IsScriptHair; IsScriptHairEnabled |
 | `行会显示` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.Base.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `踢玩家下线` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `踢玩家下线` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `邮件防刷` | 1 | Y | toggle | LABEL_ONLY | IsMailAntiSpam; IsMailAntiSpamEnabled |
 | `防0拆分` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.PileItems.cs |
 | `限制摆摊` | 0 |  | toggle | LABEL_ONLY | IsLimitStall; IsStallAllowed |
@@ -165,12 +132,12 @@
 | `刺杀剑术` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `刺杀剑术_A值` | "1" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `刺杀剑术_B值` | "5" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
-| `半月带毒` | 0 |  | toggle | LABEL_ONLY | IsHalfMoonPoison |
+| `半月带毒` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonKeys.cs |
 | `半月弯刀` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `半月弯刀_A值` | "2" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `半月弯刀_B值` | "15" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `名字变色` | 1 | Y | toggle | LABEL_ONLY | IsNameColor |
-| `噬魂沼泽绿毒修复` | 1 | Y | toggle | LABEL_ONLY | IsZhaoZeFix |
+| `噬魂沼泽绿毒修复` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonKeys.cs |
 | `基本剑术` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.cs |
 | `基本剑术_n值` | "3" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.cs |
 | `复活戒指重设` | 0 |  | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.NativeRevive.cs |
@@ -183,73 +150,73 @@
 | `攻城时长_分钟` | 120 | Y | value | LABEL_ONLY | GetSiegeDuration; IsSiegeDuration |
 | `攻杀剑术` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `攻杀剑术_A值` | "5" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
-| `武器绿毒` | 1 | Y | toggle | LABEL_ONLY | IsWeaponGreenPoison |
-| `法师群毒` | 0 |  | toggle | LABEL_ONLY | IsMageGroupPoison; IsMageGroupPoisonEnabled |
+| `武器绿毒` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonKeys.cs |
+| `法师群毒` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonKeys.cs |
 | `火墙_时间` | 120 | Y | value | LABEL_ONLY | FireWallTime |
-| `火墙设置时间上限` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `火墙设置时间上限` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `烈火剑法` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `烈火剑法_A值` | "4" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `烈火剑法_B值` | "3" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
-| `物功带毒` | 0 |  | toggle | LABEL_ONLY | IsPhysicalPoison |
-| `盘古冰咆哮的范围` | 1 | Y | toggle | LABEL_ONLY | IsPgIceStormRange |
-| `盘古冰咆哮的范围_范围值` | 3 | Y | value | LABEL_ONLY | PgIceStormRangeVal |
-| `盘古地狱雷光范围` | 1 | Y | toggle | LABEL_ONLY | IsPgHellLightRange |
-| `盘古地狱雷光范围_范围值` | 3 | Y | value | LABEL_ONLY | PgHellLightRangeVal |
-| `盘古流星火雨范围` | 1 | Y | toggle | LABEL_ONLY | IsPgFireRainRange |
-| `盘古流星火雨范围_范围值` | 4 | Y | value | LABEL_ONLY | PgFireRainRangeVal |
-| `盘古爆裂火焰范围` | 1 | Y | toggle | LABEL_ONLY | IsPgBlastFlameRange |
-| `盘古爆裂火焰范围_范围值` | 2 | Y | value | LABEL_ONLY | PgBlastFlameRangeVal |
+| `物功带毒` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonKeys.cs |
+| `盘古冰咆哮的范围` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古冰咆哮的范围_范围值` | 3 | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古地狱雷光范围` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古地狱雷光范围_范围值` | 3 | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古流星火雨范围` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古流星火雨范围_范围值` | 4 | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古爆裂火焰范围` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `盘古爆裂火焰范围_范围值` | 2 | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `破复活` | 0 |  | toggle | LABEL_ONLY | IsBreakRevival |
 | `等级禁言` | 1 | Y | toggle | LABEL_ONLY | IsLevelMute; IsMailAntiSpamEnabled |
 | `设置玩家称号函数` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `逐日剑法` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `逐日剑法_A值` | "6" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
 | `逐日剑法_B值` | "3" | Y | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Attack.cs |
-| `野蛮麻痹` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `雷电带毒` | 0 |  | toggle | LABEL_ONLY | IsLightningPoison |
+| `野蛮麻痹` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `雷电带毒` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonKeys.cs |
 
 ### 盘古3（39）
 
 | 键 | 值 | 开 | 控件 | 状态 | C# 行为落点 / API 成员 |
 |---|---|---|---|---|---|
-| `中毒时间上限` | 1 | Y | toggle | LABEL_ONLY | IsPoisonTimeLimit |
-| `中毒时间上限_秒` | "60" | Y | value | LABEL_ONLY | PoisonTimeLimitSec |
+| `中毒时间上限` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonTimeCap.cs |
+| `中毒时间上限_秒` | "60" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenPoisonTimeCap.cs |
 | `人物爆率调整` | 0 |  | toggle | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
-| `人物等级1_值` | 40 | Y | value | LABEL_ONLY | IsCustomDmgPlus; PlayerLv1 |
-| `人物等级2_值` | 45 | Y | value | LABEL_ONLY | IsCustomDmgPlus; PlayerLv2 |
-| `人物等级3_值` | 48 | Y | value | LABEL_ONLY | IsCustomDmgPlus; PlayerLv3 |
-| `修改召唤神兽` | 1 | Y | toggle | LABEL_ONLY | IsModifyShenShou; IsModifyShenShouEnabled |
-| `屏蔽排行榜` | 0 |  | toggle | LABEL_ONLY | IsHideRank; ShouldHideRank |
-| `怪物名字1_值` | "强化神兽" | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterName1 |
-| `怪物名字2_值` | "强化神兽" | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterName2 |
-| `怪物名字3_值` | "白虎" | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterName3 |
-| `怪物数量1_值` | 1 | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterCount1; MonsterName3 |
-| `怪物数量2_值` | 2 | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterCount2 |
-| `怪物数量3_值` | 1 | Y | value | LABEL_ONLY | IsCustomDmgPlus; MonsterCount3 |
-| `战士合击` | 1 | Y | toggle | LABEL_ONLY | IsWarriorCombo; IsWarriorComboEnabled |
-| `战士合击_数值1` | "1.5" | Y | value | LABEL_ONLY | WarriorComboV1 |
-| `战士合击_数值2` | "2" | Y | value | LABEL_ONLY | WarriorComboV2 |
-| `战士合击_数值3` | "2.4" | Y | value | LABEL_ONLY | WarriorComboV3 |
-| `战士合击_数值4` | "2.6" | Y | value | LABEL_ONLY | WarriorComboV4 |
-| `战士合击_数值5` | "2.8" | Y | value | LABEL_ONLY | WarriorComboV5 |
-| `施毒术` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `人物等级1_值` | 40 | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `人物等级2_值` | 45 | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `人物等级3_值` | 48 | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `修改召唤神兽` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `屏蔽排行榜` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenHideRank.cs |
+| `怪物名字1_值` | "强化神兽" | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `怪物名字2_值` | "强化神兽" | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `怪物名字3_值` | "白虎" | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `怪物数量1_值` | 1 | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `怪物数量2_值` | 2 | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `怪物数量3_值` | 1 | Y | value | IMPLEMENTED | GameSvr/Spells/MagicManager.cs |
+| `战士合击` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `战士合击_数值1` | "1.5" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `战士合击_数值2` | "2" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `战士合击_数值3` | "2.4" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `战士合击_数值4` | "2.6" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `战士合击_数值5` | "2.8" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `施毒术` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `施毒术_公式值` | "10" | Y | value | LABEL_ONLY | PoisonFormulaVal |
 | `无极真气` | 1 | Y | toggle | LABEL_ONLY | IsZhenQi |
 | `无极真气_A值` | "10" | Y | value | LABEL_ONLY | ZhenQiA |
 | `无极真气_时间` | "10" | Y | value | LABEL_ONLY | ZhenQiTime |
 | `最大装备数量` | "" |  | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
-| `法道合击` | 1 | Y | toggle | LABEL_ONLY | IsWizTaoCombo; IsWizTaoComboEnabled |
-| `法道合击_数值1` | "" |  | value | LABEL_ONLY | WizTaoComboV1 |
-| `法道合击_数值2` | "" |  | value | LABEL_ONLY | WizTaoComboV2 |
-| `法道合击_数值3` | "" |  | value | LABEL_ONLY | WizTaoComboV3 |
-| `法道合击_数值4` | "" |  | value | LABEL_ONLY | WizTaoComboV4 |
-| `法道合击_数值5` | "" |  | value | LABEL_ONLY | WizTaoComboV5 |
+| `法道合击` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `法道合击_数值1` | "" |  | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `法道合击_数值2` | "" |  | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `法道合击_数值3` | "" |  | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `法道合击_数值4` | "" |  | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
+| `法道合击_数值5` | "" |  | value | IMPLEMENTED | GameSvr/Plugins/YanshenComboTables.cs |
 | `红名K值` | "" |  | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
-| `脚本控制人物爆率` | 0 |  | toggle | LABEL_ONLY | IsScriptDropRate; IsScriptDropRateEnabled |
+| `脚本控制人物爆率` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenScriptDropRate.cs |
 | `装备吸血` | 1 | Y | toggle | LABEL_ONLY | IsEquipSteal |
-| `装备提升人物爆率` | 1 | Y | toggle | LABEL_ONLY | IsBoostDropRate |
-| `装备提升人物爆率_A值` | "10" | Y | value | LABEL_ONLY | BoostDropRateA |
-| `装备提升人物爆率_B值` | "10" | Y | value | LABEL_ONLY | BoostDropRateB |
+| `装备提升人物爆率` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenEquipDropBoost.cs |
+| `装备提升人物爆率_A值` | "10" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenEquipDropBoost.cs |
+| `装备提升人物爆率_B值` | "10" | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenEquipDropBoost.cs |
 | `非红名K值` | "" |  | value | IMPLEMENTED | GameSvr/Actors/TBaseObject.Base.cs; GameSvr/Players/TPlayObject.Message.cs |
 
 ### 盘古4（98）
@@ -272,7 +239,7 @@
 | `头盔点数几率_攻速_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `头盔点数几率_道术_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `头盔点数几率_魔法_值` | "5" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
-| `屏蔽自动绑定` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `屏蔽自动绑定` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `戒指属性几率_准确_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `戒指属性几率_攻击_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
 | `戒指属性几率_攻速_值` | "10" | Y | value | IMPLEMENTED | GameSvr/Items/NativeItemPlus28.cs |
@@ -366,15 +333,15 @@
 | `give极品` | 0 |  | toggle | LABEL_ONLY | IsGiveExtreme; IsGiveExtremeEnabled |
 | `上线触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `临时大背包` | 0 |  | toggle | LABEL_ONLY | IsTempBag; SwitchBigBag |
-| `全屏拾取` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `刀刀切割` | 0 |  | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.NativeSocialSlots.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `全屏拾取` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `刀刀切割` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenCommands.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `千分比免伤` | 0 |  | toggle | LABEL_ONLY | IsDmgReduction |
 | `复活戒指改cd` | 0 |  | toggle | LABEL_ONLY | IsReviveCD; IsReviveCDEnabled |
 | `复活戒指概率` | 0 |  | toggle | LABEL_ONLY | IsReviveChance; IsReviveChanceEnabled |
 | `复活触发脚本` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
-| `捡物触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `捡物触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.Wave2.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `攻击反伤` | 0 |  | toggle | LABEL_ONLY | IsReflectEnabled |
-| `攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.Wave3.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `新倍攻和暴击` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `新穿戴触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `永久属性` | 0 |  | toggle | LABEL_ONLY | IsPermAttr |
@@ -383,15 +350,15 @@
 | `特殊属性` | 0 |  | toggle | LABEL_ONLY | IsPetSpecial |
 | `禁止装备自动绑定` | 0 |  | toggle | LABEL_ONLY | IsBindDisabled |
 | `移动速度` | 0 |  | toggle | LABEL_ONLY | IsMoveSpeed |
-| `英雄倍攻和暴击` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `英雄倍攻和暴击` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.Wave2.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `英雄攻速移速` | 0 |  | toggle | LABEL_ONLY | IsHeroSpeed; IsHeroSpeedEnabled |
 | `英雄施法速度` | 0 |  | toggle | LABEL_ONLY | IsHeroCastSpeed |
 | `英雄穿戴触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
-| `被击杀触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `被击杀触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.Wave2.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
 | `装备来源` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `读取英雄装备` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
-| `魔法攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.cs |
-| `麻痹概率` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `魔法攻击触发` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenTriggerDispatch.Wave3.cs; GameSvr/Plugins/YanshenTriggerDispatch.cs |
+| `麻痹概率` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 
 ### 配置2（31）
 
@@ -408,9 +375,9 @@
 | `地狱雷光可换主属性` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `地狱雷光系数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `地狱雷光范围` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
-| `激光命中概率` | 0 |  | toggle | LABEL_ONLY | IsLaserHitRate |
+| `激光命中概率` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenLaserSlots.cs |
 | `激光电影可换主属性` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
-| `激光范围及系数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
+| `激光范围及系数` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenLaserSlots.cs; GameSvr/Plugins/YanshenSkillPatches.cs |
 | `火球主属性切换` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `火球自定义范围` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
 | `火雨主属切换` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenSkillPatches.cs |
@@ -437,7 +404,7 @@
 | `主号分身术a` | 0 |  | toggle | LABEL_ONLY | IsMainClone; IsMainCloneEnabled |
 | `主号施法速度` | 0 |  | toggle | LABEL_ONLY | IsMainCastSpeed; IsMainCastSpeedEnabled |
 | `主号高级暴击` | 1 | Y | toggle | LABEL_ONLY | IsMainAdvCrit; IsMainAdvCritEnabled |
-| `全屏吸怪` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `全屏吸怪` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `冰咆哮切割` | 0 |  | toggle | LABEL_ONLY | IsIceStormCutting |
 | `冰咆哮固定增伤` | 0 |  | toggle | LABEL_ONLY | IsIceStormFixDmg |
 | `切换暴击报文` | 0 |  | toggle | LABEL_ONLY | IsSwitchCritMsg; IsSwitchCritMsgEnabled |
@@ -459,7 +426,7 @@
 | `自定义元素` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `英雄千分比免伤` | 0 |  | toggle | LABEL_ONLY | IsHeroDmgReduction; IsHeroDmgReductionEnabled |
 | `英雄自动开盾` | 0 |  | toggle | LABEL_ONLY | IsHeroAutoShield |
-| `英雄读取极品` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `英雄读取极品` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `获取沙城归属` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `装备多职业` | 0 |  | toggle | LABEL_ONLY | IsMultiJob; IsMultiJobEquip |
 | `装备转生穿戴判定a` | 0 |  | toggle | LABEL_ONLY | IsRebirthWear; IsRebirthWearCheck |
@@ -472,20 +439,20 @@
 
 | 键 | 值 | 开 | 控件 | 状态 | C# 行为落点 / API 成员 |
 |---|---|---|---|---|---|
-| `super攻击触发` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `super攻击触发` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `伤害触发脚本_plus` | 0 |  | toggle | LABEL_ONLY | IsDmgScriptPlus |
-| `全局循环函数` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `全局循环函数` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenCommands.cs; GameSvr/Plugins/YanshenRecycleDriver.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `千分比经验倍数` | 0 |  | toggle | LABEL_ONLY | IsExpMultiplier |
-| `循环时间_值` | 2000 | Y | value | LABEL_ONLY | IsLoopTimeVal; IsLoopTimeValEnabled |
+| `循环时间_值` | 2000 | Y | value | IMPLEMENTED | GameSvr/Plugins/YanshenRecycleDriver.cs |
 | `怪物爆率A_值` | 0 |  | value | LABEL_ONLY | IsMonsterDropA |
 | `怪物爆率B_值` | 0 |  | value | LABEL_ONLY | IsMonsterDropB |
 | `怪物爆率K_值` | 0 |  | value | LABEL_ONLY | IsMonsterDropK |
-| `攻击吸血` | 0 |  | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs; GameSvr/Services/NativeType2StdItemSnapshotState.cs |
+| `攻击吸血` | 0 |  | toggle | IMPLEMENTED | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs; GameSvr/Services/NativeType2StdItemSnapshotState.cs |
 | `新怪物爆率` | 0 |  | toggle | LABEL_ONLY | IsNewMonsterDrop; IsNewMonsterDropEnabled |
 | `毫秒级cd记录` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `火墙不吸血` | 0 |  | toggle | LABEL_ONLY | IsFireWallNoVamp |
-| `眼神特殊函数` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs; SystemModule/Grobal2.cs |
-| `自定义伤害_plus` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `眼神特殊函数` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.NativeSocialSlots.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/Plugins/YanshenPoisonKeys.cs |
+| `自定义伤害_plus` | 0 |  | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.NativeSocialSlots.cs; GameSvr/Plugins/YanshenCommands.cs; GameSvr/Plugins/YanshenPoisonKeys.cs |
 | `英雄物理攻击触发` | 0 |  | toggle | LABEL_ONLY | IsHeroPhysTrigger; IsHeroPhysTriggerEnabled |
 | `英雄野蛮` | 0 |  | toggle | LABEL_ONLY | IsHeroBarbarian; IsHeroBarbarianEnabled |
 | `英雄魔法攻击触发` | 0 |  | toggle | LABEL_ONLY | IsHeroMagicTrigger; IsHeroMagicTriggerEnabled |
@@ -495,7 +462,7 @@
 | `道士合击系数_数值3` | "" |  | value | LABEL_ONLY | TaoComboV3 |
 | `道士合击系数_数值4` | "" |  | value | LABEL_ONLY | TaoComboV4 |
 | `道士合击系数_数值5` | "" |  | value | LABEL_ONLY | TaoComboV5 |
-| `高级回收` | 1 | Y | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `高级回收` | 1 | Y | toggle | IMPLEMENTED | GameSvr/Players/TPlayObject.MemberRoster.cs; GameSvr/Players/TPlayObject.Message.cs; GameSvr/Plugins/YanshenCommands.cs |
 | `高级物理攻击触发` | 0 |  | toggle | LABEL_ONLY | IsAdvancedPhysTrigger |
 | `高级魔法攻击触发` | 0 |  | toggle | LABEL_ONLY | IsAdvancedMagicTrigger |
 
@@ -517,7 +484,7 @@
 
 | 键 | 值 | 开 | 控件 | 状态 | C# 行为落点 / API 成员 |
 |---|---|---|---|---|---|
-| `大背包` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/Plugins/YanshenCommands.cs; GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
+| `大背包` | 0 |  | toggle | SCRIPT_ONLY | GameSvr/ScriptSystem/PasEngine/PasApiBridge.Yanshen.cs |
 | `投保报文` | 0 |  | toggle | LABEL_ONLY | IsInsuranceMsg; SendInsuranceMsg |
 | `英雄修装备a` | 0 |  | toggle | LABEL_ONLY | IsHeroRepairEquip; RepairAllEquip |
 | `装备投保` | 0 |  | toggle | LABEL_ONLY | GiveItemBind; InsuranceItem; IsEquipInsurance |
@@ -541,9 +508,9 @@
 
 ## 生产 config 无但转储里有（合法，非臆造）
 
-- `怪物伤害触发技能特效` @ `0x102bcfdc` — GameSvr/Plugins/YanshenApi.cs:1518, GameSvr/Plugins/YanshenApi.cs:1547
-- `指定英雄放技能` @ `0x102b9048` — GameSvr/Plugins/YanshenApi.cs:1585
-- `火墙修改` @ `0x102bd07c` — GameSvr/Plugins/YanshenApi.cs:3156
+- `怪物伤害触发技能特效` @ `0x102bcfdc` — GameSvr/Plugins/YanshenApi.cs:2118, GameSvr/Plugins/YanshenApi.cs:2147
+- `指定英雄放技能` @ `0x102b9048` — GameSvr/Plugins/YanshenApi.cs:2185
+- `火墙修改` @ `0x102bd07c` — GameSvr/Plugins/YanshenApi.cs:4048
 
 ## INVENTED（生产 config 和转储字符串里都没有）
 
