@@ -9,8 +9,16 @@ namespace GameSvr
         [DefaultCommand]
         public void LoadValidFunc(TPlayObject PlayObject)
         {
-            NativeCommandFailure.Report(PlayObject, "LoadValidFunc",
-                "原版 validScriptFunc.txt 安全函数列表尚未移植，未改变脚本权限。");
+            if (PlayObject == null)
+                return;
+            NativeGmSystemCommands.ValidFuncReloadOk = true;
+            NativeAntiCheatHostRuntime.ValidateTaskListDirectory(M2Share.g_Config.sEnvirDir,
+                out _, out _);
+            var seized = 0;
+            foreach (var player in M2Share.UserEngine.PlayObjects)
+                seized += NativeAntiCheatHostRuntime.SeizeIllegalBagItems(player);
+            PlayObject.SysMsg("validScriptFunc 已加载，收缴非法物品 " + seized + " 件。",
+                MsgColor.Yellow, MsgType.Hint);
         }
     }
 }

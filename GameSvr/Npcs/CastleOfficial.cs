@@ -48,18 +48,7 @@ namespace GameSvr
                 case "$CASTLEDOORSTATE":
                     {
                         var castleDoor = (CastleDoor)this.m_Castle.m_MainDoor.BaseObject;
-                        if (castleDoor.m_boDeath)
-                        {
-                            sText = "destroyed";
-                        }
-                        else if (castleDoor.m_boOpened)
-                        {
-                            sText = "opened";
-                        }
-                        else
-                        {
-                            sText = "closed";
-                        }
+                        sText = NativeCastleHostRuntime.ResolveCastleDoorState(castleDoor);
                         sMsg = this.ReplaceVariableText(sMsg, "<$CASTLEDOORSTATE>", sText);
                         break;
                     }

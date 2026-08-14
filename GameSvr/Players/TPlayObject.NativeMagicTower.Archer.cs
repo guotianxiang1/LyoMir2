@@ -63,27 +63,10 @@ namespace GameSvr
             }
         }
 
+        // sub_646BAC @0x00646BAC EngageArcher — coords from table @0x007D2A8C
         internal static bool TryGetNativeMagicTowerArcherCoordinates(
-            int index, out short x, out short y)
-        {
-            switch (index)
-            {
-                case 1: x = 30; y = 30; return true;
-                case 2: x = 27; y = 33; return true;
-                case 3: x = 29; y = 37; return true;
-                case 4: x = 31; y = 41; return true;
-                case 5: x = 34; y = 44; return true;
-                case 6: x = 38; y = 46; return true;
-                case 7: x = 41; y = 49; return true;
-                case 8: x = 45; y = 51; return true;
-                case 9: x = 48; y = 47; return true;
-                case 10: x = 51; y = 43; return true;
-                default:
-                    x = 0;
-                    y = 0;
-                    return false;
-            }
-        }
+            int index, out short x, out short y) =>
+            NativeCastleHostRuntime.TryGetEngageArcherCoordinates(index, out x, out y);
 
         private void SendNativeMagicTowerArcherDialog(NormNpc npc,
             string message)

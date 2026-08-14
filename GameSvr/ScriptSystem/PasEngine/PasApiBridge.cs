@@ -751,10 +751,8 @@ namespace GameSvr.PasEngine
                 case "getlistofwar": result = PasValue.FromString(GetCurrentCastle()?.GetAttackWarList() ?? string.Empty); break;
                 case "getcastledoorstate":
                     var door = GetCurrentCastle()?.m_MainDoor?.BaseObject as CastleDoor;
-                    result = PasValue.FromString(door == null ? string.Empty
-                        : door.m_boDeath ? "destroyed"
-                        : door.m_boOpened ? "opened"
-                        : "closed");
+                    result = PasValue.FromString(
+                        NativeCastleHostRuntime.ResolveCastleDoorState(door));
                     break;
                 case "repdoorgold": result = PasValue.FromInt(CurrentNpc.m_nPasRepDoorGold); break;
                 case "repwallgold": result = PasValue.FromInt(CurrentNpc.m_nPasRepWallGold); break;
