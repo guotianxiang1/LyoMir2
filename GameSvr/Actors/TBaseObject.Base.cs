@@ -1746,8 +1746,11 @@ namespace GameSvr
                 // plugin rewrite is a process-wide patch, so HeroObject must
                 // honour it too. Monsters do not enter this worker natively.
                 var dropCount = 0;
+                var nativeEquipDropCount = 0;
                 var deathDropPatched = false;
                 var patchedCap = 2;
+                var processedEquipSlot = false;
+                var nativeDropNoticeCount = 0;
                 if (this is HeroObject)
                 {
                     deathDropPatched = new YanshenApi(null, null, M2Share.PluginManager)
@@ -1824,6 +1827,7 @@ namespace GameSvr
                                 MsgColor.Red, MsgType.Hint);
                         }
                         Dispose(destroyed);                 // 0x73FEC4 sub_404690
+                        nativeEquipDropCount++;
                         // native 0x73FE4E inc [ebp-0xc] then jmp 0x73FF6F (destroy skips cap)
                         if (deathDropPatched) dropCount++;
                         nC++;
@@ -1863,6 +1867,7 @@ namespace GameSvr
                                 }
                             }
                             // native 0x73FF66 inc [ebp-0xc] / 0x73FF69 cmp / jg exit
+                            nativeEquipDropCount++;
                             if (deathDropPatched)
                             {
                                 dropCount++;
@@ -1881,6 +1886,9 @@ namespace GameSvr
                     SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
                         DropItemList.Count, 0, 0, "", DropItemList);
                 }
+
+                // sub_73FC70 @0x73FFD4 call sub_73E4C4(edx=[ebp-0xC] drop count).
+                TryNativeDeathDropAreaNotice(nativeEquipDropCount);
             }
             catch (Exception ex)
             {
