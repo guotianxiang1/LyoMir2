@@ -103,5 +103,30 @@ namespace GameSvr.Plugins
             if (pm == null || player == null) return true;
             return new YanshenApi(player, null, pm).IsStallAllowed();
         }
+
+        // --- PARAM_OF_PATCHED（父键已有引擎消费者）---
+
+        /// <summary>
+        /// 神兽_数量 — 插件改写宿主 <c>0x76EE99</c> 的 <c>push imm8</c>（见
+        /// <see cref="YanshenApi.ShenShouSlaveCount"/> 注释）。键关时出厂 imm8 = 1。
+        /// </summary>
+        internal static int ShenShouSlaveCount(YanshenApi api)
+        {
+            if (api == null || !api.IsSummonShenShou())
+                return 1;
+            return YanshenApi.NativeSlaveCountImm8(
+                api.GetParamInt("神兽_数量", 1));
+        }
+
+        /// <summary>
+        /// 召唤骷髅_数量 — 同构 imm8 @<c>0x76EE1F</c>（<see cref="YanshenApi.KuLouSlaveCount"/>）。
+        /// </summary>
+        internal static int KuLouSlaveCount(YanshenApi api)
+        {
+            if (api == null || !api.IsSummonKuLou())
+                return 1;
+            return YanshenApi.NativeSlaveCountImm8(
+                api.GetParamInt("召唤骷髅_数量", 1));
+        }
     }
 }
