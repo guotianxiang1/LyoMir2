@@ -220,11 +220,16 @@ namespace GameSvr
             TPlayObject owner, out int roomIndex)
         {
             roomIndex = -1;
-            if ((owner != null && !IsEligiblePlayer(owner))
-                || !TryReserveActivatedLease(roomName, owner, out var lease))
+            if (owner != null && !IsEligiblePlayer(owner))
                 return false;
-            roomIndex = lease.Index;
-            return true;
+            if (TryReserveActivatedLease(roomName, owner, out var lease))
+            {
+                roomIndex = lease.Index;
+                return true;
+            }
+
+            BroadcastNativeDynamicRoomUnavailable(roomName);
+            return false;
         }
 
         public int FlyToDynamicRoom(TPlayObject player, string roomName,
@@ -232,7 +237,10 @@ namespace GameSvr
         {
             if (!IsEligiblePlayer(player)
                 || !TryReserveActivatedLease(roomName, player, out var lease))
+            {
+                BroadcastNativeDynamicRoomUnavailable(roomName);
                 return -1;
+            }
 
             player.TrySpaceMoveToEnvironment(lease.Environment,
                 unchecked((short)x), unchecked((short)y), 0);
@@ -611,6 +619,13 @@ namespace GameSvr
             return int.TryParse(value, NumberStyles.None,
                        CultureInfo.InvariantCulture, out number)
                    && number >= minimum && number <= maximum;
+        }
+
+        // 战神 sub_5FEBD0 @0x005FEBD0 / sub_5FF2E0 @0x005FF2E0 失败支：
+        // LStrCatN("[Error]:无可用的房间:", roomName) -> 0x79DF74 (cl=1 广播)。
+        internal static void BroadcastNativeDynamicRoomUnavailable(string roomName)
+        {
+            M2Share.MainOutMessage("[Error]:无可用的房间:" + (roomName ?? string.Empty));
         }
     }
 }

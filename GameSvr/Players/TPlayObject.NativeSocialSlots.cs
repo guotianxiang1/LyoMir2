@@ -89,6 +89,10 @@ namespace GameSvr
             {
                 m_boMarried = false;
             }
+            else if (m_boMarried && !IsNativeSpouseSlotEmpty())
+            {
+                NotifyNativeSpouseOnlineCoord();
+            }
             // Leg B -- 0x6CCE91 / 0x6CCEA1 / 0x6CCED3
             if (m_boStudent)
             {
@@ -111,6 +115,11 @@ namespace GameSvr
                     // cl=2, the "your master is online at <map> x,y" notifier,
                     // which is a separate feature and stays unported here.
                     NativeLeaveMaster(1);
+                }
+                else
+                {
+                    // sub_6CD188(cl=2) -> sub_6CF000 master coord @0x006CF000
+                    NotifyNativeMasterOnlineCoord();
                 }
             }
             // Leg C -- the student-array reconciliation (0x6CCEDA..0x6CD01F)
@@ -199,10 +208,11 @@ namespace GameSvr
                 var student = M2Share.UserEngine.GetPlayObject(studentName);
                 if (student == null)
                 {
-                    continue;   // 0x6CCF3C offline -> announce only
+                    continue;   // 0x6CCF3C offline -> native sub_6CD188 另径，未完整移植
                 }
                 if (student.m_Abil.Level < M2Share.g_Config.nMasterOKLevel)
                 {
+                    NotifyNativeStudentOnlineCoord(studentName);
                     continue;   // 0x6CCF51 below 出师 -> announce only
                 }
 

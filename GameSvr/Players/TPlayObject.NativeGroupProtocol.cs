@@ -27,6 +27,30 @@ namespace GameSvr
         private static readonly ConditionalWeakTable<TPlayObject,
             List<NativeGroupRequest>> NativeGroupPendingRequests = new();
 
+        private readonly struct NativeGroupOutgoingRequest
+        {
+            public NativeGroupOutgoingRequest(TPlayObject target, byte type)
+            {
+                Target = target;
+                Type = type;
+            }
+
+            public TPlayObject Target { get; }
+            public byte Type { get; }
+        }
+
+        private static readonly ConditionalWeakTable<TPlayObject,
+            List<NativeGroupOutgoingRequest>> NativeGroupOutgoingRequests = new();
+
+        private const string NativeGroupCancelRequestOk =
+            "请求已取消";
+        private const string NativeGroupCancelRequestFail =
+            "取消请求失败";
+        private const string NativeGroupTransferLeaderOk =
+            "队长已转让";
+        private const string NativeGroupTransferLeaderFail =
+            "转让队长失败";
+
         private bool TryHandleNativeGroupProtocol(TProcessMessage processMessage)
         {
             switch (processMessage.wIdent)
@@ -52,6 +76,29 @@ namespace GameSvr
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// 战神 sub_6AF078 @0x006AF078（GM idx 654 @0x0062A1E2 同体）。无独立 CM leaf；
+        /// 供 GM/脚本宿主调用。
+        /// </summary>
+        internal void ExecuteNativeCancelGroupOutgoingRequest(byte type)
+        {
+            HandleNativeCancelGroupRequest(new TProcessMessage
+            {
+                nParam1 = type
+            });
+        }
+
+        /// <summary>
+        /// 战神 sub_6AFA7C @0x006AFA7C（GM idx 658 @0x0062A226 同体，member 名在 body）。
+        /// </summary>
+        internal void ExecuteNativeTransferGroupLeader(string memberName)
+        {
+            HandleNativeTransferGroupLeader(new TProcessMessage
+            {
+                Payload = EncodeNativeGroupText(memberName ?? string.Empty)
+            });
         }
 
         internal bool QueueNativeGroupRequest(TPlayObject requester, byte type)
@@ -89,12 +136,179 @@ namespace GameSvr
             }
 
             pending.Add(new NativeGroupRequest(requester, type));
+            TrackNativeGroupOutgoingRequest(requester, this, type);
             SendNativeGroupPacket(this,
                 BuildNativeGroupHeader(Grobal2.SM_NOTIFY_GROUP_MESSAGE, 1,
                     type, 0, 0),
                 EncodeNativeGroupText(requester.m_sCharName));
             SendNativeGroupRequestConfirmation(requester, type);
             return true;
+        }
+
+        // 战神 sub_6AF078 @0x006AF078：push [self+0x58C]/[self+0x588] -> sub_6ADA3C ->
+        // vtable+0x14；成功 SysMsg 0x6AF0D0「请求已取消」，失败 0x6AF0E4「取消请求失败」
+        // (cx=0x38FF)。GM 表 idx 654 @0x0062A1E2 亦落此体；C# 折到 outgoing 表 + 目标 pending 撤单。
+        private void HandleNativeCancelGroupRequest(TProcessMessage processMessage)
+        {
+            var type = unchecked((byte)processMessage.nParam1);
+            if (!TryCancelNativeGroupOutgoingRequest(type, out var canceled))
+            {
+                SysMsg(NativeGroupCancelRequestFail, MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            if (canceled != null && !canceled.m_boGhost)
+            {
+                canceled.RemoveNativeGroupRequest(this, type);
+                SendNativeGroupPacket(canceled,
+                    BuildNativeGroupHeader(Grobal2.SM_NOTIFY_GROUP_MESSAGE,
+                        0, type, 0, 0),
+                    EncodeNativeGroupText(m_sCharName));
+            }
+            SysMsg(NativeGroupCancelRequestOk, MsgColor.Red, MsgType.Hint);
+        }
+
+        // 战神 sub_6AFA7C @0x006AFA7C：[self+0xAE8] 经 sub_705660 解目标 ->
+        // sub_6ADA3C vtable+0x1C；成功 0x6AFADC「队长已转让」/ 失败 0x6AFAF0「转让队长失败」。
+        // GM idx 658 @0x0062A226 带 memberId 实参；CM 体为 ShortString 成员名。
+        private void HandleNativeTransferGroupLeader(TProcessMessage processMessage)
+        {
+            if (!ReferenceEquals(m_GroupOwner, this))
+            {
+                SysMsg(NativeGroupTransferLeaderFail, MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            if (!TryDecodeNativeGroupText(
+                    DecodeNativeSocialBody(processMessage.Payload),
+                    out var memberName))
+            {
+                SysMsg(NativeGroupTransferLeaderFail, MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            var member = M2Share.UserEngine?.GetPlayObject(memberName);
+            if (member == null || member.m_boGhost
+                || member.m_GroupOwner != this
+                || ReferenceEquals(member, this))
+            {
+                SysMsg(NativeGroupTransferLeaderFail, MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            if (!TryTransferNativeGroupLeader(member))
+            {
+                SysMsg(NativeGroupTransferLeaderFail, MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            SysMsg(NativeGroupTransferLeaderOk, MsgColor.Red, MsgType.Hint);
+        }
+
+        private static void TrackNativeGroupOutgoingRequest(TPlayObject requester,
+            TPlayObject target, byte type)
+        {
+            if (requester == null || target == null || type > 1)
+                return;
+
+            var outgoing = NativeGroupOutgoingRequests.GetValue(requester,
+                static _ => new List<NativeGroupOutgoingRequest>());
+            for (var i = outgoing.Count - 1; i >= 0; i--)
+            {
+                if (outgoing[i].Type == type
+                    && ReferenceEquals(outgoing[i].Target, target))
+                    return;
+            }
+            outgoing.Add(new NativeGroupOutgoingRequest(target, type));
+        }
+
+        private bool TryCancelNativeGroupOutgoingRequest(byte type,
+            out TPlayObject target)
+        {
+            target = null;
+            if (type > 1)
+                return false;
+
+            var outgoing = NativeGroupOutgoingRequests.GetValue(this,
+                static _ => new List<NativeGroupOutgoingRequest>());
+            for (var i = outgoing.Count - 1; i >= 0; i--)
+            {
+                if (outgoing[i].Type != type)
+                    continue;
+
+                target = outgoing[i].Target;
+                outgoing.RemoveAt(i);
+                return true;
+            }
+            return false;
+        }
+
+        private bool TryTransferNativeGroupLeader(TPlayObject newLeader)
+        {
+            if (newLeader == null || m_GroupMembers == null
+                || !ReferenceEquals(m_GroupOwner, this)
+                || !m_GroupMembers.Contains(newLeader))
+                return false;
+
+            var members = m_GroupMembers
+                .Where(member => member != null)
+                .Take(NativeGroupMaxMembers)
+                .ToList();
+            if (!members.Remove(this) || !members.Remove(newLeader))
+                return false;
+
+            members.Insert(0, newLeader);
+            members.Insert(1, this);
+
+            m_GroupMembers.Clear();
+            foreach (var member in members)
+                m_GroupMembers.Add(member);
+
+            m_GroupOwner = newLeader;
+            foreach (var member in m_GroupMembers)
+                member.m_GroupOwner = newLeader;
+
+            BroadcastNativeGroupMembers(newLeader);
+            return true;
+        }
+
+        private bool RemoveNativeGroupRequest(TPlayObject requester, byte type)
+        {
+            var pending = NativeGroupPendingRequests.GetValue(this,
+                static _ => new List<NativeGroupRequest>());
+            var removed = false;
+            for (var i = pending.Count - 1; i >= 0; i--)
+            {
+                if (!ReferenceEquals(pending[i].Requester, requester)
+                    || pending[i].Type != type)
+                    continue;
+
+                pending.RemoveAt(i);
+                removed = true;
+                SendNativeGroupPacket(this,
+                    BuildNativeGroupHeader(Grobal2.SM_NOTIFY_GROUP_MESSAGE,
+                        0, type, 0, 0),
+                    EncodeNativeGroupText(requester.m_sCharName));
+            }
+
+            if (removed)
+                ClearNativeGroupOutgoingRequest(requester, type);
+            return removed;
+        }
+
+        private static void ClearNativeGroupOutgoingRequest(
+            TPlayObject requester, byte type)
+        {
+            if (requester == null)
+                return;
+
+            var outgoing = NativeGroupOutgoingRequests.GetValue(requester,
+                static _ => new List<NativeGroupOutgoingRequest>());
+            for (var i = outgoing.Count - 1; i >= 0; i--)
+            {
+                if (outgoing[i].Type == type)
+                    outgoing.RemoveAt(i);
+            }
         }
 
         private void HandleNativeGroupReply(TProcessMessage processMessage)
@@ -497,27 +711,6 @@ namespace GameSvr
                     return true;
             }
             return false;
-        }
-
-        private bool RemoveNativeGroupRequest(TPlayObject requester, byte type)
-        {
-            var pending = NativeGroupPendingRequests.GetValue(this,
-                static _ => new List<NativeGroupRequest>());
-            var removed = false;
-            for (var i = pending.Count - 1; i >= 0; i--)
-            {
-                if (!ReferenceEquals(pending[i].Requester, requester)
-                    || pending[i].Type != type)
-                    continue;
-
-                pending.RemoveAt(i);
-                removed = true;
-                SendNativeGroupPacket(this,
-                    BuildNativeGroupHeader(Grobal2.SM_NOTIFY_GROUP_MESSAGE,
-                        0, type, 0, 0),
-                    EncodeNativeGroupText(requester.m_sCharName));
-            }
-            return removed;
         }
 
         private void DismissNativeGroupRequests(byte type)
