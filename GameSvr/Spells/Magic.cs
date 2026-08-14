@@ -1,3 +1,4 @@
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -108,6 +109,12 @@ namespace GameSvr
         // `Shape <= 2`, which wrongly admitted Shape 0 (a different class).
         public static bool CheckAmulet(TPlayObject PlayObject, int nCount, int nType, ref short Idx)
         {
+            // 免毒符：DoSpell 内 12 处 je/call 被 NOP，缺符也视为通过（首站 0x6ED945）。
+            if (YanshenConfig12Behaviors.AntiPoisonAmuletFree(PlayObject))
+            {
+                Idx = Grobal2.U_BUJUK;
+                return true;
+            }
             var result = false;
             Idx = 0;
             var charm = PlayObject.m_UseItems[Grobal2.U_BUJUK];
@@ -167,6 +174,8 @@ namespace GameSvr
         // `>=`, so an exact `nCount*100 == Dura` consumes the charm entirely.
         public static void UseAmulet(TPlayObject PlayObject, int nCount, int nType, ref short Idx)
         {
+            if (YanshenConfig12Behaviors.AntiPoisonAmuletFree(PlayObject))
+                return;
             var charm = PlayObject.m_UseItems[Idx];
             if (charm == null)
             {

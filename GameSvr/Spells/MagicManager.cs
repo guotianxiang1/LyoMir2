@@ -352,6 +352,26 @@ namespace GameSvr
                             // sub_75F27C(slot 9, "持久耗尽")).
                             ConsumeSpentPoisonCharm(PlayObject, poisonCharm);
                         }
+                        else if (YanshenConfig12Behaviors.AntiPoisonAmuletFree(PlayObject))
+                        {
+                            // 免毒符 @0x6ED945：无 TPoisons 也走绿毒臂（native 0x6EE04B 成功路径）。
+                            nPower = (ushort)YanshenPoisonTimeCap.Cap(
+                                DoSpell_GetPower13(UserMagic, 40) +
+                                DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);
+                            if (M2Share.RandomNumber.Random(TargeTBaseObject.m_btAntiPoison + 7) <= 6)
+                            {
+                                TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON,
+                                    Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId,
+                                    HUtil32.Round(UserMagic.btLevel / 3.0 *
+                                        ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
+                                    "", 1000);
+                                if (TargeTBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT ||
+                                    TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
+                                    boTrain = true;
+                            }
+                            PlayObject.SetTargetCreat(TargeTBaseObject);
+                            boSpellFail = false;
+                        }
                     }
                     break;
                 case SpellsDef.SKILL_FIREWIND:

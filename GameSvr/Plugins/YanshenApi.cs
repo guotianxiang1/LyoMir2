@@ -4666,7 +4666,9 @@ namespace GameSvr.Plugins
         public bool IsParalysisEnabled() => Enabled("麻痹概率");
         public bool IsParaImmune() => Enabled("麻痹中不被麻痹a");
         public bool IsBreakRevival() => Enabled("破复活");
-        public bool IsAntiPoison() => Enabled("免毒符");
+        // 免毒符 — DoSpell 12 站点 memcpy（首站 0x6ED945 apply 0x100DA719）。
+        public bool IsAntiPoisonPatchOn() => PatchToggleOn("免毒符");
+        public bool IsAntiPoison() => IsAntiPoisonPatchOn();
         public bool IsMultiDmg() => Enabled("多元伤害");
         public bool IsDmgReduction() => Enabled("千分比免伤");
         public bool IsExpMultiplier() => Enabled("千分比经验倍数");
@@ -5067,7 +5069,9 @@ namespace GameSvr.Plugins
         // (>=2 / >=5), the 60 s mute, and the decay decs are not patched.
         public bool IsBlockSpamPatchOn() => PatchToggleOn("屏蔽发言频繁禁言功能");
         public bool IsBlockSpam() => IsBlockSpamPatchOn();
-        public bool IsDelSkillSilent() => Enabled("删除技能不提示");
+        // 删除技能不提示 — sub_6C772C @0x6C7797 成功提示 <c>jmp 0x6C781D</c>（apply 0x100DB4A4）。
+        public bool IsDelSkillSilentPatchOn() => PatchToggleOn("删除技能不提示");
+        public bool IsDelSkillSilent() => IsDelSkillSilentPatchOn();
         public bool IsDelHeroSkill() => Enabled("删除英雄技能");
         // 升级技能不提示 is a host-code patch: plugin 0x100DB61C memcpy EB 3A 90 90
         // over 0x73F5EE in sub_73F500 (ChgSelfSkillLv / UpUserSkill worker), jumping
@@ -5075,7 +5079,9 @@ namespace GameSvr.Plugins
         // straight to RecalcAbilitys at 0x73F62A. Restore arm writes 57 68 7C F6 73 00.
         public bool IsUpSkillSilentPatchOn() => PatchToggleOn("升级技能不提示");
         public bool IsUpSkillSilent() => IsUpSkillSilentPatchOn();
-        public bool IsBanChatSilent() => Enabled("禁止发言不提示");
+        // 禁止发言不提示 — 三处 SysMsg memcpy：0x6BB5CD / 0x6BB625 / 0x6C94A9（apply 0x100DB803..874）。
+        public bool IsBanChatSilentPatchOn() => PatchToggleOn("禁止发言不提示");
+        public bool IsBanChatSilent() => IsBanChatSilentPatchOn();
         public bool IsNameColor() => Enabled("名字变色");
         public bool IsLevelMute() => Enabled("等级禁言");
         public bool IsMailAntiSpam() => Enabled("邮件防刷");

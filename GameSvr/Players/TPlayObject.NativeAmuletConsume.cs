@@ -1,3 +1,4 @@
+using GameSvr.Plugins;
 using SystemModule;
 
 namespace GameSvr
@@ -95,6 +96,9 @@ namespace GameSvr
         /// <param name="boConsume">false=仅测试(原生 cl=0) / true=消耗(cl=1)。</param>
         public bool NativeConsumeBujukCharm(int nCount, bool boConsume)
         {
+            if (YanshenConfig12Behaviors.AntiPoisonAmuletFree(this))
+                return true;
+
             var found = false;        // [ebp-6]
             var foundInEquip = false; // [ebp-0xD]
             var foundInBag = false;   // [ebp-0xE]
