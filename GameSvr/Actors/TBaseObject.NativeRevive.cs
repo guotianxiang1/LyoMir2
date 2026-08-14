@@ -31,15 +31,10 @@ namespace GameSvr
             var secondPathCooldownActive =
                 HasNativeActiveState(NativeRevivePolicy.SecondPathCooldownStateType);
 
-            // BLOCKED: [self+0x1D1] and [self+0x1DD] are the second path's enable flag and
-            // its 1..4 CD tier.  Both live inside the 54-byte block [self+0x1B0..+0x1E5]
-            // that sub_73D500 rebuilds wholesale from the equipment aggregate
-            // ([self+0x4C0]+0x1F8) — FillChar @0x73D542 then rep movsd+movsw
-            // @0x73D63D-0x73D650.  C# does not model that aggregate, so the tier cannot be
-            // derived faithfully and the path is left fail-closed.  Inventing a tier would
-            // pick between a 60 s and a 300 s cooldown with no evidence.
-            const bool NativeSecondPathFlag = false;   // [self+0x1D1] — unmodelled
-            const byte NativeSecondPathTier = 0;       // [self+0x1DD] — unmodelled
+            // [self+0x1D1]/[+0x1DD] rebuilt each RecalcAbilitys from agg2 — see
+            // NativeEquipAgg2Revive.cs (@0x73D63D copy, @0x76235F flag, @0x7627CF tier).
+            var nativeSecondPathFlag = m_btNativeSecondPathFlag != 0;
+            var nativeSecondPathTier = m_btNativeSecondPathTier;
 
             // 复活戒指重设: plugin 0x100B3472 test of [edi+0x5B8], then A3 over
             // host 0x743758 / 0x73C4FA (cmp imm32 0xEA60) and 66 A3 over 0x743913
@@ -60,8 +55,8 @@ namespace GameSvr
                 hasEquipRevive: m_boRevival && !suppressed,
                 lastEquipReviveTick: m_dwRevivalTick,
                 tick: tick,
-                secondPathFlag: NativeSecondPathFlag,
-                secondPathTier: NativeSecondPathTier,
+                secondPathFlag: nativeSecondPathFlag,
+                secondPathTier: nativeSecondPathTier,
                 secondPathCooldownActive: secondPathCooldownActive,
                 equipReviveCooldownMs: equipReviveCooldownMs);
 
@@ -85,11 +80,9 @@ namespace GameSvr
                 case NativeRevivePolicy.Outcome.SecondPathRevive:
                     // 0x743834 arms state 48 for GetCooldownSecondsForTier(tier) seconds,
                     // then 0x74383A/0x743846 restore HP and MP unconditionally.
-                    // Unreachable while the tier is unmodelled; kept so the ladder is
-                    // complete and the audit can exercise it.
                     // 0x743860 mov edx,1 / 0x743867 call sub_73ED28 — mode 1, +0x104 bit1|bit2.
                     ItemDamageRevivalRing(1);
-                    TryApplyNativeReviveCooldown(NativeSecondPathTier);
+                    TryApplyNativeReviveCooldown(nativeSecondPathTier);
                     m_WAbil.HP = m_WAbil.MaxHP;
                     m_WAbil.MP = m_WAbil.MaxMP;
                     HealthSpellChanged();

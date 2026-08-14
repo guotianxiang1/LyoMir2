@@ -393,6 +393,17 @@ namespace GameSvr
         
         
         public bool m_boRevival = false;
+
+        /// <summary>
+        /// <c>[self+0x1D1]</c> = agg2[0x21] after <c>sub_73D500</c> @0x73D63D copy.
+        /// Set by ext-abil ident 0x50 @0x76235F. Feeds <c>sub_746084</c>.
+        /// </summary>
+        internal byte m_btNativeSecondPathFlag;
+
+        /// <summary>
+        /// <c>[self+0x1DD]</c> = agg2[0x2D]. Tier for <c>sub_74609C</c> cooldown table.
+        /// </summary>
+        internal byte m_btNativeSecondPathTier;
         
         
         

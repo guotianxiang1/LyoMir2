@@ -2213,6 +2213,8 @@ namespace GameSvr
             m_boTeleport = false;
             m_boParalysis = false;
             m_boRevival = false;
+            m_btNativeSecondPathFlag = 0;
+            m_btNativeSecondPathTier = 0;
             m_boUnRevival = false;
             m_boFlameRing = false;
             m_boRecoveryRing = false;
@@ -2910,6 +2912,11 @@ namespace GameSvr
                     boSpirit[3] = true;
                 }
             }
+
+            // sub_73D500 @0x73D63D copies container agg2 → self+0x1B0; second revive
+            // path reads [+0x1D1]/[+0x1DD] via sub_746084 @0x746084.
+            NativeEquipAgg2Revive.Recalc(this);
+
             if (boRecallSuite[0] && boRecallSuite[1] && boRecallSuite[2] && boRecallSuite[3])
             {
                 m_boRecallSuite = true;

@@ -2651,6 +2651,7 @@ namespace GameSvr
                 Item.Dura = NativeItemFactory.IsPileItem(StdItem)
                     ? (ushort)1
                     : StdItem.DuraMax;
+                NativeOutOfBoundsItemClassifier.Apply(Item, StdItem);
                 return true;
             }
             return false;

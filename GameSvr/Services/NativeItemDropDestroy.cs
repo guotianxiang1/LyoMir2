@@ -122,29 +122,25 @@ namespace GameSvr
                 }
             }
 
-            // 0x783911 (mode 2): reject when byte[std+3] & 0x02 (no-trade flag).
-            // Native bytes: 80 BB FC 00 00 00 00 (cmp byte [ebx+0xFC],0) / 75 09 (jne 0x783923)
-            //               8B 43 1C (mov eax,[ebx+0x1C]) / F6 40 03 02 (test byte [eax+3],2)
-            //               74 56 (je 0x783979 = allow) / BE 03 00 00 00 (mov esi,3) / EB 4F
-            // NativeReserved02 is the ushort at std+2, so byte[std+3] is its high byte:
-            // bit 1 of std+3 == 0x0200, the same mask the mode-5 rung below already uses.
-            // [item+0xFC] has no C# counterpart yet, so that disjunct is omitted.
+            // 0x783911 (mode 2): reject when [item+0xFC]!=0 OR Reserved02 & 0x0200.
+            // Native bytes: 80 BB FC 00 00 00 00 / 75 09 / … F6 40 03 02 / BE 03 00 00 00
             if (mode == TransferModeTrade)
             {
-                if ((stdItem.NativeReserved02 & 0x0200) != 0)
+                if (item.NativeClassFc != 0
+                    || (stdItem.NativeReserved02 & 0x0200) != 0)
                 {
                     return 3;
                 }
             }
 
-            // 0x783940 (mode 5): reject when the item carries any of the bind / timed
-            // classes.  [item+0xFC] (the always-drop class) has no C# counterpart yet, so
-            // that disjunct is omitted — recorded, not invented.
+            // 0x783940 (mode 5): reject unless [item+0xFC]!=0 OR any bind/timed class bit.
+            // Native: cmp [ebx+0xFC],0 / jne allow; then test std+3 bits.
             if (mode == TransferModeDrop)
             {
-                if ((stdItem.NativeReserved02 & 0x0200) != 0
-                    || (stdItem.NativeReserved02 & 0x0400) != 0
-                    || (stdItem.NativeReserved02 & 0x0080) != 0)
+                if (item.NativeClassFc == 0
+                    && ((stdItem.NativeReserved02 & 0x0200) != 0
+                        || (stdItem.NativeReserved02 & 0x0400) != 0
+                        || (stdItem.NativeReserved02 & 0x0080) != 0))
                 {
                     return 5;
                 }
