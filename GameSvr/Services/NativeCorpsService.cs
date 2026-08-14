@@ -91,7 +91,7 @@ namespace GameSvr.Services
                 }
                 try
                 {
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
                 }
                 catch
                 {
@@ -935,11 +935,11 @@ namespace GameSvr.Services
                 if (!_gildStore.TrySaveGild(gild.Id, gild.OwnerCorpsId,
                         gild.ViceOwnerId, gild.Notice ?? Array.Empty<byte>(),
                         out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -949,11 +949,11 @@ namespace GameSvr.Services
             {
                 if (!_gildStore.TryDeleteGildMember(gildId, corpsId,
                         out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1059,11 +1059,11 @@ namespace GameSvr.Services
                 if (!_gildStore.TryDeleteGildRelation(
                         unchecked((long)relationKey.First),
                         unchecked((long)relationKey.Second), out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1179,11 +1179,11 @@ namespace GameSvr.Services
                         unchecked((long)relationKey.First),
                         unchecked((long)relationKey.Second), relation,
                         createTime, out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1633,11 +1633,11 @@ namespace GameSvr.Services
             try
             {
                 if (!_store.TryInsertCorps(corps, out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1647,11 +1647,11 @@ namespace GameSvr.Services
             try
             {
                 if (!_store.TryInsertMember(corpsId, member, out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1661,11 +1661,11 @@ namespace GameSvr.Services
             {
                 if (!_gildStore.TryInsertGildMember(gildId, corpsId,
                         out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1676,11 +1676,11 @@ namespace GameSvr.Services
                 if (!_gildStore.TryCreateGild(gild.Id,
                         gild.Name ?? string.Empty, gild.OwnerCorpsId,
                         gild.ViceOwnerId, out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1690,11 +1690,11 @@ namespace GameSvr.Services
             {
                 if (!_gildStore.TryInsertGildConcern(gildId, dstGildId,
                         out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 
@@ -1704,11 +1704,11 @@ namespace GameSvr.Services
             {
                 if (!_gildStore.TryDeleteGildConcern(gildId, dstGildId,
                         out var error))
-                    M2Share.ErrorMessage("[SQL Failed] " + error);
+                    M2Share.MainOutMessage("执行sql失败:" + error);
             }
             catch (Exception ex)
             {
-                M2Share.ErrorMessage("[SQL Failed] " + ex.Message);
+                M2Share.MainOutMessage("执行sql失败:" + ex.Message);
             }
         }
 

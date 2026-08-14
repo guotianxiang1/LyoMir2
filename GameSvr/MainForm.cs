@@ -153,10 +153,12 @@ namespace GameSvr
         {
             if (e.CloseReason == CloseReason.UserClosing)
             {
-                var r = MessageBox.Show("关闭 M2Server?", "M2Server",
+                // @0x79BAD0 / @0x79BAF4 — 关闭服务器?(Yes = 关闭) / 正在关闭服务器...
+                var r = MessageBox.Show("关闭服务器?(Yes = 关闭)", "M2Server",
                     MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                 if (r == DialogResult.No) { e.Cancel = true; WindowState = FormWindowState.Minimized; return; }
                 if (r == DialogResult.Cancel) { e.Cancel = true; return; }
+                M2Share.MainOutMessage("正在关闭服务器...");
             }
             _yanshenConfigForm?.Close();
             _trayIcon?.Dispose();

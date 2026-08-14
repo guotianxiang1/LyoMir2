@@ -401,9 +401,17 @@ namespace GameSvr
                         sLineText = HUtil32.GetValidStr3(sLineText, ref sData, new[] { " ", "\t" });
                         MonGenInfo.sMapName = sData;
                         sLineText = HUtil32.GetValidStr3(sLineText, ref sData, new[] { " ", "\t" });
-                        MonGenInfo.nX = HUtil32.Str_ToInt(sData, 0);
+                        var monGenX = HUtil32.Str_ToInt(sData, -1);
                         sLineText = HUtil32.GetValidStr3(sLineText, ref sData, new[] { " ", "\t" });
-                        MonGenInfo.nY = HUtil32.Str_ToInt(sData, 0);
+                        var monGenY = HUtil32.Str_ToInt(sData, -1);
+                        if (monGenX < 0 || monGenY < 0)
+                        {
+                            // sub_5F878C @0x5F88A6 ShowMessage(0x5F8970 + line) — 坐标错误--
+                            M2Share.MainOutMessage("坐标错误--" + LoadList[i]);
+                            continue;
+                        }
+                        MonGenInfo.nX = monGenX;
+                        MonGenInfo.nY = monGenY;
                         sLineText = HUtil32.GetValidStrCap(sLineText, ref sData, new[] { " ", "\t" });
                         if (!string.IsNullOrEmpty(sData) && sData[0] == '\"')
                         {
