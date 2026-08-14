@@ -1195,6 +1195,7 @@ namespace GameSvr
                         }
                         if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
+                            RemoveNativeMovementTimedState(23);
                             m_dwSearchTick = 0;
                         }
                         result = true;
