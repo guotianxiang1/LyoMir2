@@ -1137,22 +1137,31 @@ namespace GameSvr
 
         public bool AddAttackerInfo(Association Guild)
         {
-            var result = false;
-            // 0x65B66B call 0x65A36C (already listed) / jne skip-add, but the
-            // SS_212 send at 0x65B6C9 still runs. Return 1 only if a row was added.
-            if (!InAttackerList(Guild))
-            {
-                var AttackerInfo = new TAttackerInfo();
-                // 0x65B686 Now / 0x65B68B fadd dword [0x65B6DC] = 3.0 TDateTime days
-                AttackerInfo.AttackDate = DateTime.Now.AddDays(3.0);
-                AttackerInfo.sGuildName = Guild.sGuildName;
-                AttackerInfo.Guild = Guild;
-                m_AttackWarList.Add(AttackerInfo);
-                SaveAttackSabukWall();
-                result = true;
-            }
+            var result = NativeMirrorAddAttacker(Guild);
             M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_212, M2Share.nServerIndex, "");
             return result;
+        }
+
+        /// <summary>
+        /// 战神 sub_65B6E0 (ident 212 stub sub_6577B0 调 [[0x7D6214]]): 按行会名
+        /// FindGuild(0x5E76F0) 后若不在 [castle+0x8C] 攻击列表则追加并
+        /// sub_65A3B8 保存。无 SS_212 扇出 (与 AddAttackerInfo 的 live 发送方不同)。
+        /// </summary>
+        internal bool NativeMirrorAddAttacker(Association Guild)
+        {
+            if (Guild == null || InAttackerList(Guild))
+            {
+                return false;
+            }
+
+            var AttackerInfo = new TAttackerInfo();
+            // 0x65B686 Now / 0x65B68B fadd dword [0x65B6DC] = 3.0 TDateTime days
+            AttackerInfo.AttackDate = DateTime.Now.AddDays(3.0);
+            AttackerInfo.sGuildName = Guild.sGuildName;
+            AttackerInfo.Guild = Guild;
+            m_AttackWarList.Add(AttackerInfo);
+            SaveAttackSabukWall();
+            return true;
         }
 
         private bool InAttackerList(Association Guild)

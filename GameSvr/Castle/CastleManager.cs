@@ -238,6 +238,27 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// 战神 ident 212: stub 0x65726D -> sub_6577B0 -> sub_65B6E0(行会名)。
+        /// body 空则 no-op (0x6577C6 test ebx / 0x6577CC test ecx,jle)。
+        /// </summary>
+        public void NativeMirrorReloadCastleAttacker(string guildName)
+        {
+            if (string.IsNullOrEmpty(guildName))
+            {
+                return;
+            }
+
+            var guild = M2Share.GuildManager.FindGuild(guildName);
+            if (guild == null)
+            {
+                return;
+            }
+
+            var castle = GetCastle(0);
+            castle?.NativeMirrorAddAttacker(guild);
+        }
+
         public void GetCastleNameList(IList<string> List)
         {
             TUserCastle Castle;

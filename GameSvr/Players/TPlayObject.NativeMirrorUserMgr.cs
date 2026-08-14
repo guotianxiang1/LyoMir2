@@ -97,5 +97,29 @@ namespace GameSvr
             // NativeLeaveMaster.cs 0x6C5FBA)。native 无收信人权限门。
             recipient.SysMsg(text, MsgColor.Blue, MsgType.Hint);
         }
+
+        /// <summary>
+        /// 战神 sub_657670 (OthGs ident 227): body="收信人名/正文"。
+        /// 0x65768C test ebx,ebx / 0x657690 test ecx,ecx / jle 与 221 同形的前置门;
+        /// 0x6576B1 sub_4C6BA4(cl='/' ) 拆分; 0x6576C0 GetPlayObject(首段);
+        /// 0x6576C9 cx=0xFCFF call [vmt+0xD4] 把余段发给该玩家。无 GM 门 (221 有
+        /// byte[+0x675]&gt;=3 @0x657631)。
+        /// </summary>
+        internal static void NativeMirrorPlayerNotice(string recipientName,
+            string text)
+        {
+            if (string.IsNullOrEmpty(recipientName))
+            {
+                return;
+            }
+
+            var recipient = M2Share.UserEngine?.GetPlayObject(recipientName);
+            if (recipient == null)
+            {
+                return;
+            }
+
+            recipient.SysMsg(text, MsgColor.Blue, MsgType.Hint);
+        }
     }
 }
