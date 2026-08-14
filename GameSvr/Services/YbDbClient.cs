@@ -36,6 +36,9 @@ namespace GameSvr.Services
             public int OutstandingCount { get; set; }
         }
 
+        private sealed record PendingOpenDealRequest(long Generation, int ObjectId,
+            string Ptid, string RoleName, WeakReference<TPlayObject> Player);
+
         private static readonly Encoding StrictGbk;
         public static YbDbClient Instance { get; }
 
@@ -48,6 +51,8 @@ namespace GameSvr.Services
         private readonly ConcurrentQueue<QueuedSend> _outbound = new();
         private readonly Dictionary<string, List<PendingCreditEpoch>>
             _creditRequests = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, PendingOpenDealRequest>
+            _openDealRequests = new(StringComparer.OrdinalIgnoreCase);
         private readonly byte[] _sendAggregate = new byte[SendAggregateCapacity];
 
         private string _host = "127.0.0.1";
@@ -117,9 +122,52 @@ namespace GameSvr.Services
                 ClearQueue(_outbound);
                 ClearResponses();
                 _creditRequests.Clear();
+                _openDealRequests.Clear();
             }
 
             Pulse();
+        }
+
+        public bool TryRequestOpenDeal(TPlayObject player)
+        {
+            if (player == null) return false;
+
+            var identity = new YbDbLegacy77Identity
+            {
+                Field0 = player.m_sUserID,
+                Field11 = player.m_sUserID,
+                RoleName = player.m_sCharName,
+                Field48 = player.m_sIPaddr
+            };
+            if (!YbDbOpenDealProtocol.TryCreateRequest(identity,
+                    out var request, out var requestError))
+            {
+                M2Share.ErrorMessage("[YBDB] OpenDeal 身份组包失败: " + requestError);
+                return false;
+            }
+            if (!YbDbLegacy77Codec.TryEncode(request,
+                    out var frame, out var frameError))
+            {
+                M2Share.ErrorMessage("[YBDB] OpenDeal 帧组包失败: " + frameError);
+                return false;
+            }
+            if (!YbDbLegacy77Codec.TryDecodeShortString(request.Payload,
+                    YbDbLegacy77Codec.IdentityRoleNameOffset,
+                    YbDbLegacy77Codec.IdentityRoleNameCapacity,
+                    out var wireRoleName, out _))
+                return false;
+
+            lock (_stateLock)
+            {
+                if (_started == 0 || _connected == 0 || _currentSocket == null)
+                    return false;
+
+                _openDealRequests[wireRoleName] = new PendingOpenDealRequest(
+                    _connectionGeneration, player.ObjectId, player.m_sUserID,
+                    wireRoleName, new WeakReference<TPlayObject>(player));
+                _outbound.Enqueue(new QueuedSend(_connectionGeneration, frame));
+            }
+            return true;
         }
 
         public void Stop()
@@ -140,6 +188,7 @@ namespace GameSvr.Services
                 ClearQueue(_outbound);
                 ClearResponses();
                 _creditRequests.Clear();
+                _openDealRequests.Clear();
             }
 
             if (socket == null)
@@ -522,6 +571,11 @@ namespace GameSvr.Services
                         ProcessCreditResponse(frame, queued.Generation);
                         continue;
                     }
+                    if (frame.Ident == YbDbOpenDealProtocol.ResponseIdent)
+                    {
+                        ProcessOpenDealResponse(frame, queued.Generation);
+                        continue;
+                    }
                     if (frame.Ident == YbDbForgeModeProtocol.ResponseIdent)
                     {
                         if (!YbDbForgeModeProtocol.TryDecodeResponse(frame,
@@ -581,6 +635,7 @@ namespace GameSvr.Services
                         ClearQueue(_outbound);
                         ClearResponses();
                         _creditRequests.Clear();
+                        _openDealRequests.Clear();
                         generation = ++_connectionGeneration;
                         _currentSocket = socket;
                         _missedHeartbeatCount = 0;
@@ -639,6 +694,7 @@ namespace GameSvr.Services
                     lock (_parserLock) _parser.Reset();
                     ClearResponses();
                     _creditRequests.Clear();
+                    _openDealRequests.Clear();
                     shouldLog = wasConnected && _started != 0;
                 }
                 if (shouldLog)
@@ -836,6 +892,47 @@ namespace GameSvr.Services
             player.ApplyNativeYb1103Snapshot(snapshot.CurrentYuanbao,
                 snapshot.TotalConsumed, snapshot.RemainingSeconds,
                 snapshot.DividendConsumed, snapshot.ResponseParamIsOne);
+        }
+
+        private void ProcessOpenDealResponse(YbDbLegacy77Frame frame,
+            long generation)
+        {
+            if (!YbDbOpenDealProtocol.TryDecodeResponse(frame,
+                    out var result, out _))
+                return;
+            if (!TryTakeOpenDealRequest(result.RoleName, generation,
+                    out var request))
+                return;
+
+            var player = M2Share.UserEngine?.GetPlayObject(result.RoleName);
+            if (player == null || player.m_boGhost
+                || player.ObjectId != request.ObjectId
+                || !request.Player.TryGetTarget(out var requestedPlayer)
+                || !ReferenceEquals(player, requestedPlayer)
+                || !string.Equals(player.m_sCharName, request.RoleName,
+                    StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(player.m_sUserID, request.Ptid,
+                    StringComparison.OrdinalIgnoreCase))
+                return;
+
+            player.ApplyNativeOpenYbDealDbResult(result);
+        }
+
+        private bool TryTakeOpenDealRequest(string roleName, long generation,
+            out PendingOpenDealRequest request)
+        {
+            request = null;
+            lock (_stateLock)
+            {
+                if (generation != _connectionGeneration
+                    || !_openDealRequests.TryGetValue(roleName, out var pending))
+                    return false;
+                if (pending.Generation != generation)
+                    return false;
+                _openDealRequests.Remove(roleName);
+                request = pending;
+                return true;
+            }
         }
 
         private bool TryTakeCreditRequest(string roleName, long generation,
