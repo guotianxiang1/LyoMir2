@@ -23,7 +23,10 @@ namespace GameSvr
         public string DynamicRoomName { get; private set; } = string.Empty;
         public int DynamicRoomPhysicalInstanceId { get; private set; } = -1;
         public int DynamicRoomIndex { get; private set; } = -1;
-        internal bool NativeCanRunWhileOverweight { get; set; } = true;
+        // MOVE-17 @0x6BBFDC: cmp byte [Envir+0xB0],0 — missing/zero RUNFLAG keeps
+        // over-encumbered run blocked. MapInfo path writes this from RUNFLAG token;
+        // dynamic rooms inherit false until the factory copies Flag.boRUNFLAG.
+        internal bool NativeCanRunWhileOverweight { get; set; } = false;
         internal NativeMapDropItemRawState NativeMapDropItems { get; } = new();
         internal NativeDropControlState NativeDropControl { get; } =
             new(NativeDropControlBucketField.ItemName);

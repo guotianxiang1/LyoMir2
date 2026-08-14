@@ -6,7 +6,8 @@ namespace GameSvr
     {
         public static TMapFlag CreateMapFlag(IEnumerable<string> flags)
         {
-            var mapFlag = new TMapFlag();
+            // MOVE-17 @0x6BBFDC: absent RUNFLAG token stores 0 on [Envir+0xB0].
+            var mapFlag = new TMapFlag { boRUNFLAG = false };
             foreach (var rawFlag in flags ?? Array.Empty<string>())
             {
                 Apply(mapFlag, rawFlag);
