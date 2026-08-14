@@ -3218,6 +3218,29 @@ namespace GameSvr
             {
                 LogMonsterSpawnFailure("generator OnInitialize", e);
             }
+
+            // ✅ SPWN-14: Broadcast spawn notification to players in BroadcastList.
+            // Tier-1 evidence: Native ProcessMon sub_67C150 Phase-2 regen worker
+            // sub_67C9E0 accesses [esi+0x40] at EA 0x67CA5D to broadcast monster
+            // spawn events. The broadcast list contains players who should be
+            // notified when monsters spawn in this generator's area.
+            if (monGen.BroadcastList != null && monGen.BroadcastList.Count > 0)
+            {
+                var spawnMsg = $"{cert.m_sCharName} 已刷新";
+                for (var i = monGen.BroadcastList.Count - 1; i >= 0; i--)
+                {
+                    var player = monGen.BroadcastList[i];
+                    if (player != null && !player.m_boGhost)
+                    {
+                        player.SysMsg(spawnMsg, MsgColor.Green, MsgType.Hint);
+                    }
+                    else
+                    {
+                        // Clean up disconnected players from broadcast list
+                        monGen.BroadcastList.RemoveAt(i);
+                    }
+                }
+            }
             return cert;
         }
 

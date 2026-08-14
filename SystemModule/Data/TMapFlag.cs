@@ -57,6 +57,12 @@ public class TMapFlag
     public bool boBLACKROOM;
     public bool boFOXMAP;
     public bool boNODRUG;
+    /// <summary>
+    /// 战神 map flag <c>NOMAGIC</c> -> native <c>[flag+0x78]</c>
+    /// (parser <c>sub_774D98</c>: token compare @0x775E50, @0x775E5E <c>mov byte [ebx+0x78],1</c>).
+    /// Consumer TPlayObject.Attack.cs line 295: blocks magic spells on NOMAGIC maps (MOVE-90).
+    /// </summary>
+    public bool boNOMAGIC;
     public bool boMINE;
     public bool boMINE2;
     public bool boNOPOSITIONMOVE;

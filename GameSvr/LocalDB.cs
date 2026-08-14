@@ -404,6 +404,8 @@ namespace GameSvr
                         if (!string.IsNullOrEmpty(MonGenInfo.sMapName) && !string.IsNullOrEmpty(MonGenInfo.sMonName) && MonGenInfo.dwZenTime != 0 && M2Share.MapManager.GetMapInfo(M2Share.nServerIndex, MonGenInfo.sMapName) != null)
                         {
                             MonGenInfo.CertList = new List<TBaseObject>();
+                            // ✅ SPWN-14: Initialize broadcast list for spawn notifications (EA: 0x67CA5D [gen+0x40]).
+                            MonGenInfo.BroadcastList = new List<TPlayObject>();
                             MonGenInfo.Envir = M2Share.MapManager.FindMap(MonGenInfo.sMapName);
                             if (MonGenInfo.Envir != null)
                             {
@@ -419,6 +421,8 @@ namespace GameSvr
                 MonGenInfo = new MonGenInfo
                 {
                     CertList = new List<TBaseObject>(),
+                    // ✅ SPWN-14: Initialize broadcast list for spawn notifications (EA: 0x67CA5D [gen+0x40]).
+                    BroadcastList = new List<TPlayObject>(),
                     Envir = null
                 };
                 M2Share.UserEngine.m_MonGenList.Add(MonGenInfo);
