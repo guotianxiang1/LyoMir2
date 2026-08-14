@@ -3616,51 +3616,38 @@ namespace GameSvr
                                         {
                                             if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                             {
-                                                if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
+                                                try
                                                 {
-                                                    OSObject = null;
-                                                    MapCellInfo.Remove(i);
-                                                    if (MapCellInfo.Count <= 0)
+                                                    BaseObject = OSObject.CellObj as TBaseObject;
+                                                    if ((BaseObject != null) && !BaseObject.m_boGhost)
                                                     {
-                                                        m_PEnvir.ReleaseCellObjectList(nCX, nCY);
-                                                        break;
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    try
-                                                    {
-                                                        BaseObject = OSObject.CellObj as TBaseObject;
-                                                        if ((BaseObject != null) && !BaseObject.m_boGhost)
+                                                        if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                                                         {
-                                                            if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                                                            BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
+                                                            m_VisibleHumanList.Add(BaseObject);
+                                                        }
+                                                        else if (BaseObject.m_boWantRefMsg)
+                                                        {
+                                                            if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
                                                             {
                                                                 BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
                                                                 m_VisibleHumanList.Add(BaseObject);
                                                             }
-                                                            else if (BaseObject.m_boWantRefMsg)
-                                                            {
-                                                                if ((wIdent == Grobal2.RM_STRUCK) || (wIdent == Grobal2.RM_HEAR) || (wIdent == Grobal2.RM_DEATH))
-                                                                {
-                                                                    BaseObject.SendMsg(this, wIdent, wParam, nParam1, nParam2, nParam3, sMsg, payload);
-                                                                    m_VisibleHumanList.Add(BaseObject);
-                                                                }
-                                                            }
                                                         }
-                                                    }
-                                                    catch (Exception e)
-                                                    {
-                                                        MapCellInfo.Remove(i);
-                                                        if (MapCellInfo.Count <= 0)
-                                                        {
-                                                            m_PEnvir.ReleaseCellObjectList(nCX, nCY);
-                                                        }
-                                                        M2Share.ErrorMessage(format(sExceptionMsg, m_sCharName));
-                                                        M2Share.ErrorMessage(e.Message);
                                                     }
                                                 }
-                                            }
+                                                catch (Exception e)
+                                                {
+                                                    MapCellInfo.Remove(i);
+                                                    if (MapCellInfo.Count <= 0)
+                                                    {
+                                                        m_PEnvir.ReleaseCellObjectList(nCX, nCY);
+                                                    }
+                                                    M2Share.ErrorMessage(format(sExceptionMsg, m_sCharName));
+                                                    M2Share.ErrorMessage(e.Message);
+                                                }
                                         }
+                                            }
                                     }
                                 }
                             }
@@ -4705,13 +4692,24 @@ namespace GameSvr
             int nGold;
             if (m_nGold > 0)
             {
+                // DROP-10: Apply native 3000 gold cap before division
+                // 战神 sub_71EA30 @0x71EA3A: cmp dword [esi+0x2FC],0xBB8 / jle 0x71EA45
+                // If m_nGold > 3000, cap it to 3000 before splitting into piles
+                if (m_nGold > 3000)
+                {
+                    m_nGold = 3000;
+                }
+
                 I = 0;
                 while (true)
                 {
-                    if (m_nGold > M2Share.g_Config.nMonOneDropGoldCount)
+                    // DROP-12: Native pile limit is 16, not 17
+                    // Per-pile cap is 2000 (0x7D0) native hardcoded, not config-driven
+                    // 战神 sub_71EA30 @0x71EA6D: cmp [ebp-0x04],0x10 / jge (break when I >= 16)
+                    if (m_nGold > 2000)
                     {
-                        nGold = M2Share.g_Config.nMonOneDropGoldCount;
-                        m_nGold = m_nGold - M2Share.g_Config.nMonOneDropGoldCount;
+                        nGold = 2000;
+                        m_nGold = m_nGold - 2000;
                     }
                     else
                     {
@@ -4734,7 +4732,7 @@ namespace GameSvr
                         break;
                     }
                     I++;
-                    if (I >= 17)
+                    if (I >= 16)
                     {
                         break;
                     }

@@ -204,17 +204,6 @@ namespace GameSvr
                                 {
                                     if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                     {
-                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
-                                        {
-                                            OSObject = null;
-                                            MapCellInfo.Remove(nIdx);
-                                            if (MapCellInfo.Count > 0)
-                                            {
-                                                continue;
-                                            }
-                                            m_PEnvir.ReleaseCellObjectList(n18, n1C);
-                                            break;
-                                        }
                                         BaseObject = OSObject.CellObj as TBaseObject;
                                         if (BaseObject != null)
                                         {
@@ -307,17 +296,6 @@ namespace GameSvr
                             {
                                 if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                 {
-                                    if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
-                                    {
-                                        OSObject = null;
-                                        MapCellInfo.Remove(nIdx);
-                                        if (MapCellInfo.Count > 0)
-                                        {
-                                            continue;
-                                        }
-                                        m_PEnvir.ReleaseCellObjectList(n18, n1C);
-                                        break;
-                                    }
                                 }
                                 if ((OSObject.CellType == CellType.OS_ITEMOBJECT) && !m_boDeath && (m_btRaceServer > Grobal2.RC_MONSTER))
                                 {

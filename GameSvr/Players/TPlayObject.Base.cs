@@ -1623,17 +1623,6 @@ namespace GameSvr
                                 {
                                     if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                     {
-                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
-                                        {
-                                            Dispose(OSObject);
-                                            MapCellInfo.Remove(nIdx);
-                                            if (MapCellInfo.Count > 0)
-                                            {
-                                                continue;
-                                            }
-                                            m_PEnvir.ReleaseCellObjectList(n20, n1C);
-                                            break;
-                                        }
                                         BaseObject = (TBaseObject)OSObject.CellObj;
                                         if (BaseObject != null && !BaseObject.m_boInvisible)
                                         {
