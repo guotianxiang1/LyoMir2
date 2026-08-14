@@ -56,10 +56,6 @@ namespace GameSvr
                         (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
                             .TryApplySwitchWord(switchWord, true);
                     }
-                    else
-                    {
-                        MsgGetReloadGuild(serverNum, Body);
-                    }
                     break;
                 case Grobal2.ISM_GUILDMSG:
                     MsgGetGuildMsg(serverNum, Body);

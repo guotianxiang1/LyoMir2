@@ -83,6 +83,17 @@ namespace GameSvr
 
         private bool ClientNativeRun3(int destinationX, int destinationY)
         {
+            // MOVE-10: State 52 gate applied across all four native movement
+            // arms. When a player is riding someone else's horse (state 52 =
+            // passenger), they cannot initiate movement. Native walk/run both
+            // check `test byte ptr [esi+0x169],4` at 0x6D9BD5/0x6D9CF1. Run3
+            // (opcode 4108) follows the same pattern: the gate appears before
+            // state checks 45/29/1/26/24/62 and before the death/forced-move
+            // checks. Returns FALSE silently (no message, dwDelayTime=0).
+            if (HasNativeActiveState(52))
+            {
+                return false;
+            }
             if (!HasNativeActiveState(NativeHorseMountedState) ||
                 HasNativeActiveState(45) ||
                 HasNativeActiveState(29) ||

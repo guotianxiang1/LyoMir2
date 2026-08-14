@@ -1775,26 +1775,10 @@ namespace GameSvr
                             TargetBaseObject.CharPushed((byte)nPower, nRage);
                         }
                         break;
-                    case Grobal2.RM_POISON:
-                        TargetBaseObject = M2Share.ObjectManager.Get(ProcessMsg.nParam2);// ((ProcessMsg.nParam2) as TBaseObject);
-                        if (TargetBaseObject != null)
-                        {
-                            if (IsProperTarget(TargetBaseObject))
-                            {
-                                SetTargetCreat(TargetBaseObject);
-                                if ((m_btRaceServer == Grobal2.RC_PLAYOBJECT) && (TargetBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT))
-                                {
-                                    SetPKFlag(TargetBaseObject);
-                                }
-                                SetLastHiter(TargetBaseObject);
-                            }
-                            MakePosion(ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam3);// 中毒类型
-                        }
-                        else
-                        {
-                            MakePosion(ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam3);// 中毒类型
-                        }
-                        break;
+                    // STATE-19: RM_POISON (8037/0x1F65) removed — this message ID doesn't exist
+                    // in native binary. Native code directly calls VMT+0xC8 (sub_76B3C8 = MakePosion
+                    // wrapper) at poison application sites. All call sites updated to use direct
+                    // MakePosion() calls instead of SendDelayMsg(RM_POISON).
                     case Grobal2.RM_TRANSPARENT:
                         M2Share.MagicManager.MagMakePrivateTransparent(this, ProcessMsg.nParam1);
                         break;

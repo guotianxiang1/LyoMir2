@@ -1317,6 +1317,9 @@ namespace GameSvr
                         m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
+                        // MOVE-11: 原版 0x6D9BEC call sub_6BCE2C (刷新外观)
+                        // 移动成功后刷新外观，对应 native sub_767548 (RefNameColor)
+                        RefNameColor();
                     }
                     else
                     {

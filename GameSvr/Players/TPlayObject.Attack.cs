@@ -175,6 +175,17 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-10: State 52 gate applied across all four native movement
+            // arms (walk 0x6D9BD5, run 0x6D9CF1, and by inference horserun
+            // and run3). When a player is riding someone else's horse (state
+            // 52 = passenger, not driver), they cannot initiate their own
+            // movement. Native checks `test byte ptr [esi+0x169],4` before
+            // any other movement logic. The gate is silent (no message) and
+            // returns FALSE with dwDelayTime=0, triggering SM_ACT_FAIL.
+            if (HasNativeActiveState(52))
+            {
+                return result;
+            }
             // MOVE-15 bypass closure — NOT a byte-faithful port, and marked as
             // such deliberately. CM_HORSERUN(3035) has NO native movement
             // handler: the main CM dispatcher's jumptable at 0x6D858B stops at
@@ -276,6 +287,12 @@ namespace GameSvr
                 return result;
             }
             if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanSpell)// 防麻
+            {
+                return result;
+            }
+            // MOVE-90: 战神 0x6DA12B: NOMAGIC map flag consumer in movement dispatcher magic branch.
+            // When the map has NOMAGIC set, magic spells are blocked.
+            if (m_PEnvir != null && m_PEnvir.Flag.boNOMAGIC)
             {
                 return result;
             }
@@ -550,6 +567,16 @@ namespace GameSvr
             {
                 return result;
             }
+            // MOVE-10: Native run @ 0x6D9CF1 refuses state 52 (riding someone
+            // else's horse) silently before any other gate. The check occurs
+            // at `test byte ptr [esi+0x169],4` (state bitset at obj+0x168,
+            // bit index 52 = byte 6 bit 4 = mask 0x04 at +0x16E). When set,
+            // the handler returns FALSE without setting dwDelayTime, so the
+            // caller sends SM_ACT_FAIL with the current position.
+            if (HasNativeActiveState(52))
+            {
+                return result;
+            }
             // MOVE-15 — same gate on the run ladder: `call [ecx+0x40]` at
             // 0x6D9D23 (run case 3013), ahead of the run primitive
             // sub_6BBFBC at 0x6D9D39. Run passes dl=1 to the inherited
@@ -640,6 +667,16 @@ namespace GameSvr
             int n1C;
             dwDelayTime = 0;
             if (!m_boCanWalk)
+            {
+                return result;
+            }
+            // MOVE-10: Native walk @ 0x6D9BD5 refuses state 52 (riding someone
+            // else's horse) silently before any other gate. The check occurs
+            // at `test byte ptr [esi+0x169],4` (state bitset at obj+0x168,
+            // bit index 52 = byte 6 bit 4 = mask 0x04 at +0x16E). When set,
+            // the handler returns FALSE without setting dwDelayTime, so the
+            // caller sends SM_ACT_FAIL with the current position.
+            if (HasNativeActiveState(52))
             {
                 return result;
             }
