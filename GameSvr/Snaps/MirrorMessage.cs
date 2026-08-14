@@ -141,12 +141,6 @@ namespace GameSvr
                     // VA: 0x653F6B tier=3 / 0x653F74 sub_6D43C4 / 0x653F7F [+0x180c]。
                     TPlayObject.NativeMirrorAntiCheatPenalty(Body, nParam);
                     break;
-                case Grobal2.ISM_USERLOGOUT:
-                    // Obsolete 别名 (=202)。若对端仍发无 nParam 的旧登出帧, 首字段非整数
-                    // 时 TakeNativeParam 原样返回 charname —— 不再误当反作弊（需对端改
-                    // ident 198 或带 nParam 的 202 反作弊帧）。
-                    MsgGetUserLogout(serverNum, Body);
-                    break;
                 case Grobal2.ISM_WHISPER:
                     MsgGetWhisper(serverNum, Body);
                     break;
@@ -183,20 +177,6 @@ namespace GameSvr
                     // VA: 0x65811C [0x7D7038] / 0x65813F cmp 0x27 / 0x65818A cmp 0x25 /
                     // 0x658196 call 0x794F30。sub_658110 @0x658110 本 build 空桩。
                     NativeSingleQuoteScanBitmap.ApplyMirrorMask(nParam);
-                    break;
-                case Grobal2.ISM_RELOADGUILD:
-                case Grobal2.ISM_SERVERSWITCH:
-                    // Obsolete 别名 (=207)。旧帧若仍到达, 走扩展语义兜底。
-                    if (uint.TryParse(Body, NumberStyles.Integer,
-                        CultureInfo.InvariantCulture, out var legacySwitchWord))
-                    {
-                        (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
-                            .TryApplySwitchWord(legacySwitchWord, true);
-                    }
-                    else
-                    {
-                        MsgGetReloadGuild(serverNum, Body);
-                    }
                     break;
                 case Grobal2.ISM_GUILDMSG:
                     MsgGetGuildMsg(serverNum, Body);
