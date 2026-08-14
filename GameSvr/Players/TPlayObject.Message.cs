@@ -462,6 +462,8 @@ namespace GameSvr
                         m_nCurrX = m_nSwitchMapX;
                         m_nCurrY = m_nSwitchMapY;
                     }
+                    if (m_boSoftClose && !m_boReconnection)
+                        OnNativeHostPlayerLogout();
                     MakeGhost();
                     if (m_boKickFlag)
                     {

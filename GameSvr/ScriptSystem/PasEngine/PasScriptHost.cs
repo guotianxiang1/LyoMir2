@@ -1837,7 +1837,35 @@ namespace GameSvr.PasEngine
                 }
             }
             catch (Exception ex) { M2Share.MainOutMessage($"[PasEngine] Failed to parse PsMapQuest.txt: {ex.Message}"); }
+            ValidateMapQuestDuplicateIndices(mapQuestMap);
             _mapQuestMap = mapQuestMap;
+        }
+
+        private static void ValidateMapQuestDuplicateIndices(
+            ConcurrentDictionary<string, List<MapQuestEntry>> mapQuestMap)
+        {
+            foreach (var pair in mapQuestMap)
+            {
+                var seen = new HashSet<int>();
+                foreach (var entry in pair.Value)
+                {
+                    var key = (entry.VariableGroup << 16) | entry.VariableIndex;
+                    if (!seen.Add(key))
+                    {
+                        M2Share.MainOutMessage(NativeAntiCheatHostRuntime.TaskListErrorPrefix
+                            + " PsMapQuest duplicate id map=" + pair.Key
+                            + " group=" + entry.VariableGroup
+                            + " index=" + entry.VariableIndex);
+                    }
+
+                    if (!File.Exists(entry.ScriptPath))
+                    {
+                        M2Share.MainOutMessage(NativeAntiCheatHostRuntime.TaskListErrorPrefix
+                            + " " + NativeAntiCheatHostRuntime.TaskListLoadFailureMessage
+                            + " " + entry.ScriptPath);
+                    }
+                }
+            }
         }
 
         /// <summary>Get quest scripts for a map (returns list of (questName, scriptPath) pairs).</summary>

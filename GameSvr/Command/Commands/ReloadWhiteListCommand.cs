@@ -9,8 +9,10 @@ namespace GameSvr
         [DefaultCommand]
         public void ReloadWhiteList(TPlayObject PlayObject)
         {
-            NativeCommandFailure.Report(PlayObject, "ReloadWhiteList",
-                "原版 WhiteList.txt 加载器尚未移植，未替换线上配置。");
+            if (PlayObject == null)
+                return;
+            NativeAntiCheatHostRuntime.ReloadGmWhiteList(M2Share.g_Config.sEnvirDir);
+            PlayObject.SysMsg("WhiteList.txt 已重新加载。", MsgColor.Yellow, MsgType.Hint);
         }
     }
 }

@@ -57,6 +57,7 @@ namespace GameSvr
                 ClientNativeHorseDismount();
             }
             base.Die();
+            OnNativeHostPlayerDeath();
             // 死亡触发 @OnDie：眼神把 trampoline 挂在 TPlayer.Die(0x6C03F8) 的唯一 epilogue
             // 0x6C09B5，即所有死亡处理与 SEH finally 汇合、函数返回之前无条件发一次。
             // 惰性门在 FireOnDie 内（插件缺席时零派发）。见 YanshenTriggerDispatch。
