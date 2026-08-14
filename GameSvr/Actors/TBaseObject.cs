@@ -1930,55 +1930,6 @@ namespace GameSvr
             HealthSpellChanged();
         }
 
-        private void ItemDamageRevivalRing()
-        {
-            GoodItem pSItem;
-            ushort nDura;
-            ushort tDura;
-            TPlayObject PlayObject;
-            for (int i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
-            {
-                if (m_UseItems[i] != null && m_UseItems[i].wIndex > 0)
-                {
-                    pSItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
-                    if (pSItem != null)
-                    {
-                        if (new ArrayList(new byte[] { 114, 160, 161, 162 }).Contains(pSItem.Shape) || (((i == Grobal2.U_WEAPON) || (i == Grobal2.U_RIGHTHAND)) && new ArrayList(new byte[] { 114, 160, 161, 162 }).Contains(pSItem.AniCount)))
-                        {
-                            nDura = m_UseItems[i].Dura;
-                            tDura = (ushort)HUtil32.Round(nDura / 1000.0);// 1.03
-                            nDura -= 1000;
-                            if (nDura <= 0)
-                            {
-                                nDura = 0;
-                                m_UseItems[i].Dura = nDura;
-                                if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                                {
-                                    PlayObject = this as TPlayObject;
-                                    PlayObject.SendDelItems(m_UseItems[i]);
-                                }
-                                m_UseItems[i].wIndex = 0;
-                                RecalcAbilitys();
-                            }
-                            else
-                            {
-                                m_UseItems[i].Dura = nDura;
-                            }
-                            // NOTE: this is ItemDamageRevivalRing, NOT DoDamageWeapon.
-                            // The `old > new` shape proven for sub_73E804 belongs to
-                            // DoDamageWeapon (see that method); it must not be copied
-                            // here without evidence for this function's own native
-                            // counterpart, which has not been identified yet.
-                            if (tDura != HUtil32.Round(nDura / 1000.0))
-                            {
-                                SendMsg(this, Grobal2.RM_DURACHANGE, i, nDura, m_UseItems[i].DuraMax, 0, "");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         public bool GetFrontPosition(ref short nX, ref short nY)
         {
             bool result;
