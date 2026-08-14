@@ -1164,6 +1164,19 @@ namespace GameSvr
                 // 曾有一版按 "StdMode 3 / Shape 32" 在此接 `case "TTimerBomb"`，但该映射无任何
                 // 字节证据（Shape 32 超出跳表 0..10 界，落默认臂），接上等于凭空制造原版没有的
                 // 行为，违反"不得捏造"。死代码证明详见 TPlayObject.NativeTriggerBombMap.cs。
+                case "TBirthdayCake":
+                    // VMT TBirthdayCake.Use = sub_78A1D8 @0x0078A1D8
+                    return UseNativeBirthdayCake(item);
+                case "TRabbitPrize":
+                    // wrapper sub_789D40 @0x00789D40 (gate sub_787D20 @0x00787D20)
+                    return UseNativeRabbitYearPrize(item, stdItem);
+                case "TCoupleFeastBox":
+                    // sub_6DE234 @0x006DE234 (StdMode 31 / Shape 7..9)
+                    return UseNativeMooncakeGift(stdItem, item);
+                case "TNormalBox":
+                    // sub_6DD758 @0x006DD758 family (惊喜/精致/兔年/龙年礼品盒)
+                    return TryResolveNativeGiftBoxMode(stdItem.Name, out _)
+                           && UseNativeGiftBox(stdItem, item);
                 default:
                     return false;
             }
