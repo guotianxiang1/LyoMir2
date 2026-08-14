@@ -87,11 +87,11 @@ namespace DBSvr.Core
         public const ushort HeroMagicCommand = 0x0066;
         public const ushort MonsterCommand = 0x0067;
         public const ushort StdItemsCommand = 0x0068;
-        public const ushort AntiqueItemsCommand = 0x0073;
+        // REMOVED (P1-1): AntiqueItemsCommand 0x0073 - invented, no native handler
         public const ushort FieldHeroCommand = 0x006C;
-        public const ushort SuperForceCommand = 0x0075;
-        public const ushort SuperSkillCommand = 0x0076;
-        public const ushort ForceMagicCommand = 0x006D;
+        // REMOVED (P1-1): SuperForceCommand 0x0075 - invented, no native handler
+        // REMOVED (P1-1): SuperSkillCommand 0x0076 - invented, no native handler
+        // REMOVED (P1-1): ForceMagicCommand 0x006D - invented, no native handler
 
         private const int HeaderSize = NativeType2Protocol.HeaderSize;
 
@@ -105,11 +105,7 @@ namespace DBSvr.Core
                 HeroMagicCommand => BuildMagic(row, command, false, isLast),
                 MonsterCommand => BuildMonster(row, isLast),
                 StdItemsCommand => BuildStdItem(row, isLast, false),
-                AntiqueItemsCommand => BuildAntiqueItem(row, isLast),
                 FieldHeroCommand => BuildFieldHero(row, isLast),
-                SuperForceCommand => BuildSuperForce(row, isLast),
-                SuperSkillCommand => BuildSuperSkill(row, isLast),
-                ForceMagicCommand => BuildForceMagic(row, isLast),
                 _ => throw new ArgumentOutOfRangeException(nameof(command),
                     command, "unsupported native Type2 static command")
             };
@@ -121,15 +117,13 @@ namespace DBSvr.Core
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             EnsureSupported(command);
             var acceptedCount = rows.Count;
-            if (command is StdItemsCommand or ForceMagicCommand)
+            if (command is StdItemsCommand)
             {
                 for (var i = 0; i < rows.Count; i++)
                 {
                     var row = rows[i] ?? throw new ArgumentException(
                         "row cannot be null", nameof(rows));
-                    var index = command == StdItemsCommand
-                        ? row.RequireInt32("idx")
-                        : row.RequireInt32("ForceId");
+                    var index = row.RequireInt32("idx");
                     if (index == i + 1) continue;
                     acceptedCount = i;
                     break;
@@ -262,6 +256,8 @@ namespace DBSvr.Core
             return packet;
         }
 
+        // P1-1: BuildAntiqueItem removed - invented, no native handler
+        /*
         private static byte[] BuildAntiqueItem(NativeType2StaticRow row,
             bool isLast)
         {
@@ -287,6 +283,7 @@ namespace DBSvr.Core
             WriteByte(packet, 0xA9, row.RequireInt32("veinslv"));
             return packet;
         }
+        */
 
         private static byte[] BuildFieldHero(NativeType2StaticRow row,
             bool isLast)
@@ -319,6 +316,8 @@ namespace DBSvr.Core
             return packet;
         }
 
+        // P1-1: BuildSuperForce removed - invented, no native handler
+        /*
         private static byte[] BuildSuperForce(NativeType2StaticRow row,
             bool isLast)
         {
@@ -336,7 +335,10 @@ namespace DBSvr.Core
                         row.RequireInt32(families[family] + level));
             return packet;
         }
+        */
 
+        // P1-1: BuildSuperSkill removed - invented, no native handler
+        /*
         private static byte[] BuildSuperSkill(NativeType2StaticRow row,
             bool isLast)
         {
@@ -356,7 +358,10 @@ namespace DBSvr.Core
                     row.RequireInt32($"Effect{i}"));
             return packet;
         }
+        */
 
+        // P1-1: BuildForceMagic removed - invented, no native handler
+        /*
         private static byte[] BuildForceMagic(NativeType2StaticRow row,
             bool isLast)
         {
@@ -384,6 +389,7 @@ namespace DBSvr.Core
             }
             return packet;
         }
+        */
 
         private static byte[] CreatePacket(ushort command, int length,
             bool isLast)
@@ -433,8 +439,7 @@ namespace DBSvr.Core
         private static void EnsureSupported(ushort command)
         {
             if (command is HumanMagicCommand or HeroMagicCommand or MonsterCommand
-                or StdItemsCommand or AntiqueItemsCommand or FieldHeroCommand
-                or SuperForceCommand or SuperSkillCommand or ForceMagicCommand)
+                or StdItemsCommand or FieldHeroCommand)
                 return;
             throw new ArgumentOutOfRangeException(nameof(command), command,
                 "unsupported native Type2 static command");

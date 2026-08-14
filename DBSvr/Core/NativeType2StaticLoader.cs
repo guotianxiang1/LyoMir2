@@ -65,16 +65,9 @@ namespace DBSvr.Core
                 "monster", MonsterSql),
             new(NativeType2StaticRecordBuilder.StdItemsCommand,
                 "stditems", StdItemsSql),
-            new(NativeType2StaticRecordBuilder.AntiqueItemsCommand,
-                "AntiqueItems", AntiqueItemsSql),
+            // REMOVED (P1-1): AntiqueItems, SuperForce, SuperSkill, ForceMagic - invented, no native handlers
             new(NativeType2StaticRecordBuilder.FieldHeroCommand,
-                "fieldhero", FieldHeroSql),
-            new(NativeType2StaticRecordBuilder.SuperForceCommand,
-                "SuperForce", SuperForceSql),
-            new(NativeType2StaticRecordBuilder.SuperSkillCommand,
-                "SuperSkill", SuperSkillSql),
-            new(NativeType2StaticRecordBuilder.ForceMagicCommand,
-                "forcemagic", ForceMagicSql)
+                "fieldhero", FieldHeroSql)
         };
 
         public bool TryLoad(out List<byte[]> records)
@@ -99,14 +92,9 @@ namespace DBSvr.Core
                         rows = RequireMagicRows(table.Name, rows);
                     }
                     else if (table.Command is
-                             NativeType2StaticRecordBuilder.StdItemsCommand or
-                             NativeType2StaticRecordBuilder.ForceMagicCommand)
+                             NativeType2StaticRecordBuilder.StdItemsCommand)
                     {
-                        rows = TakeContinuousPrefix(rows,
-                            table.Command ==
-                            NativeType2StaticRecordBuilder.StdItemsCommand
-                                ? "idx"
-                                : "ForceId");
+                        rows = TakeContinuousPrefix(rows, "idx");
                     }
 
                     loaded.AddRange(NativeType2StaticRecordBuilder.BuildRecords(
