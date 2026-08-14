@@ -1365,6 +1365,13 @@ namespace GameSvr
                     binReader.Read(bytData, 0, bytData.Length);
                     wWidth = BitConverter.ToInt16(bytData, 0);
                     wHeight = BitConverter.ToInt16(bytData, 2);
+                    if (wWidth <= 0 || wHeight <= 0 || wWidth > 0x400 || wHeight > 0x400)
+                    {
+                        // sub_777088 @0x77712A: width/height > 0x400 → format error
+                        var mapVersion = bytData.Length > 4 ? bytData[4] : (byte)0;
+                        M2Share.MainOutMessage("[ERROR] Not support map format. Version" + mapVersion + " FileName:" + sMapFile);
+                        return false;
+                    }
 
                     Initialize(wWidth, wHeight);
 
@@ -1447,6 +1454,7 @@ namespace GameSvr
                     loadList.LoadFromFile(pointFileName);
                     string sX = string.Empty;
                     string sY = string.Empty;
+                    var pointLinesRead = 0;
                     for (int i = 0; i < loadList.Count; i++)
                     {
                         var line = loadList[i];
@@ -1454,6 +1462,7 @@ namespace GameSvr
                         {
                             continue;
                         }
+                        pointLinesRead++;
                         line = HUtil32.GetValidStr3(line, ref sX, new[] { ",", "\t" });
                         line = HUtil32.GetValidStr3(line, ref sY, new[] { ",", "\t" });
                         var nX = (short)HUtil32.Str_ToInt(sX, -1);
@@ -1462,6 +1471,12 @@ namespace GameSvr
                         {
                             m_PointList.Add(new PointInfo(nX, nY));
                         }
+                    }
+                    if (pointLinesRead > 0 && m_PointList.Count == 0)
+                    {
+                        // sub_777088 point loader @0x77754E MainOutMessage("[Warning]: 地图 "+name+" 的随机点")
+                        var mapLabel = string.IsNullOrEmpty(sMapName) ? sMapFile : sMapName;
+                        M2Share.MainOutMessage("[Warning]: 地图 " + mapLabel + " 的随机点");
                     }
                 }
             }

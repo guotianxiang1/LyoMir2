@@ -57,9 +57,10 @@ namespace GameSvr.PasEngine
                 cmd.ExecuteNonQuery();
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                M2Share.MainOutMessage($"[PasDB] ExecuteScript error: {ex.Message}");
+                // sub_61EE90 @0x61EF0B MainOutMessage(0x61F0E0 + sql) — 执行sql失败:
+                M2Share.MainOutMessage("执行sql失败:" + sql);
                 return false;
             }
         }
@@ -83,10 +84,10 @@ namespace GameSvr.PasEngine
                 _eof = _recordCount == 0;
                 return _recordCount;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 ResetResultSet();
-                M2Share.MainOutMessage($"[PasDB] ExecuteQuery error: {ex.Message}");
+                M2Share.MainOutMessage("执行sql失败:" + sql);
                 return 0;
             }
         }
@@ -166,7 +167,8 @@ namespace GameSvr.PasEngine
             {
                 _connection?.Dispose();
                 _connection = null;
-                M2Share.MainOutMessage($"[PasDB] Connection error: {ex.Message}");
+                // TMySQLDB.Connect @0x72472A MainOutMessage(0x724880 + detail) — [Error]:
+                M2Share.MainOutMessage("[Error]: " + ex.Message);
                 return false;
             }
         }

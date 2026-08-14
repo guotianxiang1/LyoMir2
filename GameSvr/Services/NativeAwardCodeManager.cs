@@ -407,7 +407,7 @@ namespace GameSvr.Services
 
         private static void LogSqlFailed(string sql)
         {
-            M2Share.MainOutMessage("   [SQL Failed] " + sql);
+            M2Share.MainOutMessage("执行sql失败:" + sql);
         }
     }
 }

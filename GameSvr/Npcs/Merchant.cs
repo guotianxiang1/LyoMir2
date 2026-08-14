@@ -877,7 +877,13 @@ namespace GameSvr
             {
                 try
                 {
-                    if (user == null || !user.IsEnoughBag()) return -1;
+                    if (user == null) return -1;
+                    if (!user.IsEnoughBag())
+                    {
+                        // sub_6447A4 @0x644C2E SysMsg(0x644C84, cx=0x38FF)
+                        user.SysMsg("对不起，你无法再携带了", MsgColor.Red, MsgType.Hint);
+                        return -1;
+                    }
                     var record = M2Share.WeaponUpgrades.GetByCharacter(user.m_sCharName);
                     if (record == null) return 0;
                     if (!record.Built && user.m_btPermission < 4) return 1;
@@ -902,6 +908,7 @@ namespace GameSvr
                     if (!M2Share.WeaponUpgrades.Delete(record.Idx)) return 0;
                     if (!user.AddItemToBag(item))
                     {
+                        user.SysMsg("对不起，你无法再携带了", MsgColor.Red, MsgType.Hint);
                         M2Share.ErrorMessage($"WeaponUpg bag changed after delete for {user.m_sCharName}, idx={record.Idx}");
                         return -1;
                     }

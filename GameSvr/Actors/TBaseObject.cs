@@ -3545,10 +3545,17 @@ namespace GameSvr
             // Player path 0x6AFCC8: `cmp ebx, Count / ja` then sentinel.
             // Negative nLevel becomes a huge uint and takes the same arm.
             if ((uint)nLevel >= (uint)table.Length)
+            {
+                // sub_651118 @0x65114E OOB: MainOutMessage(0x6511B8 + level) via 0x79DF74
+                M2Share.MainOutMessage("获取角色升级经验越界 - 等级 : " + nLevel);
                 return NativeNeedExpSentinel;
+            }
             var value = table[nLevel];
             if (value == 0 && nLevel > M2Share.g_Config.nNeedExpMaxLevel)
+            {
+                M2Share.MainOutMessage("获取角色升级经验越界 - 等级 : " + nLevel);
                 return NativeNeedExpSentinel;
+            }
             return value;
         }
 
