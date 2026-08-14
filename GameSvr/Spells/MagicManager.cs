@@ -2047,7 +2047,7 @@ namespace GameSvr
                 if (ysShinsu.IsSummonShenShou())
                 {
                     sMonName = ysShinsu.ShenShouName();
-                    nCount = ysShinsu.ShenShouSlaveCount();
+                    nCount = YanshenPangu1Patches.ShenShouSlaveCount(ysShinsu);
                 }
                 // 「修改召唤神兽」装的是 detour，不是常量覆盖：0x100BA4E0 / 0x100BA4F9
                 // 两次 call 0x10032B10 把 0x0076EE98 起 7 字节（push 数量 + push 叛变秒数）
@@ -2139,7 +2139,7 @@ namespace GameSvr
                 var ysSkele = new YanshenApi(PlayObject, null, M2Share.PluginManager);
                 if (ysSkele.IsSummonKuLou())
                 {
-                    nCount = ysSkele.KuLouSlaveCount();
+                    nCount = YanshenPangu1Patches.KuLouSlaveCount(ysSkele);
                 }
                 if (PlayObject.MakeSlave(sMonName, nMakeLevel, nExpLevel, nCount, dwRoyaltySec) != null)
                 {
