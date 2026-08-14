@@ -70,7 +70,8 @@ namespace GameSvr
                 case NativeRevivePolicy.Outcome.EquipRevive:
                     // 0x743761 stamp, 0x743775 HP = MaxHP, 0x743781 conditional MP.
                     m_dwRevivalTick = tick;
-                    ItemDamageRevivalRing();
+                    // 0x743796 xor edx,edx / 0x74379A call sub_73ED28 — mode 0, +0x104 bit0.
+                    ItemDamageRevivalRing(0);
                     m_WAbil.HP = m_WAbil.MaxHP;
                     // 0x743781 `cmp byte [esi+0x1B9],0` / je — the "also refill MP" flag is
                     // a SECOND equipment bit, distinct from [+0x1B8].  It is sourced from
@@ -86,6 +87,8 @@ namespace GameSvr
                     // then 0x74383A/0x743846 restore HP and MP unconditionally.
                     // Unreachable while the tier is unmodelled; kept so the ladder is
                     // complete and the audit can exercise it.
+                    // 0x743860 mov edx,1 / 0x743867 call sub_73ED28 — mode 1, +0x104 bit1|bit2.
+                    ItemDamageRevivalRing(1);
                     TryApplyNativeReviveCooldown(NativeSecondPathTier);
                     m_WAbil.HP = m_WAbil.MaxHP;
                     m_WAbil.MP = m_WAbil.MaxMP;
