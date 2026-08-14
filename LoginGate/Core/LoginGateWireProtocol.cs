@@ -283,9 +283,14 @@ namespace LoginGate.Core
             out NativeLoginGateRegistration registration, out string error)
         {
             registration = null!;
-            if (!TryRequireNativeFrame(frame, NativeRegistrationIdent,
-                    NativeRegistrationPayloadSize, out error))
+            error = string.Empty;
+
+            // P1-2: Native accepts 40 bytes (old format) or 68 bytes (new format with QueueCount).
+            // C# was strict 40-only, causing disconnects when native DBServer sends 68.
+            if (frame == null || frame.Ident != NativeRegistrationIdent
+                || (frame.Payload.Length != 40 && frame.Payload.Length != 68))
             {
+                error = $"native LoginGate frame must be ident {NativeRegistrationIdent} with 40 or 68 bytes";
                 return false;
             }
 
@@ -449,11 +454,13 @@ namespace LoginGate.Core
         {
             enabled = false;
             error = string.Empty;
-            if (frame == null || frame.Payload.Length != 0
+            // P1-3: Native does not check DataLength — accepts any payload size.
+            // C# required Payload.Length == 0, causing disconnects on non-zero payloads.
+            if (frame == null
                 || (frame.Ident != NativeType2EnabledIdent
                     && frame.Ident != NativeType2DisabledIdent))
             {
-                error = "native LoginGate type-2 control must be an empty 0x07D2 or 0x07D3 frame";
+                error = "native LoginGate type-2 control must be ident 0x07D2 or 0x07D3";
                 return false;
             }
 
