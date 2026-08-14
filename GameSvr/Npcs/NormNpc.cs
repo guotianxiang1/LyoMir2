@@ -280,7 +280,9 @@ namespace GameSvr
                     }
                 case "$QUERYYBDEALLOG":// 查看元宝交易记录 
                     {
-                        sMsg = ReplaceVariableText(sMsg, "<$QUERYYBDEALLOG>", "元宝寄售服务暂不可用");
+                        sMsg = ReplaceVariableText(sMsg, "<$QUERYYBDEALLOG>",
+                            PlayObject.BuildNativeYbLastDealLogText(string.Empty,
+                                string.Empty));
                         return;
                     }
                 case "$KILLER":
@@ -1176,7 +1178,9 @@ namespace GameSvr
             }
             if (sVariable == "$QUERYYBDEALLOG") 
             {
-                sMsg = ReplaceVariableText(sMsg, "<$QUERYYBDEALLOG>", "元宝寄售服务暂不可用");
+                sMsg = ReplaceVariableText(sMsg, "<$QUERYYBDEALLOG>",
+                    PlayObject.BuildNativeYbLastDealLogText(string.Empty,
+                        string.Empty));
                 return;
             }
             if (sVariable == "$GUILDNAME")

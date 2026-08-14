@@ -452,7 +452,13 @@ namespace GameSvr.Services
         public void ReportFailure(NativePasYbPurchase purchase, int errorCode)
         {
             var online = ResolveOnline(purchase);
-            if (!IsOriginalPlayerOnline(purchase, online)) return;
+            if (!IsOriginalPlayerOnline(purchase, online))
+            {
+                NativeYbBillingOfflineCallback.HandlePrefreezeBillingReturn(
+                    purchase.CharacterName, purchase.AccountName,
+                    purchase.ScriptLogId, false, null);
+                return;
+            }
             var error = errorCode == NativePasYbPurchaseTransaction
                     .SnapshotInsufficient
                 ? NativeYuanbaoManager.GetErrorText(

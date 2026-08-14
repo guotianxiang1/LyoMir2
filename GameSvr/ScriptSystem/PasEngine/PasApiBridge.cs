@@ -6047,12 +6047,24 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "clientquerylastdealmsg":
+                    if (args.Count >= 1 &&
+                        args[0].ObjVal is TPlayObject dealLogPlayer)
+                    {
+                        dealLogPlayer.ShowNativeYbLastDealLog(CurrentNpc, 0xAF,
+                            string.Empty, string.Empty);
+                        return true;
+                    }
+                    return false;
                 case "clientqueryybdealitem":
                     // Native YB consignment query services are absent.
                     return RejectUnsupportedNativeApi(out result);
 
                 case "clientaskopenyb":
-                    return RejectUnsupportedNativeApi(out result);
+                    if (args.Count != 1 ||
+                        args[0].ObjVal is not TPlayObject openYbPlayer)
+                        return false;
+                    openYbPlayer.ClientAskOpenYb(CurrentNpc);
+                    return true;
 
                 case "reqgetfirstusedgift":
                     // sub_7520E0 @0x007520E0 — config\新手礼包.ini first gift.
@@ -7493,12 +7505,26 @@ namespace GameSvr.PasEngine
 
                 case "reqitembyplatina":
                 case "clientquerylastdealmsg":
+                    if (args.Count >= 1 &&
+                        args[0].ObjVal is TPlayObject dealLogPlayer)
+                    {
+                        dealLogPlayer.ShowNativeYbLastDealLog(CurrentNpc, 0xAF,
+                            string.Empty, string.Empty);
+                        result = PasValue.FromBool(true);
+                        return true;
+                    }
+                    return false;
                 case "clientqueryybdealitem":
                     // Native platinum/YB consignment transaction services are absent.
                     return RejectUnsupportedNativeApi(out result);
 
                 case "clientaskopenyb":
-                    return RejectUnsupportedNativeApi(out result);
+                    if (args.Count != 1 ||
+                        args[0].ObjVal is not TPlayObject openYbPlayer)
+                        return false;
+                    openYbPlayer.ClientAskOpenYb(CurrentNpc);
+                    result = PasValue.FromBool(true);
+                    return true;
 
                 case "reqgetfirstusedgift":
                     return RejectUnsupportedNativeApi(out result);

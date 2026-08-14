@@ -369,6 +369,54 @@ namespace GameSvr.Services
         public static INativeYbConsignmentStore Store { get; set; } = new EmptyStore();
 
         /// <summary>
+        /// Debug strings from native 0x006F1BE8 (four list kinds + row format at 0x6F1E20).
+        /// Emitted once per query when <see cref="DebugLoggingEnabled"/> is true.
+        /// </summary>
+        internal static bool DebugLoggingEnabled;
+
+        private static readonly string[] s_debugListHeaders =
+        {
+            "查找玩家正在出售订单：",
+            "查找玩家已购买订单：",
+            "查找玩家已出售订单：",
+            "查找玩家保管："
+        };
+
+        internal static void EmitQueryDebugLog(TPlayObject player, int cmIdent,
+            int total, int start, int count)
+        {
+            if (!DebugLoggingEnabled || player == null) return;
+            var headerIndex = cmIdent switch
+            {
+                CmOutgoingPending => 0,
+                CmBuyerHistory => 1,
+                CmSellerHistory => 2,
+                CmIncomingPending => 3,
+                _ => -1
+            };
+            if (headerIndex < 0) return;
+
+            player.SendMsg(player, Grobal2.RM_SYSMESSAGE, 0,
+                0xDB, 0xFF, 0,
+                s_debugListHeaders[headerIndex] +
+                $" 总数：{total}, 当前起始位置: {start}, 个数：{count}");
+        }
+
+        internal static void EmitRowDebugLog(TPlayObject player,
+            NativeYbConsignmentQuery.Record record, string buyerName,
+            string sellerName)
+        {
+            if (!DebugLoggingEnabled || player == null || record == null) return;
+            player.SendMsg(player, Grobal2.RM_SYSMESSAGE, 0,
+                0xDB, 0xFF, 0,
+                string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "DBIdx: {0}, 道具名: {1}, 道具数: {2}, 总价: {3}, 买家名: {4}, 卖家名: {5}",
+                    record.Idx, record.CounterpartyName, record.ItemCount,
+                    record.Credit, buyerName ?? string.Empty,
+                    sellerName ?? string.Empty));
+        }
+
+        /// <summary>
         /// Serialise the page into the reply body: a 0x28-byte header per record followed by that
         /// record's item payload, exactly as sub_6E80CC lays it out. The returned length is the
         /// running total the send site reads out of [ebp-0x14] at 0x6E82C8.

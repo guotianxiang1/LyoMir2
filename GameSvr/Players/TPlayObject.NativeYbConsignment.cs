@@ -66,6 +66,16 @@ namespace GameSvr
                 ? System.Array.Empty<byte>()
                 : NativeYbConsignmentQuery.BuildReplyBody(page);
 
+            NativeYbConsignmentQuery.EmitQueryDebugLog(this, cmIdent, wanted, 0, count);
+            if (page != null)
+            {
+                foreach (var row in page)
+                {
+                    NativeYbConsignmentQuery.EmitRowDebugLog(this, row, name,
+                        row.CounterpartyName);
+                }
+            }
+
             // 0x6E82BB..0x6E82D7: [vtbl+0x254](self, dx = SM ident, ecx = 0 (Recog),
             // push count (Param), push 0 (Tag), push 0 (Series), push buffer, push length).
             target.SendSocket(

@@ -106,6 +106,13 @@ namespace GameSvr
     public partial class TPlayObject
     {
         /// <summary>
+        /// 0x006F1BE8 prologue `mov byte [eax+0x18C8],0` — external batch-cancel ack
+        /// clears the write-pending flag before query/debug logging.
+        /// </summary>
+        internal void ClearNativeYbConsignWritePending() =>
+            m_btYbConsignWritePending = 0;
+
+        /// <summary>
         /// [self+0x18C8]. Set to sub_6D3694's return in every busy-gated worker:
         /// non-zero once a write has been queued to the (external) manager and is
         /// awaiting its async ack. This port never queues, so it stays 0 — kept so the
@@ -488,6 +495,18 @@ namespace GameSvr
 
         /// <summary>Reclaim forward (req 0x13F cl=1 / 0x140 cl=0). No external link -&gt; not queued.</summary>
         internal static bool ForwardReclaim(TPlayObject self, int nRecog, bool cl) => false;
+
+        /// <summary>
+        /// External batch-cancel ack (native 0x006F1EB8). Invoked when the consignment
+        /// manager returns per-order results for a seller batch cancel.
+        /// </summary>
+        internal static void HandleBatchCancelCallback(TPlayObject player,
+            int callbackKind, int orderId, int errorCode, int batchCount,
+            string detail = null)
+        {
+            NativeYbConsignmentBatchCancel.HandleCallback(player, callbackKind,
+                orderId, errorCode, batchCount, detail);
+        }
 
         /// <summary>
         /// Record — once per ident per process — that a body/item/vendor-dependent write
