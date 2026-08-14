@@ -71,6 +71,10 @@ namespace SystemModule
         [ProtoIgnore]
         public byte NativeClassFc;
 
+        /// <summary>native 赠品(gift) byte; runtime-only, excluded from codec (protocol unchanged).</summary>
+        [ProtoIgnore]
+        public byte NativeGiftItem;
+
         /// <summary>
         /// 战神 <c>item+0x100 .. item+0x102</c> — the runtime inlay/jewel attribute triple.
         /// <c>sub_78C5EC</c> copies the last three bytes of the 9-byte row at

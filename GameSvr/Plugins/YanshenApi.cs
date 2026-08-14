@@ -367,7 +367,7 @@ namespace GameSvr.Plugins
         }
 
         /// <summary>Get a native config value as int. Returns defaultValue if not found.</summary>
-        int GetParamInt(string chineseKey, int defaultValue = 0)
+        internal int GetParamInt(string chineseKey, int defaultValue = 0)
         {
             if (_pluginManager == null) return defaultValue;
             var val = _pluginManager.GetNativeConfigValue(chineseKey);

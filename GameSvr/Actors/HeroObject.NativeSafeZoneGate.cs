@@ -1,3 +1,5 @@
+using SystemModule;
+
 namespace GameSvr
 {
     public partial class HeroObject

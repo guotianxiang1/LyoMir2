@@ -159,7 +159,7 @@ namespace GameSvr
         /// </summary>
         internal static bool IsGiftItem(TUserItem item)
         {
-            return item != null && item.NativeGiftItem;
+            return item != null && item.NativeGiftItem != 0;
         }
 
         /// <summary>
