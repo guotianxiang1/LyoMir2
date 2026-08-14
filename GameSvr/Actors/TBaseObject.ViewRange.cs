@@ -215,10 +215,8 @@ namespace GameSvr
                                         // [[0x7D6754]]（INI [Setup] GlobalSeeZone，缺省 12），
                                         // 本方法用每对象 m_nViewRange —— 这条差异登记在
                                         // docs/addtomap_and_outparam_20260814.md。
-                                        // 60 秒时限是移植期自造的替身，与谓词不等价，
-                                        // 故并联而非替换：见 docs/view_searchrange_predicate_20260814.md。
-                                        if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
-                                            || IsNativeStaleCellActor(OSObject.CellObj))
+                                        // 0x77AB07 call 0x765D64 / test al / 无效则摘链；原生无 60s 并联。
+                                        if (IsNativeStaleCellActor(OSObject.CellObj))
                                         {
                                             OSObject = null;
                                             MapCellInfo.Remove(nIdx);
@@ -321,9 +319,8 @@ namespace GameSvr
                             {
                                 if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
                                 {
-                                    // 同 SearchViewRange：0x77A2EB call 0x765D64 有效性谓词并联 60 秒时限。
-                                    if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000
-                                        || IsNativeStaleCellActor(OSObject.CellObj))
+                                    // 0x77A2EB call 0x765D64 / test al；原生无 60s 并联。
+                                    if (IsNativeStaleCellActor(OSObject.CellObj))
                                     {
                                         OSObject = null;
                                         MapCellInfo.Remove(nIdx);

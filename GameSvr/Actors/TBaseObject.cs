@@ -4084,14 +4084,12 @@ namespace GameSvr
                                                 //   77AB0C  84 C0 / 0F 85 A3 00.. jne 0x77ABB5（有效臂）
                                                 //   77AB14-77AB23  摘链 / 77AB2E B3 01 bl := 1 /
                                                 //   77AB30 push 0x77AD00 记异常 -> continue
-                                                // **本轮未接**：把 IsNativeStaleCellActor 并联进这条
-                                                // 60 秒时限后，HeroUnionStateCheck 由「1731 行失败」
-                                                // 提前到「721 行失败」——它的观察者夹具是无名
-                                                // TPlayObject，谓词判其失效后整条广播收不到。
-                                                // 这是夹具与生产现实的落差（生产路径一律先命名后入图），
-                                                // 不是谓词判错；但影响面超出本任务，交主代理决定。
-                                                // 详见 docs/addtomap_and_outparam_20260814.md §5。
-                                                if ((HUtil32.GetTickCount() - OSObject.dwAddTime) >= 60 * 1000)
+                                                // 0x77AB07 call 0x765D64 / test al / jne 有效臂；与
+                                                // SearchViewRange 三副本同一谓词，原生无 60s 并联。
+                                                // OS_MOVINGOBJECT 孤儿若无其它 GC：族 A 地图腿
+                                                // (Envirnoment CanWalk/MoveTo/GetMovObjCount) 已纯谓词；
+                                                // 仍通过谓词的悬挂节点原生亦保留，无第二摘链臂。
+                                                if (IsNativeStaleCellActor(OSObject.CellObj))
                                                 {
                                                     OSObject = null;
                                                     MapCellInfo.Remove(i);
