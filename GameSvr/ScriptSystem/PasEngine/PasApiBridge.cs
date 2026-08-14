@@ -6030,21 +6030,37 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "reqitembygoldid":
-                    // Native gold-ID account transaction is absent.
-                    return RejectUnsupportedNativeApi(out result);
+                    // sub_653990 @0x00653990 — gold account level-segment claim.
+                    if (args.Count != 3 ||
+                        args[0].ObjVal is not TPlayObject goldIdPlayer)
+                        return false;
+                    goldIdPlayer.ReqItemByGoldId(CurrentNpc, args[1].AsInt(),
+                        args[2].AsInt());
+                    return true;
 
                 case "reqitembyplatina":
+                    // sub_6C8284 @0x006C8284 — platinum role segment claim.
+                    if (args.Count != 1 ||
+                        args[0].ObjVal is not TPlayObject platinaPlayer)
+                        return false;
+                    platinaPlayer.ReqItemByPlatina(CurrentNpc);
+                    return true;
+
                 case "clientquerylastdealmsg":
                 case "clientqueryybdealitem":
-                    // Native platinum/YB consignment transaction services are absent.
+                    // Native YB consignment query services are absent.
                     return RejectUnsupportedNativeApi(out result);
 
                 case "clientaskopenyb":
                     return RejectUnsupportedNativeApi(out result);
 
                 case "reqgetfirstusedgift":
-                    // Native gift state and atomic item delivery are absent.
-                    return RejectUnsupportedNativeApi(out result);
+                    // sub_7520E0 @0x007520E0 — config\新手礼包.ini first gift.
+                    if (args.Count != 1 ||
+                        args[0].ObjVal is not TPlayObject giftPlayer)
+                        return false;
+                    _ = giftPlayer.TryClaimNativeNewbieGift(CurrentNpc);
+                    return true;
 
                 case "clientybbuylf":
                     // Native signature: procedure ClientYBbuyLF(Player; const Num: integer).

@@ -633,15 +633,28 @@ namespace GameSvr
 
                     var serverPath = Path.Combine(configPath,
                         "NewServPrize.ini");
+                    if (!File.Exists(serverPath))
+                    {
+                        M2Share.ErrorMessage(
+                            "[Error]: 缺少新天关服务器奖励配置文件：" +
+                            serverPath);
+                    }
                     for (var route = 0;
                          route < result.ServerPrizes.Length;
                          route++)
                         result.ServerPrizes[route] =
                             ReadNativeMagicTowerThresholdEntries(serverPath,
                                 "配置" + (route + 1));
+                    var personalPath = Path.Combine(configPath,
+                        "NewSelfPrize.ini");
+                    if (!File.Exists(personalPath))
+                    {
+                        M2Share.ErrorMessage(
+                            "[Error]: 缺少新天关个人奖励配置文件：" +
+                            personalPath);
+                    }
                     result.PersonalPrizes =
-                        ReadNativeMagicTowerThresholdEntries(
-                            Path.Combine(configPath, "NewSelfPrize.ini"),
+                        ReadNativeMagicTowerThresholdEntries(personalPath,
                             "配置");
                     return result;
                 }
