@@ -42,6 +42,13 @@ namespace GameSvr
         
         
         public int nRequestLevel = 0;
+        /// <summary>
+        /// Native <c>TEnvironment+0x30</c>: minimum total active point (base + job-tier
+        /// bonus) to enter when credit auth is enabled. Populated from MapActivePoint.xml
+        /// by <see cref="NativeMapActivePointLoader"/> (sub_618FB8 @0x00618FB8).
+        /// </summary>
+        internal int NativeMapActivePointRequired { get; set; } =
+            NativeMapActivePointLoader.UnconfiguredRequiredSentinel;
         public TMapFlag Flag = null;
         public byte BreakLevel => Flag?.BreakLevel ?? 0;
         public ushort CrazyBreakLevel => Flag?.CrazyBreakLevel ?? 0;

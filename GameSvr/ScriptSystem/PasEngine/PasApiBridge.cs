@@ -5084,10 +5084,18 @@ namespace GameSvr.PasEngine
                 // 结构化文件(节点 Maps/Name/Value)写入:0x61912E mov [eax+0x30], ebx,
                 // 是 +0x30 的唯一生产者。**未配置时 +0x30 仍是 ctor@0x6956EA 放的 TList
                 // 指针(非零且极大)→ 比较必然失败 → 0**,故"无配置"绝不能简化成
-                // required=0(那会反转成恒放行)。C# 缺 required 表 + '@PlayerActiveWithMap'
-                // 钩子,任何硬编码替身都是语义背离 ⇒ 保持拒绝。
+                // required=0(那会反转成恒放行)。C# 映射见 NativeMapActivePointLoader
+                // (sub_618FB8 @0x00618FB8 / consumer sub_619848 @0x00619848)。
                 case "canenteractivemap":
-                    return RejectUnsupportedNativeApi(out result);
+                    if (args.Count < 1)
+                    {
+                        result = PasValue.FromBool(false);
+                        return true;
+                    }
+                    result = PasValue.FromBool(
+                        NativeMapActivePointLoader.CanEnterActiveMap(
+                            CurrentPlayer, args[0].AsString()));
+                    return true;
 
                 // GetGildName sub_6F7ADC:sub_6ADAE4(player) 取行会对象,非空复制 [guild+0x10]
                 // (会名),否则空串。
