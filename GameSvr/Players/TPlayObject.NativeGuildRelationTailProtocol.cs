@@ -530,7 +530,7 @@ namespace GameSvr
                 (m_boInFreePKArea && castleManager?.AnyCastleUnderWar == true)
                 || currentCastle?.m_boUnderWar == true;
             SendNativeCorpsStatus(Grobal2.SM_GILD_EXIT,
-                service.ApplyGildExit(GetCachedNativeUserId(), InSafeZone(),
+                service.ApplyGildExit(GetCachedNativeUserId(), InNativeSafeZone12(),
                     inFightZone, castleWarBlocked));
         }
 

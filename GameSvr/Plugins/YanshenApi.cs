@@ -3135,7 +3135,8 @@ namespace GameSvr.Plugins
             var target = roleId <= 0 || (_player != null && roleId == _player.ObjectId)
                 ? _player
                 : FindObjectById(roleId);
-            return target != null && target.InSafeZone();
+            // Native helper @0x66BC9A call sub_76858C on the queried actor.
+            return target != null && target.InNativeSafeZone12();
         }
 
         public int SetItemBindByItemId(int itemId, int bind)

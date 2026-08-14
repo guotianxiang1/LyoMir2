@@ -287,12 +287,8 @@ namespace GameSvr
         {
             var queued = false; // 0x6F1039 xor ebx,ebx
 
-            // sub_76858C: boSAFE OR SafeZoneList polygon OR start-point within range 12.
-            // This port reuses InSafeZone() (sub_7684DC), a sibling that additionally
-            // checks RedHome and uses g_Config.nSafeZoneSize (default 10) instead of the
-            // hardcoded 12; that delta only affects whether the secondary hint shows —
-            // the SM_1257 reply below is sent either way.
-            var inSafeZone = (m_PEnvir != null && m_PEnvir.Flag.boSAFE) || InSafeZone();
+            // 0x6F103D call sub_76858C(self) — boSAFE OR polygon OR start-point abs<=12.
+            var inSafeZone = InNativeSafeZone12();
             if (!inSafeZone)
             {
                 // 0x6F109E: mov cx,0x38FF / mov edx,gbk / call [vmt+0xD4]

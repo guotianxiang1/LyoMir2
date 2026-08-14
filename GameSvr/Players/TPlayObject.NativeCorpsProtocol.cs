@@ -135,7 +135,8 @@ namespace GameSvr
             var playerId = GetCachedNativeUserId();
             var service = CorpsService;
             int result;
-            if (!InSafeZone())
+            // 0x6F57AE call sub_76858C(self) — not sub_7684DC.
+            if (!InNativeSafeZone12())
             {
                 result = 37;
             }

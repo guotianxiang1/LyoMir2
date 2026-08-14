@@ -1,4 +1,5 @@
 using GameSvr.CommandSystem;
+using System.Collections.Generic;
 using SystemModule;
 
 namespace GameSvr
@@ -82,6 +83,65 @@ namespace GameSvr
             var flag = environment.Flag;
             var enable = state == 1;
 
+            // CHECKQUEST — parser A @0x775161 writes result 0x64, never a field.
+            if (HUtil32.CompareLStr(attribute, "CHECKQUEST", "CHECKQUEST".Length))
+                return UnsupportedAttribute;
+            // PAODIAN / NORIDE / GuildPK — parser B only; GM A rejects @0x775xxx fall-through.
+            if (attribute.Equals("PAODIAN", StringComparison.OrdinalIgnoreCase)
+                || attribute.Equals("NORIDE", StringComparison.OrdinalIgnoreCase)
+                || HUtil32.CompareLStr(attribute, "GuildPK", "GuildPK".Length))
+                return UnsupportedAttribute;
+
+            // SAFE(+NOTHROUGH) -> [+0x5C] / [+0x84]; 0x774DC5 mov ecx,4 / 0x774DDF
+            if (HUtil32.CompareLStr(attribute, "SAFE", "SAFE".Length))
+            {
+                flag.boSAFE = enable;
+                if (enable)
+                {
+                    var safeParam = string.Empty;
+                    HUtil32.ArrestStringEx(attribute, '(', ')', ref safeParam);
+                    flag.boNOTHROUGH = safeParam.Equals("NOTHROUGH",
+                        StringComparison.Ordinal);
+                }
+                else
+                {
+                    flag.boNOTHROUGH = false;
+                }
+                return Success;
+            }
+            if (TryApplyEqualsBool(flag, attribute, enable, "DARK", v => flag.boDarkness = v)) // 0x774E50 [+0x5A]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "FIGHT", v => flag.boFightZone = v)) // 0x774E7F [+0x5D]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "FIGHT3", v => flag.boFight3Zone = v)) // 0x774EAE [+0x5E]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "FREEPK", v => flag.boFREEPK = v)) // 0x774EDD [+0x5F]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "DAY", v => flag.boDayLight = v)) // 0x774F0C [+0x5B]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "QUIZ", v => flag.boQUIZ = v)) // 0x774F3B [+0x60]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "DARE", v => flag.boDARE = v)) // 0x774F6A [+5]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "MONATTACK", v => flag.boMONATTACK = v)) // 0x774F99 [+0x90]
+                return Success;
+            if (TryApplySkyToken(flag, attribute, enable)) // OLDSKY/NEWSKY/MULSKY -> [+0x8C]
+                return Success;
+            // NORECONNECT prefix 8 -> [+0x64]+[+0x9C]; 0x775058
+            if (HUtil32.CompareLStr(attribute, "NORECONNECT", "NORECONNECT".Length))
+            {
+                flag.boNORECONNECT = enable;
+                if (!enable)
+                    flag.sNoReConnectMap = string.Empty;
+                else
+                {
+                    var map = string.Empty;
+                    HUtil32.ArrestStringEx(attribute, '(', ')', ref map);
+                    flag.sNoReConnectMap = map;
+                }
+                return Success;
+            }
+
             // DROPTOMAP(图名) -> [+0x65] + [+0x9C]
             //   0x7750D2 mov ecx,9 / 0x7750D7 mov edx,0x775CFC / 0x7750DE call 0x4C6E94
             //   on : 0x7750EC 置 1 -> 0x775104 call 0x4C6964 取参 -> 0x775112 存 [+0x9C]
@@ -152,10 +212,100 @@ namespace GameSvr
                 return Success;
             }
 
-            // 其余 token（SAFE / MINE / NOMAGIC / CHECKQUEST / … 约 40 个）仍未移植：
-            // parser A 对它们有臂并返 1，C# 这里落到 0x64。缩窄范围是刻意的，
-            // NativeTempSetMapParamPickupCheck 用 `SAFE` 锁住这条边界。
-            // pickup -> [+0x66]；与上面 8 个臂共用 0x4C6E94，是**前缀**比较不是全等：
+            // Prefix bool tokens (parser A 0x4C6E94)
+            if (TryApplyPrefixBool(flag, attribute, enable, "NEEDHOLE", v => flag.boNEEDHOLE = v)) // [+0x66]
+                return Success;
+            if (TryApplyPrefixBool(flag, attribute, enable, "NORECALL", v => flag.boNORECALL = v)) // [+0x67]
+                return Success;
+            if (TryApplyPrefixBool(flag, attribute, enable, "NORANDOMMOVE", v => flag.boNORANDOMMOVE = v)) // [+0x68]
+                return Success;
+            if (TryApplyPrefixBool(flag, attribute, enable, "NODRUG", v => flag.boNODRUG = v)) // [+0x69]
+                return Success;
+            if (TryApplyPrefixBool(flag, attribute, enable, "MINE", v => flag.boMINE = v)) // 0x775257 [+0x6A]
+                return Success;
+            if (TryApplyPrefixBool(flag, attribute, enable, "NOPOSITIONMOVE", v => flag.boNOPOSITIONMOVE = v)) // [+0x6B]
+                return Success;
+            if (TryApplyPrefixBool(flag, attribute, enable, "NOMAGIC", v => flag.boNOMAGIC = v)) // 0x7758A5 [+0x81]
+                return Success;
+
+            // Equals bool tokens
+            if (TryApplyEqualsBool(flag, attribute, enable, "BLACKROOM", v => flag.boBLACKROOM = v)) // [+0x7C]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "RELIVEBACK", v => flag.boRELIVEBACK = v)) // [+0x7D]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "AUTORELIVE", v => flag.boAUTORELIVE = v)) // [+0x7E]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "NOEQUIPRELIVE", v => flag.boNOEQUIPRELIVE = v)) // [+0x7F]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "TRIGGERBOMB", v => flag.boTRIGGERBOMB = v)) // 0x7758DF [+0x83]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "FOXMAP", v => flag.boFOXMAP = v)) // 0x775919 [+0x70]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "NoRelive", v => flag.boNoRelive = v)) // [+0x72]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "ONLYDROPSPEC", v => flag.boONLYDROPSPEC = v)) // [+0x76]
+                return Success;
+            if (TryApplyEqualsBool(flag, attribute, enable, "LIMITBAGITEMDROP", v => flag.boLIMITBAGITEMDROP = v)) // [+0x77]
+                return Success;
+
+            // NOC2C prefix 5 -> [+0x82]; 0x7756F7 dec edi / sete al
+            if (HUtil32.CompareLStr(attribute, "NOC2C", "NOC2C".Length))
+            {
+                flag.boNOC2C = enable;
+                return Success;
+            }
+
+            // LimitItemMove prefix 13 -> four bytes [+0x67/68/6B/6C]; 0x775A5C
+            if (HUtil32.CompareLStr(attribute, "LimitItemMove", "LimitItemMove".Length))
+            {
+                var on = enable;
+                flag.boLIMITITEMMOVE = on;
+                flag.boNORECALL = on;
+                flag.boNORANDOMMOVE = on;
+                flag.boNOPOSITIONMOVE = on;
+                return Success;
+            }
+
+            // Numeric / string-table tokens with parenthesized params
+            if (TryApplyNumericWordParam(flag, attribute, enable, "MapSign", "MapSign".Length,
+                    v => flag.MapSign = v)) // 0x775407 [+0x62]
+                return Success;
+            if (TryApplyNumericDwordParam(flag, attribute, enable, "MAPFIREWALLBURN",
+                    "MAPFIREWALLBURN".Length, v => flag.MapFireWallBurnMs = v * 1000)) // 0x7753A4 imul 0x3E8
+                return Success;
+            if (TryApplyFlyDropItem(flag, attribute, enable)) // 0x775452 [+0xB4]
+                return Success;
+            if (TryApplyRunFlag(flag, attribute, enable)) // 0x775xxx [+0xB0]
+                return Success;
+            if (TryApplyNumericWordParam(flag, attribute, enable, "UNIFIEDLEVEL",
+                    "UNIFIEDLEVEL".Length, v => flag.UnifiedLevel = v)) // [+0xBC]
+                return Success;
+            if (TryApplyNumericWordParam(flag, attribute, enable, "LIMITPLAYERLEVEL",
+                    "LIMITPLAYERLEVEL".Length, v => flag.LimitPlayerLevel = v)) // [+0xBE]
+                return Success;
+            if (TryApplyNumericWordParam(flag, attribute, enable, "LIMITHEROLEVEL",
+                    "LIMITHEROLEVEL".Length, v => flag.LimitHeroLevel = v)) // [+0xC0]
+                return Success;
+            if (enable && NativeMapBreakLevelFlagParser.TryApply(flag, attribute))
+                return Success;
+            if (!enable && HUtil32.CompareLStr(attribute, "BREAKLEVEL", "BREAKLEVEL".Length))
+            {
+                flag.BreakLevel = 0;
+                return Success;
+            }
+            if (!enable && HUtil32.CompareLStr(attribute, "CRAZYBREAKLEVEL", "CRAZYBREAKLEVEL".Length))
+            {
+                flag.CrazyBreakLevel = 0;
+                return Success;
+            }
+
+            // LimitSkill — parser A extracts skill id, no Envir field; GM A has no write arm.
+            if (HUtil32.CompareLStr(attribute, "LimitSkill", "LimitSkill".Length))
+                return UnsupportedAttribute;
+
+            // 其余未识别 token 落到 0x775BBE 写 0x64。缩窄边界由审计工具
+            // NativeTempSetMapParamPickupCheck 用 CHECKQUEST 锁住（SAFE 等已移植）。
+            // pickup -> [+0x6D]；与上面臂共用 0x4C6E94，是**前缀**比较不是全等：
             //   0x775A8E mov ecx,6 / 0x775A93 mov edx,0x775FCC ("pickup")
             //   0x775A9A call 0x4C6E94
             // sub_4C6E94(s1,s2,n) 只在 0x4C6ECC/0x4C6ED8 判两串 Length>=n，
@@ -195,6 +345,113 @@ namespace GameSvr
             }
 
             return true;
+        }
+
+        private static bool TryApplyEqualsBool(TMapFlag flag, string attribute, bool enable,
+            string token, Action<bool> write)
+        {
+            if (!attribute.Equals(token, StringComparison.OrdinalIgnoreCase))
+                return false;
+            write(enable);
+            return true;
+        }
+
+        private static bool TryApplyPrefixBool(TMapFlag flag, string attribute, bool enable,
+            string token, Action<bool> write)
+        {
+            if (!HUtil32.CompareLStr(attribute, token, token.Length))
+                return false;
+            write(enable);
+            return true;
+        }
+
+        private static bool TryApplySkyToken(TMapFlag flag, string attribute, bool enable)
+        {
+            if (attribute.Equals("OLDSKY", StringComparison.OrdinalIgnoreCase))
+            {
+                flag.SceneType = enable ? (byte)1 : (byte)0;
+                return true;
+            }
+            if (attribute.Equals("NEWSKY", StringComparison.OrdinalIgnoreCase))
+            {
+                flag.SceneType = enable ? (byte)2 : (byte)0;
+                return true;
+            }
+            if (attribute.Equals("MULSKY", StringComparison.OrdinalIgnoreCase))
+            {
+                flag.SceneType = enable ? (byte)3 : (byte)0;
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TryApplyNumericWordParam(TMapFlag flag, string attribute,
+            bool enable, string token, int prefixLen, Action<ushort> write)
+        {
+            if (!HUtil32.CompareLStr(attribute, token, prefixLen))
+                return false;
+            write(enable
+                ? unchecked((ushort)HUtil32.Str_ToInt(ExtractParenParam(attribute), 0))
+                : (ushort)0);
+            return true;
+        }
+
+        private static bool TryApplyNumericDwordParam(TMapFlag flag, string attribute,
+            bool enable, string token, int prefixLen, Action<int> write)
+        {
+            if (!HUtil32.CompareLStr(attribute, token, prefixLen))
+                return false;
+            write(enable ? HUtil32.Str_ToInt(ExtractParenParam(attribute), 0) : 0);
+            return true;
+        }
+
+        private static bool TryApplyFlyDropItem(TMapFlag flag, string attribute, bool enable)
+        {
+            if (!HUtil32.CompareLStr(attribute, "FLYDROPITEM", "FLYDROPITEM".Length))
+                return false;
+            if (!enable)
+            {
+                flag.FlyDropItemNames = null;
+                return true;
+            }
+            var value = ExtractParenParam(attribute);
+            if (value == "")
+            {
+                flag.FlyDropItemNames = null;
+                return true;
+            }
+            flag.FlyDropItemNames ??= new List<string>();
+            flag.FlyDropItemNames.Clear();
+            var remaining = value;
+            var piece = string.Empty;
+            do
+            {
+                remaining = HUtil32.GetValidStr3(remaining, ref piece, "/");
+                if (piece != "")
+                    flag.FlyDropItemNames.Add(piece);
+            } while (remaining.Length > 0);
+            return true;
+        }
+
+        private static bool TryApplyRunFlag(TMapFlag flag, string attribute, bool enable)
+        {
+            if (!HUtil32.CompareLStr(attribute, "RUNFLAG", "RUNFLAG".Length))
+                return false;
+            if (!enable)
+            {
+                flag.boRUNFLAG = false;
+                return true;
+            }
+            var value = ExtractParenParam(attribute);
+            flag.boRUNFLAG = HUtil32.Str_ToInt(value, 1) != 0;
+            return true;
+        }
+
+        private static string ExtractParenParam(string attribute)
+        {
+            var value = string.Empty;
+            HUtil32.ArrestStringEx(attribute, '(', ')', ref value);
+            return value;
         }
     }
 }

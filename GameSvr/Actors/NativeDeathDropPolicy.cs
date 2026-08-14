@@ -80,7 +80,7 @@ namespace GameSvr
         /// <summary>
         /// <c>sub_741368</c> @0x7413F6-0x741496 evaluated over the map flags and the
         /// safe-zone predicate. <paramref name="inSafeZone"/> is the caller's
-        /// <c>sub_76858C</c> result (C# <c>InSafeZone()</c>).
+        /// <c>sub_76858C</c> result (C# <c>InNativeSafeZone12()</c>).
         /// </summary>
         internal static Outcome Resolve(TMapFlag flag, bool inSafeZone)
         {
