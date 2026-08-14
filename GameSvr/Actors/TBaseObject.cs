@@ -1069,7 +1069,12 @@ namespace GameSvr
 
         public void HasLevelUp(int nLevel)
         {
-            m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
+            // EXP-06: Heroes have fixed MaxExp=100, never refresh
+            // Native: hero.MaxExp set at birth (0x728F66), never updated in level-up path
+            if (!(this is HeroObject))
+            {
+                m_Abil.MaxExp = GetLevelExp(m_Abil.Level);
+            }
             RecalcLevelAbilitys();
             RecalcAbilitys();
             SendMsg(this, Grobal2.RM_LEVELUP, 0, m_Abil.Exp, 0, 0, "");
