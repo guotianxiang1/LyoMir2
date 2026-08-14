@@ -1246,6 +1246,11 @@ namespace GameSvr
                     var nPrice = GetUserPrice(User, GetItemPrice(UserItem.wIndex));
                     var nStock = List14.Count;
                     short nSubMenu;
+                    // ✅ ECON-14 战神字节证据 @0x63EC2A三梯级:
+                    //   sub al,5 / jb       → <5 跳过MakeIndex比较
+                    //   sub al,0x1a / je    → ==31 (5+26) 跳过
+                    //   sub al,0xb / je     → ==42 (31+11) 跳过
+                    // 注意：原版**没有30**这个梯级，从5直接跳到31。
                     if (StdItem.StdMode <= 4 || StdItem.StdMode == 31 || StdItem.StdMode == 42)
                     {
                         nSubMenu = 0;
