@@ -547,9 +547,12 @@ namespace GameSvr
                     NativeCorpsService.UnknownError);
                 return;
             }
+            var result = service.ApplyGildVice(NativeGildViceOp.SelfStepDown,
+                GetCachedNativeUserId(), 0);
+            if (result == NativeGildViceTransaction.Success)
+                NotifyNativeGildViceStepDown(service);
             SendNativeCorpsStatus(Grobal2.SM_GILD_VICECAPTAIN_STEPDOWN,
-                service.ApplyGildVice(NativeGildViceOp.SelfStepDown,
-                    GetCachedNativeUserId(), 0));
+                result);
         }
 
         // 4588 president-dismiss-vice live routing. ADDITIVE + gated + fail-safe.
@@ -569,9 +572,13 @@ namespace GameSvr
             var body = GetNativeCorpsBody(processMessage);
             if (!NativeCorpsWireCodec.TryReadId(body, out var targetCorpsId))
                 return;
+            var result = service.ApplyGildVice(
+                NativeGildViceOp.PresidentDismiss,
+                GetCachedNativeUserId(), targetCorpsId);
+            if (result == NativeGildViceTransaction.Success)
+                NotifyNativeGildDismissVice(service, targetCorpsId);
             SendNativeCorpsStatus(Grobal2.SM_GILD_DISMISS_VICECAPTAIN,
-                service.ApplyGildVice(NativeGildViceOp.PresidentDismiss,
-                    GetCachedNativeUserId(), targetCorpsId));
+                result);
         }
 
         private void SendNativeGuildMemberList()

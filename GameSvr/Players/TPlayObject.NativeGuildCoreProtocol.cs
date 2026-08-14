@@ -242,8 +242,125 @@ namespace GameSvr
             var body = GetNativeCorpsBody(processMessage);
             if (!NativeCorpsWireCodec.TryReadId(body, out var targetCorpsId))
                 return;
-            SendNativeCorpsStatus(ident, service.ApplyGildLeadership(op,
-                GetCachedNativeUserId(), targetCorpsId));
+            var result = service.ApplyGildLeadership(op,
+                GetCachedNativeUserId(), targetCorpsId);
+            if (result == NativeGildLeadershipTransaction.Success)
+                NotifyNativeGildLeadershipChanged(service, op, targetCorpsId);
+            SendNativeCorpsStatus(ident, result);
+        }
+
+        // sub_706BB4 @0x706BBF mov dx,0x68 (SM_GUILDMESSAGE) + caller mov cx,0xFFD4
+        // @0x703BDA/0x704860/0x704DEA — fan-out sub_706D14 skips sender @0x706DF4.
+        private const int NativeGildBroadcastColor = 0xFFD4;
+
+        // GBK literals verified via sfind/dstr on flat_image.bin (ImageBase 0x400000).
+        private const string NativeGildAppointViceMiddle = "战队被任命为";   // 0x703C30
+        private const string NativeGildAppointViceSuffix = "行会副会长";     // 0x703C48
+        private const string NativeGildTransferMiddle = "行会的所有权被移交到了"; // 0x704904
+        private const string NativeGildTransferSuffix = "战队首领";           // 0x704924
+        private const string NativeGildViceStepDownSuffix = "战队卸任了副会长"; // 0x704E40
+        private const string NativeGildDismissViceSuffix = "战队被免除副会长职务"; // 0x704424
+
+        // 4568/4569 success tails: sub_7039F8 @0x703B4B/0x703B63 call sub_6F5B0C,
+        // @0x703B6A call sub_6AEE04; sub_7046A8 @0x70489C call sub_6AEE04 then
+        // sub_706BB4 @0x704866. Wired after ApplyGildLeadership Success (result 0).
+        private void NotifyNativeGildLeadershipChanged(
+            NativeCorpsService service, NativeGildLeadershipOp op,
+            long targetCorpsId)
+        {
+            if (!service.TryGetGildForPlayer(GetCachedNativeUserId(),
+                    out var gild))
+                return;
+            if (!service.TryGetCorps(targetCorpsId, out var targetCorps))
+                return;
+
+            switch (op)
+            {
+                case NativeGildLeadershipOp.AppointVice:
+                    // 0x703B4B: operator guild snapshot; 0x703B63/0x703B6A: target captain.
+                    SendNativePlayerGuild();
+                    TrySendNativePlayerGuildToCaptain(service, targetCorps);
+                    TrySendNativeSocialRoleRefreshToCaptain(targetCorps);
+                    BroadcastNativeGildMessage(service, gild,
+                        targetCorps.Name + NativeGildAppointViceMiddle
+                            + gild.Name + NativeGildAppointViceSuffix);
+                    break;
+                case NativeGildLeadershipOp.TransferPresident:
+                    // 0x70489C: new president captain social-role refresh (SM 4628).
+                    TrySendNativeSocialRoleRefreshToCaptain(targetCorps);
+                    TrySendNativePlayerGuildToCaptain(service, targetCorps);
+                    BroadcastNativeGildMessage(service, gild,
+                        gild.Name + NativeGildTransferMiddle
+                            + targetCorps.Name + NativeGildTransferSuffix);
+                    break;
+            }
+        }
+
+        // 4587 sub_704CC0 @0x704D9B call sub_6AEE04 + @0x704DF0 call sub_706BB4.
+        internal void NotifyNativeGildViceStepDown(NativeCorpsService service)
+        {
+            if (!service.TryGetPlayerCorps(GetCachedNativeUserId(),
+                    out var callerCorps))
+                return;
+            if (!service.TryGetGildForPlayer(GetCachedNativeUserId(),
+                    out var gild))
+                return;
+            SendNativeSocialRoleRefresh();
+            BroadcastNativeGildMessage(service, gild,
+                callerCorps.Name + NativeGildViceStepDownSuffix);
+        }
+
+        // 4588 sub_704228 @0x704342 call sub_6AEE04 + @0x7043CD call sub_706BB4.
+        internal void NotifyNativeGildDismissVice(NativeCorpsService service,
+            long targetCorpsId)
+        {
+            if (!service.TryGetGildForPlayer(GetCachedNativeUserId(),
+                    out var gild))
+                return;
+            if (!service.TryGetCorps(targetCorpsId, out var targetCorps))
+                return;
+            TrySendNativeSocialRoleRefreshToCaptain(targetCorps);
+            BroadcastNativeGildMessage(service, gild,
+                targetCorps.Name + NativeGildDismissViceSuffix);
+        }
+
+        private static void TrySendNativePlayerGuildToCaptain(
+            NativeCorpsService service, NativeCorpsSnapshot corps)
+        {
+            var captain = NativeAwardCodeManager.ResolveOnlinePlayer(
+                corps.OwnerId);
+            captain?.SendNativePlayerGuild();
+        }
+
+        private static void TrySendNativeSocialRoleRefreshToCaptain(
+            NativeCorpsSnapshot corps)
+        {
+            var captain = NativeAwardCodeManager.ResolveOnlinePlayer(
+                corps.OwnerId);
+            captain?.SendNativeSocialRoleRefresh();
+        }
+
+        private void BroadcastNativeGildMessage(NativeCorpsService service,
+            NativeGildSnapshot gild, string text)
+        {
+            var userEngine = M2Share.UserEngine;
+            if (userEngine == null) return;
+            foreach (var corpsId in gild.CorpsIds)
+            {
+                if (!service.TryGetCorps(corpsId, out var corps)) continue;
+                for (var i = 0; i < corps.Members.Count; i++)
+                {
+                    var member = corps.Members[i];
+                    if (member == null
+                        || string.IsNullOrEmpty(member.Name))
+                        continue;
+                    var player = userEngine.GetPlayObject(member.Name);
+                    if (player == null || player.m_boGhost) continue;
+                    if (ReferenceEquals(player, this)) continue;
+                    player.SendDefMessage(Grobal2.SM_GUILDMESSAGE, 0,
+                        NativeGildBroadcastColor, 0, 0, text);
+                }
+            }
         }
 
         // 4564 create-gild live routing. ADDITIVE + gated on SupportsGildWrites +
