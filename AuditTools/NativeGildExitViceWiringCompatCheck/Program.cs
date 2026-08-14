@@ -364,7 +364,12 @@ static (ClientPacket Header, byte[] Body) Drive(NativeCorpsService service,
     var player = new TPlayObject
     {
         m_boOffLineFlag = true,
-        m_sCharName = "会长"
+        m_sCharName = "会长",
+        m_PEnvir = new Envirnoment
+        {
+            sMapName = "测试地图",
+            Flag = new TMapFlag { boSAFE = true }
+        }
     };
     player.LoadNativeMailRecipientId(operatorId);
     player.SetNativeCorpsServiceForTests(service,
