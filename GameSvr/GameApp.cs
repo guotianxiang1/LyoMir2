@@ -217,6 +217,18 @@ namespace GameSvr
             {
                 M2Share.ErrorMessage("原生NormalPrize奖励池加载失败: " + configPrizeError);
             }
+            var nativeConfigDirectory = Path.Combine(nativeShareDirectory,
+                "Config");
+            if (NativeRewardConfigLoaders.TryLoadAll(nativeShareDirectory,
+                    nativeConfigDirectory, out var rewardConfigError))
+            {
+                M2Share.MainOutMessage("原生奖励/排行配置加载成功(风云榜/火龙珠/白金/新手礼包等)...");
+            }
+            else
+            {
+                M2Share.ErrorMessage("原生奖励/排行配置加载失败: " +
+                                     rewardConfigError);
+            }
             if (!Mall.MallManager.Instance.LoadMallItems())
             {
                 M2Share.MainOutMessage("元宝商城未启用：YBShopScript.pas 不存在、商品清单为空或脚本格式无效。");
