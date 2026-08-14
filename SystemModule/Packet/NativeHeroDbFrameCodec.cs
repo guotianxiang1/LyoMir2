@@ -61,19 +61,20 @@ namespace SystemModule
         //   记录基址就是 frame+0x54（编码器 0x6888B0 `lea edx,[ebx+0x54]`，
         //   ebx = frame 起点，0x54 == FrameHeaderSize 0x0C + MessageHeaderSize 0x48）。
         //
-        // 即原生是 **记录 +0x08 = HeroName、+0x18 = MasterName**，本文件两个常量正好
-        // 互换。旁证：同族的神兽存档 NativeDominatorPetProtocol.DataMasterNameOffset
-        // 也是 0x18（记录体），而 0x25 是**消息头**的主人名槽（0x160 请求 sub_6CC918
-        // @0x6CC97A 把 [player+0x106] 写到 msg+0x25，这一处 C# 是对的）。
-        //
-        // 为什么现在不翻：C# 的读写两侧共用这两个常量，所以 C#↔C# 自洽；一旦单独翻
-        // 转，**已经用错位布局写进 MySQL 的英雄 blob 会被再翻一次**，比不改更糟
-        // （REPLICATION_RULES §1.4 里 type0/type1 V/S 银行接反那次的同类事故）。
-        // 翻转必须与一次性数据迁移（按写入时间/版本标记区分两种布局）一起上线。
-        // 现状的可观测后果：GameSvr 换回原版 Delphi 后，英雄会以主人的名字复活，
-        // 而 hero+0x690（主人名，存档时写进 msg+0x25）会变成英雄名 -> 存档找不到主人。
-        public const int MasterNameOffset = 0x0008;
-        public const int HeroNameOffset = 0x0018;
+        // 原生（M2 字节亲验 sub_689034 / sub_6888FC）：记录 +0x08 = HeroName、+0x18 = MasterName。
+        // 存量 C# 库若 NameLayout=0/1 仍按错位布局入库 —— 读路径须经
+        // <see cref="ApplyStoredNameLayout"/> / <see cref="RequiresLegacyNameSwap"/> 门控，
+        // 禁止无标记全表对调（见 docs/dbsvr_hero_name_layout_migration_20260814.sql）。
+        public const int HeroNameOffset = 0x0008;
+        public const int MasterNameOffset = 0x0018;
+        public const int NameSlotByteLength = 16;
+
+        /// <summary>hero_data.NameLayout：未知/待人工复核（禁止自动 swap）。</summary>
+        public const byte NameLayoutUnknown = 0;
+        /// <summary>错位布局（C# 旧库）；迁移脚本 swap 后升为 2。</summary>
+        public const byte NameLayoutLegacySwapped = 1;
+        /// <summary>原生正确布局；Save 成功后应写入此值。</summary>
+        public const byte NameLayoutNativeCorrect = 2;
         public const int RaceOffset = 0x0028;
         public const int SexOffset = 0x0029;
         public const int JobOffset = 0x002A;
@@ -1404,6 +1405,43 @@ namespace SystemModule
 
         internal static string ReadRecordString(byte[] data, int offset, int maximumLength)
             => ReadShortString(data, offset, maximumLength);
+
+        public static bool RequiresLegacyNameSwap(byte nameLayout) =>
+            nameLayout == NameLayoutUnknown || nameLayout == NameLayoutLegacySwapped;
+
+        public static bool IsNameLayoutLoadRejected(byte nameLayout) =>
+            nameLayout == NameLayoutLegacySwapped;
+
+        /// <summary>
+        /// 对单条 0x49D4 记录就地交换 +0x08/+0x18 两个 ShortString 槽（各 16 字节）。
+        /// </summary>
+        public static void SwapRecordNameSlots(Span<byte> record)
+        {
+            if (record.Length < HeroRecordSize)
+                throw new ArgumentException(
+                    $"native hero record length must be {HeroRecordSize}",
+                    nameof(record));
+            var temp = stackalloc byte[NameSlotByteLength];
+            record.Slice(HeroNameOffset, NameSlotByteLength).CopyTo(temp);
+            record.Slice(MasterNameOffset, NameSlotByteLength).CopyTo(
+                record.Slice(HeroNameOffset, NameSlotByteLength));
+            temp.CopyTo(record.Slice(MasterNameOffset, NameSlotByteLength));
+        }
+
+        /// <summary>
+        /// 三槽包按 stride 0x49D4 独立处理；layout=2 无操作，layout=1 由调用方拒绝加载。
+        /// </summary>
+        public static void ApplyStoredNameLayout(Span<byte> dataBlob, byte nameLayout)
+        {
+            if (!RequiresLegacyNameSwap(nameLayout) || dataBlob.IsEmpty)
+                return;
+            if (dataBlob.Length != HeroRecordSize
+                && dataBlob.Length != HeroRecordSize * 3)
+                return;
+            for (var offset = 0; offset < dataBlob.Length;
+                 offset += HeroRecordSize)
+                SwapRecordNameSlots(dataBlob.Slice(offset, HeroRecordSize));
+        }
     }
 
     public sealed class NativeHeroRecord

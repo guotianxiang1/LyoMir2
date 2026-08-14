@@ -194,6 +194,20 @@ namespace DBSvr.Core
             if (!ProbeColumn("Show Fields From mir3_backup.hero_data like \"dynData\";"))
                 // 0x5AB708 len=51 rc=-1
                 Exec("Alter table mir3_backup.hero_data Add dynData Blob;");
+            MigrateHeroDataNameLayout();
+        }
+
+        /// <summary>
+        /// C#-ONLY 世代门：原生 hero_data 无 layout 列；DDL 与一次性迁移见
+        /// docs/dbsvr_hero_name_layout_migration_20260814.sql（运维执行，启动不自动 swap）。
+        /// </summary>
+        private void MigrateHeroDataNameLayout()
+        {
+            if (!ProbeColumn("Show Fields From hero_data like \"NameLayout\";"))
+                Exec("ALTER TABLE hero_data ADD COLUMN NameLayout TINYINT NOT NULL DEFAULT 0 "
+                     + "COMMENT '0=unknown 1=csharp-swapped 2=native-correct';");
+            if (!ProbeColumn("Show Fields From mir3_backup.hero_data like \"NameLayout\";"))
+                Exec("ALTER TABLE mir3_backup.hero_data ADD COLUMN NameLayout TINYINT NOT NULL DEFAULT 0;");
         }
 
         // ── user_index: AdminLevel ────────────────────────────────────────

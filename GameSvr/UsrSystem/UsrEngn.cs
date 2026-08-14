@@ -3928,6 +3928,11 @@ namespace GameSvr
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 人物原生记录过短，PK点/幸运/攻击模式/平台等级/加油点/天地合一无法回写: {PlayObject.m_sCharName}");
             }
+            if (!PlayObject.PersistNativeAccountSuffixTypeFlags())
+            {
+                M2Share.ErrorMessage(
+                    $"[SaveHumanRcd] 人物原生记录过短，账号类型旗(rec+0xB76/0xB77)无法回写: {PlayObject.m_sCharName}");
+            }
             if (!PlayObject.PersistNativeFixedCoord())
             {
                 M2Share.ErrorMessage(

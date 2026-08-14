@@ -51,12 +51,15 @@ namespace DBSvr
             // 原版对大 blob 表刻意加的修饰符 —— MyISAM 下它让读排到写队列之前。
             // 之前这里丢了该修饰符，行为上会被并发写饿死，与原版不等价。
             using var cmd = new MySqlCommand(
-                "SELECT HIGH_PRIORITY Data, dynData FROM mir3.hero_data WHERE Idx=@i", conn);
+                "SELECT HIGH_PRIORITY Data, dynData, NameLayout FROM mir3.hero_data WHERE Idx=@i", conn);
             cmd.Parameters.AddWithValue("@i", idx);
             using var dr = cmd.ExecuteReader();
             if (!dr.Read()) return (null, null);
             var storedData = dr["Data"] as byte[] ?? Array.Empty<byte>();
             var storedDynamicData = dr["dynData"] as byte[] ?? Array.Empty<byte>();
+            var nameLayout = dr.IsDBNull(dr.GetOrdinal("NameLayout"))
+                ? NativeHeroDbFrameCodec.NameLayoutUnknown
+                : dr.GetByte(dr.GetOrdinal("NameLayout"));
 
             if (storedData.Length == 0 && storedDynamicData.Length == 0)
                 return (Array.Empty<byte>(), Array.Empty<byte>());
@@ -72,6 +75,13 @@ namespace DBSvr
                 DBShare.MainOutMessage($"[HeroLoadBlob] REJECT idx={idx} Data: {error}");
                 return (null, null);
             }
+            if (NativeHeroDbFrameCodec.IsNameLayoutLoadRejected(nameLayout))
+            {
+                DBShare.MainOutMessage(
+                    $"[HeroLoadBlob] REJECT idx={idx}: NameLayout=1 awaits migration");
+                return (null, null);
+            }
+            NativeHeroDbFrameCodec.ApplyStoredNameLayout(data, nameLayout);
             if (!NativeHeroBlobCodec.TryDecodeDynamicBlob(storedDynamicData,
                     out var dynamicData, out error))
             {
@@ -140,9 +150,11 @@ namespace DBSvr
                         throw new InvalidOperationException("existing dynData is invalid: " + error);
 
                     using var update = new MySqlCommand(
-                        "UPDATE mir3.hero_data SET Data=@d, dynData=@dd WHERE Idx=@i", conn, tx);
+                        "UPDATE mir3.hero_data SET Data=@d, dynData=@dd, NameLayout=@nl WHERE Idx=@i", conn, tx);
                     update.Parameters.Add("@d", MySqlDbType.Blob).Value = storedData;
                     update.Parameters.Add("@dd", MySqlDbType.Blob).Value = storedDynamicData;
+                    update.Parameters.AddWithValue("@nl",
+                        NativeHeroDbFrameCodec.NameLayoutNativeCorrect);
                     update.Parameters.AddWithValue("@i", idx);
                     update.ExecuteNonQuery();
                     tx.Commit();
@@ -319,7 +331,7 @@ namespace DBSvr
                     using var update = new MySqlCommand(
                         @"UPDATE mir3.hero_data AS d
                           JOIN mir3.hero_index AS h ON h.idx=d.Idx
-                          SET d.Data=@d, d.dynData=@dd,
+                          SET d.Data=@d, d.dynData=@dd, d.NameLayout=@nl,
                               h.lvChangeTime=IF(h.Level<>@level
                                   OR h.ForceLv<>@forceLv OR h.sfLevel<>@sfLevel,
                                   NOW(),h.lvChangeTime),
@@ -337,6 +349,8 @@ namespace DBSvr
                           WHERE d.Idx=@i", conn, tx);
                     update.Parameters.Add("@d", MySqlDbType.Blob).Value = storedData;
                     update.Parameters.Add("@dd", MySqlDbType.Blob).Value = storedDynamicData;
+                    update.Parameters.AddWithValue("@nl",
+                        NativeHeroDbFrameCodec.NameLayoutNativeCorrect);
                     update.Parameters.AddWithValue("@level", heroRecord.Level);
                     update.Parameters.AddWithValue("@exp", heroRecord.IndexExp);
                     update.Parameters.AddWithValue("@job", heroRecord.Job);
