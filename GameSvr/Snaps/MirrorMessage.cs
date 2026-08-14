@@ -54,7 +54,7 @@ namespace GameSvr
         /// 落地**的 ident。native 侧读 [ebp+0x10] 的 stub 共 9 个 (202 0x657208 /
         /// 203 0x65721C / 207 0x657230 / 209 0x65723D / 214 0x657287 /
         /// 219 0x6572C4 / 224 0x65730A / 228 0x65733E / 249 0x657385), 但其余 7 个
-        /// 要么仍 BLOCKED (202/207/214/228), 要么本仓另有在用的三字段发送方
+        /// 要么仍 BLOCKED (202/207/214), 要么本仓另有在用的三字段发送方
         /// (203 私聊 / 207 信用卡开关 / 249 昵称灵符), 给它们加字段会改变现有
         /// 行为, 故不纳入 —— 见 docs/sgrp_transport_third_param_20260814.md。
         /// </summary>
@@ -68,6 +68,8 @@ namespace GameSvr
                 case Grobal2.ISM_MENTOR_REPUTATION:
                 // 214 stub 0x657287 `mov ecx,[ebp+0x10]` -> sub_6579B0 -> 策略档位
                 case Grobal2.ISM_GLOBAL_MODE_SET:
+                // 228 stub 0x65733E `mov ecx,[ebp+0x10]` -> sub_657BCC -> 经验奖励
+                case Grobal2.ISM_MENTOR_RECHARGE_REWARD:
                     return true;
                 default:
                     return false;
@@ -181,18 +183,14 @@ namespace GameSvr
                     // fail-closed: (1) 新掩码来自帧第三 dword (native arg3), C# 文本协议无
                     // 载体; (2) 全局 [0x7D7038] 位图对象与逐位回调 sub_658110/0x794F30 在
                     // C# 无对应模型 (缺全局状态); (3) 该 32-bit 掩码非文本可表示。故不移植
-                    // native 位图 swap。 保留 C# 现有语义 (数字 body -> 信用卡 switchWord,
-                    // live 发送方 CreditCardCommand.cs:31 SendServerGroupMsg(ISM_SERVERSWITCH
-                    // =207); 非数字 -> 重载行会), 二者均有 live 发送方, 移除会破坏在用功能。
+                    // native 位图 swap。保留 C# live 发送方的数字 body -> 信用卡 switchWord
+                    // (CreditCardCommand.cs:31); 已删除非原生 else 重载行会分支 (native 207
+                    // sub_658114 只做位图 swap, 不解析行会名 body)。
                     if (uint.TryParse(Body, NumberStyles.Integer,
                         CultureInfo.InvariantCulture, out var switchWord))
                     {
                         (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
                             .TryApplySwitchWord(switchWord, true);
-                    }
-                    else
-                    {
-                        MsgGetReloadGuild(serverNum, Body);
                     }
                     break;
                 case Grobal2.ISM_GUILDMSG:
@@ -220,7 +218,9 @@ namespace GameSvr
                     MsgGetChangeCastleOwner(serverNum, Body);
                     break;
                 case Grobal2.ISM_RELOADCASTLEINFO:
-                    MsgGetReloadCastleAttackers(serverNum);
+                    // 战神 212 stub 0x65726D -> sub_6577B0: body 非空 ->
+                    // [[0x7D6214]] sub_65B6E0(行会名), 非全量 Initialize。
+                    MsgGetReloadCastleAttackers(Body);
                     break;
                 case Grobal2.ISM_RELOADADMIN:
                     MsgGetReloadAdmin();
@@ -311,10 +311,13 @@ namespace GameSvr
                     MsgGetUserMgr(serverNum, Body, Ident);
                     break;
                 case Grobal2.ISM_PLAYER_NOTICE:
-                    MsgGetReloadMakeItemList();
+                    // 战神 227 stub 0x65732E -> sub_657670: 收信人/正文, SysMsg Blue。
+                    MsgGetPlayerNotice(Body);
                     break;
                 case Grobal2.ISM_MENTOR_RECHARGE_REWARD:
-                    MsgGetGuildMemberRecall(serverNum, Body);
+                    // 战神 228 stub 0x65733E -> sub_657BCC: 师父名/徒弟名, nParam>=1000,
+                    // sub_6C03F8 加经验 + SysMsg。
+                    MsgGetMentorRechargeReward(Body, nParam);
                     break;
                 case Grobal2.ISM_RELOADGUILDAGIT:
                     MsgGetReloadGuildAgit(serverNum, Body);
@@ -641,9 +644,9 @@ namespace GameSvr
             }
         }
 
-        private void MsgGetReloadCastleAttackers(int sNum)
+        private void MsgGetReloadCastleAttackers(string Body)
         {
-            M2Share.CastleManager.Initialize();
+            M2Share.CastleManager.NativeMirrorReloadCastleAttacker(Body);
         }
 
         private void MsgGetReloadAdmin()
@@ -756,6 +759,28 @@ namespace GameSvr
             var inviterName = HUtil32.GetValidStr3(Body, ref recipientName,
                 HUtil32.Backslash);
             TPlayObject.NativeMirrorSectInvite(recipientName, inviterName);
+        }
+
+        private void MsgGetPlayerNotice(string Body)
+        {
+            if (string.IsNullOrEmpty(Body))
+            {
+                return;
+            }
+
+            var recipientName = string.Empty;
+            var text = HUtil32.GetValidStr3(Body, ref recipientName,
+                HUtil32.Backslash);
+            TPlayObject.NativeMirrorPlayerNotice(recipientName, text);
+        }
+
+        private void MsgGetMentorRechargeReward(string Body, int nParam)
+        {
+            var masterName = string.Empty;
+            var studentName = HUtil32.GetValidStr3(Body ?? string.Empty,
+                ref masterName, HUtil32.Backslash);
+            TPlayObject.NativeMirrorMentorRechargeReward(masterName, studentName,
+                nParam);
         }
 
         private void MsgGetReloadMakeItemList()
