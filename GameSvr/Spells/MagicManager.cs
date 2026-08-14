@@ -322,11 +322,17 @@ namespace GameSvr
                                 {
                                     case 1:
                                         nPower = (ushort)(DoSpell_GetPower13(UserMagic, 40) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
-                                        TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
+                                        // STATE-19: Native @0x6ED9EB directly calls VMT+0xC8 (sub_76B3C8 = MakePosion wrapper),
+                                        // not through RM_POISON (8037/0x1F65) which doesn't exist in native binary.
+                                        TargeTBaseObject.MakePosion(Grobal2.POISON_DECHEALTH,
+                                            HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
+                                            (int)nPower);
                                         break;
                                     case 2:
                                         nPower = (ushort)(DoSpell_GetPower13(UserMagic, 30) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
-                                        TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
+                                        TargeTBaseObject.MakePosion(Grobal2.POISON_DAMAGEARMOR,
+                                            HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
+                                            (int)nPower);
                                         break;
                                 }
                                 if (TargeTBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT || TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
@@ -746,7 +752,10 @@ namespace GameSvr
                         if (M2Share.RandomNumber.Random(TargeTBaseObject.m_nAntiMagic + 5) <= 5)
                         {
                             nPower = (ushort)(DoSpell_GetPower13(UserMagic, 25) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);
-                            TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel * 2 + 10), "", 1000);
+                            // STATE-19: Direct VMT+0xC8 call (MakePosion), not RM_POISON message.
+                            TargeTBaseObject.MakePosion(Grobal2.POISON_DAMAGEARMOR,
+                                HUtil32.Round(UserMagic.btLevel * 2 + 10),
+                                (int)nPower);
                             if (TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
                             {
                                 boTrain = true;
@@ -1220,11 +1229,16 @@ namespace GameSvr
                                 {
                                     case 1:
                                         nPower = Magic.GetPower13(40, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2;// 中毒类型 - 绿毒
-                                        BaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
+                                        // STATE-19: Direct VMT+0xC8 call (MakePosion), not RM_POISON message.
+                                        BaseObject.MakePosion(Grobal2.POISON_DECHEALTH,
+                                            HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
+                                            nPower);
                                         break;
                                     case 2:
                                         nPower = Magic.GetPower13(30, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2;// 中毒类型 - 红毒
-                                        BaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
+                                        BaseObject.MakePosion(Grobal2.POISON_DAMAGEARMOR,
+                                            HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
+                                            nPower);
                                         break;
                                 }
                                 if (BaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT || BaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
@@ -1628,8 +1642,10 @@ namespace GameSvr
                                     BaseObject.SendDelayMsg(BaseObject, Grobal2.RM_DELAYMAGIC, (short)nPower, HUtil32.MakeLong(nTargetX, nTargetY), 2, TargeTBaseObject.ObjectId, "", 600);
                                     if (!TargeTBaseObject.m_boUnParalysis)
                                     {
-                                        
-                                        TargeTBaseObject.SendDelayMsg(BaseObject, Grobal2.RM_POISON, Grobal2.POISON_STONE, nPower / M2Share.g_Config.nMabMabeHitMabeTimeRate + M2Share.RandomNumber.Random(nLevel), BaseObject.ObjectId, nLevel, "", 650);
+                                        // STATE-19: Direct VMT+0xC8 call (MakePosion), not RM_POISON message.
+                                        TargeTBaseObject.MakePosion(Grobal2.POISON_STONE,
+                                            nPower / M2Share.g_Config.nMabMabeHitMabeTimeRate + M2Share.RandomNumber.Random(nLevel),
+                                            nLevel);
                                     }
                                     result = true;
                                 }
