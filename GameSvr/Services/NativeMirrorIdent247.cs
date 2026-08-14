@@ -13,6 +13,11 @@ namespace GameSvr
         internal const int NativeBodyLenGate = 0x0D;
         internal const int NativeIndexMin = 1;
         internal const int NativeIndexMax = 0x32;
+        internal const uint NativeHandlerEa = 0x0065805C;
+        internal const uint NativeWriterEa = 0x00699310;
+
+        internal static INativeMirParamsStore Store { get; set; }
+            = new NativeMirParamsMySqlStore();
 
         internal static void ApplyFromTextBody(string body)
         {
@@ -51,8 +56,13 @@ namespace GameSvr
 
             M2Share.g_Config.GlobalVal[flat] = value;
 
-            // BLOCKED: native sub_699310 经 [[0x7D5C40]]->sub_724E48 写 MySQL MirParams
-            // 表；本仓 GlobalVal 仅为内存镜像，无 724E48 等价落盘（SGRP-30）。
+            // sub_699310 @0x699310 → sub_724E48 @0x724E48 (cl=1) 写 gamedata.MirParams。
+            if (Store != null
+                && !Store.TryWriteGlobalValue(paramNo, index, value, out var sqlError)
+                && !string.IsNullOrEmpty(sqlError))
+            {
+                M2Share.ErrorMessage("[MirParams] ident247 persist: " + sqlError);
+            }
         }
     }
 }
