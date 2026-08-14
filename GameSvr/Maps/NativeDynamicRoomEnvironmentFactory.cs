@@ -49,6 +49,9 @@ namespace GameSvr
             }
 
             created.ConfigureDormantDynamicRoom(definition.RoomName);
+            // MOVE-17 @0x6BBFDC: dynamic rooms must mirror MapInfo's RUNFLAG→+0xB0
+            // write (Maps.cs:421). Without this, TMapFlag.boRUNFLAG default leaked true.
+            created.NativeCanRunWhileOverweight = created.Flag.boRUNFLAG;
             environment = created;
             errors = Array.Empty<string>();
             return true;

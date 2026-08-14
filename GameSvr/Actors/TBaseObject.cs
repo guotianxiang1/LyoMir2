@@ -1336,35 +1336,25 @@ namespace GameSvr
                     // 变了的这条臂上清。sub_76B4D0 只是 sub_7731C0 的薄壳：按
                     // [node+1] 匹配定时状态链表节点、摘链、经 vmt+0x5C 通知丢失，
                     // 即 C# 的 RemoveTimedAbilityInternal。
-                    // 相对广播的次序：人形在 0x2712 广播(0x741315)之前，怪物在广播
-                    // (0x71F217)之后；两者都在落格处理 sub_778EC0 之前。RM_WALK 载荷
-                    // 只有 Dir/X/Y，不含状态位，故这一处差别对怪物腿无可观测后果。
+                    // 相对清 0x17 的次序：人形在广播(0x741315)之前，怪物在广播
+                    // (0x71F217)之后；四 mover 均在 sub_778EC0 之前广播。RM_WALK 载荷
+                    // 只有 Dir/X/Y，不含状态位，故清 0x17 与广播的相对次序无可观测差。
                     RemoveNativeMovementTimedState(23);
-                    if (Walk(Grobal2.RM_WALK))
+                    // MOVE-39 — Walk() now matches sub_741224: 0x741315 then 0x741323;
+                    // native discards 778EC0's return, so never roll back here.
+                    Walk(Grobal2.RM_WALK);
+                    if (m_boTransparent && m_boHideMode)
                     {
-                        if (m_boTransparent && m_boHideMode)
-                        {
-                            m_wStatusTimeArr[Grobal2.STATE_TRANSPARENT] = 1;
-                        }
-                        if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                        {
-                            m_dwSearchTick = 0;
-                        }
-                        // MOVE-39 — 人形 mover 尾部的双人坐骑同伴跟随（0x741328..0x741350）。
-                        // 位置对齐原生：在广播 RM_WALK(0x74130D) 与落格处理 sub_778EC0(0x74131B)
-                        // 之后。Walk() 把这两步合并，返回 false 时本端要回滚，故只在成功臂调用。
-                        OnNativeHumanWalkMoverCommitted();
-                        result = true;
+                        m_wStatusTimeArr[Grobal2.STATE_TRANSPARENT] = 1;
                     }
-                    else
+                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                     {
-                        m_PEnvir.DeleteFromMap(m_nCurrX, m_nCurrY,
-                            CellType.OS_MOVINGOBJECT, this, false,
-                            suppressMapDropConsumer: true);
-                        m_nCurrX = nOX;
-                        m_nCurrY = nOY;
-                        m_PEnvir.AddToMap(m_nCurrX, m_nCurrY, CellType.OS_MOVINGOBJECT, this);
+                        m_dwSearchTick = 0;
                     }
+                    // MOVE-39 — 人形 mover 尾部同伴跟随 0x741328..0x741350，在广播与
+                    // sub_778EC0 之后；sub_741224 不因 778EC0 失败跳过此步。
+                    OnNativeHumanWalkMoverCommitted();
+                    result = true;
                 }
             }
             catch (Exception ex)
@@ -4712,85 +4702,28 @@ namespace GameSvr
 
         protected bool Walk(int nIdent)
         {
-            CellObject OSObject;
-            TGateObj GateObj = null;
             const string sExceptionMsg = "[Exception] TBaseObject::Walk {0} {1} {2}:{3}";
-            bool result = true;
-            var suppressMovementBroadcast = false;
             if (m_PEnvir == null)
             {
                 M2Share.ErrorMessage("Walk nil PEnvir");
-                return result;
+                return true;
             }
             try
             {
-                bool mapCell = false;
-                var MapCellInfo = m_PEnvir.GetMapCellInfo(m_nCurrX, m_nCurrY, ref mapCell);
-                if (mapCell && (MapCellInfo.ObjList != null))
-                {
-                    for (int i = 0; i < MapCellInfo.Count; i++)
-                    {
-                        OSObject = MapCellInfo.ObjList[i];
-                        switch (OSObject.CellType)
-                        {
-                            case CellType.OS_GATEOBJECT:
-                                GateObj = (TGateObj)OSObject.CellObj;
-                                if ((GateObj != null))
-                                {
-                                    if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                                    {
-                                        if (m_PEnvir.ArroundDoorOpened(m_nCurrX, m_nCurrY))
-                                        {
-                                            if ((!GateObj.DEnvir.Flag.boNEEDHOLE) || (M2Share.EventManager.GetEvent(m_PEnvir, m_nCurrX, m_nCurrY, Grobal2.ET_DIGOUTZOMBI) != null))
-                                            {
-                                                if (M2Share.nServerIndex == GateObj.DEnvir.nServerIndex)
-                                                {
-                                                    if (!EnterAnotherMap(GateObj.DEnvir, GateObj.nDMapX, GateObj.nDMapY))
-                                                    {
-                                                        result = false;
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    suppressMovementBroadcast = TryBeginCrossServerTransfer(
-                                                        GateObj.DEnvir, GateObj.nDMapX, GateObj.nDMapY);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        result = false;
-                                    }
-                                }
-                                break;
-                            case CellType.OS_EVENTOBJECT:
-                                {
-                                    ((Event)OSObject.CellObj).ApplyTo(this);
-                                    break;
-                                }
-                            case CellType.OS_MAPEVENT:
-                                break;
-                            case CellType.OS_DOOR:
-                                break;
-                            case CellType.OS_ROON:
-                                break;
-                        }
-                        if (suppressMovementBroadcast)
-                            break;
-                    }
-                }
-                if (result && !suppressMovementBroadcast)
-                {
-                    SendRefMsg(nIdent, m_btDirection, m_nCurrX, m_nCurrY, 0, "");
-                }
+                // MOVE-39 — four native movers broadcast before sub_778EC0 and ignore
+                // its return: walk sub_741224 0x741315→0x741323; run2 sub_76756C
+                // 0x767645→0x767656; run3 sub_767694 0x76776F→0x767780; monster walk
+                // sub_71F0F4 0x71F217→0x71F231. CompleteNativeRun3Move already uses
+                // this shape; gate/event handling lives in ProcessNativeMoveActionWithoutBroadcast.
+                SendRefMsg(nIdent, m_btDirection, m_nCurrX, m_nCurrY, 0, "");
+                return ProcessNativeMoveActionWithoutBroadcast();
             }
             catch (Exception e)
             {
                 M2Share.ErrorMessage(format(sExceptionMsg, new object[] { m_sCharName, m_sMapName, m_nCurrX, m_nCurrY }));
                 M2Share.ErrorMessage(e.Message);
             }
-            return result;
+            return true;
         }
 
         

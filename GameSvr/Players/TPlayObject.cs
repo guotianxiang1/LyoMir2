@@ -971,25 +971,6 @@ namespace GameSvr
             return m_PEnvir.MoveToMovingObjectForRun(m_nCurrX, m_nCurrY, this, nX, nY, ignoreObjects) > 0;
         }
 
-        // Walk() returning false means EnterAnotherMap failed after the run
-        // mover already committed the actor into the new cell. Native
-        // sub_741224 / sub_76756C / sub_767694 all ignore 0x778EC0's return
-        // (next insn is `mov dl,0x33`) and never roll back; C# still does.
-        // The rollback must name the COMMITTED cell as the source: MOVE-35(b)
-        // only succeeds from 0x779A95 after unlinking the actor from nCX/nCY,
-        // so passing the already-restored old coords looks up an empty list
-        // and returns 0, leaving the actor registered only at the new cell
-        // while CurrXY says the old one.
-        protected void RollbackCommittedRunMove(int oldX, int oldY)
-        {
-            var committedX = m_nCurrX;
-            var committedY = m_nCurrY;
-            m_nCurrX = (short)oldX;
-            m_nCurrY = (short)oldY;
-            m_PEnvir.MoveToMovingObject(committedX, committedY, this,
-                m_nCurrX, m_nCurrY, true);
-        }
-
         private bool RunTo(byte btDir, bool boFlag, int nDestX, int nDestY)
         {
             const string sExceptionMsg = "[Exception] TBaseObject::RunTo";
@@ -1069,24 +1050,12 @@ namespace GameSvr
                     //   0x767634  B2 17           mov  dl,0x17
                     //   0x767638  E8 93 3E 00 00  call 0x76B4D0
                     RemoveNativeMovementTimedState(23);
-                    if (Walk(Grobal2.RM_RUN))
-                    {
-                        m_dwSearchTick = 0;
-                        // MOVE-41 — sub_76756C 尾 0x76765B..0x767683 与 4108 mover
-                        // sub_767694 尾 0x767785..0x7677B4 同构：同样 InBodyState(0x33)
-                        // (mov dl,0x33 / call 0x772960) && [ebx+0x3C0]!=0 之后
-                        // call sub_6BBEE4(同伴, 新X, 新Y, 自己朝向)。唯一差别是 3013 传
-                        // 刚算出的局部量(edx=edi / ecx=[ebp-8])、4108 回读刚提交的
-                        // [ebx+0x12C]/[ebx+0x130]，同值。故复用同一移植体。
-                        // 位置对齐原生：在广播(0x76763F)与落格 sub_778EC0(0x767656)
-                        // 之后；Walk() 合并了这两步，返回 false 时本端要回滚，只挂成功臂。
-                        SyncNativeHorsePartnerAfterRun3();
-                        result = true;
-                    }
-                    else
-                    {
-                        RollbackCommittedRunMove(nOldX, nOldY);
-                    }
+                    // MOVE-39 — sub_76756C 0x767645→0x767656; native ignores 778EC0 return.
+                    Walk(Grobal2.RM_RUN);
+                    m_dwSearchTick = 0;
+                    // MOVE-41 — sub_76756C 尾 0x76765B..0x767683：广播与 sub_778EC0 之后。
+                    SyncNativeHorsePartnerAfterRun3();
+                    result = true;
                 }
             }
             catch (Exception ex)
@@ -1175,15 +1144,10 @@ namespace GameSvr
                     //   0x76775E  B2 17           mov  dl,0x17
                     //   0x767762  E8 69 3D 00 00  call 0x76B4D0
                     RemoveNativeMovementTimedState(23);
-                    if (Walk(Grobal2.RM_RUN))
-                    {
-                        m_dwSearchTick = 0;
-                        result = true;
-                    }
-                    else
-                    {
-                        RollbackCommittedRunMove(n10, n14);
-                    }
+                    // MOVE-39 — sub_767694 0x76776F→0x767780; native ignores 778EC0 return.
+                    Walk(Grobal2.RM_RUN);
+                    m_dwSearchTick = 0;
+                    result = true;
                 }
             }
             catch (Exception ex)

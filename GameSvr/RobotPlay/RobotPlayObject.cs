@@ -2615,14 +2615,9 @@ namespace GameSvr
                 }
                 if (m_nCurrX != nOldX || m_nCurrY != nOldY)
                 {
-                    if (Walk(Grobal2.RM_RUN))
-                    {
-                        result = true;
-                    }
-                    else
-                    {
-                        RollbackCommittedRunMove(nOldX, nOldY);
-                    }
+                    // MOVE-39 — sub_76756C discards sub_778EC0 return; no rollback.
+                    Walk(Grobal2.RM_RUN);
+                    result = true;
                 }
             }
             catch
