@@ -24,6 +24,9 @@ namespace GameSvr
         /// </summary>
         private void SendNativeStateSysMsg(int nativeCx, string text)
         {
+            // 屏蔽属性提升提示：31×VA 0x741A21..0x74298C jmp 跳过等价。
+            if (Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint(text))
+                return;
             var colour = nativeCx & 0xFF;
             var type = (nativeCx >> 8) & 0xFF;
             if (this is HeroObject hero)

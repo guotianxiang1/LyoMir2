@@ -111,6 +111,9 @@ namespace GameSvr
             {
                 return;
             }
+            // 屏蔽属性提升提示 @0x741C34 等 dispatch-band 站点。
+            if (Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint(text))
+                return;
 
             SendMsg(this, Grobal2.RM_SYSMESSAGE, 0, fColor, bColor, 0, text);
         }

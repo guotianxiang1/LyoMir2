@@ -655,22 +655,28 @@ namespace GameSvr
                             switch (i)
                             {
                                 case 0:
-                                    SysMsg("攻击力回复正常", MsgColor.Green, MsgType.Hint);
+                                    if (!Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint("攻击力回复正常"))
+                                        SysMsg("攻击力回复正常", MsgColor.Green, MsgType.Hint);
                                     break;
                                 case 1:
-                                    SysMsg("魔法力回复正常", MsgColor.Green, MsgType.Hint);
+                                    if (!Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint("魔法力回复正常"))
+                                        SysMsg("魔法力回复正常", MsgColor.Green, MsgType.Hint);
                                     break;
                                 case 2:
-                                    SysMsg("道术回复正常", MsgColor.Green, MsgType.Hint);
+                                    if (!Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint("道术回复正常"))
+                                        SysMsg("道术回复正常", MsgColor.Green, MsgType.Hint);
                                     break;
                                 case 3:
-                                    SysMsg("攻击速度回复正常", MsgColor.Green, MsgType.Hint);
+                                    if (!Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint("攻击速度回复正常"))
+                                        SysMsg("攻击速度回复正常", MsgColor.Green, MsgType.Hint);
                                     break;
                                 case 4:
-                                    SysMsg("生命值回复正常", MsgColor.Green, MsgType.Hint);
+                                    if (!Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint("生命值回复正常"))
+                                        SysMsg("生命值回复正常", MsgColor.Green, MsgType.Hint);
                                     break;
                                 case 5:
-                                    SysMsg("魔法值回复正常", MsgColor.Green, MsgType.Hint);
+                                    if (!Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint("魔法值回复正常"))
+                                        SysMsg("魔法值回复正常", MsgColor.Green, MsgType.Hint);
                                     break;
                             }
                         }

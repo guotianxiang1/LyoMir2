@@ -331,7 +331,8 @@ namespace GameSvr
             {
                 return false;
             }
-            MapCellAttributes[index] = boRelease
+            // 摆摊穿人 @0x77931D：claim 时仍 call sub_7792EC，但写 0(Walk) 而非 2(LowWall)。
+            MapCellAttributes[index] = boRelease || Plugins.YanshenPangu1Patches.StallCellsAllowPassThrough()
                 ? CellAttribute.Walk
                 : CellAttribute.LowWall;
             return true;

@@ -541,7 +541,9 @@ namespace GameSvr
                     m_boDecGameGold = false;
                     MoveToHome();
                 }
-                if (M2Share.g_boGameLogGameGold)
+                // 屏蔽元宝数据库日志 @0x70F6DC stub sub_70F6DC。
+                if (M2Share.g_boGameLogGameGold
+                    && !Plugins.YanshenPangu1Patches.ShouldSuppressGameGoldDbLog())
                 {
                     M2Share.AddGameDataLog(format(M2Share.g_sGameLogMsg1, Grobal2.LOG_GAMEGOLD, m_sMapName, m_nCurrX, m_nCurrY, m_sCharName, M2Share.g_Config.sGameGoldName, nInteger, '-', "Auto"));
                 }
@@ -560,7 +562,8 @@ namespace GameSvr
                     nInteger = 2000000 - m_nGameGold;
                     m_boIncGameGold = false;
                 }
-                if (M2Share.g_boGameLogGameGold)
+                if (M2Share.g_boGameLogGameGold
+                    && !Plugins.YanshenPangu1Patches.ShouldSuppressGameGoldDbLog())
                 {
                     M2Share.AddGameDataLog(format(M2Share.g_sGameLogMsg1, Grobal2.LOG_GAMEGOLD, m_sMapName, m_nCurrX, m_nCurrY, m_sCharName, M2Share.g_Config.sGameGoldName, nInteger, '-', "Auto"));
                 }
@@ -582,7 +585,8 @@ namespace GameSvr
                         m_boDecGameGold = false;
                         MoveToHome();
                     }
-                    if (M2Share.g_boGameLogGameGold)
+                    if (M2Share.g_boGameLogGameGold
+                        && !Plugins.YanshenPangu1Patches.ShouldSuppressGameGoldDbLog())
                     {
                         M2Share.AddGameDataLog(format(M2Share.g_sGameLogMsg1, Grobal2.LOG_GAMEGOLD, m_sMapName, m_nCurrX, m_nCurrY, m_sCharName, M2Share.g_Config.sGameGoldName, nInteger, '-', "Map"));
                     }
@@ -603,7 +607,8 @@ namespace GameSvr
                         nInteger = 2000000 - m_nGameGold;
                         m_nGameGold = 2000000;
                     }
-                    if (M2Share.g_boGameLogGameGold)
+                    if (M2Share.g_boGameLogGameGold
+                        && !Plugins.YanshenPangu1Patches.ShouldSuppressGameGoldDbLog())
                     {
                         M2Share.AddGameDataLog(format(M2Share.g_sGameLogMsg1, Grobal2.LOG_GAMEGOLD, m_sMapName, m_nCurrX, m_nCurrY, m_sCharName, M2Share.g_Config.sGameGoldName, nInteger, '+', "Map"));
                     }
