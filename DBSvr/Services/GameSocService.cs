@@ -4118,7 +4118,8 @@ namespace DBSvr
 
             var responsePack = new RequestServerPacket { QueryId = queryId };
             responsePack.Message = EDcode.EncodeBuffer(ProtoBufDecoder.Serialize(
-                new ServerMessagePacket(NativeHeroDbFrameCodec.DeleteResponseCommand,
+                // P1-4: DeleteResponseCommand 0x0059 removed - native routes to default sink
+                new ServerMessagePacket(0x0059,
                     result, 0, 0, 0)));
             responsePack.Packet = EDcode.EncodeBuffer(responseFrame);
             SendRequest(socket, responsePack);

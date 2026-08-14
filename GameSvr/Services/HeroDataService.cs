@@ -351,7 +351,8 @@ namespace GameSvr
                     });
                     return true;
 
-                case NativeHeroDbFrameCodec.DeleteResponseCommand:
+                // P1-4: DeleteResponseCommand 0x0059 removed - native routes to default sink
+                case 0x0059:
                     if (!NativeHeroDbFrameCodec.TryDecodeDeleteResponse(
                             wire, out _, out var deleteError))
                     {

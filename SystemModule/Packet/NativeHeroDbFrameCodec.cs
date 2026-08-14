@@ -30,7 +30,7 @@ namespace SystemModule
         public const ushort DetachCommand = 0x0194;
         public const ushort LoadResponseCommand = 0x0051;
         public const ushort CreateResponseCommand = 0x0053;
-        public const ushort DeleteResponseCommand = 0x0059;
+        // REMOVED (P1-4): DeleteResponseCommand 0x0059 - native dispatch table routes to default sink, never used
         public const ushort RenameResponseCommand = 0x005A;
         public const ushort ConsignedListResponseCommand = 0x005D;
         public const ushort RestoreConsignedResponseCommand = 0x005E;
@@ -501,7 +501,8 @@ namespace SystemModule
 
             frame = CreateFrame(MessageHeaderSize);
             var message = frame.AsSpan(FrameHeaderSize, MessageHeaderSize);
-            BinaryPrimitives.WriteUInt16LittleEndian(message, DeleteResponseCommand);
+            // P1-4: DeleteResponseCommand 0x0059 removed - native routes to default sink
+            BinaryPrimitives.WriteUInt16LittleEndian(message, 0x0059);
             BinaryPrimitives.WriteInt32LittleEndian(message.Slice(4), response.Result);
             if (!TryWriteShortString(message, 16, 20, response.Account, out error)
                 || !TryWriteShortString(message, 37, 15, response.MasterName, out error)
@@ -518,7 +519,8 @@ namespace SystemModule
         {
             response = null;
             if (!TryGetPayload(frame, MessageHeaderSize, out var payload, out error)) return false;
-            if (BinaryPrimitives.ReadUInt16LittleEndian(payload) != DeleteResponseCommand)
+            // P1-4: DeleteResponseCommand 0x0059 removed - native routes to default sink
+            if (BinaryPrimitives.ReadUInt16LittleEndian(payload) != 0x0059)
             {
                 error = "native hero frame is not a delete response";
                 return false;
