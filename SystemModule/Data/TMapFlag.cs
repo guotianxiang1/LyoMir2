@@ -73,6 +73,38 @@ public class TMapFlag
     public bool boNOCHAT;
     public bool boKILLFUNC;
     public int nKILLFUNCNO;
+
+    /// <summary>
+    /// Native map flag NOTHROUGH -> [flag+0x84] (0x768454 reads, 0x774D98 parser sets).
+    /// Disables walk-through in safe zones.
+    /// </summary>
+    public bool boNOTHROUGH;
+
+    /// <summary>
+    /// Native map flag NORIDE -> [flag+0x6D] (sub_74122D reads @0x741235).
+    /// Prohibits horse riding (3-step run).
+    /// </summary>
+    public bool boNORIDE;
+
+    /// <summary>
+    /// Native map flag DARE -> [flag+0x85] (sub_785560 reads @0x78558A, @0x7855AE).
+    /// Controls random teleport behavior.
+    /// </summary>
+    public bool boDARE;
+
+    /// <summary>
+    /// Native map flag NOMAGIC -> [flag+0x70] (magic system reads).
+    /// Prohibits magic usage on the map.
+    /// </summary>
+    public bool boNOMAGIC;
+
+    /// <summary>
+    /// 战神 map flag <c>NOHERO</c> -> native <c>[flag+0x6E]</c>
+    /// (parser <c>sub_774D98</c> token compare, writes <c>mov byte [ebx+0x6E],1</c>).
+    /// Prohibits hero on the map.
+    /// </summary>
+    public bool boNOHERO;
+
     /// <summary>
     /// NOT A 战神 FLAG — permanently false. Kept only so the diagnostic map dump
     /// in Envirnoment.cs keeps its column layout. 战神 has no NOHUMNOMON token:
@@ -82,6 +114,18 @@ public class TMapFlag
     /// in UsrEngn.cs no longer reads it. Do not re-wire it.
     /// </summary>
     public bool boNOHUMNOMON;
+
+    /// <summary>
+    /// 战神 map flag <c>MINGJIANG</c> -> native <c>[flag+0x7A]</c>
+    /// (parser <c>sub_774D98</c> token compare, writes <c>mov byte [ebx+0x7A],1</c>).
+    /// </summary>
+    public bool boMINGJIANG;
+
+    /// <summary>
+    /// 战神 map flag <c>HACKQUEST</c> -> native <c>[flag+0x7B]</c>
+    /// (parser <c>sub_774D98</c> token compare, writes <c>mov byte [ebx+0x7B],1</c>).
+    /// </summary>
+    public bool boHACKQUEST;
 
     /// <summary>
     /// 战神 map flag <c>ONLYDROPSPEC</c> -> native <c>[flag+0x76]</c>
@@ -136,6 +180,12 @@ public class TMapFlag
     /// RELIVEBACK still run — only the two item-driven paths are skipped.
     /// </summary>
     public bool boNOEQUIPRELIVE;
+
+    /// <summary>
+    /// 战神 map flag <c>NOEXPLORE</c> -> native <c>[flag+0x80]</c>
+    /// (parser <c>sub_774D98</c> token compare, writes <c>mov byte [ebx+0x80],1</c>).
+    /// </summary>
+    public bool boNOEXPLORE;
 
     /// <summary>
     /// 战神 map flag <c>NOC2C</c> -> native <c>[flag+0x82]</c>
