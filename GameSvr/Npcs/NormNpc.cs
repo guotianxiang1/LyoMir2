@@ -1,5 +1,6 @@
 using SystemModule;
 using System;
+using GameSvr.Plugins;
 
 namespace GameSvr
 {
@@ -556,7 +557,7 @@ namespace GameSvr
                     sMsg = ReplaceVariableText(sMsg, "<$REQUESTCASTLEWARITEM>", sText);
                     return;
                 case "$REQUESTCASTLEWARDAY":
-                    sText = M2Share.g_Config.sZumaPiece;
+                    sText = YanshenPangu2Patches.SiegeRequestDays().ToString();
                     sMsg = ReplaceVariableText(sMsg, "<$REQUESTCASTLEWARDAY>", sText);
                     return;
                 case "$REQUESTBUILDGUILDITEM":
@@ -1222,7 +1223,7 @@ namespace GameSvr
             }
             if (sVariable == "$REQUESTCASTLEWARDAY")// 几天后开始攻城
             {
-                sText = (M2Share.g_Config.nStartCastleWarDays).ToString();
+                sText = YanshenPangu2Patches.SiegeRequestDays().ToString();
                 sMsg = ReplaceVariableText(sMsg, "<$REQUESTCASTLEWARDAY>", sText);
                 return;
             }

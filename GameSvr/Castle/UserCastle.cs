@@ -1,6 +1,7 @@
 using System.Globalization;
 using SystemModule;
 using SystemModule.Common;
+using GameSvr.Plugins;
 
 namespace GameSvr
 {
@@ -428,10 +429,12 @@ namespace GameSvr
                 // 0x49E39C: DecodeTime then hour*3600+min*60+sec. Stored at [ebx+8].
                 m_nClockOfDaySec = now.Hour * 3600 + now.Minute * 60 + now.Second;
                 var timeSec = m_nClockOfDaySec;
+                YanshenPangu2Patches.TryGetSiegeDayClock(out var siegeStartSec,
+                    out var siegeEndSec, out var siegeWarnSec, out var siegeCaptureSec);
                 if (!m_boStartWar && !m_boUnderWar)
                 {
-                    // start window [0x11940, 0x12E58) unless +0x2B force skips it
-                    if (m_boForceWar || (timeSec >= 0x11940 && timeSec < 0x12E58))
+                    // start window [start,end) unless +0x2B force skips it
+                    if (m_boForceWar || (timeSec >= siegeStartSec && timeSec < siegeEndSec))
                     {
                         m_boStartWar = true;
                         m_AttackGuildList.Clear();
@@ -497,7 +500,7 @@ namespace GameSvr
                     if (m_LeftWall.BaseObject != null) m_LeftWall.BaseObject.m_boStoneMode = false;
                     if (m_CenterWall.BaseObject != null) m_CenterWall.BaseObject.m_boStoneMode = false;
                     if (m_RightWall.BaseObject != null) m_RightWall.BaseObject.m_boStoneMode = false;
-                    if (!m_boShowOverMsg && timeSec >= 0x12C00)
+                    if (!m_boShowOverMsg && timeSec >= siegeWarnSec)
                     {
                         m_boShowOverMsg = true;
                         // 0x65BE9C len=33, hardcoded 10 minutes
@@ -507,8 +510,8 @@ namespace GameSvr
                         M2Share.MainOutMessage(sWarStopTimeMsg);
                     }
                     // 0x65BE1B cmp [ebx+0x2B],0 / jne skip;
-                    // cmp [ebx+8],0x11940 / jb Stop; cmp 0x12E58 / jbe stay
-                    if (!m_boForceWar && (timeSec < 0x11940 || timeSec > 0x12E58))
+                    // cmp [ebx+8],start / jb Stop; cmp end / jbe stay
+                    if (!m_boForceWar && (timeSec < siegeStartSec || timeSec > siegeEndSec))
                     {
                         StopWallconquestWar();
                     }
@@ -531,7 +534,9 @@ namespace GameSvr
         private void TryCapturePalaceFromRun()
         {
             if (!m_boUnderWar || m_MapPalace == null) return;
-            if (m_nClockOfDaySec < 0x11B98) return;
+            YanshenPangu2Patches.TryGetSiegeDayClock(out _, out _, out _,
+                out var siegeCaptureSec);
+            if (m_nClockOfDaySec < siegeCaptureSec) return;
             var humans = new List<TBaseObject>();
             M2Share.UserEngine.GetMapRageHuman(m_MapPalace, 0, 0, 0x3E8, humans);
             Association firstGuild = null;
@@ -632,8 +637,10 @@ namespace GameSvr
 
         public bool CanGetCastle(Association guild)
         {
-            // 0x65C6AF cmp [ebx+8],0x11B98 / jb skip. Not elapsed-from-start.
-            if (m_nClockOfDaySec < 0x11B98)
+            // 0x65C6AF cmp [ebx+8],captureSec / jb skip. Not elapsed-from-start.
+            YanshenPangu2Patches.TryGetSiegeDayClock(out _, out _, out _,
+                out var siegeCaptureSec);
+            if (m_nClockOfDaySec < siegeCaptureSec)
             {
                 return false;
             }
