@@ -55,6 +55,12 @@ namespace GameSvr
             public int FreeTick;
         }
 
+        private sealed class MonFreeInfo
+        {
+            public TBaseObject Monster;
+            public int FreeTick;
+        }
+
         private sealed class NativeMagicTowerDeferredSpawn
         {
             public NativeMagicTowerDeferredSpawn(Envirnoment environment,
@@ -86,6 +92,8 @@ namespace GameSvr
         private const int HeroRunInterval = 50;
         private const int HeroProcessBudget = 25;
         private const int HeroFreeDelay = 5 * 60 * 1000;
+        /// <summary>0x67C1BD <c>cmp eax,0x493E0</c> — ProcessMon Phase-A FIFO drain.</summary>
+        private const int NativeMonFreeDelay = 5 * 60 * 1000;
         private const int NativeMagicTowerDeferredSpawnBudget = 5;
         private const int NativeMagicTowerRuntimeBudgetCheckInterval = 20;
         private const int NativeMagicTowerRuntimeTimeBudget = 25;
@@ -101,7 +109,6 @@ namespace GameSvr
         private int dwProcessMissionsTime;
         public int dwProcessNpcTimeMax;
         public int dwProcessNpcTimeMin;
-        private int dwRegenMonstersTick;
         private int dwSendOnlineHumTime;
         private int dwShowOnlineTick;
         public IList<TAdminInfo> m_AdminList;
@@ -125,7 +132,7 @@ namespace GameSvr
         public IList<TMagic> m_HeroMagicList =>
             Volatile.Read(ref _magicDefinitions).Hero;
         public IList<Merchant> m_MerchantList;
-        private readonly ArrayList m_MonFreeList;
+        private readonly Queue<MonFreeInfo> m_MonFreeList;
         public IList<MonGenInfo> m_MonGenList;
         private readonly object _monsterDefinitionSync = new();
         private MonsterDefinitionPublication _monsterDefinitions;
@@ -204,7 +211,6 @@ namespace GameSvr
             dwSendOnlineHumTime = HUtil32.GetTickCount();
             dwProcessMapDoorTick = HUtil32.GetTickCount();
             dwProcessMissionsTime = HUtil32.GetTickCount();
-            dwRegenMonstersTick = HUtil32.GetTickCount();
             m_dwProcessLoadPlayTick = HUtil32.GetTickCount();
             m_nCurrMonGen = 0;
             m_nMonGenListPosition = 0;
@@ -219,7 +225,7 @@ namespace GameSvr
             _monsterDefinitions = new MonsterDefinitionPublication(
                 new List<TMonInfo>(), null, null);
             m_MonGenList = new List<MonGenInfo>();
-            m_MonFreeList = new ArrayList();
+            m_MonFreeList = new Queue<MonFreeInfo>();
             _magicDefinitions = new MagicDefinitionPublication(
                 new List<TMagic>(), new List<TMagic>());
             m_AdminList = new List<TAdminInfo>();
@@ -1681,6 +1687,67 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// 战神 ProcessMon Phase-A @0x67C1AE..0x67C200：全局 12 字节 FIFO 头结点
+        /// <c>(now-[+4])&gt;0x493E0</c> 才 <c>call 0x404690</c>。
+        /// </summary>
+        private void ProcessNativeMonFreeFifo(int now)
+        {
+            while (m_MonFreeList.Count > 0)
+            {
+                var freeInfo = m_MonFreeList.Peek();
+                if ((now - freeInfo.FreeTick) <= NativeMonFreeDelay)
+                {
+                    break;
+                }
+                m_MonFreeList.Dequeue();
+                freeInfo.Monster = null;
+            }
+        }
+
+        /// <summary>
+        /// 战神 <c>sub_67D8F0</c> @0x67C47E：ghost 立即入 FIFO，5 分钟后再 Free。
+        /// </summary>
+        private void EnqueueNativeMonFree(TBaseObject monster, int now)
+        {
+            if (monster == null)
+            {
+                return;
+            }
+            m_MonFreeList.Enqueue(new MonFreeInfo
+            {
+                Monster = monster,
+                FreeTick = now
+            });
+        }
+
+        /// <summary>
+        /// 战神 worker <c>sub_67C9E0</c> @0x67CA15 <c>cmp dword [eax+edi*4],0</c> —
+        /// 找第一个空 CertList 槽，不用 <see cref="IList{T}.Count"/> 当容量。
+        /// </summary>
+        private static bool TryFindNativeMonGenCertSlot(MonGenInfo monGen, out int slotIndex)
+        {
+            slotIndex = -1;
+            if (monGen?.CertList == null || monGen.nCount <= 0)
+            {
+                return false;
+            }
+            for (var i = 0; i < monGen.CertList.Count; i++)
+            {
+                if (monGen.CertList[i] == null)
+                {
+                    slotIndex = i;
+                    return true;
+                }
+            }
+            if (monGen.CertList.Count < monGen.nCount)
+            {
+                slotIndex = monGen.CertList.Count;
+                return true;
+            }
+            return false;
+        }
+
         private void ProcessMonsters()
         {
             bool boCanCreate;
@@ -1691,10 +1758,13 @@ namespace GameSvr
                 var boProcessLimit = false;
                 var dwCurrentTick = HUtil32.GetTickCount();
                 MonGenInfo MonGen = null;
-                
-                if ((HUtil32.GetTickCount() - dwRegenMonstersTick) > M2Share.g_Config.dwRegenMonstersTime)
+
+                // Phase-A @0x67C1AE：每次 ProcessMon 调用都排空到期的延迟释放 FIFO。
+                ProcessNativeMonFreeFifo(dwCurrentTick);
+
+                // Phase-B @0x67C245：原生 sub_67C150 无 dwRegenMonstersTime 外包门；
+                // PrcocessData @4846 每圈直接调 ProcessMonsters，亦未见 dwProcessMonstersTime 节流。
                 {
-                    dwRegenMonstersTick = HUtil32.GetTickCount();
                     // 战神 ProcessMon sub_67C150 Phase-B, 0x67C245-0x67C2C1.  The whole
                     // block is a cursor scan over up to 80 generators per pass, not a
                     // single generator per pass:
@@ -1840,35 +1910,23 @@ namespace GameSvr
                             }
                             else
                             {
-                                if ((HUtil32.GetTickCount() - Monster.m_dwGhostTick) > 5 * 60 * 1000)
+                                // 0x67C38E cmp [+0x73] / jne 0x67C46F：ghost 立即 NULL 槽 +
+                                // sub_67D8F0 @0x67C47E + vtable+0x7C @0x67C49F；5 分钟
+                                // 只约束 Phase-A FIFO Free @0x67C1BD，不在 CertList 上等。
+                                var ghostMonster = Monster;
+                                MonGen.CertList[nProcessPosition] = null;
+                                if (MonGen.nActiveCount > 0)
                                 {
-                                    // 战神 ProcessMon sub_67C150 循环2 的 ghost 分支（0x67C46F..0x67C49F）
-                                    // 一共做三件事：
-                                    //   (1) NULL 掉 CertList 槽 + 桶计数减一（0x67C491 / 0x67C497；
-                                    //       战神不压实，故 C# 的 RemoveAt 语义上等价）；
-                                    //   (2) sub_67D8F0 把对象【入队到全局延迟释放 FIFO】
-                                    //       （0x67C47E；FIFO 在 MonsterMgr+0x20/+0x24/+0x28，节点 12 字节
-                                    //       {obj, enqueueTick, next}），该 FIFO 由同函数循环1 在
-                                    //       0x67C1BD `cmp eax,0x493E0`（= 300000ms = 5 分钟）后排空，
-                                    //       调 sub_404690 = TObject.Free 真正销毁对象；
-                                    //   (3) vtable+0x7C 的"离开世界"钩子（0x67C49F）。
-                                    // C# 之前只搬了 (1)，(2)(3) 丢了，全靠非原生的
-                                    // ObjectManager.ClearObject 全局扫 ghost（3 分钟 dwMakeGhostTime）兜底。
-                                    // 战神【没有】任何 id→对象的全局 ghost 扫描；补齐这里之后
-                                    // ClearObject 才可以删。
-                                    // 必须走 Remove(id, expected) 这个身份校验重载：它内部执行
-                                    // PasEngine.CancelDeferredCallsForObject + ClearMonsterScriptState，
-                                    // 即 vtable+0x7C 的对应物；没有别的逐类型循环做这件事。
-                                    // 本分支的 5*60*1000 就是战神的 0x493E0，逐字节一致。
-                                    // 覆盖范围：MonGen 怪物 + 守卫 + 宝宝/召唤（m_SlaveList 先在
-                                    // TBaseObject.Base.cs:460 摘链，随后落到本循环）。
-                                    var ghostMonster = Monster;
-                                    MonGen.CertList.RemoveAt(nProcessPosition);
-                                    MonGen.CertCount--;
-                                    M2Share.ObjectManager.Remove(ghostMonster.ObjectId, ghostMonster);
-                                    Monster = null;
-                                    continue;
+                                    MonGen.nActiveCount--;
                                 }
+                                if (MonGen.CertCount > 0)
+                                {
+                                    MonGen.CertCount--;
+                                }
+                                EnqueueNativeMonFree(ghostMonster, dwCurrentTick);
+                                M2Share.ObjectManager.Remove(ghostMonster.ObjectId, ghostMonster);
+                                nProcessPosition++;
+                                continue;
                             }
                         }
                         nProcessPosition++;
@@ -3393,12 +3451,8 @@ namespace GameSvr
         private TBaseObject CreateGeneratedMonster(MonGenInfo monGen, short x,
             short y, bool ignoreCellBlockers = false)
         {
-            // SPAWN-15: Check capacity before spawning (native slot check at 0x67CA15).
-            // Native: fixed-size array with NULL check: cmp dword [eax+edi*4],0
-            // C#: CertList is dynamic but must respect nCount capacity limit.
-            // Bug window: nActiveCount decrements at death but CertList entry removal
-            // is deferred 5min (ghost-reap) -> without this gate, unbounded growth.
-            if (monGen.CertList == null || monGen.CertList.Count >= monGen.nCount)
+            // 0x67CA15 cmp dword [eax+edi*4],0 — 第一个空槽，而非 List.Count>=nCount。
+            if (!TryFindNativeMonGenCertSlot(monGen, out var certSlotIndex))
             {
                 return null;
             }
@@ -3434,7 +3488,18 @@ namespace GameSvr
                 monGen.nActiveCount = activeCountBefore + 1;
                 nMonsterCount++;  // Native 0x67CA9E..0x67CAA1
                 certificatePublishAttempted = true;
-                monGen.CertList.Add(cert);
+                if (monGen.CertList == null)
+                {
+                    monGen.CertList = new List<TBaseObject>();
+                }
+                if (certSlotIndex == monGen.CertList.Count)
+                {
+                    monGen.CertList.Add(cert);
+                }
+                else
+                {
+                    monGen.CertList[certSlotIndex] = cert;
+                }
                 monGen.CertCount = certificateCountBefore + 1;
             }
             catch
@@ -3443,7 +3508,17 @@ namespace GameSvr
                 {
                     try
                     {
-                        monGen.CertList?.Remove(cert);
+                        if (monGen.CertList != null
+                            && certSlotIndex >= 0
+                            && certSlotIndex < monGen.CertList.Count
+                            && ReferenceEquals(monGen.CertList[certSlotIndex], cert))
+                        {
+                            monGen.CertList[certSlotIndex] = null;
+                        }
+                        else
+                        {
+                            monGen.CertList?.Remove(cert);
+                        }
                     }
                     catch
                     {
