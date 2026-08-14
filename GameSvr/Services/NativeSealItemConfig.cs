@@ -98,7 +98,7 @@ namespace GameSvr
         }
 
         private static void LoadSection(ItemBuildIni ini, string section,
-            List<string> target, UsrEngn engine, ref bool hadError)
+            List<string> target, UserEngine engine, ref bool hadError)
         {
             foreach (var name in ini.ReadSectionValues(section))
             {
