@@ -534,11 +534,23 @@ namespace GameSvr
                     }
                     break;
                 case SpellsDef.SKILL_EARTHFIRE:
-                    if (MagMakeFireCross(PlayObject, UserMagic, PlayObject.GetAttackPower(DoSpell_GetPower(UserMagic) + HUtil32.LoWord(PlayObject.m_WAbil.MC), HUtil32.HiWord(PlayObject.m_WAbil.MC) - HUtil32.LoWord(PlayObject.m_WAbil.MC) + 1), DoSpell_GetScaledPower(UserMagic, 10) + (DoSpell_GetRPow(PlayObject.m_WAbil.MC) >> 1), nTargetX, nTargetY) > 0)
+                {
+                    var holdSec = DoSpell_GetScaledPower(UserMagic, 10) +
+                        (DoSpell_GetRPow(PlayObject.m_WAbil.MC) >> 1);
+                    if (YanshenPangu2Patches.TryGetFireWallHoldSeconds(out var cfgSec))
+                        holdSec = cfgSec;
+                    if (MagMakeFireCross(PlayObject, UserMagic,
+                            PlayObject.GetAttackPower(
+                                DoSpell_GetPower(UserMagic) +
+                                HUtil32.LoWord(PlayObject.m_WAbil.MC),
+                                HUtil32.HiWord(PlayObject.m_WAbil.MC) -
+                                HUtil32.LoWord(PlayObject.m_WAbil.MC) + 1),
+                            holdSec, nTargetX, nTargetY) > 0)
                     {
                         boTrain = true;
                     }
                     break;
+                }
                 case SpellsDef.SKILL_FIREBOOM:
                     QueueNativeAreaBlast(PlayObject, UserMagic, nTargetX,
                         nTargetY);

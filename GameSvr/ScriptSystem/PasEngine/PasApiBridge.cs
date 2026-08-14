@@ -8662,7 +8662,7 @@ namespace GameSvr.PasEngine
 
         public void ServerSay(string msg, int color)
         {
-            M2Share.UserEngine.SendBroadCastMsg(msg, MsgType.Notice);
+            YanshenPangu2Patches.BroadcastServerSay(msg, color);
         }
 
         // =====================================================================
