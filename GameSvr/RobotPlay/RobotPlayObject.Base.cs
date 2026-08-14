@@ -455,18 +455,6 @@ namespace GameSvr
                                         switch (OSObject.CellType)
                                         {
                                             case CellType.OS_MOVINGOBJECT:
-                                                if (HUtil32.GetTickCount() - OSObject.dwAddTime >= 60000)
-                                                {
-                                                    OSObject.boObjectDisPose = true;
-                                                    Dispose(OSObject);
-                                                    MapCellInfo.Remove(nIdx);
-                                                    if (MapCellInfo.Count <= 0)
-                                                    {
-                                                        m_PEnvir.ReleaseCellObjectList(n18, n1C);
-                                                        break;
-                                                    }
-                                                    continue;
-                                                }
                                                 BaseObject = (TBaseObject)OSObject.CellObj;
                                                 if (BaseObject != null)
                                                 {
