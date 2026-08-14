@@ -159,6 +159,10 @@ namespace GameSvr
             // 宿主 sub_100795C0 入口仍不可证(0x10F2D759@Themida)，此处按函数内序落点。
             damage = Plugins.YanshenPage1PostDamage.ApplySpellCutting(
                 source, this, damage, skillId);
+            // sub_100795C0：切割臂之后、返伤害之前 — 0x1007AAC9 攻击吸血 /
+            // 0x1007AAEB 火墙不吸血（眼神2第2页，cfg+0x1A4）。
+            Plugins.YanshenPage2ExtBehaviors.ApplyMagicDamageVamp(
+                source, this, damage, skillId);
             damage = ApplyStandardEarthFireSuperForce(source, damage);
 
             int result = ApplyStandardEarthFireLanding(damage);

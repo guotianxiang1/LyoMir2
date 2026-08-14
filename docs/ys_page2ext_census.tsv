@@ -1,0 +1,47 @@
+key	page	prod_value	cfg_field	consumers_delayed	classes	verdict
+super攻击触发	眼神2(第2页)	0	0x12c	0x10068184 0x10068843	logic logic_dispatch48	logic
+伤害触发脚本_plus	眼神2(第2页)	0	0x520	0x10091ee0	gui_label	gui_only
+全局循环函数	眼神2(第2页)	1	0x950	-	-	zero
+千分比经验倍数	眼神2(第2页)	0	0x540	0x1006a99d 0x10092110	logic gui_label	logic
+多元伤害	扩展/技能相关	0	0x114	-	-	zero
+大背包	扩展/物品相关	0	0x674	-	-	zero
+宝宝叛变属性a	扩展/角色相关	0	0x6d0	0x1009e9af	gui_label	gui_only
+宠物吸血a	扩展/角色相关	0	0x6d8	0x1009ea47	gui_label	gui_only
+循环时间_值	眼神2(第2页)	2000	0x938	-	-	zero
+怪物爆率A_值	眼神2(第2页)	0	0x92c	-	-	zero
+怪物爆率B_值	眼神2(第2页)	0	0x930	-	-	zero
+怪物爆率K_值	眼神2(第2页)	0	0x934	-	-	zero
+投保报文	扩展/物品相关	0	0x6f8	0x1009ec44	gui_label	gui_only
+护身触发报文a	扩展/脚本相关	0	0x6bc	0x1009e833	gui_label	gui_only
+护身触发概率a	扩展/脚本相关	0	0x6b8	0x1009e7e7	gui_label	gui_only
+攻击吸血	眼神2(第2页)	0	0x124	0x1007aac9 0x10092300	logic gui_label	logic
+新怪物爆率	眼神2(第2页)	0	0x93c	-	-	zero
+星耀专属切割a	扩展/技能相关	0	0x6e8	0x1009eab4	gui_label	gui_only
+星耀倍功与暴击a	扩展/脚本相关	0	0x6ec	0x1009eb2b	gui_label	gui_only
+星耀攻击反伤a	扩展/技能相关	0	0x6f0	0x1009eba2	gui_label	gui_only
+格位刺杀免伤a	扩展/脚本相关	0	0x6c8	0x1009e917	gui_label	gui_only
+概率格挡a	扩展/技能相关	0	0x6cc	0x1009e963	gui_label	gui_only
+毫秒级cd记录	眼神2(第2页)	0	0x538	0x1005e650 0x100920c0	logic gui_label	logic
+火墙不吸血	眼神2(第2页)	0	0x1a4	0x1007aaeb 0x10092350	logic_gets gui_label	logic
+眼神特殊函数	眼神2(第2页)	1	0x11c	0x100922b0	gui_label	gui_only
+自定义伤害_plus	眼神2(第2页)	0	0x524	0x10091f30	gui_label	gui_only
+自定义召唤怪物a	扩展/技能相关	0	0x6d4	0x1009e9fb	gui_label	gui_only
+英雄修装备a	扩展/物品相关	0	0x6c4	0x1009e8cb	gui_label	gui_only
+英雄物理攻击触发	眼神2(第2页)	0	0x52c	0x10068035 0x10091fd0	logic_dispatch48 gui_label	logic
+英雄野蛮	眼神2(第2页)	0	0x128	0x10067d92 0x100923a0	logic gui_label	logic
+英雄魔法攻击触发	眼神2(第2页)	0	0x534	0x10092070	gui_label	gui_only
+获取玩家对象函数	扩展/脚本相关	1	0x98c	-	-	zero
+装备投保	扩展/物品相关	0	0x6f4	0x1009ebf8	gui_label	gui_only
+道士合击系数	眼神2(第2页)	0	0x850	-	-	zero
+道士合击系数_数值1	眼神2(第2页)	""	0xc00	-	-	zero
+道士合击系数_数值2	眼神2(第2页)	""	0xc18	-	-	zero
+道士合击系数_数值3	眼神2(第2页)	""	0xc30	-	-	zero
+道士合击系数_数值4	眼神2(第2页)	""	0xc48	-	-	zero
+道士合击系数_数值5	眼神2(第2页)	""	0xc60	-	-	zero
+雷电术自定义伤害	扩展/技能相关	0	0x6ac	-	-	zero
+雷电术自定义伤害_系数A	扩展/技能相关	0	0x6b0	-	-	zero
+雷电术自定义伤害_系数B	扩展/技能相关	0	0x6b4	-	-	zero
+高级回收	眼神2(第2页)	1	0x954	0x1005e6c5 0x10092260	logic gui_label	logic
+高级物理攻击触发	眼神2(第2页)	0	0x528	0x10067f16 0x10091f80	logic_dispatch48 gui_label	logic
+高级魔法攻击触发	眼神2(第2页)	0	0x530	0x10092020	gui_label	gui_only
+麻痹中不被麻痹a	扩展/技能相关	0	0x6c0	0x1009029d 0x1009e87f	logic gui_label	logic
