@@ -63,6 +63,7 @@ namespace GameSvr
             // 原生 sub_74DEDC: 标准物品表发布后加载 Share/config/powerupItem.ini 的物品使用 mode-1
             // (英雄 TDragonHeart 护符填充) refill 表 (UserEngine+0x2A0)。文件缺失 => 空表 => mode-1 保持 fail-closed。
             M2Share.UserEngine.LoadNativePowerupItems();
+            M2Share.UserEngine.LoadNativeItemAdvanceConfigs();
             M2Share.MainOutMessage("正在发布原生怪物及人物/英雄技能数据库...");
             if (!M2Share.UserEngine.TryPublishNativeMonsterDefinitions(
                     M2Share.DataServer.MonsterRuntimeCatalog,

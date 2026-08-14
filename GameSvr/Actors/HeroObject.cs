@@ -338,6 +338,8 @@ namespace GameSvr
         {
             base.Run();
 
+            PollNativeBurstStateExpiry();
+
             var dwCurTick = HUtil32.GetTickCount();
             RunNativeHealthSpellDirty(dwCurTick);
 

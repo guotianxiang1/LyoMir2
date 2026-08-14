@@ -5152,7 +5152,8 @@ namespace GameSvr.PasEngine
                 case "systemmsg":
                     return RejectUnsupportedNativeApi(out result);
                 case "showcurrentbless":
-                    return RejectUnsupportedNativeApi(out result);
+                    CurrentPlayer.ShowCurrentNativeBless();
+                    return true;
                 case "taskdialog":
                     return RejectUnsupportedNativeApi(out result);
 
