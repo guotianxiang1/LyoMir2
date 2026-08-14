@@ -964,6 +964,11 @@ namespace GameSvr.Plugins
         internal const int YsErrRange = -999;
         internal const int YsErrClass = -777;
         internal const int YsErrNoTarget = -666;
+        // 9 号拉人 sub_10070FD0 专用错误码（字节见各 cmp/ mov 落点）
+        internal const int YsErrPullPlayerOnly = -111;   // 0x100712F0 B8 91 FF FF FF（why==1 且目标非玩家）
+        internal const int YsErrPullMonsterOnly = -222;  // 0x10071328 B8 22 FF FF FF（why==2 且目标是玩家）
+        internal const int YsErrPullLevelCap = -444;     // 0x100712B5 B8 44 FE FF FF（目标等级 ≥ level 参数）
+        internal const int YsErrPullAlreadyThere = -333; // 0x1007140E B8 B3 FE FF FF（落点与施法者重合）
 
         /// <summary>
         /// `Canl` 是「离施法者的最大距离」，不是"是否包含玩家"。三个实现体同一形状，
@@ -1695,89 +1700,231 @@ namespace GameSvr.Plugins
             return recipients;
         }
 
-        /// <summary>推开: juli距离, fangxiang 0=后退 1=拉进</summary>
-        /// <remarks>4 号臂 0x10076A70 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
+        /// <summary>
+        /// 击退方框路径的方向：1007044E..100704AC 按「格心 − 施法者」象限选 0..7，
+        /// fangxiang≠0 时 100704B9..100704CE 再 +4（mod 8）。
+        /// </summary>
+        private static byte NativePushDirFromCell(int cellX, int cellY, int casterX, int casterY,
+            bool reverse)
+        {
+            int dx = cellX - casterX;
+            int dy = cellY - casterY;
+            int dir;
+            if (dx == 0)
+                dir = dy <= 0 ? 0 : 4;
+            else if (dx > 0)
+            {
+                if (dy < 0) dir = 1;
+                else if (dy == 0) dir = 2;
+                else dir = 3;
+            }
+            else
+            {
+                if (dy > 0) dir = 5;
+                else if (dy == 0) dir = 6;
+                else dir = 7;
+            }
+            if (reverse) dir = (dir + 4) & 7;
+            return (byte)dir;
+        }
+
+        /// <summary>sub_10066e70 → VMT+0xA4 CharPushed；返回 juli（100704E1 写回返回槽）。</summary>
+        private int NativeApplyPush(TBaseObject target, byte dir, int distance)
+        {
+            target.CharPushed(dir, distance);
+            return distance;
+        }
+
+        /// <summary>
+        /// `ys_JiTui` / `ys_JiTui2` = 操作码 4 = <c>sub_100700A0</c>。
+        /// 形参 juli,fangxiang,gailv,fanwei,TargetX,TargetY,Canl,isqun[,roleid]。
+        /// <code>
+        /// 1007029C  Canl 距离门 → 100702BD B8 19 FC FF FF = -999
+        /// 100702F7  fanwei&lt;=0 单体；否则 10070398 方框
+        /// 10070303  Random(100) &lt; gailv（1007030C jge 跳过）
+        /// 10070330  GetMovingObject(Envir,TargetX,TargetY)（单体）
+        /// 10070342  IsProperTarget（仅单体）
+        /// 10070354  VMT+0xA4 CharPushed(dir,juli)；单体 dir=byte[caster+0x154](±4)
+        /// 1007035D  返回值 = juli（10070378 mov eax,esi）
+        /// 10070398  isqun==1 → 100703D2 逐格 Random；否则 1007051B 全区一次
+        /// </code>
+        /// </summary>
+        /// <remarks>4 号臂 0x10076A6F → 0x10076A70 `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int PushEnemy(int distance, int direction, int probability, int range, int tx, int ty, int canl, int isAoe)
         {
             if (!TunnelGate()) return 0;
-            int count = 0;
-            foreach (var t in FindTargets(tx, ty, range, canl != 0))
+            return PushEnemyCore(distance, direction, probability, range, tx, ty, canl, isAoe, 0);
+        }
+
+        private int PushEnemyCore(int distance, int direction, int probability, int range,
+            int tx, int ty, int canl, int isAoe, int roleId)
+        {
+            if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
+            bool reverse = direction != 0;
+
+            if (range <= 0)
             {
-                if (M2Share.RandomNumber.Random(100) < probability)
+                if (!NativeRollHit(probability)) return 0;
+                TBaseObject one = roleId != 0
+                    ? ResolveNativeAttactTarget(roleId)
+                    : _player.m_PEnvir?.GetMovingObject((short)tx, (short)ty, true) as TBaseObject;
+                if (one == null || !_player.IsProperTarget(one)) return 0;
+                byte dir = _player.m_btDirection;
+                if (reverse) dir = (byte)((dir + 4) & 7);
+                NativeApplyPush(one, dir, distance);
+                return distance;
+            }
+
+            if (isAoe != 1 && !NativeRollHit(probability)) return 0;
+            int result = 0;
+            var envir = _player.m_PEnvir;
+            if (envir == null) return 0;
+            for (int x = tx - range; x <= tx + range; x++)
+            {
+                for (int y = ty - range; y <= ty + range; y++)
                 {
-                    // direction: 0=push away (back dir), 1=pull towards player
-                    var playerBase = _player as TBaseObject;
-                    if (playerBase == null) continue;
-                    byte pushDir;
-                    if (direction == 0)
+                    if (isAoe == 1 && !NativeRollHit(probability)) continue;
+                    byte dir = NativePushDirFromCell(x, y,
+                        _player.m_nCurrX, _player.m_nCurrY, reverse);
+                    var raw = new List<TBaseObject>();
+                    envir.GetBaseObjects(x, y, true, raw);
+                    foreach (var t in raw)
                     {
-                        // Push away from player
-                        pushDir = M2Share.GetNextDirection(_player.m_nCurrX, _player.m_nCurrY, t.m_nCurrX, t.m_nCurrY);
+                        if (t == null) continue;
+                        result = NativeApplyPush(t, dir, distance);
                     }
-                    else
-                    {
-                        // Pull towards player (push in reverse direction)
-                        pushDir = M2Share.GetNextDirection(t.m_nCurrX, t.m_nCurrY, _player.m_nCurrX, _player.m_nCurrY);
-                    }
-                    t.CharPushed(pushDir, distance);
-                    count++;
                 }
             }
-            return count;
+            return result;
         }
-        public int PushEnemy2(int distance, int direction, int probability, int range, int tx, int ty, int canl, int isAoe, int roleId) { return PushEnemy(distance, direction, probability, range, tx, ty, canl, isAoe); }
 
-        /// <summary>拉人/定身: why 0=拉人 1=拉回</summary>
-        /// <remarks>
-        /// 9 号臂 0x10076C7D `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。
-        /// ys_TuiTui / ys_TuiTui2 / ys_DingShen 三者都编码成 9 号，共用这一把门与
-        /// 同一个实现体 0x10070FD0，原生不存在「一函一门」。
-        /// </remarks>
+        /// <summary>ys_JiTui2 — 第 9 参 roleid；可选 token 10，0x1007030E 非 0 则当对象指针用。</summary>
+        public int PushEnemy2(int distance, int direction, int probability, int range, int tx, int ty, int canl, int isAoe, int roleId)
+        {
+            if (!TunnelGate()) return 0;
+            return PushEnemyCore(distance, direction, probability, range, tx, ty, canl, isAoe, roleId);
+        }
+
+        /// <summary>sub_10066f10：0x7797CC 可走性探测，成功返回 0x64(100)。</summary>
+        private bool NativePullCellWalkable(short x, short y) =>
+            _player.m_PEnvir != null && _player.m_PEnvir.CanWalkEx(x, y, true);
+
+        private static void NativeFacingAdjacent(byte facing, short baseX, short baseY,
+            out short x, out short y)
+        {
+            x = baseX;
+            y = baseY;
+            switch (facing & 7)
+            {
+                case 0: x++; break;
+                case 1: x++; break;
+                case 2: x++; y++; break;
+                case 3: x--; y++; break;
+                case 4: x--; break;
+                case 5: x--; y--; break;
+                case 6: x--; break;
+                case 7: x++; y--; break;
+            }
+        }
+
+        /// <summary>拉人落点：施法者朝向 8 向跳表 0x100716E4 + 10071450 起 3×3 扩张搜索。</summary>
+        private bool NativeTryFindPullLanding(byte facing, out short outX, out short outY)
+        {
+            outX = _player.m_nCurrX;
+            outY = _player.m_nCurrY;
+            NativeFacingAdjacent(facing, outX, outY, out short ax, out short ay);
+            if (NativePullCellWalkable(ax, ay))
+            {
+                outX = ax;
+                outY = ay;
+                return true;
+            }
+            sbyte dx = (sbyte)(ax - _player.m_nCurrX);
+            sbyte dy = (sbyte)(ay - _player.m_nCurrY);
+            for (int ring = -1; ring <= 1; ring++)
+            {
+                for (int step = -1; step <= 1; step++)
+                {
+                    short cx = (short)(ax + ring * dx);
+                    short cy = (short)(ay + step * dy);
+                    if (cx == _player.m_nCurrX && cy == _player.m_nCurrY) continue;
+                    if (NativePullCellWalkable(cx, cy))
+                    {
+                        outX = cx;
+                        outY = cy;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>1007143D..10071636：写 target+0x12C/+0x130 并广播。</summary>
+        private bool NativePullTeleport(TBaseObject target, short newX, short newY)
+        {
+            var envir = target.m_PEnvir;
+            if (envir == null) return false;
+            envir.DeleteFromMap(target.m_nCurrX, target.m_nCurrY,
+                CellType.OS_MOVINGOBJECT, target, false);
+            target.m_nCurrX = newX;
+            target.m_nCurrY = newY;
+            envir.AddToMap(target.m_nCurrX, target.m_nCurrY, CellType.OS_MOVINGOBJECT, target);
+            target.SendRefMsg(Grobal2.RM_SPACEMOVE_SHOW, target.m_btDirection,
+                target.m_nCurrX, target.m_nCurrY, 0, "");
+            return true;
+        }
+
+        /// <summary>
+        /// `ys_TuiTui` / `ys_TuiTui2` = 操作码 9 = <c>sub_10070FD0</c>。
+        /// AllFuc 形参 juli,fangxiang,…；实现 token2=why 模式、token3=level 等级上限：
+        /// <code>
+        /// 1007122B  fanwei&gt;0 → 1007150A 直接返回 0（原生无群体拉人）
+        /// 1007123B  Random(100) &lt; gailv
+        /// 10071268  GetMovingObject / 1007128B IsProperTarget
+        /// 1007127A  word[target+0x278]；100712A1 level&gt;0 且 targetLv≥level → -444
+        /// 100712CF  why==1 非玩家 → -111；1007130A why==2 玩家 → -222
+        /// 1007133F  why==3 按目标朝向寻格；默认 1007152D 按施法者朝向寻格
+        /// 10071519  成功返回 0
+        /// </code>
+        /// </summary>
+        /// <remarks>9 号臂 0x10076C7C → 0x10076C7D `A1 44 C2 31 10` —— 共用门 cfg2+0x11C。</remarks>
         public int PullEnemy(int why, int level, int probability, int range, int tx, int ty, int canl, int isAoe)
         {
             if (!TunnelGate()) return 0;
-            return PullEnemyCore(why, level, probability, range, tx, ty, canl, isAoe);
+            return PullEnemyCore(why, level, probability, range, tx, ty, canl, 0);
         }
 
         private int PullEnemyCore(int why, int level, int probability, int range,
-            int tx, int ty, int canl, int isAoe)
+            int tx, int ty, int canl, int roleId)
         {
-            int count = 0;
-            foreach (var t in FindTargets(tx, ty, range, canl != 0))
-            {
-                if (M2Share.RandomNumber.Random(100) < probability)
-                {
-                    // why: 0=teleport to player, 1=pull towards player (level = distance)
-                    if (why == 0)
-                    {
-                        // Teleport target to a nearby position
-                        short newX = _player.m_nCurrX;
-                        short newY = _player.m_nCurrY;
-                        if (t.m_PEnvir != null)
-                        {
-                            t.m_PEnvir.DeleteFromMap(t.m_nCurrX, t.m_nCurrY,
-                                CellType.OS_MOVINGOBJECT, t, false);
-                            t.m_nCurrX = newX;
-                            t.m_nCurrY = newY;
-                            t.m_PEnvir.AddToMap(t.m_nCurrX, t.m_nCurrY, CellType.OS_MOVINGOBJECT, t);
-                            t.SendRefMsg(Grobal2.RM_SPACEMOVE_SHOW, t.m_btDirection, t.m_nCurrX, t.m_nCurrY, 0, "");
-                        }
-                    }
-                    else
-                    {
-                        byte pullDir = M2Share.GetNextDirection(t.m_nCurrX, t.m_nCurrY, _player.m_nCurrX, _player.m_nCurrY);
-                        t.CharPushed(pullDir, level);
-                    }
-                    count++;
-                }
-            }
-            return count;
+            if (NativeCanlGateFails(canl, tx, ty)) return YsErrRange;
+            if (range > 0) return 0;
+
+            if (!NativeRollHit(probability)) return 0;
+            TBaseObject one = roleId != 0
+                ? ResolveNativeAttactTarget(roleId)
+                : _player.m_PEnvir?.GetMovingObject((short)tx, (short)ty, true) as TBaseObject;
+            if (one == null || !_player.IsProperTarget(one)) return 0;
+
+            if (level > 0 && one.m_Abil.Level >= level) return YsErrPullLevelCap;
+
+            bool isPlayer = one.m_btRaceServer == Grobal2.RC_PLAYOBJECT;
+            if (why == 1 && !isPlayer) return YsErrPullPlayerOnly;
+            if (why == 2 && isPlayer) return YsErrPullMonsterOnly;
+
+            byte facing = why == 3 ? one.m_btDirection : _player.m_btDirection;
+            if (!NativeTryFindPullLanding(facing, out short landX, out short landY)) return 0;
+            if (landX == _player.m_nCurrX && landY == _player.m_nCurrY)
+                return YsErrPullAlreadyThere;
+
+            return NativePullTeleport(one, landX, landY) ? 0 : 0;
         }
+
         public int PullEnemy2(int why, int level, int probability, int range, int tx,
             int ty, int canl, int isAoe, int roleId)
         {
             if (!TunnelGate()) return 0;
-            return PullEnemyCore(why, level, probability, range, tx, ty, canl, isAoe);
+            return PullEnemyCore(why, level, probability, range, tx, ty, canl, roleId);
         }
         /// <summary>定身: duration秒, 使用LockRun状态冻结</summary>
         /// <remarks>
@@ -1787,8 +1934,8 @@ namespace GameSvr.Plugins
         /// 0x10071023 <c>73 26</c> jae 要求 ≥10 段，不足即在 0x10071034
         /// <c>B8 88 FC FF FF</c> 返回 -888。隧道侧与 PAS 桥都已按原生短路成 -888，
         /// 本方法保留只为不改动公开 API 面。
-        /// 正文本身仍无原生字节背书（实现体 0x10070FD0 的 ≥10 段支路未反演），
-        /// 一旦将来证到 8 参定身形，这里才是落点。
+        /// 正文在 2.08 上对 ys_DingShen 不可达（元数 &lt; 10 → 0x10071034 返回 -888），
+        /// 但 ≥10 段拉人支路已在 0x10071222 起逐字节反演；见 <see cref="PullEnemyCore"/>。
         /// </remarks>
         public int RootTarget(int duration)
         {
