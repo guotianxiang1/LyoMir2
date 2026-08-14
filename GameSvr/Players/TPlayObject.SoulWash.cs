@@ -218,7 +218,7 @@ namespace GameSvr
 
             var current = GetSoulWashCurrent();
             int cap;
-            const int baseValue = 0;
+            var baseValue = 0;
             if (prereq <= 0)
             {
                 // 0x747D08: cap=base=0, current untouched (dead after the login fixup).
@@ -226,15 +226,17 @@ namespace GameSvr
             }
             else
             {
-                // 0x747DBF..0x747E29: a non-zero slot needs 0x747B38 over the unmodeled
-                // [[0x7D6014]] table -> withhold rather than invent the base.
+                // 0x747DBF..0x747E29: non-zero slot -> 0x747B38 base sum.
                 if (SoulWashHasAnySlot(m_NativeShenYouBlock))
                 {
-                    NativeCmTailFailClosed.Drop(Grobal2.CM_4127, m_sCharName);
-                    return;
+                    if (!TryComputeSoulWashBaseFromConfig(out var configuredBase))
+                    {
+                        NativeCmTailFailClosed.Drop(Grobal2.CM_4127, m_sCharName);
+                        return;
+                    }
+                    baseValue = configuredBase;
                 }
                 cap = SoulWashCap(capBitmask);
-                // 0x747E2D..0x747E58: clamp current into [0, cap-base] and persist.
                 if (current < 0)
                 {
                     current = 0;
@@ -378,16 +380,18 @@ namespace GameSvr
                 return;
             }
 
-            // A non-zero slot array makes the base ([+0x5A0]) depend on [[0x7D6014]],
-            // so the cap/maxed gates below cannot be evaluated faithfully -> withhold.
-            if (SoulWashHasAnySlot(m_NativeShenYouBlock))
+            // A non-zero slot array makes the base ([+0x5A0]) depend on [[0x7D6014]].
+            if (SoulWashHasAnySlot(m_NativeShenYouBlock)
+                && !TryComputeSoulWashBaseFromConfig(out var gateBase))
             {
                 NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
                 return;
             }
 
             var cap = prereq > 0 ? SoulWashCap(capBitmask) : 0;
-            const int baseValue = 0; // zero slots -> 0x747B38 never runs.
+            var baseValue = 0;
+            if (SoulWashHasAnySlot(m_NativeShenYouBlock))
+                TryComputeSoulWashBaseFromConfig(out baseValue);
             var current = GetSoulWashCurrent();
 
             // 0x6BF841 `jle` and 0x6BF84E `jle`: prereq or cap not positive -> Tag=0.
@@ -408,6 +412,30 @@ namespace GameSvr
             // (0x747530). Item find / name-match / delete / client-update and the
             // tier broadcasts are unmodeled and destructive -> fail-closed.
             NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
+        }
+
+        /// <summary>0x747B38 — sum table[+4] for each non-zero slot word in shenYou window.</summary>
+        private bool TryComputeSoulWashBaseFromConfig(out int baseValue)
+        {
+            baseValue = 0;
+            var block = m_NativeShenYouBlock;
+            if (block == null || block.Length < NativeShenYouBlockSize)
+                return false;
+
+            Span<ushort> slots = stackalloc ushort[10];
+            for (var i = 0; i < slots.Length; i++)
+            {
+                var off = sizeof(int) + i * sizeof(ushort);
+                if (off + sizeof(ushort) > block.Length)
+                    break;
+                slots[i] = BitConverter.ToUInt16(block, off);
+            }
+
+            var sum = NativeShenYouAttributeConfig.Shared.ComputeBaseFromSlots(slots);
+            if (sum < 0)
+                return false;
+            baseValue = sum;
+            return true;
         }
     }
 }

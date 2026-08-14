@@ -267,6 +267,9 @@ namespace GameSvr
                 // any earlier or later step in Run reads. So position within the
                 // pass is not observable; cadence is (one Run iteration, 10s gate).
                 TickNativeExpBuff(currentTick);
+                PollNativeBurstStateExpiry();
+                TickNativeBravePowerBuffs(currentTick);
+                TickNativeBlessBuff(currentTick);
                 M2Share.CreditCardService?.TrySaveDue(this, currentTick);
                 // TRADE-48: 这段属于 Run，不是登出路径，不要外迁。判据在原生
                 // sub_6B2D38 @0x6B2E76-0x6B2EB2，而 sub_6B2D38 就是 TPlayer VMT

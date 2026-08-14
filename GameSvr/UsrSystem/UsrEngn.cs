@@ -2485,6 +2485,23 @@ namespace GameSvr
             LoadNativePowerupItems(path);
         }
 
+        /// <summary>
+        /// Startup loader cluster for A3/A4 item-advance configs (0x6A0E88, 0x6A3A48, 0x755350).
+        /// Missing files log native error strings but do not abort startup.
+        /// </summary>
+        public void LoadNativeItemAdvanceConfigs()
+        {
+            var root = M2Share.sRootPath;
+            var baseDir = M2Share.g_Config.sBaseDir;
+
+            NativeSealItemConfig.Shared.Reload(
+                NativeSealItemConfig.ResolveDefaultPath(root, baseDir), out _);
+            NativeClothUpgradeConfig.Shared.Reload(
+                NativeClothUpgradeConfig.ResolveDefaultPath(root, baseDir), out _);
+            NativeShenYouAttributeConfig.Shared.Reload(
+                NativeShenYouAttributeConfig.ResolveDefaultPath(root, baseDir), out _);
+        }
+
         internal void LoadNativePowerupItems(string path)
         {
             var table = new Dictionary<int, int>();
