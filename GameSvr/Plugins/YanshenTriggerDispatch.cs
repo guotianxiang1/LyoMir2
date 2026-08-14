@@ -466,8 +466,9 @@ namespace GameSvr.Plugins
                      + "[+0x1F4]=S(1,63) 概率门；派发门 key [+0x200]==0x429 且 value [+0x204]==100 = S(1,65)。"
                      + "【仍缺口】①概率门用的是 `((([atk+0x18] & 0xFFF) + [atk+0x470]) & 0xFFF)` 这个"
                      + "**由对象字段合成的伪随机数**（不是 Random），+0x18 与 +0x470 两个字段在 C# 无对应模型；"
-                     + "②整条链的前置是 S(1,65)==100，而 S(1,1..150) 播种（A6）时机不可证、至今未实现，"
-                     + "门永远不成立。两条任一未解就会把每刀伤害算错，故 fail-closed。",
+                     + "②整条链的前置是 S(1,65)==100，而 S(1,65) 消费者与 +0x18/+0x470 伪随机仍未接线；"
+                     + "播种本身已由 <see cref=\"TPlayObject.YanshenSeedLoginSVars\"/>（0x100CE4EA）"
+                     + "在 PasScriptHost.TryInitializeYanshen 登录路径落地。两条任一未解就会把每刀伤害算错，故 fail-closed。",
             },
             new()
             {
