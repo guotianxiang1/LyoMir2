@@ -286,6 +286,13 @@ namespace GameSvr
         
         
         public int[] m_nVal;
+
+        /// <summary>
+        /// Group-0 V 的内联槽位数组 (0x6DF20F mov eax,[ebx+eax*4+0x808])。
+        /// 原生索引范围 1..100，未触碰的槽返回 0 而非 -1。
+        /// </summary>
+        public int[] m_ScriptVGroup0;
+
         public Dictionary<int, int> m_ScriptVVars;
         public Dictionary<int, int> m_ScriptSVars;
 
@@ -489,9 +496,60 @@ namespace GameSvr
                 m_nNativeYuanBaoTradeAccum = 0;
             }
         }
-        
-        
-        
+
+        /// <summary>
+        /// 脚本变量读取的唯一入口。Group-0 V 走内联槽位 (0x6DF20F mov eax,[ebx+eax*4+0x808])，
+        /// 其余走键值字典。这是所有 GetV/GetS/PlayDice/Mall/掉落闸 等读脚本变量的地方必须经过的
+        /// 唯一解析器，因为存储方式不能从扁平的 group*1000+index 键单独推导：V 的 group 0 活在
+        /// <see cref="m_ScriptVGroup0"/>，不在字典里。直接计算扁平键并索引字典的代码对 group 0
+        /// 会静默读不到任何东西 —— 扁平键低于 1000 只能意味着 group 0，所以它们永远匹配不上。
+        /// </summary>
+        public bool TryGetScriptVar(char bank, int group, int index, out int value)
+        {
+            var upper = char.ToUpperInvariant(bank);
+            if (upper == 'V' && group == 0)
+            {
+                if (index >= 1 && index <= 100)
+                {
+                    value = m_ScriptVGroup0[index];
+                    return true;
+                }
+                value = 0;
+                return false;
+            }
+            var store = upper == 'V' ? m_ScriptVVars : m_ScriptSVars;
+            if (store != null && store.TryGetValue(group * 1000 + index, out value))
+            {
+                return true;
+            }
+            value = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// <see cref="TryGetScriptVar"/> 的写对应物。Group-0 S 写被丢弃而不是归档到扁平键下，
+        /// 匹配原生 SetS 在 0x6DF251 / 0x6DF255 直接拒绝非正 group。
+        /// </summary>
+        public void SetScriptVar(char bank, int group, int index, int value)
+        {
+            var upper = char.ToUpperInvariant(bank);
+            if (group == 0)
+            {
+                if (upper == 'V' && index >= 1 && index <= 100)
+                {
+                    m_ScriptVGroup0[index] = value;
+                }
+                return;
+            }
+            var store = upper == 'V' ? m_ScriptVVars : m_ScriptSVars;
+            if (store != null)
+            {
+                store[group * 1000 + index] = value;
+            }
+        }
+
+
+
         public byte m_btMarryCount = 0;
         public bool m_boMarried = false;
         
@@ -818,6 +876,7 @@ namespace GameSvr
             m_nVal = new int[20000];  // Delphi 战神: nTaskNo*1000+nFieldNo
             m_ScriptVVars = new Dictionary<int, int>();
             m_ScriptSVars = new Dictionary<int, int>();
+            m_ScriptVGroup0 = new int[101];
             m_nMval = new int[100];
             m_DyVal = new int[100];
             m_nSval = new string[100];

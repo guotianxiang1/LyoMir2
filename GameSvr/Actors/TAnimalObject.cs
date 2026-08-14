@@ -4,9 +4,17 @@ namespace GameSvr
 {
     public class AnimalObject : TBaseObject
     {
-        
-        
-        
+        // 怪物 mover sub_71F0F4 的边界：>= 0 且 <= Width/Height（松边界）。
+        // 与人形 sub_741224 的 > 0 / < Width（严边界）不同，故单独 override。
+        // 0x71F14F cmp esi,[eax+0x3C] / jg fail -> newX <= Width
+        // 0x71F158 test edi,edi        / jl fail -> newY >= 0
+        // 0x71F166 cmp edi,[eax+0x40]  / jg fail -> newY <= Height
+        protected override bool WalkToInBounds(short nNX, short nNY)
+        {
+            return nNX >= 0 && nNX <= m_PEnvir.wWidth
+                && nNY >= 0 && nNY <= m_PEnvir.wHeight;
+        }
+
         public int m_nNotProcessCount = 0;
         public short m_nTargetX = 0;
         public short m_nTargetY = 0;

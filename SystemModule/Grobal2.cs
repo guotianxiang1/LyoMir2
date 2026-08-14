@@ -149,6 +149,8 @@ namespace SystemModule
         public const int ET_FIRE = 5;
         public const int ET_SCULPEICE = 6;
         public const int ET_YANHUA_TEXT = 23;
+        /// <summary>TStallEvent.Create @0x719A20 `6A 29 push 0x29`.</summary>
+        public const int ET_STALL = 0x29;
         public const int RCC_MERCHANT = 50;
         public const int RCC_GUARD = 12;
         public const int RCC_USERHUMAN = 0;
@@ -161,10 +163,15 @@ namespace SystemModule
         public const int CM_SELCHR = 103;
         public const int CM_QUERYDELCHR = 105;
         public const int CM_RESDELCHR = 106;
-        
-        
-        
+
+
+
         public const int CM_SELECTSERVER = 104;
+        /// <summary>
+        /// Client cheat self-report, handler at native 0x6D8CA2.
+        /// 战神 has no symbolic name for it, so it keeps the numeric form.
+        /// </summary>
+        public const int CM_205 = 205;
         public const int CM_ATTACKMODE = 545;
         
         
@@ -174,6 +181,22 @@ namespace SystemModule
         public const int CM_DROPITEM = 1000;
         public const int CM_PICKUP = 1001;
         public const int CM_PICKUP_RANGE = 4278;
+        /// <summary>
+        /// Native CM 4314 handler 0x6DB040: `66 8B 50 06 mov dx,[msg+6]` then
+        /// `E8 ED 78 01 00 call 0x6F293C`. Callee 0x6F293C is a single `C3 ret`.
+        /// </summary>
+        public const int CM_4314 = 4314;
+        /// <summary>
+        /// Native CM 4315 handler 0x6DB054: `66 8B 50 06 mov dx,[msg+6]` then
+        /// `E8 DD 78 01 00 call 0x6F2940`. Callee 0x6F2940 is a single `C3 ret`
+        /// (followed by `8D 40 00` alignment padding, not a second instruction).
+        /// </summary>
+        public const int CM_4315 = 4315;
+        /// <summary>
+        /// Native CM 4629 handler 0x6DBB70 -> 0x6F7C40. Same-ident reply via
+        /// vtbl+0x254 (0x6F7E81 66 BA 15 12 mov dx,0x1215).
+        /// </summary>
+        public const int CM_4629 = 4629;
         public const int CM_TAKEONITEM = 1003;
         public const int CM_TAKEOFFITEM = 1004;
         public const int CM_1005 = 1005;
@@ -182,6 +205,33 @@ namespace SystemModule
         public const int CM_1069 = 1069;
         public const int CM_COMMON_INFORMATION = 1099;
         public const int CM_YANHUA_TEXT = 1290;
+        /// <summary>
+        /// Hero level cap hint toggle, handler at native 0x6DA3A2, field at self+0x1898.
+        /// <c>0x6DA3BE mov byte [self+0x1898],0</c>. Param == 0 turns the hint ON.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1239 = 1239;
+        /// <summary>
+        /// Hero record sharing toggle, handler at native 0x6DA9C8, field at self+0x18AC.
+        /// Param values other than 0 and 1 leave the flag untouched.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1281 = 1281;
+        /// <summary>
+        /// Explicit no-op arm, handler at native 0x6DAC1C -> empty proc 0x6EE11C.
+        /// The callee has exactly one caller (this handler), so the opcode is a proven no-op.
+        /// 战神 has no symbolic name for it.
+        /// </summary>
+        public const int CM_1325 = 1325;
+        /// <summary>
+        /// YB consignment query opcodes. Native handlers:
+        ///   1252 0x6DA685 -> 0x6E7E3C -> 0x632A14   1253 0x6DA692 -> 0x6E7E90 -> 0x632E7C
+        ///   1256 0x6DA6D5 -> 0x6E83AC -> 0x632BEC   1257 0x6DA6E2 -> 0x6E8400 -> 0x632D34
+        /// </summary>
+        public const int CM_YB_CONSIGN_INBOX = 1252;
+        public const int CM_YB_CONSIGN_OUTBOX = 1253;
+        public const int CM_YB_DEAL_BUY_HISTORY = 1256;
+        public const int CM_YB_DEAL_SELL_HISTORY = 1257;
         public const int CM_BUTCH = 1007;
         public const int CM_MAGICKEYCHANGE = 1008;
         public const int CM_CLICKNPC = 1010;
@@ -441,6 +491,15 @@ namespace SystemModule
         public const int SM_TAKEOFF_FAIL = 620;
         public const int SM_SENDUSEITEMS = 621;
         public const int SM_WEIGHTCHANGED = 622;
+        /// <summary>
+        /// Firehit skill toggle notification. Same Recog convention as SM_SWORDHIT_ON (0xB03)
+        /// at 0x6BC8E5 / 0x6B2F8D. Production srv_AppearTimes: 626 = 56,720.
+        /// </summary>
+        public const int SM_FIREHITSKILL = 626;
+        /// <summary>
+        /// Mining success self-notification. EA=0x006BC2F8: 66 BA 74 02 (mov dx, 0x274).
+        /// </summary>
+        public const int SM_MINESUCCESS = 628;
         public const int SM_ACT_GOOD = 629;
         public const int SM_ACT_FAIL = 630;
         public const int SM_CLEAROBJECTS = 633;
@@ -700,6 +759,12 @@ namespace SystemModule
         public const int CM_HORSERUN = 3035;
         public const int CM_CRSHIT = 3036;
         public const int CM_3037 = 3037;
+        /// <summary>
+        /// Native CM 3290 (handler 0x6DA34E) replies on SM 3289 via vtbl+0x254.
+        /// C# previously used 3290 as an SM ident (SM_QUERY_FOCUS_ITEM); that is
+        /// the opposite direction and is not this CM.
+        /// </summary>
+        public const int CM_3290 = 3290;
         public const int CM_TWINHIT = 3038;
         public const int CM_QUERYUSERSET = 3040;
         public const int CM_QUERY_TASK_DETAIL = 3051;
@@ -707,6 +772,18 @@ namespace SystemModule
         public const int CM_DO_TASK_COMMAND = 3053;
         public const int CM_QUERY_SINGLE_TASK = 3054;
         public const int SM_PLAYDICE = 1200;
+        /// <summary>
+        /// Channel magic cancellation notification. EA=0x6EE164.
+        /// Recog=Self, Param=magicId from [obj+0xA24], Tag=0, Series=0.
+        /// C# queues this ident through SendRefMsg; Operate must emit the wire packet.
+        /// </summary>
+        public const int SM_CHANNEL_MAGIC_CANCEL = 1232;
+        /// <summary>
+        /// Location channel magic cancellation notification. EA=0x6EF62E.
+        /// Recog=Self, Param=magicId from [obj+0xA4C], Tag=0, Series=0.
+        /// Skipped when magicId==0 (0x6EF5EA jbe).
+        /// </summary>
+        public const int SM_LOCATION_CHANNEL_MAGIC_CANCEL = 1234;
         public const int SM_PASSWORDSTATUS = 8002;
 
         // Native hero protocol. Visible actions still use the common RM_/SM_ action path.
@@ -1067,7 +1144,13 @@ namespace SystemModule
         public const int CM_SPLITITEM = 1116;
         public const int CM_QUERY_FOCUS_ITEM = 1271;
         public const int SM_ITEM_PILEUP_RESULT = 3322;
+        /// <summary>Clock snapshot reply for CM_3290. Native EA=0x6DA34E.</summary>
+        public const int SM_3289 = 3289;
         public const int SM_QUERY_FOCUS_ITEM = 3290;
+        /// <summary>Skill 68 blink move notification. Native EA for RM carrier=0x6EC9CA.</summary>
+        public const int SM_NATIVE_BLINK_MOVE = 3557;
+        /// <summary>Skill 68 charge move notification. Native EA for RM carrier=0x6EC99E.</summary>
+        public const int SM_NATIVE_CHARGE_MOVE = 3558;
 
         // === Title / NPC / Item Commit ===
         public const int CM_QUERY_TITLE = 3202;
@@ -1159,7 +1242,15 @@ namespace SystemModule
         public const int RM_ABILITY = 10051;
         public const int RM_HEALTHSPELLCHANGED = 10052;
         public const int RM_DAYCHANGING = 10053;
-        public const int SM_LINGFU_CHANGED = 10054;
+        /// <summary>
+        /// Lingfu changed notification. Internal queue tag, not a wire ident.
+        /// `0x6B99F9 call 0x765E68` -- the record-allocating ENQUEUE helper, which
+        /// contains no [+0x250]/[+0x254] send-slot call. The wire packet is emitted by
+        /// the RM handler: dispatcher 0x6B3F08 `jmp [eax*4+0x6B3F0F]` routes tag 10054
+        /// to arm 0x6B4DED, which builds a 24-byte body and sends
+        /// 0x6B4E3A `66 BA B2 04 mov dx,0x4B2` = 1202 = SM_GETDIAMNUM_EXT.
+        /// </summary>
+        public const int RM_LINGFU_CHANGED = 10054;
         public const int RM_USERMOVE = 10056;
         public const int RM_NATIVE_CLEAROBJECTS = 10117;
         public const int RM_NATIVE_CHANGEMAP = 10118;
@@ -1235,6 +1326,12 @@ namespace SystemModule
         public const int RM_PHYSICAL_ATT = 10612;
         public const int RM_NATIVE_UNION_EFFECT = 10612;
         public const int RM_NATIVE_EXP_CONTINUE = 10625;
+        /// <summary>
+        /// Logon state synchronization notification. Native EA=0x6B1D43.
+        /// Kept numerically equal to native because it neighbours RM_NATIVE_MOOTEBO_CONTINUE
+        /// (12309); RM_* stays process-local and never reaches the wire (REPLICATION_RULES §1.4).
+        /// </summary>
+        public const int RM_NATIVE_LOGON_STATE_SYNC = 12304;
         public const int RM_NATIVE_MOOTEBO_CONTINUE = 12309;
         public const int RM_HEAR = 11001;
 
@@ -1311,6 +1408,19 @@ namespace SystemModule
         public const int RM_NATIVE_INVITE_HORSE = 15317;
         public const int RM_NATIVE_SHANGMA_OK2 = 15318;
         public const int RM_NATIVE_XIAMA_2 = 15319;
+        /// <summary>
+        /// Skill 68 charge landing notification carrier. Native EA=0x6EC8DA.
+        /// </summary>
+        public const int RM_NATIVE_CHARGE_LAND = 15320;
+        /// <summary>Carrier for <see cref="SM_NATIVE_CHARGE_MOVE"/>.</summary>
+        public const int RM_NATIVE_CHARGE_MOVE = 15321;
+        /// <summary>Carrier for <see cref="SM_NATIVE_BLINK_MOVE"/>.</summary>
+        public const int RM_NATIVE_BLINK_MOVE = 15322;
+        /// <summary>
+        /// Stealth vanish notification. TPlayObject.Operate at the 0x6B4391 table,
+        /// slot 62 of base 0x3004, arm 0x6B6065. Not a wire ident; the arm answers with SM_DISAPPEAR.
+        /// </summary>
+        public const int RM_NATIVE_STEALTH_VANISH = 15323;
         public const int RM_WWJATTACK = 10017;
         public const int RM_WSJATTACK = 10018;
         public const int RM_WTJATTACK = 10019;

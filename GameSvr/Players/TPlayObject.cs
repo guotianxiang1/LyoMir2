@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using SystemModule;
 using SystemModule.Common;
 using SystemModule.Packages;
+using GameSvr.PasEngine;
 
 namespace GameSvr
 {

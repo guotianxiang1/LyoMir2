@@ -93,12 +93,6 @@ public class TMapFlag
     public bool boDARE;
 
     /// <summary>
-    /// Native map flag NOMAGIC -> [flag+0x70] (magic system reads).
-    /// Prohibits magic usage on the map.
-    /// </summary>
-    public bool boNOMAGIC;
-
-    /// <summary>
     /// 战神 map flag <c>NOHERO</c> -> native <c>[flag+0x6E]</c>
     /// (parser <c>sub_774D98</c> token compare, writes <c>mov byte [ebx+0x6E],1</c>).
     /// Prohibits hero on the map.

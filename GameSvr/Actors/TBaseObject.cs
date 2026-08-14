@@ -1110,6 +1110,14 @@ namespace GameSvr
             }
         }
 
+        // 边界检查按类型分派：base = 永不移动（TCreature/TPsNpc 槽 0x767568 返回 false）；
+        // AnimalObject override = 怪物松边界（>= 0 且 <= Width）；
+        // TPlayObject / HeroObject override = 人形严边界（> 0 且 < Width，0x741276/0x741284）。
+        protected virtual bool WalkToInBounds(short nNX, short nNY)
+        {
+            return false;
+        }
+
         public bool WalkTo(byte btDir, bool boFlag)
         {
             short nOX = 0;

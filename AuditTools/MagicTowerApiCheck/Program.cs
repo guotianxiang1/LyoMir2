@@ -447,7 +447,7 @@ static void CheckRouteSuccessAndExplicitPlayerOwnership()
            && snapshot.PaidEntries == 1 && snapshot.FreeEntries == 0,
         "EnterRouteWayByLF global route counters mismatch");
     Assert(explicitPlayer.m_MsgList.Count(message =>
-            message.wIdent == Grobal2.SM_LINGFU_CHANGED) == 1,
+            message.wIdent == Grobal2.RM_LINGFU_CHANGED) == 1,
         "EnterRouteWayByLF LingFu refresh count mismatch");
     Assert(explicitPlayer.m_MsgList.Count(message =>
             message.wIdent == Grobal2.RM_CLEAROBJECTS) == 1,
@@ -522,7 +522,7 @@ static void CheckRouteExPaid()
            && snapshot.FreeEntries == 1,
         "paid EnterRouteWayByLFEx global counters mismatch");
     Assert(explicitPlayer.m_MsgList.Count(message =>
-            message.wIdent == Grobal2.SM_LINGFU_CHANGED) == 1,
+            message.wIdent == Grobal2.RM_LINGFU_CHANGED) == 1,
         "paid EnterRouteWayByLFEx LingFu refresh mismatch");
     Assert(M2Share.LogStringList.Count == 1
            && (string)M2Share.LogStringList[0] ==
@@ -595,7 +595,7 @@ static void CheckRouteExFree()
            && snapshot.FreeEntries == 5 && randomCalls == 1,
         "free EnterRouteWayByLFEx changed counters or lost threshold RNG");
     Assert(explicitPlayer.m_MsgList.All(message =>
-            message.wIdent != Grobal2.SM_LINGFU_CHANGED),
+            message.wIdent != Grobal2.RM_LINGFU_CHANGED),
         "free EnterRouteWayByLFEx emitted a LingFu refresh");
     Assert(M2Share.LogStringList.Count == 0,
         "free EnterRouteWayByLFEx wrote a debit log");
@@ -706,7 +706,7 @@ static void CheckRouteMissingMapDoesNotRollback()
     Assert(M2Share.LogStringList.Count == 1,
         "missing-map EnterRouteWayByLF rolled back the debit log");
     Assert(player.m_MsgList.Count(message =>
-            message.wIdent == Grobal2.SM_LINGFU_CHANGED) == 1
+            message.wIdent == Grobal2.RM_LINGFU_CHANGED) == 1
            && player.m_MsgList.All(message =>
                message.wIdent != Grobal2.RM_CHANGEMAP),
         "missing-map EnterRouteWayByLF movement/refresh messages mismatch");

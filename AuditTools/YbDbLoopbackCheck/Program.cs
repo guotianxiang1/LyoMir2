@@ -468,7 +468,7 @@ internal static class Program
         if (player.m_boNativeYbDealOpened)
             throw new InvalidOperationException("Param!=1 opened YB deal state");
         Equal(1, player.m_MsgList.Count(entry =>
-                entry.wIdent == Grobal2.SM_LINGFU_CHANGED),
+                entry.wIdent == Grobal2.RM_LINGFU_CHANGED),
             "1103 capital refresh count");
         Equal(71, player.m_CreditCard.Value, "1103 CreditCard.Value isolation");
         Equal(72, player.m_CreditCard.Value2, "1103 CreditCard.Value2 isolation");
@@ -516,7 +516,7 @@ internal static class Program
             throw new InvalidOperationException(
                 "Param==1 did not consume the YB deal one-shot state");
         Equal(2, player.m_MsgList.Count(entry =>
-                entry.wIdent == Grobal2.SM_LINGFU_CHANGED),
+                entry.wIdent == Grobal2.RM_LINGFU_CHANGED),
             "second 1103 capital refresh count");
 
         if (!client.RequestCredit(player))
