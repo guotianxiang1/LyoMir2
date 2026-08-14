@@ -1757,7 +1757,12 @@ namespace GameSvr
                             // 写反后差值恒为负(本分支的进入条件就是 Dura > DuraMax),负的 n10
                             // 继续流入下方 StdMode>4 段被逐级放大,最后被 :1721 的 _MAX(2,…) 兜到 2 ——
                             // 不崩不报错,只静默给出荒谬低价。
-                            n10 = n10 + HUtil32.Round(n10 / UserItem.DuraMax * 2.0 * (UserItem.Dura - UserItem.DuraMax));
+                            // ✅ 战神字节证据 (Tier-1) — PRICE-13 over 臂 @0x78627B-0x78629B:
+                            // fild price / fdivp liveMax / fmul 2.0f / fild (cur-liveMax) / fmulp / @ROUND.
+                            // 全程 x87 80 位; double 链在 price=1,live=196,delta=147 等处 ±1。
+                            n10 = n10 + HUtil32.RoundRational(
+                                (long)n10 * 2 * (UserItem.Dura - UserItem.DuraMax),
+                                UserItem.DuraMax);
                         }
                     }
                     if (StdItem.StdMode == 43)
@@ -1880,7 +1885,12 @@ namespace GameSvr
                             //   照抄它造成本次 -83% 定价 bug;`div` 是整除这半句 ref 恰好说对。
                             n10 = n10 + (double)((int)n10 / 5 * n14);
                         }
-                        n10 = HUtil32.Round(n10 / StdItem.DuraMax * UserItem.DuraMax);
+                        // ✅ 战神字节证据 (Tier-1) — PRICE-08 Stage A @0x783E8B-0x783EA5:
+                        // fild price / fdivp templateMax / fmulp liveMax / call @ROUND — 无 fstp qword。
+                        // double 链在 price=1,live=147,template=98 等处 ±1。
+                        n10 = HUtil32.RoundRational(
+                            (long)n10 * UserItem.DuraMax,
+                            StdItem.DuraMax);
                         n20 = n10 / 2.0 / UserItem.DuraMax * (UserItem.DuraMax - UserItem.Dura);
                         n10 = HUtil32._MAX(2, HUtil32.Round(n10 - n20));
                     }
@@ -1927,7 +1937,11 @@ namespace GameSvr
                                     nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
                                     if (PlayObject.m_nGold >= nPrice && nPrice > 0)
                                     {
-                                        if (PlayObject.AddItemToBag(UserItem))
+                                        // ✅ 战神字节证据 (Tier-1) — ECON-34 买路盖印 @0x63EC6F-0x63EC7A:
+                                        //   0063EC6F  push 0          ; reason=0
+                                        //   0063EC71  mov cl, 1       ; stampEnable=true (ECX 门控 sub_6B739F test al,bl)
+                                        //   0063EC7A  call [edi+0x248] ; AddItemToBag
+                                        if (PlayObject.AddItemToBag(UserItem, 0, true))
                                         {
                                             // ✅ 战神字节证据 (Tier-1) — ECON-34: 买入扣款走的是
                                             // 【DecGold(0x6C7D64)】,不是裸减字段。EA: sub_63EB34 @0x63EC7A-0x63EC8E:
@@ -2153,6 +2167,16 @@ namespace GameSvr
                 {
                     result = false;
                 }
+            }
+            // ECON sell transfer gate sub_63F194 @0x63F1DC-0x63F1F6:
+            //   mov cl,[merchant+0x4B7] / mov edx,1 / call 0x78389C
+            //   test eax,eax / jle pass / xor ebx,ebx (reject)
+            // mode 1 body @0x783901: test byte [std+3],1 → reject code 2.
+            if (result && StdItem != null
+                && NativeItemDropDestroy.CheckTransferPermission(
+                    UserItem, StdItem, NativeItemDropDestroy.TransferModeSell) > 0)
+            {
+                result = false;
             }
             return result;
         }
@@ -2421,7 +2445,11 @@ namespace GameSvr
             {
                 if (UserItem.DuraMax > 0)
                 {
-                    nRepairPrice = HUtil32.Round(((double)(nPrice / 3) / UserItem.DuraMax) * (UserItem.DuraMax - UserItem.Dura));
+                    // ✅ 战神字节证据 (Tier-1) — PRICE-21 @0x63EF92-0x63EFCC:
+                    // idiv 3 → fild / fdivp liveMax / Abs(Δ) / fmulp / @ROUND — /3 之后全程 80 位。
+                    nRepairPrice = HUtil32.RoundRational(
+                        (long)(nPrice / 3) * (UserItem.DuraMax - UserItem.Dura),
+                        UserItem.DuraMax);
                 }
                 else
                 {
@@ -2495,7 +2523,10 @@ namespace GameSvr
                 {
                     if (UserItem.DuraMax > 0)
                     {
-                        nRepairPrice = HUtil32.Round(((double)(nPrice / 3) / UserItem.DuraMax) * (UserItem.DuraMax - UserItem.Dura));
+                        // ✅ 战神字节证据 (Tier-1) — PRICE-21 同 ClientQueryRepairCost。
+                        nRepairPrice = HUtil32.RoundRational(
+                            (long)(nPrice / 3) * (UserItem.DuraMax - UserItem.Dura),
+                            UserItem.DuraMax);
                     }
                     else
                     {

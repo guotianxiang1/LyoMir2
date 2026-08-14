@@ -172,6 +172,36 @@ namespace SystemModule
         }
 
         /// <summary>
+        /// Half-to-even rounding of an exact rational <c>numerator / denominator</c>.
+        /// Reproduces native x87 extended-precision chains that end in
+        /// <c>fild / fdivp / fild / fmulp / call @ROUND</c> (0x403574) without
+        /// spilling to IEEE double — used by merchant pricing Stage A (PRICE-08),
+        /// meat over-cap bonus (PRICE-13), and repair tail (PRICE-21).
+        /// </summary>
+        public static int RoundRational(long numerator, long denominator)
+        {
+            if (denominator == 0) return 0;
+            if (denominator < 0)
+            {
+                numerator = -numerator;
+                denominator = -denominator;
+            }
+
+            var quotient = numerator / denominator;
+            var remainder = numerator - quotient * denominator;
+            if (remainder < 0)
+            {
+                quotient -= 1;
+                remainder += denominator;
+            }
+
+            var twice = 2 * remainder;
+            if (twice > denominator) quotient += 1;
+            else if (twice == denominator && (quotient & 1) != 0) quotient += 1;
+            return (int)quotient;
+        }
+
+        /// <summary>
         /// Significand of 1.3 = 13/10 for exact rational arithmetic in ore price calculations.
         /// Native uses x87 extended (64-bit significand); this is the numerator when denominator is 10.
         /// </summary>
