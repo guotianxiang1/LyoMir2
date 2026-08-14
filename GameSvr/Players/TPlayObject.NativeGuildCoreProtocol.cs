@@ -324,20 +324,37 @@ namespace GameSvr
                 targetCorps.Name + NativeGildDismissViceSuffix);
         }
 
+        // Captain = the corps member whose MemberId == corps.OwnerId (same
+        // resolution as NativeCorpsService owner-name lookup); then map to an
+        // online object via UserEngine.GetPlayObject(name).
+        private static TPlayObject ResolveOnlineCorpsCaptain(
+            NativeCorpsSnapshot corps)
+        {
+            var userEngine = M2Share.UserEngine;
+            if (userEngine == null || corps?.Members == null)
+                return null;
+            for (var i = 0; i < corps.Members.Count; i++)
+            {
+                var member = corps.Members[i];
+                if (member == null || member.MemberId != corps.OwnerId
+                    || string.IsNullOrEmpty(member.Name))
+                    continue;
+                var player = userEngine.GetPlayObject(member.Name);
+                return (player == null || player.m_boGhost) ? null : player;
+            }
+            return null;
+        }
+
         private static void TrySendNativePlayerGuildToCaptain(
             NativeCorpsService service, NativeCorpsSnapshot corps)
         {
-            var captain = NativeAwardCodeManager.ResolveOnlinePlayer(
-                corps.OwnerId);
-            captain?.SendNativePlayerGuild();
+            ResolveOnlineCorpsCaptain(corps)?.SendNativePlayerGuild();
         }
 
         private static void TrySendNativeSocialRoleRefreshToCaptain(
             NativeCorpsSnapshot corps)
         {
-            var captain = NativeAwardCodeManager.ResolveOnlinePlayer(
-                corps.OwnerId);
-            captain?.SendNativeSocialRoleRefresh();
+            ResolveOnlineCorpsCaptain(corps)?.SendNativeSocialRoleRefresh();
         }
 
         private void BroadcastNativeGildMessage(NativeCorpsService service,
