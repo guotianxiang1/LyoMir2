@@ -546,7 +546,20 @@ namespace GameSvr
         // a POSITION-AWARE engine "can a stall be placed at this map+tile?" check, NOT a single Environment
         // .Flag bool (codec-fidelity 2026-08-01). FLAGGED (pre-flip): default true until sub_696D7C's exact
         // predicate is reversed. Non-economy (Δ=0, dormant).
-        private bool MapAllowsStall() => true;
+        /// <summary>
+        /// START 的 -9 闸：sub_6E7C38 → sub_6E78D4（地图名）→ sub_7684A0（位置）。
+        /// 盘古1 的 土城摆摊 / 指定地图编号摆摊 / 限制摆摊 三键改的就是这两跳。
+        /// </summary>
+        private bool MapAllowsStall()
+        {
+            if (!Plugins.YanshenPangu1Patches.MapMatchesStallPolicy(this))
+                return false;
+            if (!Plugins.YanshenPangu1Patches.StallLimitPermits(this))
+                return false;
+            if (Plugins.YanshenPangu1Patches.BypassStallPositionGate(this))
+                return true;
+            return true; // sub_7684A0 未反汇至 C#，默认放行（与改前一致）
+        }
 
         // START precheck A (sub_61F3D8, the -7 rung): the booth still has paid time left =
         // 3600 * DuraTime(hours) - elapsed-since-CreateDate > 0.

@@ -1059,6 +1059,9 @@ namespace GameSvr
         {
             if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
             {
+                // 屏蔽元宝增减信息 @0x6F8288 等 8 站点：启用时不发 RM_GAMEGOLDCHANGED。
+                if (Plugins.YanshenPangu1Patches.ShouldSuppressGameGoldClientMsg())
+                    return;
                 SendUpdateMsg(this, Grobal2.RM_GAMEGOLDCHANGED, 0, 0, 0, 0, "");
             }
         }

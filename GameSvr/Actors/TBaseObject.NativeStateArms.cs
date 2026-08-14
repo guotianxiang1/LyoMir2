@@ -110,6 +110,9 @@ namespace GameSvr
         /// </summary>
         private void SendNativeStateArmMsg(string text, byte color, byte type)
         {
+            // 屏蔽属性提升提示：31 个宿主 VA 0x741A21..0x74298C 的 jmp 跳过等价。
+            if (Plugins.YanshenPangu1Patches.ShouldSuppressAttrUpHint(text))
+                return;
             if (this is HeroObject hero)
             {
                 if (hero.m_Master is TPlayObject master)
