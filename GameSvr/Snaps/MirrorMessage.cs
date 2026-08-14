@@ -53,15 +53,16 @@ namespace GameSvr
         /// 仅收录**跳表 stub 确实把 [ebp+0x10] 转给 handler、且本仓已按 native
         /// 落地**的 ident。native 侧读 [ebp+0x10] 的 stub 共 9 个 (202 0x657208 /
         /// 203 0x65721C / 207 0x657230 / 209 0x65723D / 214 0x657287 /
-        /// 219 0x6572C4 / 224 0x65730A / 228 0x65733E / 249 0x657385), 但其余 7 个
-        /// 要么仍 BLOCKED (202/207/214), 要么本仓另有在用的三字段发送方
-        /// (203 私聊 / 207 信用卡开关 / 249 昵称灵符), 给它们加字段会改变现有
-        /// 行为, 故不纳入 —— 见 docs/sgrp_transport_third_param_20260814.md。
+        /// 219 0x6572C4 / 224 0x65730A / 228 0x65733E / 249 0x657385)。
         /// </summary>
         private static bool CarriesNativeParam(int ident)
         {
             switch (ident)
             {
+                // 202 stub 0x657208 `mov ecx,[ebp+0x10]` -> sub_658384 -> 惩罚天数
+                case Grobal2.ISM_ANTICHEAT_PENALTY:
+                // 207 stub 0x657230 `mov edx,[ebp+0x10]` -> sub_658114 -> 37-bit 掩码
+                case Grobal2.ISM_SINGLEQUOTE_SCAN:
                 // 209 stub 0x65723D `mov ecx,[ebp+0x10]` -> sub_6580B8 -> 禁言秒数
                 case Grobal2.ISM_CHATPROHIBITION:
                 // 224 stub 0x65730A `mov ecx,[ebp+0x10]` -> sub_6574B4 -> 声望点数
@@ -128,30 +129,22 @@ namespace GameSvr
                 case Grobal2.ISM_USERLOGON:
                     MsgGetUserLogon(serverNum, Body);
                     break;
+                case Grobal2.ISM_CS_USERLOGOUT:
+                    // C# 扩展 ident 198（窗口外）：跨服登出广播。原误用 native 202
+                    // (ISM_ANTICHEAT_PENALTY); 发送方 UsrEngn.cs 已改到本 ident。
+                    MsgGetUserLogout(serverNum, Body);
+                    break;
+                case Grobal2.ISM_ANTICHEAT_PENALTY:
+                    // 战神 202 stub 0x657208 `mov ecx,[ebp+0x10]` -> sub_658384 @0x658384
+                    // (len>0 提 body) -> sub_653ED0 @0x653ED0。线格式
+                    // nCode/nServerIdx/nParam/sMsg，nParam=惩罚天数，sMsg=账号名。
+                    // VA: 0x653F6B tier=3 / 0x653F74 sub_6D43C4 / 0x653F7F [+0x180c]。
+                    TPlayObject.NativeMirrorAntiCheatPenalty(Body, nParam);
+                    break;
                 case Grobal2.ISM_USERLOGOUT:
-                    // 战神 202 = 反作弊惩罚 (跳表 sub_657110 EA 0x657208 -> wrapper
-                    // sub_658384 -> core sub_653ED0)。native 语义 (字节级已证):
-                    //   * wrapper: 若 [ebp+8]=len>0, 从 body 提名单串, 调 core, 第三参
-                    //     ecx=[ebp+0x10]=帧 dword[ebx+8]=惩罚"时长/秒" (0x658384)。
-                    //   * core sub_653ED0: sub_653cc4 遍历玩家表[+0x2c], 对 byte[+0x73]==0
-                    //     且 CompareText(player.[+0xb33], body)==0 的每个玩家 (可多个,
-                    //     同账号/IP), 施罚:
-                    //       time>0 -> byte[+0x1829]=3 (惩罚档位); [+0x180c]=trunc(Now-
-                    //         [+0x780])+7-time (0x653F6B/0x653F7F, 到期天数); SendMsg
-                    //         cx=0x1D "设置外挂惩罚"(0x65403C)。
-                    //       time<=0 -> byte[+0x1829]=0; [+0x180c]=0; "清除外挂惩罚"
-                    //         (0x654054)。 'SD000'@0x65402C 经 0x696228/0x696528 查表。
-                    // fail-closed (缺字段+缺载体+捏造风险, 遵铁律不改运行行为):
-                    //   (1) 时长来自帧第三 dword (native arg3); C# 跨服为文本协议,
-                    //       ProcessData(ident,serverNum,body) 无此载体 (serverNum 是发送
-                    //       服索引, 见各 handler 的 sNum==nServerIndex 守卫), 无法定 set/
-                    //       clear 亦无法算到期。
-                    //   (2) [+0x1829]=m_btNativeCheatPenaltyTier 已存在, 但到期字段
-                    //       [+0x180c] 全仓无对应成员 (缺字段); 日期基址 [+0x780] 亦未映射。
-                    //   (3) 唯一 live 发送方是 UsrEngn.cs:1568 的登出广播 (charname, 无
-                    //       时长), 全仓无反作弊形态的 202 发送方 -> 反作弊 core 不可达。
-                    // 保留 C#-自洽的登出接收 (与其 live 发送方匹配); 反作弊语义待补齐
-                    // [+0x180c]/日期基址字段 + 传输第三参后再接线。
+                    // Obsolete 别名 (=202)。若对端仍发无 nParam 的旧登出帧, 首字段非整数
+                    // 时 TakeNativeParam 原样返回 charname —— 不再误当反作弊（需对端改
+                    // ident 198 或带 nParam 的 202 反作弊帧）。
                     MsgGetUserLogout(serverNum, Body);
                     break;
                 case Grobal2.ISM_WHISPER:
@@ -172,25 +165,37 @@ namespace GameSvr
                 case Grobal2.ISM_DELGUILD:
                     MsgGetDelGuild(serverNum, Body);
                     break;
-                case Grobal2.ISM_RELOADGUILD:
-                    // 战神 207 = 服务器全局字符位图切换 (跳表 EA 0x657230 -> sub_658114)。
-                    // native 语义 (字节级已证): 叶子只传 edx=[ebp+0x10]=帧 dword[ebx+8]=
-                    // 新 37-bit 掩码; sub_658114 读全局对象 [0x7D7038], 保存旧 [+0]/[+4]
-                    // (dword+byte=37 位), 写入新掩码, 然后对字符码 bl=0..0x24(36) 逐位比
-                    // 较新旧 (0x65813F cmp al,0x27 是 bt 范围守卫, 0x65818A cmp bl,0x25 是
-                    // 循环上界): 旧置新清 -> sub_658110(char,0); 旧清新置 -> sub_658110
-                    // (char,1); 末尾 [0x7D5A68]->0x794F30 刷新。
-                    // fail-closed: (1) 新掩码来自帧第三 dword (native arg3), C# 文本协议无
-                    // 载体; (2) 全局 [0x7D7038] 位图对象与逐位回调 sub_658110/0x794F30 在
-                    // C# 无对应模型 (缺全局状态); (3) 该 32-bit 掩码非文本可表示。故不移植
-                    // native 位图 swap。保留 C# live 发送方的数字 body -> 信用卡 switchWord
-                    // (CreditCardCommand.cs:31); 已删除非原生 else 重载行会分支 (native 207
-                    // sub_658114 只做位图 swap, 不解析行会名 body)。
+                case Grobal2.ISM_CS_RELOADGUILD:
+                    // C# 扩展 ident 199：跨服重载行会。原误用 native 207。
+                    MsgGetReloadGuild(serverNum, Body);
+                    break;
+                case Grobal2.ISM_CS_SERVERSWITCH:
+                    // C# 扩展 ident 258：switchWord 广播（信用卡/地图爆物等）。
                     if (uint.TryParse(Body, NumberStyles.Integer,
-                        CultureInfo.InvariantCulture, out var switchWord))
+                        CultureInfo.InvariantCulture, out var switchWordExt))
+                    {
+                        M2Share.ServerSwitches?.TryApplySwitchWord(
+                            switchWordExt, out _);
+                    }
+                    break;
+                case Grobal2.ISM_SINGLEQUOTE_SCAN:
+                    // 战神 207 stub 0x657230 -> sub_658114 @0x658114；nParam=掩码低 32 位。
+                    // VA: 0x65811C [0x7D7038] / 0x65813F cmp 0x27 / 0x65818A cmp 0x25 /
+                    // 0x658196 call 0x794F30。sub_658110 @0x658110 本 build 空桩。
+                    NativeSingleQuoteScanBitmap.ApplyMirrorMask(nParam);
+                    break;
+                case Grobal2.ISM_RELOADGUILD:
+                case Grobal2.ISM_SERVERSWITCH:
+                    // Obsolete 别名 (=207)。旧帧若仍到达, 走扩展语义兜底。
+                    if (uint.TryParse(Body, NumberStyles.Integer,
+                        CultureInfo.InvariantCulture, out var legacySwitchWord))
                     {
                         (M2Share.CreditCardService ?? NativeCreditCardService.Disabled)
-                            .TryApplySwitchWord(switchWord, true);
+                            .TryApplySwitchWord(legacySwitchWord, true);
+                    }
+                    else
+                    {
+                        MsgGetReloadGuild(serverNum, Body);
                     }
                     break;
                 case Grobal2.ISM_GUILDMSG:
@@ -371,6 +376,7 @@ namespace GameSvr
                     // 247 发送方 (SGRP-41: 无 M2Server 对 202..257 的发送侧)。无法忠实表示。
                     // 空操作而非落默认 error sink —— 因 native 247 是真实 handler, 落 sink 会
                     // 打印 "[Error] ProcessOthGsMsg Ident=247" 与 native 不符; 此处显式吞掉。
+                    NativeMirrorIdent247.ApplyFromTextBody(Body);
                     break;
                 case Grobal2.ISM_SETNICKLF:
                     if (int.TryParse(Body, NumberStyles.Integer,

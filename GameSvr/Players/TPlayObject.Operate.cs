@@ -2203,8 +2203,8 @@ namespace GameSvr
                                 BaseObjectC.m_MyGuild.SendGuildMsg(m_MyGuild.sGuildName + " guild ally success.");
                                 m_MyGuild.RefMemberName();
                                 BaseObjectC.m_MyGuild.RefMemberName();
-                                M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                                M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, BaseObjectC.m_MyGuild.sGuildName);
+                                M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_RELOADGUILD, M2Share.nServerIndex, m_MyGuild.sGuildName);
+                                M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_RELOADGUILD, M2Share.nServerIndex, BaseObjectC.m_MyGuild.sGuildName);
                             }
                         }
                     }
@@ -2234,8 +2234,8 @@ namespace GameSvr
                     guild.SendGuildMsg(m_MyGuild.sGuildName + " 琛屼細瑙ｉ櫎浜嗕笌鎮ㄨ浼氱殑鑱旂洘!!!");
                     m_MyGuild.RefMemberName();
                     guild.RefMemberName();
-                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, guild.sGuildName);
+                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_RELOADGUILD, M2Share.nServerIndex, m_MyGuild.sGuildName);
+                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_RELOADGUILD, M2Share.nServerIndex, guild.sGuildName);
                 }
             }
         }

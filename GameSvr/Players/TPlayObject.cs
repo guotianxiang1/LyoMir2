@@ -4393,8 +4393,8 @@ namespace GameSvr
             }
             if (boReQuestOK)
             {
-                M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, m_MyGuild.sGuildName);
-                M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_207, M2Share.nServerIndex, Guild.sGuildName);
+                M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_RELOADGUILD, M2Share.nServerIndex, m_MyGuild.sGuildName);
+                M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_CS_RELOADGUILD, M2Share.nServerIndex, Guild.sGuildName);
             }
         }
 

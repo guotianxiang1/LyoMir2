@@ -28,7 +28,7 @@ namespace GameSvr
                     return;
 
                 M2Share.UserEngine?.SendServerGroupMsg(
-                    Grobal2.ISM_SERVERSWITCH, 0,
+                    Grobal2.ISM_CS_SERVERSWITCH, 0,
                     switchWord.ToString(CultureInfo.InvariantCulture));
                 playObject?.SysMsg(enabled
                         ? " 地图爆物控制 : 开"

@@ -1761,6 +1761,9 @@ namespace SystemModule
         public const int ISM_GROUPSERVERHEART = 100;     // C# extension - server heartbeat
         public const int ISM_USERSERVERCHANGE = 200;     // C# extension - user server change
         public const int ISM_USERLOGON = 201;            // C# extension - user logon
+        public const int ISM_CS_USERLOGOUT = 198;        // C# extension - cross-server user logout (was wrongly on native 202)
+        public const int ISM_CS_RELOADGUILD = 199;       // C# extension - reload guild (was wrongly on native 207)
+        public const int ISM_CS_SERVERSWITCH = 258;      // C# extension - switchWord broadcast (was wrongly on native 207)
 
         // Native ProcessOthGsMsg range (202..257) - 27 REAL / 29 SINK:
         public const int ISM_ANTICHEAT_PENALTY = 202;    // REAL - Anti-cheat penalty (EA 0x657208, calls sub_658384)

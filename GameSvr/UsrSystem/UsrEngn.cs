@@ -1442,7 +1442,7 @@ namespace GameSvr
                                         PlayObject.m_nGateIdx,
                                         PlayObject.m_nSocket,
                                         PlayObject.m_UserGeneration);
-                                    SendServerGroupMsg(Grobal2.SS_202, M2Share.nServerIndex, PlayObject.m_sCharName);
+                                    SendServerGroupMsg(Grobal2.ISM_CS_USERLOGOUT, M2Share.nServerIndex, PlayObject.m_sCharName);
                                     continue;
                                 }
                             }
@@ -1571,7 +1571,7 @@ namespace GameSvr
                             M2Share.GateManager.CloseUser(
                                 PlayObject.m_nGateIdx, PlayObject.m_nSocket,
                                 PlayObject.m_UserGeneration);
-                            SendServerGroupMsg(Grobal2.ISM_USERLOGOUT, M2Share.nServerIndex, PlayObject.m_sCharName);
+                            SendServerGroupMsg(Grobal2.ISM_CS_USERLOGOUT, M2Share.nServerIndex, PlayObject.m_sCharName);
                             continue;
                         }
                     }
