@@ -142,7 +142,9 @@ namespace GameSvr
                     m_boDisableSayMsg = true;
                     m_dwDisableSayMsgTick = now + 60 * 1000;
                     // 0x6BB59E push 0x6BB9B8 + IntToStr(60) + 0x6BB9E4 "秒。"
-                    SysMsg("发送重复的话太频繁，当前已被禁言60秒。", MsgColor.Red, MsgType.Hint);
+                    // 眼神 禁止发言不提示 @0x6BB5CD memcpy 跳过 call [VMT+0xD4]（apply 0x100DB803）。
+                    if (!YanshenConfig12Behaviors.BanChatSilent(this))
+                        SysMsg("发送重复的话太频繁，当前已被禁言60秒。", MsgColor.Red, MsgType.Hint);
                     return;
                 }
                 if (m_btSayRapidCount >= 5)
@@ -151,7 +153,9 @@ namespace GameSvr
                     m_boDisableSayMsg = true;
                     m_dwDisableSayMsgTick = now + 60 * 1000;
                     // 0x6BB5F6 push 0x6BB9F4 + IntToStr(60) + 0x6BB9E4 "秒。"
-                    SysMsg("说话太频繁，当前已被禁言60秒。", MsgColor.Red, MsgType.Hint);
+                    // 眼神 禁止发言不提示 @0x6BB625 memcpy 跳过 call [VMT+0xD4]（apply 0x100DB83A）。
+                    if (!YanshenConfig12Behaviors.BanChatSilent(this))
+                        SysMsg("说话太频繁，当前已被禁言60秒。", MsgColor.Red, MsgType.Hint);
                     return;
                 }
                 if (elapsed >= 0x7D0 && m_btSayRapidCount >= 1)
@@ -313,7 +317,9 @@ namespace GameSvr
                 if (sData.Length >= 1 && sData[0] == '/')
                     return;
                 // 0x6BBA18 / 0x6C9758 "已经被禁止聊天"
-                SysMsg("已经被禁止聊天", MsgColor.Red, MsgType.Hint);
+                // 眼神 禁止发言不提示 @0x6C94A9 memcpy 跳过 DenySay 名单 SysMsg（apply 0x100DB874）。
+                if (!YanshenConfig12Behaviors.BanChatSilent(this))
+                    SysMsg("已经被禁止聊天", MsgColor.Red, MsgType.Hint);
             }
             catch (Exception e)
             {
