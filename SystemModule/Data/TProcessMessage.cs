@@ -11,6 +11,7 @@ namespace SystemModule
         public int BaseObject;
         public bool boLateDelivery;
         public string sMsg;
+        public int nBodyLen;
         public object Payload;
     }
 }

@@ -23,27 +23,48 @@ namespace GameSvr
             return false;
         }
 
+        /// <summary>
+        /// From commit 14718608 (STATE-53). Clears legacy status slots.
+        /// NOTE: Requires TBaseObject.LegacyStatusSlotCount and related methods.
+        /// </summary>
         private void ClearLegacyStatusSlots()
         {
-            // TODO: 从相关 commit 提取
+            // TODO: Re-enable when TBaseObject.LegacyStatusSlotCount is available
         }
 
+        /// <summary>
+        /// From commit f3d12db7 (SM-C 3554). Sends native logon state sync.
+        /// NOTE: Requires BuildNativeTimedAbilitySnapshot.
+        /// </summary>
         private void SendNativeLogonStateSync()
         {
-            // TODO: 从相关 commit 提取
+            // TODO: Re-enable when BuildNativeTimedAbilitySnapshot is available
         }
 
-        private void ProcessNativeSkill68ChargeLanding(int param1, int param2, int param3, object payload)
+        /// <summary>
+        /// From commit 20cf6591. Native skill 68 charge landing handler.
+        /// Relocates the actor after charge movement completes.
+        /// </summary>
+        private void ProcessNativeSkill68ChargeLanding(int landX, int landY, int direction, object envirPayload)
         {
-            // TODO: 从相关 commit 提取
+            var envir = m_PEnvir;
+            // 0x6EC8F5: verify environment hasn't changed
+            if (envir == null || !ReferenceEquals(envirPayload, envir))
+            {
+                return;
+            }
+            // 0x6EC922: move without re-testing occupancy (6A 01)
+            if (envir.MoveToMovingObject(m_nCurrX, m_nCurrY, this, (short)landX,
+                    (short)landY, true) <= 0)
+            {
+                return;
+            }
+            m_nCurrX = (short)landX;
+            m_nCurrY = (short)landY;
+            m_btDirection = (byte)direction;
         }
 
         private void ClientNativeCheatSelfReport(int param1, int param2)
-        {
-            // TODO: 从相关 commit 提取
-        }
-
-        private void ClientYbConsignmentQuery(int queryType)
         {
             // TODO: 从相关 commit 提取
         }
@@ -54,68 +75,57 @@ namespace GameSvr
             return false;
         }
 
+        /// <summary>
+        /// From MOVE-11. Native sub_7742C0 - breaks stealth on action.
+        /// NOTE: Requires RemoveTimedAbilityInternal to be accessible.
+        /// </summary>
         private void BreakNativeStealthOnAction()
         {
-            // TODO: 从相关 commit 提取
+            // TODO: Re-enable when RemoveTimedAbilityInternal is accessible
         }
 
-        private const int NativeHitGateConsume = 1;
-        private const int NativeHitGateProceed = 2;
+        /// <summary>Gate ladder passed; call ClientHitXY.</summary>
+        internal const int NativeHitGateProceed = 0;
 
+        /// <summary>0x6D9EC3 - consume message in silence.</summary>
+        internal const int NativeHitGateConsume = 1;
+
+        /// <summary>0x6D9F5F - take 0x276 refusal block.</summary>
+        internal const int NativeHitGateRefuse = 2;
+
+        /// <summary>
+        /// From commit b5cdba83 (HIT-ARM). Native hit arm gates dispatcher.
+        /// NOTE: Requires IsNativeHitBlockedByMountState and CancelNativeActionChannels.
+        /// </summary>
         private int RunNativeHitArmGates(int ident)
         {
-            // TODO: 从相关 commit 提取
+            // TODO: Re-enable when dependencies are available
             return NativeHitGateProceed;
         }
 
+        private const byte NativeHideState = 0x3C;
+        private const int NativeRevealExemptIdent = 0x10B;
+
+        /// <summary>
+        /// From commit b5cdba83 (HIT-ARM). Native sub_6F2D48 - action reveal hook.
+        /// NOTE: Requires BreakNativeHideOnAction.
+        /// </summary>
         private void NotifyNativeActionReveal(int actionType)
         {
-            // TODO: 从相关 commit 提取
+            // TODO: Re-enable when BreakNativeHideOnAction is available
         }
 
+        /// <summary>
+        /// From commit 597075b9 (MOVE-90). Native NOMAGIC map flag checker.
+        /// Tests byte [PEnvir+0x81] to forbid spell casting on NOMAGIC maps.
+        /// </summary>
         private bool NativeNoMagicMapForbidsSpell()
         {
-            // TODO: 从相关 commit 提取
-            return false;
+            // native 0x6DA125 mov eax,[Self+0x128] / 0x6DA12B cmp byte [eax+0x81],0
+            // Null map fails OPEN (safe direction - allows casting)
+            return m_PEnvir != null && m_PEnvir.Flag != null && m_PEnvir.Flag.boNOMAGIC;
         }
 
-        private void ClientNativeCm3290ClockSnapshot()
-        {
-            // TODO: 从相关 commit 提取
-        }
-
-        private void ClientNativeCm4629GroupPositions()
-        {
-            // TODO: 从相关 commit 提取
-        }
-
-        private bool TryHandleInlayCm(TProcessMessage msg) => false;
-        private bool TryHandleQiankunCm(TProcessMessage msg) => false;
-        private bool TryHandleItemTransferCm(TProcessMessage msg) => false;
-        private bool TryHandleStallWriteCm(TProcessMessage msg) => false;
-        private bool TryHandleEquipLockCm(TProcessMessage msg) => false;
-        private bool TryHandleQuizBroadcastCm(TProcessMessage msg) => false;
-        private bool TryHandleCloneNpcCm(TProcessMessage msg) => false;
-        private bool TryHandleMallCm(TProcessMessage msg) => false;
-        private bool TryHandleNameQueryCm(TProcessMessage msg) => false;
-        private bool TryHandleNewbieQuestCm(TProcessMessage msg) => false;
-        private bool TryHandleSoulWashCm(TProcessMessage msg) => false;
-        private bool TryHandleYbConsignWriteCm(TProcessMessage msg) => false;
-        private bool TryHandleMemberRosterCm(TProcessMessage msg) => false;
-        private bool TryHandleHeroSpiritBeadCm(TProcessMessage msg) => false;
-        private bool TryHandleRewardCm(TProcessMessage msg) => false;
-        private bool TryHandleMessageBoardCm(TProcessMessage msg) => false;
-        private bool TryHandleFreeRecycleCm(TProcessMessage msg) => false;
-        private bool TryHandleTimedActivityCm(TProcessMessage msg) => false;
-        private bool TryHandleSkillStoneCm(TProcessMessage msg) => false;
-        private bool TryHandleHeroNotifyCm(TProcessMessage msg) => false;
-        private bool TryHandleHorseTokenCm(TProcessMessage msg) => false;
-        private bool TryHandleCmMiscTail(TProcessMessage msg) => false;
-        private bool TryHandleTaskBoardScriptCm(TProcessMessage msg) => false;
-        private bool TryHandleNativeCmTailProtocol(TProcessMessage msg) => false;
-        private bool TryHandleNativeCmQ1(TProcessMessage msg) => false;
-        private bool TryHandleNativeCmQ2(TProcessMessage msg) => false;
-        private bool TryHandleNativeCmQ3(TProcessMessage msg) => false;
 
         private void ApplyChatShieldMaskToAllowFlags()
         {

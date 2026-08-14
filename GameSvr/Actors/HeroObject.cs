@@ -31,6 +31,13 @@ namespace GameSvr
         /// </summary>
         internal override bool IsNativeHumanKind() => true;
 
+        /// <summary>
+        /// Wrapper for QueryNativeColdTime used by HeroNotify subsystem.
+        /// Hero VMT+0x1F4 (0x748288) queries the cold-time table for a given key.
+        /// Returns remaining milliseconds, or 0 if not found or expired.
+        /// </summary>
+        internal int GetNativeColdTimeRemaining(int magicId) => QueryNativeColdTime((uint)magicId);
+
         /// <summary>Hero's current level (mirrors or derives from master).</summary>
         public ushort HeroLevel;
 
