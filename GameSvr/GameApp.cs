@@ -288,6 +288,15 @@ namespace GameSvr
                 M2Share.ActivityPointManager = null;
                 M2Share.ErrorMessage($"PlayerActivePoint.xml load failed: {activityPointError}");
             }
+            var mapActivePointFile = NativeMapActivePointLoader.DefaultFilePath;
+            if (NativeMapActivePointLoader.TryApply(mapActivePointFile, out var mapApError))
+            {
+                M2Share.MainOutMessage("MapActivePoint.xml loaded.");
+            }
+            else
+            {
+                M2Share.ErrorMessage($"MapActivePoint.xml load failed: {mapApError}");
+            }
             if (M2Share.MapManager.FindMap(M2Share.g_Config.sHomeMap) == null)
             {
                 M2Share.MainOutMessage($"出生地图加载失败!!! HomeMap={M2Share.g_Config.sHomeMap}");
