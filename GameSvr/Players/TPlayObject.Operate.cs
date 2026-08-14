@@ -186,6 +186,10 @@ namespace GameSvr
             var inputText = sMsg ?? string.Empty;
             var inputOk = resultCode != 0;
 
+            // sub_6DD290 inputType 0x17 (23) -> sub_6C8FB0 when cx==1.
+            if (inputType == 0x17 && inputOk)
+                TryNativeStorageUnlockFromCdCard(inputText);
+
             if (M2Share.PasEngine == null)
             {
                 return;
@@ -1103,6 +1107,8 @@ namespace GameSvr
                     return true;
                 case "TSlowDrug":
                     return UseNativeSlowDrug(stdItem);
+                case "TPercentResumeDrug":
+                    return UseNativePercentResumeDrug(stdItem, item);
                 case "TQuickDrug":
                     return UseNativeQuickDrug(stdItem);
                 case "TShengShui":

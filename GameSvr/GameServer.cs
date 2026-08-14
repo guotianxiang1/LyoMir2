@@ -40,6 +40,7 @@ namespace GameSvr
             try
             {
                 M2Share.SignActManager = null;
+                M2Share.SuperMerchantManager = null;
             }
             finally
             {
@@ -126,6 +127,7 @@ namespace GameSvr
                 HUtil32.LeaveCriticalSection(M2Share.ProcessHumanCriticalSection);
             }
             Mall.MallManager.Instance.ProcessScheduledRefresh(DateTime.Now);
+            M2Share.SuperMerchantManager?.RunTick(currentTick);
             NativeMailCacheService.ProcessScheduledSweep(DateTime.Now);
             // GILD-10: native sub_6A5D6C pending-request expiry purge (join-corps / join-gild /
             // alliance-union). Self-gated to the 03:03 minute exactly as the native body is.

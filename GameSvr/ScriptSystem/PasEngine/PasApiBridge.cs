@@ -1870,19 +1870,8 @@ namespace GameSvr.PasEngine
 
                 case "confiscatebodyitem":
                     if (args.Count >= 1)
-                    {
-                        var pos = args[0].AsInt();
-                        if (pos >= 0 && pos < CurrentPlayer.m_UseItems.Length)
-                        {
-                            var useItem = CurrentPlayer.m_UseItems[pos];
-                            if (useItem != null && useItem.wIndex > 0)
-                            {
-                                CurrentPlayer.SendDelItems(useItem);
-                                useItem.wIndex = 0;
-                                CurrentPlayer.RecalcAbilitys();
-                            }
-                        }
-                    }
+                        NativeConfiscateBodyItem.Execute(CurrentPlayer,
+                            args[0].AsInt(), CurrentNpc);
                     return true;
 
                 case "getbagitemcount":
@@ -2875,18 +2864,8 @@ namespace GameSvr.PasEngine
 
                 case "takefullduraitem":
                     if (args.Count >= 2)
-                    {
-                        var itemName = args[0].AsString();
-                        int cnt = args[1].AsInt();
-                        for (int c = 0; c < cnt; c++)
-                        {
-                            var it = CurrentPlayer.m_ItemList.FirstOrDefault(i =>
-                                i != null && i.wIndex > 0 && i.Dura >= i.DuraMax &&
-                                string.Equals(M2Share.UserEngine.GetStdItemName(i.wIndex), itemName, StringComparison.OrdinalIgnoreCase));
-                            if (it != null)
-                                CurrentPlayer.DelBagItem(it.MakeIndex, M2Share.UserEngine.GetStdItemName(it.wIndex));
-                        }
-                    }
+                        NativeTakeFullDuraItem.Execute(CurrentPlayer,
+                            args[0].AsString(), args[1].AsInt());
                     return true;
 
                 case "senditemstoother":
@@ -4651,28 +4630,12 @@ namespace GameSvr.PasEngine
                 case "takefullduraitem":
                     if (args.Count >= 2)
                     {
-                        var itemName = args[0].AsString();
-                        int cnt = args[1].AsInt();
-                        int taken = 0;
-                        for (int c = 0; c < cnt; c++)
-                        {
-                            var it = CurrentPlayer.m_ItemList.FirstOrDefault(i =>
-                                i != null && i.wIndex > 0 && i.Dura >= i.DuraMax &&
-                                string.Equals(M2Share.UserEngine.GetStdItemName(i.wIndex), itemName, StringComparison.OrdinalIgnoreCase));
-                            if (it != null)
-                            {
-                                CurrentPlayer.DelBagItem(it.MakeIndex, M2Share.UserEngine.GetStdItemName(it.wIndex));
-                                taken++;
-                            }
-                        }
-                        result = PasValue.FromInt(taken);
+                        result = PasValue.FromInt(NativeTakeFullDuraItem.ExecuteCounting(
+                            CurrentPlayer, args[0].AsString(), args[1].AsInt()));
                         return true;
                     }
-                    else
-                    {
-                        result = PasValue.FromInt(0);
-                        return true;
-                    }
+                    result = PasValue.FromInt(0);
+                    return true;
 
                 case "getawarditem":
                     if (args.Count >= 1)

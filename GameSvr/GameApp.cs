@@ -103,6 +103,8 @@ namespace GameSvr
             }
             var nativeShareDirectory = Path.GetFullPath(Path.Combine(M2Share.sRootPath,
                 M2Share.g_Config.sBaseDir));
+            M2Share.SuperMerchantManager = new NativeSuperMerchantManager();
+            M2Share.SuperMerchantManager.EnsureLoaded(nativeShareDirectory);
             if (NativeServerSwitchStore.TryLoad(nativeShareDirectory,
                     out var serverSwitches, out var serverSwitchError))
             {
