@@ -397,6 +397,8 @@ namespace GameSvr
                 return;
             }
 
+            RefreshNativeHeroGuildWarAttackFlag(master);
+
             if (master.m_TargetCret != null && !master.m_TargetCret.m_boDeath)
                 SetTargetCreat(master.m_TargetCret);
 
@@ -417,12 +419,11 @@ namespace GameSvr
         /// 688606  mov dword [edx+0x344], 0     ; 联动英雄的目标
         /// </code>
         /// 它**不**清主人的目标（那只在 sub_688650 模式切换尾巴里发生）。
-        /// [+0x6CA]/[+0x6CB]/[+0x67C]/[+0x6C4] 在 C# 端尚无字段映射，见文档 BLOCKED 项，
-        /// 这里只做已映射的部分。
+        /// [+0x6CA]/[+0x67C]/[+0x6C4] 在 C# 端尚无字段映射；[+0x6CB] 见 NativeSafeZoneGate.cs。
         /// </summary>
         private void ClearNativeHeroTargets()
         {
-            // 6885EC: 直接字段清零，与原版一致（不走 DelTargetCreat 的 override 链）。
+            m_boNativeHeroGuildWarAttack = false;
             m_TargetCret = null;
         }
 

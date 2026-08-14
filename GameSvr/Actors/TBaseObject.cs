@@ -542,6 +542,9 @@ namespace GameSvr
         
         
         public bool m_boInFreePKArea = false;
+
+        /// <summary>Native [+0x714] — display bit toggled in sub_6B6B78 @0x6B6BD7..0x6B6BDA.</summary>
+        private byte m_btNativeSafeZonePkDisplay;
         public int m_dwHitTick = 0;
         public int m_dwWalkTick = 0;
         public int m_dwSearchEnemyTick = 0;
@@ -920,10 +923,27 @@ namespace GameSvr
 
         public void ChangePKStatus(bool boWarFlag)
         {
+            // Native sub_6B6B78 @0x006B6B78 — FreePK setter; 0x6B6BC4 calls sub_76858C.
+            if (!boWarFlag && m_MyGuild != null && m_MyGuild.GuildWarList.Count > 0)
+                boWarFlag = true;
+
             if (m_boInFreePKArea != boWarFlag)
             {
                 m_boInFreePKArea = boWarFlag;
                 m_boNameColorChanged = true;
+                if (this is TPlayObject playObject)
+                    playObject.SendNativeMapEntryStateMessages();
+            }
+
+            var displayFlag = boWarFlag;
+            if (displayFlag && InNativeSafeZone12())
+                displayFlag = false;
+
+            var b714 = (byte)(displayFlag ? 1 : 0);
+            if (b714 == m_btNativeSafeZonePkDisplay)
+            {
+                m_btNativeSafeZonePkDisplay = (byte)(m_btNativeSafeZonePkDisplay ^ 1);
+                RefNameColor();
             }
         }
 
