@@ -211,8 +211,12 @@ namespace GameSvr
             private static NativeMagicTowerMonsterCatalog Load(string path)
             {
                 if (!File.Exists(path))
+                {
+                    M2Share.ErrorMessage(
+                        "[Error]: 服务器错误：新天关怪物文件错误");
                     return new NativeMagicTowerMonsterCatalog(
                         Array.Empty<string>(), 0);
+                }
 
                 try
                 {
@@ -222,12 +226,21 @@ namespace GameSvr
                     AddSection(ini, names, "中级怪物");
                     var split = names.Count;
                     AddSection(ini, names, "高级怪物");
+                    if (names.Count == 0)
+                    {
+                        M2Share.ErrorMessage(
+                            "[Error]: 服务器错误：新天关怪物文件错误");
+                        return new NativeMagicTowerMonsterCatalog(
+                            Array.Empty<string>(), 0);
+                    }
                     return new NativeMagicTowerMonsterCatalog(
                         names.ToArray(), split);
                 }
                 catch (Exception e)
                 {
                     LogLoadException(e);
+                    M2Share.ErrorMessage(
+                        "[Error]: 服务器错误：新天关怪物文件错误");
                     return new NativeMagicTowerMonsterCatalog(
                         Array.Empty<string>(), 0, false);
                 }

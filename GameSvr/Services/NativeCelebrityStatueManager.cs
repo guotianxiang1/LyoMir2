@@ -1,6 +1,6 @@
 using SystemModule;
 using SystemModule.Common;
-using System.Text;
+using GameSvr.Services;
 
 namespace GameSvr
 {
@@ -213,7 +213,11 @@ namespace GameSvr
         private static void Load(NormNpc npc, string fileName, string section)
         {
             if (!File.Exists(fileName) || new FileInfo(fileName).Length == 0)
+            {
+                if (string.Equals(fileName, GetHeroFile(), StringComparison.OrdinalIgnoreCase))
+                    NativeStartupConfigValidation.ReportHeroIniMissing(fileName);
                 return;
+            }
             try
             {
                 var config = new StatueIni(fileName);

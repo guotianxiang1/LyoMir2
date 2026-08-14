@@ -4594,6 +4594,10 @@ namespace GameSvr
             var managerTables = NativeType2MonsterManagerTables
                 .LoadFromDirectory(Path.Combine(M2Share.sRootPath,
                     M2Share.g_Config.sBaseDir, "Config"));
+            if (!managerTables.MonBasePkLoaded)
+                NativeStartupConfigValidation.ReportMonBasePkMissing();
+            if (!managerTables.ButchTypeLoaded)
+                NativeStartupConfigValidation.ReportButchTypeMissing();
             try
             {
                 for (var index = 0; index < source.Length; index++)

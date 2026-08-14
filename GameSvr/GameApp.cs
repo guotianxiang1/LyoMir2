@@ -164,6 +164,11 @@ namespace GameSvr
             // (Historical note: this comment used to claim the gate stays OFF. That was stale as of
             //  2026-08-02 when the BUY conservation + CM wire round-trip proofs were reviewed and the gate
             //  was flipped. Corrected 2026-08-03 so the comment no longer contradicts the code below.)
+            if (!NativeStartupConfigValidation.TryEnsureGamedataSchema(
+                    out var gamedataSchemaError))
+            {
+                NativeStartupConfigValidation.ReportStallGamedataMissing();
+            }
             var nativeStallStore = new NativeStallMySqlStore(
                 () => M2Share.g_Config?.sConnctionString);
             NativeStallWriteGate.Store = nativeStallStore;
@@ -229,6 +234,13 @@ namespace GameSvr
             else
             {
                 M2Share.ErrorMessage("加载邮件信息失败: " + mailError);
+            }
+            if (!NativeSuperMerchantIniLoader.TryValidateAtStartup(
+                    out var superMerchantError)
+                && !string.IsNullOrEmpty(superMerchantError))
+            {
+                M2Share.ErrorMessage(
+                    "SuperMerchant.ini校验失败: " + superMerchantError);
             }
             try
             {
@@ -374,6 +386,7 @@ namespace GameSvr
                 SnapsmClient.Instance.ConnectMsgServer();
                 M2Share.MainOutMessage($"当前运行从节点模式...[{M2Share.g_Config.sMsgSrvAddr}:{M2Share.g_Config.nMsgSrvPort}]");
             }
+            NativeStartupConfigValidation.LogSystemParametersInitialized();
             return true;
         }
 

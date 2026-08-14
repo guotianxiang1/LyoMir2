@@ -1713,6 +1713,23 @@ namespace GameSvr
             NormNpc.InitializeNativeMagicTowerMonsterCatalog(sRootPath,
                 g_Config.sBaseDir);
             TPlayObject.InitializeNativeMagicTowerPrizeCatalog(sRootPath);
+            NativeStartupConfigValidation.ValidateMagicTowerBoxPrizeConfigs();
+            NativeStartupConfigValidation.ValidateWoLongConfigAtStartup();
+            NativeStartupConfigValidation.ValidateEncryptorDllAtStartup();
+            var heroIniPath = NativeStartupConfigValidation.ResolveShareConfigPath(
+                "Hero.ini");
+            if (!File.Exists(heroIniPath) || new FileInfo(heroIniPath).Length == 0)
+                NativeStartupConfigValidation.ReportHeroIniMissing(heroIniPath);
+            var shareConfigDirectory = Path.GetFullPath(Path.Combine(
+                sRootPath, g_Config.sBaseDir, "config"));
+            NativeJewelStoneTable.TryLoadFromShareConfig(shareConfigDirectory);
+            _ = NativeBufferConf.TryLoad(
+                Path.GetFullPath(Path.Combine(sRootPath, g_Config.sBaseDir)),
+                out _, out var bufferConfError);
+            if (!string.IsNullOrEmpty(bufferConfError))
+            {
+                M2Share.ErrorMessage("BufferConf加载失败: " + bufferConfError);
+            }
             RandomNumber = RandomNumber.GetInstance();
             MagicTowerRouteSequencer = new NativeMagicTowerRouteSequencer(
                 RandomNumber.Random);
