@@ -174,6 +174,12 @@ namespace GameSvr
                 NativeRecord = (byte[])record.Clone()
             };
             record.AsSpan(10, 14).CopyTo(item.btValue);
+            var stdItem = M2Share.UserEngine.GetStdItem(item.wIndex);
+            if (stdItem != null)
+            {
+                NativeOutOfBoundsItemClassifier.Apply(item, stdItem);
+            }
+
             return true;
         }
 

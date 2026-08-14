@@ -163,8 +163,7 @@ namespace GameSvr
         /// that <c>sub_73D500</c> rebuilds from the equipment aggregate
         /// (@0x73D542 FillChar 0x36 bytes, then @0x73D63D-0x73D650
         /// <c>rep movsd</c>+<c>movsw</c> of 0x36 bytes from <c>[[self+0x4C0]+0x1F8]</c>).
-        /// C# does not model that aggregate, so this predicate is currently always FALSE
-        /// in production — see <see cref="TBaseObject"/>'s revive block.
+        /// Rebuilt each <c>RecalcAbilitys</c> by <see cref="NativeEquipAgg2Revive"/>.
         /// </summary>
         internal static bool IsSecondPathEligible(bool secondPathFlag, byte tier)
         {

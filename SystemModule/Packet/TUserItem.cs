@@ -63,8 +63,13 @@ namespace SystemModule
         /// The only reader is <c>NativeItemDropDestroy</c>; nothing in production ever
         /// sets this field.
         /// </summary>
+        /// <summary>
+        /// 战神 <c>item+0xFC</c> — runtime out-of-bounds class flag written by
+        /// <c>sub_74DAE4</c> @0x74DC58/0x74DCB5/0x74DCF0/… (<c>mov [ebx+0xFC],al</c>).
+        /// Outside the 208-byte persist window; excluded from every codec.
+        /// </summary>
         [ProtoIgnore]
-        public bool NativeGiftItem;
+        public byte NativeClassFc;
 
         /// <summary>
         /// 战神 <c>item+0x100 .. item+0x102</c> — the runtime inlay/jewel attribute triple.
@@ -349,6 +354,7 @@ namespace SystemModule
             this.ClientItemID = userItem.ClientItemID;
             this.NativeMapDropAllowed = userItem.NativeMapDropAllowed;
             this.NativeGiftItem = userItem.NativeGiftItem;
+            this.NativeClassFc = userItem.NativeClassFc;
             this.NativeItemPlus100 = userItem.NativeItemPlus100;
             this.NativeItemPlus101 = userItem.NativeItemPlus101;
             this.NativeItemPlus102 = userItem.NativeItemPlus102;
