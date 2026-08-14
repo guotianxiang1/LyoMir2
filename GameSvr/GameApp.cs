@@ -58,6 +58,17 @@ namespace GameSvr
                 M2Share.ErrorMessage(
                     "加载原生宝藏天赐配置失败，OpenNeedKeyBox 保持关闭。");
             }
+            var feastDaysPath = NativeFestivalConfig.ResolveDefaultPath(
+                M2Share.sRootPath, M2Share.g_Config.sBaseDir);
+            if (!NativeFestivalConfig.TryLoad(feastDaysPath,
+                    out var festivalConfig, out var festivalError))
+            {
+                M2Share.ErrorMessage("加载节日配置文件失败: " + festivalError);
+            }
+            else
+            {
+                M2Share.FestivalConfig = festivalConfig;
+            }
             M2Share.MainOutMessage(
                 $"加载原生标准物品数据库成功({M2Share.UserEngine.StdItemList.Count})...");
             // 原生 sub_74DEDC: 标准物品表发布后加载 Share/config/powerupItem.ini 的物品使用 mode-1
