@@ -321,27 +321,27 @@ namespace GameSvr
                                     Grobal2.RM_DURACHANGE, Grobal2.U_BUJUK,
                                     poisonCharm.Dura, poisonCharm.DuraMax, 0, "");
                             }
-                            if (M2Share.RandomNumber.Random(TargeTBaseObject.m_btAntiPoison + 7) <= 6)
+                            // POIS-27 @0x6ED9C6 call [edi+0x110] / @0x6ED9E0 call [edi+0x114] — no
+                            // Random(antiPoison+7) in DoSpell or in appliers sub_76E540/sub_76E620
+                            // (only IsProperTarget @0x767498 @0x76E561/@0x76E63F before SendDelayMsg).
+                            switch (StdItem.Shape)
                             {
-                                switch (StdItem.Shape)
-                                {
-                                    case 1:
-                                        // 眼神「中毒时间上限」：绿毒施加器 sub_76E540 在 0x76E5CE
-                                        // 装 trampoline，把这个 nParam1 上钳到 atoi(中毒时间上限_秒)。
-                                        // 只钳时长，不动 nParam3。见 YanshenPoisonTimeCap。
-                                        nPower = (ushort)YanshenPoisonTimeCap.Cap(DoSpell_GetPower13(UserMagic, 40) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
-                                        TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
-                                        break;
-                                    case 2:
-                                        // 红毒施加器 sub_76E620 的同名钳位在 0x76E675。
-                                        nPower = (ushort)YanshenPoisonTimeCap.Cap(DoSpell_GetPower13(UserMagic, 30) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
-                                        TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
-                                        break;
-                                }
-                                if (TargeTBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT || TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
-                                {
-                                    boTrain = true;
-                                }
+                                case 1:
+                                    // 眼神「中毒时间上限」：绿毒施加器 sub_76E540 在 0x76E5CE
+                                    // 装 trampoline，把这个 nParam1 上钳到 atoi(中毒时间上限_秒)。
+                                    // 只钳时长，不动 nParam3。见 YanshenPoisonTimeCap。
+                                    nPower = (ushort)YanshenPoisonTimeCap.Cap(DoSpell_GetPower13(UserMagic, 40) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
+                                    TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
+                                    break;
+                                case 2:
+                                    // 红毒施加器 sub_76E620 的同名钳位在 0x76E675。
+                                    nPower = (ushort)YanshenPoisonTimeCap.Cap(DoSpell_GetPower13(UserMagic, 30) + DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
+                                    TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
+                                    break;
+                            }
+                            if (TargeTBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT || TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
+                            {
+                                boTrain = true;
                             }
                             PlayObject.SetTargetCreat(TargeTBaseObject);
                             boSpellFail = false;
@@ -358,17 +358,15 @@ namespace GameSvr
                             nPower = (ushort)YanshenPoisonTimeCap.Cap(
                                 DoSpell_GetPower13(UserMagic, 40) +
                                 DoSpell_GetRPow(PlayObject.m_WAbil.SC) * 2);
-                            if (M2Share.RandomNumber.Random(TargeTBaseObject.m_btAntiPoison + 7) <= 6)
-                            {
-                                TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON,
-                                    Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId,
-                                    HUtil32.Round(UserMagic.btLevel / 3.0 *
-                                        ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
-                                    "", 1000);
-                                if (TargeTBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT ||
-                                    TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
-                                    boTrain = true;
-                            }
+                            // POIS-27: same applier path as charm branch — no antiPoison RNG @0x6ED9C6.
+                            TargeTBaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON,
+                                Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId,
+                                HUtil32.Round(UserMagic.btLevel / 3.0 *
+                                    ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)),
+                                "", 1000);
+                            if (TargeTBaseObject.m_btRaceServer == Grobal2.RC_PLAYOBJECT ||
+                                TargeTBaseObject.m_btRaceServer >= Grobal2.RC_ANIMAL)
+                                boTrain = true;
                             PlayObject.SetTargetCreat(TargeTBaseObject);
                             boSpellFail = false;
                         }
@@ -1493,19 +1491,19 @@ namespace GameSvr
                         if (StdItem != null)
                         {
                             Magic.UseAmulet(PlayObject, 1, 2, ref nAmuletIdx);
+                            // POIS-27 BLOCKED: native wMagicID 48 @0x6EDE26 calls sub_76FBBC, not
+                            // [edi+0x110]/[edi+0x114]; no [target+0x26C]+7 Random dump for this site.
+                            // Fail-closed: keep legacy <=6 gate until native group predicate is mapped.
                             if (M2Share.RandomNumber.Random(BaseObject.m_btAntiPoison + 7) <= 6)
                             {
                                 int nPower;
                                 switch (StdItem.Shape)
                                 {
                                     case 1:
-                                        // 同 sub_76E540 @0x76E5CE 的钳位（本函数是群体施毒变体，
-                                        // 走的是同一对施加器 VMT+0x110 / +0x114）。
                                         nPower = YanshenPoisonTimeCap.Cap(Magic.GetPower13(40, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 绿毒
                                         BaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DECHEALTH, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
                                         break;
                                     case 2:
-                                        // 同 sub_76E620 @0x76E675 的钳位。
                                         nPower = YanshenPoisonTimeCap.Cap(Magic.GetPower13(30, UserMagic) + Magic.GetRPow(PlayObject.m_WAbil.SC) * 2);// 中毒类型 - 红毒
                                         BaseObject.SendDelayMsg(PlayObject, Grobal2.RM_POISON, Grobal2.POISON_DAMAGEARMOR, nPower, PlayObject.ObjectId, HUtil32.Round(UserMagic.btLevel / 3.0 * ((double)nPower / M2Share.g_Config.nAmyOunsulPoint)), "", 1000);
                                         break;

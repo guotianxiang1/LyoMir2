@@ -19,6 +19,8 @@ namespace GameSvr
                     m_nTargetY = m_TargetCret.m_nCurrY;
                     if (Math.Abs(m_nTargetX - m_nCurrX) == 1 && Math.Abs(m_nTargetY - m_nCurrY) == 1)
                     {
+                        // POIS-27 @0x674378: movzx eax,word [target+0x26C]; add eax,7; call Random;
+                        // cmp eax,6 / jg skip => roll<=6 passes. HasState(0x1F) gate @0x674342.
                         if (M2Share.RandomNumber.Random(m_TargetCret.m_btAntiPoison + 7) <= 6 && m_TargetCret.m_wStatusTimeArr[Grobal2.POISON_DECHEALTH] == 0)
                         {
                             m_TargetCret.MakePosion(Grobal2.POISON_DECHEALTH, 30, 1);
