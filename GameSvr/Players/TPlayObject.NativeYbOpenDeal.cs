@@ -47,17 +47,17 @@ namespace GameSvr
         /// PAS ClientAskOpenYB — submits ident 112 to YBDB; on link-down shows the native
         /// unavailable dialog (0x637D94 family via RequestUnavailableDialog).
         /// </summary>
-        public void ClientAskOpenYb(NormNpc npc)
+        internal void ClientAskOpenYb(NormNpc npc)
         {
             if (npc == null) return;
             m_NPC = npc;
 
+            // YbDbClient keeps this request behind its disabled authority gate. The
+            // native unavailable dialog is only a response to that closed boundary;
+            // no local success or currency mutation is substituted.
             if (!YbDbClient.Instance.TryRequestOpenDeal(this))
-            {
                 SendNativeYbNpcDialog(npc,
                     YbDbOpenDealProtocol.RequestUnavailableDialog);
-                return;
-            }
         }
 
         /// <summary>

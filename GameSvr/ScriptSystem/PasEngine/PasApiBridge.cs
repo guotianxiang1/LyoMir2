@@ -6039,11 +6039,7 @@ namespace GameSvr.PasEngine
                     return RejectUnsupportedNativeApi(out result);
 
                 case "clientaskopenyb":
-                    if (args.Count != 1 ||
-                        args[0].ObjVal is not TPlayObject openYbPlayer)
-                        return false;
-                    openYbPlayer.ClientAskOpenYb(CurrentNpc);
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "reqgetfirstusedgift":
                     // sub_7520E0 @0x007520E0 — config\新手礼包.ini first gift.
@@ -7492,12 +7488,7 @@ namespace GameSvr.PasEngine
                     return RejectUnsupportedNativeApi(out result);
 
                 case "clientaskopenyb":
-                    if (args.Count != 1 ||
-                        args[0].ObjVal is not TPlayObject openYbPlayer)
-                        return false;
-                    openYbPlayer.ClientAskOpenYb(CurrentNpc);
-                    result = PasValue.FromBool(true);
-                    return true;
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "reqgetfirstusedgift":
                     return RejectUnsupportedNativeApi(out result);

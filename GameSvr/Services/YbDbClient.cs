@@ -40,6 +40,10 @@ namespace GameSvr.Services
             string Ptid, string RoleName, WeakReference<TPlayObject> Player);
 
         private static readonly Encoding StrictGbk;
+        // The 6108 OpenYB authority is not verified in the current deployment. Keep
+        // the codec and identity-bound completion path intact, but fail closed until
+        // a service handshake proves that ident 112/1112 is supported.
+        private static readonly bool NativeOpenDealAuthorityEnabled = false;
         public static YbDbClient Instance { get; }
 
         private readonly object _stateLock = new();
@@ -128,9 +132,9 @@ namespace GameSvr.Services
             Pulse();
         }
 
-        public bool TryRequestOpenDeal(TPlayObject player)
+        internal bool TryRequestOpenDeal(TPlayObject player)
         {
-            if (player == null) return false;
+            if (!NativeOpenDealAuthorityEnabled || player == null) return false;
 
             var identity = new YbDbLegacy77Identity
             {

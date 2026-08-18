@@ -32,7 +32,8 @@ if (args.Length != 0)
 Console.WriteLine(
     $"YbDbOpenYbProtocolCompatCheck PASS tests={tests.Length} " +
     "request=112/64/Q0/P0 response=1112/32 " +
-    "results=1,-1,-2,-3,default integration=fail-closed " + scanSummary);
+    "results=1,-1,-2,-3,default integration=fail-closed " +
+    "authority=disabled " + scanSummary);
 return;
 
 static void CheckRequest()
@@ -173,10 +174,27 @@ static void CheckFailClosedBoundary(string root)
 
     var client = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
         "YbDbClient.cs"));
-    Reject(client, "YbDbOpenDealProtocol",
-        "dormant OpenYB codec was wired into YbDbClient");
-    Reject(client, "RequestOpenYb",
-        "OpenYB sender was exposed without the authoritative service");
+    Require(client,
+        "private static readonly bool NativeOpenDealAuthorityEnabled = false;",
+        "OpenYB authority gate is not explicitly disabled");
+    Require(client, "internal bool TryRequestOpenDeal",
+        "dormant OpenYB request adapter is not assembly-internal");
+    Reject(client, "public bool TryRequestOpenDeal",
+        "OpenYB request adapter is publicly exposed");
+    Require(client,
+        "if (!NativeOpenDealAuthorityEnabled || player == null) return false;",
+        "OpenYB request can run before its authority is enabled");
+    Require(client, "TryTakeOpenDealRequest",
+        "OpenYB response does not require a pending request");
+    Require(client, "player.ObjectId != request.ObjectId",
+        "OpenYB response does not verify the player object id");
+    Require(client, "ReferenceEquals(player, requestedPlayer)",
+        "OpenYB response does not verify the exact player instance");
+    Require(client, "player.m_sUserID, request.Ptid",
+        "OpenYB response does not verify PTID");
+    Equal(4, Regex.Matches(client, "_openDealRequests\\.Clear\\(\\);",
+        RegexOptions.CultureInvariant).Count,
+        "OpenYB pending identities are not cleared at every session boundary");
 }
 
 static string ScanProductionPas(string envirPath)
