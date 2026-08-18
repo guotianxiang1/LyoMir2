@@ -607,6 +607,7 @@ static Envirnoment NewMap()
         BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingMethodException("Envirnoment.Initialize");
     initialize.Invoke(map, new object[] { (short)24, (short)16 });
+    map.sMapName = "MotaeboForcedMove";
     return map;
 }
 

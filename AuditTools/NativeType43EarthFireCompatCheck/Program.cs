@@ -1713,6 +1713,7 @@ static void CheckFireBurnEvent()
 {
     M2Share.NativeFastnessHqTable = LoadHqTable("1 0.25 100");
     var map = NewMap(64, 64);
+    map.sMapName = "AUDIT_FIRE";
     var owner = new HostileSource
     {
         m_PEnvir = map,
@@ -1804,6 +1805,7 @@ static void CheckFireBurnEvent()
     owner.m_boDeath = false;
 
     var runTarget = NewDamageTarget(500, 500, 123);
+    runTarget.m_sCharName = "fire-run-target";
     runTarget.m_nNativeHqFastness = 1;
     runTarget.m_boObMode = true;
     Place(map, runTarget, 30, 30);
