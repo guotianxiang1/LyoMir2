@@ -305,7 +305,9 @@ static void GeneratedMonsterCertificateFailureRollsBackOwnership()
         "RegenMonsters certificate failure map cells");
     Equal(3, fixture.Bucket.nActiveCount,
         "RegenMonsters certificate failure active count");
-    Equal(0, failingList.Count,
+    Equal(1, failingList.Count,
+        "RegenMonsters certificate failure lost its native slot");
+    Assert(failingList[0] == null,
         "RegenMonsters certificate failure retained a certificate");
     Equal(4, fixture.Bucket.CertCount,
         "RegenMonsters certificate failure certificate count");
@@ -339,7 +341,9 @@ static void GeneratedMonsterCoordinateMutationUsesPublicationToken()
         "coordinate-mutating RegenMonsters failure active count");
     Equal(0, fixture.Bucket.CertCount,
         "coordinate-mutating RegenMonsters failure certificate count");
-    Equal(0, failingList.Count,
+    Equal(1, failingList.Count,
+        "coordinate-mutating RegenMonsters failure lost its native slot");
+    Assert(failingList[0] == null,
         "coordinate-mutating RegenMonsters failure retained a certificate");
     Assert(!attempted.m_boCanReAlive && attempted.m_pMonGen == null,
         "coordinate-mutating RegenMonsters failure retained ownership fields");
@@ -382,7 +386,9 @@ static void GeneratedMonsterReplacementSurvivesRollback()
             "same-ID replacement rollback active count");
         Equal(0, fixture.Bucket.CertCount,
             "same-ID replacement rollback certificate count");
-        Equal(0, failingList.Count,
+        Equal(1, failingList.Count,
+            "same-ID replacement rollback lost its native slot");
+        Assert(failingList[0] == null,
             "same-ID replacement rollback retained a certificate");
         Assert(!attempted.m_boCanReAlive && attempted.m_pMonGen == null,
             "same-ID replacement rollback retained original ownership fields");
@@ -582,7 +588,13 @@ static void AssertExpectedOwnerRemovalSourceOrdering()
         "merchant ghost reap (UsrEngn ProcessMerchants, native sub_67C150 loop3) does not "
         + "remove the actor from the global registry");
     // Native's deferred-free FIFO drains at 0x493E0 == 300000ms == 5*60*1000.
-    Assert(userEngine.Contains("> 5 * 60 * 1000", StringComparison.Ordinal),
+    // The production port keeps the value in a named constant rather than
+    // repeating the arithmetic at the comparison site.
+    Assert(userEngine.Contains(
+            "private const int NativeMonFreeDelay = 5 * 60 * 1000",
+            StringComparison.Ordinal)
+           && userEngine.Contains("<= NativeMonFreeDelay",
+               StringComparison.Ordinal),
         "the MonGen ghost reap no longer uses the native 5-minute (0x493E0) timeout");
 
     var gameServer = File.ReadAllText(Path.Combine(root, "GameSvr",
