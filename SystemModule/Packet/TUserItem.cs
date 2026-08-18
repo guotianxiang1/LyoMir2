@@ -76,19 +76,21 @@ namespace SystemModule
         public byte NativeGiftItem;
 
         /// <summary>
-        /// 战神 <c>item+0x100 .. item+0x102</c> — the runtime inlay/jewel attribute triple.
+        /// 战神 <c>item+0x100 .. item+0x103</c> — a shared runtime dword. The first
+        /// three bytes are also the inlay/jewel attribute triple.
         /// <c>sub_78C5EC</c> copies the last three bytes of the 9-byte row at
         /// <c>[0x7DCBDC]</c> into them (@0x78C643 <c>88 86 00 01 00 00</c>
         /// <c>mov [esi+0x100],al</c>, @0x78C64C <c>mov [esi+0x101],al</c>, @0x78C655
-        /// <c>mov [esi+0x102],al</c>), and the special-drop worker reads
-        /// <c>[item+0x100]</c> back as a percent (<c>sub_78BCBC</c>:
-        /// <c>mov eax,0x64; call Random; cmp eax,[ebx+0x100]; setl al</c>).
+        /// <c>mov [esi+0x102],al</c>). For StdMode 96, constructor
+        /// <c>sub_78BCD8</c> copies dword <c>[std+0x4C]</c> to
+        /// <c>[item+0x100]</c>, and <c>sub_78BCBC</c> reads it as a signed dword:
+        /// <c>mov eax,0x64; call Random; cmp eax,[ebx+0x100]; setl al</c>.
         ///
         /// They are runtime-only: the persisted record is <c>item+0x20 .. item+0xEF</c>
         /// (LOAD <c>sub_74DAE4</c> @0x74DB3A <c>lea edi,[ebx+0x20]</c> / @0x74DB3D
-        /// <c>mov ecx,0x34</c> / @0x74DB42 <c>rep movsd</c>; SAVE @0x6B170F..0x6B1717 the
-        /// same three in reverse), so these three bytes sit 0x10 past its end and must
-        /// never be folded into <see cref="NativeRecord"/>.
+        /// <c>mov ecx,0x34</c> / @0x74DB42 <c>rep movsd</c>; SAVE @0x6B170F..0x6B1717
+        /// copies the same 0xD0-byte window in reverse), so these four bytes sit
+        /// beyond its end and must never be folded into <see cref="NativeRecord"/>.
         /// </summary>
         [ProtoIgnore]
         public byte NativeItemPlus100;
@@ -100,6 +102,24 @@ namespace SystemModule
         /// <inheritdoc cref="NativeItemPlus100"/>
         [ProtoIgnore]
         public byte NativeItemPlus102;
+
+        /// <summary>
+        /// 战神 <c>item+0x103</c> — high byte of the transient word at
+        /// <c>item+0x102</c> and of the special-drop signed threshold dword at
+        /// <c>item+0x100</c>. <c>sub_75EE04</c> clears +0x102/+0x103 together at
+        /// 0x75EE12 before rebuilding the equipped-item aggregate. It is outside
+        /// the 208-byte persisted item record and is not part of any wire codec.
+        /// </summary>
+        [ProtoIgnore]
+        public byte NativeItemPlus103;
+
+        /// <summary>
+        /// 战神 <c>item+0x104</c> — runtime equipment-class bitmap rebuilt for
+        /// equipped items with positive durability by <c>sub_75EE04</c>. It is
+        /// outside the 208-byte persisted item record.
+        /// </summary>
+        [ProtoIgnore]
+        public byte NativeClass104;
 
         /// <summary>Item definition index (lookup into StdItemList)</summary>
         [ProtoMember(2)]
@@ -362,6 +382,8 @@ namespace SystemModule
             this.NativeItemPlus100 = userItem.NativeItemPlus100;
             this.NativeItemPlus101 = userItem.NativeItemPlus101;
             this.NativeItemPlus102 = userItem.NativeItemPlus102;
+            this.NativeItemPlus103 = userItem.NativeItemPlus103;
+            this.NativeClass104 = userItem.NativeClass104;
             this.wIndex = userItem.wIndex;
             this.Dura = userItem.Dura;
             this.DuraMax = userItem.DuraMax;

@@ -118,6 +118,11 @@ namespace SystemModule
         public const int BagItemCount = 40;
         public const int NormalMagicCount = 55;
         public const int SpecialMagicCount = 3;
+        /// <summary>
+        /// Embedded native TSlaveInfo record inside a fixed hero record.
+        /// </summary>
+        public const int NativeSlaveRecordOffset = 0x4694;
+        public const int NativeSlaveRecordSize = 0x20;
 
         // Native encoder sub_68ACA4 emits only {2,6,7} (0x68AD4F / 0x68AD78 / 0x68ADA3
         // `mov byte [eax+6], 2/6/7`). Decoder jump table 0x68B0E5: 2→0x68B1A9, 6→0x68B215,
@@ -1421,7 +1426,7 @@ namespace SystemModule
                 throw new ArgumentException(
                     $"native hero record length must be {HeroRecordSize}",
                     nameof(record));
-            var temp = stackalloc byte[NameSlotByteLength];
+            Span<byte> temp = stackalloc byte[NameSlotByteLength];
             record.Slice(HeroNameOffset, NameSlotByteLength).CopyTo(temp);
             record.Slice(MasterNameOffset, NameSlotByteLength).CopyTo(
                 record.Slice(HeroNameOffset, NameSlotByteLength));

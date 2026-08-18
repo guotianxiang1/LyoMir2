@@ -463,6 +463,8 @@ namespace SystemModule
         /// dedicated opcode rather than a reused constant.
         /// </summary>
         public const int SM_COLORHEAR = 105;
+        // CM 3295 worker 0x6EB8E4 emits this after consuming a TMicroWhelk.
+        public const int SM_MICROWHELK = 106;
         public const int SM_FEATURECHANGED = 41;
         public const int SM_USERNAME = 42;
         public const int SM_43 = 43;
@@ -488,14 +490,20 @@ namespace SystemModule
         public const int SM_ADDMAGIC = 210;
         public const int SM_SENDMYMAGIC = 211;
         public const int SM_DELMAGIC = 212;
+        /// <summary>
+        /// Revive/rebirth notice body. Native RM 12308 is emitted by
+        /// <c>sub_73C910</c> and converted at 0x6B4E77 into SM 213 with
+        /// Recog=BaseObject, Param=wParam, Tag=Series=0.
+        /// </summary>
+        public const int SM_REVIVE_MESSAGE = 213;
         // 战神 attack-mode notify ident = 0x221 (545), NOT 213.
         // All three native senders load dx=0x221 and go through VMT+0x250 (SendDefMessage):
         //   @0x6B210C  UserLogon sub_6B1AA0  (mov cl,[esi+0xAED] = MyAttackMode; mov dx,0x221)
         //   @0x6F2D33  sub_6F2D10 SetAttackMode
         //   @0x623A2E  ChangeAttackMode GM handler inside sub_622820
-        // Native's 213 (0xD5) exists but never reaches VMT+0x250 — it goes to
-        // sub_5F701C / VMT+0x254, i.e. a different message entirely. The request
-        // ident CM_ATTACKMODE is also 545: 战神 deliberately echoes the request id.
+        // Native's 213 (0xD5) is the body-bearing revive/rebirth notice above,
+        // not attack-mode state. The request ident CM_ATTACKMODE is also 545:
+        // 战神 deliberately echoes the request id.
         public const int SM_ATTACKMODE = 545;
         public const int CM_CHECKTIME = 15999;
         public const int SM_BAGITEMDURACHG = 641;
@@ -1056,9 +1064,10 @@ namespace SystemModule
         public const int SM_SLAVE_BORN = 791;        // Slave monster spawned
         public const int SM_SLAVE_VANISH = 792;      // Slave monster despawned
         public const int SM_SHOWBODY_EFFECT = 793;    // Visual body effect
-        public const int SM_COMMON_INFORMATION = 2821; // Safe zone entry/exit notification
+        public const int SM_COMMON_INFORMATION = 2821; // Obj+0x3FE pass-through transition (0x6B30AD/0x6B30C8)
         public const int SM_SAFE_ZONE_INFO = 4230;     // Map safe zone information
-        public const int SM_MAPINFO_EX = 796;         // Extended map info (after SM_NEWMAP)
+        // UserLogon 0x6B1DC2: all-zero header, body = sorted MapInfoEx.txt Text.
+        public const int SM_MAPINFO_EX = 1281;
         public const int SM_BIGMONMAGIC = 797;        // Monster magic effect
         public const int SM_NPCWALK = 798;            // NPC walk animation
         public const int SM_FIREON = 779;             // Fire hit mode ON
@@ -1620,17 +1629,20 @@ namespace SystemModule
         public const int RM_PHYSICAL_ATT = 10612;
         public const int RM_NATIVE_UNION_EFFECT = 10612;
         public const int RM_NATIVE_EXP_CONTINUE = 10625;
+        public const int RM_NATIVE_REVIVE_MESSAGE = 12308;
         public const int RM_NATIVE_MOOTEBO_CONTINUE = 12309;
 
         /// <summary>
         /// 登录状态同步 (native RM 0x3010 = 12304). UserLogon (sub_6B1D64) queues it at
-        /// 0x6B2358 (`66 B9 10 30 mov cx,0x3010` -> sub_765E68 with edx=eax=Self, six
-        /// zero params), so it is processed once, on the next Run tick after login.
+        /// 0x6B2358; THeroAct.Logon (sub_687D70) queues the same RM at 0x688180.
+        /// Both use sub_765E68 with edx=eax=Self and six zero params, so it is
+        /// processed once on the next player/hero message-loop tick after login.
         /// The Operate loop routes it through the secondary dispatcher sub_743AD8
         /// (`0x6B6247 call 0x743AD8`); case 0x3010 (`0x743B24 sub eax,0x75F / je 0x743BF3`)
-        /// runs `0x743BF7 call [edx+0x204]` which is the virtual cluster sub_6E9A98
-        /// (VMT base 0x62EF8C + 0x204; verified: [+0x250]=0x6D7CB0 is the unicast send).
-        /// The cluster fans out four legs in order: 3324, 1264, 3554, then 3556/4367.
+        /// runs `0x743BF7 call [edx+0x204]`. Player VMT+0x204 is sub_6E9A98;
+        /// the four hero VMTs use the distinct sub_69057C cluster.
+        /// Player sub_6E9A98 sends 3324, 1264, 3554, then optional 3556.
+        /// Hero sub_69057C sends 3324, then optional 4367.
         /// Kept numerically equal to native because it neighbours RM_NATIVE_MOOTEBO_CONTINUE
         /// (12309); RM_* stays process-local and never reaches the wire (REPLICATION_RULES §1.4).
         /// </summary>
@@ -1946,7 +1958,7 @@ namespace SystemModule
         // SM_965 (0x3C5) already exists earlier in this file and is reused by the builder.
         public const int SM_35 = 35;      // 0x023  RM-dispatch arm mov dx @0x6B48DE -> call [obj+0x250] @0x6B48E7 (empty body)
         public const int SM_37 = 37;      // 0x025  RM-dispatch arm mov dx @0x6B473C -> call [obj+0x250] @0x6B4745 (empty body)
-        public const int SM_56 = 56;      // 0x038  BLOCKED: 3 sites; traffic-bearing site carries the map-description container body ([Envir+0x24]/+0x44/+0x48 fill points + MapDesc.Dat unmapped). Empty-frame site verified @0x6E388D.
+        public const int SM_56 = 56;      // 0x038  map marker list: Param 0 clear, 1 record (24 bytes), 2 complete
         public const int SM_66 = 66;      // 0x042  RM-dispatch arm mov dx @0x6B5E5E -> call [obj+0x254] @0x6B5E67 (Buf=nil Len=0, empty body)
         public const int SM_70 = 70;      // 0x046  RM-dispatch arm mov dx @0x6B5D8C -> call [obj+0x250] @0x6B5D95 (empty body)
         public const int SM_71 = 71;      // 0x047  RM-dispatch arm mov dx @0x6B5DC0 -> call [obj+0x250] @0x6B5DC9 (empty body)

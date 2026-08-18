@@ -269,7 +269,8 @@ public class TMapFlag
     /// <c>69 C0 E8 03 00 00  imul eax,eax,0x3E8</c>), so the configured value is
     /// in seconds.
     /// Writers <c>0x7753AA</c> (and <c>0x7753BD/BF</c> writes 0 on toggle-off),
-    /// <c>0x7764CF</c>. No read point anchored yet.
+    /// <c>0x7764CF</c>. TFireBurnEvent reads it at <c>0x7178BC</c> and, when
+    /// positive, writes it over the event duration at <c>0x7178C6</c>.
     /// </summary>
     public int MapFireWallBurnMs;
 

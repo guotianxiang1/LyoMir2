@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Text;
 using System.Threading;
 
@@ -175,8 +176,9 @@ namespace SystemModule
         /// Half-to-even rounding of an exact rational <c>numerator / denominator</c>.
         /// Reproduces native x87 extended-precision chains that end in
         /// <c>fild / fdivp / fild / fmulp / call @ROUND</c> (0x403574) without
-        /// spilling to IEEE double — used by merchant pricing Stage A (PRICE-08),
-        /// meat over-cap bonus (PRICE-13), and repair tail (PRICE-21).
+        /// spilling to IEEE double — used by merchant pricing Stage A (PRICE-08)
+        /// and the meat over-cap bonus (PRICE-13). Repair pricing needs staged
+        /// x87 operation rounding and uses <see cref="RoundX87DivideThenMultiply"/>.
         /// </summary>
         public static int RoundRational(long numerator, long denominator)
         {
@@ -199,6 +201,171 @@ namespace SystemModule
             if (twice > denominator) quotient += 1;
             else if (twice == denominator && (quotient & 1) != 0) quotient += 1;
             return (int)quotient;
+        }
+
+        /// <summary>
+        /// Reproduces an x87 <c>fild; fdiv; fild; fmulp; @ROUND</c> chain with
+        /// the default 64-bit-significand extended precision. Both arithmetic
+        /// instructions round independently before Delphi's final half-even
+        /// integer conversion.
+        /// </summary>
+        public static int RoundX87DivideThenMultiply(long dividend,
+            long divisor, long multiplier)
+        {
+            if (divisor == 0 || dividend == 0 || multiplier == 0)
+            {
+                return 0;
+            }
+
+            var negative = dividend < 0 ^ divisor < 0 ^ multiplier < 0;
+            var numerator = BigInteger.Abs(new BigInteger(dividend));
+            var denominator = BigInteger.Abs(new BigInteger(divisor));
+            RoundPositiveRationalToExtended(numerator, denominator,
+                out var significand, out var exponent);
+
+            var product = significand * BigInteger.Abs(
+                new BigInteger(multiplier));
+            RoundPositiveIntegerToExtended(product, ref exponent,
+                out significand);
+
+            var rounded = RoundPositiveExtendedToInteger(significand,
+                exponent);
+            if (negative)
+            {
+                rounded = -rounded;
+            }
+
+            // All current callers feed signed dword/WORD money operands, so
+            // the rounded result is within Int64. The final dword conversion
+            // deliberately keeps native unchecked low-bit behavior.
+            return unchecked((int)(long)rounded);
+        }
+
+        private static void RoundPositiveRationalToExtended(
+            BigInteger numerator, BigInteger denominator,
+            out BigInteger significand, out int exponent)
+        {
+            var binaryExponent = BigIntegerBitLength(numerator) -
+                                 BigIntegerBitLength(denominator);
+            if (binaryExponent >= 0)
+            {
+                if (numerator < (denominator << binaryExponent))
+                {
+                    binaryExponent--;
+                }
+            }
+            else if ((numerator << -binaryExponent) < denominator)
+            {
+                binaryExponent--;
+            }
+
+            var scale = 63 - binaryExponent;
+            BigInteger scaledNumerator;
+            BigInteger scaledDenominator;
+            if (scale >= 0)
+            {
+                scaledNumerator = numerator << scale;
+                scaledDenominator = denominator;
+            }
+            else
+            {
+                scaledNumerator = numerator;
+                scaledDenominator = denominator << -scale;
+            }
+
+            significand = RoundPositiveRatioToInteger(scaledNumerator,
+                scaledDenominator);
+            exponent = binaryExponent - 63;
+            var carry = BigInteger.One << 64;
+            if (significand == carry)
+            {
+                significand >>= 1;
+                exponent++;
+            }
+        }
+
+        private static void RoundPositiveIntegerToExtended(BigInteger value,
+            ref int exponent, out BigInteger significand)
+        {
+            var bitLength = BigIntegerBitLength(value);
+            if (bitLength <= 64)
+            {
+                var shift = 64 - bitLength;
+                significand = value << shift;
+                exponent -= shift;
+                return;
+            }
+
+            var discardedBits = bitLength - 64;
+            significand = value >> discardedBits;
+            var remainder = value - (significand << discardedBits);
+            var half = BigInteger.One << (discardedBits - 1);
+            if (remainder > half ||
+                (remainder == half && !significand.IsEven))
+            {
+                significand++;
+            }
+            exponent += discardedBits;
+
+            var carry = BigInteger.One << 64;
+            if (significand == carry)
+            {
+                significand >>= 1;
+                exponent++;
+            }
+        }
+
+        private static BigInteger RoundPositiveExtendedToInteger(
+            BigInteger significand, int exponent)
+        {
+            if (exponent >= 0)
+            {
+                return significand << exponent;
+            }
+
+            var discardedBits = -exponent;
+            var quotient = significand >> discardedBits;
+            var remainder = significand - (quotient << discardedBits);
+            var half = BigInteger.One << (discardedBits - 1);
+            if (remainder > half ||
+                (remainder == half && !quotient.IsEven))
+            {
+                quotient++;
+            }
+            return quotient;
+        }
+
+        private static BigInteger RoundPositiveRatioToInteger(
+            BigInteger numerator, BigInteger denominator)
+        {
+            var quotient = BigInteger.DivRem(numerator, denominator,
+                out var remainder);
+            var twiceRemainder = remainder << 1;
+            if (twiceRemainder > denominator ||
+                (twiceRemainder == denominator && !quotient.IsEven))
+            {
+                quotient++;
+            }
+            return quotient;
+        }
+
+        private static int BigIntegerBitLength(BigInteger value)
+        {
+            var bytes = value.ToByteArray();
+            var last = bytes.Length - 1;
+            while (last > 0 && bytes[last] == 0)
+            {
+                last--;
+            }
+
+            var bits = last * 8;
+            var mostSignificant = bytes[last];
+            while (mostSignificant != 0)
+            {
+                bits++;
+                mostSignificant >>= 1;
+            }
+            return bits;
         }
 
         /// <summary>

@@ -63,6 +63,9 @@ namespace SystemModule
         // only sent for non-zero result: -1 no player / -5 level / -6 call failed).
         public const int SM_3367 = 3367;
 
+        // 0xCFC @0x7468DB/0x7468FE slot 0x250 - login state sync.
+        public const int SM_3324 = 3324;
+
         // 0xCFD @0x746A37 slot 0x250 - state-0x36 spirit/shape sync notice:
         // Recog = [self+0x60C], Param = word[self+0x610], Tag = 0, Series = 1,
         // sMsg = notice text. Sibling of the login-sync 3324 family.

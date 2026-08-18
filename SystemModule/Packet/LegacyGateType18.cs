@@ -30,6 +30,7 @@ namespace SystemModule.Packet
         public ushort Tag;
         public ushort Series;
         public byte[] TextBytes = Array.Empty<byte>();
+        public bool AppendTextTerminator = true;
 
         public byte[] ToClientPayload()
         {
@@ -37,7 +38,8 @@ namespace SystemModule.Packet
                 return (byte[])_wireClientPayload.Clone();
 
             var textLength = TextBytes?.Length ?? 0;
-            var result = new byte[ClientPacketSize + (textLength == 0 ? 0 : textLength + 1)];
+            var terminatorLength = textLength != 0 && AppendTextTerminator ? 1 : 0;
+            var result = new byte[ClientPacketSize + textLength + terminatorLength];
             BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(0, 4), Recog);
             BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(4, 2), Ident);
             BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(6, 2), Param);
