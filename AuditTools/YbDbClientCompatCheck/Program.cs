@@ -545,8 +545,17 @@ void CheckNativeLogoutDormantBoundary()
     var process = ExtractMethod(userEngine, "ProcessPlayObjectData");
     Equal(1, Count(process, "SaveHumanRcd(PlayObject)"),
         "periodic save no longer uses the ordinary persistence path");
-    Equal(1, Count(process, "SaveHumanRcd(PlayObject, 3)"),
-        "final player save does not use exact mode-3 persistence");
+    Equal(1, Count(process, "SelectNativeExitSaveMode(PlayObject)"),
+        "final player save does not use the native exit-mode selector");
+    var exitMode = ExtractMethod(userEngine, "SelectNativeExitSaveMode");
+    Require(exitMode, "playObject.m_boSwitchData",
+        "exit-mode selector does not prioritize switch-data persistence");
+    Require(exitMode, "return 2;",
+        "switch-data exit does not select native mode 2");
+    Require(exitMode, "playObject.m_boReconnection",
+        "exit-mode selector does not distinguish reconnection");
+    Require(exitMode, "(ushort)1 : (ushort)3",
+        "exit-mode selector does not map reconnection/ordinary exits to modes 1/3");
     var aiProcess = ExtractMethod(userEngine, "ProcessAiPlayObjectData");
     Equal(1, Count(aiProcess, "SaveHumanRcd(PlayObject, 3)"),
         "final AI-player save does not use exact mode-3 persistence");
