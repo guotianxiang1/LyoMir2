@@ -5,6 +5,8 @@ using GameSvr.Services;
 using SystemModule;
 using SystemModule.Packet;
 
+PrepareConfig();
+
 var failures = new List<string>();
 Run("exact online identity", ExactOnlineIdentity);
 Run("0062 empty and publish flag", EmptyLoadAndPublishFlag);
@@ -16,6 +18,7 @@ Run("016B/016C native producers", NativeRequestProducers);
 Run("capacity transitions", CapacityTransitions);
 Run("native item gates and log quantity", ItemGatesAndLogQuantity);
 Run("exact current NPC gate", ExactCurrentNpcGate);
+Run("read-only storage item lookup", ReadOnlyStorageItemLookup);
 Run("native operation source contract", NativeOperationSourceContract);
 
 if (failures.Count != 0)
@@ -24,7 +27,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("NativeAccountStorageCompatCheck PASS tests=11 " +
+Console.WriteLine("NativeAccountStorageCompatCheck PASS tests=12 " +
                   "type1=0062/0063 header=0x48 item=0xD0 client=704");
 return 0;
 
@@ -291,11 +294,24 @@ void ItemGatesAndLogQuantity()
     Equal(false, NativeAccountStorageClient.IsDepositRestricted(stdItem, item),
         "extension Bind two is accepted");
 
+    Equal(0, NativeAccountStorageClient.GetGameDataLogQuantity(null, item),
+        "null template log quantity");
+    Equal(0, NativeAccountStorageClient.GetGameDataLogQuantity(stdItem, null),
+        "null item log quantity");
     Equal(1, NativeAccountStorageClient.GetGameDataLogQuantity(stdItem, item),
-        "ordinary log quantity");
+        "ordinary non-pile log quantity");
     stdItem.StdMode = 7;
+    stdItem.Shape = 0;
+    Equal(1, NativeAccountStorageClient.GetGameDataLogQuantity(stdItem, item),
+        "StdMode7 charm is not a native pile item");
+    stdItem.StdMode = 3;
+    stdItem.Shape = 4;
     Equal(37, NativeAccountStorageClient.GetGameDataLogQuantity(stdItem, item),
-        "StdMode7 log quantity");
+        "StdMode3 Shape4 luck oil pile quantity");
+    stdItem.StdMode = 151;
+    stdItem.Shape = 0;
+    Equal(37, NativeAccountStorageClient.GetGameDataLogQuantity(stdItem, item),
+        "StdMode151 pile quantity");
 }
 
 void ExactCurrentNpcGate()
@@ -336,6 +352,40 @@ void ExactCurrentNpcGate()
     Equal(false, Gate(npc.ObjectId), "null current NPC");
 }
 
+void ReadOnlyStorageItemLookup()
+{
+    var player = Player("Lookup", "Account");
+    var matches = typeof(TPlayObject).GetMethod(
+        "ClientItemIdMatches",
+        System.Reflection.BindingFlags.Instance
+        | System.Reflection.BindingFlags.NonPublic);
+    Assert(matches != null, "client item id predicate is missing");
+
+    var unmatched = new TUserItem { wIndex = 7, ClientItemID = 0 };
+    Equal(false, (bool)matches.Invoke(player,
+            new object[] { unmatched, 0x12345678 }),
+        "generic client item id predicate rejects a forged next id");
+    Equal(0, unmatched.ClientItemID,
+        "generic client item id predicate must not lazily allocate an id");
+
+    var method = typeof(TPlayObject).GetMethod(
+        "FindNativeStorageItemIndex",
+        System.Reflection.BindingFlags.Static
+        | System.Reflection.BindingFlags.NonPublic);
+    Assert(method != null, "native storage item finder is missing");
+
+    var hidden = new TUserItem { wIndex = 7, ClientItemID = 0 };
+    var items = new List<TUserItem> { hidden };
+    Equal(-1, (int)method.Invoke(null, new object[] { items, 0x23456789 }),
+        "zero-id item must not match a forged next client id");
+    Equal(0, hidden.ClientItemID,
+        "storage lookup must not assign a client id as a side effect");
+
+    hidden.ClientItemID = 0x23456789;
+    Equal(0, (int)method.Invoke(null, new object[] { items, 0x23456789 }),
+        "preassigned exact client id lookup");
+}
+
 void NativeOperationSourceContract()
 {
     var sourcePath = Path.Combine(Directory.GetCurrentDirectory(), "GameSvr",
@@ -361,10 +411,46 @@ void NativeOperationSourceContract()
         StringComparison.Ordinal);
     Assert(storageFull >= 0 && storageFail > storageFull,
         "full account storage must send 702 before 703");
+    Assert(deposit.Contains("LogNativeAccountStorageItem(item, stdItem, 0x01);",
+            StringComparison.Ordinal),
+        "deposit log action must be 1");
+    var depositDirty = deposit.IndexOf("state.Dirty = true;",
+        StringComparison.Ordinal);
+    var depositAdd = deposit.IndexOf("state.Items.Add(item);",
+        StringComparison.Ordinal);
+    var depositRemove = deposit.IndexOf("m_ItemList.RemoveAt(itemIndex);",
+        StringComparison.Ordinal);
+    var depositWeight = deposit.IndexOf("WeightChanged();",
+        StringComparison.Ordinal);
+    var depositOk = deposit.IndexOf("Grobal2.SM_STORAGE_OK",
+        StringComparison.Ordinal);
+    var depositLog = deposit.IndexOf(
+        "LogNativeAccountStorageItem(item, stdItem, 0x01);",
+        StringComparison.Ordinal);
+    Assert(depositDirty >= 0 && depositAdd > depositDirty
+           && depositRemove > depositAdd && depositWeight > depositRemove
+           && depositOk > depositWeight && depositLog > depositOk,
+        "account deposit must order dirty -> add -> delete -> weight -> SM701 -> type1 log");
+    Assert(!deposit.Contains("SaveHumanRcd", StringComparison.Ordinal)
+           && !deposit.Contains("M2Share.AddGameDataLog(", StringComparison.Ordinal)
+           && !deposit.Contains("NeedIdentify", StringComparison.Ordinal),
+        "account deposit must not force character save or use gated TAB log");
 
     var takeBack = Slice(source,
         "internal void ClientNativeAccountTakeBackStorageItem(",
         "internal void RejectUnsupportedStorageItem(");
+    var prohibitGate = takeBack.IndexOf("if (!m_boCanGetBackItem)",
+        StringComparison.Ordinal);
+    var dealingGate = takeBack.IndexOf("if (m_boDealing)",
+        StringComparison.Ordinal);
+    var takeBackNpcGate = takeBack.IndexOf("if (!IsNativeAccountStorageNpc(objectId))",
+        StringComparison.Ordinal);
+    Assert(prohibitGate >= 0 && dealingGate > prohibitGate
+           && takeBackNpcGate > dealingGate,
+        "account take-back gates must be native -3 then -2 then NPC/0");
+    Assert(!takeBack.Contains("m_boPasswordLocked", StringComparison.Ordinal)
+           && !takeBack.Contains("m_nPayMent", StringComparison.Ordinal),
+        "account take-back must not substitute password/payment state for native gates");
     var missingTemplate = takeBack.IndexOf("if (stdItem == null)",
         StringComparison.Ordinal);
     var addToBag = takeBack.IndexOf("AddItemToBag(item)",
@@ -374,9 +460,33 @@ void NativeOperationSourceContract()
     Assert(takeBack.Contains("IsAddWeightAvailable(stdItem.Weight)",
             StringComparison.Ordinal),
         "take-back weight must use the validated template");
-    Assert(takeBack.Contains("LogNativeAccountStorageItem(item, stdItem, '2');",
-            StringComparison.Ordinal),
-        "take-back log action must be 2");
+    var accountAdd = takeBack.IndexOf("SendAddItem(item);",
+        StringComparison.Ordinal);
+    var accountDirty = takeBack.IndexOf("state.Dirty = true;",
+        StringComparison.Ordinal);
+    var accountRemove = takeBack.IndexOf("state.Items.RemoveAt(itemIndex);",
+        StringComparison.Ordinal);
+    var accountOk = takeBack.IndexOf(
+        "Grobal2.SM_TAKEBACKSTORAGEITEM_OK", StringComparison.Ordinal);
+    var accountLog = takeBack.IndexOf(
+        "LogNativeAccountStorageItem(item, stdItem, 0x02);",
+        StringComparison.Ordinal);
+    Assert(accountAdd >= 0 && accountDirty > accountAdd
+           && accountRemove > accountDirty && accountOk > accountRemove
+           && accountLog > accountOk,
+        "account take-back must order SM200 -> dirty -> delete -> SM705 -> type2 log");
+    Assert(!takeBack.Contains("SendSaveItemList", StringComparison.Ordinal)
+           && !takeBack.Contains("SM_SAVEITEMLIST", StringComparison.Ordinal)
+           && !takeBack.Contains("SaveHumanRcd", StringComparison.Ordinal)
+           && !takeBack.Contains("M2Share.AddGameDataLog(",
+               StringComparison.Ordinal),
+        "account take-back must not emit SM704, force character save, or use TAB log");
+    Assert(takeBack.Contains(
+               "FindNativeStorageItemIndex(state.Items, clientItemId)",
+               StringComparison.Ordinal)
+           && !takeBack.Contains("ClientItemIdMatches(state.Items",
+               StringComparison.Ordinal),
+        "account-storage lookup must compare preassigned ids without lazy allocation");
 
     var npcGate = Slice(source,
         "private bool IsNativeAccountStorageNpc(",
@@ -398,11 +508,144 @@ void NativeOperationSourceContract()
             "over-restrictive current-NPC gate: " + forbidden);
 
     Assert(!deposit.Contains("SaveHumanRcd", StringComparison.Ordinal)
+           && !deposit.Contains("m_nPayMent", StringComparison.Ordinal)
            && !takeBack.Contains("SaveHumanRcd", StringComparison.Ordinal),
-        "store/take-back must only mark dirty");
-    Assert(source.Contains("+ \"\\t账号仓库\");",
+        "account store/take-back must use native persistence and receiver gates");
+    var storageLogStart = source.IndexOf(
+        "private void LogNativeAccountStorageItem(",
+        StringComparison.Ordinal);
+    Assert(storageLogStart >= 0, "account-storage log helper is missing");
+    var storageLog = source[storageLogStart..];
+    Assert(storageLog.Contains(
+            "NativeAccountStorageClient.GetGameDataLogQuantity(",
+            StringComparison.Ordinal)
+        && storageLog.Contains("M2Share.AddNativeGameDataLog(",
+            StringComparison.Ordinal)
+        && storageLog.Contains("\"账号仓库\"", StringComparison.Ordinal)
+        && !storageLog.Contains("M2Share.AddGameDataLog(",
             StringComparison.Ordinal),
-        "account-storage log description is missing");
+        "account-storage log must emit the native pile quantity");
+
+    var dealSourcePath = Path.Combine(Directory.GetCurrentDirectory(),
+        "GameSvr", "Players", "TPlayObject.Operate.cs");
+    var quantitySourcePath = Path.Combine(Directory.GetCurrentDirectory(),
+        "GameSvr", "Services", "NativeAccountStorageClient.cs");
+    if (!File.Exists(dealSourcePath) || !File.Exists(quantitySourcePath))
+        throw new FileNotFoundException(
+            "run this audit from the repository root", dealSourcePath);
+
+    var dealSource = File.ReadAllText(dealSourcePath);
+    var normalDeposit = Slice(dealSource,
+        "internal void ClientStorageItem(",
+        "internal void ClientTakeBackStorageItem(");
+    var normalDepositAdd = normalDeposit.IndexOf(
+        "m_StorageItemList.Add(UserItem);", StringComparison.Ordinal);
+    var normalDepositRemove = normalDeposit.IndexOf(
+        "m_ItemList.RemoveAt(i);", StringComparison.Ordinal);
+    var normalDepositWeight = normalDeposit.IndexOf(
+        "WeightChanged();", StringComparison.Ordinal);
+    var normalDepositOk = normalDeposit.IndexOf(
+        "SendStorageItemOk(UserItem);", StringComparison.Ordinal);
+    var normalDepositLog = normalDeposit.IndexOf(
+        "M2Share.AddNativeGameDataLog(this, 0x01", StringComparison.Ordinal);
+    Assert(normalDepositAdd >= 0 && normalDepositRemove > normalDepositAdd
+           && normalDepositWeight > normalDepositRemove
+           && normalDepositOk > normalDepositWeight
+           && normalDepositLog > normalDepositOk,
+        "personal deposit must order add -> delete -> weight -> SM701 -> type1 log");
+    foreach (var forbidden in new[]
+             {
+                 "SaveHumanRcd", "M2Share.AddGameDataLog(", "NeedIdentify"
+             })
+        Assert(!normalDeposit.Contains(forbidden, StringComparison.Ordinal),
+            "personal deposit still contains non-native success behavior: "
+            + forbidden);
+    foreach (var required in new[]
+             {
+                 "var storageNpc = m_NPC;",
+                 "storageNpc.m_PEnvir == m_PEnvir",
+                 "Math.Abs(storageNpc.m_nCurrX - m_nCurrX) <= 15",
+                 "Math.Abs(storageNpc.m_nCurrY - m_nCurrY) <= 15"
+             })
+        Assert(normalDeposit.Contains(required, StringComparison.Ordinal),
+            "personal deposit lost native cached-NPC gate: " + required);
+    foreach (var forbidden in new[]
+             {
+                 "FindMerchant", "Merchant", "m_boStorage",
+                 "sMsg.IndexOf", "GetValidStr3", "ItmUnit.GetItemName",
+                 "string.Compare", "m_nPayMent", "boTryModeUseStorage",
+                 "g_sTryModeCanotUseStorage"
+             })
+        Assert(!normalDeposit.Contains(forbidden, StringComparison.Ordinal),
+            "personal deposit retains a non-native NPC receiver gate: "
+            + forbidden);
+
+    var normalTakeBackStart = dealSource.IndexOf(
+        "internal void ClientTakeBackStorageItem(", StringComparison.Ordinal);
+    Assert(normalTakeBackStart >= 0, "personal take-back source is missing");
+    var normalTakeBack = dealSource[normalTakeBackStart..];
+    var normalAdd = normalTakeBack.IndexOf("SendAddItem(UserItem);",
+        StringComparison.Ordinal);
+    var normalRemove = normalTakeBack.IndexOf(
+        "m_StorageItemList.RemoveAt(i);", StringComparison.Ordinal);
+    var normalOk = normalTakeBack.IndexOf(
+        "Grobal2.SM_TAKEBACKSTORAGEITEM_OK", StringComparison.Ordinal);
+    var normalLog = normalTakeBack.IndexOf(
+        "M2Share.AddNativeGameDataLog(this, 0x02", StringComparison.Ordinal);
+    Assert(normalAdd >= 0 && normalRemove > normalAdd
+           && normalOk > normalRemove && normalLog > normalOk,
+        "personal take-back must order SM200 -> delete -> SM705 -> type2 log");
+    foreach (var forbidden in new[]
+             {
+                 "SendSaveItemList", "SM_SAVEITEMLIST", "SaveHumanRcd",
+                 "M2Share.AddGameDataLog(", "NeedIdentify"
+             })
+        Assert(!normalTakeBack.Contains(forbidden, StringComparison.Ordinal),
+            "personal take-back still contains non-native success behavior: "
+            + forbidden);
+
+    var dealEnd = Slice(dealSource,
+        "private void ClientDealEnd()", "private void ClientGetMinMap()");
+    Equal(2, CountOccurrences(dealEnd,
+            "GetGameDataLogQuantity(StdItem, UserItem)"),
+        "deal item quantity helper calls");
+    var outgoingItems = Slice(dealEnd,
+        "for (var i = 0; i < m_DealItemList.Count; i++)",
+        "if (m_nDealGolds > 0)");
+    var incomingItems = Slice(dealEnd,
+        "for (var i = 0; i < m_DealCreat.m_DealItemList.Count; i++)",
+        "if (m_DealCreat.m_nDealGolds > 0)");
+    foreach (var itemLoop in new[] { outgoingItems, incomingItems })
+    {
+        Assert(itemLoop.Contains(
+                "GetGameDataLogQuantity(StdItem, UserItem)",
+                StringComparison.Ordinal)
+            && itemLoop.Contains("+ logQuantity +", StringComparison.Ordinal),
+            "both deal directions must log the native pile quantity");
+        Assert(!itemLoop.Contains("+ \"\\t\" + '1' +",
+                StringComparison.Ordinal),
+            "deal item log must not hard-code quantity one");
+    }
+
+    var quantitySource = File.ReadAllText(quantitySourcePath);
+    Assert(quantitySource.Contains(
+            "NativeItemFactory.IsPileItem(stdItem) ? item.Dura : 1",
+            StringComparison.Ordinal),
+        "log quantity must use the native TBasePileItem class mapping");
+}
+
+int CountOccurrences(string source, string value)
+{
+    var count = 0;
+    var start = 0;
+    while ((start = source.IndexOf(value, start,
+               StringComparison.Ordinal)) >= 0)
+    {
+        count++;
+        start += value.Length;
+    }
+
+    return count;
 }
 
 string Slice(string source, string startMarker, string endMarker)
@@ -477,6 +720,18 @@ void WriteShortString(byte[] payload, int offset, string value)
 }
 
 byte[] Bytes(string value) => HUtil32.GbkEncoding.GetBytes(value ?? string.Empty);
+
+void PrepareConfig()
+{
+    var baseDir = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(baseDir, "!Setup.txt"), "[Server]\r\n");
+    File.WriteAllText(Path.Combine(baseDir, "String.ini"), "[String]\r\n");
+    File.WriteAllText(Path.Combine(baseDir, "Command.conf"), "[Command]\r\n");
+    var share = Path.GetFullPath(Path.Combine(baseDir, "..", "Share"));
+    Directory.CreateDirectory(share);
+    File.WriteAllText(Path.Combine(share, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]\r\nLEVEL_1=50\r\n");
+}
 
 void Run(string name, Action test)
 {

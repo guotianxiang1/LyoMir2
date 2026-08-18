@@ -70,6 +70,9 @@ namespace NativeCastleSiegeCheck
                 var liveAdd = CodeOnly(addBody);
                 True(liveAdd.Contains("SendServerGroupMsg(Grobal2.SS_212", StringComparison.Ordinal),
                     "duplicate signup still sends SS_212 (0x65B6C9 is after the already-listed jne)");
+                True(liveAdd.Contains("M2Share.nServerIndex, guildName", StringComparison.Ordinal)
+                     && liveAdd.Contains("Guild?.sGuildName", StringComparison.Ordinal),
+                    "SS_212 signup body must be [Guild+0x10] guild name (0x65B6BA..0x65B6CD)");
             }
 
             True(GameSvr.CastleConfManager.FormatDelphiDate(new DateTime(2022, 6, 15))

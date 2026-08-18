@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Buffers.Binary;
+using DBSvr.Core;
 using GameSvr;
 using SystemModule;
 
@@ -69,6 +71,14 @@ var miDropItem = typeof(TPlayObject).GetMethod("ClientDropItem",
     BindingFlags.Instance | BindingFlags.NonPublic, null,
     new[] { typeof(string), typeof(int) }, null)
     ?? throw new MissingMethodException("TPlayObject.ClientDropItem");
+var miScatterBagItems = typeof(TPlayObject).GetMethod("ScatterBagItems",
+    BindingFlags.Instance | BindingFlags.NonPublic, null,
+    new[] { typeof(TBaseObject) }, null)
+    ?? throw new MissingMethodException("TPlayObject.ScatterBagItems");
+var miDropUseItems = typeof(TPlayObject).GetMethod("DropUseItems",
+    BindingFlags.Instance | BindingFlags.NonPublic, null,
+    new[] { typeof(TBaseObject) }, null)
+    ?? throw new MissingMethodException("TPlayObject.DropUseItems");
 var miHeroToHeroBag = typeof(TPlayObject).GetMethod("ClientHeroMoveToHeroBag",
     BindingFlags.Instance | BindingFlags.NonPublic, null,
     new[] { typeof(TProcessMessage) }, null)
@@ -114,6 +124,17 @@ try
     VerifyFailedMailAttachmentIsLostNotDuplicated();
     VerifyUnverifiedDropIsDestroyed();
     VerifyGiftDropIsDestroyed();
+    VerifyMode5DropItemDownGate();
+    VerifyDeathBagMode5Protection();
+    VerifyDeathEquipMode5Protection();
+    VerifyDeathEquipReserved08Ordering();
+    VerifyHeroDeathEquipWorker();
+    VerifyHeroDeathBagWorker();
+    VerifyHeroDeathRoutingAndSm917();
+    VerifyHumanDeathTailAfterDropException();
+    VerifyNativeDeathDropNotice();
+    VerifyNativeItemMovementSms();
+    VerifyNativeAmuletConsumeGate();
 
     Console.WriteLine(
         "PASS InProcItemConservationCheck "
@@ -124,6 +145,17 @@ try
         + "mail-failed-attachment=REAL(lost not duplicated, AttachStatus 1->2, sub_70B458) "
         + "drop-unverified=REAL(destroyed not scattered, sub_73CC98 @0x73CDEB) "
         + "drop-gift=REAL(destroyed not scattered, item+0xD8) "
+        + "drop-mode5=REAL(index5 std+2&0x20; index4 masks not reused) "
+        + "death-bag-mode5=REAL(nonzero keeps item before auth/gift Free) "
+        + "death-equip-mode5=REAL(player override, random->auth/gift->0x10->mode5) "
+        + "death-equip-reserved08=REAL(per-slot std+2&8 before Random/cap) "
+        + "hero-death-equip=REAL(16 slots/order/Reserved08/ClassFc/cap) "
+        + "hero-death-bag=REAL(reverse/PK>=threshold/ClassFc bypass/range2) "
+        + "hero-death-routing=REAL(owner preserved/equip-before-bag/SM917 count*4) "
+        + "human-death-exception=REAL(worker catch/search-tick-clear/RM_DEATH) "
+        + "death-drop-notice=REAL(sub_73E4C4 owner/mode/RNG/text/raw 0x38FF) "
+        + "item-movement-sms=REAL(suffix bit/hero snapshot/0x78 GBK/three death legs) "
+        + "amulet-consume-gate=REAL(player+hero found&boConsume matrix) "
         + "single-process no-network no-DBSvr no-MySQL");
 }
 catch (Exception ex)
@@ -586,7 +618,7 @@ void VerifyGiftDropIsDestroyed()
     var player = NewPlayerOnMap("gift-owner", "gift-user");
     player.SetNativeAuthenticationStatus(0x1F, 0x1F, 0x1F);
     var gift = MakeItem("铁剑");
-    gift.NativeGiftItem = true;                       // item+0xD8 != 0
+    gift.NativeGiftItem = 1;                          // item+0xD8 != 0
     player.m_ItemList.Add(gift);
     var giftId = player.EnsureClientItemId(gift);
 
@@ -606,6 +638,1239 @@ void VerifyGiftDropIsDestroyed()
         + "notice='" + NativeItemDropDestroyNotices.DropGift + "' (0x73CE94)");
 
     M2Share.g_Config.boAuthOpen = false;
+}
+
+void VerifyMode5DropItemDownGate()
+{
+    var player = NewPlayerOnMap("mode5-drop-owner", "mode5-drop-user");
+    var protectedStd = new GoodItem
+    {
+        Name = "mode5-protected-drop", StdMode = 5, Shape = 1,
+        Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0020
+    };
+    var protectedItem = MakeRawItem(protectedStd);
+    var groundBefore = CountGroundItems(player);
+    Assert(!player.DropItemDown(protectedItem, 1, false, null, player),
+        "sub_7688A0 non-death mode 5 must reject std[+2]&0x20");
+    Assert(CountGroundItems(player) == groundBefore,
+        "mode-5 protected item reached the ground");
+
+    var mode4OnlyStd = new GoodItem
+    {
+        Name = "mode4-only-drop", StdMode = 5, Shape = 1,
+        Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0400
+    };
+    var mode4OnlyItem = MakeRawItem(mode4OnlyStd);
+    Assert(player.DropItemDown(mode4OnlyItem, 1, false, null, player),
+        "sub_7688A0 mode 5 must not reuse mode 4's 0x0400 gate");
+    Assert(CountGroundItems(player) == groundBefore + 1,
+        "mode-4-only item did not reach the ground through mode 5");
+
+    var deathBypassItem = MakeRawItem(protectedStd);
+    Assert(player.DropItemDown(deathBypassItem, 1, true, null, player),
+        "sub_7688A0 death/scatter flag must bypass sub_78389C");
+    Assert(CountGroundItems(player) == groundBefore + 2,
+        "death/scatter bypass did not place the protected item");
+}
+
+void VerifyDeathBagMode5Protection()
+{
+    var oldAuth = M2Share.g_Config.boAuthOpen;
+    var oldDropAll = M2Share.g_Config.boDieRedScatterBagAll;
+    try
+    {
+        M2Share.g_Config.boAuthOpen = true;
+        M2Share.g_Config.boDieRedScatterBagAll = true;
+
+        var player = NewPlayerOnMap("mode5-death-owner", "mode5-death-user");
+        player.m_nPkPoint = 1000;
+        var protectedStd = new GoodItem
+        {
+            Name = "mode5-protected-death-bag", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0020
+        };
+        var protectedItem = MakeRawItem(protectedStd);
+        player.m_ItemList.Add(protectedItem);
+        var groundBefore = CountGroundItems(player);
+
+        miScatterBagItems.Invoke(player, new object[] { null });
+
+        Assert(player.m_ItemList.Contains(protectedItem),
+            "0x74017B nonzero mode-5 result must keep the death-bag item");
+        Assert(CountGroundItems(player) == groundBefore,
+            "protected death-bag item reached the ground");
+
+        var destroyPlayer = NewPlayerOnMap(
+            "mode5-death-control", "mode5-death-control-user");
+        destroyPlayer.m_nPkPoint = 1000;
+        var ordinaryStd = new GoodItem
+        {
+            Name = "mode5-unprotected-death-bag", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var ordinaryItem = MakeRawItem(ordinaryStd);
+        destroyPlayer.m_ItemList.Add(ordinaryItem);
+        var controlGroundBefore = CountGroundItems(destroyPlayer);
+
+        miScatterBagItems.Invoke(destroyPlayer, new object[] { null });
+
+        Assert(!destroyPlayer.m_ItemList.Contains(ordinaryItem),
+            "mode-5 zero result must continue through the unverified destroy arm");
+        Assert(CountGroundItems(destroyPlayer) == controlGroundBefore,
+            "unverified control item was scattered instead of destroyed");
+    }
+    finally
+    {
+        M2Share.g_Config.boAuthOpen = oldAuth;
+        M2Share.g_Config.boDieRedScatterBagAll = oldDropAll;
+    }
+}
+
+void VerifyDeathEquipMode5Protection()
+{
+    var oldAuth = M2Share.g_Config.boAuthOpen;
+    var oldRandom = M2Share.RandomNumber;
+    try
+    {
+        M2Share.g_Config.boAuthOpen = true;
+        M2Share.RandomNumber = new FixedRandomNumber(0);
+
+        var protectedPlayer = NewPlayerOnMap(
+            "mode5-equip-protected", "mode5-equip-protected-user");
+        var protectedStd = new GoodItem
+        {
+            Name = "mode5-protected-death-equip", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000,
+            NativeReserved02 = 0x0010 | 0x0020
+        };
+        var protectedItem = MakeRawItem(protectedStd);
+        protectedItem.ClientItemID = 0;
+        protectedPlayer.m_UseItems[0] = protectedItem;
+        var protectedGroundBefore = CountGroundItems(protectedPlayer);
+
+        miDropUseItems.Invoke(protectedPlayer, new object[] { null });
+
+        Assert(ReferenceEquals(protectedPlayer.m_UseItems[0], protectedItem)
+            && protectedItem.wIndex != 0,
+            "0x73FDFE nonzero mode-5 result must keep the equipped item");
+        Assert(protectedItem.ClientItemID == 0,
+            "mode-5 protected equipment reached the destroy bookkeeping arm");
+        Assert(CountGroundItems(protectedPlayer) == protectedGroundBefore,
+            "mode-5 protected equipment reached the ground");
+
+        var destroyPlayer = NewPlayerOnMap(
+            "mode5-equip-control", "mode5-equip-control-user");
+        var destroyStd = new GoodItem
+        {
+            Name = "mode5-unprotected-death-equip", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0010
+        };
+        var destroyItem = MakeRawItem(destroyStd);
+        destroyItem.ClientItemID = 0;
+        destroyPlayer.m_UseItems[0] = destroyItem;
+        var destroyGroundBefore = CountGroundItems(destroyPlayer);
+
+        miDropUseItems.Invoke(destroyPlayer, new object[] { null });
+
+        Assert(ReferenceEquals(destroyPlayer.m_UseItems[0], destroyItem)
+            && destroyItem.wIndex != 0,
+            "native death-equip destroy arm must preserve its dangling slot semantics");
+        Assert(destroyItem.ClientItemID > 0,
+            "mode-5 zero result did not reach death-equip destroy bookkeeping");
+        Assert(CountGroundItems(destroyPlayer) == destroyGroundBefore,
+            "unverified death equipment was scattered instead of destroyed");
+
+        var authenticated = NewPlayerOnMap(
+            "mode5-equip-auth", "mode5-equip-auth-user");
+        authenticated.SetNativeAuthenticationStatus(0x1F, 0x1F, 0x1F);
+        var noGroundStd = new GoodItem
+        {
+            Name = "mode5-auth-no-ground-equip", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0010
+        };
+        var noGroundItem = MakeRawItem(noGroundStd);
+        noGroundItem.ClientItemID = 0;
+        authenticated.m_UseItems[0] = noGroundItem;
+        var authGroundBefore = CountGroundItems(authenticated);
+
+        miDropUseItems.Invoke(authenticated, new object[] { null });
+
+        Assert(noGroundItem.wIndex != 0 && noGroundItem.ClientItemID == 0,
+            "0x73FECE normal arm must reject std[+2]&0x10");
+        Assert(CountGroundItems(authenticated) == authGroundBefore,
+            "std[+2]&0x10 authenticated equipment reached the ground");
+
+        M2Share.g_Config.boAuthOpen = false;
+        M2Share.RandomNumber = new FixedRandomNumber(1);
+        var classFcPlayer = NewPlayerOnMap(
+            "mode5-equip-classfc", "mode5-equip-classfc-user");
+        var classFcStd = new GoodItem
+        {
+            Name = "mode5-classfc-death-equip", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var classFcItem = MakeRawItem(classFcStd);
+        classFcItem.NativeClassFc = 1;
+        classFcPlayer.m_UseItems[0] = classFcItem;
+        var classFcGroundBefore = CountGroundItems(classFcPlayer);
+
+        miDropUseItems.Invoke(classFcPlayer, new object[] { null });
+
+        Assert(classFcPlayer.m_UseItems[0] == null
+            && classFcItem.wIndex > 0
+            && CountGroundItems(classFcPlayer) == classFcGroundBefore + 1,
+            "0x73FDA2 item+0xFC must bypass a non-zero random result "
+            + "and 0x73FF11 must detach without clearing the ground item's wIndex");
+
+        var randomSkipPlayer = NewPlayerOnMap(
+            "mode5-equip-random-skip", "mode5-equip-random-skip-user");
+        var randomSkipItem = MakeRawItem(classFcStd);
+        randomSkipPlayer.m_UseItems[0] = randomSkipItem;
+        var randomSkipGroundBefore = CountGroundItems(randomSkipPlayer);
+
+        miDropUseItems.Invoke(randomSkipPlayer, new object[] { null });
+
+        Assert(randomSkipItem.wIndex != 0
+            && CountGroundItems(randomSkipPlayer) == randomSkipGroundBefore,
+            "non-zero random result must skip ordinary death equipment");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+        M2Share.g_Config.boAuthOpen = oldAuth;
+    }
+}
+
+void VerifyDeathEquipReserved08Ordering()
+{
+    var oldAuth = M2Share.g_Config.boAuthOpen;
+    var oldRandom = M2Share.RandomNumber;
+    try
+    {
+        M2Share.g_Config.boAuthOpen = false;
+
+        var reservedPlayer = NewPlayerOnMap(
+            "reserved08-equip", "reserved08-equip-user");
+        var reservedStd = new GoodItem
+        {
+            Name = "native-reserved08-death-equip", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0008
+        };
+        var reservedItem = MakeRawItem(reservedStd);
+        reservedPlayer.m_UseItems[0] = reservedItem;
+        var noDraw = new FixedRandomNumber(1);
+        M2Share.RandomNumber = noDraw;
+        var reservedGroundBefore = CountGroundItems(reservedPlayer);
+
+        miDropUseItems.Invoke(reservedPlayer, new object[] { null });
+
+        Assert(reservedPlayer.m_UseItems[0] == null,
+            "0x73FD49 std[+2]&8 item was not removed from its current slot");
+        Assert(noDraw.Calls == 0,
+            "0x73FD49 std[+2]&8 branch must jump over Random(K)");
+        Assert(CountGroundItems(reservedPlayer) == reservedGroundBefore,
+            "std[+2]&8 death equipment reached the ground");
+
+        var legacyPlayer = NewPlayerOnMap(
+            "legacy-reserved-equip", "legacy-reserved-equip-user");
+        var legacyStd = new GoodItem
+        {
+            Name = "legacy-reserved-field-equip", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, Reserved = 0x0008
+        };
+        var legacyItem = MakeRawItem(legacyStd);
+        legacyPlayer.m_UseItems[0] = legacyItem;
+        var legacyDraw = new FixedRandomNumber(1);
+        M2Share.RandomNumber = legacyDraw;
+
+        miDropUseItems.Invoke(legacyPlayer, new object[] { null });
+
+        Assert(ReferenceEquals(legacyPlayer.m_UseItems[0], legacyItem),
+            "GoodItem.Reserved must not substitute for native std[+2]&8");
+        Assert(legacyDraw.Calls == 1,
+            "ordinary equipment did not consume exactly one Random(K) draw");
+
+        var noCapPlayer = NewPlayerOnMap(
+            "reserved08-no-cap", "reserved08-no-cap-user");
+        var noCapDraw = new FixedRandomNumber(1);
+        M2Share.RandomNumber = noCapDraw;
+        var noCapGroundBefore = CountGroundItems(noCapPlayer);
+        for (var i = 0; i < 4; i++)
+        {
+            noCapPlayer.m_UseItems[i] = MakeRawItem(reservedStd);
+        }
+
+        miDropUseItems.Invoke(noCapPlayer, new object[] { null });
+
+        Assert(noCapDraw.Calls == 0,
+            "consecutive std[+2]&8 items must all bypass Random(K)");
+        Assert(noCapPlayer.m_UseItems.Take(4).All(item => item == null),
+            "0x73FD91 must bypass the normal cap check for every std[+2]&8 slot");
+        Assert(CountGroundItems(noCapPlayer) == noCapGroundBefore,
+            "consecutive std[+2]&8 death equipment reached the ground");
+
+        var capPlayer = NewPlayerOnMap(
+            "reserved08-cap-order", "reserved08-cap-order-user");
+        var ordinaryStd = new GoodItem
+        {
+            Name = "reserved08-cap-ordinary", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var capItems = new TUserItem[4];
+        for (var i = 0; i < 3; i++)
+        {
+            capItems[i] = MakeRawItem(ordinaryStd);
+            capPlayer.m_UseItems[i] = capItems[i];
+        }
+        capItems[3] = MakeRawItem(reservedStd);
+        capPlayer.m_UseItems[3] = capItems[3];
+        var capDraw = new FixedRandomNumber(0);
+        M2Share.RandomNumber = capDraw;
+        var capGroundBefore = CountGroundItems(capPlayer);
+
+        miDropUseItems.Invoke(capPlayer, new object[] { null });
+
+        Assert(capDraw.Calls == 3,
+            "native cap path must draw only slots 0..2 before exiting");
+        Assert(capPlayer.m_UseItems[0] == null
+            && capPlayer.m_UseItems[1] == null
+            && capPlayer.m_UseItems[2] == null,
+            "three successful normal drops were not detached from equipment slots");
+        Assert(ReferenceEquals(capPlayer.m_UseItems[3], capItems[3]),
+            "a pre-scan processed slot 3 before the native cap exit at slot 2");
+        Assert(capItems[0].wIndex > 0 && capItems[1].wIndex > 0
+            && capItems[2].wIndex > 0,
+            "normal death drop cleared the wIndex of an item now owned by the ground");
+        Assert(CountGroundItems(capPlayer) == capGroundBefore + 3,
+            "native three-item cap did not produce exactly three ground items");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+        M2Share.g_Config.boAuthOpen = oldAuth;
+    }
+}
+
+void VerifyHeroDeathEquipWorker()
+{
+    var oldRandom = M2Share.RandomNumber;
+    var oldAuth = M2Share.g_Config.boAuthOpen;
+    try
+    {
+        // Heroes jump over the player auth/gift arm even when authentication is enabled.
+        M2Share.g_Config.boAuthOpen = true;
+        var ordinaryStd = new GoodItem
+        {
+            Name = "hero-death-equip-order", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var formulaOwner = NewPlayerOnMap("hero-equip-formula-owner",
+            "hero-equip-formula-user");
+        var formulaHero = NewHeroOnMap(formulaOwner, "hero-equip-formula");
+        var formulaKiller = NewPlayerOnMap("hero-equip-formula-killer",
+            "hero-equip-formula-killer-user");
+        formulaHero.m_nNativeDropRareBase = 7;
+        formulaKiller.m_btNativeDropRareKillerBonus = 10;
+        Assert(formulaHero.NativeHeroDeathEquipDropDenominator(false,
+                formulaKiller, true, 25) == 22,
+            "Eye non-red K must remain self base + patched K - human killer bonus");
+        Assert(formulaHero.NativeHeroDeathEquipDropDenominator(true,
+                formulaKiller, true, 21) == 11,
+            "Eye red K must remain patched K - human killer bonus without self base");
+        formulaHero.m_nNativeDropRareBase = 100;
+        Assert(formulaHero.NativeHeroDeathEquipDropDenominator(false,
+                null, true, -128) == 0,
+            "Eye signed imm8 K must be floored only after adding the native self base");
+        Assert(formulaHero.NativeHeroDeathEquipDropDenominator(false,
+                formulaKiller, false, -1) == 180,
+            "disabled Eye patch must retain the stock base+90-killer denominator");
+
+        var owner = NewPlayerOnMap("hero-equip-owner", "hero-equip-user");
+        var hero = NewHeroOnMap(owner, "hero-equip");
+        var slot0 = MakeRawItem(ordinaryStd);
+        var slot7 = MakeRawItem(ordinaryStd);
+        var slot15 = MakeRawItem(ordinaryStd);
+        hero.m_UseItems[0] = slot0;
+        hero.m_UseItems[7] = slot7;
+        hero.m_UseItems[15] = slot15;
+        var orderedDraws = new SequenceRandomNumber(1, 0, 1);
+        M2Share.RandomNumber = orderedDraws;
+        var groundBefore = CountGroundItems(owner);
+
+        hero.NativeHeroDropUseItems(null, owner);
+
+        Assert(orderedDraws.Bounds.SequenceEqual(new[] { 90, 90, 90 }),
+            "hero death equipment must consume Random(K) only for nonempty slots, in 0..15 order");
+        Assert(ReferenceEquals(hero.m_UseItems[0], slot0)
+            && hero.m_UseItems[7] == null
+            && ReferenceEquals(hero.m_UseItems[15], slot15),
+            "scripted draws [1,0,1] did not select only hero slot 7");
+        Assert(slot7.wIndex > 0 && CountGroundItems(owner) == groundBefore + 1,
+            "hero slot 7 was not detached onto the ground with wIndex intact");
+
+        M2Share.RandomNumber = oldRandom;
+        var reservedStd = new GoodItem
+        {
+            Name = "hero-death-equip-reserved08", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0008
+        };
+        var capOwner = NewPlayerOnMap("hero-equip-cap-owner", "hero-equip-cap-user");
+        var capHero = NewHeroOnMap(capOwner, "hero-equip-cap");
+        for (var i = 0; i < 4; i++)
+            capHero.m_UseItems[i] = MakeRawItem(reservedStd);
+        capHero.m_UseItems[4] = MakeRawItem(ordinaryStd);
+        var afterCap = MakeRawItem(ordinaryStd);
+        capHero.m_UseItems[5] = afterCap;
+        var capDraws = new SequenceRandomNumber(0);
+        M2Share.RandomNumber = capDraws;
+        var capGroundBefore = CountGroundItems(capOwner);
+
+        capHero.NativeHeroDropUseItems(null, capOwner);
+
+        Assert(capHero.m_UseItems.Take(5).All(item => item == null)
+            && ReferenceEquals(capHero.m_UseItems[5], afterCap),
+            "Reserved08 must bypass RNG/cap, but its count must make the next successful ground drop exit");
+        Assert(capDraws.Bounds.SequenceEqual(new[] { 90 })
+            && CountGroundItems(capOwner) == capGroundBefore + 1,
+            "Reserved08 ordering consumed RNG or failed to participate in the later cap");
+
+        M2Share.RandomNumber = oldRandom;
+        var ghostOwner = NewRecordingPlayerOnMap("hero-equip-ghost-owner",
+            "hero-equip-ghost-user");
+        ghostOwner.m_boGhost = true;
+        var ghostHero = NewHeroOnMap(ghostOwner, "hero-equip-ghost");
+        var ghostReserved = MakeRawItem(reservedStd);
+        ghostHero.m_UseItems[2] = ghostReserved;
+        M2Share.RandomNumber = new SequenceRandomNumber();
+
+        ghostHero.NativeHeroDropUseItems(null, ghostOwner);
+
+        var ghostDelete = ghostHero.m_MsgList.Single(message =>
+            message.wIdent == Grobal2.RM_SENDDELITEMLIST);
+        Assert(ghostReserved.ClientItemID == 0
+            && ghostDelete.Payload is byte[] { Length: 4 } ghostDeleteBody
+            && BinaryPrimitives.ReadInt32LittleEndian(ghostDeleteBody) == 0,
+            "Reserved08 must queue the raw item+0x18 dword without allocating an ID");
+        Assert(ghostOwner.BinaryPackets.Count == 0
+            && ghostOwner.TextPackets.Count == 0,
+            "Reserved08 SM906 must be suppressed when the bound owner is ghost");
+
+        M2Share.RandomNumber = oldRandom;
+        var deadOwner = NewRecordingPlayerOnMap("hero-equip-dead-owner",
+            "hero-equip-dead-user");
+        deadOwner.m_boDeath = true;
+        var deadHero = NewHeroOnMap(deadOwner, "hero-equip-dead");
+        var deadReserved = MakeRawItem(reservedStd);
+        deadHero.m_UseItems[2] = deadReserved;
+        M2Share.RandomNumber = new SequenceRandomNumber();
+
+        deadHero.NativeHeroDropUseItems(null, deadOwner);
+
+        Assert(deadOwner.BinaryPackets.Count == 1
+            && deadOwner.TextPackets.Count == 1
+            && deadOwner.BinaryPackets[0].Header.Ident == Grobal2.SM_HERO_DELITEM
+            && deadOwner.BinaryPackets[0].Header.Recog == 0
+            && deadOwner.BinaryPackets[0].Header.Series == 1,
+            "Reserved08 SM906 must still use raw ID and reach a dead, non-ghost owner");
+
+        M2Share.RandomNumber = oldRandom;
+        var classOwner = NewPlayerOnMap("hero-equip-fc-owner", "hero-equip-fc-user");
+        var classHero = NewHeroOnMap(classOwner, "hero-equip-fc");
+        var forced = MakeRawItem(ordinaryStd);
+        forced.NativeClassFc = 1;
+        var ordinary = MakeRawItem(ordinaryStd);
+        classHero.m_UseItems[0] = forced;
+        classHero.m_UseItems[1] = ordinary;
+        var classDraws = new SequenceRandomNumber(1, 1);
+        M2Share.RandomNumber = classDraws;
+
+        classHero.NativeHeroDropUseItems(null, classOwner);
+
+        Assert(classDraws.Bounds.SequenceEqual(new[] { 90, 90 }),
+            "equipment ClassFc must bypass a nonzero result only after consuming Random(K)");
+        Assert(classHero.m_UseItems[0] == null
+            && ReferenceEquals(classHero.m_UseItems[1], ordinary),
+            "equipment ClassFc did not force only the flagged item through a nonzero draw");
+        var classDelete = classHero.m_MsgList.Single(message =>
+            message.wIdent == Grobal2.RM_SENDDELITEMLIST);
+        Assert(forced.ClientItemID == 0
+            && classDelete.Payload is byte[] { Length: 4 } classDeleteBody
+            && BinaryPrimitives.ReadInt32LittleEndian(classDeleteBody) == 0,
+            "normal equipment drop must queue raw item+0x18 without lazy ID allocation");
+        Log("HERO DEATH EQUIP: 16-slot forward scan, empty slots consume no RNG, "
+            + "Eye K keeps native base/killer terms, Reserved08 bypasses RNG/cap with ghost gate, "
+            + "ClassFc consumes then bypasses, raw ClientItemID is preserved");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+        M2Share.g_Config.boAuthOpen = oldAuth;
+    }
+}
+
+void VerifyHeroDeathBagWorker()
+{
+    var oldRandom = M2Share.RandomNumber;
+    var oldAuth = M2Share.g_Config.boAuthOpen;
+    var oldThreshold = M2Share.g_Config.nPKPunishPoint;
+    try
+    {
+        M2Share.g_Config.boAuthOpen = true;
+        M2Share.g_Config.nPKPunishPoint = 200;
+        var ordinaryStd = new GoodItem
+        {
+            Name = "hero-death-bag-order", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var owner = NewPlayerOnMap("hero-bag-owner", "hero-bag-user");
+        var hero = NewHeroOnMap(owner, "hero-bag");
+        var itemA = MakeRawItem(ordinaryStd);
+        var itemB = MakeRawItem(ordinaryStd);
+        var itemC = MakeRawItem(ordinaryStd);
+        hero.m_ItemList.Add(itemA);
+        hero.m_ItemList.Add(itemB);
+        hero.m_ItemList.Add(itemC);
+        var reverseDraws = new SequenceRandomNumber(0, 1, 1);
+        M2Share.RandomNumber = reverseDraws;
+        var groundBefore = CountGroundItems(owner);
+
+        hero.NativeHeroScatterBagItems(owner);
+
+        Assert(reverseDraws.Bounds.SequenceEqual(new[] { 3, 3, 3 }),
+            "hero death bag must visit C,B,A and draw Random(3) for each ordinary non-red item");
+        Assert(hero.m_ItemList.SequenceEqual(new[] { itemA, itemB })
+            && CountGroundItems(owner) == groundBefore + 1,
+            "reverse draw sequence did not remove only the original last bag item");
+
+        M2Share.RandomNumber = oldRandom;
+        var protectedStd = new GoodItem
+        {
+            Name = "hero-death-bag-fc", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000,
+            NativeReserved02 = 0x0010 | 0x0200 | 0x4000
+        };
+        var classOwner = NewPlayerOnMap("hero-bag-fc-owner", "hero-bag-fc-user");
+        var classHero = NewHeroOnMap(classOwner, "hero-bag-fc");
+        var forced = MakeRawItem(protectedStd);
+        forced.NativeClassFc = 1;
+        forced.btValue[10] = 1;
+        classHero.m_ItemList.Add(forced);
+        var noDraw = new SequenceRandomNumber();
+        M2Share.RandomNumber = noDraw;
+        var classGroundBefore = CountGroundItems(classOwner);
+
+        classHero.NativeHeroScatterBagItems(classOwner);
+
+        Assert(noDraw.Bounds.Count == 0 && classHero.m_ItemList.Count == 0
+            && CountGroundItems(classOwner) == classGroundBefore + 1,
+            "bag ClassFc must bypass Random(3), Reserved02 and bind-word==1 before normal hero landing");
+        var classDelete = classHero.m_MsgList.Single(message =>
+            message.wIdent == Grobal2.RM_SENDDELITEMLIST);
+        Assert(forced.ClientItemID == 0
+            && classDelete.Payload is byte[] { Length: 4 } classDeleteBody
+            && BinaryPrimitives.ReadInt32LittleEndian(classDeleteBody) == 0,
+            "hero bag drop must queue raw item+0x18 without lazy ID allocation");
+
+        M2Share.RandomNumber = oldRandom;
+        var belowOwner = NewPlayerOnMap("hero-bag-pk199-owner", "hero-bag-pk199-user");
+        var belowHero = NewHeroOnMap(belowOwner, "hero-bag-pk199");
+        belowHero.m_nPkPoint = 199;
+        var belowItem = MakeRawItem(ordinaryStd);
+        belowHero.m_ItemList.Add(belowItem);
+        var belowDraw = new SequenceRandomNumber(1);
+        M2Share.RandomNumber = belowDraw;
+        belowHero.NativeHeroScatterBagItems(belowOwner);
+        Assert(belowDraw.Bounds.SequenceEqual(new[] { 3 })
+            && ReferenceEquals(belowHero.m_ItemList.Single(), belowItem),
+            "PK threshold-1 must remain non-red and obey a nonzero Random(3) result");
+
+        M2Share.RandomNumber = oldRandom;
+        var edgeOwner = NewPlayerOnMap("hero-bag-pk200-owner", "hero-bag-pk200-user");
+        var edgeHero = NewHeroOnMap(edgeOwner, "hero-bag-pk200");
+        edgeHero.m_nPkPoint = 200;
+        edgeHero.m_ItemList.Add(MakeRawItem(ordinaryStd));
+        var edgeNoDraw = new SequenceRandomNumber();
+        M2Share.RandomNumber = edgeNoDraw;
+        edgeHero.NativeHeroScatterBagItems(edgeOwner);
+        Assert(edgeNoDraw.Bounds.Count == 0 && edgeHero.m_ItemList.Count == 0,
+            "PKPoint==threshold must enter the red all-drop arm without Random(3)");
+
+        M2Share.RandomNumber = oldRandom;
+        var radiusOwner = NewPlayerOnMap("hero-bag-radius-owner", "hero-bag-radius-user");
+        var radiusHero = NewHeroOnMap(radiusOwner, "hero-bag-radius");
+        radiusHero.m_nCurrX = 50;
+        radiusHero.m_nCurrY = 50;
+        var radiusItem = MakeRawItem(ordinaryStd);
+        radiusItem.NativeClassFc = 1;
+        radiusHero.m_ItemList.Add(radiusItem);
+        var radiusNoDraw = new SequenceRandomNumber();
+        M2Share.RandomNumber = radiusNoDraw;
+        for (var x = 48; x <= 52; x++)
+            for (var y = 48; y <= 52; y++)
+                radiusHero.m_PEnvir.SetMapXYFlag(x, y, false);
+        var radiusGroundBefore = CountGroundItems(radiusOwner);
+        try
+        {
+            radiusHero.NativeHeroScatterBagItems(radiusOwner);
+            Assert(ReferenceEquals(radiusHero.m_ItemList.Single(), radiusItem)
+                && CountGroundItems(radiusOwner) == radiusGroundBefore,
+                "fixed radius 2 must fail and retain the item when only ring 3 is open");
+        }
+        finally
+        {
+            for (var x = 48; x <= 52; x++)
+                for (var y = 48; y <= 52; y++)
+                    radiusHero.m_PEnvir.SetMapXYFlag(x, y, true);
+        }
+        Log("HERO DEATH BAG: reverse scan, hardcoded Random(3), PK>=threshold edge, "
+            + "ClassFc bypasses RNG and all Reserved/bind gates, raw ClientItemID, fixed radius 2");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+        M2Share.g_Config.boAuthOpen = oldAuth;
+        M2Share.g_Config.nPKPunishPoint = oldThreshold;
+    }
+}
+
+void VerifyHeroDeathRoutingAndSm917()
+{
+    var oldRandom = M2Share.RandomNumber;
+    var oldThreshold = M2Share.g_Config.nPKPunishPoint;
+    try
+    {
+        M2Share.g_Config.nPKPunishPoint = 200;
+        var owner = NewRecordingPlayerOnMap("hero-die-owner", "hero-die-user");
+        var hero = NewHeroOnMap(owner, "hero-die");
+        var killer = NewPlayerOnMap("hero-die-killer", "hero-die-killer-user");
+        killer.m_btNativeDropRareKillerBonus = 10;
+        hero.m_LastHiter = killer;
+
+        var stdItem = new GoodItem
+        {
+            Name = "hero-die-routing", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var equipped = MakeRawItem(stdItem);
+        equipped.NativeClassFc = 1;
+        var bagged = MakeRawItem(stdItem);
+        bagged.NativeClassFc = 1;
+        var equippedId = owner.EnsureClientItemId(equipped);
+        var baggedId = owner.EnsureClientItemId(bagged);
+        hero.m_UseItems[2] = equipped;
+        hero.m_ItemList.Add(bagged);
+        var deathDraws = new SequenceRandomNumber(1);
+        M2Share.RandomNumber = deathDraws;
+        var groundBefore = CountGroundItems(owner);
+
+        hero.Die();
+
+        Assert(ReferenceEquals(hero.m_Master, owner),
+            "THeroAct owner +0x68C must survive the generic death cleanup");
+        Assert(hero.m_UseItems[2] == null && hero.m_ItemList.Count == 0
+            && CountGroundItems(owner) == groundBefore + 2,
+            "real HeroObject.Die did not run equipment first and bag second through the human worker pair");
+        Assert(deathDraws.Bounds.SequenceEqual(new[] { 80 }),
+            "real Die must preserve LastHiter for equip K=90-killerBonus; bag ClassFc consumes no RNG");
+
+        var deleteMessages = hero.m_MsgList
+            .Where(message => message.wIdent == Grobal2.RM_SENDDELITEMLIST)
+            .ToList();
+        Assert(deleteMessages.Count == 2,
+            "equipment and bag workers must each queue one RM_SENDDELITEMLIST batch");
+        var queuedIds = deleteMessages.Select(message =>
+        {
+            Assert(message.nParam1 == 1 && message.Payload is byte[] { Length: 4 },
+                "native hero delete RM must carry count=1 and exactly count*4 bytes");
+            return BinaryPrimitives.ReadInt32LittleEndian((byte[])message.Payload);
+        }).ToArray();
+        Assert(queuedIds.SequenceEqual(new[] { equippedId, baggedId }),
+            "hero deletion batches must preserve equipment-before-bag ClientItemID order");
+
+        owner.BinaryPackets.Clear();
+        foreach (var message in deleteMessages)
+        {
+            hero.Operate(new TProcessMessage
+            {
+                wIdent = message.wIdent,
+                nParam1 = message.nParam1,
+                Payload = message.Payload
+            });
+        }
+        Assert(owner.BinaryPackets.Count == 2, "hero RM 10148 did not forward two SM917 packets");
+        for (var i = 0; i < owner.BinaryPackets.Count; i++)
+        {
+            var packet = owner.BinaryPackets[i];
+            Assert(packet.Header.Ident == Grobal2.SM_HERO_DELITEMS
+                && packet.Header.Recog == 1
+                && packet.Header.Param == 0
+                && packet.Header.Tag == 0
+                && packet.Header.Series == 0,
+                "SM917 header fields differ from 0x6896ED..0x689708");
+            Assert(packet.Body.Length == 4
+                && BinaryPrimitives.ReadInt32LittleEndian(packet.Body) == queuedIds[i],
+                "SM917 body must be the unchanged ClientItemID dword with no trailing zero");
+        }
+        Log("HERO DEATH ROUTING: real Die preserves owner/LastHiter, runs equip then bag, "
+            + "queues two count*4 buffers and forwards exact SM_HERO_DELITEMS=917 frames");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+        M2Share.g_Config.nPKPunishPoint = oldThreshold;
+    }
+}
+
+void VerifyHumanDeathTailAfterDropException()
+{
+    var oldRandom = M2Share.RandomNumber;
+    var flag = M2Share.MapManager.FindMap("0")?.Flag
+        ?? throw new Exception("test map '0' has no flag record");
+    var oldOnlyDropSpec = flag.boONLYDROPSPEC;
+    try
+    {
+        flag.boONLYDROPSPEC = true;
+        var player = NewPlayerOnMap("human-die-exception", "human-die-exception-user");
+        player.m_boObMode = true;
+        player.m_dwSearchTick = 12345;
+        player.m_nBodyLuckLevel = 0;
+
+        var special = MakeRawItem(new GoodItem
+        {
+            Name = "human-die-exception-special", StdMode = 96,
+            Shape = 1, Weight = 1, DuraMax = 5000, IntParam1 = 100
+        });
+        player.m_ItemList.Add(special);
+        var throwingRandom = new SequenceRandomNumber();
+        M2Share.RandomNumber = throwingRandom;
+
+        player.Die();
+
+        Assert(throwingRandom.Bounds.SequenceEqual(new[] { 100 }),
+            "THumanKind drop exception must originate at the one Random(100) roll");
+        Assert(player.m_ItemList.Count == 1
+            && ReferenceEquals(player.m_ItemList[0], special)
+            && special.wIndex != 0,
+            "THumanKind drop exception mutated the pending special item");
+        Assert(player.m_nBodyLuckLevel == 1,
+            "THumanKind drop exception skipped the later TPlayer death tail");
+        Assert(player.m_dwSearchTick == 0,
+            "0x7414DB search-view tick clear was skipped after a drop exception");
+        Assert(player.m_MsgList.Count(message =>
+                message.wIdent == Grobal2.RM_DEATH) == 1,
+            "THumanKind drop exception skipped or duplicated RM_DEATH");
+        Log("HUMAN DEATH EXCEPTION: Random(100) worker fault is logged, item stays, "
+            + "player tail/search-tick/RM_DEATH continue exactly once");
+    }
+    finally
+    {
+        flag.boONLYDROPSPEC = oldOnlyDropSpec;
+        M2Share.RandomNumber = oldRandom;
+    }
+}
+
+void VerifyNativeDeathDropNotice()
+{
+    const int gateOffset = 0x57C;
+    const int maskOffset = 0x580;
+    var oldRandom = M2Share.RandomNumber;
+    var map = M2Share.MapManager.FindMap("0")
+        ?? throw new Exception("test map '0' was not registered");
+    var oldFight = map.Flag.boFightZone;
+    var oldFight3 = map.Flag.boFight3Zone;
+    var oldSafe = map.Flag.boSAFE;
+    try
+    {
+        // sub_6AFD7C load: record+580 -> obj+60C, record+57C -> obj+610,
+        // then 0x6B060A..11 normalizes every non-positive gate to 1.
+        foreach (var storedGate in new[] { int.MinValue, -1, 0, 1, 2, 3, int.MaxValue })
+        {
+            var state = NewPlayer("notice-state-" + storedGate, "notice-state-user");
+            state.m_NativeHumanData = new byte[NativeHumanDataCodec.DataRecordSize];
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                state.m_NativeHumanData.AsSpan(maskOffset, sizeof(uint)), 0xA5A55A5Au);
+            BinaryPrimitives.WriteInt32LittleEndian(
+                state.m_NativeHumanData.AsSpan(gateOffset, sizeof(int)), storedGate);
+            Assert(state.RestoreNativeHeroZodiacState(),
+                "native zodiac state failed to restore from a full human record");
+            Assert(state.HeroZodiacBlessMask == 0xA5A55A5Au
+                && state.HeroZodiacBlessGate == (storedGate > 0 ? storedGate : 1),
+                "record+57C/+580 load or <=0 gate normalization differs from 0x6B05E9..11");
+        }
+
+        var shortState = NewPlayer("notice-state-short", "notice-state-short-user");
+        shortState.HeroZodiacBlessMask = uint.MaxValue;
+        shortState.HeroZodiacBlessGate = 3;
+        shortState.m_NativeHumanData = new byte[maskOffset];
+        Assert(!shortState.RestoreNativeHeroZodiacState()
+            && shortState.HeroZodiacBlessMask == 0
+            && shortState.HeroZodiacBlessGate == 0,
+            "short native record must fail closed instead of retaining stale live zodiac state");
+
+        var persisted = NewPlayer("notice-state-save", "notice-state-save-user");
+        persisted.m_NativeHumanData = new byte[NativeHumanDataCodec.DataRecordSize];
+        persisted.HeroZodiacBlessMask = 0x81234567u;
+        persisted.HeroZodiacBlessGate = -7;
+        Assert(persisted.PersistNativeHeroZodiacState(),
+            "native zodiac state failed to persist into a full human record");
+        Assert(BinaryPrimitives.ReadUInt32LittleEndian(
+                persisted.m_NativeHumanData.AsSpan(maskOffset, sizeof(uint))) == 0x81234567u
+            && BinaryPrimitives.ReadInt32LittleEndian(
+                persisted.m_NativeHumanData.AsSpan(gateOffset, sizeof(int))) == -7,
+            "save must write live obj+60C/+610 verbatim at 0x6B13D9..EB");
+
+        var player = NewRecordingPlayerOnMap("notice-player", "notice-player-user");
+        SetNoticeMode(player, 2);
+        var cases = new[]
+        {
+            (Mode: 2, Count: 0, Bound: 40, Tail: "您死亡没有爆出装备！"),
+            (Mode: 2, Count: 1, Bound: 25, Tail: "您死亡应爆出装备的数量减少了一半！"),
+            (Mode: 2, Count: 2, Bound: 25, Tail: "您死亡爆出装备的件数减少了！"),
+            (Mode: 3, Count: 0, Bound: 30, Tail: "您死亡没有爆出装备！"),
+            (Mode: 3, Count: 1, Bound: 20, Tail: "您死亡应爆出装备的数量减少了一半！"),
+            (Mode: 3, Count: 2, Bound: 20, Tail: "您死亡爆出装备的件数减少了！")
+        };
+        foreach (var c in cases)
+        {
+            player.m_MsgList.Clear();
+            player.HeroZodiacBlessGate = c.Mode;
+            var draws = new SequenceRandomNumber(1);
+            M2Share.RandomNumber = draws;
+            player.TryNativeDeathDropAreaNotice(c.Count, player);
+            Assert(draws.Bounds.SequenceEqual(new[] { c.Bound }),
+                $"notice mode={c.Mode} count={c.Count} used the wrong Random bound");
+            var queued = player.m_MsgList.Single();
+            var bagName = c.Mode == 2 ? "极品神佑袋" : "顶级神佑袋";
+            Assert(queued.wIdent == Grobal2.RM_SYSMESSAGE
+                && queued.nParam1 == 0xFF && queued.nParam2 == 0x38
+                && queued.nParam3 == 0 && ReferenceEquals(queued.BaseObject, player)
+                && queued.Buff == $"由于您的{bagName}发挥作用，{c.Tail}",
+                "sub_73E4C4 queued message/color/body differs from 0x73E67D..88");
+        }
+
+        player.m_MsgList.Clear();
+        player.HeroZodiacBlessGate = 2;
+        var miss = new SequenceRandomNumber(0);
+        M2Share.RandomNumber = miss;
+        player.TryNativeDeathDropAreaNotice(0, player);
+        Assert(miss.Bounds.SequenceEqual(new[] { 40 }) && player.m_MsgList.Count == 0,
+            "notice must hit only when Random(bound)==1");
+
+        player.m_MsgList.Clear();
+        var otherCount = new SequenceRandomNumber(1);
+        M2Share.RandomNumber = otherCount;
+        player.TryNativeDeathDropAreaNotice(3, player);
+        Assert(otherCount.Bounds.SequenceEqual(new[] { 50 }) && player.m_MsgList.Count == 0,
+            "count>=3 must consume Random(50) and still send no message");
+
+        player.HeroZodiacBlessGate = 1;
+        var modeOne = new SequenceRandomNumber();
+        M2Share.RandomNumber = modeOne;
+        player.TryNativeDeathDropAreaNotice(0, player);
+        Assert(modeOne.Bounds.Count == 0 && player.m_MsgList.Count == 0,
+            "mode outside 2/3 must return before RNG");
+
+        player.HeroZodiacBlessGate = 2;
+        foreach (var gate in new[] { "fight", "fight3", "safe" })
+        {
+            map.Flag.boFightZone = gate == "fight";
+            map.Flag.boFight3Zone = gate == "fight3";
+            map.Flag.boSAFE = gate == "safe";
+            var gated = new SequenceRandomNumber();
+            M2Share.RandomNumber = gated;
+            player.m_MsgList.Clear();
+            player.TryNativeDeathDropAreaNotice(0, player);
+            Assert(gated.Bounds.Count == 0 && player.m_MsgList.Count == 0,
+                gate + " map gate must exit before owner mode and RNG");
+        }
+        map.Flag.boFightZone = false;
+        map.Flag.boFight3Zone = false;
+        map.Flag.boSAFE = false;
+
+        var stdItem = new GoodItem
+        {
+            Name = "death-notice-caller", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+        var bagStd = new GoodItem
+        {
+            Name = "death-notice-bag-gate", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000
+        };
+
+        // Exact player caller gates. A present item that loses the equipment roll gives
+        // count=0; this is the native branch the old `dropCount<=0` stub erased.
+        M2Share.RandomNumber = oldRandom;
+        var caller = NewRecordingPlayerOnMap("notice-caller", "notice-caller-user");
+        SetNoticeMode(caller, 2);
+        caller.m_UseItems[0] = MakeRawItem(stdItem);
+        caller.m_ItemList.Add(MakeRawItem(bagStd));
+        var callerDraws = new SequenceRandomNumber(1, 1);
+        M2Share.RandomNumber = callerDraws;
+        miDropUseItems.Invoke(caller, new object[] { null });
+        Assert(callerDraws.Bounds.SequenceEqual(new[] { 90, 40 })
+            && caller.m_MsgList.Count(message => message.wIdent == Grobal2.RM_SYSMESSAGE) == 1,
+            "player caller did not preserve any-equip + owner-bag + valid count=0 notice");
+        var playerNotice = caller.m_MsgList.Single(message =>
+            message.wIdent == Grobal2.RM_SYSMESSAGE);
+        caller.Operate(ToProcessMessage(playerNotice));
+        var playerWire = caller.TextPackets.Single();
+        Assert(playerWire.Header.Ident == Grobal2.SM_SYSMESSAGE
+            && playerWire.Header.Recog == caller.ObjectId
+            && playerWire.Header.Param == 0x38FF
+            && playerWire.Header.Tag == 0 && playerWire.Header.Series == 1
+            && playerWire.Text == "由于您的极品神佑袋发挥作用，您死亡没有爆出装备！",
+            "player notice did not become exact SM100/0x38FF/self/plain-text output");
+
+        M2Share.RandomNumber = oldRandom;
+        var noEquip = NewPlayerOnMap("notice-no-equip", "notice-no-equip-user");
+        SetNoticeMode(noEquip, 2);
+        noEquip.m_ItemList.Add(MakeRawItem(bagStd));
+        var noEquipDraws = new SequenceRandomNumber();
+        M2Share.RandomNumber = noEquipDraws;
+        miDropUseItems.Invoke(noEquip, new object[] { null });
+        Assert(noEquipDraws.Bounds.Count == 0
+            && noEquip.m_MsgList.All(message => message.wIdent != Grobal2.RM_SYSMESSAGE),
+            "empty initial equipment set must not call sub_73E4C4");
+
+        M2Share.RandomNumber = oldRandom;
+        var emptyBag = NewPlayerOnMap("notice-empty-bag", "notice-empty-bag-user");
+        SetNoticeMode(emptyBag, 2);
+        emptyBag.m_UseItems[0] = MakeRawItem(stdItem);
+        var emptyBagDraws = new SequenceRandomNumber(1);
+        M2Share.RandomNumber = emptyBagDraws;
+        miDropUseItems.Invoke(emptyBag, new object[] { null });
+        Assert(emptyBagDraws.Bounds.SequenceEqual(new[] { 90 })
+            && emptyBag.m_MsgList.All(message => message.wIdent != Grobal2.RM_SYSMESSAGE),
+            "owner bag Count==0 must suppress the notice RNG and message");
+
+        // Hero resolves both mode and bag through master, but queues on the hero. Its
+        // dispatcher prefixes the body and keeps Recog=hero when forwarding to master.
+        M2Share.RandomNumber = oldRandom;
+        var heroOwner = NewRecordingPlayerOnMap("notice-hero-owner", "notice-hero-user");
+        SetNoticeMode(heroOwner, 3);
+        heroOwner.m_ItemList.Add(MakeRawItem(bagStd));
+        var hero = NewHeroOnMap(heroOwner, "notice-hero");
+        hero.m_UseItems[0] = MakeRawItem(stdItem);
+        var heroDraws = new SequenceRandomNumber(1, 1);
+        M2Share.RandomNumber = heroDraws;
+        hero.NativeHeroDropUseItems(null, heroOwner);
+        Assert(heroDraws.Bounds.SequenceEqual(new[] { 90, 30 }),
+            "hero notice did not use master mode 3 and count0 bound 30");
+        var heroNotice = hero.m_MsgList.Single(message =>
+            message.wIdent == Grobal2.RM_SYSMESSAGE);
+        hero.Operate(ToProcessMessage(heroNotice));
+        var heroWire = heroOwner.BinaryPackets.Single();
+        var expectedHeroBody = HUtil32.GetBytes(
+            "(英雄) 由于您的顶级神佑袋发挥作用，您死亡没有爆出装备！\0");
+        Assert(heroWire.Header.Ident == Grobal2.SM_SYSMESSAGE
+            && heroWire.Header.Recog == hero.ObjectId
+            && heroWire.Header.Param == 0x38FF
+            && heroWire.Header.Tag == 0 && heroWire.Header.Series == 1
+            && heroWire.Body.SequenceEqual(expectedHeroBody),
+            "hero notice did not preserve hero Recog/master-only forwarding/prefix/NUL body");
+
+        Log("DEATH DROP NOTICE: sub_73E4C4 mode 2/3 bounds, hit==1, count0/1/2 text, "
+            + "count>=3 draw-only, map/caller gates, live +60C/+610 persistence, player+hero wire");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+        map.Flag.boFightZone = oldFight;
+        map.Flag.boFight3Zone = oldFight3;
+        map.Flag.boSAFE = oldSafe;
+    }
+
+    void SetNoticeMode(TPlayObject owner, int mode)
+    {
+        owner.m_NativeHumanData = new byte[NativeHumanDataCodec.DataRecordSize];
+        BinaryPrimitives.WriteInt32LittleEndian(
+            owner.m_NativeHumanData.AsSpan(gateOffset, sizeof(int)), mode);
+        Assert(owner.RestoreNativeHeroZodiacState(), "notice owner mode restore failed");
+    }
+
+    static TProcessMessage ToProcessMessage(SendMessage message) => new()
+    {
+        wIdent = message.wIdent,
+        wParam = message.wParam,
+        nParam1 = message.nParam1,
+        nParam2 = message.nParam2,
+        nParam3 = message.nParam3,
+        BaseObject = message.BaseObject?.ObjectId ?? 0,
+        sMsg = message.Buff,
+        Payload = message.Payload
+    };
+}
+
+void VerifyNativeItemMovementSms()
+{
+    var oldServerName = M2Share.g_Config.sServerName;
+    var oldAuthOpen = M2Share.g_Config.boAuthOpen;
+    var oldShowPrefix = M2Share.g_Config.boShowPreFixMsg;
+    var oldHintPrefix = M2Share.g_Config.sHintMsgPreFix;
+    var oldGreenFColor = M2Share.g_Config.btGreenMsgFColor;
+    var oldGreenBColor = M2Share.g_Config.btGreenMsgBColor;
+    var oldRandom = M2Share.RandomNumber;
+    try
+    {
+        M2Share.g_Config.sServerName = "S1";
+
+        foreach (var value in new byte[] { 0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0xFF })
+        {
+            var state = NewPlayer("sms-state-" + value, "sms-state-user");
+            state.m_NativeDbSessionSuffix =
+                new byte[NativeHumanDbCodec.SessionSuffixSize];
+            state.m_NativeDbSessionSuffix[
+                TPlayObject.NativeItemMovementSmsSuffixOffset] = value;
+            Assert(state.RestoreNativeItemMovementSmsState(),
+                "full session suffix was rejected");
+            Assert(state.m_boNativeItemMovementSmsEnabled == ((value & 1) != 0),
+                $"suffix+0x56 value 0x{value:X2} did not isolate bit 0");
+        }
+
+        var shortState = NewPlayer("sms-state-short", "sms-state-short-user");
+        shortState.m_boNativeItemMovementSmsEnabled = true;
+        shortState.m_NativeDbSessionSuffix =
+            new byte[TPlayObject.NativeItemMovementSmsSuffixOffset];
+        Assert(!shortState.RestoreNativeItemMovementSmsState()
+            && !shortState.m_boNativeItemMovementSmsEnabled,
+            "short suffix must clear stale SMS state and fail closed");
+
+        var owner = NewPlayerOnMap("sms-owner", "sms-ptid");
+        owner.m_boNativeItemMovementSmsEnabled = true;
+        var hero = NewHeroOnMap(owner, "sms-hero");
+        hero.CopyNativeItemMovementSmsState(owner);
+        owner.m_boNativeItemMovementSmsEnabled = false;
+        Assert(hero.m_boNativeItemMovementSmsEnabled,
+            "hero did not retain the one-time owner SMS-state snapshot");
+        var laterHero = NewHeroOnMap(owner, "sms-hero-later");
+        laterHero.CopyNativeItemMovementSmsState(owner);
+        Assert(!laterHero.m_boNativeItemMovementSmsEnabled,
+            "a later hero did not snapshot the owner's current false state");
+
+        var ascii = TBaseObject.BuildNativeItemMovementSmsPayload(
+            "S1", "uid", "Hero", "Sword", 0x12345678, 1);
+        var expected = new byte[TBaseObject.NativeItemMovementSmsPayloadSize];
+        System.Text.Encoding.ASCII.GetBytes("S1").CopyTo(expected, 0x00);
+        System.Text.Encoding.ASCII.GetBytes("uid").CopyTo(expected, 0x10);
+        System.Text.Encoding.ASCII.GetBytes("Hero").CopyTo(expected, 0x30);
+        System.Text.Encoding.ASCII.GetBytes("Sword").CopyTo(expected, 0x50);
+        BinaryPrimitives.WriteInt32LittleEndian(expected.AsSpan(0x70, 4),
+            0x12345678);
+        expected[0x74] = 1;
+        Assert(ascii.SequenceEqual(expected),
+            "sub_743F14 0x78 ASCII golden payload differs");
+
+        var split = TBaseObject.BuildNativeItemMovementSmsPayload(
+            new string('A', 14) + "中", new string('B', 30) + "中",
+            "角色", "屠龙", int.MinValue, 0xFF);
+        Assert(split[14] == 0xD6 && split[15] == 0
+            && split[0x10 + 30] == 0xD6 && split[0x10 + 31] == 0,
+            "15/31-byte StrPLCopy boundary must preserve the first half of GBK 中");
+        Assert(BinaryPrimitives.ReadInt32LittleEndian(split.AsSpan(0x70, 4))
+                == int.MinValue
+            && split[0x74] == 0xFF
+            && split.AsSpan(0x75, 3).SequenceEqual(new byte[3]),
+            "MakeIndex/event/tail bytes differ from native 0x70/0x74/0x75");
+
+        var noticePlayer = NewPlayer("sms-login", "sms-login-user");
+        noticePlayer.m_boNativeItemMovementSmsEnabled = true;
+        M2Share.g_Config.boShowPreFixMsg = true;
+        M2Share.g_Config.sHintMsgPreFix = "must-not-prefix:";
+        M2Share.g_Config.btGreenMsgFColor = 0x11;
+        M2Share.g_Config.btGreenMsgBColor = 0x22;
+        noticePlayer.m_btPermission = 2;
+        noticePlayer.SendNativeItemMovementSmsLoginNotice();
+        Assert(noticePlayer.m_MsgList.Count == 0,
+            "permission below 3 reached the 0x6B221C SMS login notice");
+        noticePlayer.m_btPermission = 3;
+        noticePlayer.SendNativeItemMovementSmsLoginNotice();
+        var loginNotice = noticePlayer.m_MsgList.Single();
+        var expectedLoginBody = TBaseObject.BuildNativeTerminatedTextBody(
+            TPlayObject.NativeItemMovementSmsLoginNotice);
+        Assert(loginNotice.wIdent == Grobal2.RM_SYSMESSAGE
+            && loginNotice.wParam == 0xFFDB
+            && loginNotice.nParam1 == 0
+            && loginNotice.nParam2 == 0
+            && loginNotice.nParam3 == 0
+            && loginNotice.Buff == TPlayObject.NativeItemMovementSmsLoginNotice
+            && loginNotice.Payload is byte[] loginBody
+            && loginBody.SequenceEqual(expectedLoginBody),
+            "enabled permission>=3 login notice differs from fixed cx=0xFFDB");
+
+        var std = new GoodItem
+        {
+            Name = "sms-direct-item", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0200
+        };
+        var direct = NewPlayerOnMap("sms-direct", "sms-direct-user");
+        var directItem = MakeRawItem(std);
+        directItem.MakeIndex = 0x10203040;
+        M2Share.LogStringList.Clear();
+        Assert(!direct.TryNotifyNativeItemMovementSms(direct, std, directItem, 0)
+            && SmsLogs().Count == 0,
+            "disabled actor passed the SMS gate");
+        direct.m_boNativeItemMovementSmsEnabled = true;
+        std.NativeReserved02 = 0;
+        Assert(!direct.TryNotifyNativeItemMovementSms(direct, std, directItem, 0)
+            && SmsLogs().Count == 0,
+            "std item without high-byte bit 1 passed the SMS gate");
+        std.NativeReserved02 = 0x0200;
+        var originalIndex = directItem.wIndex;
+        Assert(!direct.TryNotifyNativeItemMovementSms(direct, std, directItem, 0),
+            "inactive 6108 manager must return false after logging");
+        Assert(SmsLogs().SequenceEqual(new[]
+        {
+            "153\t0\t20\t20\tsms-direct\tsms-direct-item\t270544960\t0\t短信提醒"
+        }), "inactive manager did not retain exactly one prior actor log");
+        Assert(directItem.wIndex == originalIndex
+            && directItem.MakeIndex == 0x10203040,
+            "SMS helper mutated the item");
+
+        M2Share.g_Config.boAuthOpen = true;
+        M2Share.RandomNumber = new FixedRandomNumber(0);
+        var destroyStd = new GoodItem
+        {
+            Name = "sms-death-destroy", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000,
+            NativeReserved02 = 0x0010 | 0x0200
+        };
+        var destroyPlayer = NewPlayerOnMap("sms-destroy", "sms-destroy-user");
+        destroyPlayer.m_boNativeItemMovementSmsEnabled = true;
+        destroyPlayer.m_UseItems[0] = MakeRawItem(destroyStd);
+        M2Share.LogStringList.Clear();
+        miDropUseItems.Invoke(destroyPlayer, new object[] { null });
+        Assert(SmsLogs().Count == 1,
+            "0x73FE49 death-destroy caller did not notify once");
+
+        M2Share.g_Config.boAuthOpen = false;
+        M2Share.RandomNumber = new FixedRandomNumber(0);
+        var groundStd = new GoodItem
+        {
+            Name = "sms-death-ground", StdMode = 5, Shape = 1,
+            Weight = 1, DuraMax = 5000, NativeReserved02 = 0x0200
+        };
+        var groundPlayer = NewPlayerOnMap("sms-ground", "sms-ground-user");
+        groundPlayer.m_boNativeItemMovementSmsEnabled = true;
+        groundPlayer.m_UseItems[0] = MakeRawItem(groundStd);
+        M2Share.LogStringList.Clear();
+        miDropUseItems.Invoke(groundPlayer, new object[] { null });
+        Assert(SmsLogs().Count == 1,
+            "0x73FF61 player ground-success caller did not notify once");
+
+        M2Share.RandomNumber = new FixedRandomNumber(0);
+        var heroOwner = NewPlayerOnMap("sms-hero-owner", "sms-hero-owner-user");
+        heroOwner.m_boNativeItemMovementSmsEnabled = true;
+        var groundHero = NewHeroOnMap(heroOwner, "sms-ground-hero");
+        groundHero.CopyNativeItemMovementSmsState(heroOwner);
+        groundHero.m_UseItems[0] = MakeRawItem(groundStd);
+        M2Share.LogStringList.Clear();
+        groundHero.NativeHeroDropUseItems(null, heroOwner);
+        Assert(SmsLogs().Single().StartsWith(
+                "153\t0\t30\t30\tsms-ground-hero\tsms-death-ground\t")
+            && !SmsLogs().Single().Contains("sms-hero-owner\tsms-death-ground"),
+            "hero SMS log must use actor identity, not payload-owner identity");
+
+        Log("ITEM MOVEMENT SMS: suffix+0x56 bit0, hero snapshot, byte-cut GBK "
+            + "0x78 payload, inactive-log ordering, destroy/ground callers");
+    }
+    finally
+    {
+        M2Share.g_Config.sServerName = oldServerName;
+        M2Share.g_Config.boAuthOpen = oldAuthOpen;
+        M2Share.g_Config.boShowPreFixMsg = oldShowPrefix;
+        M2Share.g_Config.sHintMsgPreFix = oldHintPrefix;
+        M2Share.g_Config.btGreenMsgFColor = oldGreenFColor;
+        M2Share.g_Config.btGreenMsgBColor = oldGreenBColor;
+        M2Share.RandomNumber = oldRandom;
+        M2Share.LogStringList.Clear();
+    }
+
+    List<string> SmsLogs() => M2Share.LogStringList.OfType<string>()
+        .Where(value => value.StartsWith("153\t", StringComparison.Ordinal))
+        .ToList();
+}
+
+void VerifyNativeAmuletConsumeGate()
+{
+    VerifyActor("player",
+        () => NewPlayer("amulet-player", "amulet-player-user"),
+        (actor, count, consume) =>
+            ((TPlayObject)actor).NativeConsumeBujukCharm(count, consume));
+    VerifyActor("hero",
+        () => new HeroObject
+        {
+            m_sCharName = "amulet-hero", m_boGhost = false, m_boDeath = false
+        },
+        (actor, count, consume) =>
+            ((HeroObject)actor).NativeConsumeBujukCharm(count, consume));
+
+    void VerifyActor(string label, Func<TBaseObject> createActor,
+        Func<TBaseObject, int, bool, bool> consume)
+    {
+        var empty = createActor();
+        var emptyMessages = empty.m_MsgList.Count;
+        Assert(!consume(empty, 100, false) && !consume(empty, 100, true),
+            $"{label} amulet no-match result must stay false");
+        Assert(empty.m_MsgList.Count == emptyMessages,
+            $"{label} amulet no-match emitted a message");
+
+        var equipProbe = createActor();
+        var equipProbeItem = MakeCharm();
+        equipProbe.m_UseItems[Grobal2.U_BUJUK] = equipProbeItem;
+        var equipProbeMessages = equipProbe.m_MsgList.Count;
+        Assert(consume(equipProbe, 100, false),
+            $"{label} equipment test-only probe did not return found");
+        Assert(equipProbeItem.Dura == 500
+            && ReferenceEquals(equipProbe.m_UseItems[Grobal2.U_BUJUK],
+                equipProbeItem),
+            $"{label} equipment test-only probe mutated the item/container");
+        Assert(equipProbe.m_MsgList.Count == equipProbeMessages,
+            $"{label} equipment test-only probe emitted a message");
+
+        var equipConsume = createActor();
+        var equipConsumeItem = MakeCharm();
+        equipConsume.m_UseItems[Grobal2.U_BUJUK] = equipConsumeItem;
+        Assert(consume(equipConsume, 100, true),
+            $"{label} equipment consume did not return found");
+        Assert(equipConsumeItem.Dura == 400
+            && ReferenceEquals(equipConsume.m_UseItems[Grobal2.U_BUJUK],
+                equipConsumeItem),
+            $"{label} equipment consume did not apply the raw decrement");
+
+        var bagProbe = createActor();
+        var bagProbeItem = MakeCharm();
+        bagProbe.m_ItemList.Add(bagProbeItem);
+        var bagProbeMessages = bagProbe.m_MsgList.Count;
+        Assert(consume(bagProbe, 100, false),
+            $"{label} bag test-only probe did not return found");
+        Assert(bagProbeItem.Dura == 500 && bagProbe.m_ItemList.Count == 1
+            && ReferenceEquals(bagProbe.m_ItemList[0], bagProbeItem),
+            $"{label} bag test-only probe mutated the item/container");
+        Assert(bagProbe.m_MsgList.Count == bagProbeMessages,
+            $"{label} bag test-only probe emitted a message");
+
+        var bagConsume = createActor();
+        var bagConsumeItem = MakeCharm();
+        bagConsume.m_ItemList.Add(bagConsumeItem);
+        Assert(consume(bagConsume, 100, true),
+            $"{label} bag consume did not return found");
+        Assert(bagConsumeItem.Dura == 400 && bagConsume.m_ItemList.Count == 1
+            && ReferenceEquals(bagConsume.m_ItemList[0], bagConsumeItem),
+            $"{label} bag consume did not apply the raw decrement");
+    }
+
+    TUserItem MakeCharm()
+    {
+        var item = MakeRawItem(new GoodItem
+        {
+            Name = "dura38-bujuk", StdMode = 25, Shape = 5,
+            Weight = 1, DuraMax = 1000
+        });
+        item.Dura = 500;
+        item.DuraMax = 1000;
+        return item;
+    }
 }
 
 // ===================== helpers ==================================================================
@@ -695,6 +1960,49 @@ TPlayObject NewPlayerOnMap(string charName, string userId)
     return p;
 }
 
+HeroObject NewHeroOnMap(TPlayObject owner, string charName)
+{
+    var hero = new HeroObject
+    {
+        m_sCharName = charName,
+        m_boGhost = false,
+        m_boDeath = false,
+        m_Master = owner,
+        m_PEnvir = owner.m_PEnvir,
+        m_sMapName = owner.m_sMapName,
+        m_nCurrX = 30,
+        m_nCurrY = 30
+    };
+    hero.m_Abil.Level = 30;
+    owner.m_HeroObject = hero;
+    return hero;
+}
+
+RecordingPlayObject NewRecordingPlayerOnMap(string charName, string userId)
+{
+    var player = new RecordingPlayObject
+    {
+        m_boOffLineFlag = false,
+        m_boGhost = false,
+        m_boDeath = false,
+        m_sCharName = charName,
+        m_sUserID = userId,
+        m_PEnvir = M2Share.MapManager.FindMap("0"),
+        m_sMapName = "0",
+        m_nCurrX = 20,
+        m_nCurrY = 20,
+        m_boCanDrop = true
+    };
+    player.m_Abil.Level = 30;
+    player.m_Abil.MaxWeight = 30000;
+    player.m_Abil.MaxWearWeight = 30000;
+    player.m_Abil.MaxHandWeight = 30000;
+    player.m_WAbil.MaxWeight = 30000;
+    player.m_WAbil.MaxWearWeight = 30000;
+    player.m_WAbil.MaxHandWeight = 30000;
+    return player;
+}
+
 void InjectNativeDefs()
 {
     var eng = M2Share.UserEngine;
@@ -753,6 +2061,7 @@ void BootSingletons()
     M2Share.g_ItemBindAccount = new List<TItemBind>();
     M2Share.g_ItemBindIPaddr = new List<TItemBind>();
     M2Share.g_ItemBindCharName = new List<TItemBind>();
+    M2Share.StartPointList = new List<TStartPoint>();
     M2Share.ProcessMsgCriticalSection = new object();
     M2Share.ProcessHumanCriticalSection = new object();
     M2Share.LogMsgCriticalSection = new object();
@@ -765,4 +2074,59 @@ static class NativeItemDropDestroyNotices
 {
     public const string DropUnverified = "未验证,物品消失(丢弃)";   // 0x73CE74 len=21
     public const string DropGift = "赠品,物品消失(丢弃)";           // 0x73CE94 len=19
+}
+
+sealed class FixedRandomNumber : RandomNumber
+{
+    private readonly int _result;
+
+    public int Calls { get; private set; }
+
+    public FixedRandomNumber(int result)
+    {
+        _result = result;
+    }
+
+    public override int Random(int value)
+    {
+        Calls++;
+        return _result;
+    }
+}
+
+sealed class SequenceRandomNumber : RandomNumber
+{
+    private readonly Queue<int> _results;
+
+    public List<int> Bounds { get; } = new();
+
+    public SequenceRandomNumber(params int[] results)
+    {
+        _results = new Queue<int>(results);
+    }
+
+    public override int Random(int value)
+    {
+        Bounds.Add(value);
+        if (_results.Count == 0)
+            throw new Exception("unexpected Random(" + value + ") call");
+        return _results.Dequeue();
+    }
+}
+
+sealed class RecordingPlayObject : TPlayObject
+{
+    public List<(ClientPacket Header, byte[] Body)> BinaryPackets { get; } = new();
+    public List<(ClientPacket Header, string Text)> TextPackets { get; } = new();
+
+    internal override void SendSocket(ClientPacket defMsg, byte[] rawBody)
+    {
+        BinaryPackets.Add((defMsg, rawBody?.ToArray() ?? Array.Empty<byte>()));
+    }
+
+    internal override void SendSocket(ClientPacket defMsg, string text)
+    {
+        TextPackets.Add((defMsg, text ?? string.Empty));
+        BinaryPackets.Add((defMsg, Array.Empty<byte>()));
+    }
 }

@@ -65,6 +65,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using GameSvr;
+using SystemModule;
 
 int failures = 0;
 
@@ -245,6 +246,56 @@ Check(classifier == null || classifier.GetParameters().Length == 3,
 Check(classifier == null ||
       (int)classifier.Invoke(null, new object[] { null, null, 2 }) == 0,
     "CheckTransferPermission(null,null,2) == 0 so unrelated failures keep Recog 0");
+
+MethodInfo classifierCore = classifierType?.GetMethod(
+    "CheckTransferPermissionCore",
+    BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+Check(classifierCore != null && classifierCore.GetParameters().Length == 4,
+    "sub_78389C core exposes mode 3's native cl flag");
+
+int Classify(int mode, ushort reserved = 0, byte classFc = 0,
+    byte mode3Flag = 0)
+{
+    if (classifierCore == null) return int.MinValue;
+    var item = new TUserItem { NativeClassFc = classFc };
+    var stdItem = new GoodItem { NativeReserved02 = reserved };
+    return (int)classifierCore.Invoke(null,
+        new object[] { item, stdItem, mode, mode3Flag });
+}
+
+Check(Classify(0) == 0, "sub_78389C mode 0 returns 0");
+Check(Classify(1, 0x0100) == 2,
+    "sub_78389C mode 1 maps std[+3]&1 to code 2");
+Check(Classify(2, classFc: 1) == 3
+      && Classify(2, 0x0200) == 3,
+    "sub_78389C mode 2 maps +0xFC/std[+3]&2 to code 3");
+Check(Classify(3, 0x0200, mode3Flag: 0) == 0
+      && Classify(3, 0x0200, mode3Flag: 1) == 4,
+    "sub_78389C mode 3 alone consumes cl and returns code 4");
+Check(Classify(4, classFc: 1) == 5
+      && Classify(4, 0x0200) == 5
+      && Classify(4, 0x0400) == 5
+      && Classify(4, 0x0080) == 5,
+    "sub_78389C mode 4 owns the +0xFC/0200/0400/0080 ladder");
+Check(Classify(5, 0x0020) == 6,
+    "sub_78389C mode 5 maps std[+2]&0x20 to code 6");
+Check(Classify(5, 0x0200) == 0
+      && Classify(5, 0x0400) == 0
+      && Classify(5, 0x0080) == 0
+      && Classify(5, classFc: 1) == 0,
+    "sub_78389C mode 5 must not execute mode 4's ladder");
+Check(Classify(5, 0x0800) == 1
+      && Classify(5, 0x4000) == 1,
+    "sub_78389C common pre-ladder still returns code 1");
+Check(Classify(6) == 0 && Classify(-1) == 0,
+    "sub_78389C unsigned mode>5 path returns 0");
+
+var wrapperItem = new TUserItem();
+var wrapperStd = new GoodItem { NativeReserved02 = 0x0020 };
+Check(classifier == null ||
+      (int)classifier.Invoke(null,
+          new object[] { wrapperItem, wrapperStd, 5 }) == 6,
+    "drop wrapper selects jump-table index 5, not index 4");
 
 // ----------------------------------------------------------- gold-cap anchor
 // IncGold is the only capped credit; its two gates are 0x6D7924 `jle` (amount

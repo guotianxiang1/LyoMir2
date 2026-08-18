@@ -22,7 +22,9 @@ CheckRun3FallbackZeroBoundary();
 CheckRun3RecoveryStepWrap();
 CheckSharedHealthSpellRecovery();
 CheckRun3HorsePartnerSuccess();
-CheckRun3HorsePartnerFailureOnlyTurns();
+CheckRun3HorsePartnerBlockedTerrainStillMoves();
+CheckRun3HorsePartnerMissingSourceOnlyTurns();
+CheckPushedHorsePartnerFollowsWithoutTail();
 CheckHorseSilentGates();
 CheckHorseMissingMount();
 CheckHorseDelayGate();
@@ -38,7 +40,7 @@ Console.WriteLine(
     "NativeRun3HorseProtocolCheck PASS " +
     "4108-main=state51+absent(45/29/1/26/24/62)+forced0+bit7/map-CANRUN/weight+server-direction+first-step-only+3416 " +
     "state67/13=one-step-fallback+adjusted-target+health-10+3410 " +
-    "partner=state51/non-null+direction-first+overlap+no-run-broadcast+failure-direction-only " +
+    "partner=state51/non-null+exact-relocate+blocked-terrain+missing-source+push-step-tail " +
     "629=zeros 630=0/x/y/dir run3=recovery-60/10/shared-sbyte+no-hide-side-effect " +
     "4106=state52/state51/pending/delay+no-node+status16B+3555/header-only+3413/10B " +
     "4107/4111=silent-gates+state51/52-clear+bidirectional-partner+3414/3419/51B+adjacent-drop");
@@ -523,15 +525,15 @@ static void CheckRun3HorsePartnerSuccess()
         "4108 partner no independent run broadcast");
 }
 
-static void CheckRun3HorsePartnerFailureOnlyTurns()
+static void CheckRun3HorsePartnerBlockedTerrainStillMoves()
 {
     var driverMap = NewMap();
     var partnerMap = NewMap();
     partnerMap.SetMapXYFlag(8, 5, false);
-    var driver = Place(driverMap, NewPlayer("run3-partner-fail-driver"),
+    var driver = Place(driverMap, NewPlayer("run3-partner-blocked-driver"),
         5, 5);
     var partner = Place(partnerMap,
-        NewPlayer("run3-partner-fail-passenger"), 5, 5);
+        NewPlayer("run3-partner-blocked-passenger"), 5, 5);
     EnableRun3(driver);
     partner.SetNativeActiveState(52);
     partner.SetNativeActiveState(23);
@@ -539,17 +541,74 @@ static void CheckRun3HorsePartnerFailureOnlyTurns()
     SetHorsePartner(driver, partner);
 
     Assert(driver.Operate(Run3Message(8, 5, Grobal2.DR_UP)),
-        "4108 partner failure dispatch");
-    Position(driver, 8, 5, "4108 partner failure driver position");
-    Position(partner, 5, 5, "4108 partner failure passenger position");
+        "4108 blocked-terrain partner dispatch");
+    Position(driver, 8, 5, "4108 blocked-terrain driver position");
+    Position(partner, 8, 5, "4108 blocked-terrain passenger position");
     Equal((byte)Grobal2.DR_RIGHT, partner.m_btDirection,
-        "4108 partner failure direction retained");
-    Assert(partner.HasNativeActiveState(23),
-        "4108 partner failure state23 retained");
-    Equal(1, CountCellActor(partnerMap, 5, 5, partner),
-        "4108 partner failure registration retained");
+        "4108 blocked-terrain partner direction");
+    Assert(!partner.HasNativeActiveState(23),
+        "4108 blocked-terrain partner state23 removal");
+    Equal(0, CountCellActor(partnerMap, 5, 5, partner),
+        "4108 blocked-terrain old registration removed");
+    Equal(1, CountCellActor(partnerMap, 8, 5, partner),
+        "4108 blocked-terrain target registration");
     Equal(0, CountMessages(partner, Grobal2.RM_RUN3),
-        "4108 partner failure no run broadcast");
+        "4108 blocked-terrain partner no run broadcast");
+}
+
+static void CheckRun3HorsePartnerMissingSourceOnlyTurns()
+{
+    var driverMap = NewMap();
+    var partnerMap = NewMap();
+    var driver = Place(driverMap, NewPlayer("run3-partner-missing-driver"),
+        5, 5);
+    var partner = NewPlayer("run3-partner-missing-passenger");
+    partner.m_PEnvir = partnerMap;
+    partner.m_nCurrX = 5;
+    partner.m_nCurrY = 5;
+    EnableRun3(driver);
+    partner.SetNativeActiveState(52);
+    partner.SetNativeActiveState(23);
+    partner.m_btDirection = Grobal2.DR_LEFT;
+    SetHorsePartner(driver, partner);
+
+    Assert(driver.Operate(Run3Message(8, 5, Grobal2.DR_UP)),
+        "4108 missing-source partner dispatch");
+    Position(driver, 8, 5, "4108 missing-source driver position");
+    Position(partner, 5, 5, "4108 missing-source passenger position");
+    Equal((byte)Grobal2.DR_RIGHT, partner.m_btDirection,
+        "4108 missing-source direction is written before relocation");
+    Assert(partner.HasNativeActiveState(23),
+        "4108 missing-source state23 retained");
+    Equal(0, CountCellActor(partnerMap, 8, 5, partner),
+        "4108 missing-source target remains unchanged");
+}
+
+static void CheckPushedHorsePartnerFollowsWithoutTail()
+{
+    var map = NewMap();
+    var driver = Place(map, NewPlayer("push-partner-driver"), 5, 5);
+    var partner = Place(map, NewPlayer("push-partner-passenger"), 5, 6);
+    var observer = Place(map, NewPlayer("push-partner-observer"), 5, 7);
+    driver.SetNativeActiveState(51);
+    partner.SetNativeActiveState(52);
+    partner.SetNativeActiveState(23);
+    SetHorsePartner(driver, partner);
+
+    Equal(2, driver.CharPushed(Grobal2.DR_RIGHT, 2),
+        "mounted driver push count");
+    Position(driver, 7, 5, "pushed driver position");
+    Position(partner, 7, 5, "pushed passenger position");
+    Equal((byte)Grobal2.DR_LEFT, driver.m_btDirection,
+        "pushed driver back direction");
+    Equal((byte)Grobal2.DR_LEFT, partner.m_btDirection,
+        "pushed passenger back direction");
+    Assert(partner.HasNativeActiveState(23),
+        "sub_6BBF4C must not run the sub_6BBEE4 state23 tail");
+    Equal(2, CountCellActor(map, 7, 5, driver, partner),
+        "pushed pair shared cell registration");
+    Equal(2, CountMessages(observer, Grobal2.RM_PUSH),
+        "passenger must not emit an independent push broadcast");
 }
 
 static void CheckHorseSilentGates()

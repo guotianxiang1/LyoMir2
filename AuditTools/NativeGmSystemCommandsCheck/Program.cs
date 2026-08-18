@@ -12,6 +12,10 @@
 // dispatchIndex was verified (case 27 -> 0x00623A42, case 723 -> 0x0062A985, etc.).
 
 using GameSvr;
+using GameSvr.PasEngine;
+using SystemModule;
+
+PrepareRuntimeFiles();
 
 int checks = 0;
 
@@ -255,6 +259,143 @@ Equal(NativeSystemAdminOutcome.RejectedWithGmMessage, lvfFail.Outcome, "LoadVali
 Equal(0x38FF, lvfFail.NativeSysMsgIdent, "LoadValidFunc fail ident");
 ResetHooks();
 
+var validFuncRoot = Path.Combine(Path.GetTempPath(),
+    "native-valid-func-check-" + Guid.NewGuid().ToString("N"));
+var oldConfigPath = M2Share.sConfigPath;
+var oldConfig = M2Share.g_Config;
+var oldProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldObjectManager = M2Share.ObjectManager;
+try
+{
+    Equal(-1, NativeValidScriptFunctionRegistry.Reload(validFuncRoot),
+        "LoadValidFunc missing file -> -1");
+
+    var configDirectory = Path.Combine(validFuncRoot, "Config");
+    Directory.CreateDirectory(configDirectory);
+    var validFuncFile = Path.Combine(configDirectory, "validScriptFunc.txt");
+    File.WriteAllText(validFuncFile, "zeta\r\nAlpha\r\n\r\n中文函数\r\n",
+        HUtil32.GbkEncoding);
+    Equal(4, NativeValidScriptFunctionRegistry.Reload(validFuncRoot),
+        "LoadValidFunc GBK line count");
+    Equal(true, NativeValidScriptFunctionRegistry.Find("ALPHA"),
+        "LoadValidFunc case-insensitive Find");
+    Equal(true, NativeValidScriptFunctionRegistry.Find("中文函数"),
+        "LoadValidFunc GBK Find");
+    Equal(true, NativeValidScriptFunctionRegistry.Find(string.Empty),
+        "LoadValidFunc empty-line Find");
+    Equal(false, NativeValidScriptFunctionRegistry.Find("missing"),
+        "LoadValidFunc missing Find");
+    var sorted = NativeValidScriptFunctionRegistry.Snapshot();
+    for (var index = 1; index < sorted.Count; index++)
+    {
+        Equal(true, NativeValidScriptFunctionRegistry.Compare(
+                sorted[index - 1], sorted[index]) <= 0,
+            "LoadValidFunc native Sort order " + index);
+    }
+
+    File.WriteAllBytes(validFuncFile, Array.Empty<byte>());
+    Equal(0, NativeValidScriptFunctionRegistry.Reload(validFuncRoot),
+        "LoadValidFunc empty file succeeds");
+    Equal(0, NativeValidScriptFunctionRegistry.Snapshot().Count,
+        "LoadValidFunc empty file clears old list");
+
+    File.WriteAllText(validFuncFile, "Duplicate\r\nduplicate\r\n",
+        HUtil32.GbkEncoding);
+    Equal(2, NativeValidScriptFunctionRegistry.Reload(validFuncRoot),
+        "LoadValidFunc duplicate rows retained");
+    Equal(2, NativeValidScriptFunctionRegistry.Snapshot().Count,
+        "LoadValidFunc duplicate count");
+    Equal(true, NativeValidScriptFunctionRegistry.Find("DUPLICATE"),
+        "LoadValidFunc duplicate Find");
+
+    File.WriteAllText(validFuncFile, "OnlyOne\r\n", HUtil32.GbkEncoding);
+    Equal(1, NativeValidScriptFunctionRegistry.Reload(validFuncRoot),
+        "LoadValidFunc clears before reload");
+    Equal(false, NativeValidScriptFunctionRegistry.Find("Alpha"),
+        "LoadValidFunc old row removed");
+    Equal(true, NativeValidScriptFunctionRegistry.Find("onlyone"),
+        "LoadValidFunc replacement row Find");
+
+    File.Delete(validFuncFile);
+    Equal(-1, NativeValidScriptFunctionRegistry.Reload(validFuncRoot),
+        "LoadValidFunc missing reload result");
+    Equal(true, NativeValidScriptFunctionRegistry.Find("ONLYONE"),
+        "LoadValidFunc missing file preserves old list");
+
+    File.WriteAllText(validFuncFile, "Locked\r\n", HUtil32.GbkEncoding);
+    using (var locked = new FileStream(validFuncFile, FileMode.Open,
+               FileAccess.ReadWrite, FileShare.None))
+    {
+        var readFailed = false;
+        try
+        {
+            NativeValidScriptFunctionRegistry.Reload(validFuncRoot);
+        }
+        catch (IOException)
+        {
+            readFailed = true;
+        }
+        Equal(true, readFailed,
+            "LoadValidFunc read exception propagates");
+        Equal(0, NativeValidScriptFunctionRegistry.Snapshot().Count,
+            "LoadValidFunc read exception leaves cleared list");
+    }
+
+    M2Share.sConfigPath = validFuncRoot;
+    M2Share.g_Config = new GameSvrConfig
+    {
+        boShowPreFixMsg = true,
+        sHintMsgPreFix = "configured-prefix:",
+        btGreenMsgFColor = 1,
+        btGreenMsgBColor = 2,
+        btRedMsgFColor = 3,
+        btRedMsgBColor = 4
+    };
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+    var player = new TPlayObject();
+    var command = new LoadValidFuncCommand();
+
+    File.WriteAllText(validFuncFile, "Alpha\r\nBeta\r\n",
+        HUtil32.GbkEncoding);
+    command.LoadValidFunc(player);
+    Equal(1, player.m_MsgList.Count,
+        "LoadValidFunc success message count");
+    var successMessage = player.m_MsgList[0];
+    Equal(Grobal2.RM_SYSMESSAGE, successMessage.wIdent,
+        "LoadValidFunc success ident");
+    Equal(0xDB, successMessage.nParam1,
+        "LoadValidFunc success foreground");
+    Equal(0xFF, successMessage.nParam2,
+        "LoadValidFunc success background");
+    Equal("载入脚本安全函数列表成功，共2个函数", successMessage.Buff,
+        "LoadValidFunc success text");
+
+    player.m_MsgList.Clear();
+    File.Delete(validFuncFile);
+    command.LoadValidFunc(player);
+    Equal(1, player.m_MsgList.Count,
+        "LoadValidFunc failure message count");
+    var failureMessage = player.m_MsgList[0];
+    Equal(Grobal2.RM_SYSMESSAGE, failureMessage.wIdent,
+        "LoadValidFunc failure ident");
+    Equal(0xFF, failureMessage.nParam1,
+        "LoadValidFunc failure foreground");
+    Equal(0x38, failureMessage.nParam2,
+        "LoadValidFunc failure background");
+    Equal("载入脚本安全函数列表失败", failureMessage.Buff,
+        "LoadValidFunc failure text");
+}
+finally
+{
+    M2Share.sConfigPath = oldConfigPath;
+    M2Share.g_Config = oldConfig;
+    M2Share.ProcessMsgCriticalSection = oldProcessMsgCriticalSection;
+    M2Share.ObjectManager = oldObjectManager;
+    if (Directory.Exists(validFuncRoot))
+        Directory.Delete(validFuncRoot, true);
+}
+
 // ---------------------------------------------------------------------------
 // 11) LogSwitch (case 482) query / set multiplexer
 // ---------------------------------------------------------------------------
@@ -306,3 +447,21 @@ Console.WriteLine($"PASS NativeGmSystemCommandsCheck ({checks} checks): "
     + $"{NativeGmSystemCommands.All.Count} system/server/GM-admin GM commands modeled "
     + "(25 implemented + 9 no-op; registry facts, permission ladder, branch ladders, dual no-op sinks).");
 return 0;
+
+static void PrepareRuntimeFiles()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}

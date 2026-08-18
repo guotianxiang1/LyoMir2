@@ -37,7 +37,6 @@ var protectedFiles = new[]
     "GMActCtrlCommand.cs",
     "GuildForbidCommand.cs",
     "HeroSkillSwitchCommand.cs",
-    "LoadValidFuncCommand.cs",
     "LogSwitchCommand.cs",
     "MakeMyHeroCommand.cs",
     "MapCellFreeCommand.cs",
@@ -48,7 +47,6 @@ var protectedFiles = new[]
     "ReloadSmsUserListCommand.cs",
     "ReloadTaskDispatchCommand.cs",
     "ReloadunBindItemCommand.cs",
-    "ReloadWhiteListCommand.cs",
     "ReshuaMonScriptCommand.cs",
     "SendYuanBaoTextCommand.cs",
     "SetFountSwitchCommand.cs",
@@ -214,19 +212,58 @@ foreach (var implementedFile in new[]
              // mode-0 entry PAS NpcLeaveTec uses at 0x6CB017, minus the 50,000
              // gold charge, which lives in the PAS wrapper and not the GM path.
              // Ladder and colour channel are asserted in NativeLeaveMasterCheck.
-             "LeaveTechCommand.cs"
+             "LeaveTechCommand.cs",
+             // case 350 @0x006278A2 -> sub_7900FC: reload
+             // GS1/Config/validScriptFunc.txt and report the loaded line count.
+             "LoadValidFuncCommand.cs",
+             // case 515 @0x00629465: send Type2 0184 with the invoking
+             // character name; Type1 0132 later delivers the DBServer text.
+             "ReloadWhiteListCommand.cs"
          })
 {
     var source = Read(implementedFile);
     Assert(!source.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
         $"{implementedFile} reverted to fail-closed");
 }
+
+var loadValidFunc = Read("LoadValidFuncCommand.cs");
+Assert(loadValidFunc.Contains("validScriptFunc.txt", StringComparison.Ordinal) &&
+       loadValidFunc.Contains("NativeValidScriptFunctionRegistry.Reload", StringComparison.Ordinal),
+    "LoadValidFunc does not reload the native GBK string list");
+Assert(loadValidFunc.Contains("载入脚本安全函数列表成功，共", StringComparison.Ordinal) &&
+       loadValidFunc.Contains("载入脚本安全函数列表失败", StringComparison.Ordinal),
+    "LoadValidFunc native success/failure text is missing");
+Assert(loadValidFunc.Contains("SuccessColorWord = 0xFFDB", StringComparison.Ordinal) &&
+       loadValidFunc.Contains("FailureColorWord = 0x38FF", StringComparison.Ordinal) &&
+       loadValidFunc.Contains("Grobal2.RM_SYSMESSAGE", StringComparison.Ordinal) &&
+       !loadValidFunc.Contains(".SysMsg(", StringComparison.Ordinal),
+    "LoadValidFunc does not preserve the native fixed color words");
+Assert(!loadValidFunc.Contains("SeizeIllegalBagItems", StringComparison.Ordinal) &&
+       !loadValidFunc.Contains("ValidateTaskListDirectory", StringComparison.Ordinal),
+    "LoadValidFunc reintroduced non-native anti-cheat side effects");
+var gameApp = File.ReadAllText(Path.Combine(root, "GameSvr", "GameApp.cs"));
+Assert(gameApp.Contains(
+        "NativeValidScriptFunctionRegistry.Reload(",
+        StringComparison.Ordinal),
+    "validScriptFunc.txt is not loaded during server startup");
+var reloadWhiteList = Read("ReloadWhiteListCommand.cs");
+Assert(reloadWhiteList.Contains(
+           "NativeWhitelistReloadClient.SendRequest(PlayObject)",
+           StringComparison.Ordinal),
+    "ReloadWhiteList does not send the native 0184 DBServer request");
+Assert(!reloadWhiteList.Contains("ReloadGmWhiteList", StringComparison.Ordinal) &&
+       !reloadWhiteList.Contains("SysMsg", StringComparison.Ordinal),
+    "ReloadWhiteList reintroduced a local reload or immediate success reply");
 Assert(!File.Exists(Path.Combine(commandDirectory, "GameGirdCommand.cs")),
     "non-native GameGird command is registered");
 
 var allSources = Directory.GetFiles(commandDirectory, "*.cs")
     .Select(path => (Path: path, Source: File.ReadAllText(path)))
     .ToArray();
+var rawHandlerCommandFiles = new HashSet<string>(StringComparer.Ordinal)
+{
+    "CryCharmCommand.cs"
+};
 
 foreach (var (path, source) in allSources)
 {
@@ -241,11 +278,20 @@ foreach (var (path, source) in allSources)
     Assert(!source.Contains("暂未实现", StringComparison.Ordinal), $"{name} contains placeholder output");
     Assert(!Regex.IsMatch(source, @"for\s*\([^)]*\)\s*\{\s*\}", RegexOptions.Singleline),
         $"{name} contains an empty loop");
-    Assert(!Regex.IsMatch(source,
-            @"public\s+void\s+\w+\([^)]*\)\s*\{\s*(?:if\s*\([^)]*\)\s*\{\s*return;\s*\}\s*)?\}",
-            RegexOptions.Singleline),
+    var hasEmptyDefaultBody = Regex.IsMatch(source,
+        @"public\s+void\s+\w+\([^)]*\)\s*\{\s*(?:if\s*\([^)]*\)\s*\{\s*return;\s*\}\s*)?\}",
+        RegexOptions.Singleline);
+    Assert(!hasEmptyDefaultBody || rawHandlerCommandFiles.Contains(name),
         $"{name} contains an empty command body");
 }
+
+var cryCharm = Read("CryCharmCommand.cs");
+Assert(cryCharm.Contains("internal override string HandleRaw(",
+           StringComparison.Ordinal) &&
+       cryCharm.Contains("ProcessNativeCryCharmCommand(rawLine, rawPayload",
+           StringComparison.Ordinal) &&
+       cryCharm.Contains("return string.Empty;", StringComparison.Ordinal),
+    "CryCharm raw-byte command does not route through its native handler");
 
 var failureHelper = Read("NativeCommandFailure.cs");
 Assert(failureHelper.Contains("MsgColor.Red", StringComparison.Ordinal),
@@ -276,14 +322,36 @@ Assert(!clearNickLinfu.Contains("GetPlayObject", StringComparison.Ordinal),
     "ClearNickLinfu reverted to targeting another player");
 
 var shutup = Read("ShutupCommand.cs");
-Assert(shutup.Contains("g_DenySayMsgList[sHumanName]", StringComparison.Ordinal) &&
-       shutup.Contains("60_000L", StringComparison.Ordinal),
-    "temporary mute does not write the expiration dictionary");
-Assert(Read("ShutupReleaseCommand.cs").Contains("TryRemove(sHumanName", StringComparison.Ordinal),
-    "temporary mute release does not remove the entry");
-Assert(Read("ShutupListCommand.cs").Contains("foreach (var item in M2Share.g_DenySayMsgList)",
-        StringComparison.Ordinal),
-    "temporary mute list does not enumerate entries");
+Assert(shutup.Contains("HUtil32.Str_ToInt(sTime, 10)", StringComparison.Ordinal) &&
+       shutup.Contains("NativeMirrorChatBan.Add", StringComparison.Ordinal) &&
+       shutup.Contains("ISM_CHATPROHIBITION", StringComparison.Ordinal) &&
+       shutup.Contains("MsgColor.Green", StringComparison.Ordinal),
+    "OutSay does not preserve the native 10-second default/add/209/green contract");
+
+var shutupRelease = Read("ShutupReleaseCommand.cs");
+Assert(shutupRelease.Contains("NativeMirrorChatBan.Remove", StringComparison.Ordinal) &&
+       shutupRelease.Contains("ISM_CHATPROHIBITIONCANCEL", StringComparison.Ordinal) &&
+       shutupRelease.Contains("g_sGameCommandShutupReleaseHumanCanSendMsg",
+           StringComparison.Ordinal) &&
+       !shutupRelease.Contains("不在禁言列表", StringComparison.Ordinal),
+    "ShifangSay does not unconditionally delete/replicate/report success");
+
+var shutupList = Read("ShutupListCommand.cs");
+Assert(shutupList.Contains("禁言名单为：\\r", StringComparison.Ordinal) &&
+       shutupList.Contains("Append('=')", StringComparison.Ordinal) &&
+       shutupList.Contains("Append('\\r')", StringComparison.Ordinal) &&
+       shutupList.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !shutupList.Contains("MsgColor.Blue", StringComparison.Ordinal),
+    "LookOutSay does not emit the native one-message green roster format");
+
+var m2Share = File.ReadAllText(Path.Combine(root, "GameSvr", "M2Share.cs"));
+Assert(m2Share.Contains(
+           "g_sGameCommandShutupHumanMsg = \"{0} 禁止聊天：{1}秒\"",
+           StringComparison.Ordinal) &&
+       m2Share.Contains(
+           "g_sGameCommandShutupReleaseHumanCanSendMsg = \"解除禁言成功！\"",
+           StringComparison.Ordinal),
+    "native mute command text literals drifted");
 
 Console.WriteLine($"PASS protected={protectedFiles.Length} silentNativeSink={silentNativeSinkFiles.Length} absentUnregistered={absentCommandsMustNotBeRegistered.Length} commandFiles={allSources.Length}");
 return;

@@ -56,7 +56,7 @@ int struckAt = combat.IndexOf("public void StruckDamage(int nDamage, "
     + "TBaseObject attacker)", StringComparison.Ordinal);
 Check(struckAt > 0, "StruckDamage(int, TBaseObject) overload is missing "
     + "(native +0x0A8 is ret 8 with ecx = the attacker)");
-int gettersAt = combat.IndexOf("public ushort GetHitStruckDamage(",
+int gettersAt = combat.IndexOf("public int GetHitStruckDamage(",
     StringComparison.Ordinal);
 Check(gettersAt > 0 && gettersAt < struckAt,
     "GetHitStruckDamage must precede StruckDamage in the file");
@@ -209,12 +209,16 @@ plain.m_nNativeMonsterSuperForceMask = 2;
 plain.m_nNativeMonsterSuperForceReductionPercent = 25;
 SetShieldCharges(plain, 2);
 plain.SetNativeActiveState(59);
-Equal((ushort)100, plain.GetHitStruckDamage(mage, 100),
+Equal(100, plain.GetHitStruckDamage(mage, 100),
     "0x7679AE ret 4: sub_767958 applies neither super-force nor the shield");
+Equal(70_000, plain.GetHitStruckDamage(mage, 70_000),
+    "sub_767958 returns EAX as Int32; high physical damage must not wrap at 65536");
 Equal(100, plain.GetMagStruckDamage(mage, 100),
     "0x767A0E ret 4: sub_7679B8 applies neither either");
 Equal((ushort)2, ShieldCharges(plain),
     "the armour getters must not spend a charge");
+
+VerifyNativeStruckDurability();
 
 if (failures != 0)
 {
@@ -225,6 +229,244 @@ Console.WriteLine("NativeStruckDamageStageOrderCheck: PASS");
 return 0;
 
 // ------------------------------------------------------------------- helpers
+void VerifyNativeStruckDurability()
+{
+    var oldRandom = M2Share.RandomNumber;
+    try
+    {
+        ushort weapon = AddStdItem(new GoodItem
+        {
+            Name = "Blade99", StdMode = 5, Shape = 1, DuraMax = 5000,
+            NeedIdentify = 0
+        });
+        ushort charm = AddStdItem(new GoodItem
+        {
+            Name = "Charm99", StdMode = 7, Shape = 0, DuraMax = 5000
+        });
+        ushort bujuk = AddStdItem(new GoodItem
+        {
+            Name = "Bujuk99", StdMode = 25, Shape = 5, DuraMax = 5000
+        });
+
+        var forced = NewStruckPlayer("forced-fc");
+        var forcedItem = Equip(forced, 0, weapon, 100, 1, 39001);
+        var forcedRandom = new RecordingRandomNumber(0, 1);
+        M2Share.RandomNumber = forcedRandom;
+        forced.StruckDamage(1);
+        Equal((ushort)95, forcedItem.Dura,
+            "0x75EA74: NativeClassFc must force wear");
+        EqualSequence(new[] { 10 }, forcedRandom.Bounds,
+            "0x75EA7B: NativeClassFc must bypass Random(8) without consuming it");
+
+        var ordinaryMiss = NewStruckPlayer("ordinary-miss");
+        var missItem = Equip(ordinaryMiss, 0, weapon, 100, 0, 39002);
+        var missRandom = new RecordingRandomNumber(0, 1);
+        M2Share.RandomNumber = missRandom;
+        ordinaryMiss.StruckDamage(1);
+        Equal((ushort)100, missItem.Dura,
+            "0x75EA89: a nonzero Random(8) result must skip wear");
+        EqualSequence(new[] { 10, 8 }, missRandom.Bounds,
+            "ordinary wear must consume outer Random(10), then Random(8)");
+
+        var ordinaryHit = NewStruckPlayer("ordinary-hit");
+        var hitItem = Equip(ordinaryHit, 0, weapon, 100, 0, 39003);
+        var hitRandom = new RecordingRandomNumber(0, 0);
+        M2Share.RandomNumber = hitRandom;
+        ordinaryHit.StruckDamage(1);
+        Equal((ushort)95, hitItem.Dura,
+            "0x75EAA4: a zero Random(8) result must apply nDam");
+        EqualSequence(new[] { 10, 8 }, hitRandom.Bounds,
+            "ordinary hit RNG order");
+
+        VerifyNonWearingClass(charm, "TCharm");
+        VerifyNonWearingClass(bujuk, "TEquipBujuk");
+
+        var mixed = NewStruckPlayer("mixed-slots");
+        var mixedForced = Equip(mixed, 0, weapon, 100, 1, 39004);
+        var mixedMiss = Equip(mixed, 1, weapon, 100, 0, 39005);
+        var mixedCharm = Equip(mixed, 2, charm, 100, 1, 39006);
+        var mixedHit = Equip(mixed, 3, weapon, 100, 0, 39007);
+        var mixedRandom = new RecordingRandomNumber(0, 1, 0);
+        M2Share.RandomNumber = mixedRandom;
+        mixed.StruckDamage(1);
+        EqualSequence(new[] { 10, 8, 8 }, mixedRandom.Bounds,
+            "mixed slots must preserve native per-slot RNG order");
+        Equal((ushort)95, mixedForced.Dura, "mixed forced slot");
+        Equal((ushort)100, mixedMiss.Dura, "mixed ordinary miss slot");
+        Equal((ushort)100, mixedCharm.Dura, "mixed charm slot");
+        Equal((ushort)95, mixedHit.Dura, "mixed ordinary hit slot");
+
+        var samePoint = NewStruckPlayer("same-display-point");
+        Equip(samePoint, 0, weapon, 1005, 1, 39008);
+        M2Share.RandomNumber = new RecordingRandomNumber(0);
+        samePoint.StruckDamage(1);
+        Equal(0, samePoint.m_MsgList.Count(message =>
+                message.wIdent == Grobal2.RM_DURACHANGE),
+            "1005 -> 1000 stays at display point 1 and must not notify");
+
+        var crossedPoint = NewStruckPlayer("cross-display-point");
+        Equip(crossedPoint, 0, weapon, 1001, 1, 39009);
+        M2Share.RandomNumber = new RecordingRandomNumber(0);
+        crossedPoint.StruckDamage(1);
+        Equal(1, crossedPoint.m_MsgList.Count(message =>
+                message.wIdent == Grobal2.RM_DURACHANGE),
+            "1001 -> 996 crosses display point 1 -> 0 and must notify");
+
+        var aboveDestroy = NewStruckPlayer("above-destroy-boundary");
+        var aboveDestroyItem = Equip(aboveDestroy, 0, weapon, 6, 1, 39012);
+        M2Share.RandomNumber = new RecordingRandomNumber(0);
+        aboveDestroy.StruckDamage(1);
+        Equal((ushort)1, aboveDestroyItem.Dura,
+            "Dura == nDam + 1 must use the wear arm, not the destroy arm");
+        Equal(0, aboveDestroy.RecalcCalls,
+            "non-destroy wear must not recalculate abilities");
+
+        VerifyExpiry(NewStruckPlayer("expiry-player"), weapon, 39010,
+            0, new[] { 10, 8 }, "player");
+        VerifyExpiry(NewStruckHero("expiry-hero"), weapon, 39011,
+            1, new[] { 10 }, "hero");
+    }
+    finally
+    {
+        M2Share.RandomNumber = oldRandom;
+    }
+}
+
+void VerifyNonWearingClass(ushort stdIndex, string className)
+{
+    var actor = NewStruckPlayer("nonwear-" + className);
+    var item = Equip(actor, 0, stdIndex, 100, 1, 39100 + stdIndex);
+    var random = new RecordingRandomNumber(0, 0);
+    M2Share.RandomNumber = random;
+    actor.StruckDamage(1);
+    Equal((ushort)100, item.Dura,
+        className + " must reject wear before the NativeClassFc gate");
+    EqualSequence(new[] { 10 }, random.Bounds,
+        className + " must not consume Random(8)");
+}
+
+void VerifyExpiry(TBaseObject actor, ushort stdIndex, int makeIndex,
+    byte classFc, int[] expectedBounds, string actorKind)
+{
+    var item = Equip(actor, 0, stdIndex, 5, classFc, makeIndex);
+    var originalIndex = item.wIndex;
+    M2Share.LogStringList.Clear();
+    actor.m_MsgList.Clear();
+    var random = new RecordingRandomNumber(0, 0);
+    M2Share.RandomNumber = random;
+
+    actor.StruckDamage(1);
+
+    EqualSequence(expectedBounds, random.Bounds,
+        actorKind + " expiry RNG sequence");
+    Check(ReferenceEquals(actor.m_UseItems[0], item),
+        actorKind + " expiry must retain the equipped object");
+    Equal(originalIndex, item.wIndex,
+        actorKind + " expiry must retain wIndex");
+    Equal((ushort)0, item.Dura,
+        actorKind + " Dura == nDam must take the destroy arm");
+
+    var expectedLog = "67\tD39\t12\t34\t" + actor.m_sCharName
+        + "\tBlade99\t" + makeIndex + "\t1\t持久耗尽";
+    Equal(1, M2Share.LogStringList.Count,
+        actorKind + " expiry log count");
+    Equal(expectedLog, (string)M2Share.LogStringList[0],
+        actorKind + " 0x43 log fields and raw item name");
+
+    var sysIndex = MessageIndex(actor.m_MsgList,
+        Grobal2.RM_SYSMESSAGE);
+    var duraIndex = MessageIndex(actor.m_MsgList,
+        Grobal2.RM_DURACHANGE);
+    Check(sysIndex >= 0 && duraIndex > sysIndex,
+        actorKind + " expiry message must precede RM_DURACHANGE");
+    if (sysIndex >= 0)
+    {
+        var sys = actor.m_MsgList[sysIndex];
+        Equal(0xFFDB, sys.wParam,
+            actorKind + " expiry native cx");
+        Equal("您的Blade99失效了", sys.Buff,
+            actorKind + " expiry must use the raw StdItem.Name");
+        var encoded = HUtil32.GbkEncoding.GetBytes(sys.Buff);
+        var expectedBody = new byte[encoded.Length + 1];
+        encoded.CopyTo(expectedBody, 0);
+        Check(sys.Payload is byte[] body && body.SequenceEqual(expectedBody),
+            actorKind + " expiry GBK body must include the native NUL terminator");
+    }
+    if (duraIndex >= 0)
+    {
+        var dura = actor.m_MsgList[duraIndex];
+        Equal(0, dura.wParam, actorKind + " durability slot");
+        Equal(0, dura.nParam1, actorKind + " durability value");
+        Equal(5000, dura.nParam2, actorKind + " durability max");
+    }
+
+    var recalcCalls = actor switch
+    {
+        StruckPlayer player => player.RecalcCalls,
+        StruckHero hero => hero.RecalcCalls,
+        _ => -1
+    };
+    Equal(1, recalcCalls,
+        actorKind + " expiry must recalculate once after the 16-slot loop");
+}
+
+int MessageIndex(IList<SendMessage> messages, int ident)
+{
+    for (var i = 0; i < messages.Count; i++)
+    {
+        if (messages[i].wIdent == ident)
+            return i;
+    }
+    return -1;
+}
+
+ushort AddStdItem(GoodItem stdItem)
+{
+    M2Share.UserEngine.StdItemList.Add(stdItem);
+    return checked((ushort)M2Share.UserEngine.StdItemList.Count);
+}
+
+TUserItem Equip(TBaseObject actor, int slot, ushort stdIndex, ushort dura,
+    byte classFc, int makeIndex)
+{
+    var item = new TUserItem
+    {
+        wIndex = stdIndex,
+        Dura = dura,
+        DuraMax = 5000,
+        NativeClassFc = classFc,
+        MakeIndex = makeIndex
+    };
+    actor.m_UseItems[slot] = item;
+    return item;
+}
+
+StruckPlayer NewStruckPlayer(string name)
+{
+    var actor = new StruckPlayer();
+    SeedStruckActor(actor, name);
+    return actor;
+}
+
+StruckHero NewStruckHero(string name)
+{
+    var actor = new StruckHero();
+    SeedStruckActor(actor, name);
+    return actor;
+}
+
+void SeedStruckActor(TBaseObject actor, string name)
+{
+    actor.m_boGhost = false;
+    actor.m_boDeath = false;
+    actor.m_sCharName = name;
+    actor.m_sMapName = "D39";
+    actor.m_nCurrX = 12;
+    actor.m_nCurrY = 34;
+    actor.m_WAbil.HP = 1000;
+    actor.m_WAbil.MaxHP = 1000;
+}
+
 Monster NewActor(byte job, int dcHigh, int hp)
 {
     var actor = new Monster { m_btJob = job };
@@ -267,6 +509,16 @@ void Equal<T>(T expected, T actual, string description)
     failures++;
 }
 
+void EqualSequence(IEnumerable<int> expected, IEnumerable<int> actual,
+    string description)
+{
+    if (expected.SequenceEqual(actual)) return;
+    Console.WriteLine("FAIL: " + description + " (expected "
+        + string.Join(",", expected) + ", actual "
+        + string.Join(",", actual) + ")");
+    failures++;
+}
+
 static string FindRepositoryRoot()
 {
     return AuditRepoRoot.Resolve();
@@ -300,4 +552,42 @@ static void InitializeRuntime()
     M2Share.ProcessHumanCriticalSection = new object();
     M2Share.LogMsgCriticalSection = new object();
     M2Share.LogStringList = new System.Collections.ArrayList();
+}
+
+sealed class RecordingRandomNumber : RandomNumber
+{
+    private readonly Queue<int> _results;
+
+    public List<int> Bounds { get; } = new();
+
+    public RecordingRandomNumber(params int[] results)
+    {
+        _results = new Queue<int>(results);
+    }
+
+    public override int Random(int value)
+    {
+        Bounds.Add(value);
+        return _results.Count == 0 ? 0 : _results.Dequeue();
+    }
+}
+
+sealed class StruckPlayer : TPlayObject
+{
+    public int RecalcCalls { get; private set; }
+
+    public override void RecalcAbilitys()
+    {
+        RecalcCalls++;
+    }
+}
+
+sealed class StruckHero : HeroObject
+{
+    public int RecalcCalls { get; private set; }
+
+    public override void RecalcAbilitys()
+    {
+        RecalcCalls++;
+    }
 }

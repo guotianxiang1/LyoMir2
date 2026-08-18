@@ -77,11 +77,9 @@ static void CheckDeferredMaterialization()
     var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
     adapter.Publish(CreateFieldHeroCatalog(items, body), items);
 
-    var logs = new List<string>();
     var plan = CreatePlan(adapter, "EquipmentHero", null);
-    Equal(0, logs.Count, "plan creation does not materialize equipment");
 
-    var materialization = plan.MaterializeEquipment(logs.Add);
+    var materialization = plan.MaterializeEquipment();
     Equal(NativeType2FieldHeroDefinition.EquipmentSlotCount,
         materialization.Equipment.Count, "all equipment slots retained");
     Check(materialization.Equipment[0].IsMissing,
@@ -91,13 +89,6 @@ static void CheckDeferredMaterialization()
     Check(ReferenceEquals(items.Items[1],
             materialization.Equipment[1].Item),
         "resolved item remains manager-owned");
-    Equal(1, logs.Count, "materialization logs one missing slot");
-    Equal(NativeType2FieldHeroRuntimeCatalogAdapter
-              .MissingEquipmentLogPrefix
-          + "Missing"
-          + NativeType2FieldHeroRuntimeCatalogAdapter
-              .MissingEquipmentLogSuffix,
-        logs[0], "exact missing-equipment log");
 }
 
 static void CheckReplacementGenerationLifetime()
@@ -126,8 +117,8 @@ static void CheckReplacementGenerationLifetime()
     Equal(NativeType2FieldHeroActorKind.MirDotaMatchHumMonWar,
         nextPlan.ActorKind, "replacement plan class");
 
-    var oldMaterialization = oldPlan.MaterializeEquipment(_ => { });
-    var nextMaterialization = nextPlan.MaterializeEquipment(_ => { });
+    var oldMaterialization = oldPlan.MaterializeEquipment();
+    var nextMaterialization = nextPlan.MaterializeEquipment();
     Check(ReferenceEquals(items.Items[1],
             oldMaterialization.Equipment[0].Item),
         "old plan retains old manager-owned item binding");
@@ -147,8 +138,9 @@ static NativeType2FieldHeroSpawnPlan CreatePlan(
     NativeType2FieldHeroRuntimeCatalogAdapter adapter, string name,
     byte? fameJob)
 {
-    if (!adapter.TryResolveForSpawn(name, fameJob, out var selection))
+    if (!adapter.TryResolveTemplate(name, out var template))
         throw new InvalidOperationException("missing runtime selection " + name);
+    var selection = template.CaptureSelectionAfterPlacement(fameJob);
     return NativeType2FieldHeroSpawnPlanFactory.Create(selection);
 }
 

@@ -4,9 +4,8 @@ using GameSvr.CommandSystem;
 
 // Divergence #17 + #17b permanent guard.
 //
-// Covers the 93 exact-name census matches (#17) plus the 14 confirmed
-// name-drift aliases (#17b) — live C# names that resolve to a native command
-// under a different name (see staging/gm_alias_resolution_20260801.md).
+// Covers the original exact-name census and confirmed name-drift aliases,
+// plus commands wired from later binary-verified passes.
 //
 // Asserts that every name-matched GM command's nPermissionMin equals the
 // authoritative native census value (record +0x1C) from
@@ -143,6 +142,7 @@ Census("SuperMerchant", 5);
 Census("AddLinFu", 4);
 Census("AttackMode", 0);
 Census("ClearNickLinfu", 4);
+Census("ChgMonAtt", 4);
 Census("CreditCard", 4);
 Census("DelHero", 4);
 Census("GetUserItem", 4);

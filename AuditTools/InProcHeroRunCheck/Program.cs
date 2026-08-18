@@ -193,13 +193,16 @@ void RunHeroLifecycle(Envirnoment map)
     Assert(fightAfter == 500, "real hero-exp grant accumulated hero fight-exp");
 
     // ---- 6. HERO DEATH + RELIVE (real Die()/ReAlive()) -----------------------------------------
-    // Faithful: a hero with a master clears its own hiters on death, drops no random monster items
-    // (Die() explicitly skips MonGetRandomItems for HeroObject) and detaches (m_Master=null).
+    // THeroAct keeps owner +0x68C across death. C# folds that native owner slot into
+    // m_Master, so the real Die path must preserve it while bypassing the monster pipeline.
     hero.m_WAbil.HP = 0;
-    try { hero.Die(); } catch (Exception de) { Log("HERO Die() partial: " + de.Message); }
+    hero.Die();
     bool diedFlag = hero.m_boDeath;
-    Log($"HERO DEATH: HP->0 then real Die() -> m_boDeath={diedFlag}, m_Master-detached={hero.m_Master == null}");
+    Log($"HERO DEATH: HP->0 then real Die() -> m_boDeath={diedFlag}, "
+        + $"owner-preserved={ReferenceEquals(hero.m_Master, owner)}");
     Assert(diedFlag, "real hero Die() set m_boDeath");
+    Assert(ReferenceEquals(hero.m_Master, owner),
+        "real hero Die() preserved THeroAct owner +0x68C");
 
     // Relive drives the real base ReAlive() (heroes carry m_boCanReAlive=false and never autonomously
     // relive; this exercises the real method, flipping m_boDeath back to alive).

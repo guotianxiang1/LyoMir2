@@ -139,19 +139,30 @@ Equal(4, failedRange, "native fixed scatter range");
 
 var stackPlaced = new List<TUserItem>();
 var stackLog = new List<KeyValuePair<string, string>>();
+var stackRandomCalls = 0;
 var stackStdItem = new GoodItem { StdMode = 7, DuraMax = 1000 };
 NativeDropControlRuntime.Materialize(
     new NativeDropControlPending("stack", 8, 9), stackLog,
-    _ => (stackStdItem, Item(8, 1000)), _ => 0,
+    _ => (stackStdItem, Item(8, 1000)), _ =>
+    {
+        stackRandomCalls++;
+        return 0;
+    },
     (item, range, dieDrop, creator, dropCreator) =>
     {
         stackPlaced.Add(item);
         return true;
     }, null, null);
-Equal(1, stackPlaced.Count, "StdMode 7 emits one object");
-Equal((ushort)200, stackPlaced[0].Dura,
-    "StdMode 7 quantity is overwritten by virtual +0x28");
-Equal("9", stackLog.Single().Value, "StdMode 7 reports source quantity");
+Equal(9, stackPlaced.Count,
+    "StdMode 7 charm emits one ordinary object per quantity");
+Equal(9, stackRandomCalls,
+    "StdMode 7 charm uses the ordinary durability roll per object");
+Equal(9, stackPlaced.Count(item => item.Dura == 200),
+    "StdMode 7 charm durability uses the ordinary 20-percent roll");
+Equal(9, stackLog.Count,
+    "StdMode 7 charm reports one quantity per emitted object");
+Require(stackLog.All(entry => entry.Value == "1"),
+    "StdMode 7 charm log quantities are all one");
 
 var pileRandomCalls = 0;
 var pileDurabilities = new List<ushort>();
@@ -170,15 +181,15 @@ NativeDropControlRuntime.Materialize(
         return true;
     }, null, null);
 Equal(0, pileRandomCalls, "pile virtual +0x28 is no-op");
-Equal(new ushort[] { 777, 777 }, pileDurabilities.ToArray(),
-    "pile retains constructor durability");
+Equal(new ushort[] { 2 }, pileDurabilities.ToArray(),
+    "pile writes the remaining quantity into Dura once");
 
 Console.WriteLine(
     "NativeDropControlRuntimeCheck PASS timed-uint-rollover " +
     "map-equality-reset world-greater-reset bucket-isolation chain=A,C,B " +
     "rng-order=controlled,ordinary gate-scope=ordinary-only " +
     "scatter-range=4 failure-lossy=true " +
-    "type7-final-dura=virtual pile-init=noop");
+    "type7-charm-per-item=true pile-quantity-dura=true");
 
 static TUserItem Item(ushort index, ushort duraMax)
 {
@@ -236,6 +247,12 @@ static void Equal<T>(T expected, T actual, string label)
     }
     throw new InvalidOperationException(
         $"{label}: expected={Format(expected)}, actual={Format(actual)}");
+}
+
+static void Require(bool condition, string label)
+{
+    if (!condition)
+        throw new InvalidOperationException(label);
 }
 
 static string Format<T>(T value)

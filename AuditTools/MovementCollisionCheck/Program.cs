@@ -108,7 +108,10 @@ var playerCountPlayer = new TPlayObject
     m_sMapName = playerCountSource.sMapName,
     m_sMapFileName = playerCountSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    // sub_765D64 treats nameless actors as stale cell nodes. Production
+    // players always have a character name, so every inline fixture must too.
+    m_sCharName = "playerCountPlayer"
 };
 Assert(!playerCountPlayer.m_boAddToMaped && playerCountPlayer.m_boDelFormMaped,
     "new player did not start as unpublished");
@@ -206,7 +209,8 @@ var verifyMapPlayer = new TPlayObject
     m_sMapName = verifyMapSource.sMapName,
     m_sMapFileName = verifyMapSource.m_sMapFileName,
     m_nCurrX = 2,
-    m_nCurrY = 2
+    m_nCurrY = 2,
+    m_sCharName = "verifyMapPlayer"
 };
 Place(verifyMapSource, verifyMapPlayer);
 typeof(Envirnoment).GetMethod("ReleaseCellObjectList",
@@ -236,8 +240,8 @@ teleporting.SpaceMove(blockedTargetMap.sMapName, 4, 4, 0);
 
 Assert(ReferenceEquals(sourceMap, teleporting.m_PEnvir),
     "failed SpaceMove changed the environment pointer");
-Equal(sourceMap.sMapName, teleporting.m_sMapName,
-    "failed SpaceMove changed the map name");
+Equal("MoveRollbackTar", teleporting.m_sMapName,
+    "failed native base SpaceMove did not retain the truncated target map name");
 Equal(sourceMap.m_sMapFileName, teleporting.m_sMapFileName,
     "failed SpaceMove changed the map file name");
 Equal((short)4, teleporting.m_nCurrX, "failed SpaceMove changed X");
@@ -324,7 +328,8 @@ var dynamicPlayer = new TPlayObject
     m_sMapFileName = dynamicSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_btRaceServer = Grobal2.RC_PLAYOBJECT
+    m_btRaceServer = Grobal2.RC_PLAYOBJECT,
+    m_sCharName = "dynamicPlayer"
 };
 Place(dynamicSource, dynamicPlayer);
 dynamicTick++;
@@ -378,7 +383,8 @@ var exceptionPlayer = new TPlayObject
     m_sMapName = exceptionSource.sMapName,
     m_sMapFileName = exceptionSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    m_sCharName = "exceptionPlayer"
 };
 Place(exceptionSource, exceptionPlayer);
 var savedExceptionVisibleHumans = exceptionPlayer.m_VisibleHumanList;
@@ -420,7 +426,8 @@ var exceptionGatePlayer = new TPlayObject
     m_sMapName = exceptionGateSource.sMapName,
     m_sMapFileName = exceptionGateSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    m_sCharName = "exceptionGatePlayer"
 };
 Place(exceptionGateSource, exceptionGatePlayer);
 var savedExceptionGateVisibleHumans = exceptionGatePlayer.m_VisibleHumanList;
@@ -478,7 +485,8 @@ var dynamicGatePlayer = new TPlayObject
     m_sMapFileName = gateSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_btRaceServer = Grobal2.RC_PLAYOBJECT
+    m_btRaceServer = Grobal2.RC_PLAYOBJECT,
+    m_sCharName = "dynamicGatePlayer"
 };
 Place(gateSource, dynamicGatePlayer);
 dynamicTick++;
@@ -514,7 +522,8 @@ var crossServerPlayer = new TPlayObject
     m_sMapName = crossServerSource.sMapName,
     m_sMapFileName = crossServerSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    m_sCharName = "crossServerPlayer"
 };
 Place(crossServerSource, crossServerPlayer);
 dynamicTick++;
@@ -549,7 +558,8 @@ var ghostPlayer = new TPlayObject
     m_sMapName = ghostSource.sMapName,
     m_sMapFileName = ghostSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    m_sCharName = "ghostPlayer"
 };
 Place(ghostSource, ghostPlayer);
 dynamicTick++;
@@ -585,7 +595,8 @@ var failedCrossServerPlayer = new TPlayObject
     m_sMapName = failedCrossServerSource.sMapName,
     m_sMapFileName = failedCrossServerSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    m_sCharName = "failedCrossServerPlayer"
 };
 Place(failedCrossServerSource, failedCrossServerPlayer);
 dynamicTick++;
@@ -655,14 +666,19 @@ var crossServerGateSuccessPlayer = new TPlayObject
     m_sMapFileName = crossServerGateSuccessSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_boFixedHideMode = false
+    m_boFixedHideMode = false,
+    m_sCharName = "crossServerGateSuccessPlayer"
 };
 Place(crossServerGateSuccessSource, crossServerGateSuccessPlayer);
 var crossServerGateSuccess = new TGateObj
 {
     DEnvir = crossServerTarget,
-    nDMapX = 4,
-    nDMapY = 4
+    // sub_78FE80 is `mov al,1; ret` in this image. A gate therefore always
+    // calls EnterAnotherMap even when the target carries a remote server
+    // index. Use an out-of-bounds landing to make that local call fail before
+    // it changes either map, and verify that the mover ignores its return.
+    nDMapX = 99,
+    nDMapY = 99
 };
 Assert(ReferenceEquals(crossServerGateSuccess,
         crossServerGateSuccessSource.AddToMap(3, 3,
@@ -672,21 +688,44 @@ var crossServerGateSuccessDisappearCount = CountMessages(
     crossServerGateSuccessObserver, Grobal2.RM_DISAPPEAR);
 var crossServerGateSuccessWalkCount = CountMessages(
     crossServerGateSuccessObserver, Grobal2.RM_WALK);
+var crossServerGateSuccessTargetHumCount = crossServerTarget.HumCount;
+var crossServerGateSuccessServerIndex =
+    crossServerGateSuccessPlayer.m_nServerIndex;
 var crossServerGateWalkSucceeded = (bool)walk.Invoke(
     crossServerGateSuccessPlayer, new object[] { Grobal2.RM_WALK })!;
 Assert(crossServerGateWalkSucceeded,
-    "cross-server gate success returned a failed walk");
-Assert(crossServerGateSuccessPlayer.m_boSwitchData
-       && crossServerGateSuccessPlayer.m_boReconnection,
-    "cross-server gate success did not set transfer state");
-Equal(1, crossServerGateSuccessSource.HumCount,
-    "cross-server gate success did not remove the traveler");
-Equal(crossServerGateSuccessDisappearCount + 1,
+    "remote-index gate with failed local landing rejected the completed walk");
+Assert(!crossServerGateSuccessPlayer.m_bo316
+       && !crossServerGateSuccessPlayer.m_boSwitchData
+       && !crossServerGateSuccessPlayer.m_boEmergencyClose
+       && !crossServerGateSuccessPlayer.m_boReconnection,
+    "remote-index gate incorrectly entered cross-server transfer state");
+Equal(string.Empty, crossServerGateSuccessPlayer.m_sSwitchMapName,
+    "remote-index gate changed the switch map");
+Equal((short)0, crossServerGateSuccessPlayer.m_nSwitchMapX,
+    "remote-index gate changed switch X");
+Equal((short)0, crossServerGateSuccessPlayer.m_nSwitchMapY,
+    "remote-index gate changed switch Y");
+Equal(crossServerGateSuccessServerIndex,
+    crossServerGateSuccessPlayer.m_nServerIndex,
+    "remote-index gate changed the target server");
+Assert(ReferenceEquals(crossServerGateSuccessSource,
+        crossServerGateSuccessPlayer.m_PEnvir),
+    "failed local gate landing changed the source environment");
+Equal((short)3, crossServerGateSuccessPlayer.m_nCurrX,
+    "failed local gate landing changed source X");
+Equal((short)3, crossServerGateSuccessPlayer.m_nCurrY,
+    "failed local gate landing changed source Y");
+Equal(2, crossServerGateSuccessSource.HumCount,
+    "failed local gate landing changed source human count");
+Equal(crossServerGateSuccessTargetHumCount, crossServerTarget.HumCount,
+    "failed local gate landing changed target human count");
+Equal(crossServerGateSuccessDisappearCount,
     CountMessages(crossServerGateSuccessObserver, Grobal2.RM_DISAPPEAR),
-    "cross-server gate success did not send exactly one disappear message");
-Equal(crossServerGateSuccessWalkCount,
+    "failed local gate landing queued a disappear message");
+Equal(crossServerGateSuccessWalkCount + 1,
     CountMessages(crossServerGateSuccessObserver, Grobal2.RM_WALK),
-    "cross-server gate success leaked a trailing walk message");
+    "remote-index gate did not preserve native broadcast-before-gate order");
 
 var crossServerGateFailureSource = NewEnvironment("CrossServerGateFailure",
     "CrossServerGateFailureFile", 0);
@@ -701,7 +740,8 @@ var crossServerGateFailurePlayer = new TPlayObject
     m_sMapFileName = crossServerGateFailureSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_boFixedHideMode = false
+    m_boFixedHideMode = false,
+    m_sCharName = "crossServerGateFailurePlayer"
 };
 Place(crossServerGateFailureSource, crossServerGateFailurePlayer);
 var crossServerGateFailure = new TGateObj
@@ -761,7 +801,8 @@ var noHorseBlockedPlayer = new TPlayObject
     m_sMapFileName = noHorseBlockedSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_boOnHorse = true
+    m_boOnHorse = true,
+    m_sCharName = "noHorseBlockedPlayer"
 };
 Place(noHorseBlockedSource, noHorseBlockedPlayer);
 blockedTargetMap.Flag.boNOHORSE = true;
@@ -788,7 +829,8 @@ var noHorseExceptionPlayer = new TPlayObject
     m_sMapFileName = noHorseExceptionSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_boOnHorse = true
+    m_boOnHorse = true,
+    m_sCharName = "noHorseExceptionPlayer"
 };
 Place(noHorseExceptionSource, noHorseExceptionPlayer);
 var noHorseVisibleSentinel = NewObject(noHorseExceptionSource,
@@ -824,7 +866,8 @@ var noHorseSuccessPlayer = new TPlayObject
     m_sMapFileName = noHorseSuccessSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_boOnHorse = true
+    m_boOnHorse = true,
+    m_sCharName = "noHorseSuccessPlayer"
 };
 Place(noHorseSuccessSource, noHorseSuccessPlayer);
 var noHorseSuccessMoveSucceeded = (bool)enterAnotherMap.Invoke(
@@ -848,7 +891,8 @@ var horseAllowedPlayer = new TPlayObject
     m_sMapFileName = horseAllowedSource.m_sMapFileName,
     m_nCurrX = 3,
     m_nCurrY = 3,
-    m_boOnHorse = true
+    m_boOnHorse = true,
+    m_sCharName = "horseAllowedPlayer"
 };
 Place(horseAllowedSource, horseAllowedPlayer);
 var horseAllowedMoveSucceeded = (bool)enterAnotherMap.Invoke(
@@ -880,7 +924,8 @@ var staleGhostPlayer = new TPlayObject
     m_sMapName = staleGhostSource.sMapName,
     m_sMapFileName = staleGhostSource.m_sMapFileName,
     m_nCurrX = 3,
-    m_nCurrY = 3
+    m_nCurrY = 3,
+    m_sCharName = "staleGhostPlayer"
 };
 Place(staleGhostSource, staleGhostPlayer);
 dynamicTick++;

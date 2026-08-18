@@ -5,13 +5,15 @@ using GameSvr.Services;
 using SystemModule;
 
 CheckPersistentFameSelector();
-CheckEquipmentLogAndContinue();
+CheckEquipmentBindingsWithoutSideEffects();
 CheckReplacementLifetimeAndReset();
 CheckConcurrentPublicationCapture();
+CheckNativeLookupNameCanonicalization();
+CheckDuplicateNormalizedNamesUseLastLoadedEntry();
 
 Console.WriteLine("PASS NativeType2FieldHeroRuntimeCatalogCheck " +
-                  "selector=persistent equipment=log-and-continue " +
-                  "publication=atomic retired=strong-held");
+                  "selector=persistent equipment=side-effect-free " +
+                  "publication=atomic generation=borrower-held");
 
 static void CheckPersistentFameSelector()
 {
@@ -21,33 +23,37 @@ static void CheckPersistentFameSelector()
     var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
     adapter.Publish(definitions, items);
 
-    Check(adapter.TryResolveForSpawn("SelectorHero", null, out var initial),
+    Check(adapter.TryResolveTemplate("SelectorHero", out var template),
         "initial selector lookup");
-    Equal((byte)3, initial.EffectiveJob, "wire selector initial value");
-    Equal(1L, initial.Generation, "initial generation");
+    Equal((byte)3, template.CurrentEffectiveJob,
+        "wire selector initial value");
+    Equal(1L, template.Generation, "initial generation");
 
-    Check(adapter.TryResolveForSpawn("SelectorHero", byte.MaxValue,
-            out var fame),
-        "fame selector lookup");
+    // The factory has not completed placement yet. A placement failure must
+    // leave template+0x10 untouched and skip fame selection entirely.
+    Equal((byte)3, template.CurrentEffectiveJob,
+        "unconsumed template has no fame side effect");
+
+    var fame = template.CaptureSelectionAfterPlacement(byte.MaxValue);
     Equal(byte.MaxValue, fame.EffectiveJob,
         "selector remains full byte and is not clamped to 0..7");
 
     // Simulate a later constructor/publication failure by abandoning fame.
     // Native does not roll the template mutation back.
-    Check(adapter.TryResolveForSpawn("SelectorHero", null,
-            out var afterFailure),
+    Check(adapter.TryResolveTemplate("SelectorHero", out var afterTemplate),
         "selector lookup after abandoned spawn");
+    var afterFailure = afterTemplate.CaptureSelectionAfterPlacement(null);
     Equal(byte.MaxValue, afterFailure.EffectiveJob,
         "abandoned spawn did not roll back shared selector");
 
-    Check(!adapter.TryResolveForSpawn("Missing", 1, out _),
+    Check(!adapter.TryResolveTemplate("Missing", out _),
         "template miss does not create or mutate a sidecar");
     ExpectThrows<InvalidOperationException>(() =>
             adapter.Publish(definitions, items),
         "normal publication remains one-shot");
 }
 
-static void CheckEquipmentLogAndContinue()
+static void CheckEquipmentBindingsWithoutSideEffects()
 {
     var items = CreateStandardItems(Bytes("Blade"), Bytes("Shield"));
     var body = CreateFieldHeroBody(Bytes("EquipmentHero"), 0, 20);
@@ -59,12 +65,11 @@ static void CheckEquipmentLogAndContinue()
 
     var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
     adapter.Publish(CreateFieldHeroCatalog(items, body), items);
-    Check(adapter.TryResolveForSpawn("EquipmentHero", null,
+    Check(TryCaptureAfterPlacement(adapter, "EquipmentHero", null,
             out var selection),
         "equipment hero lookup");
 
-    var logs = new List<string>();
-    var materialization = selection.MaterializeEquipment(logs.Add);
+    var materialization = selection.MaterializeEquipment();
     Equal(14, materialization.Equipment.Count, "all slots retained");
     Check(materialization.Equipment[0].IsMissing,
         "unknown first slot retained as missing");
@@ -78,16 +83,10 @@ static void CheckEquipmentLogAndContinue()
     Check(materialization.Equipment[3].IsMissing,
         "local index-zero gold sentinel is excluded from wire definitions");
     Check(materialization.Equipment[4].IsEmpty,
-        "empty slot remains empty and does not log");
-
-    Equal(3, logs.Count, "one log for each non-empty unresolved slot");
-    Equal(MissingLog("MissingFirst"), logs[0], "first missing log");
-    Equal(MissingLog("blade"), logs[1], "case mismatch log");
-    Equal(MissingLog("金币"), logs[2], "sentinel mismatch log");
-
-    logs.Clear();
-    selection.MaterializeEquipment(logs.Add);
-    Equal(3, logs.Count, "each actor materialization logs its own misses");
+        "empty slot remains empty");
+    Check(ReferenceEquals(materialization.Equipment,
+            selection.MaterializeEquipment().Equipment),
+        "repeated materialization borrows the same immutable bindings");
 }
 
 static void CheckReplacementLifetimeAndReset()
@@ -100,9 +99,10 @@ static void CheckReplacementLifetimeAndReset()
 
     var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
     adapter.Publish(CreateFieldHeroCatalog(items, oldBody), items);
-    Check(adapter.TryResolveForSpawn("ReloadHero", 7, out var oldSelection),
+    Check(TryCaptureAfterPlacement(adapter, "ReloadHero", 7,
+            out var oldSelection),
         "old generation fame mutation");
-    var oldMaterialization = oldSelection.MaterializeEquipment(_ => { });
+    var oldMaterialization = oldSelection.MaterializeEquipment();
 
     var failedGeneration = adapter.Generation;
     ExpectThrows<InvalidOperationException>(() => adapter.Replace(
@@ -114,9 +114,7 @@ static void CheckReplacementLifetimeAndReset()
 
     adapter.Replace(CreateFieldHeroCatalog(items, nextBody), items);
     Equal(2L, adapter.Generation, "replacement generation");
-    Equal(1, adapter.RetiredPublicationCount,
-        "old manager-owned snapshot is retained");
-    Check(adapter.TryResolveForSpawn("ReloadHero", null,
+    Check(TryCaptureAfterPlacement(adapter, "ReloadHero", null,
             out var nextSelection),
         "new generation lookup");
     Equal((byte)2, nextSelection.EffectiveJob,
@@ -155,7 +153,7 @@ static void CheckConcurrentPublicationCapture()
         start.Wait();
         for (var index = 0; index < 2000; index++)
         {
-            if (!adapter.TryResolveForSpawn("ConcurrentHero", null,
+            if (!TryCaptureAfterPlacement(adapter, "ConcurrentHero", null,
                     out var selection))
             {
                 failures.Enqueue("lookup observed an empty publication");
@@ -174,8 +172,51 @@ static void CheckConcurrentPublicationCapture()
     Task.WaitAll(readers.Append(writer).ToArray());
     Check(failures.IsEmpty,
         failures.TryPeek(out var failure) ? failure : "concurrent failure");
-    Equal(64, adapter.RetiredPublicationCount,
-        "each replacement retains the borrowed prior generation");
+    Equal(65L, adapter.Generation,
+        "all replacements committed a complete generation");
+}
+
+static void CheckNativeLookupNameCanonicalization()
+{
+    var items = CreateStandardItems();
+    var body = CreateFieldHeroBody(Bytes("MixedCaseHero"), 2, 33);
+    var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
+    adapter.Publish(CreateFieldHeroCatalog(items, body), items);
+
+    Check(TryCaptureAfterPlacement(adapter, "mixedcasehero", null,
+            out var lower),
+        "runtime lowercase query resolves mixed-case native key");
+    Check(TryCaptureAfterPlacement(adapter, "MIXEDCASEHERO", null,
+            out var upper),
+        "runtime uppercase query resolves mixed-case native key");
+    Check(ReferenceEquals(lower.Definition, upper.Definition),
+        "runtime case variants resolve the same definition");
+}
+
+static void CheckDuplicateNormalizedNamesUseLastLoadedEntry()
+{
+    var items = CreateStandardItems();
+    var first = CreateFieldHeroBody(Bytes("DuplicateHero"), 1, 11);
+    var last = CreateFieldHeroBody(Bytes("duplicatehero"), 2, 22);
+    var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
+    adapter.Publish(CreateFieldHeroCatalog(items, first, last), items);
+
+    Check(adapter.TryResolveTemplate("DUPLICATEHERO", out var template),
+        "normalized duplicate resolves");
+    Equal((ushort)22, template.Definition.Level,
+        "hash-bucket head favors the last loaded normalized key");
+    Equal((byte)2, template.CurrentEffectiveJob,
+        "last loaded definition supplies the initial selector");
+}
+
+static bool TryCaptureAfterPlacement(
+    NativeType2FieldHeroRuntimeCatalogAdapter adapter, string name,
+    byte? fameJob, out NativeType2FieldHeroSpawnSelection selection)
+{
+    selection = null;
+    if (!adapter.TryResolveTemplate(name, out var template)) return false;
+    selection = template.CaptureSelectionAfterPlacement(fameJob);
+    return true;
 }
 
 static NativeType2FieldHeroStaticCatalog CreateFieldHeroCatalog(
@@ -255,11 +296,6 @@ static byte[] CreatePacket(ushort command, int headerSize, byte[] body,
 static int EquipmentOffset(int index) =>
     NativeType2FieldHeroDefinition.EquipmentOffset
     + index * NativeType2FieldHeroDefinition.EquipmentStride;
-
-static string MissingLog(string name) =>
-    NativeType2FieldHeroRuntimeCatalogAdapter.MissingEquipmentLogPrefix
-    + name
-    + NativeType2FieldHeroRuntimeCatalogAdapter.MissingEquipmentLogSuffix;
 
 static byte[] Bytes(string value) => Encoding.ASCII.GetBytes(value);
 

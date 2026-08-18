@@ -10,7 +10,7 @@ VerifyEarlyImmunity();
 VerifyDefenceRandomOrder();
 VerifyResolverRandomOrder();
 VerifySkill152Then153();
-VerifySkill152FlagGate();
+VerifySkill152Flags();
 VerifySpecialDirectLandingIsolation();
 
 Console.WriteLine(
@@ -48,9 +48,9 @@ static void VerifySourceOrder()
         "ApplyNativeHumanMagicPercentReduction(",
         "ApplyNativeHumanMagicBreakContest(",
         "damage = unchecked(damage + breakExtra);",
-        "(effectiveFlags & 0x0C) == 0",
-        "source.ApplyNativeSkill152OneShotBonus(",
         "damage = unchecked(damage + breakBonus);",
+        "source.ApplyNativeSkill152OneShotBonus(",
+        "source.ApplyNativeSkill151BurstDamage(",
         "ApplyNativeState16MagicDamageCap(",
         "ApplyNativeState16LevelContest(",
         "source.ApplyNativeSkill307Damage(",
@@ -196,9 +196,9 @@ static void VerifySkill152Then153()
         "resolver did not consume skill153 charge");
 }
 
-static void VerifySkill152FlagGate()
+static void VerifySkill152Flags()
 {
-    foreach (int flags in new[] { 0x04, 0x08 })
+    foreach (int flags in new[] { 0x00, 0x04, 0x08, 0x0C })
     {
         var source = NewActor();
         var target = NewPlayer();
@@ -209,14 +209,14 @@ static void VerifySkill152FlagGate()
 
         WithRandom(new[] { 999, 99 }, random =>
         {
-            Equal(100, Resolve(target, source, 1, false, 1, flags, 100),
+            Equal(350, Resolve(target, source, 1, false, 1, flags, 100),
                 $"skill152 flags 0x{flags:X2} result");
             EqualSequence(new[] { 1000, 100 }, random.MaxValues,
                 $"skill152 flags 0x{flags:X2} RNG");
             random.AssertExhausted($"skill152 flags 0x{flags:X2} RNG");
         });
 
-        Equal(900, target.m_WAbil.HP,
+        Equal(650, target.m_WAbil.HP,
             $"skill152 flags 0x{flags:X2} landing HP");
         Equal(250, GetField<int>(source, "m_nNativeOneShotMagicDamage"),
             $"skill152 flags 0x{flags:X2} preserved carrier");

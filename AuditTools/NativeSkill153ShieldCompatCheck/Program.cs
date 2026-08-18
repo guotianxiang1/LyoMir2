@@ -203,11 +203,11 @@ static void VerifyPhysicalResolverConsumption()
     // The charge is consumed in StruckDamage (sub_73F9FC @0x73FB5F), NOT in
     // the armour getter: sub_767958 ends `call sub_76FFE8` + `ret 4`
     // (@0x7679A9-0x7679B2) and never reads word [+0x3FC].
-    Equal((ushort)0, actor.GetHitStruckDamage(null, 0),
+    Equal(0, actor.GetHitStruckDamage(null, 0),
         "zero physical damage");
     Equal((ushort)2, Charges(actor),
         "armour getter must not consume a charge");
-    Equal((ushort)200, actor.GetHitStruckDamage(null, 200),
+    Equal(200, actor.GetHitStruckDamage(null, 200),
         "armour getter must pass damage through unshielded");
     Equal((ushort)2, Charges(actor),
         "armour getter consumed a charge on a positive hit");
@@ -303,10 +303,12 @@ static void VerifyHeroUnsupportedEntry()
         "unsupported hero emitted RM_MAGICFIRE");
     var spell = hero.m_MsgList.Single(message =>
         message.wIdent == Grobal2.RM_SPELL);
-    Equal(74, spell.wParam, "unsupported hero spell effect");
+    Equal(HUtil32.MakeWord(74, 3), spell.wParam,
+        "unsupported hero spell effect/type");
     Equal(109, spell.nParam1, "unsupported hero target X");
     Equal(109, spell.nParam2, "unsupported hero target Y");
     Equal(153, spell.nParam3, "unsupported hero magic id");
+    Assert(spell.Payload != null, "unsupported hero native spell payload");
 
     var outOfRange = NewHero(environment, 100, 100);
     var distantTarget = NewActor();
@@ -391,14 +393,14 @@ static void VerifySourceContracts()
     Require(manager,
         "UserMagic.MagicInfo.wMagicID != SpellsDef.SKILL_153",
         "legacy client skill153 bypass");
-    int playerSpell = manager.IndexOf("Grobal2.RM_SPELL",
+    int playerSpell = manager.IndexOf("SendNativeSpell(PlayObject",
         StringComparison.Ordinal);
     int playerCase = manager.IndexOf("case SpellsDef.SKILL_153:",
         StringComparison.Ordinal);
     int playerActivation = manager.IndexOf(
         "TryActivateNativeSkill153Shield(", playerCase,
         StringComparison.Ordinal);
-    int playerFire = manager.IndexOf("Grobal2.RM_MAGICFIRE",
+    int playerFire = manager.IndexOf("SendNativeMagicFire(PlayObject",
         playerActivation, StringComparison.Ordinal);
     Assert(playerSpell >= 0 && playerCase > playerSpell &&
         playerActivation > playerCase && playerFire > playerActivation,
@@ -433,7 +435,7 @@ static void VerifySourceContracts()
     int heroUnsupported = hero.IndexOf(
         "if (nativeUnsupportedSkill153)", heroDebit,
         StringComparison.Ordinal);
-    int heroSpell = hero.IndexOf("Grobal2.RM_SPELL", heroUnsupported,
+    int heroSpell = hero.IndexOf("MagicManager.SendNativeSpell", heroUnsupported,
         StringComparison.Ordinal);
     int heroFailure = hero.IndexOf("return false;", heroSpell,
         StringComparison.Ordinal);

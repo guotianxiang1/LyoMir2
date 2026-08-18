@@ -16,6 +16,7 @@
 // (SHA256 5540f43b…c049670b14e, image base 0x00400000).
 
 using GameSvr;
+using SystemModule;
 
 int checks = 0;
 
@@ -213,7 +214,7 @@ void Report(string name, int perm, int ident, bool deferred)
 }
 Report("HumNum", 3, 0xFFDB, true);
 Report("MAP", 3, 0x38FF, false);
-Report("ReloadMonAtt", 4, 0x38FF, true);
+Report("ReloadMonAtt", 4, 0x38FF, false);
 Report("reshuaMonScript", 5, 0xFFDB, true);
 Report("ReloadMonitemsTreeCfg", 4, 0xFFDB, true);
 
@@ -238,11 +239,11 @@ Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage,
 NativeGmMonsterMapCommands.MapExistsHook = null;
 
 // ---------------------------------------------------------------------------
-// 8) ThroughRange (136): n<=50 sets the global + confirms; n>50 silent
+// 8) ThroughRange (136): 0..50 sets the global + confirms; otherwise silent
 // ---------------------------------------------------------------------------
 var tr30 = NativeGmMonsterMapCommands.Evaluate("ThroughRange", 4, new[] { "30" });
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, tr30.Outcome, "ThroughRange 30 -> ExecutedWithGmMessage");
-Equal("value-le-50", tr30.Branch, "ThroughRange 30 branch");
+Equal("value-0-to-50", tr30.Branch, "ThroughRange 30 branch");
 Equal(0x38FF, tr30.NativeSysMsgIdent, "ThroughRange 30 ident");
 Equal(false, tr30.CoreBodyDeferred, "ThroughRange inline (not deferred)");
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage,
@@ -251,6 +252,83 @@ Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage,
 Equal(NativeMonsterMapOutcome.RejectedSilently,
     NativeGmMonsterMapCommands.Evaluate("ThroughRange", 4, new[] { "51" }).Outcome,
     "ThroughRange 51 -> RejectedSilently");
+Equal(NativeMonsterMapOutcome.RejectedSilently,
+    NativeGmMonsterMapCommands.Evaluate("ThroughRange", 4, new[] { "-1" }).Outcome,
+    "ThroughRange -1 -> RejectedSilently");
+
+PrepareRuntimeConfig();
+var oldThroughRange = TPlayObject.NativeSafeZoneThroughRange;
+var oldProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldObjectManager = M2Share.ObjectManager;
+var oldRandomNumber = M2Share.RandomNumber;
+try
+{
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+    var player = new TPlayObject();
+    var command = new ThroughRangeCommand();
+
+    TPlayObject.NativeSafeZoneThroughRange = 17;
+    command.ThroughRange(new[] { "-1" }, player);
+    Equal(17, TPlayObject.NativeSafeZoneThroughRange,
+        "live ThroughRange -1 preserves global");
+    Equal(0, player.m_MsgList.Count,
+        "live ThroughRange -1 is silent");
+
+    command.ThroughRange(new[] { "0" }, player);
+    Equal(0, TPlayObject.NativeSafeZoneThroughRange,
+        "live ThroughRange 0 writes global");
+    Equal(1, player.m_MsgList.Count,
+        "live ThroughRange 0 queues one SysMsg");
+    var zeroMessage = player.m_MsgList[0];
+    Equal(Grobal2.RM_SYSMESSAGE, zeroMessage.wIdent,
+        "live ThroughRange SysMsg ident");
+    Equal(0, zeroMessage.wParam, "live ThroughRange wParam");
+    Equal(0xFF, zeroMessage.nParam1,
+        "live ThroughRange SysMsg foreground");
+    Equal(0x38, zeroMessage.nParam2,
+        "live ThroughRange SysMsg background");
+    Equal(0, zeroMessage.nParam3, "live ThroughRange nParam3");
+    Equal("设置本服务器的安全区穿人范围为: 0", zeroMessage.Buff,
+        "live ThroughRange exact reply");
+
+    player.m_MsgList.Clear();
+    command.ThroughRange(new[] { "50" }, player);
+    Equal(50, TPlayObject.NativeSafeZoneThroughRange,
+        "live ThroughRange 50 writes global");
+    Equal(1, player.m_MsgList.Count,
+        "live ThroughRange 50 queues one SysMsg");
+
+    player.m_MsgList.Clear();
+    command.ThroughRange(new[] { "51" }, player);
+    Equal(50, TPlayObject.NativeSafeZoneThroughRange,
+        "live ThroughRange 51 preserves global");
+    Equal(0, player.m_MsgList.Count,
+        "live ThroughRange 51 is silent");
+
+    command.ThroughRange(Array.Empty<string>(), player);
+    Equal(0, TPlayObject.NativeSafeZoneThroughRange,
+        "live ThroughRange missing arg defaults to zero");
+    Equal("设置本服务器的安全区穿人范围为: ",
+        player.m_MsgList[0].Buff,
+        "live ThroughRange missing arg preserves raw empty reply");
+
+    player.m_MsgList.Clear();
+    command.ThroughRange(new[] { "abc" }, player);
+    Equal(0, TPlayObject.NativeSafeZoneThroughRange,
+        "live ThroughRange non-numeric arg defaults to zero");
+    Equal("设置本服务器的安全区穿人范围为: abc",
+        player.m_MsgList[0].Buff,
+        "live ThroughRange non-numeric reply preserves raw text");
+}
+finally
+{
+    TPlayObject.NativeSafeZoneThroughRange = oldThroughRange;
+    M2Share.ProcessMsgCriticalSection = oldProcessMsgCriticalSection;
+    M2Share.ObjectManager = oldObjectManager;
+    M2Share.RandomNumber = oldRandomNumber;
+}
 
 // ---------------------------------------------------------------------------
 // 9) ReloadNpcPrize (159): success 0xFFDB / fail 0x38FF (reload runs on both)
@@ -394,3 +472,28 @@ Console.WriteLine($"PASS NativeGmMonsterMapCommandsCheck ({checks} checks): "
     + $"({implCount} implemented, {noopCount} registered no-op) — "
     + "registry facts, permission ladder, branch ladders, SysMsg idents, silent no-ops.");
 return 0;
+
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+
+    var robotDirectory = Path.Combine(runtimeDirectory, "RobotIni");
+    Directory.CreateDirectory(robotDirectory);
+    File.WriteAllText(Path.Combine(robotDirectory, "默认.txt"),
+        "[Info]" + Environment.NewLine);
+
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+    Directory.SetCurrentDirectory(runtimeDirectory);
+}

@@ -73,9 +73,9 @@ static void CheckOwnerFilter()
     var second = NewItem("second-eligible", null);
     Place(environment, 6, 6, first);
     Place(environment, 6, 6, second);
-    Assert(ReferenceEquals(first,
+    Assert(ReferenceEquals(second,
             SelectRangeItem(environment, 6, 6, requester)),
-        "range selector must return only the first eligible item in a cell");
+        "range selector must return the first eligible node from the native head chain");
 }
 
 static void CheckDisabledIsSilent()

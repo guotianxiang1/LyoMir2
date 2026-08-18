@@ -13,6 +13,7 @@ Run("decode fixed body without ScriptData", DecodeLoadWithoutScript);
 Run("decode fixed 0xFFFC padded ScriptData slot", DecodePaddedLoad);
 Run("encode exact Type1 0x0150 layout", EncodeExactSave);
 Run("encode Type1 0x0150 without ScriptData", EncodeSaveWithoutScript);
+Run("preserve storage-space word through Type1 load/save", PreserveStorageSpaceWord);
 Run("reject malformed native frames", RejectMalformedFrames);
 
 if (failures.Count != 0)
@@ -88,9 +89,12 @@ void EncodeExactSave()
     Check(NativeHumanDbCodec.TryDecodeLoadFrame(fixture.Frame,
         out var load, out var error), error);
     load.HumanRecord.Data.nGold = unchecked((int)0x89ABCDEF);
+    var switchExtension = Enumerable.Range(0,
+            NativeHumanDbCodec.SwitchExtensionSize)
+        .Select(value => unchecked((byte)(value * 29 + 7))).ToArray();
     Check(NativeHumanDbCodec.TryEncodeSaveFrame(fixture.Account,
         fixture.Character, 2, 0x11223344, unchecked((int)0x88776655),
-        load.HumanRecord, out var save, out error), error);
+        load.HumanRecord, switchExtension, out var save, out error), error);
 
     Equal((ushort)1, save.Type, "save outer type");
     Equal((ushort)0, save.Reserved, "save outer reserved");
@@ -119,8 +123,13 @@ void EncodeExactSave()
         BinaryPrimitives.ReadInt32LittleEndian(save.Payload.AsSpan(
             NativeHumanDbCodec.NativeDataOffset + 0x44, 4)), "save raw mutation");
     Check(save.Payload.AsSpan(NativeHumanDbCodec.SessionSuffixOffset,
-        NativeHumanDbCodec.SessionSuffixSize).ToArray().All(value => value == 0),
-        "save suffix zeroing");
+            NativeHumanDbCodec.SessionPrefixSize).ToArray()
+        .All(value => value == 0), "save session prefix zeroing");
+    Check(save.Payload.AsSpan(
+            NativeHumanDbCodec.SessionSuffixOffset
+            + NativeHumanDbCodec.SessionPrefixSize,
+            NativeHumanDbCodec.SwitchExtensionSize)
+        .SequenceEqual(switchExtension), "save mode2 switch extension");
     Check(save.Payload.AsSpan(NativeHumanDbCodec.ScriptDataOffset)
         .SequenceEqual(fixture.Script), "save ScriptData offset");
 
@@ -139,6 +148,10 @@ void EncodeExactSave()
         new LegacyDbServerFrame(1, 0, asLoad), out var roundTrip, out error), error);
     Equal(unchecked((int)0x89ABCDEF), roundTrip.HumanRecord.Data.nGold,
         "save/load round trip");
+    Check(roundTrip.SessionSuffix.AsSpan(
+            NativeHumanDbCodec.SessionPrefixSize,
+            NativeHumanDbCodec.SwitchExtensionSize)
+        .SequenceEqual(switchExtension), "mode2 extension round trip");
 }
 
 void EncodeSaveWithoutScript()
@@ -153,8 +166,44 @@ void EncodeSaveWithoutScript()
         "no-script save payload length");
     Equal(24680, BinaryPrimitives.ReadInt32LittleEndian(save.Payload.AsSpan(
         NativeHumanDbCodec.NativeDataOffset + 0x44, 4)), "no-script save raw mutation");
+    Check(save.Payload.AsSpan(NativeHumanDbCodec.SessionSuffixOffset,
+            NativeHumanDbCodec.SessionSuffixSize).ToArray()
+        .All(value => value == 0), "ordinary save suffix zeroing");
     Equal(0, load.HumanRecord.NativeScriptData.Length,
         "no-script human representation remains empty");
+}
+
+void PreserveStorageSpaceWord()
+{
+    foreach (ushort stored in new ushort[] { 0, 24, 48, 49, 192, 193, 65535 })
+    {
+        var fixture = CreateLoadFixture(includeScript: false);
+        var payload = (byte[])fixture.Frame.Payload.Clone();
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(
+            NativeHumanDbCodec.NativeDataOffset + 0x050E, 2), stored);
+        var frame = new LegacyDbServerFrame(1, 0, payload);
+
+        Check(NativeHumanDbCodec.TryDecodeLoadFrame(frame,
+            out var load, out var error), error);
+        Equal((int)stored, load.HumanRecord.Data.StorageSpaceCount,
+            $"load storage-space word {stored}");
+
+        Check(NativeHumanDbCodec.TryEncodeSaveFrame(fixture.Account,
+            fixture.Character, 1, 0, 0, load.HumanRecord,
+            out var save, out error), error);
+        Equal(stored, BinaryPrimitives.ReadUInt16LittleEndian(save.Payload.AsSpan(
+            NativeHumanDbCodec.NativeDataOffset + 0x050E, 2)),
+            $"save storage-space word {stored}");
+
+        var asLoad = (byte[])save.Payload.Clone();
+        BinaryPrimitives.WriteUInt16LittleEndian(asLoad,
+            NativeHumanDbCodec.LoadCommand);
+        Check(NativeHumanDbCodec.TryDecodeLoadFrame(
+            new LegacyDbServerFrame(1, 0, asLoad),
+            out var roundTrip, out error), error);
+        Equal((int)stored, roundTrip.HumanRecord.Data.StorageSpaceCount,
+            $"round-trip storage-space word {stored}");
+    }
 }
 
 void RejectMalformedFrames()
@@ -210,6 +259,15 @@ void RejectMalformedFrames()
         "character over SS15 accepted");
     Check(!NativeHumanDbCodec.TryEncodeSaveFrame(fixture.Account, fixture.Character,
         1, 0, 0, null, out _, out _), "null save record accepted");
+    Check(!NativeHumanDbCodec.TryEncodeSaveFrame(fixture.Account, fixture.Character,
+        2, 0, 0, load.HumanRecord, out _, out _),
+        "mode2 save without switch extension accepted");
+    Check(!NativeHumanDbCodec.TryEncodeSaveFrame(fixture.Account, fixture.Character,
+        2, 0, 0, load.HumanRecord, new byte[0x107], out _, out _),
+        "short mode2 switch extension accepted");
+    Check(!NativeHumanDbCodec.TryEncodeSaveFrame(fixture.Account, fixture.Character,
+        1, 0, 0, load.HumanRecord, new byte[0x108], out _, out _),
+        "ordinary save accepted a switch extension");
 }
 
 Fixture CreateLoadFixture(bool includeScript)

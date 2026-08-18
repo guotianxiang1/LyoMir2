@@ -42,6 +42,29 @@ RecordRoundTrip("x", int.MinValue);
     Equal(0x04, buf[19], "value LE byte3");
 }
 
+// File adapter: all writes stay in an isolated temp directory.
+{
+    var root = Path.Combine(Path.GetTempPath(),
+        "native-block-users-" + Guid.NewGuid().ToString("N"));
+    var path = Path.Combine(root, "BlockUsers.Dat");
+    try
+    {
+        var store = new NativeBlockUserFileStore(path);
+        Equal(null, store.Load(), "absent file store load");
+        var image = BuildImage(("file", 17));
+        store.Save(image);
+        Equal(Convert.ToHexString(image), Convert.ToHexString(store.Load()),
+            "file store byte-exact save/load");
+        store.Delete();
+        Equal(false, File.Exists(path), "file store delete");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+            Directory.Delete(root, true);
+    }
+}
+
 // --- 4. Load: valid image populates; invalid image loads nothing ---
 {
     var img = BuildImage(("alice", 30), ("bob", 60));
@@ -52,6 +75,19 @@ RecordRoundTrip("x", int.MinValue);
     Equal(true, list.Contains("alice"), "alice loaded");
     Equal(true, list.Contains("BOB"), "case-insensitive hit");
 
+    var duplicateStore = new FakeStore
+    {
+        Data = BuildImage(("dup", 7), ("dup", 9))
+    };
+    var duplicates = new NativeGmBlockUserList(duplicateStore);
+    duplicates.Load(1000);
+    Equal(2, duplicates.Count, "duplicate records are retained on load");
+    Equal(true, duplicates.Contains("dUp"), "duplicate ASCII-fold lookup");
+    Equal(true, duplicates.Delete("dup"), "delete removes every matching duplicate");
+    Equal(0, duplicates.Count, "all matching duplicate records are removed");
+    Equal(1, duplicateStore.SaveCount, "first duplicate removal persists survivor");
+    Equal(1, duplicateStore.DeleteCount, "last duplicate removal deletes file");
+
     var bad = new byte[21]; // 21 % 20 != 0
     var list2 = new NativeGmBlockUserList(new FakeStore { Data = bad });
     list2.Load(1000);
@@ -60,6 +96,19 @@ RecordRoundTrip("x", int.MinValue);
     var list3 = new NativeGmBlockUserList(new FakeStore { Data = null });
     list3.Load(1000);
     Equal(0, list3.Count, "absent file loads nothing");
+
+    var malformed = new byte[20];
+    malformed[0] = 15;
+    for (var i = 0; i < 14; i++) malformed[1 + i] = (byte)('a' + i);
+    malformed[15] = 0x81; // invalid trailing byte: must survive decode/save
+    malformed[16] = 7;
+    var malformedStore = new FakeStore { Data = (byte[])malformed.Clone() };
+    var malformedList = new NativeGmBlockUserList(
+        malformedStore, encoding: System.Text.Encoding.UTF8);
+    malformedList.Load(1000);
+    malformedList.Save();
+    Equal(Convert.ToHexString(malformed), Convert.ToHexString(malformedStore.LastSaved),
+        "malformed ShortString bytes round trip losslessly");
 }
 
 // --- 5. Add: new name creates+saves+flags; existing name extends WITHOUT saving ---
@@ -79,6 +128,11 @@ RecordRoundTrip("x", int.MinValue);
     Equal(150, r2, "extend accumulates seconds");
     Equal(savesBefore, store.SaveCount, "extend does NOT save");
     Equal(1, list.Count, "extend keeps single entry");
+
+    var nonAscii = new NativeGmBlockUserList(new FakeStore());
+    nonAscii.Add("Ä", 10, 0);
+    nonAscii.Add("ä", 20, 0);
+    Equal(2, nonAscii.Count, "non-ASCII case variants remain distinct");
 }
 
 // --- 6. Delete: removes+saves+clears flag; absent name is a no-op ---
@@ -139,6 +193,32 @@ RecordRoundTrip("x", int.MinValue);
     Equal(savesBefore + 1, store.SaveCount, "expiry with a survivor writes the file (a1[9] > 0)");
 }
 
+// Duplicate names are possible after Load. sub_622040 clears player+2969 as soon
+// as either duplicate expires; it does not re-check whether another node survives.
+{
+    var store = new FakeStore
+    {
+        Data = BuildImage(("duplicate", 5), ("duplicate", 100))
+    };
+    var sink = new FakeSink();
+    var list = new NativeGmBlockUserList(store, sink);
+    list.Load(0);
+    sink.SetBlocked("duplicate", true); // model an online player's login flag
+
+    list.Sweep(20_000);
+    Equal(1, list.Count, "one duplicate survives expiry sweep");
+    Equal(true, list.Contains("duplicate"), "surviving duplicate remains in list");
+    Equal(false, sink.State["duplicate"],
+        "expired duplicate clears online flag despite surviving duplicate");
+
+    var savesBeforeExtend = store.SaveCount;
+    list.Add("duplicate", 10, 20_000);
+    Equal(false, sink.State["duplicate"],
+        "extending a surviving node does not restore the online flag");
+    Equal(savesBeforeExtend, store.SaveCount,
+        "extending a surviving duplicate remains non-persistent");
+}
+
 // unconditional Sweep body: fractional seconds truncate (integer division by 1000)
 {
     var list = new NativeGmBlockUserList(new FakeStore());
@@ -146,6 +226,25 @@ RecordRoundTrip("x", int.MinValue);
     var changed = list.Sweep(1999);     // 1999ms/1000 = 1s
     Equal(false, changed, "no expiry -> not changed");
     Equal(99, First(list).RemainSeconds, "truncated elapsed seconds");
+}
+
+// 32-bit GetTickCount wrap: elapsed time is an unsigned low-word difference.
+{
+    var list = new NativeGmBlockUserList(new FakeStore());
+    list.Add("wrap", 10, unchecked((int)0xFFFF_FC00)); // 1024ms before wrap
+    list.Sweep(0);
+    Equal(9, First(list).RemainSeconds,
+        "sweep uses unsigned 32-bit elapsed time across wrap");
+
+    var gated = new NativeGmBlockUserList(new FakeStore());
+    var start = unchecked((int)0xFFFF_D8EF); // 10001ms before wrap
+    gated.Add("wrap-gate", 100, start);
+    gated.Tick(start);
+    Equal(100, First(gated).RemainSeconds,
+        "initial wrapped tick does not consume time");
+    gated.Tick(0);
+    Equal(90, First(gated).RemainSeconds,
+        "10-second gate opens across wrapped interval");
 }
 
 // --- 8. Save image matches the codec exactly (round trip through a fresh list) ---

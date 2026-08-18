@@ -16,13 +16,14 @@ CheckHeaderOnlyEmptyPublication();
 CheckAllSlotReferencesAreDeferred();
 CheckEquipmentBytesRemainOpaqueAtPublication();
 CheckAtomicFailureAndOneShotPublication();
-CheckDuplicateNamesUseLinearFirstMatch();
+CheckDuplicateNamesUseHashHeadLastMatch();
+CheckNativeLookupNameCanonicalization();
 CheckDbServicePublicationOutcome();
 
 Console.WriteLine("PASS NativeType2FieldHeroStaticCatalogCheck " +
                   "parser=strong slots=14 empty=ready " +
                   "equipment=deferred publication=atomic " +
-                  "duplicates=linear-first tail=opaque");
+                  "duplicates=hash-head-last tail=opaque");
 
 static void CheckStrongParserAndAllSlots()
 {
@@ -245,7 +246,7 @@ static void CheckAtomicFailureAndOneShotPublication()
         "second publication preserves query result");
 }
 
-static void CheckDuplicateNamesUseLinearFirstMatch()
+static void CheckDuplicateNamesUseHashHeadLastMatch()
 {
     var firstBody = CreateFieldHeroBody(Bytes("Duplicate"));
     var secondBody = CreateFieldHeroBody(Bytes("Duplicate"));
@@ -260,11 +261,32 @@ static void CheckDuplicateNamesUseLinearFirstMatch()
         "first duplicate retained");
     Equal((ushort)22, catalog.Definitions[1].Level,
         "second duplicate retained");
-    Check(ReferenceEquals(catalog.Definitions[0],
+    Check(ReferenceEquals(catalog.Definitions[1],
             catalog.FindByName("Duplicate"))
-          && ReferenceEquals(catalog.Definitions[0],
+          && ReferenceEquals(catalog.Definitions[1],
               catalog.FindByNameBytes(Bytes("Duplicate"))),
-        "duplicate lookup is linear first-match");
+        "duplicate lookup observes the last bucket-head insertion");
+}
+
+static void CheckNativeLookupNameCanonicalization()
+{
+    var asciiBody = CreateFieldHeroBody(Bytes("CaseHero"));
+    var trailBody = CreateFieldHeroBody(
+        new byte[] { 0x81, (byte)'A', (byte)'X' });
+    var catalog = new NativeType2FieldHeroStaticCatalog();
+    catalog.Publish(CreateFieldHeroSnapshot(asciiBody, trailBody),
+        CreateStandardItemCatalog());
+
+    Check(ReferenceEquals(catalog.Definitions[0],
+            catalog.FindByNameBytes(Bytes("casehero"))),
+        "ASCII query uses native bytewise lowercase key");
+    Check(ReferenceEquals(catalog.Definitions[1],
+            catalog.FindByNameBytes(
+                new byte[] { 0x81, (byte)'a', (byte)'x' })),
+        "GBK trail bytes in A..Z are folded like sub_40BCBC");
+    Check(catalog.FindByNameBytes(
+              new byte[] { 0x81, (byte)'a', (byte)'[' }) == null,
+        "bytes outside A..Z remain distinct");
 }
 
 static void CheckDbServicePublicationOutcome()
@@ -277,8 +299,10 @@ static void CheckDbServicePublicationOutcome()
             "zero-record callback signals completion");
         Check(service.NativeFieldHeroDefinitionsPublished
               && service.FieldHeroRuntimeCatalog.Ready
-              && service.FieldHeroRuntimeCatalog.Count == 0,
-            "zero-record callback publishes ready empty catalog");
+              && service.FieldHeroRuntimeCatalog.Count == 0
+              && service.FieldHeroSpawnRuntimeCatalog.Ready
+              && service.FieldHeroSpawnRuntimeCatalog.Count == 0,
+            "zero-record callback publishes both ready empty catalogs");
     }
 
     using (var service = new DBService())
@@ -291,8 +315,14 @@ static void CheckDbServicePublicationOutcome()
             "unknown-equipment callback signals wait completion");
         Check(service.NativeFieldHeroDefinitionsPublished
               && service.FieldHeroRuntimeCatalog.Ready
-              && service.FieldHeroRuntimeCatalog.Count == 1,
-            "unknown equipment does not reject DBService publication");
+              && service.FieldHeroRuntimeCatalog.Count == 1
+              && service.FieldHeroSpawnRuntimeCatalog.Ready
+              && service.FieldHeroSpawnRuntimeCatalog.Count == 1,
+            "unknown equipment does not reject either DBService catalog");
+        Check(service.FieldHeroSpawnRuntimeCatalog.TryResolveTemplate(
+                "deferred", out var runtimeTemplate)
+              && runtimeTemplate.Definition.Level == 0,
+            "production runtime adapter exposes native normalized lookup");
         Check(ReadPrivate<string>(service,
                   "_fieldHeroPublicationFailure") == null,
             "unknown equipment does not record publication failure");
@@ -307,8 +337,9 @@ static void CheckDbServicePublicationOutcome()
         Check(service.StaticInitializationCompleted,
             "malformed callback still signals wait completion");
         Check(!service.NativeFieldHeroDefinitionsPublished
-              && !service.FieldHeroRuntimeCatalog.Ready,
-            "malformed callback does not commit catalog");
+              && !service.FieldHeroRuntimeCatalog.Ready
+              && !service.FieldHeroSpawnRuntimeCatalog.Ready,
+            "malformed callback does not commit either catalog");
         var failure = ReadPrivate<string>(service,
             "_fieldHeroPublicationFailure");
         Check(failure.Contains("exceeds 14 bytes",

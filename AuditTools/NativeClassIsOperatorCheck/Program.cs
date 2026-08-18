@@ -53,6 +53,7 @@ namespace NativeClassIsOperatorCheck
             try
             {
                 CheckIsSemantics();
+                CheckEquipHierarchy();
                 CheckFactoryProducesBothDragonHearts();
                 CheckChildlessClassesStayExact();
                 CheckDragonHeartGateUsesIsOperator();
@@ -131,6 +132,32 @@ namespace NativeClassIsOperatorCheck
                 "StdMode 25 / Shape 10 must be TSuperDragonHeart");
             True(IsA(ClassName(25, 10, 0), "TDragonHeart"),
                 "the factory-produced super amulet must pass the native gate");
+        }
+
+        private static void CheckEquipHierarchy()
+        {
+            var equipClasses = new[]
+            {
+                "TRWeapon", "TLWeapon", "THeadMask", "TWarDrum", "THelmet",
+                "TNecklace", "TRing", "TArmRing", "TBelt", "TBoots", "TMaPai",
+                "TCharm", "TClothes", "TEquipBujuk", "TBrokenWeapon", "TSpade",
+                "TManClothes", "TWomanClothes", "TTemporaryManClothes",
+                "TTemporaryWomanClothes", "TCryCharm", "THPCharm", "TMPCharm",
+                "THPMPCharm", "TMarkStoneCharm", "TPoisons", "TBujuk",
+                "TUnionItem", "TVessel", "TDragonHeart", "TSuperDragonHeart"
+            };
+            foreach (var className in equipClasses)
+            {
+                True(IsA(className, "TEquipItem"),
+                    $"{className} must satisfy native `is TEquipItem`");
+            }
+
+            True(IsA("TTemporaryManClothes", "TClothes"),
+                "multi-level clothes ancestry must reach TClothes");
+            True(IsA("TSuperDragonHeart", "TEquipBujuk"),
+                "multi-level dragon-heart ancestry must reach TEquipBujuk");
+            True(!IsA("TBaseItem", "TEquipItem"),
+                "an unrelated base item must not satisfy `is TEquipItem`");
         }
 
         private static void CheckChildlessClassesStayExact()

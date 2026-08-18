@@ -45,6 +45,9 @@ static void CheckInviteAcceptAndPacket()
     Assert(GetBool(passenger, "m_boNativeHorsePassengerActive"),
         "4109 passenger active set");
 
+    // sub_6BBEE4 uses sub_779CD8, which relocates the existing node without
+    // checking the target terrain byte.
+    map.SetMapXYFlag(driver.m_nCurrX, driver.m_nCurrY, false);
     Assert(passenger.Operate(Response(driver.ObjectId, 1)),
         "4110 accept dispatch");
     Assert(passenger.HasNativeActiveState(52), "4110 passenger state52");

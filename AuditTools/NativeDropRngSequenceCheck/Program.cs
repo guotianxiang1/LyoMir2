@@ -11,13 +11,14 @@ M2Share.RandomNumber = RandomNumber.GetInstance();
 NativeJewelStoneTable.Reset();
 
 PinClassBounds();
+PinFieldHeroDl1Bounds();
 PinJewelTableWrite();
 PinSeededDropChain();
 PinSourceOrder();
 
 Console.WriteLine(
     "NativeDropRngSequenceCheck PASS " +
-    "plus28-bounds jewel-table seeded-chain source-order");
+    "plus28-bounds fieldhero-dl1 jewel-table seeded-chain source-order");
 
 static void PinClassBounds()
 {
@@ -40,6 +41,102 @@ static void PinClassBounds()
     Equal(HelmetUnknown08().Length, 49, "helmet +0x08 draw count");
     Equal(RingUnknown08().Length, 43, "ring +0x08 draw count");
     Equal(ArmRingUnknown08().Length, 48, "armring +0x08 draw count (80 + 47)");
+}
+
+static void PinFieldHeroDl1Bounds()
+{
+    var ordinaryEquipment = new[]
+    {
+        (Item: Std(30, 0), ClassName: "TRWeapon"),
+        (Item: Std(5, 0), ClassName: "TLWeapon"),
+        (Item: Std(5, 6, 100), ClassName: "TBrokenWeapon"),
+        (Item: Std(5, 61), ClassName: "TSpade"),
+        (Item: Std(16, 0), ClassName: "THeadMask"),
+        (Item: Std(29, 0), ClassName: "TWarDrum"),
+        (Item: Std(15, 0), ClassName: "THelmet"),
+        (Item: Std(19, 0), ClassName: "TNecklace"),
+        (Item: Std(22, 0), ClassName: "TRing"),
+        (Item: Std(24, 0), ClassName: "TArmRing"),
+        (Item: Std(27, 0), ClassName: "TBelt"),
+        (Item: Std(28, 0), ClassName: "TBoots"),
+        (Item: Std(34, 0), ClassName: "TMaPai"),
+        (Item: Std(7, 4), ClassName: "TCharm"),
+        (Item: Std(7, 0), ClassName: "TCryCharm"),
+        (Item: Std(7, 1), ClassName: "THPCharm"),
+        (Item: Std(7, 2), ClassName: "TMPCharm"),
+        (Item: Std(7, 3), ClassName: "THPMPCharm"),
+        (Item: Std(7, 5), ClassName: "TMarkStoneCharm"),
+        (Item: Std(10, 0), ClassName: "TManClothes"),
+        (Item: Std(11, 0), ClassName: "TWomanClothes"),
+        (Item: Std(10, 28), ClassName: "TTemporaryManClothes"),
+        (Item: Std(11, 28), ClassName: "TTemporaryWomanClothes"),
+        (Item: Std(25, 1), ClassName: "TPoisons"),
+        (Item: Std(25, 5), ClassName: "TBujuk"),
+        (Item: Std(25, 7), ClassName: "TUnionItem"),
+        (Item: Std(25, 8), ClassName: "TVessel"),
+        (Item: Std(25, 9), ClassName: "TDragonHeart"),
+        (Item: Std(25, 10), ClassName: "TSuperDragonHeart")
+    };
+    foreach (var entry in ordinaryEquipment)
+    {
+        Equal(NativeItemFactory.GetClassName(entry.Item), entry.ClassName,
+            "FieldHero DL1 factory class " + entry.ClassName);
+        EqualSeq(FieldHeroDraws(Fill: 1, entry.Item), new[] { 80 },
+            "FieldHero DL1 ordinary " + entry.ClassName);
+    }
+
+    foreach (var shape in new byte[] { 130, 131, 132 })
+    {
+        EqualSeq(FieldHeroDraws(Fill: 1, Std(15, shape)),
+            HelmetUnknown08(), $"FieldHero helmet shape={shape} +0x08");
+        EqualSeq(FieldHeroDraws(Fill: 1, Std(22, shape)),
+            RingUnknown08(), $"FieldHero ring shape={shape} +0x08");
+        EqualSeq(FieldHeroDraws(Fill: 1, Std(24, shape)),
+            ArmRingUnknown08(),
+            $"FieldHero arm-ring shape={shape} Dura80 +0x08");
+    }
+
+    foreach (var shape in new byte[] { 129, 133 })
+    {
+        EqualSeq(FieldHeroDraws(Fill: 1, Std(15, shape)), new[] { 80 },
+            $"FieldHero helmet adjacent shape={shape} stays ordinary");
+        EqualSeq(FieldHeroDraws(Fill: 1, Std(22, shape)), new[] { 80 },
+            $"FieldHero ring adjacent shape={shape} stays ordinary");
+        EqualSeq(FieldHeroDraws(Fill: 1, Std(24, shape)), new[] { 80 },
+            $"FieldHero arm-ring adjacent shape={shape} stays ordinary");
+    }
+    Equal(NativeItemFactory.GetClassName(Std(19, 130)), "TNecklace",
+        "FieldHero shape 130 ordinary control class");
+    EqualSeq(FieldHeroDraws(Fill: 1, Std(19, 130)), new[] { 80 },
+        "FieldHero shape 130 is not globally special");
+
+    var normal = Item(1000);
+    UseRandom(Fill: 0);
+    NativeItemPlus28.ApplyFromFieldHeroFill(normal, Std(5, 0));
+    Equal((ushort)200, normal.Dura,
+        "FieldHero DL1 base durability uses factor 20 when Random(80)=0");
+
+    var rejectedItem = Item(1000);
+    rejectedItem.Dura = 777;
+    var rejectedRng = UseRandom(Fill: 0);
+    ExpectThrows<InvalidDataException>(() =>
+            NativeItemPlus28.ApplyFromFieldHeroFill(rejectedItem, Std(1, 0)),
+        "FieldHero DL1 rejects non-equipment classes");
+    EqualSeq(rejectedRng.Bounds.ToArray(), Array.Empty<int>(),
+        "FieldHero DL1 non-equipment rejection consumes no RNG");
+    Equal(rejectedItem.Dura, (ushort)777,
+        "FieldHero DL1 non-equipment rejection preserves durability");
+
+    rejectedItem = Item(1000);
+    rejectedItem.Dura = 779;
+    rejectedRng = UseRandom(Fill: 0);
+    ExpectThrows<InvalidDataException>(() =>
+            NativeItemPlus28.ApplyFromFieldHeroFill(rejectedItem, Std(154, 0)),
+        "FieldHero DL1 rejects pile classes before their bare +0x28");
+    EqualSeq(rejectedRng.Bounds.ToArray(), Array.Empty<int>(),
+        "FieldHero DL1 pile rejection consumes no RNG");
+    Equal(rejectedItem.Dura, (ushort)779,
+        "FieldHero DL1 pile rejection preserves durability");
 }
 
 static void PinJewelTableWrite()
@@ -154,6 +251,13 @@ static int[] Draws(int Fill, GoodItem std)
     return rng.Bounds.ToArray();
 }
 
+static int[] FieldHeroDraws(int Fill, GoodItem std)
+{
+    var rng = UseRandom(Fill);
+    NativeItemPlus28.ApplyFromFieldHeroFill(Item(1000), std);
+    return rng.Bounds.ToArray();
+}
+
 static BoundRandom UseRandom(int Fill)
 {
     var rng = new BoundRandom(Fill);
@@ -163,11 +267,11 @@ static BoundRandom UseRandom(int Fill)
 
 static TUserItem Item(ushort duraMax) => new() { DuraMax = duraMax, Dura = duraMax };
 
-static GoodItem Std(byte mode, byte shape) => new()
+static GoodItem Std(byte mode, byte shape, ushort duraMax = 1000) => new()
 {
     StdMode = mode,
     Shape = shape,
-    DuraMax = 1000
+    DuraMax = duraMax
 };
 
 static int[] Repeat(int bound, int n)
@@ -222,6 +326,20 @@ static void Equal<T>(T actual, T expected, string label)
 static void Assert(bool condition, string label)
 {
     if (!condition) throw new InvalidOperationException(label);
+}
+
+static void ExpectThrows<TException>(Action action, string label)
+    where TException : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (TException)
+    {
+        return;
+    }
+    throw new InvalidOperationException(label);
 }
 
 // M2Share's static constructor reads !Setup.txt / ../Share/*.ini out of the

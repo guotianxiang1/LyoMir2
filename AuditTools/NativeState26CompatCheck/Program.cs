@@ -92,8 +92,9 @@ Contains(effectSource, "ConsumeNativeOneShotMagicDamage(payload.SkillId);",
     "message10177 one-shot damage cleanup");
 Contains(effectSource, "chance <= M2Share.RandomNumber.Random(100)",
     "message10177 healing chance predicate");
-Contains(effectSource, "HasNativeActiveState(102)",
-    "message10177 healing state102 reduction");
+Assert(!effectSource.Contains("HasNativeActiveState(102)",
+        StringComparison.Ordinal),
+    "stock sub_7446FC must not halve magic-hit healing under state102");
 Console.WriteLine("PASS native-state26 carrier=independent-of-stone " +
     "gate=16+18+deadline deadline=125-threshold+bonus " +
     "message10177=mode+delayed-payload+positive-batch");

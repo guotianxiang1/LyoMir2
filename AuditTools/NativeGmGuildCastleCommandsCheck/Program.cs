@@ -29,7 +29,7 @@ try
         "nullsubStub=GuildPoint/GuildWarOn/GuildWarOff/ReportGuildWar " +
         "invalidStub=SetGuildLord/GuildForbid/selfAddGuild/ReNameGuild " +
         "emptyNoop=MakeGuild/DelGuild defaultNoop=loadHeroStrike/ChgGuildValue/DreamCastleScore/ChgDoubleCastleWar " +
-        "csharpDrift(perm10;over=GuildWarOff/DelGuild/DreamCastleScore/ChgDoubleCastleWar;" +
+        "csharpDrift(legacy-perm10-except-ChgMonAtt;over=GuildWarOff/DelGuild/DreamCastleScore/ChgDoubleCastleWar;" +
         "under=CallTaskMon/BeginAreaCastleMatch/EndAreaCastleMatch;mismatch=ChgCastleWar/GuildForbid)");
     return 0;
 }
@@ -81,7 +81,7 @@ static void VerifyRegistry()
         (GmGuildCastleCommand.LookSaGold,           "LookSaGold",           71, 3, GmGuildCastleHandlerKind.ImplementedCase,     0x00624C36u, false,  0, false, false, false),
         (GmGuildCastleCommand.DoTask,               "DoTask",              100, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x00625048u, false,  0, false, false, false),
         (GmGuildCastleCommand.CallTaskMon,          "CallTaskMon",         101, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x0062505Bu, true,  10, false, true,  false),
-        (GmGuildCastleCommand.ChgMonAtt,            "ChgMonAtt",           144, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x00625551u, false,  0, false, false, false),
+        (GmGuildCastleCommand.ChgMonAtt,            "ChgMonAtt",           144, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x00625551u, true,   4, false, false, false),
         (GmGuildCastleCommand.ChgCastleOwner,       "ChgCastleOwner",      215, 5, GmGuildCastleHandlerKind.ImplementedCase,     0x00625EC0u, false,  0, false, false, false),
         (GmGuildCastleCommand.ChgCastleWar,         "ChgCastleWar",        216, 5, GmGuildCastleHandlerKind.ImplementedCase,     0x00625ED5u, true,  10, false, false, true),
         (GmGuildCastleCommand.BeginAreaCastleMatch, "BeginAreaCastleMatch",394, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x0062877Bu, true,  10, false, true,  false),
@@ -129,11 +129,22 @@ static void VerifyRegistry()
         Equal(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmGuildCastleCommands.SwitchMaxIndex, true,
             $"{e.cmd} index in switch range");
 
-        // every live command in this family drifted to perm 10; original perms are 3/4/5
+        // ChgMonAtt is now wired at its native permission; older live commands
+        // in this family still retain their historical permission-10 drift.
         if (e.live)
         {
-            Equal(info.CSharpLivePermission, 10, $"{e.cmd} live perm is 10 (drift)");
-            Equal(info.RequiredPermission != info.CSharpLivePermission, true, $"{e.cmd} perm drift present");
+            if (e.cmd == GmGuildCastleCommand.ChgMonAtt)
+            {
+                Equal(info.CSharpLivePermission, info.RequiredPermission,
+                    $"{e.cmd} live permission parity");
+            }
+            else
+            {
+                Equal(info.CSharpLivePermission, 10,
+                    $"{e.cmd} live perm is 10 (drift)");
+                Equal(info.RequiredPermission != info.CSharpLivePermission,
+                    true, $"{e.cmd} perm drift present");
+            }
             live++;
         }
 
@@ -171,7 +182,7 @@ static void VerifyRegistry()
     Equal(def, 4, "default no-op count");
     Equal(impl + nullstub + invstub, 19, "dedicated-case count (inventory: 19 impl)");
     Equal(empty + def, 6, "registered no-op count (inventory: 6 noop)");
-    Equal(live, 9, "live command count");
+    Equal(live, 10, "live command count");
 }
 
 static void VerifyHandledByteSemantics()
@@ -212,7 +223,7 @@ static void VerifyCoreThenMsg()
 {
     var chgMon = NativeGmChgMonAtt.Evaluate();
     Equal(chgMon.CoreEa, 0x0067D3DCu, "chgmonatt core ea");
-    Equal(chgMon.CoreBodyDeferred, true, "chgmonatt core deferred");
+    Equal(chgMon.CoreBodyDeferred, false, "chgmonatt core implemented");
     Equal(chgMon.SendsSysMsg, true, "chgmonatt sends msg");
     Equal(chgMon.MessageColor, 0x38FF, "chgmonatt colour");
 

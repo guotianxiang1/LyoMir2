@@ -24,6 +24,7 @@
 using System.Globalization;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NativeWinExpChainCheck
 {
@@ -64,6 +65,7 @@ namespace NativeWinExpChainCheck
                 CheckAwardWithDeadHeroIsIdentity();
                 CheckAwardWithLiveHeroSplits();
                 CheckKillPathDisablesHeroBonus();
+                CheckNativeSwitchExperienceFields();
                 CheckNonNativeScalersAreGone();
                 CheckRobotDuplicateIsGone();
                 CheckPasBindingIsRaw();
@@ -452,6 +454,94 @@ namespace NativeWinExpChainCheck
                 + "mutually exclusive (0x6C0365 xor ecx,ecx)");
             Equal(120, GetExp(hero),
                 "the hero's exp is exactly the ratio share, with no bonus added on top");
+        }
+
+        private static void CheckNativeSwitchExperienceFields()
+        {
+            var normal = PlayerReadyForAward();
+            normal.m_nNativeSwitchOffsetD40 = 7;
+            normal.GrantNativePlayerExperience(100, false, false, 0);
+            Equal(107, normal.m_nNativeSwitchOffsetD40,
+                "D38=0 accumulates the actual player award into D40");
+
+            var active = PlayerReadyForAward();
+            active.m_wNativeSwitchOffsetD38 = 1;
+            active.m_nNativeSwitchOffsetD40 = 7;
+            active.GrantNativePlayerExperience(100, false, false, 0);
+            Equal(7, active.m_nNativeSwitchOffsetD40,
+                "D38!=0 suppresses the D40 accumulator");
+
+            var wrapped = PlayerReadyForAward();
+            wrapped.m_nNativeSwitchOffsetD40 = unchecked((int)0xFFFFFFF0u);
+            wrapped.GrantNativePlayerExperience(0x30, false, false, 0);
+            Equal(0x20, wrapped.m_nNativeSwitchOffsetD40,
+                "D40 accumulation uses unchecked 32-bit wraparound");
+
+            var clipped = PlayerReadyForAward();
+            SetExp(clipped, unchecked((int)0xFFB00000u), 0);
+            clipped.m_nNativeSwitchOffsetD40 = 7;
+            clipped.GrantNativePlayerExperience(0x00600000,
+                false, false, 0);
+            const int accepted = 0x00043480;
+            Equal(7 + accepted, clipped.m_nNativeSwitchOffsetD40,
+                "D40 adds only the overflow-clipped accepted block");
+            Equal(accepted, AwardedValues(clipped).Single(),
+                "D40 clipped block matches RM_WINEXP nParam1");
+
+            var split = PlayerReadyForAward();
+            var hero = NewHero();
+            SetLevel(split, 100);
+            SetLevel(hero, 50);
+            SetExp(hero, 0, 0);
+            split.m_HeroObject = hero;
+            Invoke(split, "NativeAwardExperience", 300, 1);
+            Equal(200, split.m_nNativeSwitchOffsetD40,
+                "D40 adds the master's post-split award, not the original amount");
+
+            var buckets = PlayerReadyForAward();
+            buckets.m_nNativeExpBuffSeconds = 1;
+            buckets.m_nNativeExpBuffMultiplier = 3;
+            Invoke(buckets, "WinExp", 100);
+            Equal(300, buckets.m_nNativeSwitchOffsetD40,
+                "D40 accumulates every surviving WinExp bucket");
+
+            var direct = PlayerReadyForAward();
+            SetExp(direct, 0, int.MaxValue);
+            direct.m_nNativeSwitchOffsetD40 = 9;
+            Invoke(direct, "GetExp", 25);
+            Equal(34, direct.m_nNativeSwitchOffsetD40,
+                "non-kill GetExp maintains the mode2 D40 accumulator");
+            Invoke(direct, "GetExp", 0);
+            Invoke(direct, "GetExp", -5);
+            Equal(34, direct.m_nNativeSwitchOffsetD40,
+                "non-kill GetExp zero/negative values do not enter D40");
+            direct.m_wNativeSwitchOffsetD38 = 1;
+            Invoke(direct, "GetExp", 25);
+            Equal(34, direct.m_nNativeSwitchOffsetD40,
+                "non-kill GetExp respects the D38 suppression gate");
+
+            var baseRun = ReadCode("GameSvr", "Actors",
+                "TBaseObject.Base.cs");
+            True(Regex.IsMatch(baseRun,
+                    @"if\s*\(this is TPlayObject playObject\)\s*" +
+                    @"playObject\.m_nNativeSwitchOffsetD3C\s*=\s*0;\s*" +
+                    @"for\s*\(var i = m_SlaveList\.Count - 1; i >= 0; i--\)"),
+                "TPlayer.Run clears D3C immediately before the native slave sweep");
+
+            var nativeGive = ReadCode("GameSvr", "Players",
+                "TPlayObject.NativeGive.cs");
+            var heroReward = nativeGive.IndexOf("var hero = m_HeroObject;",
+                StringComparison.Ordinal);
+            var accumulator = nativeGive.IndexOf(
+                "AccumulateNativeSwitchExperience(accepted);",
+                StringComparison.Ordinal);
+            var levelCap = nativeGive.IndexOf("if (m_Abil.Level >= 999)",
+                StringComparison.Ordinal);
+            var winExp = nativeGive.IndexOf(
+                "SendMsg(this, Grobal2.RM_WINEXP", StringComparison.Ordinal);
+            True(heroReward >= 0 && accumulator > heroReward &&
+                 levelCap > accumulator && winExp > levelCap,
+                "D40 accepted block stays after hero reward and before level-cap/RM_WINEXP");
         }
 
         // ---------- 5. static regression gates ----------

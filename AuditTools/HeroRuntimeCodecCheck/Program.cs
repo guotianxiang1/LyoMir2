@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Reflection;
 using System.Text;
 using GameSvr;
 using SystemModule;
@@ -83,6 +84,24 @@ BinaryPrimitives.WriteInt32LittleEndian(
     raw.AsSpan(NativeHeroDbFrameCodec.NativeCommonInformationOption2Offset, 4), 87654321);
 raw[NativeHeroDbFrameCodec.NativeCommonInformationOption3Offset] = 0;
 
+Equal(0x4694, NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+    "embedded hero slave record offset");
+Equal(0x20, NativeHeroDbFrameCodec.NativeSlaveRecordSize,
+    "embedded hero slave record size");
+var nativeSlave = raw.AsSpan(NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+    NativeHeroDbFrameCodec.NativeSlaveRecordSize);
+WriteShortString(raw, NativeHeroDbFrameCodec.NativeSlaveRecordOffset, 15,
+    "记录神兽");
+BinaryPrimitives.WriteInt32LittleEndian(nativeSlave.Slice(0x10, 4), 0x10203040);
+BinaryPrimitives.WriteInt32LittleEndian(nativeSlave.Slice(0x14, 4),
+    unchecked((int)0xFEDCBA98));
+BinaryPrimitives.WriteUInt16LittleEndian(nativeSlave.Slice(0x18, 2), 0xFFFF);
+BinaryPrimitives.WriteUInt16LittleEndian(nativeSlave.Slice(0x1A, 2), 0xA1B2);
+nativeSlave[0x1C] = 7;
+nativeSlave[0x1D] = 3;
+nativeSlave[0x1E] = 0xC3;
+nativeSlave[0x1F] = 0xD4;
+
 var equip0 = raw.AsSpan(NativeHeroDbFrameCodec.EquippedItemsOffset,
     NativeHeroDbFrameCodec.ItemRecordSize);
 WriteItem(equip0, 1001, 101, 500, 800, 0x81);
@@ -134,6 +153,23 @@ Assert(ReferenceEquals(hero.m_HeroMagicList, hero.m_MagicList),
     "hero magic list is not the base combat list");
 Equal(16, hero.m_UseItems.Length, "hero equipment slots before load");
 Assert(NativeHeroRuntimeCodec.TryApply(hero, nativeRecord, dyn, out error), error);
+var restoreMessage = hero.m_MsgList.Single(message =>
+    message.wIdent == Grobal2.RM_10401);
+var restoredSlaveInfo = restoreMessage.Payload as TSlaveInfo;
+Assert(restoredSlaveInfo != null,
+    "hero record +0x4694 did not queue a TSlaveInfo RM_10401 payload");
+Equal("记录神兽", restoredSlaveInfo!.sSlaveName,
+    "embedded hero slave name");
+Equal(0x10203040, restoredSlaveInfo.nKillCount,
+    "embedded hero slave kill count");
+Equal(unchecked((int)0xFEDCBA98), restoredSlaveInfo.dwRoyaltySec,
+    "embedded hero slave royalty dword");
+Equal(0xFFFF, restoredSlaveInfo.nHP, "embedded hero slave HP WORD");
+Equal(0xA1B2, restoredSlaveInfo.nMP, "embedded hero slave MP WORD");
+Equal((byte)7, restoredSlaveInfo.btSlaveExpLevel,
+    "embedded hero slave exp level");
+Equal((byte)3, restoredSlaveInfo.btSlaveLevel,
+    "embedded hero slave make level");
 Equal("主人甲", hero.MasterName, "master name");
 Equal("英雄乙", hero.m_sCharName, "hero name");
 Equal((byte)2, hero.m_btJob, "native job mapping");
@@ -202,6 +238,9 @@ hero.m_MagicList.Single(x => x.wMagIdx == 69).nTranPoint = 9999;
 Assert(NativeHeroRuntimeCodec.TryCreateSnapshot(hero, out var snapshot,
     out var snapshotDyn, out error), error);
 var saved = snapshot.ToArray();
+Assert(saved.AsSpan(NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+        NativeHeroDbFrameCodec.NativeSlaveRecordSize).IndexOfAnyExcept((byte)0) < 0,
+    "ordinary hero snapshot preserved a stale embedded slave record");
 Equal((byte)2, saved[NativeHeroDbFrameCodec.JobOffset], "snapshot native job");
 Equal(hero.m_btRaceImg, saved[NativeHeroDbFrameCodec.RaceOffset], "snapshot native race");
 Equal((byte)0xCE, saved[0x150], "fixed unknown byte");
@@ -256,6 +295,127 @@ Assert(YanshenHeroDynamicCodec.TryExtract(snapshotDyn, 2,
     out var heroSidecar, out error), error);
 Assert(heroSidecar.Length > 0, "hero eye sidecar payload is empty");
 
+var switchHero = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(switchHero, nativeRecord, dyn, out error), error);
+switchHero.m_boNativeSwitchData = true;
+var switchSlave = new NativeHeroSlaveDeathProbe
+{
+    m_sCharName = "切服神兽",
+    m_nKillMonCount = unchecked((int)0x89ABCDEF),
+    m_btSlaveExpLevel = 9,
+    m_btSlaveMakeLevel = 4,
+    m_dwMasterRoyaltyTick = HUtil32.GetTickCount() + 120_000
+};
+switchSlave.m_WAbil.HP = -1;
+switchSlave.m_WAbil.MP = 0x12345;
+SetHeroSlave(switchHero, switchSlave);
+Assert(NativeHeroRuntimeCodec.TryCreateSnapshot(switchHero,
+    out var switchSnapshot, out _, out error), error);
+var switchSlot = switchSnapshot.ToArray().AsSpan(
+    NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+    NativeHeroDbFrameCodec.NativeSlaveRecordSize);
+Equal("切服神兽", ReadShortString(switchSlot, 15),
+    "switch hero slave name");
+Equal(unchecked((int)0x89ABCDEF),
+    BinaryPrimitives.ReadInt32LittleEndian(switchSlot.Slice(0x10, 4)),
+    "switch hero slave kill count");
+var switchRoyalty = BinaryPrimitives.ReadUInt32LittleEndian(
+    switchSlot.Slice(0x14, 4));
+Assert(switchRoyalty is >= 119 and <= 120,
+    "switch hero slave remaining royalty seconds");
+Equal((ushort)0xFFFF, BinaryPrimitives.ReadUInt16LittleEndian(
+    switchSlot.Slice(0x18, 2)), "switch hero slave HP low WORD");
+Equal((ushort)0x2345, BinaryPrimitives.ReadUInt16LittleEndian(
+    switchSlot.Slice(0x1A, 2)), "switch hero slave MP low WORD");
+Equal((byte)9, switchSlot[0x1C], "switch hero slave exp level");
+Equal((byte)4, switchSlot[0x1D], "switch hero slave make level");
+Equal((byte)0, switchSlot[0x1E], "switch hero slave reserved +1E");
+Equal((byte)0, switchSlot[0x1F], "switch hero slave reserved +1F");
+Equal(0, switchSlave.DieCalls,
+    "pure switch hero snapshot executed the deferred VMT+0x84 side effect");
+
+foreach (var invalidKind in new[] { "death", "ghost" })
+{
+    var invalidHero = new HeroObject();
+    Assert(NativeHeroRuntimeCodec.TryApply(invalidHero, nativeRecord, dyn,
+        out error), error);
+    invalidHero.m_boNativeSwitchData = true;
+    var invalidSlave = new NativeHeroSlaveDeathProbe
+    {
+        m_sCharName = "invalid-" + invalidKind,
+        m_boDeath = invalidKind == "death",
+        m_boGhost = invalidKind == "ghost"
+    };
+    SetHeroSlave(invalidHero, invalidSlave);
+    Assert(NativeHeroRuntimeCodec.TryCreateSnapshot(invalidHero,
+        out var invalidSnapshot, out _, out error), error);
+    Assert(invalidSnapshot.ToArray().AsSpan(
+            NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+            NativeHeroDbFrameCodec.NativeSlaveRecordSize)
+        .IndexOfAnyExcept((byte)0) < 0,
+        invalidKind + " switch hero slave record was not empty");
+    Equal(0, invalidSlave.DieCalls,
+        invalidKind + " switch hero slave was killed again");
+}
+
+var rejectedSaveHero = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(rejectedSaveHero, nativeRecord, dyn,
+    out error), error);
+rejectedSaveHero.m_sCharName = new string('A', 16);
+rejectedSaveHero.m_boNativeSwitchData = true;
+var rejectedSaveSlave = new NativeHeroSlaveDeathProbe
+{
+    m_sCharName = "编码失败神兽"
+};
+SetHeroSlave(rejectedSaveHero, rejectedSaveSlave);
+Assert(!HeroDataService.QueueSave(rejectedSaveHero),
+    "oversized hero name unexpectedly produced a save frame");
+Equal(0, rejectedSaveSlave.DieCalls,
+    "failed hero save encoding consumed the switch slave");
+
+// The native writer calls Die after the fixed slot is built, but before the
+// outbound save request is encoded or transported. DBService accepts
+// a valid frame into its offline FIFO without opening a socket, so this probes
+// the ordering without network or background threads.
+M2Share.DataServer = null;
+Assert(HeroDataService.QueueSave(switchHero),
+    "hero switch save queue rejected a valid frame");
+Equal(1, switchSlave.DieCalls,
+    "hero switch slave Die must run even while DataServer is absent");
+Assert(HeroDataService.QueueSave(switchHero),
+    "ordinary save after switch frame was rejected");
+Equal(1, switchSlave.DieCalls,
+    "ordinary save repeated the switch slave Die side effect");
+var saveDb = new DBService();
+M2Share.DataServer = saveDb;
+Equal(0, saveDb.PendingNativeSendCount,
+    "hero switch save unexpectedly sent before FlushPendingSaves");
+HeroDataService.FlushPendingSaves();
+Equal(2, saveDb.PendingNativeSendCount,
+    "same-hero switch and ordinary saves were not both retained in FIFO");
+var pendingSendField = typeof(DBService).GetField("_pendingSends",
+    BindingFlags.Instance | BindingFlags.NonPublic)
+    ?? throw new MissingFieldException(typeof(DBService).FullName,
+        "_pendingSends");
+var pendingFrames = ((System.Collections.Concurrent.ConcurrentQueue<byte[]>)
+    pendingSendField.GetValue(saveDb)!).ToArray();
+Assert(NativeHeroDbFrameCodec.TryDecodeSaveRequest(pendingFrames[0],
+    out var queuedSwitchSave, out error), error);
+Assert(NativeHeroDbFrameCodec.TryDecodeSaveRequest(pendingFrames[1],
+    out var queuedOrdinarySave, out error), error);
+Assert(queuedSwitchSave.Record.ToArray().AsSpan(
+        NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+        NativeHeroDbFrameCodec.NativeSlaveRecordSize)
+    .IndexOfAnyExcept((byte)0) >= 0,
+    "first FIFO save lost its embedded switch slave record");
+Assert(queuedOrdinarySave.Record.ToArray().AsSpan(
+        NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+        NativeHeroDbFrameCodec.NativeSlaveRecordSize)
+    .IndexOfAnyExcept((byte)0) < 0,
+    "ordinary save after Die retained the embedded switch slave record");
+M2Share.DataServer = null;
+saveDb.Dispose();
+
 var second = new HeroObject();
 Assert(NativeHeroRuntimeCodec.TryApply(second, snapshot, snapshotDyn, out error), error);
 Equal("英雄丁", second.m_sCharName, "round-trip hero name");
@@ -288,6 +448,27 @@ Equal("hero-bag", second.m_ItemList[0].desc2, "round-trip hero bag desc2");
 Equal("hero-killer", second.m_ItemList[0].killerName,
     "round-trip hero bag killerName");
 Equal("hero-map", second.m_ItemList[0].mapName, "round-trip hero bag mapName");
+
+var emptySlaveRaw = (byte[])raw.Clone();
+emptySlaveRaw.AsSpan(NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+    NativeHeroDbFrameCodec.NativeSlaveRecordSize).Clear();
+Assert(NativeHeroDbFrameCodec.TryCreateRecord(emptySlaveRaw,
+    out var emptySlaveRecord, out error), error);
+var emptySlaveHero = new HeroObject();
+Assert(NativeHeroRuntimeCodec.TryApply(emptySlaveHero, emptySlaveRecord,
+    dyn, out error), error);
+Assert(emptySlaveHero.m_MsgList.All(message =>
+        message.wIdent != Grobal2.RM_10401),
+    "zero-length embedded slave record queued RM_10401");
+
+var corruptSlaveRaw = (byte[])raw.Clone();
+corruptSlaveRaw[NativeHeroDbFrameCodec.NativeSlaveRecordOffset] = 16;
+Assert(NativeHeroDbFrameCodec.TryCreateRecord(corruptSlaveRaw,
+    out var corruptSlaveRecord, out error), error);
+Assert(!NativeHeroRuntimeCodec.TryApply(new HeroObject(), corruptSlaveRecord,
+        dyn, out error)
+       && error.Contains("slave name", StringComparison.Ordinal),
+    "oversized embedded hero slave ShortString was accepted");
 
 Assert(YanshenHeroDynamicCodec.TryMerge(snapshotDyn, 0, heroSidecar,
     out var twoSlotDynamic, out error), error);
@@ -385,7 +566,7 @@ Equal(12345678, setLevelHero.m_Abil.MaxExp,
 Equal((ushort)50, setLevelHero.m_Abil.Level, "TrySetNativeLevel applied the level");
 
 Console.WriteLine(
-    "PASS hero-runtime fixed=49D4 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-rederives");
+    "PASS hero-runtime fixed=49D4 slave=+4694/RM10401 equip=16 bag=40 bind=+B8 eye=type7-preserved magic=55+3 unknown=fixed,item,magic,dyn overflow=closed EXP-06=setlevel-rederives");
 
 void WriteShortString(byte[] destination, int offset, int maximumLength, string value)
 {
@@ -394,6 +575,22 @@ void WriteShortString(byte[] destination, int offset, int maximumLength, string 
     destination.AsSpan(offset, maximumLength + 1).Clear();
     destination[offset] = (byte)bytes.Length;
     bytes.CopyTo(destination, offset + 1);
+}
+
+string ReadShortString(ReadOnlySpan<byte> source, int maximumLength)
+{
+    var length = source[0];
+    Assert(length <= maximumLength, "test short string length");
+    return gbk.GetString(source.Slice(1, length));
+}
+
+static void SetHeroSlave(HeroObject hero, TBaseObject slave)
+{
+    var field = typeof(HeroObject).GetField("m_NativeHeroSummonSlave",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(typeof(HeroObject).FullName,
+            "m_NativeHeroSummonSlave");
+    field.SetValue(hero, slave);
 }
 
 static void WriteSplit(byte[] destination, int lowOffset, int highOffset, uint value)
@@ -452,4 +649,15 @@ static void PrepareRuntimeConfig()
     // never ran. Nothing is queued out of the process.
     M2Share.ProcessMsgCriticalSection ??= new object();
     M2Share.LogMsgCriticalSection ??= new object();
+}
+
+sealed class NativeHeroSlaveDeathProbe : TBaseObject
+{
+    public int DieCalls { get; private set; }
+
+    public override void Die()
+    {
+        DieCalls++;
+        m_boDeath = true;
+    }
 }

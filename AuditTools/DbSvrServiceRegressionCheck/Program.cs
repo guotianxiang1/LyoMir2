@@ -19,6 +19,7 @@ Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
 Run("port 6000 connection wire-mode detection", TestDbServerWireModeDetection);
 Run("native 6000 heartbeat + selected-human push", TestNativeDbServerProtocol);
+Run("native mode2 one-time switch handoff slot", TestNativeSwitchHandoffSlot);
 Run("native 6000 DB-tool human/hero reads", TestNativeDbToolReads);
 Run("native 6000 DB-tool human/hero writes", TestNativeDbToolWrites);
 Run("native 6000 DB-tool lifecycle operations", TestNativeDbToolLifecycle);
@@ -77,6 +78,63 @@ static string RepoRoot()
 
     throw new DirectoryNotFoundException(
         "repository root not found above " + AppContext.BaseDirectory);
+}
+
+static void TestNativeSwitchHandoffSlot()
+{
+    var slot = new NativeSwitchHandoffSlot();
+    slot.SetCurrentCharacter("Role");
+    var first = Enumerable.Repeat((byte)0x11,
+        NativeDbServerProtocol.LoginExtensionSize).ToArray();
+    Check(!slot.TryStore("role", first),
+        "switch handoff character gate must be ordinal and case-sensitive");
+    Check(!slot.TryStore("Role", new byte[0x107]),
+        "switch handoff accepted a short extension");
+    Check(slot.TryStore("Role", first), "switch handoff first store");
+    first[0] = 0xEE;
+
+    var latest = Enumerable.Repeat((byte)0x22,
+        NativeDbServerProtocol.LoginExtensionSize).ToArray();
+    Check(slot.TryStore("Role", latest), "switch handoff overwrite");
+    latest[1] = 0xEE;
+    var consumed = slot.Consume();
+    Check(consumed != null && consumed.All(value => value == 0x22),
+        "switch handoff must clone and fully overwrite the prior slot");
+    Check(slot.Consume() == null,
+        "switch handoff must be consumed exactly once");
+
+    var zero = new byte[NativeDbServerProtocol.LoginExtensionSize];
+    Check(slot.TryStore("Role", zero),
+        "all-zero mode2 extension is still a valid stored block");
+    Check(slot.Consume() is { Length: NativeDbServerProtocol.LoginExtensionSize },
+        "all-zero switch block was not consumable");
+
+    var suffix = Enumerable.Range(0, NativeDbServerProtocol.HumanInfoSuffixSize)
+        .Select(value => unchecked((byte)(value * 13 + 5))).ToArray();
+    var mode2 = new NativeSaveHumanRequest
+    {
+        HeaderWord2 = NativeDbServerProtocol.SwitchSaveMode,
+        HumanInfoSuffix = suffix
+    };
+    Check(NativeDbServerProtocol.TryExtractSwitchLoginExtension(
+        mode2, out var extracted), "mode2 extension extraction");
+    Check(extracted.SequenceEqual(suffix.AsSpan(
+            NativeDbServerProtocol.SessionPrefixSize,
+            NativeDbServerProtocol.LoginExtensionSize).ToArray()),
+        "mode2 extraction offset/length");
+    var ordinary = new NativeSaveHumanRequest
+    {
+        HeaderWord2 = 1,
+        HumanInfoSuffix = suffix
+    };
+    Check(!NativeDbServerProtocol.TryExtractSwitchLoginExtension(
+        ordinary, out _), "ordinary save exposed a switch extension");
+
+    slot.SetCurrentCharacter("Role");
+    Check(slot.TryStore("Role", zero), "switch slot before reset");
+    slot.Reset();
+    Check(slot.Consume() == null && slot.CurrentCharacterName.Length == 0,
+        "disconnect reset did not clear switch slot and current character");
 }
 
 void Run(string name, Action test)
@@ -4239,12 +4297,93 @@ static void TestNativeDbToolReads()
     var routeEnd = gameSocSource.IndexOf(
         "private NativeSavePersistenceData LoadNativeHumanPersistence",
         routeStart, StringComparison.Ordinal);
-    Check(routeStart >= 0 && routeEnd > routeStart
-          && gameSocSource[routeStart..routeEnd].Contains(
-              "ref server.NativeServerType)) == 9", StringComparison.Ordinal)
-          && gameSocSource[routeStart..routeEnd].Contains(
-              "NativeRegistrationInitialized", StringComparison.Ordinal),
-        "selected-human routing did not exclude the Type9 tool connection");
+    Check(routeStart >= 0 && routeEnd > routeStart,
+        "selected-human fan-out source boundary");
+    var route = gameSocSource[routeStart..routeEnd];
+    var fanoutLoop = route.IndexOf(
+        "foreach (var target in targets)", StringComparison.Ordinal);
+    var fanoutClock = fanoutLoop < 0 ? -1 : route.IndexOf(
+        "sessionContext.DbClockBase", fanoutLoop, StringComparison.Ordinal);
+    var fanoutEncode = fanoutLoop < 0 ? -1 : route.IndexOf(
+        "NativeDbServerProtocol.TryCreateLoadHumanFrame",
+        fanoutLoop, StringComparison.Ordinal);
+    var fanoutReturn = route.LastIndexOf(
+        "return true;", StringComparison.Ordinal);
+    var emptyTargetGate = route.IndexOf(
+        "if (targets.Count == 0)", StringComparison.Ordinal);
+    var loadStart = route.IndexOf(
+        "var index = _playDataService.Index", StringComparison.Ordinal);
+    var ownershipStart = loadStart < 0 ? -1 : route.IndexOf(
+        "if (!string.Equals(persistence.CharacterName",
+        loadStart, StringComparison.Ordinal);
+    var awardStart = ownershipStart < 0 ? -1 : route.IndexOf(
+        "if (TryConsumeAwardPlayer", ownershipStart, StringComparison.Ordinal);
+    Check(route.Contains("IsNativeHumanFanoutTarget(server)",
+              StringComparison.Ordinal)
+          && fanoutLoop >= 0
+          && fanoutClock > fanoutLoop
+          && fanoutEncode > fanoutClock
+          && fanoutReturn > fanoutEncode
+          && emptyTargetGate >= 0
+          && loadStart > emptyTargetGate
+          && ownershipStart > loadStart
+          && awardStart > ownershipStart
+          && route.Contains("RemoveNativeHumanFanoutTarget(target, socket)",
+              StringComparison.Ordinal)
+          && !route.Contains("多个活动GameSvr", StringComparison.Ordinal),
+        "selected-human response did not preserve native fan-out semantics");
+    var emptyTargetBlock = route[emptyTargetGate..loadStart];
+    var loadBlock = route[loadStart..ownershipStart];
+    var ownershipBlock = route[ownershipStart..awardStart];
+    Check(emptyTargetBlock.Contains("return false;", StringComparison.Ordinal)
+          && !emptyTargetBlock.Contains("return true;", StringComparison.Ordinal)
+          && loadBlock.Contains("return true;", StringComparison.Ordinal)
+          && !loadBlock.Contains("return false;", StringComparison.Ordinal)
+          && ownershipBlock.Contains("return true;", StringComparison.Ordinal)
+          && !ownershipBlock.Contains("return false;", StringComparison.Ordinal),
+        "selected-human outer list/non-list return contract changed");
+    var fanoutBody = route[fanoutLoop..fanoutReturn];
+    var encodeFailureEnd = fanoutBody.IndexOf(
+        "var socket = target.Socket;", StringComparison.Ordinal);
+    var encodeFailureBlock = encodeFailureEnd < 0
+        ? string.Empty
+        : fanoutBody[..encodeFailureEnd];
+    Check(fanoutBody.Contains("try { SendAll(socket, wire); }",
+              StringComparison.Ordinal)
+          && encodeFailureBlock.Contains("continue;", StringComparison.Ordinal)
+          && fanoutBody.Contains(
+              "RemoveNativeHumanFanoutTarget(target, socket)",
+              StringComparison.Ordinal)
+          && !fanoutBody.Contains("break;", StringComparison.Ordinal)
+          && !fanoutBody.Contains("return", StringComparison.Ordinal),
+        "selected-human fan-out did not continue after a target failure");
+    var fanoutFilterStart = route.IndexOf(
+        "private static bool IsNativeHumanFanoutTarget",
+        StringComparison.Ordinal);
+    var fanoutFilterEnd = fanoutFilterStart < 0 ? -1 : route.IndexOf(
+        "private void RemoveNativeHumanFanoutTarget",
+        fanoutFilterStart, StringComparison.Ordinal);
+    Check(fanoutFilterStart >= 0 && fanoutFilterEnd > fanoutFilterStart,
+        "selected-human fan-out filter source boundary");
+    var fanoutFilter = route[fanoutFilterStart..fanoutFilterEnd];
+    Check(fanoutFilter.Contains("DbServerWireMode.NativeType12",
+              StringComparison.Ordinal)
+          && !fanoutFilter.Contains("NativeRegistrationInitialized",
+              StringComparison.Ordinal)
+          && !fanoutFilter.Contains("NativeServerType", StringComparison.Ordinal)
+          && !fanoutFilter.Contains("NativeHeartbeatTick", StringComparison.Ordinal)
+          && !fanoutFilter.Contains(".Connected", StringComparison.Ordinal),
+        "selected-human fan-out retained a non-original registration/type/heartbeat filter");
+    var cleanup = route[fanoutFilterEnd..];
+    Check(cleanup.Contains("ReferenceEquals(_serverList[i], target)",
+              StringComparison.Ordinal)
+          && cleanup.Contains(
+              "ReferenceEquals(_serverList[i].Socket, socket)",
+              StringComparison.Ordinal)
+          && cleanup.Contains("_serverList.RemoveAt(i)",
+              StringComparison.Ordinal)
+          && cleanup.Contains("socket.Close()", StringComparison.Ordinal),
+        "selected-human fan-out failure cleanup was not target/socket exact");
 }
 
 static void TestNativeDbToolWrites()

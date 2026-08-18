@@ -436,19 +436,15 @@ static void VerifySourceContract()
     Assert(flags04Gate >= 0, "human resolver flags 0x04 gate missing");
     int flags04Open = resolver.IndexOf('{', flags04Gate);
     int flags04Close = FindMatchingBrace(resolver, flags04Open);
-    int flags0CGate = resolver.IndexOf(
-        "if ((effectiveFlags & 0x0C) == 0", contest,
-        StringComparison.Ordinal);
-    Assert(flags0CGate >= 0, "human resolver flags 0x0C gate missing");
-    int flags0COpen = resolver.IndexOf('{', flags0CGate);
-    int flags0CClose = FindMatchingBrace(resolver, flags0COpen);
     Assert(flags04Gate >= 0 && flags04Open < hq && hq < percent &&
         percent < flags04Close && flags04Close < contest,
         "human resolver contest moved inside flags 0x04 HQ/percent gate");
-    Assert(contest < breakExtra && breakExtra < flags0CGate &&
-        flags0COpen < middleHook && middleHook < flags0CClose &&
-        flags0CClose < breakBonus && breakBonus < state16Cap,
+    Assert(contest < breakExtra && breakExtra < breakBonus &&
+        breakBonus < middleHook && middleHook < state16Cap,
         "human resolver extra/skill152/break-bonus/cap order changed");
+    Assert(!resolver.Contains("(effectiveFlags & 0x0C) == 0",
+        StringComparison.Ordinal),
+        "flags 4/8 incorrectly gate the native Skill152 consumer");
 }
 
 static TBaseObject Actor(int level, byte job, int workingMaximum)

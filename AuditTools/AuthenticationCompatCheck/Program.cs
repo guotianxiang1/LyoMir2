@@ -6,9 +6,16 @@ using SystemModule;
 PrepareRuntimeConfig();
 M2Share.g_Config = new GameSvrConfig();
 M2Share.ObjectManager = new ObjectManager();
+M2Share.ProcessMsgCriticalSection = new object();
+M2Share.LogMsgCriticalSection = new object();
+M2Share.g_MonSayMsgList = new Dictionary<string, IList<TMonSayMsg>>();
 
 var player = new TPlayObject();
 var bridge = new PasApiBridge { CurrentPlayer = player };
+var engine = new UserEngine();
+var getHumData = typeof(UserEngine).GetMethod("GetHumData",
+    BindingFlags.Instance | BindingFlags.NonPublic)
+    ?? throw new MissingMethodException(typeof(UserEngine).FullName, "GetHumData");
 var setStatus = typeof(TPlayObject).GetMethod(
     "SetNativeAuthenticationStatus",
     BindingFlags.Instance | BindingFlags.NonPublic)
@@ -21,6 +28,10 @@ var buildStatusMessage = typeof(TPlayObject).GetMethod(
     "BuildNativeAuthenticationStatusMessage",
     BindingFlags.Instance | BindingFlags.NonPublic)
     ?? throw new MissingMethodException("BuildNativeAuthenticationStatusMessage");
+var resolveLoadedStorageCapacity = typeof(NativeAuthenticationManager).GetMethod(
+    "ResolveLoadedStorageCapacity",
+    BindingFlags.Static | BindingFlags.NonPublic)
+    ?? throw new MissingMethodException("ResolveLoadedStorageCapacity");
 
 SetStatus(0x1F, 0x80, 0x04);
 Verify(true, 1, 100, "level 1 low-five aggregate");
@@ -45,6 +56,36 @@ VerifyLimits(true, 0, 0x08, 2_000_000, 192,
     "Status2 bit 3 grants only storage limit");
 VerifyLimits(true, 0x09, 0, 50_000_000, 192,
     "Status1 grants both limits");
+
+foreach (var baseline in new[] { 24, 48, 192 })
+{
+    foreach (var persisted in new[] { 0, 24, 48, 49, 192, 193, 65535 })
+    {
+        VerifyStorageRestore(baseline, persisted,
+            persisted > TPlayObject.STORAGE_PAGE_SIZE
+                ? persisted
+                : baseline);
+    }
+}
+
+foreach (var authenticationCapacity in new[] { 24, 192 })
+{
+    foreach (var persisted in new[] { 0, 24, 48, 49, 192, 193, 65535 })
+    {
+        // Before the late authentication query, GetHumData leaves the ctor's
+        // 48 for stored values <=48 and installs the raw WORD otherwise.
+        var loadedCapacity = persisted > TPlayObject.STORAGE_PAGE_SIZE
+            ? persisted
+            : TPlayObject.STORAGE_PAGE_SIZE;
+        var resolved = (int)resolveLoadedStorageCapacity.Invoke(null,
+            new object[] { loadedCapacity, authenticationCapacity });
+        Equal(persisted > TPlayObject.STORAGE_PAGE_SIZE
+                ? persisted
+                : authenticationCapacity,
+            resolved,
+            $"login storage order auth={authenticationCapacity} persisted={persisted}");
+    }
+}
 
 Equal(4636, Grobal2.SM_PLAYER_AUTHEN, "SM_PLAYER_AUTHEN protocol constant");
 VerifyStatusMessage(0x1F, Grobal2.RC_PLAYOBJECT, 0,
@@ -97,6 +138,36 @@ void VerifyLimits(bool opened, byte status1, byte status2,
     applyLimits.Invoke(player, null);
     Equal(expectedGoldMax, player.m_nGoldMax, scenario + " gold");
     Equal(expectedStorage, player.m_nStorageSpaceCount, scenario + " storage");
+}
+
+void VerifyStorageRestore(int baseline, int persisted, int expected)
+{
+    var restoredPlayer = new TPlayObject
+    {
+        m_nStorageSpaceCount = baseline
+    };
+    var record = new THumDataInfo();
+    record.Header.dCreateDate = new DateTime(2020, 1, 1).ToOADate();
+    record.Data.sCharName = "StorageRestoreAudit";
+    record.Data.sCurMap = "0";
+    record.Data.StorageSpaceCount = persisted;
+
+    try
+    {
+        getHumData.Invoke(engine, new object[] { restoredPlayer, record });
+    }
+    catch (TargetInvocationException ex) when (ex.InnerException != null)
+    {
+        throw ex.InnerException;
+    }
+
+    Equal(expected, restoredPlayer.m_nStorageSpaceCount,
+        $"storage restore baseline={baseline} persisted={persisted}");
+
+    var savedRecord = new THumDataInfo();
+    restoredPlayer.MakeSaveRcd(ref savedRecord);
+    Equal(expected, savedRecord.Data.StorageSpaceCount,
+        $"storage save baseline={baseline} persisted={persisted}");
 }
 
 void Verify(bool expected, int level, int order, string scenario,
@@ -159,16 +230,25 @@ static void VerifySourceContract()
         "login authentication load missing");
     Require(managerSource, "player.ApplyNativeAuthenticationLimits();",
         "login authentication limits are not applied");
+    Require(managerSource,
+        "ResolveLoadedStorageCapacity(\n                    loadedStorageCapacity, player.m_nStorageSpaceCount)",
+        "persisted storage capacity is not restored after authentication");
     var clearAt = managerSource.IndexOf(
         "player.SetNativeAuthenticationStatus(0, 0, 0);",
         StringComparison.Ordinal);
     var initialApplyAt = managerSource.IndexOf(
         "player.ApplyNativeAuthenticationLimits();", clearAt,
         StringComparison.Ordinal);
-    var managerTryAt = managerSource.IndexOf("try", initialApplyAt,
+    var schemaAt = managerSource.IndexOf("EnsureSchema();", initialApplyAt,
         StringComparison.Ordinal);
-    Assert(clearAt >= 0 && initialApplyAt > clearAt && managerTryAt > initialApplyAt,
+    Assert(clearAt >= 0 && initialApplyAt > clearAt && schemaAt > initialApplyAt,
         "zero authentication limits must apply before a query can fail or return no row");
+    var finallyAt = managerSource.IndexOf("finally", initialApplyAt,
+        StringComparison.Ordinal);
+    var restoreStorageAt = managerSource.IndexOf(
+        "ResolveLoadedStorageCapacity(", finallyAt, StringComparison.Ordinal);
+    Assert(finallyAt > initialApplyAt && restoreStorageAt > finallyAt,
+        "stored capacity >48 must override authentication on every query exit");
     var loadAt = loginSource.IndexOf("AuthenticationManager?.TryLoad(this);",
         StringComparison.Ordinal);
     var tryModeAt = loginSource.IndexOf("if (m_nPayMent == 1)",

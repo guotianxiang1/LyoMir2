@@ -479,18 +479,11 @@ static Task TestNativeHumanBind()
     Check(NativeHumanDataCodec.TryDecode(legacyZeroStorageBlob, null,
             out var legacyZeroStorage, out var legacyStorageError),
         "legacy zero-storage native decode: " + legacyStorageError);
-    Equal(48, legacyZeroStorage.Data.StorageSpaceCount,
-        "legacy zero storage capacity compatibility");
-    // The container is constructed with 48 slots and the load only overrides that when the
-    // stored word is STRICTLY greater, so 24/48 both come back as 48 and 49 comes back raw:
-    //   0x6AD8EB C7 46 08 30 00 00 00  mov dword [esi+8],0x30   ; ctor = 48
-    //   0x6B0CBC 66 8B 80 16 05 00 00  mov ax,[eax+0x516]       ; == record 0x50E
-    //   0x6B0CC3 66 83 F8 30           cmp ax,0x30
-    //   0x6B0CC7 76 0F                 jbe 0x6B0CD8             ; <= 48 -> keep 48
-    //   0x6B0CD5 89 42 08              mov [container+8],eax
-    // (save side: 0x6B112B 66 8B 40 08 mov ax,[eax+8] / 0x6B112F 66 89 86 0E 05 00 00
-    //  mov [esi+0x50E],ax — the load base is 8 bytes below the save base.)
-    foreach (var (stored, expectedSlots) in new[] { (24, 48), (48, 48), (49, 49), (192, 192) })
+    Equal(0, legacyZeroStorage.Data.StorageSpaceCount,
+        "legacy zero storage word preserved by DB codec");
+    // The DB codec preserves record+0x50E verbatim. M2 applies the runtime
+    // container rule (`stored > 48` overrides its baseline) in GetHumData.
+    foreach (var stored in new[] { 0, 24, 48, 49, 192, 193, 65535 })
     {
         var storageBlob = new byte[NativeHumanDataCodec.DataRecordSize + 8];
         BinaryPrimitives.WriteInt32LittleEndian(
@@ -501,8 +494,8 @@ static Task TestNativeHumanBind()
         Check(NativeHumanDataCodec.TryDecode(storageBlob, null,
                 out var storageInfo, out var storageError),
             $"stored storage capacity {stored} native decode: {storageError}");
-        Equal(expectedSlots, storageInfo.Data.StorageSpaceCount,
-            $"stored storage capacity {stored} follows the native jbe 0x30 floor");
+        Equal(stored, storageInfo.Data.StorageSpaceCount,
+            $"stored storage capacity {stored} preserved by DB codec");
     }
 
     var bound = new THumDataInfo();
@@ -522,7 +515,7 @@ static Task TestNativeHumanBind()
     bound.Data.wSecHeroPracticeLevel = 0xC3D4;
     bound.Data.nLingFu = 0x12345678;
     bound.Data.nUsedLingFu = 0x23456789;
-    // Above the native floor, so the roundtrip really does carry the stored word.
+    // Non-default value used to prove that the stored word survives the round trip.
     bound.Data.StorageSpaceCount = 96;
     var shieldNativeRecord = Enumerable.Range(0, NativeHumanDataCodec.ItemRecordSize)
         .Select(i => (byte)(i * 17 + 3))

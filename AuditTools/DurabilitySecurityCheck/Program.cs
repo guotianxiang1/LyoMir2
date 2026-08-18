@@ -18,6 +18,7 @@ Run("debug builds do not grant GM permission", CheckCommandPermission);
 Run("robot creation GM verb stays unregistered", CheckRobotCommand);
 Run("save queue keeps only the newest immutable snapshot", CheckSaveCoalescing);
 Run("old save attempts cannot remove a newer snapshot", CheckSaveAttemptCompletionGuard);
+Run("native exit save-mode selector", CheckNativeExitSaveMode);
 Run("offline gold requests remain queued and ordered", CheckGoldQueue);
 Run("DB internal record bypass accepts only the native sentinel", CheckInternalRequest);
 
@@ -84,6 +85,20 @@ void CheckSaveCoalescing()
 
     engine.AddToSaveRcdList(Save("OtherAccount", "Role", 0, 0, 0));
     Equal(2, SaveQueue(engine).Count, "different accounts were incorrectly merged");
+
+    var lanes = new TFrontEngine();
+    var ordinary = Save("Account", "Role", 0, 0, 0, 0);
+    var switching = Save("account", "role", 0, 0, 0, 2);
+    lanes.AddToSaveRcdList(ordinary);
+    lanes.AddToSaveRcdList(switching);
+    Equal(2, SaveQueue(lanes).Count,
+        "mode2 switch snapshot was coalesced with an ordinary save");
+    var latestOrdinary = Save("ACCOUNT", "ROLE", 0, 0, 0, 3);
+    lanes.AddToSaveRcdList(latestOrdinary);
+    Equal(2, SaveQueue(lanes).Count,
+        "ordinary lane no longer coalesces independently of mode2");
+    Check(SaveQueue(lanes).Contains(switching),
+        "ordinary save replaced the pending mode2 snapshot");
 }
 
 void CheckSaveAttemptCompletionGuard()
@@ -95,6 +110,32 @@ void CheckSaveAttemptCompletionGuard()
         "in-flight failure does not distinguish a replacement snapshot");
     Check(source.Contains("SameSaveKey(existing, SaveRcd)", StringComparison.Ordinal),
         "save coalescing no longer uses account and character");
+    Check(source.Contains("SaveRcd.NativeSaveMode == 2", StringComparison.Ordinal),
+        "switch completion is not gated on the mode2 save attempt");
+}
+
+void CheckNativeExitSaveMode()
+{
+    var selector = typeof(UserEngine).GetMethod("SelectNativeExitSaveMode",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException(typeof(UserEngine).FullName,
+            "SelectNativeExitSaveMode");
+
+    Equal((ushort)3, Select(false, false), "ordinary exit mode");
+    Equal((ushort)1, Select(false, true), "reconnection exit mode");
+    Equal((ushort)2, Select(true, false), "switch exit mode");
+    Equal((ushort)2, Select(true, true),
+        "switch must take priority over reconnection");
+
+    ushort Select(bool switching, bool reconnecting)
+    {
+        var player = (TPlayObject)System.Runtime.CompilerServices.RuntimeHelpers
+            .GetUninitializedObject(typeof(TPlayObject));
+        player.m_boSwitchData = switching;
+        player.m_boReconnection = reconnecting;
+        return (ushort)(selector.Invoke(null, new object[] { player })
+            ?? throw new InvalidOperationException("save-mode selector returned null"));
+    }
 }
 
 void CheckGoldQueue()
@@ -140,11 +181,13 @@ void CheckInternalRequest()
 string Read(params string[] parts) => File.ReadAllText(
     Path.Combine(new[] { root }.Concat(parts).ToArray()));
 
-static TSaveRcd Save(string account, string role, int retry, int nextRetry, int lastLog) =>
+static TSaveRcd Save(string account, string role, int retry, int nextRetry, int lastLog,
+    ushort mode = 0) =>
     new()
     {
         sAccount = account,
         sChrName = role,
+        NativeSaveMode = mode,
         nReTryCount = retry,
         NextRetryTick = nextRetry,
         LastErrorLogTick = lastLog

@@ -192,18 +192,17 @@ Check(Resolve(new TMapFlag(), equip: false, lastTick: 0, tick: 0, secondFlag: tr
 Check(Resolve(new TMapFlag(), equip: false, lastTick: 0, tick: 0, secondFlag: true,
         cooldownActive: false) == "SecondPathRevive",
     "0x7437E9 fallthrough: eligible with no live CD => the second path revives");
-// Production must currently reach NEITHER path-2 leaf, because the tier is unmodelled.
-// Assert the fail-closed WIRING (the two consts) rather than only the policy, since the
-// policy itself is deliberately able to express path 2.
+// The equipment aggregate now supplies both path-2 fields. Keep the test pinned to
+// the instance fields rather than the old fail-closed constants.
 var reviveSource = ReadRepoFile("GameSvr/Actors/TBaseObject.NativeRevive.cs");
-Check(reviveSource.Contains("const bool NativeSecondPathFlag = false", StringComparison.Ordinal) &&
-      reviveSource.Contains("const byte NativeSecondPathTier = 0", StringComparison.Ordinal),
-    "[self+0x1D1]/[self+0x1DD] are equipment-sourced and unmodelled: PATH 2 stays fail-closed");
-// The reason must stay documented at the call site, naming the block copy that produces
-// the fields, so a later reader does not "fix" the constants by guessing.
-Check(reviveSource.Contains("0x73D63D", StringComparison.Ordinal) &&
-      reviveSource.Contains("0x4C0", StringComparison.Ordinal),
-    "the fail-closed comment cites sub_73D500's rep movsd @0x73D63D from [self+0x4C0]+0x1F8");
+Check(reviveSource.Contains("m_btNativeSecondPathFlag != 0", StringComparison.Ordinal) &&
+      reviveSource.Contains("m_btNativeSecondPathTier", StringComparison.Ordinal),
+    "[self+0x1D1]/[self+0x1DD] are read from the rebuilt equipment aggregate");
+var agg2Source = ReadRepoFile("GameSvr/Actors/NativeEquipAgg2Revive.cs");
+Check(agg2Source.Contains("0x73D63D", StringComparison.Ordinal) &&
+      agg2Source.Contains("0x76235F", StringComparison.Ordinal) &&
+      agg2Source.Contains("0x7627CF", StringComparison.Ordinal),
+    "the aggregate rebuild cites the block copy, flag writer, and tier writer");
 
 Console.WriteLine("== F: the TAIL — AUTORELIVE and RELIVEBACK ==");
 
@@ -305,6 +304,116 @@ Check(doreliveBlock.Contains("sub_6E13C8", StringComparison.Ordinal) &&
 Check(SystemModule.Grobal2.RM_USERSAVEITEM == 10160,
     "RM_USERSAVEITEM still occupies ident 10160 (the blocker for dorelive)");
 
+Console.WriteLine("== I: item+0x104 is an instance bitmap rebuilt by equipped-item recalc ==");
+
+Check(ComputeClass104(new GoodItem { StdMode = 22, Shape = 114 }) == 0x01,
+    "TRing Shape 114 sets bit0");
+Check(ComputeClass104(new GoodItem { StdMode = 24, Shape = 114 }) == 0x01,
+    "TArmRing Shape 114 sets bit0");
+Check(ComputeClass104(new GoodItem { StdMode = 30, Shape = 201 }) == 0x02,
+    "TRWeapon Shape 201 sets bit1");
+Check(ComputeClass104(new GoodItem { StdMode = 22, Shape = 137 }) == 0x02,
+    "TRing Shape 137 sets bit1");
+Check(ComputeClass104(new GoodItem { StdMode = 24, Shape = 210 }) == 0x02,
+    "TArmRing Shape 210 sets bit1");
+Check(ComputeClass104(new GoodItem { StdMode = 10, Shape = 39, Mac = 1 }) == 0x02 &&
+      ComputeClass104(new GoodItem { StdMode = 11, Shape = 41, Mac = 1 }) == 0x02,
+    "TClothes descendants Shape 39..41 with Mac 1 set bit1");
+Check(ComputeClass104(new GoodItem { StdMode = 10, Shape = 39, Mac = 0 }) == 0,
+    "the clothes writer requires Mac exactly 1");
+
+var ext45 = ItemWithExtension(0x45, 0);
+var extFe = ItemWithExtension(0xFE, 0x0102);
+var oldFalseIds = ItemWithExtension(0x3E, 1);
+oldFalseIds.NativeItemExtAbilIdents[1] = 0x50;
+oldFalseIds.NativeItemExtAbilValues[1] = 1;
+Check(ComputeClass104(ext45) == 0x04, "extension ident 0x45 sets bit2");
+Check(ComputeClass104(extFe) == 0x02,
+    "extension ident 0xFE uses the low value byte and sets bit1 for subtype 2");
+Check(ComputeClass104(oldFalseIds) == 0,
+    "0x3E and 0x50 are Shape-branch constants, not extension idents");
+Check(ComputeClass104(new GoodItem
+      { StdMode = 22, Shape = 114, NativeItemExtAbilParsed = false }) == 0x01,
+    "the synthetic extension parse flag cannot suppress class/Shape writers");
+
+var runtimeItem = new TUserItem { NativeClass104 = 0x01 };
+Check(MatchesClass104(runtimeItem, 0) && !MatchesClass104(runtimeItem, 1),
+    "revive mode 0 reads instance bit0 only");
+runtimeItem.NativeClass104 = 0x06;
+Check(!MatchesClass104(runtimeItem, 0) && MatchesClass104(runtimeItem, 1),
+    "revive mode 1 reads instance bit1|bit2 only");
+
+runtimeItem.NativeItemPlus100 = 0xA0;
+runtimeItem.NativeItemPlus101 = 0xA1;
+runtimeItem.NativeItemPlus102 = 0xA2;
+runtimeItem.NativeItemPlus103 = 0xA3;
+runtimeItem.NativeClass104 = 0xFF;
+RefreshClass104(runtimeItem, new GoodItem { StdMode = 30, Shape = 201 });
+Check(runtimeItem.NativeItemPlus100 == 0xA0 && runtimeItem.NativeItemPlus101 == 0xA1,
+    "equipped refresh preserves item+0x100/+0x101");
+Check(runtimeItem.NativeItemPlus102 == 0 && runtimeItem.NativeItemPlus103 == 0,
+    "0x75EE12 clears the complete word at item+0x102");
+Check(runtimeItem.NativeClass104 == 0x02,
+    "0x75EE20 clears +0x104 before rebuilding, rather than accumulating, its bits");
+var runtimeCopy = new TUserItem(runtimeItem);
+Check(runtimeCopy.NativeItemPlus100 == 0xA0 && runtimeCopy.NativeItemPlus101 == 0xA1 &&
+      runtimeCopy.NativeItemPlus102 == 0 && runtimeCopy.NativeItemPlus103 == 0 &&
+      runtimeCopy.NativeClass104 == 0x02,
+    "the item copy constructor preserves all runtime bytes +0x100..+0x104");
+
+var class104Source = ReadRepoFile("GameSvr/Items/NativeItemClass104.cs");
+var clear102 = class104Source.IndexOf("item.NativeItemPlus102 = 0;", StringComparison.Ordinal);
+var clear103 = class104Source.IndexOf("item.NativeItemPlus103 = 0;", StringComparison.Ordinal);
+var clear104 = class104Source.IndexOf("item.NativeClass104 = 0;", StringComparison.Ordinal);
+var rebuild104 = class104Source.IndexOf(
+    "item.NativeClass104 = ComputeClass104Bits(stdItem);", StringComparison.Ordinal);
+Check(clear102 >= 0 && clear102 < clear103 && clear103 < clear104 && clear104 < rebuild104,
+    "managed refresh preserves the native clear-word, clear-byte, rebuild order");
+
+var codecBase = new TUserItem
+{
+    MakeIndex = 0x10203040,
+    wIndex = 30,
+    Dura = 100,
+    DuraMax = 200,
+    ys1 = 7
+};
+var codecRuntimeVariant = new TUserItem(codecBase)
+{
+    NativeItemPlus100 = 0x11,
+    NativeItemPlus101 = 0x22,
+    NativeItemPlus102 = 0x33,
+    NativeItemPlus103 = 0x44,
+    NativeClass104 = 0x55
+};
+Check(codecBase.GetBuffer().SequenceEqual(codecRuntimeVariant.GetBuffer()),
+    "the 147-byte manual item packet excludes +0x100..+0x104 runtime state");
+Check(SerializeProtobuf(codecBase).SequenceEqual(SerializeProtobuf(codecRuntimeVariant)),
+    "protobuf excludes +0x100..+0x104 runtime state");
+Check(EncodeEyeSidecar(codecBase).SequenceEqual(EncodeEyeSidecar(codecRuntimeVariant)),
+    "the YS27 sidecar excludes +0x100..+0x104 runtime state");
+
+codecBase.ys1 = 0;
+codecRuntimeVariant.ys1 = 0;
+Check(EncodeLegacy208(codecBase) == EncodeLegacy208(codecRuntimeVariant),
+    "the native 208-byte record excludes +0x100..+0x104 runtime state");
+
+var recalcSource = ReadRepoFile("GameSvr/Actors/TBaseObject.Base.cs");
+var duraGate = recalcSource.IndexOf(
+    "(m_UseItems[i].wIndex <= 0) || (m_UseItems[i].Dura <= 0)",
+    StringComparison.Ordinal);
+var refreshCall = recalcSource.IndexOf(
+    "NativeItemClass104.RefreshEquippedInstance(m_UseItems[i], StdItem)",
+    StringComparison.Ordinal);
+Check(duraGate >= 0 && refreshCall > duraGate,
+    "RecalcAbilitys refreshes +0x104 only after the positive-Dura equipped-item gate");
+var reviveDuraSource = ReadRepoFile("GameSvr/Actors/TBaseObject.NativeReviveDurability.cs");
+Check(reviveDuraSource.Contains(
+        "MatchesReviveDurabilityTarget(userItem, mode)", StringComparison.Ordinal) &&
+      !reviveDuraSource.Contains(
+        "MatchesReviveDurabilityTarget(stdItem, mode)", StringComparison.Ordinal),
+    "the revive debit reads the retained instance byte, not a template recomputation");
+
 Console.WriteLine();
 if (failures.Count > 0)
 {
@@ -402,6 +511,81 @@ static TMapFlag ParseToken(string token)
         System.Reflection.BindingFlags.Public)
         ?? throw new MissingMethodException("Maps.TryApplySceneFlag");
     return (bool)m.Invoke(null, new object[] { flag, token }) ? flag : null;
+}
+
+static Type Class104Type()
+{
+    return typeof(TBaseObject).Assembly.GetType("GameSvr.NativeItemClass104")
+        ?? throw new MissingMemberException("GameSvr.NativeItemClass104");
+}
+
+static byte ComputeClass104(GoodItem item)
+{
+    var method = Class104Type().GetMethod("ComputeClass104Bits",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
+        System.Reflection.BindingFlags.Public)
+        ?? throw new MissingMethodException("NativeItemClass104.ComputeClass104Bits");
+    return (byte)method.Invoke(null, new object[] { item });
+}
+
+static bool MatchesClass104(TUserItem item, int mode)
+{
+    var method = Class104Type().GetMethod("MatchesReviveDurabilityTarget",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
+        System.Reflection.BindingFlags.Public)
+        ?? throw new MissingMethodException(
+            "NativeItemClass104.MatchesReviveDurabilityTarget");
+    return (bool)method.Invoke(null, new object[] { item, mode });
+}
+
+static void RefreshClass104(TUserItem item, GoodItem stdItem)
+{
+    var method = Class104Type().GetMethod("RefreshEquippedInstance",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
+        System.Reflection.BindingFlags.Public)
+        ?? throw new MissingMethodException("NativeItemClass104.RefreshEquippedInstance");
+    method.Invoke(null, new object[] { item, stdItem });
+}
+
+static byte[] SerializeProtobuf(TUserItem item)
+{
+    using var stream = new MemoryStream();
+    ProtoBuf.Serializer.Serialize(stream, item);
+    return stream.ToArray();
+}
+
+static byte[] EncodeEyeSidecar(TUserItem item)
+{
+    if (!YanshenItemSidecarCodec.TryEncode(new[] { item }, Array.Empty<TUserItem>(),
+            Array.Empty<TUserItem>(), out var payload, out var error))
+    {
+        throw new InvalidOperationException("YS27 encode failed: " + error);
+    }
+    return payload;
+}
+
+static string EncodeLegacy208(TUserItem item)
+{
+    var type = typeof(TBaseObject).Assembly.GetType("GameSvr.LegacyUserItem208Codec")
+        ?? throw new MissingMemberException("GameSvr.LegacyUserItem208Codec");
+    var method = type.GetMethod("TryEncode",
+        System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic |
+        System.Reflection.BindingFlags.Public)
+        ?? throw new MissingMethodException("LegacyUserItem208Codec.TryEncode");
+    var args = new object[] { item, null, null };
+    if (!(bool)method.Invoke(null, args))
+    {
+        throw new InvalidOperationException("208-byte encode failed: " + args[2]);
+    }
+    return (string)args[1];
+}
+
+static GoodItem ItemWithExtension(ushort ident, ushort value)
+{
+    var item = new GoodItem();
+    item.NativeItemExtAbilIdents[0] = ident;
+    item.NativeItemExtAbilValues[0] = value;
+    return item;
 }
 
 static string ReadRepoFile(string relative)

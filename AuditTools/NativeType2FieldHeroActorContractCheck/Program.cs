@@ -1,21 +1,28 @@
+using System.Buffers.Binary;
 using System.Reflection;
+using System.Text;
 using GameSvr;
 using GameSvr.Services;
+using SystemModule;
 
+PrepareRuntimeConfig();
 CheckHierarchyAndDormantBoundary();
 CheckOriginalClassMetadata();
+CheckBaseConstructorCapture();
+CheckConcreteConstructorState();
 CheckOrdinaryAbilities();
 CheckModelAbility();
 CheckDotaAbilities();
 CheckSkillContracts();
 
 Console.WriteLine("PASS NativeType2FieldHeroActorContractCheck " +
-                  "classes=9 hierarchy=AnimalObject formulas=closed " +
+                  "classes=9 hierarchy=AiMon constructor-scalars=verified " +
+                  "container-core=closed fill-core=closed production=NO-GO formulas=closed " +
                   "skills=ordered runtime=NO-GO");
 
 static void CheckHierarchyAndDormantBoundary()
 {
-    Equal(typeof(AnimalObject), typeof(TFieldHero).BaseType,
+    Equal(typeof(AiMon), typeof(TFieldHero).BaseType,
         "FieldHero direct managed base");
     Check(typeof(TFieldHero).IsAbstract, "FieldHero base is abstract");
     Equal(typeof(TFieldHero), typeof(TMirDotaMatchHumMon).BaseType,
@@ -75,7 +82,7 @@ static void CheckHierarchyAndDormantBoundary()
         "Initialize is owned by dormant base");
     Equal(typeof(TFieldHero), typeof(TFieldHero).GetMethod(
             nameof(TFieldHero.Run))!.DeclaringType,
-        "Run cannot fall through to AnimalObject");
+        "Run cannot fall through to AiMon");
 }
 
 static void CheckOriginalClassMetadata()
@@ -117,6 +124,178 @@ static void CheckOriginalClassMetadata()
         TMirDotaMatchHumMon_Ass.OriginalSize,
         0x006084F8, 0x0060D3C0, 0x6B0, "DotaAss");
 }
+
+static void CheckBaseConstructorCapture()
+{
+    var calls = new List<string>();
+    var randomValue = NativeFieldHeroBaseConstructorCapture
+        .CaptureRandom05F8(maximum =>
+        {
+            calls.Add("random:" + maximum);
+            return 3;
+        });
+    var tick = NativeFieldHeroBaseConstructorCapture.CaptureTick(() =>
+    {
+        calls.Add("tick");
+        return 0x12345678;
+    });
+
+    Equal(33, randomValue, "base constructor Random(34)+30");
+    Equal(0x12345678, tick, "base constructor tick capture");
+    Equal(2, calls.Count, "base constructor source call count");
+    Equal("random:34", calls[0], "base constructor random first");
+    Equal("tick", calls[1], "base constructor clock second");
+    ExpectThrows<ArgumentNullException>(() =>
+            NativeFieldHeroBaseConstructorCapture.CaptureRandom05F8(null),
+        "null constructor random rejected");
+    ExpectThrows<ArgumentNullException>(() =>
+            NativeFieldHeroBaseConstructorCapture.CaptureTick(null),
+        "null constructor clock rejected");
+}
+
+static void CheckConcreteConstructorState()
+{
+    var originalRandom = M2Share.RandomNumber;
+    var originalObjectManager = M2Share.ObjectManager;
+    var random = new RecordingRandomNumber();
+    M2Share.RandomNumber = random;
+    M2Share.ObjectManager = new ObjectManager();
+    try
+    {
+        var adapter = CreateRuntimeAdapter();
+        var cases = new (byte Selector, Type Type, byte Job,
+            bool Dota, bool Assassin)[]
+        {
+            (0, typeof(TFieldWarHero), 0, false, false),
+            (1, typeof(TFieldWizHero), 1, false, false),
+            (2, typeof(TFieldTaosHero), 2, false, false),
+            (3, typeof(TFieldAssHero), 3, false, true),
+            (4, typeof(TMirDotaMatchHumMon_War), 0, true, false),
+            (5, typeof(TMirDotaMatchHumMon_Wiz), 1, true, false),
+            (6, typeof(TMirDotaMatchHumMon_Taos), 2, true, false),
+            (7, typeof(TMirDotaMatchHumMon_Ass), 3, true, true),
+            (8, typeof(TModelHero), 0, false, false)
+        };
+
+        foreach (var testCase in cases)
+        {
+            random.Clear();
+            var beforeBaseTick = HUtil32.GetTickCount();
+            var actor = CreateActor(adapter, testCase.Selector,
+                testCase.Type);
+            var afterBaseTick = HUtil32.GetTickCount();
+            Equal(1, random.Bounds.Count(value => value == 34),
+                testCase.Type.Name + " consumes one Random(34)");
+            Check(TickWithin(actor.NativeRaw0634, beforeBaseTick,
+                    afterBaseTick),
+                testCase.Type.Name + " captures a live base tick");
+            CheckCommonConstructorState(actor, testCase.Type.Name,
+                testCase.Dota);
+            Equal(testCase.Job, actor.m_btJob,
+                testCase.Type.Name + " job");
+            Equal(testCase.Assassin ? 500 : 1000,
+                actor.m_nNextHitTime,
+                testCase.Type.Name + " attack interval");
+            if (testCase.Selector <= 3)
+            {
+                Equal((ushort)45, actor.m_Abil.Level,
+                    testCase.Type.Name + " ability level");
+                Equal((ushort)45, actor.m_WAbil.Level,
+                    testCase.Type.Name + " work ability level");
+            }
+
+            if (testCase.Dota)
+            {
+                var dota = (TMirDotaMatchHumMon)actor;
+                Equal(0, dota.NativeRaw0608,
+                    testCase.Type.Name + " Dota raw +608 reset");
+                Equal(0, dota.NativeRaw05F8,
+                    testCase.Type.Name + " Dota random carrier reset");
+                Equal(0, dota.NativeRaw05FC,
+                    testCase.Type.Name + " Dota raw +5FC reset");
+                Equal((byte)0, dota.NativeRaw05F4,
+                    testCase.Type.Name + " Dota raw +5F4");
+                Equal(1, dota.NativeRaw06A0Length,
+                    testCase.Type.Name + " Dota +6A0 length");
+                Equal(0, dota.NativeRaw06A4,
+                    testCase.Type.Name + " Dota raw +6A4");
+                Equal(0, dota.NativeRaw06A8,
+                    testCase.Type.Name + " Dota raw +6A8");
+                Equal(9, dota.m_nViewRange,
+                    testCase.Type.Name + " Dota view range");
+            }
+            else
+            {
+                Equal(7, actor.m_nViewRange,
+                    testCase.Type.Name + " ordinary view range");
+            }
+        }
+
+        var beforeTaos = HUtil32.GetTickCount();
+        var taos = (TFieldTaosHero)CreateActor(adapter, 2,
+            typeof(TFieldTaosHero));
+        var afterTaos = HUtil32.GetTickCount();
+        Check(TickWithin(taos.NativeRaw06A4, beforeTaos, afterTaos),
+            "ordinary Taos captures subclass tick");
+        var beforeDotaTaos = HUtil32.GetTickCount();
+        var dotaTaos = (TMirDotaMatchHumMon_Taos)CreateActor(adapter, 6,
+            typeof(TMirDotaMatchHumMon_Taos));
+        var afterDotaTaos = HUtil32.GetTickCount();
+        Check(TickWithin(dotaTaos.NativeRaw06B4, beforeDotaTaos,
+                afterDotaTaos),
+            "Dota Taos captures subclass tick");
+        var model = (TModelHero)CreateActor(adapter, 8,
+            typeof(TModelHero));
+        Equal((byte)1, model.NativeRaw02E1, "model raw +2E1");
+        Equal((byte)1, model.NativeRaw02E0, "model raw +2E0");
+    }
+    finally
+    {
+        M2Share.RandomNumber = originalRandom;
+        M2Share.ObjectManager = originalObjectManager;
+    }
+}
+
+static void CheckCommonConstructorState(TFieldHero actor,
+    string description, bool dota)
+{
+    Equal((byte)1, actor.NativeRaw03AC, description + " raw +3AC");
+    Equal(700, actor.m_nWalkSpeed, description + " walk speed");
+    Equal(2000, actor.NativeSpellCooldownInterval,
+        description + " spell interval");
+    Equal((byte)1, actor.m_btHair, description + " hair");
+    Equal((byte)0x83, actor.m_btRaceServer,
+        description + " race server");
+    Equal((byte)1, actor.NativeRaw02E8, description + " raw +2E8");
+    if (!dota)
+    {
+        Equal(10, actor.NativeRaw0608, description + " raw +608");
+        Equal(30, actor.NativeRaw05F8,
+            description + " deterministic Random(34)+30");
+        Equal(8, actor.NativeRaw05FC, description + " raw +5FC");
+    }
+    Equal(0, actor.m_MagicList.Count,
+        description + " fresh empty magic list");
+    Equal(0, actor.NativeDropItems.Count,
+        description + " non-null empty borrowed drop table");
+    Equal(actor.NativeRaw0634, actor.NativeLastAttackTick,
+        description + " common tick +638");
+    Equal(actor.NativeRaw0634, actor.NativeRaw060C,
+        description + " common tick +60C");
+    Equal(actor.NativeRaw0634, actor.NativeLastSpellTick,
+        description + " common tick +624");
+    Equal(actor.NativeRaw0634, actor.NativeSpecialSkillTick,
+        description + " common tick +628");
+    Equal(actor.NativeRaw0634, actor.NativeRaw0610,
+        description + " common tick +610");
+    Equal(0, actor.NativeLifetimeRemaining,
+        description + " lifetime initial value");
+    Equal(0, actor.NativeFameRank,
+        description + " fame rank initial value");
+}
+
+static bool TickWithin(int value, int start, int end) =>
+    unchecked((uint)(value - start)) <= unchecked((uint)(end - start));
 
 static void CheckOrdinaryAbilities()
 {
@@ -241,6 +420,67 @@ static void CheckSkills(IReadOnlyList<NativeFieldHeroSkillContract> actual,
         placement, description + " initialization placement");
 }
 
+static NativeType2FieldHeroRuntimeCatalogAdapter CreateRuntimeAdapter()
+{
+    var standardSnapshot = NativeType2StdItemSnapshotState
+        .CreateForVerifiedOriginalStartup();
+    standardSnapshot.Consume(CreatePacket(
+        NativeType2StdItemSnapshotState.Command,
+        NativeType2StdItemSnapshotState.HeaderSize,
+        Array.Empty<byte>(), true));
+    var standardItems = new NativeType2StdItemStaticCatalog();
+    standardItems.Publish(standardSnapshot);
+
+    var body = new byte[NativeType2FieldHeroSnapshotState.BodySize];
+    var name = Encoding.ASCII.GetBytes("CtorHero");
+    body[0] = checked((byte)name.Length);
+    name.CopyTo(body, 1);
+    body[0x10] = 0;
+    BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(0x12, 2), 45);
+    var fieldSnapshot = new NativeType2FieldHeroSnapshotState();
+    fieldSnapshot.Consume(CreatePacket(
+        NativeType2FieldHeroSnapshotState.Command,
+        NativeType2FieldHeroSnapshotState.HeaderSize, body, true));
+    var fieldCatalog = new NativeType2FieldHeroStaticCatalog();
+    fieldCatalog.Publish(fieldSnapshot, standardItems);
+
+    var adapter = new NativeType2FieldHeroRuntimeCatalogAdapter();
+    adapter.Publish(fieldCatalog, standardItems);
+    return adapter;
+}
+
+static TFieldHero CreateActor(
+    NativeType2FieldHeroRuntimeCatalogAdapter adapter, byte selector,
+    Type actorType)
+{
+    if (!adapter.TryResolveTemplate("CtorHero", out var template))
+        throw new InvalidOperationException("missing constructor template");
+    var selection = template.CaptureSelectionAfterPlacement(selector);
+    var plan = NativeType2FieldHeroSpawnPlanFactory.Create(selection);
+    var materialization = plan.MaterializeEquipment();
+    using var registration = M2Share.ObjectManager
+        .BeginDeferredRegistration();
+    var actor = Activator.CreateInstance(actorType,
+        BindingFlags.Instance | BindingFlags.NonPublic, null,
+        new object[] { plan, materialization }, null) as TFieldHero;
+    if (actor == null)
+        throw new InvalidOperationException(
+            "could not construct " + actorType.Name);
+    Equal(actorType, actor.GetType(), actorType.Name + " concrete type");
+    return actor;
+}
+
+static byte[] CreatePacket(ushort command, int headerSize, byte[] body,
+    bool completed)
+{
+    var packet = new byte[headerSize + body.Length];
+    BinaryPrimitives.WriteUInt16LittleEndian(packet, command);
+    if (completed)
+        BinaryPrimitives.WriteInt32LittleEndian(packet.AsSpan(0x08, 4), 1);
+    body.CopyTo(packet, headerSize);
+    return packet;
+}
+
 static void CheckMetadata(int vmt, int constructor, int size,
     int expectedVmt, int expectedConstructor, int expectedSize,
     string description)
@@ -267,7 +507,59 @@ static void Equal<T>(T expected, T actual, string description)
     }
 }
 
+static void ExpectThrows<T>(Action action, string description)
+    where T : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (T)
+    {
+        return;
+    }
+    throw new InvalidOperationException(description);
+}
+
 static void Check(bool condition, string description)
 {
     if (!condition) throw new InvalidOperationException(description);
+}
+
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}
+
+sealed class RecordingRandomNumber : RandomNumber
+{
+    public List<int> Bounds { get; } = new();
+
+    public void Clear() => Bounds.Clear();
+
+    public override int Random() => 0;
+
+    public override int Random(int value)
+    {
+        Bounds.Add(value);
+        return 0;
+    }
+
+    public override int Random(int minValue, int maxValue) => minValue;
+
+    public override int GetRandomNumber(int minValue, int maxValue) =>
+        minValue;
 }

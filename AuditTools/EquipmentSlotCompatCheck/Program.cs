@@ -1,3 +1,4 @@
+using System.Reflection;
 using GameSvr;
 using SystemModule;
 
@@ -28,7 +29,65 @@ Equal("\u7389\u4f69", M2Share.GetUseItemName(Grobal2.U_WARDRUM),
 Equal("\u76fe\u724c", M2Share.GetUseItemName(Grobal2.U_MOUNT),
     "mount legacy script name");
 
+CheckNativeFeatureRefreshSlots();
+
 Console.WriteLine("PASS equipment slot compatibility");
+
+static void CheckNativeFeatureRefreshSlots()
+{
+    var predicate = typeof(TPlayObject).GetMethod(
+        "NativeEquipmentSlotChangesFeature",
+        BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new MissingMethodException(typeof(TPlayObject).FullName,
+            "NativeEquipmentSlotChangesFeature");
+
+    for (byte slot = 0; slot < Grobal2.HUMAN_EQUIPPED_ITEM_COUNT; slot++)
+    {
+        var expected = slot == Grobal2.U_DRESS
+            || slot == Grobal2.U_WEAPON
+            || slot == Grobal2.U_HELMET
+            || slot == Grobal2.U_MASK;
+        var actual = (bool)(predicate.Invoke(null, new object[] { slot })
+            ?? throw new InvalidOperationException("feature-slot predicate returned null"));
+        Equal(expected, actual, $"native feature refresh slot {slot}");
+    }
+
+    var root = FindRepositoryRoot()
+        ?? throw new DirectoryNotFoundException("repository root was not found");
+    var source = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
+        "TPlayObject.Operate.cs"));
+    var takeOn = Between(source, "private void ClientTakeOnItems(",
+        "private void ClientTakeOffItems(");
+    var takeOff = Between(source, "private void ClientTakeOffItems(",
+        "private void ClientUseItems(");
+    CheckGuardedFeatureRefresh(takeOn, "take-on");
+    CheckGuardedFeatureRefresh(takeOff, "take-off");
+}
+
+static void CheckGuardedFeatureRefresh(string body, string operation)
+{
+    var compact = string.Concat(body.Where(c => !char.IsWhiteSpace(c)));
+    const string guard = "if(NativeEquipmentSlotChangesFeature(btWhere)){FeatureChanged();}";
+    if (!compact.Contains(guard, StringComparison.Ordinal))
+        throw new InvalidOperationException(
+            $"{operation} feature refresh is not guarded by the native slot predicate");
+
+    var featureCallCount = compact.Split("FeatureChanged();",
+        StringSplitOptions.None).Length - 1;
+    if (featureCallCount != 1)
+        throw new InvalidOperationException(
+            $"{operation} contains {featureCallCount} FeatureChanged calls; expected exactly one guarded call");
+}
+
+static string Between(string source, string startMarker, string endMarker)
+{
+    var start = source.IndexOf(startMarker, StringComparison.Ordinal);
+    var end = source.IndexOf(endMarker, start + startMarker.Length,
+        StringComparison.Ordinal);
+    if (start < 0 || end <= start)
+        throw new InvalidOperationException($"source boundary missing: {startMarker}");
+    return source[start..end];
+}
 
 static void Accepts(int slot, byte stdMode)
 {
@@ -63,4 +122,19 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+}
+
+static string FindRepositoryRoot()
+{
+    foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+    {
+        var current = new DirectoryInfo(start);
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "GameSvr", "GameSvr.csproj")))
+                return current.FullName;
+            current = current.Parent;
+        }
+    }
+    return null;
 }

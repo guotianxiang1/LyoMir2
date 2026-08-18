@@ -14,6 +14,33 @@ M2Share.ProcessMsgCriticalSection = new object();
 M2Share.ProcessHumanCriticalSection = new object();
 M2Share.LogMsgCriticalSection = new object();
 M2Share.LogStringList = new System.Collections.ArrayList();
+if (args.Any(arg => string.Equals(arg, "--repair-only",
+        StringComparison.OrdinalIgnoreCase)))
+{
+    RunRepairClickAbiRegression();
+    var repairRepositoryRoot = FindRepositoryRoot();
+    var repairBridgeSource = File.ReadAllText(Path.Combine(
+        repairRepositoryRoot, "GameSvr", "ScriptSystem", "PasEngine",
+        "PasApiBridge.cs"));
+    var repairNpcMethods = Slice(repairBridgeSource,
+        "public bool CallNpcMethod", "public bool CallNpcFunc");
+    var repairNpcFunctions = Slice(repairBridgeSource,
+        "public bool CallNpcFunc", "public bool CallStandaloneFunction");
+    foreach (var procedureName in new[]
+             {
+                 "click_repair", "click_srepair", "click_repairex",
+                 "click_repair_ex"
+             })
+    {
+        Equal(1, Count(repairNpcMethods, $"case \"{procedureName}\":"),
+            procedureName + " procedure dispatch count");
+        Equal(0, Count(repairNpcFunctions, $"case \"{procedureName}\":"),
+            procedureName + " function shadow count");
+    }
+    Console.WriteLine("PASS repair-click ABI explicit-player mode-byte " +
+        "shared-RM function-shadow-free ghost-order");
+    return;
+}
 M2Share.UserEngine.StdItemList.Add(new GoodItem
 {
     Name = "normal-gift",
@@ -919,6 +946,7 @@ RunGroupPropertyRegressions();
 RunGroupFlyRegressions();
 RunClearMonDispatchRegressions();
 RunPlayDiceDispatchRegression();
+RunRepairClickAbiRegression();
 RunCastleClickAbiRegression();
 
 var repositoryRoot = FindRepositoryRoot();
@@ -952,6 +980,17 @@ Equal(1, Count(npcMethods, "case \"playdice\":"),
     "PlayDice procedure dispatch count");
 Equal(0, Count(npcFunctions, "case \"playdice\":"),
     "PlayDice function shadow count");
+foreach (var procedureName in new[]
+         {
+             "click_repair", "click_srepair", "click_repairex",
+             "click_repair_ex"
+         })
+{
+    Equal(1, Count(npcMethods, $"case \"{procedureName}\":"),
+        procedureName + " procedure dispatch count");
+    Equal(0, Count(npcFunctions, $"case \"{procedureName}\":"),
+        procedureName + " function shadow count");
+}
 foreach (var procedureName in new[] { "click_repairwall", "click_hirearcher" })
 {
     Equal(1, Count(npcMethods, $"case \"{procedureName}\":"),
@@ -1162,7 +1201,8 @@ Console.WriteLine(
     "TakeEx=atomic-fail-closed " +
     "Gold=boolean HeroSkill=hero-only Skill=name+level+exp+delete Log=nine-column " +
     "PlayerAbil=timed-state+native-precedence DoRelive=scheduled-fail-closed " +
-    "PlayDice=explicit-player+packed-v1-v10");
+    "PlayDice=explicit-player+packed-v1-v10 " +
+    "RepairClick=explicit-player+mode-byte+shared-rm+ghost-order");
 return;
 
 static void RunPlayDiceDispatchRegression()
@@ -1207,6 +1247,121 @@ static void RunPlayDiceDispatchRegression()
     EqualBits(0x00000A09, message.nParam3, "PlayDice V9..V10 packing");
     Assert(message.Buff == "dice-result", "PlayDice message label");
     Assert(ReferenceEquals(npc, message.BaseObject), "PlayDice message NPC");
+}
+
+static void RunRepairClickAbiRegression()
+{
+    var npc = new NormNpc();
+    var explicitPlayer = new TPlayObject { m_sCharName = "repair-clicker" };
+    var ambientPlayer = new TPlayObject { m_sCharName = "repair-ambient" };
+    var bridge = new PasApiBridge
+    {
+        CurrentNpc = npc,
+        CurrentPlayer = ambientPlayer
+    };
+
+    foreach (var call in new[]
+             {
+                 (Name: "Click_Repair", Args: Values(explicitPlayer)),
+                 (Name: "Click_SRepair", Args: Values(explicitPlayer)),
+                 (Name: "Click_RepairEx", Args: Values(explicitPlayer, 3)),
+                 (Name: "Click_Repair_Ex", Args: Values(explicitPlayer, 3))
+             })
+    {
+        Assert(!bridge.CallNpcFunc(call.Name, call.Args, out var functionResult),
+            call.Name + " function still shadows the native procedure");
+        AssertNil(functionResult, call.Name + " function");
+    }
+
+    foreach (var method in new[] { "Click_Repair", "Click_SRepair" })
+    {
+        foreach (var invalidArgs in new[]
+                 {
+                     Values(), Values(1), Values(npc),
+                     Values(explicitPlayer, 1)
+                 })
+        {
+            Assert(!bridge.CallNpcMethod(method, invalidArgs, out var methodResult),
+                method + " accepted an invalid explicit-Clicker ABI");
+            AssertNil(methodResult, method + " invalid ABI");
+        }
+    }
+
+    foreach (var method in new[] { "Click_RepairEx", "Click_Repair_Ex" })
+    {
+        foreach (var invalidArgs in new[]
+                 {
+                     Values(), Values(explicitPlayer), Values(1, 3),
+                     Values(npc, 3), Values(explicitPlayer, "3"),
+                     Values(explicitPlayer, 3, 4)
+                 })
+        {
+            Assert(!bridge.CallNpcMethod(method, invalidArgs, out var methodResult),
+                method + " accepted an invalid (Clicker, RepairMode:Word) ABI");
+            AssertNil(methodResult, method + " invalid ABI");
+        }
+    }
+    Equal(0, explicitPlayer.m_btNativeRepairMode,
+        "invalid repair click changed mode");
+    Equal(0, explicitPlayer.m_MsgList.Count,
+        "invalid repair click queued a message");
+
+    Verify("Click_Repair", Values(explicitPlayer), 1);
+    Verify("Click_SRepair", Values(explicitPlayer), 2);
+    Verify("Click_RepairEx", Values(explicitPlayer, 0x0103), 3);
+    Verify("Click_Repair_Ex", Values(explicitPlayer, 0x12345), 0x45);
+    Equal(0, ambientPlayer.m_btNativeRepairMode,
+        "repair click changed the ambient player's mode");
+    Equal(0, ambientPlayer.m_MsgList.Count,
+        "repair click queued a message on the ambient player");
+
+    explicitPlayer.m_MsgList.Clear();
+    explicitPlayer.m_boGhost = true;
+    Assert(bridge.CallNpcMethod("Click_RepairEx",
+            Values(explicitPlayer, 0x0103), out var ghostResult),
+        "ghost Click_RepairEx was not dispatched");
+    AssertNil(ghostResult, "ghost Click_RepairEx");
+    Equal(3, explicitPlayer.m_btNativeRepairMode,
+        "ghost Click_RepairEx did not write the mode before SendMsg");
+    Equal(0, explicitPlayer.m_MsgList.Count,
+        "ghost Click_RepairEx bypassed the shared SendMsg ghost gate");
+
+    explicitPlayer.m_boGhost = false;
+    explicitPlayer.m_boDeath = true;
+    Assert(bridge.CallNpcMethod("Click_Repair", Values(explicitPlayer),
+            out var deathResult),
+        "dead Click_Repair was not dispatched");
+    AssertNil(deathResult, "dead Click_Repair");
+    Equal(1, explicitPlayer.m_btNativeRepairMode,
+        "dead Click_Repair did not persist mode 1");
+    Equal(1, explicitPlayer.m_MsgList.Count,
+        "dead Click_Repair incorrectly applied a death pre-gate");
+
+    void Verify(string method, List<PasValue> args, int expectedMode)
+    {
+        explicitPlayer.m_boDeath = false;
+        explicitPlayer.m_boGhost = false;
+        explicitPlayer.m_MsgList.Clear();
+        Assert(bridge.CallNpcMethod(method, args, out var methodResult),
+            method + " procedure was not dispatched");
+        AssertNil(methodResult, method + " procedure");
+        Equal(expectedMode, explicitPlayer.m_btNativeRepairMode,
+            method + " mode byte");
+        Equal(1, explicitPlayer.m_MsgList.Count,
+            method + " queued message count");
+        var message = explicitPlayer.m_MsgList[0];
+        Equal(Grobal2.RM_SENDUSERREPAIR, message.wIdent,
+            method + " message ident");
+        Equal(0, message.wParam, method + " message wParam");
+        Equal(npc.ObjectId, message.nParam1,
+            method + " message NPC ObjectId");
+        Equal(0, message.nParam2,
+            method + " must not put repair mode in nParam2");
+        Equal(0, message.nParam3, method + " message nParam3");
+        Assert(string.IsNullOrEmpty(message.Buff), method + " message payload");
+        Assert(ReferenceEquals(npc, message.BaseObject),
+            method + " message NPC");
+    }
 }
 
 static void RunCastleClickAbiRegression()

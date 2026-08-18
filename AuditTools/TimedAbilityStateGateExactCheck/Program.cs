@@ -7,6 +7,14 @@ using SystemModule;
 PrepareRuntimeConfig();
 InitializeRuntime();
 
+if (args.Contains("--state25-only", StringComparer.OrdinalIgnoreCase))
+{
+    CheckPlayerState25Override();
+    CheckSourceOrdering();
+    Console.WriteLine("PASS player-state25 gained/lost text+color+type+player-gate+before-3555");
+    return;
+}
+
 CheckNativeStateCarrier();
 CheckState20AndLegacyWordAuthority();
 CheckSupportedPasMapping();
@@ -14,6 +22,7 @@ CheckGateProducerClosure();
 CheckGlobalGateHasNoSideEffects();
 CheckValueGate();
 CheckPlayerType45SideEffect();
+CheckPlayerState25Override();
 CheckExpiryRemovalAndExit();
 CheckType12NativeDoubling();
 CheckSourceOrdering();
@@ -21,7 +30,7 @@ CheckSourceOrdering();
     Console.WriteLine(
     "PASS timed-ability state=0..111+16B-LE state20=timed-carrier legacy21..31=authority " +
     "mapping=27->59+43->75+44->76+45->77+61->93+62->94+64->96+68->100 gate52=zero-side-effects gate16=45/53-only " +
-    "player45=visible-3415+657 hero45=no-hook expiry=two-phase-oldest-first " +
+    "player45=visible-3415+657 hero45=no-hook player-state25=gain/lost-exact expiry=two-phase-oldest-first " +
     "exit=transient-clear type12=native-double producers16/52=NO-GO(scope-closed)");
 return;
 
@@ -352,13 +361,20 @@ static void CheckPlayerType45SideEffect()
     var outsiderStatusMessages = CountMessages(outsider,
         Grobal2.RM_CHARSTATUSCHANGED);
     var visibleBeforeBroadcast = new List<TBaseObject>();
+    var sourceCellResolved = false;
+    var sourceCell = map.GetMapCellInfo(player.m_nCurrX, player.m_nCurrY,
+        ref sourceCellResolved);
     Assert(player.GetMapBaseObjects(map, player.m_nCurrX, player.m_nCurrY,
             M2Share.g_Config.nSendRefMsgRange, visibleBeforeBroadcast),
         "type45 visible-object scan failed");
     Assert(visibleBeforeBroadcast.Contains(player)
            && visibleBeforeBroadcast.Contains(observer)
            && !visibleBeforeBroadcast.Contains(outsider),
-        "type45 map placement did not match visible range");
+        "type45 map placement did not match visible range: "
+        + string.Join(',', visibleBeforeBroadcast.Select(value => value.m_sCharName))
+        + $"; range={M2Share.g_Config.nSendRefMsgRange}; cell={sourceCellResolved}/{sourceCell.Count}; "
+        + $"sourceGhost={player.m_boGhost}; sourceDeath={player.m_boDeath}; "
+        + $"observerGhost={observer.m_boGhost}; observerDeath={observer.m_boDeath}");
     Equal((byte)Grobal2.RC_PLAYOBJECT, observer.m_btRaceServer,
         "type45 observer race");
 
@@ -488,6 +504,41 @@ static void CheckPlayerType45SideEffect()
         "hero internal45 acquired player-only side effect");
 }
 
+static void CheckPlayerState25Override()
+{
+    const int duration = 70_000_999;
+    const string gainedText = "反外挂惩罚4464秒";
+    const string lostText = "反外挂惩罚时间结束";
+
+    var player = NewPlayer("state25-player");
+    Assert(AddInternalTimedAbility(player, 25, 7, duration),
+        "player state25 add");
+    var gained = player.m_MsgList.Single(message =>
+        message.wIdent == Grobal2.RM_SYSMESSAGE && message.Buff == gainedText);
+    Equal(0, gained.wParam, "state25 gained wParam");
+    Equal(0xFF, gained.nParam1, "state25 gained color");
+    Equal(0x38, gained.nParam2, "state25 gained type");
+    Equal(0, gained.nParam3, "state25 gained nParam3");
+
+    Assert(RemoveInternalTimedAbility(player, 25), "player state25 remove");
+    var lost = player.m_MsgList.Single(message =>
+        message.wIdent == Grobal2.RM_SYSMESSAGE && message.Buff == lostText);
+    Equal(0, lost.wParam, "state25 lost wParam");
+    Equal(0xDB, lost.nParam1, "state25 lost color");
+    Equal(0xFF, lost.nParam2, "state25 lost type");
+    Equal(0, lost.nParam3, "state25 lost nParam3");
+
+    var hero = new HeroObject();
+    Assert(AddInternalTimedAbility(hero, 25, 7, duration), "hero state25 add");
+    Assert(hero.m_MsgList.All(message =>
+            message.Buff != gainedText && message.Buff != lostText),
+        "hero received TPlayObject-only state25 text");
+    Assert(RemoveInternalTimedAbility(hero, 25), "hero state25 remove");
+    Assert(hero.m_MsgList.All(message =>
+            message.Buff != gainedText && message.Buff != lostText),
+        "hero received TPlayObject-only state25 lost text");
+}
+
 static void CheckExpiryRemovalAndExit()
 {
     var expiry = new TBaseObject();
@@ -605,6 +656,17 @@ static void CheckSourceOrdering()
     Before(remove, "ClearNativeActiveState(internalType)",
         "SendTimedAbilityState(node, true)", "remove clear before callback");
 
+    var stateSend = Between(timed, "private void SendTimedAbilityState(",
+        "protected virtual void SendTimedAbilityClientState");
+    Contains(stateSend, "this is TPlayObject && node.InternalType == 25",
+        "player-only state25 override");
+    var state25Index = stateSend.IndexOf(
+        "this is TPlayObject && node.InternalType == 25", StringComparison.Ordinal);
+    var finalClientStateIndex = stateSend.LastIndexOf(
+        "SendTimedAbilityClientState(node.InternalType", StringComparison.Ordinal);
+    Assert(finalClientStateIndex > state25Index,
+        "state25 override before 3555 record");
+
     var type12 = Between(timed, "case 12:", "case 59:");
     var compactType12 = Compact(type12);
     Contains(compactType12,
@@ -715,7 +777,7 @@ static void CheckPacket(ClientPacket packet, int ident, int recog, int param,
 
 static Envirnoment NewMap(short width, short height)
 {
-    var map = new Envirnoment();
+    var map = new Envirnoment { sMapName = "timed-ability-audit" };
     var initialize = typeof(Envirnoment).GetMethod("Initialize",
         BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingMethodException("Envirnoment.Initialize");
@@ -749,6 +811,24 @@ static bool CanAdd(TBaseObject actor, byte internalType)
     var method = typeof(TBaseObject).GetMethod("CanAddNativeTimedAbility",
         BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingMethodException("CanAddNativeTimedAbility");
+    return (bool)(method.Invoke(actor, new object[] { internalType }) ?? false);
+}
+
+static bool AddInternalTimedAbility(TBaseObject actor, byte internalType,
+    int value, int duration)
+{
+    var method = typeof(TBaseObject).GetMethod("AddTimedAbilityInternal",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMethodException("AddTimedAbilityInternal");
+    return (bool)(method.Invoke(actor,
+        new object[] { internalType, value, duration, (byte)0 }) ?? false);
+}
+
+static bool RemoveInternalTimedAbility(TBaseObject actor, byte internalType)
+{
+    var method = typeof(TBaseObject).GetMethod("RemoveTimedAbilityInternal",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMethodException("RemoveTimedAbilityInternal");
     return (bool)(method.Invoke(actor, new object[] { internalType }) ?? false);
 }
 

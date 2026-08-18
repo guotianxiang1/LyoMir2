@@ -16,6 +16,7 @@ CheckMissingItemIsSilent();
 CheckEmptyBodyIsSilent();
 CheckForgedMakeIndexIsSilent();
 CheckOutOfBoundsIsAtomic();
+CheckBlockedCellFireworksArePlaced();
 CheckBroadcastPacketAbi();
 CheckSuccessPath();
 CheckInvalidGbkWirePreservation();
@@ -104,6 +105,9 @@ static void CheckIngressMapping()
     ResetRuntime();
     var player = NewPlayer(30, 30);
     player.m_boOffLineFlag = false;
+    typeof(TPlayObject).GetField("m_boNativeClientVersionHandshakeDone",
+            BindingFlags.Instance | BindingFlags.NonPublic)!
+        .SetValue(player, true);
     var payload = Body("传A");
     M2Share.UserEngine.ProcessUserMessage(player, new ClientPacket
     {
@@ -162,6 +166,51 @@ static void CheckOutOfBoundsIsAtomic()
     Equal("此处无法施放传情烟花", failure.Buff,
         "out-of-bounds text");
     Equal(0, M2Share.LogStringList.Count, "out-of-bounds log");
+}
+
+static void CheckBlockedCellFireworksArePlaced()
+{
+    ResetRuntime();
+    var player = NewPlayer(30, 30);
+    player.m_PEnvir.SetMapXYFlag(10, 10, false);
+    player.m_PEnvir.SetMapXYFlag(12, 10, false);
+    var item = AddFirework(player, 4321, 8765);
+
+    Assert(player.Operate(new TProcessMessage
+    {
+        wIdent = Grobal2.CM_YANHUA_TEXT,
+        nParam1 = item.ClientItemID,
+        Payload = EDcode.EncodeBuffer(Body("AB"))
+    }), "blocked-cell dispatcher result");
+
+    var first = M2Share.EventManager.GetEvent(player.m_PEnvir, 10, 10,
+        Grobal2.ET_YANHUA_TEXT);
+    var second = M2Share.EventManager.GetEvent(player.m_PEnvir, 12, 10,
+        Grobal2.ET_YANHUA_TEXT);
+    Assert(first != null && second != null,
+        "blocked-cell firework events missing from the manager");
+
+    var found = false;
+    var firstCell = player.m_PEnvir.GetMapCellInfo(10, 10, ref found);
+    Assert(found && !firstCell.Valid && firstCell.ObjList?.Any(node =>
+            node.CellType == CellType.OS_EVENTOBJECT &&
+            ReferenceEquals(node.CellObj, first)) == true,
+        "TFireworksEvent was not linked into the first non-walkable cell");
+    var secondCell = player.m_PEnvir.GetMapCellInfo(12, 10, ref found);
+    Assert(found && !secondCell.Valid && secondCell.ObjList?.Any(node =>
+            node.CellType == CellType.OS_EVENTOBJECT &&
+            ReferenceEquals(node.CellObj, second)) == true,
+        "TFireworksEvent was not linked into the second non-walkable cell");
+
+    var ordinary = new Event(player.m_PEnvir, 14, 10, 22, 1000, false);
+    player.m_PEnvir.SetMapXYFlag(14, 10, false);
+    Assert(player.m_PEnvir.AddToMap(14, 10, CellType.OS_EVENTOBJECT,
+               ordinary) == null,
+        "the non-walkable-cell exception leaked from TFireworksEvent to Event");
+    var ordinaryCell = player.m_PEnvir.GetMapCellInfo(14, 10, ref found);
+    Assert(found && (ordinaryCell.ObjList == null || ordinaryCell.ObjList.All(
+            node => !ReferenceEquals(node.CellObj, ordinary))),
+        "ordinary Event was linked into a non-walkable cell");
 }
 
 static void CheckSuccessPath()

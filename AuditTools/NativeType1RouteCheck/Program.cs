@@ -21,6 +21,8 @@ RequireSingle(route, "HumDataService.AddNativeLoadFrame(frame)",
     "0050 human-load owner");
 RequireSingle(route, "NativeForceDisconnectClient.ProcessResponse(frame)",
     "0052 force-disconnect owner");
+RequireSingle(route, "NativeWhitelistReloadClient.ProcessResponse(frame)",
+    "0132 whitelist-reload owner");
 RequireSingle(route, "NativeItemExtractionClient.ProcessResponse(frame)",
     "0055 item-extraction owner");
 RequireSingle(route, "NativeItemInjectionClient.ProcessResponse(frame)",
@@ -41,6 +43,9 @@ Require(route,
 Require(route,
     @"command\s*==\s*NativeForceDisconnectClient\.ResponseCommand",
     "0052 constant is not routed");
+Require(route,
+    @"command\s*==\s*NativeWhitelistReloadClient\.ResponseCommand",
+    "0132 constant is not routed");
 Require(route,
     @"command\s*==\s*NativeItemExtractionProtocol\.ResponseCommand",
     "0055 constant is not routed");
@@ -81,6 +86,7 @@ Console.WriteLine("NativeType1RouteCheck PASS " +
                   "0050=human 0052=kick 0055=extract 0056=mail " +
                   "005D/5E/70=hero-aux " +
                   "0060/61=yb-ack 0062/63=account-storage " +
+                  "0132=whitelist-reload " +
                   "hero=0051/0053/005A 0059=ignored");
 return 0;
 

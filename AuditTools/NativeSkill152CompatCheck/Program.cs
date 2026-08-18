@@ -128,8 +128,12 @@ static void VerifyOneShotBonusAndConsumption()
         Equal(350, ApplyBonus(actor, skillId, 100),
             $"skill{skillId} bonus");
     Equal(100, ApplyBonus(actor, 34, 100), "unlisted skill bonus");
-    Equal(0, ApplyBonus(actor, 1, 0), "zero damage gate");
-    Equal(-1, ApplyBonus(actor, 1, -1), "negative damage gate");
+    Equal(250, ApplyBonus(actor, 1, 0), "zero damage addition");
+    Equal(249, ApplyBonus(actor, 1, -1), "negative damage addition");
+    SetField(actor, "m_nNativeOneShotMagicDamage", 1);
+    Equal(int.MinValue, ApplyBonus(actor, 1, int.MaxValue),
+        "one-shot addition must wrap as native Int32");
+    SetField(actor, "m_nNativeOneShotMagicDamage", 250);
 
     Consume(actor, 34);
     Equal(250, GetField<int>(actor, "m_nNativeOneShotMagicDamage"),
@@ -158,8 +162,11 @@ static void VerifySourceWiring()
     Contains(skill,
         "unchecked((byte)(magic.btLevel + magic.NativeLevelBonus))",
         "effective-level byte-wrap contract");
-    Contains(skill, "m_nNativeOneShotMagicDamage > 0 && damage > 0",
+    Contains(skill, "m_nNativeOneShotMagicDamage > 0 &&",
         "positive stored one-shot gate");
+    Assert(!skill.Contains("damage > 0 &&",
+        StringComparison.Ordinal),
+        "native one-shot consumer has no current-damage gate");
 
     string damage = File.ReadAllText(Path.Combine(root, "GameSvr",
         "Actors", "TBaseObject.NativeMagicDamage.cs"));
@@ -167,15 +174,24 @@ static void VerifySourceWiring()
         StringComparison.Ordinal);
     int bonus = damage.IndexOf("ApplyNativeSkill152OneShotBonus(",
         StringComparison.Ordinal);
+    int breakBonus = damage.IndexOf(
+        "damage = unchecked(damage + breakBonus);",
+        StringComparison.Ordinal);
+    int skill151 = damage.IndexOf("ApplyNativeSkill151BurstDamage(",
+        StringComparison.Ordinal);
     int cap = damage.IndexOf("ApplyNativeState16MagicDamageCap(",
         StringComparison.Ordinal);
     int contest = damage.IndexOf("ApplyNativeState16LevelContest(",
         StringComparison.Ordinal);
     int shield153 = damage.IndexOf(
         "ApplyNativeSkill153ShieldToMagicDamage(", StringComparison.Ordinal);
-    Assert(hq >= 0 && bonus > hq && cap > bonus && contest > cap &&
+    Assert(hq >= 0 && breakBonus > hq && bonus > breakBonus &&
+        skill151 > bonus && cap > skill151 && contest > cap &&
         shield153 > contest,
         "one-shot resolver order differs from target human VMT+0xF4");
+    Assert(!damage.Contains("(effectiveFlags & 0x0C) == 0",
+        StringComparison.Ordinal),
+        "flags 4/8 must not bypass the native Skill152 consumer");
 
     string effects = File.ReadAllText(Path.Combine(root, "GameSvr",
         "Actors", "TBaseObject.NativeState26Effects.cs"));
@@ -230,11 +246,11 @@ static void VerifySourceWiring()
     int rangeGate = manager.IndexOf(
         "Math.Abs(PlayObject.m_nCurrX - nTargetX)",
         StringComparison.Ordinal);
-    int spellAnimation = manager.IndexOf("Grobal2.RM_SPELL",
+    int spellAnimation = manager.IndexOf("SendNativeSpell(", rangeGate,
         StringComparison.Ordinal);
     int activation = manager.IndexOf("TryActivateNativeSkill152(",
         StringComparison.Ordinal);
-    int fireAnimation = manager.IndexOf("Grobal2.RM_MAGICFIRE",
+    int fireAnimation = manager.IndexOf("SendNativeMagicFire(",
         activation, StringComparison.Ordinal);
     Assert(rangeGate >= 0 && spellAnimation > rangeGate &&
         activation > spellAnimation && fireAnimation > activation,

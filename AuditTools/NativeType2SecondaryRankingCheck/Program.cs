@@ -88,6 +88,7 @@ CheckThrows<ArgumentOutOfRangeException>(() => state.GetBucket(
 
 CheckPageSelection();
 CheckQuestOrderResponse();
+CheckNativeHonorRecipientLookup();
 CheckTopSevenOnlineNotifications();
 
 Console.WriteLine("PASS NativeType2SecondaryRankingCheck " +
@@ -198,7 +199,8 @@ static void CheckQuestOrderResponse()
     var honorManager = new NativeHonorValueManager();
     honorManager.ReplaceRankingSnapshot(Enumerable.Range(1, 10)
         .Select(rank => new KeyValuePair<string, int>(
-            rank == 8 ? "荣誉本人" : $"荣誉{rank}", 1000 - rank)));
+            rank == 8 ? "荣誉本人" : rank == 10 ? "1234567890ABCDEF"
+                : $"荣誉{rank}", 1000 - rank)));
     M2Share.HonorValueManager = honorManager;
     player.m_sCharName = "荣誉本人";
     try
@@ -248,6 +250,22 @@ static void CheckQuestOrderResponse()
               && honorFirstBody.Length == 7 *
                   NativeHonorValueManager.RankingRecordSize,
             "category 16 explicit honor page");
+        var firstHonorName = HUtil32.GbkEncoding.GetBytes("荣誉1");
+        Check(honorFirstBody[NativeHonorValueManager.RankingNameLengthOffset]
+                  == firstHonorName.Length
+              && honorFirstBody.AsSpan(
+                      NativeHonorValueManager.RankingNameOffset,
+                      firstHonorName.Length).SequenceEqual(firstHonorName)
+              && honorFirstBody[
+                  NativeHonorValueManager.RankingNameOffset
+                  + firstHonorName.Length] == 0,
+            "category 16 record uses GBK ShortString[15] length at +2 and payload at +3");
+        Check(player.TryCreateNativeQuestOrderResponse(-2, 16,
+                  out var honorSentinel, out var honorSentinelBody)
+              && honorSentinel.Recog == -2 && honorSentinel.Param == 16
+              && honorSentinel.Tag == 1 && honorSentinel.Series == 0
+              && honorSentinelBody.Length == 0,
+            "category 16 explicit -2 sentinel returns the native empty frame");
         player.m_sCharName = "荣誉榜外";
         Check(player.TryCreateNativeQuestOrderResponse(-1, 16,
                   out var honorMissing, out var honorMissingBody)
@@ -258,6 +276,19 @@ static void CheckQuestOrderResponse()
         Check(!player.TryCreateNativeQuestOrderResponse(2, 16,
                   out _, out _),
             "category 16 high page is silent");
+        player.m_sCharName = "1234567890ABCDEF";
+        Check(player.TryCreateNativeQuestOrderResponse(-1, 16,
+                  out var honorLongMissing, out var honorLongMissingBody)
+              && honorLongMissing.Recog == -2
+              && honorLongMissingBody.Length == 0,
+            "category 16 personal lookup compares the truncated 15-byte record");
+        player.m_sCharName = "1234567890ABCDE";
+        Check(player.TryCreateNativeQuestOrderResponse(-1, 16,
+                  out var honorTruncatedMatch, out var honorTruncatedBody)
+              && honorTruncatedMatch.Recog == 1
+              && honorTruncatedBody.Length == 3 *
+                  NativeHonorValueManager.RankingRecordSize,
+            "category 16 personal lookup can match the exact truncated record bytes");
     }
     finally
     {
@@ -275,6 +306,87 @@ static void CheckQuestOrderResponse()
               && header.Tag == 2 && header.Series == 8
               && body.Length == expectedLength && body[0] == expectedFirst,
             label);
+    }
+}
+
+static void CheckNativeHonorRecipientLookup()
+{
+    var engine = new UserEngine();
+    var field = typeof(UserEngine).GetField("m_PlayObjectList",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(nameof(UserEngine),
+            "m_PlayObjectList");
+    var players = (IList<TPlayObject>)field.GetValue(engine);
+    var player = new TPlayObject
+    {
+        m_sCharName = "HonorReceiverA",
+        m_boReadyRun = true,
+        m_boGhost = false
+    };
+    players.Add(player);
+
+    Check(ReferenceEquals(engine.GetNativeReadyPlayObject("HonorReceiverA"),
+            player)
+          && ReferenceEquals(engine.GetNativeReadyPlayObject("honorreceivera"),
+              player),
+        "sub_652784 name lookup is case-insensitive and accepts the ready non-ghost player");
+    player.m_sCharName = "ReceiverＡ";
+    Check(string.Equals("ReceiverＡ", "Receiverａ",
+              StringComparison.OrdinalIgnoreCase)
+          && !UserEngine.NativeAnsiNameEquals("ReceiverＡ", "Receiverａ")
+          && engine.GetNativeReadyPlayObject("Receiverａ") == null,
+        "sub_40BCBC folds ASCII A-Z bytes only, not full-width Unicode case pairs");
+
+    var upperTrailName = HUtil32.GbkEncoding.GetString(
+        new byte[] { 0x81, 0x41 });
+    var lowerTrailName = HUtil32.GbkEncoding.GetString(
+        new byte[] { 0x81, 0x61 });
+    player.m_sCharName = upperTrailName;
+    Check(HUtil32.GbkEncoding.GetBytes(upperTrailName)
+              .SequenceEqual(new byte[] { 0x81, 0x41 })
+          && HUtil32.GbkEncoding.GetBytes(lowerTrailName)
+              .SequenceEqual(new byte[] { 0x81, 0x61 })
+          && UserEngine.NativeAnsiNameEquals(upperTrailName, lowerTrailName)
+          && ReferenceEquals(engine.GetNativeReadyPlayObject(lowerTrailName),
+              player),
+        "sub_40BCBC folds an ASCII A-Z byte even when it is a GBK trail byte");
+
+    var highByteLeft = HUtil32.GbkEncoding.GetString(
+        new byte[] { 0xD6, 0xD0 });
+    var highByteRight = HUtil32.GbkEncoding.GetString(
+        new byte[] { 0xF6, 0xD0 });
+    Check(!UserEngine.NativeAnsiNameEquals(highByteLeft, highByteRight),
+        "sub_40BCBC must leave all GBK bytes >=0x80 unchanged");
+    player.m_sCharName = "HonorReceiverA";
+
+    player.m_boReadyRun = false;
+    Check(engine.GetNativeReadyPlayObject(player.m_sCharName) == null,
+        "sub_652784 rejects ReadyRun=0");
+    player.m_boReadyRun = true;
+    player.m_boGhost = true;
+    Check(engine.GetNativeReadyPlayObject(player.m_sCharName) == null,
+        "sub_652784 rejects ghost players");
+
+    player.m_boGhost = false;
+    player.m_boPasswordLocked = true;
+    player.m_boObMode = true;
+    player.m_boAdminMode = true;
+    Check(engine.GetPlayObject(player.m_sCharName) == null
+          && ReferenceEquals(engine.GetNativeReadyPlayObject(player.m_sCharName),
+              player),
+        "sub_652784 must not inherit the generic password/observer/admin rejection");
+
+    var previousEngine = M2Share.UserEngine;
+    M2Share.UserEngine = engine;
+    try
+    {
+        Check(ReferenceEquals(player.ResolveNativeQuestOrderRecipient(16), player)
+              && ReferenceEquals(player.ResolveNativeQuestOrderRecipient(0), player),
+            "honor category uses native ready-name lookup; ordinary categories stay on Self");
+    }
+    finally
+    {
+        M2Share.UserEngine = previousEngine;
     }
 }
 

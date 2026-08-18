@@ -30,7 +30,7 @@ foreach (var file in sources)
 }
 
 var playerSource = File.ReadAllText(Path.Combine(gameRoot, "Players", "TPlayObject.cs"));
-Require(playerSource.Contains("if (Walk(Grobal2.RM_RUN))", StringComparison.Ordinal),
+Require(playerSource.Contains("Walk(Grobal2.RM_RUN);", StringComparison.Ordinal),
     "horse run no longer routes through native RM_RUN");
 
 // The multi-line pattern below is written with '\n'; the checkout is CRLF, so
@@ -120,15 +120,37 @@ Require(allSource.Contains("Grobal2.SM_THRUSTING", StringComparison.Ordinal),
     "native SM_THRUSTING(0x270) long-hit state packet was removed");
 Require(allSource.Contains("Grobal2.SM_FIREHITSKILL", StringComparison.Ordinal),
     "native SM_FIREHITSKILL(0x272) fire-hit state packet was removed");
-// 半月(+WID/+UWID) 的两条串在底本里同样 0 命中，但 SKILL_REDBANWOL(56) 这条臂
-// 是否该整条删掉（TPlayObject.Attack.cs 的注释说 56 落在默认臂 0x6BCCA6、原生
-// 什么都不发）尚未定案，这里先钉住现状，见 docs/audit_triage_C_20260814.md。
-Require(allSource.Contains("SendSocket(\"+WID\")", StringComparison.Ordinal),
-    "wide-hit text state path changed without a decision on skill 56");
+// SKILL_REDBANWOL(56) also enters the ordinary spell path: 0x6BCCA6 calls
+// sub_6ED62C, which spends MP and sends SM 17/638. It has no red-half-moon
+// toggle, and CM/RM/SM_WIDEHIT remains the independent native skill-25 path.
+foreach (var textPacket in new[]
+         {
+             "+WID", "+UWID", "+CRS", "+UCRS", "+CID", "+UCID"
+         })
+{
+    Require(!allSource.Contains(textPacket, StringComparison.Ordinal),
+        $"invented combat text-state packet is back: {textPacket}");
+}
+foreach (var removedMember in new[]
+         {
+             "m_boRedUseHalfMoon", "RedHalfMoonOnOff", "m_boCrsHitkill",
+             "SkillCrsOnOff", "m_bo43kill", "Skill43OnOff"
+         })
+{
+    Require(!allSource.Contains(removedMember, StringComparison.Ordinal),
+        $"invented combat toggle state is back: {removedMember}");
+}
+Require(!allSource.Contains("开启破空剑", StringComparison.Ordinal) &&
+        !allSource.Contains("关闭破空剑", StringComparison.Ordinal),
+    "invented skill-43 toggle feedback is back");
+Require(allSource.Contains("TryProduceNativeMagic43(UserMagic)",
+        StringComparison.Ordinal),
+    "native skill-43 visible-target producer is missing");
 
 Console.WriteLine(
     "TargetActionExtensionCheck PASS horse=RM_RUN slave=TURN/DISAPPEAR " +
-    "combat=text-state joint=10017/18/19->60/61/62 non-target-active=0");
+    "combat=native-spell/state26 joint=10017/18/19->60/61/62 " +
+    "non-target-active=0");
 return 0;
 
 static void Require(bool condition, string message)

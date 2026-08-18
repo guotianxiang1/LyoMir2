@@ -9,6 +9,14 @@ using SystemModule;
 PrepareRuntimeConfig();
 InitializeRuntime();
 
+if (args.Any(arg => string.Equals(arg, "--fire-only",
+        StringComparison.OrdinalIgnoreCase)))
+{
+    CheckFireBurnEvent();
+    Console.WriteLine("PASS native fire-burn duration+damage compatibility");
+    return;
+}
+
 CheckType43AbiAndLifecycle();
 CheckType43PacketGoldens();
 CheckFastnessHqTable();
@@ -1731,6 +1739,7 @@ static void CheckFireBurnEvent()
         wMagIdx = 0x4567,
         nTranPoint = 0x12345678
     };
+    CheckNativeMapFireWallDuration(map, owner, userMagic);
     var direct = new FireBurnEvent(owner, userMagic, 20, 20,
         Grobal2.ET_FIRE, 60_000, 100);
     var context = GetProperty<object>(direct, "Context");
@@ -1815,6 +1824,62 @@ static void CheckFireBurnEvent()
     ghostEvent.Close();
     deathEvent.Close();
     periodic.Close();
+}
+
+static void CheckNativeMapFireWallDuration(Envirnoment map, TBaseObject owner,
+    TUserMagic userMagic)
+{
+    var events = new List<Event>();
+
+    map.Flag.MapFireWallBurnMs = 0;
+    events.Add(new FireBurnEvent(owner, 40, 40, Grobal2.ET_FIRE,
+        60_000, 100));
+    Equal(60_000, GetField<int>(events[^1], "m_dwContinueTime"),
+        "MAPFIREWALLBURN zero keeps duration");
+
+    map.Flag.MapFireWallBurnMs = -1;
+    events.Add(new FireBurnEvent(owner, 41, 40, Grobal2.ET_FIRE,
+        60_000, 100));
+    Equal(60_000, GetField<int>(events[^1], "m_dwContinueTime"),
+        "MAPFIREWALLBURN negative keeps duration");
+
+    map.Flag.MapFireWallBurnMs = 17_000;
+    events.Add(new FireBurnEvent(owner, 42, 40, Grobal2.ET_FIRE,
+        60_000, 100));
+    Equal(17_000, GetField<int>(events[^1], "m_dwContinueTime"),
+        "MAPFIREWALLBURN basic constructor override");
+    events.Add(new FireBurnEvent(owner, userMagic, 43, 40,
+        Grobal2.ET_FIRE, 60_000, 100));
+    Equal(17_000, GetField<int>(events[^1], "m_dwContinueTime"),
+        "MAPFIREWALLBURN magic constructor override");
+    events.Add(new ProtectedFireBurnEvent(map, null, 44, 40,
+        60_000, 100));
+    Equal(17_000, GetField<int>(events[^1], "m_dwContinueTime"),
+        "MAPFIREWALLBURN protected constructor override");
+
+    map.Flag.MapFireWallBurnMs = 900_001;
+    events.Add(new FireBurnEvent(owner, 45, 40, Grobal2.ET_FIRE,
+        60_000, 100));
+    Equal(900_001, GetField<int>(events[^1], "m_dwContinueTime"),
+        "MAPFIREWALLBURN override happens after base clamp");
+
+    map.Flag.MapFireWallBurnMs = 17_000;
+    events.Add(new BTFireBurnEvent(map, 46, 40, 60_000,
+        100, 1_000, 10, owner));
+    Equal(60_000, GetField<int>(events[^1], "m_dwContinueTime"),
+        "BTFireBurn derived duration wins after map override");
+    events.Add(new BTFireBurnEvent(map, 47, 40, 0,
+        100, 1_000, 10, owner));
+    Equal(0, GetField<int>(events[^1], "m_dwContinueTime"),
+        "BTFireBurn zero duration post-write");
+    Equal(Grobal2.ET_BTFIREBURN, events[^1].m_nEventType,
+        "BTFireBurn map override makes derived type gate reachable");
+
+    map.Flag.MapFireWallBurnMs = 0;
+    foreach (var fireEvent in events)
+    {
+        fireEvent.Close();
+    }
 }
 
 static void CheckSourceContracts()
@@ -2757,6 +2822,15 @@ sealed class HostileSource : TBaseObject
 {
     public override bool IsProperTarget(TBaseObject target) =>
         target != null && !ReferenceEquals(this, target);
+}
+
+sealed class ProtectedFireBurnEvent : FireBurnEvent
+{
+    public ProtectedFireBurnEvent(Envirnoment envir, TBaseObject owner,
+        int x, int y, int duration, int damage)
+        : base(envir, owner, x, y, Grobal2.ET_FIRE, duration, damage)
+    {
+    }
 }
 
 sealed class ProbeEvent : Event

@@ -3,6 +3,8 @@ var messageSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
     "TPlayObject.Message.cs"));
 var routerSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
     "TPlayObject.NativeSocialProtocol.cs"));
+var mentorRechargeSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Players",
+    "TPlayObject.NativeMirrorMentorRecharge.cs"));
 
 const string socialCall = "TryHandleNativeSocialProtocol(ProcessMsg)";
 Require(Count(messageSource, socialCall) == 1,
@@ -60,8 +62,20 @@ Require(!routerSource.Contains("return true;", StringComparison.Ordinal),
 Require(Count(routerSource, "private bool ") == 1,
     "social router file must not implement protocol-family handlers");
 
+Require(mentorRechargeSource.Contains(
+        "\"恭喜，您曾经的徒弟\" + studentName", StringComparison.Ordinal),
+    "OthGs ident 228 first native text segment");
+Require(mentorRechargeSource.Contains(
+        "\"实力又进一步，“比奇国王”特赠您经验值\"", StringComparison.Ordinal),
+    "OthGs ident 228 second native text segment");
+Require(!mentorRechargeSource.Contains("您充值的徒弟", StringComparison.Ordinal)
+        && !mentorRechargeSource.Contains("实力更进一步", StringComparison.Ordinal)
+        && !mentorRechargeSource.Contains("『比奇国王』", StringComparison.Ordinal),
+    "OthGs ident 228 non-native text returned");
+
 Console.WriteLine(
-    "NativeSocialProtocolRouterCheck PASS default-fallback=guarded families=8 ordered-once");
+    "NativeSocialProtocolRouterCheck PASS default-fallback=guarded families=8 " +
+    "ordered-once mirror228=text-exact");
 
 static string FindRepositoryRoot()
 {

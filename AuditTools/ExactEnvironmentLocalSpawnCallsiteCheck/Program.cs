@@ -5,8 +5,8 @@ var repoRoot = AuditRepoRoot.Resolve(args);
 var exactSites = new[]
 {
     Site("GameSvr/Actors/TBaseObject.cs",
-        "RegenMonsterByName(m_PEnvir, nX, nY, sMonName)",
-        "RegenMonsterByName(m_PEnvir.sMapName, nX, nY, sMonName)"),
+        "spawnEnvironment, nX, nY, sMonName)",
+        "spawnEnvironment.sMapName"),
     Site("GameSvr/Monsters/Monster.cs",
         "RegenMonsterByName(m_PEnvir, m_nCurrX, m_nCurrY, sMonName)",
         "RegenMonsterByName(m_PEnvir.sMapName, m_nCurrX, m_nCurrY, sMonName)"),
@@ -64,6 +64,19 @@ foreach (var site in exactSites)
     Assert(!source.Contains(site.Forbidden, StringComparison.Ordinal),
         $"actor-local spawn regressed to map-name lookup: {site.Path}");
 }
+
+var fromHeroTrueSites = Directory
+    .EnumerateFiles(Path.Combine(repoRoot, "GameSvr"), "*.cs",
+        SearchOption.AllDirectories)
+    .Where(path => Compact(File.ReadAllText(path)).Contains(
+        "fromHero: true", StringComparison.Ordinal))
+    .Select(path => Path.GetRelativePath(repoRoot, path)
+        .Replace('\\', '/'))
+    .ToArray();
+Assert(fromHeroTrueSites.Length == 1 &&
+       fromHeroTrueSites[0] == "GameSvr/Actors/HeroObject.NativeDoSpell.cs",
+    "BoFromHero=true must be wired only to the shared hero-spell summon call: " +
+    string.Join(", ", fromHeroTrueSites));
 
 var pas = Read("GameSvr/ScriptSystem/PasEngine/PasApiBridge.cs");
 var makeSlaveEx = Compact(Slice(pas, "case \"makeslaveex\":",
@@ -160,7 +173,7 @@ Assert(createCampMon.Contains(
 Console.WriteLine(
     "ExactEnvironmentLocalSpawnCallsiteCheck PASS "
     + $"exact={exactSites.Length + 4} explicit-name={explicitNameSites.Length + 2} "
-    + "native=WantWarMon-physical-environment");
+    + "native=WantWarMon-physical-environment+hero-summon-fromHero-only");
 return;
 
 static (string Path, string Required, string Forbidden) Site(string path,

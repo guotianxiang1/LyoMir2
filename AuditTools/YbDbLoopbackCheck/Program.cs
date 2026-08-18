@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Text;
 using GameSvr;
 using GameSvr.Configs;
 using GameSvr.Services;
@@ -101,6 +102,7 @@ internal static class Program
             AssertFrame(handshakes[2], queryId: 0, param: 1,
                 ident: 108, Array.Empty<byte>(), "single forge-mode handshake");
 
+            await VerifyItemMovementSmsOutboundAsync(client, stream);
             await VerifyForgeModeResponseAsync(client, stream, queryId: 2,
                 expectedDoubleForge: true);
 
@@ -150,6 +152,7 @@ internal static class Program
 
             Console.WriteLine(
                 "YbDbLoopbackCheck PASS handshake=100,400,108/1,2 " +
+                "item-sms=135/120-e2e " +
                 "forge=1108/2,non2 " +
                 "declf=132/108+1132/64 credit=103/64+1103/32 " +
                 "relog=103-fifo+independent-1104 " +
@@ -214,6 +217,96 @@ internal static class Program
             $"1108 QueryId {queryId} runtime forge-mode bit");
         Equal(0, GetQueueCount(GetPrivateField<object>(client, "_responses")),
             "1108 completion queue was not drained");
+    }
+
+    private static async Task VerifyItemMovementSmsOutboundAsync(
+        YbDbClient client, NetworkStream stream)
+    {
+        const int payloadSize = 0x78;
+        if (InvokePrivateResult<bool>(client,
+                "TryEnqueueNativeItemMovementSms", new byte[payloadSize - 1]))
+            throw new InvalidOperationException(
+                "item-movement SMS accepted a non-0x78 payload");
+
+        var oldServerName = M2Share.g_Config.sServerName;
+        try
+        {
+            M2Share.g_Config.sServerName = "sms-server";
+            var owner = new TPlayObject
+            {
+                m_boOffLineFlag = true,
+                m_sUserID = "owner-ptid",
+                m_sCharName = "owner-role"
+            };
+            var actor = new HeroObject
+            {
+                m_Master = owner,
+                m_sMapName = "sms-map",
+                m_sCharName = "hero-actor",
+                m_nCurrX = 12,
+                m_nCurrY = 34
+            };
+            var stateField = typeof(TBaseObject).GetField(
+                "m_boNativeItemMovementSmsEnabled",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (stateField == null)
+                throw new InvalidOperationException(
+                    "item-movement SMS actor state field was not found");
+            stateField.SetValue(actor, true);
+
+            var stdItem = new GoodItem
+            {
+                Name = "sms-item",
+                NativeReserved02 = 0x0200
+            };
+            var item = new TUserItem { MakeIndex = 0x10203040 };
+            var notifyMethod = typeof(TBaseObject).GetMethod(
+                "TryNotifyNativeItemMovementSms",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (notifyMethod == null)
+                throw new InvalidOperationException(
+                    "item-movement SMS actor helper was not found");
+
+            M2Share.LogStringList.Clear();
+            if (notifyMethod.Invoke(actor,
+                    new object[] { owner, stdItem, item, (byte)0 }) is not true)
+                throw new InvalidOperationException(
+                    "connected actor item-movement SMS was not enqueued");
+            var smsLogs = M2Share.LogStringList.OfType<string>()
+                .Where(value => value.StartsWith("153\t",
+                    StringComparison.Ordinal))
+                .ToArray();
+            Equal(1, smsLogs.Length, "item-movement SMS prior log count");
+            Equal("153\tsms-map\t12\t34\thero-actor\tsms-item\t270544960\t0\t短信提醒",
+                smsLogs[0], "item-movement SMS prior actor log");
+
+            var payload = new byte[payloadSize];
+            WriteFixedAsciiCString(payload, 0x00, 0x10, "sms-server");
+            WriteFixedAsciiCString(payload, 0x10, 0x20, "owner-ptid");
+            WriteFixedAsciiCString(payload, 0x30, 0x20, "owner-role");
+            WriteFixedAsciiCString(payload, 0x50, 0x20, "sms-item");
+            BinaryPrimitives.WriteInt32LittleEndian(
+                payload.AsSpan(0x70, 4), item.MakeIndex);
+
+            var frame = (await ReadFramesAsync(stream, 1))[0];
+            AssertFrame(frame, queryId: 0, param: 0, ident: 0x87,
+                payload, "item-movement SMS");
+        }
+        finally
+        {
+            M2Share.g_Config.sServerName = oldServerName;
+            M2Share.LogStringList.Clear();
+        }
+    }
+
+    private static void WriteFixedAsciiCString(byte[] destination, int offset,
+        int capacity, string value)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        if (bytes.Length >= capacity)
+            throw new InvalidOperationException(
+                "item-movement SMS ASCII fixture exceeds its native field");
+        bytes.CopyTo(destination, offset);
     }
 
     private static List<(string Path, byte[] Original)> PrepareBootstrapFiles()

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections;
 using System.Reflection;
 using GameSvr;
 using SystemModule;
@@ -13,12 +14,13 @@ M2Share.MapManager = new MapManager();
 CheckHeaders();
 CheckShortStringsAndRecords();
 CheckPendingRequestRules();
+CheckGroupRequestExpiry();
 CheckGroupStateTransitions();
 CheckMalformedQueryBounds();
 CheckCrossProtocolSourceGuards();
 
 Console.WriteLine(
-    "PASS NativeGroupProtocol ids=4412-4416 records=36/54 pending=exact group=create+join");
+    "PASS NativeGroupProtocol ids=4412-4416 records=36/54 pending=exact+10s-expiry group=create+join");
 return;
 
 static void CheckHeaders()
@@ -216,6 +218,156 @@ static void CheckPendingRequestRules()
         "4412 accepted a Recog value outside 0/1");
 }
 
+static void CheckGroupRequestExpiry()
+{
+    Require(!InvokeStatic<bool>("IsNativeGroupRequestExpired", 10000, 0),
+        "a request expired at the native 10000ms equality boundary");
+    Require(InvokeStatic<bool>("IsNativeGroupRequestExpired", 10001, 0),
+        "a request did not expire strictly after 10000ms");
+
+    const int wrapCreated = int.MaxValue - 5;
+    Require(!InvokeStatic<bool>("IsNativeGroupRequestExpired",
+            unchecked(wrapCreated + 10000), wrapCreated),
+        "unsigned TickCount wrap broke the 10000ms equality boundary");
+    Require(InvokeStatic<bool>("IsNativeGroupRequestExpired",
+            unchecked(wrapCreated + 10001), wrapCreated),
+        "unsigned TickCount wrap did not expire at 10001ms");
+    const uint dwordWrapCreatedRaw = 0xFFFFFFF0u;
+    var dwordWrapCreated = unchecked((int)dwordWrapCreatedRaw);
+    Require(!InvokeStatic<bool>("IsNativeGroupRequestExpired",
+            unchecked((int)(dwordWrapCreatedRaw + 10000u)),
+            dwordWrapCreated),
+        "the 0xffffffff-to-zero wrap broke the 10000ms boundary");
+    Require(InvokeStatic<bool>("IsNativeGroupRequestExpired",
+            unchecked((int)(dwordWrapCreatedRaw + 10001u)),
+            dwordWrapCreated),
+        "the 0xffffffff-to-zero wrap did not expire at 10001ms");
+
+    var recipient = new GroupExpiryProbe
+    {
+        m_boOffLineFlag = true,
+        m_boAllowGroup = true,
+        m_sCharName = "expiry-recipient",
+        m_sMapName = "audit-map",
+        m_nCurrX = 12,
+        m_nCurrY = 34
+    };
+    var expiredInvite = NewPlayer("expiry-invite");
+    var expiredFriend = NewPlayer("expiry-friend");
+    var expiredJoin = NewPlayer("expiry-join");
+    var expiredUnknown = NewPlayer("expiry-unknown");
+    var expiredGhost = NewPlayer("expiry-ghost");
+    var freshJoin = NewPlayer("expiry-fresh");
+    var nullRequester = NewPlayer("expiry-null");
+    var preservedOutgoing = NewPlayer("expiry-other-target");
+    var otherRecipient = NewPlayer("other-recipient");
+
+    QueueRequest(recipient, expiredInvite, 0);
+    QueueRequest(recipient, expiredFriend, 2);
+    QueueRequest(recipient, expiredJoin, 1);
+    QueueRequest(recipient, expiredUnknown, 8);
+    QueueRequest(recipient, expiredGhost, 0);
+    QueueRequest(recipient, freshJoin, 1);
+    QueueRequest(recipient, nullRequester, 9);
+    QueueRequest(recipient, preservedOutgoing, 0);
+    QueueRequest(otherRecipient, preservedOutgoing, 0);
+    expiredInvite.m_MsgList.Clear();
+    expiredFriend.m_MsgList.Clear();
+    expiredJoin.m_MsgList.Clear();
+    expiredUnknown.m_MsgList.Clear();
+    expiredGhost.m_MsgList.Clear();
+    freshJoin.m_MsgList.Clear();
+    nullRequester.m_MsgList.Clear();
+    preservedOutgoing.m_MsgList.Clear();
+    expiredGhost.m_boGhost = true;
+
+    var now = HUtil32.GetTickCount();
+    RewritePendingRequest(recipient, expiredInvite, 0,
+        unchecked(now - 20000), clearRequester: false);
+    RewritePendingRequest(recipient, expiredFriend, 2,
+        unchecked(now - 20000), clearRequester: false);
+    RewritePendingRequest(recipient, expiredJoin, 1,
+        unchecked(now - 20000), clearRequester: false);
+    RewritePendingRequest(recipient, expiredUnknown, 8,
+        unchecked(now - 20000), clearRequester: false);
+    RewritePendingRequest(recipient, expiredGhost, 0,
+        unchecked(now - 20000), clearRequester: false);
+    RewritePendingRequest(recipient, freshJoin, 1, now,
+        clearRequester: false);
+    RewritePendingRequest(recipient, nullRequester, 9,
+        unchecked(now - 20000), clearRequester: true);
+    RewritePendingRequest(recipient, preservedOutgoing, 0,
+        unchecked(now - 20000), clearRequester: false);
+
+    InvokeInstanceVoid(recipient, "RunNativeGroupRequestExpiry");
+
+    var expectedPackets = new (TPlayObject Requester, byte Type)[]
+    {
+        (preservedOutgoing, 0),
+        (expiredGhost, 0),
+        (expiredUnknown, 8),
+        (expiredJoin, 1),
+        (expiredFriend, 2),
+        (expiredInvite, 0)
+    };
+    Require(recipient.ExpiryPackets.Count == expectedPackets.Length,
+        "wrong number of 4412 timeout retraction packets");
+    for (var i = 0; i < expectedPackets.Length; i++)
+    {
+        var packet = recipient.ExpiryPackets[i];
+        Require(packet.Header.Ident == Grobal2.SM_NOTIFY_GROUP_MESSAGE
+            && packet.Header.Recog == 0
+            && packet.Header.Param == expectedPackets[i].Type
+            && packet.Header.Tag == 0
+            && packet.Header.Series == 0,
+            $"wrong 4412 timeout header at reverse index {i}");
+        Require(HUtil32.GbkEncoding.GetString(packet.Body)
+                == expectedPackets[i].Requester.m_sCharName,
+            $"wrong 4412 timeout requester name at reverse index {i}");
+    }
+
+    Require(!HasPendingRequest(recipient, expiredInvite, 0)
+        && !HasPendingRequest(recipient, expiredFriend, 2)
+        && !HasPendingRequest(recipient, expiredJoin, 1)
+        && !HasPendingRequest(recipient, expiredUnknown, 8)
+        && !HasPendingRequest(recipient, expiredGhost, 0)
+        && !HasPendingRequest(recipient, preservedOutgoing, 0),
+        "the backwards timeout sweep skipped adjacent expired requests");
+    Require(HasPendingRequest(recipient, freshJoin, 1),
+        "the timeout sweep removed a fresh request");
+    Require(PendingRequestCount(recipient) == 1,
+        "the timeout sweep did not delete an expired null-requester record");
+
+    RequireRedHint(expiredInvite,
+        "expiry-recipient未响应您的组队邀请。");
+    RequireRedHint(expiredFriend,
+        "expiry-recipient未响应您的好友申请。");
+    RequireRedHint(expiredJoin,
+        "expiry-recipient未响应您的组队申请。");
+    Require(expiredUnknown.m_MsgList.Count == 0,
+        "an unknown request type received a fabricated expiry hint");
+    Require(expiredGhost.m_MsgList.Count == 0,
+        "a ghost requester bypassed the native SysMsg delivery gate");
+    Require(freshJoin.m_MsgList.Count == 0,
+        "a fresh requester received an expiry hint");
+    Require(nullRequester.m_MsgList.Count == 0,
+        "a cleared requester received an expiry hint");
+
+    expiredInvite.m_MsgList.Clear();
+    InvokeInstanceVoid(expiredInvite,
+        "ExecuteNativeCancelGroupOutgoingRequest", (byte)0);
+    Require(expiredInvite.m_MsgList.Count == 1
+        && expiredInvite.m_MsgList[0].Buff == "取消请求失败",
+        "an expired outgoing request could still be canceled successfully");
+
+    preservedOutgoing.m_MsgList.Clear();
+    InvokeInstanceVoid(preservedOutgoing,
+        "ExecuteNativeCancelGroupOutgoingRequest", (byte)0);
+    Require(preservedOutgoing.m_MsgList.Count == 1
+        && preservedOutgoing.m_MsgList[0].Buff == "请求已取消",
+        "expiring one target removed an outgoing request to another target");
+}
+
 static void CheckMalformedQueryBounds()
 {
     var query = RegisterPlayer(NewPlayer("query"));
@@ -245,6 +397,8 @@ static void CheckCrossProtocolSourceGuards()
         "Players", "TPlayObject.NativeRelationProtocol.cs"));
     var legacySource = File.ReadAllText(Path.Combine(root, "GameSvr",
         "Players", "TPlayObject.Operate.cs"));
+    var runSource = File.ReadAllText(Path.Combine(root, "GameSvr",
+        "Players", "TPlayObject.Message.cs"));
 
     Require(groupSource.Contains("requester.AcceptNativeFriend(this)",
         StringComparison.Ordinal), "4412 type-2 friend acceptance route");
@@ -256,6 +410,55 @@ static void CheckCrossProtocolSourceGuards()
         && legacySource.Contains("private void ClientAddGroupMember(",
             StringComparison.Ordinal),
         "legacy plain group handlers were removed");
+
+    var expiryStart = groupSource.IndexOf(
+        "private static bool IsNativeGroupRequestExpired(",
+        StringComparison.Ordinal);
+    var expiryEnd = groupSource.IndexOf("// 战神 sub_6AF078", expiryStart,
+        StringComparison.Ordinal);
+    Require(expiryStart >= 0 && expiryEnd > expiryStart,
+        "native group timeout sweep source boundary missing");
+    var expirySource = groupSource[expiryStart..expiryEnd];
+    Require(expirySource.Contains(
+            "unchecked((uint)(currentTick - createdTick)) > 10000u",
+            StringComparison.Ordinal)
+        && expirySource.Contains(
+            "Grobal2.SM_NOTIFY_GROUP_MESSAGE, 0,",
+            StringComparison.Ordinal)
+        && expirySource.Contains("request.Type, 0, 0",
+            StringComparison.Ordinal)
+        && expirySource.Contains(
+            "EncodeNativeGroupText(requester.m_sCharName)",
+            StringComparison.Ordinal)
+        && expirySource.Contains("SendNativeGroupExpiryPacket(",
+            StringComparison.Ordinal)
+        && expirySource.Contains("SendNativeGroupPacket(this, header, body)",
+            StringComparison.Ordinal)
+        && expirySource.Contains("pending.RemoveAt(i)",
+            StringComparison.Ordinal)
+        && expirySource.Contains(
+            "ClearNativeGroupOutgoingRequest(requester, this,",
+            StringComparison.Ordinal)
+        && !expirySource.Contains("m_boGhost", StringComparison.Ordinal),
+        "sub_6C3ABC timeout packet/removal contract drifted");
+    var timeoutPacket = expirySource.IndexOf(
+        "SendNativeGroupExpiryPacket(", StringComparison.Ordinal);
+    var timeoutHint = expirySource.IndexOf("requester.SysMsg(",
+        StringComparison.Ordinal);
+    var timeoutRemove = expirySource.IndexOf("pending.RemoveAt(i)",
+        StringComparison.Ordinal);
+    var timeoutOutgoingClear = expirySource.IndexOf(
+        "ClearNativeGroupOutgoingRequest(requester, this,",
+        StringComparison.Ordinal);
+    Require(timeoutPacket >= 0 && timeoutHint > timeoutPacket
+        && timeoutRemove > timeoutHint
+        && timeoutOutgoingClear > timeoutRemove,
+        "sub_6C3ABC packet/hint/removal order drifted");
+    var baseRun = runSource.IndexOf("base.Run();", StringComparison.Ordinal);
+    var expiryRun = runSource.IndexOf("RunNativeGroupRequestExpiry();",
+        StringComparison.Ordinal);
+    Require(baseRun >= 0 && expiryRun > baseRun,
+        "TPlayer.Run must end with the sub_6C3ABC timeout sweep");
 
     // Message CHANNELS. cx unpacks as FColor = cx & 0xFF, BColor = cx >> 8 (see
     // the playernotice bridge in PasApiBridge), so against GameSvrConfig defaults
@@ -340,6 +543,77 @@ static bool HasPendingRequest(TPlayObject recipient, TPlayObject requester,
         requester, type);
 }
 
+static int PendingRequestCount(TPlayObject recipient)
+{
+    return GetPendingRequestList(recipient).Count;
+}
+
+static void RewritePendingRequest(TPlayObject recipient,
+    TPlayObject requester, byte type, int createdTick, bool clearRequester)
+{
+    var pending = GetPendingRequestList(recipient);
+    for (var i = 0; i < pending.Count; i++)
+    {
+        var entry = pending[i]
+            ?? throw new InvalidOperationException("null pending request entry");
+        var entryType = entry.GetType();
+        var requesterProperty = entryType.GetProperty("Requester")
+            ?? throw new InvalidOperationException("Requester property missing");
+        var typeProperty = entryType.GetProperty("Type")
+            ?? throw new InvalidOperationException("Type property missing");
+        if (!ReferenceEquals(requesterProperty.GetValue(entry), requester)
+            || (byte)typeProperty.GetValue(entry)! != type)
+            continue;
+
+        var createdField = entryType.GetField("<CreatedTick>k__BackingField",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("CreatedTick field missing");
+        createdField.SetValue(entry, createdTick);
+        if (clearRequester)
+        {
+            var requesterField = entryType.GetField(
+                "<Requester>k__BackingField",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException(
+                    "Requester backing field missing");
+            requesterField.SetValue(entry, null);
+        }
+        pending[i] = entry;
+        return;
+    }
+    throw new InvalidOperationException("pending request entry missing");
+}
+
+static IList GetPendingRequestList(TPlayObject recipient)
+{
+    var tableField = typeof(TPlayObject).GetField(
+        "NativeGroupPendingRequests",
+        BindingFlags.Static | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("pending request table missing");
+    var table = tableField.GetValue(null)
+        ?? throw new InvalidOperationException("pending request table is null");
+    var tryGetValue = table.GetType().GetMethod("TryGetValue")
+        ?? throw new InvalidOperationException("TryGetValue missing");
+    var arguments = new object[] { recipient, null };
+    Require((bool)tryGetValue.Invoke(table, arguments)!,
+        "pending request list missing");
+    return (IList)arguments[1];
+}
+
+static void RequireRedHint(TPlayObject requester, string expectedText)
+{
+    Require(requester.m_MsgList.Count == 1,
+        $"expected one expiry hint for {requester.m_sCharName}");
+    var message = requester.m_MsgList[0];
+    Require(message.wIdent == Grobal2.RM_SYSMESSAGE
+        && message.wParam == 0
+        && message.nParam1 == M2Share.g_Config.btRedMsgFColor
+        && message.nParam2 == M2Share.g_Config.btRedMsgBColor
+        && message.nParam3 == 0
+        && message.Buff == expectedText,
+        $"wrong expiry hint for {requester.m_sCharName}");
+}
+
 static bool TryReadProtocolShortString(byte[] body, int offset, int capacity,
     out string value)
 {
@@ -374,6 +648,15 @@ static T InvokeInstance<T>(TPlayObject player, string name,
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException(name + " missing");
     return (T)method.Invoke(player, arguments);
+}
+
+static void InvokeInstanceVoid(TPlayObject player, string name,
+    params object[] arguments)
+{
+    var method = typeof(TPlayObject).GetMethod(name,
+        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException(name + " missing");
+    method.Invoke(player, arguments);
 }
 
 static string FindRepositoryRoot()
@@ -415,4 +698,16 @@ static void PrepareRuntimeConfig()
         "[PlayerLevelExp]" + Environment.NewLine);
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
+}
+
+sealed class GroupExpiryProbe : TPlayObject
+{
+    internal List<(ClientPacket Header, byte[] Body)> ExpiryPackets { get; } =
+        new();
+
+    protected override void SendNativeGroupExpiryPacket(ClientPacket header,
+        byte[] body)
+    {
+        ExpiryPackets.Add((header, body?.ToArray() ?? Array.Empty<byte>()));
+    }
 }
