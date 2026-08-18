@@ -10,7 +10,7 @@ namespace GameSvr
         /// <para>
         /// <c>sub_6BBEE4(partner, newX, newY, dir)</c> 本身：
         /// 0x6BBEF3 <c>[partner+0x154]=dir</c> → 0x6BBF12 <c>call sub_779CD8</c>
-        /// （与 MoveToMovingObject 同形参，boFlag=1 忽略占用）→ 成功才
+        /// （纯摘链/头插；压入的常量 1 在函数体内未读取，无边界、地形或占位门）→ 成功才
         /// 0x6BBF1B/0x6BBF21 提交同伴 X/Y、0x6BBF27 清定时状态 0x17、
         /// 0x6BBF38 <c>call sub_778EC0</c>、0x6BBF3D <c>call sub_6E37C4</c>；
         /// 全程不广播 RM_WALK（客户端把乘客画在坐骑上）。

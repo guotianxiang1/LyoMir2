@@ -50,8 +50,8 @@ namespace GameSvr
             DamageSpell(unchecked((ushort)NativeSkill237ManaCost));
             // 0x745F37..0x745F76 call 0x769258: ident 0x11 (SM_SPELL)
             // through VMT+0xE0, X/Y = self+0x12C/+0x130.
-            SendRefMsg(Grobal2.RM_SPELL, userMagic.MagicInfo.btEffect,
-                m_nCurrX, m_nCurrY, userMagic.MagicInfo.wMagicID, "");
+            MagicManager.SendNativeSpell(this, userMagic, m_nCurrX,
+                m_nCurrY);
             AddTimedAbilityInternal(NativeSkill237State, 0,
                 NativeSkill237StateMilliseconds, 0);
             SetNativeColdTime(NativeSkill237ColdTimeKey,

@@ -381,6 +381,13 @@ namespace GameSvr
         
         private bool SaveAttackSabukWall()
         {
+            // sub_65A3B8 @0x65A3D4 returns before file creation when the
+            // castle map field (+0x1C) is nil (for example on a non-host node).
+            if (m_MapCastle == null)
+            {
+                return true;
+            }
+
             try
             {
                 var sabukwallPath = NativeCastleDir();
@@ -1144,8 +1151,12 @@ namespace GameSvr
 
         public bool AddAttackerInfo(Association Guild)
         {
+            var guildName = Guild?.sGuildName ?? string.Empty;
             var result = NativeMirrorAddAttacker(Guild);
-            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_212, M2Share.nServerIndex, "");
+            // sub_65B658 @0x65B6BA..0x65B6CD sends [Guild+0x10]. The send
+            // remains after the duplicate gate, so duplicate requests fan out too.
+            M2Share.UserEngine.SendServerGroupMsg(Grobal2.SS_212,
+                M2Share.nServerIndex, guildName);
             return result;
         }
 

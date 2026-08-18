@@ -102,6 +102,8 @@ namespace GameSvr
                 GrantNativeHeroExperience(hero, heroExperience, countAsFightExperience, false);
             }
 
+            AccumulateNativeSwitchExperience(accepted);
+
             // EXP-09: Native 6C04DB-6C04E8: after Exp+=, level>=999 zeroes exp before
             // RM_WINEXP and the level-up loop, preventing overflow accumulation at cap.
             if (m_Abil.Level >= 999)
@@ -126,6 +128,14 @@ namespace GameSvr
                 HasLevelUp(previousLevel);
                 IncHealthSpell(20000, 20000);
             }
+        }
+
+        private void AccumulateNativeSwitchExperience(uint awardedExperience)
+        {
+            if (m_wNativeSwitchOffsetD38 != 0)
+                return;
+            m_nNativeSwitchOffsetD40 = unchecked((int)(
+                (uint)m_nNativeSwitchOffsetD40 + awardedExperience));
         }
 
         internal void GrantNativeHeroExperience(HeroObject hero, int amount,

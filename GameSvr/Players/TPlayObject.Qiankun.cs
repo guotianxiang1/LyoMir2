@@ -187,21 +187,11 @@ namespace GameSvr
         }
 
         // -------------------------------------------------------------------------------------
-        // 分发挂钩 —— 集成方(协调者)请在 TPlayObject.Message.cs 的 Operate() default 臂追加本调用：
-        //
-        //     default:
-        //         if (!TryHandleNativeSocialProtocol(ProcessMsg)
-        //             && !TryHandleNativeCmTailProtocol(ProcessMsg)
-        //             && !TryHandleQiankunCm(ProcessMsg))   // <-- 新增此行
-        //         {
-        //             result = base.Operate(ProcessMsg);
-        //         }
-        //         break;
-        //
-        // 说明：CM 3284-3288 当前无显式 case，落到 default 臂静默丢弃(base.Operate)。挂入本方法后，
-        //   3284/3285/3286 走忠实处理器，3287/3288 走 fail-closed(带节流日志)取代静默丢弃。
-        //   本方法只认领这 5 个 ident，其余一律返回 false 交回原链，绝不改变既有行为。
-        //   (若集成方已采纳 cm-C 的 CM 3284 显式 case，二选一即可；本文件的 3284 含真实字段清空。)
+        // 分发挂钩：TPlayObject.Message 的 default 链在 Q3 之前调用本 helper，
+        // 因而本处是 3284..3288 的唯一运行时 owner；Q3 仅保留不可达 fallback。
+        // 3285/3287/3288 remain under the existing Q3 fail-closed routes. If the
+        // missing config-backed 3283 loader is implemented later, this grouped
+        // helper can replace those routes without duplicating switch ownership.
         // -------------------------------------------------------------------------------------
         internal bool TryHandleQiankunCm(TProcessMessage processMessage)
         {

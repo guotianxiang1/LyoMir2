@@ -36,9 +36,8 @@ namespace GameSvr.Services
         public long Generation => _selection.Generation;
         public byte EffectiveJob => _selection.EffectiveJob;
 
-        public NativeType2FieldHeroMaterialization MaterializeEquipment(
-            Action<string> missingEquipmentLogger) =>
-            _selection.MaterializeEquipment(missingEquipmentLogger);
+        public NativeType2FieldHeroMaterialization MaterializeEquipment() =>
+            _selection.MaterializeEquipment();
     }
 
     /// <summary>

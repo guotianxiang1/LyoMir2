@@ -46,6 +46,7 @@ namespace GameSvr.Services
                 NativeRecord = (byte[])record.Clone()
             };
             record.AsSpan(10, 14).CopyTo(item.btValue);
+            NativeSpecialDropItemRollCore.HydrateConstructorState(item);
             return true;
         }
 

@@ -189,6 +189,12 @@ namespace GameSvr.CommandSystem
         
         public bool ExecCmd(string line, TPlayObject playObject)
         {
+            return ExecCmd(line, playObject, null, 0);
+        }
+
+        internal bool ExecCmd(string line, TPlayObject playObject,
+            byte[] rawPayload, int bodyLength)
+        {
             var output = string.Empty;
             string command;
             string parameters;
@@ -202,7 +208,8 @@ namespace GameSvr.CommandSystem
             BaseCommond commond;
             if (CommandMaps.TryGetValue(command, out commond))
             {
-                output = commond.Handle(parameters, playObject);
+                output = commond.HandleRaw(line, parameters, rawPayload,
+                    bodyLength, playObject);
                 found = true;
             }
 

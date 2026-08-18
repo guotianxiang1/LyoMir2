@@ -40,6 +40,7 @@ namespace GameSvr
             : base(envir, nX, nY, Grobal2.ET_TRAP, nTime, true)
         {
             // 0x717E6C  C6 43 34 01   mov byte [ebx+0x34],1
+            NativeAppliesOnLanding = true;
             // 0x717E73  89 43 14      mov [ebx+0x14],eax
             m_OwnBaseObject = owner;
             // 0x717E79  89 43 48      mov [ebx+0x48],eax

@@ -1,4 +1,5 @@
 using GameSvr.CommandSystem;
+using GameSvr.Services;
 using SystemModule;
 
 namespace GameSvr
@@ -8,7 +9,8 @@ namespace GameSvr
     // jt[62] @0x00622C14 = 90 42 62 00 -> 0x00624290：
     //   ecx=p2(时间) / edx=p1(角色名) / eax=self / call 0x006BF260 / jmp 0x0062B64C
     // 旧命令名 Shutup 三编码 0 命中（镜像里的两处只是脚本 API UnShutupSelf 的子串）。
-    // 未核实：0x006BF260 内部与本实现（g_DenySayMsgList，分钟×60000ms）是否逐字节一致。
+    // sub_6BF260 将缺省时间解析为 10 秒，调用 sub_621B14 后发送 ident 209，
+    // 并以绿色输出“角色名 禁止聊天：总剩余秒数秒”。
     [GameCommand("OutSay", "禁言角色多少时间", M2Share.g_sGameCommandShutupHelpMsg, 2)]
     public class ShutupCommand : BaseCommond
     {
@@ -21,23 +23,24 @@ namespace GameSvr
             }
             var sHumanName = @Params.Length > 0 ? @Params[0] : "";
             var sTime = @Params.Length > 1 ? @Params[1] : "";
-            if (sTime == "" || string.IsNullOrEmpty(sHumanName) || sHumanName[0] == '?')
+            if (string.IsNullOrEmpty(sHumanName) || sHumanName[0] == '?')
             {
                 PlayObject.SysMsg(string.Format(M2Share.g_sGameCommandParamUnKnow, this.GameCommand.Name, M2Share.g_sGameCommandShutupHelpMsg), MsgColor.Red, MsgType.Hint);
                 return;
             }
-            var dwTime = (uint)HUtil32.Str_ToInt(sTime, 5);
-            HUtil32.EnterCriticalSection(M2Share.g_DenySayMsgList);
-            try
-            {
-                M2Share.g_DenySayMsgList[sHumanName] =
-                    (long)HUtil32.GetTickCount() + dwTime * 60_000L;
-            }
-            finally
-            {
-                HUtil32.LeaveCriticalSection(M2Share.g_DenySayMsgList);
-            }
-            PlayObject.SysMsg(string.Format(M2Share.g_sGameCommandShutupHumanMsg, sHumanName, dwTime), MsgColor.Red, MsgType.Hint);
+            var durationSeconds = HUtil32.Str_ToInt(sTime, 10);
+            if (durationSeconds <= 0)
+                return;
+
+            // sub_6BF260 parses a default of 10 and passes the value directly as
+            // the native remaining-seconds word; it also replicates ident 209.
+            var totalSeconds = NativeMirrorChatBan.Add(sHumanName,
+                durationSeconds);
+            M2Share.UserEngine?.SendServerGroupMsg(
+                Grobal2.ISM_CHATPROHIBITION, M2Share.nServerIndex,
+                durationSeconds, sHumanName);
+            PlayObject.SysMsg(string.Format(M2Share.g_sGameCommandShutupHumanMsg,
+                sHumanName, totalSeconds), MsgColor.Green, MsgType.Hint);
         }
     }
 }

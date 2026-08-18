@@ -36,8 +36,8 @@ namespace GameSvr
             master.GrantNativePlayerExperience(nParam, shareWithHero: false,
                 countAsFightExperience: false, experienceMode: 0);
 
-            var text = "恭喜，您充值的徒弟" + studentName
-                + "实力更进一步，『比奇国王』特赠您经验值"
+            var text = "恭喜，您曾经的徒弟" + studentName
+                + "实力又进一步，“比奇国王”特赠您经验值"
                 + nParam.ToString(CultureInfo.InvariantCulture);
             master.SysMsg(text, MsgColor.Blue, MsgType.Hint);
         }

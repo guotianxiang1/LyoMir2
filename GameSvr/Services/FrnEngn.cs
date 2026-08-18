@@ -175,9 +175,9 @@ namespace GameSvr
                     if (currentTick - SaveRcd.NextRetryTick < 0)
                         continue;
                     if (HumDataService.SaveHumRcdToDB(SaveRcd.sAccount,
-                            SaveRcd.sChrName, SaveRcd.NativeSaveMode,
-                            SaveRcd.NativeSaveParam1, SaveRcd.NativeSaveParam2,
-                            SaveRcd.HumanRcd))
+                             SaveRcd.sChrName, SaveRcd.NativeSaveMode,
+                             SaveRcd.NativeSaveParam1, SaveRcd.NativeSaveParam2,
+                             SaveRcd.HumanRcd, SaveRcd.NativeSwitchExtension))
                     {
                         var removedCurrent = false;
                         HUtil32.EnterCriticalSection(m_UserCriticalSection);
@@ -198,7 +198,9 @@ namespace GameSvr
                         {
                             HUtil32.LeaveCriticalSection(m_UserCriticalSection);
                         }
-                        if (removedCurrent && SaveRcd.PlayObject != null)
+                        if (removedCurrent && SaveRcd.PlayObject != null
+                            && (!SaveRcd.PlayObject.m_boSwitchData
+                                || SaveRcd.NativeSaveMode == 2))
                             SaveRcd.PlayObject.m_boRcdSaved = true;
                     }
                     else
@@ -698,7 +700,8 @@ namespace GameSvr
         {
             return left != null && right != null &&
                    string.Equals(left.sAccount, right.sAccount, StringComparison.OrdinalIgnoreCase) &&
-                   string.Equals(left.sChrName, right.sChrName, StringComparison.OrdinalIgnoreCase);
+                   string.Equals(left.sChrName, right.sChrName, StringComparison.OrdinalIgnoreCase) &&
+                   (left.NativeSaveMode == 2) == (right.NativeSaveMode == 2);
         }
 
         private void DisPose(object obj)

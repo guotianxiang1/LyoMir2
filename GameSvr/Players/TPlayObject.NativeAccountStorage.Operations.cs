@@ -71,11 +71,6 @@ namespace GameSvr
         {
             var state = GetNativeAccountStorageState();
             if (state.Capacity == -1) return;
-            if (m_nPayMent == 1)
-            {
-                SendNativeAccountStorageFailure(Grobal2.SM_STORAGE_FAIL, 0);
-                return;
-            }
 
             if (!IsNativeAccountStorageNpc(objectId))
             {
@@ -112,26 +107,29 @@ namespace GameSvr
                 return;
             }
 
-            state.Items.Add(item);
             state.Dirty = true;
+            state.Items.Add(item);
             m_ItemList.RemoveAt(itemIndex);
             WeightChanged();
             m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_STORAGE_OK,
                 EnsureClientItemId(item), 0, 0, 1);
             SendSocket(m_DefMsg, EncodeOwnedClientItemRecord(item));
-            LogNativeAccountStorageItem(item, stdItem, '1');
+            LogNativeAccountStorageItem(item, stdItem, 0x01);
         }
 
         internal void ClientNativeAccountTakeBackStorageItem(
             int objectId, int clientItemId)
         {
-            if (m_boPasswordLocked)
+            // sub_6C2D7C applies these two player gates before dispatching to
+            // personal/account/drug storage. The managed allow flag is the inverse
+            // of native byte [+0x683].
+            if (!m_boCanGetBackItem)
             {
                 SendNativeAccountStorageFailure(
                     Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, -3);
                 return;
             }
-            if (m_nPayMent == 1)
+            if (m_boDealing)
             {
                 SendNativeAccountStorageFailure(
                     Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL, -2);
@@ -146,14 +144,7 @@ namespace GameSvr
             }
 
             var state = GetNativeAccountStorageState();
-            var itemIndex = -1;
-            for (var i = 0; i < state.Items.Count; i++)
-            {
-                if (!ClientItemIdMatches(state.Items[i], clientItemId))
-                    continue;
-                itemIndex = i;
-                break;
-            }
+            var itemIndex = FindNativeStorageItemIndex(state.Items, clientItemId);
 
             if (itemIndex < 0)
             {
@@ -186,11 +177,11 @@ namespace GameSvr
             }
 
             SendAddItem(item);
-            state.Items.RemoveAt(itemIndex);
             state.Dirty = true;
+            state.Items.RemoveAt(itemIndex);
             SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_OK,
                 clientItemId, 0, 0, 1, "");
-            LogNativeAccountStorageItem(item, stdItem, '2');
+            LogNativeAccountStorageItem(item, stdItem, 0x02);
         }
 
         // TRADE-35: series 2 = 药品仓库 / DrugStore（原生容器 [player+0x6D8]，构造 0x74a7f4，
@@ -201,15 +192,14 @@ namespace GameSvr
         // （开箱判据 0x74a854：两字段都 != -1）。本 C# 重写没有 DrugStore 的 DBSvr 后端，
         // 该容器永远处于「未加载」态。
         //
-        // 原生「未加载」态的可观测行为（**不是发失败包**）：
+        // 原生「未加载」态的存仓可观测行为（**不是发失败包**）：
         //   存仓 sub_6C2A34 @0x6C2A93 mov eax,[ebx+0x6d8] / 0x6C2A99 call 0x74a854 /
         //     0x6C2AA0 je 0x6c2d15 —— 0x6c2d15 只做局部串析构 + ret，**不发任何包**（静默）。
-        //   取仓 sub_6C2D7C 同形。SM_STORAGE_FAIL(0x2BF) 只在**容器已加载**后于共享失败出口
-        //     0x6c2cf4 才发。
-        // 故未加载态照抄原生 = 静默忽略。旧实现发 SM_STORAGE_FAIL 是多发一个原生不会发的包
-        //（虽同为 fail-closed 不丢物）。这里改为静默以 1:1 对齐 0x6C2A93→0x6c2d15。
-        // 两个方法体保留签名（NativeAccountStorageCompatCheck 用其做源码切片边界），仅作
-        // fail-closed 空实现；DrugStore 全量落地是 DBSvr 依赖项，见 docs/m_trade35_drugstore_20260813.md。
+        // 取仓 sub_6C2D7C 不调用 0x74A854；三个容器共用 +0x683、交易和失败出口。
+        // DrugStore 后端未实现时，仍可严格复刻 Series=2 的 -3/-2/0 失败子集。
+        // 两个方法保留签名（NativeAccountStorageCompatCheck 用其做源码切片边界）：
+        // 存仓保持静默，取仓发送可证明的 fail-closed 子集。DrugStore 全量落地仍是
+        // DBSvr 依赖项，见 docs/m_trade35_drugstore_20260813.md。
         internal void RejectUnsupportedStorageItem(int series)
         {
             _ = series; // DrugStore 未加载：原生 0x6c2d15 静默返回，不发 SM_STORAGE_FAIL。
@@ -217,7 +207,27 @@ namespace GameSvr
 
         internal void RejectUnsupportedTakeBackStorageItem(int series)
         {
-            _ = series; // DrugStore 未加载：原生 sub_6C2D7C 未加载臂静默返回，不发失败包。
+            var status = !m_boCanGetBackItem
+                ? -3
+                : m_boDealing
+                    ? -2
+                    : 0;
+            SendDefMessage(Grobal2.SM_TAKEBACKSTORAGEITEM_FAIL,
+                status, 0, 0, series, "");
+        }
+
+        private static int FindNativeStorageItemIndex(
+            IList<TUserItem> items, int clientItemId)
+        {
+            if (items == null) return -1;
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (item != null && item.wIndex > 0 &&
+                    item.ClientItemID == clientItemId)
+                    return i;
+            }
+            return -1;
         }
 
         private bool IsNativeAccountStorageNpc(int objectId)
@@ -237,15 +247,13 @@ namespace GameSvr
         }
 
         private void LogNativeAccountStorageItem(
-            TUserItem item, GoodItem stdItem, char action)
+            TUserItem item, GoodItem stdItem, byte logType)
         {
             if (stdItem == null) return;
             var quantity = NativeAccountStorageClient.GetGameDataLogQuantity(
                 stdItem, item);
-            M2Share.AddGameDataLog(action + "\t" + m_sMapName + "\t"
-                + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t"
-                + stdItem.Name + "\t" + item.MakeIndex + "\t" + quantity
-                + "\t账号仓库");
+            M2Share.AddNativeGameDataLog(this, logType, stdItem.Name,
+                item.MakeIndex, quantity, "账号仓库");
         }
     }
 }

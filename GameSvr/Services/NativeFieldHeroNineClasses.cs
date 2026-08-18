@@ -156,6 +156,13 @@ namespace GameSvr.Services
         NoSkills
     }
 
+    /// <summary>The common VMT+0x78 body selected by a concrete class.</summary>
+    public enum NativeFieldHeroCommonInitializeKind
+    {
+        Ordinary,
+        Dota
+    }
+
     /// <summary>
     /// The deterministic construction/initialization contract of one concrete
     /// FieldHero class: identity, native addresses, constructor job byte, the
@@ -179,6 +186,7 @@ namespace GameSvr.Services
             int? selector, byte jobByte, uint classPointerVar, uint vmt,
             uint constructor, int instanceSize, uint abilityInit,
             uint? skillInit, NativeFieldHeroInitOrder initOrder,
+            NativeFieldHeroCommonInitializeKind commonInitializeKind,
             NativeFieldHeroSkill[] skills,
             Func<int, NativeFieldHeroAbilityResult> abilities)
         {
@@ -193,6 +201,7 @@ namespace GameSvr.Services
             AbilityInitializer = abilityInit;
             SkillInitializer = skillInit;
             InitOrder = initOrder;
+            CommonInitializeKind = commonInitializeKind;
             _skills = Array.AsReadOnly(skills);
             _abilities = abilities;
         }
@@ -218,6 +227,7 @@ namespace GameSvr.Services
         public uint? SkillInitializer { get; }
 
         public NativeFieldHeroInitOrder InitOrder { get; }
+        public NativeFieldHeroCommonInitializeKind CommonInitializeKind { get; }
 
         /// <summary>Learned magic in native append order.</summary>
         public IReadOnlyList<NativeFieldHeroSkill> Skills => _skills;
@@ -336,6 +346,7 @@ namespace GameSvr.Services
                         "TFieldWarHero", 0, 0, 0x00607180, 0x006071CC,
                         0x0060B6EC, 0x6A8, 0x0060B8BC, 0x0060B870u,
                         NativeFieldHeroInitOrder.SkillsBeforeInitialize,
+                        NativeFieldHeroCommonInitializeKind.Ordinary,
                         new[]
                         {
                             new NativeFieldHeroSkill(3, 3),
@@ -351,6 +362,7 @@ namespace GameSvr.Services
                         "TFieldWizHero", 1, 1, 0x006076F0, 0x0060773C,
                         0x0060C1DC, 0x6A4, 0x0060C3FC, 0x0060C30Cu,
                         NativeFieldHeroInitOrder.SkillsBeforeInitialize,
+                        NativeFieldHeroCommonInitializeKind.Ordinary,
                         new[]
                         {
                             new NativeFieldHeroSkill(11, 3),
@@ -366,6 +378,7 @@ namespace GameSvr.Services
                         "TFieldTaosHero", 2, 2, 0x006079A8, 0x006079F4,
                         0x0060BD88, 0x6A8, 0x0060BF14, 0x0060BEC0u,
                         NativeFieldHeroInitOrder.SkillsBeforeInitialize,
+                        NativeFieldHeroCommonInitializeKind.Ordinary,
                         new[]
                         {
                             new NativeFieldHeroSkill(4, 3),
@@ -381,6 +394,7 @@ namespace GameSvr.Services
                         "TFieldAssHero", 3, 3, 0x00607438, 0x00607484,
                         0x00608D68, 0x6A0, 0x00608ED8, 0x00608E98u,
                         NativeFieldHeroInitOrder.InitializeBeforeSkills,
+                        NativeFieldHeroCommonInitializeKind.Ordinary,
                         new[]
                         {
                             new NativeFieldHeroSkill(260, 4),
@@ -395,6 +409,7 @@ namespace GameSvr.Services
                         "TMirDotaMatchHumMon_War", 4, 0, 0x006081E4, 0x00608230,
                         0x0060CDDC, 0x6B8, 0x0060D134, 0x0060CE1Cu,
                         NativeFieldHeroInitOrder.SkillsBeforeInitialize,
+                        NativeFieldHeroCommonInitializeKind.Dota,
                         new[]
                         {
                             new NativeFieldHeroSkill(3, 3),
@@ -411,6 +426,7 @@ namespace GameSvr.Services
                         "TMirDotaMatchHumMon_Wiz", 5, 1, 0x00608774, 0x006087C0,
                         0x0060D644, 0x6B4, 0x0060D850, 0x0060D764u,
                         NativeFieldHeroInitOrder.SkillsBeforeInitialize,
+                        NativeFieldHeroCommonInitializeKind.Dota,
                         new[]
                         {
                             new NativeFieldHeroSkill(11, 3),
@@ -427,6 +443,7 @@ namespace GameSvr.Services
                         "TMirDotaMatchHumMon_Taos", 6, 2, 0x00608A3C, 0x00608A88,
                         0x0060DA0C, 0x6B8, 0x0060DB50, 0x0060DB04u,
                         NativeFieldHeroInitOrder.SkillsBeforeInitialize,
+                        NativeFieldHeroCommonInitializeKind.Dota,
                         new[]
                         {
                             new NativeFieldHeroSkill(4, 3),
@@ -443,6 +460,7 @@ namespace GameSvr.Services
                         "TMirDotaMatchHumMon_Ass", 7, 3, 0x006084AC, 0x006084F8,
                         0x0060D3C0, 0x6B0, 0x0060D51C, 0x0060D4DCu,
                         NativeFieldHeroInitOrder.InitializeBeforeSkills,
+                        NativeFieldHeroCommonInitializeKind.Dota,
                         new[]
                         {
                             new NativeFieldHeroSkill(260, 4),
@@ -458,6 +476,7 @@ namespace GameSvr.Services
                         "TModelHero", null, 0, 0x00607C60, 0x00607CAC,
                         0x00609038, 0x6A0, 0x00609094, null,
                         NativeFieldHeroInitOrder.NoSkills,
+                        NativeFieldHeroCommonInitializeKind.Ordinary,
                         Array.Empty<NativeFieldHeroSkill>(),
                         ModelHeroAbilities)
             };

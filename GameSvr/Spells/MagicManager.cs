@@ -5,6 +5,33 @@ namespace GameSvr
 {
     public class MagicManager
     {
+        internal static void SendNativeSpell(TBaseObject source,
+            TUserMagic userMagic, short targetX, short targetY)
+        {
+            // sub_769258: Param=X, Tag=Y, Series=MakeWord(effect,type),
+            // followed by the magic id and effective level as two dwords.
+            source.SendRefMsg(Grobal2.RM_SPELL,
+                HUtil32.MakeWord(userMagic.MagicInfo.btEffect,
+                    userMagic.MagicInfo.btEffectType),
+                targetX, targetY, userMagic.MagicInfo.wMagicID,
+                string.Empty, new NativeSpellRelayPayload(
+                    TPlayObject.GetNativeMagicProducerEffectiveLevel(userMagic)));
+        }
+
+        internal static void SendNativeMagicFire(TBaseObject source,
+            TUserMagic userMagic, short targetX, short targetY,
+            TBaseObject target)
+        {
+            // sub_76920C: Param=X, Tag=Y, Series=MakeWord(type,effect),
+            // followed by the target id and effective level as two dwords.
+            source.SendRefMsg(Grobal2.RM_MAGICFIRE,
+                HUtil32.MakeWord(userMagic.MagicInfo.btEffectType,
+                    userMagic.MagicInfo.btEffect),
+                targetX, targetY, target == null ? 0 : target.ObjectId,
+                string.Empty, new NativeMagicFireRelayPayload(
+                    TPlayObject.GetNativeMagicProducerEffectiveLevel(userMagic)));
+        }
+
         private int MagPushArround(TBaseObject PlayObject, int nPushLevel)
         {
             var result = 0;
@@ -66,6 +93,9 @@ namespace GameSvr
         
         
         
+        // This is the CM_SPELL outer-dispatch gate, not a classification of
+        // every skill with a warrior job requirement. Native skill 38 is
+        // deliberately absent because it reaches the generic spell dispatcher.
         public bool IsWarrSkill(int wMagIdx)
         {
             var result = false;
@@ -78,8 +108,6 @@ namespace GameSvr
                 case SpellsDef.SKILL_BANWOL:
                 case SpellsDef.SKILL_FIRESWORD:
                 case SpellsDef.SKILL_MOOTEBO:
-                case SpellsDef.SKILL_CROSSMOON:
-                case SpellsDef.SKILL_TWINBLADE:
                 case SpellsDef.SKILL_58:
                     result = true;
                     break;
@@ -194,11 +222,9 @@ namespace GameSvr
             PlayObject.RecalcAbilitys();
             PlayObject.SendDelItems(charm);
             var StdItem = M2Share.UserEngine.GetStdItem(charm.wIndex);
-            M2Share.AddGameDataLog("持久耗尽" + "\t" + PlayObject.m_sMapName +
-                "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY +
-                "\t" + PlayObject.m_sCharName + "\t" +
-                (StdItem == null ? string.Empty : StdItem.Name) + "\t" +
-                charm.MakeIndex + "\t" + '1' + "\t" + '0');
+            M2Share.AddNativeGameDataLog(PlayObject, 0x0A,
+                StdItem == null ? string.Empty : StdItem.Name,
+                charm.MakeIndex, 1, "持久耗尽");
         }
 
         public bool DoSpell(TPlayObject PlayObject, TUserMagic UserMagic, short nTargetX, short nTargetY, TBaseObject TargeTBaseObject)
@@ -233,7 +259,7 @@ namespace GameSvr
             {
                 return result;
             }
-            PlayObject.SendRefMsg(Grobal2.RM_SPELL, UserMagic.MagicInfo.btEffect, nTargetX, nTargetY, UserMagic.MagicInfo.wMagicID, "");
+            SendNativeSpell(PlayObject, UserMagic, nTargetX, nTargetY);
             if (TargeTBaseObject != null && TargeTBaseObject.m_boDeath)
             {
                 TargeTBaseObject = null;
@@ -523,8 +549,8 @@ namespace GameSvr
                     }
                     break;
                 case SpellsDef.SKILL_SPACEMOVE:
-                    var targerActors = TargeTBaseObject == null ? 0 : TargeTBaseObject.ObjectId;
-                    PlayObject.SendRefMsg(Grobal2.RM_MAGICFIRE, 0, HUtil32.MakeWord(UserMagic.MagicInfo.btEffectType, UserMagic.MagicInfo.btEffect), HUtil32.MakeLong(nTargetX, nTargetY), targerActors, "");
+                    SendNativeMagicFire(PlayObject, UserMagic, nTargetX,
+                        nTargetY, TargeTBaseObject);
                     boSpellFire = false;
                     if (MagSaceMove(PlayObject, UserMagic.btLevel))
                     {
@@ -694,16 +720,7 @@ namespace GameSvr
                         TargeTBaseObject);
                     break;
                 case SpellsDef.SKILL_43:
-                    PlayObject.m_bo43kill = !PlayObject.m_bo43kill;
-                    if (PlayObject.m_bo43kill)
-                    {
-                        PlayObject.SysMsg("开启破空剑", MsgColor.Green, MsgType.Hint);
-                    }
-                    else
-                    {
-                        PlayObject.SysMsg("关闭破空剑", MsgColor.Green, MsgType.Hint);
-                    }
-                    boTrain = true;
+                    PlayObject.TryProduceNativeMagic43(UserMagic);
                     break;
                 case SpellsDef.SKILL_44:
                     if (MagHbFireBall(PlayObject, UserMagic, nTargetX, nTargetY, ref TargeTBaseObject))
@@ -941,7 +958,7 @@ namespace GameSvr
                     break;
                 // id 111 @0x6EDE4F: 冰眼巨魔 summon with 10-min cooldown
                 // Native sub_74633C: VMT+0x128 call, checks self+0x510 cooldown,
-                // summons with nExpLevel=10, royalty=300s
+                // summons with hpAfterSlave=10%, royalty=300s
                 case SpellsDef.SKILL_111:
                     boSpellFail = !PlayObject.TryActivateNativeSkill111IceEyeTrollSummon(
                         UserMagic);
@@ -1217,14 +1234,8 @@ namespace GameSvr
             }
             if (boSpellFire)
             {
-                if (TargeTBaseObject == null)
-                {
-                    PlayObject.SendRefMsg(Grobal2.RM_MAGICFIRE, 0, HUtil32.MakeWord(UserMagic.MagicInfo.btEffectType, UserMagic.MagicInfo.btEffect), HUtil32.MakeLong(nTargetX, nTargetY), 0, "");
-                }
-                else
-                {
-                    PlayObject.SendRefMsg(Grobal2.RM_MAGICFIRE, 0, HUtil32.MakeWord(UserMagic.MagicInfo.btEffectType, UserMagic.MagicInfo.btEffect), HUtil32.MakeLong(nTargetX, nTargetY), TargeTBaseObject.ObjectId, "");
-                }
+                SendNativeMagicFire(PlayObject, UserMagic, nTargetX,
+                    nTargetY, TargeTBaseObject);
             }
             if (UserMagic.btLevel < 3 && boTrain)
             {
@@ -1571,7 +1582,8 @@ namespace GameSvr
             boSpellFire = false;
             IList<TBaseObject> BaseObjectList = new List<TBaseObject>();
             PlayObject.GetMapBaseObjects(PlayObject.m_PEnvir, nTargetX, nTargetY, HUtil32._MAX(1, UserMagic.btLevel), BaseObjectList);
-            PlayObject.SendRefMsg(Grobal2.RM_MAGICFIRE, 0, HUtil32.MakeWord(UserMagic.MagicInfo.btEffectType, UserMagic.MagicInfo.btEffect), HUtil32.MakeLong(nTargetX, nTargetY), TargeTBaseObject.ObjectId, "");
+            SendNativeMagicFire(PlayObject, UserMagic, (short)nTargetX,
+                (short)nTargetY, TargeTBaseObject);
             for (var i = 0; i < BaseObjectList.Count; i++)
             {
                 var BaseObject = BaseObjectList[i];
@@ -2022,7 +2034,6 @@ namespace GameSvr
                 var sMonName = M2Share.g_Config.sDragon;
                 int nMakelevel = TPlayObject
                     .GetNativeMagicProducerEffectiveLevel(UserMagic);
-                int nExpLevel = nMakelevel;
                 var nCount = M2Share.g_Config.nDragonCount;
                 var dwRoyaltySec = 10 * 24 * 60 * 60;
                 for (var i = M2Share.g_Config.DragonArray.GetLowerBound(0); i <= M2Share.g_Config.DragonArray.GetUpperBound(0); i++)
@@ -2034,7 +2045,6 @@ namespace GameSvr
                     if (PlayObject.m_Abil.Level >= M2Share.g_Config.DragonArray[i].nHumLevel)
                     {
                         sMonName = M2Share.g_Config.DragonArray[i].sMonName;
-                        nExpLevel = M2Share.g_Config.DragonArray[i].nLevel;
                         nCount = M2Share.g_Config.DragonArray[i].nCount;
                     }
                 }
@@ -2060,7 +2070,8 @@ namespace GameSvr
                     sMonName = ysDragonName;
                     nCount = ysDragonCount;
                 }
-                if (PlayObject.MakeSlave(sMonName, nMakelevel, nExpLevel, nCount, dwRoyaltySec) != null)
+                if (PlayObject.MakeNativeSlave(sMonName, nMakelevel, nCount,
+                        dwRoyaltySec, fromHero: false, hpAfterSlave: 10) != null)
                 {
                     result = true;
                 }
@@ -2118,7 +2129,6 @@ namespace GameSvr
                 var sMonName = M2Share.g_Config.sSkeleton;
                 int nMakeLevel = TPlayObject
                     .GetNativeMagicProducerEffectiveLevel(UserMagic);
-                int nExpLevel = nMakeLevel;
                 var nCount = M2Share.g_Config.nSkeletonCount;
                 var dwRoyaltySec = 10 * 24 * 60 * 60;//叛变时间
                 for (var i = M2Share.g_Config.SkeletonArray.GetLowerBound(0); i <= M2Share.g_Config.SkeletonArray.GetUpperBound(0); i++)
@@ -2130,7 +2140,6 @@ namespace GameSvr
                     if (PlayObject.m_Abil.Level >= M2Share.g_Config.SkeletonArray[i].nHumLevel)
                     {
                         sMonName = M2Share.g_Config.SkeletonArray[i].sMonName;
-                        nExpLevel = M2Share.g_Config.SkeletonArray[i].nLevel;
                         nCount = M2Share.g_Config.SkeletonArray[i].nCount;
                     }
                 }
@@ -2141,7 +2150,8 @@ namespace GameSvr
                 {
                     nCount = YanshenPangu1Patches.KuLouSlaveCount(ysSkele);
                 }
-                if (PlayObject.MakeSlave(sMonName, nMakeLevel, nExpLevel, nCount, dwRoyaltySec) != null)
+                if (PlayObject.MakeNativeSlave(sMonName, nMakeLevel, nCount,
+                        dwRoyaltySec, fromHero: false, hpAfterSlave: 10) != null)
                 {
                     result = true;
                 }
@@ -2166,9 +2176,9 @@ namespace GameSvr
                 var sMonName = M2Share.g_Config.sAngel;
                 int nMakeLevel = TPlayObject
                     .GetNativeMagicProducerEffectiveLevel(UserMagic);
-                int nExpLevel = nMakeLevel;
                 var dwRoyaltySec = 10 * 24 * 60 * 60;
-                if (PlayObject.MakeSlave(sMonName, nMakeLevel, nExpLevel, 1, dwRoyaltySec) != null)
+                if (PlayObject.MakeNativeSlave(sMonName, nMakeLevel, 1,
+                        dwRoyaltySec, fromHero: false, hpAfterSlave: 10) != null)
                 {
                     result = true;
                 }

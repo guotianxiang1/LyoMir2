@@ -62,7 +62,7 @@ namespace GameSvr.Services
             GoodItem stdItem, TUserItem item)
         {
             if (stdItem == null || item == null) return 0;
-            return stdItem.StdMode == 7 ? item.Dura : 1;
+            return NativeItemFactory.IsPileItem(stdItem) ? item.Dura : 1;
         }
 
         internal static bool TryEncodeLoadRequest(TPlayObject player,

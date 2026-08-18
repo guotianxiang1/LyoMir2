@@ -26,6 +26,9 @@ namespace GameSvr
             string sMapInfoFile;
             var loadFailCount = 0;
             var result = -1;
+            var mapInfoExFile = Path.Combine(M2Share.sConfigPath,
+                M2Share.g_Config.sEnvirDir, "MapInfoEx.txt");
+            M2Share.MapManager?.LoadNativeMapInfoEx(mapInfoExFile);
             var sFileName = Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sEnvirDir, "MapInfo.txt");
             if (File.Exists(sFileName))
             {
@@ -179,7 +182,9 @@ namespace GameSvr
                             //     0x7762F1 cmp dword [ebx+0x9c],0 / jne done
                             //     0x7762FE mov esi,0xFFFFFFF4       空参数 -> result = -12
                             //   GM A 0x7750D7 同形（空参 0x775124 [ebp-4]=-12；取消臂清空 [+0x9c]）。
-                            // 效果层 BLOCKED：+0x65/+0x9c 无已证 C# 消费者，仅解析与存储。
+                            // 效果层消费者已闭合：sub_778EC0 @0x778F75..0x778F8E
+                            // 在落格第一遍发现非 landing 的 type-1 event 时读取
+                            // +0x65/+0x9c，并调用 sub_768C7C 随机移入目标地图。
                             if (HUtil32.CompareLStr(s34, "DROPTOMAP", "DROPTOMAP".Length))
                             {
                                 MapFlag.boDROPTOMAP = true;
@@ -446,6 +451,22 @@ namespace GameSvr
                         n20 = HUtil32.Str_ToInt(s34, 0);
                         M2Share.MapManager.AddMapRoute(sMapName, n14, n18, s44, n1C, n20);
                     }
+                }
+                var nativeMapDescriptionDirectory = Path.Combine(
+                    M2Share.sRootPath, "Share", "config");
+                if (!M2Share.MapManager.TryLoadNativeMapAreas(Path.Combine(
+                        nativeMapDescriptionDirectory, "maparea.txt"),
+                        out var mapAreaError))
+                {
+                    M2Share.ErrorMessage("maparea.txt load failed: " +
+                                         mapAreaError);
+                }
+                if (!M2Share.MapManager.TryLoadNativeMapDescriptions(Path.Combine(
+                        nativeMapDescriptionDirectory, "MapDesc.dat"),
+                        out var mapDescriptionError))
+                {
+                    M2Share.ErrorMessage("MapDesc.dat load failed: " +
+                                         mapDescriptionError);
                 }
                 if (loadFailCount > 0)
                 {
@@ -759,7 +780,8 @@ namespace GameSvr
             // 证据锚见 TMapFlag 各字段文档。比较器按原生逐 token 区分：
             //   前缀 0x4C6E94(带 mov ecx,len，ASCII 大小写不敏感) -> HUtil32.CompareLStr
             //   全等 0x40BD78(无 ecx，大小写不敏感) -> .Equals(OrdinalIgnoreCase)
-            // 效果层 BLOCKED：eqv-18 普查确认这些 offset 无已证 C# 消费者，仅解析不接线。
+            // 效果层 BLOCKED 仅指下列 7 个 bool；带参数的 DROPTOMAP 不在此组，
+            // 已由 sub_778EC0 等价落格路径消费。
 
             // UserNoKill -> byte[+0x71]=1（原生另清 word[+0x74]=0；配置解析对全零新 flag 为 no-op）
             //   B 0x7768E6 前缀 len10 / A 0x775938

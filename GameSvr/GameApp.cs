@@ -2,7 +2,6 @@ using GameSvr.CommandSystem;
 using GameSvr.Configs;
 using GameSvr.Services;
 using System.Collections;
-using System.Collections.Concurrent;
 using SystemModule;
 using SystemModule.Common;
 
@@ -57,17 +56,6 @@ namespace GameSvr
             {
                 M2Share.ErrorMessage(
                     "加载原生宝藏天赐配置失败，OpenNeedKeyBox 保持关闭。");
-            }
-            var feastDaysPath = NativeFestivalConfig.ResolveDefaultPath(
-                M2Share.sRootPath, M2Share.g_Config.sBaseDir);
-            if (!NativeFestivalConfig.TryLoad(feastDaysPath,
-                    out var festivalConfig, out var festivalError))
-            {
-                M2Share.ErrorMessage("加载节日配置文件失败: " + festivalError);
-            }
-            else
-            {
-                M2Share.FestivalConfig = festivalConfig;
             }
             M2Share.MainOutMessage(
                 $"加载原生标准物品数据库成功({M2Share.UserEngine.StdItemList.Count})...");
@@ -296,6 +284,35 @@ namespace GameSvr
                 return false;
             }
             M2Share.MainOutMessage($"地图数据加载成功({M2Share.MapManager.Maps.Count})...");
+            if (!NativeLimitBagItemDropLoader.TryResolveAutoLoadFile(
+                    M2Share.sRootPath, out var limitBagItemDropAutoLoad,
+                    out var limitBagItemDropFile,
+                    out var limitBagItemDropError))
+            {
+                M2Share.ErrorMessage("MapDropLimitBagItems.xml config failed: "
+                                     + limitBagItemDropError);
+            }
+            else if (!limitBagItemDropAutoLoad)
+            {
+                M2Share.MainOutMessage(
+                    "MapDropLimitBagItems.xml AutoStart/AutoLoad disabled...");
+            }
+            else if (NativeLimitBagItemDropLoader.TryApply(limitBagItemDropFile,
+                    M2Share.MapManager.FindMapByNativeName,
+                    out limitBagItemDropError,
+                    message => M2Share.ErrorMessage(message)))
+            {
+                var limitBagRuleCount = M2Share.MapManager.Maps.Sum(map =>
+                    map.NativeLimitBagItemDrops.Count);
+                M2Share.MainOutMessage(
+                    $"MapDropLimitBagItems.xml loaded({limitBagRuleCount})...");
+            }
+            else
+            {
+                M2Share.ErrorMessage("MapDropLimitBagItems.xml load failed: " +
+                                     limitBagItemDropError);
+            }
+            M2Share.UserEngine.LoadNativeMonSupport();
             _ = NativeDropControlLoader.TryLoadWorld(M2Share.sRootPath,
                 M2Share.NativeWorldDropControl, out _);
             var dynamicRoomEnvirDirectory = Path.GetFullPath(Path.Combine(
@@ -609,6 +626,8 @@ namespace GameSvr
             M2Share.MainOutMessage("[ScriptSystem] Pascal script system enabled (PAS-only).");
             var envirDir = Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sEnvirDir);
             M2Share.DataServer = new DBService();
+            M2Share.DataServer.ConfigureFieldHeroMonItemsSource(
+                new NativeFieldHeroFileMonItemsSource(envirDir));
             M2Share.ObjectManager = new ObjectManager();
             M2Share.GateManager = GateManager.Instance;
             M2Share.g_FindPath = new TFindPath();
@@ -653,6 +672,8 @@ namespace GameSvr
                 M2Share.DynamicRoomPasRoutes,
                 M2Share.DynamicRoomRuntime);
             PasEngine.PasApiBridge.ScriptHost = M2Share.PasEngine;
+            _ = PasEngine.NativeValidScriptFunctionRegistry.Reload(
+                M2Share.sConfigPath);
             M2Share.PasEngine.LoadNpcScriptMap();
             M2Share.PasEngine.LoadTaskScripts();
             M2Share.PasEngine.LoadMonsterScripts();
@@ -661,7 +682,18 @@ namespace GameSvr
             M2Share.StartPointList = new List<TStartPoint>();
             M2Share.SafeZoneList = new List<TSafeZoneArea>();
             M2Share.ServerTableList = new TRouteInfo[20];
-            M2Share.g_DenySayMsgList = new ConcurrentDictionary<string, long>();
+            M2Share.g_DenySayMsgList = NativeMirrorChatBan.CreateStore();
+            if (NativeMirrorChatBan.TryInitializePersistentStore(envirDir,
+                    out var blockUserCount, out var blockUserError))
+            {
+                M2Share.MainOutMessage(
+                    $"加载BlockUsers.Dat禁言记录 {blockUserCount} 条...");
+            }
+            else
+            {
+                M2Share.ErrorMessage(
+                    "加载BlockUsers.Dat失败，禁言持久化未启用: " + blockUserError);
+            }
             M2Share.MiniMapList = new Dictionary<string, int>();
             M2Share.g_UnbindList = new Dictionary<int, string>();
             M2Share.LineNoticeList = new List<string>();

@@ -57,14 +57,9 @@ namespace GameSvr
         /// 1000..1033 window.
         /// </summary>
         /// <returns>
-        /// <c>sub_772388</c>'s byte result: 0 = the cast was refused or landed
-        /// on nothing, 1 = it resolved but dealt no damage, 2 = damage was
-        /// delivered. Native keeps it in bl and feeds it to the shared
-        /// <c>sub_7707A8</c> tail at <c>0x770CC4</c>, which this tree does not
-        /// model for ANY hit ident (the C# hit arms all go through
-        /// <see cref="AttackDir"/>, an upstream-shaped path with no
-        /// counterpart to that tail). Returned so the value is available if
-        /// the tail is ever ported.
+        /// The final byte result after the native result-zero ordinary-attack
+        /// fallback. A result of two runs the shared physical tail before the
+        /// action frame is broadcast.
         /// </returns>
         internal int RunNativeAction1017()
         {
@@ -73,7 +68,8 @@ namespace GameSvr
             // always runs and 0x7707F6 `call 0x767E80` resolves the target.
             // sub_767E80 is GetFrontPosition (sub_766214, which reads
             // [self+0x154] & 7) followed by GetMovingObject — GetPoseCreate.
-            TBaseObject target = GetPoseCreate();
+            TBaseObject initialTarget = GetPoseCreate();
+            TUserMagic frameMagic = m_NativeChargedCounterMagic;
 
             // 0x770AE5 `FF 93 CC 00 00 00 call [vmt+0xCC]` on
             // (edx = DC low, ecx = DC high - DC low). VMT+0xCC is 0x767F10,
@@ -82,16 +78,45 @@ namespace GameSvr
             // 0x770ACC (the action code) and 0x770AD0 (the cached UserMagic)
             // are cleaned up unread.
             //
-            // The result goes to [ebp-0xC] and this arm never reads it again
-            // — 0x770AEE loads edx from [ebp-4] and calls the worker. Its one
-            // consumer is the shared tail 0x770D3A `fild [ebp-0xC]`, the
-            // leech accumulator, which is unmodelled here. The call is kept
-            // because GetAttackPower is not pure: it draws the luck dice
-            // (sub_76C804 @0x76C816 onwards) and therefore advances RandSeed.
-            GetAttackPower(HUtil32.LoWord(m_WAbil.DC),
+            // 0x770AEB saves this result at [ebp-0xC]; 0x770D3A consumes it
+            // in the shared physical tail when the worker result is two.
+            int tailPower = GetAttackPower(HUtil32.LoWord(m_WAbil.DC),
                 HUtil32.HiWord(m_WAbil.DC) - HUtil32.LoWord(m_WAbil.DC));
 
-            return RunNativeAction1017Swing(target);
+            int result = RunNativeAction1017Swing(initialTarget);
+            int frameAction = NativeAction1017Code;
+            if (result == 0)
+            {
+                // 0x770CE1 replaces the frame-magic local with self+0x9C,
+                // rerolls DC and enters the same ordinary fallback used by
+                // the other zero-result physical workers.
+                frameMagic = GetSunSwordFallbackMagic();
+                tailPower = GetAttackPower(HUtil32.LoWord(m_WAbil.DC),
+                    HUtil32.HiWord(m_WAbil.DC) -
+                    HUtil32.LoWord(m_WAbil.DC));
+                result = RunNativeBasicAttackFallback(initialTarget,
+                    tailPower);
+                frameAction = 1000;
+            }
+
+            if (result == 2)
+                RunNativePhysicalAttackCommonTail(initialTarget, tailPower);
+
+            // 0x770DC2..0x770DD3 is outside the result==2 block and tests
+            // self+0x178 for the player race value zero.
+            if (m_btRaceServer == Grobal2.RC_PLAYOBJECT &&
+                initialTarget != null)
+                CheckWeaponUpgrade();
+
+            int effectiveLevel = frameMagic == null
+                ? 0
+                : NativeEffectiveMagicLevel(frameMagic);
+            byte[] body = BuildSunSwordPhysicalAttackBody(frameAction,
+                effectiveLevel, m_btDirection, m_nCurrX, m_nCurrY);
+            SendRefMsg(Grobal2.RM_PHYSICAL_ATT, frameAction, m_nCurrX,
+                m_nCurrY, 0, string.Empty,
+                new NativePhysicalAttackFramePayload(body, false));
+            return result;
         }
 
         /// <summary>
@@ -168,12 +193,11 @@ namespace GameSvr
             }
 
             // 0x772438 `B8 03 00 00 00 / call 0x403B4C / 8B C8 / 41` then
-            // 0x77244F `FF 53 3C call [vmt+0x3C]` = 0x76AD30. Unconditional
-            // on the damage >= 0 path, so a swing that hits nothing still
-            // trains. [ebx+0xC4] cannot be nil here: 0x7443AA would have
-            // returned -1 and the `jl` above would have fired.
-            (this as TPlayObject)?.TrainNativeMagicProducer(
-                m_NativeChargedCounterMagic,
+            // 0x77244F `FF 53 3C call [vmt+0x3C]` = 0x76AD30 for both the
+            // player and war-hero VMTs. It is unconditional on damage >= 0,
+            // so a swing that hits nothing still trains. [ebx+0xC4] cannot
+            // be nil here: 0x7443AA would have returned -1 above.
+            TrainNativePhysicalMagic(m_NativeChargedCounterMagic,
                 M2Share.RandomNumber.Random(3) + 1);
 
             // 0x772452 `8A 45 FF mov al,[ebp-1]`

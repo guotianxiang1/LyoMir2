@@ -111,6 +111,8 @@ namespace GameSvr
                     : stdItem.DuraMax,
                 DuraMax = stdItem.DuraMax
             };
+            NativeSpecialDropItemRollCore.HydrateConstructorState(item,
+                stdItem);
             return true;
         }
 

@@ -176,8 +176,9 @@ namespace GameSvr
 
         private void MoveToNativeHorseDriver(TPlayObject driver)
         {
-            if (m_PEnvir?.MoveToMovingObject(m_nCurrX, m_nCurrY, this,
-                    driver.m_nCurrX, driver.m_nCurrY, true) <= 0)
+            if (!m_PEnvir.NativeRelocateMovingObjectNodeExact(
+                    m_nCurrX, m_nCurrY, this,
+                    driver.m_nCurrX, driver.m_nCurrY))
             {
                 return;
             }
@@ -186,7 +187,7 @@ namespace GameSvr
             m_nCurrY = driver.m_nCurrY;
             RemoveNativeMovementTimedState(23);
             ProcessNativeMoveActionWithoutBroadcast();
-            SearchViewRange();
+            SendMapDescription();
         }
 
         private void SendNativeHorsePairPacket(TPlayObject driver,

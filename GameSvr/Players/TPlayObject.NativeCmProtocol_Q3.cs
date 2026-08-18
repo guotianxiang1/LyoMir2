@@ -56,7 +56,7 @@ namespace GameSvr
                 case Grobal2.CM_3287: Q3Cm3287(); return true;
                 case Grobal2.CM_3288: Q3Cm3288(); return true;
                 case Grobal2.CM_3294: Q3Cm3294(processMessage.nBodyLen); return true;
-                case Grobal2.CM_3295: Q3Cm3295(); return true;
+                case Grobal2.CM_3295: Q3Cm3295(processMessage); return true;
                 case Grobal2.CM_3306: Q3Cm3306(processMessage.nBodyLen); return true;
                 case Grobal2.CM_3307: Q3Cm3307(); return true;
                 case Grobal2.CM_3340: Q3Cm3340(); return true;
@@ -163,12 +163,8 @@ namespace GameSvr
         private void Q3Cm3283() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3283, m_sCharName);
 
         /// <summary>
-        /// CM 3284, leaf 0x6DA650, worker 0x6E6EA4(Self). The worker finalizes the
-        /// dynamic array [Self+0x9F8] (0x6E6EB7 `mov edx,[0x74B39C]` rtti /
-        /// 0x406C64), zeroes [+0x9FC] and [+0x9F4], then answers SM 0xB8D with an
-        /// all-zero body. The reply reflects the now-empty [+0x9F8] collection, a
-        /// field this port does not model, so it is withheld rather than sent
-        /// meaninglessly.
+        /// CM 3284 is owned by the earlier TryHandleQiankunCm route. This fallback
+        /// remains fail-closed so Q3 never becomes a second owner of the same ident.
         /// </summary>
         private void Q3Cm3284() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3284, m_sCharName);
 
@@ -182,10 +178,9 @@ namespace GameSvr
         private void Q3Cm3285() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3285, m_sCharName);
 
         /// <summary>
-        /// CM 3286, leaf 0x6DA65D, worker 0x6E6B54(Self). The worker commits the slot
-        /// collection [Self+0x9F8]/[+0x9FC], consults the hero [Self+0xBB0] and the
-        /// managers [[0x7D5D6C]]/[[0x7D593C]], and answers SM 0xB8E. The collection
-        /// and managers are not modelled, so the reply is withheld.
+        /// CM 3286 is likewise owned by TryHandleQiankunCm ahead of Q3. The live
+        /// handler closes the empty-list reset leg and withholds config-backed
+        /// non-empty rewards.
         /// </summary>
         private void Q3Cm3286() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3286, m_sCharName);
 
@@ -226,13 +221,12 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// CM 3295, leaf 0x6DAA99 (Tag=word[+8] pushed, body copied via 0x405708,
-        /// Param=word[+6], Recog=[record]), worker 0x6EB8E4. The worker keys off the
-        /// player name [Self+0x106] and the fields [+0x260]/[+0x24C]/[+0xB99] plus
-        /// the manager [[0x7D593C]], answering SM 0x6A. Those fields are not
-        /// modelled, so the reply is withheld.
+        /// CM 3295 fallback. The normal owner is TryHandleNameQueryCm, which runs
+        /// before Q3; keeping this arm on the same implementation prevents a
+        /// future dispatcher-order change from reverting the command to silence.
         /// </summary>
-        private void Q3Cm3295() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3295, m_sCharName);
+        private void Q3Cm3295(TProcessMessage processMessage)
+            => HandleNativeCm3295(processMessage);
 
         /// <summary>
         /// CM 3306, leaf 0x6DAB39: `66 83 FE 04 cmp si,4` / `0F 82.. jb 0x6DBC2C`
@@ -265,10 +259,18 @@ namespace GameSvr
         /// `F6 40 03 20 test byte[eax+3],0x20` / `je 0x6DBC2C` gates on a config
         /// flag before calling worker 0x79E78C with two strings copied from
         /// [Self+0x106] and [Self+0xB09] and the manager [[0x7D5ECC]]. That config
-        /// flag and the [[0x7DD050]] text-command subsystem are not modelled, so the
-        /// gate cannot even be evaluated; the whole command is withheld.
+        /// flag is read from the five-byte ServerSwitch store. The [[0x7DD050]]
+        /// text-command subsystem remains unmodelled, so the worker is withheld.
         /// </summary>
-        private void Q3Cm3340() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3340, m_sCharName);
+        private void Q3Cm3340()
+        {
+            if (!NativeClientVersionPolicy.IsClientInfoCollectionEnabled())
+            {
+                return;
+            }
+
+            NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3340, m_sCharName);
+        }
 
         /// <summary>
         /// CM 3344, leaf 0x6DADD6, worker 0x6EC5D8(Self). The worker reads

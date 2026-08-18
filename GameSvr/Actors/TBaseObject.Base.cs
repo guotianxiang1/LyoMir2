@@ -492,7 +492,10 @@ namespace GameSvr
                         }
                     }
                 }
-                
+
+                if (this is TPlayObject playObject)
+                    playObject.m_nNativeSwitchOffsetD3C = 0;
+
                 for (var i = m_SlaveList.Count - 1; i >= 0; i--)
                 {
                     if (m_SlaveList[i].m_boDeath || m_SlaveList[i].m_boGhost || (m_SlaveList[i].m_Master != this))
@@ -563,20 +566,7 @@ namespace GameSvr
                         }
                         if (HUtil32.GetTickCount() > m_dwMasterRoyaltyTick)
                         {
-                            for (var i = 0; i < m_Master.m_SlaveList.Count; i++)
-                            {
-                                if (m_Master.m_SlaveList[i] == this)
-                                {
-                                    // Royalty-expire drop: 0x71E6C4 call 0x6F78B4 -> SM 4470,
-                                    // then TList.Remove from [master+0x4FC].
-                                    m_Master.NotifyNativeSlaveListChanged(joining: false, this);
-                                    m_Master.m_SlaveList.RemoveAt(i);
-                                    break;
-                                }
-                            }
-                            m_Master = null;
-                            m_WAbil.HP /= 10;
-                            RefShowName();
+                            ExpireNativeSlaveRoyalty();
                         }
                         if (m_dwMasterTick != 0)
                         {
@@ -812,26 +802,33 @@ namespace GameSvr
         /// neither test, so a tier-3 account kept 100% of item drops and 100% of gold —
         /// the one economic sink the anti-fatigue / anti-cheat system has.
         ///
-        /// The native abort branch additionally emits a log record through
-        /// <c>sub_768BE0</c> -> <c>sub_79D3D8</c> (a 0xBC-byte record stamped with magic
-        /// 0x33AABB77 and kind byte 0xA2) carrying the GBK literals "怪物爆出被防沉迷"
-        /// (0x7200D0, length prefix 16) and "被防沉迷" (0x7200EC, length prefix 8).  That
-        /// is a log-service record, not an SM_* packet, and its field layout is not
-        /// established (SPWN-30 / SPWN-31 are BLOCKED on the ecx/pushed-parameter
-        /// identities), so it is deliberately not reproduced here rather than guessed at.
+        /// The native abort branch additionally emits one log-service record through
+        /// <c>sub_768BE0</c> -> <c>sub_79D3D8</c> (a 0xBC-byte body stamped with magic
+        /// 0x33AABB77 and kind byte 0xA2).  The complete caller/codec chain fixes the
+        /// arguments as itemName="被防沉迷", makeIndex=0x76ADF2, quantity=1, and
+        /// reason="怪物爆出被防沉迷".  It is a game-data log, not an SM_* packet.
         /// </summary>
         private static bool NativeAfterScatterItemsBlocked(TBaseObject killer)
         {
             // 0x71FAB4 + 0x71FACE: only a non-nil, RC_PLAYOBJECT killer reaches the tests.
             if (killer == null || killer.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                 return false;
-            if (killer is TPlayObject player
+            var blocked = killer is TPlayObject player
                 && (player.m_btNativeFatigueTier == 3
-                    || player.m_btNativeCheatPenaltyTier == 3))
+                    || player.m_btNativeCheatPenaltyTier == 3);
+            if (!blocked)
             {
-                return true;
+                blocked = killer.HasNativeActiveState(25);
             }
-            return killer.HasNativeActiveState(25);
+            if (!blocked)
+            {
+                return false;
+            }
+
+            // 0x71FB03/0x71FB08/0x71FB0F: exact sub_768BE0 argument order.
+            M2Share.AddNativeGameDataLog(
+                killer, 0xA2, "被防沉迷", 0x0076ADF2, 1, "怪物爆出被防沉迷");
+            return true;
         }
 
         public virtual void Die()
@@ -864,6 +861,15 @@ namespace GameSvr
             // TEnvironment 的同槽实现 0x779F64 是裸 `C3`，只有 TDynEnvir 的 0x5FD4D4
             // 会在 0x5FD50A 派发 @OnDie —— 类门在 NativeDynEnvirObjectDiedTrigger 里。
             m_PEnvir?.NativeDynEnvirObjectDiedTrigger(this);
+            // THeroAct keeps its owner at +0x68C, separate from TCreature's generic
+            // master slot. C# currently folds both into m_Master, so preserve the
+            // native inputs before the generic pet cleanup below clears the hiters.
+            var nativeHeroDeathOwner = m_btRaceServer == Grobal2.RC_HEROOBJECT
+                ? m_Master as TPlayObject
+                : null;
+            var nativeHeroDeathLastHiter = m_btRaceServer == Grobal2.RC_HEROOBJECT
+                ? m_LastHiter
+                : null;
             if (m_Master != null)
             {
                 m_ExpHitter = null;
@@ -1005,7 +1011,12 @@ namespace GameSvr
                 {
                     m_LastHiter.MonsterSayMsg(this, MonStatus.KillHuman);
                 }
-                m_Master = null;
+                // THeroAct.Die keeps owner +0x68C alive through and after the shared
+                // THumanKind death workers. Only generic creature masters detach here.
+                if (m_btRaceServer != Grobal2.RC_HEROOBJECT)
+                {
+                    m_Master = null;
+                }
             }
             catch (Exception e)
             {
@@ -1181,6 +1192,8 @@ namespace GameSvr
                 // scattered their whole bag onto the town floor.  See NativeDeathDropPolicy.
                 var nativeHumanKindDeath = m_btRaceServer == Grobal2.RC_PLAYOBJECT
                                         || m_btRaceServer == Grobal2.RC_HEROOBJECT;
+                try
+                {
                 var deathDropOutcome = NativeDeathDropPolicy.Outcome.NormalEquipThenBag;
                 if (nativeHumanKindDeath)
                 {
@@ -1192,18 +1205,20 @@ namespace GameSvr
 
                 // 0x74143E / 0x74144E: each special flag selects its OWN exclusive worker
                 // (sub_740300 / sub_748D48) instead of the normal sub_73FC70 + sub_740078
-                // pair.  Neither worker is portable yet: sub_740300 @0x74036A filters the
-                // bag by Delphi class TSpecialDropItem ([0x783434]) and rolls the per-item
-                // percent at [item+0x100] (sub_78BCBC: `mov eax,0x64; call Random; cmp
-                // eax,[ebx+0x100]; setl al`), and sub_748D48 @0x748DA3-0x748DB1 resolves a
-                // per-map quota record through sub_784568 + sub_77C028.  C# has neither the
-                // item-class classifier (see the sub_74DAE4 `+0xFC` gap) nor the quota
-                // table, so these two stay BLOCKED and FAIL CLOSED to "drop nothing"
-                // rather than falling back to the normal pair, which would dump the whole
-                // bag on a map the operator configured to restrict drops.
-                if (deathDropOutcome == NativeDeathDropPolicy.Outcome.OnlyDropSpecWorker
-                    || deathDropOutcome == NativeDeathDropPolicy.Outcome.LimitBagItemDropWorker)
+                // pair. sub_740300 is now closed independently: it scans the bag backwards,
+                // accepts only TSpecialDropItem (StdMode 96), performs sub_78BCBC's signed
+                // percentage roll, then preserves the native auth/gift destruction or
+                // radius-2 ground transaction and the final 0x27A4 deletion batch.
+                // sub_748D48 uses the separately loaded exact-name Rnd/Ranger table and
+                // attempts only fixed-radius-2 ground placement for matching bag items.
+                if (deathDropOutcome == NativeDeathDropPolicy.Outcome.OnlyDropSpecWorker)
                 {
+                    NativeSpecialDropBagItems();
+                    deathDropsAnything = false;
+                }
+                else if (deathDropOutcome == NativeDeathDropPolicy.Outcome.LimitBagItemDropWorker)
+                {
+                    NativeLimitBagItemDropItems();
                     deathDropsAnything = false;
                 }
 
@@ -1214,7 +1229,15 @@ namespace GameSvr
                     {
                         AttackBaseObject = m_ExpHitter.m_Master;
                     }
-                    if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
+                    if (m_btRaceServer == Grobal2.RC_HEROOBJECT)
+                    {
+                        // THeroAct.Die 0x687125 enters the same THumanKind worker pair as
+                        // TPlayer.Die: equipment sub_73FC70 first, then bag sub_740078.
+                        NativeHeroDropUseItems(nativeHeroDeathLastHiter,
+                            nativeHeroDeathOwner);
+                        NativeHeroScatterBagItems(nativeHeroDeathOwner);
+                    }
+                    else if (m_btRaceServer != Grobal2.RC_PLAYOBJECT)
                     {
                         var scatteredItems = new List<KeyValuePair<string, string>>();
                         // 0x71E3B7 is the ONE gate that covers both siblings, because it
@@ -1279,7 +1302,6 @@ namespace GameSvr
                                         AttackBaseObject);
                                 }
                             });
-                        DropUseItems(AttackBaseObject, scatteredItems);
                         if (m_Master == null && (!m_boNoItem || !m_PEnvir.Flag.boNODROPITEM))
                         {
                             // 半径取原生段2 的硬编码 3（0x71FDCF / 0x71FE46），不是配置值：
@@ -1353,6 +1375,12 @@ namespace GameSvr
                             // （大小写不敏感）、UTF-16LE 三路皆 0 命中。按 §3.1 删除。
                         }
                     }
+                }
+                }
+                catch (Exception ex) when (nativeHumanKindDeath)
+                {
+                    M2Share.ErrorMessage("[Exception]: THumanKind.Die -1: "
+                        + ex.Message);
                 }
                 // 战神 sub_6C07A0 @0x6C07EE-0x6C0815 — the luck penalty is a SIBLING of the
                 // drop policy, not a child of it.  TPlayer.Die calls sub_741368 (the drop
@@ -1459,6 +1487,7 @@ namespace GameSvr
                 // Ghost is a different byte: 0x7680EF C6 43 73 01 in MakeGhost.
                 // DelObjectCount + m_boDelFormMaped here mixed death with leave-map
                 // accounting and made corpses vanish from HumCount until logout.
+                m_dwSearchTick = 0;
                 SendRefMsg(Grobal2.RM_DEATH, m_btDirection, m_nCurrX, m_nCurrY, 1, "");
             }
             catch
@@ -1780,6 +1809,21 @@ namespace GameSvr
                             equipAuthenticated, m_UseItems[nC]))
                     {
                         var destroyed = m_UseItems[nC];
+                        var destroyedStdItem = M2Share.UserEngine.GetStdItem(
+                            destroyed.wIndex);
+                        // 0x73FDDD..0x73FDFE: this destruction arm is reachable
+                        // only for std[+2]&0x10, then sub_78389C mode 5 may keep
+                        // the item. Both exits advance without dropping/freeing.
+                        if (destroyedStdItem == null
+                            || (destroyedStdItem.NativeReserved02 & 0x0010) == 0
+                            || NativeItemDropDestroy.CheckTransferPermission(
+                                destroyed, destroyedStdItem,
+                                NativeItemDropDestroy.TransferModeDrop) != 0)
+                        {
+                            nC++;
+                            if (nC >= 9) break;
+                            continue;
+                        }
                         var notice = NativeItemDropDestroy.BuildDestroyNotice(
                             equipAuthenticated, destroyed,
                             NativeItemDropDestroy.DeathEquipUnverifiedNotice,
@@ -1887,8 +1931,9 @@ namespace GameSvr
                         DropItemList.Count, 0, 0, "", DropItemList);
                 }
 
-                // sub_73FC70 @0x73FFD4 call sub_73E4C4(edx=[ebp-0xC] drop count).
-                TryNativeDeathDropAreaNotice(nativeEquipDropCount);
+                // Player and hero use their exact THumanKind workers above. This legacy
+                // base path has no proven VMT+B4 owner/bag contract, so it must not invent
+                // the sub_73E4C4 notification for monsters or other actor classes.
             }
             catch (Exception ex)
             {
@@ -2210,6 +2255,11 @@ namespace GameSvr
             // （0x73DEA8/0x73DEB7/0x73DEC7），见
             // TBaseObject.NativePhysicalPercentReduction.cs 的文件头。
             NativeRecalcPhysicalReductionPercent();
+            // sub_75F4F8 clears the equipment extension block before each
+            // rebuild. Its +0x54 low WORD is copied to actor+0x184 at
+            // 0x73DE99..0x73DE9D. The accumulator at actor+0x188 is separate
+            // persistent attack state and must not be cleared here.
+            m_wNativePhysicalTailRate = 0;
             ResetNativeHqFastness();
             ResetNativeUnionFastness();
             ResetNativeNearHitFastness();
@@ -2317,6 +2367,19 @@ namespace GameSvr
                 if (StdItem == null)
                 {
                     continue;
+                }
+                // sub_75EE04 clears item+0x102..+0x104 and rebuilds +0x104 only
+                // for the positive-durability instances admitted by this loop.
+                NativeItemClass104.RefreshEquippedInstance(m_UseItems[i], StdItem);
+                string nativeItemClass = NativeItemFactory.GetClassName(StdItem);
+                if ((nativeItemClass == "TRing" && StdItem.Shape == 136) ||
+                    (nativeItemClass == "TArmRing" && StdItem.Shape == 137) ||
+                    (nativeItemClass == "TNecklace" && StdItem.Shape == 138))
+                {
+                    // TRing 0x762350/54, TArmRing 0x762B5B/5F and
+                    // TNecklace 0x761AC1/C8 each add template DuraMax.
+                    m_wNativePhysicalTailRate = unchecked((ushort)(
+                        m_wNativePhysicalTailRate + StdItem.DuraMax));
                 }
                 StdItem.ApplyItemParameters(ref m_AddAbil);
                 m_AddAbil.NativeDrugHealthBonus = unchecked((ushort)(

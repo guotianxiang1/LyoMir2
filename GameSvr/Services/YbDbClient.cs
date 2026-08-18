@@ -540,6 +540,28 @@ namespace GameSvr.Services
                 frame.Payload, currentSocket, generation);
         }
 
+        internal bool TryEnqueueNativeItemMovementSms(byte[] payload)
+        {
+            if (payload == null
+                || payload.Length != TBaseObject.NativeItemMovementSmsPayloadSize)
+                return false;
+
+            Socket currentSocket;
+            long generation;
+            lock (_stateLock)
+            {
+                if (_started == 0 || _connected == 0
+                    || _currentSocket == null)
+                    return false;
+                currentSocket = _currentSocket;
+                generation = _connectionGeneration;
+            }
+
+            return EnqueueFrame(0, 0,
+                TBaseObject.NativeItemMovementSmsManagerIdent, payload,
+                currentSocket, generation);
+        }
+
         // Called only by the UserEngine thread.
         public void ProcessCompletions()
         {

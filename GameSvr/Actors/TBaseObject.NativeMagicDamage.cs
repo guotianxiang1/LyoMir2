@@ -84,14 +84,23 @@ namespace GameSvr
                     int breakBonus = ApplyNativeHumanMagicBreakContest(
                         source, targetMidEntryDamage, damage, skillId,
                         ref combinedBreakLevel, ref breakExtra);
-                    damage = unchecked(damage + breakExtra);
-                    if ((effectiveFlags & 0x0C) == 0 && source != null)
+                    if (breakExtra > 0)
+                        damage = unchecked(damage + breakExtra);
+                    // 0x7461D3..0x7461F3 only bypasses an identity hook for
+                    // flags 4/8. It does not gate the additions below.
+                    if (breakBonus > 0)
+                        damage = unchecked(damage + breakBonus);
+                    if (source != null)
                     {
+                        // 0x746221..0x746245: +0x3F0 applies after the
+                        // returned break bonus for every flag combination.
                         damage = source.ApplyNativeSkill152OneShotBonus(
                             skillId, damage);
+                        // 0x746247..0x74628A, after the returned bonus and
+                        // before the state-16 cap at 0x7462B8.
+                        damage = source.ApplyNativeSkill151BurstDamage(
+                            damage, skillId);
                     }
-                    // The hooks around the returned bonus remain unmapped.
-                    damage = unchecked(damage + breakBonus);
                     if ((effectiveFlags & 0x04) == 0)
                     {
                         damage = ApplyNativeState16MagicDamageCap(skillId,

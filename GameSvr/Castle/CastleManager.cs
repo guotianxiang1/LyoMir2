@@ -249,7 +249,7 @@ namespace GameSvr
                 return;
             }
 
-            var guild = M2Share.GuildManager.FindGuild(guildName);
+            var guild = M2Share.GuildManager.FindGuildNativeAscii(guildName);
             if (guild == null)
             {
                 return;

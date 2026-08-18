@@ -1,4 +1,6 @@
 using GameSvr.CommandSystem;
+using GameSvr.Services;
+using System.Text;
 using SystemModule;
 
 namespace GameSvr
@@ -10,36 +12,31 @@ namespace GameSvr
     //   0x006242C2 cmp dword [ebp-0x34],0 / jne 0x006242E1
     //   0x006242C8 mov cx,0xFFDB / edx=0x0062BB24 "禁言名单为空"
     // 旧命令名 ShutupList 三编码 0 命中。
-    // 未核实：0x006242E1 起的逐条输出格式与本实现（"剩余 N 秒"）是否一致。
+    // sub_621E74 按链表顺序构造“角色名=剩余秒数\r”；非空时命令只发送
+    // 一条绿色消息，以“禁言名单为：\r”开头。
     [GameCommand("LookOutSay", "查看禁言名单列表", 3)]
     public class ShutupListCommand : BaseCommond
     {
         [DefaultCommand]
         public void ShutupList(TPlayObject PlayObject)
         {
-            HUtil32.EnterCriticalSection(M2Share.g_DenySayMsgList);
-            try
+            var entries = NativeMirrorChatBan.Snapshot();
+            if (entries.Count <= 0)
             {
-                var nCount = M2Share.g_DenySayMsgList.Count;
-                if (M2Share.g_DenySayMsgList.Count <= 0)
-                {
-                    PlayObject.SysMsg(M2Share.g_sGameCommandShutupListIsNullMsg, MsgColor.Green, MsgType.Hint);
-                }
-                if (nCount > 0)
-                {
-                    var now = (long)HUtil32.GetTickCount();
-                    foreach (var item in M2Share.g_DenySayMsgList)
-                    {
-                        var remainingSeconds = Math.Max(0, (item.Value - now) / 1000);
-                        PlayObject.SysMsg($"{item.Key} 剩余 {remainingSeconds} 秒",
-                            MsgColor.Blue, MsgType.Hint);
-                    }
-                }
+                PlayObject.SysMsg(M2Share.g_sGameCommandShutupListIsNullMsg,
+                    MsgColor.Green, MsgType.Hint);
+                return;
             }
-            finally
+
+            var message = new StringBuilder("禁言名单为：\r");
+            foreach (var item in entries)
             {
-                HUtil32.LeaveCriticalSection(M2Share.g_DenySayMsgList);
+                message.Append(item.Name)
+                    .Append('=')
+                    .Append(item.RemainSeconds)
+                    .Append('\r');
             }
+            PlayObject.SysMsg(message.ToString(), MsgColor.Green, MsgType.Hint);
         }
     }
 }

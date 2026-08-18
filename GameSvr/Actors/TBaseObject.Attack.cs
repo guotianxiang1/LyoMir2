@@ -9,10 +9,8 @@ namespace GameSvr
             TBaseObject AttackTarget;
             bool boPowerHit;
             bool boFireHit;
-            bool boCrsHit;
             bool bo41;
             bool boTwinHit;
-            bool bo43;
             short wIdent;
             const string sExceptionMsg = "[Exception] TBaseObject::AttackDir";
             try
@@ -71,10 +69,8 @@ namespace GameSvr
                 }
                 boPowerHit = m_boPowerHit;
                 boFireHit = m_boFireHitSkill;
-                boCrsHit = m_boCrsHitkill;
                 bo41 = m_bo41kill;
                 boTwinHit = m_boTwinHitSkill;
-                bo43 = m_bo43kill;
                 if (_Attack(ref wHitMode, AttackTarget))
                 {
                     SetTargetCreat(AttackTarget);
@@ -605,8 +601,10 @@ namespace GameSvr
             for (var index = 0; index < m_MagicList.Count; index++)
             {
                 var candidate = m_MagicList[index];
-                if (candidate.wMagIdx == SpellsDef.SKILL_ONESWORD ||
-                    candidate.wMagIdx == SpellsDef.SKILL_ILKWANG)
+                if (candidate?.MagicInfo?.wMagicID ==
+                        SpellsDef.SKILL_ONESWORD ||
+                    candidate?.MagicInfo?.wMagicID ==
+                        SpellsDef.SKILL_ILKWANG)
                 {
                     fallback = candidate;
                 }
@@ -771,7 +769,6 @@ namespace GameSvr
                     if ((wHitMode == 7) && m_boFireHitSkill)
                     {
                         m_boFireHitSkill = false;
-                        m_dwLatestFireHitTick = HUtil32.GetTickCount();// Jacky 禁止双烈火
                         var magic = m_MagicArr[SpellsDef.SKILL_FIRESWORD];
                         nPower = CalculateFireSwordAttackPower(
                             nPower,
@@ -812,7 +809,6 @@ namespace GameSvr
                         if ((wHitMode == 7) && m_boFireHitSkill)
                         {
                             m_boFireHitSkill = false;
-                            m_dwLatestFireHitTick = HUtil32.GetTickCount();
                             nPower = nPower * 260 / 100;  // FireHit: 2.6x power multiplier
                         }
                         if ((wHitMode == 9) && m_boTwinHitSkill)
@@ -1066,20 +1062,6 @@ namespace GameSvr
                                     }
                                 }
                                 break;
-                            case 9:
-                                attackMagic = GetAttrackMagic(SpellsDef.SKILL_TWINBLADE);
-                                if (attackMagic != null)
-                                {
-                                    if ((attackMagic.btLevel < 3) && (attackMagic.MagicInfo.TrainLevel[attackMagic.btLevel] <= m_Abil.Level))
-                                    {
-                                        (this as TPlayObject).TrainSkill(attackMagic, 1);
-                                        if (!(this as TPlayObject).CheckMagicLevelup(attackMagic))
-                                        {
-                                            SendDelayMsg(this, Grobal2.RM_MAGIC_LVEXP, 0, attackMagic.MagicInfo.wMagicID, attackMagic.btLevel, attackMagic.nTranPoint, "", 3000);
-                                        }
-                                    }
-                                }
-                                break;
                         }
                     }
                     result = true;
@@ -1219,28 +1201,6 @@ namespace GameSvr
                     }
                 }
             }
-            if ((wHitMode == 7) && (m_MagicArr[SpellsDef.SKILL_FIRESWORD] != null) && ((m_btRaceServer == Grobal2.RC_PLAYOBJECT)))
-            {
-                if ((m_MagicArr[SpellsDef.SKILL_FIRESWORD].btLevel < m_MagicArr[SpellsDef.SKILL_FIRESWORD].MagicInfo.btTrainLv) && (m_MagicArr[SpellsDef.SKILL_FIRESWORD].MagicInfo.TrainLevel[m_MagicArr[SpellsDef.SKILL_FIRESWORD].btLevel] <= nCLevel))
-                {
-                    ((this) as TPlayObject).TrainSkill(m_MagicArr[SpellsDef.SKILL_FIRESWORD], 1);
-                    if (!((this) as TPlayObject).CheckMagicLevelup(m_MagicArr[SpellsDef.SKILL_FIRESWORD]))
-                    {
-                        SendDelayMsg(this, Grobal2.RM_MAGIC_LVEXP, 0, m_MagicArr[SpellsDef.SKILL_FIRESWORD].MagicInfo.wMagicID, m_MagicArr[SpellsDef.SKILL_FIRESWORD].btLevel, m_MagicArr[SpellsDef.SKILL_FIRESWORD].nTranPoint, "", 3000);
-                    }
-                }
-            }
-            if ((wHitMode == 9) && (m_MagicArr[43] != null) && ((m_btRaceServer == Grobal2.RC_PLAYOBJECT)))
-            {
-                if ((m_MagicArr[43].btLevel < m_MagicArr[43].MagicInfo.btTrainLv) && (m_MagicArr[43].MagicInfo.TrainLevel[m_MagicArr[43].btLevel] <= nCLevel))
-                {
-                    ((this) as TPlayObject).TrainSkill(m_MagicArr[43], 1);
-                    if (!((this) as TPlayObject).CheckMagicLevelup(m_MagicArr[43]))
-                    {
-                        SendDelayMsg(this, Grobal2.RM_MAGIC_LVEXP, 0, m_MagicArr[43].MagicInfo.wMagicID, m_MagicArr[43].btLevel, m_MagicArr[43].nTranPoint, "", 3000);
-                    }
-                }
-            }
             if ((wHitMode == 13) && (m_MagicArr[56] != null) && ((m_btRaceServer == Grobal2.RC_PLAYOBJECT)))
             {
                 if ((m_MagicArr[56].btLevel < m_MagicArr[56].MagicInfo.btTrainLv) && (m_MagicArr[56].MagicInfo.TrainLevel[m_MagicArr[56].btLevel] <= nCLevel))
@@ -1271,17 +1231,6 @@ namespace GameSvr
                     if (!((this) as TPlayObject).CheckMagicLevelup(m_MagicArr[42]))
                     {
                         SendDelayMsg(this, Grobal2.RM_MAGIC_LVEXP, 0, m_MagicArr[42].MagicInfo.wMagicID, m_MagicArr[42].btLevel, m_MagicArr[42].nTranPoint, "", 3000);
-                    }
-                }
-            }
-            if ((wHitMode == 12) && (m_MagicArr[66] != null) && ((m_btRaceServer == Grobal2.RC_PLAYOBJECT)))
-            {
-                if ((m_MagicArr[66].btLevel < m_MagicArr[66].MagicInfo.btTrainLv) && (m_MagicArr[66].MagicInfo.TrainLevel[m_MagicArr[66].btLevel] <= nCLevel))
-                {
-                    ((this) as TPlayObject).TrainSkill(m_MagicArr[66], 1);
-                    if (!((this) as TPlayObject).CheckMagicLevelup(m_MagicArr[66]))
-                    {
-                        SendDelayMsg(this, Grobal2.RM_MAGIC_LVEXP, 0, m_MagicArr[66].MagicInfo.wMagicID, m_MagicArr[66].btLevel, m_MagicArr[66].nTranPoint, "", 3000);
                     }
                 }
             }

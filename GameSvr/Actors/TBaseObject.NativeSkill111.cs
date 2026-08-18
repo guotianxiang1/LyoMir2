@@ -13,7 +13,7 @@ namespace GameSvr
         //   0074637F  66baa128      mov dx, 0x28A1                  ; RM_10401 = CheckServerMakeSlave
         //   00746392  6a01          push 1                          ; nMaxMob = 1
         //   00746394  682c010000    push 0x12C                      ; royalty = 300 seconds (5 min)
-        //   0074639B  6a0a          push 0xA                        ; nExpLevel = 10 (literal)
+        //   0074639B  6a0a          push 0xA                        ; hpAfterSlave = 10%
         //   0074639D  call 0x4C896C                               ; effective level
         //   007463B8  ba8c647400    mov edx, 0x74648C               ; "冰眼巨魔1"
         //   007463D7  ff96ec000000  call dword ptr [esi+0xEC]       ; MakeSlave
@@ -29,7 +29,7 @@ namespace GameSvr
         internal const int NativeSkill111Id = 111;
         private const int NativeSkill111CooldownMilliseconds = 600000; // 10 minutes
         private const int NativeSkill111RoyaltySeconds = 300; // 5 minutes
-        private const int NativeSkill111ExpLevel = 10;
+        private const int NativeSkill111HpAfterSlave = 10;
         private const string NativeSkill111MonsterBaseName = "冰眼巨魔1";
 
         private int m_dwNativeSkill111LastRecallTick;
@@ -77,13 +77,13 @@ namespace GameSvr
             string monsterName = NativeSkill111MonsterBaseName +
                 effectiveLevel.ToString();
             int nMakeLevel = effectiveLevel;
-            int nExpLevel = NativeSkill111ExpLevel;
             int nMaxMob = 1;
             int dwRoyaltySec = NativeSkill111RoyaltySeconds;
 
             // Native @0x7463D7: call [esi+0xEC] = MakeSlave
-            var slave = MakeSlave(monsterName, nMakeLevel, nExpLevel,
-                nMaxMob, dwRoyaltySec);
+            var slave = MakeNativeSlave(monsterName, nMakeLevel, nMaxMob,
+                dwRoyaltySec, fromHero: false,
+                hpAfterSlave: NativeSkill111HpAfterSlave);
             if (slave != null)
             {
                 // Native @0x7463E9: stamp the recall tick at +0x510

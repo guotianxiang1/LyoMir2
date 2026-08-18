@@ -306,16 +306,44 @@ namespace GameSvr
         // `is TFoo` ACCEPTS every descendant of TFoo, so a C# gate written as
         // GetClassName(x) == "TFoo" is only equivalent when TFoo is childless.
         //
-        // Verified against the image (593 SelfPtr-valid VMTs): of the classes
-        // used in such gates, only TDragonHeart has a descendant --
-        //   TSuperDragonHeart (VMT 0x75E90C, parent 0x75E810), which the factory
-        //   really can produce (branch 0x74D118 loads cell 0x75E8C0).
-        // TMarkStoneCharm / TFixedCoordStone / TVessel / TUnionItem are all
-        // childless, so their exact-equality gates already match native.
+        // The table contains the image-proven ancestry needed by current native
+        // type gates: the DragonHeart descendant and the complete factory-
+        // reachable TEquipItem subtree used by sub_63EE14.
         private static readonly Dictionary<string, string> NativeClassParents =
             new()
             {
                 // child                  parent
+                { "TRWeapon", "TEquipItem" },
+                { "TLWeapon", "TEquipItem" },
+                { "THeadMask", "TEquipItem" },
+                { "TWarDrum", "TEquipItem" },
+                { "THelmet", "TEquipItem" },
+                { "TNecklace", "TEquipItem" },
+                { "TRing", "TEquipItem" },
+                { "TArmRing", "TEquipItem" },
+                { "TBelt", "TEquipItem" },
+                { "TBoots", "TEquipItem" },
+                { "TMaPai", "TEquipItem" },
+                { "TCharm", "TEquipItem" },
+                { "TClothes", "TEquipItem" },
+                { "TEquipBujuk", "TEquipItem" },
+
+                { "TBrokenWeapon", "TLWeapon" },
+                { "TSpade", "TLWeapon" },
+                { "TManClothes", "TClothes" },
+                { "TWomanClothes", "TClothes" },
+                { "TTemporaryManClothes", "TManClothes" },
+                { "TTemporaryWomanClothes", "TWomanClothes" },
+                { "TCryCharm", "TCharm" },
+                { "THPCharm", "TCharm" },
+                { "TMPCharm", "TCharm" },
+                { "THPMPCharm", "TCharm" },
+                { "TMarkStoneCharm", "TCharm" },
+                { "TPoisons", "TEquipBujuk" },
+                { "TBujuk", "TEquipBujuk" },
+                { "TUnionItem", "TEquipBujuk" },
+                { "TVessel", "TEquipBujuk" },
+                { "TDragonHeart", "TEquipBujuk" },
                 { "TSuperDragonHeart", "TDragonHeart" },
             };
 

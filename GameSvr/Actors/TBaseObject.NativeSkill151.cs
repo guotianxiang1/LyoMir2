@@ -72,12 +72,8 @@ namespace GameSvr
         //   00746285  E8 F6 D2 CB FF           call 0x403580       ; @TRUNC (chop)
         //   0074628A  03 D8                     add ebx,eax        ; damage += bonus
         // i.e. bonus = TRUNC(min(jobMaxAttack, 5000) * 5 * factor[level]).
-        // NOTE the consumer does NOT decrement +0x3F4 here; the strike-count
-        // decrement site is elsewhere and is not yet located (see the BLOCKED
-        // wiring note on ApplyNativeSkill151BurstDamage). This handler therefore
-        // remains unwired into the C# melee pipeline; the entry state below is
-        // faithful and ApplyNativeSkill151BurstDamage carries the exact formula
-        // ready for the day the injection point is verified.
+        // The consumer does not decrement +0x3F4 here. sub_770F50 decrements it
+        // only after its main direct carrier returns a positive value.
         //
         // Native attack-kind discriminator [ebp-8] gate values (0x746251 /
         // 0x74625A): id 151's burst fires only for kinds 0x3FA and 0x3E8.
@@ -149,16 +145,6 @@ namespace GameSvr
         /// melee damage accumulator (ebx) when a strike is banked AND the attack
         /// kind matches. Byte-for-byte:
         ///   bonus = TRUNC(min(jobMaxAttack, 5000) * 5 * factor).
-        /// <para>
-        /// BLOCKED (wiring): this method is not yet called from the C# melee
-        /// pipeline. Two facts are still unverified — (1) the C# equivalent of
-        /// the native attack-kind discriminator [ebp-8] whose values 0x3E8/0x3FA
-        /// gate this arm, and (2) the site that decrements the +0x3F4 strike
-        /// counter (the consumer at 0x746247 deliberately does NOT, so the
-        /// decrement lives elsewhere in the attack path). Until both are pinned
-        /// down, wiring this in would risk a permanent (never-expiring) burst or
-        /// an RNG-order shift, so it stays fail-closed as a ready-to-call helper.
-        /// </para>
         /// </summary>
         internal int ApplyNativeSkill151BurstDamage(int damage, int attackKind)
         {
@@ -180,6 +166,13 @@ namespace GameSvr
                 return unchecked(damage + bonus);
             }
             return damage;
+        }
+
+        internal void ConsumeNativeSkill151StrikeAfterMainDamage(
+            int mainApplied)
+        {
+            if (mainApplied > 0 && m_nNativeSkill151StrikeCount > 0)
+                m_nNativeSkill151StrikeCount--;
         }
 
         /// <summary>

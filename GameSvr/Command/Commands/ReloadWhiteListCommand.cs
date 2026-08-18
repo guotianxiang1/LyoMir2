@@ -1,5 +1,5 @@
 using GameSvr.CommandSystem;
-using SystemModule;
+using GameSvr.Services;
 
 namespace GameSvr
 {
@@ -11,8 +11,7 @@ namespace GameSvr
         {
             if (PlayObject == null)
                 return;
-            NativeAntiCheatHostRuntime.ReloadGmWhiteList(M2Share.g_Config.sEnvirDir);
-            PlayObject.SysMsg("WhiteList.txt 已重新加载。", MsgColor.Yellow, MsgType.Hint);
+            NativeWhitelistReloadClient.SendRequest(PlayObject);
         }
     }
 }

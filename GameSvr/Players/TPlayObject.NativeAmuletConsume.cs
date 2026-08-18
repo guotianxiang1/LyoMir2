@@ -167,10 +167,9 @@ namespace GameSvr
                         RecalcAbilitys();
                         SendDelItems(item);
                         var std = M2Share.UserEngine.GetStdItem(item.wIndex);
-                        M2Share.AddGameDataLog("持久耗尽" + "\t" + m_sMapName +
-                            "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" +
-                            (std == null ? string.Empty : std.Name) + "\t" +
-                            item.MakeIndex + "\t" + '1' + "\t" + '0');
+                        M2Share.AddNativeGameDataLog(this, 0x0A,
+                            std == null ? string.Empty : std.Name,
+                            item.MakeIndex, 1, "持久耗尽");
                     }
                 }
             }

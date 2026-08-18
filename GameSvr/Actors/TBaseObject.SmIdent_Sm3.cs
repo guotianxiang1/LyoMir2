@@ -40,12 +40,13 @@ namespace GameSvr
     {
         // ---- empty-body [obj+0x250] sends (only the header 5-tuple varies) ----
 
-        // SM 1264 (0x4F0) — send @0x6F0A73. Fully fixed frame: Recog=0, Param=1.
-        //   006F0A61 6A 01 push 1 (Param) ; 006F0A63 6A00x3 push (Tag/Series/sMsg=nil)
-        //   006F0A69 33 C9 xor ecx,ecx (Recog=0) ; 006F0A6D 66 BA F0 04 mov dx,0x4F0
-        //   006F0A73 FF 93 50 02 00 00 call [ebx+0x250]
-        internal static (ClientPacket Header, byte[] Body) BuildSm1264()
-            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1264, 0, 1, 0, 0), Array.Empty<byte>());
+        // SM 1264 (0x4F0) — sub_6F0A50 always sends. ServerSwitch.Bin bit 31
+        // selects Param=1 @0x6F0A61 or Param=0 @0x6F0A7C; both arms keep
+        // Recog/Tag/Series at zero and call the string slot [vmt+0x250].
+        internal static (ClientPacket Header, byte[] Body) BuildSm1264(
+            bool enabled)
+            => (Grobal2.MakeDefaultMsg(Grobal2.SM_1264, 0,
+                enabled ? 1 : 0, 0, 0), Array.Empty<byte>());
 
         // SM 1265 (0x4F1) — send @0x6F1794. Recog = ecx (3rd register arg, untouched
         // to the slot); Param = word[ebp+0xC], Tag = word[ebp+8] (4th/5th stack args).

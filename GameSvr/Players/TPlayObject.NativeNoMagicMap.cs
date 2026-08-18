@@ -32,13 +32,11 @@ namespace GameSvr
         // The REJECT branch (0x6DA17A) is a SILENT fail: it emits the 0x276 spell
         // fail/ack message with four zero params and NO SysMsg text, and never calls
         // DoSpell. In other words: on a NOMAGIC map the cast is simply refused and the
-        // client is told the action failed — exactly the answer the C# CM_SPELL case
-        // already produces when ClientSpellXY returns false with dwDelayTime==0
-        // (SendRefMsg(RM_MOVEFAIL) + SendDefMessage(SM_ACT_FAIL); dwDelayTime is 0 at
-        // method entry — Message.cs:934 `var dwDelayTime = 0;`).
+        // client is told the action failed. The C# CM_SPELL case reproduces that as
+        // one four-zero SendDefMessage(SM_ACT_FAIL); dwDelayTime is zero at method
+        // entry. Native does not emit an RM_MOVEFAIL broadcast on this arm.
         //
-        // BLOCK A vs BLOCK C (why this gate is faithful, and its one documented
-        // deviation): native routes CM_SPELL through
+        // BLOCK A vs BLOCK C: native routes CM_SPELL through
         //   006DA09D  mov dl,1 / call [player.VMT+0x40]   ; sub_6E6700
         //   006DA0A7  test al / jne 0x6DA122              ; TRUE  -> block C (NOMAGIC)
         //   ; FALSE -> block A (0x6DA0AB): CanSpell(0x7725FC) gate, DoSpell, NO NOMAGIC
@@ -46,24 +44,16 @@ namespace GameSvr
         // TRUE only when the player carries NONE of the status effects 0x1D/0x01/0x1A/
         // 0x18/0x3E (via HasStatus 0x772960) and passes 0x772DA8. For every ordinary
         // player with no such status and [+0x574]==0 the predicate is TRUE, so block C
-        // (this NOMAGIC gate) is ALWAYS the path taken. Block A is only reached while
-        // the caster is under one of those disabling states — where casting is already
-        // heavily gated by ClientSpellXY's own m_boCanSpell / death / poison-stone
-        // checks. Replicating sub_6E6700 verbatim would require pinning five status
-        // ids + field [+0x574] to C# with certainty we do not have, so per fail-closed
-        // this gate enforces NOMAGIC uniformly: 1:1 for all normal players, and the
-        // restrictive (safe) direction for the rare block-A edge case. This never
-        // relaxes NOMAGIC below native.
+        // (this NOMAGIC gate) is the path taken. Block A is reached only when that
+        // can-act predicate is false. sub_7725FC then admits exactly magic 0x72, or
+        // magic 0xD3 while state 0x1A is active; those two arms call DoSpell directly
+        // and bypass NOMAGIC. Message.cs reproduces that split before calling
+        // ClientSpellXY, while every other blocked spell takes the existing fail path.
         //
-        // WIRING (handed to the parent agent — TPlayObject.Message.cs is off-limits):
-        //   In the CM_SPELL case (TPlayObject.Message.cs:1804-1805) guard the DoSpell
-        //   call so a NOMAGIC map short-circuits into the existing fail path:
-        //       case Grobal2.CM_SPELL:
-        //           if (!NativeNoMagicMapForbidsSpell() &&
-        //               ClientSpellXY((short)ProcessMsg.wIdent, ProcessMsg.wParam, ...))
-        //   When the guard fires, ClientSpellXY is skipped (dwDelayTime stays 0) and
-        //   the existing else-branch answers with the spell-fail messages — the C#
-        //   analogue of native's silent 0x276 reject at 0x6DA17A.
+        // WIRING: Message.cs first evaluates IsNativeCanActBlocked(1). An allowed
+        // caster is subject to this flag; an admitted sub_7725FC exception bypasses
+        // it. Any rejection leaves dwDelayTime at zero and takes the existing spell
+        // failure response, the C# analogue of native 0x6DA17A.
         internal bool NativeNoMagicMapForbidsSpell()
         {
             // native 0x6DA125 mov eax,[Self+0x128] / 0x6DA12B cmp byte [eax+0x81],0.

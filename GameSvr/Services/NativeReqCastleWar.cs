@@ -21,7 +21,7 @@ namespace GameSvr.Services
         private const string InsufficientMaterialMsg =
             "你的材料不足，申请攻城必须提交1个祖玛头像和1个金砖";
 
-        public static bool TryApply(TPlayObject player, UserCastle castle)
+        public static bool TryApply(TPlayObject player, TUserCastle castle)
         {
             if (player == null || castle == null || player.m_MyGuild == null)
             {

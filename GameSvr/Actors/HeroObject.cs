@@ -129,6 +129,7 @@ namespace GameSvr
             m_dwSearchMasterTick = HUtil32.GetTickCount();
             m_dwHeroMagicTick = HUtil32.GetTickCount();
             m_dwNativeHealthSpellDirtyTick = HUtil32.GetTickCount();
+            m_dwNativeWarCrossMoonReadyTick = HUtil32.GetTickCount();
             // 原版 ctor sub_6864C4 @0x6865A6: mov byte [edi+0x6A1], 1 → 英雄出生即"跟随"。
             m_btNativeHeroMode = NativeHeroMode.Follow;
             m_btRaceServer = Grobal2.RC_HEROOBJECT;
@@ -237,6 +238,23 @@ namespace GameSvr
 
         public override bool Operate(TProcessMessage ProcessMsg)
         {
+            if (ProcessMsg.wIdent == Grobal2.RM_SYSMESSAGE ||
+                ProcessMsg.wIdent == Grobal2.RM_NATIVE_REVIVE_MESSAGE)
+            {
+                ForwardNativeTextMessage(ProcessMsg);
+                return true;
+            }
+            if (ProcessMsg.wIdent == Grobal2.RM_NATIVE_LOGON_STATE_SYNC)
+            {
+                SendNativeHeroLogonStateSync();
+                return true;
+            }
+            if (ProcessMsg.wIdent == Grobal2.RM_10401)
+            {
+                if (ProcessMsg.Payload is TSlaveInfo slaveInfo)
+                    RestoreNativeHeroSummon(slaveInfo);
+                return true;
+            }
             if (ProcessMsg.wIdent == Grobal2.RM_NATIVE_EXP_CONTINUE)
             {
                 if (m_Master is TPlayObject master)
@@ -256,6 +274,21 @@ namespace GameSvr
                 SendHeroAbility();
                 return true;
             }
+            if (ProcessMsg.wIdent == Grobal2.RM_SENDDELITEMLIST)
+            {
+                // THeroAct dispatcher 0x6896ED..0x689708 forwards the RM buffer
+                // unchanged as SM_HERO_DELITEMS. The producer stores count consecutive
+                // item+0x18 ClientItemID dwords, with no trailing terminator.
+                if (ProcessMsg.Payload is byte[] body)
+                {
+                    var frame = BuildSm917(ProcessMsg.nParam1, body);
+                    // sub_689A38 checks the bound pointer and owner+0x73 ghost;
+                    // owner+0x74 death does not suppress this queued deletion batch.
+                    if (m_Master is TPlayObject master && !master.m_boGhost)
+                        master.SendSocket(frame.Header, frame.Body);
+                }
+                return true;
+            }
 
             var packet = BuildHeroRuntimePacket(ProcessMsg, m_Abil.Exp, m_Abil.Level);
             if (packet == null)
@@ -273,6 +306,32 @@ namespace GameSvr
             if (ProcessMsg.wIdent == Grobal2.RM_LEVELUP)
                 SendHeroAbility();
             return true;
+        }
+
+        private void ForwardNativeTextMessage(TProcessMessage processMsg)
+        {
+            // THeroAct queues on the hero first. Its dispatcher then checks only
+            // the bound master's ghost flag, prefixes the text and forwards it.
+            if (!(m_Master is TPlayObject master) || master.m_boGhost)
+                return;
+
+            var text = "(英雄) " + (processMsg.sMsg ?? string.Empty);
+            ClientPacket packet;
+            if (processMsg.wIdent == Grobal2.RM_SYSMESSAGE)
+            {
+                packet = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE,
+                    processMsg.BaseObject,
+                    processMsg.Payload is byte[]
+                        ? processMsg.wParam
+                        : HUtil32.MakeWord(processMsg.nParam1, processMsg.nParam2),
+                    0, 1);
+            }
+            else
+            {
+                packet = Grobal2.MakeDefaultMsg(Grobal2.SM_REVIVE_MESSAGE,
+                    processMsg.BaseObject, processMsg.wParam, 0, 0);
+            }
+            master.SendSocket(packet, BuildNativeTerminatedTextBody(text));
         }
 
         protected override void QueueTimedAbilitySnapshotAfterRecalc()
@@ -375,6 +434,9 @@ namespace GameSvr
             }
 
             ProcessNativeUnionState(dwCurTick);
+            if (m_btJob == 0)
+                ProcessNativeWarCrossMoonSelectionExpiry(
+                    HUtil32.GetTickCount());
 
             // Find master（AI 用：需要一个活着、在场的主人）
             var master = FindMaster();
@@ -660,6 +722,17 @@ namespace GameSvr
                 return;
             }
 
+            // TWarHero VMT+0x2A0 selects the 2/4-cell cross-moon action
+            // before its ordinary melee-distance branch. Its epilogue also
+            // arms the stance, so a newly armed stance is not consumed until
+            // a later decision pass.
+            if (m_btJob == 0 &&
+                TryRunNativeWarCrossMoon(m_TargetCret,
+                    HUtil32.GetTickCount()))
+            {
+                return;
+            }
+
             // Job engagement radius. These are the AttackTarget predicates, not
             // the invented universal melee-1 walk:
             //   TWarHero 0x6931B0 `cmp eax,1 / ja` → walk when dist > 1
@@ -801,9 +874,8 @@ namespace GameSvr
                     m_nCurrX));
                 short targetY = unchecked((short)(spellTarget?.m_nCurrY ??
                     m_nCurrY));
-                SendRefMsg(Grobal2.RM_SPELL,
-                    userMagic.MagicInfo.btEffect, targetX, targetY,
-                    userMagic.MagicInfo.wMagicID, string.Empty);
+                MagicManager.SendNativeSpell(this, userMagic, targetX,
+                    targetY);
                 return false;
             }
 
@@ -820,22 +892,22 @@ namespace GameSvr
             short nSpellY = spellTarget != null
                 ? spellTarget.m_nCurrY : m_nCurrY;
 
+            // sub_68DD88 broadcasts the ordinary spell frame before dispatch
+            // for every native hero magic except id 42.
+            if (wMagicID != SpellsDef.SKILL_GROUPLIGHTENING)
+                MagicManager.SendNativeSpell(this, userMagic, nSpellX,
+                    nSpellY);
+
             if (IsNativeHeroSummonMagic(wMagicID))
             {
                 // 17/30/41/62/112 在原生分派器里是主人造宠内联段, 完全不经伤害路径。
-                // 0x68DDF5: wMagicID != 42 时先广播 SM_SPELL(sub_769258)。
-                SendRefMsg(Grobal2.RM_SPELL, userMagic.MagicInfo.btEffect,
-                    nSpellX, nSpellY, wMagicID, string.Empty);
                 if (!TryReleaseNativeHeroSummonMagic(userMagic, wMagicID))
                 {
                     return false;             // 0x68E6BE boSpellFail -> 返回 0, 不发 0x27E
                 }
                 // 0x68E6C0-0x68E6F8: boSpellFire 恒为 1, 发 SM_MAGICFIRE(sub_76920C) 后 result=1。
-                SendRefMsg(Grobal2.RM_MAGICFIRE, 0,
-                    HUtil32.MakeWord(userMagic.MagicInfo.btEffectType,
-                        userMagic.MagicInfo.btEffect),
-                    HUtil32.MakeLong(nSpellX, nSpellY),
-                    spellTarget == null ? 0 : spellTarget.ObjectId, string.Empty);
+                MagicManager.SendNativeMagicFire(this, userMagic,
+                    nSpellX, nSpellY, spellTarget);
                 return true;
             }
 
@@ -1212,8 +1284,8 @@ namespace GameSvr
                 return false;
 
             SendNativeUnionSpellEffect(target, magic);
-            master.SendRefMsg(Grobal2.RM_SPELL, magic.MagicInfo.btEffect,
-                target.m_nCurrX, target.m_nCurrY, target.ObjectId, string.Empty);
+            MagicManager.SendNativeSpell(master, magic, target.m_nCurrX,
+                target.m_nCurrY);
             SendNativeUnionAction(this, target, Grobal2.RM_WWJATTACK);
             SendNativeUnionAction(master, target, Grobal2.RM_WWJATTACK);
             return true;
@@ -1616,9 +1688,11 @@ namespace GameSvr
         {
             m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY,
                 target.m_nCurrX, target.m_nCurrY);
-            SendHeroSpell(magic.MagicInfo.btEffect,
-                unchecked((short)target.m_nCurrX),
-                unchecked((short)target.m_nCurrY), target.ObjectId);
+            // The union path publishes the combined hero/master bonus before
+            // sub_769258 computes the effective level carried in the body.
+            GetNativeUnionEffectiveLevel(magic);
+            MagicManager.SendNativeSpell(this, magic, target.m_nCurrX,
+                target.m_nCurrY);
         }
 
         private void SendNativeUnionEffect(TBaseObject actor,
@@ -1930,20 +2004,28 @@ namespace GameSvr
         public void SendHeroLogon()
         {
             var master = FindMaster();
-            if (master == null) return;
+            if (master != null)
+            {
+                // Native THeroAct::Logon emits RM 10599 before RM 10600. The player
+                // dispatcher converts those messages to SM 897, then SM 899/898.
+                SendHeroBornEffect(m_nCurrX, m_nCurrY);
 
-            // Native THeroAct::Logon emits RM 10599 before RM 10600. The player
-            // dispatcher converts those messages to SM 897, then SM 899/898.
-            SendHeroBornEffect(m_nCurrX, m_nCurrY);
+                // Send SM_HERO_LOGON with hero feature/position body (same 40-byte format as player)
+                var defMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_HERO_LOGON, ObjectId, m_nCurrX, m_nCurrY,
+                    m_btDirection);
+                var body = BuildHeroLogonBody();
+                master.SendSocket(defMsg, body);
 
-            // Send SM_HERO_LOGON with hero feature/position body (same 40-byte format as player)
-            var defMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_HERO_LOGON, ObjectId, m_nCurrX, m_nCurrY,
-                m_btDirection);
-            var body = BuildHeroLogonBody();
-            master.SendSocket(defMsg, body);
-
-            // Native THeroAct sends the identity packet immediately after the spawn packet.
-            SendHeroName();
+                // Native THeroAct sends the identity packet immediately after the spawn packet.
+                SendHeroName();
+            }
+            // THeroAct.Logon sub_687D70 @0x688180 queues RM 0x3010 to the
+            // hero itself. Its message loop later dispatches the hero-specific
+            // 3324 -> optional 4367 cold-time-list cluster (sub_69057C).
+            SendMsg(this, Grobal2.RM_NATIVE_LOGON_STATE_SYNC,
+                0, 0, 0, 0, string.Empty);
+            if (master == null)
+                return;
             SendHeroBagItems();
             RecalcAndSendNativeLogonAbility(false);
             SendHeroUseItems();

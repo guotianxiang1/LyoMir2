@@ -68,6 +68,9 @@ namespace GameSvr
                 || CheckNativeAuthentication(2, NativeItemDropDestroy.AuthenOrder);
         }
 
+        // sub_63F200 and its caller sub_6B9220 each query order 4 independently.
+        internal bool NativeMerchantSellAuthenticated() => NativeItemDropDestroyAuthenticated();
+
         /// <summary>
         /// 0x73FCEF 的 `is THumanKind`（类指针 [0x73BBE8]）。原生 THumanKind 只有
         /// TPlayer 与 THeroAct 两支 —— 同一判据也解释了为什么 sub_741368 恰好只有
@@ -145,26 +148,64 @@ namespace GameSvr
                 GetScriptLabel(sMsg);
         }
 
-        private bool ClientPickUpItem_IsSelf(TBaseObject BaseObject)
+        private static TPlayObject ClientPickUpItem_ResolveOwner(
+            TBaseObject owner)
         {
-            return BaseObject == null || ReferenceEquals(this, BaseObject) ||
-                   ReferenceEquals(this, BaseObject.GetMaster());
+            if (owner is TPlayObject player)
+            {
+                return player;
+            }
+            return owner?.GetMaster() as TPlayObject;
         }
 
-        private bool ClientPickUpItem_IsOfGroup(TBaseObject BaseObject)
+        private bool ClientPickUpItem_IsOfGroup(TPlayObject owner)
         {
-            if (m_GroupOwner == null)
+            var members = m_GroupOwner?.m_GroupMembers;
+            if (owner == null || members == null)
             {
                 return false;
             }
-            for (var i = 0; i < m_GroupOwner.m_GroupMembers.Count; i++)
+            for (var i = 0; i < members.Count; i++)
             {
-                if (m_GroupOwner.m_GroupMembers[i] == BaseObject)
+                if (members[i] != null && string.Equals(
+                        members[i].m_sCharName, owner.m_sCharName,
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
             }
             return false;
+        }
+
+        private bool ClientPickUpItem_IsOwnerAllowed(TBaseObject owner)
+        {
+            if (owner == null || ReferenceEquals(owner, this))
+            {
+                return true;
+            }
+
+            var responsiblePlayer = ClientPickUpItem_ResolveOwner(owner);
+            if (responsiblePlayer == null)
+            {
+                return false;
+            }
+            if (ReferenceEquals(responsiblePlayer, this) ||
+                ClientPickUpItem_IsOfGroup(responsiblePlayer))
+            {
+                return true;
+            }
+
+            // sub_6DD534: [self+0xB94] married byte and the spouse
+            // ShortString at +0xC48 compared with responsiblePlayer+0x106.
+            return m_boMarried && string.Equals(m_sDearName,
+                responsiblePlayer.m_sCharName, StringComparison.Ordinal);
+        }
+
+        private static bool ClientPickUpItem_IsOwnerExpiredAtTick(
+            MapItem mapItem, int currentTick)
+        {
+            return mapItem != null && unchecked((uint)(currentTick -
+                mapItem.CanPickUpTick)) > 120000u;
         }
 
         private bool ClientPickUpItem()
@@ -174,8 +215,38 @@ namespace GameSvr
                 return false;
             }
             var envir = m_PEnvir;
-            return envir != null && ClientPickUpItem(
-                envir.GetItem(m_nCurrX, m_nCurrY), m_nCurrX, m_nCurrY);
+            if (envir == null)
+            {
+                return false;
+            }
+
+            var mapItem = envir.GetItem(m_nCurrX, m_nCurrY);
+            if (mapItem == null)
+            {
+                return false;
+            }
+
+            // sub_6B794C clears the owner before calling sub_6B7880. The
+            // native compare is unsigned and strictly greater than 120000.
+            if (ClientPickUpItem_IsOwnerExpiredAtTick(mapItem,
+                    HUtil32.GetTickCount()))
+            {
+                mapItem.OfBaseObject = null;
+            }
+
+            // sub_6B7880: cell order first, then final owner, group and spouse.
+            // Every false result shares the caller's 0x6B7A41 rejection.
+            if (!envir.NativeIsOldestEligiblePlayerInCell(
+                    this, m_nCurrX, m_nCurrY) ||
+                !ClientPickUpItem_IsOwnerAllowed(
+                    mapItem.OfBaseObject as TBaseObject))
+            {
+                SysMsg("一定时间范围内，不能拾取。",
+                    MsgColor.Red, MsgType.Hint);
+                return false;
+            }
+
+            return ClientPickUpItem(mapItem, m_nCurrX, m_nCurrY);
         }
 
         private bool ClientPickUpItem(MapItem mapItem, int pickupX, int pickupY)
@@ -197,15 +268,6 @@ namespace GameSvr
             }
             if (mapItem == null)
             {
-                return false;
-            }
-            if ((HUtil32.GetTickCount() - mapItem.CanPickUpTick) > M2Share.g_Config.dwFloorItemCanPickUpTime)// 2 * 60 * 1000
-            {
-                mapItem.OfBaseObject = null;
-            }
-            if (!ClientPickUpItem_IsSelf(mapItem.OfBaseObject as TBaseObject) && !ClientPickUpItem_IsOfGroup(mapItem.OfBaseObject as TBaseObject))
-            {
-                SysMsg(M2Share.g_sCanotPickUpItem, MsgColor.Red, MsgType.Hint);
                 return false;
             }
             if (mapItem.Name.Equals(Grobal2.sSTRING_GOLDNAME, StringComparison.OrdinalIgnoreCase))
@@ -295,6 +357,8 @@ namespace GameSvr
         private void GetExp(int dwExp)
         {
             m_Abil.Exp += dwExp;
+            if (dwExp > 0)
+                AccumulateNativeSwitchExperience(unchecked((uint)dwExp));
             // 原 AddBodyLuck(dwExp*0.002) 经验缩放幸运增益系伪造——原生 GetExp 无幸运变动，已删除。
             SendMsg(this, Grobal2.RM_WINEXP, 0, dwExp, 0, 0, "");
             if (m_Abil.Exp >= m_Abil.MaxExp)
@@ -392,7 +456,7 @@ namespace GameSvr
         internal bool ClientItemIdMatches(TUserItem item, int clientItemId)
         {
             if (item == null || item.wIndex == 0) return false;
-            return EnsureClientItemId(item) == clientItemId;
+            return item.ClientItemID == clientItemId;
         }
 
         internal TUserItem FindOwnedItemByClientId(int clientItemId,
@@ -601,7 +665,7 @@ namespace GameSvr
                 SendSocket(m_DefMsg);
         }
 
-        internal void SendSocket(ClientPacket DefMsg, byte[] rawBody)
+        internal virtual void SendSocket(ClientPacket DefMsg, byte[] rawBody)
         {
             // PERF: diagnostic write removed from hot path (per-packet SendSocket)
             if (m_boOffLineFlag) return;
@@ -1183,32 +1247,6 @@ namespace GameSvr
             }
         }
 
-        protected void RedHalfMoonOnOff(bool boSwitch)
-        {
-            m_boRedUseHalfMoon = boSwitch;
-            if (m_boRedUseHalfMoon)
-            {
-                SysMsg(M2Share.sRedHalfMoonOn, MsgColor.Green, MsgType.Hint);
-            }
-            else
-            {
-                SysMsg(M2Share.sRedHalfMoonOff, MsgColor.Green, MsgType.Hint);
-            }
-        }
-
-        protected void SkillCrsOnOff(bool boSwitch)
-        {
-            m_boCrsHitkill = boSwitch;
-            if (m_boCrsHitkill)
-            {
-                SysMsg(M2Share.sCrsHitOn, MsgColor.Green, MsgType.Hint);
-            }
-            else
-            {
-                SysMsg(M2Share.sCrsHitOff, MsgColor.Green, MsgType.Hint);
-            }
-        }
-
         protected void SkillTwinOnOff(bool boSwitch)
         {
             m_boTwinHitSkill = boSwitch;
@@ -1222,37 +1260,22 @@ namespace GameSvr
             }
         }
 
-        private void Skill43OnOff(bool boSwitch)
-        {
-            m_bo43kill = boSwitch;
-            if (m_bo43kill)
-            {
-                SysMsg("开启破空剑", MsgColor.Green, MsgType.Hint);
-            }
-            else
-            {
-                SysMsg("关闭破空剑", MsgColor.Green, MsgType.Hint);
-            }
-        }
-
         private bool AllowFireHitSkill()
         {
-            if ((HUtil32.GetTickCount() - m_dwLatestFireHitTick) > 10 * 1000)
-            {
-                m_dwLatestFireHitTick = HUtil32.GetTickCount();
-                m_boFireHitSkill = true;
-                SysMsg(M2Share.sFireSpiritsSummoned, MsgColor.Green, MsgType.Hint);
-                return true;
-            }
-            SysMsg(M2Share.sFireSpiritsFail, MsgColor.Red, MsgType.Hint);
-            return false;
+            return AllowFireHitSkill(HUtil32.GetTickCount());
         }
 
-        private bool AllowTwinHitSkill()
+        internal bool AllowFireHitSkill(int currentTick)
         {
-            m_dwLatestTwinHitTick = HUtil32.GetTickCount();
-            m_boTwinHitSkill = true;
-            return true;
+            // sub_6BE068 uses one GetTickCount value and an unsigned subtraction.
+            if (unchecked((uint)(currentTick - m_dwLatestFireHitTick)) > 10000u)
+            {
+                m_dwLatestFireHitTick = currentTick;
+                m_boFireHitSkill = true;
+                return true;
+            }
+            SysMsg("凝聚内力失败", MsgColor.Red, MsgType.Hint);
+            return false;
         }
 
         /// <summary>
@@ -1699,17 +1722,15 @@ namespace GameSvr
 
         private void SendMapDescription()
         {
-            // sub_6E37C4: the description is compared against the per-player cache at
-            // [Self+0x9B4] (0x6E380A CompareStr / 0x6E380F je 0x6E383F) and only a change
-            // sends the packet; nRecog is the literal 1 (0x6E382C B901000000 mov ecx,1),
-            // not a music id.
-            var description = m_PEnvir.sMapDesc ?? string.Empty;
-            if (string.CompareOrdinal(_lastMapDescription, description) == 0)
+            var frames = BuildNativeMapDescriptionFrames();
+            for (var index = 0; index < frames.Count; index++)
             {
-                return;
+                var frame = frames[index];
+                if (frame.IsBinary)
+                    SendSocket(frame.Header, frame.BinaryBody);
+                else
+                    SendSocket(frame.Header, frame.TextBody);
             }
-            _lastMapDescription = description;
-            SendDefMessage(Grobal2.SM_MAPDESCRIPTION, 1, 0, 0, 0, description);
         }
 
         private void SendWhisperMsg(TPlayObject PlayObject)
@@ -2223,15 +2244,14 @@ namespace GameSvr
                 if (!M2Share.MagicManager.IsWarrSkill(UserMagic.wMagIdx))
                 {
                     var nSpellPoint = GetSpellPoint(UserMagic);
-                    if (nSpellPoint > 0)
+                    if (m_WAbil.MP < nSpellPoint)
                     {
-                        if (m_WAbil.MP < nSpellPoint)
-                        {
-                            return result;
-                        }
-                        DamageSpell(nSpellPoint);
-                        HealthSpellChanged();
+                        return result;
                     }
+                    // sub_6ED62C calls both routines even when the computed
+                    // cost is zero; the MP publication remains observable.
+                    DamageSpell(nSpellPoint);
+                    HealthSpellChanged();
                     result = M2Share.MagicManager.DoSpell(this, UserMagic, nTargetX, nTargetY, BaseObject);
                 }
             }
@@ -3058,7 +3078,7 @@ namespace GameSvr
             }
         }
 
-        private void ChangeServerMakeSlave(TSlaveInfo slaveInfo)
+        internal void ChangeServerMakeSlave(TSlaveInfo slaveInfo)
         {
             int nSlavecount = 0;
             if (m_btJob == M2Share.jTaos)
@@ -3069,22 +3089,29 @@ namespace GameSvr
             {
                 nSlavecount = 5;
             }
-            var BaseObject = MakeSlave(slaveInfo.sSlaveName, 3, slaveInfo.btSlaveLevel, nSlavecount, slaveInfo.dwRoyaltySec);
+            var BaseObject = MakeNativeSlave(slaveInfo.sSlaveName,
+                slaveInfo.btSlaveLevel, nSlavecount, slaveInfo.dwRoyaltySec,
+                fromHero: false, hpAfterSlave: 10);
             if (BaseObject != null)
             {
-                BaseObject.m_nKillMonCount = slaveInfo.nKillCount;
-                BaseObject.m_btSlaveExpLevel = slaveInfo.btSlaveExpLevel;
-                BaseObject.m_WAbil.HP = slaveInfo.nHP;
-                BaseObject.m_WAbil.MP = slaveInfo.nMP;
-                if ((1500 - slaveInfo.btSlaveLevel * 200) < BaseObject.m_nWalkSpeed)
+                BaseObject.m_WAbil.HP = unchecked((ushort)slaveInfo.nHP);
+                BaseObject.m_WAbil.MP = unchecked((ushort)slaveInfo.nMP);
+                if (BaseObject.m_btRaceServer == 0x97)
                 {
-                    BaseObject.m_nWalkSpeed = (1500 - slaveInfo.btSlaveLevel) * 200;
+                    (BaseObject as HolyMonster)?.NativeBindHolyBeastSummoner(this);
                 }
-                if ((2000 - slaveInfo.btSlaveLevel * 200) < BaseObject.m_nNextHitTime)
+                else
                 {
-                    BaseObject.m_nWalkSpeed = (2000 - slaveInfo.btSlaveLevel) * 200;
+                    BaseObject.m_nKillMonCount = slaveInfo.nKillCount;
+                    BaseObject.m_btSlaveExpLevel = slaveInfo.btSlaveExpLevel;
+                    var walkSpeed = 1500 - slaveInfo.btSlaveLevel * 200;
+                    if (walkSpeed < BaseObject.m_nWalkSpeed)
+                        BaseObject.m_nWalkSpeed = walkSpeed;
+                    var nextHitTime = 2000 - slaveInfo.btSlaveLevel * 200;
+                    if (nextHitTime < BaseObject.m_nNextHitTime)
+                        BaseObject.m_nNextHitTime = nextHitTime;
                 }
-                RecalcAbilitys();
+                BaseObject.RecalcAbilitys();
             }
         }
 
@@ -3351,8 +3378,7 @@ namespace GameSvr
             HumData.BonusAbil = m_BonusAbil;
             HumData.nBonusPoint = m_nBonusPoint;
             HumData.sStoragePwd = m_sStoragePwd;
-            HumData.StorageSpaceCount = Math.Clamp(m_nStorageSpaceCount,
-                MIN_STORAGE_ITEM_COUNT, MAX_STORAGE_ITEM_COUNT);
+            HumData.StorageSpaceCount = unchecked((ushort)m_nStorageSpaceCount);
             HumData.btCreditPoint = m_btCreditPoint;
             HumData.nShengWan = m_nShengWan;
             HumData.nLingFu = m_nLingFu;

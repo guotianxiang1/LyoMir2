@@ -249,6 +249,8 @@ namespace GameSvr
             try
             {
                 var currentTick = HUtil32.GetTickCount();
+                RunNativeSwitchHeroHandoff(currentTick);
+                RunNativeClientVersionGate(currentTick);
                 RunNativeCattle();
                 RunNativeYbCreditLoad(unchecked((uint)currentTick));
                 RunSecHeroPracticeTimer(currentTick);
@@ -301,21 +303,7 @@ namespace GameSvr
                     m_boEmergencyClose = true;
                     m_boExpire = false;
                 }
-                if (m_boFireHitSkill && (HUtil32.GetTickCount() - m_dwLatestFireHitTick) > 20 * 1000)
-                {
-                    m_boFireHitSkill = false;
-                    SysMsg(M2Share.sSpiritsGone, MsgColor.Red, MsgType.Hint);
-                    // 0x6B2F33 mov byte [eax+0x96],0 / 6A00 x4 /
-                    // B9 01000000 mov ecx,1 / 66 BA 72 02 mov dx,0x272 /
-                    // FF 93 50 02 00 00.  "+UFIR" is absent from the image.
-                    SendSocket(Grobal2.MakeDefaultMsg(
-                        Grobal2.SM_FIREHITSKILL, 1, 0, 0, 0));
-                }
-                if (m_boTwinHitSkill && (HUtil32.GetTickCount() - m_dwLatestTwinHitTick) > 60 * 1000)
-                {
-                    m_boTwinHitSkill = false;
-                    SendSocket("+UTWN");
-                }
+                TryExpireNativeFireHitSkill(currentTick);
                 if (m_boSunSwordReady &&
                     unchecked(HUtil32.GetTickCount() - m_dwLatestSunSwordTick) > 10 * 1000)
                 {
@@ -378,25 +366,20 @@ namespace GameSvr
                 // 判定、仅变化时回写 Obj[+0x3FE] 并发 0xB05。位置在挤人块(0x6B3149)
                 // 之前、且不在任何时间闸内，故这里也放在 3000ms 块之前、每 Run 一次。
                 NativeTickThroughOccupancyTransition();
-                if ((HUtil32.GetTickCount() - m_dwCheckDupObjTick) > 3000)
+                // 0x6B3143 uses the Run tick cached in [ebp-8] and an unsigned
+                // `jbe`; the same cached tick feeds every duplicate-cell edge.
+                if (NativeBeginDuplicateOccupancyPoll(currentTick))
                 {
-                    m_dwCheckDupObjTick = HUtil32.GetTickCount();
                     GetStartPoint();
-                    tObjCount = m_PEnvir.GetXYObjCount(m_nCurrX, m_nCurrY);
-                    if (tObjCount >= 2)
-                    {
-                        if (!bo2F0)
-                        {
-                            bo2F0 = true;
-                            m_dwDupObjTick = HUtil32.GetTickCount();
-                        }
-                    }
-                    else
-                    {
-                        bo2F0 = false;
-                    }
-                    if ((tObjCount >= 3 && ((HUtil32.GetTickCount() - m_dwDupObjTick) > 3000) || tObjCount == 2
-                        && ((HUtil32.GetTickCount() - m_dwDupObjTick) > 10000)) && ((HUtil32.GetTickCount() - m_dwDupObjTick) < 20000))
+                    // 0x6B31B5 calls sub_778858 (GetMovObjCount), whose
+                    // liveness/visibility filters differ from GetXYObjCount.
+                    tObjCount = m_PEnvir.GetNativeMovObjCount(
+                        m_nCurrX, m_nCurrY);
+                    var duplicateElapsed =
+                        NativeUpdateDuplicateOccupancyLatch(
+                            currentTick, tObjCount);
+                    if (NativeShouldAutoPushDuplicateOccupancy(
+                            tObjCount, duplicateElapsed))
                     {
                         CharPushed((byte)M2Share.RandomNumber.Random(8), 1);
                     }
@@ -920,6 +903,24 @@ namespace GameSvr
             }
             SendMobileHeartbeat();
             base.Run();
+            // Native TPlayer.Run ends with sub_6C3ABC at 0x6B3CC5.
+            RunNativeGroupRequestExpiry();
+        }
+
+        internal bool TryExpireNativeFireHitSkill(int currentTick)
+        {
+            if (!m_boFireHitSkill ||
+                unchecked((uint)(currentTick - m_dwLatestFireHitTick)) <= 20000u)
+            {
+                return false;
+            }
+
+            // sub_6B2D38 @0x6B2F13..0x6B2F50 clears +0x96 and sends only
+            // SM 626/Recog 1. There is no companion text packet.
+            m_boFireHitSkill = false;
+            SendSocket(Grobal2.MakeDefaultMsg(
+                Grobal2.SM_FIREHITSKILL, 1, 0, 0, 0));
+            return true;
         }
 
         public override bool Operate(TProcessMessage ProcessMsg)
@@ -938,6 +939,11 @@ namespace GameSvr
             }
             switch (ProcessMsg.wIdent)
             {
+                case NativeClientVersionDisconnectIdent:
+                    // Self-message 10000 reaches 0x6B44A5 in the native RM
+                    // dispatcher and raises player+0x4BB (m_boSoftClose).
+                    m_boSoftClose = true;
+                    break;
                 case NativeMagicProducerPushIdent:
                     TryHandleNativeMagicProducerMessage(ProcessMsg);
                     break;
@@ -1274,7 +1280,7 @@ namespace GameSvr
                     ClientMerchantQuerySellPrice(ProcessMsg.nParam1, HUtil32.MakeLong(ProcessMsg.nParam2, ProcessMsg.nParam3), ProcessMsg.sMsg);
                     break;
                 case Grobal2.CM_USERSELLITEM:
-                    ClientUserSellItem(ProcessMsg.nParam1, HUtil32.MakeLong(ProcessMsg.nParam2, ProcessMsg.nParam3), ProcessMsg.sMsg);
+                    ClientUserSellItem(ProcessMsg.nParam1, HUtil32.MakeLong(ProcessMsg.nParam2, ProcessMsg.nParam3));
                     break;
                 case Grobal2.CM_USERBUYITEM:
                     ClientUserBuyItem(ProcessMsg.wIdent, ProcessMsg.nParam1, HUtil32.MakeLong(ProcessMsg.nParam2, ProcessMsg.nParam3), 0, ProcessMsg.sMsg);
@@ -1296,12 +1302,9 @@ namespace GameSvr
                         SendDefMessage(1, 0, 0, 0, 0, "");
                     break;
                 case Grobal2.CM_LOGINNOTICEOK:
-                    // Native dispatch tree routes opcode 1018 (0x3FA) to DEFAULT handler at 0x6DBC2C.
-                    // The DEFAULT handler is a cleanup routine (xor eax,eax; pop edx; pop ecx; pop ecx;
-                    // mov fs:[eax],edx; jmp exit) that performs no message-specific logic. The client
-                    // sends CM_LOGINNOTICEOK when the player acknowledges the login notice/MOTD dialog;
-                    // the server does not need to take any action in response. This explicit no-op case
-                    // documents the native behavior (silent acknowledgment, no server-side state change).
+                    // The first 1018 is consumed by the native pre-dispatch
+                    // version arm in UserEngine.ProcessUserMessage. Repeated
+                    // 1018 packets reach this final native default/no-op arm.
                     break;
                 case Grobal2.CM_1325:
                     // Unlike CM_LOGINNOTICEOK above, 1325 DOES have a real dispatch arm -
@@ -1430,7 +1433,7 @@ namespace GameSvr
                     // before sub_6BBC60; same masking gap as CM_SITDOWN below.
                     if (ClientChangeDir((short)ProcessMsg.wIdent, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam & 7, ref dwDelayTime))
                     {
-                        m_dwActionTick = HUtil32.GetTickCount();
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
                     }
                     else
@@ -1701,7 +1704,6 @@ namespace GameSvr
                                 : ProcessMsg.wIdent,
                             ProcessMsg.nParam1, ProcessMsg.nParam2, (byte)(ProcessMsg.wParam & 7), ProcessMsg.boLateDelivery, ref dwDelayTime))
                     {
-                        m_dwActionTick = HUtil32.GetTickCount();
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
                     }
@@ -1709,8 +1711,20 @@ namespace GameSvr
                     {
                         if (dwDelayTime == 0)
                         {
-                            SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
-                            SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
+                            if (ProcessMsg.wIdent == Grobal2.CM_3037)
+                            {
+                                // CASE2 @0x6D9FAB sends only the four-zero
+                                // SM_ACT_FAIL frame. It has no RM_MOVEFAIL leg.
+                                SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0,
+                                    0, "");
+                            }
+                            else
+                            {
+                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0,
+                                    "");
+                                SendDefMessage(Grobal2.SM_ACT_FAIL,
+                                    (int)ProcessMsg.wIdent, 0, 0, 0, "");
+                            }
                         }
                         else
                         {
@@ -1764,49 +1778,15 @@ namespace GameSvr
                     // message - could still carry a 0..65535 direction.
                     if (ClientSitDownHit(ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam & 7, ref dwDelayTime))
                     {
-                        m_dwActionTick = HUtil32.GetTickCount();
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
                     }
                     else
                     {
-                        if (dwDelayTime == 0)
-                        {
-                            SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
-                            SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
-                        }
-                        else
-                        {
-                            nMsgCount = GetSiteDownMsgCount();
-                            if (nMsgCount >= M2Share.g_Config.nMaxSitDonwMsgCount)
-                            {
-                                // MOVE-22: native pose (3012 / 0x6D9C7D) has no tick
-                                // interval and never kicks. Overflow just repeats the
-                                // four-zero 0x276 correction already used when
-                                // dwDelayTime==0 (0x6D9C8B push 0×4 / mov dx,0x276).
-                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
-                                SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
-                            }
-                            else
-                            {
-                                if (dwDelayTime < M2Share.g_Config.dwDropOverSpeed)
-                                {
-                                    SendSocket(M2Share.GetGoodTick);
-                                    if (m_boTestSpeedMode)
-                                    {
-                                        SysMsg(format("速度异常 Ident: {0} Time: {1}", ProcessMsg.wIdent, dwDelayTime), MsgColor.Red, MsgType.Hint);
-                                    }
-                                }
-                                else
-                                {
-                                    if (m_boTestSpeedMode)
-                                    {
-                                        SysMsg(format("操作延迟 Ident: {0} Time: {1}", ProcessMsg.wIdent, dwDelayTime), MsgColor.Red, MsgType.Hint);
-                                    }
-                                    SendDelayMsg(this, (short)ProcessMsg.wIdent, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, "", dwDelayTime);
-                                    result = false;
-                                }
-                            }
-                        }
+                        // Native 0x6D9C8B..0x6D9CA4 emits exactly one VMT+0x250
+                        // failure frame with four zero fields. There is no
+                        // RM_MOVEFAIL broadcast and no interval/redelivery arm.
+                        SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0, 0, "");
                     }
                     break;
                 case Grobal2.CM_SPELL:
@@ -1819,26 +1799,40 @@ namespace GameSvr
                     // 所以这里传 ProcessMsg.wParam。唯有 magic 267(0x10B) 不破隐身 0x40；
                     // 隐藏态 0x3C 照破（0x6F2D53 排在 0x6F2D58 的比较之前）。
                     NotifyNativeActionReveal(ProcessMsg.wParam);
+                    // STATE-50: 0x6DA09D..0x6DA0BC first calls the TPlayer
+                    // VMT+0x40 can-act slot with DL=1. A blocked caster may
+                    // continue only through sub_7725FC: magic 0x72, or 0xD3
+                    // while state 0x1A is active. That exceptional branch calls
+                    // ClientSpellXY directly and therefore bypasses NOMAGIC.
+                    bool nativeCanActForSpell = !IsNativeCanActBlocked(1);
+                    bool nativeSpellBypassesCanAct = !nativeCanActForSpell
+                        && CanNativeSpellBypassCanActGate(ProcessMsg.wParam);
                     // MOVE-90: NOMAGIC 地图禁施法门。原生 CM_SPELL 派发器 sub_6D7D68 在调
                     // DoSpell(sub_6BC510) 之前先测地图旗标：
                     //   006DA125  8B 80 28 01 00 00     mov eax,[eax+0x128]      ; player.m_PEnvir
                     //   006DA12B  80 B8 81 00 00 00 00  cmp byte [eax+0x81],0    ; boNOMAGIC
                     //   006DA132  0F 85 42 00 00 00     jne 0x6DA17A             ; 置位→静默拒绝
                     //   006DA17A  ... mov dx,0x276 / call [vtbl+0x250]           ; 只发失败应答,不施法,无文本
-                    // 短路后 dwDelayTime 保持 0(方法入口初始化)，走下方 else 的 dwDelayTime==0
-                    // 分支发 RM_MOVEFAIL + SM_ACT_FAIL(0x276)，与原生静默拒绝等价。
-                    if (!NativeNoMagicMapForbidsSpell()
-                        && ClientSpellXY((short)ProcessMsg.wIdent, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, M2Share.ObjectManager.Get(ProcessMsg.nParam3), ProcessMsg.boLateDelivery, ref dwDelayTime))
+                    // 短路后 dwDelayTime 保持 0；下方失败臂只发原版的四零
+                    // SM_ACT_FAIL(0x276)，不额外广播 RM_MOVEFAIL。
+                    if ((nativeSpellBypassesCanAct
+                            || nativeCanActForSpell
+                            && !NativeNoMagicMapForbidsSpell())
+                        && ClientSpellXY((short)ProcessMsg.wIdent,
+                            ProcessMsg.wParam, ProcessMsg.nParam1,
+                            ProcessMsg.nParam2,
+                            M2Share.ObjectManager.Get(ProcessMsg.nParam3),
+                            ProcessMsg.boLateDelivery,
+                            nativeSpellBypassesCanAct, ref dwDelayTime))
                     {
-                        m_dwActionTick = HUtil32.GetTickCount();
+                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD, 0, 0, 0, 0);
                         SendSocket(M2Share.GetGoodTick);
                     }
                     else
                     {
                         if (dwDelayTime == 0)
                         {
-                            SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0, "");
-                            SendDefMessage(Grobal2.SM_ACT_FAIL, (int)ProcessMsg.wIdent, 0, 0, 0, "");
+                            SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0, 0, "");
                         }
                         else
                         {
@@ -1886,7 +1880,8 @@ namespace GameSvr
                 case Grobal2.CM_SAY:
                     if (!string.IsNullOrEmpty(ProcessMsg.sMsg))
                     {
-                        ProcessUserLineMsg(ProcessMsg.sMsg);
+                        ProcessUserLineMsg(ProcessMsg.sMsg,
+                            ProcessMsg.Payload as byte[], ProcessMsg.nBodyLen);
                     }
                     break;
                 case Grobal2.CM_SWITCH_LISTEN:
@@ -1960,10 +1955,16 @@ namespace GameSvr
                          !string.IsNullOrEmpty(ProcessMsg.sMsg)))
                     {
                         m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SPELL, ProcessMsg.BaseObject, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.wParam);
+                        var nativePayload = ProcessMsg.Payload as
+                            NativeSpellRelayPayload;
                         var spellBody = new byte[8];
-                        Buffer.BlockCopy(BitConverter.GetBytes((int)HUtil32.LoWord(ProcessMsg.nParam3)),
+                        Buffer.BlockCopy(BitConverter.GetBytes(nativePayload == null
+                                ? (int)HUtil32.LoWord(ProcessMsg.nParam3)
+                                : ProcessMsg.nParam3),
                             0, spellBody, 0, 4);
-                        Buffer.BlockCopy(BitConverter.GetBytes((int)HUtil32.HiWord(ProcessMsg.nParam3)),
+                        Buffer.BlockCopy(BitConverter.GetBytes(nativePayload == null
+                                ? (int)HUtil32.HiWord(ProcessMsg.nParam3)
+                                : nativePayload.EffectiveLevel),
                             0, spellBody, 4, 4);
                         SendSocket(m_DefMsg, spellBody);
                     }
@@ -2169,6 +2170,20 @@ namespace GameSvr
                     SendNativeMapEntryStateMessages();
                     SendMapDescription();
                     break;
+                case Grobal2.RM_NATIVE_REVIVE_MESSAGE:
+                    // sub_73C910 queues native RM 12308 with wParam=1 and the
+                    // revive/rebirth text. Handler 0x6B4E77 forwards the buffer
+                    // byte-for-byte as SM 213: Recog=BaseObject, Param=wParam,
+                    // Tag=Series=0.
+                    if (m_boGhost)
+                        break;
+                    m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_REVIVE_MESSAGE,
+                        ProcessMsg.BaseObject, ProcessMsg.wParam, 0, 0);
+                    if (ProcessMsg.Payload is byte[] rawReviveBody)
+                        SendSocket(m_DefMsg, rawReviveBody);
+                    else
+                        SendSocket(m_DefMsg, ProcessMsg.sMsg);
+                    break;
                 case Grobal2.RM_HEAR:
                 case Grobal2.RM_WHISPER:
                 case Grobal2.RM_CRY:
@@ -2271,7 +2286,12 @@ namespace GameSvr
                                 0, 0);
                             break;
                         case Grobal2.RM_SYSMESSAGE:
-                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE, ProcessMsg.BaseObject, HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2), 0, 1);
+                            m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_SYSMESSAGE,
+                                ProcessMsg.BaseObject,
+                                ProcessMsg.Payload is byte[]
+                                    ? ProcessMsg.wParam
+                                    : HUtil32.MakeWord(ProcessMsg.nParam1, ProcessMsg.nParam2),
+                                0, 1);
                             break;
                         case Grobal2.RM_GROUPMESSAGE:
                             // 0x6B4EA0 68 C4 FF 00 00 / 0x6B4EB5 66 BA 64 00
@@ -2289,6 +2309,12 @@ namespace GameSvr
                     if (ProcessMsg.wIdent == Grobal2.RM_MERCHANTSAY &&
                         ProcessMsg.Payload is byte[] rawMerchantBody)
                         SendSocket(m_DefMsg, rawMerchantBody);
+                    else if (ProcessMsg.wIdent == Grobal2.RM_SYSMESSAGE &&
+                             ProcessMsg.Payload is byte[] rawSystemBody)
+                    {
+                        if (!m_boGhost)
+                            SendSocket(m_DefMsg, rawSystemBody);
+                    }
                     else
                         SendSocket(m_DefMsg, ProcessMsg.sMsg);
                     break;
@@ -2388,12 +2414,23 @@ namespace GameSvr
                     break;
                 case Grobal2.RM_MAGICFIRE:
                     {
-                        m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_MAGICFIRE,
-                            ProcessMsg.BaseObject, HUtil32.LoWord(ProcessMsg.nParam1),
-                            HUtil32.HiWord(ProcessMsg.nParam1), ProcessMsg.wParam);
+                        var nativePayload = ProcessMsg.Payload as
+                            NativeMagicFireRelayPayload;
+                        m_DefMsg = nativePayload == null
+                            ? Grobal2.MakeDefaultMsg(Grobal2.SM_MAGICFIRE,
+                                ProcessMsg.BaseObject,
+                                HUtil32.LoWord(ProcessMsg.nParam1),
+                                HUtil32.HiWord(ProcessMsg.nParam1),
+                                ProcessMsg.wParam)
+                            : Grobal2.MakeDefaultMsg(Grobal2.SM_MAGICFIRE,
+                                ProcessMsg.BaseObject, ProcessMsg.nParam1,
+                                ProcessMsg.nParam2, ProcessMsg.wParam);
                         var body = new byte[8];
                         Buffer.BlockCopy(BitConverter.GetBytes(ProcessMsg.nParam3), 0, body, 0, 4);
-                        Buffer.BlockCopy(BitConverter.GetBytes(ProcessMsg.nParam2), 0, body, 4, 4);
+                        Buffer.BlockCopy(BitConverter.GetBytes(nativePayload == null
+                                ? ProcessMsg.nParam2
+                                : nativePayload.EffectiveLevel),
+                            0, body, 4, 4);
                         SendSocket(m_DefMsg, body);
                     }
                     break;
@@ -2529,7 +2566,13 @@ namespace GameSvr
                         SendSaveItemList(ProcessMsg.nParam1);
                     break;
                 case Grobal2.RM_SENDDELITEMLIST:
-                    if (ProcessMsg.Payload is IList<TDeleteItem> delItemList)
+                    if (ProcessMsg.Payload is byte[] nativeBody)
+                    {
+                        m_DefMsg = Grobal2.MakeDefaultMsg(
+                            Grobal2.SM_DELITEMS, ProcessMsg.nParam1, 0, 0, 0);
+                        SendSocket(m_DefMsg, nativeBody);
+                    }
+                    else if (ProcessMsg.Payload is IList<TDeleteItem> delItemList)
                     {
                         SendDelItemList(delItemList, ProcessMsg.nParam1);
                     }
@@ -2981,8 +3024,12 @@ namespace GameSvr
                             break;
                         // Recog 的校验在原生 sub_6CC7C8 内部（0x6CC874 cmp ebx,[ebp-4]）。
                         if (ProcessMsg.nParam1 == ObjectId)
+                        {
+                            m_btNativeHeroRequestKind = (byte)ProcessMsg.nParam2;
+                            m_btNativeHeroRequestSlot = (byte)ProcessMsg.nParam3;
                             HeroDataService.RequestLoad(this,
                                 (byte)ProcessMsg.nParam2, (byte)ProcessMsg.nParam3);
+                        }
                     }
                     break;
                 case Grobal2.CM_HERO_LOGOUT:
@@ -3075,13 +3122,17 @@ namespace GameSvr
                     break;
 
                 case Grobal2.RM_PHYSICAL_ATT:
-                    if (ProcessMsg.BaseObject != ObjectId)
+                    var physicalFrame = ProcessMsg.Payload as
+                        NativePhysicalAttackFramePayload;
+                    if (ProcessMsg.BaseObject != ObjectId ||
+                        physicalFrame?.IncludeSource == true)
                     {
                         m_DefMsg = Grobal2.MakeDefaultMsg(
                             Grobal2.SM_PHYSICAL_ATT,
                             ProcessMsg.BaseObject, ProcessMsg.wParam,
                             ProcessMsg.nParam1, ProcessMsg.nParam2);
-                        SendSocket(m_DefMsg, GetQueuedPayloadBytes(ProcessMsg));
+                        SendSocket(m_DefMsg, physicalFrame?.Body ??
+                            GetQueuedPayloadBytes(ProcessMsg));
                     }
                     break;
 
@@ -3242,37 +3293,8 @@ namespace GameSvr
                 // C# 之前只在补丁生效时才计数并 break，没插件的服务器 16 个装备位全过筛，
                 // 一次死亡最多能爆 16 件而原生最多 3 件。
                 var nativeDropCap = deathDropPatched ? patchedCap : 2;
-                for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
-                {
-                    if (m_UseItems[i] == null)
-                    {
-                        continue;
-                    }
-                    StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
-                    if (StdItem != null)
-                    {
-                        if ((StdItem.Reserved & 8) != 0)
-                        {
-                            if (delList == null)
-                            {
-                                delList = new List<TDeleteItem>();
-                            }
-                            delList.Add(new TDeleteItem()
-                            {
-                                MakeIndex = this.m_UseItems[i].MakeIndex,
-                                ClientItemID = EnsureClientItemId(m_UseItems[i])
-                            });
-                            if (StdItem.NeedIdentify == 1)
-                            {
-                                M2Share.AddGameDataLog("16" + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[i].MakeIndex + "\t" + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
-                            }
-                            m_UseItems[i].wIndex = 0;
-                            // native 0x73FD74 FF 45 F4 inc [ebp-0xc] then jmp 0x73FF6F
-                            // (Reserved&8 skips the cap check, but the count still eats the budget)
-                            dropCount++;
-                        }
-                    }
-                }
+                var nativeFeatureChanged = false;
+                var nativeEncounteredEquip = false;
                 // 分母。战神 sub_73FC70 @0x73FCA9-0x73FD0D：红名恒 21（0x73FCB8 的 imm32
                 // 0x15），非红是 `[self+0x18C] + 0x5A(90)`（0x73FCC1/0x73FCC7），随后在
                 // LastHiter 是 THumanKind 时减 `byte [LastHiter+0x579]`（0x73FD02/0x73FD08），
@@ -3297,11 +3319,60 @@ namespace GameSvr
                     // 即**只有非空且不带 Reserved&8 的格子才消耗一次 Random**。
                     // C# 原来把 Random 放在循环第一句，空格、以及上面刚被清成 wIndex=0
                     // 的格子也各抽一次，整条 LCG 序列相对原生错位，后续所有掉落判定全歪。
-                    if (m_UseItems[i] == null || m_UseItems[i].wIndex <= 0)
+                    var candidate = m_UseItems[i];
+                    if (candidate == null)
                     {
                         continue;
                     }
-                    if (M2Share.RandomNumber.Random(nRate) != 0)
+                    // 0x73FD3A test item / 0x73FD42 mov [ebp-2],1 occurs before
+                    // the StdItem lookup. Even a corrupt/zero-index managed shell is
+                    // therefore an encountered equipment object for the caller tail.
+                    nativeEncounteredEquip = true;
+                    if (candidate.wIndex <= 0)
+                    {
+                        continue;
+                    }
+                    StdItem = M2Share.UserEngine.GetStdItem(candidate.wIndex);
+                    if (StdItem == null)
+                    {
+                        continue;
+                    }
+
+                    // 0x73FD46..0x73FD91: std[+2]&8 is handled in this slot,
+                    // before Random(K). It removes the equipment immediately and
+                    // jumps to the next slot without applying the cap check.
+                    if ((StdItem.NativeReserved02 & 0x0008) != 0)
+                    {
+                        delList ??= new List<TDeleteItem>();
+                        delList.Add(new TDeleteItem
+                        {
+                            MakeIndex = candidate.MakeIndex,
+                            ClientItemID = EnsureClientItemId(candidate)
+                        });
+
+                        m_UseItems[i] = null;              // 0x75F2BB clears container[slot]
+                        RecalcAbilitys();                  // 0x75F2C4..0x75F2D9
+                        SendDelItems(candidate);           // 0x75F2FA call [vmt+0x268]
+                        M2Share.AddNativeGameDataLog(this, 0x0A, StdItem.Name,
+                            candidate.MakeIndex, 1, "死亡爆出消失");
+
+                        if (i is 0 or 1 or 4 or 13)
+                        {
+                            // sub_75F27C performs this once; sub_73FC70 repeats it
+                            // at the common tail through its [ebp-1] flag.
+                            FeatureChanged();
+                            nativeFeatureChanged = true;
+                        }
+
+                        Dispose(candidate);
+                        dropCount++;
+                        continue;
+                    }
+
+                    // 0x73FD99..0x73FDA9: every eligible slot consumes the
+                    // draw, but item+0xFC bypasses a non-zero result.
+                    if (M2Share.RandomNumber.Random(nRate) != 0
+                        && candidate.NativeClassFc == 0)
                     {
                         continue;
                     }
@@ -3320,29 +3391,78 @@ namespace GameSvr
                     // 全镜像多编码零命中：DisableTakeOffList / DisableTakeOffList.txt /
                     // TakeOffList 三个名字在 GBK、裸 ASCII（大小写不敏感）、UTF-16LE
                     // 三路皆 0。按 §3.1 删除。
-                    if (DropItemDown(m_UseItems[i], 2, true, BaseObject, this))
+                    var authenticated = NativeItemDropDestroyAuthenticated();
+                    if (NativeItemDropDestroy.ShouldDestroy(
+                            m_btRaceServer == Grobal2.RC_PLAYOBJECT,
+                            authenticated, candidate))
                     {
-                        StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
-                        if (StdItem != null)
+                        // 0x73FDDD..0x73FDFE: the auth/gift arm destroys only
+                        // std[+2]&0x10 items, and mode 5 may keep them first.
+                        if ((StdItem.NativeReserved02 & 0x0010) == 0
+                            || NativeItemDropDestroy.CheckTransferPermission(
+                                candidate, StdItem,
+                                NativeItemDropDestroy.TransferModeDrop) != 0)
                         {
-                            if ((StdItem.Reserved & 10) == 0)
-                            {
-                                if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                                {
-                                    if (delList == null)
-                                    {
-                                        delList = new List<TDeleteItem>();
-                                    }
-                                    delList.Add(new TDeleteItem()
-                                    {
-                                        sItemName = M2Share.UserEngine.GetStdItemName(m_UseItems[i].wIndex),
-                                        MakeIndex = this.m_UseItems[i].MakeIndex,
-                                        ClientItemID = EnsureClientItemId(m_UseItems[i])
-                                    });
-                                }
-                                m_UseItems[i].wIndex = 0;
-                            }
+                            continue;
                         }
+
+                        delList ??= new List<TDeleteItem>();
+                        delList.Add(new TDeleteItem
+                        {
+                            sItemName = M2Share.UserEngine.GetStdItemName(candidate.wIndex),
+                            MakeIndex = candidate.MakeIndex,
+                            ClientItemID = EnsureClientItemId(candidate)
+                        });
+                        TryNotifyNativeItemMovementSms(this, StdItem, candidate,
+                            NativeItemMovementSmsDeathEvent);
+                        var notice = NativeItemDropDestroy.BuildDestroyNotice(
+                            NativeItemDropDestroyAuthenticated(), candidate,
+                            NativeItemDropDestroy.DeathEquipUnverifiedNotice,
+                            NativeItemDropDestroy.DeathEquipGiftNotice);
+                        if (!string.IsNullOrEmpty(notice))
+                        {
+                            SysMsg(notice + " "
+                                + M2Share.UserEngine.GetStdItemName(candidate.wIndex),
+                                MsgColor.Red, MsgType.Hint);
+                        }
+                        // 0x73FEC4 frees the object but does not clear the native
+                        // equipment slot; Dispose has the same no-clear behavior here.
+                        Dispose(candidate);
+                        dropCount++;
+                        if (i is 0 or 1)
+                        {
+                            nativeFeatureChanged = true;
+                        }
+                        continue; // destroy skips the 0x73FF69 cap check
+                    }
+
+                    // 0x73FECE..0x73FED5: the normal ground arm has the
+                    // opposite std[+2]&0x10 polarity.
+                    if ((StdItem.NativeReserved02 & 0x0010) != 0)
+                    {
+                        continue;
+                    }
+
+                    // sub_73FC70 pushes nil for sub_7688A0's floor-owner argument;
+                    // LastHiter only contributes to the separately built log label.
+                    if (DropItemDown(candidate, 2, true, null, this))
+                    {
+                        delList ??= new List<TDeleteItem>();
+                        delList.Add(new TDeleteItem
+                        {
+                            sItemName = M2Share.UserEngine.GetStdItemName(candidate.wIndex),
+                            MakeIndex = candidate.MakeIndex,
+                            ClientItemID = EnsureClientItemId(candidate)
+                        });
+                        // 0x73FF0B call sub_75F3E8(ecx=0): detach the slot only.
+                        // The same item object now belongs to the ground map entry.
+                        m_UseItems[i] = null;
+                        if (i is 0 or 1 or 4 or 13)
+                        {
+                            nativeFeatureChanged = true;
+                        }
+                        TryNotifyNativeItemMovementSms(this, StdItem, candidate,
+                            NativeItemMovementSmsDeathEvent);
                         // native 0x73FF66 FF 45 F4 inc [ebp-0xc] / 0x73FF69 83 7D F4 02 / 7F 0A jg
                         // 上限恒定生效（见 PKD-02）；眼神补丁只替换那个立即数。
                         dropCount++;
@@ -3353,6 +3473,16 @@ namespace GameSvr
                 {
                     SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
                         delList.Count, 0, 0, "", delList);
+                }
+                if (nativeFeatureChanged)
+                {
+                    FeatureChanged();
+                }
+                // 0x73FFB3..0x73FFD4: any non-null equipment object, then the
+                // VMT+B4 owner (self for players) must have at least one bag item.
+                if (nativeEncounteredEquip && m_ItemList.Count > 0)
+                {
+                    TryNativeDeathDropAreaNotice(dropCount, this);
                 }
             }
             catch (Exception ex)

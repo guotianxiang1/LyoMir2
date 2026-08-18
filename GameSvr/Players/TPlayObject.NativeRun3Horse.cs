@@ -140,6 +140,7 @@ namespace GameSvr
                          m_nCurrY == destinationY;
             if (result)
             {
+                SendMapDescription();
                 m_dwActionTick = HUtil32.GetTickCount();
                 m_dwMoveCount = 0;
                 m_dwMoveCountA = 0;
@@ -198,6 +199,7 @@ namespace GameSvr
                          m_nCurrX == adjustedX && m_nCurrY == adjustedY;
             if (result)
             {
+                SendMapDescription();
                 m_dwActionTick = HUtil32.GetTickCount();
                 m_dwMoveCount = 0;
                 m_dwMoveCountA = 0;

@@ -189,30 +189,6 @@ namespace GameSvr
                 "0"));
         }
 
-        public static int SeizeIllegalBagItems(TPlayObject player)
-        {
-            if (player?.m_ItemList == null)
-                return 0;
-
-            var removed = 0;
-            for (var i = player.m_ItemList.Count - 1; i >= 0; i--)
-            {
-                var item = player.m_ItemList[i];
-                if (item == null)
-                    continue;
-                var std = M2Share.UserEngine?.GetStdItem(item.wIndex);
-                if (std != null)
-                    continue;
-
-                player.m_ItemList.RemoveAt(i);
-                removed++;
-            }
-
-            if (removed > 0)
-                player.SendMsg(player, Grobal2.RM_BAGITEMS, 0, 0, 0, 0, string.Empty);
-            return removed;
-        }
-
         public static bool TryCloseBlackRoom(TPlayObject gm, string targetName,
             string mapName, int x, int y, bool enabled)
         {

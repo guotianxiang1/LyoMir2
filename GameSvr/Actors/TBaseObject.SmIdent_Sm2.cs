@@ -154,12 +154,9 @@ namespace GameSvr
         //   006896FC  8B 4B 04           mov ecx,[ebx+4]    ; Recog = nParam1
         //   006896FF  66 BA 95 03        mov dx,0x395       ; ident 917
         //   00689708  FF 93 54 02 00 00  call [obj+0x254]
-        // The send point is a pure Buf/Len forward of the RM record's buffer. That
-        // buffer is a client-item-id list — the hero counterpart of the human
-        // SM_DELITEMS body (TPlayObject.BuildDelItemListBody) — but it is filled by the
-        // hero RM producer, which is unmapped (docs/m_sm_b_20260813.md §8-B2). The body
-        // is therefore taken pre-encoded: the frame is reproduced, the buffer's
-        // per-field layout is not invented here.
+        // The send point is a pure Buf/Len forward of the RM record's buffer. Producers
+        // sub_73FC70 and sub_740078 fill it with count consecutive item+0x18 dwords;
+        // TBaseObject.BuildNativeHeroDeletedItemBody preserves that exact count*4 layout.
         internal static (ClientPacket Header, byte[] Body) BuildSm917(int nParam1, byte[] body)
         {
             var header = Grobal2.MakeDefaultMsg(Grobal2.SM_HERO_DELITEMS, nParam1, 0, 0, 0);

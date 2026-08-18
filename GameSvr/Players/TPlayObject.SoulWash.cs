@@ -29,9 +29,10 @@ namespace GameSvr
     /// The encoder sub_6B0FF0 / decoder sub_6AFD7C move these fields across:
     ///   obj+0x60C (cap)   &lt;-&gt; rec+0x580  (enc 0x6B13DF, dec 0x6B05E9->0x6B05F2)
     ///   obj+0x610 (prereq)&lt;-&gt; rec+0x57C  (enc 0x6B13EB, dec 0x6B05FB->0x6B0604)
-    /// The C# human-data codec models NEITHER rec+0x580 nor rec+0x57C, so both are
-    /// read straight out of the raw record m_NativeHumanData (the same mechanism
-    /// TPlayObject.NativeUnmappedScalars.cs uses). The decoder applies ONE fixup:
+    /// The shared DTO codec models NEITHER rec+0x580 nor rec+0x57C. The login/save
+    /// bridge therefore restores and persists the live HeroZodiacBlessMask/Gate fields
+    /// straight against m_NativeHumanData; fail-closed handlers may also validate the
+    /// same raw record directly. The decoder applies ONE fixup:
     /// 0x6B060A `test eax,eax / jg` then 0x6B0611 `mov [obj+0x610],1` — a stored
     /// prereq &lt;= 0 is forced to 1, so after login the prereq is ALWAYS &gt;= 1.
     ///
@@ -71,6 +72,46 @@ namespace GameSvr
 
         /// <summary>Raw record slot for obj+0x610 (prereq/mode), enc 0x6B13EB.</summary>
         private const int SoulWashPrereqRecordOffset = 0x57C;
+
+        /// <summary>
+        /// Native decoder sub_6AFD7C @0x6B05E9..0x6B0611. Restores the live object
+        /// fields used by the zodiac/soul-wash cluster and applies the sole decoder
+        /// normalization: a stored obj+0x610 value less than or equal to zero becomes 1.
+        /// </summary>
+        internal bool RestoreNativeHeroZodiacState()
+        {
+            var raw = m_NativeHumanData;
+            if (raw == null || raw.Length < SoulWashCapRecordOffset + sizeof(uint))
+            {
+                HeroZodiacBlessMask = 0;
+                HeroZodiacBlessGate = 0;
+                return false;
+            }
+
+            HeroZodiacBlessMask = BinaryPrimitives.ReadUInt32LittleEndian(
+                raw.AsSpan(SoulWashCapRecordOffset, sizeof(uint)));
+            var storedGate = BinaryPrimitives.ReadInt32LittleEndian(
+                raw.AsSpan(SoulWashPrereqRecordOffset, sizeof(int)));
+            HeroZodiacBlessGate = storedGate > 0 ? storedGate : 1;
+            return true;
+        }
+
+        /// <summary>
+        /// Native encoder sub_6B0FF0 @0x6B13D9..0x6B13EB. Writes the current live
+        /// obj+0x60C/obj+0x610 dwords back verbatim; normalization belongs only to load.
+        /// </summary>
+        internal bool PersistNativeHeroZodiacState()
+        {
+            var raw = m_NativeHumanData;
+            if (raw == null || raw.Length < SoulWashCapRecordOffset + sizeof(uint))
+                return false;
+
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                raw.AsSpan(SoulWashCapRecordOffset, sizeof(uint)), HeroZodiacBlessMask);
+            BinaryPrimitives.WriteInt32LittleEndian(
+                raw.AsSpan(SoulWashPrereqRecordOffset, sizeof(int)), HeroZodiacBlessGate);
+            return true;
+        }
 
         /// <summary>Population count, Brian-Kernighan, byte-identical to 0x4C7A34
         /// (`while (x) { x &= x - 1; ++c; }`).</summary>
@@ -149,9 +190,9 @@ namespace GameSvr
 
         /// <summary>
         /// Read the two persisted source fields (cap bitmask obj+0x60C, prereq
-        /// obj+0x610) out of self's raw record and apply the decoder's prereq fixup
-        /// (0x6B060A: a stored value &lt;= 0 becomes 1). Returns false when the record
-        /// is unavailable, so callers fail-closed instead of guessing.
+        /// obj+0x610) out of self's raw record and apply the decoder's prereq fixup.
+        /// This existing raw accessor remains the fail-closed gate for handlers that
+        /// can also be invoked on synthetic objects outside the normal login path.
         /// </summary>
         private bool TrySoulWashSource(out uint capBitmask, out int prereq)
         {

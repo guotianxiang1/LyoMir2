@@ -322,6 +322,11 @@ namespace GameSvr
             return false;
         }
 
+        // sub_63F200 @0x63F244 loads mode 1 before calling the shared sub_6C7D88 gate.
+        internal bool NativeMerchantSellEquipLockGate() =>
+            EquipLockConfirmGateProceed(Grobal2.CM_USERSELLITEM, 1,
+                "sub_63F200 @0x63F244 merchant sell");
+
         /// <summary>
         /// Drop the packet and record the unreproducible terminal action once per (ident, arm) per
         /// process. Nothing is sent, because the reply native would build depends on a subsystem this

@@ -206,7 +206,7 @@ namespace GameSvr
             // ---- un-wired mute trio (backing store = NativeGmDenyListCommands) ----
             new NativePlayerAttrCommand("OutSay", 62, 2, 0x00624290u, "sub_6BF260", true,
                 "禁言角色多少时间	@OutSay 角色名 [时间数/无]",
-                "Pure delegation: sub_6BF260(name, minutes) mutes the char -> BlockUsers.Dat. No shim SysMsg. "
+                "Pure delegation: sub_6BF260(name, seconds) mutes the char -> BlockUsers.Dat. No shim SysMsg. "
                 + "WIRE to NativeGmDenyListCommands (mute codec already modeled)."),
             new NativePlayerAttrCommand("ShifangSay", 63, 2, 0x006242A3u, "sub_6BF340", true,
                 "解除角色的禁言	@ShifangSay 角色名",

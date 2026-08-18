@@ -33,15 +33,17 @@ namespace GameSvr
     //   0x68DDBA  sub_76A894(hero, spellPoint)                 ; DamageSpell (扣蓝+刷新)
     //   0x68DDC3  target!=nil ? (tx,ty)=target(+0x12C,+0x130) : hero(+0x12C,+0x130)
     //   0x68DDF5  if (wMagicID != 0x2A/42) sub_769258(...)     ; SM_SPELL(0x11) 广播
-    //             == C# SendRefMsg(RM_SPELL, btEffect, tx, ty, wMagicID, "")
+    //             == C# MagicManager.SendNativeSpell: Param=tx, Tag=ty,
+    //                Series=MakeWord(btEffect,btEffectType),
+    //                body={wMagicID,effectiveLevel}
     //   0x68DE41  if (target!=nil && sub_772DA8(target)) target = nil     ; 死亡目标清空
     //   0x68DE58  分派 (见下)
     //   0x68E6A9  DEFAULT: result = 0; 直接 0x68E6FC 返回 (不写 tick, 不发 0x27E)
     //   0x68E6AF  收敛: [hero+0x360] = GetTickCount()
     //   0x68E6BA    if (boSpellFail) 返回 result(=0)
     //   0x68E6C0    if (boSpellFire) sub_76920C(...)           ; SM_MAGICFIRE(0x27E) 广播
-    //             == C# SendRefMsg(RM_MAGICFIRE, 0, MakeWord(btEffectType,btEffect),
-    //                              MakeLong(tx,ty), targetId, "")   (与玩家收敛同一映射)
+    //             == C# MagicManager.SendNativeMagicFire: Param=tx, Tag=ty,
+    //                Series=MakeWord(btEffectType,btEffect), body={targetId,effectiveLevel}
     //   0x68E6F8    result = 1
     //   与玩家 DoSpell sub_6ED62C 的差异: (a) 英雄没有 sub_78FE88 的 9 格射程门;
     //   (b) wMagicID==42 跳过 SM_SPELL; (c) 英雄多写 [hero+0x360]; (d) 英雄收敛只有
@@ -150,14 +152,14 @@ namespace GameSvr
     //          dec/je -> 2 (job 3)
     //          else   -> 1
     //
-    // ---- fail-closed: 原生 TPlayer.MakeSlave (0x6CB070) 中【未】移植的三处 ----
+    // ---- TPlayer.MakeSlave (0x6CB070) 的英雄槽与 BoFromHero 语义 ----
     //   (a) 0x6CB09D-0x6CB108 主人的英雄槽 GC: hero=[master+0xBB0]; hero 非空/未死/非 ghost 时,
     //       若 [hero+0x6C4] 指向的宠已死或 ghost 则清空该槽。
     //   (b) 0x6CB10E-0x6CB1E1 第 6 参 (英雄传 1, 玩家传 0) 为真时改用【英雄坐标】做空格搜索落地。
     //   (c) 0x6CB1E7-0x6CB1F0 若 [hero+0x6C4] 仍非空, nMaxMob 自增 1。
-    //   C# 的 TBaseObject.MakeSlave 没有这三段 (它只做 GetFrontPosition + 上限比较), 且改它会
-    //   同时改动玩家全部召唤路径。(a)(c) 只影响 nMaxMob 比较, 已在本文件调用点等价重现;
-    //   **(b) 的英雄坐标落地未移植** —— C# 仍用主人的 GetFrontPosition, 此处登记为缺口。
+    //   三段现由 TBaseObject.MakeSlaveCore 统一实现：英雄槽 GC 和 nCount+1
+    //   在 BoFromHero 门之前执行；BoFromHero=true 只改用英雄的物理环境/坐标，
+    //   生成后的 master、m_SlaveList 与 4469 通知仍归人物。
     // =====================================================================================
     public partial class HeroObject
     {
@@ -165,8 +167,81 @@ namespace GameSvr
         /// sub_68DD88 的阶梯 0x68DF5C `sub eax,0x2B; je 0x68E313` 处出现。</summary>
         private const int NativeHeroSkillFireSpirit = 112;
 
+        /// <summary>
+        /// 原版英雄切服标志 [hero+0x4BA]。人物切服设置器 sub_6BD044
+        /// @0x6BD096..0x6BD0A0 在人物存在英雄时同步置 1；英雄记录编码器
+        /// sub_689034 @0x68934A 只在此标志置位时写入专属召唤记录。
+        /// </summary>
+        internal bool m_boNativeSwitchData;
+
         /// <summary>[hero+0x6C4] —— 分派器为 17/30/41/62/112 记录的召唤物。</summary>
         private TBaseObject m_NativeHeroSummonSlave;
+
+        internal bool IsNativeHeroSummonSlave(TBaseObject candidate) =>
+            candidate != null && ReferenceEquals(m_NativeHeroSummonSlave, candidate);
+
+        internal TBaseObject GetNativeSwitchSlaveForSave()
+        {
+            var slave = m_boNativeSwitchData ? m_NativeHeroSummonSlave : null;
+            return slave != null && !slave.m_boGhost && !slave.m_boDeath
+                ? slave
+                : null;
+        }
+
+        // TPlayer.MakeSlave sub_6CB070 performs this maintenance before it
+        // inspects BoFromHero, so ordinary player summons must see it too.
+        internal bool PrepareNativeHeroSummonSlotForMakeSlave()
+        {
+            if (m_NativeHeroSummonSlave != null &&
+                (m_NativeHeroSummonSlave.m_boDeath ||
+                 m_NativeHeroSummonSlave.m_boGhost))
+            {
+                m_NativeHeroSummonSlave = null;
+            }
+            return m_NativeHeroSummonSlave != null;
+        }
+
+        /// <summary>
+        /// THeroAct slave-record restore, sub_68FAB8. This is the RM_10401
+        /// consumer for the embedded TSlaveInfo at hero record +0x4694.
+        /// </summary>
+        internal void RestoreNativeHeroSummon(TSlaveInfo slaveInfo)
+        {
+            var master = m_Master as TPlayObject;
+            if (master == null || m_NativeHeroSummonSlave != null || m_boGhost)
+            {
+                // 0x68FB2E..0x68FB30 explicitly clears hero+0x6C4 on every
+                // rejected arm, including an already occupied slot.
+                m_NativeHeroSummonSlave = null;
+                return;
+            }
+
+            var slave = master.MakeNativeSlave(slaveInfo.sSlaveName,
+                slaveInfo.btSlaveLevel, NativeHeroSummonMaxMob(master),
+                slaveInfo.dwRoyaltySec, fromHero: true, hpAfterSlave: 10);
+            m_NativeHeroSummonSlave = slave;
+            if (slave == null)
+                return;
+
+            // 0x68FB44..0x68FBCB: unlike the player cross-server restore,
+            // every race restores these fields. Only race 0x82 has a special
+            // level-copy arm immediately before the final RecalcAbilitys.
+            slave.m_nKillMonCount = slaveInfo.nKillCount;
+            slave.m_btSlaveExpLevel = slaveInfo.btSlaveExpLevel;
+            slave.m_WAbil.HP = unchecked((ushort)slaveInfo.nHP);
+            slave.m_WAbil.MP = unchecked((ushort)slaveInfo.nMP);
+
+            var walkSpeed = 1500 - slaveInfo.btSlaveLevel * 200;
+            if (walkSpeed < slave.m_nWalkSpeed)
+                slave.m_nWalkSpeed = walkSpeed;
+            var nextHitTime = 2000 - slaveInfo.btSlaveLevel * 200;
+            if (nextHitTime < slave.m_nNextHitTime)
+                slave.m_nNextHitTime = nextHitTime;
+
+            if (slave.m_btRaceServer == 0x82)
+                slave.m_Abil.Level = m_Abil.Level;
+            slave.RecalcAbilitys();
+        }
 
         /// <summary>[hero+0x50C] —— id 62 "圣兽" 的收回时间戳; 原生门为
         /// `GetTickCount() - [hero+0x50C] > 30000`。写入方 (收回圣兽) 不在本子系统内,
@@ -263,20 +338,6 @@ namespace GameSvr
             var nMakeLevel = TPlayObject.GetNativeMagicProducerEffectiveLevel(userMagic); // sub_4C896C
             const int dwRoyaltySec = 0xD2F00;                      // 864000 秒 = 10 天
 
-            // 原生 TPlayer.MakeSlave (0x6CB070) 里两段与 [hero+0x6C4] 相关的逻辑, C# 的
-            // TBaseObject.MakeSlave 没有, 在调用点等价重现 (二者都只影响 nMaxMob 比较):
-            //   0x6CB0D0-0x6CB108  记录的宠已死(sub_772DA8)或 ghost(byte[+0x73]) -> 清槽
-            //   0x6CB1E7-0x6CB1F0  清槽后仍非空 -> nMaxMob += 1
-            if (m_NativeHeroSummonSlave != null &&
-                (m_NativeHeroSummonSlave.m_boDeath || m_NativeHeroSummonSlave.m_boGhost))
-            {
-                m_NativeHeroSummonSlave = null;
-            }
-            if (m_NativeHeroSummonSlave != null)
-            {
-                nMaxMob++;
-            }
-
             if (master.CheckServerMakeSlave())                     // sub_7661E8(master, 0x28A1)
             {
                 // 112 在这里是 `jne 0x68E6AF` (0x68E345): 直接收敛且 boSpellFail 仍为 1。
@@ -284,8 +345,10 @@ namespace GameSvr
                 return wMagicID != NativeHeroSkillFireSpirit;
             }
 
-            // 0x6CB070 写 ecx 到 +0x483(MakeLevel) 与 +0x482(ExpLevel) 两处, 故两参同值。
-            var slave = master.MakeSlave(sMonName, nMakeLevel, nMakeLevel, nMaxMob, dwRoyaltySec);
+            // sub_6CB070: ECX feeds both level bytes; [ebp+8]=10 is the
+            // signed HP percentage applied when royalty expires.
+            var slave = master.MakeNativeSlave(sMonName, nMakeLevel,
+                nMaxMob, dwRoyaltySec, fromHero: true, hpAfterSlave: 10);
             m_NativeHeroSummonSlave = slave;                       // [hero+0x6C4]
 
             if (wMagicID == SpellsDef.SKILL_ANGEL)

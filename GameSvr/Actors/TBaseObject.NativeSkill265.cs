@@ -55,8 +55,8 @@ namespace GameSvr
             {
                 // 0x6BCB73 `E8 E0 C6 0A 00 call 0x769258`, the same emitter
                 // magic 237 uses, with X/Y taken from self.
-                SendRefMsg(Grobal2.RM_SPELL, userMagic.MagicInfo.btEffect,
-                    m_nCurrX, m_nCurrY, userMagic.MagicInfo.wMagicID, "");
+                MagicManager.SendNativeSpell(this, userMagic, m_nCurrX,
+                    m_nCurrY);
             }
             return true;
         }

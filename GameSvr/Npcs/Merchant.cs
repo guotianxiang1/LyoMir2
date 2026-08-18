@@ -1209,7 +1209,7 @@ namespace GameSvr
 
         private void UserSelect_SuperRepairItem(TPlayObject User)
         {
-            User.SendMsg(this, Grobal2.RM_SENDUSERSREPAIR, 0, ObjectId, 0, 0, "");
+            User.SendNativeScriptRepair(this, 2);
         }
 
         private const int NewMarketInfoNameSize = 16;
@@ -1282,7 +1282,7 @@ namespace GameSvr
 
         private void UserSelect_RepairItem(TPlayObject User)
         {
-            User.SendMsg(this, Grobal2.RM_SENDUSERREPAIR, 0, ObjectId, 0, 0, "");
+            User.SendNativeScriptRepair(this, 1);
         }
 
         private void UserSelect_MakeDurg(TPlayObject User)
@@ -1731,7 +1731,11 @@ namespace GameSvr
                 // ⚠ StdItem.DuraMax > 0 是【有意保留的护栏,不是遗漏】—— 原生无此门:
                 // stage A 的除法 @0x783E9B `fdivp` 之前【没有任何零检查】,Delphi 默认 x87 控制字
                 // 未屏蔽 ZeroDivide,模板 DuraMax==0 时原生会抛 EZeroDivide;C# 保留此门则静默
-                // 跳过整段返回原价。方向上 C# 更安全但不等价,零模板 max 是否可达为 UNPROVEN。
+                // 跳过整段返回原价。方向上 C# 更安全但不等价。发布版 stditems.MYD 的
+                // idx241「牢犯匕首」(StdMode=5,DuraMax=0,NeedConf=0x40) 与 NativeItemPlus28
+                // 的 AddDura 路径已证明零模板状态在配置/随机掉落链上可达；只是现有样本未命中。
+                // 因此此处仍是已知的 fail-closed 差异，不再标为“可达性未证”。在异常传播边界
+                // 完成审计前保留护栏，避免把原生 EZeroDivide 直接放大到服务进程。
                 // 本条契约已在台账里来回翻过一次,就地钉死:【不要再把它当成新 bug 删掉】。
                 if (StdItem != null && StdItem.StdMode > 4 && StdItem.DuraMax > 0 &&
                     UserItem.DuraMax > 0 && UserItem.Dura > 0)
@@ -1986,10 +1990,10 @@ namespace GameSvr
                                             }
                                             PlayObject.SendAddItem(UserItem);
 
-                                            if (StdItem.NeedIdentify == 1)
-                                            {
-                                                M2Share.AddGameDataLog('9' + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
-                                            }
+                                            M2Share.AddNativeGameDataLog(
+                                                PlayObject, 0x09, StdItem.Name,
+                                                UserItem.MakeIndex, 1,
+                                                m_sCharName);
                                             List20.RemoveAt(j);
                                             MarkNativeGoodsDirty();
                                             if (List20.Count <= 0)
@@ -2193,7 +2197,8 @@ namespace GameSvr
             var result = false;
             GoodItem StdItem;
             var nPrice = GetSellItemPrice(GetUserItemPrice(UserItem));
-            if (nPrice > 0 && ClientSellItem_sub_4A1C84(UserItem))
+            if (nPrice > 0 && PlayObject.NativeMerchantSellEquipLockGate()
+                && ClientSellItem_sub_4A1C84(UserItem))
             {
                 if (PlayObject.IncGold(nPrice))
                 {
@@ -2213,14 +2218,20 @@ namespace GameSvr
                         m_Castle.IncRateGold(nPrice);
                     }
                     PlayObject.SendMsg(this, Grobal2.RM_USERSELLITEM_OK, 0, PlayObject.m_nGold, 0, 0, "");
-                    AddItemToGoodsList(UserItem);
-                    MarkNativeGoodsDirty();
-                    StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-                    if (StdItem.NeedIdentify == 1)
+                    // 0x63F2B5..0x63F2CF: the worker performs its own fresh order-4 query.
+                    // Rejection skips merchant ownership but does not undo the completed sale.
+                    if (PlayObject.NativeMerchantSellAuthenticated())
                     {
-                        M2Share.AddGameDataLog("10" + "\t" + PlayObject.m_sMapName + "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY + "\t" + PlayObject.m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + '1' + "\t" + m_sCharName);
+                        AddItemToGoodsList(UserItem);
+                        MarkNativeGoodsDirty();
                     }
+                    StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                    // 0x63F2D4..0x63F304 has no NeedIdentify gate.
+                    M2Share.AddNativeGameDataLog(PlayObject, 0x0A,
+                        StdItem.Name, UserItem.MakeIndex, 1, m_sCharName);
                     result = true;
+                    // Native worker 0x63F30E runs this before sub_6B9220 removes the bag slot.
+                    PlayObject.WeightChanged();
                 }
                 else
                 {
@@ -2232,6 +2243,33 @@ namespace GameSvr
                 PlayObject.SendMsg(this, Grobal2.RM_USERSELLITEM_FAIL, 0, 0, 0, 0, "");
             }
             return result;
+        }
+
+        internal bool RemoveExactGoodsReference(TUserItem userItem)
+        {
+            if (userItem == null)
+            {
+                return false;
+            }
+            for (var i = 0; i < m_GoodsList.Count; i++)
+            {
+                var items = m_GoodsList[i];
+                for (var j = 0; j < items.Count; j++)
+                {
+                    if (!ReferenceEquals(items[j], userItem))
+                    {
+                        continue;
+                    }
+                    items.RemoveAt(j);
+                    if (items.Count == 0)
+                    {
+                        m_GoodsList.RemoveAt(i);
+                    }
+                    MarkNativeGoodsDirty();
+                    return true;
+                }
+            }
+            return false;
         }
 
         private bool AddItemToGoodsList(TUserItem UserItem)
@@ -2444,48 +2482,61 @@ namespace GameSvr
         
         
         
-        public void ClientQueryRepairCost(TPlayObject PlayObject, TUserItem UserItem)
+        private int GetNativeRepairPrice(TPlayObject PlayObject,
+            TUserItem UserItem, GoodItem StdItem)
         {
-            int nRepairPrice;
-            var nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
-            if (nPrice > 0 && UserItem.DuraMax > UserItem.Dura)
+            if (StdItem == null)
             {
-                if (UserItem.DuraMax > 0)
+                return -1;
+            }
+
+            if (PlayObject.m_btNativeRepairMode == 3)
+            {
+                // sub_6402BC/sub_63EE9C mode 3: raw template price, signed
+                // durability delta and a float32 1000.0 divisor. No rate or Abs.
+                if (!CheckItemType(StdItem.StdMode))
                 {
-                    // ✅ 战神字节证据 (Tier-1) — PRICE-21 @0x63EF92-0x63EFCC:
-                    // idiv 3 → fild / fdivp liveMax / Abs(Δ) / fmulp / @ROUND — /3 之后全程 80 位。
-                    nRepairPrice = HUtil32.RoundRational(
-                        (long)(nPrice / 3) * (UserItem.DuraMax - UserItem.Dura),
-                        UserItem.DuraMax);
+                    return -1;
                 }
-                else
-                {
-                    nRepairPrice = nPrice;
-                }
-                if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR)
-                {
-                    if (m_boS_repair)
-                    {
-                        nRepairPrice = nRepairPrice * M2Share.g_Config.nSuperRepairPriceRate;
-                    }
-                    else
-                    {
-                        nRepairPrice = -1;
-                    }
-                }
-                else
-                {
-                    if (!m_boRepair)
-                    {
-                        nRepairPrice = -1;
-                    }
-                }
-                PlayObject.SendMsg(this, Grobal2.RM_SENDREPAIRCOST, 0, nRepairPrice, 0, 0, "");
+                return Math.Max(-1, HUtil32.RoundX87DivideThenMultiply(
+                    (int)UserItem.DuraMax - UserItem.Dura, 1000,
+                    StdItem.Price));
+            }
+
+            var nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
+            if (nPrice <= 0)
+            {
+                return -1;
+            }
+
+            int nRepairPrice;
+            if (UserItem.DuraMax > 0)
+            {
+                // PRICE-21 @0x63EF92-0x63EFCC: integer /3, x87 divide
+                // by live max, x87 multiply by Abs(delta), then @ROUND.
+                nRepairPrice = HUtil32.RoundX87DivideThenMultiply(
+                    nPrice / 3, UserItem.DuraMax, Math.Abs(
+                        (int)UserItem.DuraMax - UserItem.Dura));
             }
             else
             {
-                PlayObject.SendMsg(this, Grobal2.RM_SENDREPAIRCOST, 0, -1, 0, 0, "");
+                nRepairPrice = nPrice;
             }
+
+            if (PlayObject.m_btNativeRepairMode == 2)
+            {
+                // 0x63EFDF/0x64039C: hardcoded post-Round x3.
+                nRepairPrice = unchecked(nRepairPrice * 3);
+            }
+            return nRepairPrice;
+        }
+
+        public void ClientQueryRepairCost(TPlayObject PlayObject, TUserItem UserItem)
+        {
+            var StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+            var nRepairPrice = GetNativeRepairPrice(PlayObject, UserItem, StdItem);
+            PlayObject.SendMsg(this, Grobal2.RM_SENDREPAIRCOST,
+                0, nRepairPrice, 0, 0, string.Empty);
         }
 
         
@@ -2496,98 +2547,63 @@ namespace GameSvr
         
         public bool ClientRepairItem(TPlayObject PlayObject, TUserItem UserItem)
         {
-            int nRepairPrice;
-            var result = false;
-            var boCanRepair = true;
-            if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR && !m_boS_repair)
-            {
-                boCanRepair = false;
-            }
-            if (PlayObject.m_sScriptLable != M2Share.sSUPERREPAIR && !m_boRepair)
-            {
-                boCanRepair = false;
-            }
             if (PlayObject.m_sScriptLable == "@fail_s_repair")
             {
                 SendMsgToUser(PlayObject, "对不起!我不能帮你修理这个物品。\\ \\ \\<返回/@main>");
                 PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL, 0, 0, 0, 0, "");
-                return result;
+                return false;
             }
-            var nPrice = GetUserPrice(PlayObject, GetUserItemPrice(UserItem));
-            // 战神 sub_63EE9C：超级修理的 ×3 是在**成本算完之后**乘的，不是乘基础价。
-            //   @0x63EF90-0x63EFCC  esi := Round(((price /(idiv 3)) / DuraMax) * Abs(DuraMax-Dura))
-            //   @0x63EFD3-0x63EFE2  `cmp byte[player+0x185C],2` / `jne` / **`lea eax,[esi+esi*2]`**（=esi*3）/ `esi=eax`
-            // 旧 C# 在此处先把 nPrice 乘了 rate，于是那个 3 又被下面的整数 `/3` 吃掉：
-            //   预览(ClientQueryRepairCost:2108) = Round(((price/3)/DuraMax)*ΔDura) * 3
-            //   旧执行                          = Round(((price*3/3)/DuraMax)*ΔDura) = Round((price/DuraMax)*ΔDura)
-            // 只要 price % 3 != 0（截断被预览放大 3 倍、被执行吸收），两者数值不同 →
-            // **客户端看到预览价、被扣执行价** 的系统性错扣。现改为与预览/原生一致：乘在 Round 之后。
-            // 注意 `/3` 在原生是真整除（@0x63EF98 `cdq`/`idiv ecx`），不得浮点化。
             GoodItem StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-            if (StdItem != null)
+            var repairMode = PlayObject.m_btNativeRepairMode;
+            if (StdItem == null ||
+                !NativeRepairEligibility.CanExecute(UserItem, StdItem, repairMode))
             {
-                if (boCanRepair && nPrice > 0 && UserItem.DuraMax > UserItem.Dura && StdItem.StdMode != 43)
-                {
-                    if (UserItem.DuraMax > 0)
-                    {
-                        // ✅ 战神字节证据 (Tier-1) — PRICE-21 同 ClientQueryRepairCost。
-                        nRepairPrice = HUtil32.RoundRational(
-                            (long)(nPrice / 3) * (UserItem.DuraMax - UserItem.Dura),
-                            UserItem.DuraMax);
-                    }
-                    else
-                    {
-                        nRepairPrice = nPrice;
-                    }
-                    if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR)
-                    {
-                        // 原生 @0x63EFDF 硬编码 ×3；nSuperRepairPriceRate 默认 3，故默认配置下逐字一致。
-                        // 原生的 ×3 对两个分支（DuraMax>0 与 DuraMax==0 的裸价回退）都生效，此处同。
-                        nRepairPrice = nRepairPrice * M2Share.g_Config.nSuperRepairPriceRate;
-                    }
-                    if (PlayObject.DecGold(nRepairPrice))
-                    {
-                        // ✅ 战神字节证据 (Tier-1)。修理税点 sub_63EE9C @0x63F00E-0x63F020:
-                        //   call sub_6C7D64(DecGold) ; test al,al ; je 0x63F0E5 ;
-                        //   cmp byte [edi+0x578],0 ; je 0x63F025      <== 唯一门,无 else
-                        //   mov eax,[0x7D6214] ; mov eax,[eax] ; mov edx,esi   ; <== 本次修理费
-                        //   call sub_65B31C(IncRateGold)
-                        // sub_65B31C 全 CODE 段仅 5 个 caller(E8 rel32 全扫描,已逐一反汇编),
-                        // 全部单门单分支,接收者恒是【单个城堡对象 [[0x7D6214]]】。
-                        // => 曾按 ref(ObjNpc.pas:2473) 加的 `else if (boGetAllNpcTax) →
-                        //    CastleManager.IncRateGold(nUpgradeWeaponPrice)` 回退分支在战神不存在,已删除
-                        //    (原生无城主时不累计任何税);"GetAllNpcTax" 字符串镜像内 0 hits。
-                        //    ref-MIR2/GameOfMir 是另一个 Mir2 分支,非战神,仅算术形态线索。
-                        if (m_boCastle && m_Castle != null)
-                        {
-                            m_Castle.IncRateGold(nRepairPrice);
-                        }
-                        if (PlayObject.m_sScriptLable == M2Share.sSUPERREPAIR)
-                        {
-                            UserItem.Dura = UserItem.DuraMax;
-                            PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_OK, 0, PlayObject.m_nGold, UserItem.Dura, UserItem.DuraMax, "");
-                            GotoLable(PlayObject, M2Share.sSUPERREPAIROK, false);
-                        }
-                        else
-                        {
-                            UserItem.DuraMax -= (ushort)((UserItem.DuraMax - UserItem.Dura) / M2Share.g_Config.nRepairItemDecDura);
-                            UserItem.Dura = UserItem.DuraMax;
-                            PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_OK, 0, PlayObject.m_nGold, UserItem.Dura, UserItem.DuraMax, "");
-                            GotoLable(PlayObject, M2Share.sREPAIROK, false);
-                        }
-                        result = true;
-                    }
-                    else
-                    {
-                        PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL, 0, 0, 0, 0, "");
-                    }
-                }
-                else
-                {
-                    PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL, 0, 0, 0, 0, "");
-                }
+                PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL,
+                    0, 0, 0, 0, string.Empty);
+                return false;
             }
-            return result;
+
+            var nRepairPrice = GetNativeRepairPrice(PlayObject, UserItem, StdItem);
+            // 0x63EFE4 checks positive cost, then 0x63EFF2 rejects StdMode
+            // 43, and only then reaches DecGold.
+            if (nRepairPrice <= 0 || StdItem.StdMode == 43 ||
+                !PlayObject.DecGold(nRepairPrice))
+            {
+                PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_FAIL,
+                    0, 0, 0, 0, string.Empty);
+                return false;
+            }
+
+            // 修理税点 sub_63EE9C @0x63F00E-0x63F020 uses the actual
+            // amount and has no fallback when this merchant is not a castle NPC.
+            if (m_boCastle && m_Castle != null)
+            {
+                m_Castle.IncRateGold(nRepairPrice);
+            }
+
+            if (repairMode is 2 or 3)
+            {
+                UserItem.Dura = UserItem.DuraMax;
+                // 0x63F044..0x63F0A4: the completion callback runs first;
+                // the success packet then re-reads gold and durability.
+                GotoLable(PlayObject, M2Share.sSUPERREPAIROK, false);
+                PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_OK,
+                    0, PlayObject.m_nGold, UserItem.Dura, UserItem.DuraMax,
+                    string.Empty);
+            }
+            else
+            {
+                if (UserItem.Dura < UserItem.DuraMax)
+                {
+                    UserItem.DuraMax -= (ushort)((UserItem.DuraMax - UserItem.Dura) / 30);
+                }
+                UserItem.Dura = UserItem.DuraMax;
+                GotoLable(PlayObject, M2Share.sREPAIROK, false);
+                PlayObject.SendMsg(this, Grobal2.RM_USERREPAIRITEM_OK,
+                    0, PlayObject.m_nGold, UserItem.Dura, UserItem.DuraMax,
+                    string.Empty);
+            }
+            return true;
         }
 
         public override void ClearScript()

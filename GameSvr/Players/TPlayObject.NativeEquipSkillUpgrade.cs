@@ -58,7 +58,7 @@ namespace GameSvr
             for (var i = 0; i < list.Count; i++)
             {
                 var m = list[i];
-                if (m?.MagicInfo != null && m.MagicInfo.wMagicId == nativeIceMagicId)
+                if (m?.MagicInfo != null && m.MagicInfo.wMagicID == nativeIceMagicId)
                 {
                     magic = m;
                     return true;

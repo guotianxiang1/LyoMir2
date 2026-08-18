@@ -67,6 +67,10 @@ namespace GameSvr
         /// <summary><c>sub_78389C</c> mode 2 used by trade (<c>mov edx,2</c>).</summary>
         internal const int TransferModeTrade = 2;
 
+        internal const int TransferMode3 = 3;
+
+        internal const int TransferMode4 = 4;
+
         /// <summary><c>sub_78389C</c> mode used by all three drop paths (<c>mov edx,5</c>).</summary>
         internal const int TransferModeDrop = 5;
 
@@ -83,9 +87,12 @@ namespace GameSvr
         /// 7838D1  test esi,esi / jne 0x783979                     ; marked -> 0x783979 `mov eax,esi` = return 1 (REJECT)
         /// 7838D9  cmp edi,5 / ja 0x783979                         ; mode &gt; 5 -> return 0
         /// 7838E2  jmp [edi*4+0x7838E9]                            ; per-mode jumptable
-        ///   mode 2 -> 0x783911: reject (esi=3) if [item+0xFC]!=0 OR Reserved02 &amp; 0x0200
-        ///   mode 5 -> 0x783940: reject (esi=5) unless [item+0xFC]!=0
-        ///                       OR Reserved02 &amp; 0x0200 OR &amp; 0x0400 OR &amp; 0x0080
+        ///   mode 1 -> 0x783901: Reserved02 &amp; 0x0100 -> 2
+        ///   mode 2 -> 0x783911: [item+0xFC]!=0 OR Reserved02 &amp; 0x0200 -> 3
+        ///   mode 3 -> 0x78392A: cl!=0 AND Reserved02 &amp; 0x0200 -> 4
+        ///   mode 4 -> 0x783940: [item+0xFC]!=0 OR Reserved02 &amp; 0x0200
+        ///                       OR &amp; 0x0400 OR &amp; 0x0080 -> 5
+        ///   mode 5 -> 0x78396B: Reserved02 &amp; 0x0020 -> 6
         /// </code>
         /// Note the polarity: the pre-ladder REJECTS (returns 1) — <c>0x783979</c> is
         /// <c>mov eax,esi</c> and <c>esi</c> is 1 on every pre-ladder hit.  Both callers
@@ -95,6 +102,12 @@ namespace GameSvr
         /// </summary>
         internal static int CheckTransferPermission(TUserItem item, GoodItem stdItem,
             int mode)
+        {
+            return CheckTransferPermissionCore(item, stdItem, mode, 0);
+        }
+
+        internal static int CheckTransferPermissionCore(TUserItem item, GoodItem stdItem,
+            int mode, byte mode3Flag)
         {
             if (item == null || stdItem == null) return 0;
 
@@ -133,17 +146,31 @@ namespace GameSvr
                 }
             }
 
-            // 0x783940 (mode 5): reject unless [item+0xFC]!=0 OR any bind/timed class bit.
-            // Native: cmp [ebx+0xFC],0 / jne allow; then test std+3 bits.
-            if (mode == TransferModeDrop)
+            // 0x78392A (mode 3): cl is meaningful only for this jump-table arm.
+            if (mode == TransferMode3
+                && mode3Flag != 0
+                && (stdItem.NativeReserved02 & 0x0200) != 0)
             {
-                if (item.NativeClassFc == 0
-                    && ((stdItem.NativeReserved02 & 0x0200) != 0
-                        || (stdItem.NativeReserved02 & 0x0400) != 0
-                        || (stdItem.NativeReserved02 & 0x0080) != 0))
+                return 4;
+            }
+
+            // 0x783940 is jump-table index 4, not index 5.
+            if (mode == TransferMode4)
+            {
+                if (item.NativeClassFc != 0
+                    || (stdItem.NativeReserved02 & 0x0200) != 0
+                    || (stdItem.NativeReserved02 & 0x0400) != 0
+                    || (stdItem.NativeReserved02 & 0x0080) != 0)
                 {
                     return 5;
                 }
+            }
+
+            // 0x78396B (mode 5): all native drop callers select this arm.
+            if (mode == TransferModeDrop
+                && (stdItem.NativeReserved02 & 0x0020) != 0)
+            {
+                return 6;
             }
 
             return 0;

@@ -1,3 +1,5 @@
+using SystemModule;
+
 namespace GameSvr
 {
     public partial class TPlayObject
@@ -38,6 +40,15 @@ namespace GameSvr
             }
 
             SendDefMessage(wIdent, nNpcRecog, 0, 0, 0, "");
+        }
+
+        internal void SendNativeScriptRepair(TBaseObject npc, byte repairMode)
+        {
+            // sub_640148/sub_64016C/sub_64018C write +0x185C before the
+            // shared message sender applies its ghost gate.
+            m_btNativeRepairMode = repairMode;
+            SendMsg(npc, Grobal2.RM_SENDUSERREPAIR,
+                0, npc.ObjectId, 0, 0, string.Empty);
         }
     }
 }

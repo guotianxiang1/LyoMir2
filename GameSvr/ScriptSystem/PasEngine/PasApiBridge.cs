@@ -3778,8 +3778,10 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "getstoragespacecount":
-                    result = PasValue.FromInt(Math.Clamp(CurrentPlayer.m_nStorageSpaceCount,
-                        TPlayObject.MIN_STORAGE_ITEM_COUNT, TPlayObject.MAX_STORAGE_ITEM_COUNT));
+                    // GetStorageSpaceCount (native 0x72BBE0) returns the raw
+                    // signed 32-bit runtime field; it does not apply the
+                    // physical 24..192 storage-record bounds.
+                    result = PasValue.FromInt(CurrentPlayer.m_nStorageSpaceCount);
                     return true;
 
                 // === Money Operations with return values ===
@@ -4531,17 +4533,18 @@ namespace GameSvr.PasEngine
 
                 case "makeslave":
                 {
-                    if (args.Count != 6 || args[5].AsInt() != 0)
+                    // Native RTTI @0x72E300:
+                    // MakeSlave(name, MagicLv, nCount, RoyaltySec,
+                    //           BoFromHero, hpAfterSlave: Integer).
+                    if (args.Count != 6 || CurrentPlayer == null)
                         return false;
-                    var owner = args[4].AsBool() && CurrentPlayer.m_HeroObject != null
-                        ? (TBaseObject)CurrentPlayer.m_HeroObject
-                        : CurrentPlayer;
-                    var slave = owner.MakeSlave(
+                    var slave = CurrentPlayer.MakeNativeSlave(
                         args[0].AsString(),
                         args[1].AsInt(),
-                        args[1].AsInt(),
                         args[2].AsInt(),
-                        args[3].AsInt());
+                        args[3].AsInt(),
+                        args[4].AsBool(),
+                        args[5].AsInt());
                     result = PasValue.FromObject(slave);
                     return true;
                 }
@@ -5422,14 +5425,18 @@ namespace GameSvr.PasEngine
                     }
                     return true;
                 case "click_repair":
-                    // Trigger repair dialog on client
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDUSERREPAIR, 0, CurrentNpc.ObjectId, 0, 0, "");
+                    if (args.Count != 1 ||
+                        args[0].Type != PasValueType.Object ||
+                        args[0].ObjVal is not TPlayObject repairPlayer)
+                        return false;
+                    repairPlayer.SendNativeScriptRepair(CurrentNpc, 1);
                     return true;
                 case "click_srepair":
-                    // Trigger special repair dialog on client
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDUSERSREPAIR, 0, CurrentNpc.ObjectId, 0, 0, "");
+                    if (args.Count != 1 ||
+                        args[0].Type != PasValueType.Object ||
+                        args[0].ObjVal is not TPlayObject specialRepairPlayer)
+                        return false;
+                    specialRepairPlayer.SendNativeScriptRepair(CurrentNpc, 2);
                     return true;
                 case "click_getback":
                     // Trigger get-back (storage retrieval) dialog on client
@@ -5929,12 +5936,14 @@ namespace GameSvr.PasEngine
                         TPlayObject.SM_CLICK_OPEN_MIRTIANTIORDER, CurrentNpc.ObjectId);
                     return true;
 
-                case "click_repair_ex":
-                    if (CurrentPlayer != null)
-                    {
-                        int repairMode = args.Count >= 1 ? args[0].AsInt() : 0;
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDUSERREPAIR, 0, CurrentNpc.ObjectId, repairMode, 0, "");
-                    }
+                case "click_repair_ex": // compatibility spelling
+                    if (args.Count != 2 ||
+                        args[0].Type != PasValueType.Object ||
+                        args[0].ObjVal is not TPlayObject repairExPlayer ||
+                        args[1].Type != PasValueType.Integer)
+                        return false;
+                    repairExPlayer.SendNativeScriptRepair(CurrentNpc,
+                        unchecked((byte)(ushort)args[1].AsInt()));
                     return true;
 
                 case "click_storage":
@@ -6963,10 +6972,17 @@ namespace GameSvr.PasEngine
                 // 此前语句形式会抛 PasRuntimeException "函数找不到" 中断脚本。
                 // =====================================================================
 
-                // Click_RepairEx sub_64016C:`mov byte [npc+0x185C], cl`(修理模式标志)
-                // 然后 sub_765E68(cx=0x279D) 发修理对话 —— 是 Click_Repair 的变体。
+                // Click_RepairEx sub_64016C: hidden Self is the NPC, EDX is
+                // Clicker and ECX is RepairMode:Word; only CL is persisted.
                 case "click_repairex":
-                    return RejectUnsupportedNativeApi(out result);
+                    if (args.Count != 2 ||
+                        args[0].Type != PasValueType.Object ||
+                        args[0].ObjVal is not TPlayObject nativeRepairExPlayer ||
+                        args[1].Type != PasValueType.Integer)
+                        return false;
+                    nativeRepairExPlayer.SendNativeScriptRepair(CurrentNpc,
+                        unchecked((byte)(ushort)args[1].AsInt()));
+                    return true;
 
                 // TryEnterSuperSky sub_6485B4:sub_6DF1B4(npc, edx=0x0C, ecx=0x0D) == 0x378(888)
                 // 才 sub_6D3694(npc, dx=0x7D, ecx=0x2738(10040), 0, 0, 0x186A0(100000))。
@@ -7277,14 +7293,6 @@ namespace GameSvr.PasEngine
                             CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDGOODSLIST, 0, CurrentNpc.ObjectId, 0, 0, "");
                     }
                     result = PasValue.FromBool(true); return true;
-                case "click_repair":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDUSERREPAIR, 0, CurrentNpc.ObjectId, 0, 0, "");
-                    result = PasValue.FromBool(true); return true;
-                case "click_srepair":
-                    if (CurrentPlayer != null)
-                        CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDUSERSREPAIR, 0, CurrentNpc.ObjectId, 0, 0, "");
-                    result = PasValue.FromBool(true); return true;
                 case "click_getback":
                     if (CurrentPlayer != null)
                     {
@@ -7415,11 +7423,6 @@ namespace GameSvr.PasEngine
 
                 case "click_open_mirtiantiorder":
                     if (CurrentPlayer != null) { CurrentPlayer.SendNativeScriptUiOpen(TPlayObject.SM_CLICK_OPEN_MIRTIANTIORDER, CurrentNpc.ObjectId); result = PasValue.FromBool(true); }
-                    else                     return true;
-                    return true;
-
-                case "click_repair_ex":
-                    if (CurrentPlayer != null) { CurrentPlayer.SendMsg(CurrentNpc, Grobal2.RM_SENDUSERREPAIR, 0, CurrentNpc.ObjectId, args.Count >= 1 ? args[0].AsInt() : 0, 0, ""); result = PasValue.FromBool(true); }
                     else                     return true;
                     return true;
 
@@ -8321,16 +8324,16 @@ namespace GameSvr.PasEngine
 
         private int ExpandStorageSpace(int addedCount)
         {
-            var current = Math.Clamp(CurrentPlayer.m_nStorageSpaceCount,
-                TPlayObject.MIN_STORAGE_ITEM_COUNT, TPlayObject.MAX_STORAGE_ITEM_COUNT);
+            // Native sub_6F30A0 reads the raw 32-bit capacity, performs a
+            // signed unchecked add, and caps only the upper bound at 0xC0.
+            // It does not clamp the starting value or impose a lower bound.
+            var current = CurrentPlayer.m_nStorageSpaceCount;
             var target = unchecked(current + addedCount);
             if (target > TPlayObject.MAX_STORAGE_ITEM_COUNT)
                 target = TPlayObject.MAX_STORAGE_ITEM_COUNT;
             var actualAdded = unchecked(target - current);
             if (actualAdded > 0)
-                CurrentPlayer.m_nStorageSpaceCount = current + actualAdded;
-            else
-                CurrentPlayer.m_nStorageSpaceCount = current;
+                CurrentPlayer.m_nStorageSpaceCount = unchecked(current + actualAdded);
 
             // Native puts the new count in Tag, not Series:
             //   006F30D1  6A 00              push 0                 ; Param  = 0

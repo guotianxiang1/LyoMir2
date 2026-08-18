@@ -64,6 +64,44 @@ namespace GameSvr.Services
     }
 
     /// <summary>
+    /// File-backed BlockUsers.Dat store used by the live GameSvr path.  The native
+    /// manager addresses the file relative to the Envir directory; keeping that
+    /// resolution outside the list itself also makes the exact codec testable with
+    /// an in-memory store and prevents accidental writes to a publish tree.
+    /// </summary>
+    public sealed class NativeBlockUserFileStore : INativeBlockUserStore
+    {
+        public NativeBlockUserFileStore(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("BlockUsers.Dat path is required.",
+                    nameof(filePath));
+            FilePath = Path.GetFullPath(filePath);
+        }
+
+        public string FilePath { get; }
+
+        public byte[] Load()
+        {
+            return File.Exists(FilePath) ? File.ReadAllBytes(FilePath) : null;
+        }
+
+        public void Save(byte[] data)
+        {
+            var directory = Path.GetDirectoryName(FilePath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(FilePath, data ?? Array.Empty<byte>());
+        }
+
+        public void Delete()
+        {
+            if (File.Exists(FilePath))
+                File.Delete(FilePath);
+        }
+    }
+
+    /// <summary>
     /// Models the native "set/clear boolean flag on the online player" side effect
     /// (player+2969 for the primary list). Optional; a null sink means "player offline".
     /// </summary>
@@ -76,6 +114,7 @@ namespace GameSvr.Services
     public sealed class NativeBlockUserEntry
     {
         public string Name;
+        public byte[] NameBytes;
         public int RemainSeconds;
         public long LastTickMs;
     }
@@ -167,8 +206,6 @@ namespace GameSvr.Services
 
         // Native prepends on both Load and Add, so the newest entry is at the head.
         private readonly LinkedList<NativeBlockUserEntry> _entries = new();
-        private readonly Dictionary<string, LinkedListNode<NativeBlockUserEntry>> _index =
-            new(StringComparer.OrdinalIgnoreCase); // native compares names case-insensitively
 
         private long _lastSweepMs;
 
@@ -189,7 +226,6 @@ namespace GameSvr.Services
         public void Load(long nowMs)
         {
             _entries.Clear();
-            _index.Clear();
 
             var data = _store.Load();
             if (data == null || data.Length == 0)
@@ -206,6 +242,7 @@ namespace GameSvr.Services
                 var entry = new NativeBlockUserEntry
                 {
                     Name = _encoding.GetString(nameBytes),
+                    NameBytes = nameBytes,
                     RemainSeconds = value,
                     LastTickMs = nowMs, // native stamps each node with GetTickCount at load
                 };
@@ -220,15 +257,20 @@ namespace GameSvr.Services
         /// </summary>
         public int Add(string name, int addSeconds, long nowMs)
         {
-            if (_index.TryGetValue(name, out var existing))
+            var lookupBytes = FoldNameBytes(name);
+            var existing = FindFirst(lookupBytes);
+            if (existing != null)
             {
                 existing.Value.RemainSeconds += addSeconds; // extend; native does NOT re-save
                 return existing.Value.RemainSeconds;
             }
 
+            var storedBytes = TruncateNameBytes(lookupBytes);
+
             var entry = new NativeBlockUserEntry
             {
-                Name = name,
+                Name = _encoding.GetString(storedBytes),
+                NameBytes = storedBytes,
                 RemainSeconds = addSeconds,
                 LastTickMs = nowMs,
             };
@@ -241,12 +283,23 @@ namespace GameSvr.Services
         /// <summary>sub_621CE4: remove by name, clear the player flag, save. No-op if absent.</summary>
         public bool Delete(string name)
         {
-            if (!_index.TryGetValue(name, out var node))
-                return false;
-            Remove(node);
-            _sink?.SetBlocked(name, false);
-            Save();
-            return true;
+            var lookupBytes = FoldNameBytes(name);
+            var removed = false;
+            var node = _entries.First;
+            while (node != null)
+            {
+                var next = node.Next;
+                if (NameBytesEqual(node.Value.NameBytes, lookupBytes))
+                {
+                    var storedName = node.Value.Name;
+                    Remove(node);
+                    _sink?.SetBlocked(storedName, false);
+                    Save(); // sub_621CE4 persists after every matching node
+                    removed = true;
+                }
+                node = next;
+            }
+            return removed;
         }
 
         /// <summary>
@@ -256,7 +309,7 @@ namespace GameSvr.Services
         /// </summary>
         public void Tick(long nowMs)
         {
-            if ((ulong)(nowMs - _lastSweepMs) <= (ulong)SweepIntervalMs)
+            if (ElapsedTick32(nowMs, _lastSweepMs) <= (uint)SweepIntervalMs)
                 return;
             _lastSweepMs = nowMs;
             Sweep(nowMs);
@@ -271,7 +324,7 @@ namespace GameSvr.Services
             {
                 var next = node.Next;
                 var e = node.Value;
-                e.RemainSeconds -= (int)((nowMs - e.LastTickMs) / 1000);
+                e.RemainSeconds -= (int)(ElapsedTick32(nowMs, e.LastTickMs) / 1000U);
                 e.LastTickMs = nowMs;
                 if (e.RemainSeconds <= 0)
                 {
@@ -286,8 +339,13 @@ namespace GameSvr.Services
             return changed;
         }
 
+        // GetTickCount is a 32-bit unsigned millisecond counter; subtracting the
+        // low 32 bits preserves elapsed time when the counter wraps around.
+        private static uint ElapsedTick32(long nowMs, long thenMs)
+            => unchecked((uint)((int)nowMs - (int)thenMs));
+
         /// <summary>"Hit": is this name currently in the list (mute active)?</summary>
-        public bool Contains(string name) => _index.ContainsKey(name);
+        public bool Contains(string name) => FindFirst(FoldNameBytes(name)) != null;
 
         /// <summary>@DisableSendMsgList / @ShutUpList: enumerate current entries (name + remaining).</summary>
         public IReadOnlyList<NativeBlockUserEntry> Snapshot()
@@ -297,6 +355,7 @@ namespace GameSvr.Services
                 list.Add(new NativeBlockUserEntry
                 {
                     Name = e.Name,
+                    NameBytes = e.NameBytes == null ? null : (byte[])e.NameBytes.Clone(),
                     RemainSeconds = e.RemainSeconds,
                     LastTickMs = e.LastTickMs,
                 });
@@ -318,7 +377,7 @@ namespace GameSvr.Services
             {
                 var offset = i * NativeBlockUserRecordCodec.RecordSize;
                 NativeBlockUserRecordCodec.EncodeRecord(
-                    data, offset, _encoding.GetBytes(e.Name), e.RemainSeconds);
+                    data, offset, e.NameBytes ?? _encoding.GetBytes(e.Name), e.RemainSeconds);
                 i++;
             }
             _store.Save(data);
@@ -326,14 +385,55 @@ namespace GameSvr.Services
 
         private void Prepend(NativeBlockUserEntry entry)
         {
-            var node = _entries.AddFirst(entry);
-            _index[entry.Name] = node;
+            _entries.AddFirst(entry);
         }
 
         private void Remove(LinkedListNode<NativeBlockUserEntry> node)
         {
-            _index.Remove(node.Value.Name);
             _entries.Remove(node);
+        }
+
+        private LinkedListNode<NativeBlockUserEntry> FindFirst(byte[] nameBytes)
+        {
+            for (var node = _entries.First; node != null; node = node.Next)
+            {
+                if (NameBytesEqual(node.Value.NameBytes, nameBytes))
+                    return node;
+            }
+            return null;
+        }
+
+        private byte[] FoldNameBytes(string name)
+        {
+            var bytes = _encoding.GetBytes(name ?? string.Empty);
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                if (bytes[i] >= (byte)'A' && bytes[i] <= (byte)'Z')
+                    bytes[i] = (byte)(bytes[i] + ('a' - 'A'));
+            }
+            return bytes;
+        }
+
+        private static byte[] TruncateNameBytes(byte[] nameBytes)
+        {
+            var length = Math.Min(nameBytes.Length, NativeBlockUserRecordCodec.NameCapacity);
+            var stored = new byte[length];
+            Array.Copy(nameBytes, stored, length);
+            return stored;
+        }
+
+        private static bool NameBytesEqual(byte[] left, byte[] right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (left == null || right == null || left.Length != right.Length)
+                return false;
+            for (var i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i])
+                    return false;
+            }
+            return true;
         }
     }
 

@@ -27,7 +27,6 @@ namespace GameSvr.Services
             try
             {
                 var ini = new SuperMerchantIni(path);
-                ini.Load();
                 for (var goodsIndex = 1; goodsIndex <= 3; goodsIndex++)
                 {
                     var section = "GoodsInfo" + goodsIndex;
@@ -83,6 +82,7 @@ namespace GameSvr.Services
         {
             internal SuperMerchantIni(string path) : base(path)
             {
+                Load();
             }
         }
     }

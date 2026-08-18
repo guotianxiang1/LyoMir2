@@ -145,6 +145,63 @@ namespace GameSvr
             return true;
         }
 
+        private static bool IsNativeGroupRequestExpired(int currentTick,
+            int createdTick)
+        {
+            // sub_6C3ABC @6C3B03..6C3B13 uses DWORD subtraction followed by
+            // unsigned JBE, so equality survives and TickCount wrap is intentional.
+            return unchecked((uint)(currentTick - createdTick)) > 10000u;
+        }
+
+        private void RunNativeGroupRequestExpiry()
+        {
+            // sub_6C3ABC @6C3AE3..6C3C65 walks the TList backwards. Every
+            // expired record first retracts its 4412 UI entry, then notifies
+            // the requester, and is removed even when its requester is nil.
+            var pending = NativeGroupPendingRequests.GetValue(this,
+                static _ => new List<NativeGroupRequest>());
+            for (var i = pending.Count - 1; i >= 0; i--)
+            {
+                var request = pending[i];
+                if (!IsNativeGroupRequestExpired(HUtil32.GetTickCount(),
+                        request.CreatedTick))
+                    continue;
+
+                var requester = request.Requester;
+                if (requester != null)
+                {
+                    SendNativeGroupExpiryPacket(
+                        BuildNativeGroupHeader(
+                            Grobal2.SM_NOTIFY_GROUP_MESSAGE, 0,
+                            request.Type, 0, 0),
+                        EncodeNativeGroupText(requester.m_sCharName));
+
+                    var suffix = request.Type switch
+                    {
+                        0 => "未响应您的组队邀请。",
+                        1 => "未响应您的组队申请。",
+                        2 => "未响应您的好友申请。",
+                        _ => null
+                    };
+                    if (suffix != null)
+                    {
+                        requester.SysMsg(m_sCharName + suffix,
+                            MsgColor.Red, MsgType.Hint);
+                    }
+                }
+
+                pending.RemoveAt(i);
+                ClearNativeGroupOutgoingRequest(requester, this,
+                    request.Type);
+            }
+        }
+
+        protected virtual void SendNativeGroupExpiryPacket(
+            ClientPacket header, byte[] body)
+        {
+            SendNativeGroupPacket(this, header, body);
+        }
+
         // 战神 sub_6AF078 @0x006AF078：push [self+0x58C]/[self+0x588] -> sub_6ADA3C ->
         // vtable+0x14；成功 SysMsg 0x6AF0D0「请求已取消」，失败 0x6AF0E4「取消请求失败」
         // (cx=0x38FF)。GM 表 idx 654 @0x0062A1E2 亦落此体；C# 折到 outgoing 表 + 目标 pending 撤单。
@@ -307,6 +364,22 @@ namespace GameSvr
             for (var i = outgoing.Count - 1; i >= 0; i--)
             {
                 if (outgoing[i].Type == type)
+                    outgoing.RemoveAt(i);
+            }
+        }
+
+        private static void ClearNativeGroupOutgoingRequest(
+            TPlayObject requester, TPlayObject target, byte type)
+        {
+            if (requester == null || target == null)
+                return;
+
+            var outgoing = NativeGroupOutgoingRequests.GetValue(requester,
+                static _ => new List<NativeGroupOutgoingRequest>());
+            for (var i = outgoing.Count - 1; i >= 0; i--)
+            {
+                if (outgoing[i].Type == type
+                    && ReferenceEquals(outgoing[i].Target, target))
                     outgoing.RemoveAt(i);
             }
         }

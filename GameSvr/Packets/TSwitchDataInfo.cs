@@ -4,6 +4,9 @@ namespace GameSvr
 {
     public class TSwitchDataInfo
     {
+        public const int NativeSlaveSlotCount = 5;
+        public const int NativeStatusSlotCount = 6;
+
         public string sMap;
         public short wX;
         public short wY;
@@ -21,5 +24,17 @@ namespace GameSvr
         public ushort[] StatusValue;
         public int[] StatusTimeOut;
         public int dwWaitTime;
+
+        public TSwitchDataInfo()
+        {
+            sMap = string.Empty;
+            sChrName = string.Empty;
+            BlockWhisperArr = new List<string>();
+            SlaveArr = new TSlaveInfo[NativeSlaveSlotCount];
+            for (var i = 0; i < SlaveArr.Length; i++)
+                SlaveArr[i] = new TSlaveInfo();
+            StatusValue = new ushort[NativeStatusSlotCount];
+            StatusTimeOut = new int[NativeStatusSlotCount];
+        }
     }
 }

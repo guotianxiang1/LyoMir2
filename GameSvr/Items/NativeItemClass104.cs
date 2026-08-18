@@ -1,10 +1,13 @@
+using SystemModule;
+
 namespace GameSvr
 {
     /// <summary>
     /// DURA-44: native item instance <c>+0x104</c> special-class bitmap used by
     /// <c>sub_75FF7C</c> @0x75FF7C (<c>bt [eax+0x104], dl</c>) and rebuilt each
-    /// <c>RecalcAbilitys</c> pass in <c>sub_75EE04</c> @0x75EE20 (zeroed) then
-    /// via <c>sub_75FE20</c> / <c>sub_76203C</c>.
+    /// <c>RecalcAbilitys</c> pass. <c>sub_75EE04</c> first clears the word at
+    /// <c>+0x102</c> @0x75EE12 and byte <c>+0x104</c> @0x75EE20, then rebuilds
+    /// the bitmap via <c>sub_75FE20</c> / <c>sub_76203C</c>.
     /// </summary>
     internal static class NativeItemClass104
     {
@@ -19,30 +22,24 @@ namespace GameSvr
         private const byte MaskBit1 = 2;
         private const byte MaskBit2 = 4;
 
-        // Template ext-abil idents that OR into +0x104 (flat_image.bin, ImageBase 0x400000):
-        //   ident 0x3E (62) -> bit0 @0x76225d / @0x762ae8 (sub_76203C jump idx 5)
-        //   ident 0x50 (80) -> bit1 @0x762363 (sub_76203C jump idx 23)
-        //   ident 0x45 (69) -> bit2 @0x75FF9C (sub_75FF90 when ident==0x45)
-        //   ident 0xFE (254) value byte 2 -> bit1 @0x75FFB3 (sub_75FFA8)
-        private const ushort IdentReviveBit0 = 0x3E;
-        private const ushort IdentRebirthBit1 = 0x50;
+        // Only these extension idents write +0x104. The 0x3E/0x50 constants in
+        // sub_76203C belong to Shape branches, not extension-ident branches.
         private const ushort IdentRebirthBit2 = 0x45;
         private const ushort IdentFeSubtype = 0xFE;
         private const byte FeValueSetsBit1 = 2;
 
         /// <summary>
-        /// <c>sub_73EBF0</c> predicate on a template row (non-null item with Dura&gt;0
-        /// is checked by the caller). Returns false when <c>NativeItemExtAbilParsed</c>
-        /// is false — no Shape/AniCount fallback.
+        /// <c>sub_73EBF0</c> predicate on the runtime item byte. The caller owns
+        /// the non-null and positive-durability gates.
         /// </summary>
-        internal static bool MatchesReviveDurabilityTarget(GoodItem item, int mode)
+        internal static bool MatchesReviveDurabilityTarget(TUserItem item, int mode)
         {
-            if (item == null || !item.NativeItemExtAbilParsed)
+            if (item == null)
             {
                 return false;
             }
 
-            var bits = ComputeClass104Bits(item);
+            var bits = item.NativeClass104;
             if (mode == 0)
             {
                 return (bits & MaskBit0) != 0;
@@ -59,23 +56,40 @@ namespace GameSvr
             }
 
             byte bits = 0;
-            for (var i = 0; i < item.NativeItemExtAbilIdents.Length; i++)
+            var className = NativeItemFactory.GetClassName(item);
+            if ((className == "TRing" && item.Shape == 114) ||
+                (className == "TArmRing" && item.Shape == 114))
             {
-                var ident = item.NativeItemExtAbilIdents[i];
-                if (ident == 0)
+                bits |= MaskBit0;
+            }
+            if ((className == "TRWeapon" && item.Shape == 201) ||
+                (className == "TRing" && item.Shape == 137) ||
+                (className == "TArmRing" && item.Shape == 210) ||
+                (NativeItemFactory.IsClassOrDescendantOf(className, "TClothes") &&
+                 item.Shape is >= 39 and <= 41 && item.Mac == 1))
+            {
+                bits |= MaskBit1;
+            }
+
+            var idents = item.NativeItemExtAbilIdents;
+            var values = item.NativeItemExtAbilValues;
+            var count = idents == null || values == null
+                ? 0
+                : System.Math.Min(6, System.Math.Min(idents.Length, values.Length));
+            for (var i = 0; i < count; i++)
+            {
+                var ident = idents[i];
+                // sub_75FE20 accepts 1..158 and the special ident 0xFE.
+                // Any other value, including an empty slot, terminates the
+                // fixed six-slot scan instead of skipping to later slots.
+                if (!((ident >= 1 && ident <= 158) || ident == IdentFeSubtype))
                 {
-                    continue;
+                    break;
                 }
 
-                var value = item.NativeItemExtAbilValues[i];
+                var value = values[i];
                 switch (ident)
                 {
-                    case IdentReviveBit0:
-                        bits |= MaskBit0;
-                        break;
-                    case IdentRebirthBit1:
-                        bits |= MaskBit1;
-                        break;
                     case IdentRebirthBit2:
                         bits |= MaskBit2;
                         break;
@@ -89,6 +103,22 @@ namespace GameSvr
             }
 
             return bits;
+        }
+
+        internal static void RefreshEquippedInstance(TUserItem item, GoodItem stdItem)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            // 0x75EE12 clears word [item+0x102], then 0x75EE20 clears +0x104.
+            // Keep the stores before computation so a failed rebuild leaves the
+            // same cleared transient state as the native routine.
+            item.NativeItemPlus102 = 0;
+            item.NativeItemPlus103 = 0;
+            item.NativeClass104 = 0;
+            item.NativeClass104 = ComputeClass104Bits(stdItem);
         }
     }
 }

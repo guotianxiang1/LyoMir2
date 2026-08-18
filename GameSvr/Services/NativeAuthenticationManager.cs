@@ -50,11 +50,12 @@ namespace GameSvr
             if (player == null || string.IsNullOrWhiteSpace(player.m_sCharName))
                 return false;
 
-            player.ClearNativeAuthenticationIdentity();
-            player.SetNativeAuthenticationStatus(0, 0, 0);
-            player.ApplyNativeAuthenticationLimits();
+            var loadedStorageCapacity = player.m_nStorageSpaceCount;
             try
             {
+                player.ClearNativeAuthenticationIdentity();
+                player.SetNativeAuthenticationStatus(0, 0, 0);
+                player.ApplyNativeAuthenticationLimits();
                 EnsureSchema();
                 using var connection = OpenConnection();
                 using var command = connection.CreateCommand();
@@ -86,6 +87,21 @@ namespace GameSvr
                 LogError("登录加载", ex);
                 return false;
             }
+            finally
+            {
+                player.m_nStorageSpaceCount = ResolveLoadedStorageCapacity(
+                    loadedStorageCapacity, player.m_nStorageSpaceCount);
+            }
+        }
+
+        internal static int ResolveLoadedStorageCapacity(
+            int loadedCapacity, int authenticationCapacity)
+        {
+            // Native load order is authentication baseline first, then the
+            // persisted WORD overrides it only when the stored value is > 48.
+            return loadedCapacity > TPlayObject.STORAGE_PAGE_SIZE
+                ? loadedCapacity
+                : authenticationCapacity;
         }
 
         internal int PersistStatus1(TPlayObject player, byte status)

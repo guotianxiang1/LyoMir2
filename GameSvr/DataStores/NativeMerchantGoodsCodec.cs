@@ -27,6 +27,7 @@ namespace GameSvr
                 NativeRecord = record
             };
             source.Slice(10, 14).CopyTo(item.btValue);
+            NativeSpecialDropItemRollCore.HydrateConstructorState(item);
             return item;
         }
 

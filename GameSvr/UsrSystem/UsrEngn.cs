@@ -249,6 +249,13 @@ namespace GameSvr
             _nativeMagicTowerRuntimeMonsters = new List<TBaseObject>();
             _nativeMagicTowerRuntimeCursor = 0;
             _nativeMagicTowerRuntimeMonsterCount = 0;
+            _nativeMonSupport = new NativeMonSupport(
+                IsNativeMonSupportLocalMap,
+                SpawnNativeMonSupportMonster,
+                BroadcastNativeMonSupportNotice,
+                M2Share.MainOutMessage,
+                HUtil32.GetTickCount,
+                () => DateTime.Now);
             _userEngineThread = new Thread(PrcocessData) { IsBackground = true };
             _processAiThread = new Thread(ProcessAiPlayObjectData) { IsBackground = true };
             m_AiPlayObjectList = new List<TPlayObject>();
@@ -556,6 +563,7 @@ namespace GameSvr
                 PlayObject.m_NativeDbSessionSuffix = nativeSessionSuffix is { Length: > 0 }
                     ? (byte[])nativeSessionSuffix.Clone()
                     : Array.Empty<byte>();
+                PlayObject.RestoreNativeItemMovementSmsState();
                 if (!M2Share.g_Config.boVentureServer)
                 {
                     SwitchDataInfo = null;
@@ -565,9 +573,17 @@ namespace GameSvr
                     SwitchDataInfo = GetSwitchData(UserOpenInfo.sChrName, UserOpenInfo.LoadUser.nSessionID);
                 }
                 Envirnoment Envir = null;
+                var nativeSwitchRestored = false;
                 if (SwitchDataInfo == null)
                 {
                     GetHumData(PlayObject, ref UserOpenInfo.HumanRcd);
+                    if (!NativeSwitchDataCodec.TryRestoreFromSessionSuffix(
+                            PlayObject, nativeSessionSuffix,
+                            out nativeSwitchRestored, out var switchError))
+                    {
+                        M2Share.ErrorMessage(
+                            $"[MakeNewHuman] 原生切服块拒绝 {UserOpenInfo.sChrName}: {switchError}");
+                    }
                     PlayObject.m_btRaceServer = Grobal2.RC_PLAYOBJECT;
                     if (string.IsNullOrEmpty(PlayObject.m_sHomeMap))
                     {
@@ -740,6 +756,8 @@ namespace GameSvr
                     else
                         PlayObject.m_boReadyRun = false;
                     PlayObject.m_sMapFileName = Envir.m_sMapFileName;
+                    PlayObject.ApplyNativeClientVersionReconnectBypass(
+                        nativeSwitchRestored);
                 }
                 else
                 {
@@ -1203,6 +1221,7 @@ namespace GameSvr
 
                 hero.MasterName = owner.m_sCharName;
                 hero.m_Master = owner;
+                hero.CopyNativeItemMovementSmsState(owner);
                 hero.m_PEnvir = owner.m_PEnvir;
                 hero.m_sMapName = owner.m_sMapName;
                 hero.m_sMapFileName = owner.m_sMapFileName;
@@ -1567,7 +1586,8 @@ namespace GameSvr
                             PlayObject.Disappear();
                             AddToHumanFreeList(PlayObject);
                             PlayObject.DealCancelA();
-                            SaveHumanRcd(PlayObject, 3);
+                            SaveHumanRcd(PlayObject,
+                                SelectNativeExitSaveMode(PlayObject));
                             M2Share.GateManager.CloseUser(
                                 PlayObject.m_nGateIdx, PlayObject.m_nSocket,
                                 PlayObject.m_UserGeneration);
@@ -1952,6 +1972,7 @@ namespace GameSvr
 
                 ProcessNativeMagicTowerRuntimeMonsters();
                 ProcessNativeMagicTowerDeferredSpawns();
+                _nativeMonSupport.ProcessIfDue(dwCurrentTick);
             }
             catch (Exception e)
             {
@@ -2668,6 +2689,8 @@ namespace GameSvr
                 Item.Dura = NativeItemFactory.IsPileItem(StdItem)
                     ? (ushort)1
                     : StdItem.DuraMax;
+                NativeSpecialDropItemRollCore.HydrateConstructorState(Item,
+                    StdItem);
                 NativeOutOfBoundsItemClassifier.Apply(Item, StdItem);
                 return true;
             }
@@ -2679,6 +2702,7 @@ namespace GameSvr
         {
             var sMsg = string.Empty;
             if (PlayObject.m_boOffLineFlag) return;
+            if (!PlayObject.ShouldDispatchNativeClientMessage(DefMsg)) return;
             if (!string.IsNullOrEmpty(Buff)) sMsg = Buff;
             // 战神's CM dispatcher receives the wire body length as its fourth parameter and 39
             // handlers open with a test on it (see NativeClientBodyLengthGate for the per-ident
@@ -2836,13 +2860,38 @@ namespace GameSvr
 
         public void SendServerGroupMsg(int nCode, int nServerIdx, string sMsg)
         {
+            SendServerGroupWire(EncodeServerGroupMessage(nCode, nServerIdx,
+                sMsg));
+        }
+
+        public void SendServerGroupMsg(int nCode, int nServerIdx, int nParam,
+            string sMsg)
+        {
+            SendServerGroupWire(EncodeServerGroupMessage(nCode, nServerIdx,
+                nParam, sMsg));
+        }
+
+        internal static string EncodeServerGroupMessage(int nCode,
+            int nServerIdx, string sMsg)
+        {
+            return nCode + "/" + nServerIdx + "/" + sMsg;
+        }
+
+        internal static string EncodeServerGroupMessage(int nCode,
+            int nServerIdx, int nParam, string sMsg)
+        {
+            return nCode + "/" + nServerIdx + "/" + nParam + "/" + sMsg;
+        }
+
+        private static void SendServerGroupWire(string wire)
+        {
             if (M2Share.nServerIndex == 0)
             {
-                SnapsmService.Instance.SendServerSocket(nCode + "/" + nServerIdx + "/" + sMsg);
+                SnapsmService.Instance.SendServerSocket(wire);
             }
             else
             {
-                SnapsmClient.Instance.SendSocket(nCode + "/" + nServerIdx + "/" + sMsg);
+                SnapsmClient.Instance.SendSocket(wire);
             }
         }
 
@@ -3685,6 +3734,61 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// Native <c>sub_652784</c>, used by the honor-order producer at
+        /// 0x60F123/0x60F16E. Unlike <see cref="GetPlayObject"/>, its only
+        /// post-lookup gates are <c>ghost == 0</c> and <c>ReadyRun != 0</c>.
+        /// Password-lock, observer and administrator state do not participate.
+        /// </summary>
+        internal TPlayObject GetNativeReadyPlayObject(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return null;
+
+            for (var index = 0; index < m_PlayObjectList.Count; index++)
+            {
+                var player = m_PlayObjectList[index];
+                if (player == null ||
+                    !NativeAnsiNameEquals(player.m_sCharName, name))
+                    continue;
+
+                return !player.m_boGhost && player.m_boReadyRun
+                    ? player
+                    : null;
+            }
+
+            return null;
+        }
+
+        internal static bool NativeAnsiNameEquals(string left, string right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (left == null || right == null)
+                return false;
+
+            var leftBytes = HUtil32.GbkEncoding.GetBytes(left);
+            var rightBytes = HUtil32.GbkEncoding.GetBytes(right);
+            if (leftBytes.Length != rightBytes.Length)
+                return false;
+
+            for (var index = 0; index < leftBytes.Length; index++)
+            {
+                var leftByte = FoldNativeAsciiUpper(leftBytes[index]);
+                var rightByte = FoldNativeAsciiUpper(rightBytes[index]);
+                if (leftByte != rightByte)
+                    return false;
+            }
+            return true;
+        }
+
+        private static byte FoldNativeAsciiUpper(byte value)
+        {
+            return value >= (byte)'A' && value <= (byte)'Z'
+                ? unchecked((byte)(value + ('a' - 'A')))
+                : value;
+        }
+
         public List<TPlayObject> GetPlayerList() => PlayObjects.ToList();
         public void KickPlayObjectEx(string sName)
         {
@@ -3736,6 +3840,10 @@ namespace GameSvr
         public object FindMerchant(int merchantId)
         {
             var normNpc = M2Share.ObjectManager.Get(merchantId);
+            if (normNpc == null)
+            {
+                return null;
+            }
             NormNpc npcObject = null;
             var npcType = normNpc.GetType();
             if (npcType == typeof(Merchant))
@@ -3786,21 +3894,27 @@ namespace GameSvr
 
         public bool GetHumPermission(string sUserName, ref string sIPaddr, ref byte btPermission)
         {
-            var result = false;
-            TAdminInfo AdminInfo;
-            btPermission = (byte)M2Share.g_Config.nStartPermission;
+            btPermission = 0;
+            byte[] candidate = HUtil32.GbkEncoding.GetBytes(sUserName ?? string.Empty);
+            LocalDB.FoldAsciiLower(candidate);
             for (var i = 0; i < m_AdminList.Count; i++)
             {
-                AdminInfo = m_AdminList[i];
-                if (string.Compare(AdminInfo.sChrName, sUserName, StringComparison.OrdinalIgnoreCase) == 0)
+                TAdminInfo adminInfo = m_AdminList[i];
+                byte[] nativeName = adminInfo.NativeChrNameBytes;
+                if (nativeName == null)
                 {
-                    btPermission = (byte)AdminInfo.nLv;
-                    sIPaddr = AdminInfo.sIPaddr;
-                    result = true;
-                    break;
+                    nativeName = HUtil32.GbkEncoding.GetBytes(
+                        adminInfo.sChrName ?? string.Empty);
+                    LocalDB.FoldAsciiLower(nativeName);
                 }
+                if (!candidate.AsSpan().SequenceEqual(nativeName))
+                    continue;
+
+                btPermission = (byte)adminInfo.nLv;
+                sIPaddr = adminInfo.sIPaddr ?? string.Empty;
+                return true;
             }
-            return result;
+            return false;
         }
 
         public void AddUserOpenInfo(TUserOpenInfo UserOpenInfo)
@@ -3908,6 +4022,13 @@ namespace GameSvr
             SaveHumanRcdCore(PlayObject, 0);
         }
 
+        private static ushort SelectNativeExitSaveMode(TPlayObject playObject)
+        {
+            if (playObject.m_boSwitchData)
+                return 2;
+            return playObject.m_boReconnection ? (ushort)1 : (ushort)3;
+        }
+
         public void SaveHumanRcd(TPlayObject PlayObject, ushort saveMode)
         {
             SaveHumanRcdCore(PlayObject, saveMode);
@@ -3920,11 +4041,25 @@ namespace GameSvr
             {
                 return;
             }
+            byte[] nativeSwitchExtension = null;
+            if (saveMode == 2
+                && !NativeSwitchDataCodec.TryEncode(PlayObject,
+                    out nativeSwitchExtension, out var switchError))
+            {
+                M2Share.ErrorMessage(
+                    $"[SaveHumanRcd] 原生切服块编码失败 {PlayObject.m_sCharName}: {switchError}");
+                return;
+            }
             PlayObject.SaveNativeAccountStorageIfDirty();
             if (PlayObject.m_HeroObject != null)
                 HeroDataService.QueueSave(PlayObject.m_HeroObject);
             M2Share.CreditCardService?.TrySaveDue(
                 PlayObject, HUtil32.GetTickCount(), true);
+            if (!PlayObject.PersistNativeHeroZodiacState())
+            {
+                M2Share.ErrorMessage(
+                    $"[SaveHumanRcd] 人物原生记录过短，生肖掩码/神佑袋模式无法回写: {PlayObject.m_sCharName}");
+            }
             if (!PlayObject.PersistNativeHeroState())
             {
                 M2Share.ErrorMessage(
@@ -3963,6 +4098,12 @@ namespace GameSvr
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 人物原生记录过短，倍经验/真视时间无法回写: {PlayObject.m_sCharName}");
             }
+            if (!PlayObject.PersistNativeAntiCheatPenalty())
+            {
+                M2Share.ErrorMessage(
+                    $"[SaveHumanRcd] 人物原生记录异常，外挂惩罚日期无法回写: {PlayObject.m_sCharName}");
+                return;
+            }
             // Rebuild ScriptData sections 2/6/7/8. Must run AFTER
             // PersistNativeHeroState, which patches a byte inside the type 0
             // payload in place and would be invalidated by a reframe.
@@ -3995,6 +4136,9 @@ namespace GameSvr
                 NativeSaveMode = saveMode,
                 NativeSaveParam1 = 0,
                 NativeSaveParam2 = 0,
+                NativeSwitchExtension = nativeSwitchExtension == null
+                    ? null
+                    : (byte[])nativeSwitchExtension.Clone(),
                 PlayObject = PlayObject,
                 LastErrorLogTick = HUtil32.GetTickCount() - 10_000,
                 HumanRcd = new THumDataInfo
@@ -4051,6 +4195,7 @@ namespace GameSvr
             PlayObject.m_NativeScriptData = HumanRcd.NativeScriptData;
             PlayObject.m_NativeScriptDataCrc = HumanRcd.NativeScriptDataCrc;
             PlayObject.LoadNativeMailRecipientId(HumanRcd.NativeUserId);
+            PlayObject.RestoreNativeHeroZodiacState();
             PlayObject.RestoreNativeHeroState();
             PlayObject.RestoreNativeChatShieldMask();
             // ScriptData sections 2/6/7/8 (shenYou / bodyState / coldTime /
@@ -4143,9 +4288,10 @@ namespace GameSvr
                     : string.Empty;
             PlayObject.m_sDearName = HumData.sDearName;
             PlayObject.m_sStoragePwd = HumData.sStoragePwd;
-            PlayObject.m_nStorageSpaceCount = Math.Clamp(
-                HumData.StorageSpaceCount, TPlayObject.MIN_STORAGE_ITEM_COUNT,
-                TPlayObject.MAX_STORAGE_ITEM_COUNT);
+            if (HumData.StorageSpaceCount > TPlayObject.STORAGE_PAGE_SIZE)
+            {
+                PlayObject.m_nStorageSpaceCount = HumData.StorageSpaceCount;
+            }
             if (PlayObject.m_sStoragePwd != "")
             {
                 PlayObject.m_boPasswordLocked = true;
@@ -4192,8 +4338,14 @@ namespace GameSvr
             // hold ABSOLUTE deadlines on the DB clock, so the per-session offset
             // (原生 obj+0x778 / obj+0x780, 0x6B026E..0x6B0292) must be established
             // FIRST -- LOAD does exactly that before reading any deadline.
-            PlayObject.RestoreNativeTimedExpBuff(
-                PlayObject.EstablishNativeDbClock(DateTime.Now.ToOADate()));
+            var nativeDbClockNow = PlayObject.EstablishNativeDbClock(
+                DateTime.Now.ToOADate());
+            PlayObject.RestoreNativeTimedExpBuff(nativeDbClockNow);
+            if (!PlayObject.RestoreNativeAntiCheatPenalty(nativeDbClockNow))
+            {
+                M2Share.ErrorMessage(
+                    $"[GetHumData] 人物原生记录过短，外挂惩罚日期无法读取: {PlayObject.m_sCharName}");
+            }
             // m_boAllowGroupReCall (天地合一 toggle, 原生 obj+0xBA4 <-> rec+0x0D7,
             // enc 0x6B11DA / dec 0x6B0104) is now restored by
             // RestoreNativeUnmappedScalars above. The shared DTO codec does not
@@ -4232,7 +4384,10 @@ namespace GameSvr
             {
                 var itemCount = Math.Min(PlayObject.m_UseItems.Length, HumItems.Length);
                 for (var i = 0; i < itemCount; i++)
+                {
+                    HydrateNativeItemConstructorState(HumItems[i]);
                     PlayObject.m_UseItems[i] = HumItems[i];
+                }
             }
             BagItems = HumanRcd.Data.BagItems;
             if (BagItems != null)
@@ -4246,6 +4401,7 @@ namespace GameSvr
                     if (BagItems[i].wIndex > 0)
                     {
                         UserItem = BagItems[i];
+                        HydrateNativeItemConstructorState(UserItem);
                         PlayObject.m_ItemList.Add(UserItem);
                     }
                 }
@@ -4285,10 +4441,23 @@ namespace GameSvr
                     if (StorageItems[i].wIndex > 0)
                     {
                         UserItem = StorageItems[i];
+                        HydrateNativeItemConstructorState(UserItem);
+                        PlayObject.ReassignClientItemId(UserItem);
                         PlayObject.m_StorageItemList.Add(UserItem);
                     }
                 }
             }
+        }
+
+        private void HydrateNativeItemConstructorState(TUserItem item)
+        {
+            if (item == null || item.wIndex == 0)
+            {
+                return;
+            }
+
+            NativeSpecialDropItemRollCore.HydrateConstructorState(item,
+                GetStdItem(item.wIndex));
         }
 
         private string GetHomeInfo(int nJob, ref short nX, ref short nY)

@@ -80,19 +80,17 @@ namespace GameSvr.Services
             Add(3283, 0x006DA626, 0x006E67B0, "槽数组重建",
                 "字段 [+0x9F4]/[+0x9F8]/[+0x9FC] 集合 + [0x7D64B8]；集合结构未建模");
             Add(3284, 0x006DA650, 0x006E6EA4, "槽数组清空",
-                "清 [+0x9F4]/[+0x9FC] 与 [+0x9F8] 动态数组 (0x406C64 + rtti [0x74B39C]) 后回发 SM 0xB8D；回包反映未建模的集合状态");
+                "由 Q3 前置 TryHandleQiankunCm 实现；Q3 fallback 不应成为第二 owner");
             Add(3285, 0x006DA638, 0x006E6DE8, "槽数组应用",
                 "dl=(Param==1)，读写 [+0x9F4]/[+0x9FC]，链 0x6E68A8/0x6DF62C/0x6D3694；集合未建模");
             Add(3286, 0x006DA65D, 0x006E6B54, "槽数组提交",
-                "[+0x9F8]/[+0x9FC] + hero [+0xBB0] + [0x7D5D6C]/[0x7D593C]，SM 0xB8E；集合未建模");
+                "空列表腿由 Q3 前置 TryHandleQiankunCm 实现；非空配置奖励仍 fail-closed");
             Add(3287, 0x006DA895, 0x006E8734, "宠物/召唤命令A",
                 "[0x7D6784] + [+0x128]/[+0x760]/[+0x9A0]，ecx=MakeLong(Param,Tag,Series)；子系统未建模");
             Add(3288, 0x006DA8C4, 0x006E8820, "宠物/召唤命令B",
                 "同 3287 子系统 + [+0x178]；子系统未建模");
             Add(3294, 0x006DA613, 0x006EB190, "摆摊/展示建立",
                 "[+0x3C4]/[+0xB74]/[+0x18BC]/[+0x18C0] + [0x7D5D6C]/[0x7D7038]/[0x7D6784]，SM 0xCF1/0xB9A；未建模（nBodyLen<4 短包腿已复现为静默）");
-            Add(3295, 0x006DAA99, 0x006EB8E4, "按名文本操作",
-                "[+0x260]/[+0x24C]/[+0xB99] + [0x7D593C]，body 经 0x405708 拷入，SM 0x6A；未建模");
             Add(3306, 0x006DAB39, 0x006EFD54, "按名双值操作",
                 "[+0x12C]/[+0x130]/[+0x24C] + [0x7D5D6C]，SM 0x275/0x276；未建模（leaf nBodyLen<4 已复现为静默）");
             Add(3307, 0x006DABEA, 0x006CBD78, "成员关系操作",

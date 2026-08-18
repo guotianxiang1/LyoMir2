@@ -186,6 +186,7 @@ namespace GameSvr
                     m_btDirection = direction;
                     SendRefMsg(Grobal2.RM_RUSH, direction, m_nCurrX,
                         m_nCurrY, 0, string.Empty);
+                    SendMapDescription();
                     moved = true;
                 }
             }

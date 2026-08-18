@@ -46,6 +46,10 @@ namespace GameSvr
         private readonly NativeType2FieldHeroSnapshotState _fieldHeroSnapshot = new();
         private readonly NativeType2FieldHeroStaticCatalog
             _fieldHeroRuntimeCatalog = new();
+        private readonly NativeType2FieldHeroRuntimeCatalogAdapter
+            _fieldHeroSpawnRuntimeCatalog = new();
+        private INativeFieldHeroMonItemsSource _fieldHeroMonItemsSource =
+            NativeFieldHeroEmptyMonItemsSource.Instance;
         private readonly NativeType2EndpointSlotState _endpointSlots = new();
         private readonly NativeType2SecondaryRankingState _secondaryRankings =
             new();
@@ -114,8 +118,28 @@ namespace GameSvr
         public NativeType2FieldHeroStaticCatalog FieldHeroRuntimeCatalog =>
             _fieldHeroRuntimeCatalog;
 
+        public NativeType2FieldHeroRuntimeCatalogAdapter
+            FieldHeroSpawnRuntimeCatalog => _fieldHeroSpawnRuntimeCatalog;
+
         public bool NativeFieldHeroDefinitionsPublished =>
             Volatile.Read(ref _fieldHeroPublicationCommitted) != 0;
+
+        internal void ConfigureFieldHeroMonItemsSource(
+            INativeFieldHeroMonItemsSource source)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            lock (_type2Lock)
+            {
+                if (_fieldHeroSnapshot.Completed
+                    || Volatile.Read(ref _fieldHeroPublicationCommitted) != 0)
+                {
+                    throw new InvalidOperationException(
+                        "FieldHero MonItems source must be configured before " +
+                        "the Type2 snapshot completes.");
+                }
+                _fieldHeroMonItemsSource = source;
+            }
+        }
 
         public bool StaticInitializationCompleted =>
             _staticInitializationCompleted.IsSet;
@@ -230,6 +254,7 @@ namespace GameSvr
                 return false;
             }
             if (!_fieldHeroRuntimeCatalog.Ready
+                || !_fieldHeroSpawnRuntimeCatalog.Ready
                 || Volatile.Read(ref _fieldHeroPublicationCommitted) == 0)
             {
                 error = "原生 FieldHero 定义未形成有效终态快照";
@@ -587,6 +612,9 @@ namespace GameSvr
             {
                 _fieldHeroRuntimeCatalog.Publish(snapshot,
                     _stdItemRuntimeCatalog);
+                _fieldHeroSpawnRuntimeCatalog.Publish(
+                    _fieldHeroRuntimeCatalog, _stdItemRuntimeCatalog,
+                    _fieldHeroMonItemsSource);
                 Volatile.Write(ref _fieldHeroPublicationCommitted, 1);
             }
             catch (Exception ex) when (ex is InvalidDataException
@@ -683,6 +711,12 @@ namespace GameSvr
             if (command == NativeForceDisconnectClient.ResponseCommand)
             {
                 NativeForceDisconnectClient.ProcessResponse(frame);
+                return;
+            }
+
+            if (command == NativeWhitelistReloadClient.ResponseCommand)
+            {
+                NativeWhitelistReloadClient.ProcessResponse(frame);
                 return;
             }
 

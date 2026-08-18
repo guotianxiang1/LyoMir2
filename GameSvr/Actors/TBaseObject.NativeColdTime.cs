@@ -234,6 +234,16 @@ namespace GameSvr
             return null;
         }
 
+        /// <summary>Login-cluster bulk leg: sub_74839C(Self, 0, 0, 0).
+        /// An empty table is intentionally silent.</summary>
+        internal void SendNativeColdTimeListState()
+        {
+            if (SupportsNativeColdTime)
+            {
+                NotifyNativeColdTime(0, 0, 0);
+            }
+        }
+
         /// <summary>sub_74839C. The ident is selected by obj+0x178 at 0x7483BD,
         /// and `test edx,edx / jne 0x748476` at 0x7483D6 picks the payload shape:
         /// key 0 sends the WHOLE table, any other key sends that one entry.

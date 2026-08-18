@@ -600,12 +600,9 @@ namespace GameSvr
         public bool m_boPowerHit = false;
         public bool m_boUseThrusting = false;
         public bool m_boUseHalfMoon = false;
-        public bool m_boRedUseHalfMoon = false;
         public bool m_boFireHitSkill = false;
-        public bool m_boCrsHitkill = false;
         public bool m_bo41kill = false;
         public bool m_boTwinHitSkill = false;
-        public bool m_bo43kill = false;
         public bool m_boSunSwordReady = false;
         public int m_dwLatestFireHitTick = 0;
         public int m_dwDoMotaeboTick = 0;
@@ -753,7 +750,6 @@ namespace GameSvr
             m_boPowerHit = false;
             m_boUseThrusting = false;
             m_boUseHalfMoon = false;
-            m_boRedUseHalfMoon = false;
             m_boFireHitSkill = false;
             m_boTwinHitSkill = false;
             m_boSunSwordReady = false;
@@ -1008,74 +1004,83 @@ namespace GameSvr
 
         public bool DropItemDown(TUserItem UserItem, int nScatterRange, bool boDieDrop, TBaseObject ItemOfCreat, TBaseObject DropCreat)
         {
-            bool result = false;
-            int dx = 0;
-            int dy = 0;
-            int idura;
-            MapItem MapItem;
-            MapItem pr;
-            string logcap;
+            const string exceptionMessage =
+                "[Exception]: TCreature.DropItemDown";
             if (UserItem == null)
-            {
                 return false;
-            }
-            GoodItem StdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
-            if (StdItem != null)
+
+            try
             {
-                if (StdItem.StdMode == 40)
+                var stdItem = M2Share.UserEngine.GetStdItem(UserItem.wIndex);
+                if (stdItem == null)
+                    return false;
+
+                // sub_7688A0 @0x7688EA..0x768901: only callers whose final
+                // boolean argument is zero run sub_78389C mode 5. Death/scatter
+                // callers pass one and bypass this classifier.
+                if (!boDieDrop
+                    && NativeItemDropDestroy.CheckTransferPermission(UserItem,
+                        stdItem, NativeItemDropDestroy.TransferModeDrop) != 0)
                 {
-                    idura = UserItem.Dura;
-                    idura = idura - 2000;
-                    if (idura < 0)
-                    {
-                        idura = 0;
-                    }
-                    UserItem.Dura = (ushort)idura;
+                    return false;
                 }
-                MapItem = new MapItem
+
+                var itemName = M2Share.UserEngine.GetStdItemName(
+                    UserItem.wIndex);
+                var mapItem = new MapItem
                 {
                     UserItem = UserItem,
-                    Name = ItmUnit.GetItemName(UserItem),// 取自定义物品名称
-                    Looks = StdItem.Looks
+                    Name = itemName,
+                    Looks = stdItem.Looks,
+                    AniCount = unchecked((byte)stdItem.AniCount),
+                    Reserved = 0,
+                    Count = 1,
+                    OfBaseObject = ItemOfCreat,
+                    CanPickUpTick = HUtil32.GetTickCount(),
+                    DropBaseObject = DropCreat
                 };
-                if (StdItem.StdMode == 45)
-                {
-                    MapItem.Looks = (ushort)M2Share.GetRandomLook(MapItem.Looks, StdItem.Shape);
-                }
-                MapItem.AniCount = unchecked((byte)StdItem.AniCount);
-                MapItem.Reserved = 0;
-                MapItem.Count = 1;
-                MapItem.OfBaseObject = ItemOfCreat;
-                MapItem.CanPickUpTick = HUtil32.GetTickCount();
-                MapItem.DropBaseObject = DropCreat;
+
+                var dx = 0;
+                var dy = 0;
                 GetDropPosition(m_nCurrX, m_nCurrY, nScatterRange, ref dx, ref dy);
-                pr = (MapItem)m_PEnvir.AddToMap(dx, dy, CellType.OS_ITEMOBJECT, MapItem);
-                if (pr == MapItem)
+                var placed = (MapItem)m_PEnvir.AddToMap(dx, dy,
+                    CellType.OS_ITEMOBJECT, mapItem);
+                if (!ReferenceEquals(placed, mapItem))
+                    return false;
+
+                // sub_768934..0x768939 confirms placement before sub_7839E8;
+                // these class-specific mutations belong to that committed arm.
+                if (stdItem.StdMode == 40)
                 {
-                    SendRefMsg(Grobal2.RM_ITEMSHOW, MapItem.Looks, MapItem.Id, dx, dy, MapItem.Name);
-                    if (boDieDrop)
-                    {
-                        logcap = "15";
-                    }
-                    else
-                    {
-                        logcap = "7";
-                    }
-                    if (!M2Share.IsCheapStuff(StdItem.StdMode))
-                    {
-                        if (StdItem.NeedIdentify == 1)
-                        {
-                            M2Share.AddGameDataLog(logcap + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + UserItem.MakeIndex + "\t" + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
-                        }
-                    }
-                    result = true;
+                    UserItem.Dura = unchecked((ushort)Math.Max(0,
+                        UserItem.Dura - 2000));
                 }
-                else
+                if (stdItem.StdMode == 45)
                 {
-                    MapItem = null;
+                    mapItem.Looks = unchecked((ushort)M2Share.GetRandomLook(
+                        mapItem.Looks, stdItem.Shape));
                 }
+
+                SendRefMsg(Grobal2.RM_ITEMSHOW, mapItem.Looks, mapItem.Id,
+                    dx, dy, mapItem.Name);
+                // sub_783984 @0x783984 is an unconditional zero-return stub,
+                // so every successful sub_7688A0 placement reaches action 7/15.
+                var logType = boDieDrop ? (byte)0x0F : (byte)0x07;
+                var logReason = m_btRaceServer == Grobal2.RC_HEROOBJECT
+                                && m_Master != null
+                    ? m_Master.m_sCharName
+                    : "1";
+                var logQuantity = stdItem.StdMode == 7 ? UserItem.Dura : 1;
+                M2Share.AddNativeGameDataLog(this, logType, itemName,
+                    UserItem.MakeIndex, logQuantity, logReason);
+                return true;
             }
-            return result;
+            catch (Exception exception)
+            {
+                M2Share.ErrorMessage(exceptionMessage + " "
+                                     + exception.Message);
+                return false;
+            }
         }
 
         public void GoldChanged()
@@ -1836,7 +1841,17 @@ namespace GameSvr
                     {
                         m_nCurrX = nx;
                         m_nCurrY = ny;
+                        // sub_76834C @0x7683D0 writes the back direction before
+                        // both RM_PUSH and the horse-partner callback. It restores
+                        // the requested direction at 0x76841E for the next step.
+                        m_btDirection = nBackDir;
                         SendRefMsg(Grobal2.RM_PUSH, nBackDir, m_nCurrX, m_nCurrY, 0, "");
+                        // sub_76834C @0x7683E6..0x768419: after each
+                        // successful push step, a mounted player's passenger
+                        // follows through the lightweight sub_6BBF4C wrapper.
+                        (this as TPlayObject)?.SyncNativeHorsePartnerAfterPush(
+                            nBackDir);
+                        m_btDirection = nDir;
                         result++;
                         if (m_btRaceServer >= Grobal2.RC_ANIMAL)
                         {
@@ -2131,6 +2146,101 @@ namespace GameSvr
             return result;
         }
 
+        private static string TruncateNativeMapShortString(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+            const int capacity = 15;
+            if (HUtil32.GbkEncoding.GetByteCount(value) <= capacity)
+                return value;
+
+            var buffer = new byte[capacity];
+            HUtil32.GbkEncoding.GetEncoder().Convert(
+                value.AsSpan(), buffer.AsSpan(), true,
+                out var charsUsed, out _, out _);
+            return value[..charsUsed];
+        }
+
+        // Native base-object SpaceMove sub_768D78.
+        // TPlayer has a separate VMT override (sub_6BD294), so this path must
+        // never be shared with managed TPlayObject instances.
+        private bool TryNativeNonPlayerSpaceMove(
+            Envirnoment environment, short requestedX, short requestedY,
+            int showMode)
+        {
+            var candidateX = requestedX;
+            var candidateY = requestedY;
+            if (ReferenceEquals(environment, m_PEnvir))
+            {
+                // sub_768D78 has no "already resolved" input. Its same-map
+                // arm always searches before attempting the quiet relocation.
+                var candidateResolved = SpaceMove_GetRandXY(environment,
+                    ref candidateX, ref candidateY);
+
+                // 0x768DA5..0x768E0C: the quiet arm reuses the exact map node.
+                // It checks occupancy, sends nothing, and leaves tick/latch.
+                if (candidateResolved && environment.MoveToMovingObject(
+                        m_nCurrX, m_nCurrY, this, candidateX, candidateY,
+                        false) > 0)
+                {
+                    for (var i = 0; i < m_VisibleActors.Count; i++)
+                    {
+                        m_VisibleActors[i] = null;
+                    }
+                    m_VisibleActors.Clear();
+                    m_VisibleHumanList.Clear();
+                    m_nCurrX = candidateX;
+                    m_nCurrY = candidateY;
+                    return true;
+                }
+            }
+
+            // 0x768E11..0x768F41: cross-map moves enter here directly; a
+            // same-map search/move failure enters with the first candidate.
+            // Delete/Add results are ignored and item/event visibility survives.
+            var oldEnvironment = m_PEnvir;
+            var oldX = m_nCurrX;
+            var oldY = m_nCurrY;
+            m_VisibleHumanList.Clear();
+            oldEnvironment.DeleteFromMap(oldX, oldY,
+                CellType.OS_MOVINGOBJECT, this);
+            for (var i = 0; i < m_VisibleActors.Count; i++)
+            {
+                m_VisibleActors[i] = null;
+            }
+            m_VisibleActors.Clear();
+
+            m_PEnvir = environment;
+            m_sMapName = TruncateNativeMapShortString(environment.sMapName);
+            m_nCurrX = candidateX;
+            m_nCurrY = candidateY;
+            if (!SpaceMove_GetRandXY(environment, ref m_nCurrX,
+                    ref m_nCurrY))
+            {
+                m_PEnvir = oldEnvironment;
+                m_nCurrX = oldX;
+                m_nCurrY = oldY;
+                // Native AddToMap calls the map's AddObject slot for every new
+                // moving node. Reset the managed registration guard so a prior
+                // failed Delete does not suppress that observable count update.
+                m_boAddToMaped = false;
+                oldEnvironment.AddToMap(oldX, oldY,
+                    CellType.OS_MOVINGOBJECT, this);
+                return false;
+            }
+
+            m_boAddToMaped = false;
+            environment.AddToMap(m_nCurrX, m_nCurrY,
+                CellType.OS_MOVINGOBJECT, this);
+            SendRefMsg(showMode == 1
+                    ? Grobal2.RM_SPACEMOVE_SHOW2
+                    : Grobal2.RM_SPACEMOVE_SHOW,
+                m_btDirection, m_nCurrX, m_nCurrY, 0, string.Empty);
+            m_dwMapMoveTick = HUtil32.GetTickCount();
+            m_bo316 = true;
+            return true;
+        }
+
         // MOVE-52 — both space-move arms load the internal idents as immediates:
         //   006BD3AA  66 B9 85 27  mov cx,0x2785 -> 006BD3B2 call 0x765E68
         //   006BD3D3  66 B9 86 27  mov cx,0x2786 -> 006BD3DB call 0x765F6C
@@ -2141,10 +2251,12 @@ namespace GameSvr
         internal bool TrySpaceMoveToEnvironment(Envirnoment targetEnvironment,
             short nX, short nY, int showMode,
             bool coordinatesAlreadyResolved = false,
-            bool useNativeInternalMessages = true)
+            bool useNativeInternalMessages = true,
+            bool requireLocalServerIndex = true)
         {
             if (targetEnvironment == null
-                || M2Share.nServerIndex != targetEnvironment.nServerIndex)
+                || (requireLocalServerIndex
+                    && M2Share.nServerIndex != targetEnvironment.nServerIndex))
                 return false;
 
             var oldEnvironment = m_PEnvir;
@@ -2152,6 +2264,12 @@ namespace GameSvr
 
             var sameEnvironment = ReferenceEquals(oldEnvironment,
                 targetEnvironment);
+
+            if (this is not TPlayObject)
+            {
+                return TryNativeNonPlayerSpaceMove(
+                    targetEnvironment, nX, nY, showMode);
+            }
 
             if (this is TPlayObject playObject)
             {
@@ -2187,28 +2305,8 @@ namespace GameSvr
                         ref m_nCurrY))
                     return false;
 
-                // MOVE-54 — 创物(非玩家)传送的 boIgnoreOccupancy=0「终态占位复检」刻意不在此补：
-                // 补一道「占位即失败」的复检反而会偏离 native。VMT+0x1C0 分派 TPlayer=sub_6BD294 /
-                // 其余=sub_768D78(MOVE-59)；两者同图快臂都是 GetRandomXY(1,1)→MoveToMovingObject，
-                // 唯一差别是末参 boIgnoreOccupancy：玩家 push 1 @0x6BD35E(忽略)、创物 push 0 @0x768DC9
-                // (复检)。复检在 sub_7797CC @0x7799EB `cmp byte[ebp-0xA],0 / je 0x779AAD`：目标格有
-                // 阻挡对象(sub_765D64)时纯 no-op 返回 FALSE 且不摘旧格(不到 0x779A15 的重挂块)。但创物
-                // 快臂 MoveToMovingObject 失败(@0x768DE6 je 0x768E11)会落入稳健臂 @0x768E11：摘旧格→
-                // 拿刚那枚「地形可走但被占」的 (X1,Y1) 作 GetRandomXY 种子(@0x768E91 push 1,1)→
-                // CanWalk(flag=1 忽略占位, sub_777EF8 @0x777F70)对 (X1,Y1) 恒真→原样返回→AddToMap
-                // (VMT+0x28 @0x768EB0/@0x777A72 无占位复检头插)。净效果：无论目标占否，创物最终都落在
-                // 同一 (X1,Y1)。复检只切换「快臂静默移动(不发 clear/changemap/spacemove) vs 稳健臂全量
-                // 重挂(RM_SPACEMOVE)」，不改变落位格。C# 统一走稳健臂(DeleteFromMap→GetRandXY→AddToMap)，
-                // 落位与 native 已等价；此处若加「占位即 return false」，会让创物拒绝落在被占格 → 偏离
-                // native。残差仅为「同图未占静默快臂」的广播差，属传送原语热点(GetRandomXY 11 /
-                // MoveToMovingObject 17 caller, MOVE-63)且与 C# 统一 RM_NATIVE_* 广播适配(MOVE-52)冲突
-                // → 依铁律只报不改(详见 docs/eqv_shard22 MOVE-54 与本分支报告)。
-                // MOVE-54(re-verify) — VMT+0x1C0 的 classname 扫描佐证该分派:push-1 的 override
-                // sub_6BD294 仅存于 TPlayer + TGdMsgGMAgent 两张 VMT;push-0 的基类 sub_768D78 覆盖
-                // TCreature / THumanKind / 英雄(TSecWarHero)等,故 `this is not TPlayObject` 为忠实
-                // 判别子。落位不变已复核:稳健臂用被拒的 (X1,Y1) 作 GetRandomXY 种子,其首个
-                // CanWalk(忽略占位) 恒真 → 原样返回、0 额外 RNG(@0x768EA7),两臂均落 (X1,Y1);
-                // 唯一差为快臂静默 vs 稳健臂 RM_SPACEMOVE 的广播,与落位/RNG 无关。
+                // Non-player dispatch returned through sub_768D78 above. This
+                // transaction is the managed TPlayer/sub_6BD294 branch.
                 targetAddAttempted = true;
                 if (!ReferenceEquals(targetEnvironment.AddToMap(m_nCurrX, m_nCurrY,
                     CellType.OS_MOVINGOBJECT, this), this))
@@ -2358,20 +2456,24 @@ namespace GameSvr
         {
             if (Envir == null)
                 return;
+
+            // Native base-object sub_768D78 passes target[+0x54] through
+            // sub_78FE84, which is `xor eax,eax; ret` in this image. Only the
+            // TPlayer override owns cross-server handoff semantics.
+            if (this is not TPlayObject)
+            {
+                TrySpaceMoveToEnvironment(Envir, nX, nY, nInt,
+                    requireLocalServerIndex: false);
+                return;
+            }
+
             if (M2Share.nServerIndex == Envir.nServerIndex)
             {
                 TrySpaceMoveToEnvironment(Envir, nX, nY, nInt);
             }
             else if (SpaceMove_GetRandXY(Envir, ref nX, ref nY))
             {
-                if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-                {
-                    TryBeginCrossServerTransfer(Envir, nX, nY);
-                }
-                else
-                {
-                    KickException();
-                }
+                TryBeginCrossServerTransfer(Envir, nX, nY);
             }
         }
 
@@ -2427,35 +2529,155 @@ namespace GameSvr
                 0, 0, 0, 0, slave.m_sCharName ?? "");
         }
 
-        public TBaseObject MakeSlave(string sMonName, int nMakeLevel, int nExpLevel, int nMaxMob, int dwRoyaltySec)
+        public TBaseObject MakeSlave(string sMonName, int nMakeLevel,
+            int nExpLevel, int nMaxMob, int dwRoyaltySec)
         {
-            short nX = 0;
-            short nY = 0;
-            TBaseObject result = null;
-            if (m_SlaveList.Count < nMaxMob)
+            // Compatibility surface for existing managed extensions. Native
+            // callers use MakeNativeSlave, whose one MagicLv feeds both level
+            // bytes and whose hpAfterSlave argument is explicit.
+            return MakeSlaveCore(sMonName, nMakeLevel, nExpLevel, nMaxMob,
+                dwRoyaltySec, fromHero: false, hpAfterSlave: 10);
+        }
+
+        /// <summary>
+        /// Exact TPlayer.MakeSlave <c>sub_6CB070</c> argument surface. Native
+        /// writes <paramref name="magicLevel"/> to both slave level bytes and
+        /// stores the raw signed <paramref name="hpAfterSlave"/> percentage at
+        /// TAnimal <c>+0x48C</c>.
+        /// </summary>
+        internal TBaseObject MakeNativeSlave(string sMonName, int magicLevel,
+            int nMaxMob, int dwRoyaltySec, bool fromHero, int hpAfterSlave)
+        {
+            return MakeSlaveCore(sMonName, magicLevel, magicLevel, nMaxMob,
+                dwRoyaltySec, fromHero, hpAfterSlave);
+        }
+
+        private TBaseObject MakeSlaveCore(string sMonName, int nMakeLevel,
+            int nExpLevel, int nMaxMob, int dwRoyaltySec, bool fromHero,
+            int hpAfterSlave)
+        {
+            short nX = -1;
+            short nY = -1;
+            var spawnEnvironment = m_PEnvir;
+
+            // 0x6CB09D..0x6CB108 and 0x6CB1E7..0x6CB1F0 execute before
+            // and independently of the BoFromHero branch.
+            var hero = (this as TPlayObject)?.m_HeroObject;
+            if (hero != null && !hero.m_boDeath && !hero.m_boGhost)
             {
-                GetFrontPosition(ref nX, ref nY);
-                var MonObj = M2Share.UserEngine.RegenMonsterByName(m_PEnvir, nX, nY, sMonName);
-                if (MonObj != null)
+                if (hero.PrepareNativeHeroSummonSlotForMakeSlave())
+                    nMaxMob++;
+
+                if (fromHero && hero.m_PEnvir != null)
                 {
-                    MonObj.m_Master = this;
-                    MonObj.m_dwMasterRoyaltyTick = HUtil32.GetTickCount() + (dwRoyaltySec * 1000);
-                    MonObj.m_btSlaveMakeLevel = (byte)nMakeLevel;
-                    MonObj.m_btSlaveExpLevel = (byte)nExpLevel;
-                    MonObj.RecalcAbilitys();
-                    if (MonObj.m_WAbil.HP < MonObj.m_WAbil.MaxHP)
-                    {
-                        MonObj.m_WAbil.HP += (MonObj.m_WAbil.MaxHP - MonObj.m_WAbil.HP) / 2;
-                    }
-                    MonObj.RefNameColor();
-                    m_SlaveList.Add(MonObj);
-                    // MakeSlave = sub_6CB070: after TList.Add to [this+0x4FC],
-                    // 0x6CB357 call 0x6F784C -> SM 4469 name notify to the master.
-                    NotifyNativeSlaveListChanged(joining: true, MonObj);
-                    result = MonObj;
+                    spawnEnvironment = hero.m_PEnvir;
+                    ResolveNativeSlaveSpawnPosition(hero, spawnEnvironment,
+                        ref nX, ref nY);
                 }
             }
-            return result;
+
+            // A missing/dead/ghost/mapless hero, or an ordinary five-argument
+            // call, falls back to the player's physical environment.
+            if (nX == -1)
+            {
+                spawnEnvironment = m_PEnvir;
+                if (spawnEnvironment == null)
+                    return null;
+                ResolveNativeSlaveSpawnPosition(this, spawnEnvironment,
+                    ref nX, ref nY);
+            }
+
+            if (m_SlaveList.Count >= nMaxMob || nX == -1)
+                return null;
+
+            var MonObj = M2Share.UserEngine.RegenMonsterByName(
+                spawnEnvironment, nX, nY, sMonName);
+            if (MonObj == null)
+                return null;
+
+            MonObj.m_Master = this;
+            // TPlayer.MakeSlave sub_6CB070 @0x6CB2DA writes byte
+            // [slave+0x47D]=1. sub_71E3B7 reads that byte as the native
+            // no-item-drop gate, so every slave created by this shared core
+            // inherits the same suppression.
+            MonObj.m_boNoItem = true;
+            MonObj.m_dwMasterRoyaltyTick = HUtil32.GetTickCount() +
+                                           (dwRoyaltySec * 1000);
+            MonObj.m_btSlaveMakeLevel = (byte)nMakeLevel;
+            MonObj.m_btSlaveExpLevel = (byte)nExpLevel;
+            if (MonObj is AnimalObject animal)
+                animal.m_nNativeHpAfterSlavePercent = hpAfterSlave;
+            MonObj.RecalcAbilitys();
+            if (MonObj.m_WAbil.HP < MonObj.m_WAbil.MaxHP)
+            {
+                MonObj.m_WAbil.HP +=
+                    (MonObj.m_WAbil.MaxHP - MonObj.m_WAbil.HP) / 2;
+            }
+            MonObj.RefNameColor();
+            m_SlaveList.Add(MonObj);
+            // 0x6CB348 adds to master+0x4FC; 0x6CB357 sends SM 4469 to
+            // the master even when the spawn anchor was the hero.
+            NotifyNativeSlaveListChanged(joining: true, MonObj);
+            return MonObj;
+        }
+
+        /// <summary>
+        /// TAnimal.Run <c>0x71E657..0x71E720</c>: detach an expired slave,
+        /// apply the signed Int32 HP percentage, then refresh its displayed
+        /// name. The multiply deliberately wraps before division.
+        /// </summary>
+        internal void ExpireNativeSlaveRoyalty()
+        {
+            var master = m_Master;
+            if (master == null)
+                return;
+
+            for (var i = master.m_SlaveList.Count - 1; i >= 0; i--)
+            {
+                if (!ReferenceEquals(master.m_SlaveList[i], this))
+                    continue;
+                master.NotifyNativeSlaveListChanged(joining: false, this);
+                master.m_SlaveList.RemoveAt(i);
+                break;
+            }
+
+            m_Master = null;
+            var hpAfterSlave = 10;
+            if (this is AnimalObject animal)
+            {
+                animal.m_boNativeSlaveRoyaltyExpired = true;
+                hpAfterSlave = animal.m_nNativeHpAfterSlavePercent;
+            }
+            m_WAbil.HP = unchecked(m_WAbil.HP * hpAfterSlave) / 100;
+            RefShowName();
+        }
+
+        private static void ResolveNativeSlaveSpawnPosition(TBaseObject anchor,
+            Envirnoment environment, ref short nX, ref short nY)
+        {
+            anchor.GetFrontPosition(ref nX, ref nY);
+            if (environment.CanWalk(nX, nY, false))
+                return;
+
+            var centerX = anchor.m_nCurrX;
+            var centerY = anchor.m_nCurrY;
+            nX = centerX;
+            nY = centerY;
+
+            // 0x6CB184..0x6CB1DF / 0x6CB237..0x6CB28C: X is the
+            // outer loop, Y the inner loop. If all nine cells are blocked,
+            // native retains the anchor's center coordinates.
+            for (var scanX = centerX - 1; scanX <= centerX + 1; scanX++)
+            {
+                for (var scanY = centerY - 1; scanY <= centerY + 1; scanY++)
+                {
+                    if (!environment.CanWalk(scanX, scanY, false))
+                        continue;
+                    nX = unchecked((short)scanX);
+                    nY = unchecked((short)scanY);
+                    return;
+                }
+            }
         }
 
         
@@ -4645,7 +4867,13 @@ namespace GameSvr
             playObject.m_nSwitchMapX = targetX;
             playObject.m_nSwitchMapY = targetY;
             playObject.m_nServerIndex = targetEnvironment.nServerIndex;
+            playObject.m_boRcdSaved = false;
             playObject.m_boSwitchData = true;
+            if (playObject.m_HeroObject != null)
+            {
+                playObject.m_HeroObject.m_boNativeSwitchData = true;
+                playObject.m_boNativeSwitchHeroHandoffPending = true;
+            }
             playObject.m_boEmergencyClose = true;
             playObject.m_boReconnection = true;
 
@@ -4706,7 +4934,10 @@ namespace GameSvr
                 // sub_71F0F4 0x71F217→0x71F231. CompleteNativeRun3Move already uses
                 // this shape; gate/event handling lives in ProcessNativeMoveActionWithoutBroadcast.
                 SendRefMsg(nIdent, m_btDirection, m_nCurrX, m_nCurrY, 0, "");
-                return ProcessNativeMoveActionWithoutBroadcast();
+                // The four native movers discard sub_778EC0's return value.
+                // It controls CM_TURN broadcasting, not mover success.
+                _ = ProcessNativeMoveActionWithoutBroadcast();
+                return true;
             }
             catch (Exception e)
             {
@@ -5929,7 +6160,7 @@ namespace GameSvr
         /// @0x7679A9 tail-calls <c>sub_76FFE8</c> (bubble) and returns.
         /// </para>
         /// </summary>
-        public ushort GetHitStruckDamage(TBaseObject Target, int nDamage)
+        public int GetHitStruckDamage(TBaseObject Target, int nDamage)
         {
             // sub_7678F4 is shared with the magic entry; state 0x11 skips it.
             if (!HasNativeActiveState(17))
@@ -5955,7 +6186,9 @@ namespace GameSvr
             // attacker parameter in either armour getter — confirmed by the
             // dispatcher @0x76C449-0x76C455 (`mov ecx,[ebp+0xC]` = damage,
             // `movzx edx,bx` = skill id).
-            return (ushort)nDamage;
+            // 0x7679A9..0x7679B2 returns the full EAX value; there is no
+            // word-sized load or truncation in the epilogue.
+            return nDamage;
         }
 
         /// <summary>
@@ -6110,9 +6343,9 @@ namespace GameSvr
             //   copied UserItem attribute bytes [+0x0A..+0x11] against per-type caps and
             //   setting +0xfc=1 when any exceeds. It is a general, ALL-slot anti-over-limit
             //   mechanism, unrelated to slot 0, and the deleted pre-pass used the ordinary
-            //   Random(8) gate — it never modelled 0xfc. A faithful 0xfc port would need
-            //   the off-limits 16-slot worker plus item-build over-cap modelling and is
-            //   left unimplemented (fail-closed), reported as a separate gap.
+            //   Random(8) gate — it never modelled 0xfc. NativeClassFc now carries the
+            //   item-build over-cap result, and the per-slot condition below preserves
+            //   the native short-circuit: a nonzero flag consumes no Random(8) draw.
             for (var i = m_UseItems.GetLowerBound(0); i <= m_UseItems.GetUpperBound(0); i++)
             {
                 // The `Dura > 0` term is the native per-item gate sub_75EA40
@@ -6122,7 +6355,8 @@ namespace GameSvr
                 // wear path and is destroyed on the next hit, which native never
                 // does. See TBaseObject.NativeStruckDurability.cs.
                 if ((m_UseItems[i] != null) && (m_UseItems[i].wIndex > 0) && NativeStruckWearsOnHit(m_UseItems[i])
-                    && (M2Share.RandomNumber.Random(8) == 0))
+                    && (m_UseItems[i].NativeClassFc != 0
+                        || M2Share.RandomNumber.Random(8) == 0))
                 {
                     nDura = m_UseItems[i].Dura;
                     nOldDura = NativeStruckDuraDisplayPoint(nDura);
@@ -6140,13 +6374,16 @@ namespace GameSvr
                         // — the broken item stays equipped (greyed) and RecalcAbilitys
                         // (@0x75EE9B `jbe` skips Dura<=0) drops its stat contribution. The
                         // prior C# deleted the item, which native never does on struck-destroy.
-                        if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+                        if (this is TPlayObject || this is HeroObject)
                         {
                             StdItem = M2Share.UserEngine.GetStdItem(m_UseItems[i].wIndex);
-                            if ((StdItem != null) && (StdItem.NeedIdentify == 1))
+                            if (StdItem != null)
                             {
-                                M2Share.AddGameDataLog('3' + "\t" + m_sMapName + "\t" + m_nCurrX + "\t" + m_nCurrY + "\t" + m_sCharName + "\t" + StdItem.Name + "\t" + m_UseItems[i].MakeIndex + "\t"
-                                    + HUtil32.BoolToIntStr(m_btRaceServer == Grobal2.RC_PLAYOBJECT) + "\t" + '0');
+                                M2Share.AddNativeGameDataLog(this, 0x43,
+                                    StdItem.Name, m_UseItems[i].MakeIndex, 1,
+                                    "持久耗尽");
+                                SendNativeStateSysMsg(0xFFDB,
+                                    "您的" + StdItem.Name + "失效了");
                             }
                         }
                         m_UseItems[i].Dura = 0;

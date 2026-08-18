@@ -87,7 +87,7 @@ namespace GameSvr
                     NameQuery_Cm3282_RosterByIds(processMessage.nBodyLen);
                     return true;
                 case Grobal2.CM_3295:
-                    NameQuery_Cm3295_ItemTextByRecog();
+                    NameQuery_Cm3295_MicroWhelk(processMessage);
                     return true;
                 case Grobal2.CM_3306:
                     NameQuery_Cm3306_ItemDualValueByRecog(processMessage.nBodyLen);
@@ -159,25 +159,13 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// CM 3295 — leaf 0x6DAA99 → worker 0x6EB8E4(Self=EAX, Recog=record[0]=EDX,
-        /// Param=word[+6]=ECX, body-copy=arg4, Tag=word[+8]=arg5). The leaf copies
-        /// Tag bytes of the body into a local via 0x405708 before the call; there is
-        /// no evaluable length gate (leaf and worker branch only on modelled-absent
-        /// state).
-        ///
-        /// Data flow: obj = sub_73CF08(Self, Recog) (modelled by-id item finder),
-        /// then the worker compares/decrements the counter pair word[obj+0x26] /
-        /// word[obj+0x28] against 0x3E8 (1000), dispatches vmt+0x260 or vmt+0x24C on
-        /// Self, and finally either SM 0x6A via vmt+0x250 (when byte[Self+0xB99]==0)
-        /// or broadcasts a 0x6A record through the manager [[0x7D593C]] (sub_5F7614).
-        ///
-        /// C# mapping: the counter pair word[obj+0x26]/[0x28] (as used here), the
-        /// reply-slot behaviour vmt+0x260/0x24C, the flag byte[Self+0xB99] and the
-        /// broadcast manager [[0x7D593C]] are not modelled, so which SM (if any) is
-        /// emitted cannot be derived. Withheld — no invented body/Recog.
+        /// CM 3295 — the main-bag TMicroWhelk operation restored from leaf
+        /// 0x6DAA99 and worker 0x6EB8E4. The shared implementation owns the exact
+        /// Dura 1000 boundary, SM 641/202 ordering, SM 106 header, raw GBK body,
+        /// mute routing and direct/broadcast NUL counts.
         /// </summary>
-        private void NameQuery_Cm3295_ItemTextByRecog()
-            => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3295, m_sCharName);
+        private void NameQuery_Cm3295_MicroWhelk(TProcessMessage processMessage)
+            => HandleNativeCm3295(processMessage);
 
         /// <summary>
         /// CM 3306 — leaf 0x6DAB39 → worker 0x6EFD54(Self=EAX, Recog=record[0]=EDX,

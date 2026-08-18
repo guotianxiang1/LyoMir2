@@ -35,30 +35,41 @@ namespace GameSvr
             PlayObject.m_boAdminMode = SwitchData.boAdminMode;
             PlayObject.m_boObMode = SwitchData.boObMode;
             nCount = 0;
-            while (true)
+            while (SwitchData.BlockWhisperArr != null
+                   && nCount < SwitchData.BlockWhisperArr.Count)
             {
-                if (SwitchData.BlockWhisperArr[nCount] == "") break;
-                PlayObject.m_BlockWhisperList.Add(SwitchData.BlockWhisperArr[nCount]);
+                var blockedName = SwitchData.BlockWhisperArr[nCount];
+                if (string.IsNullOrEmpty(blockedName)) break;
+                PlayObject.m_BlockWhisperList.Add(blockedName);
                 nCount++;
-                if (nCount >= SwitchData.BlockWhisperArr.Count) break;
             }
 
-            nCount = 0;
-            while (true)
+            // sub_6B188C @0x6B1928..0x6B197E scans all five fixed slots.
+            // An empty slot is skipped, not a terminator, so sparse records keep
+            // every later summon. The native delay is 0x5DC = 1500 ms.
+            for (nCount = 0; nCount < TSwitchDataInfo.NativeSlaveSlotCount; nCount++)
             {
-                if (SwitchData.SlaveArr[nCount].sSlaveName == "") break;
-                SlaveInfo = SwitchData.SlaveArr[nCount];
-                PlayObject.SendDelayMsg(PlayObject, Grobal2.RM_10401, 0, 0, 0, 0, "", 500, SlaveInfo);
-                nCount++;
-                if (nCount >= 5) break;
+                SlaveInfo = SwitchData.SlaveArr != null
+                            && nCount < SwitchData.SlaveArr.Length
+                    ? SwitchData.SlaveArr[nCount]
+                    : null;
+                if (SlaveInfo == null || string.IsNullOrEmpty(SlaveInfo.sSlaveName))
+                    continue;
+                PlayObject.SendDelayMsg(PlayObject, Grobal2.RM_10401,
+                    0, 0, 0, 0, "", 1500, SlaveInfo);
             }
-            nCount = 0;
-            while (true)
+
+            for (nCount = 0; nCount < TSwitchDataInfo.NativeStatusSlotCount; nCount++)
             {
-                PlayObject.m_wStatusArrValue[nCount] = SwitchData.StatusValue[nCount];
-                PlayObject.m_dwStatusArrTimeOutTick[nCount] = SwitchData.StatusTimeOut[nCount];
-                nCount++;
-                if (nCount >= 6) break;
+                PlayObject.m_wStatusArrValue[nCount] = SwitchData.StatusValue != null
+                                                       && nCount < SwitchData.StatusValue.Length
+                    ? SwitchData.StatusValue[nCount]
+                    : (ushort)0;
+                PlayObject.m_dwStatusArrTimeOutTick[nCount] =
+                    SwitchData.StatusTimeOut != null
+                    && nCount < SwitchData.StatusTimeOut.Length
+                        ? SwitchData.StatusTimeOut[nCount]
+                        : 0;
             }
         }
 
@@ -113,24 +124,32 @@ namespace GameSvr
             {
                 SwitchData.BlockWhisperArr.Add(PlayObject.m_BlockWhisperList[i]);
             }
-            TBaseObject BaseObject = null;
+            var written = 0;
             for (var i = 0; i < PlayObject.m_SlaveList.Count; i++)
             {
-                BaseObject = PlayObject.m_SlaveList[i];
-                if (i <= 4)
-                {
-                    SwitchData.SlaveArr[i].sSlaveName = BaseObject.m_sCharName;
-                    SwitchData.SlaveArr[i].nKillCount = BaseObject.m_nKillMonCount;
-                    SwitchData.SlaveArr[i].btSalveLevel = BaseObject.m_btSlaveMakeLevel;
-                    SwitchData.SlaveArr[i].btSlaveExpLevel = BaseObject.m_btSlaveExpLevel;
-                    SwitchData.SlaveArr[i].dwRoyaltySec = (BaseObject.m_dwMasterRoyaltyTick - HUtil32.GetTickCount()) / 1000;
-                    SwitchData.SlaveArr[i].nHP = BaseObject.m_WAbil.HP;
-                    SwitchData.SlaveArr[i].nMP = BaseObject.m_WAbil.MP;
-                }
+                var baseObject = PlayObject.m_SlaveList[i];
+                if (baseObject == null || baseObject.m_boDeath || baseObject.m_boGhost)
+                    continue;
+                if (PlayObject.m_HeroObject?.IsNativeHeroSummonSlave(baseObject) == true)
+                    continue;
+                if (written >= TSwitchDataInfo.NativeSlaveSlotCount)
+                    break;
+
+                var target = SwitchData.SlaveArr[written++];
+                target.sSlaveName = baseObject.m_sCharName;
+                target.nKillCount = baseObject.m_nKillMonCount;
+                target.btSlaveLevel = baseObject.m_btSlaveMakeLevel;
+                target.btSlaveExpLevel = baseObject.m_btSlaveExpLevel;
+                target.dwRoyaltySec = unchecked((int)(unchecked((uint)(
+                    baseObject.m_dwMasterRoyaltyTick - HUtil32.GetTickCount())) / 1000u));
+                target.nHP = unchecked((ushort)baseObject.m_WAbil.HP);
+                target.nMP = unchecked((ushort)baseObject.m_WAbil.MP);
             }
-            for (var i = 0; i < PlayObject.m_wStatusArrValue.Length; i++)
+            for (var i = 0; i < TSwitchDataInfo.NativeStatusSlotCount; i++)
             {
-                if (PlayObject.m_wStatusArrValue[i] > 0)
+                if (i < PlayObject.m_wStatusArrValue.Length
+                    && i < PlayObject.m_dwStatusArrTimeOutTick.Length
+                    && PlayObject.m_wStatusArrValue[i] > 0)
                 {
                     SwitchData.StatusValue[i] = PlayObject.m_wStatusArrValue[i];
                     SwitchData.StatusTimeOut[i] = PlayObject.m_dwStatusArrTimeOutTick[i];

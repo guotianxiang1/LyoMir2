@@ -2,7 +2,7 @@ using SystemModule;
 
 namespace GameSvr
 {
-    public class MapManager
+    public partial class MapManager
     {
         private readonly Dictionary<string, Envirnoment> m_MapList = new Dictionary<string, Envirnoment>(StringComparer.OrdinalIgnoreCase);
 
@@ -616,6 +616,14 @@ namespace GameSvr
                     return env;
             }
             return null;
+        }
+
+        internal Envirnoment FindMapByNativeName(string mapName)
+        {
+            return mapName != null && m_MapList.TryGetValue(mapName,
+                out var environment)
+                ? environment
+                : null;
         }
 
         public Envirnoment GetMapInfo(int nServerIdx, string sMapName)

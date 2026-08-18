@@ -79,6 +79,14 @@ namespace GameSvr
         
         public bool m_boActive = false;
 
+        /// <summary>
+        /// Native <c>TMapEvent+0x34</c>. The base constructor clears it at
+        /// <c>0x71733A</c>; only event classes with an immediate landing callback
+        /// set it. This is independent of the managed lifecycle flag
+        /// <see cref="m_boActive"/>.
+        /// </summary>
+        internal bool NativeAppliesOnLanding { get; set; }
+
         public Event(Envirnoment envir, int ntX, int ntY, int nType, int dwETime, bool boVisible)
             : this(envir, ntX, ntY, nType, dwETime, boVisible, null, null)
         {

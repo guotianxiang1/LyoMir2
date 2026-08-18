@@ -390,8 +390,6 @@ namespace GameSvr
             int health = NextNativeMagicHealingRandom(firstRange) +
                 NextNativeMagicHealingRandom(secondRange) +
                 NextNativeMagicHealingRandom(thirdRange);
-            if (HasNativeActiveState(102))
-                health /= 2;
             IncHealthSpell(health, 0);
         }
 

@@ -711,9 +711,9 @@ namespace GameSvr
         /// 75 is absent from both switches.
         /// </para>
         /// <para>
-        /// Still MISSING: the TPlayObject-only state-25 arms of 0x6D7628
-        /// ("反外挂惩罚" @0x6D7754 gained / "反外挂惩罚时间结束" @0x6D7774 lost).
-        /// They are a separate override, not part of the 99-arm tables.
+        /// The TPlayObject-only state-25 arms of 0x6D7628 are emitted after the
+        /// inherited tables and before the 3555 record below. They are a separate
+        /// override, not part of the 99-arm tables.
         /// </para>
         /// </summary>
         private void SendTimedAbilityState(TimedAbilityNode node, bool removed)
@@ -787,6 +787,23 @@ namespace GameSvr
                     unchecked((ushort)(node.RemainingMilliseconds / 1000)));
                 DispatchNativeStateGainedTextBatchC(node.InternalType,
                     node.RemainingMilliseconds);
+            }
+
+            if (this is TPlayObject && node.InternalType == 25)
+            {
+                if (removed)
+                {
+                    // 0x6D76A6: cx=0xFFDB, text @0x6D7774.
+                    SendNativeStateArmMsg("反外挂惩罚时间结束",
+                        NativeStateArmBuffColor, NativeStateArmBuffType);
+                }
+                else
+                {
+                    // 0x6D7668..0x6D7698: movzx eax,di after signed ms/1000.
+                    var seconds = unchecked((ushort)(node.RemainingMilliseconds / 1000));
+                    SendNativeStateArmMsg("反外挂惩罚" + seconds + "秒",
+                        NativeStateArmAlertColor, NativeStateArmAlertType);
+                }
             }
 
             SendTimedAbilityClientState(node.InternalType,

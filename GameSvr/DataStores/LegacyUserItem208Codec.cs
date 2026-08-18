@@ -177,6 +177,8 @@ namespace GameSvr
             var stdItem = M2Share.UserEngine.GetStdItem(item.wIndex);
             if (stdItem != null)
             {
+                NativeSpecialDropItemRollCore.HydrateConstructorState(item,
+                    stdItem);
                 NativeOutOfBoundsItemClassifier.Apply(item, stdItem);
             }
 

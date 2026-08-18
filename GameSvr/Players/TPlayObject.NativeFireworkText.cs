@@ -41,9 +41,8 @@ namespace GameSvr
             for (var index = 0; index < glyphs.Count; index++)
             {
                 var glyph = glyphs[index];
-                var fireworkEvent = new Event(m_PEnvir, glyph.X, glyph.Y,
-                    Grobal2.ET_YANHUA_TEXT,
-                    NativeFireworkTextLifetime, true, glyph.Text,
+                var fireworkEvent = new FireworksEvent(m_PEnvir, glyph.X,
+                    glyph.Y, NativeFireworkTextLifetime, glyph.Text,
                     glyph.RawBytes);
                 M2Share.EventManager.AddEvent(fireworkEvent);
             }

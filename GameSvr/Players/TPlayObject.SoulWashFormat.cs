@@ -45,8 +45,8 @@ namespace GameSvr
         /// <summary>sub_744C80 — compact map/level summary for the second line.</summary>
         private string NativeFormatSoulWashStatusLine()
         {
-            var map = m_PEnvir?.m_sMapDesc ?? m_sMapName ?? string.Empty;
-            return $"{map}  Lv.{Abil.Level}";
+            var map = m_PEnvir?.sMapDesc ?? m_sMapName ?? string.Empty;
+            return $"{map}  Lv.{m_Abil.Level}";
         }
 
         /// <summary>

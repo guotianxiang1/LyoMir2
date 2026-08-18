@@ -4,6 +4,10 @@ namespace GameSvr
 {
     public partial class TBaseObject
     {
+        internal const string NativeEquipReviveNotice = "靠戒指的力量，您复活了。";
+        internal const string NativeSecondPathSystemNotice = "靠戒指的力量,您获得了重生。";
+        internal const string NativeSecondPathPopupNotice = "靠戒指的力量,您获得了重生";
+
         /// <summary>
         /// 战神 <c>sub_7436F8</c> — the revive handler, VMT slot <c>+0x08</c>, not
         /// overridden by any of the ten classes that expose it. Called from the tick when
@@ -74,7 +78,8 @@ namespace GameSvr
                     // restored on this path.  (The second path restores MP
                     // unconditionally, but that path is itself blocked.)
                     HealthSpellChanged();
-                    SysMsg(M2Share.g_sRevivalRecoverMsg, MsgColor.Green, MsgType.Hint);
+                    SendNativeReviveNotices(NativeEquipReviveNotice,
+                        NativeEquipReviveNotice);
                     break;
 
                 case NativeRevivePolicy.Outcome.SecondPathRevive:
@@ -86,6 +91,8 @@ namespace GameSvr
                     m_WAbil.HP = m_WAbil.MaxHP;
                     m_WAbil.MP = m_WAbil.MaxMP;
                     HealthSpellChanged();
+                    SendNativeReviveNotices(NativeSecondPathSystemNotice,
+                        NativeSecondPathPopupNotice);
                     break;
 
                 case NativeRevivePolicy.Outcome.SecondPathOnCooldown:
@@ -141,6 +148,19 @@ namespace GameSvr
             }
 
             return revived;
+        }
+
+        /// <summary>
+        /// Native success order at 0x74379F..0x7437BD and 0x74386C..0x74388A:
+        /// first VMT+0xD4 with packed colour 0xFCFF, then sub_73C910 with wParam=1.
+        /// The latter queues RM 12308, whose player dispatcher emits SM 213.
+        /// </summary>
+        private void SendNativeReviveNotices(string systemText, string popupText)
+        {
+            SendNativeStateSysMsg(0xFCFF, systemText);
+            SendMsg(this, Grobal2.RM_NATIVE_REVIVE_MESSAGE, 1,
+                0, 0, 0, popupText,
+                BuildNativeTerminatedTextBody(popupText));
         }
 
         /// <summary>

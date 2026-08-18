@@ -65,6 +65,7 @@ namespace GameSvr.Services
 
         private readonly byte[] _wireBody;
         private readonly byte[] _nameBytes;
+        private readonly byte[] _lookupNameBytes;
         private readonly ReadOnlyCollection<
             NativeType2FieldHeroEquipmentDefinition> _equipment;
 
@@ -80,6 +81,8 @@ namespace GameSvr.Services
             }
 
             _nameBytes = wireBody.AsSpan(0x01, nameLength).ToArray();
+            _lookupNameBytes = NativeFieldHeroFactoryPreflight
+                .CanonicalizeLookupName(_nameBytes);
             Name = HUtil32.GbkEncoding.GetString(_nameBytes);
             Sex = wireBody[0x0F];
             Job = wireBody[0x10];
@@ -157,8 +160,8 @@ namespace GameSvr.Services
             return Parse(rawRecord.CopyWireBody());
         }
 
-        internal bool NameBytesEqual(ReadOnlySpan<byte> value) =>
-            value.SequenceEqual(_nameBytes);
+        internal bool LookupNameBytesEqual(ReadOnlySpan<byte> value) =>
+            value.SequenceEqual(_lookupNameBytes);
 
         private ushort ReadUInt16(int offset) =>
             BinaryPrimitives.ReadUInt16LittleEndian(
@@ -246,10 +249,14 @@ namespace GameSvr.Services
                 NativeType2FieldHeroDefinition.NameCapacity)
                 return null;
 
+            var lookupName = NativeFieldHeroFactoryPreflight
+                .CanonicalizeLookupName(nameBytes);
             var definitions = Volatile.Read(ref _publication).Definitions;
-            for (var index = 0; index < definitions.Count; index++)
+            // Native sub_49F128 inserts each value at the bucket head. For
+            // duplicate normalized keys, the last loaded record wins lookup.
+            for (var index = definitions.Count - 1; index >= 0; index--)
             {
-                if (definitions[index].NameBytesEqual(nameBytes))
+                if (definitions[index].LookupNameBytesEqual(lookupName))
                     return definitions[index];
             }
             return null;

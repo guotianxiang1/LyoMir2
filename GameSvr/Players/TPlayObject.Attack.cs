@@ -246,6 +246,10 @@ namespace GameSvr
                         // `0F 87 AF 04 00 00 ja 0x770CC4` at 0x770803 rejects it again.
                         // Native performs no swing for 42 by either route, and hit modes
                         // 10/11 are not reachable from any client opcode.
+                        case NativeAction1011Code:
+                        case NativeAction1012Code:
+                            RunNativeCrossMoonAction(wIdent, nDir);
+                            break;
                         case Grobal2.CM_SWORD_HIT:
                             if (!ReleaseSunSword(nDir))
                             {
@@ -365,6 +369,7 @@ namespace GameSvr
                 }
                 if (m_bo316 || m_nCurrX == nX && m_nCurrY == nY)
                 {
+                    SendMapDescription();
                     result = true;
                 }
                 m_nHealthTick -= 60;
@@ -380,7 +385,7 @@ namespace GameSvr
             return result;
         }
 
-        private bool ClientSpellXY(short wIdent, int nKey, int nTargetX, int nTargetY, TBaseObject TargeTBaseObject, bool boLateDelivery, ref int dwDelayTime)
+        private bool ClientSpellXY(short wIdent, int nKey, int nTargetX, int nTargetY, TBaseObject TargeTBaseObject, bool boLateDelivery, bool boBypassNativeCanActBlock, ref int dwDelayTime)
         {
             var result = false;
             dwDelayTime = 0;
@@ -388,7 +393,9 @@ namespace GameSvr
             {
                 return result;
             }
-            if (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0 && !M2Share.g_Config.ClientConf.boParalyCanSpell)// 防麻
+            if (!boBypassNativeCanActBlock
+                && (m_boDeath || m_wStatusTimeArr[Grobal2.POISON_STONE] != 0
+                    && !M2Share.g_Config.ClientConf.boParalyCanSpell))// 防麻
             {
                 return result;
             }
@@ -623,25 +630,6 @@ namespace GameSvr
                     }
                     result = true;
                     break;
-                // SKILL_REDBANWOL (56) keeps the text markers: the native magic table
-                // at 0x6BC6AF only covers ids 3..27 (after `add eax,-3`) plus a separate
-                // `je` for 58, so 56 reaches the default arm 0x6BCCA6 and sends nothing.
-                case SpellsDef.SKILL_REDBANWOL:
-                    if (m_MagicArr[SpellsDef.SKILL_REDBANWOL] != null)
-                    {
-                        if (!m_boRedUseHalfMoon)
-                        {
-                            RedHalfMoonOnOff(true);
-                            SendSocket("+WID");
-                        }
-                        else
-                        {
-                            RedHalfMoonOnOff(false);
-                            SendSocket("+UWID");
-                        }
-                    }
-                    result = true;
-                    break;
                 case SpellsDef.SKILL_FIRESWORD:
                     if (m_MagicArr[SpellsDef.SKILL_FIRESWORD] != null)
                     {
@@ -661,8 +649,8 @@ namespace GameSvr
                                     Grobal2.SM_FIREHITSKILL, 0, 0, 0, 0));
                             }
                         }
+                        result = true;
                     }
-                    result = true;
                     break;
                 case SpellsDef.SKILL_58:
                     if (m_MagicArr[SpellsDef.SKILL_58] != null)
@@ -699,58 +687,10 @@ namespace GameSvr
                             HUtil32.GetTickCount());
                     }
                     break;
-                case SpellsDef.SKILL_CROSSMOON:
-                    if (m_MagicArr[SpellsDef.SKILL_CROSSMOON] != null)
-                    {
-                        if (!m_boCrsHitkill)
-                        {
-                            SkillCrsOnOff(true);
-                            SendSocket("+CRS");
-                        }
-                        else
-                        {
-                            SkillCrsOnOff(false);
-                            SendSocket("+UCRS");
-                        }
-                    }
-                    result = true;
-                    break;
-                case SpellsDef.SKILL_TWINBLADE:// 狂风斩
-                    if (m_MagicArr[SpellsDef.SKILL_TWINBLADE] != null)
-                    {
-                        if (AllowTwinHitSkill())
-                        {
-                            nSpellPoint = GetSpellPoint(UserMagic);
-                            if (m_WAbil.MP >= nSpellPoint)
-                            {
-                                if (nSpellPoint > 0)
-                                {
-                                    DamageSpell(nSpellPoint);
-                                    HealthSpellChanged();
-                                }
-                                SendSocket("+TWN");
-                            }
-                        }
-                    }
-                    result = true;
-                    break;
-                case SpellsDef.SKILL_43:// 破空剑
-                    if (m_MagicArr[SpellsDef.SKILL_43] != null)
-                    {
-                        if (!m_bo43kill)
-                        {
-                            Skill43OnOff(true);
-                            SendSocket("+CID");
-                        }
-                        else
-                        {
-                            Skill43OnOff(false);
-                            SendSocket("+UCID");
-                        }
-                    }
-                    result = true;
-                    break;
                 default:
+                    // ID 38 is intentionally handled here. The outer native
+                    // ladder sends it to sub_6ED62C, whose own dispatcher
+                    // converges on the successful default spell tail.
                     m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, nTargetX, nTargetY); ;
                     TBaseObject BaseObject = null;
                     if (CretInNearXY(TargeTBaseObject, nTargetX, nTargetY)) 
@@ -894,6 +834,7 @@ namespace GameSvr
                 }
                 if (m_bo316 || m_nCurrX == nX && m_nCurrY == nY)
                 {
+                    SendMapDescription();
                     result = true;
                 }
                 m_nHealthTick -= 60;
@@ -1057,6 +998,7 @@ namespace GameSvr
             {
                 if (m_bo316 || m_nCurrX == nX && m_nCurrY == nY)
                 {
+                    SendMapDescription();
                     result = true;
                 }
                 m_nHealthTick -= 10;

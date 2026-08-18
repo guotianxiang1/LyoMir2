@@ -67,8 +67,8 @@ namespace GameSvr
     //     off_7D600C   server-wide guild recruit/kick switch byte    [serverguildswitch writes 0/1]
     //
     //   C# PORT DIVERGENCES observed (live GameSvr/Command/Commands/*Command.cs vs. this original):
-    //     * EVERY live command declares perm 10 in its [GameCommand(...,10)] attribute; the original
-    //       record +0x1C perms are 3/4/5. Systematic perm drift (CSharpLivePermission below).
+    //     * Older live commands declare perm 10 even where original +0x1C is 3/4/5.
+    //       ChgMonAtt is now wired at its original permission 4.
     //     GuildWarOff (117) — original is a nullsub (does nothing, no message); live GuildWarOffCommand
     //                    does FindGuild + EndGuildWar on both guilds + two SysMsgs. Live OVER-sends.
     //     DelGuild    (214) — original is an EMPTY case (no effect, no message); live DelGuildCommand
@@ -140,7 +140,7 @@ namespace GameSvr
         public string Name { get; init; }
         /// <summary>Dispatch index (record +0x18, == the value switched on in sub_622820).</summary>
         public int DispatchIndex { get; init; }
-        /// <summary>Required GM permission (record +0x1C). Original value; the live C# stubs all use 10.</summary>
+        /// <summary>Required GM permission from original record +0x1C.</summary>
         public int RequiredPermission { get; init; }
         /// <summary>Terminal shape of the case / jump-table slot for this index.</summary>
         public GmGuildCastleHandlerKind HandlerKind { get; init; }
@@ -171,7 +171,8 @@ namespace GameSvr
         public const int SysMsgVtableOffset = 0xD4;           // player vtable slot +212 = SysMsg(colour,text)
 
         // SysMsg colour words (LOWORD of the cx immediate, stored as unsigned hex)
-        public const int ColorGreen = 0x38FF;                 // ChgMonAtt / WatchGuild / "Invalid" stubs
+        public const int ColorErrorRed = 0x38FF;              // ChgMonAtt / WatchGuild / "Invalid" stubs
+        public const int ColorGreen = ColorErrorRed;          // compatibility alias for older audit callers
         public const int ColorYellowNotice = 0xFFDB;          // LookSaGold / ChgCastleWar / Area matches / guard-block
         public const int ColorWhiteNotice = 0xFCFF;           // serverguildswitch open/close
 
@@ -211,7 +212,7 @@ namespace GameSvr
             new() { Command = GmGuildCastleCommand.LookSaGold,           Name = "LookSaGold",           DispatchIndex =  71, RequiredPermission = 3, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00624C36 },
             new() { Command = GmGuildCastleCommand.DoTask,               Name = "DoTask",               DispatchIndex = 100, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625048 },
             new() { Command = GmGuildCastleCommand.CallTaskMon,          Name = "CallTaskMon",          DispatchIndex = 101, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x0062505B, CSharpLivePresent = true, CSharpLivePermission = 10, CSharpStubUnderImplements = true },
-            new() { Command = GmGuildCastleCommand.ChgMonAtt,            Name = "ChgMonAtt",            DispatchIndex = 144, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625551 },
+            new() { Command = GmGuildCastleCommand.ChgMonAtt,            Name = "ChgMonAtt",            DispatchIndex = 144, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625551, CSharpLivePresent = true, CSharpLivePermission = 4 },
             new() { Command = GmGuildCastleCommand.ChgCastleOwner,       Name = "ChgCastleOwner",       DispatchIndex = 215, RequiredPermission = 5, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625EC0 },
             new() { Command = GmGuildCastleCommand.ChgCastleWar,         Name = "ChgCastleWar",         DispatchIndex = 216, RequiredPermission = 5, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625ED5, CSharpLivePresent = true, CSharpLivePermission = 10, CSharpBehaviorMismatch = true },
             new() { Command = GmGuildCastleCommand.BeginAreaCastleMatch, Name = "BeginAreaCastleMatch", DispatchIndex = 394, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x0062877B, CSharpLivePresent = true, CSharpLivePermission = 10, CSharpStubUnderImplements = true },
@@ -387,7 +388,7 @@ namespace GameSvr
     {
         public bool CallsCore => true;
         public uint CoreEa { get; init; }
-        public bool CoreBodyDeferred => true;
+        public bool CoreBodyDeferred { get; init; } = true;
         public bool SendsSysMsg => true;
         public int MessageColor { get; init; }
     }
@@ -395,7 +396,12 @@ namespace GameSvr
     public static class NativeGmChgMonAtt
     {
         public static GuildCastleCoreMsgOutcome Evaluate() =>
-            new() { CoreEa = NativeGmGuildCastleCommands.CoreChgMonAttEa, MessageColor = NativeGmGuildCastleCommands.ColorGreen };
+            new()
+            {
+                CoreEa = NativeGmGuildCastleCommands.CoreChgMonAttEa,
+                CoreBodyDeferred = false,
+                MessageColor = NativeGmGuildCastleCommands.ColorErrorRed
+            };
     }
 
     public static class NativeGmBeginAreaCastleMatch

@@ -53,10 +53,10 @@ namespace GameSvr.Services
                     continue;
                 player.m_ItemList.RemoveAt(idx);
                 player.SendDelItems(item);
-                M2Share.AddGameDataLog('10' + "\t" + player.m_sMapName + "\t" +
+                M2Share.AddGameDataLog("10" + "\t" + player.m_sMapName + "\t" +
                     player.m_nCurrX + "\t" + player.m_nCurrY + "\t" +
                     player.m_sCharName + "\t" + itemName + "\t" +
-                    item.MakeIndex + "\t" + '1' + "\t" + '0');
+                    item.MakeIndex + "\t" + "1" + "\t" + "0");
                 player.Dispose(item);
             }
 

@@ -10,6 +10,7 @@ namespace GameSvr
         public ushort NativeSaveMode;
         public int NativeSaveParam1;
         public int NativeSaveParam2;
+        public byte[] NativeSwitchExtension;
         public TPlayObject PlayObject;
         public THumDataInfo HumanRcd;
         public int nReTryCount;

@@ -84,8 +84,11 @@ namespace GameSvr
         private static readonly ConcurrentDictionary<int, PendingRename> PendingRenames = new();
         private static readonly ConcurrentDictionary<int, int> PendingRenameOwners = new();
         private static readonly ConcurrentQueue<RenameCompletion> RenameCompletions = new();
-        private static readonly ConcurrentDictionary<string, PendingSave> PendingSaves =
-            new(StringComparer.OrdinalIgnoreCase);
+        // sub_713CBC queues every offline hero frame in send order. A keyed
+        // dictionary would let a later ordinary save overwrite the switch frame
+        // whose embedded +4694 slave was already written and consumed.
+        private static readonly ConcurrentQueue<PendingSave> PendingSaves = new();
+        private static readonly object PendingSaveFlushLock = new();
         private static readonly ConcurrentDictionary<int, int> LastSaveTicks = new();
 
         public static bool RequestLoad(TPlayObject owner, byte heroKind, byte heroSlot)
@@ -451,12 +454,20 @@ namespace GameSvr
         {
             if (hero == null)
                 return false;
+            var nativeSwitchSlave = hero.GetNativeSwitchSlaveForSave();
             if (!NativeHeroRuntimeCodec.TryCreateSnapshot(hero, out var record,
                     out var dynamicData, out var error))
             {
                 M2Share.ErrorMessage($"[HeroDB] 拒绝保存英雄 {hero.m_sCharName}: {error}");
                 return false;
             }
+
+            // sub_689034 calls VMT+0x84 immediately after the fixed +4694
+            // record is complete. Its caller only copies the dynamic payload
+            // and invokes sub_713554 afterwards. Keep TryCreateSnapshot pure
+            // for rollback callers, and perform the side effect here before
+            // the outbound request is encoded or queued.
+            nativeSwitchSlave?.Die();
 
             var request = new NativeHeroSaveRequest
             {
@@ -472,12 +483,11 @@ namespace GameSvr
                 return false;
             }
 
-            var key = record.MasterName + "\0" + record.HeroName;
-            PendingSaves[key] = new PendingSave
+            PendingSaves.Enqueue(new PendingSave
             {
                 HeroName = record.HeroName,
                 Frame = frame
-            };
+            });
             if (saveMode != 0)
                 LastSaveTicks.TryRemove(hero.ObjectId, out _);
             return true;
@@ -769,21 +779,30 @@ namespace GameSvr
         {
             var dataServer = M2Share.DataServer;
             if (dataServer == null) return;
-            foreach (var pair in PendingSaves)
+            lock (PendingSaveFlushLock)
             {
-                var pending = pair.Value;
-                try
+                while (PendingSaves.TryPeek(out var pending))
                 {
-                    if (!dataServer.SendNativeFrame(pending.Frame))
-                        continue;
+                    try
+                    {
+                        if (!dataServer.SendNativeFrame(pending.Frame))
+                            return;
+                    }
+                    catch (Exception ex)
+                    {
+                        M2Share.ErrorMessage($"[HeroDB] 英雄保存发送失败 {pending.HeroName}: {ex.Message}");
+                        return;
+                    }
+
+                    // QueueSave only appends; the flush lock ensures that the
+                    // successfully accepted head is the exact frame removed.
+                    if (!PendingSaves.TryDequeue(out var accepted)
+                        || !ReferenceEquals(accepted, pending))
+                    {
+                        throw new InvalidOperationException(
+                            "hero save FIFO head changed during flush");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    M2Share.ErrorMessage($"[HeroDB] 英雄保存发送失败 {pending.HeroName}: {ex.Message}");
-                    continue;
-                }
-                ((ICollection<KeyValuePair<string, PendingSave>>)PendingSaves)
-                    .Remove(pair);
             }
         }
 

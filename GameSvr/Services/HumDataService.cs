@@ -121,11 +121,11 @@ namespace GameSvr
 
         public static bool SaveHumRcdToDB(string account, string characterName,
             ushort saveMode, int param1, int param2,
-            THumDataInfo humanRecord)
+            THumDataInfo humanRecord, byte[] switchExtension = null)
         {
             M2Share.g_Config.nSaveDBCount++;
             if (!NativeHumanDbCodec.TryEncodeSaveFrame(account, characterName,
-                    saveMode, param1, param2, humanRecord,
+                    saveMode, param1, param2, humanRecord, switchExtension,
                     out var frame, out var error))
             {
                 M2Share.ErrorMessage(

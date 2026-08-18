@@ -35,10 +35,12 @@ namespace GameSvr.Services
         internal NativeType2FieldHeroMaterialization(
             NativeType2FieldHeroRuntimeDefinition owner,
             ReadOnlyCollection<NativeType2FieldHeroRuntimeEquipmentBinding>
-                equipment)
+                equipment,
+            ReadOnlyCollection<NativeFieldHeroRuntimeDropBinding> dropItems)
         {
             _owner = owner;
             Equipment = equipment;
+            DropItems = dropItems;
         }
 
         public NativeType2FieldHeroDefinition Definition =>
@@ -46,6 +48,8 @@ namespace GameSvr.Services
         public long Generation => _owner.Generation;
         public IReadOnlyList<NativeType2FieldHeroRuntimeEquipmentBinding>
             Equipment { get; }
+        public IReadOnlyList<NativeFieldHeroRuntimeDropBinding> DropItems
+            { get; }
     }
 
     /// <summary>
@@ -57,16 +61,20 @@ namespace GameSvr.Services
         private readonly object _publicationOwner;
         private readonly ReadOnlyCollection<
             NativeType2FieldHeroRuntimeEquipmentBinding> _equipment;
+        private readonly ReadOnlyCollection<NativeFieldHeroRuntimeDropBinding>
+            _dropItems;
         private int _effectiveJob;
 
         internal NativeType2FieldHeroRuntimeDefinition(object publicationOwner,
             long generation, NativeType2FieldHeroDefinition definition,
-            NativeType2FieldHeroRuntimeEquipmentBinding[] equipment)
+            NativeType2FieldHeroRuntimeEquipmentBinding[] equipment,
+            NativeFieldHeroRuntimeDropBinding[] dropItems)
         {
             _publicationOwner = publicationOwner;
             Generation = generation;
             Definition = definition;
             _equipment = Array.AsReadOnly(equipment);
+            _dropItems = Array.AsReadOnly(dropItems);
             _effectiveJob = definition.Job;
         }
 
@@ -82,26 +90,12 @@ namespace GameSvr.Services
             return fameJob.Value;
         }
 
-        internal NativeType2FieldHeroMaterialization MaterializeEquipment(
-            Action<string> missingEquipmentLogger)
+        // Native equipment lookup/logging belongs to sub_60B154's slot loop.
+        // Materialization only captures the immutable publication generation.
+        internal NativeType2FieldHeroMaterialization MaterializeEquipment()
         {
-            if (missingEquipmentLogger == null)
-                throw new ArgumentNullException(
-                    nameof(missingEquipmentLogger));
-
-            for (var index = 0; index < _equipment.Count; index++)
-            {
-                var binding = _equipment[index];
-                if (!binding.IsMissing) continue;
-                missingEquipmentLogger(
-                    NativeType2FieldHeroRuntimeCatalogAdapter
-                        .MissingEquipmentLogPrefix
-                    + binding.Definition.Name
-                    + NativeType2FieldHeroRuntimeCatalogAdapter
-                        .MissingEquipmentLogSuffix);
-            }
-
-            return new NativeType2FieldHeroMaterialization(this, _equipment);
+            return new NativeType2FieldHeroMaterialization(this, _equipment,
+                _dropItems);
         }
     }
 
@@ -125,16 +119,45 @@ namespace GameSvr.Services
         public long Generation => _runtime.Generation;
         public byte EffectiveJob { get; }
 
-        public NativeType2FieldHeroMaterialization MaterializeEquipment(
-            Action<string> missingEquipmentLogger) =>
-            _runtime.MaterializeEquipment(missingEquipmentLogger);
+        public NativeType2FieldHeroMaterialization MaterializeEquipment() =>
+            _runtime.MaterializeEquipment();
+    }
+
+    /// <summary>
+    /// Side-effect-free template lookup result. Native sub_604E3C performs
+    /// placement before its fame lookup and persistent template+0x10 write;
+    /// callers must therefore capture the spawn selection only after placement
+    /// succeeds.
+    /// </summary>
+    public sealed class NativeType2FieldHeroTemplateResolution
+    {
+        private readonly NativeType2FieldHeroRuntimeDefinition _runtime;
+
+        internal NativeType2FieldHeroTemplateResolution(
+            NativeType2FieldHeroRuntimeDefinition runtime)
+        {
+            _runtime = runtime;
+        }
+
+        public NativeType2FieldHeroDefinition Definition =>
+            _runtime.Definition;
+        public long Generation => _runtime.Generation;
+        public byte CurrentEffectiveJob => _runtime.EffectiveJob;
+
+        public NativeType2FieldHeroSpawnSelection
+            CaptureSelectionAfterPlacement(byte? fameJob)
+        {
+            var effectiveJob = _runtime.CaptureEffectiveJob(fameJob);
+            return new NativeType2FieldHeroSpawnSelection(_runtime,
+                effectiveJob);
+        }
     }
 
     /// <summary>
     /// Mutable runtime adapter over immutable Type2 FieldHero definitions.
     /// Normal production is one-shot Publish. Replace is an explicit audit and
-    /// reload boundary: the old generation is retained because live actors may
-    /// still borrow its manager-owned equipment/drop-list entries.
+    /// reload boundary. In-flight selections and actor materializations retain
+    /// their own publication generation through their runtime owner.
     /// </summary>
     public sealed class NativeType2FieldHeroRuntimeCatalogAdapter
     {
@@ -155,6 +178,19 @@ namespace GameSvr.Services
             public GoodItem Item { get; }
         }
 
+        private sealed class DropStandardItemBinding
+        {
+            public DropStandardItemBinding(byte[] lookupNameBytes,
+                GoodItem item)
+            {
+                LookupNameBytes = lookupNameBytes;
+                Item = item;
+            }
+
+            public byte[] LookupNameBytes { get; }
+            public GoodItem Item { get; }
+        }
+
         private sealed class Publication
         {
             public static readonly Publication Empty = new();
@@ -169,12 +205,15 @@ namespace GameSvr.Services
             public Publication(long generation,
                 IReadOnlyList<NativeType2FieldHeroDefinition> definitions,
                 IReadOnlyList<NativeType2StdItemDefinition> itemDefinitions,
-                IReadOnlyList<GoodItem> items)
+                IReadOnlyList<GoodItem> items,
+                INativeFieldHeroMonItemsSource monItemsSource)
             {
                 Ready = true;
                 Generation = generation;
 
                 var standardItems = BuildStandardItemBindings(
+                    itemDefinitions, items);
+                var dropStandardItems = BuildDropStandardItemBindings(
                     itemDefinitions, items);
                 var entries = new NativeType2FieldHeroRuntimeDefinition[
                     definitions.Count];
@@ -183,7 +222,9 @@ namespace GameSvr.Services
                     var definition = definitions[index];
                     entries[index] = new NativeType2FieldHeroRuntimeDefinition(
                         this, generation, definition,
-                        BuildEquipmentBindings(definition, standardItems));
+                        BuildEquipmentBindings(definition, standardItems),
+                        BuildDropBindings(definition, monItemsSource,
+                            dropStandardItems));
                 }
                 Entries = Array.AsReadOnly(entries);
             }
@@ -196,10 +237,14 @@ namespace GameSvr.Services
             public NativeType2FieldHeroRuntimeDefinition FindByNameBytes(
                 ReadOnlySpan<byte> nameBytes)
             {
-                for (var index = 0; index < Entries.Count; index++)
+                var lookupName = NativeFieldHeroFactoryPreflight
+                    .CanonicalizeLookupName(nameBytes);
+                // sub_49F128 inserts at the hash-bucket head, so a duplicate
+                // key loaded later is the first one returned by sub_49F2E4.
+                for (var index = Entries.Count - 1; index >= 0; index--)
                 {
                     var entry = Entries[index];
-                    if (entry.Definition.NameBytesEqual(nameBytes))
+                    if (entry.Definition.LookupNameBytesEqual(lookupName))
                         return entry;
                 }
                 return null;
@@ -226,6 +271,77 @@ namespace GameSvr.Services
                         definition.CopyNameBytes(), items[wireIndex]);
                 }
                 return bindings;
+            }
+
+            private static DropStandardItemBinding[]
+                BuildDropStandardItemBindings(
+                    IReadOnlyList<NativeType2StdItemDefinition> definitions,
+                    IReadOnlyList<GoodItem> items)
+            {
+                var bindings = new List<DropStandardItemBinding>();
+                if (items.Count > 0 && items[0] != null
+                    && items[0].NativeWireIndex == 0)
+                {
+                    bindings.Add(new DropStandardItemBinding(
+                        NativeFieldHeroFactoryPreflight
+                            .CanonicalizeLookupName(
+                                HUtil32.GbkEncoding.GetBytes(items[0].Name)),
+                        items[0]));
+                }
+
+                for (var index = 0; index < definitions.Count; index++)
+                {
+                    var definition = definitions[index];
+                    var wireIndex = definition.WireIndex;
+                    if (wireIndex >= items.Count
+                        || items[wireIndex] == null
+                        || items[wireIndex].NativeWireIndex != wireIndex)
+                    {
+                        throw new InvalidDataException(
+                            "Native standard-item publication is internally " +
+                            "inconsistent.");
+                    }
+                    bindings.Add(new DropStandardItemBinding(
+                        NativeFieldHeroFactoryPreflight
+                            .CanonicalizeLookupName(
+                                definition.CopyNameBytes()),
+                        items[wireIndex]));
+                }
+                return bindings.ToArray();
+            }
+
+            private static NativeFieldHeroRuntimeDropBinding[]
+                BuildDropBindings(
+                    NativeType2FieldHeroDefinition definition,
+                    INativeFieldHeroMonItemsSource monItemsSource,
+                    IReadOnlyList<DropStandardItemBinding> standardItems)
+            {
+                var lines = monItemsSource.LoadLines(
+                    definition.CopyNameBytes());
+                if (lines == null)
+                {
+                    throw new InvalidDataException(
+                        "Native FieldHero MonItems source returned null.");
+                }
+
+                return NativeFieldHeroMonItemsParser.Parse(lines, name =>
+                {
+                    var lookupName = NativeFieldHeroFactoryPreflight
+                        .CanonicalizeLookupName(
+                            HUtil32.GbkEncoding.GetBytes(name));
+                    // The native hash inserts each later definition at the
+                    // bucket head, so duplicate normalized names resolve to
+                    // the last loaded standard item.
+                    for (var index = standardItems.Count - 1;
+                         index >= 0; index--)
+                    {
+                        var candidate = standardItems[index];
+                        if (lookupName.AsSpan().SequenceEqual(
+                                candidate.LookupNameBytes))
+                            return candidate.Item;
+                    }
+                    return null;
+                });
             }
 
             private static
@@ -263,7 +379,6 @@ namespace GameSvr.Services
         }
 
         private readonly object _publishLock = new();
-        private readonly List<Publication> _retiredPublications = new();
         private Publication _publication = Publication.Empty;
         private long _nextGeneration;
 
@@ -271,18 +386,21 @@ namespace GameSvr.Services
         public int Count => Volatile.Read(ref _publication).Entries.Count;
         public long Generation => Volatile.Read(ref _publication).Generation;
 
-        public int RetiredPublicationCount
-        {
-            get
-            {
-                lock (_publishLock) return _retiredPublications.Count;
-            }
-        }
-
         public void Publish(
             NativeType2FieldHeroStaticCatalog definitionCatalog,
             NativeType2StdItemStaticCatalog standardItems)
         {
+            Publish(definitionCatalog, standardItems,
+                NativeFieldHeroEmptyMonItemsSource.Instance);
+        }
+
+        public void Publish(
+            NativeType2FieldHeroStaticCatalog definitionCatalog,
+            NativeType2StdItemStaticCatalog standardItems,
+            INativeFieldHeroMonItemsSource monItemsSource)
+        {
+            if (monItemsSource == null)
+                throw new ArgumentNullException(nameof(monItemsSource));
             lock (_publishLock)
             {
                 if (Volatile.Read(ref _publication).Ready)
@@ -291,7 +409,8 @@ namespace GameSvr.Services
                         "Native FieldHero runtime adapter is already " +
                         "published.");
                 }
-                PublishCore(definitionCatalog, standardItems, false);
+                PublishCore(definitionCatalog, standardItems,
+                    monItemsSource);
             }
         }
 
@@ -299,6 +418,17 @@ namespace GameSvr.Services
             NativeType2FieldHeroStaticCatalog definitionCatalog,
             NativeType2StdItemStaticCatalog standardItems)
         {
+            Replace(definitionCatalog, standardItems,
+                NativeFieldHeroEmptyMonItemsSource.Instance);
+        }
+
+        public void Replace(
+            NativeType2FieldHeroStaticCatalog definitionCatalog,
+            NativeType2StdItemStaticCatalog standardItems,
+            INativeFieldHeroMonItemsSource monItemsSource)
+        {
+            if (monItemsSource == null)
+                throw new ArgumentNullException(nameof(monItemsSource));
             lock (_publishLock)
             {
                 if (!Volatile.Read(ref _publication).Ready)
@@ -306,27 +436,27 @@ namespace GameSvr.Services
                     throw new InvalidOperationException(
                         "Native FieldHero runtime adapter is not published.");
                 }
-                PublishCore(definitionCatalog, standardItems, true);
+                PublishCore(definitionCatalog, standardItems,
+                    monItemsSource);
             }
         }
 
-        public bool TryResolveForSpawn(string name, byte? fameJob,
-            out NativeType2FieldHeroSpawnSelection selection)
+        public bool TryResolveTemplate(string name,
+            out NativeType2FieldHeroTemplateResolution resolution)
         {
             if (name == null)
             {
-                selection = null;
+                resolution = null;
                 return false;
             }
-            return TryResolveForSpawnBytes(HUtil32.GbkEncoding.GetBytes(name),
-                fameJob, out selection);
+            return TryResolveTemplateBytes(HUtil32.GbkEncoding.GetBytes(name),
+                out resolution);
         }
 
-        public bool TryResolveForSpawnBytes(ReadOnlySpan<byte> nameBytes,
-            byte? fameJob,
-            out NativeType2FieldHeroSpawnSelection selection)
+        public bool TryResolveTemplateBytes(ReadOnlySpan<byte> nameBytes,
+            out NativeType2FieldHeroTemplateResolution resolution)
         {
-            selection = null;
+            resolution = null;
             if (nameBytes.Length is 0 or >
                 NativeType2FieldHeroDefinition.NameCapacity)
                 return false;
@@ -335,15 +465,14 @@ namespace GameSvr.Services
             var runtime = publication.FindByNameBytes(nameBytes);
             if (runtime == null) return false;
 
-            var effectiveJob = runtime.CaptureEffectiveJob(fameJob);
-            selection = new NativeType2FieldHeroSpawnSelection(runtime,
-                effectiveJob);
+            resolution = new NativeType2FieldHeroTemplateResolution(runtime);
             return true;
         }
 
         private void PublishCore(
             NativeType2FieldHeroStaticCatalog definitionCatalog,
-            NativeType2StdItemStaticCatalog standardItems, bool retireCurrent)
+            NativeType2StdItemStaticCatalog standardItems,
+            INativeFieldHeroMonItemsSource monItemsSource)
         {
             if (definitionCatalog == null)
                 throw new ArgumentNullException(nameof(definitionCatalog));
@@ -367,10 +496,8 @@ namespace GameSvr.Services
             var items = standardItems.Items;
             var generation = checked(_nextGeneration + 1);
             var next = new Publication(generation, definitions,
-                itemDefinitions, items);
+                itemDefinitions, items, monItemsSource);
 
-            var current = Volatile.Read(ref _publication);
-            if (retireCurrent) _retiredPublications.Add(current);
             Interlocked.Exchange(ref _publication, next);
             _nextGeneration = generation;
         }

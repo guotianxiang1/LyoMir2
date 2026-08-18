@@ -28,7 +28,8 @@ namespace GameSvr
                    || ident == Grobal2.CM_MERCHANTDLGSELECT
                    || ident == Grobal2.CM_MERCHANT_QUERY
                    || ident == Grobal2.CM_USERBUYITEM
-                   || ident == Grobal2.CM_USERGETDETAILITEM;
+                   || ident == Grobal2.CM_USERGETDETAILITEM
+                   || ident == Grobal2.CM_3295;
         }
 
         private static string DecodeClientMessageBody(int ident, byte[] body)
@@ -237,6 +238,33 @@ namespace GameSvr
                 != frame.Length)
                 return false;
 
+            return QueueInternalBroadcastFrame(frame,
+                "TRunSocket::HandleLegacyType18");
+        }
+
+        internal bool HandleInternalPacket77(byte[] frame)
+        {
+            if (frame == null
+                || frame.Length < InternalPacket77.HEADER_SIZE
+                || frame.Length > InternalPacket77.MAX_FRAME_SIZE)
+                return false;
+
+            var bodyLength = BitConverter.ToUInt16(frame, 14);
+            if (InternalPacket77.HEADER_SIZE + bodyLength != frame.Length)
+                return false;
+
+            var packet = InternalPacket77.FromBytes(frame, 0, frame.Length);
+            if (packet == null || packet.Magic != InternalPacket77.MAGIC)
+                return false;
+
+            return QueueInternalBroadcastFrame(frame,
+                "TRunSocket::HandleInternalPacket77");
+        }
+
+        private bool QueueInternalBroadcastFrame(byte[] frame,
+            string operation)
+        {
+
             Socket socketToClose = null;
             lock (runSocketSection)
             {
@@ -253,8 +281,7 @@ namespace GameSvr
                     }
                     catch (Exception exception)
                     {
-                        socketToClose = MarkSendFailureLocked(exception,
-                            "TRunSocket::HandleLegacyType18");
+                        socketToClose = MarkSendFailureLocked(exception, operation);
                     }
                 }
             }

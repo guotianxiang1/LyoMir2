@@ -236,7 +236,7 @@ namespace GameSvr
         // parse helper + inline global/data addresses proven by the shims
         public const uint StrToIntWithDefaultEa = 0x0040CA18; // sub_40CA18(str, default)
         public const uint ThroughRangeGlobalEa = 0x007D6970;  // off_7D6970 -> *[0] = through range
-        public const int ThroughRangeMax = 0x32;              // n <= 50 accepted, else silent
+        public const int ThroughRangeMax = 0x32;              // 0 <= n <= 50 accepted
         public const uint FountSwitchGlobalEa = 0x007D6EC8;   // *(BYTE*)off_7D6EC8 = 1|0
         public const uint SpiderLastTimeGlobalEa = 0x007D6364; // *(WORD*)off_7D6364
         public const uint SpiderCodeTimeGlobalEa = 0x007D6D14; // *(WORD*)off_7D6D14
@@ -257,7 +257,7 @@ namespace GameSvr
         public const uint HumNumCoreEa = 0x006BED0C;       // sub_6BED0C (player count for map)
         public const uint MapIdxCoreEa = 0x006DEF10;       // sub_6DEF10 (current-map index for @MAP)
         public const uint MonNumberCoreEa = 0x00779DDC;    // sub_779DDC (monster count for map)
-        public const uint ReloadMonAttCoreEa = 0x0067D484; // sub_67D484 (reload MonItems/mon attr)
+        public const uint ReloadMonAttCoreEa = 0x0067D484; // sub_67D484 (reload TMonSupport)
         public const uint ReloadNpcPrizeCoreEa = 0x0074EBB4; // sub_74EBB4 (reload NormalPrize.ini -> bool)
         public const uint RangeShuagCoreEa = 0x0062E58C;   // sub_62E58C (range spawn monsters)
         public const uint NpcHitCoreEa = 0x0062EA7C;       // sub_62EA7C (nearby NPC animation)
@@ -307,9 +307,9 @@ namespace GameSvr
                 + "SysMsg(0xFFDB, template+count); not found -> SysMsg(0x38FF, error)."),
 
             // ---- reload monster / npc / map config ----------------------------
-            new NativeMonsterMapCommand("ReloadMonAtt", 111, 4, 0x0062517Cu, "sub_67D484", true,
+            new NativeMonsterMapCommand("ReloadMonAtt", 111, 4, 0x0062517Cu, "sub_67D484", false,
                 "重载怪物信息	@ReloadMonAtt",
-                "Always: sub_67D484() reloads monster attributes, then SysMsg(0x38FF, fixed). Reload core deferred."),
+                "Always: sub_67D484() reloads Thousand_mon.ini, then SysMsg(0x38FF, success/failure text)."),
             new NativeMonsterMapCommand("ReloadNpcPrize", 159, 4, 0x006258BFu, "sub_74EBB4", true,
                 "重载NPC脚本奖励配置文件NormalPrize.ini	@ReloadNpcPrize",
                 "ok=sub_74EBB4() reloads NormalPrize.ini. ok -> SysMsg(0xFFDB, success); else SysMsg(0x38FF, fail). "
@@ -338,7 +338,7 @@ namespace GameSvr
             // ---- inline map / global runtime parameters -----------------------
             new NativeMonsterMapCommand("ThroughRange", 136, 4, 0x006252D3u, "(inline)", false,
                 "设置本服务器的安全区穿人范围(0;0..50)	@ThroughRange [无/0..50]",
-                "n=StrToInt(arg,0). n<=50 -> *off_7D6970[0]=n + SysMsg(0x38FF, confirm). n>50 -> silent (no write)."),
+                "n=StrToInt(arg,0). 0<=n<=50 -> *off_7D6970[0]=n + SysMsg(0x38FF, confirm). Out of range -> silent."),
             new NativeMonsterMapCommand("SetFountSwitch", 307, 4, 0x0062723Eu, "(inline)", false,
                 "打开/关闭GM可控泉水	@SetFountSwitch [open/close]",
                 "arg=='open' -> *(BYTE*)off_7D6EC8=1 + SysMsg(0x38FF, on). arg=='close' -> =0 + SysMsg(0x38FF, off). "
@@ -491,7 +491,8 @@ namespace GameSvr
                         "report current map name (+ optional idx via sub_6DEF10); read-only");
                 case "ReloadMonAtt":
                     return Msg(NativeMonsterMapOutcome.ExecutedWithGmMessage, "reload",
-                        rec.NativeCore, SysMsgUsage, true, "sub_67D484 reload then confirm");
+                        rec.NativeCore, SysMsgUsage, false,
+                        "sub_67D484 reloads TMonSupport then reports status");
                 case "reshuaMonScript":
                     return Msg(NativeMonsterMapOutcome.ExecutedWithGmMessage, "reload",
                         rec.NativeCore, SysMsgGmReply, true,
@@ -528,13 +529,13 @@ namespace GameSvr
         private static NativeMonsterMapEvaluation EvalThroughRange(IReadOnlyList<string> a)
         {
             int n = StrToInt(Arg(a, 0), 0);
-            if (n <= ThroughRangeMax)
+            if (n >= 0 && n <= ThroughRangeMax)
                 return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.ExecutedWithGmMessage,
-                    "value-le-50", "(inline)", SysMsgUsage, false,
+                    "value-0-to-50", "(inline)", SysMsgUsage, false,
                     "*off_7D6970[0] = " + n + " (安全区穿人范围), then SysMsg(0x38FF) confirm");
             return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.RejectedSilently,
-                "value-gt-50", "(inline)", NoSysMsg, false,
-                "n > 50 -> no write, no message (jz to exit)");
+                "value-out-of-range", "(inline)", NoSysMsg, false,
+                "n < 0 or n > 50 -> no write, no message");
         }
 
         // --- ReloadNpcPrize (case 159) --------------------------------------

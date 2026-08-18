@@ -62,6 +62,12 @@ namespace GameSvr
             }
         }
 
+        internal virtual string HandleRaw(string rawLine, string parameters,
+            byte[] rawPayload, int bodyLength, TPlayObject playObject)
+        {
+            return Handle(parameters, playObject);
+        }
+
         internal static byte GetEffectivePermission(TPlayObject playObject)
         {
             if (playObject == null)

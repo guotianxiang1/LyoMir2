@@ -624,6 +624,7 @@ namespace GameSvr.Plugins
                 MakeIndex = created.MakeIndex,
                 wIndex = created.wIndex
             };
+            NativeSpecialDropItemRollCore.HydrateConstructorState(restored);
             _player.m_ItemList.Add(restored);
             _player.SendAddItem(restored);
         }

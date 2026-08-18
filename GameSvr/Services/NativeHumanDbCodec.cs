@@ -32,6 +32,8 @@ namespace GameSvr
         public const int SessionSuffixOffset = NativeDataOffset
                                                + NativeHumanDataCodec.DataRecordSize;
         public const int ScriptDataOffset = HumanInfoOffset + HumanInfoSize;
+        public const int SessionPrefixSize = 0x00A0;
+        public const int SwitchExtensionSize = 0x0108;
 
         private const int AccountCapacity = 20;
         private const int CharacterCapacity = 15;
@@ -140,6 +142,15 @@ namespace GameSvr
             ushort saveMode, int param1, int param2, THumDataInfo human,
             out LegacyDbServerFrame frame, out string error)
         {
+            return TryEncodeSaveFrame(account, characterName, saveMode,
+                param1, param2, human, null, out frame, out error);
+        }
+
+        public static bool TryEncodeSaveFrame(string account, string characterName,
+            ushort saveMode, int param1, int param2, THumDataInfo human,
+            byte[] switchExtension,
+            out LegacyDbServerFrame frame, out string error)
+        {
             frame = null;
             error = string.Empty;
             if (human?.Data == null)
@@ -152,6 +163,20 @@ namespace GameSvr
                 || !TryEncodeShortString(characterName, CharacterCapacity,
                     allowEmpty: false, out var characterBytes, out error))
                 return false;
+            if (saveMode == 2)
+            {
+                if (switchExtension == null
+                    || switchExtension.Length != SwitchExtensionSize)
+                {
+                    error = $"native save mode 2 requires a {SwitchExtensionSize}-byte switch extension";
+                    return false;
+                }
+            }
+            else if (switchExtension is { Length: > 0 })
+            {
+                error = "native switch extension is only valid for save mode 2";
+                return false;
+            }
 
             // A fixed-size 0x0050 body can legitimately omit ScriptData. The shared
             // codec uses null to mean "no native ScriptData" and an empty array to
@@ -215,6 +240,9 @@ namespace GameSvr
             WriteShortString(payload, CharacterOffset, characterBytes);
             payload[0x35] = 0;
             human.NativeData.CopyTo(payload, NativeDataOffset);
+            if (saveMode == 2)
+                switchExtension.CopyTo(payload,
+                    SessionSuffixOffset + SessionPrefixSize);
             if (script.Length > 0)
                 script.CopyTo(payload, ScriptDataOffset);
 

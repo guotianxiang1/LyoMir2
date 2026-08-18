@@ -26,6 +26,11 @@ namespace GameSvr
         public void StartService()
         {
             M2Share.DataServer.Start();
+            NativeGameDataLogService.Instance.Start(
+                M2Share.g_Config.sLogServerAddr,
+                M2Share.g_Config.nLogServerPort);
+            NativeSecondaryGameDataLogService.Instance.Start(
+                M2Share.g_Config.sLogServerAddr);
             YbDbClient.Instance.Start();
             M2Share.UserEngine.Start();
             M2Share.g_dwUsrRotCountTick = HUtil32.GetTickCount();
@@ -104,6 +109,12 @@ namespace GameSvr
             }
             M2Share.FrontEngine?.Stop();
             M2Share.DataServer?.Stop();
+            // Native manager closes both independent UDP sockets before it waits
+            // for either worker thread (sub_79D930 @0x79D940..0x79D981).
+            NativeGameDataLogService.Instance.RequestStop();
+            NativeSecondaryGameDataLogService.Instance.RequestStop();
+            NativeGameDataLogService.Instance.WaitForStop();
+            NativeSecondaryGameDataLogService.Instance.WaitForStop();
         }
 
         public void Run()
@@ -111,6 +122,8 @@ namespace GameSvr
             M2Share.DataServer?.Pulse();
             M2Share.GateManager.Run();
             var currentTick = HUtil32.GetTickCount();
+            NativeSecondaryGameDataLogService.Instance.Run(
+                unchecked((uint)currentTick), M2Share.nServerIndex);
             var processSignActEveryday = unchecked((uint)(currentTick - _runTimeTick)) >= 1000U;
             if (processSignActEveryday)
                 _runTimeTick = currentTick;
@@ -198,7 +211,8 @@ namespace GameSvr
         /// </summary>
         private void ProcessPhase4_SlowerExecute()
         {
-            if ((HUtil32.GetTickCount() - _phase4Tick) <= _phase4IntervalMs)
+            if (!NativeMirrorChatBan.HasElapsed(
+                    HUtil32.GetTickCount(), _phase4Tick, (uint)_phase4IntervalMs))
                 return;
 
             _phase4Tick = HUtil32.GetTickCount();
@@ -220,19 +234,11 @@ namespace GameSvr
                     M2Share.ErrorMessage("本轮城堡配置保存未完成，将在下个周期重试。");
                 }
 
-                // 3. DenySay timeout cleanup — clear expired chat bans
-                var denyList = new List<string>(M2Share.g_DenySayMsgList.Count);
-                foreach (var item in M2Share.g_DenySayMsgList)
-                {
-                    if (HUtil32.GetTickCount() > item.Value)
-                        denyList.Add(item.Key);
-                }
+                // 3. Native BlockUsers.Dat manager sweep (sub_621E44/sub_622040).
+                var denyList = NativeMirrorChatBan.Tick(HUtil32.GetTickCount());
                 for (var i = 0; i < denyList.Count; i++)
                 {
-                    if (M2Share.g_DenySayMsgList.TryRemove(denyList[i], out var _))
-                    {
-                        M2Share.MainOutMessage($"解除玩家[{denyList[i]}]禁言");
-                    }
+                    M2Share.MainOutMessage($"解除玩家[{denyList[i]}]禁言");
                 }
             }
             finally

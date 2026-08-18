@@ -73,6 +73,32 @@ namespace GameSvr
             return result;
         }
 
+        /// <summary>
+        /// 战神 sub_5E76F0 normalizes guild lookup keys with sub_40BC50,
+        /// which folds only ASCII a-z to A-Z before the hash lookup.
+        /// </summary>
+        internal Association FindGuildNativeAscii(string guildName)
+        {
+            if (string.IsNullOrEmpty(guildName))
+            {
+                return null;
+            }
+
+            for (var i = 0; i < GuildList.Count; i++)
+            {
+                var guild = GuildList[i];
+                var candidate = guild?.sGuildName;
+                if (candidate != null
+                    && candidate.Length == guildName.Length
+                    && HUtil32.CompareLStr(candidate, guildName,
+                        candidate.Length))
+                {
+                    return guild;
+                }
+            }
+            return null;
+        }
+
         public void LoadGuildInfo()
         {
             StringList LoadList;

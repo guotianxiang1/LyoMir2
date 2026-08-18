@@ -32,6 +32,7 @@ namespace GameSvr
             : base(envir, nX, nY, Grobal2.ET_FIREDRAGONPOINT, nTime, boVisible)
         {
             // 0x718BEC  C6 46 34 01  mov byte [esi+0x34],1
+            NativeAppliesOnLanding = true;
             // 0x718BF3  89 46 48     mov [esi+0x48],eax
             m_nDamage = nDamage;
             // 0x718BF9  89 46 14     mov [esi+0x14],eax

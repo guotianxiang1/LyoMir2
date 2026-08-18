@@ -37,7 +37,7 @@ namespace GameSvr
                     continue;
                 }
 
-                if (!NativeItemClass104.MatchesReviveDurabilityTarget(stdItem, mode))
+                if (!NativeItemClass104.MatchesReviveDurabilityTarget(userItem, mode))
                 {
                     continue;
                 }

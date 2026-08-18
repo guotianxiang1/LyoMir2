@@ -407,7 +407,8 @@ namespace GameSvr
         /// </summary>
         private void RewardSysMsg(string text)
         {
-            SendMsg(this, Grobal2.RM_SYSMESSAGE, RewardSysMsgParam, 0, 0, 0, text);
+            SendMsg(this, Grobal2.RM_SYSMESSAGE, RewardSysMsgParam,
+                0, 0, 0, text, BuildNativeTerminatedTextBody(text));
         }
     }
 }

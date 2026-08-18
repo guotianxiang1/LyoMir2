@@ -194,7 +194,37 @@ namespace GameSvr
             hero.NativeHeroState = new NativeHeroRuntimeState(raw, dynamicCopy,
                 unknownNormal, unknownSpecial);
             hero.RecalcAbilitys();
+
+            // sub_6888FC @0x688EDB..0x688F12 copies record+0x4694 into a
+            // standalone 32-byte TSlaveInfo and queues RM_10401 to the hero.
+            // The message is deliberately not executed here: the hero is
+            // attached to its owner/map only after TryApply returns.
+            if (!TryDecodeNativeHeroSlaveRecord(raw, out var slaveInfo, out error))
+                return false;
+            if (slaveInfo != null)
+            {
+                hero.SendMsg(hero, Grobal2.RM_10401, 0, 0, 0, 0,
+                    string.Empty, slaveInfo);
+            }
             return true;
+        }
+
+        internal static bool TryDecodeNativeHeroSlaveRecord(
+            ReadOnlySpan<byte> fixedRecord, out TSlaveInfo slaveInfo,
+            out string error)
+        {
+            slaveInfo = null;
+            error = string.Empty;
+            if (fixedRecord.Length != NativeHeroDbFrameCodec.HeroRecordSize)
+            {
+                error = $"native hero record length must be {NativeHeroDbFrameCodec.HeroRecordSize}";
+                return false;
+            }
+
+            return NativeSlaveInfoCodec.TryDecode(fixedRecord.Slice(
+                    NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+                    NativeHeroDbFrameCodec.NativeSlaveRecordSize),
+                out slaveInfo, out error);
         }
 
         public static bool TryCreateSnapshot(HeroObject hero, out NativeHeroRecord record,
@@ -243,6 +273,19 @@ namespace GameSvr
             }
 
             var raw = (byte[])hero.NativeHeroState.FixedRecord.Clone();
+            var nativeSwitchSlave = hero.GetNativeSwitchSlaveForSave();
+
+            // sub_689034 writes into a fresh fixed record. The embedded slot is
+            // therefore zero for every ordinary save and for every rejected
+            // switch-save arm; cloning the loaded record without this clear would
+            // resurrect a stale summon on the next load.
+            raw.AsSpan(NativeHeroDbFrameCodec.NativeSlaveRecordOffset,
+                NativeHeroDbFrameCodec.NativeSlaveRecordSize).Clear();
+            if (nativeSwitchSlave != null
+                && !TryWriteNativeSlaveRecord(raw, nativeSwitchSlave, out error))
+            {
+                return false;
+            }
             if (!TryWriteShortString(raw, NativeHeroDbFrameCodec.MasterNameOffset, 15,
                     hero.MasterName, out error)
                 || !TryWriteShortString(raw, NativeHeroDbFrameCodec.HeroNameOffset, 15,
@@ -345,6 +388,7 @@ namespace GameSvr
                 record = null;
                 return false;
             }
+
             return true;
         }
 
@@ -381,6 +425,7 @@ namespace GameSvr
             };
             source.Slice(10, 14).CopyTo(item.btValue);
             YanshenNativeItemLayout.Unpack(item);
+            NativeSpecialDropItemRollCore.HydrateConstructorState(item);
             return item;
         }
 
@@ -531,6 +576,15 @@ namespace GameSvr
                 return false;
             }
             return true;
+        }
+
+        private static bool TryWriteNativeSlaveRecord(byte[] destination,
+            TBaseObject slave, out string error)
+        {
+            var offset = NativeHeroDbFrameCodec.NativeSlaveRecordOffset;
+            return NativeSlaveInfoCodec.TryEncode(destination.AsSpan(offset,
+                    NativeHeroDbFrameCodec.NativeSlaveRecordSize),
+                slave, HUtil32.GetTickCount(), out error);
         }
 
         private static bool TryWriteShortString(byte[] destination, int offset, int maximumLength,

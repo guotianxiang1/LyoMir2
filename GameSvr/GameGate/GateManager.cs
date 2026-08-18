@@ -323,6 +323,22 @@ namespace GameSvr
             return sentCount;
         }
 
+        public int BroadcastInternalPacket77(InternalPacket77 packet)
+        {
+            if (packet == null
+                || (packet.Payload?.Length ?? 0) > InternalPacket77.MAX_PAYLOAD_SIZE)
+                return 0;
+
+            var frame = packet.ToBytes();
+            var sentCount = 0;
+            foreach (var gateService in _gateDataService.Values.ToList())
+            {
+                if (gateService.HandleInternalPacket77(frame))
+                    sentCount++;
+            }
+            return sentCount;
+        }
+
         
         
         

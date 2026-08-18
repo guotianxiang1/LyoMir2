@@ -193,11 +193,9 @@ namespace GameSvr
                 PlayObject.RecalcAbilitys();
                 PlayObject.SendDelItems(charm);
                 var StdItem = M2Share.UserEngine.GetStdItem(charm.wIndex);
-                M2Share.AddGameDataLog("持久耗尽" + "\t" + PlayObject.m_sMapName +
-                    "\t" + PlayObject.m_nCurrX + "\t" + PlayObject.m_nCurrY +
-                    "\t" + PlayObject.m_sCharName + "\t" +
-                    (StdItem == null ? string.Empty : StdItem.Name) + "\t" +
-                    charm.MakeIndex + "\t" + '1' + "\t" + '0');
+                M2Share.AddNativeGameDataLog(PlayObject, 0x0A,
+                    StdItem == null ? string.Empty : StdItem.Name,
+                    charm.MakeIndex, 1, "持久耗尽");
             }
         }
     }

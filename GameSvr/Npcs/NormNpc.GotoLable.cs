@@ -67,7 +67,8 @@ namespace GameSvr
             _ = message;
         }
 
-        public void GotoLable(TPlayObject playObject, string label, bool extendedJump)
+        public virtual void GotoLable(TPlayObject playObject, string label,
+            bool extendedJump)
         {
             _ = extendedJump;
             TryGotoPascalLabel(playObject, label);

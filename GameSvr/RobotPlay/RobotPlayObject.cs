@@ -2886,10 +2886,6 @@ namespace GameSvr
                                 }
                                 if (AllowUseMagic(40))// 英雄抱月刀法
                                 {
-                                    if (!m_boCrsHitkill)
-                                    {
-                                        SkillCrsOnOff(true);
-                                    }
                                     result = 40;
                                     return result;
                                 }
@@ -2925,10 +2921,6 @@ namespace GameSvr
                                 }
                                 if (AllowUseMagic(40))// 英雄抱月刀法
                                 {
-                                    if (!m_boCrsHitkill)
-                                    {
-                                        SkillCrsOnOff(true);
-                                    }
                                     result = 40;
                                     return result;
                                 }
@@ -2976,10 +2968,6 @@ namespace GameSvr
                                 }
                                 if (AllowUseMagic(40))// 英雄抱月刀法
                                 {
-                                    if (!m_boCrsHitkill)
-                                    {
-                                        SkillCrsOnOff(true);
-                                    }
                                     result = 40;
                                     return result;
                                 }
@@ -3015,10 +3003,6 @@ namespace GameSvr
                             if (AllowUseMagic(40) && (HUtil32.GetTickCount() - m_SkillUseTick[40]) > 3000)// 英雄抱月刀法
                             {
                                 m_SkillUseTick[40] = HUtil32.GetTickCount();
-                                if (!m_boCrsHitkill)
-                                {
-                                    SkillCrsOnOff(true);
-                                }
                                 result = 40;
                                 return result;
                             }
@@ -3071,10 +3055,6 @@ namespace GameSvr
                     if (AllowUseMagic(40) && (HUtil32.GetTickCount() - m_SkillUseTick[40]) > 3000 && CheckTargetXYCount1(m_nCurrX, m_nCurrY, 1) > 1)
                     {
                         
-                        if (!m_boCrsHitkill)
-                        {
-                            SkillCrsOnOff(true);
-                        }
                         m_SkillUseTick[40] = HUtil32.GetTickCount();
                         result = 40;
                         return result;

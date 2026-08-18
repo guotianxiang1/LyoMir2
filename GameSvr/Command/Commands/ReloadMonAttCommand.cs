@@ -4,26 +4,19 @@ using SystemModule;
 namespace GameSvr
 {
     /// <summary>
-    /// GM command to reload monster attribute database.
+    /// TMonSupport reload wrapper sub_67D484.
     /// Usage: @ReloadMonAtt
-    /// Calls CommonDB.LoadMonsterDB() to reload monster stats and attributes.
+    /// Reloads Share/Config/Thousand_mon.ini and reports its native status.
     /// </summary>
-    [GameCommand("ReloadMonAtt", "重新加载怪物属性数据库", 4)]
+    [GameCommand("ReloadMonAtt", "重载怪物攻城配置", 4)]
     public class ReloadMonAttCommand : BaseCommond
     {
         [DefaultCommand]
         public void ReloadMonAtt(TPlayObject PlayObject)
         {
-            var nCode = M2Share.CommonDB.LoadMonsterDB();
-            if (nCode >= 0)
-            {
-                PlayObject.SysMsg("怪物属性数据库重新加载完成。", MsgColor.Green, MsgType.Hint);
-                M2Share.MainOutMessage($"[重新加载] 怪物属性数据库已由 GM {PlayObject.m_sCharName} 重新加载。");
-            }
-            else
-            {
-                PlayObject.SysMsg($"怪物属性数据库重新加载失败，错误码: {nCode}", MsgColor.Red, MsgType.Hint);
-            }
+            var text = M2Share.UserEngine.ReloadNativeMonSupport();
+            PlayObject.SendMsg(PlayObject, Grobal2.RM_SYSMESSAGE, 0,
+                0xFF, 0x38, 0, text);
         }
     }
 }

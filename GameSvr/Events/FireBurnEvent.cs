@@ -24,9 +24,11 @@ namespace GameSvr
 
         public FireBurnEvent(TBaseObject Creat, int nX, int nY, int nType, int nTime, int nDamage) : base(Creat.m_PEnvir, nX, nY, nType, nTime, true)
         {
+            NativeAppliesOnLanding = true; // 0x71788D: mov byte [self+0x34],1
             m_nDamage = nDamage;
             m_OwnBaseObject = Creat;
             Context = MagicDamageContext.Empty;
+            ApplyNativeMapFireWallDuration();
         }
 
         /// <summary>
@@ -43,6 +45,7 @@ namespace GameSvr
             int nY, int nType, int nTime, int nDamage)
             : base(envir, nX, nY, nType, nTime, true)
         {
+            NativeAppliesOnLanding = true; // 0x71788D
             m_nDamage = nDamage;
             m_OwnBaseObject = owner;
             Context = MagicDamageContext.Empty;
@@ -54,22 +57,28 @@ namespace GameSvr
             {
                 ContinueTime = nTime;
             }
-            // NOT modelled, and it applies to the public constructor above too:
-            //   0x7178BC  8B 86 88 00 00 00  mov eax,[esi+0x88]   ; esi = Envir
-            //   0x7178C2  85 C0 / 7E 03      jle
-            //   0x7178C6  89 43 20           mov [ebx+0x20],eax
-            // A positive Envirnoment field +0x88 overrides the duration of EVERY
-            // fire-burn event on that map, last write wins. The C# Envirnoment has
-            // no identified counterpart for +0x88, so guessing one would be worse
-            // than leaving the override out. Flagged in the event report.
+            ApplyNativeMapFireWallDuration();
         }
 
         public FireBurnEvent(TBaseObject Creat, TUserMagic userMagic, int nX, int nY, int nType, int nTime, int nDamage) : base(Creat.m_PEnvir, nX, nY, nType, nTime, true)
         {
+            NativeAppliesOnLanding = true; // 0x71788D
             m_nDamage = nDamage;
             m_OwnBaseObject = Creat;
             Context = MagicDamageContext.Capture(userMagic);
             m_nEventParam = userMagic?.MagicInfo?.btEffect ?? 0;
+            ApplyNativeMapFireWallDuration();
+        }
+
+        private void ApplyNativeMapFireWallDuration()
+        {
+            // 0x7178BC..0x7178C9 reads Envir+0x88 after the base clamp and
+            // owner-null restore, then overwrites +0x20 only when it is positive.
+            var duration = m_Envir?.Flag?.MapFireWallBurnMs ?? 0;
+            if (duration > 0)
+            {
+                ContinueTime = duration;
+            }
         }
 
         public override bool ApplyTo(TBaseObject target)

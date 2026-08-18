@@ -1,4 +1,5 @@
 using GameSvr.Services;
+using SystemModule;
 
 namespace GameSvr
 {
@@ -142,7 +143,10 @@ namespace GameSvr
             m_btJob = 2;
             m_Abil.Level = 45;
             m_WAbil.Level = 45;
+            NativeRaw06A4 = HUtil32.GetTickCount();
         }
+
+        public int NativeRaw06A4 { get; }
 
         public override NativeType2FieldHeroActorKind NativeActorKind =>
             NativeType2FieldHeroActorKind.FieldTaosHero;
@@ -197,6 +201,7 @@ namespace GameSvr
             : base(spawnPlan, materialization)
         {
             RequirePlanKind(NativeType2FieldHeroActorKind.FieldAssHero);
+            m_nNextHitTime = 500;
             m_btJob = 3;
             m_Abil.Level = 45;
             m_WAbil.Level = 45;
@@ -247,8 +252,8 @@ namespace GameSvr
             : base(spawnPlan, materialization)
         {
             RequirePlanKind(NativeType2FieldHeroActorKind.ModelHero);
-            NativeRaw02E0 = 1;
             NativeRaw02E1 = 1;
+            NativeRaw02E0 = 1;
         }
 
         public byte NativeRaw02E0 { get; }
@@ -286,7 +291,21 @@ namespace GameSvr
             NativeType2FieldHeroMaterialization materialization)
             : base(spawnPlan, materialization)
         {
+            NativeRaw0608 = 0;
+            NativeRaw05F8 = 0;
+            NativeRaw05FC = 0;
+            NativeRaw05F4 = 0;
+            NativeRaw06A0Length = 1;
+            NativeRaw06A4 = 0;
+            NativeRaw06A8 = 0;
+            NativeLifetimeRemaining = 0;
+            m_nViewRange = 9;
         }
+
+        public byte NativeRaw05F4 { get; }
+        public int NativeRaw06A0Length { get; }
+        public int NativeRaw06A4 { get; }
+        public int NativeRaw06A8 { get; }
     }
 
     public sealed class TMirDotaMatchHumMon_War : TMirDotaMatchHumMon
@@ -416,7 +435,10 @@ namespace GameSvr
             RequirePlanKind(
                 NativeType2FieldHeroActorKind.MirDotaMatchHumMonTaos);
             m_btJob = 2;
+            NativeRaw06B4 = HUtil32.GetTickCount();
         }
+
+        public int NativeRaw06B4 { get; }
 
         public override NativeType2FieldHeroActorKind NativeActorKind =>
             NativeType2FieldHeroActorKind.MirDotaMatchHumMonTaos;
@@ -466,6 +488,7 @@ namespace GameSvr
         {
             RequirePlanKind(
                 NativeType2FieldHeroActorKind.MirDotaMatchHumMonAss);
+            m_nNextHitTime = 500;
             m_btJob = 3;
         }
 

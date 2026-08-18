@@ -28,6 +28,8 @@ namespace GameSvr
         // dynamic rooms inherit false until the factory copies Flag.boRUNFLAG.
         internal bool NativeCanRunWhileOverweight { get; set; } = false;
         internal NativeMapDropItemRawState NativeMapDropItems { get; } = new();
+        internal NativeLimitBagItemDropState NativeLimitBagItemDrops { get; } =
+            new();
         internal NativeDropControlState NativeDropControl { get; } =
             new(NativeDropControlBucketField.ItemName);
         internal int DynamicRoomState { get; set; }
@@ -207,6 +209,12 @@ namespace GameSvr
         
         public object AddToMap(int nX, int nY, CellType btType, object pRemoveObject)
         {
+            return AddToMap(nX, nY, btType, pRemoveObject, 0);
+        }
+
+        public object AddToMap(int nX, int nY, CellType btType,
+            object pRemoveObject, int nAliveSeconds)
+        {
             object result = null;
             MapCellinfo MapCellInfo;
             CellObject OSObject;
@@ -215,10 +223,28 @@ namespace GameSvr
             const string sExceptionMsg = "[Exception] TEnvirnoment::AddToMap";
             try
             {
+                if (pRemoveObject == null)
+                {
+                    return null;
+                }
+
                 var bo1E = false;
                 var mapCell = false;
+                var dwAddTime = GetNativeAddToMapStamp(nAliveSeconds);
                 MapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
-                if (mapCell && MapCellInfo.Valid)
+                // sub_7776EC scans and refreshes the native chain before its
+                // cell-attribute gate. A duplicate refresh returns nil.
+                if (mapCell && ScanNativeAddToMapChain(
+                        MapCellInfo, pRemoveObject, dwAddTime))
+                {
+                    return null;
+                }
+                // 0x777967..0x77797F: a non-walkable cell rejects every
+                // object except TFireworksEvent (Delphi `is`, descendants
+                // included). The dedicated managed type preserves that class
+                // gate without granting all map events the exception.
+                if (mapCell && (MapCellInfo.Valid ||
+                                pRemoveObject is FireworksEvent))
                 {
                     if (MapCellInfo.ObjList == null)
                     {
@@ -253,11 +279,6 @@ namespace GameSvr
                                     }
                                 }
                             }
-                            if (!bo1E && MapCellInfo.Count >= 5)
-                            {
-                                result = null;
-                                bo1E = true;
-                            }
                         }
                     }
                     if (!bo1E)
@@ -266,9 +287,10 @@ namespace GameSvr
                         {
                             CellType = btType,
                             CellObj = pRemoveObject,
-                            dwAddTime = HUtil32.GetTickCount()
+                            dwAddTime = dwAddTime
                         };
-                        MapCellInfo.ObjList.Add(OSObject);
+                        // 0x777A9C..0x777AAE splices the node at cell.head.
+                        MapCellInfo.ObjList.Insert(0, OSObject);
                         result = pRemoveObject;
                         if (btType == CellType.OS_MOVINGOBJECT)
                         {
@@ -293,6 +315,54 @@ namespace GameSvr
                 M2Share.ErrorMessage(sExceptionMsg + " " + ex.Message);
             }
             return result;
+        }
+
+        private static int GetNativeAddToMapStamp(int nAliveSeconds)
+        {
+            if (nAliveSeconds <= 0)
+            {
+                return HUtil32.GetTickCount();
+            }
+
+            var stamp = unchecked(HUtil32.GetTickCount()
+                                  + nAliveSeconds * 1000 - 600000);
+            return stamp > 0 ? stamp : 0;
+        }
+
+        private static bool ScanNativeAddToMapChain(
+            MapCellinfo mapCellInfo, object addedObject, int addTime)
+        {
+            var objects = mapCellInfo.ObjList;
+            if (objects == null)
+            {
+                return false;
+            }
+
+            var index = 0;
+            while (index < objects.Count)
+            {
+                var cellObject = objects[index];
+                if (cellObject.CellType == CellType.OS_MOVINGOBJECT
+                    && cellObject.CellObj != null
+                    && TBaseObject.IsNativeStaleCellActor(
+                        cellObject.CellObj))
+                {
+                    // 0x7777F7..0x777811 unlinks a stale actor and keeps the
+                    // previous chain cursor in place.
+                    objects.RemoveAt(index);
+                    continue;
+                }
+
+                if (ReferenceEquals(cellObject.CellObj, addedObject))
+                {
+                    cellObject.dwAddTime = addTime;
+                    return true;
+                }
+
+                index++;
+            }
+
+            return false;
         }
 
         public void AddDoorToMap()
@@ -369,6 +439,50 @@ namespace GameSvr
         public int MoveToMovingObjectForRun(int nCX, int nCY, TBaseObject Cert, int nX, int nY, bool boFlag)
         {
             return MoveToMovingObjectCore(nCX, nCY, Cert, nX, nY, boFlag, true);
+        }
+
+        /// <summary>
+        /// Native <c>sub_779CD8</c>: move the first source node whose object is
+        /// <paramref name="cert"/> directly to the target cell head. Unlike
+        /// <see cref="MoveToMovingObject"/>, this primitive deliberately has no
+        /// bounds, terrain, occupancy, LinkPoint, or stale-object gate.
+        /// </summary>
+        internal bool NativeRelocateMovingObjectNodeExact(int sourceX,
+            int sourceY, TBaseObject cert, int targetX, int targetY)
+        {
+            // 0x779CF1..0x779D22 uses movzx WORD coordinates and indexes the
+            // column-major cell array directly. Invalid coordinates are native's
+            // fault domain, so do not turn them into a normal false result here.
+            int sourceIndex = unchecked((ushort)sourceX * wHeight +
+                (ushort)sourceY);
+            int targetIndex = unchecked((ushort)targetX * wHeight +
+                (ushort)targetY);
+            var sourceObjects = MapCellObjectLists[sourceIndex];
+            if (sourceObjects == null)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < sourceObjects.Count; index++)
+            {
+                var node = sourceObjects[index];
+                if (!ReferenceEquals(node.CellObj, cert))
+                {
+                    continue;
+                }
+
+                sourceObjects.RemoveAt(index);
+                if (sourceObjects.Count == 0)
+                {
+                    MapCellObjectLists[sourceIndex] = null;
+                }
+
+                var targetObjects = MapCellObjectLists[targetIndex] ??=
+                    new List<CellObject>();
+                targetObjects.Insert(0, node);
+                return true;
+            }
+            return false;
         }
 
         private int MoveToMovingObjectCore(int nCX, int nCY, TBaseObject Cert, int nX, int nY, bool boFlag, bool useRunRules)
@@ -510,31 +624,24 @@ namespace GameSvr
                         {
                             return 0;
                         }
-                        var boUnlinkedFromSource = false;
+                        CellObject movedCellObject = null;
                         if (GetMapCellInfo(nCX, nCY, ref MapCellInfo) && MapCellInfo.ObjList != null)
                         {
                             var i = 0;
-                            while (true)
+                            while (i < MapCellInfo.Count)
                             {
-                                if (MapCellInfo.Count <= i)
-                                {
-                                    break;
-                                }
                                 OSObject = MapCellInfo.ObjList[i];
-                                if (OSObject.CellType == CellType.OS_MOVINGOBJECT)
+                                // 0x779A5B..0x779A64 compares only node.Object
+                                // with Cert. It does not inspect the node tag.
+                                if (ReferenceEquals(OSObject.CellObj, Cert))
                                 {
-                                    if ((TBaseObject)OSObject.CellObj == Cert)
+                                    movedCellObject = OSObject;
+                                    MapCellInfo.Remove(i);
+                                    if (MapCellInfo.Count == 0)
                                     {
-                                        boUnlinkedFromSource = true;
-                                        MapCellInfo.Remove(i);
-                                        OSObject = null;
-                                        if (MapCellInfo.Count > 0)
-                                        {
-                                            continue;
-                                        }
                                         ReleaseCellObjectList(nCX, nCY);
-                                        break;
                                     }
+                                    break;
                                 }
                                 i++;
                             }
@@ -549,7 +656,7 @@ namespace GameSvr
                         //   00779AAD  33 C0        xor eax,eax            ; 遍历完 -> FALSE
                         // C# 无论找没找到都 Add 并返回 1，于是"从一个自己并不在的格子
                         // 搬走"会在目标格凭空多出一份登记 —— 旧格的幽灵占位就是这么来的。
-                        if (!boUnlinkedFromSource)
+                        if (movedCellObject == null)
                         {
                             return 0;
                         }
@@ -559,12 +666,6 @@ namespace GameSvr
                             {
                                 MapCellInfo.ObjList = EnsureCellObjectList(nX, nY);
                             }
-                            OSObject = new CellObject
-                            {
-                                CellType = CellType.OS_MOVINGOBJECT,
-                                CellObj = Cert,
-                                dwAddTime = HUtil32.GetTickCount()
-                            };
                             // MOVE-35(c) — dest cell is a native singly-linked list
                             // whose head lives at destCell[8]. After unlinking, the
                             // mover splices the same node onto the front:
@@ -572,11 +673,10 @@ namespace GameSvr
                             //   00779A83  8B 40 08        mov eax,[eax+8]    ; old head
                             //   00779A89  89 42 0C        mov [edx+0xC],eax  ; node.next = old head
                             //   00779A92  89 50 08        mov [eax+8],edx    ; destCell[8] = node
-                            // C# stores the chain as List<T> and walks 0..Count-1, so
-                            // index 0 is the native head. Add() was tail-insert and
-                            // reversed every consumer that iterates the cell (pick-up,
-                            // target select, AOE). Insert(0) restores head order.
-                            MapCellInfo.ObjList.Insert(0, OSObject);
+                            // Reusing the same CellObject also preserves the native
+                            // tag, object payload and dwAddTime; the mover writes none
+                            // of those fields. List index 0 represents the native head.
+                            MapCellInfo.ObjList.Insert(0, movedCellObject);
                             result = 1;
                         }
                     }
@@ -1182,6 +1282,7 @@ namespace GameSvr
                 }
 
                 if (mapItem.OfBaseObject == null ||
+                    ReferenceEquals(mapItem.OfBaseObject, requester) ||
                     mapItem.OfBaseObject is TBaseObject owner &&
                     ReferenceEquals(owner.GetMaster(), requester))
                 {
@@ -1246,7 +1347,7 @@ namespace GameSvr
                     OSObject.CellType = nType;
                     OSObject.CellObj = __Event;
                     OSObject.dwAddTime = HUtil32.GetTickCount();
-                    MapCellInfo.ObjList.Add(OSObject);
+                    MapCellInfo.ObjList.Insert(0, OSObject);
                     result = OSObject;
                 }
             }
@@ -1295,7 +1396,7 @@ namespace GameSvr
                         CellObj = stoneMineEvent,
                         dwAddTime = HUtil32.GetTickCount()
                     };
-                    MapCellInfo.ObjList.Add(OSObject);
+                    MapCellInfo.ObjList.Insert(0, OSObject);
                     return stoneMineEvent;
                 }
             }
@@ -1670,6 +1771,93 @@ namespace GameSvr
                 }
             }
             return result;
+        }
+
+        /// <summary>
+        /// Native <c>sub_77BD34</c>: returns true only when <paramref name="actor"/>
+        /// is the oldest eligible player in the cell's head-linked chain.
+        /// </summary>
+        internal bool NativeIsOldestEligiblePlayerInCell(
+            TBaseObject actor, int nX, int nY)
+        {
+            return NativeIsOldestEligiblePlayerInCellCore(
+                actor, nX, nY, null);
+        }
+
+        internal bool NativeIsOldestEligiblePlayerInCellAtTick(
+            TBaseObject actor, int nX, int nY, int currentTick)
+        {
+            return NativeIsOldestEligiblePlayerInCellCore(
+                actor, nX, nY, currentTick);
+        }
+
+        private bool NativeIsOldestEligiblePlayerInCellCore(
+            TBaseObject actor, int nX, int nY, int? fixedTick)
+        {
+            if (actor == null)
+            {
+                return false;
+            }
+
+            // 0x77BD52..0x77BD68: a dead subject remains eligible through
+            // exactly 10000 ms; the `ja` rejection is unsigned.
+            if (actor.m_boDeath && unchecked((uint)(
+                    (fixedTick ?? HUtil32.GetTickCount()) -
+                    actor.m_dwDeathTick)) > 10000u)
+            {
+                return false;
+            }
+
+            // 0x77BD6E..0x77BD96 deliberately excludes the last column and
+            // row, unlike the general GetMapCellInfo bounds.
+            if (nX < 0 || nY < 0 || nX >= wWidth - 1 ||
+                nY >= wHeight - 1 ||
+                !TryGetMapCellIndex(nX, nY, out var cellIndex))
+            {
+                return false;
+            }
+
+            var objects = MapCellObjectLists?[cellIndex];
+            if (objects == null)
+            {
+                return false;
+            }
+
+            var foundActor = false;
+            for (var i = 0; i < objects.Count; i++)
+            {
+                var cellObject = objects[i];
+                // 0x77BDBC compares the payload before testing the node tag.
+                if (ReferenceEquals(cellObject?.CellObj, actor))
+                {
+                    foundActor = true;
+                    continue;
+                }
+
+                if (!foundActor ||
+                    cellObject?.CellType != CellType.OS_MOVINGOBJECT ||
+                    cellObject.CellObj is not TBaseObject candidate ||
+                    candidate.m_btRaceServer != Grobal2.RC_PLAYOBJECT)
+                {
+                    continue;
+                }
+
+                if (!candidate.m_boDeath)
+                {
+                    return false;
+                }
+
+                // 0x77BDEC..0x77BDFC uses `jae`: an older dead candidate is
+                // ignored starting at exactly 10000 ms.
+                if (unchecked((uint)(
+                        (fixedTick ?? HUtil32.GetTickCount()) -
+                        candidate.m_dwDeathTick)) < 10000u)
+                {
+                    return false;
+                }
+            }
+
+            return foundActor;
         }
 
         public bool GetNextPosition(short sx, short sy, int ndir, int nFlag, ref short snx, ref short sny)

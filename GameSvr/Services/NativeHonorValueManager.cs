@@ -9,6 +9,8 @@ namespace GameSvr
         internal const int RankingPageSize = 7;
         internal const int RankingRecordSize = 22;
         internal const int RankingNameCapacity = 15;
+        internal const int RankingNameLengthOffset = 2;
+        internal const int RankingNameOffset = 3;
         internal const int RankingHonorOffset = 18;
 
         private const string CreateTableSql =
@@ -180,16 +182,23 @@ namespace GameSvr
             correctedPage = requestedPage;
             lastPage = (records.Length - 1) / RankingPageSize;
             body = Array.Empty<byte>();
+            // sub_60EFE4 @0x60F168 accepts the sentinel produced by the
+            // "my ranking not found" leg and sends an empty SM 1108/-2 frame.
+            // A client may also echo that sentinel on its next request.
+            if (requestedPage == -2)
+                return true;
             if (requestedPage > lastPage || requestedPage < -1)
                 return false;
 
             if (requestedPage == -1)
             {
                 var rank = 0;
+                var requestedNameBytes = HUtil32.GbkEncoding.GetBytes(
+                    characterName ?? string.Empty);
                 for (var index = 0; index < records.Length; index++)
                 {
-                    if (!string.Equals(records[index].CharacterName,
-                            characterName, StringComparison.Ordinal))
+                    if (!records[index].NameBytes.AsSpan()
+                            .SequenceEqual(requestedNameBytes))
                         continue;
                     rank = index + 1;
                     break;
@@ -322,13 +331,17 @@ namespace GameSvr
                 unchecked((ushort)rank));
             var nameBytes = HUtil32.GbkEncoding.GetBytes(
                 characterName ?? string.Empty);
-            nameBytes.AsSpan(0, Math.Min(nameBytes.Length,
-                    RankingNameCapacity))
-                .CopyTo(wire.AsSpan(2, RankingNameCapacity));
+            var nameLength = Math.Min(nameBytes.Length, RankingNameCapacity);
+            // 0x60ECC6..0x60ED22 calls the ShortString[15] writer: byte +2
+            // is the byte length and the GBK payload starts at +3. The previous
+            // port copied the payload at +2 and shifted every name one byte left.
+            wire[RankingNameLengthOffset] = unchecked((byte)nameLength);
+            nameBytes.AsSpan(0, nameLength)
+                .CopyTo(wire.AsSpan(RankingNameOffset, RankingNameCapacity));
             BinaryPrimitives.WriteInt32LittleEndian(
                 wire.AsSpan(RankingHonorOffset, sizeof(int)), honorValue);
-            return new NativeHonorRankingRecord(characterName ?? string.Empty,
-                wire);
+            return new NativeHonorRankingRecord(
+                nameBytes.AsSpan(0, nameLength).ToArray(), wire);
         }
 
         private static void UpdateOnline(string characterName, int value)
@@ -361,14 +374,14 @@ namespace GameSvr
 
         private sealed class NativeHonorRankingRecord
         {
-            public NativeHonorRankingRecord(string characterName,
+            public NativeHonorRankingRecord(byte[] nameBytes,
                 byte[] wireBytes)
             {
-                CharacterName = characterName;
+                NameBytes = nameBytes;
                 WireBytes = wireBytes;
             }
 
-            public string CharacterName { get; }
+            public byte[] NameBytes { get; }
             public byte[] WireBytes { get; }
         }
     }

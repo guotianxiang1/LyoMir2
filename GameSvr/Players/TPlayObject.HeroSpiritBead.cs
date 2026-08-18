@@ -77,11 +77,10 @@ namespace GameSvr
     //   0x747CF4 由 [0x60C] 重算派生属性(门控 [0x610]>0); 0x74730C 广播 SM 0xFC1.
     //   SM 0xCFD: Recog=[target+0x60C], Param=word[target+0x610], sMsg=文本 (target.vmt+0x250);
     //                [target.vmt+0x24C] 移除物品; Free.
-    //   BLOCKERS: [0x610] 由 worker 外部(登录加载/激活)写入, 产生者未验证; 派生属性
-    //                [0x59C..0x5A8]/重算 0x747CF4/广播 SM 0xFC1 未建模; 登录同步 SM 3324/3325
-    //                读同组字段已在 TPlayObject.NativeLogonStateSync.cs 刻意 fail-closed
-    //                ([0x60C]/[0x610] "not yet mapped"). 故 SM 0xCFD 的 Param=word[0x610]
-    //                无法推导, 掩码提交缺重算/广播/落盘 -> fail-closed.
+    //   BLOCKERS: 持久化源已由 SoulWash.cs 映射为 record+0x580/+0x57C，登录 SM 3324
+    //                也已从该源恢复；但本文件的会话属性仍未接到完整镶嵌提交链，且派生属性
+    //                [0x59C..0x5A8]/重算 0x747CF4/广播 SM 0xFC1 未建模。因此掩码提交
+    //                仍缺重算/广播/会话状态衔接 -> fail-closed.
     //
     //     另: 0x73CF08 比较 dword[item+0x18]==Recog; item+0x18 在 C# 模型里究竟对应
     //     MakeIndex 还是 ClientItemID 两处注释相互矛盾 (TUserItem.ClientItemID vs
@@ -91,8 +90,9 @@ namespace GameSvr
     public partial class TPlayObject
     {
         // ---- 建字段: 神佑袋/生肖掩码 (offsets [self+0x60C]/[self+0x610]) ----
-        // 当前无 C# 登录同步会加载它们 (见 NativeLogonStateSync.cs 对 SM 3324 的刻意
-        // fail-closed), 故它们是纯会话状态、默认 0; 掩码子系统整体未建模, 处理器不提交。
+        // RestoreNativeHeroZodiacState/PersistNativeHeroZodiacState now map these live
+        // session fields to record+0x580/+0x57C exactly. The inlay commit chain itself
+        // remains fail-closed until its recompute and SM 0xFC1 broadcast are complete.
 
         /// <summary>
         /// 生肖位掩码 <c>dword[self+0x60C]</c>. Bit (生肖-1) 置 1 表示该生肖已镶嵌。
@@ -103,8 +103,8 @@ namespace GameSvr
 
         /// <summary>
         /// 神佑袋门控 <c>dword[self+0x610]</c>. 0x747CF4 <c>cmp dword[+0x610],0 / jg</c>
-        /// 决定派生属性是否生效; SM 0xCFD 取其低 word 作 Param。产生者在镶嵌 worker
-        /// 之外 (登录加载/激活), 本轮未验证、未建模。见类注释 (3) BLOCKERS。
+        /// 决定派生属性是否生效; SM 0xCFD 取其低 word 作 Param。持久化源为
+        /// record+0x57C，登录时按 0x6B060A 将非正值归一为 1，保存时原值写回。
         /// </summary>
         internal int HeroZodiacBlessGate { get; set; }
 
@@ -196,8 +196,8 @@ namespace GameSvr
         /// — 英雄生肖/神佑袋镶嵌 (TAnimalMascot)。
         /// Leaf 路由 1:1: Series==1 时有英雄走 worker(Hero)、无英雄静默; Series==0 走
         /// worker(self); Series&gt;=2 静默。两条 worker 腿的终末动作 (置位 [self+0x60C]、
-        /// 重算、广播 SM 0xFC1、SM 0xCFD) 依赖未建模的神佑袋集群, SM 0xCFD 的
-        /// Param=word[0x610] 无法推导 -> fail-closed (见类注释 (3))。
+        /// 重算、广播 SM 0xFC1、SM 0xCFD) 依赖尚未完整接线的神佑袋集群
+        /// -> fail-closed (见类注释 (3))。
         /// </summary>
         /// <param name="nSeries">Series = word[msg+0xA] = TProcessMessage.wParam。</param>
         private void ClientNativeHeroZodiacInlay(int nSeries)

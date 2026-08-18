@@ -14,6 +14,19 @@ namespace GameSvr
         public int m_dwRunAwayStart = 0;
         public int m_dwRunAwayTime = 0;
 
+        /// <summary>
+        /// Native TAnimal <c>+0x48C</c>. TAnimal.Create initializes it to 10;
+        /// TPlayer.MakeSlave overwrites it with the raw signed
+        /// <c>hpAfterSlave</c> percentage.
+        /// </summary>
+        internal int m_nNativeHpAfterSlavePercent = 10;
+
+        /// <summary>
+        /// Native TAnimal <c>+0x450</c>, set when slave royalty expires.
+        /// This offset is unrelated to the TPlayer sibling-layout revive tick.
+        /// </summary>
+        internal bool m_boNativeSlaveRoyaltyExpired;
+
         public virtual void Attack(TBaseObject TargeTBaseObject, byte nDir)
         {
             base.AttackDir(TargeTBaseObject, 0, nDir);
@@ -60,6 +73,34 @@ namespace GameSvr
             m_boRunAwayMode = false;
             m_dwRunAwayStart = HUtil32.GetTickCount();
             m_dwRunAwayTime = 0;
+            m_nNativeHpAfterSlavePercent = 10; // 0x71D8B7
+            m_boNativeSlaveRoyaltyExpired = false; // 0x71D85F
+        }
+
+        internal override bool IsNativeMagic43Target(TPlayObject source)
+        {
+            // These C# classes map to native VMT+0x19C constant-false holders.
+            // SuperGuard is the one flattened exception: native TSuperGuard is
+            // a direct TAnimal child and inherits the accepting slot.
+            if (this is TPlayObject || this is HeroObject ||
+                this is TFieldHero || this is AiMon || this is SearchMon ||
+                this is WalkMon || this is FoxBossMon ||
+                this is FourteenYearBossMon ||
+                this is WorldCupPreMatchMon || this is HuoSheMonster ||
+                this is MirDotaMatchBossMon || this is KingFireDragon ||
+                this is SuicideBat || this is FireCracker ||
+                this is QingLong || this is BaiHu || this is ItemAttMon ||
+                this is TimerBombMon || this is CreateBombMon ||
+                (this is NormNpc && !(this is SuperGuard)))
+            {
+                return false;
+            }
+
+            // TAnimal.IsProperTarget slot @0x71F840, as called by skill 43.
+            return source != null && !m_boDeath &&
+                   !ReferenceEquals(this, source) && m_Master == null &&
+                   m_btRaceServer > Grobal2.RC_ANIMAL &&
+                   m_Abil.Level <= source.m_Abil.Level;
         }
 
         protected virtual void GotoTargetXY()

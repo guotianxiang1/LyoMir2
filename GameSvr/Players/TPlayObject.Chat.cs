@@ -1,4 +1,5 @@
 using GameSvr.Plugins;
+using GameSvr.Services;
 using SystemModule;
 
 namespace GameSvr
@@ -74,7 +75,11 @@ namespace GameSvr
             {
                 if (M2Share.UserEngine.FindOtherServerUser(whostr, ref svidx))
                 {
-                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_WHISPER, svidx, whostr + '/' + m_sCharName + "=> " + saystr);
+                    // 0x652DA3 movzx eax,word[player+0x278] / 0x652DA7 push eax:
+                    // ISM 203 carries the speaker level in the native P2 dword.
+                    M2Share.UserEngine.SendServerGroupMsg(Grobal2.ISM_WHISPER,
+                        svidx, m_Abil.Level,
+                        whostr + '/' + m_sCharName + "=> " + saystr);
                 }
                 else
                 {
@@ -169,7 +174,7 @@ namespace GameSvr
                     m_boDisableSayMsg = false;
                 }
                 boDisableSayMsg = m_boDisableSayMsg;
-                if (M2Share.g_DenySayMsgList.ContainsKey(this.m_sCharName))
+                if (NativeMirrorChatBan.Contains(this.m_sCharName))
                 {
                     boDisableSayMsg = true;
                 }
@@ -329,6 +334,12 @@ namespace GameSvr
         }
 
         internal void ProcessUserLineMsg(string sData)
+        {
+            ProcessUserLineMsg(sData, null, 0);
+        }
+
+        internal void ProcessUserLineMsg(string sData, byte[] rawPayload,
+            int bodyLength)
         {
             string sC;
             var sCMD = string.Empty;
@@ -545,7 +556,8 @@ namespace GameSvr
                 {
                     return;
                 }
-                if (M2Share.CommandSystem.ExecCmd(sData, this))
+                if (M2Share.CommandSystem.ExecCmd(sData, this, rawPayload,
+                        bodyLength))
                 {
                     return;
                 }

@@ -88,6 +88,24 @@ namespace GameSvr
 
         // Opaque Type1 0x0050 data; it must not override gate routing fields.
         public byte[] m_NativeDbSessionSuffix = Array.Empty<byte>();
+
+        // Runtime-only fields carried by the original saveMode=2 block at
+        // HumanInfo suffix +0xA0. Unknown business meanings remain offset-named.
+        internal int m_nNativeSwitchSerial;
+        internal bool m_boNativeSwitchOffsetB75;
+        internal bool m_boNativeClientVersionHandshakeDone;
+        internal string m_sNativeClientVersion = string.Empty;
+        internal int m_dwNativeClientVersionCheckTick;
+        internal byte m_btNativeRepairMode;
+        internal bool m_boNativeSwitchHeroHandoffPending;
+        internal ushort m_wNativeSwitchOffsetD38;
+        internal int m_nNativeSwitchOffsetD3C;
+        internal int m_nNativeSwitchOffsetD40;
+        internal int m_dwNativeSwitchOffsetD44;
+        internal int m_dwNativeSwitchHeroKind0Tick;
+        internal int m_dwNativeSwitchHeroKind1Tick;
+        internal byte m_btNativeHeroRequestKind;
+        internal byte m_btNativeHeroRequestSlot;
         
         
         
@@ -1068,6 +1086,15 @@ namespace GameSvr
             SendSocket(m_DefMsg, body);
         }
 
+        internal void SendNativeMapInfoExLogin()
+        {
+            var body = M2Share.MapManager?.GetNativeMapInfoExText()
+                ?? string.Empty;
+            var header = Grobal2.MakeDefaultMsg(Grobal2.SM_MAPINFO_EX,
+                0, 0, 0, 0);
+            SendSocket(header, body);
+        }
+
         
         
         
@@ -1105,6 +1132,7 @@ namespace GameSvr
                 m_dwLogonTick = HUtil32.GetTickCount();
                 Initialize();
                 logonStage = "initialized";
+                SendNativeMapInfoExLogin();
                 SendMsg(this, Grobal2.RM_LOGON, 0, 0, 0, 0, "");
                 logonStage = "logon-sent";
                 if (m_Abil.Level <= 7)
@@ -1129,6 +1157,7 @@ namespace GameSvr
                         }
                     }
                 }
+                InitializeNativeClientVersionRunGate(HUtil32.GetTickCount());
                 GetStartPoint();
                 for (var i = m_MagicList.Count - 1; i >= 0; i--)
                 {
@@ -1340,6 +1369,7 @@ namespace GameSvr
                     }
                 }
                 RefShowName();
+                SendNativeItemMovementSmsLoginNotice();
                 M2Share.AuthenticationManager?.TryLoad(this);
                 if (m_nPayMent == 1)
                 {
@@ -1405,8 +1435,8 @@ namespace GameSvr
                 // -> sub_765E68 with edx=eax=Self, six zero params), just ahead of the
                 // 0x6B23C6 SM 888 send below. Being an enqueue, the login-state cluster
                 // (SM 3324/1264/3554/3556) is delivered on the next Run tick, after every
-                // direct SM this UserLogon writes. C# currently emits only the 3554 leg;
-                // see TPlayObject.NativeLogonStateSync for the other three legs' status.
+                // direct SM this UserLogon writes. All four player legs are emitted
+                // in native order; an empty 3556 cold-time list stays silent.
                 SendMsg(this, Grobal2.RM_NATIVE_LOGON_STATE_SYNC, 0, 0, 0, 0, "");
                 // Native UserLogon @0x6B23C6 call 0x6F05D8, immediately before the
                 // 定位石 replay at 0x6B23E3. sub_6F05D8 first sends SM 888:
@@ -2247,7 +2277,9 @@ namespace GameSvr
             // 原先这里的 `m_boAngryRing || m_boNoDropItem || Flag.boNODROPITEM` 早退
             // 在原生无对应，且全镜像多编码零命中（GBK / 裸 ASCII 大小写不敏感 /
             // UTF-16LE 三路皆 0）。按 §3.1 删除——原版就是不给这道保护。
-            var boDropall = M2Share.g_Config.boDieRedScatterBagAll && PKLevel() >= 2;
+            // 0x7400B1..0x7400BE: setle => PKPoint >= configured threshold.
+            // The worker never reads boDieRedScatterBagAll or PKLevel().
+            var boDropall = m_nPkPoint >= M2Share.g_Config.nPKPunishPoint;
             // 战神 sub_740078 @0x740140-0x740223 — the auth + gift DESTROY branch, absent
             // from C# until now.  Same three-part test as the manual drop:
             //   0x740140  cmp byte [esi+0x178],0 / jne 0x740225   ; non-player -> normal scatter
@@ -2259,7 +2291,6 @@ namespace GameSvr
             //   0x74021E  call sub_404690                         ; Free — NEVER DropItemDown
             // This was the primary laundering route in the whole game: die on purpose,
             // alt picks the gift/unverified items up off the floor.
-            var scatterAuthenticated = NativeItemDropDestroyAuthenticated();
             var isPlayerRace = m_btRaceServer == Grobal2.RC_PLAYOBJECT;
             try
             {
@@ -2282,40 +2313,54 @@ namespace GameSvr
                     // 循环第一句，于是 (a) 未验证/赠品被 100% 销毁而不是原生的 1/3，
                     // (b) 绑定物、Reserved02&0x0010/0x0200 的物品本来一件都不该动，
                     // 却照样被销毁 —— 两条都是净额外的玩家资产损失。
-                    var bagStdItem = M2Share.UserEngine.GetStdItem(m_ItemList[i].wIndex);
-                    // 分母是**硬编码 3**：0x7400F8 `B8 03 00 00 00 mov eax,3` 紧接
-                    // 0x7400FD `E8 4A 3A CC FF call sub_403B4C`，没有任何全局读。
-                    // 这里原先读 g_Config.nDieScatterBagRate（默认也是 3，所以默认配置下
-                    // 行为不变），但 DieScatterBagRate 这个名字在全镜像 GBK、裸 ASCII
-                    // （大小写不敏感）、UTF-16LE 三路皆 0 命中，原生没有这个旋钮。
-                    if (!boDropall
-                        && M2Share.RandomNumber.Random(3) != 0)
+                    var bagItem = m_ItemList[i];
+                    var bagStdItem = M2Share.UserEngine.GetStdItem(bagItem.wIndex);
+                    if (bagItem.NativeClassFc == 0)
                     {
-                        continue;                                   // 0x740104 jne 0x74025C
-                    }
-                    if (bagStdItem != null)
-                    {
-                        if ((bagStdItem.NativeReserved02 & 0x0010) != 0)
+                        // 分母是**硬编码 3**：0x7400F8 `B8 03 00 00 00 mov eax,3` 紧接
+                        // 0x7400FD `E8 4A 3A CC FF call sub_403B4C`，没有任何全局读。
+                        // 这里原先读 g_Config.nDieScatterBagRate（默认也是 3，所以默认配置下
+                        // 行为不变），但 DieScatterBagRate 这个名字在全镜像 GBK、裸 ASCII
+                        // （大小写不敏感）、UTF-16LE 三路皆 0 命中，原生没有这个旋钮。
+                        if (!boDropall
+                            && M2Share.RandomNumber.Random(3) != 0)
                         {
-                            continue;                               // 0x740111 jne 0x74025C
+                            continue;                               // 0x740104 jne 0x74025C
                         }
-                        if ((bagStdItem.NativeReserved02 & 0x0200) != 0)
+                        if (bagStdItem != null)
                         {
-                            continue;                               // 0x74011E jne 0x74025C
-                        }
-                        if ((bagStdItem.NativeReserved02 & 0x4000) != 0
-                            && NativeItemAcquisitionStamp.ReadBindWord(m_ItemList[i]) == 1)
-                        {
-                            continue;                               // 0x74013A je 0x74025C
+                            if ((bagStdItem.NativeReserved02 & 0x0010) != 0)
+                            {
+                                continue;                           // 0x740111 jne 0x74025C
+                            }
+                            if ((bagStdItem.NativeReserved02 & 0x0200) != 0)
+                            {
+                                continue;                           // 0x74011E jne 0x74025C
+                            }
+                            if ((bagStdItem.NativeReserved02 & 0x4000) != 0
+                                && NativeItemAcquisitionStamp.ReadBindWord(bagItem) == 1)
+                            {
+                                continue;                           // 0x74013A je 0x74025C
+                            }
                         }
                     }
                     // 0x740140: 分流点。
+                    var scatterAuthenticated = NativeItemDropDestroyAuthenticated();
                     if (NativeItemDropDestroy.ShouldDestroy(isPlayerRace,
-                            scatterAuthenticated, m_ItemList[i]))
+                            scatterAuthenticated, bagItem))
                     {
-                        var destroyed = m_ItemList[i];
+                        var destroyed = bagItem;
+                        // 0x74016E..0x740182: the auth/gift destruction arm
+                        // still runs sub_78389C mode 5. A non-zero result keeps
+                        // the item in the bag and advances to the next slot.
+                        if (NativeItemDropDestroy.CheckTransferPermission(destroyed,
+                                bagStdItem,
+                                NativeItemDropDestroy.TransferModeDrop) != 0)
+                        {
+                            continue;
+                        }
                         var notice = NativeItemDropDestroy.BuildDestroyNotice(
-                            scatterAuthenticated, destroyed,
+                            NativeItemDropDestroyAuthenticated(), destroyed,
                             NativeItemDropDestroy.DeathBagUnverifiedNotice,
                             NativeItemDropDestroy.DeathBagGiftNotice);
                         if (isPlayerRace)

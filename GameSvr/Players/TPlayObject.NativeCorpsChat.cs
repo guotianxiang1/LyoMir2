@@ -1,3 +1,4 @@
+using GameSvr.Services;
 using SystemModule;
 
 namespace GameSvr
@@ -138,7 +139,7 @@ namespace GameSvr
         private bool IsNativeChatMuted()
         {
             return m_boDisableSayMsg
-                || M2Share.g_DenySayMsgList.ContainsKey(m_sCharName);
+                || NativeMirrorChatBan.Contains(m_sCharName);
         }
 
         /// <summary>

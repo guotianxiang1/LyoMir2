@@ -22,8 +22,19 @@ namespace GameSvr
             if (!TryCreateNativeQuestOrderResponse(requestedPage, category,
                     out var header, out var body))
                 return false;
-            SendSocket(header, body);
+            var recipient = ResolveNativeQuestOrderRecipient(category);
+            recipient?.SendSocket(header, body);
             return true;
+        }
+
+        internal TPlayObject ResolveNativeQuestOrderRecipient(byte category)
+        {
+            // Only category 16 is built by sub_60EFE4. Its two send legs call
+            // sub_652784 by character name immediately before VMT+0x254.
+            // The ordinary sub_6CBA88 ranking categories send on Self.
+            return category == 16
+                ? M2Share.UserEngine?.GetNativeReadyPlayObject(m_sCharName)
+                : this;
         }
 
         internal bool TryCreateNativeQuestOrderResponse(int requestedPage,

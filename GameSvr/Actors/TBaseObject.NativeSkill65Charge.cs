@@ -10,9 +10,9 @@ namespace GameSvr
     public partial class TBaseObject
     {
         /// <summary>
-        /// self+0xE8. Set here at 0x6BCA22 `C6 86 E8 00 00 00 01` and
-        /// cleared by the 66/67 release path at 0x74439C. No reader has
-        /// been found; kept so the write order matches native.
+        /// self+0xE8. Set here at 0x6BCA22 and by the war-hero decision path
+        /// at 0x693111, consumed before cross-moon at 0x692C40, and cleared
+        /// by the 66/67 release path at 0x74439C.
         /// </summary>
         internal byte m_btNativeChargedIndicator;
 

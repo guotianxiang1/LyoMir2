@@ -91,7 +91,7 @@ namespace GameSvr
         internal int ApplyNativeSkill152OneShotBonus(int skillId,
             int damage)
         {
-            if (m_nNativeOneShotMagicDamage > 0 && damage > 0 &&
+            if (m_nNativeOneShotMagicDamage > 0 &&
                 IsNativeSkill152DamageSkill(skillId))
             {
                 return unchecked(damage +

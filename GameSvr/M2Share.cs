@@ -256,10 +256,6 @@ namespace GameSvr
         public static string sThrustingOff = "关闭刺杀剑法";
         public static string sHalfMoonOn = "开启半月弯刀";
         public static string sHalfMoonOff = "关闭半月弯刀";
-        public static string sCrsHitOn = "开启光风斩";
-        public static string sCrsHitOff = "关闭光风?";
-        public static string sRedHalfMoonOn = "开启破空剑";
-        public static string sRedHalfMoonOff = "关闭破空?";
         public static string sTwinHitOn = "开启龙影剑?";
         public static string sTwinHitOff = "关闭龙影剑法";
         public static string sFireSpiritsSummoned = "召唤烈火精灵成功...";
@@ -345,7 +341,7 @@ namespace GameSvr
         public static string g_sDealItemsDenyGetBackMsg = "交易的金币或物品不可以取回，要取回请取消再重新交?!!!";
         public static string g_sDisableDealItemsMsg = "交易功能暂时关闭!!!";
         public static string g_sDealActionCancelMsg = "交易取消!!!";
-        public static string g_sPoseDisableDealMsg = "对方禁止进入交易";
+        public static string g_sPoseDisableDealMsg = "对方拒绝和你交易。";
         public static string g_sDealSuccessMsg = "交易成功...";
         public static string g_sDealOKTooFast = "过早按了成交按钮?";
         public static string g_sYouDealOKMsg = "你已经确认交易了?";
@@ -1512,10 +1508,10 @@ namespace GameSvr
         
         public const string sSL_SENDMSG = "@@sendmsg";
         public const string sSUPERREPAIR = "@s_repair";
-        public const string sSUPERREPAIROK = "~@s_repair";
+        public const string sSUPERREPAIROK = "@SRepairDone";
         public const string sSUPERREPAIRFAIL = "@fail_s_repair";
         public const string sREPAIR = "@repair";
-        public const string sREPAIROK = "~@repair";
+        public const string sREPAIROK = "@RepairDone";
         public const string sBUY = "@buy";
         public const string sSELL = "@sell";
         public const string sMAKEDURG = "@makedrug";
@@ -1582,8 +1578,8 @@ namespace GameSvr
         public const string g_sGameCommandSuperTingHelpMsg = "人物名称 范围(0-10)";
         public const string g_sGameCommandMapMoveHelpMsg = "源地?  目标地图";
         public const string g_sGameCommandMapMoveMapNotFound = "地图{0}不存?!!!";
-        public const string g_sGameCommandShutupHelpMsg = "人物名称  时间长度(分钟)";
-        public const string g_sGameCommandShutupHumanMsg = "{0} 已被禁言{1}分钟";
+        public const string g_sGameCommandShutupHelpMsg = "人物名称 [时间数|无]";
+        public const string g_sGameCommandShutupHumanMsg = "{0} 禁止聊天：{1}秒";
         public const string g_sGameCommandGamePointHelpMsg = "人物名称 控制?(+,-,=) 游戏点数(1-100000000)";
         public const string g_sGameCommandGamePointHumanMsg = "你的游戏点已增加{0}点，当前总点数为{1}点?";
         public const string g_sGameCommandGamePointGMMsg = "{0}的游戏点已增加{1}点，当前总点数为{2}点?";
@@ -1597,7 +1593,7 @@ namespace GameSvr
         public const string g_sGameCommandMapInfoSizeMsg = "地图大小: X({0}) Y({1})";
         public const string g_sGameCommandShutupReleaseHelpMsg = "人物名称";
         public const string g_sGameCommandShutupReleaseCanSendMsg = "你已经恢复聊天功?!!!";
-        public const string g_sGameCommandShutupReleaseHumanCanSendMsg = "{0} 已经恢复聊天?";
+        public const string g_sGameCommandShutupReleaseHumanCanSendMsg = "解除禁言成功！";
         // 0x0062BB24（长度前缀 12 = 六个汉字），由 @LookOutSay 的 0x006242CC 引用
         public const string g_sGameCommandShutupListIsNullMsg = "禁言名单为空";
         public const string g_sGameCommandLevelConsoleMsg = "[等级调整] {0} ({1} -> {2})";
@@ -2560,18 +2556,10 @@ namespace GameSvr
             return result;
         }
 
-        // TRADE-52: 游戏数据日志缓冲上限。战神 AddGameDataLog(0x79d3d8) 把每条日志编码成
-        // 196 字节二进制记录（magic 0x33AABB77 @0x79D40D，头8+体0xBC=188；发送长度 ecx=0xC4=196
-        // @0x79D4D3 call 0x4a0684）**立即经 socket 发往 LogServer（[self+0x44]，配置
-        // LogServerAddr/LogServerPort 默认 127.0.0.1:10000），原生不保留任何缓冲列表**。
-        // 本 C# 重写把日志暂存进 LogStringList/LogonCostLogList，却从无 drain（运行期只有
-        // AddGameDataLog/AddLogonCostLog 写入，无任何消费点）——列表无界增长即内存泄漏。
-        // 196 字节记录 + LogServer 传输属 77BBAA33 内部转发协议（CMD 0xC4/0xBC 等），协议规范
-        // 明列为「不需要实现的服务端内部CMD……C#重写版不需要」，属 DBSVR 依赖、out-of-scope，
-        // 见 docs/m_trade52_logserver_20260813.md。
-        // 本轮：以 FIFO 上限封顶消除无界泄漏（原生该缓冲概念长度为 0，此处封顶是最贴近的
-        // 本地建模）。审计工具把这两个列表当日志探针（每次 Clear 后断言个位数条目），上限
-        // 远高于其用量，不受影响。摊销裁剪：越过上限即裁到 3/4，避免逐条 RemoveAt 的 O(n^2)。
+        // 原生 sub_79D3D8 构造 196 字节记录，sub_4A0684 深拷贝入 FIFO；后台
+        // sub_49FF64/sub_4A080C 最多聚合 4096 字节后经 UDP sendto 投递 LogServer。
+        // LogStringList 继续保留为既有审计探针。只有完成原版 ABI 复核的调用点才走
+        // AddNativeGameDataLog；旧 TAB 文本不反向猜测类型和字段，避免把历史畸形行错误发包。
         public const int LogRecordBufferCap = 20000;
 
         private static void AppendBoundedLog(ArrayList list, string sMsg)
@@ -2594,6 +2582,31 @@ namespace GameSvr
             {
                 HUtil32.LeaveCriticalSection(LogMsgCriticalSection);
             }
+
+        }
+
+        public static bool AddNativeGameDataLog(TBaseObject actor, byte logType,
+            string itemName, int makeIndex, int quantity, string reason)
+        {
+            if (actor == null) return false;
+            var record = new NativeGameDataLogRecord(logType,
+                actor.m_sMapName, unchecked((ushort)actor.m_nCurrX),
+                unchecked((ushort)actor.m_nCurrY), actor.m_sCharName, itemName,
+                makeIndex, quantity, reason);
+            var probe = string.Join('\t', logType, actor.m_sMapName,
+                actor.m_nCurrX, actor.m_nCurrY, actor.m_sCharName, itemName,
+                makeIndex, quantity, reason);
+
+            HUtil32.EnterCriticalSection(LogMsgCriticalSection);
+            try
+            {
+                AppendBoundedLog(LogStringList, probe);
+            }
+            finally
+            {
+                HUtil32.LeaveCriticalSection(LogMsgCriticalSection);
+            }
+            return NativeGameDataLogService.Instance.TryEnqueue(record);
         }
 
         public static void AddLogonCostLog(string sMsg)
@@ -3504,17 +3517,7 @@ namespace GameSvr
 
         public static bool GetDisableSendMsgList(string sHumanName)
         {
-            bool result;
-            result = false;
-            
-            
-            
-            
-            
-            
-            
-            
-            return result;
+            return NativeMirrorChatBan.Contains(sHumanName);
         }
 
         public static bool LoadGameLogItemNameList()

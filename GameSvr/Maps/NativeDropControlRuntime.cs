@@ -294,7 +294,7 @@ namespace GameSvr
             //   00788112  66 C7 46 26 01 00  mov word [esi+0x26],1
             // For a pile Dura is the stack count, so seeding it from DuraMax would
             // hand out DuraMax units per configured drop instead of one.
-            return (stdItem, new TUserItem
+            var userItem = new TUserItem
             {
                 wIndex = unchecked((ushort)itemIndex),
                 MakeIndex = makeIndex,
@@ -302,7 +302,10 @@ namespace GameSvr
                     ? (ushort)1
                     : stdItem.DuraMax,
                 DuraMax = stdItem.DuraMax
-            });
+            };
+            NativeSpecialDropItemRollCore.HydrateConstructorState(userItem,
+                stdItem);
+            return (stdItem, userItem);
         }
 
         private static void InitializeForDrop(GoodItem stdItem,

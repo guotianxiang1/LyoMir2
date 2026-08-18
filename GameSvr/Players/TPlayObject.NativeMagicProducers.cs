@@ -99,10 +99,12 @@ namespace GameSvr
             {
                 return null;                                   // 0x76EF14 jne
             }
-            // 0x6CB070 把 ecx 同时写进 +0x483(MakeLevel) 与 +0x482(ExpLevel), 故两参同值。
+            // 0x6CB070 writes ECX to both level bytes and stores the pushed
+            // literal 10 at TAnimal +0x48C.
             int nMakeLevel = GetNativeMagicProducerEffectiveLevel(UserMagic);
-            var slave = MakeSlave(NativeHolyBeastName, nMakeLevel, nMakeLevel,
-                NativeHolyBeastMaxMob, NativeHolyBeastRoyaltySec);   // 0x76EF36
+            var slave = MakeNativeSlave(NativeHolyBeastName, nMakeLevel,
+                NativeHolyBeastMaxMob, NativeHolyBeastRoyaltySec,
+                fromHero: false, hpAfterSlave: 10);                 // 0x76EF36
             if (slave == null)
             {
                 return null;                                   // 0x76EF3E / 0x76EF40

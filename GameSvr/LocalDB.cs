@@ -8,86 +8,121 @@ namespace GameSvr
     {
         public bool LoadAdminList()
         {
-            var sLineText = string.Empty;
-            var sIPaddr = string.Empty;
-            var sCharName = string.Empty;
-            var sData = string.Empty;
-            TAdminInfo AdminInfo;
-            string sfilename = Path.Combine(M2Share.sConfigPath, M2Share.g_Config.sEnvirDir, "AdminList.txt");
-            if (!File.Exists(sfilename))
+            var adminList = M2Share.UserEngine.m_AdminList;
+            adminList.Clear();
+
+            string fileName = Path.Combine(M2Share.sConfigPath,
+                M2Share.g_Config.sEnvirDir, "AdminList.txt");
+            bool sourceLoaded = File.Exists(fileName);
+            if (sourceLoaded)
             {
-                return false;
-            }
-            M2Share.UserEngine.m_AdminList.Clear();
-            using var LoadList = new StringList();
-            LoadList.LoadFromFile(sfilename);
-            for (var i = 0; i < LoadList.Count; i++)
-            {
-                sLineText = LoadList[i];
-                var nLv = -1;
-                if (sLineText != "" && sLineText[0] != ';')
+                byte[] fileBytes = File.ReadAllBytes(fileName);
+                int lineStart = 0;
+                for (int index = 0; index <= fileBytes.Length; index++)
                 {
-                    if (sLineText[0] == '*')
+                    if (index < fileBytes.Length &&
+                        fileBytes[index] != (byte)'\r' &&
+                        fileBytes[index] != (byte)'\n')
                     {
-                        nLv = 10;
-                    }
-                    else if (sLineText[0] == '1')
-                    {
-                        nLv = 9;
-                    }
-                    else if (sLineText[0] == '2')
-                    {
-                        nLv = 8;
-                    }
-                    else if (sLineText[0] == '3')
-                    {
-                        nLv = 7;
-                    }
-                    else if (sLineText[0] == '4')
-                    {
-                        nLv = 6;
-                    }
-                    else if (sLineText[0] == '5')
-                    {
-                        nLv = 5;
-                    }
-                    else if (sLineText[0] == '6')
-                    {
-                        nLv = 4;
-                    }
-                    else if (sLineText[0] == '7')
-                    {
-                        nLv = 3;
-                    }
-                    else if (sLineText[0] == '8')
-                    {
-                        nLv = 2;
-                    }
-                    else if (sLineText[0] == '9')
-                    {
-                        nLv = 1;
+                        continue;
                     }
 
-                    if (nLv > 0)
+                    AddNativeAdminLine(fileBytes.AsSpan(lineStart, index - lineStart));
+                    if (index < fileBytes.Length && fileBytes[index] == (byte)'\r' &&
+                        index + 1 < fileBytes.Length && fileBytes[index + 1] == (byte)'\n')
                     {
-                        sLineText = HUtil32.GetValidStrCap(sLineText, ref sData, new[] { "/", "\\", " ", "\t" });
-                        sLineText = HUtil32.GetValidStrCap(sLineText, ref sCharName, new[] { "/", "\\", " ", "\t" });
-                        sLineText = HUtil32.GetValidStrCap(sLineText, ref sIPaddr, new[] { "/", "\\", " ", "\t" });
-                        if (string.IsNullOrEmpty(sCharName) || sIPaddr == "")
-                        {
-                            continue;
-                        }
-                        AdminInfo = new TAdminInfo
-                        {
-                            nLv = nLv,
-                            sChrName = sCharName,
-                            sIPaddr = sIPaddr
-                        };
-                        M2Share.UserEngine.m_AdminList.Add(AdminInfo);
+                        index++;
                     }
+                    lineStart = index + 1;
                 }
             }
-            return true;
+
+            ReloadNativeFestivalConfig();
+            return sourceLoaded;
+        }
+
+        private static void AddNativeAdminLine(ReadOnlySpan<byte> line)
+        {
+            if (line.IsEmpty || line[0] == (byte)';')
+            {
+                return;
+            }
+
+            int permission = line[0] switch
+            {
+                (byte)'*' => 4,
+                (byte)'1' => 3,
+                (byte)'2' => 2,
+                _ => 0
+            };
+            if (permission == 0)
+            {
+                return;
+            }
+
+            int delimiter = line.IndexOfAny((byte)'\t', (byte)' ');
+            if (delimiter < 0)
+            {
+                return;
+            }
+
+            ReadOnlySpan<byte> name = TrimNativeBytes(line[(delimiter + 1)..]);
+            if (name.IsEmpty)
+            {
+                return;
+            }
+
+            int nameLength = Math.Min(name.Length, 14);
+            var nativeName = name[..nameLength].ToArray();
+            FoldAsciiLower(nativeName);
+            M2Share.UserEngine.m_AdminList.Insert(0, new TAdminInfo
+            {
+                nLv = permission,
+                sChrName = HUtil32.GbkEncoding.GetString(nativeName),
+                sIPaddr = string.Empty,
+                NativeChrNameBytes = nativeName
+            });
+        }
+
+        private static ReadOnlySpan<byte> TrimNativeBytes(ReadOnlySpan<byte> value)
+        {
+            int start = 0;
+            int end = value.Length;
+            while (start < end && value[start] <= 0x20)
+            {
+                start++;
+            }
+            while (end > start && value[end - 1] <= 0x20)
+            {
+                end--;
+            }
+            return value[start..end];
+        }
+
+        internal static void FoldAsciiLower(Span<byte> value)
+        {
+            for (int index = 0; index < value.Length; index++)
+            {
+                if (value[index] >= (byte)'A' && value[index] <= (byte)'Z')
+                {
+                    value[index] = (byte)(value[index] + 0x20);
+                }
+            }
+        }
+
+        private static void ReloadNativeFestivalConfig()
+        {
+            string feastDaysPath = NativeFestivalConfig.ResolveDefaultPath(
+                M2Share.sRootPath, M2Share.g_Config.sBaseDir);
+            if (!NativeFestivalConfig.TryLoad(feastDaysPath,
+                    out var loadedConfig, out var error))
+            {
+                M2Share.ErrorMessage("加载节日配置文件失败: " + error);
+                return;
+            }
+
+            M2Share.FestivalConfig = NativeFestivalConfig.Append(
+                M2Share.FestivalConfig, loadedConfig);
         }
 
         public void LoadGuardList()

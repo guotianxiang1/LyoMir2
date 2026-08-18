@@ -61,6 +61,8 @@ namespace GameSvr
             {
                 // 202 stub 0x657208 `mov ecx,[ebp+0x10]` -> sub_658384 -> 惩罚天数
                 case Grobal2.ISM_ANTICHEAT_PENALTY:
+                // 203 stub 0x65721C `mov edx,[ebp+0x10]` -> sub_6582B0 -> 发信人等级
+                case Grobal2.ISM_WHISPER:
                 // 207 stub 0x657230 `mov edx,[ebp+0x10]` -> sub_658114 -> 37-bit 掩码
                 case Grobal2.ISM_SINGLEQUOTE_SCAN:
                 // 209 stub 0x65723D `mov ecx,[ebp+0x10]` -> sub_6580B8 -> 禁言秒数
@@ -95,12 +97,40 @@ namespace GameSvr
             return body ?? string.Empty;
         }
 
+        private static string TakeWhisperNativeParam(string body,
+            out int nParam)
+        {
+            body ??= string.Empty;
+            var firstSlash = body.IndexOf('/', StringComparison.Ordinal);
+            if (firstSlash <= 0
+                || !int.TryParse(body.AsSpan(0, firstSlash),
+                    NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out nParam))
+            {
+                nParam = 0;
+                return body;
+            }
+
+            var rest = body[(firstSlash + 1)..];
+            var recipientSlash = rest.IndexOf('/', StringComparison.Ordinal);
+            var arrow = rest.IndexOf("=>", StringComparison.Ordinal);
+            if (recipientSlash < 0 || (arrow >= 0 && recipientSlash > arrow))
+            {
+                // Legacy body="numericRecipient/sender=> text[/...]".
+                nParam = 0;
+                return body;
+            }
+            return rest;
+        }
+
         public void ProcessData(int Ident, int serverNum, string Body)
         {
             var nParam = 0;
             if (CarriesNativeParam(Ident))
             {
-                Body = TakeNativeParam(Body, out nParam);
+                Body = Ident == Grobal2.ISM_WHISPER
+                    ? TakeWhisperNativeParam(Body, out nParam)
+                    : TakeNativeParam(Body, out nParam);
             }
             switch (Ident)
             {
@@ -142,7 +172,7 @@ namespace GameSvr
                     TPlayObject.NativeMirrorAntiCheatPenalty(Body, nParam);
                     break;
                 case Grobal2.ISM_WHISPER:
-                    MsgGetWhisper(serverNum, Body);
+                    MsgGetWhisper(serverNum, nParam, Body);
                     break;
                 case Grobal2.ISM_GMWHISPER:
                     MsgGetGMWhisper(serverNum, Body);
@@ -356,7 +386,6 @@ namespace GameSvr
                     // 247 发送方 (SGRP-41: 无 M2Server 对 202..257 的发送侧)。无法忠实表示。
                     // 空操作而非落默认 error sink —— 因 native 247 是真实 handler, 落 sink 会
                     // 打印 "[Error] ProcessOthGsMsg Ident=247" 与 native 不符; 此处显式吞掉。
-                    NativeMirrorIdent247.ApplyFromTextBody(Body);
                     break;
                 case Grobal2.ISM_SETNICKLF:
                     if (int.TryParse(Body, NumberStyles.Integer,
@@ -422,7 +451,7 @@ namespace GameSvr
             M2Share.UserEngine.OtherServerUserLogout(sNum, uname);
         }
 
-        private void MsgGetWhisper(int sNum, string Body)
+        private void MsgGetWhisper(int sNum, int nSenderLevel, string Body)
         {
             var uname = string.Empty;
             if (sNum == M2Share.nServerIndex)
@@ -434,12 +463,9 @@ namespace GameSvr
                 {
                     if (hum.m_boHearWhisper)
                     {
-                        // Native carries the sender level as a separate argument of the
-                        // ISM_WHISPER send (0x652DA3 movzx eax,word[ebx+0x278] pushed
-                        // ahead of the body at 0x652DA7, 0x652DD6 mov dx,0xCB). This
-                        // tree's ISM body has no level field, so the whisper Tag goes
-                        // out as 0 on the cross-server path only.
-                        hum.WhisperRe(Str, 0);
+                        // 0x658325 reads the low word of the ISM P2 dword and
+                        // 0x65834A forwards it to sub_6C976C as the sender level.
+                        hum.WhisperRe(Str, unchecked((ushort)nSenderLevel));
                     }
                 }
             }
@@ -622,7 +648,9 @@ namespace GameSvr
 
         private void MsgGetChangeCastleOwner(int sNum, string Body)
         {
-            var guild = M2Share.GuildManager.FindGuild(Body);
+            // sub_657810 @0x65783E calls the same sub_5E76F0 native
+            // ASCII-folded guild lookup used by ident 212.
+            var guild = M2Share.GuildManager.FindGuildNativeAscii(Body);
             var castle = M2Share.CastleManager.GetCastle(0);
             if (guild != null && castle != null && castle.m_MasterGuild != guild)
             {
@@ -754,9 +782,11 @@ namespace GameSvr
                 return;
             }
 
-            var recipientName = string.Empty;
-            var text = HUtil32.GetValidStr3(Body, ref recipientName,
-                HUtil32.Backslash);
+            // sub_4C6BA4 splits at the first '/', preserving both an empty first
+            // field and every later slash in the message body.
+            var separator = Body.IndexOf('/', StringComparison.Ordinal);
+            var recipientName = separator >= 0 ? Body[..separator] : Body;
+            var text = separator >= 0 ? Body[(separator + 1)..] : string.Empty;
             TPlayObject.NativeMirrorPlayerNotice(recipientName, text);
         }
 

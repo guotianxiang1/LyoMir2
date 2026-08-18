@@ -284,6 +284,30 @@ namespace GameSvr
         }
 
         /// <summary>
+        /// SM 3324 (0xCFC) - login state sync, header only. The two native arms
+        /// differ only in Series: race 0x36 sends 1, every other race sends 0.
+        /// Native send sites @0x007468DB / 0x007468FE:
+        /// <code>
+        /// 007468B8  80 B8 78 01 00 00 36 cmp byte [eax+0x178],0x36
+        /// 007468C1  66 8B 90 10 06 00 00 mov dx,word [eax+0x610] ; Param
+        /// 007468C9  6A 00                push 0                ; Tag
+        /// 007468CB  6A 01                push 1                ; Series (hero arm)
+        /// 007468CD  6A 00                push 0                ; sMsg
+        /// 007468CF  8B 88 0C 06 00 00    mov ecx,[eax+0x60C]   ; Recog
+        /// 007468D5  66 BA FC 0C          mov dx,0xCFC          ; Ident
+        /// 007468DB  FF 93 50 02 00 00    call [ebx+0x250]
+        /// 007468E4..007468FE repeats the send with Series=0 for the non-hero arm.
+        /// </code>
+        /// </summary>
+        internal static (ClientPacket Header, string Msg) BuildSm3324(
+            int recog, ushort param, bool heroRace)
+        {
+            var header = Grobal2.MakeDefaultMsg(SmIdentConstsA.SM_3324, recog,
+                param, 0, heroRace ? 1 : 0);
+            return (header, string.Empty);
+        }
+
+        /// <summary>
         /// SM 3325 (0xCFD) - state-0x36 spirit/shape sync notice, the sibling that
         /// the state dispatcher selects when <c>byte[self+0x178] == 0x36</c>
         /// (0x00746A10). slot 0x250 (SendDefMessage); returns (header, message).
@@ -302,10 +326,8 @@ namespace GameSvr
         /// 00746A35  8B 18                mov ebx, [eax]
         /// 00746A37  FF 93 50 02 00 00    call [ebx+0x250]     ; SendDefMessage
         /// </code>
-        /// The source fields <c>self+0x60C</c> / <c>self+0x610</c> belong to the
-        /// login-sync family that is not yet mapped in C#, so this builder is kept
-        /// isolated and takes the values as parameters; the packet layout itself is
-        /// fully evidenced.
+        /// The source fields <c>self+0x60C</c> / <c>self+0x610</c> are persisted at
+        /// record offsets 0x580 / 0x57C and are supplied explicitly to this builder.
         /// </summary>
         internal static (ClientPacket Header, string Msg) BuildSm3325(
             int recog, ushort param, string msg)
@@ -329,10 +351,6 @@ namespace GameSvr
         //  SM 3313 (0xCF1) @0x6EB25A slot 0x254 - body is `call [obj+0x34]`
         //      serializer output (obj from 0x754D40), dyn length; Series = esi.
         //      Same opaque serializer as 3283.
-        //  SM 3324 (0xCFC) @0x746A3F slot 0x250 - login/shape sync sibling of
-        //      3325 reading self+0x60C / self+0x610. Already a DELIBERATE
-        //      fail-closed in TPlayObject.NativeLogonStateSync.cs (fields
-        //      UNMAPPED); left untouched to honor that decision.
         //  SM 3332 (0xD04) @0x6CBDC0 slot 0x254 - body is `call [obj+0x34]`
         //      serializer output (obj from 0x74C2FC by id=edi), dyn length;
         //      Recog = edi. Same opaque serializer.

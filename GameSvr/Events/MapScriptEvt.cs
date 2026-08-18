@@ -36,6 +36,7 @@ namespace GameSvr
             : base(envir, nX, nY, Grobal2.ET_MAPSCRIPT, nTime, boVisible)
         {
             // 0x719B8E  C6 47 34 01  mov byte [edi+0x34],1
+            NativeAppliesOnLanding = true;
             m_ScriptNpc = scriptNpc;
         }
 
@@ -89,9 +90,11 @@ namespace GameSvr
             // 0x719B23  6A 00 / 0x719B25 33 C9  two nil arguments
             // 0x719B27  8B 40 48        mov eax,[eax+0x48]   ; the NPC
             // 0x719B2C  FF 56 44        call [NPC.VMT+0x44]
-            // Left unwired: the C# NPC script host entry that corresponds to
-            // VMT+0x44 is not identified, so the call is not issued. See report.
-            _ = m_ScriptNpc;
+            // Clone-NPC and map-quest callsites independently identify NPC
+            // VMT+0x44 as the no-argument label entry represented by GotoLable.
+            // The two pushed zeroes are the empty argument and false jump mode.
+            ((NormNpc)m_ScriptNpc).GotoLable((TPlayObject)target,
+                ScriptLabel, false);
             return true;
         }
     }
