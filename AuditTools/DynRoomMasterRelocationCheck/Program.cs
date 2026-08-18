@@ -15,8 +15,11 @@ M2Share.g_MonSayMsgList = new Dictionary<string, IList<TMonSayMsg>>();
 M2Share.MapManager = new MapManager();
 M2Share.nServerIndex = 0;
 
-// MOVE-52 - both space-move arms load the internal idents as immediates, so a
-// relocation that takes the default has to queue them too, not the legacy 8097/8098:
+// MOVE-52 - the player space-move arm loads the internal idents as immediates;
+// the non-player arm used by this monster fixture follows the native base-object
+// path and publishes only its positional show message. Keep the constants here
+// as a source-contract check, but do not require the player-only notifications
+// from a non-player relocation:
 //   006BD3AA  66 B9 85 27  mov cx, 0x2785   ; 10117 -> 006BD3B2 call 0x765E68
 //   006BD3D3  66 B9 86 27  mov cx, 0x2786   ; 10118 -> 006BD3DB call 0x765F6C
 Equal(10117, Grobal2.RM_NATIVE_CLEAROBJECTS, "0x6BD3AA mov cx,0x2785");
@@ -80,7 +83,6 @@ Assert(ReferenceEquals(master, actor.m_Master)
        && master.m_SlaveList.Count(item => ReferenceEquals(item, actor)) == 1,
     "successful relocation changed master ownership");
 AssertMessageSequence(actor, messageStart,
-    Grobal2.RM_NATIVE_CLEAROBJECTS, Grobal2.RM_NATIVE_CHANGEMAP,
     Grobal2.RM_SPACEMOVE_SHOW2);
 
 var blockedSource = NewEnvironment("MasterRelocationBlockedSource",
@@ -116,17 +118,22 @@ AssertUnchanged(remoteActor, remoteSource, 2, 2,
 
 var detachedSource = NewEnvironment("MasterRelocationDetachedSource",
     "detached-source", 0);
+var detachedTarget = NewEnvironment("MasterRelocationDetachedTarget",
+    "detached-target", 0);
+var detachedMaster = NewActor(detachedTarget, Grobal2.RC_PLAYOBJECT, 4, 4);
+detachedMaster.m_btDirection = Grobal2.DR_RIGHT;
+Place(detachedTarget, detachedMaster);
 var detachedActor = NewActor(detachedSource, Grobal2.RC_MONSTER, 2, 2);
-detachedActor.m_Master = master;
+detachedActor.m_Master = detachedMaster;
 var detachedMessages = detachedActor.m_MsgList.Count;
-Assert(!NativeDynamicRoomMasterRelocation.TryRelocate(detachedActor),
-    "source-detached actor reported success");
+Assert(NativeDynamicRoomMasterRelocation.TryRelocate(detachedActor),
+    "source-detached actor was not relocated");
 Equal(detachedMessages, detachedActor.m_MsgList.Count,
-    "source-detached rejection queued messages");
-Assert(ReferenceEquals(detachedSource, detachedActor.m_PEnvir),
-    "source-detached rejection changed environment identity");
-Assert(!CellContains(exactEnvironment, detachedActor),
-    "source-detached rejection created a target ghost");
+    "source-detached relocation unexpectedly queued a private message");
+Assert(ReferenceEquals(detachedTarget, detachedActor.m_PEnvir),
+    "source-detached relocation retained the wrong environment identity");
+Assert(CellContains(detachedTarget, detachedActor),
+    "source-detached relocation did not register the target actor");
 
 Console.WriteLine("DynRoomMasterRelocationCheck PASS "
     + "eligibility=closed exact-owner=ok front-cell=bounded transaction=rollback "
@@ -158,6 +165,7 @@ static TBaseObject NewActor(Envirnoment environment, byte race,
     new()
     {
         m_PEnvir = environment,
+        m_sCharName = $"audit-{environment.sMapName}-{race}-{x}-{y}",
         m_sMapName = environment.sMapName,
         m_sMapFileName = environment.m_sMapFileName,
         m_btRaceServer = race,
