@@ -118,27 +118,32 @@ namespace SystemModule.Packet
 
                     var payloadLength = BitConverter.ToUInt16(_buffer, marker + 14);
                     var totalLength = LegacyGateType18.HeaderSize + payloadLength;
-                    if (payloadLength < LegacyGateType18.ClientPacketSize
-                        || totalLength >= LegacyGateType18.MaximumFrameLengthExclusive)
+                    // Command 18 is ambiguous on this stream: the legacy broadcast
+                    // envelope carries a 12-byte client sub-header, while an ordinary
+                    // InternalPacket77 command 18 may have a shorter body.  Only take
+                    // the legacy branch when its complete minimum shape is present.
+                    // Short command-18 frames must fall through to the generic parser;
+                    // scanning past the marker here can mistake a marker inside their
+                    // payload for a new frame and leave a partial tail buffered.
+                    if (payloadLength >= LegacyGateType18.ClientPacketSize
+                        && totalLength < LegacyGateType18.MaximumFrameLengthExclusive)
                     {
-                        scan = marker + 1;
-                        continue;
-                    }
-                    if (_length - marker < totalLength)
-                    {
-                        Compact(marker);
-                        return true;
-                    }
+                        if (_length - marker < totalLength)
+                        {
+                            Compact(marker);
+                            return true;
+                        }
 
-                    var legacy = LegacyGateType18.FromBytes(_buffer, marker, totalLength);
-                    if (legacy == null)
-                    {
-                        scan = marker + 1;
+                        var legacy = LegacyGateType18.FromBytes(_buffer, marker, totalLength);
+                        if (legacy == null)
+                        {
+                            scan = marker + 1;
+                            continue;
+                        }
+                        frames.Add(GameGateServerFrame.FromLegacyType18(legacy));
+                        scan = marker + totalLength;
                         continue;
                     }
-                    frames.Add(GameGateServerFrame.FromLegacyType18(legacy));
-                    scan = marker + totalLength;
-                    continue;
                 }
 
                 // 通用 16 字节头 InternalPacket77: total = 0x10 + word[+0x0E](BodyLen)。
@@ -149,6 +154,23 @@ namespace SystemModule.Packet
                 if (frameLength > _maximumInternalFrameLength)
                 {
                     scan = marker + 1;
+                    continue;
+                }
+
+                // A malformed legacy type-18 header can advertise a body that
+                // extends across the next real frame.  Prefer a complete marker
+                // inside that declared span as the resynchronization point.  A
+                // marker merely embedded in a short command-18 payload is not
+                // enough: without a complete following frame it remains payload.
+                var nestedMarker = FindMarker(marker + InternalPacket77.HEADER_SIZE);
+                if (discriminator == LegacyGateType18.MessageType
+                    && (bodyLength < LegacyGateType18.ClientPacketSize
+                        || frameLength >= LegacyGateType18.MaximumFrameLengthExclusive)
+                    && nestedMarker > marker
+                    && nestedMarker < marker + frameLength
+                    && IsCompleteInternalFrame(nestedMarker))
+                {
+                    scan = nestedMarker;
                     continue;
                 }
                 if (_length - marker < frameLength)
@@ -180,6 +202,16 @@ namespace SystemModule.Packet
                     && _buffer[i + 2] == 0xAA && _buffer[i + 3] == 0x33)
                     return i;
             return -1;
+        }
+
+        private bool IsCompleteInternalFrame(int marker)
+        {
+            if (_length - marker < InternalPacket77.HEADER_SIZE)
+                return false;
+            var bodyLength = BitConverter.ToUInt16(_buffer, marker + 14);
+            var frameLength = InternalPacket77.HEADER_SIZE + bodyLength;
+            return frameLength <= _maximumInternalFrameLength
+                && _length - marker >= frameLength;
         }
 
         private void KeepPossibleMarkerSuffix(int start)
