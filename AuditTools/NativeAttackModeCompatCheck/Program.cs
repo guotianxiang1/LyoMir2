@@ -266,11 +266,21 @@ static void AddGild(NativeCorpsDataSnapshot snapshot, long gildId,
 
 static ProbePlayer NewPlayer()
 {
-    return new ProbePlayer
+    var player = new ProbePlayer
     {
-        m_boOffLineFlag = true,
+        m_boOffLineFlag = false,
         m_MsgList = new List<SendMessage>()
     };
+    M2Share.UserEngine.ProcessUserMessage(player, new ClientPacket
+    {
+        Ident = Grobal2.CM_LOGINNOTICEOK,
+        Recog = 1,
+        Param = 0,
+        Tag = 0,
+        Series = 0
+    }, string.Empty);
+    player.m_boOffLineFlag = true;
+    return player;
 }
 
 static ProbePlayer NewSocialPlayer(long id, string name)

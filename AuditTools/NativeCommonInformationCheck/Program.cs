@@ -177,11 +177,24 @@ static void Operate(ProbePlayer player, int value, int subtype, int option = 0)
     }), $"1099 dispatcher subtype {subtype}");
 }
 
-static ProbePlayer NewPlayer() => new()
+static ProbePlayer NewPlayer()
 {
-    m_boOffLineFlag = true,
-    m_MsgList = new List<SendMessage>()
-};
+    var player = new ProbePlayer
+    {
+        m_boOffLineFlag = false,
+        m_MsgList = new List<SendMessage>()
+    };
+    M2Share.UserEngine.ProcessUserMessage(player, new ClientPacket
+    {
+        Ident = Grobal2.CM_LOGINNOTICEOK,
+        Recog = 1,
+        Param = 0,
+        Tag = 0,
+        Series = 0
+    }, string.Empty);
+    player.m_boOffLineFlag = true;
+    return player;
+}
 
 static ProbeHero NewHero() => new()
 {

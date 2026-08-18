@@ -225,12 +225,24 @@ TProcessMessage Take(ProbePlayer player, string label)
     return message;
 }
 
-ProbePlayer NewPlayer() => new()
+ProbePlayer NewPlayer()
 {
-    m_boOffLineFlag = false,
-    m_boGhost = false,
-    m_MsgList = new List<SendMessage>()
-};
+    var player = new ProbePlayer
+    {
+        m_boOffLineFlag = false,
+        m_boGhost = false,
+        m_MsgList = new List<SendMessage>()
+    };
+    M2Share.UserEngine.ProcessUserMessage(player, new ClientPacket
+    {
+        Ident = Grobal2.CM_LOGINNOTICEOK,
+        Recog = 1,
+        Param = 0,
+        Tag = 0,
+        Series = 0
+    }, string.Empty);
+    return player;
+}
 
 // ---------------------------------------------------------------------------
 
