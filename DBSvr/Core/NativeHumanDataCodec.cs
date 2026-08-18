@@ -150,16 +150,6 @@ namespace DBSvr.Core
         private const int BagItemBase = 0x2BF6;
         private const int StorageBase = 0x52F6;
         private const int StorageSpaceCountOffset = 0x050E;
-        // 战神 gives the storage container a hard-coded count when it is constructed:
-        //   0x6AD8E5  89 b7 d0 06 00 00      mov [edi+0x6d0], esi     ; the container
-        //   0x6AD8EB  c7 46 08 30 00 00 00   mov dword [esi+8], 0x30  ; count = 48
-        // and the LOAD only overrides it when the stored word is STRICTLY GREATER:
-        //   0x6B0CB9  8b 45 f8               mov eax,[ebp-8]          ; the blob
-        //   0x6B0CBC  66 8b 80 16 05 00 00   mov ax,[eax+0x516]       ; == record 0x50E
-        //   0x6B0CC3  66 83 f8 30            cmp ax,0x30
-        //   0x6B0CC7  76 0f                  jbe 0x6B0CD8             ; <= 48 -> keep 48
-        //   0x6B0CD5  89 42 08               mov [container+8],eax
-        private const int DefaultStorageSpaceCount = 48;
         private const int ShengWanOffset = 0x00EC;
         private const int LingFuOffset = 0x00F0;         // obj+0xBD8; bidirectional LOAD/SAVE
         private const int UsedLingFuOffset = 0x00F4;     // obj+0xBDC MyUsedLfNum; bidirectional LOAD/SAVE
@@ -347,18 +337,10 @@ namespace DBSvr.Core
                     raw.AsSpan(SecHeroPracticeLevelOffset, 2));
                 var storedSpaceCount = BinaryPrimitives.ReadUInt16LittleEndian(
                     raw.AsSpan(StorageSpaceCountOffset, 2));
-                // The threshold is `> 48`, not `>= 24` (see DefaultStorageSpaceCount for
-                // the bytes).  The old `< 24 ? 48 : value` rule handed a character with a
-                // stored 24..48 a SMALLER storage than 战神 would: native keeps the
-                // constructor's 48 for every value at or below 48, so a stored 24 meant
-                // 48 slots natively and 24 slots here — pages of storage would vanish.
-                // No upper clamp either: native writes the raw word into the container.
-                // Every C# consumer already clamps to MAX_STORAGE_ITEM_COUNT before
-                // indexing (UsrEngn:3879, TPlayObject.Operate:2243, PileItems:246), so
-                // carrying the raw value cannot overrun the 192-slot array here.
-                data.StorageSpaceCount = storedSpaceCount > DefaultStorageSpaceCount
-                    ? storedSpaceCount
-                    : DefaultStorageSpaceCount;
+                // Preserve the persisted word at the DB boundary. The M2 load stage
+                // applies its `> 48` runtime-container rule in UserEngine.GetHumData;
+                // normalizing here would destroy the original record on a DB round trip.
+                data.StorageSpaceCount = storedSpaceCount;
 
                 for (var i = 0; i < MagicCount; i++)
                     data.Magic[i] = DecodeMagic(raw.AsSpan(MagicBase + i * MagicRecordSize, MagicRecordSize));
@@ -598,7 +580,7 @@ namespace DBSvr.Core
             BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(SecHeroPracticeLevelOffset, 2),
                 data.wSecHeroPracticeLevel);
             BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(StorageSpaceCountOffset, 2),
-                (ushort)Math.Clamp(data.StorageSpaceCount, 24, StorageItemCount));
+                unchecked((ushort)data.StorageSpaceCount));
 
             if (!TryWriteMagic(raw, data.Magic, out error)
                 || !TryWriteItems(raw, data.HumItems, EquippedItemBase,

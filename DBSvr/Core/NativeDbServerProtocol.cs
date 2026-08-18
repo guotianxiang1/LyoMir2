@@ -207,6 +207,7 @@ namespace DBSvr.Core
         public const int CharacterOffset = 0x25;
         public const int SessionPrefixSize = 0x00A0;
         public const int LoginExtensionSize = 0x0108;
+        public const ushort SwitchSaveMode = 2;
         public const ushort AwardPlayerFlag = 0x0800;
         private const int AccountCapacity = 20;
         private const int CharacterCapacity = 15;
@@ -305,6 +306,19 @@ namespace DBSvr.Core
                     HumanInfoSuffixSize).ToArray(),
                 NativeScriptData = payload.Slice(ScriptDataOffset).ToArray()
             };
+            return true;
+        }
+
+        public static bool TryExtractSwitchLoginExtension(
+            NativeSaveHumanRequest request, out byte[] extension)
+        {
+            extension = null;
+            if (request?.HeaderWord2 != SwitchSaveMode
+                || request.HumanInfoSuffix == null
+                || request.HumanInfoSuffix.Length != HumanInfoSuffixSize)
+                return false;
+            extension = request.HumanInfoSuffix.AsSpan(
+                SessionPrefixSize, LoginExtensionSize).ToArray();
             return true;
         }
 

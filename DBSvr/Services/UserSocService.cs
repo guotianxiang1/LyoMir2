@@ -114,6 +114,40 @@ namespace DBSvr
                 DisconnectNativeUserByAccount,
                 UpdateNativeOnlineAccountText,
                 UpdateNativeOnlineAccountLoginTime);
+            _gameSocService.AttachNativeSwitchHandoffStore(
+                StoreNativeSwitchHandoff);
+        }
+
+        private bool StoreNativeSwitchHandoff(string account,
+            string characterName, byte[] extension)
+        {
+            if (string.IsNullOrEmpty(account)
+                || string.IsNullOrEmpty(characterName)
+                || extension == null
+                || extension.Length != NativeDbServerProtocol.LoginExtensionSize)
+                return false;
+            lock (_gateLock)
+            {
+                foreach (var gate in _gateList)
+                {
+                    if (gate?.UserList == null) continue;
+                    lock (gate.UserList)
+                    {
+                        foreach (var user in gate.UserList)
+                        {
+                            if (user == null
+                                || user.WireMode != TGateWireMode.Native77
+                                || !string.Equals(user.sAccount, account,
+                                    StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            if (user.NativeSwitchHandoff.TryStore(
+                                    characterName, extension))
+                                return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         private IReadOnlyList<string> SnapshotNativeUserIps()
@@ -266,7 +300,12 @@ namespace DBSvr
                 foreach (var gate in _gateList)
                 {
                     if (gate?.UserList == null) continue;
-                    lock (gate.UserList) gate.UserList.Clear();
+                    lock (gate.UserList)
+                    {
+                        foreach (var user in gate.UserList)
+                            user?.NativeSwitchHandoff.Reset();
+                        gate.UserList.Clear();
+                    }
                 }
                 _gateList.Clear();
             }
@@ -393,7 +432,12 @@ namespace DBSvr
                     {
                         DBShare.MainOutMessage($"角色网关[{i}]({e.RemoteIPaddr}:{e.RemotePort})已关闭...");
                         var users = _gateList[i].UserList;
-                        if (users != null) lock (users) users.Clear();
+                        if (users != null) lock (users)
+                        {
+                            foreach (var user in users)
+                                user?.NativeSwitchHandoff.Reset();
+                            users.Clear();
+                        }
                         _gateList.RemoveAt(i);
                         break;
                     }
@@ -547,60 +591,67 @@ namespace DBSvr
 
         private void OpenUser(string sConnId, string sIP, ref TGateInfo gateInfo)
         {
-            string sUserIPaddr = string.Empty;
-            string sGateIPaddr = HUtil32.GetValidStr3(sIP, ref sUserIPaddr, HUtil32.Backslash);
-
-            // 检查重复
-            for (var i = 0; i < gateInfo.UserList.Count; i++)
+            lock (gateInfo.UserList)
             {
-                if (gateInfo.UserList[i]?.sConnID == sConnId)
-                    return;
+                string sUserIPaddr = string.Empty;
+                string sGateIPaddr = HUtil32.GetValidStr3(sIP, ref sUserIPaddr, HUtil32.Backslash);
+
+                // 检查重复
+                for (var i = 0; i < gateInfo.UserList.Count; i++)
+                {
+                    if (gateInfo.UserList[i]?.sConnID == sConnId)
+                        return;
+                }
+
+                gateInfo.UserList.Add(new TUserInfo
+                {
+                    sAccount = string.Empty,
+                    sUserIPaddr = sUserIPaddr,
+                    sGateIPaddr = sGateIPaddr,
+                    sConnID = sConnId,
+                    nSessionID = 0,
+                    Socket = gateInfo.Socket,
+                    sText = string.Empty,
+                    dwTick34 = HUtil32.GetTickCount(),
+                    dwChrTick = HUtil32.GetTickCount(),
+                    boChrSelected = false,
+                    boChrQueryed = false,
+                    nSelGateID = gateInfo.nGateID,
+                    WireMode = gateInfo.WireMode,
+                    NativeQueryId = gateInfo.WireMode == TGateWireMode.Native77
+                        ? HUtil32.Str_ToInt(sConnId, 0)
+                        : 0,
+                    NativeConnectionId = gateInfo.WireMode == TGateWireMode.Native77
+                        ? checked((ushort)HUtil32.Str_ToInt(sConnId, 0))
+                        : (ushort)0,
+                    NativeAuthTick = 0,
+                    NativeAuthResponse = null,
+                    NativeText102 = string.Empty,
+                    NativeLoginDateTimeBits = 0,
+                    sReconnectID = string.Empty
+                });
             }
-
-            gateInfo.UserList.Add(new TUserInfo
-            {
-                sAccount = string.Empty,
-                sUserIPaddr = sUserIPaddr,
-                sGateIPaddr = sGateIPaddr,
-                sConnID = sConnId,
-                nSessionID = 0,
-                Socket = gateInfo.Socket,
-                sText = string.Empty,
-                dwTick34 = HUtil32.GetTickCount(),
-                dwChrTick = HUtil32.GetTickCount(),
-                boChrSelected = false,
-                boChrQueryed = false,
-                nSelGateID = gateInfo.nGateID,
-                WireMode = gateInfo.WireMode,
-                NativeQueryId = gateInfo.WireMode == TGateWireMode.Native77
-                    ? HUtil32.Str_ToInt(sConnId, 0)
-                    : 0,
-                NativeConnectionId = gateInfo.WireMode == TGateWireMode.Native77
-                    ? checked((ushort)HUtil32.Str_ToInt(sConnId, 0))
-                    : (ushort)0,
-                NativeAuthTick = 0,
-                NativeAuthResponse = null,
-                NativeText102 = string.Empty,
-                NativeLoginDateTimeBits = 0,
-                sReconnectID = string.Empty
-            });
         }
 
         private void CloseUser(string sConnId, ref TGateInfo gateInfo)
         {
-            for (var i = 0; i < gateInfo.UserList.Count; i++)
+            lock (gateInfo.UserList)
             {
-                var userInfo = gateInfo.UserList[i];
-                if (userInfo?.sConnID == sConnId)
+                for (var i = 0; i < gateInfo.UserList.Count; i++)
                 {
-                    if (!_loginService.GetGlobaSessionStatus(userInfo.sAccount, userInfo.nSessionID))
+                    var userInfo = gateInfo.UserList[i];
+                    if (userInfo?.sConnID == sConnId)
                     {
-                        _loginService.SendSocketMsg(Grobal2.SS_SOFTOUTSESSION,
-                            userInfo.sAccount + "/" + userInfo.nSessionID);
-                        _loginService.CloseSession(userInfo.sAccount, userInfo.nSessionID);
+                        if (!_loginService.GetGlobaSessionStatus(userInfo.sAccount, userInfo.nSessionID))
+                        {
+                            _loginService.SendSocketMsg(Grobal2.SS_SOFTOUTSESSION,
+                                userInfo.sAccount + "/" + userInfo.nSessionID);
+                            _loginService.CloseSession(userInfo.sAccount, userInfo.nSessionID);
+                        }
+                        userInfo.NativeSwitchHandoff.Reset();
+                        gateInfo.UserList.RemoveAt(i);
+                        break;
                     }
-                    gateInfo.UserList.RemoveAt(i);
-                    break;
                 }
             }
         }
@@ -1610,7 +1661,8 @@ namespace DBSvr
                             SessionMode = 1,
                             CachedValue38 = unchecked((int)loginDateTimeBits),
                             CachedValue3C = unchecked(
-                                (int)(loginDateTimeBits >> 32))
+                                (int)(loginDateTimeBits >> 32)),
+                            LoginExtension = userInfo.NativeSwitchHandoff.Consume()
                         };
                         boDataOK = _gameSocService.TrySendNativeHuman(
                             ptid2, sChrName, context);
@@ -1622,6 +1674,8 @@ namespace DBSvr
                         $"{ptid2}/{userInfo.nSessionID}/{MobileAdmissionPaymentState}/" +
                         $"{MobileAdmissionPayMode}/{userInfo.sUserIPaddr}");
                 }
+                if (boDataOK && userInfo.WireMode == TGateWireMode.Native77)
+                    userInfo.NativeSwitchHandoff.SetCurrentCharacter(sChrName);
                 if (boDataOK)
                     _loginService.SetGlobaSessionPlay(userInfo.sAccount, userInfo.nSessionID);
             }

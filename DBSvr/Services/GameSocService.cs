@@ -75,6 +75,8 @@ namespace DBSvr
         private bool _heroSaveStopping;
         private readonly NativeHeroSaveStateTracker _heroSaveState = new();
         private readonly NativeHeroAttachmentStateTracker _heroAttachmentState = new();
+        private Func<string, string, byte[], bool> _nativeSwitchHandoffStore =
+            static (_, _, _) => false;
 
         public GameSocService(LoginSvrService loginSvrService,
             IPlayDataService playDataService, IPlayRecordService playRecordService,
@@ -141,6 +143,13 @@ namespace DBSvr
             _serverSocket.Init();
             EnsureNativeSaveWorker();
             EnsureHeroSaveWorker();
+        }
+
+        public void AttachNativeSwitchHandoffStore(
+            Func<string, string, byte[], bool> store)
+        {
+            Volatile.Write(ref _nativeSwitchHandoffStore,
+                store ?? ((_, _, _) => false));
         }
 
         public void Start()
@@ -248,8 +257,7 @@ namespace DBSvr
             {
                 for (var i = 0; i < _serverList.Count; i++)
                 {
-                    if (_serverList[i].nSckHandle == (int)e.Socket.Handle
-                        && ReferenceEquals(_serverList[i].Socket, e.Socket))
+                    if (ReferenceEquals(_serverList[i].Socket, e.Socket))
                     {
                         _serverList.RemoveAt(i);
                         break;
@@ -2726,9 +2734,15 @@ namespace DBSvr
                     return;
                 }
 
-                _humanLogicalCache.TryStage(index, persistence,
+                var staged = _humanLogicalCache.TryStage(index, persistence,
                     staged => EnqueueNativeSave(
                         new NativeSaveWorkItem(index, staged)));
+                if (staged && NativeDbServerProtocol.TryExtractSwitchLoginExtension(
+                        request, out var extension))
+                {
+                    Volatile.Read(ref _nativeSwitchHandoffStore)(
+                        request.Account, request.CharacterName, extension);
+                }
             }
             catch (Exception ex)
             {
@@ -3039,26 +3053,17 @@ namespace DBSvr
         public bool TrySendNativeHuman(string account, string characterName,
             NativeHumanSessionContext sessionContext)
         {
-            TServerInfo target = null;
-            var now = Environment.TickCount64;
+            var targets = new List<TServerInfo>();
             lock (_serverListLock)
             {
                 foreach (var server in _serverList)
                 {
-                    if (!IsNativeHumanRouteTarget(server, now))
-                        continue;
-                    if (target != null)
-                    {
-                        DBShare.MainOutMessage(
-                            "[GameSoc] 原生6000存在多个活动GameSvr，无法可靠路由选角记录");
-                        return false;
-                    }
-                    target = server;
+                    if (IsNativeHumanFanoutTarget(server)) targets.Add(server);
                 }
             }
-            if (target == null)
+            if (targets.Count == 0)
             {
-                DBShare.MainOutMessage("[GameSoc] 没有已登记的原生6000 GameSvr");
+                DBShare.MainOutMessage("[GameSoc] 没有原生6000 GameSvr连接");
                 return false;
             }
 
@@ -3072,7 +3077,7 @@ namespace DBSvr
                     out var nativeData, out var nativeScriptData))
             {
                 DBShare.MainOutMessage($"[GameSoc] 原生选角存档读取失败 chr={characterName}");
-                return false;
+                return true;
             }
             if (!string.Equals(persistence.CharacterName, characterName,
                     StringComparison.Ordinal)
@@ -3082,68 +3087,70 @@ namespace DBSvr
             {
                 DBShare.MainOutMessage(
                     $"[GameSoc] 原生选角存档归属不匹配 account={account} chr={characterName}");
-                return false;
+                return true;
             }
             if (TryConsumeAwardPlayer(account, characterName))
                 sessionContext.AuthFlags75 |= NativeDbServerProtocol.AwardPlayerFlag;
 
-            // suffix+0x40 = DB 时钟基准。原版在**记录发送时刻**求值，而非登录时刻：
-            // 0x59A9E6 `fstp qword ptr [eax+0x40]` 写入未经截断的 Now()，且
-            // sub_59DC1C 的 fan-out 循环里逐个 GameServer 重新求值。故在帧构造点
-            // 紧前赋值，而不是在 sessionContext 构造处一次性快照。
-            // 不得截断：0x59A9F0 的 Trunc 落到 struct+0x58，不回写 +0x40。
-            sessionContext.DbClockBase = HUtil32.DateTimeToDouble(DateTime.Now);
-
-            if (!NativeDbServerProtocol.TryCreateLoadHumanFrame(
-                    account, characterName, nativeData, nativeScriptData,
-                    sessionContext,
-                    out var response, out var error)
-                || !LegacyDbServerFrameCodec.TryEncode(response, out var wire, out error))
+            foreach (var target in targets)
             {
-                DBShare.MainOutMessage(
-                    $"[GameSoc] 原生选角响应编码失败 chr={characterName}: {error}");
-                return false;
-            }
+                // suffix+0x40 = DB 时钟基准。sub_59DC1C 在 fan-out 循环内
+                // 逐个调用 sub_5986CC，因此每个目标都在编码紧前重新求 Now()。
+                sessionContext.DbClockBase = HUtil32.DateTimeToDouble(DateTime.Now);
 
-            var socket = target.Socket;
-            try
-            {
-                lock (socket)
+                if (!NativeDbServerProtocol.TryCreateLoadHumanFrame(
+                        account, characterName, nativeData, nativeScriptData,
+                        sessionContext,
+                        out var response, out var error)
+                    || !LegacyDbServerFrameCodec.TryEncode(
+                        response, out var wire, out error))
                 {
-                    if (!ReferenceEquals(socket, target.Socket)
-                        || !IsNativeHumanRouteTarget(
-                            target, Environment.TickCount64))
-                    {
-                        DBShare.MainOutMessage(
-                            "[GameSoc] 原生6000 GameSvr在选角发送前失效");
-                        return false;
-                    }
-                    SendAll(socket, wire);
-                    return true;
+                    DBShare.MainOutMessage(
+                        $"[GameSoc] 原生选角响应编码失败 chr={characterName}: {error}");
+                    continue;
+                }
+
+                var socket = target.Socket;
+                if (socket == null) continue;
+                try { SendAll(socket, wire); }
+                catch (Exception ex) when (ex is SocketException
+                                           || ex is ObjectDisposedException)
+                {
+                    DBShare.MainOutMessage(
+                        $"[GameSoc] 原生选角响应发送失败 chr={characterName}: {ex.Message}");
+                    RemoveNativeHumanFanoutTarget(target, socket);
                 }
             }
-            catch (Exception ex) when (ex is SocketException
-                                       || ex is ObjectDisposedException)
-            {
-                DBShare.MainOutMessage(
-                    $"[GameSoc] 原生选角响应发送失败 chr={characterName}: {ex.Message}");
-                try { socket.Close(); }
-                catch (ObjectDisposedException) { }
-                return false;
-            }
+
+            // 原版 sub_59DC1C 的返回值只表示 fan-out 列表非空；每目标的
+            // 记录构造或发送是否成功都不改变该结果。
+            return true;
         }
 
-        private static bool IsNativeHumanRouteTarget(TServerInfo server,
-            long now)
+        private static bool IsNativeHumanFanoutTarget(TServerInfo server)
         {
-            if (server?.Socket?.Connected != true
-                || server.WireModeDetector.Mode != DbServerWireMode.NativeType12
-                || Volatile.Read(ref server.NativeRegistrationInitialized) != 1
-                || unchecked((byte)Volatile.Read(
-                    ref server.NativeServerType)) == 9)
-                return false;
-            var heartbeat = Volatile.Read(ref server.NativeHeartbeatTick);
-            return heartbeat != 0 && now - heartbeat <= 30000;
+            return server?.Socket != null
+                   && server.WireModeDetector.Mode
+                   == DbServerWireMode.NativeType12;
+        }
+
+        private void RemoveNativeHumanFanoutTarget(TServerInfo target,
+            Socket socket)
+        {
+            lock (_serverListLock)
+            {
+                for (var i = 0; i < _serverList.Count; i++)
+                {
+                    if (!ReferenceEquals(_serverList[i], target)
+                        || !ReferenceEquals(_serverList[i].Socket, socket))
+                        continue;
+                    _serverList.RemoveAt(i);
+                    break;
+                }
+            }
+
+            try { socket.Close(); }
+            catch (ObjectDisposedException) { }
         }
 
         private NativeSavePersistenceData LoadNativeHumanPersistence(int index)

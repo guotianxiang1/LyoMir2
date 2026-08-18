@@ -296,6 +296,7 @@ namespace DBSvr
         public string NativeText102;
         public long NativeLoginDateTimeBits;
         public string sReconnectID;
+        public NativeSwitchHandoffSlot NativeSwitchHandoff { get; } = new();
 
         /// <summary>
         /// 登录排队位次，复刻原版账号/会话对象的 <c>word[Self+0x9C]</c>。
