@@ -20,8 +20,11 @@ namespace NativeCastleSiegeCheck
             var root = AuditRepoRoot.Resolve();
             var conf = File.ReadAllText(Path.Combine(root, "GameSvr", "Castle", "CastleConfManager.cs"));
             var castle = File.ReadAllText(Path.Combine(root, "GameSvr", "Castle", "UserCastle.cs"));
+            var siegeClock = File.ReadAllText(Path.Combine(root, "GameSvr", "Plugins",
+                "YanshenPangu2Patches.cs"));
             var liveConf = CodeOnly(conf);
             var liveCastle = CodeOnly(castle);
+            var liveSiegeClock = CodeOnly(siegeClock);
 
             True(liveConf.Contains("沙巴克.txt", StringComparison.Ordinal),
                 "state file must be 沙巴克.txt (0x65A8F4 / 0x65B074), not SabukW.txt");
@@ -50,9 +53,10 @@ namespace NativeCastleSiegeCheck
                     "AddDateTimeOfDay(DateTime.Now, M2Share.g_Config.nStartCastleWarDays)",
                     StringComparison.Ordinal),
                 "nStartCastleWarDays (default 4) is 0 hits in the native image");
-            True(liveCastle.Contains("0x11B98", StringComparison.Ordinal)
-                 || liveCastle.Contains("0x11b98", StringComparison.Ordinal),
-                "palace capture unlock is clock-of-day 0x11B98=20:10 (0x65C6AF), not 10min-from-start");
+            True(liveCastle.Contains("TryGetSiegeDayClock", StringComparison.Ordinal)
+                 && liveSiegeClock.Contains("StockSiegeCaptureSec = 0x11B98",
+                     StringComparison.Ordinal),
+                "palace capture unlock must consume the clock-of-day 0x11B98=20:10 provider, not 10min-from-start");
             True(liveCastle.Contains("TryCapturePalaceFromRun", StringComparison.Ordinal),
                 "occupancy 0x65C690 must run from Castle.Run, before the 10s gate");
             True(liveCastle.Contains("m_MainDoor.BaseObject.m_boGhost", StringComparison.Ordinal),
