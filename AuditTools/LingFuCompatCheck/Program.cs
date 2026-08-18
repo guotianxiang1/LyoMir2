@@ -375,7 +375,7 @@ foreach (var value in new[]
              "清除每月限时灵符数据成功",
              "需要先关闭扩展灵符的应用",
              "清除CreditCard表数据成功",
-             "ISM_SERVERSWITCH",
+             "ISM_CS_SERVERSWITCH",
              "ISM_CREDITCARD_CLEARALL",
              "ISM_CREDITCARD_CLEARMONTHLY"
          })
@@ -383,6 +383,9 @@ foreach (var value in new[]
     Assert(creditCardSource.Contains(value, StringComparison.Ordinal),
         $"CreditCard missing native surface: {value}");
 }
+Assert(!creditCardSource.Contains("ISM_SERVERSWITCH",
+        StringComparison.Ordinal),
+    "CreditCard still uses obsolete native 207 server-switch alias");
 
 var serviceSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Services",
     "NativeCreditCardService.cs"));
@@ -487,7 +490,8 @@ var mirrorSource = File.ReadAllText(Path.Combine(root, "GameSvr", "Snaps",
     "MirrorMessage.cs"));
 foreach (var value in new[]
          {
-             "TryApplySwitchWord(switchWord, true)",
+             "M2Share.ServerSwitches?.TryApplySwitchWord(",
+             "switchWordExt, out _",
              ".ResetOnlineAll()",
              ".ResetOnlineMonthly()"
          })
