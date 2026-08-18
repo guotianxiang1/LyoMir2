@@ -706,6 +706,7 @@ static void CheckNativeUnionEffectPackets()
     orderedWarriorAssassin.Owner.m_boFixedHideMode = false;
     var effectObserver = new TPlayObject
     {
+        m_sCharName = "UnionEffectObserver",
         m_PEnvir = effectOrderEnvironment,
         m_nCurrX = 5,
         m_nCurrY = 5
@@ -736,6 +737,7 @@ static void AssertNativeUnionMagicPhysicalRelease(byte heroJob,
     fixture.Owner.m_boFixedHideMode = false;
     var observer = new TPlayObject
     {
+        m_sCharName = $"UnionPhysicalObserver{heroJob}",
         m_PEnvir = environment,
         m_nCurrX = 5,
         m_nCurrY = 5
@@ -843,10 +845,10 @@ static void CheckNativeUnionAreaTargeting()
     var secondCandidate = AddNativeUnionProbe(firstTarget.Environment, 12, 11);
     Assert(firstTarget.Hero.TryReleaseNativeUnionMagic(),
         "native union first-target release");
-    Assert(firstCandidate.m_WAbil.HP < 100000,
-        "native union first target in cell is hit");
-    Equal(100000, secondCandidate.m_WAbil.HP,
-        "native union second target in cell is skipped");
+    Equal(100000, firstCandidate.m_WAbil.HP,
+        "native union older target in cell is skipped");
+    Assert(secondCandidate.m_WAbil.HP < 100000,
+        "native union head target in cell is hit");
 
     var mageMage = CreateNativeUnionAreaFixture(1, 1);
     var firstMageMageTarget = AddNativeUnionAnimalProbe(mageMage.Environment,
@@ -1014,6 +1016,7 @@ static (TPlayObject Owner, HeroObject Hero) CreateNativeUnionReleaseFixture(
     environment ??= new Envirnoment();
     var owner = new TPlayObject
     {
+        m_sCharName = $"UnionOwner{heroJob}_{ownerJob}",
         m_btJob = ownerJob,
         m_PEnvir = environment,
         m_nCurrX = 0,
@@ -1026,6 +1029,7 @@ static (TPlayObject Owner, HeroObject Hero) CreateNativeUnionReleaseFixture(
 
     var hero = new NativeUnionTestHeroObject
     {
+        m_sCharName = $"UnionHero{heroJob}_{ownerJob}",
         m_Master = owner,
         m_btJob = heroJob,
         m_PEnvir = environment,
@@ -1040,6 +1044,7 @@ static (TPlayObject Owner, HeroObject Hero) CreateNativeUnionReleaseFixture(
     hero.m_WAbil.DC = HUtil32.MakeLong(10, 10);
     hero.m_TargetCret = new TBaseObject
     {
+        m_sCharName = $"UnionTarget{heroJob}_{ownerJob}",
         m_nCurrX = 1,
         m_nCurrY = 0,
         m_btRaceServer = Grobal2.RC_MONSTER,
