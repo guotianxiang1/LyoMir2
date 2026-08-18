@@ -40,7 +40,7 @@ These are audit-tool outcomes, not a project completion percentage and not a rel
 ## Integration Status
 
 - The tracked source snapshot from the temp carrier was integrated in commits
-  `119abe2e`, `b5b49094`, `51ed8d79`, `cce83b4d`, and `2161dfe9`.
+  `119abe2e`, `b5b49094`, `51ed8d79`, `cce83b4d`, `2161dfe9`, and `8b05e6c6`.
 - Five server projects were rebuilt after integration with zero compiler errors.
 - New audit projects and the three recovered GuildBase seed files were committed;
   generated binaries, `_toolruns_root`, and temporary probe files were not committed.
