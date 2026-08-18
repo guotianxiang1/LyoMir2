@@ -12,7 +12,7 @@ M2Share.UserEngine = new UserEngine();
 M2Share.ProcessMsgCriticalSection = new object();
 M2Share.LogMsgCriticalSection = new object();
 M2Share.LogStringList = new ArrayList();
-SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 
 var cacheField = typeof(TPlayObject).GetField("m_nNativeDiamondCache",
     BindingFlags.Instance | BindingFlags.NonPublic);
@@ -79,7 +79,7 @@ Equal(0, player.m_MsgList.Count, "zero TakeDiamond queued a refresh");
 M2Share.UserEngine.StdItemList.Clear();
 Equal(20, ReadCapitalDiamond(player),
     "capital offset +8 rescanned item definitions or the bag");
-SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 player.m_MsgList.Clear();
 initializeCache.Invoke(player, null);
 Equal(15, ReadCache(player), "relogin cache baseline");

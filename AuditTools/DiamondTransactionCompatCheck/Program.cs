@@ -17,7 +17,7 @@ var takeDiamond = typeof(TPlayObject).GetMethod("TakeNativeDiamond",
     BindingFlags.Instance | BindingFlags.NonPublic);
 Assert(takeDiamond != null, "TakeNativeDiamond helper is missing");
 
-SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 var invalidPlayer = NewPlayer();
 invalidPlayer.m_ItemList.Add(NewItem(10, 1, 9));
 Assert(!Take(invalidPlayer, 0), "zero TakeDiamond returned True");
@@ -35,7 +35,7 @@ Equal(1, missingPlayer.m_ItemList.Count, "missing definition changed bag");
 AssertRefreshOnly(missingPlayer, "missing definition");
 Equal(0, M2Share.LogStringList.Count, "missing definition log count");
 
-SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 var insufficientPlayer = NewPlayer();
 var insufficientFront = NewItem(30, 1, 20);
 var insufficientTail = NewItem(31, 1, 10);
@@ -74,30 +74,46 @@ AssertSuccessMessages(ordinaryPlayer, "ordinary");
 Equal(8, ordinaryPlayer.m_WAbil.Weight, "ordinary WeightChanged value");
 
 SetDefinitions(new GoodItem
-    { Name = "金刚石", StdMode = 7, DuraMax = 100, Weight = 2 });
+    { Name = "金刚石", StdMode = 152, DuraMax = 100, Weight = 2 });
 var pilePlayer = NewPlayer();
 var pileFront = NewItem(400, 1, 40, 100);
 var pileTail = NewItem(425, 1, 25, 100);
 pilePlayer.m_ItemList.Add(pileFront);
 pilePlayer.m_ItemList.Add(pileTail);
-Assert(Take(pilePlayer, 50), "StdMode=7 TakeDiamond returned False");
-Equal(1, pilePlayer.m_ItemList.Count, "StdMode=7 remaining bag count");
+Assert(Take(pilePlayer, 50), "StdMode=152 TakeDiamond returned False");
+Equal(1, pilePlayer.m_ItemList.Count, "StdMode=152 remaining bag count");
 Assert(ReferenceEquals(pileFront, pilePlayer.m_ItemList[0]),
-    "StdMode=7 removed the wrong pile");
-Equal(15, pileFront.Dura, "StdMode=7 partial pile quantity");
-Equal(2, M2Share.LogStringList.Count, "StdMode=7 log count");
+    "StdMode=152 removed the wrong pile");
+Equal(15, pileFront.Dura, "StdMode=152 partial pile quantity");
+Equal(2, M2Share.LogStringList.Count, "StdMode=152 log count");
 EqualText("10\taudit-map\t12\t34\taudit-role\t金刚石\t425\t50\tNPC收取50个",
-    LogAt(0), "StdMode=7 tail log");
+    LogAt(0), "StdMode=152 tail log");
 EqualText("10\taudit-map\t12\t34\taudit-role\t金刚石\t400\t25\tNPC收取25个",
-    LogAt(1), "StdMode=7 partial log");
+    LogAt(1), "StdMode=152 partial log");
 Equal(Grobal2.SM_BAGITEMDURACHG, pilePlayer.m_DefMsg.Ident,
-    "StdMode=7 partial packet ident");
+    "StdMode=152 partial packet ident");
 Equal(pileFront.ClientItemID, pilePlayer.m_DefMsg.Recog,
-    "StdMode=7 partial packet client item id");
-Equal(15, pilePlayer.m_DefMsg.Param, "StdMode=7 partial packet quantity");
-Equal(100, pilePlayer.m_DefMsg.Tag, "StdMode=7 partial packet DuraMax");
-AssertSuccessMessages(pilePlayer, "StdMode=7");
-Equal(2, pilePlayer.m_WAbil.Weight, "StdMode=7 WeightChanged value");
+    "StdMode=152 partial packet client item id");
+Equal(15, pilePlayer.m_DefMsg.Param, "StdMode=152 partial packet quantity");
+Equal(100, pilePlayer.m_DefMsg.Tag, "StdMode=152 partial packet DuraMax");
+AssertSuccessMessages(pilePlayer, "StdMode=152");
+Equal(30, pilePlayer.m_WAbil.Weight, "StdMode=152 WeightChanged value");
+
+// StdMode 7 is the charm family, not a pile. Keep this explicit boundary so a
+// future broad StdMode shortcut cannot silently reintroduce the old bug.
+SetDefinitions(new GoodItem
+    { Name = "金刚石", StdMode = 7, DuraMax = 100, Weight = 2 });
+var charmPlayer = NewPlayer();
+var charmKeep = NewItem(450, 1, 40, 100);
+var charmTail = NewItem(451, 1, 25, 100);
+charmPlayer.m_ItemList.Add(charmKeep);
+charmPlayer.m_ItemList.Add(charmTail);
+Assert(Take(charmPlayer, 1), "StdMode=7 ordinary TakeDiamond returned False");
+Equal(1, charmPlayer.m_ItemList.Count, "StdMode=7 ordinary remaining bag count");
+Equal(40, charmKeep.Dura, "StdMode=7 changed ordinary item Dura");
+EqualText("10\taudit-map\t12\t34\taudit-role\t金刚石\t451\t1\tNPC收取",
+    LogAt(0), "StdMode=7 ordinary log");
+AssertSuccessMessages(charmPlayer, "StdMode=7 ordinary");
 
 SetDefinitions(new GoodItem
     { Name = "金刚石", StdMode = 150, Shape = 0, DuraMax = 100 });
@@ -127,7 +143,7 @@ EqualText("10\taudit-map\t12\t34\taudit-role\t金刚石\t601\t1\tNPC收取",
     LogAt(0), "StdMode=149 ordinary log");
 AssertSuccessMessages(belowRuntimePilePlayer, "StdMode=149");
 
-SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+SetDefinitions(new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 var zeroPilePlayer = NewPlayer();
 var nonzeroPile = NewItem(700, 1, 5, 100);
 var zeroPile = NewItem(701, 1, 0, 100);
@@ -144,8 +160,8 @@ EqualText("10\taudit-map\t12\t34\taudit-role\t金刚石\t700\t1\tNPC收取1个",
 AssertSuccessMessages(zeroPilePlayer, "zero-Dura traversal");
 
 SetDefinitions(
-    new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 },
-    new GoodItem { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+    new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 },
+    new GoodItem { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 var duplicateNamePlayer = NewPlayer();
 duplicateNamePlayer.m_ItemList.Add(NewItem(800, 2, 99, 100));
 Assert(!Take(duplicateNamePlayer, 1),
@@ -156,7 +172,7 @@ AssertRefreshOnly(duplicateNamePlayer, "duplicate-name wIndex");
 Equal(0, M2Share.LogStringList.Count, "duplicate-name log count");
 
 SetDefinitions(new GoodItem
-    { Name = "金刚石", StdMode = 7, DuraMax = 100 });
+    { Name = "金刚石", StdMode = 152, DuraMax = 100 });
 var dispatchPlayer = NewPlayer();
 var dispatchPile = NewItem(900, 1, 5, 100);
 dispatchPlayer.m_ItemList.Add(dispatchPile);
@@ -216,8 +232,10 @@ RequireMatches(source, "if \\(available >= amount\\) break;", 1,
 RequireMatches(source, "if \\(available < amount\\) return false;", 1,
     "TakeDiamond preflight is not all-or-nothing (native rolls back at 0x7406F5)");
 RequireMatches(source,
-    "stdItem\\.StdMode == 7 \\|\\| NativeItemFactory\\.IsPileItem\\(stdItem\\)",
+    "NativeItemFactory\\.IsPileItem\\(stdItem\\)",
     1, "TakeDiamond runtime pile classification");
+Assert(!source.Contains("stdItem.StdMode == 7", StringComparison.Ordinal),
+    "TakeDiamond still treats the StdMode=7 charm family as a pile");
 RequireMatches(source, "RefreshNativeLingFu\\(\\);", 1,
     "TakeDiamond positive capital refresh");
 RequireMatches(source, "WeightChanged\\(\\);", 1,
@@ -244,7 +262,7 @@ Assert(!functionSource.Contains("args[1]", StringComparison.Ordinal),
 
 Console.WriteLine(
     "PASS TakeDiamond invalid=silent positive=10054 preflight=atomic commit=tail-to-head " +
-    "ordinary=count pile=StdMode7/runtime logs=type10/Cardinal/NPC WeightChanged=once " +
+    "ordinary=count pile=StdMode152/runtime logs=type10/Cardinal/NPC WeightChanged=once " +
     "dispatch=CallPlayerFunc/exact2/Npc-unread method=closed");
 return;
 
