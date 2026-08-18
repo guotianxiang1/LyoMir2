@@ -1742,6 +1742,7 @@ static void RunClearMonDispatchRegressions()
     ghost.m_boGhost = true;
     var hero = new HeroObject
     {
+        m_sCharName = "clear-hero",
         m_PEnvir = environment,
         m_sMapName = environment.sMapName,
         m_Master = attacker,
@@ -1848,6 +1849,7 @@ static void RunClearMonDispatchRegressions()
     {
         var actor = new TBaseObject
         {
+            m_sCharName = $"clear-actor-{race}-{x}-{y}-{hp}",
             m_PEnvir = environment,
             m_sMapName = environment.sMapName,
             m_btRaceServer = race,

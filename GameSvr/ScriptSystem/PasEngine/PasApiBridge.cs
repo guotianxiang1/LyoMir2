@@ -6009,13 +6009,10 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "reqitembygoldid":
-                    // sub_653990 @0x00653990 — gold account level-segment claim.
-                    if (args.Count != 3 ||
-                        args[0].ObjVal is not TPlayObject goldIdPlayer)
-                        return false;
-                    goldIdPlayer.ReqItemByGoldId(CurrentNpc, args[1].AsInt(),
-                        args[2].AsInt());
-                    return true;
+                    // The reward codec/state machine is retained for later
+                    // authority integration, but no native GoldID account
+                    // authority is present in the current deployment.
+                    return RejectUnsupportedNativeApi(out result);
 
                 case "reqitembyplatina":
                     // sub_6C8284 @0x006C8284 — platinum role segment claim.

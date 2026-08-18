@@ -266,10 +266,35 @@ void CheckDormantBoundary()
         "dormant real grant helper became reachable");
 
     var ybClient = Read("GameSvr", "Services", "YbDbClient.cs");
-    False(ybClient.Contains("YbDbOpenDealProtocol", StringComparison.Ordinal),
-        "YbDbClient consumes dormant 1112 codec");
-    False(ybClient.Contains("1112", StringComparison.Ordinal),
-        "YbDbClient directly consumes response 1112");
+    True(ybClient.Contains(
+            "private static readonly bool NativeOpenDealAuthorityEnabled = false;",
+            StringComparison.Ordinal),
+        "OpenYB authority gate is not explicitly disabled");
+    True(ybClient.Contains("internal bool TryRequestOpenDeal",
+            StringComparison.Ordinal),
+        "dormant OpenYB request adapter is not assembly-internal");
+    False(ybClient.Contains("public bool TryRequestOpenDeal",
+            StringComparison.Ordinal),
+        "OpenYB request adapter is publicly exposed");
+    True(ybClient.Contains(
+            "if (!NativeOpenDealAuthorityEnabled || player == null) return false;",
+            StringComparison.Ordinal),
+        "OpenYB request can run before its authority is enabled");
+    True(ybClient.Contains("TryTakeOpenDealRequest",
+            StringComparison.Ordinal),
+        "OpenYB response does not require a pending request");
+    True(ybClient.Contains("player.ObjectId != request.ObjectId",
+            StringComparison.Ordinal),
+        "OpenYB response does not verify the player object id");
+    True(ybClient.Contains("ReferenceEquals(player, requestedPlayer)",
+            StringComparison.Ordinal),
+        "OpenYB response does not verify the exact player instance");
+    True(ybClient.Contains("player.m_sUserID, request.Ptid",
+            StringComparison.Ordinal),
+        "OpenYB response does not verify PTID");
+    Equal(4, Regex.Matches(ybClient, "_openDealRequests\\.Clear\\(\\);",
+        RegexOptions.CultureInvariant).Count,
+        "OpenYB pending identities are not cleared at every session boundary");
 }
 
 TPlayObject NewPlayer() => new();

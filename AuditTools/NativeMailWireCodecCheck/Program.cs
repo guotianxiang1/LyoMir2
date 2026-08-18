@@ -5,6 +5,7 @@ using GameSvr.Services;
 using SystemModule;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+PrepareRuntimeConfig();
 var gbk = Encoding.GetEncoding(936);
 
 CheckListInfo();
@@ -18,6 +19,25 @@ CheckNativeMailCreationSourceContract();
 CheckNativeMailClaimDeleteSourceContract();
 
 Console.WriteLine("NativeMailWireCodecCheck PASS");
+
+static void PrepareRuntimeConfig()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+
+    var shareDirectory = Path.GetFullPath(Path.Combine(
+        runtimeDirectory, "..", "Share"));
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}
 
 void CheckListInfo()
 {
