@@ -1,17 +1,19 @@
 # Unified Git Baseline
 
-Snapshot time: 2026-08-18 23:18 +08:00
+Snapshot time: 2026-08-18 23:46 +08:00
 
 ## Authoritative Line
 
 - Branch: `unified/main`
-- Baseline commit: `18635d2b39dd4249a208abb2e2cb94d1fa18d096`
+- History-anchor commit: `18635d2b39dd4249a208abb2e2cb94d1fa18d096`
 - First parent: `temp-merge-branch @ 299c20390250075217d7e257738c60c249317191`
 - Second parent: `master @ e7a2429b1b62abdd665cdbf2b205be79b8888cd4`
-- Baseline tree: `564fbb841269bcb4dcf3f3e92aacd783f411f9b7`
+- Source-integration tip before this document update: `21254b9c3a76bc619f98b8a332bc1626172a39d0`
+- Source-integration tree before this document update: `ad6d6bedfff6c71c04b6061e36eb35f071fbe67b`
 
-The baseline merge anchors both histories while retaining the temp committed tree exactly.
-It does not claim that master-only file content has passed review or was imported.
+The history-anchor merge anchors both histories while retaining the temp committed tree
+exactly. Subsequent commits integrate the reviewed source snapshot in project-sized
+batches; generated output and temporary audit runners were intentionally left out.
 
 ## Preservation
 
@@ -35,19 +37,21 @@ and copies of all non-ignored untracked files found during the snapshot pass.
 
 These are audit-tool outcomes, not a project completion percentage and not a release gate.
 
-## Work In Progress
+## Integration Status
 
-The audit ran against a dirty temp worktree. Its uncommitted changes are preserved but
-are not automatically committed to `unified/main`. At the preservation snapshot, 69 of
-306 original worktrees were dirty. The temp carrier later reported 375 top-level status
-records, showing that the source state was still moving.
-
-Each WIP batch must be classified as source, test, documentation, generated output, or
-runtime data before it is added to the unified line.
+- The tracked source snapshot from the temp carrier was integrated in commits
+  `119abe2e`, `b5b49094`, `51ed8d79`, `cce83b4d`, and `2161dfe9`.
+- Five server projects were rebuilt after integration with zero compiler errors.
+- New audit projects and the three recovered GuildBase seed files were committed;
+  generated binaries, `_toolruns_root`, and temporary probe files were not committed.
+- `GameSvr/Plugins/YanshenProvableRegistry.cs` was deliberately retained because the
+  carrier's deletion was not independently reviewed.
+- The original temp carrier remains dirty and continues to be preserved separately;
+  it is not the authoritative integration line.
 
 ## Safety Rules
 
-Until WIP review and full-stack acceptance are complete:
+Until full-stack acceptance is complete:
 
 - Do not delete branches, worktrees, stashes, tags, or recovery files.
 - Do not run `git gc`, `git prune`, `git clean`, or destructive reset operations.
@@ -67,5 +71,6 @@ git merge-base --is-ancestor temp-merge-branch unified/main
 git bundle verify D:\loym2\backups\LyoMir2_rescue_20260818_230609\refs.bundle
 ```
 
-Both ancestor checks must return exit code `0`, and the tree must equal
-`564fbb841269bcb4dcf3f3e92aacd783f411f9b7` for this baseline commit.
+Both ancestor checks must return exit code `0`. The current tree is obtained from
+`git rev-parse 'unified/main^{tree}'`; do not compare it to the historical anchor tree
+after source-integration commits.

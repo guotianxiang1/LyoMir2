@@ -1,15 +1,17 @@
-【2026-08-18 23:18 状态更正】
+【2026-08-18 23:46 状态更正】
 
   本文件 21:52 版本记录的是“审计交付”，不是“Git 统一完成”或“可上线验收”。
   当前已完成的非破坏性 Git 动作：
     ✓ 建立仓库外恢复快照与 refs.bundle
     ✓ 为 master/temp-merge-branch 建立 pre-unification 保护标签
-    ✓ 建立唯一集成线 unified/main @ 18635d2b
+    ✓ 建立唯一集成线 unified/main（历史锚点 18635d2b）
     ✓ master 与 temp-merge-branch 均为 unified/main 的祖先
-    ✓ unified/main 的初始文件树与 temp-merge-branch @ 299c2039 完全一致
+    ✓ unified/main 的历史锚点文件树与 temp-merge-branch @ 299c2039 完全一致
+    ✓ 已按项目提交审计源码、AuditTools 新检查和 GuildBase 种子配置
+    ✓ 五个服务端项目在统一线重新构建，均为 0 编译错误
 
   仍未完成：
-    [ ] 评审并分批纳入 temp 工作树的未提交代码
+    [x] 评审并分批纳入 temp 工作树的源码改动（生成物和未审删除除外）
     [ ] 评审 master 独有内容是否需要移植（历史已保留，文件树未强行覆盖）
     [ ] 修复 22 个行为分歧并执行全栈验证
 
@@ -76,19 +78,19 @@
   当前状态:
     - 本地分支: 401 个（248 w/*, 62 fix/*, 37 gap/*, 其他 54）
     - 工作树: 306 个
-    - 未提交改动: 356 个文件（260 修改 + 1 删除 + 95 未跟踪）
-    - 活跃线: temp-merge-branch @ 299c2039
+    - 审计快照未提交改动: 356 个文件（当前统一线已分类提交源码）
+    - 权威集成线: unified/main
     
   双向分叉:
     - temp-merge-branch 独有: 1674 提交
     - master 独有: 65 提交
-    - 无清晰合并基线
+    - 已由 unified/main 历史锚点建立清晰合并基线
     
   推荐方案:
-    ✓ 以 temp-merge-branch 为权威基线（1674 >> 65）
-    ✓ 归档或 cherry-pick master 的 65 提交
-    ✓ 清理 401 → ~10 分支（去重 + 删除已合并）
-    ✓ 清理 306 → ~5-10 工作树（删除超过 30 天的）
+    ✓ 以 unified/main 为权威集成线（同时锚定 temp/master 历史）
+    ⏸ 评审 master 的 65 个独有提交（历史已保留，未强行覆盖文件树）
+    ⏸ 清理 401 个分支（本轮只保护和统一，不删除）
+    ⏸ 清理 306 个工作树（本轮只保护和统一，不删除）
 
 【文档维护规则】
 
@@ -114,12 +116,12 @@
         - NativeCommonInformationCheck (1099 消息未入队)
         - NativeClientBodyLengthGateCheck (ident 3030 被丢弃)
     [ ] 修复 3 个环境/fixture 问题
-    [ ] 提交 356 个未提交改动（分批验证）
+    [x] 提交已审计源码改动（分批验证）
     
   短期（1 周）:
     [ ] 决策 FieldHero 接入策略（3 个选项）
     [ ] 决策元宝商城接入策略（2 个选项）
-    [ ] 执行 Git 线路统一（遵循 GIT_TOPOLOGY_AUDIT.md 第 5 节）
+    [x] 建立 Git 统一集成线（旧线路保留，不做破坏性清理）
     [ ] 全栈集成测试（MySQL + 真实客户端 + 断线重连）
     
   中期（2-4 周）:
