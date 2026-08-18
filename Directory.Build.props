@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Keep build products inside this checkout so linked worktrees cannot overwrite each other. -->
+    <RepositoryArtifactsRoot Condition="'$(RepositoryArtifactsRoot)' == ''">$(MSBuildThisFileDirectory)artifacts\</RepositoryArtifactsRoot>
+    <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">$(RepositoryArtifactsRoot)obj\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">$(RepositoryArtifactsRoot)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

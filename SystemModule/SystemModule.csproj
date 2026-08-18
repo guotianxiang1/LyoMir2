@@ -10,12 +10,6 @@
 		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="$(Configuration)=='Release' and $([MSBuild]::IsOSPlatform('Windows'))">
-		<OutputPath>D:\lyom2Release\SystemModule\</OutputPath>
-		<PublishDir>D:\lyom2Release\SystemModule\</PublishDir>
-		<PublishUrl>D:\lyom2Release\SystemModule\</PublishUrl>
-	</PropertyGroup>
-
 	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<DefineConstants>TRACE;ISWOL</DefineConstants>

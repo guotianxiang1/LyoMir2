@@ -5,7 +5,6 @@
         <UserSecretsId>1fd3fe7d-5ab8-4c52-b44f-47638c9af29a</UserSecretsId>
         <LangVersion>10</LangVersion>
         <Nullable>disable</Nullable>
-        <BaseOutputPath>bin\</BaseOutputPath>
         <PackageId>GameSvr</PackageId>
         <OutputType>WinExe</OutputType>
         <UseWindowsForms>true</UseWindowsForms>
@@ -28,41 +27,13 @@
       <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
       <Optimize>True</Optimize>
     </PropertyGroup>
-    <PropertyGroup Condition="$(Configuration)=='Release' and $([MSBuild]::IsOSPlatform('Windows'))">
-      <OutputPath>D:\lyom2Release\mud2.0\Mir200\GS1\</OutputPath>
-      <PublishDir>D:\lyom2Release\mud2.0\Mir200\GS1\</PublishDir>
-      <PublishUrl>D:\lyom2Release\mud2.0\Mir200\GS1\</PublishUrl>
-    </PropertyGroup>
     <PropertyGroup Condition=" '$(RunConfiguration)' == 'MirServer' " />
 
-	<Choose>
-		<When Condition="$(Configuration)=='Release'">
-			<PropertyGroup>
-				<DebugSymbols>false</DebugSymbols>
-				<Optimize>true</Optimize>
-				<DefineConstants>TRACE</DefineConstants>
-			</PropertyGroup>
-		</When>
-		<When Condition="$(Configuration)=='Debug'">
-			<Choose>
-				<When Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-					<PropertyGroup>
-						<OutputPath>..\..\Build\Mir200</OutputPath>
-					</PropertyGroup>
-				</When>
-				<When Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-					<PropertyGroup>
-						<OutputPath>/Volumes/Data/Mir200</OutputPath>
-					</PropertyGroup>
-				</When>
-				<When Condition="$([MSBuild]::IsOSPlatform('Linux'))">
-					<PropertyGroup>
-						<OutputPath>/Volumes/opt/Mir200</OutputPath>
-					</PropertyGroup>
-				</When>
-			</Choose>
-		</When>
-	</Choose>
+	<PropertyGroup Condition="$(Configuration)=='Release'">
+		<DebugSymbols>false</DebugSymbols>
+		<Optimize>true</Optimize>
+		<DefineConstants>TRACE</DefineConstants>
+	</PropertyGroup>
 	
   <ItemGroup>
     <PackageReference Include="MySql.Data" Version="8.0.28" />

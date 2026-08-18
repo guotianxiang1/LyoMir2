@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup Condition="'$(RepositoryUseIsolatedOutputs)' != 'false'">
+    <RepositoryProjectOutputPath>$(RepositoryArtifactsRoot)bin\$(MSBuildProjectName)\$(Configuration)\$(TargetFramework)\</RepositoryProjectOutputPath>
+    <RepositoryProjectPublishPath>$(RepositoryArtifactsRoot)publish\$(MSBuildProjectName)\$(Configuration)\$(TargetFramework)\</RepositoryProjectPublishPath>
+    <OutputPath>$(RepositoryProjectOutputPath)</OutputPath>
+    <PublishDir>$(RepositoryProjectPublishPath)</PublishDir>
+    <PublishUrl>$(RepositoryProjectPublishPath)</PublishUrl>
+  </PropertyGroup>
+</Project>

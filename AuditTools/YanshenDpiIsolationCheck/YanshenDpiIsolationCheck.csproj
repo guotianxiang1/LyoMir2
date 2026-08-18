@@ -9,7 +9,5 @@
   <ItemGroup>
     <ProjectReference Include="..\..\GameSvr\GameSvr.csproj"
                       Condition="Exists('..\..\GameSvr\GameSvr.csproj')" />
-    <ProjectReference Include="D:\loym2\LyoMir2-master\GameSvr\GameSvr.csproj"
-                      Condition="!Exists('..\..\GameSvr\GameSvr.csproj')" />
   </ItemGroup>
 </Project>
