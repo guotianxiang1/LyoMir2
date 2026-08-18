@@ -285,8 +285,9 @@ Check(!equipSource.Contains("PKLevel() > 2", StringComparison.Ordinal),
 // F1b. ANTI-REGRESSION: the BAG worker sub_740078 @0x7400BE uses `0F 9E setle`, i.e.
 //      threshold <= PK => PK >= 200.  Native is deliberately inconsistent between the two
 //      workers; do NOT "harmonise" them.
-Check(bagSource.Contains("M2Share.g_Config.boDieRedScatterBagAll && PKLevel() >= 2", StringComparison.Ordinal),
-    "0x7400BE setle: 背包爆率的红名判据是 PK >= 200，与装备的 > 200 差一点，不许统一");
+Check(bagSource.Contains("m_nPkPoint >= M2Share.g_Config.nPKPunishPoint", StringComparison.Ordinal)
+      && !bagSource.Contains("boDieRedScatterBagAll && PKLevel()", StringComparison.Ordinal),
+    "0x7400BE setle: 背包爆率直接使用 PK >= 200，且不引入额外配置/等级判据");
 
 // F2. sub_73FC70 @0x73FF69 `83 7D F4 02 cmp [ebp-0xC],2` / 0x73FF6D `7F 0A jg` — the
 //     3-item ground-drop cap is UNCONDITIONAL native code; the 眼神 patch only rewrites the
@@ -300,10 +301,14 @@ Check(!equipSource.Contains("if (deathDropPatched) dropCount++;", StringComparis
 // F3. RNG ORDER.  sub_73FC70 fetches the slot first (0x73FD33 call sub_75EC20) and bails on
 //     an empty slot at 0x73FD3C `0F 84 2D 02 00 00 je 0x73FF6F` — BEFORE the draw at
 //     0x73FD99 `call sub_403B4C`.  Drawing for empty slots desynchronises the whole LCG.
-var nullGuard = equipSource.IndexOf("m_UseItems[i] == null || m_UseItems[i].wIndex <= 0",
+var candidateRead = equipSource.IndexOf("var candidate = m_UseItems[i];",
     StringComparison.Ordinal);
+var nullGuard = candidateRead >= 0
+    ? equipSource.IndexOf("if (candidate == null)", candidateRead,
+        StringComparison.Ordinal)
+    : -1;
 var equipDraw = equipSource.IndexOf("M2Share.RandomNumber.Random(nRate)", StringComparison.Ordinal);
-Check(nullGuard > 0 && equipDraw > 0 && nullGuard < equipDraw,
+Check(candidateRead >= 0 && nullGuard > candidateRead && equipDraw > nullGuard,
     "0x73FD3C je 先于 0x73FD99 call sub_403B4C: 空装备格不消耗抽签");
 
 // F4/F5. sub_740078 per-item order: 0x7400F8 Random(3) -> 0x740111 / 0x74011E / 0x74013A
