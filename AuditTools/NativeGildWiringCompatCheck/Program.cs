@@ -395,8 +395,19 @@ static (ClientPacket Header, byte[] Body) DriveGuildCore(
     });
 
     Require(handled, ident + " was not claimed by the dispatcher");
-    Equal(1, packets.Count, ident + " must emit exactly one packet");
-    return packets[0];
+    var statusIdent = ident switch
+    {
+        Grobal2.CM_GILD_DISMISS_CORPS => Grobal2.SM_GILD_DISMISS_CORPS,
+        Grobal2.CM_GILD_TRANSFER_PRESIDENT => Grobal2.SM_GILD_TRANSFER_PRESIDENT,
+        Grobal2.CM_GILD_APPOINT_VICE_PRESIDENT => Grobal2.SM_GILD_APPOINT_VICE_PRESIDENT,
+        _ => throw new InvalidOperationException("unknown Gild leadership ident: " + ident)
+    };
+    var statusPackets = packets
+        .Where(packet => packet.Header.Ident == statusIdent)
+        .ToArray();
+    Equal(1, statusPackets.Length,
+        ident + " must emit exactly one status packet");
+    return statusPackets[0];
 }
 
 static int PacketResult((ClientPacket Header, byte[] Body) packet) =>

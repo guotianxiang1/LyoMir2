@@ -387,8 +387,19 @@ static (ClientPacket Header, byte[] Body) Drive(NativeCorpsService service,
     });
 
     Require(handled, ident + " was not claimed by " + dispatcher);
-    Equal(1, packets.Count, ident + " must emit exactly one packet");
-    return packets[0];
+    var statusIdent = ident switch
+    {
+        Grobal2.CM_GILD_EXIT => Grobal2.SM_GILD_EXIT,
+        Grobal2.CM_GILD_VICECAPTAIN_STEPDOWN => Grobal2.SM_GILD_VICECAPTAIN_STEPDOWN,
+        Grobal2.CM_GILD_DISMISS_VICECAPTAIN => Grobal2.SM_GILD_DISMISS_VICECAPTAIN,
+        _ => throw new InvalidOperationException("unknown Gild relation ident: " + ident)
+    };
+    var statusPackets = packets
+        .Where(packet => packet.Header.Ident == statusIdent)
+        .ToArray();
+    Equal(1, statusPackets.Length,
+        ident + " must emit exactly one status packet");
+    return statusPackets[0];
 }
 
 static NativeGildSnapshot GildById(NativeCorpsService service, long gildId)
