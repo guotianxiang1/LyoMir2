@@ -27,6 +27,39 @@ namespace GameSvr
         private static YanshenApi Knobs() =>
             new YanshenApi(null, null, M2Share.PluginManager);
 
+        /// <summary>
+        /// VMT +0x28 with DL=1 from TFieldHero.FillDBData @0x60B235.
+        /// Helmet and ring shapes 130..132 dispatch to their VMT+0x08 body
+        /// before the ordinary durability roll; arm rings do so afterward.
+        /// </summary>
+        internal static void ApplyFromFieldHeroFill(TUserItem item,
+            GoodItem std)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (std == null ||
+                !NativeItemFactory.IsClassOrDescendantOf(std, "TEquipItem"))
+            {
+                throw new InvalidDataException(
+                    "FieldHero Fill DL=1 requires a TEquipItem instance.");
+            }
+
+            var className = NativeItemFactory.GetClassName(std);
+            if (className == "THelmet" && IsUnknownShape(std))
+            {
+                ApplyUnknownHelmet08(item);
+                return;
+            }
+            if (className == "TRing" && IsUnknownShape(std))
+            {
+                ApplyUnknownRing08(item);
+                return;
+            }
+
+            ApplyDura80(item);
+            if (className == "TArmRing" && IsUnknownShape(std))
+                ApplyUnknownArmRing08(item);
+        }
+
         public static void ApplyOnDrop(TUserItem item, GoodItem std)
         {
             if (item == null) return;
@@ -76,9 +109,8 @@ namespace GameSvr
                 item.DuraMax / 100.0 * (20 + Random(80)));
         }
 
-        // Shape 130/131/132: add al,0x7E / sub al,3 / jae normal → call [vmt+8].
-        // Unsigned wrap: 130+0x7E=208, 208-3=205; 133+0x7E=211, 211-3=208.
-        // jae taken for Shape>=133; 130/131/132 fall through to +0x08.
+        // Shape 130/131/132: byte wrap makes the subtract borrow; shape 133
+        // maps to 3 and takes the normal no-borrow branch.
         private static bool IsUnknownShape(GoodItem std)
         {
             return std != null && std.Shape is 130 or 131 or 132;
