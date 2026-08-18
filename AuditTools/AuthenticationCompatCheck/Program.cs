@@ -231,8 +231,11 @@ static void VerifySourceContract()
     Require(managerSource, "player.ApplyNativeAuthenticationLimits();",
         "login authentication limits are not applied");
     Require(managerSource,
-        "ResolveLoadedStorageCapacity(\n                    loadedStorageCapacity, player.m_nStorageSpaceCount)",
+        "player.m_nStorageSpaceCount = ResolveLoadedStorageCapacity(",
         "persisted storage capacity is not restored after authentication");
+    Require(managerSource,
+        "loadedStorageCapacity, player.m_nStorageSpaceCount);",
+        "persisted storage capacity arguments are not preserved");
     var clearAt = managerSource.IndexOf(
         "player.SetNativeAuthenticationStatus(0, 0, 0);",
         StringComparison.Ordinal);

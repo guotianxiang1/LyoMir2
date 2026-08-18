@@ -1588,8 +1588,9 @@ static void VerifySourceContracts()
     Require(userEngine,
         "PlayObject.ShouldDispatchNativeClientMessage(DefMsg)",
         "the native client-version handshake must run before CM dispatch");
-    Require(userEngine,
-        "ApplyNativeClientVersionReconnectBypass(\n                        nativeSwitchRestored);",
+    Require(userEngine, "ApplyNativeClientVersionReconnectBypass(",
+        "mode-2 login must invoke the reconnect bypass");
+    Require(userEngine, "nativeSwitchRestored);",
         "mode-2 login must bypass 1018 only after a successful restore");
     Require(playerBase,
         "InitializeNativeClientVersionRunGate(HUtil32.GetTickCount());",

@@ -2252,7 +2252,7 @@ static void CheckSourceContracts()
     // ExactEnvironmentMoveCheck and DynRoomMasterRelocationCheck pin the queued
     // sequence a default-argument caller actually gets; this is the signature tripwire.
     Contains(baseActor,
-        "boolcoordinatesAlreadyResolved=false,booluseNativeInternalMessages=true)",
+        "boolcoordinatesAlreadyResolved=false,booluseNativeInternalMessages=true,boolrequireLocalServerIndex=true)",
         "space-move internal idents defaulted away from the native 10117/10118 pair");
     Contains(baseActor,
         "if(!coordinatesAlreadyResolved&&!SpaceMove_GetRandXY(targetEnvironment,refm_nCurrX,refm_nCurrY))returnfalse;",
@@ -2309,9 +2309,13 @@ static void CheckSourceContracts()
 
     var actor = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
         "Actors", "TBaseObject.cs")));
-    Contains(actor, "caseCellType.OS_EVENTOBJECT:",
-        "walk event-object case");
-    Contains(actor, "((Event)OSObject.CellObj).ApplyTo(this);",
+    var moveAction = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",
+        "Actors", "TBaseObject.NativeMoveAction.cs")));
+    Contains(moveAction, "cellObject?.CellType!=CellType.OS_EVENTOBJECT",
+        "walk event-object filter");
+    Contains(moveAction, "cellObject.CellObjisnotEventmapEvent",
+        "walk event type guard");
+    Contains(moveAction, "mapEvent.ApplyTo(this);",
         "walk event ApplyTo call");
 
     var magic = Compact(File.ReadAllText(Path.Combine(root, "GameSvr",

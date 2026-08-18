@@ -705,16 +705,7 @@ static void AssertCloseMessage(TPlayObject player, NormNpc npc,
 }
 
 static string FindRepositoryRoot()
-{
-    var directory = new DirectoryInfo(AppContext.BaseDirectory);
-    while (directory != null)
-    {
-        if (Directory.Exists(Path.Combine(directory.FullName, "GameSvr")))
-            return directory.FullName;
-        directory = directory.Parent;
-    }
-    throw new DirectoryNotFoundException("repository root not found");
-}
+    => AuditRepoRoot.Resolve();
 
 static void PrepareRuntimeConfig()
 {

@@ -218,17 +218,7 @@ static byte[] Encode(YbDbLegacy77Frame frame)
 }
 
 static string FindRepositoryRoot()
-{
-    var current = new DirectoryInfo(AppContext.BaseDirectory);
-    while (current != null)
-    {
-        if (Directory.Exists(Path.Combine(current.FullName, "GameSvr"))
-            && Directory.Exists(Path.Combine(current.FullName, "SystemModule")))
-            return current.FullName;
-        current = current.Parent;
-    }
-    throw new DirectoryNotFoundException("repository root not found");
-}
+    => AuditRepoRoot.Resolve();
 
 static string Slice(string source, string start, string end)
 {

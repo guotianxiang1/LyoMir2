@@ -31,6 +31,7 @@ $ErrorActionPreference = 'Continue'
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 
 $buildRoot = Join-Path (Split-Path $RepoRoot -Parent) 'Build'
+$artifactRoot = Join-Path $RepoRoot 'artifacts\obj'
 $projects = Get-ChildItem -Path (Join-Path $RepoRoot 'AuditTools') -Recurse -Filter '*.csproj' | Sort-Object Name
 if ($Only.Count -gt 0) { $projects = $projects | Where-Object { $Only -contains $_.BaseName } }
 
@@ -40,17 +41,27 @@ foreach ($project in $projects) {
     $index++
     $name = $project.BaseName
 
-    $candidates = @()
-    $candidates += Get-ChildItem -Path (Join-Path $project.Directory.FullName 'bin') -Recurse -Filter '*.exe' -ErrorAction SilentlyContinue
-    $candidates += Get-ChildItem -Path (Join-Path $buildRoot "AuditTools\$name") -Recurse -Filter '*.exe' -ErrorAction SilentlyContinue
-    $candidates += Get-ChildItem -Path (Join-Path $buildRoot 'Mir200') -Filter "$name.exe" -ErrorAction SilentlyContinue
-    $candidates = $candidates | Where-Object { $_.BaseName -ne 'apphost' -and $_.BaseName -eq $name }
-    if ($candidates.Count -eq 0) {
+    # Prefer outputs whose parent chain cannot be mistaken for a source root.
+    # artifacts/obj contains a generated GameSvr directory, so source scanners
+    # that stop at the first matching directory would otherwise inspect the
+    # wrong tree. Fall back to artifacts only when no canonical output exists.
+    $candidateGroups = @(
+        (Get-ChildItem -Path (Join-Path $project.Directory.FullName 'bin') -Recurse -Filter "$name.exe" -ErrorAction SilentlyContinue),
+        (Get-ChildItem -Path (Join-Path $buildRoot "AuditTools\$name") -Recurse -Filter "$name.exe" -ErrorAction SilentlyContinue),
+        (Get-ChildItem -Path (Join-Path $buildRoot 'Mir200') -Filter "$name.exe" -ErrorAction SilentlyContinue),
+        (Get-ChildItem -Path (Join-Path $artifactRoot $name) -Recurse -Filter "$name.exe" -ErrorAction SilentlyContinue)
+    )
+    $exe = $null
+    foreach ($group in $candidateGroups) {
+        $candidate = @($group) | Where-Object { $_.BaseName -eq $name } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($null -ne $candidate) { $exe = $candidate.FullName; break }
+    }
+    if (-not $exe) {
         $results += [pscustomobject]@{ Name = $name; Status = 'NOEXE'; Exit = -999; Secs = 0; Tail = 'no built exe found' }
         Write-Host ("[{0}/{1}] {2} : NOEXE" -f $index, $projects.Count, $name)
         continue
     }
-    $exe = ($candidates | Sort-Object LastWriteTime -Descending)[0].FullName
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $exe
@@ -61,6 +72,8 @@ foreach ($project in $projects) {
     # is outside the checkout, so it has to be the repository root.
     $psi.WorkingDirectory = $RepoRoot
     $psi.UseShellExecute = $false
+    $psi.Environment['M2_REPO_ROOT'] = $RepoRoot
+    $psi.Environment['LYOMIR_REPO_ROOT'] = $RepoRoot
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8

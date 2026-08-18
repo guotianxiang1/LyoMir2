@@ -572,16 +572,7 @@ static void RequireContains(string path, string needle, string label)
 }
 
 static string FindRepositoryRoot()
-{
-    var dir = new DirectoryInfo(AppContext.BaseDirectory);
-    while (dir != null)
-    {
-        if (Directory.Exists(Path.Combine(dir.FullName, "GameSvr")))
-            return dir.FullName;
-        dir = dir.Parent;
-    }
-    throw new InvalidOperationException("repository root not found");
-}
+    => AuditRepoRoot.Resolve();
 
 static void Equal<T>(T expected, T actual, string label)
 {

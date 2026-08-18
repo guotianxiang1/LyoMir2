@@ -309,16 +309,7 @@ static NativeCreditCardService CreateCreditCardService()
 }
 
 static string FindRoot()
-{
-    var current = new DirectoryInfo(AppContext.BaseDirectory);
-    while (current != null)
-    {
-        if (Directory.Exists(Path.Combine(current.FullName, "GameSvr")))
-            return current.FullName;
-        current = current.Parent;
-    }
-    throw new InvalidOperationException("repository root not found");
-}
+    => AuditRepoRoot.Resolve();
 
 static void PrepareRuntimeConfig()
 {
