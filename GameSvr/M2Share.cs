@@ -32,6 +32,13 @@ namespace GameSvr
         public static int g_dwStartTick = 0;
         public static int ShareFileNameNum = 0;
         public static int g_nServerTickDifference = 0;
+        /// <summary>
+        /// Native <c>off_7D6EC8 -&gt; 0x7DCED4</c>. Startup clears this byte at
+        /// 0x794293 and GM case 307 writes 1/0 at 0x627252/0x627282. The native
+        /// M2 image has no other xref, so no downstream fountain behavior is
+        /// inferred here.
+        /// </summary>
+        public static byte NativeFountSwitch = 0;
         public static ObjectManager ObjectManager = null;
         public static ServerConfig ServerConf = null;
         public static GameCmdConfig CommandConf = null;

@@ -49,7 +49,6 @@ var protectedFiles = new[]
     "ReloadunBindItemCommand.cs",
     "ReshuaMonScriptCommand.cs",
     "SendYuanBaoTextCommand.cs",
-    "SetFountSwitchCommand.cs",
     "SetNoKillMapLvCommand.cs",
     "SmeltEquipCommand.cs",
     "SuperMerchantCommand.cs",
@@ -193,6 +192,9 @@ foreach (var implementedFile in new[]
              //   ChgHeroSkill  idx228@0x006261D8 MATCH -> sub_6D2E08 -> sub_73F500 hero skill-level set
              "SetGoldActLvCommand.cs", "DecEquipDuraCommand.cs",
              "CreateCampMonCommand.cs", "ChgHeroSkillCommand.cs",
+             // case 307 @0x0062723E: strict open/close token ladder writes
+             // the global byte behind off_7D6EC8 and sends one 0x38FF reply.
+             "SetFountSwitchCommand.cs",
              // R-pass 2026-08-03 (idat_R_ap_skillexp_reload_20260803.md): the AP/信用分 family and
              // AddSkillExp wired to reversed sub_6F92xx / sub_744D4C contracts, moved out of
              // protectedFiles. AP runtime field = m_nActivePoint ([player+0x0AE4], NOT save off 0x0608);
@@ -256,6 +258,25 @@ Assert(!reloadWhiteList.Contains("ReloadGmWhiteList", StringComparison.Ordinal) 
     "ReloadWhiteList reintroduced a local reload or immediate success reply");
 Assert(!File.Exists(Path.Combine(commandDirectory, "GameGirdCommand.cs")),
     "non-native GameGird command is registered");
+
+var setFountSwitch = Read("SetFountSwitchCommand.cs");
+Assert(setFountSwitch.Contains(
+           "GameCommand(\"SetFountSwitch\", \"打开/关闭GM可控泉水\", \"[open/close]\", 4)",
+           StringComparison.Ordinal) &&
+       setFountSwitch.Contains("operation == \"open\"", StringComparison.Ordinal) &&
+       setFountSwitch.Contains("operation == \"close\"", StringComparison.Ordinal) &&
+       setFountSwitch.Contains("M2Share.NativeFountSwitch = 1", StringComparison.Ordinal) &&
+       setFountSwitch.Contains("M2Share.NativeFountSwitch = 0", StringComparison.Ordinal) &&
+       setFountSwitch.Contains("NativeSysMsgColorWord = 0x38FF", StringComparison.Ordinal),
+    "SetFountSwitch lost its native command, token, byte-write, or colour contract");
+Assert(setFountSwitch.Contains("GM可控泉水已打开", StringComparison.Ordinal) &&
+       setFountSwitch.Contains("GM可控泉水已关闭", StringComparison.Ordinal) &&
+       setFountSwitch.Contains(
+           "参数open表示打开，参数close表示关闭，GM可控泉水默认关闭",
+           StringComparison.Ordinal) &&
+       !setFountSwitch.Contains("Str_ToInt", StringComparison.Ordinal) &&
+       !setFountSwitch.Contains("OrdinalIgnoreCase", StringComparison.Ordinal),
+    "SetFountSwitch reply text or strict native token comparison drifted");
 
 var allSources = Directory.GetFiles(commandDirectory, "*.cs")
     .Select(path => (Path: path, Source: File.ReadAllText(path)))

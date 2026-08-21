@@ -355,6 +355,95 @@ Equal("close", NativeGmMonsterMapCommands.Evaluate("SetFountSwitch", 4, new[] { 
 var fsBad = NativeGmMonsterMapCommands.Evaluate("SetFountSwitch", 4, new[] { "bogus" });
 Equal(NativeMonsterMapOutcome.RejectedWithGmMessage, fsBad.Outcome, "SetFountSwitch bogus -> RejectedWithGmMessage");
 Equal("usage", fsBad.Branch, "SetFountSwitch bogus branch");
+Equal("usage",
+    NativeGmMonsterMapCommands.Evaluate("SetFountSwitch", 4,
+        new[] { "OPEN" }).Branch,
+    "SetFountSwitch token comparison is case-sensitive");
+
+var oldFountSwitch = M2Share.NativeFountSwitch;
+var oldFountProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldFountObjectManager = M2Share.ObjectManager;
+var oldFountRandomNumber = M2Share.RandomNumber;
+try
+{
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+    var player = new TPlayObject();
+    var command = new SetFountSwitchCommand();
+
+    Equal((byte)0, M2Share.NativeFountSwitch,
+        "live SetFountSwitch defaults closed");
+
+    command.SetFountSwitch(new[] { "open" }, player);
+    Equal((byte)1, M2Share.NativeFountSwitch,
+        "live SetFountSwitch open writes one");
+    Equal(1, player.m_MsgList.Count,
+        "live SetFountSwitch open queues one SysMsg");
+    var openMessage = player.m_MsgList[0];
+    Equal(Grobal2.RM_SYSMESSAGE, openMessage.wIdent,
+        "live SetFountSwitch open SysMsg ident");
+    Equal(0, openMessage.wParam,
+        "live SetFountSwitch open wParam");
+    Equal(0xFF, openMessage.nParam1,
+        "live SetFountSwitch open foreground");
+    Equal(0x38, openMessage.nParam2,
+        "live SetFountSwitch open background");
+    Equal(0, openMessage.nParam3,
+        "live SetFountSwitch open nParam3");
+    Equal("GM可控泉水已打开", openMessage.Buff,
+        "live SetFountSwitch open exact reply");
+
+    player.m_MsgList.Clear();
+    command.SetFountSwitch(new[] { "close" }, player);
+    Equal((byte)0, M2Share.NativeFountSwitch,
+        "live SetFountSwitch close writes zero");
+    Equal(1, player.m_MsgList.Count,
+        "live SetFountSwitch close queues one SysMsg");
+    Equal("GM可控泉水已关闭", player.m_MsgList[0].Buff,
+        "live SetFountSwitch close exact reply");
+
+    M2Share.NativeFountSwitch = 1;
+    player.m_MsgList.Clear();
+    command.SetFountSwitch(new[] { "bogus" }, player);
+    Equal((byte)1, M2Share.NativeFountSwitch,
+        "live SetFountSwitch invalid preserves byte");
+    Equal(1, player.m_MsgList.Count,
+        "live SetFountSwitch invalid queues usage SysMsg");
+    Equal("参数open表示打开，参数close表示关闭，GM可控泉水默认关闭",
+        player.m_MsgList[0].Buff,
+        "live SetFountSwitch invalid exact usage reply");
+
+    player.m_MsgList.Clear();
+    command.SetFountSwitch(Array.Empty<string>(), player);
+    Equal((byte)1, M2Share.NativeFountSwitch,
+        "live SetFountSwitch missing arg preserves byte");
+    Equal("参数open表示打开，参数close表示关闭，GM可控泉水默认关闭",
+        player.m_MsgList[0].Buff,
+        "live SetFountSwitch missing arg exact usage reply");
+
+    player.m_MsgList.Clear();
+    command.SetFountSwitch(new[] { "OPEN" }, player);
+    Equal((byte)1, M2Share.NativeFountSwitch,
+        "live SetFountSwitch uppercase is not native open token");
+    Equal("参数open表示打开，参数close表示关闭，GM可控泉水默认关闭",
+        player.m_MsgList[0].Buff,
+        "live SetFountSwitch uppercase exact usage reply");
+
+    player.m_MsgList.Clear();
+    command.SetFountSwitch(new[] { "close" }, null);
+    Equal((byte)1, M2Share.NativeFountSwitch,
+        "live SetFountSwitch null player preserves byte");
+    Equal(0, player.m_MsgList.Count,
+        "live SetFountSwitch null player cannot queue message");
+}
+finally
+{
+    M2Share.NativeFountSwitch = oldFountSwitch;
+    M2Share.ProcessMsgCriticalSection = oldFountProcessMsgCriticalSection;
+    M2Share.ObjectManager = oldFountObjectManager;
+    M2Share.RandomNumber = oldFountRandomNumber;
+}
 
 // ---------------------------------------------------------------------------
 // 11) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent

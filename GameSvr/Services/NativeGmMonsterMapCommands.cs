@@ -554,7 +554,8 @@ namespace GameSvr
         // --- SetFountSwitch (case 307) --------------------------------------
         private static NativeMonsterMapEvaluation EvalSetFountSwitch(IReadOnlyList<string> a)
         {
-            var op = Lower(Arg(a, 0));
+            // sub_40591C is Delphi's case-sensitive long-string equality helper.
+            var op = Arg(a, 0);
             if (op == "open")
                 return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.ExecutedWithGmMessage,
                     "open", "(inline)", SysMsgUsage, false,
