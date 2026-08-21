@@ -9,7 +9,7 @@
 > - 合并提交文件树：与 temp 的提交树 `564fbb841269...` 完全一致
 > - 保护标签：`rescue/pre-unification-master-20260818`、
 >   `rescue/pre-unification-temp-20260818`
-> - 仓库外恢复快照：`D:\loym2\backups\LyoMir2_rescue_20260818_230609`
+> - 仓库外恢复快照：`D:\loym2\workspace-archive\git-rescue\LyoMir2_rescue_20260818_230609`
 > - 审计源码已按 SystemModule、DBSvr、GameSvr、AuditTools 分批提交
 > - 五个服务端项目在统一线重新构建，均为 0 编译错误
 

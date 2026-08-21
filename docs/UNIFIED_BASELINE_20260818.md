@@ -17,7 +17,7 @@ batches; generated output and temporary audit runners were intentionally left ou
 
 ## Preservation
 
-- Recovery snapshot: `D:\loym2\backups\LyoMir2_rescue_20260818_230609`
+- Recovery snapshot: `D:\loym2\workspace-archive\git-rescue\LyoMir2_rescue_20260818_230609`
 - Reachable-ref bundle: `refs.bundle`
 - Bundle SHA-256: `4496383DE8EACD14202801E1BF7D4E11A3295BC1CF7521C7808FC592FA11B590`
 - Master protection tag: `rescue/pre-unification-master-20260818`
@@ -68,7 +68,7 @@ git rev-parse unified/main
 git rev-parse 'unified/main^{tree}'
 git merge-base --is-ancestor master unified/main
 git merge-base --is-ancestor temp-merge-branch unified/main
-git bundle verify D:\loym2\backups\LyoMir2_rescue_20260818_230609\refs.bundle
+git bundle verify D:\loym2\workspace-archive\git-rescue\LyoMir2_rescue_20260818_230609\refs.bundle
 ```
 
 Both ancestor checks must return exit code `0`. The current tree is obtained from
