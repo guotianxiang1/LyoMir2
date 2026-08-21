@@ -313,10 +313,12 @@ namespace GameSvr
                 "重载NPC脚本奖励配置文件NormalPrize.ini	@ReloadNpcPrize",
                 "ok=sub_74EBB4() reloads NormalPrize.ini. ok -> SysMsg(0xFFDB, success); else SysMsg(0x38FF, fail). "
                 + "The reload runs on both paths; only the report ident differs. Result bool is deferred."),
-            new NativeMonsterMapCommand("reshuaMonScript", 476, 5, 0x006291EFu, "sub_67DC40", true,
+            new NativeMonsterMapCommand("reshuaMonScript", 476, 5, 0x006291EFu, "sub_67DC40", false,
                 "重新加载怪物脚本	@reshuaMonScript",
-                "SysMsg(0xFFDB, '重载中…') -> sub_67DC40() reload -> SysMsg(0xFFDB, '完成'). Two 0xFFDB messages "
-                + "bracket the deferred reload core."),
+                "SysMsg(0xFFDB, '开始刷新怪物脚本') -> sub_67DC40 walks the manager+0xD4 active-script "
+                + "monster list; sub_71F240 replaces each script from its existing path and reinitializes it "
+                + "without rereading monScript.txt. An all-success run logs '成功刷新怪物脚本N个'. The shim then "
+                + "always sends SysMsg(0xFFDB, '刷新怪物脚本结束')."),
             new NativeMonsterMapCommand("ReloadMonitemsTreeCfg", 576, 4, 0x00624002u, "sub_67AEC0", true,
                 "重载MonItemsTree.txt文件	@ReloadMonitemsTreeCfg",
                 "Always: sub_67AEC0() reloads MonItemsTree.txt, then SysMsg(0xFFDB, fixed). Reload core deferred."),
@@ -501,8 +503,9 @@ namespace GameSvr
                         "sub_67D484 reloads TMonSupport then reports status");
                 case "reshuaMonScript":
                     return Msg(NativeMonsterMapOutcome.ExecutedWithGmMessage, "reload",
-                        rec.NativeCore, SysMsgGmReply, true,
-                        "two 0xFFDB messages bracket sub_67DC40 reload");
+                        rec.NativeCore, SysMsgGmReply, false,
+                        "exact start/end 0xFFDB messages bracket active-monster script replacement; "
+                        + "each existing path is reloaded and initialized, while monScript.txt is not reread");
                 case "ReloadMonitemsTreeCfg":
                     return Msg(NativeMonsterMapOutcome.ExecutedWithGmMessage, "reload",
                         rec.NativeCore, SysMsgGmReply, true, "sub_67AEC0 reload then confirm");

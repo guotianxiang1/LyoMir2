@@ -16,6 +16,7 @@
 // (SHA256 5540f43b…c049670b14e, image base 0x00400000).
 
 using GameSvr;
+using GameSvr.PasEngine;
 using System.Reflection;
 using SystemModule;
 
@@ -230,8 +231,26 @@ void Report(string name, int perm, int ident, bool deferred)
 Report("HumNum", 3, 0xFFDB, true);
 Report("MAP", 3, 0x38FF, false);
 Report("ReloadMonAtt", 4, 0x38FF, false);
-Report("reshuaMonScript", 5, 0xFFDB, true);
+Report("reshuaMonScript", 5, 0xFFDB, false);
 Report("ReloadMonitemsTreeCfg", 4, 0xFFDB, true);
+
+var reshuaRecord = NativeGmMonsterMapCommands.Find("reshuaMonScript");
+Equal(true, reshuaRecord.EffectSummary.Contains(
+        "开始刷新怪物脚本", StringComparison.Ordinal),
+    "reshuaMonScript exact start message modeled");
+Equal(true, reshuaRecord.EffectSummary.Contains(
+        "刷新怪物脚本结束", StringComparison.Ordinal),
+    "reshuaMonScript exact end message modeled");
+Equal(true, reshuaRecord.EffectSummary.Contains(
+        "without rereading monScript.txt", StringComparison.Ordinal),
+    "reshuaMonScript model preserves loaded mapping");
+var reshuaModel = NativeGmMonsterMapCommands.Evaluate(
+    "reshuaMonScript", 5, new[] { "ignored", "text" });
+Equal("reload", reshuaModel.Branch, "reshuaMonScript recovered branch");
+Equal("sub_67DC40", reshuaModel.NativeCore,
+    "reshuaMonScript recovered core");
+Equal(false, reshuaModel.CoreBodyDeferred,
+    "reshuaMonScript recovered core is not deferred");
 
 // ---------------------------------------------------------------------------
 // 7) MonNumber (73): empty map == current (always), named map may miss
@@ -728,7 +747,221 @@ finally
 }
 
 // ---------------------------------------------------------------------------
-// 13) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent
+// 13) reshuaMonScript (476): replace active scripts only, with exact messages
+// ---------------------------------------------------------------------------
+var monsterScriptRoot = Path.Combine(Path.GetTempPath(),
+    "loym2-reshua-mon-script-" + Guid.NewGuid().ToString("N"));
+var monsterScriptDirectory = Path.Combine(monsterScriptRoot, "MonScript");
+var commonScriptDirectory = Path.Combine(monsterScriptRoot, "CommonScripts");
+var monsterScriptPath = Path.Combine(monsterScriptDirectory, "ReloadProbe.pas");
+var unrelatedScriptPath = Path.Combine(commonScriptDirectory, "Unrelated.pas");
+Directory.CreateDirectory(monsterScriptDirectory);
+Directory.CreateDirectory(commonScriptDirectory);
+File.WriteAllText(Path.Combine(monsterScriptRoot, "monScript.txt"),
+    "ReloadProbe" + Environment.NewLine);
+File.WriteAllText(monsterScriptPath, """
+    program ReloadProbe;
+
+    var InitCount: Integer;
+
+    procedure OnInitialize;
+    begin
+      InitCount := InitCount + 1;
+    end;
+
+    begin
+    end.
+    """);
+File.WriteAllText(unrelatedScriptPath, """
+    program Unrelated;
+    begin
+    end.
+    """);
+
+var oldReloadProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldReloadObjectManager = M2Share.ObjectManager;
+var oldReloadRandomNumber = M2Share.RandomNumber;
+var oldPasEngine = M2Share.PasEngine;
+var oldReloadConfig = M2Share.g_Config;
+var reloadConfig = oldReloadConfig ?? new GameSvrConfig();
+var oldReloadTestServer = reloadConfig.boTestServer;
+var oldReloadPrefix = reloadConfig.boShowPreFixMsg;
+var oldReloadGreenForeground = reloadConfig.btGreenMsgFColor;
+var oldReloadGreenBackground = reloadConfig.btGreenMsgBColor;
+try
+{
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+    M2Share.g_Config = reloadConfig;
+    reloadConfig.boTestServer = false;
+    reloadConfig.boShowPreFixMsg = false;
+    reloadConfig.btGreenMsgFColor = 0xDB;
+    reloadConfig.btGreenMsgBColor = 0xFF;
+
+    var host = new PasScriptHost(monsterScriptRoot);
+    M2Share.PasEngine = host;
+    var animal = new Monster { m_sCharName = "ReloadProbe" };
+    var secondAnimal = new Monster { m_sCharName = "ReloadProbe" };
+    Equal(true, host.TryInitializeMonsterScript(animal),
+        "live reshuaMonScript creates initial active script state");
+    Equal(true, host.TryInitializeMonsterScript(secondAnimal),
+        "live reshuaMonScript creates second same-path active state");
+
+    var firstState = GetMonsterScriptState(host, animal.ObjectId);
+    var secondState = GetMonsterScriptState(host, secondAnimal.ObjectId);
+    Equal(true, firstState != null,
+        "live reshuaMonScript initial state is indexed");
+    Equal(true, secondState != null,
+        "live reshuaMonScript second state is indexed");
+    var firstProgram = ReadPrivateField<PasProgram>(firstState, "Program");
+    var firstInterpreter = ReadPrivateField<PasInterpreter>(firstState,
+        "Interpreter");
+    var secondInterpreter = ReadPrivateField<PasInterpreter>(secondState,
+        "Interpreter");
+    Equal(true, ReferenceEquals(firstProgram,
+            ReadPrivateField<PasProgram>(secondState, "Program")),
+        "live reshuaMonScript same-path states share parsed program");
+    Equal(false, ReferenceEquals(firstInterpreter, secondInterpreter),
+        "live reshuaMonScript same-path states have independent interpreters");
+    Equal(true, ReadPrivateField<bool>(firstState, "Initialized"),
+        "live reshuaMonScript initial state initialized");
+    Equal(1, ReadPasGlobalInt(firstInterpreter, "InitCount"),
+        "live reshuaMonScript initial OnInitialize ran once");
+
+    var unrelatedProgram = LoadProgram(host, unrelatedScriptPath);
+    var monsterPathsField = typeof(PasScriptHost).GetField(
+        "_monsterScriptPaths", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    var monsterPaths = monsterPathsField.GetValue(host)!;
+    var monsterPathCount = (int)monsterPaths.GetType().GetProperty("Count")!
+        .GetValue(monsterPaths)!;
+    var monsterScriptsLoadedField = typeof(PasScriptHost).GetField(
+        "_monsterScriptsLoaded", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    // Make a reread observable: native sub_67DC40 must ignore this emptied file.
+    File.WriteAllText(Path.Combine(monsterScriptRoot, "monScript.txt"), string.Empty);
+    monsterScriptsLoadedField.SetValue(host, false);
+
+    var command = new ReshuaMonScriptCommand();
+    var registration = typeof(ReshuaMonScriptCommand)
+        .GetCustomAttribute<GameSvr.CommandSystem.GameCommandAttribute>()!;
+    command.Register(registration,
+        typeof(ReshuaMonScriptCommand).GetMethod("ReshuaMonScript")!);
+    var player = new TPlayObject { m_btPermission = 4 };
+
+    Equal("该命令需要5级GM才能使用",
+        command.Handle("ignored extra parameters", player),
+        "live reshuaMonScript permission 4 is rejected by normal gate");
+    Equal(true, ReferenceEquals(firstState,
+            GetMonsterScriptState(host, animal.ObjectId)),
+        "live reshuaMonScript permission 4 preserves script state");
+    Equal(true, ReferenceEquals(secondState,
+            GetMonsterScriptState(host, secondAnimal.ObjectId)),
+        "live reshuaMonScript permission 4 preserves second script state");
+    Equal(0, player.m_MsgList.Count,
+        "live reshuaMonScript permission 4 queues no SysMsg");
+
+    player.m_btPermission = 5;
+    Equal<string>(null, command.Handle("ignored extra parameters", player),
+        "live reshuaMonScript permission 5 executes and ignores text");
+    Equal(2, player.m_MsgList.Count,
+        "live reshuaMonScript queues exactly two SysMsg records");
+    Equal("开始刷新怪物脚本", player.m_MsgList[0].Buff,
+        "live reshuaMonScript exact start message");
+    Equal("刷新怪物脚本结束", player.m_MsgList[1].Buff,
+        "live reshuaMonScript exact end message");
+    foreach (var message in player.m_MsgList)
+    {
+        Equal(Grobal2.RM_SYSMESSAGE, message.wIdent,
+            "live reshuaMonScript SysMsg ident");
+        Equal(0xDB, message.nParam1,
+            "live reshuaMonScript green foreground");
+        Equal(0xFF, message.nParam2,
+            "live reshuaMonScript green background");
+    }
+
+    var reloadedState = GetMonsterScriptState(host, animal.ObjectId);
+    var secondReloadedState = GetMonsterScriptState(host, secondAnimal.ObjectId);
+    Equal(true, reloadedState != null && !ReferenceEquals(firstState, reloadedState),
+        "live reshuaMonScript replaces the active state object");
+    Equal(true, secondReloadedState != null &&
+                !ReferenceEquals(secondState, secondReloadedState),
+        "live reshuaMonScript replaces second active state object");
+    var reloadedProgram = ReadPrivateField<PasProgram>(reloadedState, "Program");
+    var reloadedInterpreter = ReadPrivateField<PasInterpreter>(reloadedState,
+        "Interpreter");
+    var secondReloadedInterpreter = ReadPrivateField<PasInterpreter>(
+        secondReloadedState, "Interpreter");
+    Equal(false, ReferenceEquals(firstProgram, reloadedProgram),
+        "live reshuaMonScript reparses unchanged script bytes");
+    Equal(false, ReferenceEquals(firstInterpreter, reloadedInterpreter),
+        "live reshuaMonScript replaces interpreter state");
+    Equal(false, ReferenceEquals(secondInterpreter, secondReloadedInterpreter),
+        "live reshuaMonScript replaces second interpreter state");
+    Equal(true, ReferenceEquals(reloadedProgram,
+            ReadPrivateField<PasProgram>(secondReloadedState, "Program")),
+        "live reshuaMonScript reloads a shared path once per command");
+    Equal(false, ReferenceEquals(reloadedInterpreter,
+            secondReloadedInterpreter),
+        "live reshuaMonScript replacements keep per-monster interpreters");
+    Equal(true, ReadPrivateField<bool>(reloadedState, "Initialized"),
+        "live reshuaMonScript initializes replacement state");
+    Equal(1, ReadPasGlobalInt(reloadedInterpreter, "InitCount"),
+        "live reshuaMonScript reruns OnInitialize on replacement");
+    Equal(1, ReadPasGlobalInt(secondReloadedInterpreter, "InitCount"),
+        "live reshuaMonScript reruns OnInitialize on second replacement");
+    Equal(true, ReferenceEquals(animal,
+            ReadPrivateField<TBaseObject>(reloadedState, "Animal")),
+        "live reshuaMonScript preserves owning monster identity");
+    Equal(true, ReferenceEquals(unrelatedProgram,
+            LoadProgram(host, unrelatedScriptPath)),
+        "live reshuaMonScript preserves unrelated PAS cache entries");
+    Equal(true, ReferenceEquals(monsterPaths, monsterPathsField.GetValue(host)),
+        "live reshuaMonScript preserves monster mapping dictionary");
+    Equal(monsterPathCount, (int)monsterPaths.GetType().GetProperty("Count")!
+            .GetValue(monsterPaths)!,
+        "live reshuaMonScript preserves monster mapping entries");
+    Equal(false, (bool)monsterScriptsLoadedField.GetValue(host)!,
+        "live reshuaMonScript does not reread monScript.txt");
+
+    player.m_MsgList.Clear();
+    File.Delete(monsterScriptPath);
+    command.ReshuaMonScript(player);
+    Equal(2, player.m_MsgList.Count,
+        "live reshuaMonScript failure still brackets reload with two messages");
+    Equal("开始刷新怪物脚本", player.m_MsgList[0].Buff,
+        "live reshuaMonScript failure exact start message");
+    Equal("刷新怪物脚本结束", player.m_MsgList[1].Buff,
+        "live reshuaMonScript failure exact end message");
+    Equal<object>(null, GetMonsterScriptState(host, animal.ObjectId),
+        "live reshuaMonScript missing file removes old active state");
+    Equal<object>(null, GetMonsterScriptState(host, secondAnimal.ObjectId),
+        "live reshuaMonScript missing file removes second active state");
+    Equal(true, ReferenceEquals(unrelatedProgram,
+            LoadProgram(host, unrelatedScriptPath)),
+        "live reshuaMonScript failure preserves unrelated PAS cache");
+
+    command.ReshuaMonScript(null);
+    Equal(2, player.m_MsgList.Count,
+        "live reshuaMonScript null player is silent");
+}
+finally
+{
+    reloadConfig.boTestServer = oldReloadTestServer;
+    reloadConfig.boShowPreFixMsg = oldReloadPrefix;
+    reloadConfig.btGreenMsgFColor = oldReloadGreenForeground;
+    reloadConfig.btGreenMsgBColor = oldReloadGreenBackground;
+    M2Share.g_Config = oldReloadConfig;
+    M2Share.PasEngine = oldPasEngine;
+    M2Share.ProcessMsgCriticalSection = oldReloadProcessMsgCriticalSection;
+    M2Share.ObjectManager = oldReloadObjectManager;
+    M2Share.RandomNumber = oldReloadRandomNumber;
+    if (Directory.Exists(monsterScriptRoot))
+        Directory.Delete(monsterScriptRoot, true);
+}
+
+// ---------------------------------------------------------------------------
+// 14) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent
 // ---------------------------------------------------------------------------
 foreach (var (sub, br) in new[] { ("lasttime", "lasttime"), ("codetime", "codetime"), ("effect", "effect") })
 {
@@ -743,7 +976,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "SpiderWebTest bogus -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 14) AutoMove (233): both coords valid -> Executed; a -1 coord -> silent
+// 15) AutoMove (233): both coords valid -> Executed; a -1 coord -> silent
 // ---------------------------------------------------------------------------
 var amOk = NativeGmMonsterMapCommands.Evaluate("AutoMove", 5, new[] { "MapA", "100", "200" });
 Equal(NativeMonsterMapOutcome.Executed, amOk.Outcome, "AutoMove valid -> Executed");
@@ -758,7 +991,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "AutoMove non-numeric coords -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 15) setRecoverFactor (375): both args -> Executed; missing -> silent
+// 16) setRecoverFactor (375): both args -> Executed; missing -> silent
 // ---------------------------------------------------------------------------
 var srf = NativeGmMonsterMapCommands.Evaluate("setRecoverFactor", 4, new[] { "10", "20" });
 Equal(NativeMonsterMapOutcome.Executed, srf.Outcome, "setRecoverFactor both -> Executed");
@@ -768,7 +1001,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "setRecoverFactor missing mp -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 16) LoadMonGen (529): mongen reload; mon found/not-found/idx0; unknown silent
+// 17) LoadMonGen (529): mongen reload; mon found/not-found/idx0; unknown silent
 // ---------------------------------------------------------------------------
 var lmg = NativeGmMonsterMapCommands.Evaluate("LoadMonGen", 3, new[] { "mongen" });
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, lmg.Outcome, "LoadMonGen mongen -> ExecutedWithGmMessage");
@@ -793,7 +1026,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "LoadMonGen unknown sub -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 17) TempSetMapParam (577): usage / map-missing / add / remove / unsupported / fail
+// 18) TempSetMapParam (577): usage / map-missing / add / remove / unsupported / fail
 // ---------------------------------------------------------------------------
 var tspUsage = NativeGmMonsterMapCommands.Evaluate("TempSetMapParam", 5, System.Array.Empty<string>());
 Equal(NativeMonsterMapOutcome.RejectedWithGmMessage, tspUsage.Outcome, "TempSetMapParam no args -> RejectedWithGmMessage");
@@ -827,7 +1060,7 @@ NativeGmMonsterMapCommands.TempSetMapParamStatus = NativeGmMonsterMapCommands.Te
 NativeGmMonsterMapCommands.MapExistsHook = null;
 
 // ---------------------------------------------------------------------------
-// 18) BreakLvCtrl (309): every reporting path uses 0xFFDB (coarse but true)
+// 19) BreakLvCtrl (309): every reporting path uses 0xFFDB (coarse but true)
 // ---------------------------------------------------------------------------
 var blcReport = NativeGmMonsterMapCommands.Evaluate("BreakLvCtrl", 4, System.Array.Empty<string>());
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, blcReport.Outcome, "BreakLvCtrl no arg -> ExecutedWithGmMessage");
@@ -867,4 +1100,38 @@ static void PrepareRuntimeConfig()
     File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
         "[Integer]" + Environment.NewLine);
     Directory.SetCurrentDirectory(runtimeDirectory);
+}
+
+static object GetMonsterScriptState(PasScriptHost host, int objectId)
+{
+    var states = typeof(PasScriptHost).GetField("_monsterStates",
+            BindingFlags.Instance | BindingFlags.NonPublic)!
+        .GetValue(host)!;
+    var arguments = new object[] { objectId, null };
+    var found = (bool)states.GetType().GetMethod("TryGetValue")!
+        .Invoke(states, arguments)!;
+    return found ? arguments[1] : null;
+}
+
+static T ReadPrivateField<T>(object instance, string fieldName)
+{
+    return (T)instance.GetType().GetField(fieldName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+        .GetValue(instance)!;
+}
+
+static int ReadPasGlobalInt(PasInterpreter interpreter, string variableName)
+{
+    var globals = (System.Collections.IDictionary)typeof(PasInterpreter)
+        .GetField("_globals", BindingFlags.Instance | BindingFlags.NonPublic)!
+        .GetValue(interpreter)!;
+    return ((PasValue)globals[variableName]!).AsInt();
+}
+
+static PasProgram LoadProgram(PasScriptHost host, string scriptPath)
+{
+    var method = typeof(PasScriptHost).GetMethod("GetOrLoadProgram",
+        BindingFlags.Instance | BindingFlags.NonPublic, null,
+        new[] { typeof(string) }, null)!;
+    return (PasProgram)method.Invoke(host, new object[] { scriptPath })!;
 }

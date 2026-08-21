@@ -3,14 +3,20 @@ using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("ReshuaMonScript", "刷新怪物脚本配置", "", 5)]
-    public class ReshuaMonScriptCommand : BaseCommond
+    [GameCommand("reshuaMonScript", "重新加载怪物脚本", "", 5)]
+    public sealed class ReshuaMonScriptCommand : BaseCommond
     {
+        internal const string NativeStartMessage = "开始刷新怪物脚本";
+        internal const string NativeEndMessage = "刷新怪物脚本结束";
+
         [DefaultCommand]
-        public void ReshuaMonScript(TPlayObject PlayObject)
+        public void ReshuaMonScript(TPlayObject player)
         {
-            NativeCommandFailure.Report(PlayObject, "ReshuaMonScript",
-                "原版怪物脚本缓存与重载入口尚未移植，未替换线上脚本。");
+            if (player == null) return;
+
+            player.SysMsg(NativeStartMessage, MsgColor.Green, MsgType.Hint);
+            M2Share.PasEngine?.ReloadActiveMonsterScripts();
+            player.SysMsg(NativeEndMessage, MsgColor.Green, MsgType.Hint);
         }
     }
 }

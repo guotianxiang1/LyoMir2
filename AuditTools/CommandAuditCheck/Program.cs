@@ -46,7 +46,6 @@ var protectedFiles = new[]
     "ReloadSmsUserListCommand.cs",
     "ReloadTaskDispatchCommand.cs",
     "ReloadunBindItemCommand.cs",
-    "ReshuaMonScriptCommand.cs",
     "SendYuanBaoTextCommand.cs",
     "SmeltEquipCommand.cs",
     "SuperMerchantCommand.cs",
@@ -205,6 +204,10 @@ foreach (var implementedFile in new[]
              // resolves sub_652784's non-ghost ReadyRun player, then invokes
              // vtbl+0x84 Die(). Missing targets and all successful paths are silent.
              "DieCommand.cs",
+             // case 476 @0x006291EF brackets sub_67DC40 with two exact green
+             // messages. The core walks the active scripted-monster list and
+             // sub_71F240 replaces each existing script instance from the same path.
+             "ReshuaMonScriptCommand.cs",
              // R-pass 2026-08-03 (idat_R_ap_skillexp_reload_20260803.md): the AP/信用分 family and
              // AddSkillExp wired to reversed sub_6F92xx / sub_744D4C contracts, moved out of
              // protectedFiles. AP runtime field = m_nActivePoint ([player+0x0AE4], NOT save off 0x0608);
@@ -304,6 +307,42 @@ Assert(mapCellFree.Contains(
        !mapCellFree.Contains("string[]", StringComparison.Ordinal) &&
        !mapCellFree.Contains("SysMsg", StringComparison.Ordinal),
     "MapCellFree lost its native no-argument, current-map, silent contract");
+
+var reshuaMonScript = Read("ReshuaMonScriptCommand.cs");
+Assert(reshuaMonScript.Contains(
+           "GameCommand(\"reshuaMonScript\", \"重新加载怪物脚本\", \"\", 5)",
+           StringComparison.Ordinal) &&
+       reshuaMonScript.Contains("开始刷新怪物脚本", StringComparison.Ordinal) &&
+       reshuaMonScript.Contains("ReloadActiveMonsterScripts", StringComparison.Ordinal) &&
+       reshuaMonScript.Contains("刷新怪物脚本结束", StringComparison.Ordinal) &&
+       !reshuaMonScript.Contains("ClearCache", StringComparison.Ordinal) &&
+       !reshuaMonScript.Contains("LoadMonsterScripts", StringComparison.Ordinal),
+    "reshuaMonScript lost its native no-argument, exact-message reload contract");
+Assert(reshuaMonScript.IndexOf("player.SysMsg(NativeStartMessage",
+           StringComparison.Ordinal) <
+       reshuaMonScript.IndexOf("ReloadActiveMonsterScripts", StringComparison.Ordinal) &&
+       reshuaMonScript.IndexOf("ReloadActiveMonsterScripts", StringComparison.Ordinal) <
+       reshuaMonScript.IndexOf("player.SysMsg(NativeEndMessage",
+           StringComparison.Ordinal),
+    "reshuaMonScript start/reload/end order drifted");
+
+var pasScriptHost = File.ReadAllText(Path.Combine(root, "GameSvr", "ScriptSystem",
+    "PasEngine", "PasScriptHost.cs"));
+var reloadStart = pasScriptHost.IndexOf(
+    "public int ReloadActiveMonsterScripts()", StringComparison.Ordinal);
+var reloadEnd = pasScriptHost.IndexOf(
+    "public bool TryCallAfterScatterItems", reloadStart, StringComparison.Ordinal);
+Assert(reloadStart >= 0 && reloadEnd > reloadStart,
+    "active monster script reload implementation is missing");
+var reloadBody = pasScriptHost.Substring(reloadStart, reloadEnd - reloadStart);
+Assert(reloadBody.Contains("_monsterStates.ToArray()", StringComparison.Ordinal) &&
+       reloadBody.Contains("Invalidate(oldState.ScriptPath)", StringComparison.Ordinal) &&
+       reloadBody.Contains("_monsterStates.TryUpdate", StringComparison.Ordinal) &&
+       reloadBody.Contains("TryInitializeMonsterScriptState", StringComparison.Ordinal) &&
+       !reloadBody.Contains("ClearCache", StringComparison.Ordinal) &&
+       !reloadBody.Contains("LoadMonsterScripts", StringComparison.Ordinal) &&
+       !reloadBody.Contains("_monsterScriptPaths.Clear", StringComparison.Ordinal),
+    "active monster reload no longer replaces only currently attached script states");
 
 var allSources = Directory.GetFiles(commandDirectory, "*.cs")
     .Select(path => (Path: path, Source: File.ReadAllText(path)))

@@ -130,6 +130,7 @@ namespace GameSvr.PasEngine
 
         private sealed class MonsterScriptState
         {
+            public TBaseObject Animal;
             public string ScriptPath;
             public PasProgram Program;
             public PasInterpreter Interpreter;
@@ -240,6 +241,12 @@ namespace GameSvr.PasEngine
         {
             if (!TryGetMonsterScriptState(animal, out var state)) return false;
 
+            return TryInitializeMonsterScriptState(animal, state);
+        }
+
+        private bool TryInitializeMonsterScriptState(TBaseObject animal,
+            MonsterScriptState state)
+        {
             lock (state.SyncRoot)
             {
                 if (state.Initialized) return true;
@@ -263,6 +270,79 @@ namespace GameSvr.PasEngine
                     state.Initialized = true;
                 }
             }
+        }
+
+        /// <summary>
+        /// Native sub_67DC40 walks the manager's script-attached monster list and
+        /// calls TAnimal.LoadScript (sub_71F240) for each entry. The native loader
+        /// releases the old script object, reloads that animal's existing path, and
+        /// initializes the replacement; it does not reread monScript.txt.
+        /// </summary>
+        public int ReloadActiveMonsterScripts()
+        {
+            var snapshot = _monsterStates.ToArray();
+            var reloaded = 0;
+            var allSucceeded = true;
+            var reloadedPrograms = new Dictionary<string, PasProgram>(
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in snapshot)
+            {
+                var oldState = entry.Value;
+                lock (oldState.SyncRoot)
+                {
+                    if (!_monsterStates.TryGetValue(entry.Key, out var current) ||
+                        !ReferenceEquals(current, oldState))
+                    {
+                        allSucceeded = false;
+                        continue;
+                    }
+
+                    if (!File.Exists(oldState.ScriptPath))
+                    {
+                        LogMonsterMessage(
+                            $"[Exception]:TAnimal.LoadScript:{oldState.ScriptPath}: 不存在");
+                        RemoveMonsterState(entry.Key, oldState);
+                        allSucceeded = false;
+                        continue;
+                    }
+
+                    if (!reloadedPrograms.TryGetValue(oldState.ScriptPath,
+                            out var program))
+                    {
+                        Invalidate(oldState.ScriptPath);
+                        program = GetOrLoadProgram(oldState.ScriptPath);
+                        if (program != null)
+                            reloadedPrograms.Add(oldState.ScriptPath, program);
+                    }
+                    if (program == null)
+                    {
+                        RemoveMonsterState(entry.Key, oldState);
+                        allSucceeded = false;
+                        continue;
+                    }
+
+                    var replacement = new MonsterScriptState
+                    {
+                        Animal = oldState.Animal,
+                        ScriptPath = oldState.ScriptPath,
+                        Program = program,
+                        Interpreter = CreateInterpreter(program)
+                    };
+                    if (!_monsterStates.TryUpdate(entry.Key, replacement, oldState) ||
+                        !TryInitializeMonsterScriptState(replacement.Animal, replacement))
+                    {
+                        allSucceeded = false;
+                        continue;
+                    }
+
+                    reloaded++;
+                }
+            }
+
+            if (allSucceeded)
+                LogMonsterMessage($"成功刷新怪物脚本{snapshot.Length}个");
+            return reloaded;
         }
 
         public bool TryCallAfterScatterItems(TBaseObject animal, TPlayObject player,
@@ -357,6 +437,15 @@ namespace GameSvr.PasEngine
             if (objectId > 0) _monsterStates.TryRemove(objectId, out _);
         }
 
+        private void RemoveMonsterState(int objectId,
+            MonsterScriptState expectedState)
+        {
+            if (expectedState == null) return;
+            ((ICollection<KeyValuePair<int, MonsterScriptState>>)_monsterStates)
+                .Remove(new KeyValuePair<int, MonsterScriptState>(objectId,
+                    expectedState));
+        }
+
         private string ResolveMonsterScriptPath(string monsterName)
         {
             if (string.IsNullOrWhiteSpace(monsterName) || monsterName is "." or ".." ||
@@ -404,6 +493,7 @@ namespace GameSvr.PasEngine
             while (true)
             {
                 if (_monsterStates.TryGetValue(animal.ObjectId, out var existing) &&
+                    ReferenceEquals(existing.Animal, animal) &&
                     string.Equals(existing.ScriptPath, scriptPath, StringComparison.OrdinalIgnoreCase) &&
                     ReferenceEquals(existing.Program, program))
                 {
@@ -413,6 +503,7 @@ namespace GameSvr.PasEngine
 
                 var replacement = new MonsterScriptState
                 {
+                    Animal = animal,
                     ScriptPath = scriptPath,
                     Program = program,
                     Interpreter = CreateInterpreter(program)
