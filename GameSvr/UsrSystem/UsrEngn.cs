@@ -785,7 +785,16 @@ namespace GameSvr
                         ReleaseUnpublishedObject(PlayObject);
                         return result;
                     }
-                    if (!Envir.CanWalk(PlayObject.m_nCurrX, PlayObject.m_nCurrY, true))
+                    // MOVE-57: native sub_6B9A2C pushes boFlag=1/fallback=1 and
+                    // calls GetRandomXY @0x6B9DC7. Only lookup failure returns home.
+                    var nSwitchX = (int)PlayObject.m_nCurrX;
+                    var nSwitchY = (int)PlayObject.m_nCurrY;
+                    if (TBaseObject.NativeGetRandomXY(Envir, ref nSwitchX, ref nSwitchY))
+                    {
+                        PlayObject.m_nCurrX = unchecked((short)nSwitchX);
+                        PlayObject.m_nCurrY = unchecked((short)nSwitchY);
+                    }
+                    else
                     {
                         M2Share.MainOutMessage(string.Format(sChangeServerFail4,
                             new object[] { M2Share.nServerIndex, PlayObject.m_nServerIndex, PlayObject.m_sMapName }));

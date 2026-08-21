@@ -992,6 +992,8 @@ Equal(1, environment.MoveToMovingObject(7, 8, linkPointPlayer, 7, 7, false),
 Assert(CellContains(environment, 7, 7, linkPointPlayer),
     "MOVE-34 player did not move onto the LinkPoint cell");
 
+AssertSwitchReentryUsesNativePlacement();
+
 Console.WriteLine("MovementCollisionCheck PASS");
 
 static TBaseObject NewObject(Envirnoment environment, byte race, short x, short y)
@@ -1076,6 +1078,65 @@ static void RegisterMap(MapManager manager, Envirnoment environment)
         BindingFlags.Instance | BindingFlags.NonPublic)!;
     var maps = (IDictionary<string, Envirnoment>)field.GetValue(manager)!;
     maps.Add(environment.sMapName, environment);
+}
+
+static void AssertSwitchReentryUsesNativePlacement()
+{
+    var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "GameSvr",
+        "UsrSystem", "UsrEngn.cs"));
+    const string startMarker = "GetHumData(PlayObject, ref UserOpenInfo.HumanRcd);";
+    const string endMarker = "PlayObject.AbilCopyToWAbil();";
+    var start = source.LastIndexOf(startMarker, StringComparison.Ordinal);
+    var end = start < 0 ? -1 : source.IndexOf(endMarker, start,
+        StringComparison.Ordinal);
+    Assert(start >= 0 && end > start,
+        "MOVE-57 switch/re-entry branch could not be located");
+
+    var block = source[start..end].Replace("\r", string.Empty,
+        StringComparison.Ordinal);
+    var nativeLookup = block.IndexOf(
+        "TBaseObject.NativeGetRandomXY(Envir, ref nSwitchX, ref nSwitchY)",
+        StringComparison.Ordinal);
+    var writeX = block.IndexOf(
+        "PlayObject.m_nCurrX = unchecked((short)nSwitchX);",
+        StringComparison.Ordinal);
+    var writeY = block.IndexOf(
+        "PlayObject.m_nCurrY = unchecked((short)nSwitchY);",
+        StringComparison.Ordinal);
+    var failureGate = block.IndexOf("}\n                    else\n                    {",
+        StringComparison.Ordinal);
+    var fallback = block.IndexOf("sChangeServerFail4", StringComparison.Ordinal);
+    Assert(nativeLookup >= 0,
+        "MOVE-57 switch/re-entry path does not call NativeGetRandomXY");
+    Assert(writeX > nativeLookup && writeY > nativeLookup,
+        "MOVE-57 switch/re-entry path does not retain the native coordinates");
+    Assert(failureGate > writeX && failureGate > writeY
+        && fallback > failureGate,
+        "MOVE-57 switch/re-entry fallback is not gated by native lookup failure");
+    Assert(!block.Contains("if (!Envir.CanWalk(", StringComparison.Ordinal),
+        "MOVE-57 switch/re-entry path still uses the non-native CanWalk shortcut");
+}
+
+static string FindRepositoryRoot()
+{
+    foreach (var startPath in new[]
+             {
+                 Directory.GetCurrentDirectory(),
+                 AppContext.BaseDirectory
+             })
+    {
+        for (var directory = new DirectoryInfo(startPath);
+             directory != null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "GameSvr",
+                    "UsrSystem", "UsrEngn.cs"))
+                && Directory.Exists(Path.Combine(directory.FullName,
+                    "SystemModule")))
+                return directory.FullName;
+        }
+    }
+
+    throw new DirectoryNotFoundException("repository root not found");
 }
 
 static void Equal<T>(T expected, T actual, string label)
