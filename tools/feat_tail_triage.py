@@ -13,7 +13,7 @@ from pathlib import Path
 
 IMAGE = r"D:\loym2\staging\_reunpack_work\flat_image.bin"
 BASE = 0x400000
-TSV = r"D:\loym2\_scan_20260814_2008\funccat_m2_missing.tsv"
+TSV = r"D:\loym2\workspace-archive\evidence\m2\host-gap-scan-20260814-2008\funccat_m2_missing.tsv"
 CS_ROOT = Path(r"D:\loym2\_gapwork\feat-tail")
 
 with open(IMAGE, "rb") as f:

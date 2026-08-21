@@ -2,7 +2,7 @@
 
 日期：2026-08-13
 工作树：`D:\loym2\.claude\wt2\m-logingate`（分支 `w/m-logingate`）
-证据基座：`D:\loym2\战神引擎LG源代码\LoginGate\Source\*.pas`（及 `staging\lg_src_utf8` UTF-8 副本）
+证据基座：`D:\loym2\reference\m2\lg-source\LoginGate\Source\*.pas`（及 `staging\lg_src_utf8` UTF-8 副本）
 本轮**未执行任何编译命令**。
 
 ---
