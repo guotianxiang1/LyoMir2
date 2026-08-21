@@ -101,6 +101,19 @@ namespace GameSvr
             MapCellObjectLists[index] = null;
         }
 
+        /// <summary>
+        /// Native <c>sub_77BEB4</c> @0x0077BEB4 walks the 12-byte cell array and
+        /// clears only byte +0, the terrain attribute. Object chains and skill
+        /// flags remain unchanged.
+        /// </summary>
+        internal void SetAllNativeMapCellsWalkable()
+        {
+            if (MapCellAttributes == null)
+                return;
+
+            Array.Fill(MapCellAttributes, CellAttribute.Walk);
+        }
+
         public Envirnoment()
         {
             sMapName = string.Empty;

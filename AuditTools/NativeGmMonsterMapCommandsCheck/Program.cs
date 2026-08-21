@@ -16,6 +16,7 @@
 // (SHA256 5540f43b…c049670b14e, image base 0x00400000).
 
 using GameSvr;
+using System.Reflection;
 using SystemModule;
 
 int checks = 0;
@@ -199,7 +200,22 @@ Delegate("MonXinxi", 3, "sub_6BEC4C");
 Delegate("RangeShuag", 4, "sub_62E58C");
 Delegate("NpcHit", 4, "sub_62EA7C");
 Delegate("LockInPlayers", 3, "sub_6CDD48");
-Delegate("MapCellFree", 5, "sub_77BEB4");
+
+var mapCellFreeModel = NativeGmMonsterMapCommands.Evaluate(
+    "MapCellFree", 5, new[] { "ignored", "text" });
+Equal(NativeMonsterMapOutcome.Executed, mapCellFreeModel.Outcome,
+    "MapCellFree -> Executed");
+Equal("attributes-walk", mapCellFreeModel.Branch,
+    "MapCellFree recovered branch");
+Equal("sub_77BEB4", mapCellFreeModel.NativeCore,
+    "MapCellFree recovered core");
+Equal(NativeGmMonsterMapCommands.NoSysMsg,
+    mapCellFreeModel.NativeSysMsgIdent, "MapCellFree no SysMsg");
+Equal(false, mapCellFreeModel.CoreBodyDeferred,
+    "MapCellFree recovered core is not deferred");
+Equal(true, mapCellFreeModel.Detail.Contains(
+        "Object chains and skill flags are unchanged", StringComparison.Ordinal),
+    "MapCellFree model pins untouched cell state");
 
 // ---------------------------------------------------------------------------
 // 6) Unconditional-report commands -> ExecutedWithGmMessage with the exact ident.
@@ -589,7 +605,130 @@ finally
 }
 
 // ---------------------------------------------------------------------------
-// 12) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent
+// 12) MapCellFree (454): current map, attributes only, no arguments or SysMsg
+// ---------------------------------------------------------------------------
+var mapCellFreeEnvironment = new Envirnoment { sMapName = "map-cell-free" };
+var environmentType = typeof(Envirnoment);
+environmentType.GetMethod("Initialize",
+        BindingFlags.Instance | BindingFlags.NonPublic)!
+    .Invoke(mapCellFreeEnvironment, new object[] { (short)3, (short)2 });
+
+var attributes = (CellAttribute[])environmentType.GetField("MapCellAttributes",
+    BindingFlags.Instance | BindingFlags.NonPublic)!
+    .GetValue(mapCellFreeEnvironment)!;
+var skillFlags = (byte[])environmentType.GetField("MapCellSkillFlags",
+    BindingFlags.Instance | BindingFlags.NonPublic)!
+    .GetValue(mapCellFreeEnvironment)!;
+var objectLists = (IList<CellObject>[])environmentType.GetField(
+        "MapCellObjectLists", BindingFlags.Instance | BindingFlags.NonPublic)!
+    .GetValue(mapCellFreeEnvironment)!;
+
+for (var i = 0; i < attributes.Length; i++)
+    attributes[i] = i % 2 == 0 ? CellAttribute.HighWall : CellAttribute.LowWall;
+skillFlags[3] = 0x5A;
+var preservedObject = new CellObject
+{
+    CellType = CellType.OS_ITEMOBJECT,
+    CellObj = new object(),
+    dwAddTime = 1234
+};
+var preservedObjectList = new List<CellObject> { preservedObject };
+objectLists[3] = preservedObjectList;
+var preservedObjectListsArray = objectLists;
+
+var oldMapCellFreeProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldMapCellFreeObjectManager = M2Share.ObjectManager;
+var oldMapCellFreeRandomNumber = M2Share.RandomNumber;
+try
+{
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+
+    var mapCellFreePlayer = new TPlayObject
+    {
+        m_btPermission = 5,
+        m_PEnvir = mapCellFreeEnvironment
+    };
+    var mapCellFreeCommand = new MapCellFreeCommand();
+    var mapCellFreeRegistration = typeof(MapCellFreeCommand)
+        .GetCustomAttribute<GameSvr.CommandSystem.GameCommandAttribute>()!;
+    mapCellFreeCommand.Register(mapCellFreeRegistration,
+        typeof(MapCellFreeCommand).GetMethod("MapCellFree")!);
+
+    mapCellFreeCommand.MapCellFree(mapCellFreePlayer);
+    var objectListsAfterDirectCall = (IList<CellObject>[])environmentType.GetField(
+            "MapCellObjectLists", BindingFlags.Instance | BindingFlags.NonPublic)!
+        .GetValue(mapCellFreeEnvironment)!;
+    Equal(true, attributes.All(attribute => attribute == CellAttribute.Walk),
+        "live MapCellFree sets every terrain attribute to Walk");
+    Equal((byte)0x5A, skillFlags[3],
+        "live MapCellFree preserves skill flag");
+    Equal(true, ReferenceEquals(preservedObjectListsArray, objectListsAfterDirectCall),
+        "live MapCellFree preserves object-list array");
+    Equal(true, ReferenceEquals(preservedObjectList, objectListsAfterDirectCall[3]),
+        "live MapCellFree preserves cell object-list reference");
+    Equal(1, objectListsAfterDirectCall[3].Count,
+        "live MapCellFree preserves cell object count");
+    Equal(true, ReferenceEquals(preservedObject, objectListsAfterDirectCall[3][0]),
+        "live MapCellFree preserves cell object");
+    Equal(0, mapCellFreePlayer.m_MsgList.Count,
+        "live MapCellFree sends no SysMsg");
+
+    var oldMapCellFreeConfig = M2Share.g_Config;
+    var mapCellFreeConfig = oldMapCellFreeConfig ?? new GameSvrConfig();
+    var oldMapCellFreeTestServer = mapCellFreeConfig.boTestServer;
+    try
+    {
+        M2Share.g_Config = mapCellFreeConfig;
+        mapCellFreeConfig.boTestServer = false;
+
+        Array.Fill(attributes, CellAttribute.HighWall);
+        mapCellFreePlayer.m_btPermission = 4;
+        Equal("该命令需要5级GM才能使用",
+            mapCellFreeCommand.Handle("ignored text", mapCellFreePlayer),
+            "live MapCellFree permission 4 is rejected by normal gate");
+        Equal(true, attributes.All(attribute => attribute == CellAttribute.HighWall),
+            "live MapCellFree permission 4 preserves terrain attributes");
+
+        mapCellFreePlayer.m_btPermission = 5;
+        Equal<string>(null,
+            mapCellFreeCommand.Handle("ignored extra parameters", mapCellFreePlayer),
+            "live MapCellFree permission 5 executes and ignores text");
+        Equal(true, attributes.All(attribute => attribute == CellAttribute.Walk),
+            "live MapCellFree permission 5 clears terrain attributes");
+    }
+    finally
+    {
+        mapCellFreeConfig.boTestServer = oldMapCellFreeTestServer;
+        M2Share.g_Config = oldMapCellFreeConfig;
+    }
+
+    mapCellFreePlayer.m_PEnvir = null;
+    mapCellFreeCommand.MapCellFree(mapCellFreePlayer);
+    mapCellFreeCommand.MapCellFree(null);
+    Equal(0, mapCellFreePlayer.m_MsgList.Count,
+        "live MapCellFree null player/map stays silent");
+
+    var uninitializedMap = new Envirnoment();
+    mapCellFreePlayer.m_PEnvir = uninitializedMap;
+    mapCellFreeCommand.MapCellFree(mapCellFreePlayer);
+    Equal<object>(null, environmentType.GetField("MapCellAttributes",
+            BindingFlags.Instance | BindingFlags.NonPublic)!
+        .GetValue(uninitializedMap),
+        "live MapCellFree uninitialized map safely remains uninitialized");
+    Equal(0, mapCellFreePlayer.m_MsgList.Count,
+        "live MapCellFree uninitialized map stays silent");
+}
+finally
+{
+    M2Share.ProcessMsgCriticalSection = oldMapCellFreeProcessMsgCriticalSection;
+    M2Share.ObjectManager = oldMapCellFreeObjectManager;
+    M2Share.RandomNumber = oldMapCellFreeRandomNumber;
+}
+
+// ---------------------------------------------------------------------------
+// 13) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent
 // ---------------------------------------------------------------------------
 foreach (var (sub, br) in new[] { ("lasttime", "lasttime"), ("codetime", "codetime"), ("effect", "effect") })
 {
@@ -604,7 +743,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "SpiderWebTest bogus -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 13) AutoMove (233): both coords valid -> Executed; a -1 coord -> silent
+// 14) AutoMove (233): both coords valid -> Executed; a -1 coord -> silent
 // ---------------------------------------------------------------------------
 var amOk = NativeGmMonsterMapCommands.Evaluate("AutoMove", 5, new[] { "MapA", "100", "200" });
 Equal(NativeMonsterMapOutcome.Executed, amOk.Outcome, "AutoMove valid -> Executed");
@@ -619,7 +758,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "AutoMove non-numeric coords -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 14) setRecoverFactor (375): both args -> Executed; missing -> silent
+// 15) setRecoverFactor (375): both args -> Executed; missing -> silent
 // ---------------------------------------------------------------------------
 var srf = NativeGmMonsterMapCommands.Evaluate("setRecoverFactor", 4, new[] { "10", "20" });
 Equal(NativeMonsterMapOutcome.Executed, srf.Outcome, "setRecoverFactor both -> Executed");
@@ -629,7 +768,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "setRecoverFactor missing mp -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 15) LoadMonGen (529): mongen reload; mon found/not-found/idx0; unknown silent
+// 16) LoadMonGen (529): mongen reload; mon found/not-found/idx0; unknown silent
 // ---------------------------------------------------------------------------
 var lmg = NativeGmMonsterMapCommands.Evaluate("LoadMonGen", 3, new[] { "mongen" });
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, lmg.Outcome, "LoadMonGen mongen -> ExecutedWithGmMessage");
@@ -654,7 +793,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "LoadMonGen unknown sub -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 16) TempSetMapParam (577): usage / map-missing / add / remove / unsupported / fail
+// 17) TempSetMapParam (577): usage / map-missing / add / remove / unsupported / fail
 // ---------------------------------------------------------------------------
 var tspUsage = NativeGmMonsterMapCommands.Evaluate("TempSetMapParam", 5, System.Array.Empty<string>());
 Equal(NativeMonsterMapOutcome.RejectedWithGmMessage, tspUsage.Outcome, "TempSetMapParam no args -> RejectedWithGmMessage");
@@ -688,7 +827,7 @@ NativeGmMonsterMapCommands.TempSetMapParamStatus = NativeGmMonsterMapCommands.Te
 NativeGmMonsterMapCommands.MapExistsHook = null;
 
 // ---------------------------------------------------------------------------
-// 17) BreakLvCtrl (309): every reporting path uses 0xFFDB (coarse but true)
+// 18) BreakLvCtrl (309): every reporting path uses 0xFFDB (coarse but true)
 // ---------------------------------------------------------------------------
 var blcReport = NativeGmMonsterMapCommands.Evaluate("BreakLvCtrl", 4, System.Array.Empty<string>());
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, blcReport.Outcome, "BreakLvCtrl no arg -> ExecutedWithGmMessage");

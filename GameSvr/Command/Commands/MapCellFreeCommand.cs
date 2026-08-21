@@ -1,26 +1,14 @@
 using GameSvr.CommandSystem;
-using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("MapCellFree", "地图单元格释放/清理", "地图名称", 5)]
-    public class MapCellFreeCommand : BaseCommond
+    [GameCommand("MapCellFree", "GM设置其ownmap中的每个点为free状态", "", 5)]
+    public sealed class MapCellFreeCommand : BaseCommond
     {
         [DefaultCommand]
-        public void MapCellFree(string[] @Params, TPlayObject PlayObject)
+        public void MapCellFree(TPlayObject player)
         {
-            if (@Params == null)
-            {
-                return;
-            }
-            var sMapName = @Params.Length > 0 ? @Params[0] : "";
-            if (string.IsNullOrEmpty(sMapName))
-            {
-                PlayObject.SysMsg(GameCommand.ShowHelp, MsgColor.Red, MsgType.Hint);
-                return;
-            }
-            NativeCommandFailure.Report(PlayObject, "MapCellFree",
-                "原版 ownmap 点状态模型尚未移植，未清理地图单元格。");
+            player?.m_PEnvir?.SetAllNativeMapCellsWalkable();
         }
     }
 }

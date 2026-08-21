@@ -39,7 +39,6 @@ var protectedFiles = new[]
     "HeroSkillSwitchCommand.cs",
     "LogSwitchCommand.cs",
     "MakeMyHeroCommand.cs",
-    "MapCellFreeCommand.cs",
     "NpcHitCommand.cs",
     "ReloadC2CItemsCommand.cs",
     "ReloadPromptFileCommand.cs",
@@ -198,6 +197,10 @@ foreach (var implementedFile in new[]
              // gates on current map UserNoKill (+0x71), writes the WORD cap at
              // +0x74, and reports both success/refusal with cx=0xFFDB.
              "SetNoKillMapLvCommand.cs",
+             // case 454 @0x00628B3E loads the invoking GM's current map and
+             // sub_77BEB4 clears only byte +0 of every 12-byte cell record.
+             // The recovered command is argument-free and sends no SysMsg.
+             "MapCellFreeCommand.cs",
              // R-pass 2026-08-03 (idat_R_ap_skillexp_reload_20260803.md): the AP/信用分 family and
              // AddSkillExp wired to reversed sub_6F92xx / sub_744D4C contracts, moved out of
              // protectedFiles. AP runtime field = m_nActivePoint ([player+0x0AE4], NOT save off 0x0608);
@@ -280,6 +283,15 @@ Assert(setFountSwitch.Contains("GM可控泉水已打开", StringComparison.Ordin
        !setFountSwitch.Contains("Str_ToInt", StringComparison.Ordinal) &&
        !setFountSwitch.Contains("OrdinalIgnoreCase", StringComparison.Ordinal),
     "SetFountSwitch reply text or strict native token comparison drifted");
+
+var mapCellFree = Read("MapCellFreeCommand.cs");
+Assert(mapCellFree.Contains(
+           "GameCommand(\"MapCellFree\", \"GM设置其ownmap中的每个点为free状态\", \"\", 5)",
+           StringComparison.Ordinal) &&
+       mapCellFree.Contains("SetAllNativeMapCellsWalkable", StringComparison.Ordinal) &&
+       !mapCellFree.Contains("string[]", StringComparison.Ordinal) &&
+       !mapCellFree.Contains("SysMsg", StringComparison.Ordinal),
+    "MapCellFree lost its native no-argument, current-map, silent contract");
 
 var allSources = Directory.GetFiles(commandDirectory, "*.cs")
     .Select(path => (Path: path, Source: File.ReadAllText(path)))

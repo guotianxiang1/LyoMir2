@@ -354,9 +354,10 @@ namespace GameSvr
                 "如果GM所在地图是NOKillMap,则设置该地图的等级上限	@SetNoKillMapLv 等级值",
                 "Strict StrToInt parses the level. sub_6CDBBC reads current map+0x71: false -> SysMsg(0xFFDB) "
                 + "refusal, no write; true -> WORD map+0x74=(ushort)level and SysMsg(0xFFDB) reports the stored value."),
-            new NativeMonsterMapCommand("MapCellFree", 454, 5, 0x00628B3Eu, "sub_77BEB4", true,
+            new NativeMonsterMapCommand("MapCellFree", 454, 5, 0x00628B3Eu, "sub_77BEB4", false,
                 "GM设置其ownmap中的每个点为free状态	@MapCellFree",
-                "Pure delegation: sub_77BEB4() marks every cell of the GM's own map free. No SysMsg."),
+                "sub_77BEB4 walks every 12-byte cell record in the GM's current map and writes only "
+                + "attribute byte +0 to Walk (0). Object chains and skill flags are unchanged. No SysMsg."),
             new NativeMonsterMapCommand("BreakLvCtrl", 309, 4, 0x00627322u, "sub_696228 / sub_718914 / sub_65645C", true,
                 "查询全服暴击信息;设置某地图或全服的暴击等级	@BreakLvCtrl …",
                 "Multi-mode. No arg -> report(0xFFDB). Set-per-map (GetMap-gated): writes *(BYTE*)(map+0xB8) or "
@@ -474,6 +475,10 @@ namespace GameSvr
                 case "ReloadNpcPrize": return EvalReloadNpcPrize();
                 case "SetFountSwitch": return EvalSetFountSwitch(a);
                 case "SetNoKillMapLv": return EvalSetNoKillMapLv(a);
+                case "MapCellFree":
+                    return new NativeMonsterMapEvaluation(
+                        NativeMonsterMapOutcome.Executed, "attributes-walk",
+                        rec.NativeCore, NoSysMsg, false, rec.EffectSummary);
                 case "SpiderWebTest": return EvalSpiderWebTest(a);
                 case "AutoMove": return EvalAutoMove(a);
                 case "setRecoverFactor": return EvalSetRecoverFactor(a);
@@ -504,7 +509,7 @@ namespace GameSvr
 
                 default:
                     // gowgo / dingdianyidong / MonXinxi / RangeShuag / NpcHit /
-                    // LockInPlayers / MapCellFree: single-branch
+                    // LockInPlayers: single-branch
                     // delegations, no shim-level guard, no shim SysMsg.
                     return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.Executed,
                         "delegate", rec.NativeCore, NoSysMsg, rec.CoreBodyDeferred,
