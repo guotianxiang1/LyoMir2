@@ -196,7 +196,7 @@ namespace GameSvr
                 "清除玩家多倍经验时间	@clearMulExp 角色名",
                 "FindPlayer(sub_652784): found -> sub_6E3FB0() clears the multi-exp timer + SysMsg(0xFFDB); "
                 + "not found -> error line SysMsg(0xFFDB)."),
-            new NativePlayerAttrCommand("Die", 358, 5, 0x00627FD5u, "vtbl+0x84", true,
+            new NativePlayerAttrCommand("Die", 358, 5, 0x00627FD5u, "vtbl+0x84", false,
                 "GM自杀或设置其他玩家死亡	@Die [角色名/空(自身)]",
                 "arg present -> FindPlayer(sub_652784) else self; target != null -> vtbl+0x84 Die(); else silent. No shim SysMsg."),
             new NativePlayerAttrCommand("OpenZhuZaiShenYou", 425, 4, 0x00628A94u, "sub_6BF658", true,
@@ -333,7 +333,7 @@ namespace GameSvr
             bool self = string.IsNullOrEmpty(Arg(a, 0));
             if (self || TargetPlayerFound)
                 return new NativePlayerAttrEvaluation(NativePlayerAttrOutcome.Executed, self ? "self" : "target",
-                    "vtbl+0x84", NoSysMsg, true, "target (self or found) -> vtbl+0x84 Die(); no SysMsg");
+                    "vtbl+0x84", NoSysMsg, false, "target (self or found) -> vtbl+0x84 Die(); no SysMsg");
             return new NativePlayerAttrEvaluation(NativePlayerAttrOutcome.RejectedSilently, "not-found",
                 "sub_652784", NoSysMsg, false, "named target not found -> silent");
         }

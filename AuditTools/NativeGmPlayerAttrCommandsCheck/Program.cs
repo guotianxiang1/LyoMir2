@@ -13,7 +13,11 @@
 // staging/update_clothes_4637_ida_work/{disp_decomp.txt, big622820.txt,
 // padmin_out.txt} over m2full.i64 (SHA256 5540f43b…, base 0x00400000).
 
+using System.Reflection;
 using GameSvr;
+using GameSvr.CommandSystem;
+
+PrepareRuntimeFiles();
 
 int checks = 0;
 void Equal<T>(T expected, T actual, string label)
@@ -256,13 +260,92 @@ Equal(NativePlayerAttrOutcome.RejectedSilently,
     NativeGmPlayerAttrCommands.Evaluate("ChgDmgShare", 5, new[] { "ghost", "5" }).Outcome, "ChgDmgShare not-found silent");
 NativeGmPlayerAttrCommands.TargetPlayerFound = true;
 
-// Die
-Equal("self", NativeGmPlayerAttrCommands.Evaluate("Die", 5, null).Branch, "Die self");
-Equal("target", NativeGmPlayerAttrCommands.Evaluate("Die", 5, new[] { "bob" }).Branch, "Die target found");
+// Die model
+var dieSelf = NativeGmPlayerAttrCommands.Evaluate("Die", 5, null);
+Equal("self", dieSelf.Branch, "Die self");
+Equal(false, dieSelf.CoreBodyDeferred, "Die self body wired");
+var dieTarget = NativeGmPlayerAttrCommands.Evaluate("Die", 5, new[] { "bob" });
+Equal("target", dieTarget.Branch, "Die target found");
+Equal(false, dieTarget.CoreBodyDeferred, "Die target body wired");
 NativeGmPlayerAttrCommands.TargetPlayerFound = false;
 Equal(NativePlayerAttrOutcome.RejectedSilently,
     NativeGmPlayerAttrCommands.Evaluate("Die", 5, new[] { "ghost" }).Outcome, "Die not-found silent");
 NativeGmPlayerAttrCommands.TargetPlayerFound = true;
+
+// Die runtime: case 358 reads only token 1, uses native sub_652784 readiness
+// gates, dispatches vtbl+0x84 and never emits a command-body message.
+M2Share.g_Config = new GameSvrConfig
+{
+    boTestServer = false
+};
+M2Share.ObjectManager = new ObjectManager();
+M2Share.ProcessMsgCriticalSection = new object();
+M2Share.UserEngine = new UserEngine();
+
+var gm = new DieProbePlayer
+{
+    m_sCharName = "GameMaster",
+    m_btPermission = 5,
+    m_boReadyRun = true
+};
+var readyTarget = new DieProbePlayer
+{
+    m_sCharName = "ReadyTarget",
+    m_boReadyRun = true
+};
+var ghostTarget = new DieProbePlayer
+{
+    m_sCharName = "GhostTarget",
+    m_boReadyRun = true,
+    m_boGhost = true
+};
+var notReadyTarget = new DieProbePlayer
+{
+    m_sCharName = "NotReadyTarget",
+    m_boReadyRun = false
+};
+AddOnline(readyTarget, ghostTarget, notReadyTarget);
+
+var dieAttribute = typeof(DieCommand).GetCustomAttribute<GameCommandAttribute>();
+var dieMethod = typeof(DieCommand).GetMethod(nameof(DieCommand.Die));
+Equal(true, dieAttribute != null, "Die runtime command attribute");
+Equal(5, (int)dieAttribute.nPermissionMin, "Die runtime permission");
+Equal(true, dieMethod != null, "Die runtime command method");
+var dieCommand = new DieCommand();
+dieCommand.Register(dieAttribute, dieMethod);
+
+Equal<string>(null, dieCommand.Handle(string.Empty, gm), "Die self return silent");
+Equal(1, gm.DieCalls, "Die self virtual call");
+Equal(0, gm.m_MsgList.Count, "Die self queued no message");
+
+Equal<string>(null, dieCommand.Handle("rEaDyTaRgEt ignored", gm),
+    "Die target return silent");
+Equal(1, readyTarget.DieCalls, "Die target virtual call");
+Equal(1, gm.DieCalls, "Die target did not kill caller");
+Equal(0, gm.m_MsgList.Count, "Die target queued no caller message");
+Equal(0, readyTarget.m_MsgList.Count, "Die target queued no target message");
+
+Equal<string>(null, dieCommand.Handle("MissingTarget", gm),
+    "Die missing target silent");
+Equal<string>(null, dieCommand.Handle("GhostTarget", gm),
+    "Die ghost target silent");
+Equal<string>(null, dieCommand.Handle("NotReadyTarget", gm),
+    "Die not-ready target silent");
+Equal(0, ghostTarget.DieCalls, "Die ghost target rejected");
+Equal(0, notReadyTarget.DieCalls, "Die not-ready target rejected");
+Equal(0, gm.m_MsgList.Count, "Die rejected paths queued no message");
+
+gm.m_btPermission = 4;
+Equal("该命令需要5级GM才能使用", dieCommand.Handle(string.Empty, gm),
+    "Die permission 4 rejected by normal gate");
+Equal(1, gm.DieCalls, "Die permission rejection skipped body");
+gm.m_btPermission = 5;
+Equal<string>(null, dieCommand.Handle(string.Empty, gm),
+    "Die permission 5 executes silently");
+Equal(2, gm.DieCalls, "Die permission 5 virtual call");
+
+dieCommand.Die(null, null);
+Equal(2, gm.DieCalls, "Die null player silent");
 
 // ClearAllState
 Equal(NativePlayerAttrOutcome.Executed, NativeGmPlayerAttrCommands.Evaluate("ClearAllState", 5, new[] { "bob" }).Outcome, "ClearAllState found");
@@ -285,3 +368,43 @@ Console.WriteLine($"PASS NativeGmPlayerAttrCommandsCheck ({checks} checks): "
     + "registry, permission ladder, find-player + report ladders, dual no-op sinks. "
     + "OutSay/ShifangSay/LookOutSay back onto NativeGmDenyListCommands (mute codec).");
 return 0;
+
+void AddOnline(params TPlayObject[] players)
+{
+    var field = typeof(UserEngine).GetField("m_PlayObjectList",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(typeof(UserEngine).FullName,
+            "m_PlayObjectList");
+    if (field.GetValue(M2Share.UserEngine) is not IList<TPlayObject> online)
+        throw new InvalidOperationException("unexpected online-player list");
+    foreach (var player in players)
+        online.Add(player);
+}
+
+void PrepareRuntimeFiles()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
+}
+
+sealed class DieProbePlayer : TPlayObject
+{
+    public int DieCalls { get; private set; }
+
+    public override void Die()
+    {
+        DieCalls++;
+    }
+}

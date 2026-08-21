@@ -201,6 +201,10 @@ foreach (var implementedFile in new[]
              // sub_77BEB4 clears only byte +0 of every 12-byte cell record.
              // The recovered command is argument-free and sends no SysMsg.
              "MapCellFreeCommand.cs",
+             // case 358 @0x00627FD5 selects self for an empty first token or
+             // resolves sub_652784's non-ghost ReadyRun player, then invokes
+             // vtbl+0x84 Die(). Missing targets and all successful paths are silent.
+             "DieCommand.cs",
              // R-pass 2026-08-03 (idat_R_ap_skillexp_reload_20260803.md): the AP/信用分 family and
              // AddSkillExp wired to reversed sub_6F92xx / sub_744D4C contracts, moved out of
              // protectedFiles. AP runtime field = m_nActivePoint ([player+0x0AE4], NOT save off 0x0608);
@@ -233,6 +237,14 @@ foreach (var implementedFile in new[]
     Assert(!source.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
         $"{implementedFile} reverted to fail-closed");
 }
+
+var dieCommand = Read("DieCommand.cs");
+Assert(dieCommand.Contains("[GameCommand(\"Die\"", StringComparison.Ordinal) &&
+       dieCommand.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
+       dieCommand.Contains("target?.Die();", StringComparison.Ordinal),
+    "Die command no longer follows case 358 -> sub_652784 -> vtbl+0x84");
+Assert(!dieCommand.Contains(".SysMsg(", StringComparison.Ordinal),
+    "Die command introduced a non-native player message");
 
 var loadValidFunc = Read("LoadValidFuncCommand.cs");
 Assert(loadValidFunc.Contains("validScriptFunc.txt", StringComparison.Ordinal) &&
