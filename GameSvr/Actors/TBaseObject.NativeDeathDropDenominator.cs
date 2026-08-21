@@ -66,7 +66,7 @@ namespace GameSvr
     //   7623B5  66 01 46 5E           add word [esi+0x5E], ax
     // 反查 152 项槽号表，落到槽 27 的**只有属性类型 201 (0xC9)**（邻居 202 落到 +0x60）。
     //
-    // ⇒ [self+0x18C] = (身上所有装备的扩展属性 201 之和) / 10，无符号截断。
+    // ⇒ [self+0x18C] = (身上所有装备的扩展属性 201 低字节值之和) / 10，无符号截断。
     //    分母 = 该值 + 90，所以属性 201 只会让装备**更不容易**掉，90 是地板。
     //
     // 【订正 PKD-20 的两处措辞】这条臂所在的函数是 **[item.vmt+0x54]**（TRing 的 VMT 基址
@@ -116,7 +116,8 @@ namespace GameSvr
     // `imul` / `idiv 100` / 上钳 0x4E20 / `sub esi,eax`，另一处 sub_746130 @0x746177）。
     //
     // ── C# 映射边界 ────────────────────────────────────────────────────────────────
-    // 两个输入都出自装备扩展属性分发（StdItem+0x15 的类型 57..208 → 33 个臂 →
+    // 两个输入都出自装备扩展属性分发（0x7620DA 只取 StdItem+0x15 的低字节，
+    // 类型 57..208 → 33 个臂 →
     // agg1/agg2）。当前 GoodItem 已保留原生六组扩展属性槽，因此本端可以精确消费
     // 已确认的三种类型：201 -> agg1+0x5E，128/138 -> agg2+0x25。
     // 未覆盖的其它扩展属性臂仍不参与本改动；这不是对整个装备扩展子系统的声明。
@@ -136,7 +137,8 @@ namespace GameSvr
         public byte m_btNativeDropRareKillerBonus;
 
         /// <summary>
-        /// word[装备容器+0x48+0x5E] —— 身上装备扩展属性类型 201 (0xC9) 的累加值。
+        /// word[装备容器+0x48+0x5E] —— 身上装备扩展属性类型 201 (0xC9) 的
+        /// StdItem+0x17 低字节累加值。
         /// GoodItem 已保留原生六组扩展属性槽；这里只消费已解析的装备定义，
         /// 不推断其它扩展属性的效果。
         /// </summary>
@@ -149,8 +151,8 @@ namespace GameSvr
 
             // Native sub_75EE78 admits the same positive-durability equipped
             // records that the RecalcAbilitys worker scans.  The native arm at
-            // 0x7623B0 performs `add word [agg1+0x5E], ax`, so accumulation is
-            // deliberately ushort-wrapped rather than a widened int sum.
+            // 0x7623B0 clears EAX, loads only AL from StdItem+0x17, then adds AX
+            // into agg1+0x5E. Preserve both the byte contribution and word sum.
             ushort aggregate = 0;
             var count = Math.Min(m_UseItems.Length,
                 Grobal2.HUMAN_EQUIPPED_ITEM_COUNT);
@@ -171,14 +173,14 @@ namespace GameSvr
 
                 var idents = stdItem.NativeItemExtAbilIdents;
                 var values = stdItem.NativeItemExtAbilValues;
-                var pairCount = Math.Min(idents?.Length ?? 0,
-                    values?.Length ?? 0);
+                var pairCount = Math.Min(6, Math.Min(idents?.Length ?? 0,
+                    values?.Length ?? 0));
                 for (var pair = 0; pair < pairCount; pair++)
                 {
-                    if (idents[pair] == 201)
+                    if (unchecked((byte)idents[pair]) == 201)
                     {
                         aggregate = unchecked((ushort)(aggregate +
-                            values[pair]));
+                            unchecked((byte)values[pair])));
                     }
                 }
             }
@@ -224,9 +226,11 @@ namespace GameSvr
                     continue;
                 }
 
-                for (var pair = 0; pair < idents.Length; pair++)
+                var pairCount = Math.Min(6, idents.Length);
+                for (var pair = 0; pair < pairCount; pair++)
                 {
-                    if (idents[pair] == 128 || idents[pair] == 138)
+                    var ident = unchecked((byte)idents[pair]);
+                    if (ident == 128 || ident == 138)
                     {
                         return true;
                     }

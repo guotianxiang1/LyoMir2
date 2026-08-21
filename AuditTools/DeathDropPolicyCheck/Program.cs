@@ -219,12 +219,16 @@ var hitter = new AnimalObject();
 // this check deliberately does not claim to implement the other extension arms.
 M2Share.UserEngine.StdItemList.Clear();
 var aggregateItem = new GoodItem { Name = "drop-aggregate" };
-aggregateItem.NativeItemExtAbilIdents[0] = 201;
-aggregateItem.NativeItemExtAbilValues[0] = 61;
-aggregateItem.NativeItemExtAbilIdents[1] = 128;
+aggregateItem.NativeItemExtAbilIdents[0] = 0x01C9;
+aggregateItem.NativeItemExtAbilValues[0] = 0x013D;
+aggregateItem.NativeItemExtAbilIdents[1] = 0x0180;
+aggregateItem.NativeItemExtAbilIdents[2] = 0x01AA;
+aggregateItem.NativeItemExtAbilValues[2] = 0x0107;
 var secondAggregateItem = new GoodItem { Name = "drop-aggregate-2" };
-secondAggregateItem.NativeItemExtAbilIdents[0] = 201;
-secondAggregateItem.NativeItemExtAbilValues[0] = 49;
+secondAggregateItem.NativeItemExtAbilIdents[0] = 0x01C9;
+secondAggregateItem.NativeItemExtAbilValues[0] = 0x0131;
+secondAggregateItem.NativeItemExtAbilIdents[1] = 0x01AE;
+secondAggregateItem.NativeItemExtAbilValues[1] = 0x0109;
 var brokenAggregateItem = new GoodItem { Name = "drop-aggregate-broken" };
 brokenAggregateItem.NativeItemExtAbilIdents[0] = 201;
 brokenAggregateItem.NativeItemExtAbilValues[0] = 999;
@@ -232,6 +236,8 @@ var unparsedAggregateItem = new GoodItem { Name = "drop-aggregate-unparsed",
     NativeItemExtAbilParsed = false };
 unparsedAggregateItem.NativeItemExtAbilIdents[0] = 201;
 unparsedAggregateItem.NativeItemExtAbilValues[0] = 999;
+unparsedAggregateItem.NativeItemExtAbilIdents[1] = 170;
+unparsedAggregateItem.NativeItemExtAbilValues[1] = 999;
 M2Share.UserEngine.StdItemList.Add(aggregateItem);
 M2Share.UserEngine.StdItemList.Add(secondAggregateItem);
 M2Share.UserEngine.StdItemList.Add(brokenAggregateItem);
@@ -255,10 +261,31 @@ var recalcMethod = typeof(TBaseObject).GetMethod(
     System.Reflection.BindingFlags.Instance |
     System.Reflection.BindingFlags.NonPublic)
     ?? throw new MissingMethodException("NativeRecalcDropRareFields");
+var physicalAggregateMethod = typeof(TBaseObject).GetMethod(
+    "NativeEquipPhysicalReductionAggregate",
+    System.Reflection.BindingFlags.Instance |
+    System.Reflection.BindingFlags.NonPublic)
+    ?? throw new MissingMethodException("NativeEquipPhysicalReductionAggregate");
+var physicalRecalcMethod = typeof(TBaseObject).GetMethod(
+    "NativeRecalcPhysicalReductionPercent",
+    System.Reflection.BindingFlags.Instance |
+    System.Reflection.BindingFlags.NonPublic)
+    ?? throw new MissingMethodException("NativeRecalcPhysicalReductionPercent");
 Check((int)aggregateMethod.Invoke(animal, null)! == 110,
-    "0x7623B5: positive-durability equipped ident-201 values 61+49 feed agg1; broken/unparsed items are ignored");
+    "0x7620DA/0x7623B2: ident and value both use their low byte; 201 contributes 61+49 and broken/unparsed items are ignored");
 Check((bool)gateMethod.Invoke(animal, null)!,
-    "0x76231B/0x762372: equipped ident 128 sets agg2+0x25 gate");
+    "0x7620DA/0x76231B: equipped ident low byte 128 sets agg2+0x25 gate");
+Check((int)physicalAggregateMethod.Invoke(animal, null)! == 16,
+    "0x7620DA/0x7623A8: ident low bytes 170 and 174 contribute value low bytes 7+9; unparsed definitions are ignored");
+physicalRecalcMethod.Invoke(animal, null);
+Check(animal.m_wNativePhysicalDamageReductionPercent == 36,
+    "0x73DEA8/0x73DEC7: physical reduction receives low-word aggregate 16 plus gate 20");
+animal.m_WAbil.HP = 2000;
+animal.m_WAbil.MaxHP = 2000;
+animal.m_WAbil.MP = 0;
+Check(animal.ApplyNativePhysicalLandingDamage(1000) == 640 &&
+      animal.m_WAbil.HP == 1360,
+    "0x73F903..0x73F92C: live 36-percent aggregate reduces 1000 physical landing damage to 640");
 recalcMethod.Invoke(animal, null);
 Check(animal.m_nNativeDropRareBase == 11,
     "0x73DAC5/0x73DAC1: aggregate 110 uses unsigned WORD / 10 => [+0x18C]=11");
@@ -271,6 +298,9 @@ recalcMethod.Invoke(animal, null);
 Check(animal.m_nNativeDropRareBase == 0 &&
       animal.m_btNativeDropRareKillerBonus == 0,
     "sub_75EE78 positive-durability gate: no live equipped item clears both derived fields");
+physicalRecalcMethod.Invoke(animal, null);
+Check(animal.m_wNativePhysicalDamageReductionPercent == 0,
+    "physical reduction positive-durability gate: no live equipped item clears the derived field");
 
 animal.SetLastHiter(hitter);
 Check(ReferenceEquals(animal.m_LastHiter, hitter) && ReferenceEquals(animal.m_ExpHitter, hitter),

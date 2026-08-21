@@ -34,12 +34,10 @@ namespace GameSvr
         //       0x73F920 cmp eax,0x4E20 / 0x73F925 jle / 0x73F927 mov eax,0x4E20 ; 上钳 20000
         //       0x73F92C sub esi,eax                          ; damage -= reduction
         //     self+0x2DC = 「百分比物理减伤总量」。它由 RecalcAbilitys(sub_73D500)在装备
-        //     扩展属性聚合子系统(sub_75EE78,容器+0x48/+0x1F8)重算时累加而成,来源含
-        //     0x73DEB1 `add word[self+0x2DC],ax`(ax=m_btNativeDamageShare 零扩展)与
-        //     0x73DEC7 `add word[self+0x2DC],0x14`([self+0x1D5] 门控)。该聚合子系统 C# 整套
-        //     未移植(见 TBaseObject.NativeDeathDropDenominator.cs),故 self+0x2DC 当前无活
-        //     字段、恒 0 —— 与 C# 其余所有伤害路径读到的 self+0x2DC 一致。见
-        //     NativePhysicalPercentDamageReduction()。
+        //     扩展属性聚合子系统(sub_75EE78,容器+0x48/+0x1F8)重算时累加而成,来源为
+        //     0x73DEA8 的装备扩展属性 0xAA..0xAE 低字节之和、0x73DEB1 的
+        //     m_btNativeDamageShare 零扩展，以及 0x73DEC7 的扩展属性 128/138 门控 +20。
+        //     三个已证实输入现由 NativeRecalcPhysicalReductionPercent()重建。
         //
         //  ② 护甲掷点 0x73F92E..0x73F94C -> [vmt+0x50]=sub_744894:
         //       0x73F92E push esi(damage) / push &[ebp-8](dwordOut) / push &[ebp-0xA](wordOut)
@@ -106,17 +104,17 @@ namespace GameSvr
         /// <para>
         /// 其填充在 RecalcAbilitys(sub_73D500)内,由 self+0x2DC 三条 add 累加而成:
         /// write#1 0x73DEA8 `add word[self+0x2DC],word[agg1+0x58]`(装备扩展属性聚合,
-        /// 类型 0xAA..0xAE,BLOCKED)、write#2 0x73DEB7 `add word[self+0x2DC],ax`
+        /// 类型 0xAA..0xAE 的值低字节)、write#2 0x73DEB7 `add word[self+0x2DC],ax`
         /// (ax=m_btNativeDamageShare 零扩展,活字段)、write#3 0x73DEC7
         /// `add word[self+0x2DC],0x14`([self+0x1D5]=NativeDropRareKillerBonusGate 门控,
-        /// BLOCKED)。种子经 sub_73D3E4(base[+0x260]=0)复位为 0。完整逐字节见
+        /// 由装备扩展属性 128/138 置位)。种子经 sub_73D3E4(base[+0x260]=0)复位为 0。完整逐字节见
         /// <c>TBaseObject.NativePhysicalPercentReduction.cs</c>。
         /// </para>
         /// <para>
         /// 现已作为真实字段 <see cref="m_wNativePhysicalDamageReductionPercent"/> 落地:
-        /// write#2(m_btNativeDamageShare, GM 359 @ChgDmgShare / 持久化)为活值;
-        /// write#1/#3 依赖的装备扩展属性聚合子系统仍 BLOCKED(≡0/false),补齐后本访问器
-        /// 自动返回其贡献。
+        /// write#1 消费已解析的装备扩展属性 170..174，write#2 消费
+        /// m_btNativeDamageShare(GM 359 @ChgDmgShare / 持久化)，write#3 复用
+        /// 已验证的装备扩展属性 128/138 门。
         /// </para>
         /// </summary>
         private int NativePhysicalPercentDamageReduction() => m_wNativePhysicalDamageReductionPercent;
@@ -124,7 +122,7 @@ namespace GameSvr
         /// <summary>
         /// 战神 sub_73F8E0(VMT+0x1AC)物理落地伤害管线,建模为 param3=0/param4=0 形态
         /// (0x39/0x47 两个调用点的唯一入参形态,见文件头逐阶段字节)。忠实复刻:
-        /// 阶段① 百分比减伤(self+0x2DC,当前源 BLOCKED 恒 0)→ 阶段② 护甲(param3=0 证明塌缩,
+        /// 阶段① 百分比减伤(self+0x2DC)→ 阶段② 护甲(param3=0 证明塌缩,
         /// 无加成/无广播)→ 阶段③ HasState(8) 随机缩放 → 下限钳 → 阶段⑦ sub_767BA8(param3=0
         /// 原样返回)→ 阶段⑧ DamageHealth。返回喂给 DamageHealth 的最终落地伤害
         /// (native 自身返回 0/被忽略,此处返回值仅便于核对)。
@@ -134,7 +132,7 @@ namespace GameSvr
         {
             var damage = rawDamage;
 
-            // ① 0x73F903..0x73F92C 百分比减伤(self+0x2DC,源 BLOCKED 恒 0)。
+            // ① 0x73F903..0x73F92C 百分比减伤(self+0x2DC)。
             // 0x73F903 mov cx,[edi+0x2DC] / 0x73F90F movsx eax,cx:字段是 word,以有符号 16 位读入。
             var pct = (short)NativePhysicalPercentDamageReduction();
             if (pct > 0) // 0x73F90A test cx,cx / 0x73F90D jle(有符号 16 位比较)

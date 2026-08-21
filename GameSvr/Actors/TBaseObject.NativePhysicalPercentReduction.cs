@@ -1,3 +1,5 @@
+using SystemModule;
+
 namespace GameSvr
 {
     // ============================================================================
@@ -38,13 +40,15 @@ namespace GameSvr
     //     edi+0x58 = 容器聚合块 agg1(容器+0x48) 的 +0x58。agg1+0x58 是 **DWORD** 累加器
     //     (0x7623AB 01 46 58 add dword[esi+0x58],eax)，由装备扩展属性分发器
     //     (sub_76203C / 兄弟 sub_762974) 的 slot 26 臂(0x76238E→0x7623A6)喂养：
-    //       0x7623A8  8A 43 13   mov al,[ebx+0x13]      ; ebx = StdItem+4 栈副本 ⇒ StdItem+0x17 属性值
+    //       0x7623A6  33 C0      xor eax,eax
+    //       0x7623A8  8A 43 13   mov al,[ebx+0x13]      ; ebx = StdItem+4 栈副本 ⇒ StdItem+0x17 属性值低字节
     //       0x7623AB  01 46 58   add dword[agg1+0x58],eax
+    //     0x7620DA 用 AL 读取 StdItem+0x15，因此属性编号同样只取低字节。
     //     反查 152 项槽表(0x7620F8)：落到 slot 26 的属性类型 = 0xAA..0xAE(170..174)。
-    //     ⇒ write#1 = Σ(身上装备中扩展属性类型∈{0xAA..0xAE}的 StdItem+0x17 之和)，读其低 word。
-    //     该装备扩展属性聚合子系统(sub_75EE78→sub_75EE04→[vmt+0x5C]=sub_75F728→
-    //     [vmt+0x54]=sub_76203C)C# 整套未移植(见 TBaseObject.NativeDeathDropDenominator.cs)，
-    //     故 NativeEquipPhysicalReductionAggregate() ≡ 0 —— BLOCKED，fail-closed。
+    //     ⇒ write#1 = Σ(身上装备中扩展属性类型∈{0xAA..0xAE}的 byte(StdItem+0x17))，
+    //     先按 DWORD 累加，再读其低 word。
+    //     GoodItem 已保留 2.08 原生六组扩展属性槽，本实现直接消费这些已解析定义，
+    //     精确恢复类型 0xAA..0xAE 对 agg1+0x58 的贡献；其它分发臂不在本文件扩展。
     //
     //  【write#2】0x73DEAF 33 C0 xor eax,eax / 0x73DEB1 8A 86 78 05 00 00 mov al,[esi+0x578]
     //     / 0x73DEB7 66 01 86 DC 02 00 00 add word[esi+0x2DC],ax。零扩展一个 byte。
@@ -57,16 +61,13 @@ namespace GameSvr
     //     四个写者全是扩展属性臂里的 C6 40 25 01(0x76231B/0x762372/0x762B26/0x762B6A)。
     //     同一道门在 0x73DECF 还把 self+0x579 置 10 —— 即已建模的
     //     NativeDropRareKillerBonusGate()（见 TBaseObject.NativeDeathDropDenominator.cs）。
-    //     该门属同一 BLOCKED 子系统，当前 ≡ false，故 write#3 现恒不触发（复用同一钩子，
-    //     子系统落地后自动生效）。
+    //     同一道门已由 NativeDropRareKillerBonusGate() 从扩展属性 128/138 恢复，
+    //     因此 write#3 与爆装凶手减项共享同一个已验证谓词。
     //
     // ── 顺序说明（与 NativeRecalcDropRareFields 相同的既定约定）─────────────────────
-    //  原生 write#1..#3 在装备扫描/容器聚合之后(0x73DExx)。C# 因 agg1/agg2 聚合子系统
-    //  BLOCKED(≡0/false)，把本重算并入重置段(RecalcAbilitys 里 NativeRecalcDropRareFields
-    //  之后)——只有在 NativeEquipPhysicalReductionAggregate()≡0 且门≡false 时等价；
-    //  write#2(m_btNativeDamageShare)与装备扫描无关，任何顺序都对。谁把扩展属性聚合
-    //  子系统补上，必须把本步挪到装备扫描之后，并接上 NativeEquipPhysicalReductionAggregate()
-    //  与 NativeDropRareKillerBonusGate() 两个钩子。
+    //  原生 write#1..#3 在装备扫描/容器聚合之后(0x73DExx)。本实现直接扫描同一批
+    //  正耐久装备定义，而不是依赖一个临时 agg1/agg2 缓冲，因此在重算重置段求值仍
+    //  得到相同的三个输入；write#2(m_btNativeDamageShare)与装备扫描无关。
     // ============================================================================
     public partial class TBaseObject
     {
@@ -80,10 +81,54 @@ namespace GameSvr
 
         /// <summary>
         /// write#1 源：agg1+0x58（DWORD 累加器）的低 word。= 身上装备扩展属性类型
-        /// ∈{0xAA..0xAE} 的 StdItem+0x17 之和（分发器 slot 26 臂 0x76238E/0x7623A6）。
-        /// 该装备扩展属性聚合子系统 C# 未移植，恒 0（BLOCKED，见文件头 write#1）。
+        /// ∈{0xAA..0xAE} 的 StdItem+0x17 低字节之和（分发器 slot 26 臂
+        /// 0x76238E/0x7623A6）。
+        /// GoodItem 已映射原生六组扩展属性槽；这里只消费已证实的 170..174。
         /// </summary>
-        protected virtual int NativeEquipPhysicalReductionAggregate() => 0;
+        protected virtual int NativeEquipPhysicalReductionAggregate()
+        {
+            if (m_UseItems == null || M2Share.UserEngine == null)
+            {
+                return 0;
+            }
+
+            // 0x7623AB is a DWORD add, then 0x73DEA4 reads only AX.  Preserve
+            // both widths: accumulate modulo 2^32 and return the low word.
+            uint aggregate = 0;
+            var count = Math.Min(m_UseItems.Length,
+                Grobal2.HUMAN_EQUIPPED_ITEM_COUNT);
+            for (var slot = 0; slot < count; slot++)
+            {
+                var userItem = m_UseItems[slot];
+                if (userItem == null || userItem.wIndex <= 0 ||
+                    userItem.Dura <= 0)
+                {
+                    continue;
+                }
+
+                var stdItem = M2Share.UserEngine.GetStdItem(userItem.wIndex);
+                if (stdItem == null || !stdItem.NativeItemExtAbilParsed)
+                {
+                    continue;
+                }
+
+                var idents = stdItem.NativeItemExtAbilIdents;
+                var values = stdItem.NativeItemExtAbilValues;
+                var pairCount = Math.Min(6, Math.Min(idents?.Length ?? 0,
+                    values?.Length ?? 0));
+                for (var pair = 0; pair < pairCount; pair++)
+                {
+                    var ident = unchecked((byte)idents[pair]);
+                    if (ident >= 0xAA && ident <= 0xAE)
+                    {
+                        aggregate = unchecked(aggregate +
+                            unchecked((byte)values[pair]));
+                    }
+                }
+            }
+
+            return unchecked((ushort)aggregate);
+        }
 
         /// <summary>
         /// write#2 源：byte[self+0x578] 零扩展（0x73DEB1）。TBaseObject 基类无此字段，
@@ -100,7 +145,7 @@ namespace GameSvr
             // total 用 int 聚合、末尾截 16 位，与原生对 word 逐条 add 的最终低 16 位一致
             // （模 2^16 加法可结合）。self+0x2DC 读端为有符号 word，故存 short。
             var total = 0;
-            total += NativeEquipPhysicalReductionAggregate(); // 0x73DEA8 write#1（BLOCKED ≡ 0）
+            total += NativeEquipPhysicalReductionAggregate(); // 0x73DEA8 write#1
             total += NativePhysicalReductionDamageShare();    // 0x73DEB7 write#2（m_btNativeDamageShare）
             if (NativeDropRareKillerBonusGate())              // 0x73DEBE 门 self+0x1D5
             {
