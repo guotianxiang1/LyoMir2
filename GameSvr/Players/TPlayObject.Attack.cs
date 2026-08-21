@@ -154,7 +154,18 @@ namespace GameSvr
                     switch (wIdent)
                     {
                         case Grobal2.CM_HIT:
-                            AttackDir(null, 0, nDir);
+                            // Native sub_6EC078 @0x6EC1E2 dispatches job 3
+                            // through action 0x400; every other job keeps the
+                            // ordinary action-1000 arm @0x6EC200.
+                            if (m_btJob == 3)
+                            {
+                                m_btDirection = nDir;
+                                RunNativeAction1024();
+                            }
+                            else
+                            {
+                                AttackDir(null, 0, nDir);
+                            }
                             break;
                         case Grobal2.CM_HEAVYHIT:
                             AttackDir(null, 1, nDir);

@@ -126,9 +126,10 @@ namespace GameSvr
         /// routine <c>sub_77136C</c> does that once in its tail:
         /// <c>test edi,edi / jle</c> @0x77143F, counter-positive test
         /// @0x771443, then <c>dec word [self+0x3E0]</c> @0x771453. The live
-        /// action-1024 dispatcher is still a separate production gap; callers
-        /// must use <see cref="ConsumeNativeSkill154StrikeAfterMainDamage"/>
-        /// only after that action's main carrier returns a positive value.
+        /// action-1024 dispatcher therefore calls
+        /// <see cref="ConsumeNativeSkill154StrikeAfterPositiveAttackPower"/>
+        /// with the pre-delivery power held in EDI. Final applied damage is
+        /// irrelevant to this gate.
         /// </para>
         /// </summary>
         internal int ApplyNativeSkill154BurstDamage(int damage, int attackKind)
@@ -148,13 +149,14 @@ namespace GameSvr
 
         /// <summary>
         /// Native action-1024 tail @0x77143F..0x771459. This is deliberately
-        /// separate from the damage resolver because failed/non-positive main
-        /// carriers do not spend a charge, and the counter must not underflow.
+        /// separate from the damage resolver because EDI is the power rolled
+        /// before either direct carrier. Even an immune target spends a charge
+        /// when that rolled power is positive; the counter cannot underflow.
         /// </summary>
-        internal void ConsumeNativeSkill154StrikeAfterMainDamage(
-            int mainApplied)
+        internal void ConsumeNativeSkill154StrikeAfterPositiveAttackPower(
+            int attackPower)
         {
-            if (mainApplied > 0 && m_nNativeSkill154StrikeCount > 0)
+            if (attackPower > 0 && m_nNativeSkill154StrikeCount > 0)
                 m_nNativeSkill154StrikeCount--;
         }
 

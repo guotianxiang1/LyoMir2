@@ -262,7 +262,7 @@ static void VerifySkill154BurstBeforeState16Cap()
         "skill154 uncapped landing HP");
     Equal((ushort)1, GetField<ushort>(source,
         "m_nNativeSkill154StrikeCount"),
-        "skill154 resolver consumed count");
+        "skill154 resolver must not consume count");
 
     var cappedTarget = NewPlayer();
     PrepareLanding(cappedTarget, 10_000);
@@ -282,12 +282,12 @@ static void VerifySkill154BurstBeforeState16Cap()
     ConsumeSkill154(source, 0);
     Equal((ushort)1, GetField<ushort>(source,
         "m_nNativeSkill154StrikeCount"),
-        "skill154 non-positive carrier consumed count");
+        "skill154 zero attack power consumed count");
     ConsumeSkill154(source, 1);
     ConsumeSkill154(source, 1);
     Equal((ushort)0, GetField<ushort>(source,
         "m_nNativeSkill154StrikeCount"),
-        "skill154 positive carrier count/underflow");
+        "skill154 positive attack power count/underflow");
 }
 
 static void VerifySpecialDirectLandingIsolation()
@@ -437,14 +437,14 @@ static void SetNativeCoreCcHigh(TBaseObject actor, int value)
     SetField(actor, "m_NativeCoreWorkingAbility", ability);
 }
 
-static void ConsumeSkill154(TBaseObject actor, int mainApplied)
+static void ConsumeSkill154(TBaseObject actor, int attackPower)
 {
     MethodInfo method = typeof(TBaseObject).GetMethod(
-        "ConsumeNativeSkill154StrikeAfterMainDamage",
+        "ConsumeNativeSkill154StrikeAfterPositiveAttackPower",
         BindingFlags.Instance | BindingFlags.NonPublic) ??
         throw new MissingMethodException(
-            "ConsumeNativeSkill154StrikeAfterMainDamage");
-    method.Invoke(actor, new object[] { mainApplied });
+            "ConsumeNativeSkill154StrikeAfterPositiveAttackPower");
+    method.Invoke(actor, new object[] { attackPower });
 }
 
 static void SetCritical(TBaseObject actor, short chance, int increase)
