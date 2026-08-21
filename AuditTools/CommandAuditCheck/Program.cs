@@ -204,6 +204,10 @@ foreach (var implementedFile in new[]
              // non-ghost ReadyRun target and mutates only +0x1829/+0x180C.
              // Zero clears; nonzero stores currentDay+7-days and never moves/logs.
              "HackFlagCommand.cs",
+             // case 151 @0x006255EE -> sub_6D321C resolves the same target.
+             // A flagged target clears +0x1829/+0x180C/+0x7B0/+0x7B4 and
+             // state 25; the privileged unflagged branch sets tier 3.
+             "ClearHackFlagCommand.cs",
              // case 358 @0x00627FD5 selects self for an empty first token or
              // resolves sub_652784's non-ghost ReadyRun player, then invokes
              // vtbl+0x84 Die(). Missing targets and all successful paths are silent.
@@ -326,6 +330,22 @@ Assert(!hackFlag.Contains("NativeMirrorAntiCheatPenalty", StringComparison.Ordin
        !hackFlag.Contains("AddGameDataLog", StringComparison.Ordinal) &&
        !hackFlag.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "HackFlag introduced non-native mirror movement/log/failure behavior");
+
+var clearHackFlag = Read("ClearHackFlagCommand.cs");
+Assert(clearHackFlag.Contains(
+           "GameCommand(\"ClearHackFlag\", \"设置/清除角色使用非法外挂的限制\", \"角色名\", 4)",
+           StringComparison.Ordinal) &&
+       clearHackFlag.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
+       clearHackFlag.Contains("NativeGmClearHackFlag.Evaluate", StringComparison.Ordinal) &&
+       clearHackFlag.Contains("m_nNativeQuizCooldown", StringComparison.Ordinal) &&
+       clearHackFlag.Contains("m_nNativeQuizAnswerCount", StringComparison.Ordinal) &&
+       clearHackFlag.Contains("RemoveNativeTimedAbilityByInternalType", StringComparison.Ordinal),
+    "ClearHackFlag command drifted from sub_6D321C target/state behavior");
+Assert(!clearHackFlag.Contains("NativeMirrorAntiCheatPenalty", StringComparison.Ordinal) &&
+       !clearHackFlag.Contains("TrySpaceMove", StringComparison.Ordinal) &&
+       !clearHackFlag.Contains("AddGameDataLog", StringComparison.Ordinal) &&
+       !clearHackFlag.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "ClearHackFlag introduced non-native mirror movement/log/failure behavior");
 
 var reshuaMonScript = Read("ReshuaMonScriptCommand.cs");
 Assert(reshuaMonScript.Contains(

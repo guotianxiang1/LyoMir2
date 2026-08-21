@@ -94,9 +94,12 @@ namespace GameSvr
 
             NativeMakePosion(25, NativeClientVersionPenaltySeconds, 0);
 
-            // Native also clears +7B0/+7B4/+7C3/+7C4 here. The quiz poser and
-            // answer-window driver are dormant in this port, so those four
-            // values have no live carrier and are already permanently zero.
+            // 0x6B37A6/0x6B37AC clear the two dword quiz counters.
+            m_nNativeQuizCooldown = 0;
+            m_nNativeQuizAnswerCount = 0;
+
+            // Native also clears +7C3/+7C4 here. Their producers remain
+            // dormant in this port, so those two flags have no live carrier.
             if (m_Abil.Level < 8)
             {
                 NativeMirrorChatBan.Add(m_sCharName,

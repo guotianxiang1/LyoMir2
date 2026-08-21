@@ -15,8 +15,8 @@ using GameSvr.CommandSystem;
 //
 // Command Types are reflection-loaded from the GameSvr assembly and matched by
 // GameCommandAttribute.Name (case-insensitive), which is immune to class-name
-// drift. Several of the 93 commands live on classes whose name differs from the
-// command name -- e.g. "Make" is on MakeItemCommond (note the "Commond" typo),
+// drift. Several commands live on classes whose name differs from the command
+// name -- e.g. "Make" is on MakeItemCommond (note the "Commond" typo),
 // "AttackMode" on ChangeAttackModeCommand, "Rest" on ChangeSalveStatusCommand --
 // so a hardcoded typeof(<Command>Command) list would not even compile.
 
@@ -144,6 +144,7 @@ Census("AttackMode", 0);
 Census("ClearNickLinfu", 4);
 Census("ChgMonAtt", 4);
 Census("CreditCard", 4);
+Census("ClearHackFlag", 4);
 Census("DelHero", 4);
 Census("GetUserItem", 4);
 Census("HackFlag", 4);

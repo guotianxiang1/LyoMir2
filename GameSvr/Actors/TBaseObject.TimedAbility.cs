@@ -285,6 +285,13 @@ namespace GameSvr
             return RemoveTimedAbilityInternal(internalType);
         }
 
+        /// <summary>
+        /// Narrow assembly-internal entry for native callers that already hold
+        /// the internal state id, such as sub_6D321C removing state 25.
+        /// </summary>
+        internal bool RemoveNativeTimedAbilityByInternalType(byte internalType)
+            => RemoveTimedAbilityInternal(internalType);
+
         private bool RemoveTimedAbilityInternal(byte internalType)
         {
             if (!HasNativeActiveState(internalType))

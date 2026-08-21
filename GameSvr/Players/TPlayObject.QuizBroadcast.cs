@@ -117,6 +117,12 @@ namespace GameSvr
     /// </summary>
     public partial class TPlayObject
     {
+        /// <summary>Native Self+0x7B0 quiz cooldown/timer.</summary>
+        internal int m_nNativeQuizCooldown;
+
+        /// <summary>Native Self+0x7B4 quiz speak/answer count.</summary>
+        internal int m_nNativeQuizAnswerCount;
+
         // Idents whose faithful native behaviour is a silent no-op in this port (answer-state
         // dormant), surfaced once per ident so it reads as "faithful dormant", NOT as a gap/drop.
         private static readonly HashSet<int> s_quizDormantNoted = new HashSet<int>();

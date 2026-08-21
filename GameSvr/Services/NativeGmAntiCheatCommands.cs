@@ -43,9 +43,9 @@ namespace GameSvr
     //     511 ViewMonitor   perm3  @0x00629502  ->  sub_79F5C4(buf, arg); SysMsg(view, 0xFFDB)   [always]
     //     516 ReloadSmsUserList perm4 @0x006294A9 -> ok=sub_6556F4(); SysMsg(ok?done:fail, 0xFFDB) (off_7D6D50)
     //
-    //   sub_6D440C (HackFlag) is fully recovered and wired. The remaining core subs are deferred: their
-    //   result/effect is taken as an INPUT here, never fabricated. Dispatcher-level ladders remain
-    //   modelled exactly (guards, global writes, SysMsg presence + colour).
+    //   sub_6D321C (ClearHackFlag) and sub_6D440C (HackFlag) are fully recovered and wired. The
+    //   remaining core subs are deferred: their result/effect is taken as an INPUT here, never
+    //   fabricated. Dispatcher-level ladders remain modelled exactly.
     //
     //   Shared cores worth noting: SetIpHumanMaxCount(501) and ReloadWhiteList(505) both tail into the
     //   generic server-config core sub_7130E8(selfByte, keyString, intValue) (also used by
@@ -148,7 +148,7 @@ namespace GameSvr
         public const uint PlayerListEa = 0x007D6D50;           // off_7D6D50: online player list
         public const uint MonitorListEa = 0x007D62A4;          // off_7D62A4: monitor list
 
-        // core subs (HackFlag recovered; the others remain deferred)
+        // core subs (ClearHackFlag/HackFlag recovered; the others remain deferred)
         public const uint CoreMapUserInfo = 0x006D6698;   // sub_6D6698
         public const uint CoreClearHackFlag = 0x006D321C; // sub_6D321C
         public const uint CoreHackPunishApply = 0x00713890; // sub_713890
@@ -167,7 +167,7 @@ namespace GameSvr
         private static readonly GmAntiCheatCommandInfo[] Registry =
         {
             new() { Command = GmAntiCheatCommand.MapUserInfo,        Name = "MapUserInfo",        DispatchIndex = 74,  RequiredPermission = 3, Implemented = true, CaseAddress = 0x00624D3B, CoreAddress = CoreMapUserInfo,     CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 0, DispatcherSendsSysMsg = false },
-            new() { Command = GmAntiCheatCommand.ClearHackFlag,      Name = "ClearHackFlag",      DispatchIndex = 151, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006255EE, CoreAddress = CoreClearHackFlag,   CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 0, DispatcherSendsSysMsg = false },
+            new() { Command = GmAntiCheatCommand.ClearHackFlag,      Name = "ClearHackFlag",      DispatchIndex = 151, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006255EE, CoreAddress = CoreClearHackFlag,   CoreBodyDeferred = false, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 1, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.Hackerpunish,       Name = "Hackerpunish",       DispatchIndex = 152, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006255FE, CoreAddress = CoreHackPunishApply, CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = true  },
             new() { Command = GmAntiCheatCommand.HackFlag,           Name = "HackFlag",           DispatchIndex = 153, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00625690, CoreAddress = CoreHackFlag,        CoreBodyDeferred = false, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IPHackFlag,         Name = "IPHackFlag",         DispatchIndex = 154, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006256A3, CoreAddress = CoreIpHackFlag,      CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
@@ -208,7 +208,7 @@ namespace GameSvr
 
         /// <summary>
         /// Forward contract for a ForwardOnly / ParseIntThenCore command: recognized by the table,
-        /// permission-gated, then the case body tail-calls its (deferred) core with the string args
+        /// permission-gated, then the case body tail-calls its core with the string args
         /// passed straight through. The dispatcher itself sends no message.
         /// </summary>
         public static GmAntiCheatForward ForwardContract(GmAntiCheatCommand command)
@@ -222,6 +222,103 @@ namespace GameSvr
                 CoreStringArgs = info.CoreStringArgs,
                 ParsesLeadingInt = info.Shape == GmAntiCheatShape.ParseIntThenCore,
                 CoreBodyDeferred = info.CoreBodyDeferred,
+            };
+        }
+    }
+
+    // ===================== ClearHackFlag (idx 151) =====================
+    // sub_6D321C @0x006D321C:
+    //   empty target name -> silent;
+    //   target = sub_652784(name); missing/ghost/not-ReadyRun -> cx=0x38FF;
+    //   target tier != 0 -> clear +0x1829/+0x180C/+0x7B0/+0x7B4,
+    //                       RemoveState(25), cx=0xFFDB;
+    //   target tier == 0 && target permission > 3 -> tier=3,
+    //                       expiry=sub_6D43C4(invoking GM), cx=0x38FF;
+    //   otherwise -> no mutation, cx=0xFFDB.
+    public enum ClearHackFlagBranch
+    {
+        TargetNameEmpty,
+        TargetMissing,
+        Cleared,
+        AppliedToPrivilegedTarget,
+        NoRestriction,
+    }
+
+    public sealed class ClearHackFlagOutcome
+    {
+        public ClearHackFlagBranch Branch { get; init; }
+        public bool MutatesTarget { get; init; }
+        public byte StoredTier { get; init; }
+        public int StoredExpiryDay { get; init; }
+        public bool ClearsQuizState { get; init; }
+        public bool RemovesTimedState25 { get; init; }
+        public bool SendsSysMsg { get; init; }
+        public int MessageColor { get; init; }
+        public string Message { get; init; }
+        public bool CoreBodyDeferred => false;
+    }
+
+    public static class NativeGmClearHackFlag
+    {
+        public static ClearHackFlagOutcome Evaluate(string targetName,
+            bool targetFound, byte targetTier, byte targetPermission,
+            int invokerCurrentDay)
+        {
+            if (string.IsNullOrEmpty(targetName))
+            {
+                return new ClearHackFlagOutcome
+                {
+                    Branch = ClearHackFlagBranch.TargetNameEmpty,
+                };
+            }
+
+            if (!targetFound)
+            {
+                return new ClearHackFlagOutcome
+                {
+                    Branch = ClearHackFlagBranch.TargetMissing,
+                    SendsSysMsg = true,
+                    MessageColor = NativeGmAntiCheatCommands.ColorEcho,
+                    Message = $"{targetName} 不在线或不在本GS服务器",
+                };
+            }
+
+            if (targetTier != 0)
+            {
+                return new ClearHackFlagOutcome
+                {
+                    Branch = ClearHackFlagBranch.Cleared,
+                    MutatesTarget = true,
+                    StoredTier = 0,
+                    StoredExpiryDay = 0,
+                    ClearsQuizState = true,
+                    RemovesTimedState25 = true,
+                    SendsSysMsg = true,
+                    MessageColor = NativeGmAntiCheatCommands.ColorNotice,
+                    Message = $"清除 {targetName} 使用非法外挂的限制成功",
+                };
+            }
+
+            if (targetPermission > 3)
+            {
+                return new ClearHackFlagOutcome
+                {
+                    Branch = ClearHackFlagBranch.AppliedToPrivilegedTarget,
+                    MutatesTarget = true,
+                    StoredTier = 3,
+                    StoredExpiryDay = invokerCurrentDay,
+                    SendsSysMsg = true,
+                    MessageColor = NativeGmAntiCheatCommands.ColorEcho,
+                    Message = $"设置 {targetName} 使用非法外挂成功",
+                };
+            }
+
+            return new ClearHackFlagOutcome
+            {
+                Branch = ClearHackFlagBranch.NoRestriction,
+                SendsSysMsg = true,
+                MessageColor = NativeGmAntiCheatCommands.ColorNotice,
+                Message = $"{targetName} 没有受到外挂惩罚机制的限制",
             };
         }
     }
