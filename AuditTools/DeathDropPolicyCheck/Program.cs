@@ -202,6 +202,7 @@ Console.WriteLine("== E: items 7-10 — behavioural, incl. two anti-regression l
 PrepareConfig();
 M2Share.g_Config = new GameSvrConfig();
 M2Share.RandomNumber = RandomNumber.GetInstance();
+M2Share.UserEngine = new UserEngine();
 M2Share.ObjectManager = new ObjectManager();   // TBaseObject ctor calls RegisterConstructed
 
 var actorSource = ReadRepoFile("GameSvr/Actors/TBaseObject.cs");
@@ -210,6 +211,67 @@ var actorSource = ReadRepoFile("GameSvr/Actors/TBaseObject.cs");
 // WHOLE function a no-op on a null hitter.  Driven for real, not pattern-matched.
 var animal = new AnimalObject();
 var hitter = new AnimalObject();
+
+// E0. The native 0x7623B0 extension arm feeds agg1+0x5E only for ident 201,
+// while the four 0x76231B/0x762372/0x762B26/0x762B6A arms set agg2+0x25 for
+// idents 128/138.  Both scans admit only positive-durability equipped items.
+// GoodItem is the already-published six-slot 2.08 StdItem extension surface;
+// this check deliberately does not claim to implement the other extension arms.
+M2Share.UserEngine.StdItemList.Clear();
+var aggregateItem = new GoodItem { Name = "drop-aggregate" };
+aggregateItem.NativeItemExtAbilIdents[0] = 201;
+aggregateItem.NativeItemExtAbilValues[0] = 61;
+aggregateItem.NativeItemExtAbilIdents[1] = 128;
+var secondAggregateItem = new GoodItem { Name = "drop-aggregate-2" };
+secondAggregateItem.NativeItemExtAbilIdents[0] = 201;
+secondAggregateItem.NativeItemExtAbilValues[0] = 49;
+var brokenAggregateItem = new GoodItem { Name = "drop-aggregate-broken" };
+brokenAggregateItem.NativeItemExtAbilIdents[0] = 201;
+brokenAggregateItem.NativeItemExtAbilValues[0] = 999;
+var unparsedAggregateItem = new GoodItem { Name = "drop-aggregate-unparsed",
+    NativeItemExtAbilParsed = false };
+unparsedAggregateItem.NativeItemExtAbilIdents[0] = 201;
+unparsedAggregateItem.NativeItemExtAbilValues[0] = 999;
+M2Share.UserEngine.StdItemList.Add(aggregateItem);
+M2Share.UserEngine.StdItemList.Add(secondAggregateItem);
+M2Share.UserEngine.StdItemList.Add(brokenAggregateItem);
+M2Share.UserEngine.StdItemList.Add(unparsedAggregateItem);
+animal.m_UseItems[0] = new TUserItem { wIndex = 1, Dura = 100 };
+animal.m_UseItems[1] = new TUserItem { wIndex = 2, Dura = 100 };
+animal.m_UseItems[2] = new TUserItem { wIndex = 3, Dura = 0 };
+animal.m_UseItems[3] = new TUserItem { wIndex = 4, Dura = 100 };
+var aggregateMethod = typeof(TBaseObject).GetMethod(
+    "NativeEquipDropRareAggregate",
+    System.Reflection.BindingFlags.Instance |
+    System.Reflection.BindingFlags.NonPublic)
+    ?? throw new MissingMethodException("NativeEquipDropRareAggregate");
+var gateMethod = typeof(TBaseObject).GetMethod(
+    "NativeDropRareKillerBonusGate",
+    System.Reflection.BindingFlags.Instance |
+    System.Reflection.BindingFlags.NonPublic)
+    ?? throw new MissingMethodException("NativeDropRareKillerBonusGate");
+var recalcMethod = typeof(TBaseObject).GetMethod(
+    "NativeRecalcDropRareFields",
+    System.Reflection.BindingFlags.Instance |
+    System.Reflection.BindingFlags.NonPublic)
+    ?? throw new MissingMethodException("NativeRecalcDropRareFields");
+Check((int)aggregateMethod.Invoke(animal, null)! == 110,
+    "0x7623B5: positive-durability equipped ident-201 values 61+49 feed agg1; broken/unparsed items are ignored");
+Check((bool)gateMethod.Invoke(animal, null)!,
+    "0x76231B/0x762372: equipped ident 128 sets agg2+0x25 gate");
+recalcMethod.Invoke(animal, null);
+Check(animal.m_nNativeDropRareBase == 11,
+    "0x73DAC5/0x73DAC1: aggregate 110 uses unsigned WORD / 10 => [+0x18C]=11");
+Check(animal.m_btNativeDropRareKillerBonus == 10,
+    "0x73DEBE/0x73DECF: agg2+0x25 gate writes killer bonus 10");
+animal.m_UseItems[0].Dura = 0;
+animal.m_UseItems[1].Dura = 0;
+animal.m_UseItems[3].Dura = 0;
+recalcMethod.Invoke(animal, null);
+Check(animal.m_nNativeDropRareBase == 0 &&
+      animal.m_btNativeDropRareKillerBonus == 0,
+    "sub_75EE78 positive-durability gate: no live equipped item clears both derived fields");
+
 animal.SetLastHiter(hitter);
 Check(ReferenceEquals(animal.m_LastHiter, hitter) && ReferenceEquals(animal.m_ExpHitter, hitter),
     "0x767511/0x76752C: a real hitter sets m_LastHiter AND seeds m_ExpHitter");

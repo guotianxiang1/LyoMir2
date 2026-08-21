@@ -1,3 +1,5 @@
+using SystemModule;
+
 namespace GameSvr
 {
     // ------------------------------------------------------------------------------------------
@@ -113,17 +115,11 @@ namespace GameSvr
     // [+0x2DC] 是百分比减伤（sub_73F8E0 @0x73F903 `mov cx,[edi+0x2DC]` / `jle` 跳过 /
     // `imul` / `idiv 100` / 上钳 0x4E20 / `sub esi,eax`，另一处 sub_746130 @0x746177）。
     //
-    // ── 仍然 BLOCKED，但缺口已经收敛成同一件事 ───────────────────────────────────────
-    // 两个输入都出自**装备扩展属性聚合子系统**（StdItem+0x15 的类型 57..208 → 33 个臂 →
-    // agg1(容器+0x48, 0x1B0 字节) 与 agg2(容器+0x1F8, 0x36 字节)，由 sub_75EE78 重建），
-    // C# 整套没有，所以两个钩子都恒 0/false：
-    //   ① NativeEquipDropRareAggregate() ≡ 0  ⇒ 非红分母恒 90。对**没穿属性 201 装备**
-    //      的玩家这就是原生值；穿了的玩家 C# 会比原生**更容易**掉装备。
-    //   ② NativeDropRareKillerBonusGate() ≡ false ⇒ [+0x579] 恒 0，凶手侧减项不生效，
-    //      分母偏大 ⇒ 同样是**更容易掉**。
-    // 两个误差同向、有界（最坏 90 vs 90+N、21 vs 21-10），都不会让玩家比原生掉得少。
-    // 谁把聚合子系统补上，必须同时接这两个钩子，并把 NativeRecalcDropRareFields()
-    // 拆回原生顺序（清零 → 拷 agg1/agg2 → 算 [+0x18C] → 读 agg2[0x25] 定 [+0x579]）。
+    // ── C# 映射边界 ────────────────────────────────────────────────────────────────
+    // 两个输入都出自装备扩展属性分发（StdItem+0x15 的类型 57..208 → 33 个臂 →
+    // agg1/agg2）。当前 GoodItem 已保留原生六组扩展属性槽，因此本端可以精确消费
+    // 已确认的三种类型：201 -> agg1+0x5E，128/138 -> agg2+0x25。
+    // 未覆盖的其它扩展属性臂仍不参与本改动；这不是对整个装备扩展子系统的声明。
     // ------------------------------------------------------------------------------------------
     public partial class TBaseObject
     {
@@ -141,27 +137,114 @@ namespace GameSvr
 
         /// <summary>
         /// word[装备容器+0x48+0x5E] —— 身上装备扩展属性类型 201 (0xC9) 的累加值。
-        /// C# 还没有扩展属性子系统，所以恒 0（BLOCKED，见文件头 ①）。
+        /// GoodItem 已保留原生六组扩展属性槽；这里只消费已解析的装备定义，
+        /// 不推断其它扩展属性的效果。
         /// </summary>
-        protected virtual int NativeEquipDropRareAggregate() => 0;
+        protected virtual int NativeEquipDropRareAggregate()
+        {
+            if (m_UseItems == null || M2Share.UserEngine == null)
+            {
+                return 0;
+            }
+
+            // Native sub_75EE78 admits the same positive-durability equipped
+            // records that the RecalcAbilitys worker scans.  The native arm at
+            // 0x7623B0 performs `add word [agg1+0x5E], ax`, so accumulation is
+            // deliberately ushort-wrapped rather than a widened int sum.
+            ushort aggregate = 0;
+            var count = Math.Min(m_UseItems.Length,
+                Grobal2.HUMAN_EQUIPPED_ITEM_COUNT);
+            for (var slot = 0; slot < count; slot++)
+            {
+                var userItem = m_UseItems[slot];
+                if (userItem == null || userItem.wIndex <= 0 ||
+                    userItem.Dura <= 0)
+                {
+                    continue;
+                }
+
+                var stdItem = M2Share.UserEngine.GetStdItem(userItem.wIndex);
+                if (stdItem == null || !stdItem.NativeItemExtAbilParsed)
+                {
+                    continue;
+                }
+
+                var idents = stdItem.NativeItemExtAbilIdents;
+                var values = stdItem.NativeItemExtAbilValues;
+                var pairCount = Math.Min(idents?.Length ?? 0,
+                    values?.Length ?? 0);
+                for (var pair = 0; pair < pairCount; pair++)
+                {
+                    if (idents[pair] == 201)
+                    {
+                        aggregate = unchecked((ushort)(aggregate +
+                            values[pair]));
+                    }
+                }
+            }
+
+            return aggregate;
+        }
 
         /// <summary>
         /// [self+0x1D5] != 0，即 agg2[0x25]（装备容器 +0x1F8+0x25，经 0x73D64E 的
         /// rep movsd 落到 self+0x1B0+0x25）。四个写入点全是扩展属性臂里的
         /// `C6 40 25 01`（0x76231B / 0x762372 / 0x762B26 / 0x762B6A）。
-        /// C# 无该子系统，恒 false（BLOCKED，见文件头 ②）。
+        /// The native dispatcher sets this marker when an equipped extension
+        /// ident is 128 or 138.  GoodItem carries those idents, so the gate can
+        /// be reconstructed without inventing a broader extension subsystem.
         /// </summary>
-        protected virtual bool NativeDropRareKillerBonusGate() => false;
+        protected virtual bool NativeDropRareKillerBonusGate()
+        {
+            if (m_UseItems == null || M2Share.UserEngine == null)
+            {
+                return false;
+            }
+
+            var count = Math.Min(m_UseItems.Length,
+                Grobal2.HUMAN_EQUIPPED_ITEM_COUNT);
+            for (var slot = 0; slot < count; slot++)
+            {
+                var userItem = m_UseItems[slot];
+                if (userItem == null || userItem.wIndex <= 0 ||
+                    userItem.Dura <= 0)
+                {
+                    continue;
+                }
+
+                var stdItem = M2Share.UserEngine.GetStdItem(userItem.wIndex);
+                if (stdItem == null || !stdItem.NativeItemExtAbilParsed)
+                {
+                    continue;
+                }
+
+                var idents = stdItem.NativeItemExtAbilIdents;
+                if (idents == null)
+                {
+                    continue;
+                }
+
+                for (var pair = 0; pair < idents.Length; pair++)
+                {
+                    if (idents[pair] == 128 || idents[pair] == 138)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// sub_73D500 里与爆装分母有关的三次赋值：0x73D578 清 [+0x579]、
         /// 0x73DAC5 写 [+0x18C]、0x73DECF 在 [+0x1D5] 门下把 [+0x579] 置 10。
         /// 由 RecalcAbilitys 调用。
         /// <para>
-        /// 顺序注意：原生的 0x73D578 在重置段，0x73DAC5 在**装备聚合块拷贝之后**
-        /// （0x73D631 的 rep movsd）。这里三步并在重置段执行，只有在
-        /// NativeEquipDropRareAggregate() 恒 0 的当下才等价。谁实现了属性 201 的
-        /// 聚合，必须把这一步挪到装备扫描之后。
+        /// 原生的 0x73D578 在重置段，0x73DAC5 在装备聚合块拷贝之后
+        /// （0x73D631 的 rep movsd）。本实现的属性 201 聚合直接读取同一批
+        /// 正耐久装备记录，因此不依赖临时聚合块的写入顺序；其它扩展属性仍由
+        /// 各自已验证的重算分支负责。
         /// </para>
         /// </summary>
         internal void NativeRecalcDropRareFields()
