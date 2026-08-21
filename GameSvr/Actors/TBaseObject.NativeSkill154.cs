@@ -122,11 +122,13 @@ namespace GameSvr
         /// `* 5`, so 154 is NOT clamped to 5000. The fild/TRUNC of the integer
         /// product is the identity, so the bonus is simply that product.
         /// <para>
-        /// BLOCKED (wiring): identical to id 151 — the C# attack-kind
-        /// discriminator (native [ebp-8] == 0x400) and the +0x3E0 strike-count
-        /// decrement site are not yet verified, so this stays a fail-closed,
-        /// ready-to-call helper and is not wired into the melee pipeline. Note
-        /// the native consumer does NOT decrement +0x3E0 here.
+        /// The resolver arm does not decrement +0x3E0. The owning action-1024
+        /// routine <c>sub_77136C</c> does that once in its tail:
+        /// <c>test edi,edi / jle</c> @0x77143F, counter-positive test
+        /// @0x771443, then <c>dec word [self+0x3E0]</c> @0x771453. The live
+        /// action-1024 dispatcher is still a separate production gap; callers
+        /// must use <see cref="ConsumeNativeSkill154StrikeAfterMainDamage"/>
+        /// only after that action's main carrier returns a positive value.
         /// </para>
         /// </summary>
         internal int ApplyNativeSkill154BurstDamage(int damage, int attackKind)
@@ -142,6 +144,18 @@ namespace GameSvr
                 return unchecked(damage + bonus);
             }
             return damage;
+        }
+
+        /// <summary>
+        /// Native action-1024 tail @0x77143F..0x771459. This is deliberately
+        /// separate from the damage resolver because failed/non-positive main
+        /// carriers do not spend a charge, and the counter must not underflow.
+        /// </summary>
+        internal void ConsumeNativeSkill154StrikeAfterMainDamage(
+            int mainApplied)
+        {
+            if (mainApplied > 0 && m_nNativeSkill154StrikeCount > 0)
+                m_nNativeSkill154StrikeCount--;
         }
 
         internal static byte GetNativeSkill154EffectiveLevel(

@@ -96,9 +96,12 @@ namespace GameSvr
                         // returned break bonus for every flag combination.
                         damage = source.ApplyNativeSkill152OneShotBonus(
                             skillId, damage);
-                        // 0x746247..0x74628A, after the returned bonus and
-                        // before the state-16 cap at 0x7462B8.
+                        // 0x746247..0x74628A, after the returned bonus.
                         damage = source.ApplyNativeSkill151BurstDamage(
+                            damage, skillId);
+                        // 0x74628C..0x7462B6 follows 151 and immediately
+                        // precedes the state-16 cap at 0x7462B8.
+                        damage = source.ApplyNativeSkill154BurstDamage(
                             damage, skillId);
                     }
                     if ((effectiveFlags & 0x04) == 0)

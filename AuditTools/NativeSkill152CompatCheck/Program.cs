@@ -179,6 +179,8 @@ static void VerifySourceWiring()
         StringComparison.Ordinal);
     int skill151 = damage.IndexOf("ApplyNativeSkill151BurstDamage(",
         StringComparison.Ordinal);
+    int skill154 = damage.IndexOf("ApplyNativeSkill154BurstDamage(",
+        StringComparison.Ordinal);
     int cap = damage.IndexOf("ApplyNativeState16MagicDamageCap(",
         StringComparison.Ordinal);
     int contest = damage.IndexOf("ApplyNativeState16LevelContest(",
@@ -186,7 +188,8 @@ static void VerifySourceWiring()
     int shield153 = damage.IndexOf(
         "ApplyNativeSkill153ShieldToMagicDamage(", StringComparison.Ordinal);
     Assert(hq >= 0 && breakBonus > hq && bonus > breakBonus &&
-        skill151 > bonus && cap > skill151 && contest > cap &&
+        skill151 > bonus && skill154 > skill151 && cap > skill154 &&
+        contest > cap &&
         shield153 > contest,
         "one-shot resolver order differs from target human VMT+0xF4");
     Assert(!damage.Contains("(effectiveFlags & 0x0C) == 0",

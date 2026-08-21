@@ -11,12 +11,14 @@ VerifyDefenceRandomOrder();
 VerifyResolverRandomOrder();
 VerifySkill152Then153();
 VerifySkill152Flags();
+VerifySkill154BurstBeforeState16Cap();
 VerifySpecialDirectLandingIsolation();
 
 Console.WriteLine(
     "PASS native-full-magic-resolver order=closed-chain " +
     "rng=breakthrough/fixed/awakening/state16/306/190/critical " +
-    "immunity=52/55-zero-side-effects skill152-before-cap-before-skill153 " +
+    "immunity=52/55-zero-side-effects skill152/151/154-before-cap-before-skill153 " +
+    "skill154=kind1024-uncapped-caller-owned-count " +
     "special=282-285+287-290-direct-landing-shell");
 return;
 
@@ -51,6 +53,7 @@ static void VerifySourceOrder()
         "damage = unchecked(damage + breakBonus);",
         "source.ApplyNativeSkill152OneShotBonus(",
         "source.ApplyNativeSkill151BurstDamage(",
+        "source.ApplyNativeSkill154BurstDamage(",
         "ApplyNativeState16MagicDamageCap(",
         "ApplyNativeState16LevelContest(",
         "source.ApplyNativeSkill307Damage(",
@@ -223,6 +226,70 @@ static void VerifySkill152Flags()
     }
 }
 
+static void VerifySkill154BurstBeforeState16Cap()
+{
+    var source = NewActor();
+    source.m_btJob = 3;
+    SetNativeCoreCcHigh(source, 6000);
+    SetField(source, "m_nNativeSkill154StrikeCount", (ushort)1);
+    SetCritical(source, -1, 0);
+
+    var wrongKindTarget = NewPlayer();
+    PrepareLanding(wrongKindTarget, 50_000);
+    WithRandom(new[] { 999, 99 }, random =>
+    {
+        Equal(100, Resolve(wrongKindTarget, source, 0x401, false, 1, 1,
+            100), "skill154 wrong attack kind");
+        EqualSequence(new[] { 1000, 100 }, random.MaxValues,
+            "skill154 wrong-kind RNG");
+        random.AssertExhausted("skill154 wrong-kind RNG");
+    });
+    Equal((ushort)1, GetField<ushort>(source,
+        "m_nNativeSkill154StrikeCount"),
+        "skill154 wrong kind consumed count");
+
+    var uncappedTarget = NewPlayer();
+    PrepareLanding(uncappedTarget, 50_000);
+    WithRandom(new[] { 999, 99 }, random =>
+    {
+        Equal(30_100, Resolve(uncappedTarget, source, 0x400, false, 1, 1,
+            100), "skill154 uncapped max-attack burst");
+        EqualSequence(new[] { 1000, 100 }, random.MaxValues,
+            "skill154 uncapped RNG");
+        random.AssertExhausted("skill154 uncapped RNG");
+    });
+    Equal(19_900, uncappedTarget.m_WAbil.HP,
+        "skill154 uncapped landing HP");
+    Equal((ushort)1, GetField<ushort>(source,
+        "m_nNativeSkill154StrikeCount"),
+        "skill154 resolver consumed count");
+
+    var cappedTarget = NewPlayer();
+    PrepareLanding(cappedTarget, 10_000);
+    Assert(AddTimed(cappedTarget, 16, 1, -1),
+        "skill154 state16 setup");
+    WithRandom(new[] { 999, 99 }, random =>
+    {
+        Equal(800, Resolve(cappedTarget, source, 0x400, false, 1, 1,
+            100), "skill154 before state16 cap");
+        EqualSequence(new[] { 1000, 100 }, random.MaxValues,
+            "skill154 state16-cap RNG");
+        random.AssertExhausted("skill154 state16-cap RNG");
+    });
+    Equal(9_200, cappedTarget.m_WAbil.HP,
+        "skill154 state16-cap landing HP");
+
+    ConsumeSkill154(source, 0);
+    Equal((ushort)1, GetField<ushort>(source,
+        "m_nNativeSkill154StrikeCount"),
+        "skill154 non-positive carrier consumed count");
+    ConsumeSkill154(source, 1);
+    ConsumeSkill154(source, 1);
+    Equal((ushort)0, GetField<ushort>(source,
+        "m_nNativeSkill154StrikeCount"),
+        "skill154 positive carrier count/underflow");
+}
+
 static void VerifySpecialDirectLandingIsolation()
 {
     foreach (int skillId in Enumerable.Range(282, 4)
@@ -356,6 +423,28 @@ static bool AddTimed(TBaseObject actor, byte type, int value, int duration)
         null) ?? throw new MissingMethodException("AddTimedAbilityInternal");
     return (bool)(method.Invoke(actor,
         new object[] { type, value, duration, (byte)0 }) ?? false);
+}
+
+static void SetNativeCoreCcHigh(TBaseObject actor, int value)
+{
+    object ability = GetField<object>(actor, "m_NativeCoreWorkingAbility");
+    FieldInfo field = ability.GetType().GetField("CCHigh",
+        BindingFlags.Instance | BindingFlags.Public |
+        BindingFlags.NonPublic) ??
+        throw new MissingFieldException(ability.GetType().FullName,
+            "CCHigh");
+    field.SetValue(ability, value);
+    SetField(actor, "m_NativeCoreWorkingAbility", ability);
+}
+
+static void ConsumeSkill154(TBaseObject actor, int mainApplied)
+{
+    MethodInfo method = typeof(TBaseObject).GetMethod(
+        "ConsumeNativeSkill154StrikeAfterMainDamage",
+        BindingFlags.Instance | BindingFlags.NonPublic) ??
+        throw new MissingMethodException(
+            "ConsumeNativeSkill154StrikeAfterMainDamage");
+    method.Invoke(actor, new object[] { mainApplied });
 }
 
 static void SetCritical(TBaseObject actor, short chance, int increase)
