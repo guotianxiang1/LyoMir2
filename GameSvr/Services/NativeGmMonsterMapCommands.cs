@@ -15,8 +15,7 @@
 // LockTimeChg/CreateCampMon/SetMapState/kickOutBlackRoom) are modeled THERE and
 // are NOT re-modeled here. This file covers the OTHER 27 monster/map/npc records.
 //
-// NOT wired into the live command pipeline; the live commands remain the
-// fail-closed stubs in GameSvr/Command/Commands/*Command.cs. This type only
+// Most entries are not wired into the live command pipeline. This type
 // *describes* the exact original contract so AuditTools/
 // NativeGmMonsterMapCommandsCheck can pin it against the binary, and so a future
 // port can reproduce each branch/effect/SysMsg precisely.
@@ -64,7 +63,7 @@
 // write the shim itself performs, and which SysMsg (if any) the shim emits. It
 // does NOT invent core-internal ladders. Where the shim performs the write inline
 // (ThroughRange, SetFountSwitch, SpiderWebTest) the effect IS fully modeled
-// (CoreBodyDeferred=false).
+// (CoreBodyDeferred=false). SetNoKillMapLv's core has since been recovered too.
 //
 // Inline global/data writes proven by the shims (absolute addresses, reliable
 // even though the decompiler flagged "bad sp value" for stack locals):
@@ -351,9 +350,10 @@ namespace GameSvr
                 "设置安全区血量,魔法恢复比值	@setRecoverFactor 血量回复值 魔法回复值",
                 "Both args present -> hp=StrToInt(arg0); mp=StrToInt(arg1); sub_62ECE0(hp) applies. Missing either "
                 + "arg -> silent. No inline SysMsg."),
-            new NativeMonsterMapCommand("SetNoKillMapLv", 392, 5, 0x006286BCu, "sub_6CDBBC", true,
+            new NativeMonsterMapCommand("SetNoKillMapLv", 392, 5, 0x006286BCu, "sub_6CDBBC", false,
                 "如果GM所在地图是NOKillMap,则设置该地图的等级上限	@SetNoKillMapLv 等级值",
-                "Parses the level then sub_6CDBBC() applies the no-kill map level cap. Delegation; no inline SysMsg."),
+                "Strict StrToInt parses the level. sub_6CDBBC reads current map+0x71: false -> SysMsg(0xFFDB) "
+                + "refusal, no write; true -> WORD map+0x74=(ushort)level and SysMsg(0xFFDB) reports the stored value."),
             new NativeMonsterMapCommand("MapCellFree", 454, 5, 0x00628B3Eu, "sub_77BEB4", true,
                 "GM设置其ownmap中的每个点为free状态	@MapCellFree",
                 "Pure delegation: sub_77BEB4() marks every cell of the GM's own map free. No SysMsg."),
@@ -473,6 +473,7 @@ namespace GameSvr
                 case "ThroughRange": return EvalThroughRange(a);
                 case "ReloadNpcPrize": return EvalReloadNpcPrize();
                 case "SetFountSwitch": return EvalSetFountSwitch(a);
+                case "SetNoKillMapLv": return EvalSetNoKillMapLv(a);
                 case "SpiderWebTest": return EvalSpiderWebTest(a);
                 case "AutoMove": return EvalAutoMove(a);
                 case "setRecoverFactor": return EvalSetRecoverFactor(a);
@@ -503,7 +504,7 @@ namespace GameSvr
 
                 default:
                     // gowgo / dingdianyidong / MonXinxi / RangeShuag / NpcHit /
-                    // LockInPlayers / MapCellFree / SetNoKillMapLv: single-branch
+                    // LockInPlayers / MapCellFree: single-branch
                     // delegations, no shim-level guard, no shim SysMsg.
                     return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.Executed,
                         "delegate", rec.NativeCore, NoSysMsg, rec.CoreBodyDeferred,
@@ -567,6 +568,30 @@ namespace GameSvr
             return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.RejectedWithGmMessage,
                 "usage", "(inline)", SysMsgUsage, false,
                 "arg matched neither open/close -> SysMsg(0x38FF) usage, no write");
+        }
+
+        // --- SetNoKillMapLv (case 392) --------------------------------------
+        private static NativeMonsterMapEvaluation EvalSetNoKillMapLv(
+            IReadOnlyList<string> a)
+        {
+            if (!TryParseStrictInt(Arg(a, 0), out var level))
+                return new NativeMonsterMapEvaluation(
+                    NativeMonsterMapOutcome.RejectedSilently,
+                    "parse-failed", "sub_40C9D8", NoSysMsg, false,
+                    "strict StrToInt failed before sub_6CDBBC; live port keeps state unchanged");
+
+            if (!SetNoKillMapLvMapEnabled)
+                return new NativeMonsterMapEvaluation(
+                    NativeMonsterMapOutcome.RejectedWithGmMessage,
+                    "map-not-user-no-kill", "sub_6CDBBC", SysMsgGmReply, false,
+                    "current map byte+0x71 is zero -> no write; SysMsg(0xFFDB) refusal");
+
+            var stored = unchecked((ushort)level);
+            return new NativeMonsterMapEvaluation(
+                NativeMonsterMapOutcome.ExecutedWithGmMessage,
+                "stored-word-" + stored, "sub_6CDBBC", SysMsgGmReply, false,
+                "current map WORD+0x74 = " + stored
+                + "; SysMsg(0xFFDB) reports the stored WORD value");
         }
 
         // --- SpiderWebTest (case 340) ---------------------------------------
@@ -723,6 +748,9 @@ namespace GameSvr
         /// <summary>sub_774D24 status for TempSetMapParam (default 1 = success).</summary>
         public static int TempSetMapParamStatus { get; set; } = TempSetMapParamSuccess;
 
+        /// <summary>Current map byte +0x71 oracle for SetNoKillMapLv.</summary>
+        public static bool SetNoKillMapLvMapEnabled { get; set; }
+
         private static bool ModeledMapExists(string map)
             => MapExistsHook != null && MapExistsHook(map);
 
@@ -743,5 +771,8 @@ namespace GameSvr
         // Mirrors sub_40CA18(str, default): parse int, else return the default.
         private static int StrToInt(string s, int dflt)
             => int.TryParse(s, out int v) ? v : dflt;
+
+        private static bool TryParseStrictInt(string s, out int value)
+            => PasEngine.PasApiBridge.TryParseNativeDelphiInteger(s, out value);
     }
 }

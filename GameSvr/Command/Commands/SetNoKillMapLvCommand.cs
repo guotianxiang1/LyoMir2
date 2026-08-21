@@ -36,8 +36,22 @@ namespace GameSvr
         [DefaultCommand]
         public void SetNoKillMapLv(string[] @Params, TPlayObject PlayObject)
         {
-            NativeCommandFailure.Report(PlayObject, "SetNoKillMapLv",
-                "原版 NoKillMap 等级字段尚未移植，未改写入图等级或其他地图字段。");
+            if (PlayObject?.m_PEnvir?.Flag == null || @Params == null ||
+                @Params.Length == 0 ||
+                !PasApiBridge.TryParseNativeDelphiInteger(@Params[0], out var level))
+                return;
+
+            var mapFlag = PlayObject.m_PEnvir.Flag;
+            if (!mapFlag.boUserNoKill)
+            {
+                PlayObject.SysMsg("该地图无法设定此命令", MsgColor.Green, MsgType.Hint);
+                return;
+            }
+
+            mapFlag.UserNoKillLevelCap = unchecked((ushort)level);
+            PlayObject.SysMsg(
+                $"已成功设定等级上限为{mapFlag.UserNoKillLevelCap}级",
+                MsgColor.Green, MsgType.Hint);
         }
 
         private static bool TryParseId(string parameters, out int id)

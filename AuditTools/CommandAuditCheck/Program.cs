@@ -49,7 +49,6 @@ var protectedFiles = new[]
     "ReloadunBindItemCommand.cs",
     "ReshuaMonScriptCommand.cs",
     "SendYuanBaoTextCommand.cs",
-    "SetNoKillMapLvCommand.cs",
     "SmeltEquipCommand.cs",
     "SuperMerchantCommand.cs",
 };
@@ -195,6 +194,10 @@ foreach (var implementedFile in new[]
              // case 307 @0x0062723E: strict open/close token ladder writes
              // the global byte behind off_7D6EC8 and sends one 0x38FF reply.
              "SetFountSwitchCommand.cs",
+             // case 392 @0x006286BC strictly parses one integer, then sub_6CDBBC
+             // gates on current map UserNoKill (+0x71), writes the WORD cap at
+             // +0x74, and reports both success/refusal with cx=0xFFDB.
+             "SetNoKillMapLvCommand.cs",
              // R-pass 2026-08-03 (idat_R_ap_skillexp_reload_20260803.md): the AP/信用分 family and
              // AddSkillExp wired to reversed sub_6F92xx / sub_744D4C contracts, moved out of
              // protectedFiles. AP runtime field = m_nActivePoint ([player+0x0AE4], NOT save off 0x0608);

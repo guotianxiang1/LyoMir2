@@ -53,7 +53,8 @@ Assert(commandSource.Contains("[GameCommand(\"SetNoKillMapLv\"", StringCompariso
        commandSource.Contains("\"等级\", 5)]", StringComparison.Ordinal),
     "SetNoKillMapLv GM permission contract changed");
 Assert(commandSource.Contains("public override string Handle", StringComparison.Ordinal) &&
-       commandSource.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+       commandSource.Contains("UserNoKillLevelCap", StringComparison.Ordinal) &&
+       commandSource.Contains("该地图无法设定此命令", StringComparison.Ordinal),
     "SetNoKillMapLv did not preserve the GM path while adding the client callback");
 Assert(commandSource.Contains("playObject.m_boDeath", StringComparison.Ordinal) &&
        commandSource.Contains("PluginState.Running", StringComparison.Ordinal) &&

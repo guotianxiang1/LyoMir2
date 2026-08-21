@@ -157,9 +157,9 @@ Equal(NativeMonsterMapOutcome.UnknownCommand,
 Equal(NativeMonsterMapOutcome.PermissionRejected,
     NativeGmMonsterMapCommands.Evaluate("SetNoKillMapLv", 4, null).Outcome,
     "SetNoKillMapLv perm 4 < 5 -> PermissionRejected");
-Equal(NativeMonsterMapOutcome.Executed,
+Equal(NativeMonsterMapOutcome.RejectedSilently,
     NativeGmMonsterMapCommands.Evaluate("SetNoKillMapLv", 5, null).Outcome,
-    "SetNoKillMapLv perm 5 -> Executed");
+    "SetNoKillMapLv perm 5 missing arg -> parse rejected");
 // gowgo needs only perm 0 — even a perm-0 caller proceeds.
 Equal(NativeMonsterMapOutcome.Executed,
     NativeGmMonsterMapCommands.Evaluate("gowgo", 0, new[] { "1", "2" }).Outcome,
@@ -200,7 +200,6 @@ Delegate("RangeShuag", 4, "sub_62E58C");
 Delegate("NpcHit", 4, "sub_62EA7C");
 Delegate("LockInPlayers", 3, "sub_6CDD48");
 Delegate("MapCellFree", 5, "sub_77BEB4");
-Delegate("SetNoKillMapLv", 5, "sub_6CDBBC");
 
 // ---------------------------------------------------------------------------
 // 6) Unconditional-report commands -> ExecutedWithGmMessage with the exact ident.
@@ -446,7 +445,151 @@ finally
 }
 
 // ---------------------------------------------------------------------------
-// 11) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent
+// 11) SetNoKillMapLv (392): current-map UserNoKill gate + WORD level cap
+// ---------------------------------------------------------------------------
+NativeGmMonsterMapCommands.SetNoKillMapLvMapEnabled = false;
+var noKillRejected = NativeGmMonsterMapCommands.Evaluate(
+    "SetNoKillMapLv", 5, new[] { "100" });
+Equal(NativeMonsterMapOutcome.RejectedWithGmMessage,
+    noKillRejected.Outcome,
+    "SetNoKillMapLv non-UserNoKill map -> RejectedWithGmMessage");
+Equal("map-not-user-no-kill", noKillRejected.Branch,
+    "SetNoKillMapLv non-UserNoKill branch");
+Equal(0xFFDB, noKillRejected.NativeSysMsgIdent,
+    "SetNoKillMapLv non-UserNoKill ident");
+Equal(false, noKillRejected.CoreBodyDeferred,
+    "SetNoKillMapLv recovered core is not deferred");
+
+NativeGmMonsterMapCommands.SetNoKillMapLvMapEnabled = true;
+var noKillStored = NativeGmMonsterMapCommands.Evaluate(
+    "SetNoKillMapLv", 5, new[] { "65536" });
+Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage,
+    noKillStored.Outcome,
+    "SetNoKillMapLv UserNoKill map -> ExecutedWithGmMessage");
+Equal("stored-word-0", noKillStored.Branch,
+    "SetNoKillMapLv stores low WORD");
+Equal(0xFFDB, noKillStored.NativeSysMsgIdent,
+    "SetNoKillMapLv success ident");
+Equal("stored-word-65535",
+    NativeGmMonsterMapCommands.Evaluate(
+        "SetNoKillMapLv", 5, new[] { "-1" }).Branch,
+    "SetNoKillMapLv negative value wraps to WORD");
+Equal("stored-word-0",
+    NativeGmMonsterMapCommands.Evaluate(
+        "SetNoKillMapLv", 5, new[] { "$10000" }).Branch,
+    "SetNoKillMapLv Delphi hexadecimal parsing");
+Equal(NativeMonsterMapOutcome.RejectedSilently,
+    NativeGmMonsterMapCommands.Evaluate(
+        "SetNoKillMapLv", 5, new[] { "invalid" }).Outcome,
+    "SetNoKillMapLv invalid strict integer is silent/no-write in live port");
+
+var oldNoKillProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldNoKillObjectManager = M2Share.ObjectManager;
+var oldNoKillRandomNumber = M2Share.RandomNumber;
+try
+{
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+
+    var mapFlag = new TMapFlag();
+    var player = new TPlayObject
+    {
+        m_btPermission = 5,
+        m_PEnvir = new Envirnoment { Flag = mapFlag }
+    };
+    var command = new SetNoKillMapLvCommand();
+    command.Register(
+        new GameSvr.CommandSystem.GameCommandAttribute(
+            "SetNoKillMapLv", "设置安全地图等级上限", "等级", 5),
+        typeof(SetNoKillMapLvCommand).GetMethod("SetNoKillMapLv")!);
+
+    mapFlag.UserNoKillLevelCap = 77;
+    command.SetNoKillMapLv(new[] { "100" }, player);
+    Equal((ushort)77, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv non-UserNoKill map preserves cap");
+    Equal(1, player.m_MsgList.Count,
+        "live SetNoKillMapLv non-UserNoKill queues one SysMsg");
+    Equal("该地图无法设定此命令", player.m_MsgList[0].Buff,
+        "live SetNoKillMapLv non-UserNoKill exact reply");
+    Equal(0xDB, player.m_MsgList[0].nParam1,
+        "live SetNoKillMapLv failure foreground 0xDB");
+    Equal(0xFF, player.m_MsgList[0].nParam2,
+        "live SetNoKillMapLv failure background 0xFF");
+
+    mapFlag.boUserNoKill = true;
+    player.m_MsgList.Clear();
+    command.SetNoKillMapLv(new[] { "100" }, player);
+    Equal((ushort)100, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv writes level cap");
+    Equal(1, player.m_MsgList.Count,
+        "live SetNoKillMapLv success queues one SysMsg");
+    Equal("已成功设定等级上限为100级", player.m_MsgList[0].Buff,
+        "live SetNoKillMapLv exact success reply");
+    Equal(0xDB, player.m_MsgList[0].nParam1,
+        "live SetNoKillMapLv success foreground 0xDB");
+    Equal(0xFF, player.m_MsgList[0].nParam2,
+        "live SetNoKillMapLv success background 0xFF");
+
+    foreach (var (raw, expectedCap) in new[]
+             {
+                 ("0", (ushort)0),
+                 ("-1", ushort.MaxValue),
+                 ("65535", ushort.MaxValue),
+                 ("65536", (ushort)0)
+             })
+    {
+        player.m_MsgList.Clear();
+        command.SetNoKillMapLv(new[] { raw }, player);
+        Equal(expectedCap, mapFlag.UserNoKillLevelCap,
+            $"live SetNoKillMapLv {raw} WORD store");
+        Equal($"已成功设定等级上限为{expectedCap}级", player.m_MsgList[0].Buff,
+            $"live SetNoKillMapLv {raw} reports stored WORD");
+    }
+
+    mapFlag.UserNoKillLevelCap = 321;
+    player.m_MsgList.Clear();
+    command.SetNoKillMapLv(Array.Empty<string>(), player);
+    Equal((ushort)321, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv missing arg preserves cap");
+    Equal(0, player.m_MsgList.Count,
+        "live SetNoKillMapLv missing arg is silent");
+
+    command.SetNoKillMapLv(new[] { "not-an-integer" }, player);
+    Equal((ushort)321, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv invalid integer preserves cap");
+    Equal(0, player.m_MsgList.Count,
+        "live SetNoKillMapLv invalid integer is silent");
+
+    player.m_PEnvir = null;
+    command.SetNoKillMapLv(new[] { "9" }, player);
+    Equal((ushort)321, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv null map preserves prior cap");
+    Equal(0, player.m_MsgList.Count,
+        "live SetNoKillMapLv null map is silent");
+
+    player.m_PEnvir = new Envirnoment { Flag = mapFlag };
+    player.m_btPermission = 4;
+    Equal(M2Share.g_sGameCommandPermissionTooLow, command.Handle("9", player),
+        "live SetNoKillMapLv permission 4 preserves callback gate");
+    Equal((ushort)321, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv permission 4 preserves cap");
+
+    player.m_btPermission = 5;
+    Equal<string>(null, command.Handle("9", player),
+        "live SetNoKillMapLv permission 5 executes GM path");
+    Equal((ushort)9, mapFlag.UserNoKillLevelCap,
+        "live SetNoKillMapLv permission 5 writes cap");
+}
+finally
+{
+    M2Share.ProcessMsgCriticalSection = oldNoKillProcessMsgCriticalSection;
+    M2Share.ObjectManager = oldNoKillObjectManager;
+    M2Share.RandomNumber = oldNoKillRandomNumber;
+}
+
+// ---------------------------------------------------------------------------
+// 12) SpiderWebTest (340): lasttime/codetime/effect -> 0xFCFF; else silent
 // ---------------------------------------------------------------------------
 foreach (var (sub, br) in new[] { ("lasttime", "lasttime"), ("codetime", "codetime"), ("effect", "effect") })
 {
@@ -461,7 +604,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "SpiderWebTest bogus -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 12) AutoMove (233): both coords valid -> Executed; a -1 coord -> silent
+// 13) AutoMove (233): both coords valid -> Executed; a -1 coord -> silent
 // ---------------------------------------------------------------------------
 var amOk = NativeGmMonsterMapCommands.Evaluate("AutoMove", 5, new[] { "MapA", "100", "200" });
 Equal(NativeMonsterMapOutcome.Executed, amOk.Outcome, "AutoMove valid -> Executed");
@@ -476,7 +619,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "AutoMove non-numeric coords -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 13) setRecoverFactor (375): both args -> Executed; missing -> silent
+// 14) setRecoverFactor (375): both args -> Executed; missing -> silent
 // ---------------------------------------------------------------------------
 var srf = NativeGmMonsterMapCommands.Evaluate("setRecoverFactor", 4, new[] { "10", "20" });
 Equal(NativeMonsterMapOutcome.Executed, srf.Outcome, "setRecoverFactor both -> Executed");
@@ -486,7 +629,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "setRecoverFactor missing mp -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 14) LoadMonGen (529): mongen reload; mon found/not-found/idx0; unknown silent
+// 15) LoadMonGen (529): mongen reload; mon found/not-found/idx0; unknown silent
 // ---------------------------------------------------------------------------
 var lmg = NativeGmMonsterMapCommands.Evaluate("LoadMonGen", 3, new[] { "mongen" });
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, lmg.Outcome, "LoadMonGen mongen -> ExecutedWithGmMessage");
@@ -511,7 +654,7 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     "LoadMonGen unknown sub -> RejectedSilently");
 
 // ---------------------------------------------------------------------------
-// 15) TempSetMapParam (577): usage / map-missing / add / remove / unsupported / fail
+// 16) TempSetMapParam (577): usage / map-missing / add / remove / unsupported / fail
 // ---------------------------------------------------------------------------
 var tspUsage = NativeGmMonsterMapCommands.Evaluate("TempSetMapParam", 5, System.Array.Empty<string>());
 Equal(NativeMonsterMapOutcome.RejectedWithGmMessage, tspUsage.Outcome, "TempSetMapParam no args -> RejectedWithGmMessage");
@@ -545,7 +688,7 @@ NativeGmMonsterMapCommands.TempSetMapParamStatus = NativeGmMonsterMapCommands.Te
 NativeGmMonsterMapCommands.MapExistsHook = null;
 
 // ---------------------------------------------------------------------------
-// 16) BreakLvCtrl (309): every reporting path uses 0xFFDB (coarse but true)
+// 17) BreakLvCtrl (309): every reporting path uses 0xFFDB (coarse but true)
 // ---------------------------------------------------------------------------
 var blcReport = NativeGmMonsterMapCommands.Evaluate("BreakLvCtrl", 4, System.Array.Empty<string>());
 Equal(NativeMonsterMapOutcome.ExecutedWithGmMessage, blcReport.Outcome, "BreakLvCtrl no arg -> ExecutedWithGmMessage");
