@@ -1,6 +1,10 @@
+using System.Collections;
+using System.Reflection;
 using GameSvr;
+using GameSvr.CommandSystem;
+using SystemModule;
 
-// Contract check for the dormant ANTICHEAT/IP/SECURITY GM command family model
+// Contract check for the ANTICHEAT/IP/SECURITY GM command family model
 // (GameSvr/Services/NativeGmAntiCheatCommands.cs), locked against the Hex-Rays-verified original
 // dispatcher sub_622820 (single switch, table jpt_622B15 @0x00622B1C) in the unpacked M2Server image.
 // Family 09 = 15 commands, ALL real handlers (0 no-ops).
@@ -11,6 +15,8 @@ try
     VerifyRegistry();
     VerifyNoNoOps();
     VerifyForwardContracts();
+    VerifyHackFlag();
+    VerifyHackFlagRuntime();
     VerifyHackerpunish();
     VerifyClientVersion();
     VerifySetIpHumanMaxCount();
@@ -21,13 +27,14 @@ try
     Console.WriteLine(
         "PASS NativeGmAntiCheatCommandsCheck dispatcher=sub_622820 table=0x622B1C max=750 family=09 " +
         "commands=15 impl=15 noop=0 " +
+        "recovered=HackFlag " +
         "ladders=Hackerpunish/ClientVersion/SetIpHumanMaxCount/ReloadWhiteList/ViewMonitor/ReloadSmsUserList " +
-        "forward=MapUserInfo/ClearHackFlag/HackFlag/IPHackFlag/IPOutSay/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
+        "deferred=MapUserInfo/ClearHackFlag/IPHackFlag/IPOutSay/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
     return 0;
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"NativeGmAntiCheatCommandsCheck FAIL: {ex.Message}");
+    Console.Error.WriteLine($"NativeGmAntiCheatCommandsCheck FAIL: {ex}");
     return 1;
 }
 
@@ -100,7 +107,8 @@ static void VerifyRegistry()
         Equal(info.CoreStringArgs, e.args, $"{e.cmd} core string args");
         Equal(info.DispatcherSendsSysMsg, e.msg, $"{e.cmd} dispatcher SysMsg");
         Assert(info.Implemented, $"{e.cmd} implemented");
-        Assert(info.CoreBodyDeferred, $"{e.cmd} core body deferred");
+        Equal(info.CoreBodyDeferred, e.cmd != GmAntiCheatCommand.HackFlag,
+            $"{e.cmd} core body deferred");
         Assert(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmAntiCheatCommands.SwitchMaxIndex,
             $"{e.cmd} index in switch range");
         Assert(info.CaseAddress != NativeGmAntiCheatCommands.DefaultCaseEa, $"{e.cmd} not on no-op sink #1");
@@ -113,23 +121,29 @@ static void VerifyNoNoOps()
     // Family 09 is the only fully-implemented family: every command has a distinct real case body.
     Equal(NativeGmAntiCheatCommands.NoOpCount, 0, "family 09 no-op count");
     foreach (var info in NativeGmAntiCheatCommands.All)
-        Assert(info.Implemented && info.CoreBodyDeferred, $"{info.Command} impl+deferred");
+    {
+        Assert(info.Implemented, $"{info.Command} implemented");
+        Equal(info.CoreBodyDeferred,
+            info.Command != GmAntiCheatCommand.HackFlag,
+            $"{info.Command} recovered/deferred state");
+    }
 }
 
 static void VerifyForwardContracts()
 {
     // ForwardOnly / ParseIntThenCore commands: recognized, gated, forward to a deferred core, no dispatcher SysMsg.
-    (GmAntiCheatCommand cmd, uint coreEa, int args, bool parsesInt)[] fwd =
+    (GmAntiCheatCommand cmd, uint coreEa, int args, bool parsesInt,
+        bool deferred)[] fwd =
     {
-        (GmAntiCheatCommand.MapUserInfo,   0x006D6698, 0, false),
-        (GmAntiCheatCommand.ClearHackFlag, 0x006D321C, 0, false),
-        (GmAntiCheatCommand.HackFlag,      0x006D440C, 2, false),
-        (GmAntiCheatCommand.IPHackFlag,    0x006D45C8, 2, false),
-        (GmAntiCheatCommand.IPOutSay,      0x006D4CA4, 2, false),
-        (GmAntiCheatCommand.IPHumNum,      0x006E3498, 0, true),
-        (GmAntiCheatCommand.IpBlackRoom,   0x006D49E4, 2, false),
-        (GmAntiCheatCommand.KickOutPtid,   0x00651CBC, 0, false),
-        (GmAntiCheatCommand.SetMonitor,    0x0079F908, 2, false),
+        (GmAntiCheatCommand.MapUserInfo,   0x006D6698, 0, false, true),
+        (GmAntiCheatCommand.ClearHackFlag, 0x006D321C, 0, false, true),
+        (GmAntiCheatCommand.HackFlag,      0x006D440C, 2, false, false),
+        (GmAntiCheatCommand.IPHackFlag,    0x006D45C8, 2, false, true),
+        (GmAntiCheatCommand.IPOutSay,      0x006D4CA4, 2, false, true),
+        (GmAntiCheatCommand.IPHumNum,      0x006E3498, 0, true,  true),
+        (GmAntiCheatCommand.IpBlackRoom,   0x006D49E4, 2, false, true),
+        (GmAntiCheatCommand.KickOutPtid,   0x00651CBC, 0, false, true),
+        (GmAntiCheatCommand.SetMonitor,    0x0079F908, 2, false, true),
     };
     foreach (var f in fwd)
     {
@@ -137,7 +151,8 @@ static void VerifyForwardContracts()
         Equal(c.CoreAddress, f.coreEa, $"{f.cmd} forward core");
         Equal(c.CoreStringArgs, f.args, $"{f.cmd} forward args");
         Equal(c.ParsesLeadingInt, f.parsesInt, $"{f.cmd} forward parses int");
-        Assert(c.CoreBodyDeferred, $"{f.cmd} forward deferred");
+        Equal(c.CoreBodyDeferred, f.deferred,
+            $"{f.cmd} forward recovered/deferred state");
         Assert(!c.DispatcherSendsSysMsg, $"{f.cmd} forward silent");
     }
 
@@ -146,6 +161,287 @@ static void VerifyForwardContracts()
     try { NativeGmAntiCheatCommands.ForwardContract(GmAntiCheatCommand.Hackerpunish); }
     catch (InvalidOperationException) { threw = true; }
     Assert(threw, "ladder command rejected by forward path");
+}
+
+static void VerifyHackFlag()
+{
+    var usage = NativeGmHackFlag.Evaluate(string.Empty, "9",
+        targetFound: false, currentDay: 100);
+    Equal(usage.Branch, HackFlagBranch.Usage, "HackFlag empty-name branch");
+    Assert(!usage.MutatesTarget, "HackFlag usage does not mutate target");
+    Assert(usage.SendsSysMsg, "HackFlag usage replies");
+    Equal(usage.MessageColor, NativeGmAntiCheatCommands.ColorNotice,
+        "HackFlag usage color");
+    Equal(usage.Message, NativeGmHackFlag.UsageMessage,
+        "HackFlag exact usage text");
+
+    var missing = NativeGmHackFlag.Evaluate("Nobody", "3",
+        targetFound: false, currentDay: 100);
+    Equal(missing.Branch, HackFlagBranch.TargetMissing,
+        "HackFlag missing-target branch");
+    Equal(missing.ParsedDays, 3, "HackFlag parses before lookup result");
+    Assert(!missing.MutatesTarget && !missing.SendsSysMsg,
+        "HackFlag missing target is silent and non-mutating");
+
+    var clear = NativeGmHackFlag.Evaluate("Target", "not-a-number",
+        targetFound: true, currentDay: 100);
+    Equal(clear.Branch, HackFlagBranch.Cleared,
+        "HackFlag invalid days defaults to clear");
+    Equal(clear.ParsedDays, 0, "HackFlag invalid days default");
+    Equal(clear.StoredTier, (byte)0, "HackFlag clear tier");
+    Equal(clear.StoredExpiryDay, 0, "HackFlag clear expiry");
+    Equal(clear.Message, "清除 Target 使用非法外挂的限制成功",
+        "HackFlag exact clear text");
+    Equal(clear.MessageColor, NativeGmAntiCheatCommands.ColorNotice,
+        "HackFlag clear color");
+
+    var missingDays = NativeGmHackFlag.Evaluate("Target", string.Empty,
+        targetFound: true, currentDay: 100);
+    Equal(missingDays.Branch, HackFlagBranch.Cleared,
+        "HackFlag missing days defaults to clear");
+
+    var explicitZero = NativeGmHackFlag.Evaluate("Target", "0",
+        targetFound: true, currentDay: 100);
+    Equal(explicitZero.Branch, HackFlagBranch.Cleared,
+        "HackFlag explicit zero clears");
+
+    var set = NativeGmHackFlag.Evaluate("Target", "3",
+        targetFound: true, currentDay: 100);
+    Equal(set.Branch, HackFlagBranch.Applied, "HackFlag positive branch");
+    Equal(set.StoredTier, (byte)3, "HackFlag set tier");
+    Equal(set.StoredExpiryDay, 104, "HackFlag currentDay+7-days");
+    Equal(set.Message, "设置 Target 外挂惩罚 3 天成功",
+        "HackFlag exact set text");
+    Equal(set.MessageColor, NativeGmAntiCheatCommands.ColorEcho,
+        "HackFlag set color");
+
+    var echoed = NativeGmHackFlag.Evaluate("Target", "+003",
+        targetFound: true, currentDay: 100);
+    Equal(echoed.ParsedDays, 3, "HackFlag signed padded days parse");
+    Equal(echoed.StoredExpiryDay, 104,
+        "HackFlag signed padded days arithmetic");
+    Equal(echoed.Message, "设置 Target 外挂惩罚 +003 天成功",
+        "HackFlag set message preserves original days token");
+
+    var negative = NativeGmHackFlag.Evaluate("Target", "-2",
+        targetFound: true, currentDay: 100);
+    Equal(negative.Branch, HackFlagBranch.Applied,
+        "HackFlag negative days still sets");
+    Equal(negative.StoredExpiryDay, 109,
+        "HackFlag negative days arithmetic");
+    Equal(NativeGmHackFlag.ComputeExpiryDay(int.MaxValue, -1),
+        unchecked(int.MaxValue + 7 - -1),
+        "HackFlag expiry uses unchecked Int32 arithmetic");
+    Assert(!negative.CoreBodyDeferred, "HackFlag recovered core is not deferred");
+}
+
+static void VerifyHackFlagRuntime()
+{
+    PrepareRuntimeFiles();
+    var oldConfig = M2Share.g_Config;
+    var oldProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
+    var oldObjectManager = M2Share.ObjectManager;
+    var oldRandomNumber = M2Share.RandomNumber;
+    var oldUserEngine = M2Share.UserEngine;
+    var oldLogStringList = M2Share.LogStringList;
+    var config = oldConfig ?? new GameSvrConfig();
+    var oldTestServer = config.boTestServer;
+
+    try
+    {
+        M2Share.g_Config = config;
+        config.boTestServer = false;
+        M2Share.ProcessMsgCriticalSection = new object();
+        M2Share.ObjectManager = new ObjectManager();
+        M2Share.RandomNumber = RandomNumber.GetInstance();
+        M2Share.UserEngine = new UserEngine();
+        M2Share.LogStringList = new ArrayList();
+
+        var gm = new TPlayObject
+        {
+            m_sCharName = "GameMaster",
+            m_btPermission = 4,
+            m_boReadyRun = true,
+        };
+        var originalMap = new Envirnoment { sMapName = "stay-put" };
+        var ready = new TPlayObject
+        {
+            m_sCharName = "ReadyTarget",
+            m_boReadyRun = true,
+            m_PEnvir = originalMap,
+        };
+        var ghost = new TPlayObject
+        {
+            m_sCharName = "GhostTarget",
+            m_boReadyRun = true,
+            m_boGhost = true,
+            m_btNativeCheatPenaltyTier = 1,
+            m_nNativeCheatPenaltyExpiryDay = 11,
+        };
+        var notReady = new TPlayObject
+        {
+            m_sCharName = "NotReadyTarget",
+            m_boReadyRun = false,
+            m_btNativeCheatPenaltyTier = 2,
+            m_nNativeCheatPenaltyExpiryDay = 22,
+        };
+        AddOnline(M2Share.UserEngine, ready, ghost, notReady);
+
+        var attribute = typeof(HackFlagCommand)
+            .GetCustomAttribute<GameCommandAttribute>();
+        var method = typeof(HackFlagCommand).GetMethod(
+            nameof(HackFlagCommand.HackFlag));
+        Assert(attribute != null && method != null,
+            "HackFlag live registration metadata");
+        Equal(attribute.nPermissionMin, 4,
+            "HackFlag live native permission");
+        var command = new HackFlagCommand();
+        command.Register(attribute, method);
+
+        Equal<string>(null, command.Handle(string.Empty, gm),
+            "HackFlag usage return");
+        Equal(gm.m_MsgList.Count, 1, "HackFlag usage message count");
+        Equal(gm.m_MsgList[0].Buff, NativeGmHackFlag.UsageMessage,
+            "HackFlag live exact usage text");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "HackFlag usage foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "HackFlag usage background");
+
+        gm.m_MsgList.Clear();
+        Equal<string>(null, command.Handle("Missing 3", gm),
+            "HackFlag missing target return");
+        Equal(gm.m_MsgList.Count, 0,
+            "HackFlag missing target is silent");
+
+        command.Handle("GhostTarget 3", gm);
+        command.Handle("NotReadyTarget 3", gm);
+        Equal(ghost.m_btNativeCheatPenaltyTier, (byte)1,
+            "HackFlag ghost target tier unchanged");
+        Equal(ghost.m_nNativeCheatPenaltyExpiryDay, 11,
+            "HackFlag ghost target expiry unchanged");
+        Equal(notReady.m_btNativeCheatPenaltyTier, (byte)2,
+            "HackFlag non-ReadyRun tier unchanged");
+        Equal(notReady.m_nNativeCheatPenaltyExpiryDay, 22,
+            "HackFlag non-ReadyRun expiry unchanged");
+        Equal(gm.m_MsgList.Count, 0,
+            "HackFlag ghost/non-ready paths are silent");
+
+        ready.m_btNativeCheatPenaltyTier = 2;
+        ready.m_nNativeCheatPenaltyExpiryDay = 99;
+        command.Handle("readytarget not-a-number", gm);
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)0,
+            "HackFlag invalid days clears tier");
+        Equal(ready.m_nNativeCheatPenaltyExpiryDay, 0,
+            "HackFlag invalid days clears expiry");
+        Equal(gm.m_MsgList[0].Buff,
+            "清除 readytarget 使用非法外挂的限制成功",
+            "HackFlag clear preserves supplied target token");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "HackFlag clear foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "HackFlag clear background");
+
+        gm.m_MsgList.Clear();
+        ready.m_btNativeCheatPenaltyTier = 2;
+        ready.m_nNativeCheatPenaltyExpiryDay = 99;
+        command.Handle("ReadyTarget", gm);
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)0,
+            "HackFlag missing days clears tier");
+        Equal(ready.m_nNativeCheatPenaltyExpiryDay, 0,
+            "HackFlag missing days clears expiry");
+        Equal(gm.m_MsgList[0].Buff,
+            "清除 ReadyTarget 使用非法外挂的限制成功",
+            "HackFlag missing days exact clear message");
+
+        gm.m_MsgList.Clear();
+        ready.m_btNativeCheatPenaltyTier = 2;
+        ready.m_nNativeCheatPenaltyExpiryDay = 99;
+        command.Handle("ReadyTarget 0", gm);
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)0,
+            "HackFlag explicit zero clears tier");
+        Equal(ready.m_nNativeCheatPenaltyExpiryDay, 0,
+            "HackFlag explicit zero clears expiry");
+        Equal(gm.m_MsgList[0].Buff,
+            "清除 ReadyTarget 使用非法外挂的限制成功",
+            "HackFlag explicit zero exact clear message");
+
+        gm.m_MsgList.Clear();
+        var getCurrentDay = typeof(TPlayObject).GetMethod(
+            "GetNativeTruncDaysOnline",
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(
+                "TPlayObject.GetNativeTruncDaysOnline");
+        var dayBefore = (int)getCurrentDay.Invoke(ready, null)!;
+        command.Handle("ReadyTarget +003 ignored extra tokens", gm);
+        var dayAfter = (int)getCurrentDay.Invoke(ready, null)!;
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)3,
+            "HackFlag positive days sets tier 3");
+        Assert(ready.m_nNativeCheatPenaltyExpiryDay ==
+                   NativeGmHackFlag.ComputeExpiryDay(dayBefore, 3) ||
+               ready.m_nNativeCheatPenaltyExpiryDay ==
+                   NativeGmHackFlag.ComputeExpiryDay(dayAfter, 3),
+            "HackFlag positive days stores currentDay+7-days");
+        Equal(gm.m_MsgList.Count, 1,
+            "HackFlag positive days one message");
+        Equal(gm.m_MsgList[0].Buff,
+            "设置 ReadyTarget 外挂惩罚 +003 天成功",
+            "HackFlag preserves days token and ignores extra parameters");
+        Equal(gm.m_MsgList[0].nParam1, 0xFF,
+            "HackFlag set foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0x38,
+            "HackFlag set background");
+        Assert(ReferenceEquals(ready.m_PEnvir, originalMap),
+            "HackFlag does not move target to black room");
+        Equal(M2Share.LogStringList.Count, 0,
+            "HackFlag emits no game-data log");
+        Equal(ready.m_MsgList.Count, 0,
+            "HackFlag sends no target message");
+
+        gm.m_MsgList.Clear();
+        dayBefore = (int)getCurrentDay.Invoke(ready, null)!;
+        command.Handle("ReadyTarget -2", gm);
+        dayAfter = (int)getCurrentDay.Invoke(ready, null)!;
+        Assert(ready.m_nNativeCheatPenaltyExpiryDay ==
+                   NativeGmHackFlag.ComputeExpiryDay(dayBefore, -2) ||
+               ready.m_nNativeCheatPenaltyExpiryDay ==
+                   NativeGmHackFlag.ComputeExpiryDay(dayAfter, -2),
+            "HackFlag negative days follows set branch");
+        Equal(gm.m_MsgList[0].Buff,
+            "设置 ReadyTarget 外挂惩罚 -2 天成功",
+            "HackFlag negative exact message");
+
+        gm.m_MsgList.Clear();
+        ready.m_btNativeCheatPenaltyTier = 1;
+        ready.m_nNativeCheatPenaltyExpiryDay = 123;
+        gm.m_btPermission = 3;
+        Equal(command.Handle("ReadyTarget 5", gm),
+            "该命令需要4级GM才能使用",
+            "HackFlag permission 3 rejected by normal gate");
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)1,
+            "HackFlag permission rejection preserves tier");
+        Equal(ready.m_nNativeCheatPenaltyExpiryDay, 123,
+            "HackFlag permission rejection preserves expiry");
+        Equal(gm.m_MsgList.Count, 0,
+            "HackFlag permission gate does not invoke body");
+
+        gm.m_btPermission = 4;
+        M2Share.UserEngine = null;
+        command.HackFlag(new[] { "ReadyTarget", "5" }, gm);
+        Equal(gm.m_MsgList.Count, 0,
+            "HackFlag null engine is silent");
+        command.HackFlag(null, null);
+    }
+    finally
+    {
+        config.boTestServer = oldTestServer;
+        M2Share.g_Config = oldConfig;
+        M2Share.ProcessMsgCriticalSection = oldProcessMsgCriticalSection;
+        M2Share.ObjectManager = oldObjectManager;
+        M2Share.RandomNumber = oldRandomNumber;
+        M2Share.UserEngine = oldUserEngine;
+        M2Share.LogStringList = oldLogStringList;
+    }
 }
 
 static void VerifyHackerpunish()
@@ -241,4 +537,34 @@ static void VerifyReloadSmsUserList()
     Equal(fail.Branch, ReloadSmsUserListBranch.Failure, "sms fail branch");
     Assert(fail.SendsSysMsg, "sms fail msg");
     Equal(fail.MessageColor, NativeGmAntiCheatCommands.ColorNotice, "sms fail colour");
+}
+
+static void AddOnline(UserEngine engine, params TPlayObject[] players)
+{
+    var field = typeof(UserEngine).GetField("m_PlayObjectList",
+        BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(typeof(UserEngine).FullName,
+            "m_PlayObjectList");
+    if (field.GetValue(engine) is not IList<TPlayObject> online)
+        throw new InvalidOperationException("unexpected online-player list");
+    foreach (var player in players)
+        online.Add(player);
+}
+
+static void PrepareRuntimeFiles()
+{
+    var runtimeDirectory = AppContext.BaseDirectory;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "!Setup.txt"),
+        "[Server]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "String.ini"),
+        "[String]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(runtimeDirectory, "Command.conf"),
+        "[Command]" + Environment.NewLine);
+    var shareDirectory = Path.Combine(Path.GetFullPath(
+        Path.Combine(runtimeDirectory, "..")), "Share");
+    Directory.CreateDirectory(shareDirectory);
+    File.WriteAllText(Path.Combine(shareDirectory, "PlayerUpgradeExp.ini"),
+        "[PlayerLevelExp]" + Environment.NewLine);
+    File.WriteAllText(Path.Combine(shareDirectory, "ServerData.ini"),
+        "[Integer]" + Environment.NewLine);
 }

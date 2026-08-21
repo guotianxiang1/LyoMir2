@@ -1,11 +1,9 @@
 namespace GameSvr
 {
     // ------------------------------------------------------------------------------------------------
-    // Dormant model of the ANTICHEAT / IP / SECURITY GM command family (inventory family 09), reversed
-    // 1:1 from the original Delphi M2Server. NOT wired into the live command table — the few live
-    // commands with these names remain the perm-10 stubs in GameSvr/Command/Commands/*Command.cs. This
-    // type only *describes* the exact original contract so an AuditTools check can lock it, and so a
-    // future port can reproduce it precisely instead of guessing.
+    // Model of the ANTICHEAT / IP / SECURITY GM command family (inventory family 09), reversed 1:1
+    // from the original Delphi M2Server. Recovered cores are wired into the live command table one at
+    // a time; unrecovered cores remain explicit deferred contracts instead of guessed behavior.
     //
     // Evidence (IDA/Hex-Rays over the unpacked image m2full.i64, image base 0x00400000; dump-only,
     // no idat/dotnet executed):
@@ -45,10 +43,9 @@ namespace GameSvr
     //     511 ViewMonitor   perm3  @0x00629502  ->  sub_79F5C4(buf, arg); SysMsg(view, 0xFFDB)   [always]
     //     516 ReloadSmsUserList perm4 @0x006294A9 -> ok=sub_6556F4(); SysMsg(ok?done:fail, 0xFFDB) (off_7D6D50)
     //
-    //   Every core sub above (sub_6D6698/6D321C/713890/6D440C/6D45C8/6D4CA4/6E3498/6D49E4/655954/651CBC/
-    //   7130E8/6556F4/79F908/79F5C4) is NOT present in the dumps -> CoreBodyDeferred: its result/effect
-    //   is taken as an INPUT here, never fabricated. What is modelled is the exact dispatcher-level
-    //   ladder (guards, global writes, SysMsg presence + colour) that the case body itself performs.
+    //   sub_6D440C (HackFlag) is fully recovered and wired. The remaining core subs are deferred: their
+    //   result/effect is taken as an INPUT here, never fabricated. Dispatcher-level ladders remain
+    //   modelled exactly (guards, global writes, SysMsg presence + colour).
     //
     //   Shared cores worth noting: SetIpHumanMaxCount(501) and ReloadWhiteList(505) both tail into the
     //   generic server-config core sub_7130E8(selfByte, keyString, intValue) (also used by
@@ -124,8 +121,8 @@ namespace GameSvr
         public int CoreStringArgs { get; init; }
         /// <summary>True when the dispatcher parses one leading int before the core call (IPHumNum).</summary>
         public bool ParsesLeadingInt { get; init; }
-        /// <summary>The core body is always deferred for family 09.</summary>
-        public bool CoreBodyDeferred => true;
+        /// <summary>True while the forwarded core body has not yet been recovered.</summary>
+        public bool CoreBodyDeferred { get; init; }
         /// <summary>Forward cases never emit a SysMsg from the dispatcher; the core may.</summary>
         public bool DispatcherSendsSysMsg => false;
     }
@@ -151,7 +148,7 @@ namespace GameSvr
         public const uint PlayerListEa = 0x007D6D50;           // off_7D6D50: online player list
         public const uint MonitorListEa = 0x007D62A4;          // off_7D62A4: monitor list
 
-        // core subs (all deferred — bodies not in the dumps)
+        // core subs (HackFlag recovered; the others remain deferred)
         public const uint CoreMapUserInfo = 0x006D6698;   // sub_6D6698
         public const uint CoreClearHackFlag = 0x006D321C; // sub_6D321C
         public const uint CoreHackPunishApply = 0x00713890; // sub_713890
@@ -172,7 +169,7 @@ namespace GameSvr
             new() { Command = GmAntiCheatCommand.MapUserInfo,        Name = "MapUserInfo",        DispatchIndex = 74,  RequiredPermission = 3, Implemented = true, CaseAddress = 0x00624D3B, CoreAddress = CoreMapUserInfo,     CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 0, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.ClearHackFlag,      Name = "ClearHackFlag",      DispatchIndex = 151, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006255EE, CoreAddress = CoreClearHackFlag,   CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 0, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.Hackerpunish,       Name = "Hackerpunish",       DispatchIndex = 152, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006255FE, CoreAddress = CoreHackPunishApply, CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = true  },
-            new() { Command = GmAntiCheatCommand.HackFlag,           Name = "HackFlag",           DispatchIndex = 153, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00625690, CoreAddress = CoreHackFlag,        CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
+            new() { Command = GmAntiCheatCommand.HackFlag,           Name = "HackFlag",           DispatchIndex = 153, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00625690, CoreAddress = CoreHackFlag,        CoreBodyDeferred = false, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IPHackFlag,         Name = "IPHackFlag",         DispatchIndex = 154, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006256A3, CoreAddress = CoreIpHackFlag,      CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IPOutSay,           Name = "IPOutSay",           DispatchIndex = 158, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006258AC, CoreAddress = CoreIpOutSay,        CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IPHumNum,           Name = "IPHumNum",           DispatchIndex = 160, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006256B6, CoreAddress = CoreIpHumNum,        CoreBodyDeferred = true, Shape = GmAntiCheatShape.ParseIntThenCore, CoreStringArgs = 0, DispatcherSendsSysMsg = false },
@@ -224,8 +221,99 @@ namespace GameSvr
                 CoreAddress = info.CoreAddress,
                 CoreStringArgs = info.CoreStringArgs,
                 ParsesLeadingInt = info.Shape == GmAntiCheatShape.ParseIntThenCore,
+                CoreBodyDeferred = info.CoreBodyDeferred,
             };
         }
+    }
+
+    // ===================== HackFlag (idx 153) =====================
+    // sub_6D440C @0x006D440C:
+    //   empty target name -> usage, cx=0xFFDB;
+    //   days = StrToIntDef(arg2, 0); target = sub_652784(arg1);
+    //   missing/ghost/not-ReadyRun target -> silent;
+    //   days == 0 -> [target+0x1829]=0, [target+0x180C]=0, cx=0xFFDB;
+    //   days != 0 -> [target+0x1829]=3,
+    //                [target+0x180C]=unchecked(sub_6D43C4(target)+7-days), cx=0x38FF.
+    public enum HackFlagBranch
+    {
+        Usage,
+        TargetMissing,
+        Cleared,
+        Applied,
+    }
+
+    public sealed class HackFlagOutcome
+    {
+        public HackFlagBranch Branch { get; init; }
+        public int ParsedDays { get; init; }
+        public bool MutatesTarget { get; init; }
+        public byte StoredTier { get; init; }
+        public int StoredExpiryDay { get; init; }
+        public bool SendsSysMsg { get; init; }
+        public int MessageColor { get; init; }
+        public string Message { get; init; }
+        public bool CoreBodyDeferred => false;
+    }
+
+    public static class NativeGmHackFlag
+    {
+        public const string UsageMessage =
+            "设置标志：@HackFlag <玩家名> <天数> （天数=0清除）";
+
+        public static HackFlagOutcome Evaluate(string targetName,
+            string daysText, bool targetFound, int currentDay)
+        {
+            if (string.IsNullOrEmpty(targetName))
+            {
+                return new HackFlagOutcome
+                {
+                    Branch = HackFlagBranch.Usage,
+                    SendsSysMsg = true,
+                    MessageColor = NativeGmAntiCheatCommands.ColorNotice,
+                    Message = UsageMessage,
+                };
+            }
+
+            var days = SystemModule.HUtil32.Str_ToInt(daysText, 0);
+            if (!targetFound)
+            {
+                return new HackFlagOutcome
+                {
+                    Branch = HackFlagBranch.TargetMissing,
+                    ParsedDays = days,
+                };
+            }
+
+            if (days == 0)
+            {
+                return new HackFlagOutcome
+                {
+                    Branch = HackFlagBranch.Cleared,
+                    ParsedDays = days,
+                    MutatesTarget = true,
+                    StoredTier = 0,
+                    StoredExpiryDay = 0,
+                    SendsSysMsg = true,
+                    MessageColor = NativeGmAntiCheatCommands.ColorNotice,
+                    Message = $"清除 {targetName} 使用非法外挂的限制成功",
+                };
+            }
+
+            return new HackFlagOutcome
+            {
+                Branch = HackFlagBranch.Applied,
+                ParsedDays = days,
+                MutatesTarget = true,
+                StoredTier = 3,
+                StoredExpiryDay = ComputeExpiryDay(currentDay, days),
+                SendsSysMsg = true,
+                MessageColor = NativeGmAntiCheatCommands.ColorEcho,
+                Message = $"设置 {targetName} 外挂惩罚 {daysText} 天成功",
+            };
+        }
+
+        public static int ComputeExpiryDay(int currentDay, int penaltyDays) =>
+            unchecked(currentDay + 7 - penaltyDays);
     }
 
     // ===================== Hackerpunish (idx 152) =====================

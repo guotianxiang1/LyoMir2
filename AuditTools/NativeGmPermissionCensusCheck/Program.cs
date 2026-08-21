@@ -146,6 +146,7 @@ Census("ChgMonAtt", 4);
 Census("CreditCard", 4);
 Census("DelHero", 4);
 Census("GetUserItem", 4);
+Census("HackFlag", 4);
 Census("MapDropItem", 4);
 Census("Rest", 0);
 Census("SetAllGM", 5);

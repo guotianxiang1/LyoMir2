@@ -200,6 +200,10 @@ foreach (var implementedFile in new[]
              // sub_77BEB4 clears only byte +0 of every 12-byte cell record.
              // The recovered command is argument-free and sends no SysMsg.
              "MapCellFreeCommand.cs",
+             // case 153 @0x00625690 -> sub_6D440C resolves sub_652784's
+             // non-ghost ReadyRun target and mutates only +0x1829/+0x180C.
+             // Zero clears; nonzero stores currentDay+7-days and never moves/logs.
+             "HackFlagCommand.cs",
              // case 358 @0x00627FD5 selects self for an empty first token or
              // resolves sub_652784's non-ghost ReadyRun player, then invokes
              // vtbl+0x84 Die(). Missing targets and all successful paths are silent.
@@ -307,6 +311,21 @@ Assert(mapCellFree.Contains(
        !mapCellFree.Contains("string[]", StringComparison.Ordinal) &&
        !mapCellFree.Contains("SysMsg", StringComparison.Ordinal),
     "MapCellFree lost its native no-argument, current-map, silent contract");
+
+var hackFlag = Read("HackFlagCommand.cs");
+Assert(hackFlag.Contains(
+           "GameCommand(\"HackFlag\", \"设置/清除角色使用非法外挂的惩罚天数(天数,@0就是清除)\", \"角色名 天数\", 4)",
+           StringComparison.Ordinal) &&
+       hackFlag.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
+       hackFlag.Contains("NativeGmHackFlag.Evaluate", StringComparison.Ordinal) &&
+       hackFlag.Contains("m_btNativeCheatPenaltyTier", StringComparison.Ordinal) &&
+       hackFlag.Contains("m_nNativeCheatPenaltyExpiryDay", StringComparison.Ordinal),
+    "HackFlag command drifted from sub_6D440C target/field behavior");
+Assert(!hackFlag.Contains("NativeMirrorAntiCheatPenalty", StringComparison.Ordinal) &&
+       !hackFlag.Contains("TrySpaceMove", StringComparison.Ordinal) &&
+       !hackFlag.Contains("AddGameDataLog", StringComparison.Ordinal) &&
+       !hackFlag.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "HackFlag introduced non-native mirror movement/log/failure behavior");
 
 var reshuaMonScript = Read("ReshuaMonScriptCommand.cs");
 Assert(reshuaMonScript.Contains(
