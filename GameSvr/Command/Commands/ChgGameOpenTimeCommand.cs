@@ -1,4 +1,6 @@
 using GameSvr.CommandSystem;
+using GameSvr.Configs;
+using System.Globalization;
 using SystemModule;
 
 namespace GameSvr
@@ -26,20 +28,24 @@ namespace GameSvr
                 PlayObject.SysMsg(NativeUsage, MsgColor.Red, MsgType.Hint);
                 return;
             }
-            // 参数非空 -> 0062B44B call sub_6FA494(self, p1)，随后 jmp 0x62B64C（成功路径静默）。
-            // sub_6FA494 已反汇编但未移植：
-            //   0x006FA4DA  path := ExtractFilePath(ExeName) + "!Setup.txt"  [串 0x006FA618 len=10]
-            //   0x006FA4E7  FileExists(path) 为假 -> 直接返回，不回消息
-            //   0x006FA4FE  TIniFile.Create(path)
-            //   0x006FA525  StrToDate(p1) -> 存入全局 double [0x007D6320] -> 0x007DCF7C
-            //   0x006FA544  FormatDateTime("YYYY-MM-DD", 该值)             [串 0x006FA62C]
-            //   0x006FA55C  ini.WriteString("Setup", "OpenDay", s)  [串 0x006FA650 / 0x006FA640]
-            //   0x006FA57C  mov cx,0xFFDB（绿）SysMsg("开区时间:" + s +
-            //               "已写入!Setup.txt中, 下次启动仍有效")  [0x006FA660 / 0x006FA674]
-            // 本仓没有对应的开区日期全局，也没有 [Setup]OpenDay 的读取端；只补写入端会造成
-            // 读/写/持久化三条路径不一致，故此处明确拒绝而不是静默成功。
-            NativeCommandFailure.Report(PlayObject, "ChgOpenGameTime",
-                "开区日期全局([0x007D6320])与 [Setup]OpenDay 读取端尚未移植，未写入 !Setup.txt。");
+            if (!DateTime.TryParseExact(sDate.Trim(), ServerConfig.OpenDayFormat,
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var openDay))
+            {
+                PlayObject.SysMsg(NativeUsage, MsgColor.Red, MsgType.Hint);
+                return;
+            }
+
+            // 参数非空 -> 0062B44B call sub_6FA494(self, p1)，随后 jmp 0x62B64C。
+            // sub_6FA494: FileExists(!Setup.txt) false -> silent; otherwise write the
+            // canonical YYYY-MM-DD value and report the exact green confirmation.
+            if (!M2Share.ServerConf.TryWriteOpenDay(openDay, out var formatted))
+            {
+                return;
+            }
+
+            M2Share.g_Config.OpenDay = openDay.Date;
+            PlayObject.SysMsg("开区时间:" + formatted +
+                "已写入!Setup.txt中, 下次启动仍有效", MsgColor.Green, MsgType.Hint);
         }
     }
 }

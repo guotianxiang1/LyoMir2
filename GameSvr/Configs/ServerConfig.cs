@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using SystemModule;
 using SystemModule.Common;
 
@@ -12,6 +13,10 @@ namespace GameSvr.Configs
     /// </summary>
     public class ServerConfig : IniFile
     {
+        public const string OpenDaySection = "Setup";
+        public const string OpenDayKey = "OpenDay";
+        public const string OpenDayFormat = "yyyy-MM-dd";
+
         private readonly string _itemNumberPath;
         private readonly string _formGmSetPath;
         private readonly object _itemNumberSaveLock = new();
@@ -21,11 +26,50 @@ namespace GameSvr.Configs
             var configDirectory = Path.GetDirectoryName(fileName) ?? string.Empty;
             _itemNumberPath = Path.Combine(configDirectory, "ItemNumber.Dat");
             _formGmSetPath = Path.Combine(configDirectory, "FormGMSet.ini");
-            Load();
+            // Native ChgOpenGameTime checks FileExists(!Setup.txt) and returns silently
+            // when the file is absent. Keep a missing setup file absent instead of letting
+            // IniFile.Load create an empty one as a side effect.
+            if (File.Exists(fileName) && new FileInfo(fileName).Length > 0)
+            {
+                Load();
+                LoadOpenDay();
+            }
+        }
+
+        /// <summary>Current native [Setup]OpenDay value, or null when absent/invalid.</summary>
+        public DateTime? OpenDay { get; private set; }
+
+        private void LoadOpenDay()
+        {
+            var raw = ReadString(OpenDaySection, OpenDayKey, string.Empty).Trim();
+            OpenDay = DateTime.TryParseExact(raw, OpenDayFormat,
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var value)
+                ? value.Date
+                : null;
+        }
+
+        /// <summary>
+        /// Persists the native OpenDay value. Returns false when !Setup.txt is absent,
+        /// matching sub_6FA494's FileExists false branch.
+        /// </summary>
+        public bool TryWriteOpenDay(DateTime value, out string formatted)
+        {
+            formatted = value.Date.ToString(OpenDayFormat, CultureInfo.InvariantCulture);
+            if (!File.Exists(FileName))
+            {
+                return false;
+            }
+
+            WriteString(OpenDaySection, OpenDayKey, formatted);
+            OpenDay = value.Date;
+            return true;
         }
 
         public void LoadConfig()
         {
+            LoadOpenDay();
+            M2Share.g_Config.OpenDay = OpenDay;
+
             // ============ [Server] section ============
             M2Share.nServerIndex = ReadInteger("Server", "ServerIndex", M2Share.nServerIndex);
             var itemNumberSeed = unchecked((uint)M2Share.nServerIndex + 1000u);

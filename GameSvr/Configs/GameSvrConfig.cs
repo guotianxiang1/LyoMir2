@@ -4,6 +4,8 @@ namespace GameSvr
 {
     public class GameSvrConfig
     {
+        /// <summary>Native [Setup]OpenDay, when present and formatted as yyyy-MM-dd.</summary>
+        public DateTime? OpenDay;
         public string sDBType;
         public string sConnctionString;
         public string sServerName;

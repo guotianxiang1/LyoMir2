@@ -8012,11 +8012,9 @@ namespace GameSvr.PasEngine
 
                 case "getopen gametime":
                 case "getopengametime":
-                    // Return server uptime in seconds since start
-                    if (M2Share.g_dwStartTick > 0)
-                        result = PasValue.FromInt((HUtil32.GetTickCount() - M2Share.g_dwStartTick) / 1000);
-                    else
-                        result = PasValue.FromInt(0);
+                    // Native returns the persisted TDateTime global (Delphi/OLE double),
+                    // not uptime. Zero is the native empty/unset value.
+                    result = PasValue.FromDouble(M2Share.ServerConf?.OpenDay?.ToOADate() ?? 0d);
                     return true;
 
                 case "getnow":
