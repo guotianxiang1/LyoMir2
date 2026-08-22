@@ -9,7 +9,8 @@ namespace GameSvr.Configs
     /// Reads 战神 (Zhanshen) original Delphi !Setup.txt sections:
     ///   [Server], [Share], [Setup], [GameGate], [DataBase], [Authenticate]
     /// ([Names] section is handled by StringConfig.cs)
-    /// Does NOT write-back to the config file. Missing keys use C# defaults from GameSvrConfig.
+    /// The native ChgOpenGameTime path writes [Setup]OpenDay back to this file;
+    /// other missing keys use C# defaults from GameSvrConfig.
     /// </summary>
     public class ServerConfig : IniFile
     {
