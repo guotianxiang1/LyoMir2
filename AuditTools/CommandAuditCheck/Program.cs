@@ -31,7 +31,6 @@ var protectedFiles = new[]
     "BeginAreaCastleMatchCommand.cs",
     "CallTaskMonCommand.cs",
     "ChgEquipLevelCommand.cs",
-    "ChgGameOpenTimeCommand.cs",
     "EndAreaCastleMatchCommand.cs",
     "GetBackItemCommand.cs",
     "GMActCtrlCommand.cs",
@@ -241,13 +240,25 @@ foreach (var implementedFile in new[]
              "LoadValidFuncCommand.cs",
              // case 515 @0x00629465: send Type2 0184 with the invoking
              // character name; Type1 0132 later delivers the DBServer text.
-             "ReloadWhiteListCommand.cs"
+             "ReloadWhiteListCommand.cs",
+             "ChgGameOpenTimeCommand.cs"
          })
 {
     var source = Read(implementedFile);
     Assert(!source.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
         $"{implementedFile} reverted to fail-closed");
 }
+
+var chgOpenGameTime = Read("ChgGameOpenTimeCommand.cs");
+Assert(chgOpenGameTime.Contains(
+           "GameCommand(\"ChgOpenGameTime\", \"修改开区时间\", \"XXXX-XX-XX\", 5)",
+           StringComparison.Ordinal) &&
+       chgOpenGameTime.Contains("DateTime.TryParseExact", StringComparison.Ordinal) &&
+       chgOpenGameTime.Contains("TryWriteOpenDay", StringComparison.Ordinal) &&
+       chgOpenGameTime.Contains("开区时间:", StringComparison.Ordinal) &&
+       chgOpenGameTime.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !chgOpenGameTime.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "ChgOpenGameTime does not preserve the native OpenDay parse/write/success contract");
 
 var dieCommand = Read("DieCommand.cs");
 Assert(dieCommand.Contains("[GameCommand(\"Die\"", StringComparison.Ordinal) &&
