@@ -57,13 +57,15 @@
 //
 // KEY FINDING (same as the ITEM/EQUIP peer): the delegating case blocks are THIN
 // SHIMS — they marshal parsed params + self and tail-call a core subroutine
-// (sub_6CE400/sub_6BE4D0/…). Those core bodies are NOT present in the dumps, so
-// per the fail-closed rule they are abstracted as inputs (CoreBodyDeferred=true).
+// (sub_6CE400/sub_6BE4D0/…). Most of those core bodies are NOT present in the
+// dumps, so per the fail-closed rule they are abstracted as inputs
+// (CoreBodyDeferred=true); the recovered NpcHit body is modeled explicitly.
 // This model captures only what the SHIM proves: which branch fires, any inline
 // write the shim itself performs, and which SysMsg (if any) the shim emits. It
 // does NOT invent core-internal ladders. Where the shim performs the write inline
 // (ThroughRange, SetFountSwitch, SpiderWebTest) the effect IS fully modeled
-// (CoreBodyDeferred=false). SetNoKillMapLv's core has since been recovered too.
+// (CoreBodyDeferred=false). SetNoKillMapLv's and NpcHit's cores have since been
+// recovered too.
 //
 // Inline global/data writes proven by the shims (absolute addresses, reliable
 // even though the decompiler flagged "bad sp value" for stack locals):
@@ -332,9 +334,12 @@ namespace GameSvr
             new NativeMonsterMapCommand("RangeShuag", 165, 4, 0x00625CC7u, "sub_62E58C", true,
                 "范围刷怪	@RangeShuag 怪物名称 刷怪数量 刷怪范围",
                 "Pure delegation: sub_62E58C(count, self, monName, range) spawns monsters across a radius. No SysMsg."),
-            new NativeMonsterMapCommand("NpcHit", 182, 4, 0x00625AF8u, "sub_62EA7C", true,
+            new NativeMonsterMapCommand("NpcHit", 182, 4, 0x00625AF8u, "sub_62EA7C", false,
                 "让自身附近的可见的NPC做一个活动的动作	@NpcHit",
-                "Pure delegation: sub_62EA7C() triggers a visible-NPC animation near the GM. No SysMsg."),
+                "Walks self.m_VisibleActors; null entries are skipped. For each BaseObject with "
+                + "m_btRaceServer == Grobal2.RC_NPC (10), calls SendRefMsg(Grobal2.RM_HIT, "
+                + "npc.m_btDirection, npc.m_nCurrX, npc.m_nCurrY, 0, string.Empty). "
+                + "Null self/list/entries are no-op; no SysMsg."),
 
             // ---- inline map / global runtime parameters -----------------------
             new NativeMonsterMapCommand("ThroughRange", 136, 4, 0x006252D3u, "(inline)", false,
@@ -487,6 +492,7 @@ namespace GameSvr
                 case "LoadMonGen": return EvalLoadMonGen(a);
                 case "TempSetMapParam": return EvalTempSetMapParam(a);
                 case "BreakLvCtrl": return EvalBreakLvCtrl(a);
+                case "NpcHit": return EvalNpcHit(rec);
 
                 // Unconditional-report commands (no guard; always one inline SysMsg).
                 case "HumNum":
@@ -511,13 +517,22 @@ namespace GameSvr
                         rec.NativeCore, SysMsgGmReply, true, "sub_67AEC0 reload then confirm");
 
                 default:
-                    // gowgo / dingdianyidong / MonXinxi / RangeShuag / NpcHit /
+                    // gowgo / dingdianyidong / MonXinxi / RangeShuag /
                     // LockInPlayers: single-branch
                     // delegations, no shim-level guard, no shim SysMsg.
                     return new NativeMonsterMapEvaluation(NativeMonsterMapOutcome.Executed,
                         "delegate", rec.NativeCore, NoSysMsg, rec.CoreBodyDeferred,
                         rec.EffectSummary);
             }
+        }
+
+        // --- NpcHit (case 182) ---------------------------------------------
+        private static NativeMonsterMapEvaluation EvalNpcHit(NativeMonsterMapCommand rec)
+        {
+            return new NativeMonsterMapEvaluation(
+                NativeMonsterMapOutcome.Executed, "visible-npc-walk",
+                rec.NativeCore, NoSysMsg, false,
+                rec.EffectSummary);
         }
 
         // --- MonNumber (case 73) --------------------------------------------

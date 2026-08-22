@@ -16,6 +16,7 @@
 // (SHA256 5540f43b…c049670b14e, image base 0x00400000).
 
 using GameSvr;
+using GameSvr.CommandSystem;
 using GameSvr.PasEngine;
 using System.Reflection;
 using SystemModule;
@@ -199,8 +200,121 @@ Delegate("gowgo", 0, "sub_6CE400");
 Delegate("dingdianyidong", 3, "sub_6BE4D0");
 Delegate("MonXinxi", 3, "sub_6BEC4C");
 Delegate("RangeShuag", 4, "sub_62E58C");
-Delegate("NpcHit", 4, "sub_62EA7C");
 Delegate("LockInPlayers", 3, "sub_6CDD48");
+
+var npcHitModel = NativeGmMonsterMapCommands.Evaluate(
+    "NpcHit", 4, new[] { "ignored", "extra" });
+Equal(NativeMonsterMapOutcome.Executed, npcHitModel.Outcome,
+    "NpcHit -> Executed");
+Equal("visible-npc-walk", npcHitModel.Branch,
+    "NpcHit recovered visible-actor branch");
+Equal("sub_62EA7C", npcHitModel.NativeCore,
+    "NpcHit recovered core");
+Equal(NativeGmMonsterMapCommands.NoSysMsg, npcHitModel.NativeSysMsgIdent,
+    "NpcHit no SysMsg");
+Equal(false, npcHitModel.CoreBodyDeferred,
+    "NpcHit recovered core is not deferred");
+Equal(true, npcHitModel.Detail.Contains("m_VisibleActors", StringComparison.Ordinal),
+    "NpcHit model walks visible actors");
+Equal(true, npcHitModel.Detail.Contains("RC_NPC (10)", StringComparison.Ordinal),
+    "NpcHit model filters race 10 NPCs");
+Equal(true, npcHitModel.Detail.Contains("RM_HIT", StringComparison.Ordinal),
+    "NpcHit model sends RM_HIT");
+
+// ---------------------------------------------------------------------------
+// 5a) Live @NpcHit: null-safe visible-actor walk, race-10 filter, exact message
+// ---------------------------------------------------------------------------
+PrepareRuntimeConfig();
+var oldNpcHitConfig = M2Share.g_Config;
+var oldNpcHitRandom = M2Share.RandomNumber;
+var oldNpcHitCriticalSection = M2Share.ProcessMsgCriticalSection;
+var oldNpcHitObjectManager = M2Share.ObjectManager;
+try
+{
+    M2Share.g_Config = new GameSvrConfig();
+    M2Share.RandomNumber = RandomNumber.GetInstance();
+    M2Share.ProcessMsgCriticalSection = new object();
+    M2Share.ObjectManager = new ObjectManager();
+
+    var npcHitPlayer = new TPlayObject();
+    var npcHitTarget = new NormNpc
+    {
+        m_boObMode = true,
+        m_PEnvir = new Envirnoment(),
+        m_btDirection = 6,
+        m_nCurrX = 123,
+        m_nCurrY = 456
+    };
+    var secondNpcHitTarget = new NormNpc
+    {
+        m_boObMode = true,
+        m_PEnvir = new Envirnoment()
+    };
+    var nonNpcTarget = new TBaseObject
+    {
+        m_boObMode = true,
+        m_PEnvir = new Envirnoment()
+    };
+    npcHitPlayer.m_VisibleActors = new List<TVisibleBaseObject>
+    {
+        null,
+        new TVisibleBaseObject(),
+        new TVisibleBaseObject { BaseObject = nonNpcTarget },
+        new TVisibleBaseObject { BaseObject = npcHitTarget },
+        new TVisibleBaseObject { BaseObject = secondNpcHitTarget }
+    };
+
+    var npcHitCommand = new NpcHitCommand();
+    npcHitCommand.NpcHit(npcHitPlayer);
+    Equal(1, npcHitTarget.m_MsgList.Count,
+        "live NpcHit sends one RM_HIT to each matching NPC");
+    Equal(1, secondNpcHitTarget.m_MsgList.Count,
+        "live NpcHit walks all matching NPCs");
+    Equal(0, nonNpcTarget.m_MsgList.Count,
+        "live NpcHit skips non-NPC races");
+    var npcHitMessage = npcHitTarget.m_MsgList[0];
+    Equal(Grobal2.RM_HIT, npcHitMessage.wIdent,
+        "live NpcHit uses RM_HIT");
+    Equal((int)npcHitTarget.m_btDirection, npcHitMessage.wParam,
+        "live NpcHit forwards NPC direction");
+    Equal(npcHitTarget.m_nCurrX, npcHitMessage.nParam1,
+        "live NpcHit forwards NPC X");
+    Equal(npcHitTarget.m_nCurrY, npcHitMessage.nParam2,
+        "live NpcHit forwards NPC Y");
+    Equal(0, npcHitMessage.nParam3,
+        "live NpcHit clears message param 3");
+    Equal(string.Empty, npcHitMessage.Buff ?? string.Empty,
+        "live NpcHit forwards an empty message");
+    Equal(0, npcHitPlayer.m_MsgList.Count,
+        "live NpcHit sends no player SysMsg");
+
+    npcHitCommand.NpcHit(null);
+    npcHitPlayer.m_VisibleActors = null;
+    npcHitCommand.NpcHit(npcHitPlayer);
+    Equal(1, npcHitTarget.m_MsgList.Count,
+        "live NpcHit null player/list stays a no-op");
+
+    npcHitPlayer.m_VisibleActors = new List<TVisibleBaseObject>
+    {
+        new TVisibleBaseObject { BaseObject = npcHitTarget }
+    };
+    var npcHitRegistration = typeof(NpcHitCommand)
+        .GetCustomAttribute<GameCommandAttribute>()!;
+    npcHitCommand.Register(npcHitRegistration,
+        typeof(NpcHitCommand).GetMethod("NpcHit")!);
+    npcHitPlayer.m_btPermission = 4;
+    Equal<string>(null, npcHitCommand.Handle("ignored arguments", npcHitPlayer),
+        "live NpcHit accepts no-argument method and ignores parsed text");
+    Equal(2, npcHitTarget.m_MsgList.Count,
+        "live NpcHit Handle dispatches the visible-NPC walk");
+}
+finally
+{
+    M2Share.g_Config = oldNpcHitConfig;
+    M2Share.RandomNumber = oldNpcHitRandom;
+    M2Share.ProcessMsgCriticalSection = oldNpcHitCriticalSection;
+    M2Share.ObjectManager = oldNpcHitObjectManager;
+}
 
 var mapCellFreeModel = NativeGmMonsterMapCommands.Evaluate(
     "MapCellFree", 5, new[] { "ignored", "text" });
@@ -290,7 +404,6 @@ Equal(NativeMonsterMapOutcome.RejectedSilently,
     NativeGmMonsterMapCommands.Evaluate("ThroughRange", 4, new[] { "-1" }).Outcome,
     "ThroughRange -1 -> RejectedSilently");
 
-PrepareRuntimeConfig();
 var oldThroughRange = TPlayObject.NativeSafeZoneThroughRange;
 var oldProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
 var oldObjectManager = M2Share.ObjectManager;

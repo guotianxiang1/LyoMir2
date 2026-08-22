@@ -38,7 +38,6 @@ var protectedFiles = new[]
     "HeroSkillSwitchCommand.cs",
     "LogSwitchCommand.cs",
     "MakeMyHeroCommand.cs",
-    "NpcHitCommand.cs",
     "ReloadC2CItemsCommand.cs",
     "ReloadPromptFileCommand.cs",
     "ReloadRndItemCommand.cs",
@@ -199,6 +198,10 @@ foreach (var implementedFile in new[]
              // sub_77BEB4 clears only byte +0 of every 12-byte cell record.
              // The recovered command is argument-free and sends no SysMsg.
              "MapCellFreeCommand.cs",
+             // case 182 @0x00625AF8 calls sub_62EA7C with no arguments. The
+             // recovered core walks the invoking player's visible actors and
+             // sends RM_HIT only to race-10 NPC entries, without SysMsg.
+             "NpcHitCommand.cs",
              // case 153 @0x00625690 -> sub_6D440C resolves sub_652784's
              // non-ghost ReadyRun target and mutates only +0x1829/+0x180C.
              // Zero clears; nonzero stores currentDay+7-days and never moves/logs.
@@ -326,6 +329,19 @@ Assert(mapCellFree.Contains(
        !mapCellFree.Contains("string[]", StringComparison.Ordinal) &&
        !mapCellFree.Contains("SysMsg", StringComparison.Ordinal),
     "MapCellFree lost its native no-argument, current-map, silent contract");
+
+var npcHit = Read("NpcHitCommand.cs");
+Assert(npcHit.Contains(
+           "GameCommand(\"NpcHit\", \"让自身附近的可见的NPC做一个活动的动作\", \"\", 4)",
+           StringComparison.Ordinal) &&
+       npcHit.Contains("public void NpcHit(TPlayObject player)", StringComparison.Ordinal) &&
+       npcHit.Contains("player?.m_VisibleActors", StringComparison.Ordinal) &&
+       npcHit.Contains("m_btRaceServer != Grobal2.RC_NPC", StringComparison.Ordinal) &&
+       npcHit.Contains("npc.SendRefMsg(Grobal2.RM_HIT, npc.m_btDirection", StringComparison.Ordinal) &&
+       npcHit.Contains("npc.m_nCurrX, npc.m_nCurrY, 0, string.Empty", StringComparison.Ordinal) &&
+       !npcHit.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
+       !npcHit.Contains("SysMsg", StringComparison.Ordinal),
+    "NpcHit lost its native no-argument visible-NPC RM_HIT contract");
 
 var hackFlag = Read("HackFlagCommand.cs");
 Assert(hackFlag.Contains(
