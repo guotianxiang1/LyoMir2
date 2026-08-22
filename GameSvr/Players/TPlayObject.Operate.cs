@@ -1386,11 +1386,14 @@ namespace GameSvr
                             var n10 = M2Share.RandomNumber.Random(16) + 5;
                             var n14 = M2Share.RandomNumber.Random(201) + 100;
                             BaseObject.m_nBodyLeathery -= n10;
-                            BaseObject.m_nMeatQuality -= (ushort)n14;
-                            if (BaseObject.m_nMeatQuality < 0)
+                            // Native sub_71ED80 keeps +0x4A0 as a signed DWORD and
+                            // clamps the result before the later WORD durability copy.
+                            var meatQuality = (int)BaseObject.m_nMeatQuality - n14;
+                            if (meatQuality < 0)
                             {
-                                BaseObject.m_nMeatQuality = 0;
+                                meatQuality = 0;
                             }
+                            BaseObject.m_nMeatQuality = (ushort)meatQuality;
                             // 战神 sub_71ED80 @0x71EDFF: cmp [+0x4A4],0 / jge return —— 皮革>=0 直接 return,
                             // 严格 <0 才交付(原 C# 用 <=0,皮革==0 即交付,与 native 边界相反)。紧接
                             // @0x71EE0C: cmp [+0x47D],0 / jne return —— m_boNoItem 门(皮革耗尽后、骨架/交付/
