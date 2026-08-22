@@ -4,5 +4,6 @@
     <RepositoryArtifactsRoot Condition="'$(RepositoryArtifactsRoot)' == ''">$(MSBuildThisFileDirectory)artifacts\</RepositoryArtifactsRoot>
     <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">$(RepositoryArtifactsRoot)obj\$(MSBuildProjectName)\</BaseOutputPath>
     <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">$(RepositoryArtifactsRoot)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
 </Project>
