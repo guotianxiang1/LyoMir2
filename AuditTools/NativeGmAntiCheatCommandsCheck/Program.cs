@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using GameSvr;
 using GameSvr.CommandSystem;
+using GameSvr.Services;
 using SystemModule;
 
 // Contract check for the ANTICHEAT/IP/SECURITY GM command family model
@@ -18,6 +19,7 @@ try
     VerifyClearHackFlag();
     VerifyHackFlag();
     VerifyIpHackFlag();
+    VerifyIpOutSay();
     VerifyFlagCommandsRuntime();
     VerifyHackerpunish();
     VerifyClientVersion();
@@ -29,9 +31,9 @@ try
     Console.WriteLine(
         "PASS NativeGmAntiCheatCommandsCheck dispatcher=sub_622820 table=0x622B1C max=750 family=09 " +
         "commands=15 impl=15 noop=0 " +
-        "recovered=ClearHackFlag/HackFlag/IPHackFlag " +
+        "recovered=ClearHackFlag/HackFlag/IPHackFlag/IPOutSay " +
         "ladders=Hackerpunish/ClientVersion/SetIpHumanMaxCount/ReloadWhiteList/ViewMonitor/ReloadSmsUserList " +
-        "deferred=MapUserInfo/IPOutSay/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
+        "deferred=MapUserInfo/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
     return 0;
 }
 catch (Exception ex)
@@ -112,7 +114,8 @@ static void VerifyRegistry()
         Equal(info.CoreBodyDeferred,
             e.cmd != GmAntiCheatCommand.ClearHackFlag &&
             e.cmd != GmAntiCheatCommand.HackFlag &&
-            e.cmd != GmAntiCheatCommand.IPHackFlag,
+            e.cmd != GmAntiCheatCommand.IPHackFlag &&
+            e.cmd != GmAntiCheatCommand.IPOutSay,
             $"{e.cmd} core body deferred");
         Assert(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmAntiCheatCommands.SwitchMaxIndex,
             $"{e.cmd} index in switch range");
@@ -131,7 +134,8 @@ static void VerifyNoNoOps()
         Equal(info.CoreBodyDeferred,
             info.Command != GmAntiCheatCommand.ClearHackFlag &&
             info.Command != GmAntiCheatCommand.HackFlag &&
-            info.Command != GmAntiCheatCommand.IPHackFlag,
+            info.Command != GmAntiCheatCommand.IPHackFlag &&
+            info.Command != GmAntiCheatCommand.IPOutSay,
             $"{info.Command} recovered/deferred state");
     }
 }
@@ -146,7 +150,7 @@ static void VerifyForwardContracts()
         (GmAntiCheatCommand.ClearHackFlag, 0x006D321C, 1, false, false),
         (GmAntiCheatCommand.HackFlag,      0x006D440C, 2, false, false),
         (GmAntiCheatCommand.IPHackFlag,    0x006D45C8, 2, false, false),
-        (GmAntiCheatCommand.IPOutSay,      0x006D4CA4, 2, false, true),
+        (GmAntiCheatCommand.IPOutSay,      0x006D4CA4, 2, false, false),
         (GmAntiCheatCommand.IPHumNum,      0x006E3498, 0, true,  true),
         (GmAntiCheatCommand.IpBlackRoom,   0x006D49E4, 2, false, true),
         (GmAntiCheatCommand.KickOutPtid,   0x00651CBC, 0, false, true),
@@ -378,6 +382,48 @@ static void VerifyIpHackFlag()
         .CoreBodyDeferred, "IPHackFlag core recovered");
 }
 
+static void VerifyIpOutSay()
+{
+    Equal(NativeGmIpOutSay.DefaultSeconds, 300,
+        "IPOutSay native default seconds");
+    Equal(NativeGmIpOutSay.UsageMessage,
+        "使用说明：@IpOutSay + IP地址 + 时间(秒)",
+        "IPOutSay exact usage text");
+    Equal(NativeGmIpOutSay.UsageColorWord, 0x38FF,
+        "IPOutSay usage colour");
+    Equal(NativeGmIpOutSay.ReplyColorWord, 0xFFDB,
+        "IPOutSay reply colour");
+
+    // IPOutSay uses the same native integer parser as IPHackFlag, but its
+    // missing/invalid token default is 300 and non-positive values are silent.
+    Equal(NativeGmIpOutSay.ParseSeconds(null), 300,
+        "IPOutSay missing seconds default");
+    Equal(NativeGmIpOutSay.ParseSeconds(string.Empty), 300,
+        "IPOutSay empty seconds default");
+    Equal(NativeGmIpOutSay.ParseSeconds("+003"), 3,
+        "IPOutSay signed seconds parse");
+    Equal(NativeGmIpOutSay.ParseSeconds("0x10"), 16,
+        "IPOutSay hexadecimal seconds parse");
+    Equal(NativeGmIpOutSay.ParseSeconds("0"), 0,
+        "IPOutSay zero seconds parse");
+    Equal(NativeGmIpOutSay.ParseSeconds("-2"), -2,
+        "IPOutSay negative seconds parse");
+    Equal(NativeGmIpOutSay.ParseSeconds("not-a-number"), 300,
+        "IPOutSay malformed seconds default");
+
+    Equal(NativeGmIpOutSay.BuildReply("10.0.0.1", 2, 300),
+        "禁止IP：10.0.0.1 共：2 个用户聊天：300秒",
+        "IPOutSay exact final receipt");
+    Equal(NativeGmIpOutSay.BuildMessage("10.0.0.1", 0, 3),
+        "禁止IP：10.0.0.1 共：0 个用户聊天：3秒",
+        "IPOutSay zero-match receipt");
+
+    Assert(NativeGmIpHackFlag.NativeAnsiEquals("ABcd", "aBcD"),
+        "IPOutSay native IP comparison");
+    Assert(!NativeGmAntiCheatCommands.Info(GmAntiCheatCommand.IPOutSay)
+        .CoreBodyDeferred, "IPOutSay core recovered");
+}
+
 static void VerifyFlagCommandsRuntime()
 {
     PrepareRuntimeFiles();
@@ -386,6 +432,7 @@ static void VerifyFlagCommandsRuntime()
     var oldObjectManager = M2Share.ObjectManager;
     var oldRandomNumber = M2Share.RandomNumber;
     var oldUserEngine = M2Share.UserEngine;
+    var oldDenySayMsgList = M2Share.g_DenySayMsgList;
     var oldLogStringList = M2Share.LogStringList;
     var oldLogMsgCriticalSection = M2Share.LogMsgCriticalSection;
     var config = oldConfig ?? new GameSvrConfig();
@@ -399,6 +446,7 @@ static void VerifyFlagCommandsRuntime()
         M2Share.ObjectManager = new ObjectManager();
         M2Share.RandomNumber = RandomNumber.GetInstance();
         M2Share.UserEngine = new UserEngine();
+        M2Share.g_DenySayMsgList = NativeMirrorChatBan.CreateStore();
         M2Share.LogStringList = new ArrayList();
         M2Share.LogMsgCriticalSection = new object();
 
@@ -851,6 +899,124 @@ static void VerifyFlagCommandsRuntime()
         Equal(M2Share.LogStringList.Count, 0,
             "IPHackFlag no-match emits no logs");
 
+        var ipOutAttribute = typeof(IPOutSayCommand)
+            .GetCustomAttribute<GameCommandAttribute>();
+        var ipOutMethod = typeof(IPOutSayCommand).GetMethod(
+            nameof(IPOutSayCommand.IPOutSay));
+        Assert(ipOutAttribute != null && ipOutMethod != null,
+            "IPOutSay live registration metadata");
+        Equal(ipOutAttribute.nPermissionMin, 4,
+            "IPOutSay live native permission");
+        var ipOutCommand = new IPOutSayCommand();
+        ipOutCommand.Register(ipOutAttribute, ipOutMethod);
+
+        // Empty IP is the native usage branch and carries the fixed 0x38FF
+        // word; no IP/seconds mutation is attempted.
+        gm.m_MsgList.Clear();
+        M2Share.g_DenySayMsgList.Clear();
+        ipOutCommand.Handle(string.Empty, gm);
+        Equal(gm.m_MsgList.Count, 1,
+            "IPOutSay empty IP one usage message");
+        Equal(gm.m_MsgList[0].wIdent, Grobal2.RM_SYSMESSAGE,
+            "IPOutSay usage message ident");
+        Equal(gm.m_MsgList[0].Buff, NativeGmIpOutSay.UsageMessage,
+            "IPOutSay exact usage message");
+        Equal(gm.m_MsgList[0].nParam1, 0xFF,
+            "IPOutSay usage foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0x38,
+            "IPOutSay usage background");
+        Equal(NativeMirrorChatBan.Snapshot().Count, 0,
+            "IPOutSay usage leaves mute table unchanged");
+
+        // Zero and negative values are the native silent branch, including
+        // ignored trailing arguments.
+        gm.m_MsgList.Clear();
+        ipOutCommand.Handle("10.0.0.1 0 ignored extra", gm);
+        Equal(gm.m_MsgList.Count, 0,
+            "IPOutSay zero seconds is silent");
+        Equal(NativeMirrorChatBan.Snapshot().Count, 0,
+            "IPOutSay zero seconds leaves mute table unchanged");
+        ipOutCommand.Handle("10.0.0.1 -2", gm);
+        Equal(gm.m_MsgList.Count, 0,
+            "IPOutSay negative seconds is silent");
+        Equal(NativeMirrorChatBan.Snapshot().Count, 0,
+            "IPOutSay negative seconds leaves mute table unchanged");
+
+        // Missing seconds defaults to 300. Both non-ghost matches (including
+        // the non-ReadyRun one) are muted; the ghost match is skipped.
+        gm.m_MsgList.Clear();
+        ipOutCommand.Handle("10.0.0.1", gm);
+        var defaultMutes = NativeMirrorChatBan.Snapshot();
+        Equal(defaultMutes.Count, 2,
+            "IPOutSay default mutes both non-ghost matches");
+        Assert(defaultMutes.Any(e => string.Equals(e.Name, "ReadyTarget",
+                                     StringComparison.OrdinalIgnoreCase) &&
+                                     e.RemainSeconds >= 298),
+            "IPOutSay default ReadyTarget mute seconds: " +
+            string.Join(",", defaultMutes.Select(e =>
+                e.Name + ":" + e.RemainSeconds)));
+        Assert(defaultMutes.Any(e => string.Equals(e.Name, "NotReadyTarget",
+                                     StringComparison.OrdinalIgnoreCase) &&
+                                     e.RemainSeconds >= 298),
+            "IPOutSay default non-ReadyRun mute seconds");
+        Assert(!defaultMutes.Any(e => string.Equals(e.Name, "GhostTarget",
+                                      StringComparison.OrdinalIgnoreCase)),
+            "IPOutSay skips ghost mute");
+        Equal(gm.m_MsgList.Count, 1,
+            "IPOutSay default one final receipt");
+        Equal(gm.m_MsgList[0].Buff,
+            "禁止IP：10.0.0.1 共：2 个用户聊天：300秒",
+            "IPOutSay default final receipt text");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "IPOutSay final receipt foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "IPOutSay final receipt background");
+
+        // A second invocation accumulates seconds in each target's native
+        // mute table and ignores all tokens after the seconds argument.
+        gm.m_MsgList.Clear();
+        ipOutCommand.Handle("10.0.0.1 +003 ignored extra", gm);
+        var cumulativeMutes = NativeMirrorChatBan.Snapshot();
+        Equal(cumulativeMutes.Count, 2,
+            "IPOutSay cumulative mute row count");
+        Assert(cumulativeMutes.Any(e => string.Equals(e.Name, "ReadyTarget",
+                                        StringComparison.OrdinalIgnoreCase) &&
+                                        e.RemainSeconds >= 300),
+            "IPOutSay cumulative ReadyTarget seconds");
+        Assert(cumulativeMutes.Any(e => string.Equals(e.Name, "NotReadyTarget",
+                                        StringComparison.OrdinalIgnoreCase) &&
+                                        e.RemainSeconds >= 300),
+            "IPOutSay cumulative non-ReadyRun seconds");
+        Equal(gm.m_MsgList[0].Buff,
+            "禁止IP：10.0.0.1 共：2 个用户聊天：3秒",
+            "IPOutSay extra tokens ignored and parsed seconds echoed");
+
+        Equal(Grobal2.ISM_CHATPROHIBITION, 209,
+            "IPOutSay native mute ident");
+        var encodeServerGroup = typeof(UserEngine).GetMethod(
+            "EncodeServerGroupMessage",
+            BindingFlags.Static | BindingFlags.NonPublic, null,
+            new[] { typeof(int), typeof(int), typeof(int), typeof(string) },
+            null);
+        Assert(encodeServerGroup != null,
+            "IPOutSay server-group encoder available");
+        Equal((string)encodeServerGroup.Invoke(null,
+            new object[] { Grobal2.ISM_CHATPROHIBITION,
+                M2Share.nServerIndex, 3, "ReadyTarget" }),
+            "209/0/3/ReadyTarget",
+            "IPOutSay ident 209 wire shape");
+
+        gm.m_MsgList.Clear();
+        gm.m_btPermission = 3;
+        Equal(ipOutCommand.Handle("10.0.0.1 3", gm),
+            "该命令需要4级GM才能使用",
+            "IPOutSay permission gate");
+        Equal(gm.m_MsgList.Count, 0,
+            "IPOutSay permission rejection does not invoke body");
+        Equal(NativeMirrorChatBan.Snapshot().Count, 2,
+            "IPOutSay permission rejection preserves mute table");
+        gm.m_btPermission = 4;
+
         gm.m_MsgList.Clear();
         gm.m_btPermission = 3;
         Equal(ipCommand.Handle("10.0.0.1 3", gm),
@@ -884,6 +1050,16 @@ static void VerifyFlagCommandsRuntime()
         Equal(gm.m_MsgList.Count, 0,
             "HackFlag null engine is silent");
         command.HackFlag(null, null);
+
+        // Direct invocation is null-safe even when the dispatcher supplies no
+        // parameter array or the online engine is unavailable.
+        ipOutCommand.IPOutSay(null, null);
+        ipOutCommand.IPOutSay(new[] { (string)null, (string)null }, gm);
+        M2Share.UserEngine = null;
+        gm.m_MsgList.Clear();
+        ipOutCommand.IPOutSay(new[] { "10.0.0.1", "3" }, gm);
+        Equal(gm.m_MsgList.Count, 1,
+            "IPOutSay null engine final receipt is safe");
     }
     finally
     {
@@ -893,6 +1069,7 @@ static void VerifyFlagCommandsRuntime()
         M2Share.ObjectManager = oldObjectManager;
         M2Share.RandomNumber = oldRandomNumber;
         M2Share.UserEngine = oldUserEngine;
+        M2Share.g_DenySayMsgList = oldDenySayMsgList;
         M2Share.LogStringList = oldLogStringList;
         M2Share.LogMsgCriticalSection = oldLogMsgCriticalSection;
     }

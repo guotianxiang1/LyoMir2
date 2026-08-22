@@ -43,8 +43,8 @@ namespace GameSvr
     //     511 ViewMonitor   perm3  @0x00629502  ->  sub_79F5C4(buf, arg); SysMsg(view, 0xFFDB)   [always]
     //     516 ReloadSmsUserList perm4 @0x006294A9 -> ok=sub_6556F4(); SysMsg(ok?done:fail, 0xFFDB) (off_7D6D50)
     //
-    //   sub_6D321C (ClearHackFlag), sub_6D440C (HackFlag), and sub_6D45C8 (IPHackFlag) are fully
-    //   recovered and wired. The remaining core subs are deferred: their result/effect is taken
+    //   sub_6D321C (ClearHackFlag), sub_6D440C (HackFlag), sub_6D45C8 (IPHackFlag), and
+    //   sub_6D4CA4 (IPOutSay) are fully recovered and wired. The remaining core subs are deferred: their result/effect is taken
     //   as an INPUT here, never fabricated. Dispatcher-level ladders remain modelled exactly.
     //
     //   Shared cores worth noting: SetIpHumanMaxCount(501) and ReloadWhiteList(505) both tail into the
@@ -148,7 +148,7 @@ namespace GameSvr
         public const uint PlayerListEa = 0x007D6D50;           // off_7D6D50: online player list
         public const uint MonitorListEa = 0x007D62A4;          // off_7D62A4: monitor list
 
-        // core subs (ClearHackFlag/HackFlag/IPHackFlag recovered; the others remain deferred)
+        // core subs (ClearHackFlag/HackFlag/IPHackFlag/IPOutSay recovered; the others remain deferred)
         public const uint CoreMapUserInfo = 0x006D6698;   // sub_6D6698
         public const uint CoreClearHackFlag = 0x006D321C; // sub_6D321C
         public const uint CoreHackPunishApply = 0x00713890; // sub_713890
@@ -171,7 +171,7 @@ namespace GameSvr
             new() { Command = GmAntiCheatCommand.Hackerpunish,       Name = "Hackerpunish",       DispatchIndex = 152, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006255FE, CoreAddress = CoreHackPunishApply, CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = true  },
             new() { Command = GmAntiCheatCommand.HackFlag,           Name = "HackFlag",           DispatchIndex = 153, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00625690, CoreAddress = CoreHackFlag,        CoreBodyDeferred = false, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IPHackFlag,         Name = "IPHackFlag",         DispatchIndex = 154, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006256A3, CoreAddress = CoreIpHackFlag,      CoreBodyDeferred = false, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
-            new() { Command = GmAntiCheatCommand.IPOutSay,           Name = "IPOutSay",           DispatchIndex = 158, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006258AC, CoreAddress = CoreIpOutSay,        CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
+            new() { Command = GmAntiCheatCommand.IPOutSay,           Name = "IPOutSay",           DispatchIndex = 158, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006258AC, CoreAddress = CoreIpOutSay,        CoreBodyDeferred = false, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IPHumNum,           Name = "IPHumNum",           DispatchIndex = 160, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006256B6, CoreAddress = CoreIpHumNum,        CoreBodyDeferred = true, Shape = GmAntiCheatShape.ParseIntThenCore, CoreStringArgs = 0, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.IpBlackRoom,        Name = "IpBlackRoom",        DispatchIndex = 163, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00625C98, CoreAddress = CoreIpBlackRoom,     CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.ClientVersion,      Name = "ClientVersion",      DispatchIndex = 180, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00625969, CoreAddress = CoreVersionCheckAll, CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = true  },

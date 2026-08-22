@@ -213,6 +213,9 @@ foreach (var implementedFile in new[]
              // A flagged target clears +0x1829/+0x180C/+0x7B0/+0x7B4 and
              // state 25; the privileged unflagged branch sets tier 3.
              "ClearHackFlagCommand.cs",
+             // case 158 @0x006258AC -> sub_6D4CA4: IPOutSay mutes every
+             // non-ghost same-IP player, mirrors ident 209, and replies 0xFFDB.
+             "IPOutSayCommand.cs",
              // case 358 @0x00627FD5 selects self for an empty first token or
              // resolves sub_652784's non-ghost ReadyRun player, then invokes
              // vtbl+0x84 Die(). Missing targets and all successful paths are silent.
@@ -397,6 +400,42 @@ Assert(!clearHackFlag.Contains("NativeMirrorAntiCheatPenalty", StringComparison.
        !clearHackFlag.Contains("AddGameDataLog", StringComparison.Ordinal) &&
        !clearHackFlag.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ClearHackFlag introduced non-native mirror movement/log/failure behavior");
+
+var ipOutSay = Read("IPOutSayCommand.cs");
+var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",
+    "Services", "NativeGmIpOutSay.cs"));
+Assert(ipOutSay.Contains("[GameCommand(\"IPOutSay\"",
+           StringComparison.Ordinal) &&
+       ipOutSay.Contains("禁止指定IP地址的玩家聊天多长时间",
+           StringComparison.Ordinal) &&
+       ipOutSay.Contains("IP地址 时间(秒)", StringComparison.Ordinal) &&
+       ipOutSay.Contains("\"IP地址 时间(秒)\", 4)",
+           StringComparison.Ordinal) &&
+       ipOutSay.Contains("NativeGmIpOutSay.ParseSeconds", StringComparison.Ordinal) &&
+       ipOutSay.Contains("NativeMirrorChatBan.Add(name, seconds)",
+           StringComparison.Ordinal) &&
+       ipOutSay.Contains("Grobal2.ISM_CHATPROHIBITION",
+           StringComparison.Ordinal) &&
+       ipOutSay.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
+       ipOutSay.Contains("NativeGmIpOutSay.BuildMessage",
+           StringComparison.Ordinal) &&
+       ipOutSay.Contains("PlayObject == null", StringComparison.Ordinal) &&
+       ipOutSay.Contains("userEngine?.PlayObjects", StringComparison.Ordinal) &&
+       ipOutSay.Contains("player?.m_sCharName", StringComparison.Ordinal) &&
+       !ipOutSay.Contains("HUtil32.Str_ToInt", StringComparison.Ordinal) &&
+       !ipOutSay.Contains(".SysMsg(", StringComparison.Ordinal),
+    "IPOutSay command does not preserve the native parser/fan-out/209 contract");
+Assert(ipOutSayService.Contains(
+           "NativeGmIpHackFlag.ParseDays(text, DefaultSeconds)",
+           StringComparison.Ordinal) &&
+       ipOutSayService.Contains("NativeGmIpHackFlag.FindMatches",
+           StringComparison.Ordinal) &&
+       ipOutSayService.Contains("使用说明：@IpOutSay + IP地址 + 时间(秒)",
+           StringComparison.Ordinal) &&
+       ipOutSayService.Contains("禁止IP：", StringComparison.Ordinal) &&
+       ipOutSayService.Contains("0x38FF", StringComparison.Ordinal) &&
+       ipOutSayService.Contains("0xFFDB", StringComparison.Ordinal),
+    "NativeGmIpOutSay service lost native parser/filter/text/colour constants");
 
 var reshuaMonScript = Read("ReshuaMonScriptCommand.cs");
 Assert(reshuaMonScript.Contains(
