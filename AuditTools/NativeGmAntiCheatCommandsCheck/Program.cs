@@ -17,6 +17,7 @@ try
     VerifyForwardContracts();
     VerifyClearHackFlag();
     VerifyHackFlag();
+    VerifyIpHackFlag();
     VerifyFlagCommandsRuntime();
     VerifyHackerpunish();
     VerifyClientVersion();
@@ -28,9 +29,9 @@ try
     Console.WriteLine(
         "PASS NativeGmAntiCheatCommandsCheck dispatcher=sub_622820 table=0x622B1C max=750 family=09 " +
         "commands=15 impl=15 noop=0 " +
-        "recovered=ClearHackFlag/HackFlag " +
+        "recovered=ClearHackFlag/HackFlag/IPHackFlag " +
         "ladders=Hackerpunish/ClientVersion/SetIpHumanMaxCount/ReloadWhiteList/ViewMonitor/ReloadSmsUserList " +
-        "deferred=MapUserInfo/IPHackFlag/IPOutSay/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
+        "deferred=MapUserInfo/IPOutSay/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
     return 0;
 }
 catch (Exception ex)
@@ -110,7 +111,8 @@ static void VerifyRegistry()
         Assert(info.Implemented, $"{e.cmd} implemented");
         Equal(info.CoreBodyDeferred,
             e.cmd != GmAntiCheatCommand.ClearHackFlag &&
-            e.cmd != GmAntiCheatCommand.HackFlag,
+            e.cmd != GmAntiCheatCommand.HackFlag &&
+            e.cmd != GmAntiCheatCommand.IPHackFlag,
             $"{e.cmd} core body deferred");
         Assert(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmAntiCheatCommands.SwitchMaxIndex,
             $"{e.cmd} index in switch range");
@@ -128,7 +130,8 @@ static void VerifyNoNoOps()
         Assert(info.Implemented, $"{info.Command} implemented");
         Equal(info.CoreBodyDeferred,
             info.Command != GmAntiCheatCommand.ClearHackFlag &&
-            info.Command != GmAntiCheatCommand.HackFlag,
+            info.Command != GmAntiCheatCommand.HackFlag &&
+            info.Command != GmAntiCheatCommand.IPHackFlag,
             $"{info.Command} recovered/deferred state");
     }
 }
@@ -142,7 +145,7 @@ static void VerifyForwardContracts()
         (GmAntiCheatCommand.MapUserInfo,   0x006D6698, 0, false, true),
         (GmAntiCheatCommand.ClearHackFlag, 0x006D321C, 1, false, false),
         (GmAntiCheatCommand.HackFlag,      0x006D440C, 2, false, false),
-        (GmAntiCheatCommand.IPHackFlag,    0x006D45C8, 2, false, true),
+        (GmAntiCheatCommand.IPHackFlag,    0x006D45C8, 2, false, false),
         (GmAntiCheatCommand.IPOutSay,      0x006D4CA4, 2, false, true),
         (GmAntiCheatCommand.IPHumNum,      0x006E3498, 0, true,  true),
         (GmAntiCheatCommand.IpBlackRoom,   0x006D49E4, 2, false, true),
@@ -309,6 +312,72 @@ static void VerifyHackFlag()
     Assert(!negative.CoreBodyDeferred, "HackFlag recovered core is not deferred");
 }
 
+static void VerifyIpHackFlag()
+{
+    Equal(NativeGmIpHackFlag.UsageMessage,
+        "设置标志：@IPHackFlag <IP地址> <天数> （天数=0清除）",
+        "IPHackFlag exact usage text");
+
+    // sub_403DCC/sub_40CA18 parser forms used by the native core.
+    Equal(NativeGmIpHackFlag.ParseDays(null), 0, "IPHackFlag null days default");
+    Equal(NativeGmIpHackFlag.ParseDays(string.Empty), 0,
+        "IPHackFlag empty days default");
+    Equal(NativeGmIpHackFlag.ParseDays(" 12"), 12,
+        "IPHackFlag leading ASCII space");
+    Equal(NativeGmIpHackFlag.ParseDays("+003"), 3,
+        "IPHackFlag signed decimal");
+    Equal(NativeGmIpHackFlag.ParseDays("-2"), -2,
+        "IPHackFlag negative decimal");
+    Equal(NativeGmIpHackFlag.ParseDays("0x10"), 16,
+        "IPHackFlag 0x hexadecimal");
+    Equal(NativeGmIpHackFlag.ParseDays("$10"), 16,
+        "IPHackFlag dollar hexadecimal");
+    Equal(NativeGmIpHackFlag.ParseDays("x10"), 16,
+        "IPHackFlag x hexadecimal");
+    Equal(NativeGmIpHackFlag.ParseDays("-0xFFFFFFFF"), 1,
+        "IPHackFlag negative hexadecimal unchecked result");
+    Equal(NativeGmIpHackFlag.ParseDays("0xFFFFFFFF"), -1,
+        "IPHackFlag positive hexadecimal wrap");
+    Equal(NativeGmIpHackFlag.ParseDays("12x"), 0,
+        "IPHackFlag malformed suffix defaults");
+    Equal(NativeGmIpHackFlag.ParseDays("12 "), 0,
+        "IPHackFlag trailing space defaults");
+    Equal(NativeGmIpHackFlag.ParseDays("2147483648"), 0,
+        "IPHackFlag decimal overflow defaults");
+
+    Assert(NativeGmIpHackFlag.NativeAnsiEquals("10.0.0.1", "10.0.0.1"),
+        "IPHackFlag IP equality");
+    Assert(NativeGmIpHackFlag.NativeAnsiEquals("ABcd", "aBCD"),
+        "IPHackFlag ASCII case folding");
+    Assert(!NativeGmIpHackFlag.NativeAnsiEquals("10.0.0.1", "10.0.0.2"),
+        "IPHackFlag IP mismatch");
+
+    var entries = "acctA(Alpha)  acctB(Beta)  ";
+    Equal(NativeGmIpHackFlag.BuildQueryMessage("10.0.0.1", entries),
+        "10.0.0.1 的玩家有：" + entries,
+        "IPHackFlag query message ordering");
+    Equal(NativeGmIpHackFlag.BuildQueryMessage("10.0.0.1", string.Empty),
+        "10.0.0.1 没有玩家",
+        "IPHackFlag query no-player message");
+    Equal(NativeGmIpHackFlag.BuildSetMessage("10.0.0.1", "3", 3,
+        string.Empty),
+        "10.0.0.1　下没有玩家",
+        "IPHackFlag set no-player message");
+    Equal(NativeGmIpHackFlag.BuildSetMessage("10.0.0.1", "0", 0, entries),
+        "清除10.0.0.1　下的玩家外挂惩罚：" + entries,
+        "IPHackFlag clear summary ordering");
+    Equal(NativeGmIpHackFlag.BuildSetMessage("10.0.0.1", "+003", 3, entries),
+        "设置10.0.0.1　下的玩家外挂惩罚 +003 天：" + entries,
+        "IPHackFlag set summary ordering");
+    Equal(NativeGmIpHackFlag.BuildSetMessage("10.0.0.1", "-2", -2, entries),
+        "设置10.0.0.1　下的玩家外挂惩罚 -2 天：" + entries,
+        "IPHackFlag negative summary follows native parsed-zero test");
+    Equal(NativeGmIpHackFlag.ComputeExpiryDay(100, 3), 104,
+        "IPHackFlag expiry arithmetic");
+    Assert(!NativeGmAntiCheatCommands.Info(GmAntiCheatCommand.IPHackFlag)
+        .CoreBodyDeferred, "IPHackFlag core recovered");
+}
+
 static void VerifyFlagCommandsRuntime()
 {
     PrepareRuntimeFiles();
@@ -318,6 +387,7 @@ static void VerifyFlagCommandsRuntime()
     var oldRandomNumber = M2Share.RandomNumber;
     var oldUserEngine = M2Share.UserEngine;
     var oldLogStringList = M2Share.LogStringList;
+    var oldLogMsgCriticalSection = M2Share.LogMsgCriticalSection;
     var config = oldConfig ?? new GameSvrConfig();
     var oldTestServer = config.boTestServer;
 
@@ -330,10 +400,12 @@ static void VerifyFlagCommandsRuntime()
         M2Share.RandomNumber = RandomNumber.GetInstance();
         M2Share.UserEngine = new UserEngine();
         M2Share.LogStringList = new ArrayList();
+        M2Share.LogMsgCriticalSection = new object();
 
         var gm = new TPlayObject
         {
             m_sCharName = "GameMaster",
+            m_sUserID = "gm-account",
             m_btPermission = 4,
             m_boReadyRun = true,
         };
@@ -341,12 +413,16 @@ static void VerifyFlagCommandsRuntime()
         var ready = new TPlayObject
         {
             m_sCharName = "ReadyTarget",
+            m_sUserID = "acct-ready",
+            m_sIPaddr = "10.0.0.1",
             m_boReadyRun = true,
             m_PEnvir = originalMap,
         };
         var ghost = new TPlayObject
         {
             m_sCharName = "GhostTarget",
+            m_sUserID = "acct-ghost",
+            m_sIPaddr = "10.0.0.1",
             m_boReadyRun = true,
             m_boGhost = true,
             m_btNativeCheatPenaltyTier = 1,
@@ -355,6 +431,8 @@ static void VerifyFlagCommandsRuntime()
         var notReady = new TPlayObject
         {
             m_sCharName = "NotReadyTarget",
+            m_sUserID = "acct-not-ready",
+            m_sIPaddr = "10.0.0.1",
             m_boReadyRun = false,
             m_btNativeCheatPenaltyTier = 2,
             m_nNativeCheatPenaltyExpiryDay = 22,
@@ -645,6 +723,143 @@ static void VerifyFlagCommandsRuntime()
             "设置 ReadyTarget 外挂惩罚 -2 天成功",
             "HackFlag negative exact message");
 
+        var ipAttribute = typeof(IPHackFlagCommand)
+            .GetCustomAttribute<GameCommandAttribute>();
+        var ipMethod = typeof(IPHackFlagCommand).GetMethod(
+            nameof(IPHackFlagCommand.IPHackFlag));
+        Assert(ipAttribute != null && ipMethod != null,
+            "IPHackFlag live registration metadata");
+        Equal(ipAttribute.nPermissionMin, 4,
+            "IPHackFlag live native permission");
+        var ipCommand = new IPHackFlagCommand();
+        ipCommand.Register(ipAttribute, ipMethod);
+
+        // Query: only non-ghost matches are shown; the non-ReadyRun match is
+        // intentionally included, and no fields/logs are changed.
+        gm.m_MsgList.Clear();
+        M2Share.LogStringList.Clear();
+        ready.m_btNativeCheatPenaltyTier = 1;
+        ready.m_nNativeCheatPenaltyExpiryDay = 77;
+        notReady.m_btNativeCheatPenaltyTier = 2;
+        notReady.m_nNativeCheatPenaltyExpiryDay = 88;
+        ipCommand.Handle("10.0.0.1", gm);
+        Equal(gm.m_MsgList.Count, 1,
+            "IPHackFlag query one message");
+        Equal(gm.m_MsgList[0].Buff,
+            "10.0.0.1 的玩家有：acct-ready(ReadyTarget)  acct-not-ready(NotReadyTarget)  ",
+            "IPHackFlag query account/name list and order");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "IPHackFlag query foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "IPHackFlag query background");
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)1,
+            "IPHackFlag query preserves ready tier");
+        Equal(notReady.m_btNativeCheatPenaltyTier, (byte)2,
+            "IPHackFlag query preserves non-ready tier");
+        Equal(M2Share.LogStringList.Count, 0,
+            "IPHackFlag query emits no game-data logs");
+
+        // Positive set: both non-ghost matches mutate and each emits the
+        // native type-0x1D record with (MakeIndex=1, Quantity=days, IP)
+        // arguments after the wrapper's ABI reorder.
+        gm.m_MsgList.Clear();
+        M2Share.LogStringList.Clear();
+        var localNowForIp = DateTime.Now.ToOADate();
+        ready.m_dNativeDbClockOffset = localNowForIp - 100.25;
+        notReady.m_dNativeDbClockOffset = localNowForIp - 200.25;
+        var readyDay = (int)getCurrentDay.Invoke(ready, null)!;
+        var notReadyDay = (int)getCurrentDay.Invoke(notReady, null)!;
+        ipCommand.Handle("10.0.0.1 +003 ignored extra", gm);
+        Equal(ready.m_btNativeCheatPenaltyTier, NativeGmIpHackFlag.PenaltyTier,
+            "IPHackFlag positive ready tier");
+        Equal(notReady.m_btNativeCheatPenaltyTier,
+            NativeGmIpHackFlag.PenaltyTier,
+            "IPHackFlag positive non-ready tier");
+        Equal(ready.m_nNativeCheatPenaltyExpiryDay,
+            NativeGmIpHackFlag.ComputeExpiryDay(readyDay, 3),
+            "IPHackFlag positive ready expiry");
+        Equal(notReady.m_nNativeCheatPenaltyExpiryDay,
+            NativeGmIpHackFlag.ComputeExpiryDay(notReadyDay, 3),
+            "IPHackFlag positive non-ready expiry");
+        Equal(ghost.m_btNativeCheatPenaltyTier, (byte)1,
+            "IPHackFlag positive skips ghost tier");
+        Equal(ghost.m_nNativeCheatPenaltyExpiryDay, 11,
+            "IPHackFlag positive skips ghost expiry");
+        Equal(gm.m_MsgList.Count, 1,
+            "IPHackFlag positive one message");
+        Equal(gm.m_MsgList[0].Buff,
+            "设置10.0.0.1　下的玩家外挂惩罚 +003 天：acct-ready(ReadyTarget)  acct-not-ready(NotReadyTarget)  ",
+            "IPHackFlag positive summary exact text");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "IPHackFlag positive foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "IPHackFlag positive background");
+        Equal(M2Share.LogStringList.Count, 2,
+            "IPHackFlag positive one log per match");
+        Assert(((string)M2Share.LogStringList[0]).StartsWith(
+            "29\t\t0\t0\tReadyTarget\t设置外挂惩罚\t1\t3\t10.0.0.1",
+            StringComparison.Ordinal),
+            "IPHackFlag positive ready log fields");
+        Assert(((string)M2Share.LogStringList[1]).StartsWith(
+            "29\t\t0\t0\tNotReadyTarget\t设置外挂惩罚\t1\t3\t10.0.0.1",
+            StringComparison.Ordinal),
+            "IPHackFlag positive non-ready log fields");
+
+        // Zero clears each match and uses quantity/makeIndex 1 in the log.
+        gm.m_MsgList.Clear();
+        M2Share.LogStringList.Clear();
+        ipCommand.Handle("10.0.0.1 0", gm);
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)0,
+            "IPHackFlag zero clears ready tier");
+        Equal(notReady.m_btNativeCheatPenaltyTier, (byte)0,
+            "IPHackFlag zero clears non-ready tier");
+        Equal(ready.m_nNativeCheatPenaltyExpiryDay, 0,
+            "IPHackFlag zero clears ready expiry");
+        Equal(notReady.m_nNativeCheatPenaltyExpiryDay, 0,
+            "IPHackFlag zero clears non-ready expiry");
+        Equal(gm.m_MsgList[0].Buff,
+            "清除10.0.0.1　下的玩家外挂惩罚：acct-ready(ReadyTarget)  acct-not-ready(NotReadyTarget)  ",
+            "IPHackFlag zero summary exact text");
+        Equal(M2Share.LogStringList.Count, 2,
+            "IPHackFlag zero one log per match");
+        Assert(((string)M2Share.LogStringList[0]).EndsWith(
+            "\t清除外挂惩罚\t1\t1\t10.0.0.1", StringComparison.Ordinal),
+            "IPHackFlag zero log arguments");
+
+        // Native oddity: negative days clear per-player fields but use the
+        // nonzero ("设置") summary branch.
+        gm.m_MsgList.Clear();
+        M2Share.LogStringList.Clear();
+        ready.m_btNativeCheatPenaltyTier = 1;
+        notReady.m_btNativeCheatPenaltyTier = 1;
+        ipCommand.Handle("10.0.0.1 -2", gm);
+        Equal(ready.m_btNativeCheatPenaltyTier, (byte)0,
+            "IPHackFlag negative clears ready tier");
+        Equal(notReady.m_btNativeCheatPenaltyTier, (byte)0,
+            "IPHackFlag negative clears non-ready tier");
+        Equal(gm.m_MsgList[0].Buff,
+            "设置10.0.0.1　下的玩家外挂惩罚 -2 天：acct-ready(ReadyTarget)  acct-not-ready(NotReadyTarget)  ",
+            "IPHackFlag negative summary oddity");
+        Equal(M2Share.LogStringList.Count, 2,
+            "IPHackFlag negative clear logs");
+
+        gm.m_MsgList.Clear();
+        M2Share.LogStringList.Clear();
+        ipCommand.Handle("9.9.9.9 3", gm);
+        Equal(gm.m_MsgList[0].Buff, "9.9.9.9　下没有玩家",
+            "IPHackFlag no-match message");
+        Equal(M2Share.LogStringList.Count, 0,
+            "IPHackFlag no-match emits no logs");
+
+        gm.m_MsgList.Clear();
+        gm.m_btPermission = 3;
+        Equal(ipCommand.Handle("10.0.0.1 3", gm),
+            "该命令需要4级GM才能使用",
+            "IPHackFlag permission gate");
+        Equal(gm.m_MsgList.Count, 0,
+            "IPHackFlag permission rejection does not invoke body");
+        gm.m_btPermission = 4;
+
         gm.m_MsgList.Clear();
         ready.m_btNativeCheatPenaltyTier = 1;
         ready.m_nNativeCheatPenaltyExpiryDay = 123;
@@ -679,6 +894,7 @@ static void VerifyFlagCommandsRuntime()
         M2Share.RandomNumber = oldRandomNumber;
         M2Share.UserEngine = oldUserEngine;
         M2Share.LogStringList = oldLogStringList;
+        M2Share.LogMsgCriticalSection = oldLogMsgCriticalSection;
     }
 }
 
