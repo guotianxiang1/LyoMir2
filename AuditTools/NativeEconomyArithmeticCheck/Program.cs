@@ -158,13 +158,13 @@ void Reject(bool condition, string message)
 
 string ResolveRepositoryRoot(string[] arguments)
 {
-    if (arguments.Length > 0 && Directory.Exists(Path.Combine(arguments[0], "GameSvr")))
+    if (arguments.Length > 0 && IsRepositoryRoot(arguments[0]))
         return Path.GetFullPath(arguments[0]);
 
     var directory = new DirectoryInfo(AppContext.BaseDirectory);
     while (directory != null)
     {
-        if (Directory.Exists(Path.Combine(directory.FullName, "GameSvr")))
+        if (IsRepositoryRoot(directory.FullName))
             return directory.FullName;
         directory = directory.Parent;
     }
@@ -172,3 +172,8 @@ string ResolveRepositoryRoot(string[] arguments)
     throw new DirectoryNotFoundException(
         "repository root not found; pass the LyoMir2 root as the first argument");
 }
+
+bool IsRepositoryRoot(string path) =>
+    Directory.Exists(path) &&
+    File.Exists(Path.Combine(path, "GameSvr", "GameSvr.csproj")) &&
+    File.Exists(Path.Combine(path, "SystemModule", "SystemModule.csproj"));
