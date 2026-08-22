@@ -3,13 +3,13 @@ using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("NpcHit", "让自身附近的可见的NPC做一个活动的动作", "", 4)]
+    [GameCommand("NpcHit", "NPC攻击", "", 4)]
     public sealed class NpcHitCommand : BaseCommond
     {
         [DefaultCommand]
-        public void NpcHit(TPlayObject player)
+        public void NpcHit(TPlayObject PlayObject)
         {
-            var visibleActors = player?.m_VisibleActors;
+            var visibleActors = PlayObject?.m_VisibleActors;
             if (visibleActors == null)
             {
                 return;

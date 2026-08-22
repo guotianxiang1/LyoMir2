@@ -530,7 +530,7 @@ namespace GameSvr
         private static NativeMonsterMapEvaluation EvalNpcHit(NativeMonsterMapCommand rec)
         {
             return new NativeMonsterMapEvaluation(
-                NativeMonsterMapOutcome.Executed, "visible-npc-walk",
+                NativeMonsterMapOutcome.Executed, "visible-npc-hit",
                 rec.NativeCore, NoSysMsg, false,
                 rec.EffectSummary);
         }

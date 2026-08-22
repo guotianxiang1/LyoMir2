@@ -397,10 +397,10 @@ Assert(mapCellFree.Contains(
 
 var npcHit = Read("NpcHitCommand.cs");
 Assert(npcHit.Contains(
-           "GameCommand(\"NpcHit\", \"让自身附近的可见的NPC做一个活动的动作\", \"\", 4)",
+           "GameCommand(\"NpcHit\", \"NPC攻击\", \"\", 4)",
            StringComparison.Ordinal) &&
-       npcHit.Contains("public void NpcHit(TPlayObject player)", StringComparison.Ordinal) &&
-       npcHit.Contains("player?.m_VisibleActors", StringComparison.Ordinal) &&
+       npcHit.Contains("public void NpcHit(TPlayObject PlayObject)", StringComparison.Ordinal) &&
+       npcHit.Contains("PlayObject?.m_VisibleActors", StringComparison.Ordinal) &&
        npcHit.Contains("m_btRaceServer != Grobal2.RC_NPC", StringComparison.Ordinal) &&
        npcHit.Contains("npc.SendRefMsg(Grobal2.RM_HIT, npc.m_btDirection", StringComparison.Ordinal) &&
        npcHit.Contains("npc.m_nCurrX, npc.m_nCurrY, 0, string.Empty", StringComparison.Ordinal) &&
