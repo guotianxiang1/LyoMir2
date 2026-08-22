@@ -99,6 +99,11 @@ namespace GameSvr.Services
         // accept/refuse strategies resolve (sub_6A5284), keyed by the per-request UNIQUE id — the only thing
         // the 4611/4572 CM body carries. Distinct from the per-guild dedup/query indices above.
         private readonly Dictionary<long, NativeGildPendingRequest> _byUniqueId = new();
+        // sub_6A52BC's request-manager[+0x24] index.  Each recipient owns an
+        // append-only TList of 17-byte notices; it is transient and is drained
+        // atomically on the recipient's next UserLogon.
+        private readonly Dictionary<long, List<NativeGildOfflineNotice>>
+            _pendingNotices = new();
         // Monotonic unique-id source (abstract; native sub_5E665C = time + counter + server tag).
         private long _nextUniqueId = 1;
 
@@ -180,6 +185,59 @@ namespace GameSvr.Services
                 _ordered.Remove(request);
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Appends one native SM 4612 notice to the recipient's offline queue.
+        /// The native manager stores the record in memory only; no database row
+        /// is created.  A defensive copy keeps callers from mutating queued data.
+        /// </summary>
+        public void EnqueueNotice(long recipientId,
+            NativeGildOfflineNotice notice)
+        {
+            if (recipientId == 0 || notice == null) return;
+            var copy = new NativeGildOfflineNotice
+            {
+                NoticeType = notice.NoticeType,
+                Text = notice.Text ?? string.Empty
+            };
+            lock (_sync)
+            {
+                if (!_pendingNotices.TryGetValue(recipientId,
+                        out var notices))
+                {
+                    notices = new List<NativeGildOfflineNotice>();
+                    _pendingNotices.Add(recipientId, notices);
+                }
+                notices.Add(copy);
+            }
+        }
+
+        /// <summary>
+        /// Takes and removes every queued notice for a recipient.  The returned
+        /// list preserves native append order and is detached from the ledger.
+        /// </summary>
+        public IReadOnlyList<NativeGildOfflineNotice> TakeNotices(
+            long recipientId)
+        {
+            if (recipientId == 0)
+                return Array.Empty<NativeGildOfflineNotice>();
+            lock (_sync)
+            {
+                if (!_pendingNotices.Remove(recipientId,
+                        out var notices))
+                    return Array.Empty<NativeGildOfflineNotice>();
+                return notices.ToArray();
+            }
+        }
+
+        /// <summary>Diagnostic count for protocol audits; does not consume data.</summary>
+        public int PendingNoticeCount(long recipientId)
+        {
+            if (recipientId == 0) return 0;
+            lock (_sync)
+                return _pendingNotices.TryGetValue(recipientId,
+                    out var notices) ? notices.Count : 0;
         }
 
         // sub_6A5190 (+ sub_6A5070 back-link clear): remove the resolved request from every container
@@ -328,12 +386,18 @@ namespace GameSvr.Services
     // a 16-byte short string, capacity 15} is appended to a per-recipient TList held in the request
     // manager's +0x24 index (keyed by the recipient's id). When the recipient is ONLINE the server sends
     // SM 4612 directly instead. Delivered on the recipient's next login. Dump-confirmed; the live wiring
-    // reuses the existing offline-mail-style delivery. NO writes here — this only records the layout.
+    // reuses the existing offline-mail-style delivery. The ledger below owns the transient queue.
     public sealed class NativeGildOfflineNotice
     {
         public const int RecordSize = 17;      // sub_402FA0(17)
         public const int TextShortStringCap = 15; // sub_4039E4(..., 0x0F)
         public const int OnlineNoticeSmId = 4612; // SM 4612 when the recipient is online
+
+        // Refuse leaves from the three native request subclasses:
+        // sub_7077C4 (JoinCorps), sub_708520 (JoinGild), sub_708004 (Union).
+        public const byte JoinCorpsRefuseType = 1;
+        public const byte JoinGildRefuseType = 2;
+        public const byte UnionRefuseType = 3;
 
         public byte NoticeType { get; init; }
         public string Text { get; init; } = string.Empty;

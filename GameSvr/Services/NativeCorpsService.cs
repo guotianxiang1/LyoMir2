@@ -208,6 +208,28 @@ namespace GameSvr.Services
         internal int CorpsCount => _corpsById.Count;
         internal int GildCount => _gildById.Count;
 
+        // sub_6A52BC / request-manager[+0x24].  Notices are runtime-only;
+        // the login sender drains them and encodes count * 17 bytes.
+        internal void QueuePendingNotice(long recipientId, byte noticeType,
+            string text)
+        {
+            _requestLedger.EnqueueNotice(recipientId,
+                new NativeGildOfflineNotice
+                {
+                    NoticeType = noticeType,
+                    Text = text ?? string.Empty
+                });
+        }
+
+        internal byte[] TakePendingNoticesBody(long recipientId)
+        {
+            var notices = _requestLedger.TakeNotices(recipientId);
+            return NativeCorpsWireCodec.EncodePendingNotices(notices);
+        }
+
+        internal int PendingNoticeCount(long recipientId) =>
+            _requestLedger.PendingNoticeCount(recipientId);
+
         internal static bool TryCreate(INativeCorpsStore store,
             out NativeCorpsService service, out string error,
             INativeGildStore gildStore = null)
@@ -542,6 +564,12 @@ namespace GameSvr.Services
                     || application.CorpsId != corps.Id)
                     return 10;
                 _applications.Remove(applicantId);
+                // TJoinCorpsRequest.refuse (sub_7077C4): tag 1 and the
+                // accepting corps name are stored in the same 17-byte
+                // applicant notice queue as the gild refusal leaves.
+                QueuePendingNotice(applicantId,
+                    NativeGildOfflineNotice.JoinCorpsRefuseType,
+                    corps.Name);
                 AddLogLocked(corps.Id, 1,
                     $"{application.Actor.Name} membership request refused");
                 return 0;
@@ -2116,7 +2144,9 @@ namespace GameSvr.Services
         // (sub_5E90A4 @0x70809E) — refuse ONLY deletes, NO re-insert (accept does DELETE-3 + INSERT-1).
         // Lookup = the per-guild ledger by applicant CharID (= sub_6A5284 Self[+0x1C]);
         // guild[+0x24] is the president's UI copy only. break-union (4574) is unrelated (dissolves an
-        // established relation-1 alliance). [union notify SM 4612 tag-3 / mail type-3 = DEFERRED, as above.]
+        // established relation-1 alliance). On a successful refuse, the native applicant notification
+        // is now queued with the exact SM-4612 tag (join-gild=2, union=3) and target-gild ShortString.
+        // Direct online delivery remains a separate native call site; the queued record is consumed on login.
         internal int ApplyGildRefuseRequest(long operatorId,
             long uniqueRequestId)
         {
@@ -2165,9 +2195,44 @@ namespace GameSvr.Services
                             NativeCorpsDataSnapshot.GildRelationKey(
                                 request.SecondaryKey, request.TargetKey));
                     _requestLedger.RemoveByUniqueId(uniqueRequestId);
+                    QueueGildRefuseNoticeLocked(request, targetGild);
                 }
                 return result;
             }
+        }
+
+        // Native sub_7077C4 / sub_708520 / sub_708004 build the same 17-byte
+        // notice for an applicant that cannot be reached online.  The recipient identity is
+        // the requester's CharID ([2,3] / RequestId); the text source is the
+        // accepting gild's +0x10 name field.  JoinCorps is intentionally left
+        // out until its request object is modeled in this service.
+        private void QueueGildRefuseNoticeLocked(
+            NativeGildPendingRequest request, NativeGildSnapshot targetGild)
+        {
+            if (request == null || targetGild == null
+                || request.RequestId == 0)
+                return;
+
+            var noticeType = request.Kind switch
+            {
+                NativeGildRequestKind.JoinGild =>
+                    NativeGildOfflineNotice.JoinGildRefuseType,
+                NativeGildRequestKind.Union =>
+                    NativeGildOfflineNotice.UnionRefuseType,
+                _ => (byte)0
+            };
+            if (noticeType == 0) return;
+
+            // Native resolves the requesting side before calling sub_6A52BC;
+            // do the same existence gate so a stale request cannot create a
+            // notice for a missing corps/gild.
+            var requesterExists = request.Kind == NativeGildRequestKind.JoinGild
+                ? _corpsById.ContainsKey(request.SecondaryKey)
+                : _gildById.ContainsKey(request.SecondaryKey);
+            if (!requesterExists) return;
+
+            QueuePendingNotice(request.RequestId, noticeType,
+                targetGild.Name);
         }
 
         // 4611 CM_GILD_ACCEPT_REQUEST write (native sub_6F62F0 -> role strategy slot +0x00 -> the request

@@ -155,6 +155,10 @@ namespace GameSvr.Services
         internal const int GildRelationSummarySize = 24;
         internal const int GildConcernSummarySize = 32;
         internal const int GildRequestSummarySize = 56;
+        internal const int PendingNoticeRecordSize =
+            NativeGildOfflineNotice.RecordSize;
+        internal const int PendingNoticeTextCapacity =
+            NativeGildOfflineNotice.TextShortStringCap;
 
         private static readonly Encoding StrictGbk = Encoding.GetEncoding(
             HUtil32.GbkEncoding.CodePage, EncoderFallback.ExceptionFallback,
@@ -407,6 +411,31 @@ namespace GameSvr.Services
                 WriteShortString(record.Slice(32, 16), 15,
                     requests[index].OwnerName);
                 record[48] = unchecked((byte)requests[index].Flag);
+            }
+            return body;
+        }
+
+        // SM 4612 (sub_6F772C / sub_7077C4 / sub_708004 / sub_708520):
+        // each queued notice is exactly one byte of subtype followed by a
+        // Delphi ShortString slot of 16 bytes (length + 15-byte GBK payload).
+        // The native sender uses count * 17 as the body length and emits no
+        // header record when the queue is empty.
+        internal static byte[] EncodePendingNotices(
+            IReadOnlyList<NativeGildOfflineNotice> notices)
+        {
+            if (notices == null || notices.Count == 0)
+                return Array.Empty<byte>();
+
+            var body = new byte[checked(notices.Count *
+                                        PendingNoticeRecordSize)];
+            for (var index = 0; index < notices.Count; index++)
+            {
+                var notice = notices[index];
+                var record = body.AsSpan(index * PendingNoticeRecordSize,
+                    PendingNoticeRecordSize);
+                record[0] = notice?.NoticeType ?? (byte)0;
+                WriteShortString(record.Slice(1, 16),
+                    PendingNoticeTextCapacity, notice?.Text);
             }
             return body;
         }

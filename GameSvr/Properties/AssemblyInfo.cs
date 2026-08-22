@@ -65,3 +65,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeMonSupportCompatCheck")]
 [assembly: InternalsVisibleTo("NativeSpecialDropItemRollCoreCheck")]
 [assembly: InternalsVisibleTo("NativeAction1024CompatCheck")]
+[assembly: InternalsVisibleTo("NativePendingNoticeProtocolCheck")]

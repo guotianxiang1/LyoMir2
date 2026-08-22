@@ -52,12 +52,15 @@ namespace GameSvr
         // Empty list still sends: je 0x6F77EB skips packing but not the send,
         // Len=0 (ebx stays 0 from the xor at 0x6F7750). Body records are 17
         // bytes {type byte + ShortString cap 15} when the offline-notice
-        // queue at manager+0x24 is non-empty; C# does not yet populate that
-        // queue, so login emits the empty frame native still always fires.
+        // queue at manager+0x24 is non-empty. TakePendingNoticesBody removes
+        // the queue atomically before encoding, matching native's consume-on-
+        // login behavior; the online push sites remain separate call sites.
         private void SendNativePendingNoticesOnLogon()
         {
+            var body = CorpsService.TakePendingNoticesBody(
+                GetCachedNativeUserId());
             SendSocket(Grobal2.MakeDefaultMsg(Grobal2.SM_PENDING_NOTICE, 0, 0, 0, 0),
-                new byte[0]);
+                body);
         }
     }
 }

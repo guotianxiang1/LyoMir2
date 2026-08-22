@@ -2111,11 +2111,11 @@ namespace SystemModule
         // member-broadcast wrappers 0x705954 [0x250] / 0x7059D0 [0x254]):
         //   [obj+0x250] SendDefMessage: push Param,Tag,Series,sMsg ; ecx=Recog dx=ident
         //   [obj+0x254] SendSocket:     push Param,Tag,Series,Buf,Len ; ecx=Recog dx=ident
-        // Eight idents whose body cannot be evaluated at the send slot (locally
+        // Seven idents whose body cannot be evaluated at the send slot (locally
         // composed record/struct buffers with uninitialised ShortString padding, an
         // opaque per-record serializer, or a non-standard virtual slot) are registered
         // here but marked BLOCKED and have NO builder (fail-closed):
-        //   SM_4363, SM_4441, SM_4442, SM_4443, SM_4612, SM_4626, SM_4646, SM_4647.
+        //   SM_4363, SM_4441, SM_4442, SM_4443, SM_4626, SM_4646, SM_4647.
         public const int SM_4349 = 4349; // 0x10FD [obj+0x250] empty; RM arm Recog=nParam1 Param=wParam Tag=LoWord(nParam2) Series=HiWord(nParam2) @0x6B5215
         public const int SM_4350 = 4350; // 0x10FE [obj+0x250] empty; RM arm (same 5-tuple as 4349) @0x68980D
         public const int SM_4351 = 4351; // 0x10FF [obj+0x250] empty; Recog=arg(eax), all-0; gated target!=nil/not-ghost/[t+0x73]==0 @0x647F38
@@ -2143,7 +2143,7 @@ namespace SystemModule
         public const int SM_4480 = 4480; // 0x1180 member-broadcast wrapper 0x705954; sMsg text = "与"+<name>+"行会的行会战结束"; all-0 frame @0x7068AF
         public const int SM_4496 = 4496; // 0x1190 [obj+0x250] empty; Recog=esi(runtime, -1 default / 0x4177C0 result), all-0 @0x6FAD1B
         public const int SM_4499 = 4499; // 0x1193 [obj+0x250] sMsg text=esi(string arg); Recog=edi(int arg), all-0 @0x6FBD25
-        public const int SM_4612 = 4612; // 0x1204 BLOCKED: [obj+0x254] count*17 record array (byte + SS[15] name) copied by loop from unmapped source dyn-array; SS padding uninit; Len=[src+8]*17 @0x6F781C
+        public const int SM_4612 = 4612; // 0x1204: login + queued refuse notice body; count*17 records {type + SS[15]} @0x6F781C; direct online sites remain deferred
         public const int SM_4614 = 4614; // 0x1206 member-broadcast wrapper 0x7059D0 ([0x254] variant); body=8 bytes (two dwords); Param=0 Tag=0 Series=1 Recog=0 @0x70214D
         public const int SM_4626 = 4626; // 0x1212 BLOCKED: [obj+0x254] count*0x40 record array filled by opaque serializer 0x7060B8; Buf=[ebp-0x1C] Len=[ebp-0x14]*0x40 @0x6AE363
         public const int SM_4638 = 4638; // 0x121E [obj+0x250] empty; Recog=0 all-0; sent to edx target!=nil @0x64E832
