@@ -32,7 +32,15 @@ namespace GameSvr.Services
 
         // ---- 4418 browse RESPONSE (sub_61DA00) layout, byte-exact from spec §3b ----
         public const int QueryHeaderSize = 88;      // 0x58 header-only length for an empty stall
-        public const int QueryItemRecordSize = 16;  // one {ClientItemID,uprice,moneytype,count} scalar record
+        // Native sub_61DA00/sub_61DDF8 use the in-memory stall-item order:
+        // {ClientItemID, itemCount, moneyType, unitPrice}.  It is intentionally not
+        // the request header order (4421 carries price in the body and count in Param).
+        public const int QueryItemRecordSize = 16;  // {ClientItemID,itemCount,moneytype,uprice}
+        /// <summary>
+        /// SM 4428 (SM_UPT_ADD_STALLITEM) prepends the same four scalar values to the
+        /// native item-detail blob that the item object's VMT+34 serializer returns.
+        /// </summary>
+        public const int AddItemUpdateHeaderSize = 16;
         private const int Name1MaxChars = 14;       // ShortString[15] content @0x08 (1 len byte + 14)
         private const int Name2MaxChars = 30;       // ShortString[33] content @0x17 (1 len byte + up to 30 +pad)
 
@@ -156,7 +164,7 @@ namespace GameSvr.Services
 
         /// <summary>
         /// Build the 4418 browse-response PAYLOAD (<c>sub_61DA00</c>, spec §3b): an 88-byte header +
-        /// a <c>16 * itemCount</c> item-scalar array (<c>{ClientItemID, uprice, moneytype, count}</c>, the
+        /// a <c>16 * itemCount</c> item-scalar array (<c>{ClientItemID, itemCount, moneytype, uprice}</c>, the
         /// records BUY echoes back in <c>Recog</c>) + the per-item detail blob. Empty stall => header only
         /// (length 88). The per-item ClientItemID must already be assigned on <see cref="TUserItem.ClientItemID"/>
         /// (native writes back <c>item+0xFC</c>); the caller runs <c>EnsureClientItemId</c> first.
@@ -198,14 +206,15 @@ namespace GameSvr.Services
             ms.Write(header, 0, header.Length);
 
             // -------- segment ② : 16 * itemCount scalar array --------
+            // sub_61DA00 copies stall-item +0xF0/+0xF4/+0xF8 to offsets +4/+8/+12.
             var record16 = new byte[QueryItemRecordSize];
             foreach (var si in items)
             {
                 var clientItemId = si?.Item?.ClientItemID ?? 0;
                 BinaryPrimitives.WriteInt32LittleEndian(record16.AsSpan(0x00, 4), clientItemId);
-                BinaryPrimitives.WriteInt32LittleEndian(record16.AsSpan(0x04, 4), si?.UnitPrice ?? 0);
+                BinaryPrimitives.WriteInt32LittleEndian(record16.AsSpan(0x04, 4), si?.ItemCount ?? 0);
                 BinaryPrimitives.WriteInt32LittleEndian(record16.AsSpan(0x08, 4), si?.MoneyType ?? 0);
-                BinaryPrimitives.WriteInt32LittleEndian(record16.AsSpan(0x0C, 4), si?.ItemCount ?? 0);
+                BinaryPrimitives.WriteInt32LittleEndian(record16.AsSpan(0x0C, 4), si?.UnitPrice ?? 0);
                 ms.Write(record16, 0, record16.Length);
             }
 
@@ -222,6 +231,33 @@ namespace GameSvr.Services
             }
 
             return ms.ToArray();
+        }
+
+        /// <summary>
+        /// Builds the SM 4428 body emitted by native <c>sub_61DDF8</c>/<c>sub_6E7DE0</c>
+        /// after an item is successfully listed.  The first 16 bytes are, in order,
+        /// <c>ClientItemID</c>, listed count, money type, and unit price.  The remainder
+        /// is copied verbatim from the item's client-detail serializer (native VMT+34).
+        /// A zero-length detail is fail-closed: native's <c>sub_6E7DE0</c> does not send
+        /// a frame when the total length is non-positive.
+        /// </summary>
+        public static byte[] BuildAddItemUpdate(TUserItem item, int unitPrice, int moneyType,
+            int itemCount, Func<TUserItem, byte[]> serializeItemBlob)
+        {
+            if (item == null || serializeItemBlob == null)
+                return Array.Empty<byte>();
+
+            var detail = serializeItemBlob(item);
+            if (detail == null || detail.Length == 0)
+                return Array.Empty<byte>();
+
+            var payload = new byte[AddItemUpdateHeaderSize + detail.Length];
+            BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(0x00, 4), item.ClientItemID);
+            BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(0x04, 4), itemCount);
+            BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(0x08, 4), moneyType);
+            BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(0x0C, 4), unitPrice);
+            detail.AsSpan().CopyTo(payload.AsSpan(AddItemUpdateHeaderSize));
+            return payload;
         }
 
         // Delphi ShortString: 1 length byte + up to maxChars GBK content bytes (fixed-offset zero padded).

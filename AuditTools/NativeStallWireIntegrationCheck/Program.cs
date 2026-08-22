@@ -32,6 +32,7 @@ try
     VerifyLengthGuards();
     VerifyManagerByCharId();
     VerifyBrowseResponse();
+    VerifyAddItemUpdate();
     VerifyBuyEchoLoop();
     VerifyGateStaysDormant();
 
@@ -40,10 +41,11 @@ try
         "Series=wParam/body=Payload) + BUY(itemId=Recog,owner=body[0]/[4] int64,count=Series) + " +
         "ADD(itemId=Recog,uprice=body[0],moneytype=Tag,count=Param) + Query(owner=body[0]/[4]) + " +
         "SetName(whole-body GBK) + len-guards(>=8 4418/4426,>=4 4421) + mgr by-CharID + " +
-        "4418 response(88 hdr + 16xN array + blob; ClientItemID/price/type/count round-trip; BUY-echo) " +
+        "4418 response(88 hdr + 16xN array + blob; ClientItemID/count/type/price round-trip; BUY-echo) " +
         "gate=OFF");
     return 0;
 }
+
 catch (Exception ex)
 {
     Console.Error.WriteLine($"NativeStallWireIntegrationCheck FAIL: {ex.Message}");
@@ -53,6 +55,29 @@ catch (Exception ex)
 static void Assert(bool cond, string msg)
 {
     if (!cond) throw new Exception(msg);
+}
+
+// SM 4428 / sub_61DDF8: scalar listing header followed by the VMT+34 detail blob.
+static void VerifyAddItemUpdate()
+{
+    var item = new TUserItem { ClientItemID = 0x12345678, wIndex = 7 };
+    var detail = new byte[] { 0xA1, 0x00, 0xFE, 0x7F };
+    var body = NativeStallWireCodec.BuildAddItemUpdate(item, 123456, 1, 9, _ => detail);
+
+    Assert(body.Length == NativeStallWireCodec.AddItemUpdateHeaderSize + detail.Length,
+        "SM4428: total length = 16 + detail");
+    Assert(BinaryPrimitives.ReadInt32LittleEndian(body.AsSpan(0x00, 4)) == item.ClientItemID,
+        "SM4428: ClientItemID @0");
+    Assert(BinaryPrimitives.ReadInt32LittleEndian(body.AsSpan(0x04, 4)) == 9,
+        "SM4428: item count @4");
+    Assert(BinaryPrimitives.ReadInt32LittleEndian(body.AsSpan(0x08, 4)) == 1,
+        "SM4428: money type @8");
+    Assert(BinaryPrimitives.ReadInt32LittleEndian(body.AsSpan(0x0C, 4)) == 123456,
+        "SM4428: unit price @12");
+    Assert(body.AsSpan(NativeStallWireCodec.AddItemUpdateHeaderSize).SequenceEqual(detail),
+        "SM4428: detail copied after scalar header");
+    Assert(NativeStallWireCodec.BuildAddItemUpdate(item, 1, 0, 1, _ => Array.Empty<byte>()).Length == 0,
+        "SM4428: empty detail suppresses native frame");
 }
 
 // ---- wire helpers ------------------------------------------------------------------------------
@@ -294,8 +319,8 @@ static void VerifyBrowseResponse()
     Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(0x54, 4)) == 2, "hdr: item count @0x54 == 2");
 
     // --- segment ② item-scalar array (the records BUY echoes back) ---
-    CheckItemRecord(p, Hdr + 0 * Recsz, 111, 500, 0, 5);
-    CheckItemRecord(p, Hdr + 1 * Recsz, 222, 9999, 1, 1);
+    CheckItemRecord(p, Hdr + 0 * Recsz, 111, 5, 0, 500);
+    CheckItemRecord(p, Hdr + 1 * Recsz, 222, 1, 1, 9999);
 
     // --- segment ③ per-item blob (appended verbatim, in item order) ---
     var blobStart = Hdr + Recsz * 2;
@@ -344,12 +369,12 @@ static bool BytesEq(byte[] a, byte[] b, int n)
     return true;
 }
 
-static void CheckItemRecord(byte[] p, int off, int clientItemId, int uprice, int moneyType, int count)
+static void CheckItemRecord(byte[] p, int off, int clientItemId, int count, int moneyType, int uprice)
 {
     Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(off + 0x00, 4)) == clientItemId, $"item@{off}: ClientItemID");
-    Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(off + 0x04, 4)) == uprice, $"item@{off}: uprice");
+    Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(off + 0x04, 4)) == count, $"item@{off}: count");
     Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(off + 0x08, 4)) == moneyType, $"item@{off}: moneytype");
-    Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(off + 0x0C, 4)) == count, $"item@{off}: count");
+    Assert(BinaryPrimitives.ReadInt32LittleEndian(p.AsSpan(off + 0x0C, 4)) == uprice, $"item@{off}: uprice");
 }
 
 static string ReadShortStr(byte[] p, int off)

@@ -338,8 +338,15 @@ namespace GameSvr
                     SendDefMessage(Grobal2.SM_BAGITEMDURACHG, clientItemId, item.Dura, item.DuraMax, 0, "");
                 else
                     SendDefMessage(Grobal2.SM_DELITEM, clientItemId, 0, 0, 1, "");   // the whole stack left the bag
-                // FLAGGED (pre-flip): the stall-side "item listed" update (SM_UPT_ADD 4428) needs the sub_61DA00
-                // per-item wire format (codec-fidelity is dumping it). Deferred until that byte-exact lands.
+
+                // Native sub_61DDF8 sends the listing-side update only after the item has
+                // received its final ClientItemID.  Its body is a 16-byte scalar header
+                // followed by the same VMT+34 client-detail blob used by the browse reply;
+                // sub_6E7DE0 frames it as SM 4428 with all scalar message fields zero.
+                var update = NativeStallWireCodec.BuildAddItemUpdate(added.Item, uprice, moneyType, added.ItemCount,
+                    EncodeClientItemRecord);
+                if (update.Length > 0)
+                    SendSocket(Grobal2.MakeDefaultMsg(Grobal2.SM_UPT_ADD_STALLITEM, 0, 0, 0, 0), update);
             }
             SendDefMessage(responseIdent, code, 0, 0, 0, "");
             return true;
