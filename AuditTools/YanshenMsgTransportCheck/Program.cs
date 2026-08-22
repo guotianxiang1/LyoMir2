@@ -119,6 +119,11 @@ TransportResult DispatchThroughGate(ushort ident, byte[] expectedBody,
         }
     };
     M2Share.UserEngine = engine;
+    engine.ProcessUserMessage(player, new ClientPacket
+    {
+        Ident = Grobal2.CM_LOGINNOTICEOK,
+        Recog = 1
+    }, string.Empty);
 
     var clientPacket = new ClientPacket
     {
