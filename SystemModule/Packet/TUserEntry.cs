@@ -15,12 +15,26 @@ namespace SystemModule.Packet
         
         protected override void ReadPacket(BinaryReader reader)
         {
-            throw new System.NotImplementedException();
+            sAccount = reader.ReadPascalString(10);
+            sPassword = reader.ReadPascalString(10);
+            sUserName = reader.ReadPascalString(20);
+            sSSNo = reader.ReadPascalString(14);
+            sPhone = reader.ReadPascalString(14);
+            sQuiz = reader.ReadPascalString(20);
+            sAnswer = reader.ReadPascalString(12);
+            sEMail = reader.ReadPascalString(40);
         }
 
         protected override void WritePacket(BinaryWriter writer)
         {
-            throw new System.NotImplementedException();
+            writer.Write(sAccount, 10);
+            writer.Write(sPassword, 10);
+            writer.Write(sUserName, 20);
+            writer.Write(sSSNo, 14);
+            writer.Write(sPhone, 14);
+            writer.Write(sQuiz, 20);
+            writer.Write(sAnswer, 12);
+            writer.Write(sEMail, 40);
         }
     }
 

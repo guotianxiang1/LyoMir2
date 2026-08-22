@@ -19,7 +19,16 @@ namespace GameSvr
 
         protected override void ReadPacket(BinaryReader reader)
         {
-            throw new System.NotImplementedException();
+            var magicBytes = reader.ReadBytes(TMagic.RecordSize);
+            if (magicBytes.Length != TMagic.RecordSize)
+                throw new EndOfStreamException();
+
+            MagicInfo = Packets.ToPacket<TMagic>(magicBytes)
+                ?? throw new InvalidDataException("Invalid TUserMagic definition.");
+            btLevel = reader.ReadByte();
+            wMagIdx = reader.ReadUInt16();
+            nTranPoint = reader.ReadInt32();
+            btKey = reader.ReadByte();
         }
 
         protected override void WritePacket(BinaryWriter writer)

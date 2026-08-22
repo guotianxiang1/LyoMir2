@@ -19,7 +19,18 @@ namespace GameSvr
 
         protected override void ReadPacket(BinaryReader reader)
         {
-            throw new System.NotImplementedException();
+            wMagicID = reader.ReadUInt16();
+            btEffectType = reader.ReadByte();
+            btEffect = reader.ReadByte();
+            wSpell = reader.ReadUInt16();
+            wPower = reader.ReadUInt16();
+            btTrainLv = reader.ReadByte();
+            btJob = reader.ReadByte();
+            dwDelayTime = reader.ReadInt32();
+            btDefSpell = reader.ReadByte();
+            btDefPower = reader.ReadByte();
+            wMaxPower = reader.ReadUInt16();
+            btDefMaxPower = reader.ReadByte();
         }
 
         protected override void WritePacket(BinaryWriter writer)

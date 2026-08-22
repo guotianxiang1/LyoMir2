@@ -9,7 +9,8 @@ namespace GameSvr
 
         protected override void ReadPacket(BinaryReader reader)
         {
-            throw new System.NotImplementedException();
+            Ident = reader.ReadUInt16();
+            wMsg = reader.ReadUInt16();
         }
 
         protected override void WritePacket(BinaryWriter writer)
