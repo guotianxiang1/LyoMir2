@@ -28,8 +28,27 @@ artifacts/
 # LoginGate/Resources ARE EmbeddedResource inputs and must stay tracked.
 /Resources/
 
-# RE notes and evidence (48M); the real corpus lives in D:/loym2/staging
+# Local analysis material (kept outside the source distribution)
 /staging/
+
+# Source distribution policy: notes, scripts, and generated reports stay local.
+*.md
+*.markdown
+*.js
+*.jsx
+*.mjs
+*.cjs
+*.log
+*.py
+*.pyc
+*.ps1
+*.bat
+*.cmd
+/docs/
+/tools/
+/_audit/
+/_work/
+/.claude/
 
 # runtime backups
 _runtime_backup_*/
