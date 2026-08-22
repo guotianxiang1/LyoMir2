@@ -1,4 +1,5 @@
 using GameSvr;
+using GameSvr.PasEngine;
 
 // Contract check for the dormant ACTIVITY / TITLE / RANK (活动 / 封号称号 / 排行) GM command family model
 // (GameSvr/Services/NativeGmActivityCommands.cs), locked against the Hex-Rays-verified original dispatcher
@@ -13,6 +14,7 @@ try
     VerifyHandledByteSemantics();
     VerifyPureCoreForwards();
     VerifySuccessMsgImpls();
+    VerifyPushSingleTaskLive();
     VerifyPushActIdent();
     VerifyAddVote();
     VerifySetGoldActLv();
@@ -27,7 +29,7 @@ try
         "SignInAct/PushActIdent/SimpleActCtrl/AddVote/GMActCtrl/setGoldActLv) " +
         "fixedReplyStub=2(GetGuildMember=Invalid/addGuildMem=CanNotInsertDirectly) defaultNoop=23 " +
         "(SetActScore idx264 modeled in item family) " +
-        "csharp(NO perm drift;live=10;under=AddVote/GMActCtrl/setGoldActLv;" +
+        "csharp(NO perm drift;live=11;under=AddVote/GMActCtrl/setGoldActLv;" +
         "over=ReloadGoddessConfig/ReloadSnakeConf/SETACHIEVE/ReloadDailyActiveCfg;faithful=SignInAct)");
     return 0;
 }
@@ -61,6 +63,19 @@ static void VerifyDispatcherConstants()
     Equal(NativeGmActivityCommands.CanNotInsertReplyText, "Can not insert directly", "CanNotInsert reply text");
     Equal(NativeGmActivityCommands.CoreFindCharEa, 0x00652784u, "find-char helper ea");
     Equal(NativeGmActivityCommands.CharGoldActLvOffset, 6173, "setGoldActLv char field offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskCaseEa, 0x006287F1u, "pushsingletask case ea");
+    Equal(NativeGmActivityCommands.PushSingleTaskParserEa, 0x0040CA18u, "pushsingletask parser ea");
+    Equal(NativeGmActivityCommands.PushSingleTaskParserDefault, -1, "pushsingletask parser default");
+    Equal(NativeGmActivityCommands.PushSingleTaskPlayerListOffset, 0x2C, "pushsingletask player-list offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskPlayerCountVtableOffset, 0x14, "pushsingletask count vtable offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskPlayerAtVtableOffset, 0x18, "pushsingletask indexed-get vtable offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskGhostOffset, 0x73, "pushsingletask ghost offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskDeathOffset, 0x74, "pushsingletask death offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskDispatchEa, 0x006E13A4u, "pushsingletask dispatch ea");
+    Equal(NativeGmActivityCommands.PushSingleTaskDispatchVtableOffset, 0x250, "pushsingletask dispatch vtable offset");
+    Equal(NativeGmActivityCommands.PushSingleTaskMessageIdent, 1530, "pushsingletask message ident");
+    Equal(NativeGmActivityCommands.PushSingleTaskMessageColor, 0x38FF, "pushsingletask message colour");
+    Equal(NativeGmActivityCommands.PushSingleTaskMessagePrefix, "向在线玩家推送活动", "pushsingletask message prefix");
 }
 
 static void VerifyRegistry()
@@ -72,7 +87,7 @@ static void VerifyRegistry()
         // ---- 14 implemented cases ----
         (GmActivityCommand.Givetitle,      "givetitle",      142, 4, GmActivityHandlerKind.ImplementedCase,   0x0062552Eu, false, 0, false, false),
         (GmActivityCommand.Quxiaotitle,    "quxiaotitle",    143, 4, GmActivityHandlerKind.ImplementedCase,   0x00625541u, false, 0, false, false),
-        (GmActivityCommand.PushSingleTask, "PushSingleTask", 197, 4, GmActivityHandlerKind.ImplementedCase,   0x006287F1u, false, 0, false, false),
+        (GmActivityCommand.PushSingleTask, "PushSingleTask", 197, 4, GmActivityHandlerKind.ImplementedCase,   0x006287F1u, true, 4, false, false),
         (GmActivityCommand.UpdateOrder,    "UpdateOrder",    200, 5, GmActivityHandlerKind.ImplementedCase,   0x00625D19u, false, 0, false, false),
         (GmActivityCommand.AddNWPresent,   "AddNWPresent",   231, 5, GmActivityHandlerKind.ImplementedCase,   0x00626215u, false, 0, false, false),
         (GmActivityCommand.AddNWAccept,    "AddNWAccept",    232, 5, GmActivityHandlerKind.ImplementedCase,   0x00626272u, false, 0, false, false),
@@ -170,7 +185,7 @@ static void VerifyRegistry()
     Equal(stub, 2, "fixed-reply-stub count");
     Equal(def, 23, "default no-op count (SetActScore modeled in item family)");
     Equal(impl + stub + def, 39, "total family-07 modeled here (40 total)");
-    Equal(live, 10, "live command count");
+    Equal(live, 11, "live command count");
     Equal(over, 4, "over-sends count");
     Equal(under, 3, "under-implements count");
 }
@@ -208,7 +223,7 @@ static void VerifySuccessMsgImpls()
 {
     var push = NativeGmPushSingleTask.Evaluate(5);
     Equal(push.CoreEa, 0x00656924u, "pushsingletask core ea");
-    Equal(push.CoreBodyDeferred, true, "pushsingletask core deferred");
+    Equal(push.CoreBodyDeferred, false, "pushsingletask core fully recovered");
     Equal(push.SendsSysMsgOnSuccess, true, "pushsingletask msg on success");
     Equal(push.MessageColor, 0x38FF, "pushsingletask colour green");
 
@@ -219,6 +234,51 @@ static void VerifySuccessMsgImpls()
     var accept = NativeGmAddNWAccept.Evaluate(3, "gift");
     Equal(accept.CoreEa, 0x006036B8u, "addnwaccept core ea");
     Equal(accept.MessageColor, 0xFFDB, "addnwaccept colour");
+}
+
+static void VerifyPushSingleTaskLive()
+{
+    var commandType = typeof(PushSingleTaskCommand);
+    var attribute = (GameSvr.CommandSystem.GameCommandAttribute)
+        Attribute.GetCustomAttribute(commandType,
+            typeof(GameSvr.CommandSystem.GameCommandAttribute));
+    if (attribute == null)
+        throw new Exception("pushsingletask live command attribute missing");
+    Equal(attribute.Name, "PushSingleTask", "pushsingletask live name");
+    Equal(attribute.Desc, "向在线玩家推送活动", "pushsingletask live description");
+    Equal(attribute.Help, "活动ID", "pushsingletask live help");
+    Equal(attribute.nPermissionMin, (byte)4, "pushsingletask live permission");
+
+    var method = commandType.GetMethod("PushSingleTask");
+    if (method == null)
+        throw new Exception("pushsingletask live handler missing");
+    var parameters = method.GetParameters();
+    Equal(parameters.Length, 2, "pushsingletask handler parameter count");
+    Equal(parameters[0].ParameterType, typeof(string[]), "pushsingletask token parameter");
+    Equal(parameters[1].ParameterType, typeof(TPlayObject), "pushsingletask invoker parameter");
+
+    if (!TryNativeInteger("5", out var decimalId) || decimalId != 5)
+        throw new Exception("native Delphi decimal parser no longer accepts activity ID");
+    if (!TryNativeInteger("$10", out var hexId) || hexId != 16)
+        throw new Exception("native Delphi hexadecimal parser no longer matches StrToIntDef");
+    if (TryNativeInteger("0", out var zeroId) && zeroId > 0)
+        throw new Exception("zero activity ID escaped the native <=0 gate");
+    if (TryNativeInteger("not-an-id", out _))
+        throw new Exception("invalid activity ID escaped the native default -1 path");
+}
+
+static bool TryNativeInteger(string text, out int value)
+{
+    var parser = typeof(PasApiBridge).GetMethod(
+        "TryParseNativeDelphiInteger",
+        System.Reflection.BindingFlags.Static |
+        System.Reflection.BindingFlags.NonPublic);
+    if (parser == null)
+        throw new Exception("native Delphi integer parser missing");
+    var args = new object[] { text, 0 };
+    var result = (bool)parser.Invoke(null, args);
+    value = (int)args[1];
+    return result;
 }
 
 static void VerifyPushActIdent()

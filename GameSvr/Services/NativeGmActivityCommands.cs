@@ -2,10 +2,10 @@ namespace GameSvr
 {
     // ------------------------------------------------------------------------------------------------
     // Dormant model of the ACTIVITY / TITLE / RANK (活动 / 封号称号 / 排行) GM command family, reversed
-    // 1:1 from the original Delphi M2Server ("战神" / God-of-War fork). NOT wired into the live command
-    // table — the live handlers stay in GameSvr/Command/Commands/*Command.cs. This type only *describes*
-    // the exact original contract so an AuditTools check can lock it and a future port can reproduce it
-    // precisely instead of guessing.
+    // 1:1 from the original Delphi M2Server ("战神" / God-of-War fork). Most entries remain a model
+    // for their still-dormant handlers; PushSingleTask is the first entry in this family wired into
+    // GameSvr/Command/Commands. This type keeps the exact original contract available to AuditTools
+    // so live ports can be checked against evidence instead of guessed.
     //
     // This is the GM "@"-command family 07 of gm_full_inventory_20260731.md: 40 commands — 39 modeled
     // here (14 with a dedicated case that does real work, 2 with a dedicated case that only replies a
@@ -180,10 +180,24 @@ namespace GameSvr
         // setGoldActLv writes the parsed level byte to [char + 6173] (0x181D) inline (no deferred core)
         public const int CharGoldActLvOffset = 6173;
 
-        // CORE targets each implemented case forwards to (bodies NOT in the dumps -> CoreBodyDeferred)
+        // CORE targets each implemented case forwards to (bodies not in the dumps -> CoreBodyDeferred)
         public const uint CoreGiveTitleEa = 0x006C66C4;       // givetitle    -> sub_6C66C4(name, title)
         public const uint CoreQuxiaoTitleEa = 0x006C67D4;     // quxiaotitle  -> sub_6C67D4(name)
-        public const uint CorePushSingleTaskEa = 0x00656924;  // PushSingleTask-> sub_656924()
+        public const uint CorePushSingleTaskEa = 0x00656924;  // PushSingleTask -> sub_656924()
+        // PushSingleTask's complete 2.08 staging contract (dispatcher + fan-out + packet path).
+        public const uint PushSingleTaskCaseEa = 0x006287F1;
+        public const uint PushSingleTaskParserEa = 0x0040CA18; // sub_40CA18(token, -1)
+        public const int PushSingleTaskParserDefault = -1;
+        public const int PushSingleTaskPlayerListOffset = 0x2C;
+        public const int PushSingleTaskPlayerCountVtableOffset = 0x14;
+        public const int PushSingleTaskPlayerAtVtableOffset = 0x18;
+        public const int PushSingleTaskGhostOffset = 0x73;
+        public const int PushSingleTaskDeathOffset = 0x74;
+        public const uint PushSingleTaskDispatchEa = 0x006E13A4; // SendDefMessage fan-out helper
+        public const int PushSingleTaskDispatchVtableOffset = 0x250;
+        public const int PushSingleTaskMessageIdent = SystemModule.Grobal2.SM_PUSH_SINGLE_TASK;
+        public const int PushSingleTaskMessageColor = ColorGreen;
+        public const string PushSingleTaskMessagePrefix = "向在线玩家推送活动";
         public const uint CoreUpdateOrderEa = 0x00713094;     // UpdateOrder  -> sub_713094(0)
         public const uint CoreAddNWPresentEa = 0x00603948;    // AddNWPresent -> sub_603948(count, giftName)
         public const uint CoreAddNWAcceptEa = 0x006036B8;     // AddNWAccept  -> sub_6036B8(count, giftName)
@@ -209,7 +223,7 @@ namespace GameSvr
             // ---- IMPLEMENTED cases (dedicated body does real work) ----
             new() { Command = GmActivityCommand.Givetitle,     Name = "givetitle",      DispatchIndex = 142, RequiredPermission = 4, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x0062552E },
             new() { Command = GmActivityCommand.Quxiaotitle,   Name = "quxiaotitle",    DispatchIndex = 143, RequiredPermission = 4, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x00625541 },
-            new() { Command = GmActivityCommand.PushSingleTask,Name = "PushSingleTask", DispatchIndex = 197, RequiredPermission = 4, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x006287F1 },
+            new() { Command = GmActivityCommand.PushSingleTask,Name = "PushSingleTask", DispatchIndex = 197, RequiredPermission = 4, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x006287F1, CSharpLivePresent = true, CSharpLivePermission = 4 },
             new() { Command = GmActivityCommand.UpdateOrder,   Name = "UpdateOrder",    DispatchIndex = 200, RequiredPermission = 5, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x00625D19 },
             new() { Command = GmActivityCommand.AddNWPresent,  Name = "AddNWPresent",   DispatchIndex = 231, RequiredPermission = 5, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x00626215 },
             new() { Command = GmActivityCommand.AddNWAccept,   Name = "AddNWAccept",    DispatchIndex = 232, RequiredPermission = 5, HandlerKind = GmActivityHandlerKind.ImplementedCase, CaseAddress = 0x00626272 },
@@ -335,13 +349,16 @@ namespace GameSvr
 
     // ===================== Parse-then-core-then-message impls (message on the SUCCESS branch) =====
     // PushSingleTask(197)  parse actID; if actID>0 -> sub_656924() + SysMsg(0x38FF). (else silent.)
+    // Its delegated body is fully recovered in the 2.08 staging image: sub_656924 walks
+    // UserEngine+0x2C, skips null/ghost/dead players, and sub_6E13A4 sends SM 1530
+    // with Param=actID. The other two cores below remain deferred.
     // AddNWPresent(231)    parse count; if sub_603948(count,gift) -> SysMsg(0xFFDB). (else silent.)
     // AddNWAccept(232)     parse count; if sub_6036B8(count,gift) -> SysMsg(0xFFDB). (else silent.)
     public sealed class ActivitySuccessMsgOutcome
     {
         public bool CallsCore => true;
         public uint CoreEa { get; init; }
-        public bool CoreBodyDeferred => true;
+        public bool CoreBodyDeferred { get; init; } = true;
         /// <summary>The SysMsg fires only on the success branch (parse/core success); silent otherwise.</summary>
         public bool SendsSysMsgOnSuccess => true;
         public int MessageColor { get; init; }
@@ -350,19 +367,24 @@ namespace GameSvr
     public static class NativeGmPushSingleTask
     {
         public static ActivitySuccessMsgOutcome Evaluate(int actId) =>
-            new() { CoreEa = NativeGmActivityCommands.CorePushSingleTaskEa, MessageColor = NativeGmActivityCommands.ColorGreen };
+            new()
+            {
+                CoreEa = NativeGmActivityCommands.CorePushSingleTaskEa,
+                CoreBodyDeferred = false,
+                MessageColor = NativeGmActivityCommands.PushSingleTaskMessageColor
+            };
     }
 
     public static class NativeGmAddNWPresent
     {
         public static ActivitySuccessMsgOutcome Evaluate(int count, string giftName) =>
-            new() { CoreEa = NativeGmActivityCommands.CoreAddNWPresentEa, MessageColor = NativeGmActivityCommands.ColorYellowNotice };
+            new() { CoreEa = NativeGmActivityCommands.CoreAddNWPresentEa, CoreBodyDeferred = true, MessageColor = NativeGmActivityCommands.ColorYellowNotice };
     }
 
     public static class NativeGmAddNWAccept
     {
         public static ActivitySuccessMsgOutcome Evaluate(int count, string giftName) =>
-            new() { CoreEa = NativeGmActivityCommands.CoreAddNWAcceptEa, MessageColor = NativeGmActivityCommands.ColorYellowNotice };
+            new() { CoreEa = NativeGmActivityCommands.CoreAddNWAcceptEa, CoreBodyDeferred = true, MessageColor = NativeGmActivityCommands.ColorYellowNotice };
     }
 
     // ===================== PushActIdent (idx 284) =====================

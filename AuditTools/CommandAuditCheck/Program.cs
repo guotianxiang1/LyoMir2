@@ -187,6 +187,9 @@ foreach (var implementedFile in new[]
              //   ChgHeroSkill  idx228@0x006261D8 MATCH -> sub_6D2E08 -> sub_73F500 hero skill-level set
              "SetGoldActLvCommand.cs", "DecEquipDuraCommand.cs",
              "CreateCampMonCommand.cs", "ChgHeroSkillCommand.cs",
+             // case 197 @0x006287F1: strict Delphi integer parse, online-player fan-out
+             // through sub_656924/sub_6E13A4, and fixed 0x38FF confirmation.
+             "PushSingleTaskCommand.cs",
              // case 307 @0x0062723E: strict open/close token ladder writes
              // the global byte behind off_7D6EC8 and sends one 0x38FF reply.
              "SetFountSwitchCommand.cs",
@@ -262,6 +265,27 @@ Assert(chgOpenGameTime.Contains(
        chgOpenGameTime.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !chgOpenGameTime.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ChgOpenGameTime does not preserve the native OpenDay parse/write/success contract");
+
+var pushSingleTask = Read("PushSingleTaskCommand.cs");
+Assert(pushSingleTask.Contains(
+           "GameCommand(\"PushSingleTask\", \"向在线玩家推送活动\", \"活动ID\", 4)",
+           StringComparison.Ordinal) &&
+       pushSingleTask.Contains("PasApiBridge.TryParseNativeDelphiInteger", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("actId <= 0", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("M2Share.UserEngine", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("userEngine.PlayObjects", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("player.m_boGhost", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("player.m_boDeath", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("Grobal2.SM_PUSH_SINGLE_TASK", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("SendDefMessage", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("0, actId, 0, 0, string.Empty", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("Grobal2.RM_SYSMESSAGE", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("0xFF, 0x38", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("向在线玩家推送活动", StringComparison.Ordinal) &&
+       pushSingleTask.Contains("CultureInfo.InvariantCulture", StringComparison.Ordinal),
+    "PushSingleTask does not preserve the native parser/fan-out/packet/fixed-colour contract");
+Assert(!pushSingleTask.Contains(".SysMsg(", StringComparison.Ordinal),
+    "PushSingleTask uses configurable SysMsg colour instead of native RM_SYSMESSAGE colour");
 
 var dieCommand = Read("DieCommand.cs");
 Assert(dieCommand.Contains("[GameCommand(\"Die\"", StringComparison.Ordinal) &&
