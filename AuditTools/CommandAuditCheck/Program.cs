@@ -216,6 +216,10 @@ foreach (var implementedFile in new[]
              // case 158 @0x006258AC -> sub_6D4CA4: IPOutSay mutes every
              // non-ghost same-IP player, mirrors ident 209, and replies 0xFFDB.
              "IPOutSayCommand.cs",
+             // case 160 @0x006256B6 parses one threshold (default 5), then
+             // sub_6E3498 counts every online-list entry by IP and replies
+             // with qualifying rows in ordinal IP order.
+             "IPHumNumCommand.cs",
              // case 358 @0x00627FD5 selects self for an empty first token or
              // resolves sub_652784's non-ghost ReadyRun player, then invokes
              // vtbl+0x84 Die(). Missing targets and all successful paths are silent.

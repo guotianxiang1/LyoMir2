@@ -20,6 +20,7 @@ try
     VerifyHackFlag();
     VerifyIpHackFlag();
     VerifyIpOutSay();
+    VerifyIpHumNum();
     VerifyFlagCommandsRuntime();
     VerifyHackerpunish();
     VerifyClientVersion();
@@ -31,9 +32,9 @@ try
     Console.WriteLine(
         "PASS NativeGmAntiCheatCommandsCheck dispatcher=sub_622820 table=0x622B1C max=750 family=09 " +
         "commands=15 impl=15 noop=0 " +
-        "recovered=ClearHackFlag/HackFlag/IPHackFlag/IPOutSay " +
+        "recovered=ClearHackFlag/HackFlag/IPHackFlag/IPOutSay/IPHumNum " +
         "ladders=Hackerpunish/ClientVersion/SetIpHumanMaxCount/ReloadWhiteList/ViewMonitor/ReloadSmsUserList " +
-        "deferred=MapUserInfo/IPHumNum/IpBlackRoom/kickOutPtid/SetMonitor");
+        "deferred=MapUserInfo/IpBlackRoom/kickOutPtid/SetMonitor");
     return 0;
 }
 catch (Exception ex)
@@ -115,7 +116,8 @@ static void VerifyRegistry()
             e.cmd != GmAntiCheatCommand.ClearHackFlag &&
             e.cmd != GmAntiCheatCommand.HackFlag &&
             e.cmd != GmAntiCheatCommand.IPHackFlag &&
-            e.cmd != GmAntiCheatCommand.IPOutSay,
+            e.cmd != GmAntiCheatCommand.IPOutSay &&
+            e.cmd != GmAntiCheatCommand.IPHumNum,
             $"{e.cmd} core body deferred");
         Assert(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmAntiCheatCommands.SwitchMaxIndex,
             $"{e.cmd} index in switch range");
@@ -135,7 +137,8 @@ static void VerifyNoNoOps()
             info.Command != GmAntiCheatCommand.ClearHackFlag &&
             info.Command != GmAntiCheatCommand.HackFlag &&
             info.Command != GmAntiCheatCommand.IPHackFlag &&
-            info.Command != GmAntiCheatCommand.IPOutSay,
+            info.Command != GmAntiCheatCommand.IPOutSay &&
+            info.Command != GmAntiCheatCommand.IPHumNum,
             $"{info.Command} recovered/deferred state");
     }
 }
@@ -151,7 +154,7 @@ static void VerifyForwardContracts()
         (GmAntiCheatCommand.HackFlag,      0x006D440C, 2, false, false),
         (GmAntiCheatCommand.IPHackFlag,    0x006D45C8, 2, false, false),
         (GmAntiCheatCommand.IPOutSay,      0x006D4CA4, 2, false, false),
-        (GmAntiCheatCommand.IPHumNum,      0x006E3498, 0, true,  true),
+        (GmAntiCheatCommand.IPHumNum,      0x006E3498, 0, true,  false),
         (GmAntiCheatCommand.IpBlackRoom,   0x006D49E4, 2, false, true),
         (GmAntiCheatCommand.KickOutPtid,   0x00651CBC, 0, false, true),
         (GmAntiCheatCommand.SetMonitor,    0x0079F908, 2, false, true),
@@ -424,6 +427,36 @@ static void VerifyIpOutSay()
         .CoreBodyDeferred, "IPOutSay core recovered");
 }
 
+static void VerifyIpHumNum()
+{
+    Equal(NativeGmIpHumNum.DefaultThreshold, 5,
+        "IPHumNum native default threshold");
+    Equal(NativeGmIpHumNum.ParseThreshold(null), 5,
+        "IPHumNum missing threshold default");
+    Equal(NativeGmIpHumNum.ParseThreshold(string.Empty), 5,
+        "IPHumNum empty threshold default");
+    Equal(NativeGmIpHumNum.ParseThreshold("+003"), 3,
+        "IPHumNum signed threshold parse");
+    Equal(NativeGmIpHumNum.ParseThreshold("0x10"), 16,
+        "IPHumNum hexadecimal threshold parse");
+    Equal(NativeGmIpHumNum.ParseThreshold("bad"), 5,
+        "IPHumNum malformed threshold default");
+
+    var counts = new[]
+    {
+        new KeyValuePair<string, int>("10.0.0.1", 1),
+        new KeyValuePair<string, int>("10.0.0.2", 2),
+    };
+    Equal(NativeGmIpHumNum.BuildMessage(counts, 2),
+        "10.0.0.2 : 2\r",
+        "IPHumNum sorted qualifying output");
+    Equal(NativeGmIpHumNum.BuildMessage(counts, 3),
+        NativeGmIpHumNum.NoMatchMessage,
+        "IPHumNum no-match output");
+    Assert(!NativeGmAntiCheatCommands.Info(GmAntiCheatCommand.IPHumNum)
+        .CoreBodyDeferred, "IPHumNum core recovered");
+}
+
 static void VerifyFlagCommandsRuntime()
 {
     PrepareRuntimeFiles();
@@ -486,6 +519,43 @@ static void VerifyFlagCommandsRuntime()
             m_nNativeCheatPenaltyExpiryDay = 22,
         };
         AddOnline(M2Share.UserEngine, ready, ghost, notReady);
+
+        var ipHumAttribute = typeof(IPHumNumCommand)
+            .GetCustomAttribute<GameCommandAttribute>();
+        var ipHumMethod = typeof(IPHumNumCommand).GetMethod(
+            nameof(IPHumNumCommand.IPHumNum));
+        Assert(ipHumAttribute != null && ipHumMethod != null,
+            "IPHumNum live registration metadata");
+        Equal(ipHumAttribute.nPermissionMin, 4,
+            "IPHumNum live native permission");
+        var ipHumCommand = new IPHumNumCommand();
+        ipHumCommand.Register(ipHumAttribute, ipHumMethod);
+
+        gm.m_MsgList.Clear();
+        Equal(ipHumCommand.Handle("3 ignored extra", gm), null,
+            "IPHumNum returns no command result");
+        Equal(gm.m_MsgList.Count, 1,
+            "IPHumNum qualifying output one message");
+        Equal(gm.m_MsgList[0].Buff, "10.0.0.1 : 3\r",
+            "IPHumNum qualifying output counts ghost/list entries");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "IPHumNum output foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "IPHumNum output background");
+
+        gm.m_MsgList.Clear();
+        ipHumCommand.Handle(string.Empty, gm);
+        Equal(gm.m_MsgList[0].Buff, NativeGmIpHumNum.NoMatchMessage,
+            "IPHumNum missing threshold default five");
+
+        gm.m_MsgList.Clear();
+        gm.m_btPermission = 3;
+        Equal(ipHumCommand.Handle("3", gm),
+            "该命令需要4级GM才能使用",
+            "IPHumNum permission gate");
+        Equal(gm.m_MsgList.Count, 0,
+            "IPHumNum permission rejection does not invoke body");
+        gm.m_btPermission = 4;
 
         var clearAttribute = typeof(ClearHackFlagCommand)
             .GetCustomAttribute<GameCommandAttribute>();
