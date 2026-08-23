@@ -40,7 +40,6 @@ var protectedFiles = new[]
     "ReloadRndItemCommand.cs",
     "ReloadunBindItemCommand.cs",
     "SmeltEquipCommand.cs",
-    "SuperMerchantCommand.cs",
 };
 
 foreach (var fileName in protectedFiles)
@@ -293,6 +292,7 @@ foreach (var implementedFile in new[]
              // and writes the first matching entry's native switch WORD.
              "HeroSkillSwitchCommand.cs",
              "ChgGameOpenTimeCommand.cs"
+             ,"SuperMerchantCommand.cs"
          })
 {
     var source = Read(implementedFile);

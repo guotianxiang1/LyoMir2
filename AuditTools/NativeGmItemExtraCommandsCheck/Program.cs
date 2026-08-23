@@ -5,7 +5,8 @@ using GameSvr;
 // NativeGmItemCommands.cs + NativeGmItemCommandsSupplement.cs. Locked against the Hex-Rays-verified
 // original dispatcher sub_622820 (single switch, table jpt_622B15 @0x00622B1C) in the unpacked M2Server.
 // Evidence: D:/loym2/staging/update_clothes_4637_ida_work/{disp_decomp.txt,big622820.txt}.
-// 17 commands = 9 implemented (thin shim -> deferred core) + 8 registered no-ops (def_622B15).
+// 17 commands = 9 implemented + 8 registered no-ops (def_622B15); SuperMerchant's
+// small stock setter is modeled locally, while the other core bodies remain deferred.
 
 try
 {
@@ -69,7 +70,7 @@ static void VerifyRegistry()
         // ---- 9 implemented ----
         (GmItemExtraCommand.ReloadUnBindItem, "ReloadunBindItem", 166, 4, true, 0x00625CE2u, 0x0062E630u, true),
         (GmItemExtraCommand.Make,             "make",             201, 5, true, 0x00625D32u, 0x006BDA34u, true),
-        (GmItemExtraCommand.SuperMerchant,    "SuperMerchant",    297, 5, true, 0x00626F32u, 0x0061668Cu, true),
+        (GmItemExtraCommand.SuperMerchant,    "SuperMerchant",    297, 5, true, 0x00626F32u, 0x0061668Cu, false),
         (GmItemExtraCommand.ReloadRndItem,    "reloadRndItem",    299, 4, true, 0x00626FD9u, 0x007524A8u, true),
         (GmItemExtraCommand.ReloadStdItem,    "reloadStditem",    443, 4, true, 0x00628AC6u, 0x00713094u, true),
         (GmItemExtraCommand.SetMaxButchCount, "SetMaxButchCount", 515, 4, true, 0x0062954Fu, 0x00790210u, true),
@@ -113,7 +114,7 @@ static void VerifyRegistry()
             Equal(info.CaseAddress != NativeGmItemExtraCommands.DefaultCaseEa, true, $"{e.cmd} case != default");
             Equal(info.CaseAddress != NativeGmItemExtraCommands.EpilogueEa, true, $"{e.cmd} case != epilogue");
             Equal(info.CaseAddress != info.CoreEa, true, $"{e.cmd} case-branch != core");
-            Equal(info.CoreBodyDeferred, true, $"{e.cmd} core deferred");
+            Equal(info.CoreBodyDeferred, e.deferred, $"{e.cmd} core deferred state");
             impl++;
         }
         else
@@ -194,7 +195,7 @@ static void VerifySuperMerchant()
     Equal(applied.Branch, SuperMerchantBranch.Applied, "supermerchant applied branch");
     Equal(applied.CallsCore, true, "supermerchant applied calls core");
     Equal(applied.CoreEa, 0x0061668Cu, "supermerchant core ea");
-    Equal(applied.CoreBodyDeferred, true, "supermerchant core deferred");
+    Equal(applied.CoreBodyDeferred, false, "supermerchant core implemented");
     Equal(applied.MgrGlobalEa, 0x007D6D10u, "supermerchant mgr global");
     Equal(applied.SendsSysMsg, true, "supermerchant applied sends msg");
     Equal(applied.MessageColor, 0xFFDB, "supermerchant applied colour");

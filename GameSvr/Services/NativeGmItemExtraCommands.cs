@@ -23,9 +23,9 @@ namespace GameSvr
     //
     // CaseAddress = the case-branch address (the jump-table slot VALUE, i.e. where the case block starts),
     //   NOT the delegated core body. The cores each shim tail-calls (sub_XXXXXX) are NOT in the dumps and
-    //   are abstracted as inputs (CoreBodyDeferred=true); this model captures only what the shim proves
-    //   (forwarded-arg count, shim-level guard/parse, whether the shim itself sends a SysMsg). It does NOT
-    //   invent the deferred core ladders.
+    //   are abstracted as inputs (CoreBodyDeferred=true), except for the small SuperMerchant stock setter
+    //   which is modeled by NativeSuperMerchantManager. This model captures the dispatcher contract without
+    //   inventing any other deferred core ladders.
     //
     // SysMsg call is the virtual slot [self]+0xD4 invoked as (colour, text). Every message in this slice
     //   uses colour 0xFFDB (the -37 immediate); none use 0x38FF.
@@ -113,7 +113,7 @@ namespace GameSvr
         public const int SysMsgVtableOffset = 0xD4;    // call dword ptr [self]+0xD4 (colour, text)
         public const int ColorInfo = 0xFFDB;           // the -37 immediate
 
-        // core subroutines invoked by the shims — bodies NOT in the dumps (CoreBodyDeferred)
+        // Core addresses retained for the native registry; most bodies remain deferred.
         public const uint ReloadUnBindItemCoreEa = 0x0062E630; // sub_62E630 (ReloadunBindItem)
         public const uint MakeCoreEa = 0x006BDA34;             // sub_6BDA34 (make)
         public const uint SuperMerchantCoreEa = 0x0061668C;    // sub_61668C (SuperMerchant stock set)
@@ -140,7 +140,7 @@ namespace GameSvr
             // ---- implemented (9) ----
             new() { Command = GmItemExtraCommand.ReloadUnBindItem, Name = "ReloadunBindItem", DispatchIndex = 166, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625CE2, CoreEa = ReloadUnBindItemCoreEa, CoreBodyDeferred = true },
             new() { Command = GmItemExtraCommand.Make,             Name = "make",             DispatchIndex = 201, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00625D32, CoreEa = MakeCoreEa,            CoreBodyDeferred = true },
-            new() { Command = GmItemExtraCommand.SuperMerchant,    Name = "SuperMerchant",    DispatchIndex = 297, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00626F32, CoreEa = SuperMerchantCoreEa,   CoreBodyDeferred = true },
+            new() { Command = GmItemExtraCommand.SuperMerchant,    Name = "SuperMerchant",    DispatchIndex = 297, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00626F32, CoreEa = SuperMerchantCoreEa,   CoreBodyDeferred = false },
             new() { Command = GmItemExtraCommand.ReloadRndItem,    Name = "reloadRndItem",    DispatchIndex = 299, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00626FD9, CoreEa = ReloadRndItemCoreEa,   CoreBodyDeferred = true },
             new() { Command = GmItemExtraCommand.ReloadStdItem,    Name = "reloadStditem",    DispatchIndex = 443, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00628AC6, CoreEa = ReloadStdItemCoreEa,   CoreBodyDeferred = true },
             new() { Command = GmItemExtraCommand.SetMaxButchCount, Name = "SetMaxButchCount", DispatchIndex = 515, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x0062954F, CoreEa = SetMaxButchMgrEa,      CoreBodyDeferred = true },
@@ -256,7 +256,7 @@ namespace GameSvr
     // "@SuperMerchant 物品类型 库存类型 数量"  parse 3 ints (itemType, stockType, amount). If any <= 0 ->
     //   SysMsg(0xFFDB, usage) and stop. Else, guard the stock manager global off_7D6D10: if present ->
     //   ok = sub_61668C(amount); SysMsg(0xFFDB, ok ? success : fail). If the manager is absent -> SILENT
-    //   (no message). Stock-set core body is deferred.
+    //   (no message). The stock-set core is implemented by NativeSuperMerchantManager.
     public enum SuperMerchantBranch
     {
         BadArgs,      // any parsed int <= 0 -> usage message
@@ -283,7 +283,7 @@ namespace GameSvr
                 return new SuperMerchantOutcome { Branch = SuperMerchantBranch.BadArgs, CallsCore = false, CoreBodyDeferred = false, SendsSysMsg = true, MessageColor = NativeGmItemExtraCommands.ColorInfo };
             if (!managerPresent)
                 return new SuperMerchantOutcome { Branch = SuperMerchantBranch.MgrAbsent, CallsCore = false, CoreBodyDeferred = false, SendsSysMsg = false, MessageColor = 0 };
-            return new SuperMerchantOutcome { Branch = SuperMerchantBranch.Applied, CallsCore = true, CoreBodyDeferred = true, SendsSysMsg = true, MessageColor = NativeGmItemExtraCommands.ColorInfo };
+            return new SuperMerchantOutcome { Branch = SuperMerchantBranch.Applied, CallsCore = true, CoreBodyDeferred = false, SendsSysMsg = true, MessageColor = NativeGmItemExtraCommands.ColorInfo };
         }
     }
 

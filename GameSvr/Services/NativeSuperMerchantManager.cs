@@ -73,6 +73,39 @@ namespace GameSvr.Services
 
         internal void MarkDirty() => _dirty = true;
 
+        /// <summary>
+        /// Applies the three-field stock update accepted by the native GM command.
+        /// Goods types are 1 (healing pack) and 2 (snow-flower pack); storage types
+        /// are 1 (minimum), 2 (maximum), and 3 (current).
+        /// </summary>
+        public bool TrySetStock(int goodsType, int storageType, int amount)
+        {
+            lock (_sync)
+            {
+                if (goodsType is < 1 or > 2 ||
+                    storageType is < 1 or > 3 ||
+                    amount <= 0)
+                    return false;
+
+                var slot = _slots[goodsType];
+                switch (storageType)
+                {
+                    case 1:
+                        slot.Min = amount;
+                        break;
+                    case 2:
+                        slot.Max = amount;
+                        break;
+                    default:
+                        slot.Current = amount;
+                        break;
+                }
+
+                _dirty = true;
+                return true;
+            }
+        }
+
         private void BroadcastRestock()
         {
             // 0x6160D4..0x616117: two world broadcasts via sub_79D3D8, dx=0xA.
