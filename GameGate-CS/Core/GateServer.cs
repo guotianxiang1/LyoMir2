@@ -446,7 +446,7 @@ public sealed class GateServer : IDisposable
                 await Task.Delay(SoftCloseQueryDelayMs, cts.Token);
                 var account = session.Account;
                 var sessionId = session.DBSessionId;
-                if (string.IsNullOrEmpty(account) || sessionId <= 0)
+                if (string.IsNullOrEmpty(account) || sessionId == 0)
                 {
                     Trace("UP", $"CM_SOFTCLOSE character query skipped: account/session unavailable ({account ?? "<null>"}/{sessionId})");
                     return;
@@ -596,8 +596,6 @@ public sealed class GateServer : IDisposable
                                     Trace("TIGER", $"Tiger protocol detected for {ip} (ID:{session.SessionId})");
                                 }
 
-                                // Update key offset: client uses SessionId (dataIndex) after first frame
-                                session.TigerKeyOffset = (uint)(session.SessionId > 0 ? session.SessionId : 1);
                                 Trace("TIGER", $"Decoded {tigerStr.Length}B tiger → {decoded.Length}B binary (keyOff={session.TigerKeyOffset})");
 
                                 // Replace accBuf: decoded binary + any trailing data after |LH
@@ -647,6 +645,16 @@ public sealed class GateServer : IDisposable
                         // === 控制帧处理 (44FF44FF, 对照战神文档 + 手游协议分析.md §5) ===
                         if (mf.Header.Marker == MobileCodec.MARKER_CONNECT) // 0x1802
                         {
+                            // LoginGate returns ciSessionID in SM_SELECT_SERVER. The BaiZhu
+                            // client carries it in this outer TClientMessage.dataIndex; the
+                            // later CM_LOGIN_AUTH.Recog is MIR_VERSION_NUMBER, not a session.
+                            if (mf.Header.Seq != 0)
+                            {
+                                session.DBSessionId = unchecked((int)mf.Header.Seq);
+                                session.TigerKeyOffset = mf.Header.Seq;
+                                Trace("UP", $"LoginGate session from dataIndex: {mf.Header.Seq}");
+                            }
+
                             // :7100 登录阶段: CONNECT → SERVER_INFO(0x2C, SM_LOGIN=4003)
                             // 客户端 processMsg 收到 SM_LOGIN 后发 CM_LOGIN_AUTH(0x59)
                             var siInner = new MobileCodec.InnerHeader { Recog = 0, Ident = 4003 }; // SM_LOGIN
@@ -841,8 +849,8 @@ public sealed class GateServer : IDisposable
                             sentLoginScriptToGameSvr = true;
                         }
 
-                        // 从认证请求 Recog 提取 sessionId (客户端生成的会话标识)
-                        if (fwdIdent == 4004 && mf.Inner.Recog > 0) { session.DBSessionId = mf.Inner.Recog; Trace("UP", $"SessionId→session: {mf.Inner.Recog}"); }
+                        if (fwdIdent == 4004)
+                            Trace("UP", $"CM_LOGIN_AUTH version={mf.Inner.Recog} session={session.DBSessionId}");
 
                         // 从 SELECT_CHR 请求中提取角色名 (body=GBK_bytes+\0, 7B total)
                         if (fwdIdent == 4017 && bodyToSend.Length > 1)
@@ -867,7 +875,10 @@ public sealed class GateServer : IDisposable
                         {
                             Trace("UP", $"→DBSvr {fwdIdent}→{serverIdent} body={bodyToSend.Length}B");
                             // EDcode header(16 chars) + 6-bit body, 与 DBSvr SendUserSocket 格式一致
-                            var headerMsg = new ClientPacket { Recog = mf.Inner.Recog, Ident = serverIdent,
+                            var dbRecog = fwdIdent == 4004
+                                ? session.DBSessionId
+                                : mf.Inner.Recog;
+                            var headerMsg = new ClientPacket { Recog = dbRecog, Ident = serverIdent,
                                 Param = mf.Inner.Param, Tag = mf.Inner.Tag, Series = mf.Inner.Series };
                             var headerStr = EDcode.EncodeMessage(headerMsg);
                             var bodyEnc = Enc6Body(bodyToSend);
@@ -883,10 +894,10 @@ public sealed class GateServer : IDisposable
                             if (fwdIdent == 1018)
                             {
                                 // CM_LOGINNOTICEOK: 构造 EDcode 认证字符串
-                                // sessionId 从客户端认证请求(4004)的 Recog 提取, 与原版一致
+                                // sessionId comes from the initial outer dataIndex.
                                 var acct = session.Account ?? "guest";
                                 var chr = session.CharName ?? acct;
-                                var sid = session.DBSessionId > 0 ? session.DBSessionId : 2;
+                                var sid = session.DBSessionId != 0 ? session.DBSessionId : 2;
                                 var certPlain = $"**{acct}/{chr}/{sid}/1/0/0123456789ABCDEF";
                                 var certBody = HUtil32.GetBytes(EDcode.EncodeString(certPlain));
                                 var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);
@@ -1063,7 +1074,7 @@ public sealed class GateServer : IDisposable
                                 {
                                     var acct = session.Account ?? "guest";
                                     var chr = session.CharName ?? acct;
-                                    var sid = session.DBSessionId > 0 ? session.DBSessionId : 2;
+                                    var sid = session.DBSessionId != 0 ? session.DBSessionId : 2;
                                     var certPlain = $"**{acct}/{chr}/{sid}/1/0/0123456789ABCDEF";
                                     var gsBody = HUtil32.GetBytes(EDcode.EncodeString(certPlain));
                                     var cp = new ClientPacket { Recog = 0, Ident = 1018, Param = 0, Tag = 0, Series = 0 };
