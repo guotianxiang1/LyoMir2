@@ -96,6 +96,10 @@ static void VerifyOffsetsAndColors()
     Equal(-10, NativeGmPlayerAdminCommands.BodyLuckMin, "luck min");
     Equal(5, NativeGmPlayerAdminCommands.BodyLuckMax, "luck max");
     Equal(100, NativeGmPlayerAdminCommands.InComePkStep, "incomepk step");
+    Equal(" ：Pkpoint = 0", NativeGmPlayerAdminCommands.ChgPkZeroSuccessSuffix,
+        "chgpkzero success suffix");
+    Equal("该角色不在本GS，或不在线", NativeGmPlayerAdminCommands.ChgPkZeroNotFoundMessage,
+        "chgpkzero not-found text");
 }
 
 static void VerifyRegistry()
@@ -190,7 +194,7 @@ static void VerifyChgPkZero()
     var miss = NativeGmChgPkZero.Evaluate(false);
     Equal(ChgPkZeroBranch.PlayerNotFound, miss.Branch, "chgpkzero not-found branch");
     Assert(!miss.PkSetToZero && !miss.SendsConfirmText, "chgpkzero not-found does not clear/format");
-    Assert(miss.SendsSysMsg, "chgpkzero still calls sysmsg (empty)");
+    Assert(miss.SendsSysMsg, "chgpkzero not-found still sends fixed sysmsg");
 }
 
 static void VerifyInComePk()

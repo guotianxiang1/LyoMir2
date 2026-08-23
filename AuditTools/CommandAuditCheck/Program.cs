@@ -446,8 +446,8 @@ Assert(chgPkZero.Contains(
        chgPkZero.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
        chgPkZero.Contains("target.m_nPkPoint = 0", StringComparison.Ordinal) &&
        chgPkZero.Contains("target.RefNameColor()", StringComparison.Ordinal) &&
-       chgPkZero.Contains("该角色不在本GS，或不在线", StringComparison.Ordinal) &&
-       chgPkZero.Contains("Pkpoint = 0", StringComparison.Ordinal) &&
+       chgPkZero.Contains("ChgPkZeroNotFoundMessage", StringComparison.Ordinal) &&
+       chgPkZero.Contains("ChgPkZeroSuccessSuffix", StringComparison.Ordinal) &&
        chgPkZero.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !chgPkZero.Contains("AddGameDataLog", StringComparison.Ordinal) &&
        !chgPkZero.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
