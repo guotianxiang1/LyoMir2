@@ -242,6 +242,7 @@ static void VerifyChgSex()
     var r = NativeGmChgSex.Evaluate();
     Assert(r.TogglesGender && r.SendsSysMsg, "chgsex toggles + confirms");
     Equal(NativeGmPlayerAdminCommands.ColorConfirm, r.MessageColor, "chgsex colour");
+    Equal("职业变更成功", r.Message, "chgsex fixed native message");
 }
 
 static void VerifyChgHideState()

@@ -263,6 +263,9 @@ foreach (var implementedFile in new[]
              // case 90 @0x00624EB3 -> sub_6BFE20: the same target lookup
              // reads +0x160 and replies with the literal " PK: " format.
              "ShowPkCommand.cs",
+             // case 98 @0x00625018 -> sub_6D77F0 toggles only self[+0x71] bit 0
+             // and sends the fixed green text at 0x006D781C.
+             "ChgSexCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -443,6 +446,19 @@ Assert(showPk.Contains(
        !showPk.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
        !showPk.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ShowPk does not preserve the native target/read/message-only contract");
+
+var chgSex = Read("ChgSexCommand.cs");
+Assert(chgSex.Contains(
+           "GameCommand(\"ChgSex\", \"更改自身性别\", \"\", 4)",
+           StringComparison.Ordinal) &&
+       chgSex.Contains("public void ChgSex(TPlayObject player)", StringComparison.Ordinal) &&
+       chgSex.Contains("m_btGender", StringComparison.Ordinal) &&
+       chgSex.Contains("^ 1", StringComparison.Ordinal) &&
+       chgSex.Contains("职业变更成功", StringComparison.Ordinal) &&
+       chgSex.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !chgSex.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
+       !chgSex.Contains("SendServerGroupMsg", StringComparison.Ordinal),
+    "ChgSex does not preserve the native self gender-bit/fixed-message contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",

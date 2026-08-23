@@ -387,12 +387,14 @@ namespace GameSvr
     // ===================== ChgSex (idx 98, perm 4) =====================
     // case @0x00625018 -> sub_6D77F0(self).  self[+0x71] = !(self[+0x71] & 1)  (toggle gender bit 0),
     // then SysMsg(ColorConfirm, dword_6D781C).  No args; operates on the GM's own character.
+    // 0x006D781C in the flat 2.08 image is the GBK string "职业变更成功".
     // "更改自身性别  @ChgSex"
     public sealed class ChgSexOutcome
     {
         public bool TogglesGender => true;          // player+0x71 bit 0
         public bool SendsSysMsg => true;
         public int MessageColor => NativeGmPlayerAdminCommands.ColorConfirm;
+        public string Message => "职业变更成功";
     }
 
     public static class NativeGmChgSex
