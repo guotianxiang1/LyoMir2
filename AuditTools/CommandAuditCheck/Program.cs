@@ -29,7 +29,6 @@ var protectedFiles = new[]
 {
     "AddVoteCommand.cs",
     "BeginAreaCastleMatchCommand.cs",
-    "CallTaskMonCommand.cs",
     "ChgEquipLevelCommand.cs",
     "EndAreaCastleMatchCommand.cs",
     "GetBackItemCommand.cs",
@@ -283,6 +282,12 @@ foreach (var implementedFile in new[]
              // PsMapQuest/TaskDispatch.pas, invokes OnInitialize, and always
              // emits the fixed green completion message.
              "ReloadTaskDispatchCommand.cs",
+             // case 100 @0x00625048 -> sub_6BFEF8 arms the global task target
+             // and captures the invoking player's map plus X/Y coordinates.
+             "DoTaskCommand.cs",
+             // case 101 @0x0062505B -> sub_6C19D0 resolves the captured map,
+             // spawns task monsters, and assigns their mission target fields.
+             "CallTaskMonCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -536,6 +541,28 @@ Assert(reloadTaskDispatch.Contains(
        reloadTaskDispatch.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !reloadTaskDispatch.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "reloadTaskDispatch does not preserve the native script reload/completion contract");
+
+var doTask = Read("DoTaskCommand.cs");
+Assert(doTask.Contains(
+           "GameCommand(\"DoTask\", \"设置任务攻击目标\", \"X Y\", 4)",
+           StringComparison.Ordinal) &&
+       doTask.Contains("TryArmTaskTarget", StringComparison.Ordinal) &&
+       doTask.Contains("任务设置失败！", StringComparison.Ordinal) &&
+       doTask.Contains("任务设置：攻击目标", StringComparison.Ordinal) &&
+       doTask.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !doTask.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "DoTask does not preserve the native target-arming contract");
+
+var callTaskMon = Read("CallTaskMonCommand.cs");
+Assert(callTaskMon.Contains(
+           "GameCommand(\"CallTaskMon\", \"召唤任务怪物\", \"X坐标 Y坐标 怪物 数量\", 4)",
+           StringComparison.Ordinal) &&
+       callTaskMon.Contains("NativeGmTaskMonsterCommands.CallTaskMon", StringComparison.Ordinal) &&
+       callTaskMon.Contains("没有指定任务", StringComparison.Ordinal) &&
+       callTaskMon.Contains("命令错误，应为：X坐标 Y坐标 怪物 数量", StringComparison.Ordinal) &&
+       callTaskMon.Contains("=>", StringComparison.Ordinal) &&
+       !callTaskMon.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "CallTaskMon does not preserve the native task-monster contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",

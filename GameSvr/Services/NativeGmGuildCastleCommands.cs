@@ -196,7 +196,8 @@ namespace GameSvr
         public const uint NullsubGuildWarOffEa = 0x006C2910;  // nullsub_87  (GuildWarOff)
         public const uint NullsubReportGuildWarEa = 0x006C2914;// nullsub_88 (ReportGuildWar)
 
-        // core targets whose bodies are not in the current dumps (CoreBodyDeferred)
+        // core targets for the family; DoTask and CallTaskMon are wired in the
+        // C# command layer while the remaining cores stay explicitly deferred.
         public const uint CoreDoTaskEa = 0x006BFEF8;          // sub_6BFEF8  (DoTask)
         public const uint CoreCallTaskMonEa = 0x006C19D0;     // sub_6C19D0  (CallTaskMon)
         public const uint CoreChgMonAttEa = 0x0067D3DC;       // sub_67D3DC  (ChgMonAtt)
@@ -210,8 +211,8 @@ namespace GameSvr
         {
             // ---- IMPLEMENTED cases (dedicated body does real work) ----
             new() { Command = GmGuildCastleCommand.LookSaGold,           Name = "LookSaGold",           DispatchIndex =  71, RequiredPermission = 3, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00624C36 },
-            new() { Command = GmGuildCastleCommand.DoTask,               Name = "DoTask",               DispatchIndex = 100, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625048 },
-            new() { Command = GmGuildCastleCommand.CallTaskMon,          Name = "CallTaskMon",          DispatchIndex = 101, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x0062505B, CSharpLivePresent = true, CSharpLivePermission = 10, CSharpStubUnderImplements = true },
+            new() { Command = GmGuildCastleCommand.DoTask,               Name = "DoTask",               DispatchIndex = 100, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625048, CSharpLivePresent = true, CSharpLivePermission = 4 },
+            new() { Command = GmGuildCastleCommand.CallTaskMon,          Name = "CallTaskMon",          DispatchIndex = 101, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x0062505B, CSharpLivePresent = true, CSharpLivePermission = 4 },
             new() { Command = GmGuildCastleCommand.ChgMonAtt,            Name = "ChgMonAtt",            DispatchIndex = 144, RequiredPermission = 4, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625551, CSharpLivePresent = true, CSharpLivePermission = 4 },
             new() { Command = GmGuildCastleCommand.ChgCastleOwner,       Name = "ChgCastleOwner",       DispatchIndex = 215, RequiredPermission = 5, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625EC0 },
             new() { Command = GmGuildCastleCommand.ChgCastleWar,         Name = "ChgCastleWar",         DispatchIndex = 216, RequiredPermission = 5, HandlerKind = GmGuildCastleHandlerKind.ImplementedCase, CaseAddress = 0x00625ED5, CSharpLivePresent = true, CSharpLivePermission = 10, CSharpBehaviorMismatch = true },
@@ -347,25 +348,25 @@ namespace GameSvr
     // ===================== Pure core-forward impls (no SysMsg) =====================
     // DoTask(100) sub_6BFEF8(x,y) · CallTaskMon(101) sub_6C19D0(x,y,name,count) ·
     // ChgCastleOwner(215) sub_6C74EC(1, guildName) · weimanyuan(720) sub_6AE260(30,0).
-    // The case unconditionally forwards to the core and sends no message; the core body is not in dumps.
+    // The case unconditionally forwards to the core and sends no message itself.
     public sealed class GuildCastleCoreForwardOutcome
     {
         public bool CallsCore => true;
         public uint CoreEa { get; init; }
-        public bool CoreBodyDeferred => true;
+        public bool CoreBodyDeferred { get; init; } = true;
         public bool SendsSysMsg => false;
     }
 
     public static class NativeGmDoTask
     {
         public static GuildCastleCoreForwardOutcome Evaluate(int x, int y) =>
-            new() { CoreEa = NativeGmGuildCastleCommands.CoreDoTaskEa };
+            new() { CoreEa = NativeGmGuildCastleCommands.CoreDoTaskEa, CoreBodyDeferred = false };
     }
 
     public static class NativeGmCallTaskMon
     {
         public static GuildCastleCoreForwardOutcome Evaluate(int x, int y, string monName, int count) =>
-            new() { CoreEa = NativeGmGuildCastleCommands.CoreCallTaskMonEa };
+            new() { CoreEa = NativeGmGuildCastleCommands.CoreCallTaskMonEa, CoreBodyDeferred = false };
     }
 
     public static class NativeGmChgCastleOwner
