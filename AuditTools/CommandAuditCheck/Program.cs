@@ -256,6 +256,10 @@ foreach (var implementedFile in new[]
              // case 516 @0x006294A9: sub_6556F4 loads SmsUserList.txt from
              // the configured directory; both result branches send green text.
              "ReloadSmsUserListCommand.cs",
+             // case 89 @0x00624EA3 -> sub_6BFD58: only non-ghost ReadyRun
+             // targets are found; native clears +0x160, refreshes name colour,
+             // and replies to the invoking GM with fixed green text.
+             "ChgPkZeroCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -406,6 +410,21 @@ Assert(!clearHackFlag.Contains("NativeMirrorAntiCheatPenalty", StringComparison.
        !clearHackFlag.Contains("AddGameDataLog", StringComparison.Ordinal) &&
        !clearHackFlag.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ClearHackFlag introduced non-native mirror movement/log/failure behavior");
+
+var chgPkZero = Read("ChgPkZeroCommand.cs");
+Assert(chgPkZero.Contains(
+           "GameCommand(\"ChgPkZero\", \"将某角色的PK值清零\", \"角色名\", 4)",
+           StringComparison.Ordinal) &&
+       chgPkZero.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
+       chgPkZero.Contains("target.m_nPkPoint = 0", StringComparison.Ordinal) &&
+       chgPkZero.Contains("target.RefNameColor()", StringComparison.Ordinal) &&
+       chgPkZero.Contains("该角色不在本GS，或不在线", StringComparison.Ordinal) &&
+       chgPkZero.Contains("Pkpoint = 0", StringComparison.Ordinal) &&
+       chgPkZero.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !chgPkZero.Contains("AddGameDataLog", StringComparison.Ordinal) &&
+       !chgPkZero.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
+       !chgPkZero.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "ChgPkZero does not preserve the native target/PK/name-colour/message contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",

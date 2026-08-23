@@ -275,7 +275,8 @@ namespace GameSvr
     // case @0x00624EA3 -> sub_6BFD58(self, p0=charName).  player = FindPlayerByName(charName):
     //   found     -> player[+0x160] (PK point) = 0; refresh appearance (sub_767548); confirm text
     //                is formatted and the SysMsg(ColorConfirm) carries it.
-    //   not found -> the confirm buffer is never formatted; SysMsg(ColorConfirm) still fires but empty.
+    //   not found/empty/ghost/not-ReadyRun -> the fixed failure string is sent
+    //   through the same SysMsg(ColorConfirm) path.
     // "将某角色的PK值清零  @ChgPkZero 角色名"
     public enum ChgPkZeroBranch { Cleared, PlayerNotFound }
 
