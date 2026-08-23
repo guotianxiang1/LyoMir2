@@ -252,9 +252,10 @@ namespace GameSvr
                 "sub_6554FC reloads the GM/admin list (AdminList.txt), sub_713890 rebroadcasts it, then a GM SysMsg "
                 + "(0xFFDB) confirms."),
             new NativeSystemAdminCommand("ReLoadTask", 234, 4, 0x00625DEF, "sub_6DF540",
-                NativeSystemAdminOutcome.Executed, NoSysMsg,
+                NativeSystemAdminOutcome.ExecutedWithGmMessage, SysMsgGmReply,
                 "重载任务脚本 (@LogonQuest)",
-                "sub_6DF540 reloads the quest/task scripts. Helper handles feedback; case sends none inline."),
+                "sub_6DF540 reloads the quest/task scripts, formats the count with the literal "
+                + "' task Is Reload', and emits it as a green GM reply."),
             new NativeSystemAdminCommand("reloadTaskDispatch", 459, 4, 0x00628C39, "sub_6997BC",
                 NativeSystemAdminOutcome.ExecutedWithGmMessage, SysMsgGmReply,
                 "重载任务发布脚本",

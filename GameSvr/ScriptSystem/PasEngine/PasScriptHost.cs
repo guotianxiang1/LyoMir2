@@ -568,6 +568,23 @@ namespace GameSvr.PasEngine
             }
         }
 
+        /// <summary>
+        /// Rebuilds only the task-script collection used by the native ReLoadTask
+        /// command. Other Pascal script caches and live NPC/monster state remain
+        /// untouched.
+        /// </summary>
+        public int ReloadTaskScripts()
+        {
+            lock (_taskScriptsLock)
+            {
+                _taskScripts.Clear();
+                _taskScriptsById.Clear();
+                _taskScriptsLoaded = false;
+            }
+
+            return LoadTaskScripts();
+        }
+
         public IReadOnlyList<PasTaskMetadata> GetTaskScripts()
         {
             LoadTaskScripts();

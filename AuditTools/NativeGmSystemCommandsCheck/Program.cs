@@ -171,6 +171,12 @@ Equal(NativeGmSystemCommands.NoSysMsg, supergm.NativeSysMsgIdent, "supergm no in
 Equal("sub_65411C", NativeGmSystemCommands.Evaluate("AllZx", 3, null).NativeCore, "AllZx -> sub_65411C");
 Equal(0xFFDB, NativeGmSystemCommands.Evaluate("GetSysTime", 4, null).NativeSysMsgIdent, "GetSysTime -> GM reply");
 Equal(0xFFDB, NativeGmSystemCommands.Evaluate("ReLoadGmFile", 5, null).NativeSysMsgIdent, "ReLoadGmFile -> GM reply");
+Equal(NativeSystemAdminOutcome.ExecutedWithGmMessage,
+    NativeGmSystemCommands.Evaluate("ReLoadTask", 4, null).Outcome,
+    "ReLoadTask -> ExecutedWithGmMessage");
+Equal(0xFFDB,
+    NativeGmSystemCommands.Evaluate("ReLoadTask", 4, null).NativeSysMsgIdent,
+    "ReLoadTask -> task reload count ident");
 // SkyIncome and GMPower use the usage ident (0x38FF) on their success path.
 Equal(0x38FF, NativeGmSystemCommands.Evaluate("SkyIncome", 4, null).NativeSysMsgIdent, "SkyIncome -> usage ident");
 Equal(NativeSystemAdminOutcome.ExecutedWithGmMessage,

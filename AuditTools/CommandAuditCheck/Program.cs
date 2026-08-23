@@ -277,6 +277,9 @@ foreach (var implementedFile in new[]
              // case 477 @0x0062B59C -> sub_6FAD74 trims and writes
              // [Setup]GS_Task_Version, then emits the native helper message.
              "SetGsTaskVersionCommand.cs",
+             // case 234 @0x00625DEF -> sub_6DF540 reloads task scripts and
+             // reports the loaded count followed by " task Is Reload".
+             "ReLoadTaskCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -510,6 +513,16 @@ Assert(setGsTaskVersion.Contains(
        setGsTaskVersion.Contains("MsgColor.Red", StringComparison.Ordinal) &&
        !setGsTaskVersion.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "SetGsTaskVersion does not preserve the native trim/write/message contract");
+
+var reLoadTask = Read("ReLoadTaskCommand.cs");
+Assert(reLoadTask.Contains(
+           "GameCommand(\"ReLoadTask\", \"重载任务脚本 (@LogonQuest)\", \"\", 4)",
+           StringComparison.Ordinal) &&
+       reLoadTask.Contains("ReloadTaskScripts()", StringComparison.Ordinal) &&
+       reLoadTask.Contains("task Is Reload", StringComparison.Ordinal) &&
+       reLoadTask.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !reLoadTask.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "ReLoadTask does not preserve the native task reload/count message contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",
