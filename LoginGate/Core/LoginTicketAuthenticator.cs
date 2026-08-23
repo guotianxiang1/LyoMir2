@@ -46,17 +46,19 @@ public sealed class MySqlLoginTicketAuthenticator : ILoginTicketAuthenticator
     public async ValueTask<LoginTicketAuthenticationResult> AuthenticateAsync(
         NativeLoginGateAuthRequest request, CancellationToken cancellationToken)
     {
-        // 厂商认证屏蔽：仅凭运营方账号票据(szAuthID)鉴权，等价于原生 LoginCenter /verify
-        // (SELECT ... FROM account.ticket ...)。密码/客户端IP/MAC(机器码)/安全码/密保/
-        // 安全卡/SDOA 等厂商 SDK 字段一律不校验——私服场景下无意义，已屏蔽。
+        // The client sends the short-lived operator ticket in szAuthID.  The
+        // ticket table stores the provider's pt_id, while the native account
+        // slot (and the character database) uses normal.uid.  Resolve that
+        // mapping here so the 20-byte native account field is always usable.
         if (request == null || string.IsNullOrEmpty(request.Ticket))
             return LoginTicketAuthenticationResult.Rejected("ticket is empty");
 
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT t.pt_id
+        command.CommandText = @"SELECT n.uid
 FROM account.ticket t
+INNER JOIN account.normal n ON n.pt_id = t.pt_id
 WHERE BINARY t.ticket = BINARY @ticket AND t.create_time > @expires
 LIMIT 1";
         command.Parameters.AddWithValue("@ticket", request.Ticket);
