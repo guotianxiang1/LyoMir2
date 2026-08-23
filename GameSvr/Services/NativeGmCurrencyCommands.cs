@@ -34,7 +34,7 @@ namespace GameSvr
     //     offset are shim-proven; the normalize (sub_4C7004) and refresh (sub_6B99E4) bodies are deferred.
     //   * ChgUserLinFu (220) and ChgUserLinFu2 (221) call the SAME core sub_6C78A8 with a discriminator
     //     0 (normal lingfu) vs 1 (extended/扩展 lingfu). Shim-proven.
-    //   * TransferCredit (249) / SetNickLF (267) / SendYuanBaoText (334) are GUARDED forwards: a missing/
+    //   * TransferCredit (249) / SetNickLF (267) / SendYuanBaoText (334) are guarded entries: a missing/
     //     zero argument sends an error SysMsg and does NOT call the core.
     //   * SetLingfu3 (260) / SetGloryPoint (274) resolve the target by name (sub_652784); target absent
     //     => error SysMsg; SetLingfu3 additionally treats count == -1 / empty as a QUERY (no write).
@@ -169,7 +169,7 @@ namespace GameSvr
         public const uint SetNickLFCoreEa = 0x0062EAE4;     // sub_62EAE4(ratio, self)
         public const uint SetGloryPointCoreEa = 0x006E2134; // sub_6E2134 (set glory point)
         public const uint ReshuaGPCoreEa = 0x0063C1D4;      // sub_63C1D4 (reload GPForbidItems.txt)
-        public const uint SendYuanBaoTextCoreEa = 0x006EA1A4;// sub_6EA1A4(1,0) (broadcast)
+        public const uint SendYuanBaoTextCoreEa = 0x006EA1A4;// sub_6EA1A4(1,0) (GM-local firework)
         public const uint C2cTestCoreEa = 0x006F228C;       // sub_6F228C (player.C2C_Cmd_Test)
         public const uint C2cQueryCoreEa = 0x006F1A50;      // sub_6F1A50
         public const uint C2cOperateCoreEa = 0x006F1844;    // sub_6F1844
@@ -197,7 +197,7 @@ namespace GameSvr
             new() { Command = GmCurrencyCommand.SetNickLF,        Name = "SetNickLF",        DispatchIndex = 267, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x0062678B, CoreEa = SetNickLFCoreEa,      CoreBodyDeferred = true },
             new() { Command = GmCurrencyCommand.SetGloryPoint,    Name = "SetGloryPoint",    DispatchIndex = 274, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x006269B8, CoreEa = SetGloryPointCoreEa,  CoreBodyDeferred = true },
             new() { Command = GmCurrencyCommand.ReshuaGP,         Name = "reshuaGP",         DispatchIndex = 277, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00626B71, CoreEa = ReshuaGPCoreEa,       CoreBodyDeferred = true },
-            new() { Command = GmCurrencyCommand.SendYuanBaoText,  Name = "SendYuanBaoText",  DispatchIndex = 334, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00627D29, CoreEa = SendYuanBaoTextCoreEa,CoreBodyDeferred = true },
+            new() { Command = GmCurrencyCommand.SendYuanBaoText,  Name = "SendYuanBaoText",  DispatchIndex = 334, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00627D29, CoreEa = SendYuanBaoTextCoreEa,CoreBodyDeferred = false },
             new() { Command = GmCurrencyCommand.C2cTest,          Name = "c2ctest",          DispatchIndex = 372, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00628242, CoreEa = C2cTestCoreEa,        CoreBodyDeferred = true },
             new() { Command = GmCurrencyCommand.C2cQuery,         Name = "c2cQuery",         DispatchIndex = 376, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x006282B0, CoreEa = C2cQueryCoreEa,       CoreBodyDeferred = true },
             new() { Command = GmCurrencyCommand.C2cOperate,       Name = "c2cOperate",       DispatchIndex = 377, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x006282CF, CoreEa = C2cOperateCoreEa,     CoreBodyDeferred = true },
@@ -351,7 +351,7 @@ namespace GameSvr
     //                        amount == 0 -> SysMsg(0xFCFF, "amount required"), no forward.
     //   SetNickLF(267):      param present -> ratio = sub_40CA18(); sub_62EAE4(ratio, self);
     //                        param absent  -> SysMsg(0x38FF, "ratio required"), no forward.
-    //   SendYuanBaoText(334):content present -> sub_6EA1A4(1,0) [broadcast];
+    //   SendYuanBaoText(334):content present -> sub_6EA1A4(1,0) [GM-local firework];
     //                        content absent  -> SysMsg(0x38FF, "content required"), no forward.
     public sealed class GuardedForwardOutcome
     {
@@ -360,8 +360,8 @@ namespace GameSvr
         public bool SendsErrorSysMsg => !GuardSatisfied;
         public uint CoreEa { get; init; }               // reached only when GuardSatisfied
         public int ErrorColor { get; init; }            // colour used on the refusal path
-        public bool CoreBodyDeferred => true;
-        /// <summary>True when the satisfied path changes persistent state (false for the broadcast-only text).</summary>
+        public bool CoreBodyDeferred { get; init; } = true;
+        /// <summary>True when the satisfied path changes persistent state.</summary>
         public bool MutatesStateWhenSatisfied { get; init; }
     }
 
@@ -393,13 +393,14 @@ namespace GameSvr
 
     public static class NativeGmSendYuanBaoText
     {
-        // guardSatisfied == (message content present); broadcast only -> no persistent mutation
+        // guardSatisfied == (message content present); local firework only -> no persistent mutation
         public static GuardedForwardOutcome Evaluate(bool contentPresent) =>
             new()
             {
                 GuardSatisfied = contentPresent,
                 CoreEa = NativeGmCurrencyCommands.SendYuanBaoTextCoreEa,
                 ErrorColor = NativeGmCurrencyCommands.ColorError,    // 0x38FF
+                CoreBodyDeferred = false,
                 MutatesStateWhenSatisfied = false,
             };
     }

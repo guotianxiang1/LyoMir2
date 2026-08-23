@@ -8,6 +8,46 @@ namespace GameSvr
         private const int NativeFireworkTextLifetime = 88000;
         private const int NativeFireworkTextMaximumBytes = 12;
 
+        /// <summary>
+        /// Native GM case 334 (SendYuanBaoText) calls the same text-event core as
+        /// CM_YANHUA_TEXT, but passes the local-only flags (1, 0).  The GM path
+        /// therefore creates visual events without consuming an item, logging, or
+        /// broadcasting a gate packet.
+        /// </summary>
+        internal bool TryCreateNativeGmFireworkText(string text)
+        {
+            if (string.IsNullOrEmpty(text) || m_PEnvir == null ||
+                M2Share.EventManager == null)
+                return false;
+
+            var textBytes = HUtil32.GbkEncoding.GetBytes(text);
+            var payload = new byte[textBytes.Length + 1];
+            Buffer.BlockCopy(textBytes, 0, payload, 0, textBytes.Length);
+            var glyphs = BuildNativeFireworkTextGlyphs(payload, m_nCurrX,
+                m_nCurrY, out _);
+            if (glyphs.Count == 0)
+                return false;
+
+            // The native helper validates every glyph coordinate before adding
+            // the first event, so an overrun cannot leave a partial display.
+            for (var index = 0; index < glyphs.Count; index++)
+            {
+                var glyph = glyphs[index];
+                if (glyph.X < 0 || glyph.X >= m_PEnvir.wWidth ||
+                    glyph.Y < 0 || glyph.Y >= m_PEnvir.wHeight)
+                    return false;
+            }
+
+            for (var index = 0; index < glyphs.Count; index++)
+            {
+                var glyph = glyphs[index];
+                M2Share.EventManager.AddEvent(new FireworksEvent(m_PEnvir,
+                    glyph.X, glyph.Y, NativeFireworkTextLifetime, glyph.Text,
+                    glyph.RawBytes));
+            }
+            return true;
+        }
+
         private void ClientNativeFireworkText(TProcessMessage processMessage)
         {
             if (processMessage == null || m_PEnvir == null ||

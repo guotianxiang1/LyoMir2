@@ -39,7 +39,6 @@ var protectedFiles = new[]
     "ReloadPromptFileCommand.cs",
     "ReloadRndItemCommand.cs",
     "ReloadunBindItemCommand.cs",
-    "SendYuanBaoTextCommand.cs",
     "SmeltEquipCommand.cs",
     "SuperMerchantCommand.cs",
 };
@@ -276,6 +275,10 @@ foreach (var implementedFile in new[]
              // case 234 @0x00625DEF -> sub_6DF540 reloads task scripts and
              // reports the loaded count followed by " task Is Reload".
              "ReLoadTaskCommand.cs",
+             // case 334 @0x00627D29 -> sub_6EA1A4(1,0): GBK text is capped
+             // at 12 bytes and rendered as local 23/88000 firework events;
+             // the GM path does not consume an item or broadcast globally.
+             "SendYuanBaoTextCommand.cs",
              // case 459 @0x00628C39 -> sub_6997BC releases and recompiles
              // PsMapQuest/TaskDispatch.pas, invokes OnInitialize, and always
              // emits the fixed green completion message.
@@ -311,6 +314,14 @@ Assert(addVote.Contains(
            "GameCommand(\"AddVote\", \"增加投票数\", \"人物名称 票数 投票类型\", 5)",
            StringComparison.Ordinal),
     "AddVote does not preserve the native three-argument command contract");
+
+var sendYuanBaoText = Read("SendYuanBaoTextCommand.cs");
+Assert(sendYuanBaoText.Contains(
+           "GameCommand(\"SendYuanBaoText\", \"GM自身发送烟花状的元宝样式的消息内容\", \"消息内容\", 4)",
+           StringComparison.Ordinal) &&
+       sendYuanBaoText.Contains("TryCreateNativeGmFireworkText", StringComparison.Ordinal) &&
+       !sendYuanBaoText.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "SendYuanBaoText does not preserve the native local firework contract");
 
 var chgOpenGameTime = Read("ChgGameOpenTimeCommand.cs");
 Assert(chgOpenGameTime.Contains(
