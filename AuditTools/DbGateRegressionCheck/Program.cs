@@ -31,6 +31,7 @@ await Run("5600 account session replacement + IP admission", TestSessionReplacem
 await Run("5600 private admission requires an M2 peer", TestPrivateAdmissionDelivery);
 await Run("5600 native client registration + auth + probe", TestNativeLoginGateClientMode);
 await Run("GameGate ignored native type17 runtime", TestIgnoredType17Runtime);
+await Run("GameGate route open requires GameSvr", TestGameRouteOpenFailure);
 await Run("GameGate DB reconnect invalidates clients", TestSharedBackendDbReconnect);
 await Run("GameGate shared backend multiplexing", TestSharedBackendHub);
 await Run("GameGate pooled session release", TestSessionPoolRelease);
@@ -1481,6 +1482,44 @@ static async Task TestSharedBackendDbReconnect()
     await Task.Delay(50);
     Check(!dbListener.Pending(), "only one replacement shared DB connection");
     Check(!gameListener.Pending(), "only one shared Game connection in DB reconnect test");
+}
+
+static async Task TestGameRouteOpenFailure()
+{
+    using var dbListener = new TcpListener(IPAddress.Loopback, 0);
+    using var gamePortLease = new TcpListener(IPAddress.Loopback, 0);
+    dbListener.Start();
+    gamePortLease.Start();
+    var dbPort = ((IPEndPoint)dbListener.LocalEndpoint).Port;
+    var gamePort = ((IPEndPoint)gamePortLease.LocalEndpoint).Port;
+    gamePortLease.Stop();
+
+    var dbAccept = dbListener.AcceptTcpClientAsync();
+    using var hub = new SharedBackendHub(new GateConfig
+    {
+        BackendIP = "127.0.0.1",
+        BackendPort2 = dbPort,
+        GameBackendIP = "127.0.0.1",
+        BackendPort = gamePort
+    }, (_, _) => { });
+    hub.Start();
+
+    var opening = hub.OpenRouteAsync(301, "127.0.0.4", 4, () => { },
+        CancellationToken.None);
+    using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(3));
+    var dbFrames = await ReadPercentFrames(dbPeer.GetStream(), 2);
+    var route = await opening.WaitAsync(TimeSpan.FromSeconds(3));
+
+    Check(route == null, "GameSvr failure returned a live route");
+    Check(dbFrames.Any(frame => Encoding.ASCII.GetString(frame)
+        == "%O301/127.0.0.4/127.0.0.4$"),
+        "failed GameSvr route did not open its DB logical route");
+    Check(dbFrames.Any(frame => Encoding.ASCII.GetString(frame) == "%X301$"),
+        "failed GameSvr route did not close its DB logical route");
+    Check(!hub.TryGetRoute(301, 4, out _),
+        "failed GameSvr route remained in the route table");
+
+    await hub.StopAsync();
 }
 
 static Task TestSessionPoolRelease()
