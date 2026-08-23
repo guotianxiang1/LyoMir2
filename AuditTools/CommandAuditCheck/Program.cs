@@ -306,6 +306,12 @@ Assert(chgEquipLevel.Contains(
        !chgEquipLevel.Contains("人物名称 装备位置", StringComparison.Ordinal),
     "ChgEquipLevel does not preserve the native item-id/level command contract");
 
+var addVote = Read("AddVoteCommand.cs");
+Assert(addVote.Contains(
+           "GameCommand(\"AddVote\", \"增加投票数\", \"人物名称 票数 投票类型\", 5)",
+           StringComparison.Ordinal),
+    "AddVote does not preserve the native three-argument command contract");
+
 var chgOpenGameTime = Read("ChgGameOpenTimeCommand.cs");
 Assert(chgOpenGameTime.Contains(
            "GameCommand(\"ChgOpenGameTime\", \"修改开区时间\", \"XXXX-XX-XX\", 5)",
