@@ -41,7 +41,6 @@ var protectedFiles = new[]
     "ReloadC2CItemsCommand.cs",
     "ReloadPromptFileCommand.cs",
     "ReloadRndItemCommand.cs",
-    "ReloadTaskDispatchCommand.cs",
     "ReloadunBindItemCommand.cs",
     "SendYuanBaoTextCommand.cs",
     "SmeltEquipCommand.cs",
@@ -280,6 +279,10 @@ foreach (var implementedFile in new[]
              // case 234 @0x00625DEF -> sub_6DF540 reloads task scripts and
              // reports the loaded count followed by " task Is Reload".
              "ReLoadTaskCommand.cs",
+             // case 459 @0x00628C39 -> sub_6997BC releases and recompiles
+             // PsMapQuest/TaskDispatch.pas, invokes OnInitialize, and always
+             // emits the fixed green completion message.
+             "ReloadTaskDispatchCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -523,6 +526,16 @@ Assert(reLoadTask.Contains(
        reLoadTask.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !reLoadTask.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ReLoadTask does not preserve the native task reload/count message contract");
+
+var reloadTaskDispatch = Read("ReloadTaskDispatchCommand.cs");
+Assert(reloadTaskDispatch.Contains(
+           "GameCommand(\"reloadTaskDispatch\", \"重载任务发布脚本\", \"\", 4)",
+           StringComparison.Ordinal) &&
+       reloadTaskDispatch.Contains("ReloadTaskDispatch()", StringComparison.Ordinal) &&
+       reloadTaskDispatch.Contains("重载任务发布脚本结束", StringComparison.Ordinal) &&
+       reloadTaskDispatch.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !reloadTaskDispatch.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "reloadTaskDispatch does not preserve the native script reload/completion contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",

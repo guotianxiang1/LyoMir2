@@ -177,6 +177,15 @@ Equal(NativeSystemAdminOutcome.ExecutedWithGmMessage,
 Equal(0xFFDB,
     NativeGmSystemCommands.Evaluate("ReLoadTask", 4, null).NativeSysMsgIdent,
     "ReLoadTask -> task reload count ident");
+var reloadTaskDispatch = NativeGmSystemCommands.Evaluate(
+    "reloadTaskDispatch", 4, null);
+Equal(NativeSystemAdminOutcome.ExecutedWithGmMessage,
+    reloadTaskDispatch.Outcome,
+    "reloadTaskDispatch -> ExecutedWithGmMessage");
+Equal("sub_6997BC", reloadTaskDispatch.NativeCore,
+    "reloadTaskDispatch -> task-dispatch reload core");
+Equal(0xFFDB, reloadTaskDispatch.NativeSysMsgIdent,
+    "reloadTaskDispatch -> completion ident");
 // SkyIncome and GMPower use the usage ident (0x38FF) on their success path.
 Equal(0x38FF, NativeGmSystemCommands.Evaluate("SkyIncome", 4, null).NativeSysMsgIdent, "SkyIncome -> usage ident");
 Equal(NativeSystemAdminOutcome.ExecutedWithGmMessage,

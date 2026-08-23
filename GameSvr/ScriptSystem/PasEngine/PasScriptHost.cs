@@ -1186,6 +1186,20 @@ namespace GameSvr.PasEngine
         }
 
         /// <summary>
+        /// Restores native case 459 (0x00628C39): discard the cached task
+        /// dispatch program, compile PsMapQuest/TaskDispatch.pas again, and
+        /// invoke its OnInitialize procedure when present.
+        /// </summary>
+        public bool ReloadTaskDispatch()
+        {
+            var scriptPath = Path.Combine(_envirPath, "PsMapQuest",
+                "TaskDispatch.pas");
+            Invalidate(scriptPath);
+            return TryCallTaskDispatchProcedure(null, "OnInitialize",
+                out _);
+        }
+
+        /// <summary>
         /// Execute a script file's main entry point.
         /// Typical script: program Mir2; begin domain; end.
         /// </summary>

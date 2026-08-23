@@ -4,17 +4,22 @@ using SystemModule;
 namespace GameSvr
 {
     /// <summary>
-    /// GM command to reload task dispatch configuration.
-    /// Usage: @ReloadTaskDispatch
+    /// Restores native dispatcher case 459 (0x00628C39).
     /// </summary>
-    [GameCommand("ReloadTaskDispatch", "重新加载任务调度配置", 4)]
-    public class ReloadTaskDispatchCommand : BaseCommond
+    [GameCommand("reloadTaskDispatch", "重载任务发布脚本", "", 4)]
+    public sealed class ReloadTaskDispatchCommand : BaseCommond
     {
+        internal const string NativeCompletionMessage = "重载任务发布脚本结束";
+
         [DefaultCommand]
-        public void ReloadTaskDispatch(TPlayObject PlayObject)
+        public void ReloadTaskDispatch(TPlayObject player)
         {
-            NativeCommandFailure.Report(PlayObject, "ReloadTaskDispatch",
-                "原版任务发布状态机尚未完整移植，未清理或替换线上任务状态。");
+            if (player == null)
+                return;
+
+            M2Share.PasEngine?.ReloadTaskDispatch();
+            player.SysMsg(NativeCompletionMessage, MsgColor.Green,
+                MsgType.Hint);
         }
     }
 }
