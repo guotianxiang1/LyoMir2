@@ -274,6 +274,9 @@ foreach (var implementedFile in new[]
              // PkRuleLevel, persists [Setup]PkRuleLevel, and replies with the
              // original blue usage/red status messages.
              "SetPkLvCommand.cs",
+             // case 477 @0x0062B59C -> sub_6FAD74 trims and writes
+             // [Setup]GS_Task_Version, then emits the native helper message.
+             "SetGsTaskVersionCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -493,6 +496,20 @@ Assert(setPkLv.Contains(
        setPkLv.Contains("MsgColor.Red", StringComparison.Ordinal) &&
        !setPkLv.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "SetPkLv does not preserve the native parse/config/status contract");
+
+var setGsTaskVersion = Read("SetGsTaskVersionCommand.cs");
+Assert(setGsTaskVersion.Contains(
+           "GameCommand(\"SetGsTaskVersion\", \"\", \"\", 3)",
+           StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains(".Trim()", StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains("TryWriteGSTaskVersion(value)", StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains("nGSTaskVersion", StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains("GS_Task_Version成功修改为：", StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains("!Setup.txt写入失败", StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       setGsTaskVersion.Contains("MsgColor.Red", StringComparison.Ordinal) &&
+       !setGsTaskVersion.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "SetGsTaskVersion does not preserve the native trim/write/message contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",

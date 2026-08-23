@@ -19,6 +19,8 @@ namespace GameSvr.Configs
         public const string OpenDayFormat = "yyyy-MM-dd";
         public const string PkRuleLevelSection = "Setup";
         public const string PkRuleLevelKey = "PkRuleLevel";
+        public const string GSTaskVersionSection = "Setup";
+        public const string GSTaskVersionKey = "GS_Task_Version";
 
         private readonly string _itemNumberPath;
         private readonly string _formGmSetPath;
@@ -84,6 +86,18 @@ namespace GameSvr.Configs
             return true;
         }
 
+        /// <summary>Persists [Setup]GS_Task_Version when !Setup.txt exists.</summary>
+        public bool TryWriteGSTaskVersion(string value)
+        {
+            if (!File.Exists(FileName))
+            {
+                return false;
+            }
+
+            WriteString(GSTaskVersionSection, GSTaskVersionKey, value);
+            return true;
+        }
+
         public void LoadConfig()
         {
             LoadOpenDay();
@@ -144,7 +158,8 @@ namespace GameSvr.Configs
             M2Share.g_Config.nPKPunishPoint = ReadInteger("Setup", "PKPunishPoint", M2Share.g_Config.nPKPunishPoint);
             M2Share.g_Config.nPkRuleLevel = ReadInteger(PkRuleLevelSection, PkRuleLevelKey,
                 M2Share.g_Config.nPkRuleLevel);
-            M2Share.g_Config.nGSTaskVersion = ReadInteger("Setup", "GS_Task_Version", M2Share.g_Config.nGSTaskVersion);
+            M2Share.g_Config.nGSTaskVersion = ReadInteger(GSTaskVersionSection, GSTaskVersionKey,
+                M2Share.g_Config.nGSTaskVersion);
 
             // ============ [Authenticate] section ============
             M2Share.g_Config.boAuthOpen = ReadInteger("Authenticate", "opened", 0) != 0;

@@ -24,6 +24,8 @@ try
     Check(!File.Exists(missingPath), "missing !Setup.txt remains absent after config construction");
     Check(!missing.TryWriteOpenDay(new DateTime(2026, 8, 22), out _),
         "missing !Setup.txt follows native silent FileExists-false branch");
+    Check(!missing.TryWriteGSTaskVersion("10002"),
+        "missing !Setup.txt keeps GS_Task_Version silent");
     Check(!File.Exists(missingPath), "missing !Setup.txt is not created by ChgOpenGameTime");
 
     var setupPath = Path.Combine(root, "!Setup.txt");
@@ -39,6 +41,12 @@ try
     Check(persisted.Contains("[Setup]", StringComparison.Ordinal)
         && persisted.Contains("OpenDay=2026-08-22", StringComparison.Ordinal),
         "[Setup]OpenDay is persisted with the canonical value");
+
+    Check(config.TryWriteGSTaskVersion("10002"),
+        "GS_Task_Version persists when !Setup.txt exists");
+    var gsPersisted = File.ReadAllText(setupPath, System.Text.Encoding.UTF8);
+    Check(gsPersisted.Contains("GS_Task_Version=10002", StringComparison.Ordinal),
+        "GS_Task_Version preserves the native string value");
 
     var reloaded = new ServerConfig(setupPath);
     Check(reloaded.OpenDay == new DateTime(2026, 8, 22),
@@ -59,6 +67,13 @@ try
     Check(commandSource.Contains("NativeUsage", StringComparison.Ordinal)
         && commandSource.Contains("string.IsNullOrEmpty(sDate)", StringComparison.Ordinal),
         "no-argument path reports native usage");
+
+    var gsCommandSource = File.ReadAllText(Path.Combine(AuditRepoRoot.Resolve(),
+        "GameSvr", "Command", "Commands", "SetGsTaskVersionCommand.cs"));
+    Check(gsCommandSource.Contains("GS_Task_Version成功修改为：", StringComparison.Ordinal)
+        && gsCommandSource.Contains("TryWriteGSTaskVersion(value)", StringComparison.Ordinal)
+        && gsCommandSource.Contains("value.Length == 0", StringComparison.Ordinal),
+        "SetGsTaskVersion trims, persists, and stays silent for an empty value");
 
     var apiSource = File.ReadAllText(Path.Combine(AuditRepoRoot.Resolve(),
         "GameSvr", "ScriptSystem", "PasEngine", "PasApiBridge.cs"));

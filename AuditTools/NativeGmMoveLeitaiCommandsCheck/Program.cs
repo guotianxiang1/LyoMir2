@@ -46,7 +46,7 @@ Equal(0x00652784u, NativeGmMoveLeitaiCommands.FindPlayerEa, "FindPlayer sub_6527
 Equal(0x005FBA58u, NativeGmMoveLeitaiCommands.ReloadDynRoomCoreEa, "ReloadDynRoomConf sub_5FBA58");
 Equal(0x00713094u, NativeGmMoveLeitaiCommands.UnlockAllTranserCoreEa, "unlockAllTranser sub_713094");
 Equal(0x007130E8u, NativeGmMoveLeitaiCommands.UnlockTranserCoreEa, "unlockTranser sub_7130E8");
-Equal(0x006FAD74u, NativeGmMoveLeitaiCommands.CloseYaBiaoCoreEa, "close-yabiao sub_6FAD74");
+Equal(0x006FAD74u, NativeGmMoveLeitaiCommands.SetGsTaskVersionCoreEa, "SetGsTaskVersion sub_6FAD74");
 
 // ---------------------------------------------------------------------------
 // 2) Registry facts (Name, Idx, Perm, Handler, Implemented, EmptyBodySink)
@@ -177,10 +177,12 @@ Equal(0xFFDB, ut.NativeSysMsgIdent, "unlockTranser one ident 0xFFDB");
 
 Equal(NativeMoveLeitaiOutcome.RejectedSilently,
     NativeGmMoveLeitaiCommands.Evaluate("SetGsTaskVersion", 3, new[] { "" }).Outcome, "SetGsTaskVersion no-arg silent");
-var sg = NativeGmMoveLeitaiCommands.Evaluate("SetGsTaskVersion", 3, new[] { "x" });
-Equal(NativeMoveLeitaiOutcome.Executed, sg.Outcome, "SetGsTaskVersion arg -> Executed");
-Equal("close-yabiao", sg.Branch, "SetGsTaskVersion branch");
-Equal("sub_6FAD74", sg.NativeCore, "SetGsTaskVersion core (close yabiao)");
+var sg = NativeGmMoveLeitaiCommands.Evaluate("SetGsTaskVersion", 3, new[] { " 10001 " });
+Equal(NativeMoveLeitaiOutcome.ExecutedWithGmMessage, sg.Outcome, "SetGsTaskVersion arg -> ExecutedWithGmMessage");
+Equal("set-version", sg.Branch, "SetGsTaskVersion branch");
+Equal("sub_6FAD74", sg.NativeCore, "SetGsTaskVersion core");
+Equal(0xFFDB, sg.NativeSysMsgIdent, "SetGsTaskVersion helper message ident");
+Equal(false, sg.CoreBodyDeferred, "SetGsTaskVersion body recovered");
 
 Console.WriteLine($"PASS NativeGmMoveLeitaiCommandsCheck ({checks} checks): "
     + $"{NativeGmMoveLeitaiCommands.All.Count} move/leitai GM commands modeled "

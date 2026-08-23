@@ -37,16 +37,16 @@
 // SysMsg = `mov cx,IDENT; call [self+0xD4]`. THREE idents (Hex-Rays signed LOWORD):
 //   0xFFDB (-37)   GM reply/report · 0x38FF (14591) usage/error · 0xFCFF (-769) notice.
 //
-// KEY FINDING (same as the peers): delegating case blocks are THIN SHIMS that
+// KEY FINDING (same as the peers): most delegating case blocks are THIN SHIMS that
 // tail-call a core sub_XXXX whose body is NOT in the dumps (CoreBodyDeferred=true;
-// == "needs-idat" to reverse further). This model captures only shim-provable
-// facts (branch, inline write, SysMsg). Inline-write commands are fully modeled
-// (CoreBodyDeferred=false): AllowTeam.
+// == "needs-idat" for later analysis). SetGsTaskVersion is an exception: the
+// helper body and its file/message contract are recovered, so it is modeled with
+// CoreBodyDeferred=false alongside the inline AllowTeam case.
 //
-// NOTABLE QUIRK: the real "关闭押镖战场" (close-yabiao) logic lives under
-// SetGsTaskVersion (idx 477 → sub_6FAD74); the command literally named CloseYaBiao
-// (idx 509) is a registered SILENT NO-OP (0x0062B648). Both carry the same help
-// text — an off-by-one in the record→help association (see gm_full_inventory).
+// NOTABLE QUIRK: SetGsTaskVersion (idx 477) writes [Setup]GS_Task_Version through
+// sub_6FAD74 and emits the helper's success/failure message. The command literally
+// named CloseYaBiao (idx 509) is a registered SILENT NO-OP (0x0062B648). Both
+// records carry the same help text — an off-by-one in the record→help association.
 // -----------------------------------------------------------------------------
 
 using System.Collections.Generic;
@@ -175,7 +175,8 @@ namespace GameSvr
         public const uint ReloadDynRoomCoreEa = 0x005FBA58;  // sub_5FBA58 (reload dyn-room config)
         public const uint UnlockAllTranserCoreEa = 0x00713094; // sub_713094 (unlock all cross-server)
         public const uint UnlockTranserCoreEa = 0x007130E8;    // sub_7130E8 (unlock one)
-        public const uint CloseYaBiaoCoreEa = 0x006FAD74;      // sub_6FAD74 (close 押镖 battlefield)
+        public const uint SetGsTaskVersionCoreEa = 0x006FAD74; // sub_6FAD74 ([Setup]GS_Task_Version writer)
+        public const uint CloseYaBiaoCoreEa = SetGsTaskVersionCoreEa; // compatibility alias
 
         private static readonly NativeMoveLeitaiCommand[] _all =
         {
@@ -218,14 +219,13 @@ namespace GameSvr
             new NativeMoveLeitaiCommand("unlockTranser", 471, 4, 0x00628C8Bu, "sub_7130E8", true,
                 "请求解锁某个跨服玩家	@unlockTranser 角色名",
                 "arg present -> sub_7130E8(name,...) unlock one + SysMsg(0xFFDB); no arg -> SysMsg(0x38FF) usage."),
-            new NativeMoveLeitaiCommand("SetGsTaskVersion", 477, 3, 0x0062B59Cu, "sub_6FAD74", true,
-                "关闭押镖战场	@CloseYaBiao",
-                "arg present -> sub_6FAD74() closes the 押镖 (escort) battlefield; else silent. No shim SysMsg. "
-                + "This is the command that actually performs close-yabiao (the CloseYaBiao record @509 is a no-op)."),
+            new NativeMoveLeitaiCommand("SetGsTaskVersion", 477, 3, 0x0062B59Cu, "sub_6FAD74", false,
+                "",
+                "arg present -> Trim(arg), sub_6FAD74 writes [Setup]GS_Task_Version and emits the helper's "
+                + "native success/failure messages; empty arg -> silent. The case has no inline SysMsg."),
             new NativeMoveLeitaiCommand("CloseYaBiao", 509, 3, 0x0062B648u, "", false,
                 "关闭押镖战场	@CloseYaBiao",
-                "Registered (idx 509, perm 3) but = def_622B15 (default sink): silent no-op. The real close-yabiao "
-                + "action lives under SetGsTaskVersion (idx 477)."),
+                "Registered (idx 509, perm 3) but = def_622B15 (default sink): silent no-op."),
             new NativeMoveLeitaiCommand("ReloadLeitaiBlock", 563, 4, 0x0062B64Cu, "", false,
                 "重载擂台阻挡点	@ReloadLeitaiBlock",
                 "Registered (idx 563, perm 4) but = loc_62B64C (empty-body sink): silent no-op."),
@@ -358,13 +358,16 @@ namespace GameSvr
                 : new NativeMoveLeitaiEvaluation(NativeMoveLeitaiOutcome.ExecutedWithGmMessage, "unlock-one",
                     "sub_7130E8", SysMsgGmReply, true, "sub_7130E8(name,...) unlock + SysMsg(0xFFDB)");
 
-        // SetGsTaskVersion (477): arg -> close-yabiao; else silent.
+        // SetGsTaskVersion (477): trimmed arg -> write [Setup]GS_Task_Version; else silent.
         private static NativeMoveLeitaiEvaluation EvalSetGsTaskVersion(IReadOnlyList<string> a)
-            => string.IsNullOrEmpty(Arg(a, 0))
+        {
+            var value = Arg(a, 0).Trim();
+            return value.Length == 0
                 ? new NativeMoveLeitaiEvaluation(NativeMoveLeitaiOutcome.RejectedSilently, "no-arg", "sub_6FAD74",
-                    NoSysMsg, false, "no arg -> silent, no close")
-                : new NativeMoveLeitaiEvaluation(NativeMoveLeitaiOutcome.Executed, "close-yabiao", "sub_6FAD74",
-                    NoSysMsg, true, "sub_6FAD74() closes the 押镖 battlefield; no shim SysMsg");
+                    NoSysMsg, false, "empty trimmed arg -> silent")
+                : new NativeMoveLeitaiEvaluation(NativeMoveLeitaiOutcome.ExecutedWithGmMessage, "set-version", "sub_6FAD74",
+                    SysMsgGmReply, false, "Trim(arg) -> writes [Setup]GS_Task_Version; helper emits success or write-failure SysMsg");
+        }
 
         // -------- dormant hooks (injectable for branch coverage) --------
         /// <summary>Searching gate: self flag [+451] set OR GMLevel(self[+1653]) >= 3.</summary>
