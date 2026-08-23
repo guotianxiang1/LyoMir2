@@ -117,7 +117,8 @@ static void VerifyRegistry()
             e.cmd != GmAntiCheatCommand.HackFlag &&
             e.cmd != GmAntiCheatCommand.IPHackFlag &&
             e.cmd != GmAntiCheatCommand.IPOutSay &&
-            e.cmd != GmAntiCheatCommand.IPHumNum,
+            e.cmd != GmAntiCheatCommand.IPHumNum &&
+            e.cmd != GmAntiCheatCommand.ReloadSmsUserList,
             $"{e.cmd} core body deferred");
         Assert(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmAntiCheatCommands.SwitchMaxIndex,
             $"{e.cmd} index in switch range");
@@ -138,7 +139,8 @@ static void VerifyNoNoOps()
             info.Command != GmAntiCheatCommand.HackFlag &&
             info.Command != GmAntiCheatCommand.IPHackFlag &&
             info.Command != GmAntiCheatCommand.IPOutSay &&
-            info.Command != GmAntiCheatCommand.IPHumNum,
+            info.Command != GmAntiCheatCommand.IPHumNum &&
+            info.Command != GmAntiCheatCommand.ReloadSmsUserList,
             $"{info.Command} recovered/deferred state");
     }
 }
@@ -461,6 +463,7 @@ static void VerifyFlagCommandsRuntime()
 {
     PrepareRuntimeFiles();
     var oldConfig = M2Share.g_Config;
+    var oldConfigPath = M2Share.sConfigPath;
     var oldProcessMsgCriticalSection = M2Share.ProcessMsgCriticalSection;
     var oldObjectManager = M2Share.ObjectManager;
     var oldRandomNumber = M2Share.RandomNumber;
@@ -468,12 +471,16 @@ static void VerifyFlagCommandsRuntime()
     var oldDenySayMsgList = M2Share.g_DenySayMsgList;
     var oldLogStringList = M2Share.LogStringList;
     var oldLogMsgCriticalSection = M2Share.LogMsgCriticalSection;
+    var smsRuntimeDirectory = Path.Combine(Path.GetTempPath(),
+        "NativeGmAntiCheatCommandsCheck-" + Guid.NewGuid().ToString("N"));
     var config = oldConfig ?? new GameSvrConfig();
     var oldTestServer = config.boTestServer;
 
     try
     {
         M2Share.g_Config = config;
+        Directory.CreateDirectory(smsRuntimeDirectory);
+        M2Share.sConfigPath = smsRuntimeDirectory;
         config.boTestServer = false;
         M2Share.ProcessMsgCriticalSection = new object();
         M2Share.ObjectManager = new ObjectManager();
@@ -519,6 +526,54 @@ static void VerifyFlagCommandsRuntime()
             m_nNativeCheatPenaltyExpiryDay = 22,
         };
         AddOnline(M2Share.UserEngine, ready, ghost, notReady);
+
+        var smsAttribute = typeof(ReloadSmsUserListCommand)
+            .GetCustomAttribute<GameCommandAttribute>();
+        var smsMethod = typeof(ReloadSmsUserListCommand).GetMethod(
+            nameof(ReloadSmsUserListCommand.ReloadSmsUserList));
+        Assert(smsAttribute != null && smsMethod != null,
+            "ReloadSmsUserList live registration metadata");
+        Equal(smsAttribute.nPermissionMin, 4,
+            "ReloadSmsUserList live native permission");
+        var smsCommand = new ReloadSmsUserListCommand();
+        smsCommand.Register(smsAttribute, smsMethod);
+
+        File.WriteAllLines(Path.Combine(smsRuntimeDirectory, "SmsUserList.txt"),
+            new[] { "13800138000", "短信白名单" }, HUtil32.GbkEncoding);
+        gm.m_MsgList.Clear();
+        Equal<string>(null, smsCommand.Handle("ignored extra tokens", gm),
+            "ReloadSmsUserList success return");
+        Equal(gm.m_MsgList.Count, 1,
+            "ReloadSmsUserList success one message");
+        Equal(gm.m_MsgList[0].Buff, "加载SmsUserList.txt成功",
+            "ReloadSmsUserList success text");
+        Equal(gm.m_MsgList[0].nParam1, 0xDB,
+            "ReloadSmsUserList success foreground");
+        Equal(gm.m_MsgList[0].nParam2, 0xFF,
+            "ReloadSmsUserList success background");
+        Assert(M2Share.UserEngine.NativeSmsUserList.SequenceEqual(
+                new[] { "13800138000", "短信白名单" }),
+            "ReloadSmsUserList stores GBK lines");
+
+        File.Delete(Path.Combine(smsRuntimeDirectory, "SmsUserList.txt"));
+        gm.m_MsgList.Clear();
+        smsCommand.Handle(string.Empty, gm);
+        Equal(gm.m_MsgList.Count, 1,
+            "ReloadSmsUserList missing-file one message");
+        Equal(gm.m_MsgList[0].Buff, "加载SmsUserList.txt失败",
+            "ReloadSmsUserList failure text");
+        Assert(M2Share.UserEngine.NativeSmsUserList.SequenceEqual(
+                new[] { "13800138000", "短信白名单" }),
+            "ReloadSmsUserList failure preserves prior list");
+
+        gm.m_MsgList.Clear();
+        gm.m_btPermission = 3;
+        Equal(smsCommand.Handle(string.Empty, gm),
+            "该命令需要4级GM才能使用",
+            "ReloadSmsUserList permission gate");
+        Equal(gm.m_MsgList.Count, 0,
+            "ReloadSmsUserList permission rejection does not invoke body");
+        gm.m_btPermission = 4;
 
         var ipHumAttribute = typeof(IPHumNumCommand)
             .GetCustomAttribute<GameCommandAttribute>();
@@ -1135,6 +1190,7 @@ static void VerifyFlagCommandsRuntime()
     {
         config.boTestServer = oldTestServer;
         M2Share.g_Config = oldConfig;
+        M2Share.sConfigPath = oldConfigPath;
         M2Share.ProcessMsgCriticalSection = oldProcessMsgCriticalSection;
         M2Share.ObjectManager = oldObjectManager;
         M2Share.RandomNumber = oldRandomNumber;
@@ -1142,6 +1198,8 @@ static void VerifyFlagCommandsRuntime()
         M2Share.g_DenySayMsgList = oldDenySayMsgList;
         M2Share.LogStringList = oldLogStringList;
         M2Share.LogMsgCriticalSection = oldLogMsgCriticalSection;
+        if (Directory.Exists(smsRuntimeDirectory))
+            Directory.Delete(smsRuntimeDirectory, recursive: true);
     }
 }
 
@@ -1233,11 +1291,13 @@ static void VerifyReloadSmsUserList()
     Equal(ok.Branch, ReloadSmsUserListBranch.Success, "sms success branch");
     Assert(ok.SendsSysMsg, "sms success msg");
     Equal(ok.MessageColor, NativeGmAntiCheatCommands.ColorNotice, "sms success colour");
+    Assert(!ok.CoreBodyDeferred, "sms success core recovered");
 
     var fail = NativeGmReloadSmsUserList.Evaluate(reloadOk: false);
     Equal(fail.Branch, ReloadSmsUserListBranch.Failure, "sms fail branch");
     Assert(fail.SendsSysMsg, "sms fail msg");
     Equal(fail.MessageColor, NativeGmAntiCheatCommands.ColorNotice, "sms fail colour");
+    Assert(!fail.CoreBodyDeferred, "sms failure core recovered");
 }
 
 static void AddOnline(UserEngine engine, params TPlayObject[] players)

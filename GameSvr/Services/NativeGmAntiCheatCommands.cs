@@ -44,7 +44,8 @@ namespace GameSvr
     //     516 ReloadSmsUserList perm4 @0x006294A9 -> ok=sub_6556F4(); SysMsg(ok?done:fail, 0xFFDB) (off_7D6D50)
     //
     //   sub_6D321C (ClearHackFlag), sub_6D440C (HackFlag), sub_6D45C8 (IPHackFlag),
-    //   sub_6D4CA4 (IPOutSay), and sub_6E3498 (IPHumNum) are fully recovered and wired.
+    //   sub_6D4CA4 (IPOutSay), sub_6E3498 (IPHumNum), and sub_6556F4
+    //   (ReloadSmsUserList) are fully recovered and wired.
     //   The remaining core subs are deferred: their result/effect is taken
     //   as an INPUT here, never fabricated. Dispatcher-level ladders remain modelled exactly.
     //
@@ -56,7 +57,6 @@ namespace GameSvr
     // Live drift flagged (NOT represented in this native-truth registry; see report / staging doc):
     //   MapUserInfoCommand.cs        perm 10 (native 3) AND behaviour drift (map-count vs hack-map dump)
     //   ReloadWhiteListCommand.cs    perm 10 (native 4), fail-closed stub
-    //   ReloadSmsUserListCommand.cs  perm 10 (native 4), fail-closed stub
     // ------------------------------------------------------------------------------------------------
 
     public enum GmAntiCheatCommand
@@ -181,7 +181,7 @@ namespace GameSvr
             new() { Command = GmAntiCheatCommand.ReloadWhiteList,    Name = "ReloadWhiteList",    DispatchIndex = 505, RequiredPermission = 4, Implemented = true, CaseAddress = 0x00629465, CoreAddress = CoreServerConfig,    CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.SetMonitor,         Name = "SetMonitor",         DispatchIndex = 510, RequiredPermission = 3, Implemented = true, CaseAddress = 0x006294EB, CoreAddress = CoreSetMonitor,      CoreBodyDeferred = true, Shape = GmAntiCheatShape.ForwardOnly,      CoreStringArgs = 2, DispatcherSendsSysMsg = false },
             new() { Command = GmAntiCheatCommand.ViewMonitor,        Name = "ViewMonitor",        DispatchIndex = 511, RequiredPermission = 3, Implemented = true, CaseAddress = 0x00629502, CoreAddress = CoreViewMonitor,     CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 1, DispatcherSendsSysMsg = true  },
-            new() { Command = GmAntiCheatCommand.ReloadSmsUserList,  Name = "ReloadSmsUserList",  DispatchIndex = 516, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006294A9, CoreAddress = CoreSmsReload,       CoreBodyDeferred = true, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = true  },
+            new() { Command = GmAntiCheatCommand.ReloadSmsUserList,  Name = "ReloadSmsUserList",  DispatchIndex = 516, RequiredPermission = 4, Implemented = true, CaseAddress = 0x006294A9, CoreAddress = CoreSmsReload,       CoreBodyDeferred = false, Shape = GmAntiCheatShape.DispatcherLadder, CoreStringArgs = 0, DispatcherSendsSysMsg = true  },
         };
 
         public static GmAntiCheatCommandInfo Info(GmAntiCheatCommand command)
@@ -561,7 +561,7 @@ namespace GameSvr
 
     // ===================== ReloadSmsUserList (idx 516) =====================
     // "@ReloadSmsUserList"  case @0x006294A9
-    //   ok = sub_6556F4()   (reload SmsUserList.txt, returns bool, deferred core);
+    //   ok = sub_6556F4()   (reload SmsUserList.txt, returns bool; managed list is replaced only after a successful GBK read);
     //   ok  -> SysMsg(done, 0xFFDB);
     //   !ok -> SysMsg(fail, 0xFFDB).   Both branches send a message, same colour.
     public enum ReloadSmsUserListBranch
@@ -573,6 +573,7 @@ namespace GameSvr
     public sealed class ReloadSmsUserListOutcome
     {
         public ReloadSmsUserListBranch Branch { get; init; }
+        public bool CoreBodyDeferred => false;
         public bool SendsSysMsg => true;
         public int MessageColor => NativeGmAntiCheatCommands.ColorNotice;
     }

@@ -154,6 +154,8 @@ namespace GameSvr
         private readonly Dictionary<string, ServerGruopInfo> m_OtherUserNameList;
         private readonly IList<TPlayObject> m_PlayObjectList;
         private readonly IList<TPlayObject> m_AiPlayObjectList;
+        private readonly object _nativeSmsUserListSync;
+        private readonly IList<string> _nativeSmsUserList;
         public IList<TMonInfo> MonsterList =>
             Volatile.Read(ref _monsterDefinitions).Definitions;
         private int nMerchantPosition;
@@ -243,6 +245,8 @@ namespace GameSvr
             m_ListOfUserGeneration = new ArrayList();
             OldMagicList = new ArrayList();
             m_OtherUserNameList = new Dictionary<string, ServerGruopInfo>(StringComparer.OrdinalIgnoreCase);
+            _nativeSmsUserListSync = new object();
+            _nativeSmsUserList = new List<string>();
             m_UserLogonList = new List<TAILogon>();
             _nativeMagicTowerDeferredSpawns =
                 new Queue<NativeMagicTowerDeferredSpawn>();
@@ -265,6 +269,51 @@ namespace GameSvr
         public int OnlinePlayObject => GetOnlineHumCount();
         public int PlayObjectCount => GetUserCount();
         public int LoadPlayCount => GetLoadPlayCount();
+
+        /// <summary>
+        /// Current lines loaded by the native @ReloadSmsUserList analogue.
+        /// The previous list remains intact when the file cannot be read.
+        /// </summary>
+        public IReadOnlyList<string> NativeSmsUserList
+        {
+            get
+            {
+                lock (_nativeSmsUserListSync)
+                    return _nativeSmsUserList.ToArray();
+            }
+        }
+
+        public bool ReloadNativeSmsUserList()
+        {
+            var configPath = string.IsNullOrEmpty(M2Share.sConfigPath)
+                ? AppContext.BaseDirectory
+                : M2Share.sConfigPath;
+            var filePath = Path.Combine(configPath, "SmsUserList.txt");
+            if (!File.Exists(filePath))
+                return false;
+
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(filePath, HUtil32.GbkEncoding);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+
+            lock (_nativeSmsUserListSync)
+            {
+                _nativeSmsUserList.Clear();
+                foreach (var line in lines)
+                    _nativeSmsUserList.Add(line);
+            }
+            return true;
+        }
 
         public int HeroObjectCount
         {

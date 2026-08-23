@@ -41,7 +41,6 @@ var protectedFiles = new[]
     "ReloadC2CItemsCommand.cs",
     "ReloadPromptFileCommand.cs",
     "ReloadRndItemCommand.cs",
-    "ReloadSmsUserListCommand.cs",
     "ReloadTaskDispatchCommand.cs",
     "ReloadunBindItemCommand.cs",
     "SendYuanBaoTextCommand.cs",
@@ -254,6 +253,9 @@ foreach (var implementedFile in new[]
              // case 515 @0x00629465: send Type2 0184 with the invoking
              // character name; Type1 0132 later delivers the DBServer text.
              "ReloadWhiteListCommand.cs",
+             // case 516 @0x006294A9: sub_6556F4 loads SmsUserList.txt from
+             // the configured directory; both result branches send green text.
+             "ReloadSmsUserListCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {

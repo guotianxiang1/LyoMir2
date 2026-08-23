@@ -9,8 +9,14 @@ namespace GameSvr
         [DefaultCommand]
         public void ReloadSmsUserList(TPlayObject PlayObject)
         {
-            NativeCommandFailure.Report(PlayObject, "ReloadSmsUserList",
-                "原版 SmsUserList.txt 加载器尚未移植，未替换线上配置。");
+            if (PlayObject == null)
+                return;
+
+            var loaded = M2Share.UserEngine?.ReloadNativeSmsUserList() == true;
+            PlayObject.SysMsg(
+                loaded ? "加载SmsUserList.txt成功" : "加载SmsUserList.txt失败",
+                MsgColor.Green,
+                MsgType.Hint);
         }
     }
 }
