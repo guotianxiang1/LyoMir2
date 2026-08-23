@@ -16,7 +16,13 @@ namespace GameSvr
                 out var sectionCount, out _);
             var outcome = NativeGmItemExtraReloads.ReloadUnBindItem(loaded,
                 sectionCount);
-            PlayObject.SysMsg(outcome.Message, MsgColor.Green, MsgType.Hint);
+            // Native SysMsg receives the packed WORD 0xFFDB directly.  The
+            // regular MsgColor enum maps through configurable foreground and
+            // background bytes, which would change the wire colour.
+            PlayObject.SendMsg(PlayObject, Grobal2.RM_SYSMESSAGE, 0,
+                NativeGmItemExtraCommands.ColorInfo & 0xFF,
+                (NativeGmItemExtraCommands.ColorInfo >> 8) & 0xFF, 0,
+                outcome.Message);
         }
     }
 }
