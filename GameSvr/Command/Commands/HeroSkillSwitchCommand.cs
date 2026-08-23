@@ -11,7 +11,7 @@ namespace GameSvr
     // 旧注释说「命令名与帮助串零 xref，原版不存在此命令」：观察没错，推论是错的——注册表是
     // 430 条连续记录的数组，运行期靠 ebx 从 0x7B4654 每次 +0x120 遍历，任何单条记录本来就
     // 不会有独立 xref，该推理对全部 430 条无效。
-    [GameCommand("HeroSkillSwitch", "英雄技能开关", "玩家名 英雄技能名 开/关 [1|0]", 3)]
+    [GameCommand("HeroSkillSwitch", "英雄技能开关", "人物名称 技能名称 开/关 0|1", 3)]
     public class HeroSkillSwitchCommand : BaseCommond
     {
         // 0x0062BD10 len=46：40 48 65 72 6f 53 6b 69 6c 6c 53 77 69 74 63 68 20 cd e6 bc d2
@@ -54,12 +54,18 @@ namespace GameSvr
             if (sState != SwitchOn)
                 sState = SwitchOff;
 
-            // 0x0062474F  call sub_73D458(eax=目标对象, edx=技能名, cl=flag)。
-            // bHero 分支作用于 [target+0xBB0]（英雄对象）。sub_73D458 尚未移植，本仓也没有
-            // 英雄技能开关位；成功后 0x0062479B 会用 "玩家%s的技能%s设为:%s"(0x0062BCF0)
-            // 以 0x38FF 红字回报。只发那条回报而不真正改开关等于静默成功，故此处明确拒绝。
-            NativeCommandFailure.Report(PlayObject, "HeroSkillSwitch",
-                $"sub_73D458 英雄技能开关位尚未移植，{sTarget} 的技能 {sSkill} 未设为 {sState}。");
+            // 0x0062474F / 0x006248A4 call sub_73D458 with the player or
+            // [player+0xBB0] hero. Unknown definitions and absent list entries
+            // return silently, matching sub_73D458/sub_73D38C.
+            TBaseObject owner = bHero ? target.m_HeroObject : target;
+            if (!NativeGmHeroSkillSwitch.TrySetByName(owner, sSkill,
+                sState == SwitchOn))
+                return;
+
+            var message = bHero
+                ? $"玩家{sTarget}的英雄技能{sSkill}设为:{sState}"
+                : $"玩家{sTarget}的技能{sSkill}设为:{sState}";
+            PlayObject.SysMsg(message, MsgColor.Red, MsgType.Hint);
         }
     }
 }

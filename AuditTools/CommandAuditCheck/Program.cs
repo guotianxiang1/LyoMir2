@@ -34,7 +34,6 @@ var protectedFiles = new[]
     "GetBackItemCommand.cs",
     "GMActCtrlCommand.cs",
     "GuildForbidCommand.cs",
-    "HeroSkillSwitchCommand.cs",
     "LogSwitchCommand.cs",
     "MakeMyHeroCommand.cs",
     "ReloadC2CItemsCommand.cs",
@@ -288,6 +287,9 @@ foreach (var implementedFile in new[]
              // case 101 @0x0062505B -> sub_6C19D0 resolves the captured map,
              // spawns task monsters, and assigns their mission target fields.
              "CallTaskMonCommand.cs",
+             // case 611 @0x006246C6 -> sub_73D458 resolves the named skill
+             // and writes the first matching entry's native switch WORD.
+             "HeroSkillSwitchCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -306,6 +308,17 @@ Assert(chgOpenGameTime.Contains(
        chgOpenGameTime.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !chgOpenGameTime.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ChgOpenGameTime does not preserve the native OpenDay parse/write/success contract");
+
+var heroSkillSwitch = Read("HeroSkillSwitchCommand.cs");
+Assert(heroSkillSwitch.Contains(
+           "GameCommand(\"HeroSkillSwitch\", \"英雄技能开关\", \"人物名称 技能名称 开/关 0|1\", 3)",
+           StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("NativeGmHeroSkillSwitch.TrySetByName", StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("玩家{sTarget}的技能{sSkill}设为:{sState}", StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("玩家{sTarget}的英雄技能{sSkill}设为:{sState}", StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("MsgColor.Red", StringComparison.Ordinal) &&
+       !heroSkillSwitch.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "HeroSkillSwitch does not preserve the native mode/setter/message contract");
 
 var pushSingleTask = Read("PushSingleTaskCommand.cs");
 Assert(pushSingleTask.Contains(

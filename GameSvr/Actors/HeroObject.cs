@@ -840,7 +840,7 @@ namespace GameSvr
 
         private bool TryReleaseHeroMagic(TUserMagic userMagic, int dwCurTick)
         {
-            if (userMagic?.MagicInfo == null ||
+            if (userMagic?.MagicInfo == null || !userMagic.NativeSkillEnabled ||
                 IsNativeUnionMagicId(userMagic.MagicInfo.wMagicID))
             {
                 return false;
