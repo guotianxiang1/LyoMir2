@@ -266,6 +266,10 @@ foreach (var implementedFile in new[]
              // case 98 @0x00625018 -> sub_6D77F0 toggles only self[+0x71] bit 0
              // and sends the fixed green text at 0x006D781C.
              "ChgSexCommand.cs",
+             // case 60 @0x00624269 -> sub_6BF02C: empty name moves self;
+             // a name resolves a local ReadyRun player, moves that player's
+             // current map to a random return point, and only a miss replies.
+             "MakeGoCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -459,6 +463,18 @@ Assert(chgSex.Contains(
        !chgSex.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
        !chgSex.Contains("SendServerGroupMsg", StringComparison.Ordinal),
     "ChgSex does not preserve the native self gender-bit/fixed-message contract");
+
+var makeGo = Read("MakeGoCommand.cs");
+Assert(makeGo.Contains(
+           "GameCommand(\"MakeGo\", \"送人回城(回城点坐标随机，不指定角色名则送自己回城)\", \"角色名\", 3)",
+           StringComparison.Ordinal) &&
+       makeGo.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
+       makeGo.Contains("MapRandomMove(target.m_sMapName, 0)", StringComparison.Ordinal) &&
+       makeGo.Contains("该角色不在本GS，或不在线", StringComparison.Ordinal) &&
+       makeGo.Contains("MsgColor.Red", StringComparison.Ordinal) &&
+       !makeGo.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
+       !makeGo.Contains("SendServerGroupMsg", StringComparison.Ordinal),
+    "MakeGo does not preserve the native self/target random-return contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",
