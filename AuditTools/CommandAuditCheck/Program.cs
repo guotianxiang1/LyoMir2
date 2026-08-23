@@ -260,6 +260,9 @@ foreach (var implementedFile in new[]
              // targets are found; native clears +0x160, refreshes name colour,
              // and replies to the invoking GM with fixed green text.
              "ChgPkZeroCommand.cs",
+             // case 90 @0x00624EB3 -> sub_6BFE20: the same target lookup
+             // reads +0x160 and replies with the literal " PK: " format.
+             "ShowPkCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -425,6 +428,21 @@ Assert(chgPkZero.Contains(
        !chgPkZero.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
        !chgPkZero.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ChgPkZero does not preserve the native target/PK/name-colour/message contract");
+
+var showPk = Read("ShowPkCommand.cs");
+Assert(showPk.Contains(
+           "GameCommand(\"ShowPk\", \"查询角色PK值\", \"角色名\", 4)",
+           StringComparison.Ordinal) &&
+       showPk.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
+       showPk.Contains("target.m_nPkPoint", StringComparison.Ordinal) &&
+       showPk.Contains(" PK: ", StringComparison.Ordinal) &&
+       showPk.Contains("该角色不在本GS，或不在线", StringComparison.Ordinal) &&
+       showPk.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !showPk.Contains("RefNameColor", StringComparison.Ordinal) &&
+       !showPk.Contains("AddGameDataLog", StringComparison.Ordinal) &&
+       !showPk.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
+       !showPk.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "ShowPk does not preserve the native target/read/message-only contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",
