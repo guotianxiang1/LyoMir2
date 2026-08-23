@@ -40,7 +40,8 @@ namespace DBSvr
             var dbUser = ReadString("Setup", "DBUser", "root");
             var dbPassword = ReadString("Setup", "DBPassword", "");
             DBShare.DBConnection = $"server=127.0.0.1;uid={dbUser};pwd={dbPassword};database=mir3;charset=latin1;Pooling=true;Min Pool Size=10;Max Pool Size=200;Connection Lifetime=300;";
-            DBShare.DBConnectionRoot = $"server=127.0.0.1;uid=root;pwd={ReadString("Setup", "RootPassword", "dsdfffsadsd")};database=mir3;charset=latin1;";
+            var rootPassword = ReadString("Setup", "RootPassword", dbPassword);
+            DBShare.DBConnectionRoot = $"server=127.0.0.1;uid=root;pwd={rootPassword};database=mir3;charset=latin1;";
 
             // 初始化数据库用户 + 会话参数（对应 Delphi 启动时的 GRANT + SET SESSION）
             DatabaseInitService.Initialize();
