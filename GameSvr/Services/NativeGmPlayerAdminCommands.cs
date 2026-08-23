@@ -131,6 +131,7 @@ namespace GameSvr
         public const int ColorConfirm = 0xFFDB;        // (short)-37 — confirm / green
         public const int ColorRed = 0x38FF;            // 14591 — error / red
         public const int ColorSetPkEmpty = 0xFCFF;     // SetPkLv empty-arg message
+        public const int PkRuleLevelDefault = 0;       // [Setup]PkRuleLevel when absent
 
         // Scheduled/immediate message IDENTS (the `cx` argument to sub_766060 /
         // sub_765E68).  These are NOT colours — sub_766060 @0x766069/0x76608E does
@@ -183,7 +184,7 @@ namespace GameSvr
             new() { Command = GmPlayerAdminCommand.HeroRename,   Name = "HeroRename",   DispatchIndex = 106, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625124, ModeledInDepth = false },
             new() { Command = GmPlayerAdminCommand.Relive,       Name = "Relive",       DispatchIndex = 193, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x006259FB, ModeledInDepth = true  },
             new() { Command = GmPlayerAdminCommand.UpSelfGrade,  Name = "UpSelfGrade",  DispatchIndex = 217, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00625F17, ModeledInDepth = false },
-            new() { Command = GmPlayerAdminCommand.SetPkLv,      Name = "SetPkLv",      DispatchIndex = 259, RequiredPermission = 3, Implemented = true,  CaseAddress = 0x00626550, ModeledInDepth = false },
+            new() { Command = GmPlayerAdminCommand.SetPkLv,      Name = "SetPkLv",      DispatchIndex = 259, RequiredPermission = 3, Implemented = true,  CaseAddress = 0x00626550, ModeledInDepth = true  },
             // registered but no-op — index maps to def_622B15
             new() { Command = GmPlayerAdminCommand.ChgNewBie,    Name = "ChgNewBie",    DispatchIndex = 225, RequiredPermission = 5, Implemented = false, CaseAddress = DefaultCaseEa, ModeledInDepth = false },
         };
@@ -498,5 +499,51 @@ namespace GameSvr
             => selfIsDead
                 ? new ReliveOutcome { Branch = ReliveBranch.Revived, PerformsRevive = true, SendsNotice = true }
                 : new ReliveOutcome { Branch = ReliveBranch.NotDead, PerformsRevive = false, SendsNotice = false };
+    }
+
+    // ===================== SetPkLv (idx 259, perm 3) =====================
+    // case @0x00626550: an argument is parsed with Str_ToInt(default 0), stored in
+    // the process-wide PkRuleLevel, and written to [Setup]PkRuleLevel.  The success
+    // reply is red and concatenates "当前PK红名等级为" + value + "级".  With no
+    // argument the command is silent except for the blue usage hint.
+    public enum SetPkLvBranch { UsageHint, Updated }
+
+    public sealed class SetPkLvOutcome
+    {
+        public SetPkLvBranch Branch { get; init; }
+        public int NewLevel { get; init; }
+        public bool UpdatesGlobal { get; init; }
+        public bool PersistsSetup { get; init; }
+        public bool SendsSysMsg => true;
+        public int MessageColor { get; init; }
+        public string Message { get; init; } = string.Empty;
+    }
+
+    public static class NativeGmSetPkLv
+    {
+        public static SetPkLvOutcome Evaluate(bool hasArgument, int requestedLevel, bool persisted = true)
+        {
+            if (!hasArgument)
+            {
+                return new SetPkLvOutcome
+                {
+                    Branch = SetPkLvBranch.UsageHint,
+                    UpdatesGlobal = false,
+                    PersistsSetup = false,
+                    MessageColor = NativeGmPlayerAdminCommands.ColorSetPkEmpty,
+                    Message = "命令格式：@SetPkLv 等级",
+                };
+            }
+
+            return new SetPkLvOutcome
+            {
+                Branch = SetPkLvBranch.Updated,
+                NewLevel = requestedLevel,
+                UpdatesGlobal = true,
+                PersistsSetup = persisted,
+                MessageColor = NativeGmPlayerAdminCommands.ColorRed,
+                Message = $"当前PK红名等级为{requestedLevel}级",
+            };
+        }
     }
 }

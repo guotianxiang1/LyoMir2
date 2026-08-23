@@ -17,6 +17,8 @@ namespace GameSvr.Configs
         public const string OpenDaySection = "Setup";
         public const string OpenDayKey = "OpenDay";
         public const string OpenDayFormat = "yyyy-MM-dd";
+        public const string PkRuleLevelSection = "Setup";
+        public const string PkRuleLevelKey = "PkRuleLevel";
 
         private readonly string _itemNumberPath;
         private readonly string _formGmSetPath;
@@ -63,6 +65,22 @@ namespace GameSvr.Configs
 
             WriteString(OpenDaySection, OpenDayKey, formatted);
             OpenDay = value.Date;
+            return true;
+        }
+
+        /// <summary>
+        /// Persists the native [Setup]PkRuleLevel value. The original command still
+        /// reports success when the setup writer is unavailable, so this method only
+        /// reports whether the file write itself was possible.
+        /// </summary>
+        public bool TryWritePkRuleLevel(int value)
+        {
+            if (!File.Exists(FileName))
+            {
+                return false;
+            }
+
+            WriteInteger(PkRuleLevelSection, PkRuleLevelKey, value);
             return true;
         }
 
@@ -124,6 +142,8 @@ namespace GameSvr.Configs
             M2Share.g_Config.sClientFile3 = ReadString("Setup", "ClientFile3", M2Share.g_Config.sClientFile3);
             M2Share.g_Config.nPKAddPoint = ReadInteger("Setup", "PKAddPoint", M2Share.g_Config.nPKAddPoint);
             M2Share.g_Config.nPKPunishPoint = ReadInteger("Setup", "PKPunishPoint", M2Share.g_Config.nPKPunishPoint);
+            M2Share.g_Config.nPkRuleLevel = ReadInteger(PkRuleLevelSection, PkRuleLevelKey,
+                M2Share.g_Config.nPkRuleLevel);
             M2Share.g_Config.nGSTaskVersion = ReadInteger("Setup", "GS_Task_Version", M2Share.g_Config.nGSTaskVersion);
 
             // ============ [Authenticate] section ============

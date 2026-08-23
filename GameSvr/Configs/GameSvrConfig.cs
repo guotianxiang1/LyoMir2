@@ -143,6 +143,7 @@ namespace GameSvr
         public int nDecPkPointCount;
         public int dwPKFlagTime;
         public int nPKPunishPoint;
+        public int nPkRuleLevel;
         public int nKillHumanAddPKPoint;
         public int nKillHumanDecLuckPoint;
         public int dwDecLightItemDrugTime;
@@ -1106,6 +1107,7 @@ namespace GameSvr
             nDecPkPointCount = 1;
             dwPKFlagTime = 60 * 1000;
             nPKPunishPoint = 200;
+            nPkRuleLevel = 0;
             nKillHumanAddPKPoint = 100;
             nKillHumanDecLuckPoint = 500;
             dwDecLightItemDrugTime = 500;

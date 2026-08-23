@@ -1,4 +1,5 @@
 using GameSvr;
+using GameSvr.Configs;
 
 // Contract check for the dormant PLAYER/CHARACTER-SELF admin GM command family model
 // (GameSvr/Services/NativeGmPlayerAdminCommands.cs), locked against the Hex-Rays-verified original
@@ -23,13 +24,15 @@ try
     VerifyIncSelfLv();
     VerifyPlayerRename();
     VerifyRelive();
+    VerifySetPkLv();
+    VerifySetPkLvConfig();
 
     VerifyUnimplementedNoOp();
 
     Console.WriteLine(
         "PASS NativeGmPlayerAdminCommandsCheck dispatcher=sub_622820 table=0x622B1C max=750 " +
         "modeled=AttackMode/MakeGo/ChgPkZero/InComePk/ChgBodyLuck/ChgmanKind/ChgSex/ChgHideState/" +
-        "IncSelfLv/PlayerRename/Relive registry=18 noop=ChgNewBie(225)");
+        "IncSelfLv/PlayerRename/Relive/SetPkLv registry=18 noop=ChgNewBie(225)");
     return 0;
 }
 catch (Exception ex)
@@ -76,6 +79,8 @@ static void VerifyOffsetsAndColors()
     Equal(0xFFDB, NativeGmPlayerAdminCommands.ColorConfirm, "confirm colour");
     Equal(0x38FF, NativeGmPlayerAdminCommands.ColorRed, "red colour");
     Equal(0xFCFF, NativeGmPlayerAdminCommands.ColorSetPkEmpty, "setpk-empty colour");
+    Equal(0x007D6B8Cu, NativeGmPlayerAdminCommands.PkRuleLevelGlobalEa, "setpk global ea");
+    Equal(0, NativeGmPlayerAdminCommands.PkRuleLevelDefault, "setpk default level");
 
     // Message IDENTS, not colours.  sub_766060 @0x766069 `mov word [ebp-6],cx` then
     // @0x76608E `mov word [ebx],ax` stores cx as the queued record's ident field.
@@ -289,6 +294,53 @@ static void VerifyRelive()
     var alive = NativeGmRelive.Evaluate(false);
     Equal(ReliveBranch.NotDead, alive.Branch, "relive alive->no-op");
     Assert(!alive.PerformsRevive && !alive.SendsNotice, "relive alive is silent no-op");
+}
+
+static void VerifySetPkLv()
+{
+    var hint = NativeGmSetPkLv.Evaluate(false, 0);
+    Equal(SetPkLvBranch.UsageHint, hint.Branch, "setpklv empty branch");
+    Assert(!hint.UpdatesGlobal && !hint.PersistsSetup, "setpklv empty does not update");
+    Equal(NativeGmPlayerAdminCommands.ColorSetPkEmpty, hint.MessageColor, "setpklv empty colour");
+    Equal("命令格式：@SetPkLv 等级", hint.Message, "setpklv usage text");
+
+    var updated = NativeGmSetPkLv.Evaluate(true, 20);
+    Equal(SetPkLvBranch.Updated, updated.Branch, "setpklv update branch");
+    Assert(updated.UpdatesGlobal && updated.PersistsSetup, "setpklv updates+persistent");
+    Equal(20, updated.NewLevel, "setpklv requested level");
+    Equal(NativeGmPlayerAdminCommands.ColorRed, updated.MessageColor, "setpklv update colour");
+    Equal("当前PK红名等级为20级", updated.Message, "setpklv update text");
+
+    var negative = NativeGmSetPkLv.Evaluate(true, -3, false);
+    Equal(-3, negative.NewLevel, "setpklv accepts native signed integer");
+    Assert(!negative.PersistsSetup, "setpklv reports unavailable writer");
+}
+
+static void VerifySetPkLvConfig()
+{
+    var directory = Path.Combine(Path.GetTempPath(), "m2-setpklv-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var path = Path.Combine(directory, "!Setup.txt");
+        File.WriteAllText(path, "[Setup]\r\nPkRuleLevel=12\r\n");
+
+        M2Share.g_Config = new GameSvrConfig();
+        var loaded = new ServerConfig(path);
+        loaded.LoadConfig();
+        Equal(12, M2Share.g_Config.nPkRuleLevel, "setpklv setup load");
+
+        Assert(loaded.TryWritePkRuleLevel(19), "setpklv setup write");
+        M2Share.g_Config = new GameSvrConfig();
+        var reloaded = new ServerConfig(path);
+        reloaded.LoadConfig();
+        Equal(19, M2Share.g_Config.nPkRuleLevel, "setpklv setup reload");
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, true);
+    }
 }
 
 static void VerifyUnimplementedNoOp()

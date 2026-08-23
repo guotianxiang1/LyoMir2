@@ -1120,7 +1120,11 @@ namespace GameSvr
                         }
                         else
                         {
-                            if (!m_LastHiter.IsGoodKilling(this))
+                            // Native sub_6C0FE4 treats a victim below the configured
+                            // PkRuleLevel as protected even when no PK flag is set.
+                            // The comparison is strict: level < PkRuleLevel.
+                            if (!m_LastHiter.IsGoodKilling(this)
+                                && m_Abil.Level >= M2Share.g_Config.nPkRuleLevel)
                             {
                                 m_LastHiter.IncPkPoint(M2Share.g_Config.nKillHumanAddPKPoint);
                                 m_LastHiter.SysMsg(M2Share.g_sYouMurderedMsg, MsgColor.Red, MsgType.Hint);

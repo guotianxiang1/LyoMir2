@@ -270,6 +270,10 @@ foreach (var implementedFile in new[]
              // a name resolves a local ReadyRun player, moves that player's
              // current map to a random return point, and only a miss replies.
              "MakeGoCommand.cs",
+             // case 259 @0x00626550 parses the level, updates the process-wide
+             // PkRuleLevel, persists [Setup]PkRuleLevel, and replies with the
+             // original blue usage/red status messages.
+             "SetPkLvCommand.cs",
              "ChgGameOpenTimeCommand.cs"
          })
 {
@@ -475,6 +479,20 @@ Assert(makeGo.Contains(
        !makeGo.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
        !makeGo.Contains("SendServerGroupMsg", StringComparison.Ordinal),
     "MakeGo does not preserve the native self/target random-return contract");
+
+var setPkLv = Read("SetPkLvCommand.cs");
+Assert(setPkLv.Contains(
+           "GameCommand(\"SetPkLv\", \"设置PK红名等级\", \"等级\", 3)",
+           StringComparison.Ordinal) &&
+       setPkLv.Contains("HUtil32.Str_ToInt(rawLevel, 0)", StringComparison.Ordinal) &&
+       setPkLv.Contains("nPkRuleLevel = level", StringComparison.Ordinal) &&
+       setPkLv.Contains("TryWritePkRuleLevel(level)", StringComparison.Ordinal) &&
+       setPkLv.Contains("命令格式：@SetPkLv 等级", StringComparison.Ordinal) &&
+       setPkLv.Contains("当前PK红名等级为{level}级", StringComparison.Ordinal) &&
+       setPkLv.Contains("MsgColor.Blue", StringComparison.Ordinal) &&
+       setPkLv.Contains("MsgColor.Red", StringComparison.Ordinal) &&
+       !setPkLv.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "SetPkLv does not preserve the native parse/config/status contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",
