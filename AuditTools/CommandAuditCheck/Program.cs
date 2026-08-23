@@ -29,7 +29,6 @@ var protectedFiles = new[]
 {
     "AddVoteCommand.cs",
     "BeginAreaCastleMatchCommand.cs",
-    "ChgEquipLevelCommand.cs",
     "EndAreaCastleMatchCommand.cs",
     "GetBackItemCommand.cs",
     "GMActCtrlCommand.cs",
@@ -297,6 +296,15 @@ foreach (var implementedFile in new[]
     Assert(!source.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
         $"{implementedFile} reverted to fail-closed");
 }
+
+var chgEquipLevel = Read("ChgEquipLevelCommand.cs");
+Assert(chgEquipLevel.Contains(
+           "GameCommand(\"ChgEquipLevel\", \"更改装备等级(1..5)\", \"物品ID 等级值\", 5)",
+           StringComparison.Ordinal) &&
+       chgEquipLevel.Contains("NativeGmChgEquipLevel.Execute", StringComparison.Ordinal) &&
+       !chgEquipLevel.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
+       !chgEquipLevel.Contains("人物名称 装备位置", StringComparison.Ordinal),
+    "ChgEquipLevel does not preserve the native item-id/level command contract");
 
 var chgOpenGameTime = Read("ChgGameOpenTimeCommand.cs");
 Assert(chgOpenGameTime.Contains(
