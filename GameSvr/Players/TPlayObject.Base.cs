@@ -1020,8 +1020,8 @@ namespace GameSvr
                     if (!m_boSendNotice)
                     {
                         SendNotice();
+                        SendNativeClientConfig();
                         m_boSendNotice = true;
-                        m_boLoginNoticeOK = true;
                     }
                 }
                 catch (Exception)

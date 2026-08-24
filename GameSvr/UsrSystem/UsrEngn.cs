@@ -986,9 +986,6 @@ namespace GameSvr
                         var gateBound = M2Share.GateManager.SetGateUserList(
                                 PlayObject.m_nGateIdx, PlayObject.m_nSocket,
                                 PlayObject);
-                        PlayObject.TraceGateLifecycle(gateBound
-                            ? "gate-bind-success"
-                            : "gate-bind-failure");
                         if (!gateBound)
                         {
                             PlayObject.m_boEmergencyClose = true;
@@ -1498,7 +1495,6 @@ namespace GameSvr
                                         {
                                             PlayObject.m_boReadyRun = true;
                                             PlayObject.UserLogon();
-                                            PlayObject.TraceGateLifecycle("user-logon-after-call");
 #if GAMESVR_PACKET_TRACE
                                             PacketTraceWriter.Write(
                                                 $"{DateTime.Now:O} [UserLogon] notice=" +
@@ -1596,7 +1592,6 @@ namespace GameSvr
                                         {
                                             PlayObject.m_boReadyRun = true;
                                             PlayObject.UserLogon();
-                                            PlayObject.TraceGateLifecycle("user-logon-after-call");
 #if GAMESVR_PACKET_TRACE
                                             PacketTraceWriter.Write(
                                                 $"{DateTime.Now:O} [UserLogon] notice=" +
