@@ -3061,6 +3061,19 @@ namespace GameSvr
             {
                 sMap = m_sMapName;
             }
+
+            // Native sub_6CE1B8 clears Self[+0xBA8] before dispatching the
+            // polymorphic move when the resolved target environment differs.
+            // m_boTimeRecall is the managed timed-recall state corresponding to
+            // that byte; resolve first so an unknown map remains a silent no-op.
+            var targetEnvironment = M2Share.MapManager.FindMap(sMap);
+            if (targetEnvironment != null
+                && !ReferenceEquals(targetEnvironment, m_PEnvir)
+                && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
+            {
+                m_boTimeRecall = false;
+            }
+
             if (sX != 0 && sY != 0)
             {
                 short nX = sX;
@@ -3070,11 +3083,6 @@ namespace GameSvr
             else
             {
                 MapRandomMove(sMap, 0);
-            }
-            var envir = m_PEnvir;
-            if (envir != m_PEnvir && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
-            {
-                m_boTimeRecall = false;
             }
         }
 
