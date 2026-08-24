@@ -3,25 +3,23 @@ using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("ChgEquipLevel", "调整装备等级", "人物名称 装备位置 等级", 5)]
-    public class ChgEquipLevelCommand : BaseCommond
+    /// <summary>
+    /// Native dispatch 229.  Parameters are the bag item's MakeIndex and a
+    /// requested level in the inclusive range 1..5.
+    /// </summary>
+    [GameCommand("ChgEquipLevel", "更改装备等级(1..5)", "物品ID 等级值", 5)]
+    public sealed class ChgEquipLevelCommand : BaseCommond
     {
         [DefaultCommand]
         public void ChgEquipLevel(string[] @Params, TPlayObject PlayObject)
         {
-            if (@Params == null)
-            {
-                return;
-            }
-            var sHumName = @Params.Length > 0 ? @Params[0] : "";
-            var nLevel = @Params.Length > 1 ? HUtil32.Str_ToInt(@Params[1], 0) : 0;
-            if (string.IsNullOrEmpty(sHumName) || nLevel <= 0)
-            {
-                PlayObject.SysMsg(GameCommand.ShowHelp, MsgColor.Red, MsgType.Hint);
-                return;
-            }
-            NativeCommandFailure.Report(PlayObject, "ChgEquipLevel",
-                "原版按物品 ID 修改装备等级的字段映射尚未确认，未修改物品。");
+            var rawItemId = @Params != null && @Params.Length > 0
+                ? @Params[0] ?? string.Empty
+                : string.Empty;
+            var rawLevel = @Params != null && @Params.Length > 1
+                ? @Params[1] ?? string.Empty
+                : string.Empty;
+            NativeGmChgEquipLevel.Execute(PlayObject, rawItemId, rawLevel);
         }
     }
 }

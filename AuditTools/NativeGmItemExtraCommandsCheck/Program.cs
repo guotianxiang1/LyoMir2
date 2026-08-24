@@ -1,11 +1,13 @@
 using GameSvr;
+using SystemModule;
 
 // Contract check for the dormant ITEM/EQUIP/MAKE GM command family — SECOND SUPPLEMENT model
 // (GameSvr/Services/NativeGmItemExtraCommands.cs), the 17 family-01 commands that slipped
 // NativeGmItemCommands.cs + NativeGmItemCommandsSupplement.cs. Locked against the Hex-Rays-verified
 // original dispatcher sub_622820 (single switch, table jpt_622B15 @0x00622B1C) in the unpacked M2Server.
 // Evidence: D:/loym2/staging/update_clothes_4637_ida_work/{disp_decomp.txt,big622820.txt}.
-// 17 commands = 9 implemented (thin shim -> deferred core) + 8 registered no-ops (def_622B15).
+// 17 commands = 9 implemented + 8 registered no-ops (def_622B15); SuperMerchant's
+// small stock setter is modeled locally, while the other core bodies remain deferred.
 
 try
 {
@@ -13,6 +15,7 @@ try
     VerifyRegistry();
     VerifyForwarders();
     VerifyReloads();
+    VerifyReloadUnBindItem();
     VerifySuperMerchant();
     VerifyCmdBindItem();
     VerifySetMaxButchCount();
@@ -67,9 +70,9 @@ static void VerifyRegistry()
     (GmItemExtraCommand cmd, string name, int idx, int perm, bool impl, uint addr, uint core, bool deferred)[] expected =
     {
         // ---- 9 implemented ----
-        (GmItemExtraCommand.ReloadUnBindItem, "ReloadunBindItem", 166, 4, true, 0x00625CE2u, 0x0062E630u, true),
+        (GmItemExtraCommand.ReloadUnBindItem, "ReloadunBindItem", 166, 4, true, 0x00625CE2u, 0x0062E630u, false),
         (GmItemExtraCommand.Make,             "make",             201, 5, true, 0x00625D32u, 0x006BDA34u, true),
-        (GmItemExtraCommand.SuperMerchant,    "SuperMerchant",    297, 5, true, 0x00626F32u, 0x0061668Cu, true),
+        (GmItemExtraCommand.SuperMerchant,    "SuperMerchant",    297, 5, true, 0x00626F32u, 0x0061668Cu, false),
         (GmItemExtraCommand.ReloadRndItem,    "reloadRndItem",    299, 4, true, 0x00626FD9u, 0x007524A8u, true),
         (GmItemExtraCommand.ReloadStdItem,    "reloadStditem",    443, 4, true, 0x00628AC6u, 0x00713094u, true),
         (GmItemExtraCommand.SetMaxButchCount, "SetMaxButchCount", 515, 4, true, 0x0062954Fu, 0x00790210u, true),
@@ -113,7 +116,8 @@ static void VerifyRegistry()
             Equal(info.CaseAddress != NativeGmItemExtraCommands.DefaultCaseEa, true, $"{e.cmd} case != default");
             Equal(info.CaseAddress != NativeGmItemExtraCommands.EpilogueEa, true, $"{e.cmd} case != epilogue");
             Equal(info.CaseAddress != info.CoreEa, true, $"{e.cmd} case-branch != core");
-            Equal(info.CoreBodyDeferred, true, $"{e.cmd} core deferred");
+            Equal(info.CoreBodyDeferred, e.deferred,
+                $"{e.cmd} core deferred/ported");
             impl++;
         }
         else
@@ -135,7 +139,7 @@ static void VerifyForwarders()
     Equal(rub.CoreEa, 0x0062E630u, "ReloadunBindItem core ea");
     Equal(rub.ForwardedArgCount, 0, "ReloadunBindItem arg count");
     Equal(rub.ShimSendsSysMsg, false, "ReloadunBindItem silent");
-    Equal(rub.CoreBodyDeferred, true, "ReloadunBindItem core deferred");
+    Equal(rub.CoreBodyDeferred, false, "ReloadunBindItem core ported");
 
     var mk = NativeGmItemExtraForwarders.Make();
     Equal(mk.CoreEa, 0x006BDA34u, "make core ea");
@@ -170,6 +174,92 @@ static void VerifyReloads()
     Equal(rr.MessageVariesByResult, true, "reloadRndItem message varies by result");
 }
 
+static void VerifyReloadUnBindItem()
+{
+    Equal(NativeUnbindItemConfig.FileName, "UnBindItem.txt",
+        "UnBindItem file name");
+    Equal(NativeUnbindItemConfig.ResolveDefaultPath("root", "Envir"),
+        Path.Combine("root", "Envir", "UnBindItem.txt"),
+        "UnBindItem default path");
+
+    var success = NativeGmItemExtraReloads.ReloadUnBindItem(true, 2);
+    Equal(success.Branch, ReloadUnBindItemBranch.Loaded,
+        "ReloadunBindItem loaded branch");
+    Equal(success.CallsCore, true, "ReloadunBindItem calls core");
+    Equal(success.CoreEa, 0x0062E630u, "ReloadunBindItem evaluator core ea");
+    Equal(success.CoreBodyDeferred, false,
+        "ReloadunBindItem evaluator core ported");
+    Equal(success.MutatesState, true, "ReloadunBindItem success publishes");
+    Equal(success.SendsSysMsg, true, "ReloadunBindItem success sends msg");
+    Equal(success.MessageColor, 0xFFDB, "ReloadunBindItem message colour");
+    Equal(success.Message, "重载 UnbindItem.txt 成功，共2种解包物品",
+        "ReloadunBindItem success message");
+
+    var failure = NativeGmItemExtraReloads.ReloadUnBindItem(false, 0);
+    Equal(failure.Branch, ReloadUnBindItemBranch.Failed,
+        "ReloadunBindItem failure branch");
+    Equal(failure.MutatesState, false, "ReloadunBindItem failure preserves");
+    Equal(failure.SendsSysMsg, true, "ReloadunBindItem failure sends msg");
+    Equal(failure.Message, "重载 UnbindItem.txt 失败",
+        "ReloadunBindItem failure message");
+
+    var tempRoot = Path.Combine(Path.GetTempPath(),
+        "loym2-unbind-audit-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(tempRoot);
+    var fileName = Path.Combine(tempRoot, NativeUnbindItemConfig.FileName);
+    try
+    {
+        File.WriteAllLines(fileName, new[]
+        {
+            "; GBK comment",
+            "",
+            "[春节礼包]",
+            "经验 888888 100 0",
+            "\"带 空格 名\" 1 50 1",
+            "[第二组]",
+            "焰火 2 100 0",
+        }, HUtil32.GbkEncoding);
+
+        var config = new NativeUnbindItemConfig();
+        var loaded = config.TryReload(fileName, out var sectionCount,
+            out var error);
+        Equal(loaded, true, "UnBindItem GBK load");
+        Equal(error, string.Empty, "UnBindItem successful error");
+        Equal(sectionCount, 2, "UnBindItem section count");
+        Equal(config.Snapshot.SectionCount, 2,
+            "UnBindItem snapshot section count");
+        Equal(config.Snapshot.ItemCount, 3, "UnBindItem item count");
+        Equal(config.Sections[0].Name, "春节礼包",
+            "UnBindItem first section name");
+        Equal(config.Sections[0].Items[1].Name, "带 空格 名",
+            "UnBindItem quoted name");
+        Equal(config.Sections[0].Items[1].Probability, 50,
+            "UnBindItem probability");
+        Equal(config.Sections[1].Items[0].BindFlag, 0,
+            "UnBindItem bind flag");
+
+        var previous = config.Snapshot;
+        File.WriteAllLines(fileName, new[]
+        {
+            "[损坏]",
+            "物品 not-an-int 100 0",
+        }, HUtil32.GbkEncoding);
+        loaded = config.TryReload(fileName, out sectionCount, out error);
+        Equal(loaded, false, "UnBindItem malformed load rejected");
+        Equal(sectionCount, 0, "UnBindItem malformed count");
+        Equal(ReferenceEquals(config.Snapshot, previous), true,
+            "UnBindItem malformed load preserves snapshot");
+        Equal(error.Length > 0, true, "UnBindItem malformed error");
+    }
+    finally
+    {
+        if (File.Exists(fileName))
+            File.Delete(fileName);
+        if (Directory.Exists(tempRoot))
+            Directory.Delete(tempRoot);
+    }
+}
+
 static void VerifySuperMerchant()
 {
     foreach (var bad in new[]
@@ -194,7 +284,7 @@ static void VerifySuperMerchant()
     Equal(applied.Branch, SuperMerchantBranch.Applied, "supermerchant applied branch");
     Equal(applied.CallsCore, true, "supermerchant applied calls core");
     Equal(applied.CoreEa, 0x0061668Cu, "supermerchant core ea");
-    Equal(applied.CoreBodyDeferred, true, "supermerchant core deferred");
+    Equal(applied.CoreBodyDeferred, false, "supermerchant core implemented");
     Equal(applied.MgrGlobalEa, 0x007D6D10u, "supermerchant mgr global");
     Equal(applied.SendsSysMsg, true, "supermerchant applied sends msg");
     Equal(applied.MessageColor, 0xFFDB, "supermerchant applied colour");

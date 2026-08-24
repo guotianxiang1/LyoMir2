@@ -453,7 +453,7 @@ namespace GameSvr
                 return result;
             }
             var UserMagic = GetMagicInfo(nKey);
-            if (UserMagic == null)
+            if (UserMagic == null || !UserMagic.NativeSkillEnabled)
             {
                 return result;
             }

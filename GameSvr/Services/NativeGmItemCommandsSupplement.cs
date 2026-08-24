@@ -31,18 +31,16 @@ namespace GameSvr
     //   * big622820.txt — raw disassembly of every case block (the "shim").
     //   * disp_decomp.txt — Hex-Rays of the same switch (case bodies).
     //
-    // KEY FINDING (identical to the sibling file): every implemented ITEM/EQUIP case here is a THIN SHIM
-    // that marshals the parsed params + self and tail-calls a core subroutine whose body is NOT present
-    // in the current dumps. Per the fail-closed rule those cores are abstracted as inputs
-    // (CoreBodyDeferred=true); this model captures only what the shim itself proves (forwarded-arg count,
-    // any shim-level parse/guard, whether the shim sends a SysMsg). It does NOT invent core ladders.
+    // KEY FINDING: the remaining pure-forwarder cases below still tail-call cores whose bodies are not
+    // present in the current dumps. ChgEquipLevel is the exception: its core at 0x006D6DEC has now been
+    // recovered and is wired through NativeGmChgEquipLevel. The deferred entries remain fail-closed.
     //
     // Per-command facts (Name = exact table spelling; Index = record+0x18; Perm = record+0x1C):
-    //   IMPLEMENTED (distinct case block in sub_622820 -> deferred core):
+    //   IMPLEMENTED (distinct case block in sub_622820):
     //     StorageItem     idx 167 perm 4  case@0x00625CF2  sub_62E730(ctx, self)                 [0 parsed args]
     //     GetBackItem     idx 168 perm 4  case@0x00625D02  sub_62E7CC(ctx, self, p0, p1)         [2 parsed args]
     //     LookUserItemId  idx 191 perm 4  case@0x00625FED  sub_6D07C4(self, p0=itemId)           [1 parsed arg]
-    //     ChgEquipLevel   idx 229 perm 5  case@0x006261EF  sub_6D6DEC(self, p0=name, p1=slot)    [2 parsed args]
+    //     ChgEquipLevel   idx 229 perm 5  case@0x006261EF  sub_6D6DEC(self, p0=itemId, p1=level) [2 parsed args; core restored]
     //     SetItemTimeOut  idx 434 perm 4  case@0x00627714  sub_6BD8F8(self, token(p1), int(p0))  [shim parses]
     //   REGISTERED BUT UNIMPLEMENTED (index maps to def_622B15 / silent no-op):
     //     SetEquipComposeAbil idx 499 perm 5  help "设置装备合成属性"  (distinct from the skill/equip peer's
@@ -53,9 +51,8 @@ namespace GameSvr
     //   proven by the shim; the effect (what the timeout is applied to) lives in the deferred core.
     //
     // C# STUB DRIFT (live GameSvr/Command/Commands, NOT this model — flagged for the port):
-    //   * ChgEquipLevelCommand.cs / GetBackItemCommand.cs are fail-closed NativeCommandFailure.Report
-    //     stubs; the report itself is a SysMsg. The native shims send NO SysMsg on the dispatch path, so
-    //     the stubs currently emit MORE than the original.
+    //   * GetBackItemCommand.cs remains a fail-closed NativeCommandFailure.Report stub; the report itself
+    //     is a SysMsg. The native shim sends NO SysMsg on its dispatch path, so the stub emits MORE.
     //   * StorageItemCommand.cs help advertises an optional target name; the native shim forwards NO
     //     parsed arg (operates on self/context) — any name targeting would have to live in the deferred
     //     core, so the stub's name argument is not proven by the binary.
@@ -129,7 +126,7 @@ namespace GameSvr
             new() { Command = GmItemSupCommand.StorageItem,    Name = "StorageItem",    DispatchIndex = 167, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625CF2, CoreEa = StorageItemCoreEa,    CoreBodyDeferred = true, ForwardedArgCount = 0 },
             new() { Command = GmItemSupCommand.GetBackItem,    Name = "GetBackItem",    DispatchIndex = 168, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625D02, CoreEa = GetBackItemCoreEa,    CoreBodyDeferred = true, ForwardedArgCount = 2 },
             new() { Command = GmItemSupCommand.LookUserItemId, Name = "LookUserItemId", DispatchIndex = 191, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625FED, CoreEa = LookUserItemIdCoreEa, CoreBodyDeferred = true, ForwardedArgCount = 1 },
-            new() { Command = GmItemSupCommand.ChgEquipLevel,  Name = "ChgEquipLevel",  DispatchIndex = 229, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x006261EF, CoreEa = ChgEquipLevelCoreEa,  CoreBodyDeferred = true, ForwardedArgCount = 2 },
+            new() { Command = GmItemSupCommand.ChgEquipLevel,  Name = "ChgEquipLevel",  DispatchIndex = 229, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x006261EF, CoreEa = ChgEquipLevelCoreEa,  CoreBodyDeferred = false, ForwardedArgCount = 2 },
             new() { Command = GmItemSupCommand.SetItemTimeOut, Name = "SetItemTimeOut", DispatchIndex = 434, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00627714, CoreEa = SetItemTimeOutCoreEa, CoreBodyDeferred = true, ForwardedArgCount = 2 },
             new() { Command = GmItemSupCommand.SetEquipComposeAbil, Name = "SetEquipComposeAbil", DispatchIndex = 499, RequiredPermission = 5, Implemented = false, CaseAddress = DefaultCaseEa, CoreEa = 0, CoreBodyDeferred = false, ForwardedArgCount = 0 },
         };
@@ -177,13 +174,13 @@ namespace GameSvr
     }
 
     // ===================== Pure-forwarder shims =====================
-    // StorageItem / GetBackItem / LookUserItemId / ChgEquipLevel: the case block does NO validation and
+    // StorageItem / GetBackItem / LookUserItemId: the case block does NO validation and
     // sends NO SysMsg itself; it only marshals the parsed params + self into a deferred core routine.
     // The only shim-provable facts are the forwarded-argument count and that self is always forwarded.
     //   StorageItem     sub_62E730(ctx, self)               -> 0 parsed args (self/context only)
     //   GetBackItem     sub_62E7CC(ctx, self, p0, p1)       -> 2 parsed args (p0 = target name, p1)
     //   LookUserItemId  sub_6D07C4(self, p0)                -> 1 parsed arg  (p0 = item id)
-    //   ChgEquipLevel   sub_6D6DEC(self, p0, p1)            -> 2 parsed args (p0 = name, p1 = equip slot)
+    // ChgEquipLevel is implemented by NativeGmChgEquipLevel and is intentionally not represented here.
     public sealed class GmItemSupForwardOutcome
     {
         public uint CoreEa { get; init; }
@@ -206,8 +203,6 @@ namespace GameSvr
         public static GmItemSupForwardOutcome LookUserItemId() =>
             new() { CoreEa = NativeGmItemCommandsSupplement.LookUserItemIdCoreEa, ForwardedArgCount = 1 };
 
-        public static GmItemSupForwardOutcome ChgEquipLevel() =>
-            new() { CoreEa = NativeGmItemCommandsSupplement.ChgEquipLevelCoreEa, ForwardedArgCount = 2 };
     }
 
     // ===================== SetItemTimeOut (idx 434) =====================

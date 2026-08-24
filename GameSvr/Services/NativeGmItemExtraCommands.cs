@@ -23,9 +23,9 @@ namespace GameSvr
     //
     // CaseAddress = the case-branch address (the jump-table slot VALUE, i.e. where the case block starts),
     //   NOT the delegated core body. The cores each shim tail-calls (sub_XXXXXX) are NOT in the dumps and
-    //   are abstracted as inputs (CoreBodyDeferred=true); this model captures only what the shim proves
-    //   (forwarded-arg count, shim-level guard/parse, whether the shim itself sends a SysMsg). It does NOT
-    //   invent the deferred core ladders.
+    //   are abstracted as inputs (CoreBodyDeferred=true), except for the concrete
+    //   ReloadunBindItem parser/store and SuperMerchant stock setter. This model
+    //   captures only what each shim proves and does not invent deferred cores.
     //
     // SysMsg call is the virtual slot [self]+0xD4 invoked as (colour, text). Every message in this slice
     //   uses colour 0xFFDB (the -37 immediate); none use 0x38FF.
@@ -37,7 +37,7 @@ namespace GameSvr
     //
     // Per-command facts (Name = exact table spelling; Index = record+0x18; Perm = record+0x1C):
     //   IMPLEMENTED (distinct case block in sub_622820 -> deferred core):
-    //     ReloadunBindItem idx 166 perm 4 case@0x00625CE2  sub_62E630(self)                [silent fwd, 0 args]
+    //     ReloadunBindItem idx 166 perm 4 case@0x00625CE2  sub_62E630(self)                [reload + result msg, 0 args]
     //     make             idx 201 perm 5 case@0x00625D32  sub_6BDA34(self, name, count)   [silent fwd, 2 args]
     //     SuperMerchant    idx 297 perm 5 case@0x00626F32  3 ints parsed; guard off_7D6D10; sub_61668C(n) -> msg
     //     reloadRndItem    idx 299 perm 4 case@0x00626FD9  sub_7524A8() bool -> success/fail msg (both 0xFFDB)
@@ -51,9 +51,8 @@ namespace GameSvr
     //     ChgAntiNormal(421,p5) reloadEquipSplit(447,p4) EquipDrop(457,p4) ReloadComposeConfig(542,p4)
     //     (all verified: no `case` label in disp_decomp -> falls to def_622B15.)
     //
-    // C# STUB DRIFT (live GameSvr/Command/Commands, NOT this model — flagged for the port): the live
-    //   *Command.cs stubs for these are fail-closed NativeCommandFailure.Report / ShowHelp shims; the
-    //   report itself is a SysMsg, so the reload/no-op stubs emit MORE than the silent native path.
+    // C# port status: ReloadunBindItem now has a concrete parser/store and command handler.  The
+    //   remaining family handlers are still fail-closed NativeCommandFailure.Report / ShowHelp shims.
     // ------------------------------------------------------------------------------------------------
 
     public enum GmItemExtraCommand
@@ -95,7 +94,7 @@ namespace GameSvr
         public uint CaseAddress { get; init; }
         /// <summary>Core subroutine the shim tail-calls (0 for no-op commands).</summary>
         public uint CoreEa { get; init; }
-        /// <summary>True when the core body is not present in the dumps and is abstracted as an input.</summary>
+        /// <summary>True when no concrete C# core is attached; false for a completed local port.</summary>
         public bool CoreBodyDeferred { get; init; }
     }
 
@@ -113,7 +112,7 @@ namespace GameSvr
         public const int SysMsgVtableOffset = 0xD4;    // call dword ptr [self]+0xD4 (colour, text)
         public const int ColorInfo = 0xFFDB;           // the -37 immediate
 
-        // core subroutines invoked by the shims — bodies NOT in the dumps (CoreBodyDeferred)
+        // Core addresses retained for the native registry; most bodies remain deferred.
         public const uint ReloadUnBindItemCoreEa = 0x0062E630; // sub_62E630 (ReloadunBindItem)
         public const uint MakeCoreEa = 0x006BDA34;             // sub_6BDA34 (make)
         public const uint SuperMerchantCoreEa = 0x0061668C;    // sub_61668C (SuperMerchant stock set)
@@ -138,9 +137,9 @@ namespace GameSvr
         private static readonly GmItemExtraCommandInfo[] Registry =
         {
             // ---- implemented (9) ----
-            new() { Command = GmItemExtraCommand.ReloadUnBindItem, Name = "ReloadunBindItem", DispatchIndex = 166, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625CE2, CoreEa = ReloadUnBindItemCoreEa, CoreBodyDeferred = true },
+            new() { Command = GmItemExtraCommand.ReloadUnBindItem, Name = "ReloadunBindItem", DispatchIndex = 166, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00625CE2, CoreEa = ReloadUnBindItemCoreEa, CoreBodyDeferred = false },
             new() { Command = GmItemExtraCommand.Make,             Name = "make",             DispatchIndex = 201, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00625D32, CoreEa = MakeCoreEa,            CoreBodyDeferred = true },
-            new() { Command = GmItemExtraCommand.SuperMerchant,    Name = "SuperMerchant",    DispatchIndex = 297, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00626F32, CoreEa = SuperMerchantCoreEa,   CoreBodyDeferred = true },
+            new() { Command = GmItemExtraCommand.SuperMerchant,    Name = "SuperMerchant",    DispatchIndex = 297, RequiredPermission = 5, Implemented = true,  CaseAddress = 0x00626F32, CoreEa = SuperMerchantCoreEa,   CoreBodyDeferred = false },
             new() { Command = GmItemExtraCommand.ReloadRndItem,    Name = "reloadRndItem",    DispatchIndex = 299, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00626FD9, CoreEa = ReloadRndItemCoreEa,   CoreBodyDeferred = true },
             new() { Command = GmItemExtraCommand.ReloadStdItem,    Name = "reloadStditem",    DispatchIndex = 443, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x00628AC6, CoreEa = ReloadStdItemCoreEa,   CoreBodyDeferred = true },
             new() { Command = GmItemExtraCommand.SetMaxButchCount, Name = "SetMaxButchCount", DispatchIndex = 515, RequiredPermission = 4, Implemented = true,  CaseAddress = 0x0062954F, CoreEa = SetMaxButchMgrEa,      CoreBodyDeferred = true },
@@ -194,9 +193,9 @@ namespace GameSvr
     }
 
     // ===================== Pure-forwarder shims (silent) =====================
-    // The case block does NO validation and sends NO SysMsg; it only marshals the parsed params + self
-    // into a deferred core routine. Shim-provable facts: forwarded command-arg count and that self is
-    // forwarded (as receiver or argument).
+    // The remaining case blocks do NO validation and send NO SysMsg; they only marshal the parsed
+    // params + self into deferred core routines. ReloadunBindItem is now handled by the concrete
+    // C# parser/store, so its evaluator is below rather than a silent live stub.
     //   ReloadunBindItem  sub_62E630(self)                          -> 0 command args
     //   make              sub_6BDA34(self, name, count)             -> 2 command args
     //   reloadStditem     sub_713094([off_7D62DC], 0x180, self)     -> 0 command args (global receiver + selector)
@@ -204,7 +203,7 @@ namespace GameSvr
     public sealed class GmItemExtraForwardOutcome
     {
         public uint CoreEa { get; init; }
-        public bool CoreBodyDeferred => true;
+        public bool CoreBodyDeferred { get; init; }
         /// <summary>Parsed command params forwarded to the core, excluding the always-present self.</summary>
         public int ForwardedArgCount { get; init; }
         public bool ForwardsSelf => true;
@@ -215,16 +214,16 @@ namespace GameSvr
     public static class NativeGmItemExtraForwarders
     {
         public static GmItemExtraForwardOutcome ReloadUnBindItem() =>
-            new() { CoreEa = NativeGmItemExtraCommands.ReloadUnBindItemCoreEa, ForwardedArgCount = 0 };
+            new() { CoreEa = NativeGmItemExtraCommands.ReloadUnBindItemCoreEa, ForwardedArgCount = 0, CoreBodyDeferred = false };
 
         public static GmItemExtraForwardOutcome Make() =>
-            new() { CoreEa = NativeGmItemExtraCommands.MakeCoreEa, ForwardedArgCount = 2 };
+            new() { CoreEa = NativeGmItemExtraCommands.MakeCoreEa, ForwardedArgCount = 2, CoreBodyDeferred = true };
 
         public static GmItemExtraForwardOutcome ReloadStdItem() =>
-            new() { CoreEa = NativeGmItemExtraCommands.ReloadStdItemCoreEa, ForwardedArgCount = 0 };
+            new() { CoreEa = NativeGmItemExtraCommands.ReloadStdItemCoreEa, ForwardedArgCount = 0, CoreBodyDeferred = true };
 
         public static GmItemExtraForwardOutcome ChgItemBindDay() =>
-            new() { CoreEa = NativeGmItemExtraCommands.ChgItemBindDayCoreEa, ForwardedArgCount = 1 };
+            new() { CoreEa = NativeGmItemExtraCommands.ChgItemBindDayCoreEa, ForwardedArgCount = 1, CoreBodyDeferred = true };
     }
 
     // ===================== Reload-then-message shims =====================
@@ -245,18 +244,83 @@ namespace GameSvr
 
     public static class NativeGmItemExtraReloads
     {
+        public const string ReloadUnBindItemSuccessPrefix =
+            "重载 UnbindItem.txt 成功，共";
+        public const string ReloadUnBindItemSuccessSuffix = "种解包物品";
+        public const string ReloadUnBindItemFailureMessage =
+            "重载 UnbindItem.txt 失败";
+
         public static ItemExtraReloadOutcome ReloadQKbag() =>
             new() { CoreEa = NativeGmItemExtraCommands.ReloadQKbagCoreEa, MessageVariesByResult = false };
 
         public static ItemExtraReloadOutcome ReloadRndItem() =>
             new() { CoreEa = NativeGmItemExtraCommands.ReloadRndItemCoreEa, MessageVariesByResult = true };
+
+        /// <summary>
+        /// Models sub_62E630's result-dependent branch.  The native shim calls
+        /// the core without arguments; the core then reloads the file and
+        /// emits one green message containing the section count on success.
+        /// </summary>
+        public static ReloadUnBindItemOutcome ReloadUnBindItem(
+            bool loaded, int sectionCount)
+        {
+            var succeeded = loaded && sectionCount > 0;
+            return new ReloadUnBindItemOutcome
+            {
+                Branch = succeeded
+                    ? ReloadUnBindItemBranch.Loaded
+                    : ReloadUnBindItemBranch.Failed,
+                CallsCore = true,
+                MutatesState = succeeded,
+                SendsSysMsg = true,
+                MessageColor = NativeGmItemExtraCommands.ColorInfo,
+                SectionCount = succeeded ? sectionCount : 0,
+                Message = FormatReloadUnBindItemMessage(succeeded,
+                    sectionCount),
+            };
+        }
+
+        public static ReloadUnBindItemOutcome ReloadUnBindItem(
+            int sectionCount)
+        {
+            return ReloadUnBindItem(sectionCount > 0, sectionCount);
+        }
+
+        public static string FormatReloadUnBindItemMessage(bool loaded,
+            int sectionCount)
+        {
+            return loaded && sectionCount > 0
+                ? ReloadUnBindItemSuccessPrefix + sectionCount
+                    + ReloadUnBindItemSuccessSuffix
+                : ReloadUnBindItemFailureMessage;
+        }
+    }
+
+    public enum ReloadUnBindItemBranch
+    {
+        Failed,
+        Loaded,
+    }
+
+    public sealed class ReloadUnBindItemOutcome
+    {
+        public ReloadUnBindItemBranch Branch { get; init; }
+        public bool CallsCore { get; init; }
+        public uint CoreEa => NativeGmItemExtraCommands.ReloadUnBindItemCoreEa;
+        public bool CoreBodyDeferred => false;
+        public bool MutatesState { get; init; }
+        public bool SendsSysMsg { get; init; }
+        public int MessageColor { get; init; }
+        public bool MessageVariesByResult => true;
+        public int SectionCount { get; init; }
+        public string Message { get; init; }
     }
 
     // ===================== SuperMerchant (idx 297) =====================
     // "@SuperMerchant 物品类型 库存类型 数量"  parse 3 ints (itemType, stockType, amount). If any <= 0 ->
     //   SysMsg(0xFFDB, usage) and stop. Else, guard the stock manager global off_7D6D10: if present ->
     //   ok = sub_61668C(amount); SysMsg(0xFFDB, ok ? success : fail). If the manager is absent -> SILENT
-    //   (no message). Stock-set core body is deferred.
+    //   (no message). The stock-set core is implemented by NativeSuperMerchantManager.
     public enum SuperMerchantBranch
     {
         BadArgs,      // any parsed int <= 0 -> usage message
@@ -283,7 +347,7 @@ namespace GameSvr
                 return new SuperMerchantOutcome { Branch = SuperMerchantBranch.BadArgs, CallsCore = false, CoreBodyDeferred = false, SendsSysMsg = true, MessageColor = NativeGmItemExtraCommands.ColorInfo };
             if (!managerPresent)
                 return new SuperMerchantOutcome { Branch = SuperMerchantBranch.MgrAbsent, CallsCore = false, CoreBodyDeferred = false, SendsSysMsg = false, MessageColor = 0 };
-            return new SuperMerchantOutcome { Branch = SuperMerchantBranch.Applied, CallsCore = true, CoreBodyDeferred = true, SendsSysMsg = true, MessageColor = NativeGmItemExtraCommands.ColorInfo };
+            return new SuperMerchantOutcome { Branch = SuperMerchantBranch.Applied, CallsCore = true, CoreBodyDeferred = false, SendsSysMsg = true, MessageColor = NativeGmItemExtraCommands.ColorInfo };
         }
     }
 

@@ -3,24 +3,46 @@ using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("CallTaskMon", "召唤任务怪物", "怪物名称 地图 X Y", 4)]
-    public class CallTaskMonCommand : BaseCommond
+    /// <summary>Restores native dispatcher case 101 (0x0062505B).</summary>
+    [GameCommand("CallTaskMon", "召唤任务怪物", "X坐标 Y坐标 怪物 数量", 4)]
+    public sealed class CallTaskMonCommand : BaseCommond
     {
         [DefaultCommand]
-        public void CallTaskMon(string[] @Params, TPlayObject PlayObject)
+        public void CallTaskMon(string[] @params, TPlayObject player)
         {
-            if (@Params == null)
+            if (player == null)
+                return;
+
+            var rawX = @params != null && @params.Length > 0
+                ? @params[0]
+                : null;
+            var rawY = @params != null && @params.Length > 1
+                ? @params[1]
+                : null;
+            var monsterName = @params != null && @params.Length > 2
+                ? @params[2]
+                : null;
+            var rawCount = @params != null && @params.Length > 3
+                ? @params[3]
+                : null;
+
+            var outcome = NativeGmTaskMonsterCommands.CallTaskMon(rawX,
+                rawY, monsterName, rawCount);
+            if (outcome.Result == NativeGmTaskMonsterCommands.CallTaskMonResult.NotArmed)
             {
+                player.SysMsg("没有指定任务", MsgColor.Red, MsgType.Hint);
                 return;
             }
-            var sMonName = @Params.Length > 0 ? @Params[0] : "";
-            if (string.IsNullOrEmpty(sMonName))
+
+            if (outcome.Result != NativeGmTaskMonsterCommands.CallTaskMonResult.Completed)
             {
-                PlayObject.SysMsg(GameCommand.ShowHelp, MsgColor.Red, MsgType.Hint);
+                player.SysMsg("命令错误，应为：X坐标 Y坐标 怪物 数量",
+                    MsgColor.Green, MsgType.Hint);
                 return;
             }
-            NativeCommandFailure.Report(PlayObject, "CallTaskMon",
-                "原版怪物攻城生成参数与所有权尚未移植，未生成怪物。");
+
+            player.SysMsg($"{outcome.MapName}:{outcome.X}=>{outcome.Y} "
+                + $"{outcome.RequestedCount} 只", MsgColor.Green, MsgType.Hint);
         }
     }
 }

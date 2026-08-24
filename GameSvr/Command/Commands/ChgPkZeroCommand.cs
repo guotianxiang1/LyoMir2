@@ -12,8 +12,6 @@ namespace GameSvr
     [GameCommand("ChgPkZero", "将某角色的PK值清零", "角色名", 4)]
     public sealed class ChgPkZeroCommand : BaseCommond
     {
-        private const string MissingText = "该角色不在本GS，或不在线";
-
         [DefaultCommand]
         public void ChgPkZero(string[] @Params, TPlayObject PlayObject)
         {
@@ -21,14 +19,17 @@ namespace GameSvr
                 return;
 
             var targetName = @Params != null && @Params.Length > 0
-                ? @Params[0]
+                ? @Params[0] ?? string.Empty
                 : string.Empty;
-            var target = M2Share.UserEngine?.GetNativeReadyPlayObject(targetName);
+            var target = string.IsNullOrEmpty(targetName)
+                ? null
+                : M2Share.UserEngine?.GetNativeReadyPlayObject(targetName);
             if (target == null)
             {
                 // sub_6BFD58 still calls the GM's SysMsg vtbl slot on the
                 // empty/missing/ghost/not-ReadyRun branches.
-                PlayObject.SysMsg(MissingText, MsgColor.Green, MsgType.Hint);
+                PlayObject.SysMsg(NativeGmPlayerAdminCommands.ChgPkZeroNotFoundMessage,
+                    MsgColor.Green, MsgType.Hint);
                 return;
             }
 
@@ -36,8 +37,8 @@ namespace GameSvr
             target.RefNameColor();
             // VA 0x006BFDEC: leading space + full-width colon is part of the
             // original Delphi string and must not be normalized.
-            PlayObject.SysMsg(targetName + " ：Pkpoint = 0", MsgColor.Green,
-                MsgType.Hint);
+            PlayObject.SysMsg(targetName + NativeGmPlayerAdminCommands.ChgPkZeroSuccessSuffix,
+                MsgColor.Green, MsgType.Hint);
         }
     }
 }

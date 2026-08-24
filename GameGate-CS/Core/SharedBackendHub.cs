@@ -149,7 +149,19 @@ internal sealed class SharedBackendHub : IDisposable
             return null;
         }
 
-        await EnsureGameRouteOpenAsync(route, cancellationToken);
+        try
+        {
+            if (!await EnsureGameRouteOpenAsync(route, cancellationToken))
+            {
+                await CloseRouteAsync(route);
+                return null;
+            }
+        }
+        catch
+        {
+            await CloseRouteAsync(route);
+            throw;
+        }
         return route;
     }
 

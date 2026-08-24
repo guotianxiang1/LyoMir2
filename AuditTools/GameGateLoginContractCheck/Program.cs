@@ -8,11 +8,12 @@ VerifyStartPlayStatePrecedesClientWrite();
 VerifyLoginNoticeOkIsSingleSuccessfulSend();
 VerifyLoginCertificationRecogIsZero();
 VerifyMarkerDataCommand23PreservesRawBody();
+VerifyLoginSessionUsesOuterDataIndex();
 VerifyGameDataUsesSupportedEnvelopeCommand();
 VerifyLoginFlushKeepsFramesOrdered();
 VerifyGameDataFrameLimit();
 
-Console.WriteLine("GameGateLoginContractCheck PASS checks=7");
+Console.WriteLine("GameGateLoginContractCheck PASS checks=8");
 
 static void VerifyStartPlayStatePrecedesClientWrite()
 {
@@ -117,6 +118,58 @@ static void VerifyMarkerDataCommand23PreservesRawBody()
         "RelayUp must not 6-bit decode ordinary MARKER_DATA bodies");
     NotContains(relayUp, "mf.Header.Cmd == 23",
         "RelayUp must not interpret MARKER_DATA's overlapping Cmd byte as an encoding flag");
+}
+
+static void VerifyLoginSessionUsesOuterDataIndex()
+{
+    const uint selectedSession = 1011;
+    const int clientVersion = 131532307;
+
+    var connectWire = MobileCodec.WriteConnect(selectedSession);
+    True(MobileCodec.TryReadFrame(connectWire, 0, connectWire.Length,
+            out var connect, out var connectConsumed),
+        "BaiZhu LM_GET_ENCRYPT/connect frame did not parse");
+    Equal(connectWire.Length, connectConsumed, "connect consumed length");
+    Equal(MobileCodec.MARKER_CONNECT, connect.Header.Marker,
+        "LM_GET_ENCRYPT marker");
+    Equal(selectedSession, connect.Header.Seq,
+        "LoginGate session must travel in outer dataIndex");
+
+    var authWire = MobileCodec.WriteFrame(new MobileCodec.InnerHeader
+    {
+        Recog = clientVersion,
+        Ident = 4004,
+        Param = 2
+    }, Array.Empty<byte>(), 0x1234);
+    True(MobileCodec.TryReadFrame(authWire, 0, authWire.Length,
+            out var auth, out _), "BaiZhu CM_LOGIN_AUTH frame did not parse");
+    Equal(clientVersion, auth.Inner.Recog,
+        "CM_LOGIN_AUTH Recog is the client version");
+    True(unchecked((uint)auth.Inner.Recog) != connect.Header.Seq,
+        "client version and LoginGate session must remain distinct");
+
+    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var connectBranch = Position(relayUp,
+        "if (mf.Header.Marker == MobileCodec.MARKER_CONNECT)");
+    var captureSession = Position(relayUp,
+        "session.DBSessionId = unchecked((int)mf.Header.Seq);", connectBranch);
+    var captureTigerOffset = Position(relayUp,
+        "session.TigerKeyOffset = mf.Header.Seq;", captureSession);
+    var sendLogin = Position(relayUp,
+        "await WriteClientMobileFrame(siFrame);", captureTigerOffset);
+    InOrder("outer dataIndex must arm both DB and Tiger state before SM_LOGIN",
+        connectBranch, captureSession, captureTigerOffset, sendLogin);
+
+    NotContains(relayUp, "session.DBSessionId = mf.Inner.Recog",
+        "CM_LOGIN_AUTH version must not overwrite the LoginGate session");
+    var chooseDbRecog = Position(relayUp,
+        "var dbRecog = fwdIdent == 4004");
+    var chooseSession = Position(relayUp, "? session.DBSessionId", chooseDbRecog);
+    var preserveOtherRecog = Position(relayUp, ": mf.Inner.Recog;", chooseSession);
+    var serializeDbRecog = Position(relayUp,
+        "var headerMsg = new ClientPacket { Recog = dbRecog", preserveOtherRecog);
+    InOrder("only 4004 must replace client version with the routed DB session",
+        chooseDbRecog, chooseSession, preserveOtherRecog, serializeDbRecog);
 }
 
 static void VerifyGameDataUsesSupportedEnvelopeCommand()

@@ -206,7 +206,7 @@ var npcHitModel = NativeGmMonsterMapCommands.Evaluate(
     "NpcHit", 4, new[] { "ignored", "extra" });
 Equal(NativeMonsterMapOutcome.Executed, npcHitModel.Outcome,
     "NpcHit -> Executed");
-Equal("visible-npc-walk", npcHitModel.Branch,
+Equal("visible-npc-hit", npcHitModel.Branch,
     "NpcHit recovered visible-actor branch");
 Equal("sub_62EA7C", npcHitModel.NativeCore,
     "NpcHit recovered core");

@@ -3,7 +3,7 @@ using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("AddVote", "增加投票数", "人物名称 票数", 5)]
+    [GameCommand("AddVote", "增加投票数", "人物名称 票数 投票类型", 5)]
     public class AddVoteCommand : BaseCommond
     {
         [DefaultCommand]

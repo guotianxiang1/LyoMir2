@@ -17,13 +17,14 @@ try
     VerifyPermissionGate();
     VerifyForwarders();
     VerifySetItemTimeOut();
+    VerifyChgEquipLevel();
     VerifyNoOps();
 
     Console.WriteLine(
         "PASS NativeGmItemCommandsSupplementCheck dispatcher=sub_622820 table=0x622B1C max=750 " +
         "implemented=StorageItem/GetBackItem/LookUserItemId/ChgEquipLevel/SetItemTimeOut " +
         "noop=SetEquipComposeAbil " +
-        "coreDeferred=StorageItem/GetBackItem/LookUserItemId/ChgEquipLevel/SetItemTimeOut");
+        "coreDeferred=StorageItem/GetBackItem/LookUserItemId/SetItemTimeOut");
     return 0;
 }
 catch (Exception ex)
@@ -70,7 +71,7 @@ static void VerifyRegistry()
         (GmItemSupCommand.StorageItem,    "StorageItem",    167, 4, true,  0x00625CF2u, 0x0062E730u, true,  0),
         (GmItemSupCommand.GetBackItem,    "GetBackItem",    168, 4, true,  0x00625D02u, 0x0062E7CCu, true,  2),
         (GmItemSupCommand.LookUserItemId, "LookUserItemId", 191, 4, true,  0x00625FEDu, 0x006D07C4u, true,  1),
-        (GmItemSupCommand.ChgEquipLevel,  "ChgEquipLevel",  229, 5, true,  0x006261EFu, 0x006D6DECu, true,  2),
+        (GmItemSupCommand.ChgEquipLevel,  "ChgEquipLevel",  229, 5, true,  0x006261EFu, 0x006D6DECu, false, 2),
         (GmItemSupCommand.SetItemTimeOut, "SetItemTimeOut", 434, 4, true,  0x00627714u, 0x006BD8F8u, true,  2),
         (GmItemSupCommand.SetEquipComposeAbil, "SetEquipComposeAbil", 499, 5, false, NativeGmItemCommandsSupplement.DefaultCaseEa, 0u, false, 0),
     };
@@ -90,11 +91,15 @@ static void VerifyRegistry()
 
         Assert(info.DispatchIndex >= 0 && info.DispatchIndex <= NativeGmItemCommandsSupplement.SwitchMaxIndex,
             $"{e.cmd} index in switch range");
-        // implemented => real case address + a deferred core; unimplemented => default label + no core
+        // implemented => real case address + a core; unimplemented => default label + no core
         if (e.impl)
         {
             Assert(info.CaseAddress != NativeGmItemCommandsSupplement.DefaultCaseEa, $"{e.cmd} has distinct case");
-            Assert(info.CoreEa != 0 && info.CoreBodyDeferred, $"{e.cmd} core is deferred");
+            Assert(info.CoreEa != 0, $"{e.cmd} core is present");
+            if (e.cmd != GmItemSupCommand.ChgEquipLevel)
+                Assert(info.CoreBodyDeferred, $"{e.cmd} core is deferred");
+            else
+                Assert(!info.CoreBodyDeferred, "ChgEquipLevel core is restored");
         }
         else
         {
@@ -142,17 +147,36 @@ static void VerifyForwarders()
     Equal(look.CoreEa, 0x006D07C4u, "LookUserItemId core ea");
     Equal(look.ForwardedArgCount, 1, "LookUserItemId fwd args");
 
-    var chg = NativeGmItemSupForwarders.ChgEquipLevel();
-    Equal(chg.CoreEa, 0x006D6DECu, "ChgEquipLevel core ea");
-    Equal(chg.ForwardedArgCount, 2, "ChgEquipLevel fwd args");
-
-    foreach (var o in new[] { storage, getBack, look, chg })
+    foreach (var o in new[] { storage, getBack, look })
     {
         Assert(o.ForwardsSelf, "forwarder forwards self");
         Assert(o.CoreBodyDeferred, "forwarder core deferred");
         Assert(!o.ShimValidates, "forwarder shim does not validate");
         Assert(!o.ShimSendsSysMsg, "forwarder shim sends no SysMsg");
     }
+}
+
+static void VerifyChgEquipLevel()
+{
+    Equal(NativeGmChgEquipLevel.CoreEa, 0x006D6DECu, "ChgEquipLevel core ea");
+    Equal(NativeGmChgEquipLevel.DominantAttributeEa, 0x0078437Cu,
+        "ChgEquipLevel dominant helper ea");
+    Equal(NativeGmChgEquipLevel.RefreshItemEa, 0x0073CBD0u,
+        "ChgEquipLevel refresh helper ea");
+    Assert(NativeGmChgEquipLevel.IsDamageSharingSuitShape(0x8C),
+        "native damage-sharing shape 0x8C rejected");
+    Assert(!NativeGmChgEquipLevel.IsDamageSharingSuitShape(0x8F),
+        "unlisted shape 0x8F accepted");
+    Equal(NativeGmChgEquipLevel.ParseOrDefault("$10", 1), 16,
+        "native hexadecimal item id parse");
+    Equal(NativeGmChgEquipLevel.ParseOrDefault("", 1), 1,
+        "native missing level default");
+    Equal(NativeGmChgEquipLevel.ParseOrDefault("bad", 1), 1,
+        "native invalid level default");
+
+    // The effective-stat helper is exercised by the in-process runtime harness;
+    // this contract check intentionally avoids loading M2Share's disk-backed
+    // !Setup/String configuration just to validate its static constants.
 }
 
 static void VerifySetItemTimeOut()

@@ -3,24 +3,25 @@ using SystemModule;
 
 namespace GameSvr
 {
-    [GameCommand("SendYuanBaoText", "发送元宝广播文本", "文本内容", 4)]
+    [GameCommand("SendYuanBaoText", "GM自身发送烟花状的元宝样式的消息内容", "消息内容", 4)]
     public class SendYuanBaoTextCommand : BaseCommond
     {
         [DefaultCommand]
         public void SendYuanBaoText(string[] @Params, TPlayObject PlayObject)
         {
-            if (@Params == null)
+            if (PlayObject == null)
+                return;
+
+            if (@Params == null || @Params.Length == 0 ||
+                string.IsNullOrEmpty(@Params[0]))
             {
+                var help = GameCommand?.ShowHelp ??
+                    "命令格式: @SendYuanBaoText 消息内容";
+                PlayObject.SysMsg(help, MsgColor.Red, MsgType.Hint);
                 return;
             }
-            var sText = @Params.Length > 0 ? @Params[0] : "";
-            if (string.IsNullOrEmpty(sText))
-            {
-                PlayObject.SysMsg(GameCommand.ShowHelp, MsgColor.Red, MsgType.Hint);
-                return;
-            }
-            NativeCommandFailure.Report(PlayObject, "SendYuanBaoText",
-                "原版烟花元宝消息协议尚未确认，未发送广播。");
+
+            PlayObject.TryCreateNativeGmFireworkText(@Params[0]);
         }
     }
 }

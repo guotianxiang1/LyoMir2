@@ -29,8 +29,8 @@ try
         "nullsubStub=GuildPoint/GuildWarOn/GuildWarOff/ReportGuildWar " +
         "invalidStub=SetGuildLord/GuildForbid/selfAddGuild/ReNameGuild " +
         "emptyNoop=MakeGuild/DelGuild defaultNoop=loadHeroStrike/ChgGuildValue/DreamCastleScore/ChgDoubleCastleWar " +
-        "csharpDrift(legacy-perm10-except-ChgMonAtt;over=GuildWarOff/DelGuild/DreamCastleScore/ChgDoubleCastleWar;" +
-        "under=CallTaskMon/BeginAreaCastleMatch/EndAreaCastleMatch;mismatch=ChgCastleWar/GuildForbid)");
+        "csharpDrift(legacy-perm10-except-DoTask/CallTaskMon/ChgMonAtt;over=GuildWarOff/DelGuild/DreamCastleScore/ChgDoubleCastleWar;" +
+        "under=BeginAreaCastleMatch/EndAreaCastleMatch;mismatch=ChgCastleWar/GuildForbid)");
     return 0;
 }
 catch (Exception ex)
@@ -79,8 +79,8 @@ static void VerifyRegistry()
         bool live, int livePerm, bool over, bool under, bool mismatch)[] expected =
     {
         (GmGuildCastleCommand.LookSaGold,           "LookSaGold",           71, 3, GmGuildCastleHandlerKind.ImplementedCase,     0x00624C36u, false,  0, false, false, false),
-        (GmGuildCastleCommand.DoTask,               "DoTask",              100, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x00625048u, false,  0, false, false, false),
-        (GmGuildCastleCommand.CallTaskMon,          "CallTaskMon",         101, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x0062505Bu, true,  10, false, true,  false),
+        (GmGuildCastleCommand.DoTask,               "DoTask",              100, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x00625048u, true,   4, false, false, false),
+        (GmGuildCastleCommand.CallTaskMon,          "CallTaskMon",         101, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x0062505Bu, true,   4, false, false, false),
         (GmGuildCastleCommand.ChgMonAtt,            "ChgMonAtt",           144, 4, GmGuildCastleHandlerKind.ImplementedCase,     0x00625551u, true,   4, false, false, false),
         (GmGuildCastleCommand.ChgCastleOwner,       "ChgCastleOwner",      215, 5, GmGuildCastleHandlerKind.ImplementedCase,     0x00625EC0u, false,  0, false, false, false),
         (GmGuildCastleCommand.ChgCastleWar,         "ChgCastleWar",        216, 5, GmGuildCastleHandlerKind.ImplementedCase,     0x00625ED5u, true,  10, false, false, true),
@@ -133,7 +133,9 @@ static void VerifyRegistry()
         // in this family still retain their historical permission-10 drift.
         if (e.live)
         {
-            if (e.cmd == GmGuildCastleCommand.ChgMonAtt)
+            if (e.cmd == GmGuildCastleCommand.DoTask ||
+                e.cmd == GmGuildCastleCommand.CallTaskMon ||
+                e.cmd == GmGuildCastleCommand.ChgMonAtt)
             {
                 Equal(info.CSharpLivePermission, info.RequiredPermission,
                     $"{e.cmd} live permission parity");
@@ -182,7 +184,7 @@ static void VerifyRegistry()
     Equal(def, 4, "default no-op count");
     Equal(impl + nullstub + invstub, 19, "dedicated-case count (inventory: 19 impl)");
     Equal(empty + def, 6, "registered no-op count (inventory: 6 noop)");
-    Equal(live, 10, "live command count");
+    Equal(live, 11, "live command count");
 }
 
 static void VerifyHandledByteSemantics()
@@ -200,12 +202,12 @@ static void VerifyPureCoreForwards()
     var doTask = NativeGmDoTask.Evaluate(30, 30);
     Equal(doTask.CallsCore, true, "dotask calls core");
     Equal(doTask.CoreEa, 0x006BFEF8u, "dotask core ea");
-    Equal(doTask.CoreBodyDeferred, true, "dotask core deferred");
+    Equal(doTask.CoreBodyDeferred, false, "dotask core implemented");
     Equal(doTask.SendsSysMsg, false, "dotask silent");
 
     var callMon = NativeGmCallTaskMon.Evaluate(30, 30, "Zuma", 5);
     Equal(callMon.CoreEa, 0x006C19D0u, "calltaskmon core ea");
-    Equal(callMon.CoreBodyDeferred, true, "calltaskmon core deferred");
+    Equal(callMon.CoreBodyDeferred, false, "calltaskmon core implemented");
     Equal(callMon.SendsSysMsg, false, "calltaskmon silent");
 
     var chgOwner = NativeGmChgCastleOwner.Evaluate("Guild1");

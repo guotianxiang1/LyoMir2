@@ -29,22 +29,16 @@ var protectedFiles = new[]
 {
     "AddVoteCommand.cs",
     "BeginAreaCastleMatchCommand.cs",
-    "CallTaskMonCommand.cs",
-    "ChgEquipLevelCommand.cs",
     "EndAreaCastleMatchCommand.cs",
     "GetBackItemCommand.cs",
     "GMActCtrlCommand.cs",
     "GuildForbidCommand.cs",
-    "HeroSkillSwitchCommand.cs",
     "LogSwitchCommand.cs",
     "MakeMyHeroCommand.cs",
     "ReloadC2CItemsCommand.cs",
     "ReloadPromptFileCommand.cs",
     "ReloadRndItemCommand.cs",
-    "ReloadunBindItemCommand.cs",
-    "SendYuanBaoTextCommand.cs",
     "SmeltEquipCommand.cs",
-    "SuperMerchantCommand.cs",
 };
 
 foreach (var fileName in protectedFiles)
@@ -279,17 +273,54 @@ foreach (var implementedFile in new[]
              // case 234 @0x00625DEF -> sub_6DF540 reloads task scripts and
              // reports the loaded count followed by " task Is Reload".
              "ReLoadTaskCommand.cs",
+             // case 334 @0x00627D29 -> sub_6EA1A4(1,0): GBK text is capped
+             // at 12 bytes and rendered as local 23/88000 firework events;
+             // the GM path does not consume an item or broadcast globally.
+             "SendYuanBaoTextCommand.cs",
              // case 459 @0x00628C39 -> sub_6997BC releases and recompiles
              // PsMapQuest/TaskDispatch.pas, invokes OnInitialize, and always
              // emits the fixed green completion message.
              "ReloadTaskDispatchCommand.cs",
+             // case 100 @0x00625048 -> sub_6BFEF8 arms the global task target
+             // and captures the invoking player's map plus X/Y coordinates.
+             "DoTaskCommand.cs",
+             // case 101 @0x0062505B -> sub_6C19D0 resolves the captured map,
+             // spawns task monsters, and assigns their mission target fields.
+             "CallTaskMonCommand.cs",
+             // case 611 @0x006246C6 -> sub_73D458 resolves the named skill
+             // and writes the first matching entry's native switch WORD.
+             "HeroSkillSwitchCommand.cs",
              "ChgGameOpenTimeCommand.cs"
+             ,"SuperMerchantCommand.cs", "ReloadunBindItemCommand.cs"
          })
 {
     var source = Read(implementedFile);
     Assert(!source.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
         $"{implementedFile} reverted to fail-closed");
 }
+
+var chgEquipLevel = Read("ChgEquipLevelCommand.cs");
+Assert(chgEquipLevel.Contains(
+           "GameCommand(\"ChgEquipLevel\", \"更改装备等级(1..5)\", \"物品ID 等级值\", 5)",
+           StringComparison.Ordinal) &&
+       chgEquipLevel.Contains("NativeGmChgEquipLevel.Execute", StringComparison.Ordinal) &&
+       !chgEquipLevel.Contains("NativeCommandFailure.Report", StringComparison.Ordinal) &&
+       !chgEquipLevel.Contains("人物名称 装备位置", StringComparison.Ordinal),
+    "ChgEquipLevel does not preserve the native item-id/level command contract");
+
+var addVote = Read("AddVoteCommand.cs");
+Assert(addVote.Contains(
+           "GameCommand(\"AddVote\", \"增加投票数\", \"人物名称 票数 投票类型\", 5)",
+           StringComparison.Ordinal),
+    "AddVote does not preserve the native three-argument command contract");
+
+var sendYuanBaoText = Read("SendYuanBaoTextCommand.cs");
+Assert(sendYuanBaoText.Contains(
+           "GameCommand(\"SendYuanBaoText\", \"GM自身发送烟花状的元宝样式的消息内容\", \"消息内容\", 4)",
+           StringComparison.Ordinal) &&
+       sendYuanBaoText.Contains("TryCreateNativeGmFireworkText", StringComparison.Ordinal) &&
+       !sendYuanBaoText.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "SendYuanBaoText does not preserve the native local firework contract");
 
 var chgOpenGameTime = Read("ChgGameOpenTimeCommand.cs");
 Assert(chgOpenGameTime.Contains(
@@ -301,6 +332,17 @@ Assert(chgOpenGameTime.Contains(
        chgOpenGameTime.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !chgOpenGameTime.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "ChgOpenGameTime does not preserve the native OpenDay parse/write/success contract");
+
+var heroSkillSwitch = Read("HeroSkillSwitchCommand.cs");
+Assert(heroSkillSwitch.Contains(
+           "GameCommand(\"HeroSkillSwitch\", \"英雄技能开关\", \"人物名称 技能名称 开/关 0|1\", 3)",
+           StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("NativeGmHeroSkillSwitch.TrySetByName", StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("玩家{sTarget}的技能{sSkill}设为:{sState}", StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("玩家{sTarget}的英雄技能{sSkill}设为:{sState}", StringComparison.Ordinal) &&
+       heroSkillSwitch.Contains("MsgColor.Red", StringComparison.Ordinal) &&
+       !heroSkillSwitch.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "HeroSkillSwitch does not preserve the native mode/setter/message contract");
 
 var pushSingleTask = Read("PushSingleTaskCommand.cs");
 Assert(pushSingleTask.Contains(
@@ -392,10 +434,10 @@ Assert(mapCellFree.Contains(
 
 var npcHit = Read("NpcHitCommand.cs");
 Assert(npcHit.Contains(
-           "GameCommand(\"NpcHit\", \"让自身附近的可见的NPC做一个活动的动作\", \"\", 4)",
+           "GameCommand(\"NpcHit\", \"NPC攻击\", \"\", 4)",
            StringComparison.Ordinal) &&
-       npcHit.Contains("public void NpcHit(TPlayObject player)", StringComparison.Ordinal) &&
-       npcHit.Contains("player?.m_VisibleActors", StringComparison.Ordinal) &&
+       npcHit.Contains("public void NpcHit(TPlayObject PlayObject)", StringComparison.Ordinal) &&
+       npcHit.Contains("PlayObject?.m_VisibleActors", StringComparison.Ordinal) &&
        npcHit.Contains("m_btRaceServer != Grobal2.RC_NPC", StringComparison.Ordinal) &&
        npcHit.Contains("npc.SendRefMsg(Grobal2.RM_HIT, npc.m_btDirection", StringComparison.Ordinal) &&
        npcHit.Contains("npc.m_nCurrX, npc.m_nCurrY, 0, string.Empty", StringComparison.Ordinal) &&
@@ -441,8 +483,8 @@ Assert(chgPkZero.Contains(
        chgPkZero.Contains("GetNativeReadyPlayObject", StringComparison.Ordinal) &&
        chgPkZero.Contains("target.m_nPkPoint = 0", StringComparison.Ordinal) &&
        chgPkZero.Contains("target.RefNameColor()", StringComparison.Ordinal) &&
-       chgPkZero.Contains("该角色不在本GS，或不在线", StringComparison.Ordinal) &&
-       chgPkZero.Contains("Pkpoint = 0", StringComparison.Ordinal) &&
+       chgPkZero.Contains("ChgPkZeroNotFoundMessage", StringComparison.Ordinal) &&
+       chgPkZero.Contains("ChgPkZeroSuccessSuffix", StringComparison.Ordinal) &&
        chgPkZero.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !chgPkZero.Contains("AddGameDataLog", StringComparison.Ordinal) &&
        !chgPkZero.Contains("SendServerGroupMsg", StringComparison.Ordinal) &&
@@ -536,6 +578,28 @@ Assert(reloadTaskDispatch.Contains(
        reloadTaskDispatch.Contains("MsgColor.Green", StringComparison.Ordinal) &&
        !reloadTaskDispatch.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
     "reloadTaskDispatch does not preserve the native script reload/completion contract");
+
+var doTask = Read("DoTaskCommand.cs");
+Assert(doTask.Contains(
+           "GameCommand(\"DoTask\", \"设置任务攻击目标\", \"X Y\", 4)",
+           StringComparison.Ordinal) &&
+       doTask.Contains("TryArmTaskTarget", StringComparison.Ordinal) &&
+       doTask.Contains("任务设置失败！", StringComparison.Ordinal) &&
+       doTask.Contains("任务设置：攻击目标", StringComparison.Ordinal) &&
+       doTask.Contains("MsgColor.Green", StringComparison.Ordinal) &&
+       !doTask.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "DoTask does not preserve the native target-arming contract");
+
+var callTaskMon = Read("CallTaskMonCommand.cs");
+Assert(callTaskMon.Contains(
+           "GameCommand(\"CallTaskMon\", \"召唤任务怪物\", \"X坐标 Y坐标 怪物 数量\", 4)",
+           StringComparison.Ordinal) &&
+       callTaskMon.Contains("NativeGmTaskMonsterCommands.CallTaskMon", StringComparison.Ordinal) &&
+       callTaskMon.Contains("没有指定任务", StringComparison.Ordinal) &&
+       callTaskMon.Contains("命令错误，应为：X坐标 Y坐标 怪物 数量", StringComparison.Ordinal) &&
+       callTaskMon.Contains("=>", StringComparison.Ordinal) &&
+       !callTaskMon.Contains("NativeCommandFailure.Report", StringComparison.Ordinal),
+    "CallTaskMon does not preserve the native task-monster contract");
 
 var ipOutSay = Read("IPOutSayCommand.cs");
 var ipOutSayService = File.ReadAllText(Path.Combine(root, "GameSvr",

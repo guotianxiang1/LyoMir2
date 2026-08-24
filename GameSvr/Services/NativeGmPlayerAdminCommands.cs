@@ -162,6 +162,8 @@ namespace GameSvr
         public const int BodyLuckMin = -10;            // ChgBodyLuck clamp
         public const int BodyLuckMax = 5;              // ChgBodyLuck clamp
         public const int InComePkStep = 100;           // InComePk immediate (0x64)
+        public const string ChgPkZeroSuccessSuffix = " ：Pkpoint = 0";
+        public const string ChgPkZeroNotFoundMessage = "该角色不在本GS，或不在线";
         public const int NameColorDefault = 0xFF;      // ChgNameClr Str_ToInt default (edx=0xFF)
         public const int JobCount = 4;                 // ChgmanKind matches 4 job names -> 0..3
 

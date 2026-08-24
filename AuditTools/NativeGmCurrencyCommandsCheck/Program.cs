@@ -26,7 +26,7 @@ try
         "ChgUserLinFu/ChgUserLinFu2/chguserGlory/GiveSdNickLinfu/TransferCredit/ReloadC2CItems/SetLingfu3/" +
         "SetNickLF/SetGloryPoint/reshuaGP/SendYuanBaoText/c2ctest/c2cQuery/c2cOperate/loadEquipRecycle " +
         "noop=AddCardValue/SellC2CGoods/SetZillionCount " +
-        "coreDeferred=ALL-23-impl (元宝 settlement YbBuyLf/TransferCredit external=YBDB-6108)");
+        "coreDeferred=22/23-impl (SendYuanBaoText inline; 元宝 settlement YbBuyLf/TransferCredit external=YBDB-6108)");
     return 0;
 }
 catch (Exception ex)
@@ -101,7 +101,7 @@ static void VerifyRegistry()
         (GmCurrencyCommand.SetNickLF,        "SetNickLF",        267, 4, true,  0x0062678Bu, 0x0062EAE4u, true),
         (GmCurrencyCommand.SetGloryPoint,    "SetGloryPoint",    274, 5, true,  0x006269B8u, 0x006E2134u, true),
         (GmCurrencyCommand.ReshuaGP,         "reshuaGP",         277, 4, true,  0x00626B71u, 0x0063C1D4u, true),
-        (GmCurrencyCommand.SendYuanBaoText,  "SendYuanBaoText",  334, 4, true,  0x00627D29u, 0x006EA1A4u, true),
+        (GmCurrencyCommand.SendYuanBaoText,  "SendYuanBaoText",  334, 4, true,  0x00627D29u, 0x006EA1A4u, false),
         (GmCurrencyCommand.C2cTest,          "c2ctest",          372, 5, true,  0x00628242u, 0x006F228Cu, true),
         (GmCurrencyCommand.C2cQuery,         "c2cQuery",         376, 4, true,  0x006282B0u, 0x006F1A50u, true),
         (GmCurrencyCommand.C2cOperate,       "c2cOperate",       377, 5, true,  0x006282CFu, 0x006F1844u, true),
@@ -129,7 +129,10 @@ static void VerifyRegistry()
         {
             Assert(info.CaseAddress != NativeGmCurrencyCommands.DefaultCaseEa, $"{e.cmd} has distinct case");
             Assert(info.CaseAddress != NativeGmCurrencyCommands.EmptyExitCaseEa, $"{e.cmd} not empty-exit");
-            Assert(info.CoreBodyDeferred, $"{e.cmd} impl core deferred");
+            if (e.deferred)
+                Assert(info.CoreBodyDeferred, $"{e.cmd} impl core deferred");
+            else
+                Assert(!info.CoreBodyDeferred, $"{e.cmd} recovered core should not be deferred");
             impl++;
         }
         else
@@ -228,11 +231,12 @@ static void VerifyGuardedForwards()
     Assert(!lfNo.CallsCore && lfNo.SendsErrorSysMsg, "setnicklf absent refuses");
     Equal(lfNo.ErrorColor, 0x38FF, "setnicklf refusal colour (error)");
 
-    // SendYuanBaoText: content present -> broadcast sub_6EA1A4; absent -> error SysMsg; never mutates state
+    // SendYuanBaoText: content present -> local firework sub_6EA1A4; absent -> error SysMsg; never mutates state
     var ybOk = NativeGmSendYuanBaoText.Evaluate(contentPresent: true);
-    Assert(ybOk.CallsCore && !ybOk.SendsErrorSysMsg, "sendyuanbaotext present broadcasts");
+    Assert(ybOk.CallsCore && !ybOk.SendsErrorSysMsg, "sendyuanbaotext present renders locally");
     Equal(ybOk.CoreEa, 0x006EA1A4u, "sendyuanbaotext core");
-    Assert(!ybOk.MutatesStateWhenSatisfied, "sendyuanbaotext broadcast-only (no mutation)");
+    Assert(!ybOk.CoreBodyDeferred, "sendyuanbaotext core is restored");
+    Assert(!ybOk.MutatesStateWhenSatisfied, "sendyuanbaotext local-only (no persistent mutation)");
     var ybNo = NativeGmSendYuanBaoText.Evaluate(contentPresent: false);
     Assert(!ybNo.CallsCore && ybNo.SendsErrorSysMsg, "sendyuanbaotext absent refuses");
     Equal(ybNo.ErrorColor, 0x38FF, "sendyuanbaotext refusal colour (error)");

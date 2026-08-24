@@ -190,6 +190,20 @@ namespace GameSvr.Configs
             {
                 M2Share.g_Config.sConnctionString = connString;
             }
+            else
+            {
+                // Keep the deployed 2.08 layout usable when !Setup.txt only
+                // carries the DBServer password.  GameSvr and DBSvr share the
+                // same mir3 account in the native deployment.
+                var dbPassword = ReadString("DataBase", "DBPassword", string.Empty);
+                if (string.IsNullOrEmpty(dbPassword))
+                    dbPassword = ReadString("Server", "DBPassword", string.Empty);
+                if (!string.IsNullOrEmpty(dbPassword))
+                {
+                    M2Share.g_Config.sConnctionString =
+                        $"server=127.0.0.1;uid=root;pwd={dbPassword};database=mir3;charset=gbk;";
+                }
+            }
 
             LoadFormGmSetConfig();
 

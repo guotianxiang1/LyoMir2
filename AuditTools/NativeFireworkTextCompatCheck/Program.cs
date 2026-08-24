@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using System.Text;
 using GameSvr;
+using GameSvr.CommandSystem;
 using SystemModule;
 using SystemModule.Packet;
 
@@ -20,9 +21,10 @@ CheckBlockedCellFireworksArePlaced();
 CheckBroadcastPacketAbi();
 CheckSuccessPath();
 CheckInvalidGbkWirePreservation();
+CheckGmSendYuanBaoTextPath();
 
 Console.WriteLine(
-    "NativeFireworkTextCompatCheck PASS ident=1290 raw=min(12,len-1)/GBK coords=x+2*i atomic=all-bounds event=23/88000 delete=SM_DELITEM broadcast=0x38FF");
+    "NativeFireworkTextCompatCheck PASS ident=1290/GM334 raw=min(12,len-1)/GBK coords=x+2*i atomic=all-bounds event=23/88000 gm-local");
 
 static void CheckGlyphPlanning()
 {
@@ -320,6 +322,62 @@ static void CheckInvalidGbkWirePreservation()
     Equal((byte)2, body[8], "malformed-GBK SHOWEVENT length");
     BytesEqual(new byte[] { 0x81, 0x30 }, body[9..11],
         "malformed-GBK SHOWEVENT bytes");
+}
+
+static void CheckGmSendYuanBaoTextPath()
+{
+    ResetRuntime();
+    var player = NewPlayer(30, 30);
+    var command = new SendYuanBaoTextCommand();
+    var commandType = typeof(SendYuanBaoTextCommand);
+    command.Register(
+        commandType.GetCustomAttribute<GameCommandAttribute>()
+            ?? throw new InvalidOperationException("SendYuanBaoText attribute missing"),
+        commandType.GetMethod("SendYuanBaoText")
+            ?? throw new InvalidOperationException("SendYuanBaoText method missing"));
+
+    command.SendYuanBaoText(new[] { "传A", "ignored" }, player);
+    var first = M2Share.EventManager.GetEvent(player.m_PEnvir, 10, 10,
+        Grobal2.ET_YANHUA_TEXT);
+    var second = M2Share.EventManager.GetEvent(player.m_PEnvir, 12, 10,
+        Grobal2.ET_YANHUA_TEXT);
+    Assert(first != null && second != null,
+        "GM SendYuanBaoText did not create local firework events");
+    Equal("传", first.m_sEventOwnerName, "GM first glyph");
+    Equal("A", second.m_sEventOwnerName, "GM second glyph");
+    Equal(0, player.m_ItemList.Count, "GM path changed bag state");
+    Equal(0, player.m_MsgList.Count, "GM success emitted a message");
+    Equal(0, M2Share.LogStringList.Count, "GM path emitted a transaction log");
+
+    ResetRuntime();
+    player = NewPlayer(14, 30);
+    command = new SendYuanBaoTextCommand();
+    command.Register(
+        commandType.GetCustomAttribute<GameCommandAttribute>()
+            ?? throw new InvalidOperationException("SendYuanBaoText attribute missing"),
+        commandType.GetMethod("SendYuanBaoText")
+            ?? throw new InvalidOperationException("SendYuanBaoText method missing"));
+    command.SendYuanBaoText(new[] { "ABC" }, player);
+    Assert(M2Share.EventManager.GetEvent(player.m_PEnvir, 10, 10,
+        Grobal2.ET_YANHUA_TEXT) == null &&
+        M2Share.EventManager.GetEvent(player.m_PEnvir, 12, 10,
+            Grobal2.ET_YANHUA_TEXT) == null,
+        "GM out-of-bounds path left partial firework events");
+    Equal(0, player.m_MsgList.Count, "GM out-of-bounds path emitted a message");
+
+    ResetRuntime();
+    player = NewPlayer(30, 30);
+    command = new SendYuanBaoTextCommand();
+    command.Register(
+        commandType.GetCustomAttribute<GameCommandAttribute>()
+            ?? throw new InvalidOperationException("SendYuanBaoText attribute missing"),
+        commandType.GetMethod("SendYuanBaoText")
+            ?? throw new InvalidOperationException("SendYuanBaoText method missing"));
+    command.SendYuanBaoText(Array.Empty<string>(), player);
+    Equal(1, player.m_MsgList.Count, "GM missing text did not show help");
+    Equal(command.GameCommand.ShowHelp, player.m_MsgList[0].Buff,
+        "GM missing text help");
+    command.SendYuanBaoText(null, null);
 }
 
 static List<(string Text, int X, int Y, byte[] RawBytes)> Plan(byte[] payload,
