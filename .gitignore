@@ -57,6 +57,9 @@ _runtime_backup_*/
 /_*.txt
 /_*.xml
 /build_out.txt
+/LoginGate.ini
+/MirGate.ini
+/logs/
 
 # publish output (163MB GameGate.exe + vendored runtime dlls);
 # no csproj HintPath references any of it, so it is pure build output.

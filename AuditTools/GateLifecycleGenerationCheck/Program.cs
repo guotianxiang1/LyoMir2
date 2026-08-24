@@ -7,6 +7,7 @@ using System.Text;
 using GameSvr;
 using SystemModule;
 using SystemModule.Packet;
+using SystemModule.Packages;
 using SystemModule.Sockets;
 
 PrepareRuntimeFiles();
@@ -17,6 +18,7 @@ Run("ConnectionId reuse keeps replacement gate", ConnectionIdReuse);
 Run("out-connect send requires current generation", OutConnectGeneration);
 Run("published and pre-bind loads are revoked", PublishedLoadIsRevoked);
 Run("FrontEngine full threshold is 2000 saves", FrontEngineFullThreshold);
+Run("certified packets wait for bind and replay", PendingPacketsReplayAfterBind);
 
 if (failures.Count != 0)
 {
@@ -24,7 +26,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("GateLifecycleGenerationCheck PASS tests=5");
+Console.WriteLine("GateLifecycleGenerationCheck PASS tests=6");
 return 0;
 
 void RepeatedOpenAndStaleUser()
@@ -264,6 +266,128 @@ void FrontEngineFullThreshold()
     Assert(!front.IsFull(), "FrontEngine reported full below 2000");
     saves.Add(null);
     Assert(front.IsFull(), "FrontEngine did not report full at 2000");
+}
+
+void PendingPacketsReplayAfterBind()
+{
+    const int gateIndex = 61;
+    const int clientSocket = 6101;
+    const long generation = 61001;
+    var socket = NewSocket();
+    var gate = NewGate(socket);
+    var gateUser = new TGateUserInfo
+    {
+        nSocket = clientSocket,
+        nGSocketIdx = 0,
+        UserGeneration = generation,
+        nSessionID = 2,
+        sAccount = "account",
+        sCharName = "character",
+        boCertification = true,
+        PlayObject = null,
+        UserEngine = null
+    };
+    gate.UserList.Add(gateUser);
+    gate.nUserCount = 1;
+    var service = new GateService(gateIndex, gate);
+    var oldUserEngine = M2Share.UserEngine;
+    var oldObjectManager = M2Share.ObjectManager;
+    var oldConfig = M2Share.g_Config;
+    var oldProcessMsgSection = M2Share.ProcessMsgCriticalSection;
+    var engine = (UserEngine)RuntimeHelpers.GetUninitializedObject(typeof(UserEngine));
+    M2Share.UserEngine = engine;
+    M2Share.ObjectManager = new ObjectManager();
+    M2Share.g_Config = new GameSvrConfig();
+    M2Share.ProcessMsgCriticalSection = new object();
+    try
+    {
+        var exec = typeof(GateService).GetMethod("ExecGateMsg",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var loginPacket = new ClientPacket
+        {
+            Recog = 208,
+            Ident = Grobal2.CM_LOGINNOTICEOK,
+            Param = 1,
+            Tag = 2,
+            Series = 3
+        }.GetBuffer();
+        var header = new PacketHeader
+        {
+            PacketCode = Grobal2.RUNGATECODE,
+            Socket = clientSocket,
+            SocketIdx = 0,
+            Ident = Grobal2.GM_DATA,
+            UserIndex = 1,
+            PackLength = loginPacket.Length
+        };
+        exec.Invoke(service, new object[] { gateIndex, gate, header,
+            loginPacket, loginPacket.Length });
+        var runPacket = new ClientPacket
+        {
+            Recog = 10,
+            Ident = Grobal2.CM_RUN,
+            Param = 11,
+            Series = 2
+        }.GetBuffer();
+        header.PackLength = runPacket.Length;
+        exec.Invoke(service, new object[] { gateIndex, gate, header,
+            runPacket, runPacket.Length });
+        Equal(2, gateUser.PendingClientMessages.Count,
+            "pre-bind pending count");
+        Equal(1, gateUser.PendingClientBytes > 0 ? 1 : 0,
+            "pre-bind pending bytes");
+        Equal((ushort)Grobal2.CM_LOGINNOTICEOK,
+            gateUser.PendingClientMessages.Peek().Ident,
+            "pre-bind pending ident");
+
+        var player = new TPlayObject();
+        player.m_nGateIdx = gateIndex;
+        player.m_nSocket = clientSocket;
+        player.m_UserGeneration = generation;
+        player.m_nGSocketIdx = 0;
+        player.m_nSessionID = 2;
+        player.m_sLoginAccount = "account";
+        player.m_sCharName = "character";
+        Assert(service.SetGateUserList(clientSocket, player),
+            "certified user did not bind");
+        Equal(0, gateUser.PendingClientMessages.Count,
+            "pending queue was not drained");
+        Assert(player.m_boLoginNoticeOK &&
+               player.m_boNativeClientVersionHandshakeDone,
+            "replayed 1018 did not advance native handshake");
+        Assert(player.m_MsgList.Any(message => message.wIdent == Grobal2.CM_RUN),
+            "replayed movement packet did not enter the player queue");
+
+        // A duplicate bind callback must not steal the replay owner or clear
+        // its marker while the first detached batch is still being flushed.
+        gateUser.PendingClientReplayInProgress = true;
+        Assert(service.SetGateUserList(clientSocket, player),
+            "duplicate bind for replay owner was rejected");
+        Assert(gateUser.PendingClientReplayInProgress,
+            "duplicate bind cleared the replay owner's marker");
+
+        // A stale generation must never be accepted or allowed to replay.
+        var stale = Player(gateIndex, clientSocket, generation - 1);
+        Assert(!service.SetGateUserList(clientSocket, stale),
+            "stale generation rebound pending user");
+
+        // Replay detaches its batch before dispatch. Closing an otherwise
+        // empty queue must still clear the in-progress marker; otherwise all
+        // later packets would be queued forever after a replay exception.
+        Assert(service.CloseUser(clientSocket, generation),
+            "bound generation did not close");
+        Assert(!gateUser.PendingClientReplayInProgress,
+            "empty pending queue left replay state stuck");
+    }
+    finally
+    {
+        service.Stop();
+        socket.Dispose();
+        M2Share.UserEngine = oldUserEngine;
+        M2Share.ObjectManager = oldObjectManager;
+        M2Share.g_Config = oldConfig;
+        M2Share.ProcessMsgCriticalSection = oldProcessMsgSection;
+    }
 }
 
 static TPlayObject Player(int gate, int socket, long generation)

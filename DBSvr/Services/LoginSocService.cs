@@ -46,6 +46,8 @@ namespace DBSvr
         private readonly byte _groupIndex;
         private readonly string sIDAddr;
         private readonly int nIDPort;
+        private readonly string _sessionServerAddress;
+        private readonly int _sessionServerPort;
         private long _lastConnectAttempt;
         private long _lastRegistrationTick;
         private int _nativeUserCount;
@@ -82,21 +84,31 @@ namespace DBSvr
             _gameGatePort = (ushort)DBShare.g_nPublicGatePort;
             _zoneIndex = (ushort)DBShare.nZoneIdx;
             _groupIndex = (byte)DBShare.nGroupIdx;
+            _sessionServerAddress = _mode == LoginGateTransportMode.PrivateListener
+                ? sIDAddr
+                : configManager.ReadString("LoginServer", "IP", DBShare.sIDServerAddr);
+            _sessionServerPort = _mode == LoginGateTransportMode.PrivateListener
+                ? nIDPort
+                : configManager.ReadInteger("LoginServer", "Port", 5601);
+            if (_sessionServerPort is <= 0 or > ushort.MaxValue)
+                throw new InvalidOperationException(
+                    "LoginServer session port must fit in one unsigned word");
             GlobaSessionList = new List<TGlobaSessionInfo>();
             _sessionDict = new Dictionary<(string, int), TGlobaSessionInfo>();
 
-            if (_mode == LoginGateTransportMode.PrivateListener)
-            {
-                _serverSocket = new ISocketServer(MaxServerConnections, 1024);
-                _serverSocket.OnClientConnect += (sender, e) =>
-                    _receiveStates[e.ConnectionId] = new ServerReceiveState();
-                _serverSocket.OnClientDisconnect += (sender, e) =>
-                    _receiveStates.TryRemove(e.ConnectionId, out _);
-                _serverSocket.OnClientRead += OnServerClientRead;
-                _serverSocket.OnClientError += (_, _) => { };
-                _serverSocket.Init();
-            }
-            else
+            // The original LoginSrv server channel and the mobile LoginGate
+            // Native77 channel are distinct protocols. Native mode still needs
+            // the former so GameSvr can receive SS_OPENSESSION (100) unchanged.
+            _serverSocket = new ISocketServer(MaxServerConnections, 1024);
+            _serverSocket.OnClientConnect += (sender, e) =>
+                _receiveStates[e.ConnectionId] = new ServerReceiveState();
+            _serverSocket.OnClientDisconnect += (sender, e) =>
+                _receiveStates.TryRemove(e.ConnectionId, out _);
+            _serverSocket.OnClientRead += OnServerClientRead;
+            _serverSocket.OnClientError += (_, _) => { };
+            _serverSocket.Init();
+
+            if (_mode == LoginGateTransportMode.Native77Client)
             {
                 _nativeClient = new IClientScoket { Host = sIDAddr, Port = nIDPort };
                 _nativeClient.OnConnected += OnNativeConnected;
@@ -151,12 +163,11 @@ namespace DBSvr
         public void Start()
         {
             if (Interlocked.Exchange(ref _started, 1) != 0) return;
+            _serverSocket.Start(_sessionServerAddress, _sessionServerPort);
+            Console.WriteLine($"LoginSvrService {_sessionServerAddress}:{_sessionServerPort} "
+                + "监听已启动 (原版GameSvr会话协议)");
             if (_mode == LoginGateTransportMode.PrivateListener)
-            {
-                _serverSocket.Start(sIDAddr, nIDPort);
-                Console.WriteLine($"LoginSvrService {sIDAddr}:{nIDPort} 监听已启动 (接受GameSvr会话连接)");
                 return;
-            }
 
             Interlocked.Exchange(ref _lastConnectAttempt,
                 Environment.TickCount64 - _reconnectIntervalMs);
@@ -167,9 +178,8 @@ namespace DBSvr
         public void Stop()
         {
             Interlocked.Exchange(ref _started, 0);
-            if (_mode == LoginGateTransportMode.PrivateListener)
-                _serverSocket.Shutdown();
-            else
+            _serverSocket.Shutdown();
+            if (_mode == LoginGateTransportMode.Native77Client)
                 _nativeClient.Disconnect();
             FailAllNativeAuth("native LoginGate stopped");
             _receiveStates.Clear();
@@ -620,11 +630,6 @@ namespace DBSvr
 
         public bool TrySendSocketMsg(short wIdent, string sMsg)
         {
-            if (_mode == LoginGateTransportMode.Native77Client)
-            {
-                DBShare.MainOutMessage($"原版LoginGate模式不支持私有5600指令 {wIdent}");
-                return false;
-            }
             return BroadcastFrame($"({wIdent}/{sMsg})");
         }
 

@@ -2154,15 +2154,16 @@ static Task TestDatabase(string iniPath)
             Check(persistedRoundTrip.NativeScriptData.SequenceEqual(loaded.NativeScriptData),
                 "persisted native save ScriptData identity " + name);
             Check((loaded.NativeScriptData?.Length ?? 0)
-                  <= NativeDbServerProtocol.ScriptDataSlotSize,
-                "native ScriptData fits selected-human slot " + name);
+                  <= NativeDbServerProtocol.MaximumScriptDataSize,
+                "native ScriptData fits selected-human frame " + name);
             Check(NativeDbServerProtocol.TryCreateLoadHumanFrame(
                     loaded.Data.sAccount, loaded.Data.sCharName,
                     loaded.NativeData, loaded.NativeScriptData,
                     new NativeHumanSessionContext(),
                     out var selectedFrame, out var selectedError),
                 "build native selected-human frame " + name + ": " + selectedError);
-            Equal(NativeDbServerProtocol.LoadHumanPayloadSize,
+            Equal(NativeDbServerProtocol.LoadHumanBasePayloadSize
+                  + (loaded.NativeScriptData?.Length ?? 0),
                 selectedFrame.Payload.Length, "selected-human payload length " + name);
             Check(selectedFrame.Payload.AsSpan(NativeDbServerProtocol.NativeDataOffset,
                     NativeHumanDataCodec.DataRecordSize).SequenceEqual(loaded.NativeData),

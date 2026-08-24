@@ -9,7 +9,18 @@ namespace SystemModule.Packet
     /// </summary>
     public sealed class InternalPacket77FrameParser
     {
-        public const int DefaultMaximumBufferedLength = 1024 * 1024;
+        // Native M2 (TGameGate) keeps one 0x8000-byte receive buffer.  Its
+        // frame validator accepts a body through 0x3000 inclusive; a larger
+        // declaration abandons the current receive buffer before dispatch.
+        // Keep these limits here, next to the parser used by GateService, so
+        // callers do not silently fall back to the old permissive 64K model.
+        public const int NativeMaximumBufferedLength =
+            NativeGameGateCommands.NativeM2ReceiveBufferLength;
+        public const int NativeMaximumBodyLength =
+            NativeGameGateCommands.NativeM2MaximumBodyLength;
+        public const int NativeMaximumFrameLength =
+            NativeGameGateCommands.NativeM2MaximumFrameLength;
+        public const int DefaultMaximumBufferedLength = NativeMaximumBufferedLength;
 
         private readonly int _maximumBufferedLength;
         private readonly int _maximumFrameLength;
@@ -17,7 +28,7 @@ namespace SystemModule.Packet
         private int _length;
 
         public InternalPacket77FrameParser(int maximumBufferedLength = DefaultMaximumBufferedLength,
-            int maximumFrameLength = ushort.MaxValue)
+            int maximumFrameLength = NativeMaximumFrameLength)
         {
             if (maximumBufferedLength < InternalPacket77.HEADER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(maximumBufferedLength));
@@ -74,8 +85,13 @@ namespace SystemModule.Packet
                 var frameLength = InternalPacket77.HEADER_SIZE + bodyLength;
                 if (frameLength > _maximumFrameLength)
                 {
-                    scan = marker + 1;
-                    continue;
+                    // Native 0x5F6679 drops the whole filled receive buffer
+                    // when the declared body exceeds its accepted bound. Do
+                    // not resynchronise into a trailing marker from the same
+                    // invalid buffer; that would deliver bytes the original
+                    // parser discards.
+                    Reset();
+                    return true;
                 }
                 if (_length - marker < frameLength)
                 {

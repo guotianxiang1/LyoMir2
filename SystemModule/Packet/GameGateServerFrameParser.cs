@@ -6,32 +6,52 @@ namespace SystemModule.Packet
     public sealed class GameGateServerFrame
     {
         public InternalPacket77 Internal77 { get; private set; }
+        public LegacyGateType17 LegacyType17 { get; private set; }
         public LegacyGateType18 LegacyType18 { get; private set; }
+        public LegacyGateType19 LegacyType19 { get; private set; }
+        public LegacyGateType20 LegacyType20 { get; private set; }
 
         public static GameGateServerFrame FromInternal77(InternalPacket77 packet) =>
             new GameGateServerFrame { Internal77 = packet };
 
+        public static GameGateServerFrame FromLegacyType17(LegacyGateType17 packet) =>
+            new GameGateServerFrame { LegacyType17 = packet };
+
         public static GameGateServerFrame FromLegacyType18(LegacyGateType18 packet) =>
             new GameGateServerFrame { LegacyType18 = packet };
+
+        public static GameGateServerFrame FromLegacyType19(LegacyGateType19 packet) =>
+            new GameGateServerFrame { LegacyType19 = packet };
+
+        public static GameGateServerFrame FromLegacyType20(LegacyGateType20 packet) =>
+            new GameGateServerFrame { LegacyType20 = packet };
     }
 
     /// <summary>
     /// Parses the shared M2-to-GameGate stream without changing the existing
-    /// InternalPacket77 parser. Native outer types 17 and 18 at offset 12 use
-    /// the legacy 16-byte envelope. Type 17 is consumed without dispatch, as in
-    /// the Delphi GameGate; type 18 is returned for native broadcast routing.
+    /// InternalPacket77 parser. Native outer types 17 through 20 at offset 12
+    /// have dedicated routing semantics and are returned as typed envelopes.
     /// </summary>
     public sealed class GameGateServerFrameParser
     {
-        private const ushort IgnoredLegacyMessageType = 17;
+        // The native GameGate outer parser accepts a frame only while
+        // payload+0x20 < 0x10000, i.e. total frame length < 0xFFF0.
+        public const int NativeMaximumFrameLengthExclusive = 0xFFF0;
+        public const int NativeMaximumFrameLength =
+            NativeMaximumFrameLengthExclusive - 1;
+        // Unlike the M2 receive parser, this side must be able to hold the
+        // native outer frame boundary (just under 0x10000) while a frame is
+        // split across socket reads.  No smaller 0x8000 cap is proven for the
+        // GameGate stream.
+        public const int DefaultMaximumBufferedLength = 1024 * 1024;
         private readonly int _maximumBufferedLength;
         private readonly int _maximumInternalFrameLength;
         private byte[] _buffer = new byte[8192];
         private int _length;
 
         public GameGateServerFrameParser(
-            int maximumBufferedLength = InternalPacket77FrameParser.DefaultMaximumBufferedLength,
-            int maximumInternalFrameLength = ushort.MaxValue)
+            int maximumBufferedLength = DefaultMaximumBufferedLength,
+            int maximumInternalFrameLength = NativeMaximumFrameLength)
         {
             if (maximumBufferedLength < InternalPacket77.HEADER_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(maximumBufferedLength));
@@ -83,17 +103,30 @@ namespace SystemModule.Packet
                 }
 
                 var discriminator = BitConverter.ToUInt16(_buffer, marker + 12);
-                if (discriminator == IgnoredLegacyMessageType)
+                var declaredBodyLength = BitConverter.ToUInt16(_buffer, marker + 14);
+                var declaredFrameLength =
+                    InternalPacket77.HEADER_SIZE + declaredBodyLength;
+                if (declaredFrameLength > _maximumInternalFrameLength)
                 {
-                    if (_length - marker < LegacyGateType18.HeaderSize)
+                    // RunGate logs an oversized outer frame and drops the whole
+                    // current receive buffer instead of scanning for a nested marker.
+                    // The default maximum is the native < 0xFFF0 boundary;
+                    // callers that intentionally use a wider synthetic fixture
+                    // may opt into that limit through the constructor.
+                    Reset();
+                    return true;
+                }
+                if (discriminator == LegacyGateType17.MessageType)
+                {
+                    if (_length - marker < LegacyGateType17.HeaderSize)
                     {
                         Compact(marker);
                         return true;
                     }
 
                     var payloadLength = BitConverter.ToUInt16(_buffer, marker + 14);
-                    var totalLength = LegacyGateType18.HeaderSize + payloadLength;
-                    if (totalLength >= LegacyGateType18.MaximumFrameLengthExclusive)
+                    var totalLength = LegacyGateType17.HeaderSize + payloadLength;
+                    if (totalLength > _maximumInternalFrameLength)
                     {
                         scan = marker + 1;
                         continue;
@@ -104,6 +137,13 @@ namespace SystemModule.Packet
                         return true;
                     }
 
+                    var legacy = LegacyGateType17.FromBytes(_buffer, marker, totalLength);
+                    if (legacy == null)
+                    {
+                        scan = marker + 1;
+                        continue;
+                    }
+                    frames.Add(GameGateServerFrame.FromLegacyType17(legacy));
                     scan = marker + totalLength;
                     continue;
                 }
@@ -118,32 +158,101 @@ namespace SystemModule.Packet
 
                     var payloadLength = BitConverter.ToUInt16(_buffer, marker + 14);
                     var totalLength = LegacyGateType18.HeaderSize + payloadLength;
-                    // Command 18 is ambiguous on this stream: the legacy broadcast
-                    // envelope carries a 12-byte client sub-header, while an ordinary
-                    // InternalPacket77 command 18 may have a shorter body.  Only take
-                    // the legacy branch when its complete minimum shape is present.
-                    // Short command-18 frames must fall through to the generic parser;
-                    // scanning past the marker here can mistake a marker inside their
-                    // payload for a new frame and leave a partial tail buffered.
-                    if (payloadLength >= LegacyGateType18.ClientPacketSize
-                        && totalLength < LegacyGateType18.MaximumFrameLengthExclusive)
+                    if (totalLength > _maximumInternalFrameLength)
                     {
-                        if (_length - marker < totalLength)
-                        {
-                            Compact(marker);
-                            return true;
-                        }
-
-                        var legacy = LegacyGateType18.FromBytes(_buffer, marker, totalLength);
-                        if (legacy == null)
-                        {
-                            scan = marker + 1;
-                            continue;
-                        }
-                        frames.Add(GameGateServerFrame.FromLegacyType18(legacy));
-                        scan = marker + totalLength;
+                        scan = marker + 1;
                         continue;
                     }
+                    if (_length - marker < totalLength)
+                    {
+                        Compact(marker);
+                        return true;
+                    }
+
+                    var legacy = LegacyGateType18.FromBytes(_buffer, marker, totalLength);
+                    if (legacy == null)
+                    {
+                        scan = marker + 1;
+                        continue;
+                    }
+                    frames.Add(GameGateServerFrame.FromLegacyType18(legacy));
+                    scan = marker + totalLength;
+                    continue;
+                }
+
+                if (discriminator == LegacyGateType19.MessageType)
+                {
+                    if (_length - marker < LegacyGateType19.HeaderSize)
+                    {
+                        Compact(marker);
+                        return true;
+                    }
+
+                    var payloadLength = BitConverter.ToUInt16(_buffer, marker + 14);
+                    var totalLength = LegacyGateType19.HeaderSize + payloadLength;
+                    if (totalLength > _maximumInternalFrameLength)
+                    {
+                        scan = marker + 1;
+                        continue;
+                    }
+
+                    var sessionCount = BitConverter.ToUInt32(_buffer, marker + 8);
+                    if (sessionCount > (uint)(payloadLength / sizeof(ushort)))
+                    {
+                        // Every target consumes one little-endian WORD at the
+                        // start of the body. The remaining client payload may be
+                        // shorter than 12 bytes; the relay routine then consumes
+                        // it without producing a client transmission.
+                        scan = marker + 1;
+                        continue;
+                    }
+                    if (_length - marker < totalLength)
+                    {
+                        Compact(marker);
+                        return true;
+                    }
+
+                    var legacy = LegacyGateType19.FromBytes(_buffer, marker, totalLength);
+                    if (legacy == null)
+                    {
+                        scan = marker + 1;
+                        continue;
+                    }
+                    frames.Add(GameGateServerFrame.FromLegacyType19(legacy));
+                    scan = marker + totalLength;
+                    continue;
+                }
+
+                if (discriminator == LegacyGateType20.MessageType)
+                {
+                    if (_length - marker < LegacyGateType20.HeaderSize)
+                    {
+                        Compact(marker);
+                        return true;
+                    }
+
+                    var payloadLength = BitConverter.ToUInt16(_buffer, marker + 14);
+                    var totalLength = LegacyGateType20.HeaderSize + payloadLength;
+                    if (totalLength > _maximumInternalFrameLength)
+                    {
+                        scan = marker + 1;
+                        continue;
+                    }
+                    if (_length - marker < totalLength)
+                    {
+                        Compact(marker);
+                        return true;
+                    }
+
+                    var legacy = LegacyGateType20.FromBytes(_buffer, marker, totalLength);
+                    if (legacy == null)
+                    {
+                        scan = marker + 1;
+                        continue;
+                    }
+                    frames.Add(GameGateServerFrame.FromLegacyType20(legacy));
+                    scan = marker + totalLength;
+                    continue;
                 }
 
                 // 通用 16 字节头 InternalPacket77: total = 0x10 + word[+0x0E](BodyLen)。
@@ -157,22 +266,6 @@ namespace SystemModule.Packet
                     continue;
                 }
 
-                // A malformed legacy type-18 header can advertise a body that
-                // extends across the next real frame.  Prefer a complete marker
-                // inside that declared span as the resynchronization point.  A
-                // marker merely embedded in a short command-18 payload is not
-                // enough: without a complete following frame it remains payload.
-                var nestedMarker = FindMarker(marker + InternalPacket77.HEADER_SIZE);
-                if (discriminator == LegacyGateType18.MessageType
-                    && (bodyLength < LegacyGateType18.ClientPacketSize
-                        || frameLength >= LegacyGateType18.MaximumFrameLengthExclusive)
-                    && nestedMarker > marker
-                    && nestedMarker < marker + frameLength
-                    && IsCompleteInternalFrame(nestedMarker))
-                {
-                    scan = nestedMarker;
-                    continue;
-                }
                 if (_length - marker < frameLength)
                 {
                     Compact(marker);
@@ -202,16 +295,6 @@ namespace SystemModule.Packet
                     && _buffer[i + 2] == 0xAA && _buffer[i + 3] == 0x33)
                     return i;
             return -1;
-        }
-
-        private bool IsCompleteInternalFrame(int marker)
-        {
-            if (_length - marker < InternalPacket77.HEADER_SIZE)
-                return false;
-            var bodyLength = BitConverter.ToUInt16(_buffer, marker + 14);
-            var frameLength = InternalPacket77.HEADER_SIZE + bodyLength;
-            return frameLength <= _maximumInternalFrameLength
-                && _length - marker >= frameLength;
         }
 
         private void KeepPossibleMarkerSuffix(int start)

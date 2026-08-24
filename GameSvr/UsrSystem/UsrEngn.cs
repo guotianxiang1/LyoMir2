@@ -354,7 +354,7 @@ namespace GameSvr
         public void Start()
         {
             _stopRequested = false;
-            if (_userEngineThread.ThreadState == ThreadState.Unstarted)
+            if ((_userEngineThread.ThreadState & ThreadState.Unstarted) != 0)
             {
                 _userEngineThread.Start();
             }
@@ -983,9 +983,13 @@ namespace GameSvr
                     for (var i = 0; i < newHumans.Count; i++)
                     {
                         PlayObject = newHumans[i];
-                        if (!M2Share.GateManager.SetGateUserList(
+                        var gateBound = M2Share.GateManager.SetGateUserList(
                                 PlayObject.m_nGateIdx, PlayObject.m_nSocket,
-                                PlayObject))
+                                PlayObject);
+                        PlayObject.TraceGateLifecycle(gateBound
+                            ? "gate-bind-success"
+                            : "gate-bind-failure");
+                        if (!gateBound)
                         {
                             PlayObject.m_boEmergencyClose = true;
                             PlayObject.m_boSoftClose = true;
@@ -1486,7 +1490,6 @@ namespace GameSvr
                                 {
                                     if (!PlayObject.m_boLoginNoticeOK)
                                     {
-                                        PlayObject.SendNativeClientConfig();
                                         PlayObject.RunNotice();
                                     }
                                     else
@@ -1495,6 +1498,13 @@ namespace GameSvr
                                         {
                                             PlayObject.m_boReadyRun = true;
                                             PlayObject.UserLogon();
+                                            PlayObject.TraceGateLifecycle("user-logon-after-call");
+#if GAMESVR_PACKET_TRACE
+                                            PacketTraceWriter.Write(
+                                                $"{DateTime.Now:O} [UserLogon] notice=" +
+                                                $"{PlayObject.m_boLoginNoticeOK} ready=" +
+                                                $"{PlayObject.m_boReadyRun} char={PlayObject.m_sCharName}");
+#endif
                                         }
                                         else
                                         {
@@ -1578,15 +1588,21 @@ namespace GameSvr
                         {
                             if (!PlayObject.m_boLoginNoticeOK)
                             {
-                                PlayObject.SendNativeClientConfig();
                                 PlayObject.RunNotice();
                             }
                             else
                             {
-                                if (!PlayObject.m_boReadyRun)
-                                {
-                                    PlayObject.m_boReadyRun = true;
-                                    PlayObject.UserLogon();
+                                        if (!PlayObject.m_boReadyRun)
+                                        {
+                                            PlayObject.m_boReadyRun = true;
+                                            PlayObject.UserLogon();
+                                            PlayObject.TraceGateLifecycle("user-logon-after-call");
+#if GAMESVR_PACKET_TRACE
+                                            PacketTraceWriter.Write(
+                                                $"{DateTime.Now:O} [UserLogon] notice=" +
+                                                $"{PlayObject.m_boLoginNoticeOK} ready=" +
+                                                $"{PlayObject.m_boReadyRun} char={PlayObject.m_sCharName}");
+#endif
                                 }
                                 else
                                 {
@@ -2760,7 +2776,25 @@ namespace GameSvr
         {
             var sMsg = string.Empty;
             if (PlayObject.m_boOffLineFlag) return;
-            if (!PlayObject.ShouldDispatchNativeClientMessage(DefMsg)) return;
+            if (!PlayObject.ShouldDispatchNativeClientMessage(DefMsg))
+            {
+#if GAMESVR_PACKET_TRACE
+                PacketTraceWriter.Write(
+                    $"{DateTime.Now:O} [DispatchConsumed] ident={DefMsg?.Ident} " +
+                    $"notice={PlayObject.m_boLoginNoticeOK} handshake=" +
+                    $"{PlayObject.m_boNativeClientVersionHandshakeDone}");
+#endif
+                return;
+            }
+#if GAMESVR_PACKET_TRACE
+            PacketTraceWriter.Write(
+                $"{DateTime.Now:O} [Dispatch] ident={DefMsg?.Ident} " +
+                $"recog={DefMsg?.Recog} param={DefMsg?.Param} " +
+                $"tag={DefMsg?.Tag} series={DefMsg?.Series} " +
+                $"notice={PlayObject.m_boLoginNoticeOK} handshake=" +
+                $"{PlayObject.m_boNativeClientVersionHandshakeDone} " +
+                $"body={payload?.Length ?? 0}");
+#endif
             if (!string.IsNullOrEmpty(Buff)) sMsg = Buff;
             // 战神's CM dispatcher receives the wire body length as its fourth parameter and 39
             // handlers open with a test on it (see NativeClientBodyLengthGate for the per-ident
@@ -5238,7 +5272,7 @@ namespace GameSvr
 
         public void StartAI()
         {
-            if (_processAiThread.ThreadState == ThreadState.Unstarted)
+            if ((_processAiThread.ThreadState & ThreadState.Unstarted) != 0)
             {
                 _processAiThread.Start();
             }

@@ -15,7 +15,7 @@ namespace SystemModule.Packet
         public const int ClientPacketSize = 12;
         public const int ClientRelayHeaderSize = 12;
         public const int MaximumClientRelayLengthExclusive = 0x8000;
-        public const int MaximumFrameLengthExclusive = 0xFFF0;
+        public const int MaximumFrameLengthExclusive = 0x10000;
 
         private byte[] _wireClientPayload;
 
@@ -54,8 +54,7 @@ namespace SystemModule.Packet
         {
             var clientPayload = ToClientPayload();
             var totalLength = HeaderSize + clientPayload.Length;
-            if (clientPayload.Length < ClientPacketSize
-                || totalLength >= MaximumFrameLengthExclusive)
+            if (totalLength >= MaximumFrameLengthExclusive)
                 throw new InvalidOperationException(
                     "Legacy GameGate type 18 frame length is outside the native range");
 
@@ -76,7 +75,7 @@ namespace SystemModule.Packet
 
         public static LegacyGateType18 FromBytes(byte[] buffer, int offset, int length)
         {
-            if (buffer == null || offset < 0 || length < HeaderSize + ClientPacketSize
+            if (buffer == null || offset < 0 || length < HeaderSize
                 || offset > buffer.Length - length)
                 return null;
 
@@ -84,7 +83,6 @@ namespace SystemModule.Packet
             var totalLength = HeaderSize + payloadLength;
             if (BitConverter.ToUInt32(buffer, offset) != MagicValue
                 || BitConverter.ToUInt16(buffer, offset + 12) != MessageType
-                || payloadLength < ClientPacketSize
                 || totalLength >= MaximumFrameLengthExclusive
                 || length < totalLength)
                 return null;
@@ -95,26 +93,30 @@ namespace SystemModule.Packet
                 IgnoredConnectionId = BitConverter.ToUInt32(buffer, offset + 4),
                 FilterUserIndex = BitConverter.ToUInt32(buffer, offset + 8),
                 Type = MessageType,
-                PayloadLength = payloadLength,
-                Recog = BitConverter.ToInt32(buffer, offset + HeaderSize),
-                Ident = BitConverter.ToUInt16(buffer, offset + HeaderSize + 4),
-                Param = BitConverter.ToUInt16(buffer, offset + HeaderSize + 6),
-                Tag = BitConverter.ToUInt16(buffer, offset + HeaderSize + 8),
-                Series = BitConverter.ToUInt16(buffer, offset + HeaderSize + 10)
+                PayloadLength = payloadLength
             };
             packet._wireClientPayload = new byte[payloadLength];
             Buffer.BlockCopy(buffer, offset + HeaderSize,
                 packet._wireClientPayload, 0, payloadLength);
 
-            var textLength = payloadLength - ClientPacketSize;
-            if (textLength > 0)
+            if (payloadLength >= ClientPacketSize)
             {
-                var logicalTextLength = buffer[offset + totalLength - 1] == 0
-                    ? textLength - 1
-                    : textLength;
-                packet.TextBytes = new byte[logicalTextLength];
-                Buffer.BlockCopy(buffer, offset + HeaderSize + ClientPacketSize,
-                    packet.TextBytes, 0, packet.TextBytes.Length);
+                packet.Recog = BitConverter.ToInt32(buffer, offset + HeaderSize);
+                packet.Ident = BitConverter.ToUInt16(buffer, offset + HeaderSize + 4);
+                packet.Param = BitConverter.ToUInt16(buffer, offset + HeaderSize + 6);
+                packet.Tag = BitConverter.ToUInt16(buffer, offset + HeaderSize + 8);
+                packet.Series = BitConverter.ToUInt16(buffer, offset + HeaderSize + 10);
+
+                var textLength = payloadLength - ClientPacketSize;
+                if (textLength > 0)
+                {
+                    var logicalTextLength = buffer[offset + totalLength - 1] == 0
+                        ? textLength - 1
+                        : textLength;
+                    packet.TextBytes = new byte[logicalTextLength];
+                    Buffer.BlockCopy(buffer, offset + HeaderSize + ClientPacketSize,
+                        packet.TextBytes, 0, packet.TextBytes.Length);
+                }
             }
             return packet;
         }

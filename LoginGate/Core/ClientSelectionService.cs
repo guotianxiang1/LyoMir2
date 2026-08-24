@@ -159,7 +159,10 @@ internal sealed class ClientSelectionService
 
         try
         {
-            while (!idle.IsCancellationRequested && session.State != ClientSelectionState.Complete)
+            // The native LoginGate keeps the selection socket alive after sending
+            // SM_SELECT_SERVER. The client closes it while switching to GameGate.
+            // Closing here races the jump frame with a disconnect callback.
+            while (!idle.IsCancellationRequested)
             {
                 var read = await stream.ReadAsync(buffer, idle.Token).ConfigureAwait(false);
                 if (read == 0) break;
