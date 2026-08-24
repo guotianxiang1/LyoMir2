@@ -1826,6 +1826,36 @@ static void TestNativeLoginGateFrames()
     Equal("gametea", mobileRequest.GameType, "4004 game type");
     Equal("mobile-mac-address", mobileRequest.DeviceName, "4004 device name");
 
+    var variableDeviceBlocks = new[]
+    {
+        Convert.FromHexString("01020304"),
+        Convert.FromHexString("FDFDFDFDDDDDDDDD43C32132DD12")
+    };
+    foreach (var deviceBlock in variableDeviceBlocks)
+    {
+        var variantBody = Encoding.ASCII.GetBytes("0123456789abcdef0123456789abcdef")
+            .Concat(new byte[] { 0 })
+            .Concat(deviceBlock)
+            .Concat(new byte[] { 0 })
+            .Concat(Encoding.ASCII.GetBytes("gametea\0mobile-mac-address\0"))
+            .ToArray();
+        Check(NativeMobileLoginAuthCodec.TryDecode(variantBody,
+            out var variantRequest, out error), error);
+        Check(variantRequest.DeviceId.SequenceEqual(deviceBlock),
+            $"4004 variable device block {deviceBlock.Length}B");
+        Equal(61 + deviceBlock.Length, variantBody.Length,
+            $"4004 variable body {deviceBlock.Length}B length");
+        Check(NativeLoginGateProtocol.TryCreateAuthRequest(
+            2360 + deviceBlock.Length, variantRequest.Ticket,
+            variantRequest.DeviceId, "192.168.1.6", variantRequest.DeviceName,
+            180, 1, out var variantFrame, out error), error);
+        Check(variantFrame.Payload.AsSpan(64, deviceBlock.Length)
+                .SequenceEqual(deviceBlock),
+            $"5600 variable device block {deviceBlock.Length}B");
+        Equal((byte)0, variantFrame.Payload[64 + deviceBlock.Length],
+            $"5600 variable device block {deviceBlock.Length}B terminator");
+    }
+
     var deviceId = Convert.FromHexString("4CF2D1CFFFFFFFFF");
     Check(NativeLoginGateProtocol.TryCreateAuthRequest(
         2359, "c413abef0d1b671c58da593ab93d7c96", deviceId,

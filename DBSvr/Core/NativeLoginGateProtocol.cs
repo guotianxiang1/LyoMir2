@@ -179,9 +179,9 @@ namespace DBSvr.Core
         {
             frame = null;
             error = string.Empty;
-            if (deviceId == null || deviceId.Length != 8)
+            if (deviceId == null)
             {
-                error = "native LoginGate device id must be 8 bytes";
+                error = "native LoginGate device block is null";
                 return false;
             }
 
@@ -195,7 +195,11 @@ namespace DBSvr.Core
             {
                 return false;
             }
-            deviceId.CopyTo(payload, 64);
+            // The 2.08 Lua client passes an empty second string through a broken
+            // u2a conversion and may append arbitrary debug-heap bytes. LoginCenter
+            // authentication consumes szAuthID only; keep szPwd terminated while
+            // preserving as much of the opaque field as its native slot can hold.
+            deviceId.AsSpan(0, Math.Min(deviceId.Length, 31)).CopyTo(payload.AsSpan(64, 32));
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(132, 2), areaId);
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(134, 2), groupId);
             frame = new YbDbLegacy77Frame(0, 0, AuthRequestIdent, payload);
@@ -372,27 +376,35 @@ namespace DBSvr.Core
                     error = "native mobile login ticket is empty";
                     return false;
                 }
-                if (offset + 9 > body.Length)
+                if (offset >= body.Length || body[^1] != 0)
                 {
-                    error = "native mobile login device id is truncated";
+                    error = "native mobile login device name is not terminated";
                     return false;
                 }
 
-                var deviceId = body.AsSpan(offset, 8).ToArray();
-                offset += 8;
-                if (body[offset++] != 0)
+                // The second Lua value is an opaque binary block. Real 2.08 clients
+                // emit at least 4-, 8- and 14-byte variants, so it cannot be parsed as
+                // the single captured 8-byte fixture. Locate the two trailing C strings
+                // from the end and preserve every byte before their separator.
+                var deviceNameEnd = body.Length - 1;
+                var gameTypeEnd = Array.LastIndexOf(body, (byte)0, deviceNameEnd - 1);
+                if (gameTypeEnd < offset)
                 {
-                    error = "native mobile login device id separator is missing";
+                    error = "native mobile login game type is truncated";
                     return false;
                 }
-                if (!TryReadCString(body, offset, out var gameType, out offset, out error)
-                    || !TryReadCString(body, offset, out var deviceName, out offset, out error))
-                    return false;
-                if (offset != body.Length)
+                var deviceBlockEnd = Array.LastIndexOf(body, (byte)0, gameTypeEnd - 1);
+                if (deviceBlockEnd < offset)
                 {
-                    error = "native mobile login body has trailing bytes";
+                    error = "native mobile login device block separator is missing";
                     return false;
                 }
+
+                var deviceId = body.AsSpan(offset, deviceBlockEnd - offset).ToArray();
+                var gameType = Ascii.GetString(body, deviceBlockEnd + 1,
+                    gameTypeEnd - deviceBlockEnd - 1);
+                var deviceName = Ascii.GetString(body, gameTypeEnd + 1,
+                    deviceNameEnd - gameTypeEnd - 1);
 
                 request = new NativeMobileLoginAuthRequest(
                     ticket, deviceId, gameType, deviceName);
