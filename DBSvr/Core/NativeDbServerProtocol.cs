@@ -193,7 +193,6 @@ namespace DBSvr.Core
         public static bool ShouldReceiveHeroSaveNotification(byte serverType) =>
             serverType != 9;
         public const int HeartbeatPayloadSize = 12;
-        public const int LoadHumanPayloadSize = 0xFFFC;
         public const int LoadHumanHeaderSize = 0x48;
         public const int HumanInfoSize = 0xF0A8;
         public const int HumanInfoPrefixSize = 0x08;
@@ -202,7 +201,10 @@ namespace DBSvr.Core
         public const int HumanInfoSuffixOffset = NativeDataOffset
                                                 + NativeHumanDataCodec.DataRecordSize;
         public const int ScriptDataOffset = LoadHumanHeaderSize + HumanInfoSize;
-        public const int ScriptDataSlotSize = 0x0F0C;
+        public const int LoadHumanBasePayloadSize = ScriptDataOffset;
+        public const int MaximumScriptDataSize = MaximumFrameLength
+                                                 - LegacyDbServerFrameCodec.HeaderSize
+                                                 - LoadHumanBasePayloadSize;
         public const int AccountOffset = 0x10;
         public const int CharacterOffset = 0x25;
         public const int SessionPrefixSize = 0x00A0;
@@ -415,9 +417,10 @@ namespace DBSvr.Core
                 error = $"native human data must be {NativeHumanDataCodec.DataRecordSize} bytes";
                 return false;
             }
-            if (nativeScriptData != null && nativeScriptData.Length > ScriptDataSlotSize)
+            var scriptDataLength = nativeScriptData?.Length ?? 0;
+            if (scriptDataLength > MaximumScriptDataSize)
             {
-                error = $"native ScriptData exceeds {ScriptDataSlotSize} bytes";
+                error = $"native ScriptData exceeds {MaximumScriptDataSize} bytes";
                 return false;
             }
             if (sessionContext == null)
@@ -426,7 +429,10 @@ namespace DBSvr.Core
                 return false;
             }
 
-            var payload = new byte[LoadHumanPayloadSize];
+            // Original 2.08 sub_5986CC allocates 0xF0FC + ScriptDataLength
+            // bytes and writes 0xF0F0 + ScriptDataLength into the payload-size
+            // field. 0xFFFC is only the observed size when ScriptData is 0xF0C.
+            var payload = new byte[LoadHumanBasePayloadSize + scriptDataLength];
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), LoadHumanCommand);
             if (!TryWriteShortString(payload, AccountOffset, account,
                     AccountCapacity, allowEmpty: false, out error)

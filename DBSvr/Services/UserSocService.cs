@@ -595,6 +595,10 @@ namespace DBSvr
             {
                 string sUserIPaddr = string.Empty;
                 string sGateIPaddr = HUtil32.GetValidStr3(sIP, ref sUserIPaddr, HUtil32.Backslash);
+                var routeId = HUtil32.Str_ToInt(sConnId, 0);
+                var nativeConnectionId = routeId is > 0 and <= ushort.MaxValue
+                    ? (ushort)routeId
+                    : (ushort)0;
 
                 // 检查重复
                 for (var i = 0; i < gateInfo.UserList.Count; i++)
@@ -618,12 +622,11 @@ namespace DBSvr
                     boChrQueryed = false,
                     nSelGateID = gateInfo.nGateID,
                     WireMode = gateInfo.WireMode,
-                    NativeQueryId = gateInfo.WireMode == TGateWireMode.Native77
-                        ? HUtil32.Str_ToInt(sConnId, 0)
-                        : 0,
-                    NativeConnectionId = gateInfo.WireMode == TGateWireMode.Native77
-                        ? checked((ushort)HUtil32.Str_ToInt(sConnId, 0))
-                        : (ushort)0,
+                    // The C# GameGate uses its percent/dollar route id for the
+                    // same client that it exposes to GameSvr as the native 77
+                    // ConnID. Preserve that identity across both gate wire modes.
+                    NativeQueryId = nativeConnectionId,
+                    NativeConnectionId = nativeConnectionId,
                     NativeAuthTick = 0,
                     NativeAuthResponse = null,
                     NativeText102 = string.Empty,
@@ -862,9 +865,10 @@ namespace DBSvr
             var body = DecodeRawBody(sData);
             if (_loginService.Mode == LoginGateTransportMode.Native77Client)
             {
+                var decodeError = string.Empty;
                 if (sessionId == 0
                     || !NativeMobileLoginAuthCodec.TryDecode(body,
-                        out var nativeRequest, out var decodeError))
+                        out var nativeRequest, out decodeError))
                 {
                     Log("[MobileAuth] native request rejected: " + decodeError);
                     SendMobileLoginAuth(userInfo, -1, 0, "认证失败");
@@ -945,6 +949,16 @@ namespace DBSvr
 
             Log($"[MobileAuth] Opening session for {account}");
             _loginService.OpenMobileSession(account, userInfo.sUserIPaddr, sessionId);
+            if (_loginService.Mode == LoginGateTransportMode.Native77Client
+                && !_loginService.TrySendSocketMsg(Grobal2.SS_OPENSESSION,
+                    $"{account}/{sessionId}/{MobileAdmissionPaymentState}/" +
+                    $"{MobileAdmissionPayMode}/{userInfo.sUserIPaddr}"))
+            {
+                _loginService.CloseSession(account, sessionId);
+                Log("[MobileAuth] GameSvr session channel is unavailable");
+                SendMobileLoginAuth(userInfo, -1, 0, "认证失败");
+                return;
+            }
             userInfo.sAccount = account;
             userInfo.nSessionID = sessionId;
 
@@ -1619,7 +1633,9 @@ namespace DBSvr
             if (recordIndex > 0 && dataIndex == recordIndex)
             {
                 var ptid2 = sAccount;
-                if (userInfo.WireMode == TGateWireMode.Native77)
+                var useNativeBackends = _loginService.Mode
+                                        == LoginGateTransportMode.Native77Client;
+                if (useNativeBackends)
                 {
                     // The original DBServer pushes the selected record directly over port 6000
                     // before acknowledging 4017 on port 5100.
@@ -1674,7 +1690,7 @@ namespace DBSvr
                         $"{ptid2}/{userInfo.nSessionID}/{MobileAdmissionPaymentState}/" +
                         $"{MobileAdmissionPayMode}/{userInfo.sUserIPaddr}");
                 }
-                if (boDataOK && userInfo.WireMode == TGateWireMode.Native77)
+                if (boDataOK && useNativeBackends)
                     userInfo.NativeSwitchHandoff.SetCurrentCharacter(sChrName);
                 if (boDataOK)
                     _loginService.SetGlobaSessionPlay(userInfo.sAccount, userInfo.nSessionID);

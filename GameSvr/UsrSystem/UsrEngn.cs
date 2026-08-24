@@ -354,7 +354,7 @@ namespace GameSvr
         public void Start()
         {
             _stopRequested = false;
-            if (_userEngineThread.ThreadState == ThreadState.Unstarted)
+            if ((_userEngineThread.ThreadState & ThreadState.Unstarted) != 0)
             {
                 _userEngineThread.Start();
             }
@@ -5238,7 +5238,7 @@ namespace GameSvr
 
         public void StartAI()
         {
-            if (_processAiThread.ThreadState == ThreadState.Unstarted)
+            if ((_processAiThread.ThreadState & ThreadState.Unstarted) != 0)
             {
                 _processAiThread.Start();
             }

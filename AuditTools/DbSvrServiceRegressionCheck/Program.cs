@@ -2055,15 +2055,17 @@ static void TestNativeDbServerProtocol()
         CachedValue38 = unchecked((int)cachedDateTimeBits),
         CachedValue3C = unchecked((int)(cachedDateTimeBits >> 32))
     };
+    var capturedScriptData = new byte[0x0F0C];
     Check(NativeDbServerProtocol.TryCreateLoadHumanFrame(
-        "ptidv35blreszj7xl6jz", characterName, nativeData, null,
+        "ptidv35blreszj7xl6jz", characterName, nativeData, capturedScriptData,
         sessionContext,
         out var loadFrame, out error), error);
     Check(LegacyDbServerFrameCodec.TryEncode(loadFrame, out var loadWire, out error), error);
     Equal(65544, loadWire.Length, "native selected-human total length");
     Check(loadWire.AsSpan(0, capturedPrefix.Length).SequenceEqual(capturedPrefix),
         "native selected-human captured prefix bytes");
-    Equal(NativeDbServerProtocol.LoadHumanPayloadSize,
+    Equal(NativeDbServerProtocol.LoadHumanBasePayloadSize
+          + capturedScriptData.Length,
         BitConverter.ToInt32(loadWire, 8), "native selected-human payload length");
     Equal((ushort)NativeDbServerProtocol.LoadHumanCommand,
         BitConverter.ToUInt16(loadWire, 12), "native selected-human command");
@@ -2076,6 +2078,11 @@ static void TestNativeDbServerProtocol()
     Check(loadFrame.Payload.AsSpan(NativeDbServerProtocol.ScriptDataOffset,
             scriptData.Length).SequenceEqual(scriptData),
         "native selected-human ScriptData offset");
+    Check(NativeDbServerProtocol.TryCreateLoadHumanFrame(
+        "ptidv35blreszj7xl6jz", characterName, nativeData, null,
+        sessionContext, out var noScriptFrame, out error), error);
+    Equal(NativeDbServerProtocol.LoadHumanBasePayloadSize,
+        noScriptFrame.Payload.Length, "native selected-human empty ScriptData length");
     var suffix = loadFrame.Payload.AsSpan(NativeDbServerProtocol.HumanInfoSuffixOffset,
         NativeDbServerProtocol.HumanInfoSuffixSize);
     Equal((byte)15, suffix[0x00], "native session user IP length");
@@ -2312,7 +2319,15 @@ static void TestNativeDbServerProtocol()
             new LegacyDbServerFrame(1, 0, invalidSaveHeader), out _, out error),
         "native save accepted oversized account header");
 
-    var oversizedScript = new byte[NativeDbServerProtocol.ScriptDataSlotSize + 1];
+    var deployedScript = new byte[9303];
+    Check(NativeDbServerProtocol.TryCreateLoadHumanFrame(
+        "ptidv35blreszj7xl6jz", characterName, nativeData, deployedScript,
+        sessionContext, out var deployedScriptFrame, out error), error);
+    Equal(NativeDbServerProtocol.LoadHumanBasePayloadSize + deployedScript.Length,
+        deployedScriptFrame.Payload.Length,
+        "native selected-human deployed ScriptData length");
+
+    var oversizedScript = new byte[NativeDbServerProtocol.MaximumScriptDataSize + 1];
     Check(!NativeDbServerProtocol.TryCreateLoadHumanFrame(
         "ptidv35blreszj7xl6jz", characterName, nativeData, oversizedScript,
         sessionContext,

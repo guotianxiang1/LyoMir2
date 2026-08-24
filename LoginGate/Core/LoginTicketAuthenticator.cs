@@ -46,19 +46,17 @@ public sealed class MySqlLoginTicketAuthenticator : ILoginTicketAuthenticator
     public async ValueTask<LoginTicketAuthenticationResult> AuthenticateAsync(
         NativeLoginGateAuthRequest request, CancellationToken cancellationToken)
     {
-        // The client sends the short-lived operator ticket in szAuthID.  The
-        // ticket table stores the provider's pt_id, while the native account
-        // slot (and the character database) uses normal.uid.  Resolve that
-        // mapping here so the 20-byte native account field is always usable.
+        // The client sends the short-lived operator ticket in szAuthID. The
+        // native account slot is the 20-byte key used by mir3.user_index.PTID,
+        // so preserve the ticket owner instead of returning the login name.
         if (request == null || string.IsNullOrEmpty(request.Ticket))
             return LoginTicketAuthenticationResult.Rejected("ticket is empty");
 
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT n.uid
+        command.CommandText = @"SELECT t.pt_id
 FROM account.ticket t
-INNER JOIN account.normal n ON n.pt_id = t.pt_id
 WHERE BINARY t.ticket = BINARY @ticket AND t.create_time > @expires
 LIMIT 1";
         command.Parameters.AddWithValue("@ticket", request.Ticket);
