@@ -40,14 +40,12 @@ namespace GameSvr
         public override void Run()
         {
             // Native TCowKingMonster.Run = sub_667420 @0x00667420: Boss-specific dual-timer
-            // logic (30000ms outer + 8000ms phase transitions) that wraps the STANDARD
-            // sub_666AE4 aggressive-monster tick (NOT a separate search path). The native
-            // does NOT bypass the 8000/1000ms SearchTarget gate — it modulates attack/walk
-            // speed and conditionally teleports, THEN calls sub_666AE4.
+            // logic (30000ms outer + 8000ms phase transitions) that wraps
+            // TATMonster.Run sub_666AE4. The native does not bypass that method's
+            // 8000/1000ms SearchTarget gate: it modulates attack/walk speed and
+            // conditionally teleports, then calls sub_666AE4.
             //
-            // Key divergence fix: the C# previously called base.Run() which is ATMonster.Run()
-            // with its OWN 8000/1000ms search gate, causing double search logic. The native
-            // structure is:
+            // Native structure:
             //   if (blocked || death) return sub_666AE4(self);
             //   if ((now - self[+1256]) > 0x7530) { // 30000ms gate
             //       self[+1256] = now;
@@ -56,10 +54,8 @@ namespace GameSvr
             //   }
             //   return sub_666AE4(self);  // ALWAYS calls standard aggressive AI
             //
-            // The correct C# mapping: the Boss logic modulates m_nNextHitTime and m_nWalkSpeed,
-            // then falls through to the standard Monster.Run (NOT ATMonster.Run override) so
-            // the base aggressive-monster AI handles target search/attack without the redundant
-            // ATMonster 8000/1000ms timer override.
+            // CowKingMonster derives from AtMonster, so base.Run() is the exact C# mapping
+            // for the native direct call to sub_666AE4.
 
             short n8 = 0;
             short nC = 0;
@@ -125,17 +121,8 @@ namespace GameSvr
                 }
             }
 
-            // Native: return sub_666AE4(self). C# equivalent: call Monster.Run() which has the
-            // standard aggressive-monster logic (Think/WalkWait/AttackTarget/movement) WITHOUT
-            // ATMonster's redundant 8000/1000ms search override. This ensures the Boss uses
-            // the dual-timer structure (30000ms outer wrap) but still gets standard target
-            // search/attack from the base aggressive-monster tick.
-            //
-            // IMPORTANT: Do NOT call base.Run() (= ATMonster.Run) because that adds a SECOND
-            // 8000/1000ms search gate on top of the 30000ms Boss gate, creating double search
-            // logic the native does not have. The native sub_667420 wraps sub_666AE4; the C#
-            // CowKingMonster.Run should wrap Monster.Run.
-            ((Monster)this).Run();
+            // Native 0x006675D6: call sub_666AE4 (TATMonster.Run).
+            base.Run();
         }
 
         public int sub_4C3538()
