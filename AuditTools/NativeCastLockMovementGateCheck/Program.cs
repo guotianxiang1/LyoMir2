@@ -42,6 +42,7 @@ CheckConstants();
 CheckPredicateIsPlayerOnly();
 CheckCanActPredicateMatrix();
 CheckTurnAndPoseStateMatrix();
+CheckTurnDirectionMask();
 CheckTurnAndPoseHaveNoInventedInterval();
 CheckTurnLandingEventPrecedesBroadcast();
 CheckMapScriptEventInvokesNpcLabel();
@@ -199,6 +200,18 @@ static void CheckTurnAndPoseStateMatrix()
         Grobal2.DR_UP)), "pose state 24 dispatch");
     Equal(0, CountMessages(poseState24, Grobal2.RM_SPELL2),
         "pose state 24 blocked with arg1");
+}
+
+static void CheckTurnDirectionMask()
+{
+    var player = FreePlayer("turn-direction-mask", 5, 5, Grobal2.DR_LEFT);
+    Assert(player.Operate(Message(Grobal2.CM_TURN, 5, 5, 9)),
+        "CM_TURN direction 9 dispatch");
+    // Native masks the requested direction byte with 7; 9 therefore becomes 1.
+    Equal((byte)1, player.m_btDirection,
+        "CM_TURN direction 9 is normalized to 1");
+    Equal(1, CountMessages(player, Grobal2.RM_TURN),
+        "CM_TURN direction 9 emits one turn broadcast");
 }
 
 static void CheckSpellCanActRoutes()

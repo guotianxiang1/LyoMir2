@@ -467,6 +467,9 @@ namespace GameSvr
 
         private bool ClientChangeDir(short wIdent, int nX, int nY, int nDir, ref int dwDelayTime)
         {
+            // Native CM_TURN normalizes the direction byte with `& 7` before
+            // comparing or storing it (0x6D9B79/0x6D9CAF).
+            nDir &= 7;
             var result = false;
             // STATE-50 / MOVE-15 — turn (case 3010) opens with the can-act call
             // `call [ecx+0x40]` at 0x6D9B6C, arg dl=0 (`xor edx,edx` at
