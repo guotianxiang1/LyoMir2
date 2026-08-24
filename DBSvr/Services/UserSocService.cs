@@ -1013,20 +1013,18 @@ namespace DBSvr
             // Character rows are authoritative data. Encoding problems must never be
             // treated as permission to delete a character.
 
-            int nChrCount = 0;
-            int recSize = 20;
-            byte[] chrBody = new byte[recSize * chrList.Count];
-            foreach (var chr in chrList)
+            int nChrCount = Math.Min(chrList.Count,
+                NativeCharacterListCodec.MaxRows);
+            byte[] chrBody = new byte[
+                NativeCharacterListCodec.RowSize * nChrCount];
+            for (int i = 0; i < nChrCount; i++)
             {
+                var chr = chrList[i];
                 byte[] nb = System.Text.Encoding.GetEncoding(936).GetBytes(chr.ChrName ?? "");
-                int off = nChrCount * recSize;
-                chrBody[off] = (byte)Math.Min(nb.Length, 14);
-                Buffer.BlockCopy(nb, 0, chrBody, off + 1, Math.Min(nb.Length, 14));
-                chrBody[off + 16] = 1;
-                chrBody[off + 17] = (byte)chr.Job;
-                chrBody[off + 18] = (byte)chr.Sex;
-                chrBody[off + 19] = (byte)chr.Level;
-                nChrCount++;
+                int off = i * NativeCharacterListCodec.RowSize;
+                NativeCharacterListCodec.WriteRow(
+                    chrBody.AsSpan(off, NativeCharacterListCodec.RowSize),
+                    nb, chr.Job, chr.Sex, chr.Level);
             }
             Log($"[QueryChr] chrBody({chrBody.Length}B) hex={BitConverter.ToString(chrBody).Replace("-"," ")}");
             SendEncodedPacket(userInfo, Grobal2.SM_QUERYCHR,
@@ -1496,7 +1494,7 @@ namespace DBSvr
             try
             {
                 // 直接查 MySQL 获取完整 Job/Sex/Level
-                var delList = new List<(string name, byte job, byte sex, byte level)>();
+                var delList = new List<(string name, byte job, byte sex, int level)>();
                 using (var conn = new MySqlConnection(DBShare.DBConnection))
                 {
                     conn.Open();
@@ -1524,22 +1522,21 @@ namespace DBSvr
                     {
                         var name = LegacyGbkText.Read(dr, "ChrName");
                         if (string.IsNullOrEmpty(name)) continue;
-                        delList.Add((name, (byte)dr.GetInt32("Job"), (byte)dr.GetInt32("Sex"), (byte)dr.GetInt32("Level")));
+                        delList.Add((name, (byte)dr.GetInt32("Job"),
+                            (byte)dr.GetInt32("Sex"), dr.GetInt32("Level")));
                     }
                 }
-                int nChrCount = delList.Count;
-                int recSize = 20;
-                byte[] chrBody = new byte[recSize * nChrCount];
+                int nChrCount = Math.Min(delList.Count,
+                    NativeCharacterListCodec.MaxRows);
+                byte[] chrBody = new byte[
+                    NativeCharacterListCodec.RowSize * nChrCount];
                 for (int i = 0; i < nChrCount; i++)
                 {
                     var nb = System.Text.Encoding.GetEncoding(936).GetBytes(delList[i].name);
-                    int off = i * recSize;
-                    chrBody[off] = (byte)Math.Min(nb.Length, 14);
-                    Buffer.BlockCopy(nb, 0, chrBody, off + 1, Math.Min(nb.Length, 14));
-                    chrBody[off + 16] = 1;
-                    chrBody[off + 17] = delList[i].job;
-                    chrBody[off + 18] = delList[i].sex;
-                    chrBody[off + 19] = delList[i].level;
+                    int off = i * NativeCharacterListCodec.RowSize;
+                    NativeCharacterListCodec.WriteRow(
+                        chrBody.AsSpan(off, NativeCharacterListCodec.RowSize),
+                        nb, delList[i].job, delList[i].sex, delList[i].level);
                 }
                 SendEncodedPacket(userInfo, Grobal2.SM_QUERYDELCHR,
                     nChrCount > 0 ? 1 : 0, (ushort)nChrCount, 0, 0,

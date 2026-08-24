@@ -255,7 +255,7 @@ namespace DBSvr
                 @"SELECT idx, PTID, ChrName, IsSelect, IsDelete, Level, Job, Sex, Exp,
                          CreateDate, ModifyDate
                   FROM mir3.user_index
-                  WHERE PTID=@ptid AND IsDelete=1 LIMIT 10", conn);
+                  WHERE PTID=@ptid AND IsDelete=1 LIMIT 200", conn);
             cmd.Parameters.AddWithValue("@ptid", sAccount);
             using var dr = cmd.ExecuteReader();
             while (dr.Read())
@@ -890,7 +890,7 @@ namespace DBSvr
             using var cmd = new MySqlCommand(
                 @"SELECT idx, ChrName, Job, Sex, Level, Exp, IsDelete, IsSelect, ModifyDate
                   FROM mir3.user_index
-                  WHERE PTID=@ptid AND IsDelete=0 ORDER BY idx ASC LIMIT 20", conn);
+                  WHERE PTID=@ptid AND IsDelete=0 ORDER BY idx ASC LIMIT 200", conn);
             cmd.Parameters.AddWithValue("@ptid", ptid);
             using var dr = cmd.ExecuteReader();
             while (dr.Read())

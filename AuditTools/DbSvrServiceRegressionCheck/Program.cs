@@ -15,6 +15,7 @@ Run("native GBK character-name validation", TestNativeNameValidation);
 Run("native 5100 control frames", TestNativeGateControlFrames);
 Run("native 5100 data frames", TestNativeGateDataFrames);
 Run("native 4004 login result body", TestNativeLoginResultBody);
+Run("native 4010/4014 character-list rows", TestNativeCharacterListRows);
 Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
 Run("port 6000 connection wire-mode detection", TestDbServerWireModeDetection);
@@ -1760,6 +1761,50 @@ static void TestNativeLoginResultBody()
         "4004 complete response fixture bytes");
     Equal(36, NativeLoginResultCodec.CreateReconnectId(
         "ptidv35blreszj7xl6jz").Length, "generated reconnect id length");
+}
+
+static void TestNativeCharacterListRows()
+{
+    var name = Enumerable.Range(1, 16).Select(value => (byte)value).ToArray();
+    var row = Enumerable.Repeat((byte)0xCC,
+        NativeCharacterListCodec.RowSize).ToArray();
+    NativeCharacterListCodec.WriteRow(row, name, 2, 1, 0x0102);
+
+    Equal((byte)15, row[0], "character-list name length");
+    Check(row.AsSpan(1, 15).SequenceEqual(name.AsSpan(0, 15)),
+        "character-list 15-byte name payload");
+    Equal((byte)2, row[16], "character-list high level byte plus one");
+    Equal((byte)2, row[17], "character-list job");
+    Equal((byte)1, row[18], "character-list sex");
+    Equal((byte)2, row[19], "character-list low level byte");
+
+    NativeCharacterListCodec.WriteRow(row, new byte[] { 0x41 }, 0, 0, 0xFFFF);
+    Equal((byte)1, row[0], "short character-list name length");
+    Equal((byte)0, row[2], "character-list row was not cleared");
+    Equal((byte)0, row[16], "character-list high-level wrap");
+    Equal((byte)0xFF, row[19], "character-list low-level maximum");
+
+    var userSocSource = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"));
+    Check(userSocSource.Contains(
+              "Math.Min(chrList.Count,\n                NativeCharacterListCodec.MaxRows)",
+              StringComparison.Ordinal)
+          && userSocSource.Contains(
+              "Math.Min(delList.Count,\n                    NativeCharacterListCodec.MaxRows)",
+              StringComparison.Ordinal)
+          && userSocSource.Split("NativeCharacterListCodec.WriteRow",
+              StringSplitOptions.None).Length == 3,
+        "4010/4014 paths are not both capped and wired to the native row codec");
+
+    var playRecordSource = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"));
+    Check(playRecordSource.Contains(
+              "WHERE PTID=@ptid AND IsDelete=1 LIMIT 200",
+              StringComparison.Ordinal)
+          && playRecordSource.Contains(
+              "WHERE PTID=@ptid AND IsDelete=0 ORDER BY idx ASC LIMIT 200",
+              StringComparison.Ordinal),
+        "native 200-row character-list query ceiling is missing");
 }
 
 static void TestNativeLoginGateFrames()
