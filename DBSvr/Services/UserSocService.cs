@@ -26,7 +26,7 @@ namespace DBSvr
         private const int MaxGateConnections = 64;
         private const int MaxUserFrameLength = 64 * 1024;
         private const ushort SoftCloseQueryParam = 1;
-        private const int MobileAdmissionPaymentState = 0;
+        private const int MobileAdmissionPaymentState = 2;
         private const int MobileAdmissionPayMode = 5;
         private readonly IList<TGateInfo> _gateList;
         private Dictionary<string, int> _mapList;

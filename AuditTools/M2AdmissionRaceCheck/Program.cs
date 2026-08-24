@@ -8,7 +8,7 @@ M2Share.g_Config.UserIDSection = new object();
 
 using var accountService = new AccountService();
 M2Share.g_Config.sIDSocketRecvText =
-    "(100/race-user/42001/0/5/127.0.0.1)";
+    "(100/race-user/42001/2/5/127.0.0.1)";
 accountService.Run();
 
 var payMode = 0;
@@ -18,7 +18,24 @@ var admitted = accountService.GetAdmission(
 Assert(admitted != null, "existing admission was rejected");
 Equal(42001, admitted.nSessionID, "admission session id");
 Equal(5, payMode, "admission pay mode");
-Equal(1, payment, "admission payment mapping");
+Equal(3, payment, "full admission payment mapping");
+
+M2Share.g_Config.sIDSocketRecvText =
+    "(100/trial-user/42003/0/5/127.0.0.1)";
+accountService.Run();
+
+var trialPayMode = 0;
+var trialPayment = 0;
+var trialAdmission = accountService.GetAdmission(
+    "trial-user", "127.0.0.1", 42003, ref trialPayMode, ref trialPayment);
+Assert(trialAdmission != null, "trial admission was rejected before login");
+Equal(1, trialPayment, "trial admission payment mapping");
+Assert(WouldBeRejectedByTrialGate(trialPayment, 65,
+        M2Share.g_Config.nTryModeLevel),
+    "state 0 must reproduce the level-65 trial disconnect");
+Assert(!WouldBeRejectedByTrialGate(payment, 65,
+        M2Share.g_Config.nTryModeLevel),
+    "full mobile admission must keep a level-65 character online");
 
 payMode = -1;
 payment = -1;
@@ -32,7 +49,7 @@ VerifyGateServiceContract();
 VerifyAccountServiceContract();
 VerifyDbAdmissionContract();
 VerifyDuplicateLoginKickContract();
-Console.WriteLine("M2AdmissionRaceCheck PASS mode=synchronous-single-lookup");
+Console.WriteLine("M2AdmissionRaceCheck PASS mode=full-mobile-admission");
 
 static void VerifyGateServiceContract()
 {
@@ -74,8 +91,8 @@ static void VerifyDbAdmissionContract()
     var root = FindRepositoryRoot();
     var source = File.ReadAllText(Path.Combine(
         root, "DBSvr", "Services", "UserSocService.cs"));
-    Require(source, "private const int MobileAdmissionPaymentState = 0;",
-        "DBS mobile admission payment state must use the M2-supported unpaid value");
+    Require(source, "private const int MobileAdmissionPaymentState = 2;",
+        "DBS mobile admission must use the M2 full-session state");
     Require(source, "private const int MobileAdmissionPayMode = 5;",
         "DBS mobile admission pay mode must use the original default mode");
     Require(source,
@@ -150,6 +167,9 @@ static void Require(string source, string value, string message) =>
     Assert(source.Contains(value, StringComparison.Ordinal), message);
 static void Reject(string source, string value, string message) =>
     Assert(!source.Contains(value, StringComparison.Ordinal), message);
+
+static bool WouldBeRejectedByTrialGate(int payment, int level,
+    int maximumTrialLevel) => payment == 1 && level > maximumTrialLevel;
 
 static void Equal<T>(T expected, T actual, string message)
 {
