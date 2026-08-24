@@ -3,7 +3,7 @@ using SystemModule;
 using M = GameSvr.NativeMonsterAiSearchAttack;
 
 // Contract check for the dormant native monster-AI target-search + attack ladder
-// (Monster.Run tick sub_666AE4, SearchTarget sub_71DA70/sub_71DCD8, GetAttackDir
+// (AtMonster.Run tick sub_666AE4, SearchTarget sub_71DA70/sub_71DCD8, GetAttackDir
 // 3x3 adjacency, AttackTarget swing gate, Wondering sub_71E8C4). Pure model, no
 // engine, no RandomNumber draw. See staging/monster_ai_search_attack_20260731.md.
 
@@ -122,6 +122,17 @@ Equal(M.NativeWanderAction.Walk, M.DecideWander(0, 2), "wander: 0 then Random(4)
 Assert(!M.NoGoTimedAbilityAndConcreteSwing(),
     "timed-ability + concrete swing routing stays NO-GO (fail closed)");
 
+// ---- 7. CowKing native inherited-call topology ----
+// TCowKingMonster.Run sub_667420 ends with a direct call to TATMonster.Run
+// sub_666AE4. Casting this to Monster before calling Run still performs virtual
+// dispatch in C# and recursively re-enters CowKingMonster.Run.
+var cowKingSource = File.ReadAllText(RepositoryFile(
+    "GameSvr", "Monsters", "Monster", "CowKingMonster.cs"));
+Assert(cowKingSource.Contains("base.Run();", StringComparison.Ordinal),
+    "CowKing sub_667420 must call inherited AtMonster.Run sub_666AE4");
+Assert(!cowKingSource.Contains("((Monster)this).Run();", StringComparison.Ordinal),
+    "CowKing inherited tick must not recurse through virtual dispatch");
+
 if (failures == 0)
 {
     Console.WriteLine(
@@ -157,4 +168,18 @@ void Assert(bool condition, string msg)
         failures++;
         Console.Error.WriteLine($"FAIL {msg}");
     }
+}
+
+string RepositoryFile(params string[] parts)
+{
+    var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (directory != null)
+    {
+        var candidate = Path.Combine(new[] { directory.FullName }.Concat(parts).ToArray());
+        if (File.Exists(candidate))
+            return candidate;
+        directory = directory.Parent;
+    }
+    throw new FileNotFoundException("Repository source file was not found",
+        Path.Combine(parts));
 }
