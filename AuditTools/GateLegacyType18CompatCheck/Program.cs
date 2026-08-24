@@ -12,14 +12,13 @@ var tests = new (string Name, Action Run)[]
     ("zero-text type18 frame", ZeroTextType18Frame),
     ("byte-wise split type18", ByteWiseSplitType18),
     ("mixed sticky stream", MixedStickyStream),
-    ("24-byte cmd18 remains internal", InternalCmd18IsNotLegacy),
+    ("short type18 is consumed as native", ShortType18IsConsumed),
     ("magic inside payload remains framed", MagicInsidePayload),
     ("raw trailing bytes round-trip", RawTrailingBytesRoundTrip),
-    ("malformed type18 resynchronizes", MalformedType18Resynchronizes),
-    ("exclusive 0x8000 boundary", ExclusiveMaximumBoundary),
-    ("native type17 zero payload is ignored", IgnoredType17ZeroPayload),
-    ("native type17 split sticky alignment", IgnoredType17SplitStickyAlignment),
-    ("native type17 outer boundary", IgnoredType17OuterBoundary),
+    ("two-level type18 length boundary", TwoLevelLengthBoundary),
+    ("native type17 zero payload is parsed", Type17ZeroPayloadParsed),
+    ("native type17 split sticky alignment", Type17SplitStickyAlignment),
+    ("native type17 outer boundary", Type17OuterBoundary),
     ("split magic and false suffix", SplitMagicAndFalseSuffix),
     ("bounded input and reset", BoundedInputAndReset)
 };
@@ -27,7 +26,7 @@ var tests = new (string Name, Action Run)[]
 foreach (var test in tests) test.Run();
 Console.WriteLine(
     $"GateLegacyType18CompatCheck PASS tests={tests.Length} legacy=16+12+GBK/NUL " +
-    "internal=24B+ACK14 split=bytewise sticky=mixed");
+    "internal=16B+ACK16 split=bytewise sticky=mixed");
 
 void NativeType18GoldenFrame()
 {
@@ -116,24 +115,27 @@ void MixedStickyStream()
     Equal((ushort)0x1234, frames[2].Internal77.Cmd, "internal command");
 }
 
-void InternalCmd18IsNotLegacy()
+void ShortType18IsConsumed()
 {
     var encoded = BuildInternal(0x10203040, 22, 18,
         new byte[] { 0x77, 0xBB, 0xAA, 0x33, 0, 1, 2, 3 });
-    // +0x0C is Cmd and +0x0E is BodyLen for BOTH shapes (0x637AC7 mov [eax+0x0C],di /
-    // 0x637AD7 mov [eax+0x0E],bx), so a legacy type 18 is just an internal frame whose Cmd
-    // is 18. What keeps this one internal is the body: 8 bytes is below the 12-byte
-    // ClientPacketSize a legacy frame must carry.
     Equal((ushort)18,
         BinaryPrimitives.ReadUInt16LittleEndian(encoded.AsSpan(12, 2)),
-        "internal command 18 at the discriminator");
+        "type18 discriminator");
     Equal((ushort)8,
         BinaryPrimitives.ReadUInt16LittleEndian(encoded.AsSpan(14, 2)),
-        "internal body length below the legacy client packet size");
-    var frames = ParseOnce(encoded);
-    Equal(1, frames.Count, "cmd18 internal count");
-    NotNull(frames[0].Internal77, "cmd18 remains internal");
-    Null(frames[0].LegacyType18, "cmd18 not legacy");
+        "short type18 body length");
+
+    var tail = BuildInternal(23, 24, 25, Array.Empty<byte>());
+    var frames = ParseOnce(Join(encoded, tail));
+    Equal(2, frames.Count, "short type18 sticky count");
+    NotNull(frames[0].LegacyType18, "short type18 classification");
+    Equal(8, frames[0].LegacyType18.ToClientPayload().Length,
+        "short type18 payload length");
+    BytesEqual(encoded, frames[0].LegacyType18.ToBytes(),
+        "short type18 round-trip");
+    NotNull(frames[1].Internal77, "short type18 sticky tail");
+    Equal(23u, frames[1].Internal77.ConnID, "short type18 tail connection");
 }
 
 void MagicInsidePayload()
@@ -149,19 +151,6 @@ void MagicInsidePayload()
     Equal(2, frames.Count, "payload magic count");
     BytesEqual(payload, frames[0].Internal77.Payload, "payload magic preserved");
     NotNull(frames[1].LegacyType18, "payload magic tail legacy");
-}
-
-void MalformedType18Resynchronizes()
-{
-    var tooShort = new byte[16];
-    BinaryPrimitives.WriteUInt32LittleEndian(tooShort.AsSpan(0, 4),
-        InternalPacket77.MAGIC);
-    BinaryPrimitives.WriteUInt16LittleEndian(tooShort.AsSpan(12, 2), 18);
-    BinaryPrimitives.WriteUInt16LittleEndian(tooShort.AsSpan(14, 2), 11);
-    var valid = BuildInternal(41, 42, 43, new byte[] { 44 });
-    var frames = ParseOnce(Join(tooShort, valid));
-    Equal(1, frames.Count, "malformed recovery count");
-    Equal(41u, frames[0].Internal77.ConnID, "malformed recovery connection");
 }
 
 void RawTrailingBytesRoundTrip()
@@ -184,16 +173,27 @@ void RawTrailingBytesRoundTrip()
         frames[0].LegacyType18.ToClientPayload(), "NUL-only payload preserved");
 }
 
-void ExclusiveMaximumBoundary()
+void TwoLevelLengthBoundary()
 {
-    var acceptedText = new byte[
-        LegacyGateType18.MaximumFrameLengthExclusive
-        - LegacyGateType18.HeaderSize - LegacyGateType18.ClientPacketSize - 2];
-    Array.Fill(acceptedText, (byte)0x41);
-    var accepted = BuildLegacy(0, 0, 0, 100, 0x38FF, 0, 0, acceptedText);
-    Equal(0xFFEF, accepted.Length, "largest accepted total length");
-    var frames = ParseOnce(accepted, maximumBufferedLength: 0x10000);
-    Equal(1, frames.Count, "largest accepted count");
+    var acceptedTotals = new[] { 0x7FFF, 0x8000, 0x8003, 0x8004, 0xFFFF };
+    foreach (var total in acceptedTotals)
+    {
+        var accepted = BuildType18Total(total);
+        var frames = ParseOnce(accepted, maximumBufferedLength: 0x10000,
+            maximumInternalFrameLength: ushort.MaxValue);
+        Equal(1, frames.Count, $"accepted frame count 0x{total:X}");
+        NotNull(frames[0].LegacyType18,
+            $"accepted type18 classification 0x{total:X}");
+        Equal(total - LegacyGateType18.HeaderSize,
+            frames[0].LegacyType18.ToClientPayload().Length,
+            $"accepted body length 0x{total:X}");
+
+        var relayLength = frames[0].LegacyType18.ToClientPayload().Length
+                          + LegacyGateType18.ClientRelayHeaderSize;
+        Equal(total <= 0x8003, relayLength
+            < LegacyGateType18.MaximumClientRelayLengthExclusive,
+            $"relay eligibility 0x{total:X}");
+    }
 
     var rejectedHeader = new byte[16];
     BinaryPrimitives.WriteUInt32LittleEndian(rejectedHeader.AsSpan(0, 4),
@@ -203,28 +203,32 @@ void ExclusiveMaximumBoundary()
         checked((ushort)(LegacyGateType18.MaximumFrameLengthExclusive
                          - LegacyGateType18.HeaderSize)));
     var tail = BuildInternal(51, 52, 53, Array.Empty<byte>());
-    frames = ParseOnce(Join(rejectedHeader, tail));
-    Equal(1, frames.Count, "exclusive maximum recovery count");
-    Equal(51u, frames[0].Internal77.ConnID, "exclusive maximum recovery tail");
+    var rejectedFrames = ParseOnce(Join(rejectedHeader, tail));
+    Equal(0, rejectedFrames.Count, "0x10000 drops current receive buffer");
 }
 
-void IgnoredType17ZeroPayload()
+void Type17ZeroPayloadParsed()
 {
-    var ignored = BuildIgnoredType17(0x11223344, 0x55667788, Array.Empty<byte>());
-    Equal(LegacyGateType18.HeaderSize, ignored.Length, "type17 zero total length");
-    var frames = ParseOnce(ignored);
-    Equal(0, frames.Count, "type17 zero emitted frame count");
+    var encoded = BuildType17(0x11223344, 0x55667788, Array.Empty<byte>());
+    Equal(LegacyGateType17.HeaderSize, encoded.Length, "type17 zero total length");
+    var frames = ParseOnce(encoded);
+    Equal(1, frames.Count, "type17 zero emitted frame count");
+    NotNull(frames[0].LegacyType17, "type17 zero classification");
+    Equal(0x11223344u, frames[0].LegacyType17.ConnectionId,
+        "type17 zero field4");
+    Equal(0x55667788u, frames[0].LegacyType17.TargetGate,
+        "type17 zero target");
 }
 
-void IgnoredType17SplitStickyAlignment()
+void Type17SplitStickyAlignment()
 {
     var payload = new byte[]
     {
         0x41, 0x77, 0xBB, 0xAA, 0x33, 0x42, 0x43, 0x44, 0x45
     };
-    var ignored = BuildIgnoredType17(0xFFFFFFFF, 0x80000000, payload);
+    var encoded = BuildType17(0xFFFFFFFF, 0x80000000, payload);
     var tail = BuildInternal(61, 62, 63, new byte[] { 64, 65 });
-    var sticky = Join(ignored, tail);
+    var sticky = Join(encoded, tail);
     var parser = new GameGateServerFrameParser();
     var frames = new List<GameGateServerFrame>();
     for (var i = 0; i < sticky.Length; i++)
@@ -232,32 +236,36 @@ void IgnoredType17SplitStickyAlignment()
         True(parser.TryAppend(sticky, i, 1, out var batch, out var error), error);
         frames.AddRange(batch);
     }
-    Equal(1, frames.Count, "type17 sticky emitted frame count");
-    NotNull(frames[0].Internal77, "type17 sticky tail classification");
-    Equal(61u, frames[0].Internal77.ConnID, "type17 sticky tail connection");
-    Equal((ushort)63, frames[0].Internal77.Cmd, "type17 sticky tail command");
+    Equal(2, frames.Count, "type17 sticky emitted frame count");
+    NotNull(frames[0].LegacyType17, "type17 sticky classification");
+    Equal(0x80000000u, frames[0].LegacyType17.TargetGate,
+        "type17 sticky target");
+    NotNull(frames[1].Internal77, "type17 sticky tail classification");
+    Equal(61u, frames[1].Internal77.ConnID, "type17 sticky tail connection");
+    Equal((ushort)63, frames[1].Internal77.Cmd, "type17 sticky tail command");
     Equal(0, parser.BufferedLength, "type17 sticky final buffer");
 }
 
-void IgnoredType17OuterBoundary()
+void Type17OuterBoundary()
 {
     var acceptedPayload = new byte[
-        LegacyGateType18.MaximumFrameLengthExclusive
-        - LegacyGateType18.HeaderSize - 1];
+        LegacyGateType17.MaximumFrameLengthExclusive
+        - LegacyGateType17.HeaderSize - 1];
     Array.Fill(acceptedPayload, (byte)0x41);
-    var accepted = BuildIgnoredType17(1, 2, acceptedPayload);
-    Equal(0xFFEF, accepted.Length, "type17 largest accepted total length");
-    var frames = ParseOnce(accepted, maximumBufferedLength: 0x10000);
-    Equal(0, frames.Count, "type17 largest accepted emitted frame count");
+    var accepted = BuildType17(1, 2, acceptedPayload);
+    Equal(0xFFFF, accepted.Length, "type17 largest accepted total length");
+    var frames = ParseOnce(accepted, maximumBufferedLength: 0x10000,
+        maximumInternalFrameLength: ushort.MaxValue);
+    Equal(1, frames.Count, "type17 largest accepted emitted frame count");
+    NotNull(frames[0].LegacyType17, "type17 largest accepted classification");
 
-    var rejectedHeader = BuildIgnoredType17(3, 4, Array.Empty<byte>());
+    var rejectedHeader = BuildType17(3, 4, Array.Empty<byte>());
     BinaryPrimitives.WriteUInt16LittleEndian(rejectedHeader.AsSpan(14, 2),
-        checked((ushort)(LegacyGateType18.MaximumFrameLengthExclusive
-                         - LegacyGateType18.HeaderSize)));
+        checked((ushort)(LegacyGateType17.MaximumFrameLengthExclusive
+                         - LegacyGateType17.HeaderSize)));
     var tail = BuildInternal(71, 72, 73, Array.Empty<byte>());
     frames = ParseOnce(Join(rejectedHeader, tail));
-    Equal(1, frames.Count, "type17 exclusive maximum recovery count");
-    Equal(71u, frames[0].Internal77.ConnID, "type17 exclusive maximum tail");
+    Equal(0, frames.Count, "type17 0x10000 drops current receive buffer");
 }
 
 void SplitMagicAndFalseSuffix()
@@ -322,17 +330,36 @@ static byte[] BuildLegacy(uint ignoredConnection, uint filterUserIndex, int reco
     return result;
 }
 
-static byte[] BuildIgnoredType17(uint field4, uint field8, byte[] payload)
+static byte[] BuildType17(uint field4, uint field8, byte[] payload)
 {
-    var result = new byte[LegacyGateType18.HeaderSize + payload.Length];
+    var result = new byte[LegacyGateType17.HeaderSize + payload.Length];
     BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(0, 4),
         InternalPacket77.MAGIC);
     BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(4, 4), field4);
     BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(8, 4), field8);
-    BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(12, 2), 17);
+    BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(12, 2),
+        LegacyGateType17.MessageType);
     BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(14, 2),
         checked((ushort)payload.Length));
-    payload.CopyTo(result, LegacyGateType18.HeaderSize);
+    payload.CopyTo(result, LegacyGateType17.HeaderSize);
+    return result;
+}
+
+static byte[] BuildType18Total(int totalLength)
+{
+    if (totalLength < LegacyGateType18.HeaderSize
+        || totalLength >= LegacyGateType18.MaximumFrameLengthExclusive)
+        throw new ArgumentOutOfRangeException(nameof(totalLength));
+
+    var result = new byte[totalLength];
+    BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(0, 4),
+        LegacyGateType18.MagicValue);
+    BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(12, 2),
+        LegacyGateType18.MessageType);
+    BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(14, 2),
+        checked((ushort)(totalLength - LegacyGateType18.HeaderSize)));
+    if (totalLength > LegacyGateType18.HeaderSize)
+        result.AsSpan(LegacyGateType18.HeaderSize).Fill(0x41);
     return result;
 }
 
@@ -352,9 +379,11 @@ static byte[] BuildInternal(uint connId, uint seqId, ushort command, byte[] payl
 }
 
 static List<GameGateServerFrame> ParseOnce(byte[] data,
-    int maximumBufferedLength = InternalPacket77FrameParser.DefaultMaximumBufferedLength)
+    int maximumBufferedLength = InternalPacket77FrameParser.DefaultMaximumBufferedLength,
+    int maximumInternalFrameLength = GameGateServerFrameParser.NativeMaximumFrameLength)
 {
-    var parser = new GameGateServerFrameParser(maximumBufferedLength);
+    var parser = new GameGateServerFrameParser(maximumBufferedLength,
+        maximumInternalFrameLength);
     True(parser.TryAppend(data, 0, data.Length, out var frames, out var error), error);
     Equal(0, parser.BufferedLength, "one-shot final buffer");
     return frames;
@@ -387,11 +416,6 @@ static void True(bool condition, string message)
 static void False(bool condition, string message)
 {
     if (condition) throw new InvalidOperationException(message);
-}
-
-static void Null(object value, string name)
-{
-    if (value != null) throw new InvalidOperationException($"{name}: expected null");
 }
 
 static void NotNull(object value, string name)

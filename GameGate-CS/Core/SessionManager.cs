@@ -10,9 +10,13 @@ public sealed class SessionManager
     public const int MAX_SESSIONS = 5000;
     private readonly ClientSession?[] _sessions;
     private readonly object _lock = new();
+    private readonly HashSet<ushort> _nativeSessionIds = new();
     private int _activeCount;
     private long _nextGeneration;
+    private ushort _nextNativeSessionId = NativeSessionIdStart;
     public long TotalConnected, TotalDisconnected;
+
+    public const ushort NativeSessionIdStart = 1000;
 
     public int ActiveCount => Volatile.Read(ref _activeCount);
     public int Capacity => _sessions.Length;
@@ -33,7 +37,10 @@ public sealed class SessionManager
                     _sessions[i] ??= new ClientSession();
                     var s = _sessions[i]!;
                     s.Reset();
+                    if (!TryAllocateNativeSessionId(out var nativeSessionId))
+                        return null;
                     s.SessionId = i;
+                    s.NativeSessionId = nativeSessionId;
                     s.Generation = Interlocked.Increment(ref _nextGeneration);
                     s.State = SessionState.ACTIVE;
                     s.RemoteAddr = remoteAddr;
@@ -56,6 +63,7 @@ public sealed class SessionManager
             var s = _sessions[id];
             if (s != null && s.Generation == generation && s.State != SessionState.FREE)
             {
+                _nativeSessionIds.Remove(s.NativeSessionId);
                 s.Reset();
                 _activeCount = Math.Max(0, _activeCount - 1);
                 Interlocked.Increment(ref TotalDisconnected);
@@ -114,6 +122,31 @@ public sealed class SessionManager
     public int CountByIP(string ip)
     {
         lock (_lock) { return _sessions.Count(s => s != null && s.State != SessionState.FREE && s.RemoteAddr == ip); }
+    }
+
+    private bool TryAllocateNativeSessionId(out ushort nativeSessionId)
+    {
+        // Native GameGate starts at 1000, increments a WORD, wraps back to
+        // 1000, and skips IDs still present in its active-session map.
+        const int available = ushort.MaxValue - NativeSessionIdStart + 1;
+        var candidate = _nextNativeSessionId;
+        if (candidate < NativeSessionIdStart) candidate = NativeSessionIdStart;
+        for (var attempt = 0; attempt < available; attempt++)
+        {
+            var id = candidate;
+            candidate = id == ushort.MaxValue
+                ? NativeSessionIdStart
+                : (ushort)(id + 1);
+            if (_nativeSessionIds.Add(id))
+            {
+                _nextNativeSessionId = candidate;
+                nativeSessionId = id;
+                return true;
+            }
+        }
+
+        nativeSessionId = 0;
+        return false;
     }
 
     public (int active, int banned, int muted, long totalConn, long totalDisc) GetStats()

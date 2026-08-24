@@ -12,9 +12,16 @@ internal sealed class SharedBackendRoute
     private int _aborted;
     private int _dbInvalidated;
     private int _gameInvalidated;
-    private int _sequence;
+    private int _gateIndex = 1;
+    private uint _nativeRouteContext;
 
     public required int Handle { get; init; }
+    public ushort NativeSessionId { get; init; }
+    public int GateIndex
+    {
+        get => Volatile.Read(ref _gateIndex);
+        init => _gateIndex = value;
+    }
     public required uint ConnId { get; init; }
     public required long SessionGeneration { get; init; }
     public required string ClientIp { get; init; }
@@ -48,11 +55,74 @@ internal sealed class SharedBackendRoute
 
     public bool TryClose() => Interlocked.Exchange(ref _closed, 1) == 0;
 
-    public uint NextSequence()
+    /// <summary>
+    /// Stable native route context carried at frame +0x08.
+    ///
+    /// The native M2 lookup key is not a per-frame sequence.  It is composed
+    /// once from the registered gate number and the WORD session key:
+    /// <c>(gateIndex &lt;&lt; 17) | sessionWord</c>.  Keep the historical method
+    /// name because callers use it for every outgoing frame, but always return
+    /// the same value for this route.
+    /// </summary>
+    public uint RouteId
     {
-        var low = unchecked((uint)Interlocked.Increment(ref _sequence)) & 0xFFFF;
-        return ((ConnId & 0xFFFF) << 16) | low;
+        get
+        {
+            var bound = Volatile.Read(ref _nativeRouteContext);
+            return bound != 0
+                ? bound
+                : ComposeRouteId(GateIndex, NativeSessionId);
+        }
     }
+
+    public uint NextSequence() => RouteId;
+
+    /// <summary>
+    /// Binds the native gate slot returned by the M2 registration handshake.
+    /// A route context already learned from Cmd=11 remains authoritative for
+    /// this route; newly-created routes use the returned slot directly.
+    /// </summary>
+    public bool TryBindNativeGateIndex(int gateIndex)
+    {
+        if (gateIndex is < NativeGameGateCommands.MinGateIndex
+            or > NativeGameGateCommands.MaxGateIndex)
+            return false;
+
+        if (Volatile.Read(ref _nativeRouteContext) != 0)
+            return false;
+        Volatile.Write(ref _gateIndex, gateIndex);
+        return true;
+    }
+
+    public static uint ComposeRouteId(int gateIndex, ushort sessionId)
+    {
+        return NativeGameGateCommands.ComposeRouteId(gateIndex, sessionId);
+    }
+
+    /// <summary>
+    /// Atomically accepts the route context advertised by M2 for this WORD
+    /// session.  RunGate resolves the route by the frame +0x04 word and the
+    /// native receiver stores frame +0x08 as an opaque value.  The M2 sender
+    /// normally composes that value as (gateIndex &lt;&lt; 17) | sessionWord, but
+    /// GameGate does not validate that shape here.  A conflicting rebinding is
+    /// rejected so a stale frame cannot move the route after it is established.
+    /// </summary>
+    public bool BindNativeRouteContext(ushort sessionWord, uint routeId)
+    {
+        if (sessionWord != NativeSessionId || routeId == 0)
+            return false;
+
+        var current = Volatile.Read(ref _nativeRouteContext);
+        if (current == routeId) return true;
+        if (current != 0) return false;
+
+        return Interlocked.CompareExchange(ref _nativeRouteContext, routeId, 0) == 0;
+    }
+
+    // Kept for callers that already resolved the session from ConnID.  New
+    // receive paths should pass both wire fields to preserve the native lookup.
+    public bool BindNativeRouteContext(uint routeId) =>
+        BindNativeRouteContext(NativeSessionId, routeId);
 
     public void AbortOnce()
     {
@@ -77,13 +147,19 @@ internal sealed class SharedBackendRoute
 
 /// <summary>
 /// Original GameGate topology: one shared DBSvr socket and one shared M2 socket.
-/// Logical client handles are carried in %.../ text routes and InternalPacket77.ConnID.
+/// Native logical client session keys are carried in %.../ text routes and
+/// InternalPacket77.ConnID; the OS socket handle is retained only for local
+/// diagnostics and lifecycle ownership.
 /// </summary>
 internal sealed class SharedBackendHub : IDisposable
 {
+    private static readonly ConcurrentDictionary<SharedBackendHub, byte>
+        NativeRunGates = new();
+
     private readonly GateConfig _config;
     private readonly Action<string, string> _log;
     private readonly ConcurrentDictionary<uint, SharedBackendRoute> _routes = new();
+    private readonly LegacyGateType24Cache _focusItemCache = new();
     private readonly SemaphoreSlim _dbConnectLock = new(1, 1);
     private readonly SemaphoreSlim _gameConnectLock = new(1, 1);
     private readonly SemaphoreSlim _dbWriteLock = new(1, 1);
@@ -107,6 +183,33 @@ internal sealed class SharedBackendHub : IDisposable
     private long _nextGameConnectTick;
     private int _reconnects;
     private int _heartbeatSequence;
+    private int _heartbeatPending;
+    private long _heartbeatSentTick;
+    private int _registeredGateIndex;
+    private TaskCompletionSource<int>? _gameRegistrationCompletion;
+    private long _gameRegistrationGeneration;
+    private int _requestedGateIndex;
+    private long _lastUnknownGameTypeTick;
+    private const int NativeRegistrationTimeoutMilliseconds = 5000;
+    private const long NativeHeartbeatTimeoutMilliseconds = 60000;
+    private const ushort NativeKeepAliveRequest =
+        NativeGameGateCommands.GateKeepAliveRequest;
+
+    // 2.08 战神 GameGate (M2 -> GameGate) command values.  Grobal2.GM_* remains the
+    // historical C# GameSvr dialect; these constants are deliberately kept
+    // local to the wire adapter so both peers can be supported while the
+    // native command meanings are restored.
+    private const ushort NativeRouteBind = 11;
+    private const ushort NativeRouteClear = 12;
+    private const ushort NativeKeepAliveReply = 13;
+    private const ushort NativeClientData = 14;
+    private const ushort NativeGateRegistrationReply = 15;
+    private const ushort NativeSilentReserved16 = 16;
+    private const ushort NativeCrossGateBroadcast = 17;
+    private const ushort NativeTargetedMulticast = 19;
+    private const ushort NativeSilentReserved21 = 21;
+    private const ushort NativeSilentReserved22 = 22;
+    private const ushort NativeSilentReserved23 = 23;
 
     public SharedBackendHub(GateConfig config, Action<string, string> log)
     {
@@ -117,27 +220,36 @@ internal sealed class SharedBackendHub : IDisposable
     public bool DBConnected { get; private set; }
     public bool GameConnected { get; private set; }
     public int Reconnects => Volatile.Read(ref _reconnects);
+    public int RegisteredGateIndex => Volatile.Read(ref _registeredGateIndex);
+    public bool GameHeartbeatPending => Volatile.Read(ref _heartbeatPending) != 0;
+
+    internal bool TryGetNativeFocusItem(int recog, out byte[] payload) =>
+        _focusItemCache.TryGet(recog, out payload);
 
     public void Start()
     {
         if (Interlocked.Exchange(ref _started, 1) != 0) return;
+        NativeRunGates.TryAdd(this, 0);
         _stop = new CancellationTokenSource();
         _dbDispatcher = Task.Run(() => DBDispatcherLoop(_stop.Token));
         _gameDispatcher = Task.Run(() => GameDispatcherLoop(_stop.Token));
         _heartbeat = Task.Run(() => HeartbeatLoop(_stop.Token));
     }
 
-    public async Task<SharedBackendRoute?> OpenRouteAsync(int handle, string clientIp,
-        long sessionGeneration, Action abort, CancellationToken cancellationToken)
+    public async Task<SharedBackendRoute?> OpenRouteAsync(int handle,
+        ushort nativeSessionId, string clientIp, long sessionGeneration,
+        Action abort, CancellationToken cancellationToken)
     {
-        var connId = unchecked((uint)handle);
+        var connId = (uint)nativeSessionId;
         var route = new SharedBackendRoute
         {
             Handle = handle,
+            NativeSessionId = nativeSessionId,
+            GateIndex = _config.GateIndex,
             ConnId = connId,
             SessionGeneration = sessionGeneration,
             ClientIp = clientIp,
-            DbOpenFrame = HUtil32.GetBytes($"%O{handle}/{clientIp}/{clientIp}$"),
+            DbOpenFrame = HUtil32.GetBytes($"%O{nativeSessionId}/{clientIp}/{clientIp}$"),
             Abort = abort
         };
         if (!_routes.TryAdd(connId, route)) return null;
@@ -186,6 +298,11 @@ internal sealed class SharedBackendHub : IDisposable
     public async Task<bool> SendGameAsync(SharedBackendRoute route, byte[] frame,
         CancellationToken cancellationToken = default)
     {
+        if (!TryValidateNativeM2Frame(frame, out var frameError))
+        {
+            _log("WARN", $"drop Gate->M2 frame: {frameError}");
+            return false;
+        }
         if (route == null || route.IsClosed || route.IsInvalidated) return false;
         if (!await EnsureGameRouteOpenAsync(route, cancellationToken)) return false;
         if (!TryGetGameState(out var stream, out _)) return false;
@@ -220,7 +337,7 @@ internal sealed class SharedBackendHub : IDisposable
         {
             try
             {
-                await WriteDbCoreAsync(dbStream, HUtil32.GetBytes($"%X{route.Handle}$"),
+                await WriteDbCoreAsync(dbStream, HUtil32.GetBytes($"%X{route.NativeSessionId}$"),
                     CancellationToken.None);
             }
             catch { }
@@ -244,6 +361,7 @@ internal sealed class SharedBackendHub : IDisposable
 
     public async Task StopAsync()
     {
+        NativeRunGates.TryRemove(this, out _);
         var stop = _stop;
         if (stop == null) return;
         stop.Cancel();
@@ -316,7 +434,8 @@ internal sealed class SharedBackendHub : IDisposable
             try
             {
                 foreach (var route in _routes.Values)
-                    await EnsureGameRouteOpenAsync(route, cancellationToken);
+                    await EnsureGameRouteOpenAsync(route, cancellationToken,
+                        waitForRegistration: false);
 
                 while (!cancellationToken.IsCancellationRequested
                        && IsCurrentGameStream(stream, generation))
@@ -330,8 +449,16 @@ internal sealed class SharedBackendHub : IDisposable
                         if (frame.Internal77 != null)
                             await DispatchGamePacketAsync(stream, generation, frame.Internal77,
                                 cancellationToken);
+                        else if (frame.LegacyType17 != null)
+                            await DispatchLegacyType17Async(frame.LegacyType17,
+                                cancellationToken);
                         else if (frame.LegacyType18 != null)
                             TryDispatchLegacyType18(frame.LegacyType18);
+                        else if (frame.LegacyType19 != null)
+                            TryDispatchLegacyType19(frame.LegacyType19);
+                        else if (frame.LegacyType20 != null)
+                            await EchoLegacyType20Async(stream, generation,
+                                frame.LegacyType20, cancellationToken);
                     }
                 }
             }
@@ -351,29 +478,104 @@ internal sealed class SharedBackendHub : IDisposable
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
+                if (Volatile.Read(ref _heartbeatPending) != 0)
+                {
+                    var sentTick = Interlocked.Read(ref _heartbeatSentTick);
+                    if (IsHeartbeatExpired(Environment.TickCount64, sentTick,
+                        pending: true))
+                    {
+                        if (TryGetGameState(out var staleStream, out _))
+                            InvalidateGame(staleStream, "native heartbeat timeout");
+                    }
+                    // One outstanding native heartbeat is enough.  Do not
+                    // refresh its timestamp by sending another request.
+                    continue;
+                }
                 await SendGameHeartbeatOnceAsync(cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
     }
 
+    internal static bool IsHeartbeatExpired(long nowTick, long sentTick,
+        bool pending)
+    {
+        return pending && sentTick > 0 && nowTick >= sentTick
+            && nowTick - sentTick >= NativeHeartbeatTimeoutMilliseconds;
+    }
+
     internal async Task<bool> SendGameHeartbeatOnceAsync(CancellationToken cancellationToken)
     {
         if (!await EnsureGameConnectedAsync(cancellationToken)) return false;
-        if (!TryGetGameState(out var stream, out _)) return false;
+        if (!TryGetGameState(out var stream, out var generation)) return false;
+        // Native GameGate establishes its 1..32 slot before control traffic;
+        // do not let the periodic heartbeat race the one-shot Cmd=5 handshake.
+        if (!await WaitForGameRegistrationAsync(generation, cancellationToken))
+            return false;
+        if (Interlocked.CompareExchange(ref _heartbeatPending, 1, 0) != 0)
+            return false;
         try
         {
             var heartbeat = CreateGameControl(0,
                 unchecked((uint)Interlocked.Increment(ref _heartbeatSequence)),
-                Grobal2.GM_CHECKCLIENT, Array.Empty<byte>());
+                NativeKeepAliveRequest, Array.Empty<byte>());
+            // Publish the deadline before the write.  A very fast peer can
+            // answer while WriteAsync is still completing; writing the tick
+            // afterwards would resurrect a request that the reply cleared.
+            Interlocked.Exchange(ref _heartbeatSentTick, Environment.TickCount64);
             await WriteGameCoreAsync(stream, heartbeat.ToBytes(), cancellationToken);
             return true;
         }
         catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
         {
+            Volatile.Write(ref _heartbeatPending, 0);
+            Interlocked.Exchange(ref _heartbeatSentTick, 0);
             InvalidateGame(stream, ex.Message);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Validates the direction-specific Gate -> M2 envelope before any route
+    /// or socket work.  The native M2 receiver accepts BodyLen through 0x3000;
+    /// it does not truncate a larger frame, so the managed adapter must drop
+    /// it before writing the shared stream.
+    /// </summary>
+    internal static bool TryValidateNativeM2Frame(byte[]? frame,
+        out string error)
+    {
+        error = string.Empty;
+        if (frame == null)
+        {
+            error = "frame is null";
+            return false;
+        }
+        if (frame.Length < InternalPacket77.HEADER_SIZE)
+        {
+            error = $"frame is shorter than {InternalPacket77.HEADER_SIZE} bytes";
+            return false;
+        }
+        if (BitConverter.ToUInt32(frame, 0) != InternalPacket77.MAGIC)
+        {
+            error = "invalid 77BBAA33 magic";
+            return false;
+        }
+
+        var bodyLength = BitConverter.ToUInt16(frame, 14);
+        var expectedLength = InternalPacket77.HEADER_SIZE + bodyLength;
+        if (expectedLength != frame.Length)
+        {
+            error = $"declared body {bodyLength} does not match frame length "
+                    + frame.Length;
+            return false;
+        }
+        if (bodyLength > NativeGameGateCommands.NativeM2MaximumBodyLength)
+        {
+            error = $"body {bodyLength} exceeds native limit "
+                    + NativeGameGateCommands.NativeM2MaximumBodyLength;
+            return false;
+        }
+        return true;
     }
 
     private async Task<bool> EnsureDbRouteOpenAsync(SharedBackendRoute route,
@@ -400,15 +602,34 @@ internal sealed class SharedBackendHub : IDisposable
     }
 
     private async Task<bool> EnsureGameRouteOpenAsync(SharedBackendRoute route,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool waitForRegistration = true)
     {
         if (route.IsClosed || route.IsInvalidated
             || !await EnsureGameConnectedAsync(cancellationToken)) return false;
+
+        if (!TryGetGameState(out _, out var initialGeneration))
+            return false;
+        if (!IsGameRegistrationReady(initialGeneration))
+        {
+            if (!waitForRegistration
+                || !await WaitForGameRegistrationAsync(initialGeneration,
+                    cancellationToken))
+                return false;
+        }
+
         await route.GameOpenLock.WaitAsync(cancellationToken);
         try
         {
             if (route.IsClosed || route.IsInvalidated
                 || !TryGetGameState(out var stream, out var generation)) return false;
+            if (!IsGameRegistrationReady(generation))
+            {
+                // The connection may have been replaced while the caller
+                // waited outside the route lock.  Never emit OPEN on an
+                // unregistered generation; the next caller will await it.
+                return false;
+            }
+            route.TryBindNativeGateIndex(RegisteredGateIndex);
             if (route.GameConnectionGeneration == generation) return true;
             Volatile.Write(ref route.NativePlayerRecog, 0);
             Volatile.Write(ref route.NativeServerUserIndex, 0);
@@ -424,6 +645,51 @@ internal sealed class SharedBackendHub : IDisposable
             return false;
         }
         finally { route.GameOpenLock.Release(); }
+    }
+
+    private bool IsGameRegistrationReady(long generation)
+    {
+        lock (_gameStateLock)
+        {
+            return GameConnected && generation == _gameGeneration
+                && _gameRegistrationGeneration == generation
+                && IsValidNativeGateIndex(_registeredGateIndex);
+        }
+    }
+
+    private async Task<bool> WaitForGameRegistrationAsync(long generation,
+        CancellationToken cancellationToken)
+    {
+        Task<int>? completion;
+        lock (_gameStateLock)
+        {
+            if (!GameConnected || generation != _gameGeneration
+                || _gameRegistrationGeneration != generation)
+                return false;
+            if (IsValidNativeGateIndex(_registeredGateIndex)) return true;
+            completion = _gameRegistrationCompletion?.Task;
+        }
+        if (completion == null) return false;
+
+        try
+        {
+            var assigned = await completion.WaitAsync(
+                TimeSpan.FromMilliseconds(NativeRegistrationTimeoutMilliseconds),
+                cancellationToken);
+            return IsValidNativeGateIndex(assigned)
+                && IsGameRegistrationReady(generation);
+        }
+        catch (TimeoutException)
+        {
+            if (TryGetGameState(out var staleStream, out var currentGeneration)
+                && currentGeneration == generation)
+                InvalidateGame(staleStream, "native gate registration timeout");
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private async Task<bool> EnsureDbConnectedAsync(CancellationToken cancellationToken)
@@ -486,15 +752,40 @@ internal sealed class SharedBackendHub : IDisposable
                     _gameStream = client.GetStream();
                     _gameGeneration++;
                     GameConnected = true;
+                    _gameRegistrationGeneration = _gameGeneration;
+                    _requestedGateIndex = Math.Clamp(_config.GateIndex,
+                        NativeGameGateCommands.MinGateIndex,
+                        NativeGameGateCommands.MaxGateIndex);
+                    _gameRegistrationCompletion =
+                        new TaskCompletionSource<int>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
                 }
+                Volatile.Write(ref _registeredGateIndex, 0);
+                Volatile.Write(ref _heartbeatPending, 0);
+                Interlocked.Exchange(ref _heartbeatSentTick, 0);
                 Volatile.Write(ref _nextGameConnectTick, 0);
                 Interlocked.Increment(ref _reconnects);
                 _log("INFO", $"GameSvr shared connection {_config.GameBackendIP}:{_config.BackendPort}");
+
+                // Native M2 does not infer a gate number from the TCP handle.
+                // It consumes a one-shot type-5 registration frame and reads
+                // byte[+0x08].  Send the exact 16-byte control frame before
+                // opening any client route; the dispatcher records the type-15
+                // reply when M2 assigns the slot.
+                var gateIndex = Volatile.Read(ref _requestedGateIndex);
+                var registration = CreateGameControl(0, (uint)gateIndex,
+                    NativeGameGateCommands.GateRegistrationRequest,
+                    Array.Empty<byte>());
+                await WriteGameCoreAsync(client.GetStream(),
+                    registration.ToBytes(), timeout.Token);
+                _log("TRACE", $"GameSvr gate registration requested index={gateIndex}");
                 return true;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
+                if (TryGetGameState(out var connectedStream, out _))
+                    InvalidateGame(connectedStream, ex.Message);
                 Volatile.Write(ref _nextGameConnectTick, Environment.TickCount64 + 1000);
                 LogBackendError(ref _lastGameErrorTick, "GameSvr", ex.Message);
                 return false;
@@ -543,6 +834,110 @@ internal sealed class SharedBackendHub : IDisposable
     private async Task DispatchGamePacketAsync(NetworkStream stream, long generation,
         InternalPacket77 packet, CancellationToken cancellationToken)
     {
+        // Native RunGate binds the stable +0x08 context before it starts
+        // delivering client data.  The +0x04 word is still the lookup key.
+        if (packet.Cmd == NativeRouteBind)
+        {
+            if (TryGetIncomingRoute(packet.ConnID, out var boundRoute))
+            {
+                boundRoute.BindNativeRouteContext(
+                    unchecked((ushort)packet.ConnID), packet.SeqID);
+                _log("TRACE", $"M2 route bind session={boundRoute.NativeSessionId} " +
+                    $"route=0x{packet.SeqID:X8}");
+            }
+            else
+            {
+                LogUnknownGameType(packet, "route-bind-miss");
+            }
+            return;
+        }
+
+        if (packet.Cmd == NativeRouteClear)
+        {
+            if (TryGetIncomingRoute(packet.ConnID, out var clearedRoute))
+            {
+                Volatile.Write(ref clearedRoute.NativePlayerRecog, 0);
+                Volatile.Write(ref clearedRoute.NativeServerUserIndex, 0);
+            }
+            return;
+        }
+
+        if (packet.Cmd == NativeKeepAliveReply && packet.ConnID == 0
+            && IsCurrentGameStream(stream, generation))
+        {
+            Volatile.Write(ref _heartbeatPending, 0);
+            Interlocked.Exchange(ref _heartbeatSentTick, 0);
+            return;
+        }
+
+        // M2 may initiate the same native liveness exchange.  RunGate answers
+        // a type-3 request with a bare type-13 frame on ConnID=0; ignoring it
+        // leaves the server-side watchdog waiting forever.
+        if (packet.Cmd == NativeKeepAliveRequest && packet.ConnID == 0
+            && IsCurrentGameStream(stream, generation))
+        {
+            var reply = CreateGameControl(0, packet.SeqID,
+                NativeKeepAliveReply, Array.Empty<byte>());
+            await WriteGameCoreAsync(stream, reply.ToBytes(), cancellationToken);
+            return;
+        }
+
+        if (packet.Cmd == NativeGateRegistrationReply)
+        {
+            var candidate = (int)(packet.ConnID & 0xFF);
+            if (!IsValidNativeGateIndex(candidate))
+            {
+                LogUnknownGameType(packet, "invalid-gate-registration");
+                return;
+            }
+            if (!IsCurrentGameStream(stream, generation)) return;
+
+            TaskCompletionSource<int>? completion;
+            lock (_gameStateLock)
+            {
+                if (!GameConnected || generation != _gameGeneration)
+                    return;
+                Volatile.Write(ref _registeredGateIndex, candidate);
+                completion = _gameRegistrationCompletion;
+            }
+            foreach (var candidateRoute in _routes.Values)
+            {
+                if (!candidateRoute.IsClosed && !candidateRoute.IsInvalidated)
+                    candidateRoute.TryBindNativeGateIndex(candidate);
+            }
+            completion?.TrySetResult(candidate);
+            _log("TRACE", $"GameSvr gate registration accepted index={candidate}");
+
+            // The dispatcher deliberately does not wait for Cmd=15 (doing so
+            // would stop it from reading the reply).  Flush routes that were
+            // created while the one-shot registration was in flight now.
+            foreach (var pendingRoute in _routes.Values)
+            {
+                if (pendingRoute.IsClosed || pendingRoute.IsInvalidated
+                    || pendingRoute.GameConnectionGeneration == generation)
+                    continue;
+                await EnsureGameRouteOpenAsync(pendingRoute, cancellationToken,
+                    waitForRegistration: false);
+            }
+            return;
+        }
+
+        if (packet.Cmd == LegacyGateType24Cache.MessageType)
+        {
+            if (!_focusItemCache.TryStore(packet.Payload))
+                LogUnknownGameType(packet, "invalid-focus-item-cache-payload");
+            return;
+        }
+
+        if (IsNativeSilentConsumeType(packet.Cmd))
+        {
+            // Native 2019 RunGate jump table 0x47FE48 maps 16 and 21..23
+            // directly to 0x47FFF1.  That target only advances by the complete
+            // frame length and continues parsing; it performs no route lookup,
+            // client delivery, state mutation, log, or backend write.
+            return;
+        }
+
         if (packet.ConnID == 0)
         {
             if (packet.Cmd == Grobal2.GM_RECEIVE_OK
@@ -554,8 +949,28 @@ internal sealed class SharedBackendHub : IDisposable
             }
             return;
         }
-        if (!_routes.TryGetValue(packet.ConnID, out var route) || route.IsClosed
-            || route.IsInvalidated) return;
+
+        if (!TryGetIncomingRoute(packet.ConnID, out var route))
+        {
+            LogUnknownGameType(packet, "route-miss");
+            return;
+        }
+
+        // Native 0x0E is the single-client data path.  Normalize it to the
+        // internal client-data command consumed by GateServer, while leaving
+        // the original wire fields (connection/context/payload) intact.
+        if (packet.Cmd == NativeClientData)
+        {
+            packet = new InternalPacket77
+            {
+                Magic = packet.Magic,
+                ConnID = packet.ConnID,
+                SeqID = packet.SeqID,
+                FrameLen = packet.FrameLen,
+                Cmd = Grobal2.GM_DATA,
+                Payload = packet.Payload ?? Array.Empty<byte>()
+            };
+        }
         if (packet.Cmd == Grobal2.GM_SERVERUSERINDEX
             && packet.Payload is { Length: >= sizeof(int) })
         {
@@ -574,6 +989,89 @@ internal sealed class SharedBackendHub : IDisposable
         if (!route.GameResponses.Writer.TryWrite(packet)) route.AbortOnce();
     }
 
+    internal static bool IsNativeSilentConsumeType(ushort command) =>
+        command == NativeSilentReserved16
+        || command is >= NativeSilentReserved21 and <= NativeSilentReserved23;
+
+    private bool TryGetIncomingRoute(uint wireSession,
+        out SharedBackendRoute route)
+    {
+        if (_routes.TryGetValue(wireSession, out route!) && !route.IsClosed
+            && !route.IsInvalidated)
+            return true;
+
+        // A few native producers pass the composed route context back in the
+        // lookup field.  Accept that form without weakening the primary WORD
+        // session-key namespace.
+        if (wireSession > ushort.MaxValue
+            && _routes.TryGetValue(wireSession & ushort.MaxValue, out route!)
+            && !route.IsClosed && !route.IsInvalidated
+            && route.RouteId == wireSession)
+            return true;
+
+        route = null!;
+        return false;
+    }
+
+    private void LogUnknownGameType(InternalPacket77 packet, string reason)
+    {
+        var now = Environment.TickCount64;
+        var previous = Interlocked.Read(ref _lastUnknownGameTypeTick);
+        if (previous != 0 && now - previous < 30000) return;
+        Interlocked.Exchange(ref _lastUnknownGameTypeTick, now);
+        _log("TRACE", $"M2 frame consumed reason={reason} type={packet.Cmd} " +
+            $"conn=0x{packet.ConnID:X8} route=0x{packet.SeqID:X8} " +
+            $"body={packet.Payload?.Length ?? 0}");
+    }
+
+    internal async Task<int> DispatchLegacyType17Async(LegacyGateType17 packet,
+        CancellationToken cancellationToken)
+    {
+        if (packet == null || !packet.CanForward) return 0;
+
+        var frame = packet.ToForwardedBytes();
+        var forwarded = 0;
+        foreach (var candidate in NativeRunGates.Keys)
+        {
+            if (!packet.ShouldForwardTo(
+                    unchecked((byte)candidate.RegisteredGateIndex),
+                    ReferenceEquals(candidate, this)))
+                continue;
+            if (await candidate.TryWriteNativeCrossGateAsync(frame, cancellationToken))
+                forwarded++;
+        }
+        return forwarded;
+    }
+
+    internal async Task<bool> EchoLegacyType20Async(NetworkStream stream,
+        long generation, LegacyGateType20 packet,
+        CancellationToken cancellationToken)
+    {
+        if (packet == null || !packet.CanEcho
+            || !IsCurrentGameStream(stream, generation))
+            return false;
+
+        await WriteGameCoreAsync(stream, packet.ToBytes(), cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> TryWriteNativeCrossGateAsync(byte[] frame,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetGameState(out var stream, out _)) return false;
+        try
+        {
+            await WriteGameCoreAsync(stream, frame, cancellationToken);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or SocketException
+                                   or ObjectDisposedException)
+        {
+            InvalidateGame(stream, ex.Message);
+            return false;
+        }
+    }
+
     internal bool TryDispatchLegacyType18(LegacyGateType18 packet)
     {
         if (packet == null) return false;
@@ -581,7 +1079,8 @@ internal sealed class SharedBackendHub : IDisposable
         var payload = packet.ToClientPayload();
         // The native relay adds its own 12-byte transport header and drops a
         // client payload when the resulting block is not below 0x8000 bytes.
-        if (payload.Length + LegacyGateType18.ClientRelayHeaderSize
+        if (payload.Length < LegacyGateType18.ClientPacketSize
+            || payload.Length + LegacyGateType18.ClientRelayHeaderSize
             >= LegacyGateType18.MaximumClientRelayLengthExclusive)
             return false;
         var dispatched = false;
@@ -616,6 +1115,63 @@ internal sealed class SharedBackendHub : IDisposable
             dispatched = true;
         }
         return dispatched;
+    }
+
+    internal bool TryDispatchLegacyType19(LegacyGateType19 packet)
+    {
+        if (packet == null) return false;
+
+        var payload = packet.ToClientPayload();
+        // The native handler passes the remainder to the same client relay
+        // routine used by type 18.  That routine rejects a block whose own
+        // 12-byte relay header would reach 0x8000 bytes.
+        if (payload.Length < LegacyGateType19.ClientPacketSize
+            || payload.Length + LegacyGateType19.ClientRelayHeaderSize
+            >= LegacyGateType19.MaximumClientRelayLengthExclusive)
+            return false;
+
+        var dispatched = false;
+        var ids = packet.SessionIds ?? Array.Empty<ushort>();
+        foreach (var id in ids)
+        {
+            if (!TryGetLegacyType19Route(id, out var route))
+                continue;
+
+            var routed = new InternalPacket77
+            {
+                Magic = InternalPacket77.MAGIC,
+                ConnID = route.ConnId,
+                SeqID = route.NextSequence(),
+                FrameLen = checked((ushort)(InternalPacket77.HEADER_SIZE + payload.Length)),
+                Cmd = Grobal2.GM_DATA,
+                Field20 = checked((uint)payload.Length),
+                Payload = payload
+            };
+            if (!route.GameResponses.Writer.TryWrite(routed))
+            {
+                route.AbortOnce();
+                continue;
+            }
+            dispatched = true;
+        }
+        return dispatched;
+    }
+
+    private bool TryGetLegacyType19Route(ushort sessionId,
+        out SharedBackendRoute route)
+    {
+        // Type 19 contains the native GameGate-generated WORD session key.
+        // It is a separate namespace from both the OS handle and M2's server
+        // user index; never use either as a fallback because equal numeric
+        // values must not cause cross-route delivery.
+        var key = (uint)sessionId;
+        if (_routes.TryGetValue(key, out route!)
+            && route.NativeSessionId == sessionId
+            && !route.IsClosed && !route.IsInvalidated)
+            return true;
+
+        route = null!;
+        return false;
     }
 
     private void RemoveRoute(SharedBackendRoute route)
@@ -687,6 +1243,7 @@ internal sealed class SharedBackendHub : IDisposable
     {
         TcpClient? client;
         long invalidatedGeneration;
+        TaskCompletionSource<int>? registrationCompletion;
         lock (_gameStateLock)
         {
             if (expected != null && !ReferenceEquals(expected, _gameStream)) return;
@@ -695,7 +1252,14 @@ internal sealed class SharedBackendHub : IDisposable
             _gameClient = null;
             _gameStream = null;
             GameConnected = false;
+            registrationCompletion = _gameRegistrationCompletion;
+            _gameRegistrationCompletion = null;
+            _gameRegistrationGeneration = 0;
         }
+        Volatile.Write(ref _registeredGateIndex, 0);
+        Volatile.Write(ref _heartbeatPending, 0);
+        Interlocked.Exchange(ref _heartbeatSentTick, 0);
+        registrationCompletion?.TrySetResult(0);
         try { client?.Dispose(); } catch { }
         if (client != null)
         {
@@ -707,6 +1271,10 @@ internal sealed class SharedBackendHub : IDisposable
         }
         if (!string.IsNullOrEmpty(reason)) LogBackendError(ref _lastGameErrorTick, "GameSvr", reason);
     }
+
+    private static bool IsValidNativeGateIndex(int gateIndex) =>
+        gateIndex is >= NativeGameGateCommands.MinGateIndex
+            and <= NativeGameGateCommands.MaxGateIndex;
 
     private void LogBackendError(ref long lastTick, string backend, string error)
     {

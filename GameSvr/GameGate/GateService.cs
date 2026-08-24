@@ -15,6 +15,7 @@ namespace GameSvr
         {
 #if GAMESVR_PACKET_TRACE
             Debug.WriteLine(msg);
+            PacketTraceWriter.Write($"{DateTime.Now:O} {msg}");
 #endif
         }
 
@@ -44,7 +45,40 @@ namespace GameSvr
             return IsRawClientTextMessage(ident) ? rawText : EDcode.DeCodeString(rawText);
         }
 
+        private const int MaxPendingClientMessages = 16;
+        private const int MaxPendingClientBytes = 8192;
+
+        private static bool TryParseClientMessage(byte[] msgBuff, int nMsgLen,
+            out ClientPacket defMsg, out string sMsg, out byte[] body)
+        {
+            defMsg = null;
+            sMsg = null;
+            body = null;
+            if (msgBuff == null || nMsgLen < ClientPacket.PackSize ||
+                nMsgLen > msgBuff.Length)
+                return false;
+
+            defMsg = Packets.ToPacket<ClientPacket>(msgBuff);
+            if (defMsg == null) return false;
+            var bodyLength = nMsgLen - ClientPacket.PackSize;
+            if (bodyLength == 0) return true;
+            body = new byte[bodyLength];
+            Buffer.BlockCopy(msgBuff, ClientPacket.PackSize, body, 0,
+                bodyLength);
+            sMsg = DecodeClientMessageBody(defMsg.Ident, body);
+            return true;
+        }
+
         private readonly int _gateIdx;
+        // _gateIdx is the managed connection/dictionary key.  Native M2
+        // keeps a separate 1..32 GateIndex learned from the type-5 handshake.
+        // Keep the two identities distinct so a large socket ConnectionId does
+        // not leak into the native route field.
+        private int _nativeGateIndex;
+        private readonly Func<GateService, int, bool> _claimNativeGateIndex;
+        private readonly Action<GateService, int> _releaseNativeGateIndex;
+        private int _nativeGateSlotReleased;
+        private readonly bool _requireNativeRegistration;
         private readonly TGateInfo _gateInfo;
         private static long _nextUserGeneration;
         private readonly SendQueue _sendQueue;
@@ -54,12 +88,33 @@ namespace GameSvr
         private readonly object runSocketSection;
         private bool _closing;
 
-        private readonly InternalPacket77FrameParser _frameParser = new(maximumFrameLength: 0x8000);
+        // This parser is on the Gate -> M2 receive direction.  The native M2
+        // validator accepts BodyLen <= 0x3000; the larger 0x8000 send-buffer
+        // ceiling belongs to the opposite M2 -> Gate accumulation path.
+        private readonly InternalPacket77FrameParser _frameParser =
+            new(maximumFrameLength: InternalPacket77FrameParser.NativeMaximumFrameLength);
         private Task _queueTask;
 
         public GateService(int gateIdx, TGateInfo gateInfo)
+            : this(gateIdx, gateInfo, false, null, null)
+        {
+        }
+
+        internal GateService(int gateIdx, TGateInfo gateInfo,
+            bool requireNativeRegistration)
+            : this(gateIdx, gateInfo, requireNativeRegistration, null, null)
+        {
+        }
+
+        internal GateService(int gateIdx, TGateInfo gateInfo,
+            bool requireNativeRegistration,
+            Func<GateService, int, bool> claimNativeGateIndex,
+            Action<GateService, int> releaseNativeGateIndex)
         {
             _gateIdx = gateIdx;
+            _requireNativeRegistration = requireNativeRegistration;
+            _claimNativeGateIndex = claimNativeGateIndex;
+            _releaseNativeGateIndex = releaseNativeGateIndex;
             _gateInfo = gateInfo ?? throw new ArgumentNullException(nameof(gateInfo));
             _gateInfo.UserList ??= new List<TGateUserInfo>();
             runSocketSection = new object();
@@ -93,9 +148,11 @@ namespace GameSvr
             {
                 _closing = true;
                 GateInfo.boUsed = false;
+                ClearPendingClientMessagesLocked("stop");
             }
             lock (_sendStateLock) _pendingSendBuffers.Clear();
             _sendQueue.Stop();
+            ReleaseNativeGateSlot();
             try
             {
                 _queueTask?.Wait(TimeSpan.FromSeconds(5));
@@ -141,6 +198,13 @@ namespace GameSvr
                     PacketTrace($"[GateSvc] recv={nMsgLen}B buffered={_frameParser.BufferedLength} frames={packets.Count}");
                     foreach (var internalPacket in packets)
                     {
+                        if (internalPacket.Cmd ==
+                            NativeGameGateCommands.GateRegistrationRequest)
+                        {
+                            HandleNativeRegistrationPacketLocked(internalPacket);
+                            continue;
+                        }
+
                         var body = internalPacket.Payload ?? Array.Empty<byte>();
                         var messageHeader = new PacketHeader
                         {
@@ -311,6 +375,10 @@ namespace GameSvr
 
         private void DrainPendingSendBuffersCoreLocked()
         {
+            if (_requireNativeRegistration
+                && !IsValidNativeGateIndex(Volatile.Read(ref _nativeGateIndex)))
+                return;
+
             if (GateInfo.nSendChecked > 0)
             {
                 if (unchecked((uint)(HUtil32.GetTickCount() - GateInfo.dwSendCheckTick))
@@ -345,14 +413,23 @@ namespace GameSvr
                 }
                 else payload = Array.Empty<byte>();
 
-                // 封装为 77BBAA33 帧发送
+                // 封装为 77BBAA33 帧发送。  GM_DATA=5 is the historical
+                // GameSvr dialect; native M2 -> GameGate DATA is type 14.
+                // Keep the legacy value in PacketHeader and translate only at
+                // this wire boundary so game logic remains source-compatible.
+                var wireCmd = cmd == Grobal2.GM_DATA
+                    ? NativeGameGateCommands.M2ClientData
+                    : cmd;
                 var pkt = new InternalPacket77
                 {
                     Magic = InternalPacket77.MAGIC,
                     ConnID = connId,
-                    SeqID = (uint)Environment.TickCount,
+                    // Native M2 emits the stable routed session key at +0x08,
+                    // not a per-frame tick/sequence.  The socket/session word
+                    // is the low WORD of the +0x04 connection field.
+                    SeqID = ComposeWireRouteContext(unchecked((ushort)connId)),
                     FrameLen = (ushort)(InternalPacket77.HEADER_SIZE + payload.Length),
-                    Cmd = cmd,
+                    Cmd = wireCmd,
                     Field16 = (uint)Environment.TickCount,
                     Field20 = (uint)payload.Length,
                     Payload = payload
@@ -362,7 +439,7 @@ namespace GameSvr
                 if (checkBlockBytes > 0 && GateInfo.nSendBlockCount > 0
                     && GateInfo.nSendBlockCount + (long)pktBytes.Length >= checkBlockBytes)
                 {
-                    QueueControlPacketLocked(Grobal2.GM_RECEIVE_OK, compactAck: false);
+                    QueueControlPacketLocked(Grobal2.GM_RECEIVE_OK);
                     GateInfo.nSendChecked = 1;
                     GateInfo.dwSendCheckTick = HUtil32.GetTickCount();
                     return;
@@ -379,12 +456,96 @@ namespace GameSvr
 
                 if (checkBlockBytes > 0 && pktBytes.Length >= checkBlockBytes)
                 {
-                    QueueControlPacketLocked(Grobal2.GM_RECEIVE_OK, compactAck: false);
+                    QueueControlPacketLocked(Grobal2.GM_RECEIVE_OK);
                     GateInfo.nSendChecked = 1;
                     GateInfo.dwSendCheckTick = HUtil32.GetTickCount();
                     return;
                 }
             }
+        }
+
+        private uint ComposeWireRouteContext(ushort sessionWord)
+        {
+            var nativeGateIndex = Volatile.Read(ref _nativeGateIndex);
+            if (nativeGateIndex is < NativeGameGateCommands.MinGateIndex
+                or > NativeGameGateCommands.MaxGateIndex)
+                nativeGateIndex = _gateIdx;
+
+            if (nativeGateIndex is >= NativeGameGateCommands.MinGateIndex
+                and <= NativeGameGateCommands.MaxGateIndex)
+            {
+                return NativeGameGateCommands.ComposeRouteId(nativeGateIndex,
+                    sessionWord);
+            }
+
+            // GateManager's dictionary key is an internal ConnectionId and is
+            // not the native 1..32 gate number.  The native route can only be
+            // composed after a registration identity is available.  Keep the
+            // historical managed context for synthetic/legacy GateService
+            // instances instead of throwing from the send path and closing a
+            // valid socket.  Real native deployments must provide a valid
+            // registration index before relying on this field for routing.
+            return _requireNativeRegistration
+                ? 0u
+                : unchecked((uint)Environment.TickCount);
+        }
+
+        private static bool IsValidNativeGateIndex(int gateIndex) =>
+            gateIndex is >= NativeGameGateCommands.MinGateIndex
+                and <= NativeGameGateCommands.MaxGateIndex;
+
+        private void HandleNativeRegistrationPacketLocked(
+            InternalPacket77 packet)
+        {
+            // Native M2 reads only byte[frame+0x08] and ignores the body.  The
+            // managed sender places the requested GateIndex in SeqID, so the
+            // low byte is the complete registration value here as well.
+            var requested = (int)(packet.SeqID & 0xFF);
+            // The native handler registers only while its slot is empty.  A
+            // duplicate request on an already registered connection is a
+            // no-op, matching that one-shot state transition.
+            if (Interlocked.CompareExchange(ref _nativeGateIndex,
+                    requested, 0) != 0)
+                return;
+
+            // Native stores the byte before the manager's 1..32 validation;
+            // preserve that one-shot behavior for malformed requests too.
+            if (!IsValidNativeGateIndex(requested))
+            {
+                PacketTrace($"[GateRegister] rejected request gate={requested} " +
+                            $"body={packet.Payload?.Length ?? 0}");
+                return;
+            }
+
+            if (_claimNativeGateIndex != null
+                && !_claimNativeGateIndex(this, requested))
+            {
+                // GateManager normally replaces the previous owner, matching
+                // the native 32-slot table.  A custom owner callback may
+                // reject the claim; leave this connection unregistered.
+                Interlocked.Exchange(ref _nativeGateIndex, 0);
+                PacketTrace($"[GateRegister] slot claim failed gate={requested}");
+                return;
+            }
+
+            lock (_sendStateLock)
+            {
+                QueueControlPacketLocked(
+                    NativeGameGateCommands.M2RegistrationReply,
+                    (uint)requested, 0);
+                if (_requireNativeRegistration)
+                    DrainPendingSendBuffersLocked();
+            }
+            PacketTrace($"[GateRegister] accepted gate={requested}");
+        }
+
+        private void ReleaseNativeGateSlot()
+        {
+            if (Interlocked.Exchange(ref _nativeGateSlotReleased, 1) != 0)
+                return;
+            var gateIndex = Volatile.Read(ref _nativeGateIndex);
+            if (IsValidNativeGateIndex(gateIndex))
+                _releaseNativeGateIndex?.Invoke(this, gateIndex);
         }
 
         public void ResumeFlowControlIfTimedOut()
@@ -425,7 +586,7 @@ namespace GameSvr
                 {
                     try
                     {
-                        QueueControlPacketLocked(nIdent, compactAck: false);
+                        QueueControlPacketLocked(nIdent);
                     }
                     catch (Exception exception)
                     {
@@ -437,38 +598,21 @@ namespace GameSvr
             if (socketToClose != null) CloseSocket(socketToClose);
         }
 
-        public void SendCompactAck()
+        private void QueueControlPacketLocked(ushort nIdent)
         {
-            Socket socketToClose = null;
-            lock (runSocketSection)
-            {
-                if (_closing || GateInfo.Socket?.Connected != true) return;
-                lock (_sendStateLock)
-                {
-                    try
-                    {
-                        QueueControlPacketLocked(0x0C, compactAck: true);
-                    }
-                    catch (Exception exception)
-                    {
-                        socketToClose = MarkSendFailureLocked(exception,
-                            "TRunSocket::SendCompactAck");
-                    }
-                }
-            }
-            if (socketToClose != null) CloseSocket(socketToClose);
+            QueueControlPacketLocked(nIdent, 0,
+                unchecked((uint)Environment.TickCount));
         }
 
-        private void QueueControlPacketLocked(ushort nIdent, bool compactAck)
+        private void QueueControlPacketLocked(ushort nIdent, uint connId,
+            uint seqId)
         {
             var pkt = new InternalPacket77
             {
                 Magic = InternalPacket77.MAGIC,
-                ConnID = 0,
-                SeqID = (uint)Environment.TickCount,
-                FrameLen = compactAck
-                    ? InternalPacket77.ACK_FRAME_LEN
-                    : (ushort)InternalPacket77.HEADER_SIZE,
+                ConnID = connId,
+                SeqID = seqId,
+                FrameLen = (ushort)InternalPacket77.HEADER_SIZE,
                 Cmd = nIdent,
                 Field16 = (uint)Environment.TickCount,
                 Field20 = 0,
@@ -651,6 +795,10 @@ namespace GameSvr
                          candidate.UserGeneration != expectedGeneration))
                         continue;
                     gateUser = candidate;
+                    PacketTrace($"[GateClose] reason=CloseUser gate={_gateIdx} " +
+                                $"socket={candidate.nSocket} generation={candidate.UserGeneration} " +
+                                $"playObj={candidate.PlayObject != null} cert={candidate.boCertification}");
+                    ClearPendingClientMessagesLocked(gateUser, "close");
                     GateInfo.UserList[i] = null;
                     GateInfo.nUserCount = CountActiveUsersLocked();
                     break;
@@ -685,6 +833,10 @@ namespace GameSvr
                         || candidate.nSessionID != sessionId)
                         continue;
                     gateUser = candidate;
+                    PacketTrace($"[GateClose] reason=KickUser gate={_gateIdx} " +
+                                $"socket={candidate.nSocket} generation={candidate.UserGeneration} " +
+                                $"playObj={candidate.PlayObject != null} cert={candidate.boCertification}");
+                    ClearPendingClientMessagesLocked(gateUser, "kick");
                     GateInfo.UserList[i] = null;
                     GateInfo.nUserCount = CountActiveUsersLocked();
                     break;
@@ -735,6 +887,7 @@ namespace GameSvr
                     return false;
                 _closing = true;
                 users = GateInfo.UserList.Where(user => user != null).ToList();
+                ClearPendingClientMessagesLocked("connection-close");
                 for (var i = 0; i < GateInfo.UserList.Count; i++)
                     GateInfo.UserList[i] = null;
                 GateInfo.nUserCount = 0;
@@ -743,8 +896,13 @@ namespace GameSvr
                 _frameParser.Reset();
             }
 
+            ReleaseNativeGateSlot();
+
             foreach (var gateUser in users)
             {
+                PacketTrace($"[GateClose] reason=connection-close gate={_gateIdx} " +
+                            $"socket={gateUser.nSocket} generation={gateUser.UserGeneration} " +
+                            $"playObj={gateUser.PlayObject != null} cert={gateUser.boCertification}");
                 TryCancelLoad(gateUser);
                 if (gateUser.PlayObject == null) continue;
                 gateUser.PlayObject.m_boEmergencyClose = true;
@@ -797,6 +955,178 @@ namespace GameSvr
 
         private int CountActiveUsersLocked() =>
             GateInfo.UserList.Count(user => user != null);
+
+        private static void ClearPendingClientMessagesLocked(
+            TGateUserInfo gateUser, string reason)
+        {
+            if (gateUser == null)
+                return;
+
+            var count = gateUser.PendingClientMessages.Count;
+            if (count > 0)
+            {
+                PacketTrace($"[PendingDrop] reason={reason} socket={gateUser.nSocket} " +
+                            $"generation={gateUser.UserGeneration} count={count} " +
+                            $"bytes={gateUser.PendingClientBytes}");
+                gateUser.PendingClientMessages.Clear();
+            }
+            gateUser.PendingClientBytes = 0;
+            // The queue can be empty while a replay batch is executing: the
+            // batch is detached before dispatch. Always clear this state so a
+            // replay exception/flush cannot strand later client packets.
+            gateUser.PendingClientReplayInProgress = false;
+        }
+
+        private void ClearPendingClientMessagesLocked(string reason)
+        {
+            foreach (var gateUser in GateInfo.UserList)
+                ClearPendingClientMessagesLocked(gateUser, reason);
+        }
+
+        private static List<PendingClientPacket> TakePendingClientMessagesLocked(
+            TGateUserInfo gateUser)
+        {
+            if (gateUser == null || gateUser.PendingClientMessages.Count == 0)
+                return null;
+            var result = new List<PendingClientPacket>(
+                gateUser.PendingClientMessages.Count);
+            while (gateUser.PendingClientMessages.Count > 0)
+                result.Add(gateUser.PendingClientMessages.Dequeue());
+            gateUser.PendingClientBytes = 0;
+            return result;
+        }
+
+        private static bool QueuePendingClientMessageLocked(
+            TGateUserInfo gateUser, byte[] msgBuff, int nMsgLen)
+        {
+            if (gateUser == null || !TryParseClientMessage(msgBuff, nMsgLen,
+                    out var defMsg, out _, out _))
+            {
+                PacketTrace($"[PendingDrop] reason=malformed socket=" +
+                            $"{gateUser?.nSocket} len={nMsgLen}");
+                return false;
+            }
+
+            if (nMsgLen > MaxPendingClientBytes ||
+                gateUser.PendingClientMessages.Count >= MaxPendingClientMessages ||
+                gateUser.PendingClientBytes > MaxPendingClientBytes - nMsgLen)
+            {
+                PacketTrace($"[PendingDrop] reason=limit socket={gateUser.nSocket} " +
+                            $"generation={gateUser.UserGeneration} ident={defMsg.Ident} " +
+                            $"len={nMsgLen} count={gateUser.PendingClientMessages.Count} " +
+                            $"bytes={gateUser.PendingClientBytes}");
+                return false;
+            }
+
+            var copy = new byte[nMsgLen];
+            Buffer.BlockCopy(msgBuff, 0, copy, 0, nMsgLen);
+            gateUser.PendingClientMessages.Enqueue(new PendingClientPacket(
+                copy, nMsgLen, defMsg.Ident, gateUser.UserGeneration));
+            gateUser.PendingClientBytes += nMsgLen;
+            PacketTrace($"[PendingQueue] socket={gateUser.nSocket} " +
+                        $"generation={gateUser.UserGeneration} ident={defMsg.Ident} " +
+                        $"len={nMsgLen} count={gateUser.PendingClientMessages.Count} " +
+                        $"bytes={gateUser.PendingClientBytes}");
+            return true;
+        }
+
+        private void ReplayPendingClientMessages(TGateUserInfo expectedUser,
+            TPlayObject expectedPlayObject, long expectedGeneration,
+            List<PendingClientPacket> pending)
+        {
+            if (pending == null || pending.Count == 0)
+            {
+                lock (runSocketSection)
+                {
+                    expectedUser.PendingClientReplayInProgress = false;
+                }
+                return;
+            }
+            var batch = pending;
+            while (batch != null && batch.Count > 0)
+            {
+                foreach (var pendingMessage in batch)
+                {
+                    ClientPacket defMsg;
+                    string sMsg;
+                    byte[] body;
+                    UserEngine userEngine;
+                    lock (runSocketSection)
+                    {
+                        if (_closing || pendingMessage.Generation != expectedGeneration)
+                        {
+                            PacketTrace($"[PendingDrop] reason=generation socket=" +
+                                        $"{expectedUser?.nSocket} ident={pendingMessage.Ident}");
+                            continue;
+                        }
+                        var current = GateInfo.UserList.FirstOrDefault(user =>
+                            user != null && user.nSocket == expectedUser.nSocket &&
+                            user.UserGeneration == expectedGeneration);
+                        if (current == null || !ReferenceEquals(current, expectedUser) ||
+                            !ReferenceEquals(current.PlayObject, expectedPlayObject) ||
+                            current.UserEngine == null || !current.boCertification)
+                        {
+                            PacketTrace($"[PendingDrop] reason=stale-bind socket=" +
+                                        $"{expectedUser?.nSocket} generation={expectedGeneration} " +
+                                        $"ident={pendingMessage.Ident}");
+                            ClearPendingClientMessagesLocked(expectedUser, "stale-bind");
+                            continue;
+                        }
+                        if (!TryParseClientMessage(pendingMessage.Data,
+                                pendingMessage.Length, out defMsg, out sMsg, out body))
+                        {
+                            PacketTrace($"[PendingDrop] reason=malformed-replay socket=" +
+                                        $"{current.nSocket} ident={pendingMessage.Ident}");
+                            continue;
+                        }
+                        userEngine = current.UserEngine;
+                    }
+
+                    // Do not hold the gate lock while invoking game logic. The same
+                    // path can close/rebind a user and must be free to acquire it.
+                    PacketTrace($"[PendingFlush] socket={expectedUser.nSocket} " +
+                                $"generation={expectedGeneration} ident={defMsg.Ident} " +
+                                $"len={pendingMessage.Length}");
+                    try
+                    {
+                        userEngine.ProcessUserMessage(expectedPlayObject,
+                            defMsg, sMsg, body);
+                    }
+                    catch (Exception exception)
+                    {
+                        PacketTrace($"[PendingDrop] reason=replay-exception " +
+                                    $"socket={expectedUser.nSocket} ident={defMsg.Ident} " +
+                                    $"error={exception.GetType().Name}");
+                        lock (runSocketSection)
+                            ClearPendingClientMessagesLocked(expectedUser,
+                                "replay-exception");
+                        return;
+                    }
+                }
+
+                lock (runSocketSection)
+                {
+                    var current = GateInfo.UserList.FirstOrDefault(user =>
+                        user != null && user.nSocket == expectedUser.nSocket &&
+                        user.UserGeneration == expectedGeneration);
+                    if (current == null || !ReferenceEquals(current, expectedUser) ||
+                        !ReferenceEquals(current.PlayObject, expectedPlayObject) ||
+                        !current.boCertification)
+                    {
+                        ClearPendingClientMessagesLocked(expectedUser, "flush-end-stale");
+                        batch = null;
+                        continue;
+                    }
+                    batch = TakePendingClientMessagesLocked(current);
+                    if (batch == null || batch.Count == 0)
+                    {
+                        current.PendingClientReplayInProgress = false;
+                        batch = null;
+                    }
+                }
+            }
+            DrainDeferredUserCleanup();
+        }
 
         private int OpenNewUser(int nSocket, ushort nGSocketIdx, string sIPaddr, IList<TGateUserInfo> UserList)
         {
@@ -872,6 +1202,7 @@ namespace GameSvr
                 if (_closing) return GateInfo.Socket;
                 _closing = true;
                 GateInfo.boUsed = false;
+                ClearPendingClientMessagesLocked("send-failure");
                 _sendQueue.Stop();
                 M2Share.ErrorMessage($"[Exception] {operation}: " +
                                      exception.Message);
@@ -903,12 +1234,12 @@ namespace GameSvr
                     case Grobal2.GM_CLOSE:
                         CloseUser(MsgHeader.Socket);
                         break;
-                    case Grobal2.GM_CHECKCLIENT:
-                        Gate.boSendKeepAlive = true;
+                    case NativeGameGateCommands.GateKeepAliveRequest:
+                        // Native RunGate sends type 3 and expects the bare
+                        // M2->gate type 13 reply on the same connection.
+                        SendCheck(NativeGameGateCommands.M2KeepAliveReply);
                         break;
-                    case Grobal2.GM_RECEIVE_OK:
-                        CompleteFlowControl();
-                        break;
+                    case NativeGameGateCommands.GateClientData:
                     case Grobal2.GM_DATA:
                         TGateUserInfo GateUser = null;
                         if (MsgHeader.UserIndex >= 1)
@@ -953,29 +1284,30 @@ namespace GameSvr
                         {
                             if (GateUser.PlayObject != null && GateUser.UserEngine != null)
                             {
-                                if (GateUser.boCertification && nMsgLen >= 12)
+                                if (GateUser.boCertification &&
+                                    GateUser.PendingClientReplayInProgress)
                                 {
-                                    var defMsg = Packets.ToPacket<ClientPacket>(MsgBuff);
-                                    PacketTrace($"[Pkt] ident={defMsg.Ident}(0x{defMsg.Ident:X4}) recog={defMsg.Recog} len={nMsgLen}");
-                                    byte[] body = null;
-                                    string sMsg = null;
-                                    // `nMsgLen - 12` is 战神's CM dispatcher fourth parameter
-                                    // (0x6B1B11 `movzx esi,word [node+8]` / 0x6B1B15 `sub esi,0x0C`),
-                                    // so this body array's Length is what the length gates in
-                                    // NativeClientBodyLengthGate compare against. It has to reach
-                                    // ProcessUserMessage intact — do not shorten or re-encode it here.
-                                    if (nMsgLen > ClientPacket.PackSize)
-                                    {
-                                        var bodyLength = Math.Min(nMsgLen, MsgBuff.Length) - ClientPacket.PackSize;
-                                        body = new byte[bodyLength];
-                                        Buffer.BlockCopy(MsgBuff, ClientPacket.PackSize, body, 0, bodyLength);
-
-                                        // Keep the exact bytes for binary client commands while preserving the
-                                        // legacy text view used by existing message handlers.
-                                        sMsg = DecodeClientMessageBody(defMsg.Ident, body);
-                                    }
+                                    QueuePendingClientMessageLocked(GateUser,
+                                        MsgBuff, nMsgLen);
+                                }
+                                else if (GateUser.boCertification &&
+                                         TryParseClientMessage(MsgBuff, nMsgLen,
+                                             out var defMsg, out var sMsg,
+                                             out var body))
+                                {
+                                    PacketTrace($"[Pkt] ident={defMsg.Ident}(0x{defMsg.Ident:X4}) " +
+                                                $"recog={defMsg.Recog} param={defMsg.Param} " +
+                                                $"tag={defMsg.Tag} series={defMsg.Series} len={nMsgLen}");
                                     M2Share.UserEngine.ProcessUserMessage(GateUser.PlayObject, defMsg, sMsg, body);
                                 }
+                            }
+                            else if (GateUser.boCertification)
+                            {
+                                // Certification is acknowledged before the async DB load
+                                // creates PlayObject. Preserve the exact client packet until
+                                // SetGateUserList binds this same socket/generation.
+                                QueuePendingClientMessageLocked(GateUser, MsgBuff,
+                                    nMsgLen);
                             }
                             else if (!GateUser.boCertification)
                             {
@@ -1001,7 +1333,10 @@ namespace GameSvr
                             }
                             PacketTrace($"[GateDataMiss] socket={MsgHeader.Socket} userIdx={MsgHeader.UserIndex} gateUsers={Gate.UserList.Count} list={users}");
 #endif
-                        }
+                         }
+                         break;
+                    case Grobal2.GM_RECEIVE_OK:
+                        CompleteFlowControl();
                         break;
                 }
             }
@@ -1017,6 +1352,10 @@ namespace GameSvr
         public bool SetGateUserList(int nSocket, TPlayObject PlayObject)
         {
             var bound = false;
+            TGateUserInfo boundUser = null;
+            List<PendingClientPacket> pending = null;
+            long boundGeneration = 0;
+            var startReplay = false;
             lock (runSocketSection)
             {
                 if (!_closing && PlayObject != null &&
@@ -1041,18 +1380,51 @@ namespace GameSvr
                                  StringComparison.OrdinalIgnoreCase)) ||
                             (!string.IsNullOrEmpty(gateUserInfo.sCharName) &&
                              !string.Equals(gateUserInfo.sCharName,
-                                 PlayObject.m_sCharName,
-                                 StringComparison.OrdinalIgnoreCase)) ||
+                                  PlayObject.m_sCharName,
+                                  StringComparison.OrdinalIgnoreCase)) ||
                             (gateUserInfo.PlayObject != null &&
                              !ReferenceEquals(gateUserInfo.PlayObject,
-                                 PlayObject)))
+                                  PlayObject)))
                             continue;
+
+                        // The load pipeline can publish the same player twice.
+                        // Once replay owns this generation, a duplicate bind
+                        // must not detach a second batch or clear the owner's
+                        // in-progress marker while the first batch is running.
+                        if (gateUserInfo.PendingClientReplayInProgress &&
+                            ReferenceEquals(gateUserInfo.PlayObject, PlayObject))
+                        {
+                            boundUser = gateUserInfo;
+                            boundGeneration = gateUserInfo.UserGeneration;
+                            bound = true;
+                            PacketTrace($"[GateBind] gate={_gateIdx} socket={nSocket} " +
+                                        $"generation={boundGeneration} duplicate=replay-owner");
+                            break;
+                        }
                         gateUserInfo.FrontEngine = null;
                         gateUserInfo.UserEngine = M2Share.UserEngine;
                         gateUserInfo.PlayObject = PlayObject;
+                        boundUser = gateUserInfo;
+                        boundGeneration = gateUserInfo.UserGeneration;
+                        pending = TakePendingClientMessagesLocked(gateUserInfo);
+                        gateUserInfo.PendingClientReplayInProgress =
+                            pending != null && pending.Count > 0;
+                        startReplay = pending != null && pending.Count > 0;
+                        PacketTrace($"[GateBind] gate={_gateIdx} socket={nSocket} " +
+                                    $"generation={boundGeneration} pending={pending?.Count ?? 0}");
                         bound = true;
                         break;
                     }
+                }
+                if (!bound && PlayObject != null)
+                {
+                    var failedGeneration = PlayObject.m_UserGeneration;
+                    var failedUser = GateInfo.UserList.FirstOrDefault(user =>
+                        user != null && user.nSocket == nSocket &&
+                        user.UserGeneration == failedGeneration);
+                    ClearPendingClientMessagesLocked(failedUser, "bind-failed");
+                    PacketTrace($"[GateBindFail] gate={_gateIdx} socket={nSocket} " +
+                                $"generation={failedGeneration} userFound={failedUser != null}");
                 }
             }
             if (!bound && PlayObject != null)
@@ -1060,6 +1432,9 @@ namespace GameSvr
                 PlayObject.m_boEmergencyClose = true;
                 PlayObject.m_boSoftClose = true;
             }
+            if (bound && startReplay)
+                ReplayPendingClientMessages(boundUser, PlayObject,
+                    boundGeneration, pending);
             return bound;
         }
     }

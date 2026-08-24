@@ -206,6 +206,7 @@ internal static class LoginGateSelfTests
             "jump inner ident");
         Equal((ushort)7100, jumpInner.Param, "jump GameGate port");
         Check(jumpInner.Recog != 0, "jump session id is non-zero");
+        await CheckPeerKeptOpenAsync(clientStream, timeout.Token);
 
         using var areaTwoClient = new TcpClient();
         await areaTwoClient.ConnectAsync(IPAddress.Loopback, started.ClientListenPort,
@@ -254,6 +255,27 @@ internal static class LoginGateSelfTests
         await server.StartAsync(timeout.Token);
         Check(server.GetStats().Running, "server did not restart");
         await server.StopAsync();
+    }
+
+    private static async Task CheckPeerKeptOpenAsync(NetworkStream stream,
+        CancellationToken cancellationToken)
+    {
+        using var probe = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        probe.CancelAfter(TimeSpan.FromMilliseconds(150));
+        try
+        {
+            var byteBuffer = new byte[1];
+            var read = await stream.ReadAsync(byteBuffer, probe.Token);
+            Check(read != 0,
+                "LoginGate closed the selection socket after the jump frame");
+            throw new InvalidOperationException(
+                "LoginGate sent unexpected data after the jump frame");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // No data and no FIN: the server is waiting for the client to close.
+        }
     }
 
     private static YbDbLegacy77Frame CreateRegistration(string name, int online)

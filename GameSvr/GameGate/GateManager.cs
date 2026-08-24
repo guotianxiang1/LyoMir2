@@ -24,6 +24,10 @@ namespace GameSvr
         public static GateManager Instance => instance;
         private readonly ISocketServer _gateSocket = null;
         private readonly ConcurrentDictionary<int, GateService> _gateDataService;
+        // Native M2 keeps a separate 1..32 gate table. ConnectionId remains
+        // the managed dictionary key; this table is only for native routing.
+        private readonly object _nativeGateSlotLock = new();
+        private readonly GateService[] _nativeGateSlots = new GateService[33];
 
         private GateManager()
         {
@@ -81,10 +85,15 @@ namespace GameSvr
                 gateInfo.Socket = e.Socket;
                 gateInfo.UserList = new List<TGateUserInfo>();
                 gateInfo.nUserCount = 0;
-                gateInfo.boSendKeepAlive = false;
                 gateInfo.nSendChecked = 0;
                 gateInfo.nSendBlockCount = 0;
-                var gateService = new GateService(e.ConnectionId, gateInfo);
+                // ConnectionId is only the managed dictionary key.  The
+                // native 1..32 gate identity arrives in the Cmd=5 registration
+                // frame and must be present before DATA is emitted.
+                var gateService = new GateService(e.ConnectionId, gateInfo,
+                    requireNativeRegistration: true,
+                    claimNativeGateIndex: TryClaimNativeGateIndex,
+                    releaseNativeGateIndex: ReleaseNativeGateIndex);
                 if (!_gateDataService.TryAdd(e.ConnectionId, gateService))
                 {
                     gateService.Stop();
@@ -98,6 +107,35 @@ namespace GameSvr
             {
                 M2Share.ErrorMessage(string.Format(sKickGate, e.EndPoint));
                 e.Socket.Close();
+            }
+        }
+
+        /// <summary>
+        /// Mirrors M2's manager+index*4+0x30C table. A new registration
+        /// replaces the previous pointer for that slot; native does not reject
+        /// duplicate gate numbers.
+        /// </summary>
+        private bool TryClaimNativeGateIndex(GateService service, int gateIndex)
+        {
+            if (gateIndex is < NativeGameGateCommands.MinGateIndex
+                or > NativeGameGateCommands.MaxGateIndex)
+                return false;
+            lock (_nativeGateSlotLock)
+            {
+                _nativeGateSlots[gateIndex] = service;
+                return true;
+            }
+        }
+
+        private void ReleaseNativeGateIndex(GateService service, int gateIndex)
+        {
+            if (gateIndex is < NativeGameGateCommands.MinGateIndex
+                or > NativeGameGateCommands.MaxGateIndex)
+                return;
+            lock (_nativeGateSlotLock)
+            {
+                if (ReferenceEquals(_nativeGateSlots[gateIndex], service))
+                    _nativeGateSlots[gateIndex] = null;
             }
         }
 
@@ -248,18 +286,7 @@ namespace GameSvr
                                 gateInfo.nSendBytesCount = 0;
                                 gateInfo.nSendCount = 0;
                             }
-                            if (gateInfo.boSendKeepAlive)
-                            {
-                                gateInfo.boSendKeepAlive = false;
-                                gateService.SendCheck(Grobal2.GM_CHECKSERVER);
-                            }
                             gateService.ResumeFlowControlIfTimedOut();
-                            // 每 5 秒发送心跳 ACK (CMD=0x0C), 防止 GameGate 超时断连
-                            if ((HUtil32.GetTickCount() - gateInfo.dwCompactAckTick) > 5000)
-                            {
-                                gateInfo.dwCompactAckTick = HUtil32.GetTickCount();
-                                gateService.SendCompactAck();
-                            }
                         }
                     }
                 }

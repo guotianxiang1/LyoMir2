@@ -18,7 +18,6 @@ namespace GameSvr
         
         
         public int nUserCount;
-        public bool boSendKeepAlive;
         public int nSendChecked;
         public int nSendBlockCount;
         
@@ -53,6 +52,5 @@ namespace GameSvr
         
         
         public int dwSendCheckTick;
-        public int dwCompactAckTick;
     }
 }

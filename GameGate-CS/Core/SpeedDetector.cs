@@ -165,6 +165,7 @@ public static class ActionClassifier
                 action = ActionType.WALK;
                 return true;
             case Grobal2.CM_RUN:
+            case Grobal2.CM_RUN3:
             case Grobal2.CM_HORSERUN:
                 action = ActionType.RUN;
                 return true;

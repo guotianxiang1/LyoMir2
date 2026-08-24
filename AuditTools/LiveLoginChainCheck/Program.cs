@@ -89,7 +89,8 @@ try
     {
         Recog = 0,
         Ident = 1018
-    }, Array.Empty<byte>(), 4, options.Tiger, selectedSession, timeout.Token);
+    }, CreateNativeClientVersionBody(), 4, options.Tiger, selectedSession,
+        timeout.Token);
 
     var sawLogon = false;
     var sawNewMap = false;
@@ -224,6 +225,10 @@ static async Task WriteMobileAsync(NetworkStream stream,
     var wire = MobileCodec.WriteFrame(inner, body, sequence, MobileCodec.MARKER_DATA);
     await WriteGameWireAsync(stream, wire, tiger, tigerKeyOffset, cancellationToken);
 }
+
+// The 2.08 client sends the fixed TOsVersion3 payload on CM_LOGINNOTICEOK.
+// The captured login frame is exactly 81 bytes (all zero for this build).
+static byte[] CreateNativeClientVersionBody() => new byte[81];
 
 static async Task WriteGameWireAsync(NetworkStream stream, byte[] frame,
     bool tiger, uint tigerKeyOffset, CancellationToken cancellationToken)

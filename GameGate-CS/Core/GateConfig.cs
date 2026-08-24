@@ -22,6 +22,9 @@ public sealed class GateConfig
     public int MaxSend = 1000;
     public int ServeCount = 16;
     public int Mode = 1;
+    // Native RunGate registration accepts gate numbers 1..32.  A single
+    // gateway deployment uses 1 until a registration reply supplies another.
+    public int GateIndex = 1;
 
     // ── Speed Detection (real INI keys) ──
     public int WalkInterval = 570;       // Walk (Delphi: 570ms)
@@ -97,6 +100,7 @@ public sealed class GateConfig
         cfg.AbusiveFilter.LoadRules(Path.Combine(dir, "AbusiveFilter.txt"));
 
         cfg.MaxUser = Math.Clamp(cfg.MaxUser, 1, SessionManager.MAX_SESSIONS);
+        cfg.GateIndex = Math.Clamp(cfg.GateIndex, 1, 32);
 
         return cfg;
     }
@@ -140,6 +144,11 @@ public sealed class GateConfig
                 case "MaxSend": cfg.MaxSend = iv; break;
                 case "ServeCount": cfg.ServeCount = iv; break;
                 case "Mode": cfg.Mode = iv; break;
+                case "GateIndex":
+                case "GateIdx":
+                case "GateID":
+                    if (iv is >= 1 and <= 32) cfg.GateIndex = iv;
+                    break;
                 case "Walk": cfg.WalkInterval = iv; break;
                 case "Attacr": cfg.AttackInterval = iv; break;
                 case "Cast": cfg.CastInterval = iv; break;
@@ -188,6 +197,9 @@ public sealed class GateConfig
 
     private static bool IsM2Key(string key) => key.Equals("GameServerIP", StringComparison.OrdinalIgnoreCase) ||
         key.Equals("GameServerPort", StringComparison.OrdinalIgnoreCase) ||
+        key.Equals("GateIndex", StringComparison.OrdinalIgnoreCase) ||
+        key.Equals("GateIdx", StringComparison.OrdinalIgnoreCase) ||
+        key.Equals("GateID", StringComparison.OrdinalIgnoreCase) ||
         key.Equals("site", StringComparison.OrdinalIgnoreCase) ||
         key.Equals("time", StringComparison.OrdinalIgnoreCase) ||
         key.Equals("Reboot", StringComparison.OrdinalIgnoreCase);
@@ -315,6 +327,7 @@ public sealed class GateConfig
             ["MaxSend"] = MaxSend.ToString(),
             ["Mode"] = Mode.ToString(),
             ["ServeCount"] = ServeCount.ToString(),
+            ["GateIndex"] = Math.Clamp(GateIndex, 1, 32).ToString(),
             ["OpenNewTigerGate"] = OpenNewTigerGate ? "1" : "0",
             ["site"] = M2Path,
             ["time"] = M2WatchInterval.ToString(),

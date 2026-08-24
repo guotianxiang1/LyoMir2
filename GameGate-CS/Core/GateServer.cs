@@ -21,8 +21,10 @@ public sealed class GateServer : IDisposable
     private const ushort SM_STARTPLAY = 525;
     private const ushort SM_LOGON = 50;
     private const ushort SM_SENDNOTICE = 658;
+    private const ushort SM_CLIENT_CONF = 2953;
     private const ushort SM_NEWMAP = 51;
     private const ushort CM_QUERYBAGITEMS = 81;
+    private const ushort CM_QUERY_FOCUS_ITEM = 1271;
     private const ushort CM_MERCHANTDLGSELECT = 1011;
     private const ushort SM_AREASTATE_SERVER = 766;
     private const ushort SM_AREASTATE_CLIENT = 708;
@@ -78,9 +80,10 @@ public sealed class GateServer : IDisposable
         byte[] payload)
     {
         ArgumentNullException.ThrowIfNull(payload);
-        if (payload.Length > InternalPacket77.MAX_PAYLOAD_SIZE)
+        if (payload.Length > NativeGameGateCommands.NativeM2MaximumBodyLength)
             throw new InvalidDataException(
-                $"GameSvr payload {payload.Length} exceeds {InternalPacket77.MAX_PAYLOAD_SIZE} bytes");
+                $"GameSvr payload {payload.Length} exceeds "
+                + $"{NativeGameGateCommands.NativeM2MaximumBodyLength} bytes");
 
         return new InternalPacket77
         {
@@ -88,7 +91,7 @@ public sealed class GateServer : IDisposable
             ConnID = connId,
             SeqID = sequence,
             FrameLen = checked((ushort)(InternalPacket77.HEADER_SIZE + payload.Length)),
-            Cmd = Grobal2.GM_DATA,
+            Cmd = NativeGameGateCommands.GateClientData,
             Field16 = unchecked((uint)Environment.TickCount),
             Field20 = checked((uint)payload.Length),
             Payload = payload
@@ -358,8 +361,9 @@ public sealed class GateServer : IDisposable
 
         // Bidirectional relay using the original shared-backend topology:
         // Client↔GameGate: MobileCodec binary frames (0xFF3A3A44/0xFF44FF44)
-        // GameGate↔DBSvr: 6bit AccountPacket (%A{handle}/{encoded}$)
-        // GameGate↔GameSvr: one shared 77BBAA33 stream routed by ConnID=client handle.
+        // GameGate↔DBSvr: 6bit AccountPacket (%A{nativeSessionId}/{encoded}$)
+        // GameGate↔GameSvr: one shared 77BBAA33 stream routed by the native
+        // logical session key, independent from the OS socket handle.
         var cts = new CancellationTokenSource();
         var clientStream = client.GetStream();
         var clientWriteLock = session.ClientWriteLock;
@@ -369,7 +373,8 @@ public sealed class GateServer : IDisposable
         SharedBackendRoute? route;
         try
         {
-            route = await _backend.OpenRouteAsync(sockHandle, ip, generation,
+            route = await _backend.OpenRouteAsync(sockHandle, session.NativeSessionId,
+                ip, generation,
                 () =>
                 {
                     try { cts.Cancel(); } catch { }
@@ -397,7 +402,7 @@ public sealed class GateServer : IDisposable
             if (session.Generation != generation || !await _backend.SendGameAsync(route, data, token))
                 throw new IOException("shared GameSvr route is unavailable");
         }
-        Trace("OPEN", $"shared backends route handle={sockHandle} conn=0x{route.ConnId:X8}");
+        Trace("OPEN", $"shared backends route handle={sockHandle} native={route.NativeSessionId} conn=0x{route.ConnId:X8}");
 
         var bufferedGameFrames = new List<(ushort Ident, byte[] Frame, int BodyLen, int Plen, string Reason)>();
         var bufferedGameFrameBytes = 0;
@@ -405,26 +410,27 @@ public sealed class GateServer : IDisposable
         var waitClientMainReady = false;
         var clientMainReady = false;
         var delayedFirstPassionAreaState = false;
-        var injectedNoticeOk = false;
+        var sentGameSvrCertification = false;
         using var loginNoticeWriteLock = new SemaphoreSlim(1, 1);
         var sentLogonToClient = false;
         var sentLoginScriptToGameSvr = false;
         long lastQueryBagItemsForwardedAt = 0;
+        long lastQueryFocusItemAt = 0;
         var softCloseQueryPending = 0;
 
-        async Task<bool> SendLoginNoticeOkOnce(byte[] frame, string source)
+        async Task<bool> SendGameSvrCertificationOnce(byte[] frame, string source)
         {
             await loginNoticeWriteLock.WaitAsync(cts.Token);
             try
             {
                 lock (bufferedGameFramesLock)
                 {
-                    if (injectedNoticeOk) return false;
+                    if (sentGameSvrCertification) return false;
                 }
 
                 await WriteGameSvr(frame, cts.Token);
-                lock (bufferedGameFramesLock) injectedNoticeOk = true;
-                Trace("GS", $"CM_LOGINNOTICEOK sent by {source}");
+                lock (bufferedGameFramesLock) sentGameSvrCertification = true;
+                Trace("GS", $"GameSvr certification sent by {source}");
                 return true;
             }
             finally
@@ -459,7 +465,7 @@ public sealed class GateServer : IDisposable
                     waitClientMainReady = false;
                     clientMainReady = false;
                     delayedFirstPassionAreaState = false;
-                    injectedNoticeOk = false;
+                    sentGameSvrCertification = false;
                     sentLogonToClient = false;
                     sentLoginScriptToGameSvr = false;
                 }
@@ -469,7 +475,7 @@ public sealed class GateServer : IDisposable
                 var queryBody = HUtil32.GetBytes(EDcode.EncodeString($"{account}/{sessionId}"));
                 var bodyEnc = Enc6Body(queryBody);
                 var bodyStr = bodyEnc.Length > 0 ? HUtil32.GetString(bodyEnc, 0, bodyEnc.Length) : "";
-                var apFrame = HUtil32.GetBytes($"%A{sockHandle}/#{EDcode.EncodeMessage(headerMsg)}{bodyStr}!$");
+                var apFrame = HUtil32.GetBytes($"%A{route.NativeSessionId}/#{EDcode.EncodeMessage(headerMsg)}{bodyStr}!$");
                 if (!await _backend.SendDbAsync(route, apFrame, cts.Token))
                 {
                     Log("UP", "CM_SOFTCLOSE character query failed: DBSvr unavailable");
@@ -483,15 +489,39 @@ public sealed class GateServer : IDisposable
             }
         }
 
-        async Task WriteClientMobileFrame(byte[] frame)
+        async Task WriteClientMobileFrame(byte[] frame, bool allocateDataIndex = false)
         {
-            var wire = session.IsTiger
-                ? Encoding.ASCII.GetBytes(TigerCodec.Encode(frame, session.TigerKeyOffset))
-                : frame;
             await clientWriteLock.WaitAsync(cts.Token);
             try
             {
+                uint dataIndex = 0;
+                if (allocateDataIndex)
+                {
+                    if (frame.Length < MobileCodec.HEADER_SIZE)
+                        throw new InvalidDataException("client DATA frame is shorter than its mobile header");
+
+                    // Allocate and patch only while the write lock is held.  DB,
+                    // GameSvr, delayed, and management senders therefore share
+                    // one counter in the same order bytes reach the socket.
+                    dataIndex = session.AllocateDownDataIndex();
+                    BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(8, 4), dataIndex);
+                }
+
+                var wire = session.IsTiger
+                    ? Encoding.ASCII.GetBytes(TigerCodec.Encode(frame, session.TigerKeyOffset))
+                    : frame;
                 await clientStream.WriteAsync(wire, 0, wire.Length, cts.Token);
+
+                if (allocateDataIndex)
+                {
+                    ushort ident = 0;
+                    if (frame.Length >= MobileCodec.HEADER_SIZE + MobileCodec.INNER_SIZE
+                        && BitConverter.ToUInt16(frame, 4) == MobileCodec.MARKER_DATA)
+                    {
+                        ident = BitConverter.ToUInt16(frame, MobileCodec.HEADER_SIZE + 4);
+                    }
+                    Trace("CLIENT-DOWN", $"ident={ident} seq={dataIndex} wire={wire.Length}B");
+                }
             }
             finally
             {
@@ -537,7 +567,7 @@ public sealed class GateServer : IDisposable
                         throttledFrameCount++;
                     }
 
-                    await WriteClientMobileFrame(frameInfo.Frame);
+                    await WriteClientMobileFrame(frameInfo.Frame, allocateDataIndex: true);
                     session.TotalSentBytes += frameInfo.Frame.Length;
                     Trace("GS", $"=>Client ident={frameInfo.Ident} body={frameInfo.BodyLen}B plen={frameInfo.Plen} flushed {reason} {frameInfo.Reason}".TrimEnd());
 
@@ -659,7 +689,7 @@ public sealed class GateServer : IDisposable
                             // 客户端 processMsg 收到 SM_LOGIN 后发 CM_LOGIN_AUTH(0x59)
                             var siInner = new MobileCodec.InnerHeader { Recog = 0, Ident = 4003 }; // SM_LOGIN
                             var siFrame = E(siInner, new byte[44], mf.Header.Seq);
-                            await WriteClientMobileFrame(siFrame);
+                            await WriteClientMobileFrame(siFrame, allocateDataIndex: true);
                             Trace("SEND", $"→ SERVER_INFO(0x2C) SM_LOGIN");
                             continue;
                         }
@@ -714,11 +744,31 @@ public sealed class GateServer : IDisposable
 
                         // ── Speed detection (Fix 5: DelayQueue integration) ──
                         // 角色管理/登录命令不加速检 (4012-4017, 4004, 4002, 100-107, 4039, 4041, 4031)
+                        //
+                        // 2.08's GameSvr owns the native movement timing gate.  Applying
+                        // the gateway detector a second time is not equivalent: the client
+                        // sends CM_RUN at roughly 400-424 ms while the legacy GateConfig
+                        // derives a 450 ms run floor from Walk=600.  Violations were queued
+                        // for one second and then released in a burst, making valid movement
+                        // stale/out of order.  Keep movement packets on the live route so the
+                        // GameSvr can apply its native state/collision checks exactly once.
                         bool isCharCmd = mf.Inner.Ident is 4004 or 4002 or (>= 4012 and <= 4017)
                                          or (>= 100 and <= 107) or 4041 or 4039 or 4031;
+                        bool isNativeMovementCmd = mf.Inner.Ident is
+                            Grobal2.CM_WALK or Grobal2.CM_RUN or Grobal2.CM_RUN3 or
+                            Grobal2.CM_HORSERUN or Grobal2.CM_TURN;
                         var actionType = default(ActionType);
-                        var hasActionType = !isCharCmd && ActionClassifier.TryClassify(mf.Inner.Ident, out actionType);
-                        if (hasActionType && !_speed.Check(session, actionType))
+                        // Keep classification independent from the optional speed layer:
+                        // chat filtering and mute enforcement must still run when
+                        // Globalspeed=0.  Only the gateway timing/penalty path is gated;
+                        // native movement remains authoritative in GameSvr.  In
+                        // particular, 2.08 emits short CM_TURN bursts while translating
+                        // a click into a move.
+                        var hasActionType = !isCharCmd &&
+                            ActionClassifier.TryClassify(mf.Inner.Ident, out actionType);
+                        var speedCheckEnabled = _cfg.GlobalSpeed &&
+                            hasActionType && !isNativeMovementCmd;
+                        if (speedCheckEnabled && !_speed.Check(session, actionType))
                         {
                             // Fix 6: TurnPack penalty — set TurnPack flag on TURN violations
                             if (actionType == ActionType.TURN)
@@ -749,7 +799,7 @@ public sealed class GateServer : IDisposable
                         }
 
                         // Fix 6: TurnPack — skip forwarding TURN packets when penalty is active
-                        if (hasActionType && actionType == ActionType.TURN && session.TurnPack)
+                        if (speedCheckEnabled && actionType == ActionType.TURN && session.TurnPack)
                         {
                             Trace("TURNPACK", $"[{ip}] Turn packet dropped (TurnPack active)");
                             Interlocked.Increment(ref TotalDropped);
@@ -823,6 +873,49 @@ public sealed class GateServer : IDisposable
                         // 战神架构: GameGate 纯转发, DBSvr/GameSvr 处理业务逻辑
                         byte[] bodyToSend = mf.Body ?? Array.Empty<byte>();
                         ushort fwdIdent = mf.Inner.Ident;
+
+                        if (fwdIdent == CM_QUERY_FOCUS_ITEM)
+                        {
+                            var now = Environment.TickCount64;
+                            if (LegacyGateType24Cache.IsLookupDue(now, lastQueryFocusItemAt))
+                            {
+                                lastQueryFocusItemAt = now;
+                                if (_backend.TryGetNativeFocusItem(mf.Inner.Recog,
+                                        out var cachedPayload))
+                                {
+                                    var cachedHeader = new MobileCodec.InnerHeader
+                                    {
+                                        Recog = BinaryPrimitives.ReadInt32LittleEndian(
+                                            cachedPayload.AsSpan(0, 4)),
+                                        Ident = BinaryPrimitives.ReadUInt16LittleEndian(
+                                            cachedPayload.AsSpan(4, 2)),
+                                        Param = BinaryPrimitives.ReadUInt16LittleEndian(
+                                            cachedPayload.AsSpan(6, 2)),
+                                        Tag = BinaryPrimitives.ReadUInt16LittleEndian(
+                                            cachedPayload.AsSpan(8, 2)),
+                                        Series = BinaryPrimitives.ReadUInt16LittleEndian(
+                                            cachedPayload.AsSpan(10, 2))
+                                    };
+                                    var cachedBody = cachedPayload.AsSpan(ClientPacket.PackSize).ToArray();
+                                    var cachedFrame = MobileCodec.WriteFrame(cachedHeader,
+                                        cachedBody, 0, MobileCodec.MARKER_DATA);
+                                    await WriteClientMobileFrame(cachedFrame,
+                                        allocateDataIndex: true);
+                                    session.TotalSentBytes += cachedFrame.Length;
+                                    Trace("UP", $"CM_QUERY_FOCUS_ITEM recog={mf.Inner.Recog} cache hit");
+                                }
+                                else
+                                {
+                                    Trace("UP", $"CM_QUERY_FOCUS_ITEM recog={mf.Inner.Recog} cache miss");
+                                }
+                            }
+                            else
+                            {
+                                Trace("UP", $"CM_QUERY_FOCUS_ITEM recog={mf.Inner.Recog} throttled");
+                            }
+                            continue;
+                        }
+
                         ushort serverIdent = MobileCmdMap.ToServer(fwdIdent);
 
                         if (fwdIdent == CM_QUERYBAGITEMS)
@@ -883,48 +976,33 @@ public sealed class GateServer : IDisposable
                             var headerStr = EDcode.EncodeMessage(headerMsg);
                             var bodyEnc = Enc6Body(bodyToSend);
                             var bodyStr = bodyEnc.Length > 0 ? HUtil32.GetString(bodyEnc, 0, bodyEnc.Length) : "";
-                            var apFrame = HUtil32.GetBytes($"%A{sockHandle}/#{headerStr}{bodyStr}!$");
+                            var apFrame = HUtil32.GetBytes($"%A{route.NativeSessionId}/#{headerStr}{bodyStr}!$");
                             if (!await _backend.SendDbAsync(route, apFrame, cts.Token))
                                 throw new IOException("shared DBSvr route is unavailable");
                         }
                         else
                         {
                             Trace("UP", $"→GameSvr ident={fwdIdent} body={bodyToSend.Length}B");
-                            byte[] gsBody;
-                            if (fwdIdent == 1018)
-                            {
-                                // CM_LOGINNOTICEOK: 构造 EDcode 认证字符串
-                                // sessionId comes from the initial outer dataIndex.
-                                var acct = session.Account ?? "guest";
-                                var chr = session.CharName ?? acct;
-                                var sid = session.DBSessionId != 0 ? session.DBSessionId : 2;
-                                var certPlain = $"**{acct}/{chr}/{sid}/1/0/0123456789ABCDEF";
-                                var certBody = HUtil32.GetBytes(EDcode.EncodeString(certPlain));
-                                var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);
-                                cp.Recog = 0;
-                                cp.Ident = 1018;
-                                UpdateClientActionState(session, cp);
-                                gsBody = new byte[ClientPacket.PackSize + certBody.Length];
-                                Buffer.BlockCopy(cp.GetBuffer(), 0, gsBody, 0, ClientPacket.PackSize);
-                                Buffer.BlockCopy(certBody, 0, gsBody, ClientPacket.PackSize, certBody.Length);
-                            }
-                            else
-                            {
-                                 // 其他游戏数据: ClientPacket(12B) + body
-                                 var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);
-                                 UpdateClientActionState(session, cp);
-                                 gsBody = new byte[ClientPacket.PackSize + bodyToSend.Length];
-                                Buffer.BlockCopy(cp.GetBuffer(), 0, gsBody, 0, ClientPacket.PackSize);
-                                if (bodyToSend.Length > 0) Buffer.BlockCopy(bodyToSend, 0, gsBody, ClientPacket.PackSize, bodyToSend.Length);
-                            }
-                            // 77BBAA33: Cmd=GM_DATA(5), Payload=gsBody
+                            // ClientPacket(12B) + the exact client body. In particular,
+                            // CM_LOGINNOTICEOK carries the 81-byte TOsVersion3 payload;
+                            // the earlier internal certification is a separate phase.
+                            var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);
+                            UpdateClientActionState(session, cp);
+                            var gsBody = new byte[ClientPacket.PackSize + bodyToSend.Length];
+                            Buffer.BlockCopy(cp.GetBuffer(), 0, gsBody, 0, ClientPacket.PackSize);
+                            if (bodyToSend.Length > 0)
+                                Buffer.BlockCopy(bodyToSend, 0, gsBody, ClientPacket.PackSize, bodyToSend.Length);
+                            // Native 2.08 Gate -> M2 uses command 4 for client DATA.
+                            // Grobal2.GM_DATA (5) is the historical C# dialect and is the
+                            // native registration command, so it must never be put on this
+                            // wire path.
                             var pkt = CreateGameDataPacket(route.ConnId,
                                 route.NextSequence(), gsBody);
                             if (fwdIdent == 1018)
                             {
-                                var sent = await SendLoginNoticeOkOnce(pkt.ToBytes(), "client 1018");
+                                await WriteGameSvr(pkt.ToBytes(), cts.Token);
                                 await FlushBufferedGameFrames("after client 1018");
-                                if (!sent) Trace("UP", "Duplicate CM_LOGINNOTICEOK suppressed");
+                                Trace("UP", "CM_LOGINNOTICEOK forwarded from client");
                             }
                             else
                             {
@@ -1022,7 +1100,7 @@ public sealed class GateServer : IDisposable
                                 }
                                 else if (body.Length > 0)
                                 {
-                                    if (decodedHeader.Ident == SM_STARTPLAY) // SM_STARTPLAY - 选角完成, 注入 CM_LOGINNOTICEOK 给 GameSvr
+                                    if (decodedHeader.Ident == SM_STARTPLAY)
                                     {
                                         var chrStr = HUtil32.GetString(body, 0, body.Length);
                                         int ni = chrStr.IndexOf('\0');
@@ -1053,7 +1131,7 @@ public sealed class GateServer : IDisposable
                                         bufferedGameFrameBytes = 0;
                                         waitClientMainReady = true;
                                         clientMainReady = false;
-                                        injectedNoticeOk = false;
+                                        sentGameSvrCertification = false;
                                     }
                                 }
 
@@ -1066,7 +1144,7 @@ public sealed class GateServer : IDisposable
                                 session.TotalSentBytes += frame.Length;
                                 if (client.Connected)
                                 {
-                                    await WriteClientMobileFrame(frame);
+                                    await WriteClientMobileFrame(frame, allocateDataIndex: true);
                                 }
                                 Trace("DOWN", $"Sent to client: ident={decodedHeader.Ident} body={body.Length}B hex={BitConverter.ToString(body).Replace("-"," ")}");
 
@@ -1076,23 +1154,30 @@ public sealed class GateServer : IDisposable
                                     var chr = session.CharName ?? acct;
                                     var sid = session.DBSessionId != 0 ? session.DBSessionId : 2;
                                     var certPlain = $"**{acct}/{chr}/{sid}/1/0/0123456789ABCDEF";
-                                    var gsBody = HUtil32.GetBytes(EDcode.EncodeString(certPlain));
-                                    var cp = new ClientPacket { Recog = 0, Ident = 1018, Param = 0, Tag = 0, Series = 0 };
-                                    var pktBody = new byte[ClientPacket.PackSize + gsBody.Length];
+                                    var certBody = HUtil32.GetBytes(EDcode.EncodeString(certPlain));
+                                    var cp = new ClientPacket
+                                    {
+                                        Recog = 0,
+                                        Ident = 1018,
+                                        Param = 0,
+                                        Tag = 0,
+                                        Series = 0
+                                    };
+                                    var pktBody = new byte[ClientPacket.PackSize + certBody.Length];
                                     Buffer.BlockCopy(cp.GetBuffer(), 0, pktBody, 0, ClientPacket.PackSize);
-                                    Buffer.BlockCopy(gsBody, 0, pktBody, ClientPacket.PackSize, gsBody.Length);
+                                    Buffer.BlockCopy(certBody, 0, pktBody, ClientPacket.PackSize,
+                                        certBody.Length);
                                     var pkt = CreateGameDataPacket(route.ConnId,
                                         route.NextSequence(), pktBody);
                                     try
                                     {
-                                        if (await SendLoginNoticeOkOnce(pkt.ToBytes(), "SM_STARTPLAY injection"))
-                                            Trace("GS", "Buffering game packets until client 1018");
-                                        else
-                                            Trace("GS", "SM_STARTPLAY injection skipped; client 1018 won the race");
+                                        if (await SendGameSvrCertificationOnce(pkt.ToBytes(),
+                                                "SM_STARTPLAY"))
+                                            Trace("GS", "Waiting for client 1018 before main-scene delivery");
                                     }
                                     catch (Exception ex)
                                     {
-                                        Log("ERROR", $"Failed to inject CM_LOGINNOTICEOK: {ex.Message}");
+                                        Log("ERROR", $"Failed to certify GameSvr session: {ex.Message}");
                                         throw new IOException("GameSvr login certification failed", ex);
                                     }
                                 }
@@ -1178,7 +1263,8 @@ public sealed class GateServer : IDisposable
                 bool bufferOverflow = false;
                 lock (bufferedGameFramesLock)
                 {
-                    shouldBuffer = waitClientMainReady && !clientMainReady && ident != SM_SENDNOTICE;
+                    shouldBuffer = waitClientMainReady && !clientMainReady
+                        && ident != SM_SENDNOTICE && ident != SM_CLIENT_CONF;
                     if (shouldBuffer)
                     {
                         if (bufferedGameFrames.Count >= MaximumBufferedLoginFrames
@@ -1201,7 +1287,7 @@ public sealed class GateServer : IDisposable
                     return;
                 }
 
-                await WriteClientMobileFrame(frame);
+                await WriteClientMobileFrame(frame, allocateDataIndex: true);
                 session.TotalSentBytes += frame.Length;
                 if (ident == 31 && frameBody.Length >= 32)
                 {
@@ -1227,7 +1313,7 @@ public sealed class GateServer : IDisposable
                                 return;
                             }
 
-                            await WriteClientMobileFrame(delayedFrame);
+                            await WriteClientMobileFrame(delayedFrame, allocateDataIndex: true);
                             session.TotalSentBytes += delayedFrame.Length;
                             Trace("GS", $"=>Client ident={ident} body={delayedBodyLen}B plen={delayedAreaStatePlen} delayed {LoginPassionAreaStateDelayMs}ms {delayedAreaStateReason}".TrimEnd());
                         }
@@ -1288,10 +1374,6 @@ public sealed class GateServer : IDisposable
                                 var clientIdent = ToCurrentClientIdent(cp.Ident);
                                 var mappedReason = clientIdent == cp.Ident ? string.Empty : $"mapped serverIdent={cp.Ident}";
                                 await SendClientGameFrame(clientIdent, cp.Recog, cp.Param, cp.Tag, cp.Series, body, mappedReason);
-
-                                if (cp.Ident == SM_NEWMAP)
-                                    await SendClientGameFrame(SM_MAPINFO_EX_CLIENT, 0, 0, 0, 0,
-                                        Array.Empty<byte>(), "injected empty mapinfo");
                             }
                         }
                     }
@@ -1443,16 +1525,23 @@ public sealed class GateServer : IDisposable
             Series = 1
         };
         var frame = MobileCodec.WriteFrame(inner, HUtil32.GetBytes(message + '\0'),
-            unchecked((uint)Environment.TickCount), MobileCodec.MARKER_DATA);
-        var wire = session.IsTiger
-            ? Encoding.ASCII.GetBytes(TigerCodec.Encode(frame, session.TigerKeyOffset))
-            : frame;
+            0, MobileCodec.MARKER_DATA);
 
         await session.ClientWriteLock.WaitAsync(cancellationToken);
         try
         {
             if (_sessions.Get(id, generation) != session || !client.Connected) return false;
+
+            // System messages are ordinary cmd=23 DATA frames and share the
+            // same per-session index as DB/GameSvr traffic.  Allocate at the
+            // actual write point so concurrent management sends retain wire order.
+            var dataIndex = session.AllocateDownDataIndex();
+            BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(8, 4), dataIndex);
+            var wire = session.IsTiger
+                ? Encoding.ASCII.GetBytes(TigerCodec.Encode(frame, session.TigerKeyOffset))
+                : frame;
             await client.GetStream().WriteAsync(wire, cancellationToken);
+            Trace("CLIENT-DOWN", $"ident={inner.Ident} seq={dataIndex} wire={wire.Length}B");
             Interlocked.Add(ref session.TotalSentBytes, wire.Length);
             Interlocked.Add(ref TotalBytesDown, wire.Length);
             Interlocked.Increment(ref TotalPacketsDown);

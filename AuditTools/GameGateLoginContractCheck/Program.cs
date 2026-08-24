@@ -5,15 +5,17 @@ using SystemModule.Packet;
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 VerifyStartPlayStatePrecedesClientWrite();
-VerifyLoginNoticeOkIsSingleSuccessfulSend();
-VerifyLoginCertificationRecogIsZero();
+VerifyGameSvrCertificationIsSingleSuccessfulSend();
+VerifyInternalCertificationRecogIsZero();
 VerifyMarkerDataCommand23PreservesRawBody();
 VerifyLoginSessionUsesOuterDataIndex();
 VerifyGameDataUsesSupportedEnvelopeCommand();
 VerifyLoginFlushKeepsFramesOrdered();
+VerifyTwoPhaseLoginRelease();
+VerifyGameSvrNoticeStateMachine();
 VerifyGameDataFrameLimit();
 
-Console.WriteLine("GameGateLoginContractCheck PASS checks=8");
+Console.WriteLine("GameGateLoginContractCheck PASS checks=10");
 
 static void VerifyStartPlayStatePrecedesClientWrite()
 {
@@ -25,64 +27,62 @@ static void VerifyStartPlayStatePrecedesClientWrite()
     var clear = Position(relayDown, "bufferedGameFrames.Clear();", startPlayState);
     var wait = Position(relayDown, "waitClientMainReady = true;", clear);
     var notReady = Position(relayDown, "clientMainReady = false;", wait);
-    var injectionAvailable = Position(relayDown, "injectedNoticeOk = false;", notReady);
+    var certificationAvailable = Position(relayDown,
+        "sentGameSvrCertification = false;", notReady);
     var clientWrite = Position(relayDown,
-        "await WriteClientMobileFrame(frame);", injectionAvailable);
+        "await WriteClientMobileFrame(frame, allocateDataIndex: true);", certificationAvailable);
 
     InOrder("SM_STARTPLAY state must be armed before the frame reaches the client",
-        updatePlayer, startPlayState, clear, wait, notReady, injectionAvailable, clientWrite);
+        updatePlayer, startPlayState, clear, wait, notReady,
+        certificationAvailable, clientWrite);
 }
 
-static void VerifyLoginNoticeOkIsSingleSuccessfulSend()
+static void VerifyGameSvrCertificationIsSingleSuccessfulSend()
 {
     var source = GateServerSource();
     var helper = Section(source,
-        "async Task<bool> SendLoginNoticeOkOnce", "async Task QueryCharactersAfterSoftClose");
+        "async Task<bool> SendGameSvrCertificationOnce",
+        "async Task QueryCharactersAfterSoftClose");
 
     var acquireLock = Position(helper,
         "await loginNoticeWriteLock.WaitAsync(cts.Token);");
     var duplicateCheck = Position(helper,
-        "if (injectedNoticeOk) return false;", acquireLock);
+        "if (sentGameSvrCertification) return false;", acquireLock);
     var gameWrite = Position(helper, "await WriteGameSvr(frame, cts.Token);", duplicateCheck);
-    var commitSuccess = Position(helper, "injectedNoticeOk = true;", gameWrite);
+    var commitSuccess = Position(helper,
+        "sentGameSvrCertification = true;", gameWrite);
     var releaseLock = Position(helper,
         "loginNoticeWriteLock.Release();", commitSuccess);
-    InOrder("login certification must serialize duplicate check, write, and commit",
+    InOrder("GameSvr certification must serialize duplicate check, write, and commit",
         acquireLock, duplicateCheck, gameWrite, commitSuccess, releaseLock);
 
     Equal(1, Count(source,
-            "SendLoginNoticeOkOnce(pkt.ToBytes(), \"client 1018\")"),
-        "client 1018 send path count");
-    Equal(1, Count(source,
-            "SendLoginNoticeOkOnce(pkt.ToBytes(), \"SM_STARTPLAY injection\")"),
-        "SM_STARTPLAY injection send path count");
+            "SendGameSvrCertificationOnce(pkt.ToBytes(),"),
+        "SM_STARTPLAY GameSvr certification path count");
+
+    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    NotContains(relayUp, "SendGameSvrCertificationOnce",
+        "the real client 1018 must not be suppressed as a duplicate certification");
 }
 
-static void VerifyLoginCertificationRecogIsZero()
+static void VerifyInternalCertificationRecogIsZero()
 {
-    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
-    var client1018 = Position(relayUp, "if (fwdIdent == 1018)");
-    var createPacket = Position(relayUp,
-        "var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);", client1018);
-    var zeroRecog = Position(relayUp, "cp.Recog = 0;", createPacket);
-    var serializePacket = Position(relayUp,
-        "Buffer.BlockCopy(cp.GetBuffer()", zeroRecog);
-    InOrder("client 1018 certification must serialize Recog=0",
-        createPacket, zeroRecog, serializePacket);
-
     var relayDown = GateServerSection("async Task RelayDown()", "async Task RelayGameSvr()");
-    var injection = Position(relayDown,
-        "SendLoginNoticeOkOnce(pkt.ToBytes(), \"SM_STARTPLAY injection\")");
-    var injectionBlockStart = relayDown.LastIndexOf(
-        "if (decodedHeader.Ident == SM_STARTPLAY)", injection,
-        StringComparison.Ordinal);
-    True(injectionBlockStart >= 0,
-        "SM_STARTPLAY certification block was not found");
-    var injectionBlock = relayDown.Substring(injectionBlockStart,
-        injection - injectionBlockStart);
-    Require(injectionBlock,
-        "new ClientPacket { Recog = 0, Ident = 1018",
-        "injected login certification does not force Recog=0");
+    var clientWrite = Position(relayDown,
+        "await WriteClientMobileFrame(frame, allocateDataIndex: true);");
+    var certPlain = Position(relayDown, "var certPlain =", clientWrite);
+    var createPacket = Position(relayDown, "var cp = new ClientPacket", certPlain);
+    var zeroRecog = Position(relayDown, "Recog = 0", createPacket);
+    var ident1018 = Position(relayDown, "Ident = 1018", zeroRecog);
+    var serializePacket = Position(relayDown,
+        "Buffer.BlockCopy(cp.GetBuffer()", ident1018);
+    var sendCertification = Position(relayDown,
+        "SendGameSvrCertificationOnce(pkt.ToBytes(),", serializePacket);
+    InOrder("SM_STARTPLAY certification must follow client 525 and use Recog=0/Ident=1018",
+        clientWrite, certPlain, createPacket, zeroRecog, ident1018,
+        serializePacket, sendCertification);
+    NotContains(relayDown, "FlushBufferedGameFrames",
+        "the internal SM_STARTPLAY certification must not release scene frames");
 }
 
 static void VerifyMarkerDataCommand23PreservesRawBody()
@@ -156,7 +156,8 @@ static void VerifyLoginSessionUsesOuterDataIndex()
     var captureTigerOffset = Position(relayUp,
         "session.TigerKeyOffset = mf.Header.Seq;", captureSession);
     var sendLogin = Position(relayUp,
-        "await WriteClientMobileFrame(siFrame);", captureTigerOffset);
+        "await WriteClientMobileFrame(siFrame, allocateDataIndex: true);",
+        captureTigerOffset);
     InOrder("outer dataIndex must arm both DB and Tiger state before SM_LOGIN",
         connectBranch, captureSession, captureTigerOffset, sendLogin);
 
@@ -175,6 +176,10 @@ static void VerifyLoginSessionUsesOuterDataIndex()
 static void VerifyGameDataUsesSupportedEnvelopeCommand()
 {
     var source = GateServerSource();
+    Require(source, "Cmd = NativeGameGateCommands.GateClientData",
+        "GateServer client DATA must use native Gate->M2 command 4");
+    NotContains(source, "Cmd = Grobal2.GM_DATA",
+        "GateServer must not put the legacy GM_DATA=5 value on native DATA frames");
     NotContains(source, "(ushort)0x275",
         "GateServer must not send an unsupported speed command as an outer M2 command");
     NotContains(source, "(ushort)0x276",
@@ -195,12 +200,98 @@ static void VerifyLoginFlushKeepsFramesOrdered()
     var stopBuffering = Position(flush, "waitClientMainReady = false;", ready);
     var exit = Position(flush, "return;", stopBuffering);
     var takeBatch = Position(flush, "frames = bufferedGameFrames.ToList();", exit);
-    var sendBatch = Position(flush, "await WriteClientMobileFrame(frameInfo.Frame);",
+    var sendBatch = Position(flush,
+        "await WriteClientMobileFrame(frameInfo.Frame, allocateDataIndex: true);",
         takeBatch);
     InOrder("login flush must commit live mode only on an empty batch",
         loop, empty, ready, stopBuffering, exit, takeBatch, sendBatch);
     Equal(1, Count(flush, "waitClientMainReady = false;"),
         "login flush live-mode commit count");
+}
+
+static void VerifyTwoPhaseLoginRelease()
+{
+    var relayDown = GateServerSection("async Task RelayDown()", "async Task RelayGameSvr()");
+    Require(relayDown, "SendGameSvrCertificationOnce(pkt.ToBytes(),",
+        "SM_STARTPLAY must create the GameSvr player before the notice phase");
+
+    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var createPacket = Position(relayUp,
+        "var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);");
+    var allocateBody = Position(relayUp,
+        "var gsBody = new byte[ClientPacket.PackSize + bodyToSend.Length];",
+        createPacket);
+    var copyBody = Position(relayUp,
+        "Buffer.BlockCopy(bodyToSend, 0, gsBody, ClientPacket.PackSize, bodyToSend.Length);",
+        allocateBody);
+    var createGameFrame = Position(relayUp,
+        "var pkt = CreateGameDataPacket(route.ConnId,", copyBody);
+    var client1018 = Position(relayUp, "if (fwdIdent == 1018)", createGameFrame);
+    var forward1018 = Position(relayUp,
+        "await WriteGameSvr(pkt.ToBytes(), cts.Token);", client1018);
+    var flush = Position(relayUp,
+        "FlushBufferedGameFrames(\"after client 1018\")", forward1018);
+    InOrder("the real client 1018 body must be forwarded before scene release",
+        createPacket, allocateBody, copyBody, createGameFrame,
+        client1018, forward1018, flush);
+    NotContains(relayUp, "cp.Recog = 0;",
+        "the real client 1018 header must not be rewritten as internal certification");
+    NotContains(relayUp, "certPlain",
+        "the real client 1018 body must not be replaced by an EDcode certification string");
+
+    var relayGame = GateServerSection("async Task RelayGameSvr()",
+        "var relayTasks = new[]");
+    var bufferDecision = Position(relayGame,
+        "shouldBuffer = waitClientMainReady && !clientMainReady");
+    var allowNotice = Position(relayGame,
+        "ident != SM_SENDNOTICE", bufferDecision);
+    var allowClientConfig = Position(relayGame,
+        "ident != SM_CLIENT_CONF", allowNotice);
+    var enqueueBuffered = Position(relayGame,
+        "if (shouldBuffer)", allowClientConfig);
+    InOrder("658 and 2953 must bypass the pre-1018 scene buffer",
+        bufferDecision, allowNotice, allowClientConfig, enqueueBuffered);
+    NotContains(relayGame, "injected empty mapinfo",
+        "GameGate must not append an empty SM_MAPINFO_EX after GameSvr's real packet");
+}
+
+static void VerifyGameSvrNoticeStateMachine()
+{
+    var playerBase = RepositorySource("GameSvr", "Players", "TPlayObject.Base.cs");
+    var runNotice = Section(playerBase, "public void RunNotice()",
+        "private byte[] GetMobileAbility()");
+    var sendNotice = Position(runNotice, "SendNotice();");
+    var sendClientConfig = Position(runNotice, "SendNativeClientConfig();", sendNotice);
+    var markNoticeSent = Position(runNotice, "m_boSendNotice = true;", sendClientConfig);
+    InOrder("GameSvr must send 658 then 2953 exactly once without entering the game",
+        sendNotice, sendClientConfig, markNoticeSent);
+    NotContains(runNotice, "m_boLoginNoticeOK = true",
+        "sending 658/2953 must not enter the game before the real client 1018");
+
+    var versionGate = RepositorySource("GameSvr", "Players",
+        "TPlayObject.NativeClientVersionGate.cs");
+    var first1018 = Section(versionGate,
+        "internal bool ShouldDispatchNativeClientMessage",
+        "internal void InitializeNativeClientVersionRunGate");
+    var require1018 = Position(first1018,
+        "if (packet.Ident != Grobal2.CM_LOGINNOTICEOK)");
+    var completeHandshake = Position(first1018,
+        "m_boNativeClientVersionHandshakeDone = true;", require1018);
+    var allowLogin = Position(first1018,
+        "m_boLoginNoticeOK = true;", completeHandshake);
+    var consume1018 = Position(first1018, "return false;", allowLogin);
+    InOrder("only the first real 1018 may complete the notice gate",
+        require1018, completeHandshake, allowLogin, consume1018);
+
+    var userEngine = RepositorySource("GameSvr", "UsrSystem", "UsrEngn.cs");
+    Equal(2, Count(userEngine, "if (!PlayObject.m_boLoginNoticeOK)"),
+        "GameSvr login-notice wait-loop count");
+    Equal(2, Count(userEngine, "PlayObject.RunNotice();"),
+        "GameSvr notice loop count");
+    Equal(2, Count(userEngine, "PlayObject.UserLogon();"),
+        "GameSvr post-1018 UserLogon path count");
+    Equal(0, Count(userEngine, "PlayObject.SendNativeClientConfig();"),
+        "2953 must be emitted alongside 658, not separately on every engine tick");
 }
 
 static void VerifyGameDataFrameLimit()
@@ -231,8 +322,13 @@ static void VerifyGameDataFrameLimit()
     Equal(1, packets.Count, "maximum M2 frame parser count");
 
     var source = GateServerSource();
-    Require(source, "if (payload.Length > InternalPacket77.MAX_PAYLOAD_SIZE)",
-        "GGCS game-data factory does not reject oversized M2 payloads");
+    Require(source,
+        "if (payload.Length > NativeGameGateCommands.NativeM2MaximumBodyLength)",
+        "GGCS game-data factory does not reject oversized native M2 payloads");
+    var gateService = RepositorySource("GameSvr", "GameGate", "GateService.cs");
+    Require(gateService,
+        "maximumFrameLength: InternalPacket77FrameParser.NativeMaximumFrameLength",
+        "GameSvr GateService does not use the native M2 receive frame limit");
     Equal(3, Count(source, "CreateGameDataPacket(route.ConnId,"),
         "all GGCS game-data construction paths must use the bounded factory");
 }
@@ -242,10 +338,12 @@ static string GateServerSection(string start, string end) =>
 
 static string GateServerSource()
 {
-    var root = FindRepositoryRoot();
-    return File.ReadAllText(Path.Combine(root,
-        "GameGate-CS", "Core", "GateServer.cs"));
+    return RepositorySource("GameGate-CS", "Core", "GateServer.cs");
 }
+
+static string RepositorySource(params string[] components) =>
+    File.ReadAllText(Path.Combine(new[] { FindRepositoryRoot() }
+        .Concat(components).ToArray()));
 
 static string Section(string source, string start, string end)
 {
