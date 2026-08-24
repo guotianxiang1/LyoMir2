@@ -46,6 +46,7 @@ namespace GameSvr
             m_sNativeClientVersion = BuildNativeClientVersion(packet);
             m_boNativeSwitchOffsetB75 =
                 NativeClientVersionPolicy.IsAllowed(m_sNativeClientVersion);
+            m_boLoginNoticeOK = true;
             return false;
         }
 
