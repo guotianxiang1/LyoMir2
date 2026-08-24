@@ -598,6 +598,33 @@ namespace GameSvr
             if (socketToClose != null) CloseSocket(socketToClose);
         }
 
+        private void SendNativeKeepAliveReply()
+        {
+            Socket socketToClose = null;
+            lock (runSocketSection)
+            {
+                if (_closing || GateInfo.Socket?.Connected != true) return;
+                lock (_sendStateLock)
+                {
+                    try
+                    {
+                        // Native M2 sub_5F6708 calls sub_5F65A4 with
+                        // ecx=0, push 0 and dx=0x0D.  The reply is therefore
+                        // a bare 16-byte frame with both routing words zero;
+                        // do not reuse SendCheck's diagnostic tick sequence.
+                        QueueControlPacketLocked(
+                            NativeGameGateCommands.M2KeepAliveReply, 0, 0);
+                    }
+                    catch (Exception exception)
+                    {
+                        socketToClose = MarkSendFailureLocked(exception,
+                            "TRunSocket::SendNativeKeepAliveReply");
+                    }
+                }
+            }
+            if (socketToClose != null) CloseSocket(socketToClose);
+        }
+
         private void QueueControlPacketLocked(ushort nIdent)
         {
             QueueControlPacketLocked(nIdent, 0,
@@ -1237,7 +1264,7 @@ namespace GameSvr
                     case NativeGameGateCommands.GateKeepAliveRequest:
                         // Native RunGate sends type 3 and expects the bare
                         // M2->gate type 13 reply on the same connection.
-                        SendCheck(NativeGameGateCommands.M2KeepAliveReply);
+                        SendNativeKeepAliveReply();
                         break;
                     case NativeGameGateCommands.GateClientData:
                     case Grobal2.GM_DATA:
