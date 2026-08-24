@@ -10,7 +10,10 @@ namespace DBSvr.Core
         public const int AccountCapacity = 20;
         public const int ServerNameCapacity = 20;
         public const int ReconnectIdCapacity = 36;
-        public const int BodySize = 88;
+        // TLoginIdResult2 is packed: 21 + 21 + 4 + 4 +
+        // (length byte + 36 bytes) = 87. The client writeString helper does
+        // not append a terminator; net.send transmits the exact record size.
+        public const int BodySize = 87;
 
         private const string ReconnectAlphabet =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -25,7 +28,7 @@ namespace DBSvr.Core
                 serverName, ServerNameCapacity);
             BinaryPrimitives.WriteInt32LittleEndian(body.AsSpan(42, 4), areaId);
             BinaryPrimitives.WriteInt32LittleEndian(body.AsSpan(46, 4), groupId);
-            WriteShortString(body.AsSpan(50, ReconnectIdCapacity + 2),
+            WriteShortString(body.AsSpan(50, ReconnectIdCapacity + 1),
                 reconnectId, ReconnectIdCapacity);
             return body;
         }

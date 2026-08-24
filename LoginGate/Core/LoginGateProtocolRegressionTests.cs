@@ -61,13 +61,22 @@ namespace LoginGate.Core
             Check(LoginGateWireProtocol.TryCreateServerListFrame(3156,
                 [(groupName, groupName), ("SECOND", "SECOND-DESC")],
                 out var multiple, out error), error);
-            Equal(92, multiple.Payload.Length, "multi-group 4001 payload length");
+            Equal(LoginGateWireProtocol.InnerHeaderSize
+                + LoginGateWireProtocol.ServerGroupInfoSize * 2,
+                multiple.Payload.Length, "multi-group 4001 payload length");
             Check(LoginGateWireProtocol.TryParseInnerHeader(multiple.Payload,
                 out var multipleHeader, out error), error);
             Equal((ushort)2, multipleHeader.Param, "multi-group 4001 count");
-            Equal("SECOND", ReadGbkSlot(multiple.Payload.AsSpan(52, 16)),
+            Equal("SECOND", ReadGbkSlot(multiple.Payload.AsSpan(
+                    LoginGateWireProtocol.InnerHeaderSize
+                    + LoginGateWireProtocol.ServerGroupInfoSize,
+                    LoginGateWireProtocol.ServerGroupNameSlotSize)),
                 "multi-group second name");
-            Equal("SECOND-DESC", ReadGbkSlot(multiple.Payload.AsSpan(68, 16)),
+            Equal("SECOND-DESC", ReadGbkSlot(multiple.Payload.AsSpan(
+                    LoginGateWireProtocol.InnerHeaderSize
+                    + LoginGateWireProtocol.ServerGroupInfoSize
+                    + LoginGateWireProtocol.ServerGroupNameSlotSize,
+                    LoginGateWireProtocol.ServerGroupDescriptionSlotSize)),
                 "multi-group second description");
 
             var maximumGroups = Enumerable.Range(1, 32)
@@ -84,20 +93,29 @@ namespace LoginGate.Core
             Equal(1292, decodedMaximumList.Payload.Length,
                 "32-group 4001 wire roundtrip");
 
-            // Native StrPLCopy(...,15) truncates an over-long name/desc to 15 bytes
-            // + null and continues; the frame builder must not throw or drop it.
+            // Native StrPLCopy(...,15/23) truncates over-long name/desc to the
+            // byte limit + null and continues; the frame builder must preserve
+            // the distinct native slot widths.
             Check(LoginGateWireProtocol.TryCreateServerListFrame(3158,
-                "ABCDEFGHIJKLMNOPQRSTUV", "1234567890ABCDEFGHIJ",
+                "ABCDEFGHIJKLMNOPQRSTUV", "1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                 out var truncated, out error), error);
             Equal("ABCDEFGHIJKLMNO",
-                ReadGbkSlot(truncated.Payload.AsSpan(12, 16)),
+                ReadGbkSlot(truncated.Payload.AsSpan(
+                    LoginGateWireProtocol.InnerHeaderSize,
+                    LoginGateWireProtocol.ServerGroupNameSlotSize)),
                 "oversized group name truncated to 15 bytes");
-            Equal("1234567890ABCDE",
-                ReadGbkSlot(truncated.Payload.AsSpan(28, 16)),
-                "oversized group desc truncated to 15 bytes");
-            Equal((byte)0, truncated.Payload[12 + 15],
+            Equal("1234567890ABCDEFGHIJKLM",
+                ReadGbkSlot(truncated.Payload.AsSpan(
+                    LoginGateWireProtocol.InnerHeaderSize
+                    + LoginGateWireProtocol.ServerGroupNameSlotSize,
+                    LoginGateWireProtocol.ServerGroupDescriptionSlotSize)),
+                "oversized group desc truncated to 23 bytes");
+            Equal((byte)0, truncated.Payload[
+                    LoginGateWireProtocol.InnerHeaderSize + 15],
                 "truncated name null terminator");
-            Equal((byte)0, truncated.Payload[28 + 15],
+            Equal((byte)0, truncated.Payload[
+                    LoginGateWireProtocol.InnerHeaderSize
+                    + LoginGateWireProtocol.ServerGroupNameSlotSize + 23],
                 "truncated desc null terminator");
         }
 

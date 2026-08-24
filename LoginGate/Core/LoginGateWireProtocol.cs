@@ -26,7 +26,13 @@ namespace LoginGate.Core
         public const int InnerHeaderSize = 12;
         public const ushort ServerListIdent = 4001;
         public const ushort SelectServerIdent = 4002;
-        public const int ServerGroupInfoSize = 40;
+        // TServerGroupInfo (mir2.def.globa2): char*15 + char*23,
+        // including their terminators, is a 16-byte name slot followed by a
+        // 24-byte description slot. Keep the native 40-byte group stride.
+        public const int ServerGroupNameSlotSize = 16;
+        public const int ServerGroupDescriptionSlotSize = 24;
+        public const int ServerGroupInfoSize =
+            ServerGroupNameSlotSize + ServerGroupDescriptionSlotSize;
         public const int ServerListPayloadSize = 52;
         public const int SelectServerJumpPayloadSize = 32;
 
@@ -219,9 +225,12 @@ namespace LoginGate.Core
             for (var index = 0; index < groups.Count; index++)
             {
                 var offset = InnerHeaderSize + ServerGroupInfoSize * index;
-                if (!TryWriteGbkCString(payload.AsSpan(offset, 16),
+                if (!TryWriteGbkCString(payload.AsSpan(offset,
+                            ServerGroupNameSlotSize),
                         groups[index].Name, out error)
-                    || !TryWriteGbkCString(payload.AsSpan(offset + 16, 16),
+                    || !TryWriteGbkCString(payload.AsSpan(
+                            offset + ServerGroupNameSlotSize,
+                            ServerGroupDescriptionSlotSize),
                         groups[index].Description, out error))
                 {
                     return false;
@@ -667,9 +676,10 @@ namespace LoginGate.Core
             }
             // Native StrPLCopy(dst, src, MaxLen) truncates to at most MaxLen BYTES
             // and null-terminates; it never rejects an over-long field. Every caller
-            // uses MaxLen == destination.Length - 1: 16-byte GroupName/GroupDesc slots
-            // and the 8-byte suffix (uServerInfo.pas: StrPLCopy(GroupName,sName,15),
-            // StrPLCopy(GroupDesc,sDesc,15), StrPLCopy(szPostfix,sSuffix,7)).
+            // uses MaxLen == destination.Length - 1: a 16-byte GroupName slot,
+            // a 24-byte GroupDesc slot, and the 8-byte suffix (uServerInfo.pas:
+            // StrPLCopy(GroupName,sName,15), StrPLCopy(GroupDesc,sDesc,23),
+            // StrPLCopy(szPostfix,sSuffix,7)).
             // Reproduce the byte-level truncation exactly — this can split a 2-byte
             // GBK char at the boundary, exactly as native does.
             destination.Clear();
