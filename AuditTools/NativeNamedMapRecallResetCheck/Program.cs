@@ -18,8 +18,11 @@ try
         StringComparison.Ordinal);
     Assert(resolve >= 0, "named-map target resolution missing");
     var nullGuard = method.IndexOf(
-        "targetEnvironment != null", resolve, StringComparison.Ordinal);
+        "targetEnvironment == null", resolve, StringComparison.Ordinal);
     Assert(nullGuard > resolve, "unresolved map must not mutate recall state");
+    var nullReturn = method.IndexOf("return;", nullGuard,
+        StringComparison.Ordinal);
+    Assert(nullReturn > nullGuard, "unresolved map must return silently");
     var clear = method.IndexOf("m_boTimeRecall = false", nullGuard,
         StringComparison.Ordinal);
     Assert(clear > nullGuard, "cross-map recall clear missing");
@@ -30,6 +33,12 @@ try
         "post-move self comparison was reintroduced");
     Assert(!method.Contains("if (envir != m_PEnvir", StringComparison.Ordinal),
         "dead post-move environment guard was reintroduced");
+    Assert(method.Contains("SpaceMove(targetEnvironment, sX, sY, 0);",
+        StringComparison.Ordinal),
+        "named-map move must pass both requested axes through the native path");
+    Assert(!method.Contains("if (sX != 0 && sY != 0)",
+        StringComparison.Ordinal),
+        "single-axis coordinate sentinel was collapsed by an AND gate");
 
     var staging = Path.GetFullPath(Path.Combine(root, "..", "..", "staging"));
     var native = File.ReadAllText(Path.Combine(staging,
@@ -38,6 +47,8 @@ try
         StringComparison.Ordinal), "native BA8 clear evidence missing");
     Assert(native.Contains("006CE204  FF 93 C0 01 00 00",
         StringComparison.Ordinal), "native VMT dispatch evidence missing");
+    Assert(native.Contains("006CE1F3", StringComparison.Ordinal),
+        "native named-map coordinate dispatch evidence missing");
 
     var baseline = File.ReadAllText(Path.Combine(staging,
         "clean_m2_baseline_audit.md"));
@@ -65,7 +76,11 @@ catch (Exception exception)
 static int FirstDispatch(string method)
 {
     var space = method.IndexOf("SpaceMove(sMap", StringComparison.Ordinal);
+    var resolvedSpace = method.IndexOf("SpaceMove(targetEnvironment",
+        StringComparison.Ordinal);
     var random = method.IndexOf("MapRandomMove(sMap", StringComparison.Ordinal);
+    if (resolvedSpace >= 0)
+        space = space < 0 ? resolvedSpace : Math.Min(space, resolvedSpace);
     if (space < 0) return random;
     if (random < 0) return space;
     return Math.Min(space, random);
