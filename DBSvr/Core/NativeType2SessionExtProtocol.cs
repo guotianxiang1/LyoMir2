@@ -58,6 +58,11 @@ namespace DBSvr.Core
                 error = "native type2 0177 frame is null";
                 return false;
             }
+            if (frame.Type != 2)
+            {
+                error = "native type2 0177 envelope is invalid";
+                return false;
+            }
             var payload = frame.Payload ?? Array.Empty<byte>();
             if (payload.Length < 2
                 || BinaryPrimitives.ReadUInt16LittleEndian(payload)

@@ -14,6 +14,7 @@ Run("blob captured verbatim", BlobCaptured);
 Run("ack echoes identity dwords", AckEchoes);
 Run("short record refused", ShortRecordRefused);
 Run("malformed frames rejected", MalformedFrames);
+Run("wrong envelope refused", WrongEnvelopeRefused);
 
 if (failures.Count != 0)
 {
@@ -21,7 +22,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("NativeType2SessionExtCheck PASS tests=6 "
+Console.WriteLine("NativeType2SessionExtCheck PASS tests=7 "
                   + "type2=0177 ack=013A total=0x54 payload=0x48 "
                   + "id@0x14 cookie@0x18 echo@body+8/+C");
 return 0;
@@ -124,6 +125,18 @@ void MalformedFrames()
     False(NativeType2SessionExtProtocol.TryDecodeRequest(
             new LegacyDbServerFrame(2, 0, wrong), out _, out _),
         "wrong command");
+}
+
+void WrongEnvelopeRefused()
+{
+    // The native dispatcher reaches 0x599AEE only from its TYPE_B/type2 arm.
+    var payload = MakeHeader(0x20);
+    False(NativeType2SessionExtProtocol.TryDecodeRequest(
+            new LegacyDbServerFrame(1, 0, payload), out _, out _),
+        "type1 envelope refused");
+    False(NativeType2SessionExtProtocol.TryDecodeRequest(
+            new LegacyDbServerFrame(3, 0, payload), out _, out _),
+        "type3 envelope refused");
 }
 
 // ---- helpers ----
