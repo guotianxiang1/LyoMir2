@@ -79,6 +79,15 @@ namespace DBSvr.Core
         /// <summary>0x59E22F: delayed 0x2750 reply body command.</summary>
         public const ushort QueryQueueReplyCommand = 0x012D;
 
+        /// <summary>
+        /// Mirrors the unsigned <c>dec; sub 2; jae</c> split in the native
+        /// 0x2750 drain handler (0x5D2BC7..0x5D2BD0). Only result codes 1 and 2
+        /// re-enter the external relay; every other 32-bit value takes the
+        /// GameServer reply path. In particular, -1 and -21 are replies.
+        /// </summary>
+        public static bool ShouldReplyToGameServer(int resultCode) =>
+            resultCode != 1 && resultCode != 2;
+
         /// <summary>0x5D1D08: the async queue node is 0x1C bytes.</summary>
         public const int QueueNodeSize = 0x1C;
 

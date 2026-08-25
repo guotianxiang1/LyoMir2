@@ -141,6 +141,12 @@ void GlobalRelayConstants()
         "0x274D reply");
     Equal(0x012D, NativeGlobalRelayProtocol.QueryQueueReplyCommand,
         "0x2750 reply");
+    foreach (var result in new[] { -21, -1, 0, 3, int.MinValue, int.MaxValue })
+        True(NativeGlobalRelayProtocol.ShouldReplyToGameServer(result),
+            $"0x2750 result {result} replies");
+    foreach (var result in new[] { 1, 2 })
+        False(NativeGlobalRelayProtocol.ShouldReplyToGameServer(result),
+            $"0x2750 result {result} continues relay");
     // 0x5D1D08 `mov eax,0x1C`.
     Equal(0x1C, NativeGlobalRelayProtocol.QueueNodeSize, "queue node 0x1C");
 }
