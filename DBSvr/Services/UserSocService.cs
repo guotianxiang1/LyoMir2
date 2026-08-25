@@ -2310,34 +2310,30 @@ namespace DBSvr
             var ownedRecord = accountRecords.FirstOrDefault(record =>
                 string.Equals(record?.sChrName, sChrName,
                     StringComparison.Ordinal));
+            ChrIndexInfo nativeRecord = null;
+            var hasNativeRecord = nativeWire
+                && _playRecordService.TryGetNativeCharacterByName(
+                    LegacyGbkText.Encode(sChrName), out nativeRecord)
+                && nativeRecord != null;
+            var nativeDeletedRecordOwned = hasNativeRecord
+                && string.Equals(nativeRecord.PTID, sAccount,
+                    StringComparison.Ordinal)
+                && (nativeRecord.DeleteState != 0 || nativeRecord.IsDelete);
             if (nativeWire && (!accountLookupSucceeded || ownedRecord == null))
             {
                 // The native character record keeps deleted rows in the
                 // account registry.  Its +0x37 byte is bDeleted, and the
-                // loader reports code 4 for that state.  Find the cached row
-                // before treating a miss from the active-only account query
-                // as a cross-account request.
-                if (ownedRecord == null
-                    && _playRecordService.TryGetNativeCharacterByName(
-                        LegacyGbkText.Encode(sChrName), out var nativeRecord)
-                    && nativeRecord != null
-                    && string.Equals(nativeRecord.PTID, sAccount,
-                        StringComparison.Ordinal)
-                    && (nativeRecord.DeleteState != 0
-                        || nativeRecord.IsDelete))
+                // loader eventually reports code 4 for that state.  A deleted
+                // owned row passes this ownership gate, but the native loader
+                // checks both result-6 locks before it checks bDeleted.
+                if (!nativeDeletedRecordOwned)
                 {
-                    Log($"[SelectChr] native character is deleted: {sChrName}");
-                    SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
-                        0, 4, 0, 0, null);
-                    handled = true;
+                    // Native ownership failure leaves the handler unhandled;
+                    // the dispatcher emits one 4018 and closes the session.
+                    // Do not invent a 4017 loader code for this pre-loader leg.
+                    Log($"[SelectChr] native character is not owned by account: {sChrName}");
                     return false;
                 }
-
-                // Native ownership failure leaves the handler unhandled; the
-                // dispatcher emits one 4018 and closes the session.  Do not
-                // invent a 4017 loader code for this pre-loader branch.
-                Log($"[SelectChr] native character is not owned by account: {sChrName}");
-                return false;
             }
 
             if (nativeWire)
@@ -2386,9 +2382,7 @@ namespace DBSvr
                 // so this leg is handled with no synchronous packet.  Do not
                 // add a retry/timeout/state-5 wait: the recovered image does
                 // not prove such a continuation in this call path.
-                if (_playRecordService.TryGetNativeCharacterByName(
-                        LegacyGbkText.Encode(sChrName), out var loaderRecord)
-                    && loaderRecord != null && loaderRecord.IsTransLock)
+                if (hasNativeRecord && nativeRecord.IsTransLock)
                 {
                     Log($"[SelectChr] native loader result 6 (record lock): {sChrName}");
                     handled = true;
@@ -2398,9 +2392,24 @@ namespace DBSvr
                 // fn_5AD85C reads account-record+0x1E using the selected
                 // character's PTID. Native 0x019E is its only proven writer:
                 // state 1 sets the lock and every other state clears it.
-                if (_loginService.IsNativeAccountCrossServerLocked(sAccount))
+                var nativeAccount = hasNativeRecord
+                    && !string.IsNullOrEmpty(nativeRecord.PTID)
+                    ? nativeRecord.PTID
+                    : sAccount;
+                if (_loginService.IsNativeAccountCrossServerLocked(nativeAccount))
                 {
                     Log($"[SelectChr] native loader result 6 (account lock): {sChrName}");
+                    handled = true;
+                    return false;
+                }
+
+                // fn_5A777C checks record+0x37 only after both result-6
+                // predicates.  Result 4 is a synchronous 4017 with Param=4.
+                if (nativeDeletedRecordOwned)
+                {
+                    Log($"[SelectChr] native character is deleted: {sChrName}");
+                    SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
+                        0, 4, 0, 0, null);
                     handled = true;
                     return false;
                 }

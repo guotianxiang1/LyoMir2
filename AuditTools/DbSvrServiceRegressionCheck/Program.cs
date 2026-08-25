@@ -1265,7 +1265,10 @@ static void TestNativeSessionControl()
     Check(characterLock >= 0 && accountLock > characterLock
           && selectionMutation > accountLock
           && select.Contains(
-              "_loginService.IsNativeAccountCrossServerLocked(sAccount)",
+              "_loginService.IsNativeAccountCrossServerLocked(nativeAccount)",
+              StringComparison.Ordinal)
+          && select.Contains(
+              "? nativeRecord.PTID\n                    : sAccount",
               StringComparison.Ordinal),
         "4017 account-level result-6 predicate is not wired in native order");
 }
@@ -2978,7 +2981,7 @@ static void TestNativeSelectEntryRenameContinuation()
     var lockResult = select.IndexOf("loader result 6 (record lock)",
         StringComparison.Ordinal);
     Check(lockResult > mustRename && selectionMutation > lockResult
-          && select.Contains("loaderRecord.IsTransLock",
+          && select.Contains("hasNativeRecord && nativeRecord.IsTransLock",
               StringComparison.Ordinal)
           && select.IndexOf("handled = true", lockResult,
               StringComparison.Ordinal) >= lockResult
@@ -3137,19 +3140,43 @@ static void TestNativeSelectDeletedCharacterResult()
     Check(selectStart >= 0 && selectEnd > selectStart,
         "4017 SelectChr method boundary is missing");
     var select = source.Substring(selectStart, selectEnd - selectStart);
-    var deletedProbe = select.IndexOf(
-        "TryGetNativeCharacterByName(\n                        LegacyGbkText.Encode(sChrName)",
+    var cachedProbe = select.IndexOf(
+        "var hasNativeRecord = nativeWire\n                && _playRecordService.TryGetNativeCharacterByName(",
         StringComparison.Ordinal);
-    Check(deletedProbe >= 0
+    var nameGate = select.IndexOf(
+        "var entryStatus = _selectEntryProtocol.Classify(sChrName)",
+        StringComparison.Ordinal);
+    var recordLock = select.IndexOf(
+        "if (hasNativeRecord && nativeRecord.IsTransLock)",
+        StringComparison.Ordinal);
+    var accountLock = select.IndexOf(
+        "if (_loginService.IsNativeAccountCrossServerLocked(nativeAccount))",
+        StringComparison.Ordinal);
+    var deletedResult = select.IndexOf(
+        "if (nativeDeletedRecordOwned)", accountLock,
+        StringComparison.Ordinal);
+    var deletedPacket = select.IndexOf(
+        "SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,\n                        0, 4, 0, 0, null);",
+        deletedResult, StringComparison.Ordinal);
+    Check(cachedProbe >= 0
           && select.Contains("nativeRecord.DeleteState != 0",
               StringComparison.Ordinal)
           && select.Contains("nativeRecord.IsDelete", StringComparison.Ordinal)
-          && select.Contains(
-              "SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,\n                        0, 4, 0, 0, null);",
+          && nameGate > cachedProbe
+          && recordLock > nameGate
+          && accountLock > recordLock
+          && deletedResult > accountLock
+          && deletedPacket > deletedResult
+          && select.IndexOf("handled = true;", deletedPacket,
+              StringComparison.Ordinal) > deletedPacket,
+        "native 4017 must apply name, record-lock and account-lock gates before deleted Param=4");
+    Check(select.Contains(
+              "var nativeAccount = hasNativeRecord\n                    && !string.IsNullOrEmpty(nativeRecord.PTID)",
               StringComparison.Ordinal)
-          && select.IndexOf("handled = true;", deletedProbe,
-              StringComparison.Ordinal) > deletedProbe,
-        "native deleted character must be classified as 4017 Param=4 before the ownership-close path");
+          && select.Contains(
+              "if (!nativeDeletedRecordOwned)\n                {",
+              StringComparison.Ordinal),
+        "native deleted-row ownership or selected-record account key is missing");
 }
 
 static void TestNativeSelectLoadFailureResult()
