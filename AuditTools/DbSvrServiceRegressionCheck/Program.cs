@@ -17,6 +17,7 @@ Run("native 5100 data frames", TestNativeGateDataFrames);
 Run("native 4004 login result body", TestNativeLoginResultBody);
 Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
+Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
 Run("native 4010/4014 character-list rows", TestNativeCharacterListRows);
 Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
@@ -1859,6 +1860,60 @@ static void TestNativeOutOfConnectIdent()
               "Grobal2.SM_OUTOFCONNECTION)",
               StringComparison.Ordinal),
         "native OutOfConnect must use 4018 while preserving the legacy transport");
+}
+
+static void TestNativeSelectOwnershipGate()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var selectStart = source.IndexOf(
+        "private bool SelectChr(string sData",
+        StringComparison.Ordinal);
+    var selectEnd = source.IndexOf(
+        "\n        // ===================== 手游进游戏响应包 =====================",
+        selectStart, StringComparison.Ordinal);
+    Check(selectStart >= 0 && selectEnd > selectStart,
+        "4017 SelectChr method boundary is missing");
+    var select = source.Substring(selectStart, selectEnd - selectStart);
+
+    var lookup = select.IndexOf(
+        "_playRecordService.FindByAccount(ptid, ref chrList)",
+        StringComparison.Ordinal);
+    var ownership = select.IndexOf(
+        "native character is not owned by account",
+        StringComparison.Ordinal);
+    var stateMutation = select.IndexOf(
+        "_playRecordService.UpdateBy(updatedRecord.Id, ref updatedRecord)",
+        StringComparison.Ordinal);
+    var globalIndex = select.IndexOf(
+        "_playRecordService.Index(sChrName)",
+        StringComparison.Ordinal);
+    Check(select.Contains(
+              "var nativeWire = userInfo.WireMode == TGateWireMode.Native77",
+              StringComparison.Ordinal)
+          && lookup >= 0
+          && ownership > lookup
+          && stateMutation > ownership
+          && globalIndex > ownership
+          && select.Contains(
+              "if (nativeWire && (!accountLookupSucceeded || ownedRecord == null))",
+              StringComparison.Ordinal)
+          && select.Contains("OutOfConnect(userInfo);", StringComparison.Ordinal)
+          && select.IndexOf("return false;", ownership,
+              StringComparison.Ordinal) >= 0,
+        "native 4017 must verify account ownership before mutating selection or loading by global name");
+    Check(select.Contains(
+              "int recordIndex = nativeWire && ownedRecord != null\n                ? ownedRecord.Id",
+              StringComparison.Ordinal),
+        "native 4017 must use the account-owned record index after the ownership gate");
+
+    var playRecordSource = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"));
+    Check(playRecordSource.Contains(
+              "WHERE PTID=@ptid AND IsDelete=0 LIMIT 200",
+              StringComparison.Ordinal),
+        "native 4017 ownership lookup must not retain the legacy two-row SQL cap");
 }
 
 static void TestNativeCharacterListRows()

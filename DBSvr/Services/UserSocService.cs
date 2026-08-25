@@ -1645,24 +1645,55 @@ namespace DBSvr
             if (string.IsNullOrEmpty(sChrName)) return false;
 
             bool boDataOK = false;
+            var nativeWire = userInfo.WireMode == TGateWireMode.Native77;
 
-            // 更新选择状态
+            // The native 2.08 handler verifies that the requested name belongs
+            // to the authenticated account before it classifies/loads the
+            // character.  Keep the lookup result separate from the mutation so
+            // an invalid cross-account request cannot clear the account's
+            // existing selection bits.
             IList<TQuickID> chrList = new List<TQuickID>();
             string ptid = sAccount;
-            if (_playRecordService.FindByAccount(ptid, ref chrList) >= 0)
+            var accountLookupSucceeded =
+                _playRecordService.FindByAccount(ptid, ref chrList) >= 0;
+            var accountRecords = new List<HumRecordData>(chrList.Count);
+            if (accountLookupSucceeded)
             {
                 foreach (var qid in chrList)
                 {
                     bool gotIt = false;
                     var humRecord = _playRecordService.GetBy(qid.nIndex, ref gotIt);
                     if (!gotIt) continue;
-
-                    humRecord.boSelected = (byte)(humRecord.sChrName == sChrName ? 1 : 0);
-                    _playRecordService.UpdateBy(qid.nIndex, ref humRecord);
+                    accountRecords.Add(humRecord);
                 }
             }
 
-            int recordIndex = _playRecordService.Index(sChrName);
+            var ownedRecord = accountRecords.FirstOrDefault(record =>
+                string.Equals(record?.sChrName, sChrName,
+                    StringComparison.Ordinal));
+            if (nativeWire && (!accountLookupSucceeded || ownedRecord == null))
+            {
+                // Native ownership failure leaves the handler unhandled; the
+                // dispatcher emits one 4018 and closes the session.  Do not
+                // invent a 4017 loader code for this pre-loader branch.
+                Log($"[SelectChr] native character is not owned by account: {sChrName}");
+                OutOfConnect(userInfo);
+                return false;
+            }
+
+            // 更新选择状态 only after the native ownership gate succeeds.
+            foreach (var humRecord in accountRecords)
+            {
+                humRecord.boSelected = (byte)(
+                    string.Equals(humRecord.sChrName, sChrName,
+                        StringComparison.Ordinal) ? 1 : 0);
+                var updatedRecord = humRecord;
+                _playRecordService.UpdateBy(updatedRecord.Id, ref updatedRecord);
+            }
+
+            int recordIndex = nativeWire && ownedRecord != null
+                ? ownedRecord.Id
+                : _playRecordService.Index(sChrName);
             int dataIndex = _playDataService.Index(sChrName);
             if (recordIndex > 0 && dataIndex == recordIndex)
             {

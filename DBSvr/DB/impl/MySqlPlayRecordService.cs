@@ -230,7 +230,7 @@ namespace DBSvr
 
             using var cmd = new MySqlCommand(
                 @"SELECT idx, ChrName FROM mir3.user_index
-                  WHERE PTID=@ptid AND IsDelete=0 LIMIT 2", conn);
+                  WHERE PTID=@ptid AND IsDelete=0 LIMIT 200", conn);
             cmd.Parameters.AddWithValue("@ptid", sAccount);
             using var dr = cmd.ExecuteReader();
             while (dr.Read())
