@@ -54,10 +54,13 @@ namespace DBSvr
         private long _lastRegistrationTick;
         private int _nativeUserCount;
         private int _nativeRegistered;
+        private int _nativeAdmissionCapacity;
         private int _started;
 
         public LoginGateTransportMode Mode => _mode;
         public bool IsNativeRegistered => Volatile.Read(ref _nativeRegistered) != 0;
+        public int NativeAdmissionCapacity =>
+            Volatile.Read(ref _nativeAdmissionCapacity);
 
         public LoginSvrService(ConfigManager configManager)
         {
@@ -343,11 +346,14 @@ namespace DBSvr
         private void ProcessNativeLoginGateFrame(YbDbLegacy77Frame frame,
             Socket socket, long generation)
         {
-            if (NativeLoginGateProtocol.IsRegistrationResponse(frame))
+            if (NativeLoginGateProtocol.TryDecodeRegistrationResponse(frame,
+                    out var admissionCapacity))
             {
                 lock (_nativeControlLock)
                 {
                     if (!IsCurrentNativeGenerationNoLock(socket, generation)) return;
+                    Volatile.Write(ref _nativeAdmissionCapacity,
+                        admissionCapacity);
                     Interlocked.Exchange(ref _nativeRegistered, 1);
                 }
                 return;

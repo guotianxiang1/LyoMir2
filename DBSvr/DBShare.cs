@@ -89,6 +89,7 @@ namespace DBSvr
         /// <summary>单 IP 同时在线上限</summary>
         public static int MaxSingleIpHumanCount = 100;
         public static bool NativeQueueEnabled = false;
+        public static int NativeCountLimit = 10000;
         /// <summary>排行榜活跃窗口 (30天)</summary>
         public const int RankingActiveDays = 30;
         /// <summary>跨服记录保留天数</summary>

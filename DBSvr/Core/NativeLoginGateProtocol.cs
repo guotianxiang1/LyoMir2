@@ -115,9 +115,19 @@ namespace DBSvr.Core
 
         public static bool IsRegistrationResponse(YbDbLegacy77Frame frame)
         {
-            return frame != null
-                   && frame.Ident == RegistrationResponseIdent
-                   && frame.Payload.Length == 0;
+            return TryDecodeRegistrationResponse(frame, out _);
+        }
+
+        public static bool TryDecodeRegistrationResponse(
+            YbDbLegacy77Frame frame, out int admissionCapacity)
+        {
+            admissionCapacity = 0;
+            if (frame == null
+                || frame.Ident != RegistrationResponseIdent
+                || frame.Payload.Length != 0)
+                return false;
+            admissionCapacity = frame.Param;
+            return true;
         }
 
         public static YbDbLegacy77Frame CreateType2Control(bool enabled) =>

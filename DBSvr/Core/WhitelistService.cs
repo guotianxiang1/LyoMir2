@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Text;
 
 namespace DBSvr.Core
@@ -156,11 +157,25 @@ namespace DBSvr.Core
                 if (!File.Exists(fileName)) return;
                 var lines = File.ReadAllLines(fileName, Encoding.GetEncoding("GBK"));
                 _nativeGameMasterIps.Clear();
+                var countLimit = 10000;
+                var countLimitSeen = false;
                 string currentSection = "";
 
                 foreach (var rawLine in lines)
                 {
                     var separator = rawLine.IndexOf('=');
+                    if (!countLimitSeen && separator > 0
+                        && string.Equals(rawLine[..separator], "CountLimit",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = TrimNativeControlSpace(
+                            rawLine[(separator + 1)..]);
+                        if (!int.TryParse(value, NumberStyles.Integer,
+                                CultureInfo.InvariantCulture, out countLimit))
+                            countLimit = 10000;
+                        countLimitSeen = true;
+                        continue;
+                    }
                     if (separator > 0
                         && string.Equals(rawLine[..separator], "GameMaster",
                             StringComparison.OrdinalIgnoreCase))
@@ -189,6 +204,7 @@ namespace DBSvr.Core
                     else if (currentSection.IndexOf("Deny", StringComparison.OrdinalIgnoreCase) >= 0)
                         _deniedIps.Add(line);
                 }
+                DBShare.NativeCountLimit = countLimit;
             }
             catch { }
         }

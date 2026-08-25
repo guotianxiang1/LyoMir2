@@ -2899,6 +2899,31 @@ static void TestNativeCharacterListRows()
 
 static void TestNativeLoginGateFrames()
 {
+    foreach (var capacity in new[]
+             {
+                 int.MinValue, -1, 0, 1, int.MaxValue
+             })
+    {
+        var registrationResponse = new YbDbLegacy77Frame(7, capacity,
+            NativeLoginGateProtocol.RegistrationResponseIdent,
+            Array.Empty<byte>());
+        Check(NativeLoginGateProtocol.TryDecodeRegistrationResponse(
+            registrationResponse, out var admissionCapacity),
+            "1000 registration response was not recognized");
+        Equal(capacity, admissionCapacity,
+            "1000 registration response admission capacity");
+    }
+    Check(!NativeLoginGateProtocol.TryDecodeRegistrationResponse(
+            new YbDbLegacy77Frame(0, 9,
+                NativeLoginGateProtocol.RegistrationResponseIdent + 1,
+                Array.Empty<byte>()), out _),
+        "non-1000 registration response was accepted");
+    Check(!NativeLoginGateProtocol.TryDecodeRegistrationResponse(
+            new YbDbLegacy77Frame(0, 9,
+                NativeLoginGateProtocol.RegistrationResponseIdent,
+                new byte[] { 0 }), out _),
+        "1000 registration response accepted a non-empty payload");
+
     Check(NativeLoginGateProtocol.TryCreateRegistration(
         LegacyGbkText.Decode(Convert.FromHexString("C2EAB7A8CCE5D1E9B7FE")), 9,
         out var registration, out var error), error);
@@ -4243,6 +4268,7 @@ static void TestNativeType2WhitelistReload()
         "dbsvr-whitelist-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(directory);
     var gbk = Encoding.GetEncoding(936);
+    var previousCountLimit = DBShare.NativeCountLimit;
     void Write(string name, string value) =>
         File.WriteAllText(Path.Combine(directory, name), value, gbk);
     try
@@ -4260,6 +4286,8 @@ static void TestNativeType2WhitelistReload()
         Write("!DenyLogon.txt", "DENY-PTID\r\n");
         var whitelist = new WhitelistService();
         whitelist.Load(directory);
+        Equal(10000, DBShare.NativeCountLimit,
+            "invalid native CountLimit did not fall back to 10000");
         Check(whitelist.IsIpAllowed("10.20.0.1")
               && whitelist.IsIpAllowed("10.20.0.2")
               && whitelist.IsIpAllowed("10.20.0.3"),
@@ -4327,20 +4355,35 @@ static void TestNativeType2WhitelistReload()
         Equal(2, nativeLines.Count(line => line == "10.20.0.4"),
             "native TStringList duplicate preservation");
 
-        Write("IpAddress.txt", "gamemaster=all\r\n");
+        Write("IpAddress.txt",
+            "gamemaster=all\r\ncOuNtLiMiT=-7\r\nCountLimit=8\r\n");
         whitelist.Load(directory);
+        Equal(-7, DBShare.NativeCountLimit,
+            "signed native CountLimit was not preserved");
         Check(whitelist.IsNativeGameMasterIpAllowed("203.0.113.7"),
             "native GameMaster=all did not allow an arbitrary IP");
         File.Delete(Path.Combine(directory, "IpAddress.txt"));
         whitelist.Load(directory);
+        Equal(-7, DBShare.NativeCountLimit,
+            "missing IpAddress file did not preserve CountLimit");
         Check(whitelist.IsNativeGameMasterIpAllowed("203.0.113.8"),
             "missing IpAddress file did not preserve the active GameMaster table");
+        Write("IpAddress.txt", " CountLimit=7\r\nCountLimit =8\r\n");
+        whitelist.Load(directory);
+        Equal(10000, DBShare.NativeCountLimit,
+            "native CountLimit key was incorrectly whitespace-normalized");
         Write("IpAddress.txt", string.Empty);
         whitelist.Load(directory);
+        Equal(10000, DBShare.NativeCountLimit,
+            "empty IpAddress file did not restore the default CountLimit");
         Check(!whitelist.IsNativeGameMasterIpAllowed("203.0.113.8"),
             "successfully loaded empty IpAddress file did not clear the GameMaster table");
     }
-    finally { Directory.Delete(directory, true); }
+    finally
+    {
+        DBShare.NativeCountLimit = previousCountLimit;
+        Directory.Delete(directory, true);
+    }
 }
 
 static void TestNativeType2Initialization()
