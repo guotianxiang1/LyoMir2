@@ -115,6 +115,11 @@ namespace DBSvr.Core
                 error = "native gate-report frame is null";
                 return false;
             }
+            if (frame.Type != 1)
+            {
+                error = "native gate-report envelope type must be 1";
+                return false;
+            }
             var payload = frame.Payload ?? Array.Empty<byte>();
             if (payload.Length < HeaderSize)
             {

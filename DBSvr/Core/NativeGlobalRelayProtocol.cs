@@ -137,6 +137,11 @@ namespace DBSvr.Core
                 error = "native global-relay frame is null";
                 return false;
             }
+            if (frame.Type != 1)
+            {
+                error = "native global-relay envelope type must be 1";
+                return false;
+            }
             payload = frame.Payload ?? Array.Empty<byte>();
             if (payload.Length < HeaderSize)
             {

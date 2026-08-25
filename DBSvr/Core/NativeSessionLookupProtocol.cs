@@ -61,6 +61,11 @@ namespace DBSvr.Core
                 error = "native 0151 frame is null";
                 return false;
             }
+            if (frame.Type != 1)
+            {
+                error = "native 0151 envelope type must be 1";
+                return false;
+            }
             var payload = frame.Payload ?? Array.Empty<byte>();
             if (payload.Length < HeaderSize)
             {

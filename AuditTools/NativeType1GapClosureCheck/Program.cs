@@ -229,7 +229,7 @@ void OpcodeSpaceAccounted()
         NativeCharacterAdminProtocol.LookupRequestCommand,          // 0x19B
         NativeOnlineAccountProtocol.SetTextCommand,                 // 0x19C
         NativeOnlineAccountProtocol.SetLoginTimeCommand,            // 0x19D
-        NativeSessionControlProtocol.SetPlayStateCommand,           // 0x19E
+        NativeSessionControlProtocol.SetCrossServerLockCommand,      // 0x19E
     };
     // The hero family 0x160-0x167 is covered by a range test in the dispatcher.
     for (var hero = NativeHeroDbFrameCodec.LoadCommand;
