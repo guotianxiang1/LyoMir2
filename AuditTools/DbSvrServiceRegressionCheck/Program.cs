@@ -15,6 +15,7 @@ Run("native GBK character-name validation", TestNativeNameValidation);
 Run("native 5100 control frames", TestNativeGateControlFrames);
 Run("native 5100 data frames", TestNativeGateDataFrames);
 Run("native 4004 login result body", TestNativeLoginResultBody);
+Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native 4010/4014 character-list rows", TestNativeCharacterListRows);
 Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
@@ -1761,6 +1762,76 @@ static void TestNativeLoginResultBody()
         "4004 complete response fixture bytes");
     Equal(36, NativeLoginResultCodec.CreateReconnectId(
         "ptidv35blreszj7xl6jz").Length, "generated reconnect id length");
+}
+
+static void TestNativeLoginAlreadyOnline()
+{
+    var auth = new NativeLoginGateAuthResponse(
+        1, 1, 17, Array.Empty<byte>(), "account", string.Empty,
+        string.Empty, 0, 0, 0, 0, 0, string.Empty, "online",
+        Array.Empty<byte>());
+    var user = new TUserInfo
+    {
+        sAccount = "account",
+        nSessionID = 77,
+        boChrSelected = true,
+        boChrQueryed = true,
+        NativeAuthTick = 123,
+        NativeAuthResponse = auth,
+        NativeText102 = "online",
+        NativeLoginDateTimeBits = 0x1122334455667788,
+        sReconnectID = "reconnect"
+    };
+    user.NativeSwitchHandoff.SetCurrentCharacter("Role");
+    Check(user.NativeSwitchHandoff.TryStore("Role",
+        new byte[NativeDbServerProtocol.LoginExtensionSize]),
+        "4041 switch slot setup");
+
+    NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin(user);
+
+    Check(user.sAccount == string.Empty, "4041 did not clear account");
+    Check(!user.boChrSelected && !user.boChrQueryed,
+        "4041 did not clear character state");
+    Check(user.NativeAuthTick == 0 && user.NativeAuthResponse == null,
+        "4041 did not clear native authentication context");
+    Check(user.NativeText102 == string.Empty
+          && user.NativeLoginDateTimeBits == 0
+          && user.sReconnectID == string.Empty,
+        "4041 did not clear native login metadata");
+    Check(user.NativeSwitchHandoff.Consume() == null
+          && user.NativeSwitchHandoff.CurrentCharacterName == string.Empty,
+        "4041 did not reset switch handoff state");
+    Equal(77, user.nSessionID,
+        "4041 changed the session id without native evidence");
+    Equal((ushort)4041, NativeLoginAlreadyOnlineProtocol.Command,
+        "4041 command constant");
+    Equal((ushort)4040, NativeLoginAlreadyOnlineProtocol.KickoutCommand,
+        "4040 command constant");
+
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var caseStart = source.IndexOf(
+        "case Grobal2.CM_LOGIN_ALREADY_ONLINE:", StringComparison.Ordinal);
+    Check(caseStart >= 0, "4041 switch case is missing");
+    var nextCase = source.IndexOf("\n                case ", caseStart + 1,
+        StringComparison.Ordinal);
+    Check(nextCase > caseStart, "4041 switch case boundary is missing");
+    var caseBlock = source.Substring(caseStart, nextCase - caseStart);
+    Check(caseBlock.Contains(
+              "NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin",
+              StringComparison.Ordinal)
+          && caseBlock.Contains(
+              "Grobal2.SM_OUTOFCONNECTION_4018", StringComparison.Ordinal)
+          && caseBlock.Split("Grobal2.SM_OUTOFCONNECTION_4018",
+              StringSplitOptions.None).Length == 2
+          && caseBlock.Contains(
+              "fn_5A2C40/fn_5CDCB4", StringComparison.Ordinal),
+        "4041 return branch must clear state and emit one 4018 while the force branch remains fail-closed");
+    Check(source.Contains(
+              "SendEncodedPacket(userInfo, 4041, 0, 0, 0, 0, null)",
+              StringComparison.Ordinal),
+        "outgoing 4041 login-chain response was changed");
 }
 
 static void TestNativeCharacterListRows()

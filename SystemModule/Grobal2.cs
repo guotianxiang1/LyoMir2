@@ -1057,6 +1057,12 @@ namespace SystemModule
         public const int CM_SELCHR4017 = 4017;      // Select character (mobile)
         public const int SM_SELCHR4017 = 4017;
         public const int SM_OUTOFCONNECTION_4018 = 4018;
+        // The client uses the same ident for the online-account prompt in
+        // both directions.  Keep the two 404x constants explicit so the
+        // UserSoc state machine does not have to rely on magic literals.
+        public const int SM_OUTOFCONNECTION_KICKOUT = 4040;
+        public const int CM_LOGIN_ALREADY_ONLINE = 4041;
+        public const int SM_LOGIN_ALREADY_ONLINE = 4041;
         public const int SM_RECONNECT_MOBILE = 4031;
         public const int CM_RECONNECT_MOBILE = 4031;
 

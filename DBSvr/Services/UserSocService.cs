@@ -72,6 +72,7 @@ namespace DBSvr
             Grobal2.CM_RESDELCHR,
             4004, // 手游认证
             4039, // CM_SELCHR_EXIT
+            Grobal2.CM_LOGIN_ALREADY_ONLINE,
             1018, // CM_LOGINNOTICEOK
             // 0xFB0 角色改名（原版内层派发 idx = 4016 - 0xFAC = 4 -> grp 5 ->
             // 0x5CE404 -> call fn_5CD2EC）。登记在此只对文本线路有效；
@@ -722,6 +723,27 @@ namespace DBSvr
 
                 case 4039: // CM_SELCHR_EXIT — 返回登录/退出选角
                     SendEncodedPacket(userInfo, 4039, 0, 0, 0, 0, null);
+                    break;
+
+                case Grobal2.CM_LOGIN_ALREADY_ONLINE:
+                    // Native fn_5D0714 returns false for Param=0 after
+                    // clearing the account/character state; the outer
+                    // dispatcher then emits exactly one 4018.  The native
+                    // Param!=0 leg depends on two still-unresolved native
+                    // predicates (fn_5A2C40/fn_5CDCB4); fail closed here
+                    // instead of inventing a 4040 target or a 4018 reply.
+                    if (packetParam == 0)
+                    {
+                        NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin(
+                            userInfo);
+                        SendEncodedPacket(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018, 0, 0, 0, 0, null);
+                    }
+                    else
+                    {
+                        Log("[UserSoc] 4041 force-login branch is blocked until "
+                            + "fn_5A2C40/fn_5CDCB4 are proven");
+                    }
                     break;
 
                 case Grobal2.CM_RENAMECHR4016: // 0xFB0 角色改名
