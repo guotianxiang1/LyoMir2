@@ -41,6 +41,7 @@ namespace DBSvr
                     services.AddSingleton<ITransferAreaService, MySqlTransferAreaService>();
                     services.AddSingleton<NativeAccountStorageCache>();
                     services.AddSingleton<NativeUserAdmissionControl>();
+                    services.AddSingleton<NativeAccountOwnerRegistry>();
                     services.AddSingleton<INativeHallOfFameService,
                         MySqlNativeHallOfFameService>();
                     services.AddSingleton<INativeAwardPlayerService,

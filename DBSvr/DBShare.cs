@@ -260,6 +260,7 @@ namespace DBSvr
         public TGateWireMode WireMode;
         public ushort NativeRoutePort;
         public byte NativeRouteID;
+        public NativeGateRouteRegistry NativeRoutes { get; } = new();
         public PercentDollarFrameParser FrameParser = new PercentDollarFrameParser();
         public YbDbLegacy77StreamParser NativeFrameParser = new YbDbLegacy77StreamParser();
     }
@@ -291,6 +292,9 @@ namespace DBSvr
         public TGateWireMode WireMode;
         public int NativeQueryId;
         public ushort NativeConnectionId;
+        public object NativeRouteLifecycleSync { get; } = new();
+        public bool NativeRouteActive;
+        public TGateInfo NativeGateOwner;
         public int NativeAuthTick;
         public NativeLoginGateAuthResponse NativeAuthResponse;
         public string NativeText102;

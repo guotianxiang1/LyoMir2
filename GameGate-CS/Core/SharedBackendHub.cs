@@ -12,6 +12,7 @@ internal sealed class SharedBackendRoute
     private int _aborted;
     private int _dbInvalidated;
     private int _gameInvalidated;
+    private int _dbTerminationPending;
     private int _gateIndex = 1;
     private uint _nativeRouteContext;
 
@@ -31,6 +32,7 @@ internal sealed class SharedBackendRoute
     public long GameConnectionGeneration;
     public int NativePlayerRecog;
     public int NativeServerUserIndex;
+    public int NativeDbRouteContext;
     public readonly SemaphoreSlim DbOpenLock = new(1, 1);
     public readonly SemaphoreSlim GameOpenLock = new(1, 1);
     public readonly Channel<byte[]> DbResponses = Channel.CreateBounded<byte[]>(
@@ -52,6 +54,8 @@ internal sealed class SharedBackendRoute
     public bool IsDbInvalidated => Volatile.Read(ref _dbInvalidated) != 0;
     public bool IsGameInvalidated => Volatile.Read(ref _gameInvalidated) != 0;
     public bool IsInvalidated => IsDbInvalidated || IsGameInvalidated;
+    public bool IsDbTerminationPending =>
+        Volatile.Read(ref _dbTerminationPending) != 0;
 
     public bool TryClose() => Interlocked.Exchange(ref _closed, 1) == 0;
 
@@ -142,6 +146,24 @@ internal sealed class SharedBackendRoute
     {
         if (Interlocked.Exchange(ref _dbInvalidated, 1) != 0) return;
         AbortOnce();
+    }
+
+    public async ValueTask<bool> QueueDbTerminationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (Interlocked.Exchange(ref _dbTerminationPending, 1) != 0)
+            return true;
+        try
+        {
+            await DbResponses.Writer.WriteAsync(Array.Empty<byte>(),
+                cancellationToken);
+            return true;
+        }
+        catch (ChannelClosedException)
+        {
+            AbortOnce();
+            return false;
+        }
     }
 }
 
@@ -384,7 +406,7 @@ internal sealed class SharedBackendHub : IDisposable
     private async Task DBDispatcherLoop(CancellationToken cancellationToken)
     {
         var buffer = new byte[8192];
-        var parser = new PercentDollarFrameParser();
+        var parser = new DbServerGatewayFrameParser();
         while (!cancellationToken.IsCancellationRequested)
         {
             if (!await EnsureDbConnectedAsync(cancellationToken))
@@ -406,7 +428,14 @@ internal sealed class SharedBackendHub : IDisposable
                     if (count <= 0) throw new IOException("DBSvr closed the shared connection");
                     if (!parser.TryAppend(buffer, 0, count, out var frames, out var error))
                         throw new InvalidDataException(error);
-                    foreach (var frame in frames) DispatchDbFrame(frame);
+                    foreach (var frame in frames)
+                    {
+                        if (frame.Kind == DbServerGatewayFrameKind.NativeControl)
+                            await DispatchDbControlAsync(frame,
+                                cancellationToken);
+                        else
+                            DispatchDbFrame(frame.Data);
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
@@ -855,10 +884,7 @@ internal sealed class SharedBackendHub : IDisposable
         if (packet.Cmd == NativeRouteClear)
         {
             if (TryGetIncomingRoute(packet.ConnID, out var clearedRoute))
-            {
-                Volatile.Write(ref clearedRoute.NativePlayerRecog, 0);
-                Volatile.Write(ref clearedRoute.NativeServerUserIndex, 0);
-            }
+                ClearNativeRouteState(clearedRoute);
             return;
         }
 
@@ -1011,6 +1037,66 @@ internal sealed class SharedBackendHub : IDisposable
 
         route = null!;
         return false;
+    }
+
+    internal async ValueTask<bool> DispatchDbControlAsync(
+        DbServerGatewayFrame frame,
+        CancellationToken cancellationToken = default)
+    {
+        if (frame == null
+            || frame.Kind != DbServerGatewayFrameKind.NativeControl)
+            return false;
+
+        // Unknown native controls are valid envelopes and are consumed by the
+        // original switch default without damaging the shared DB connection.
+        if (frame.Command is not 11 and not 12 and not 21) return true;
+        if (!_routes.TryGetValue(frame.ConnectionId, out var route)
+            || route.IsClosed || route.IsInvalidated)
+            return false;
+
+        switch (frame.Command)
+        {
+            case 11:
+                ClearNativeRouteState(route);
+                if (!IsAcceptedDbControlResult(frame.Parameter)) return true;
+                Volatile.Write(ref route.NativeDbRouteContext,
+                    frame.Parameter);
+                if (route.DbResponses.Writer.TryWrite(
+                        CreateNativeDbLoginPrompt(route.NativeSessionId)))
+                    return true;
+                route.AbortOnce();
+                return false;
+            case 12:
+                // SelGate sets its close flag here. The consumer observes the
+                // sentinel after every earlier queued response (notably 4040),
+                // then the ordinary client cleanup closes the route.
+                return await route.QueueDbTerminationAsync(cancellationToken);
+            case 21:
+                ClearNativeRouteState(route);
+                if (IsAcceptedDbControlResult(frame.Parameter))
+                    Volatile.Write(ref route.NativeDbRouteContext,
+                        frame.Parameter);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private static bool IsAcceptedDbControlResult(int result) =>
+        result >= 0 || result == -999;
+
+    private static byte[] CreateNativeDbLoginPrompt(ushort connectionId)
+    {
+        var message = Grobal2.MakeDefaultMsg(Grobal2.SM_LOGIN, 0, 0, 0, 0);
+        var encoded = EDcode.EncodeMessage(message);
+        while (encoded.Length < Grobal2.DEFBLOCKSIZE) encoded += "0";
+        return HUtil32.GetBytes($"%{connectionId}/#{encoded}!$");
+    }
+
+    private static void ClearNativeRouteState(SharedBackendRoute route)
+    {
+        Volatile.Write(ref route.NativePlayerRecog, 0);
+        Volatile.Write(ref route.NativeServerUserIndex, 0);
     }
 
     private void LogUnknownGameType(InternalPacket77 packet, string reason)

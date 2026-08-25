@@ -6,12 +6,11 @@ using System.Text;
 namespace DBSvr.Core
 {
     /// <summary>
-    /// IP/账号白名单黑名单管理。
-    /// 对应 Delphi 原版:
-    ///   - IpAddress.txt: [Allow]/[Deny] IP段
-    ///   - WhiteList.txt / GameGateWhiteList.txt: IP白名单
-    ///   - AllowPTID.txt / FastPassPTID.txt: 账号白名单
-    ///   - !DenyLogon.txt: 禁止登录账号
+    /// IP/账号白名单黑名单管理。Native 2.08 sources remain separate:
+    /// WhiteList.txt is an exact-match list, while IpAddress.txt contributes
+    /// only repeated GameMaster=value entries to the login IP exception list.
+    /// The legacy [Allow]/[Deny] parser is retained for its existing callers
+    /// but is not used by the native single-IP admission path.
     /// </summary>
     public class WhitelistService
     {
@@ -19,6 +18,7 @@ namespace DBSvr.Core
         private readonly HashSet<string> _addressAllowedIps = new();
         private List<string> _whiteListIps = new();
         private List<string> _gameGateWhiteListIps = new();
+        private readonly List<string> _nativeGameMasterIps = new();
         private readonly HashSet<string> _deniedIps = new();
         private readonly HashSet<string> _allowedPtids = new();
         private readonly HashSet<string> _fastPassPtids = new();
@@ -73,6 +73,28 @@ namespace DBSvr.Core
             lock (_sync) return NativeListContains(_gameGateWhiteListIps, value);
         }
 
+        public bool IsNativeGameMasterIpAllowed(string value)
+        {
+            value ??= string.Empty;
+            lock (_sync)
+            {
+                if (NativeListContains(_nativeGameMasterIps, "all")
+                    || NativeListContains(_nativeGameMasterIps, value))
+                    return true;
+
+                foreach (var stored in _nativeGameMasterIps)
+                {
+                    var prefix = stored;
+                    if (prefix.EndsWith("*", StringComparison.Ordinal))
+                        prefix = prefix[..^1];
+                    if (prefix.EndsWith(".", StringComparison.Ordinal)
+                        && value.StartsWith(prefix, StringComparison.Ordinal))
+                        return true;
+                }
+                return false;
+            }
+        }
+
         /// <summary>
         /// 检查 IP 是否被允许 (考虑到 [Allow]/[Deny] 段)。
         /// </summary>
@@ -124,7 +146,8 @@ namespace DBSvr.Core
         }
 
         /// <summary>
-        /// 解析 IpAddress.txt 的 [Allow]/[Deny] 段。
+        /// Loads the native GameMaster=value entries and preserves the
+        /// pre-existing legacy [Allow]/[Deny] compatibility view.
         /// </summary>
         private void LoadIpAddressFile(string fileName)
         {
@@ -132,12 +155,28 @@ namespace DBSvr.Core
             {
                 if (!File.Exists(fileName)) return;
                 var lines = File.ReadAllLines(fileName, Encoding.GetEncoding("GBK"));
+                _nativeGameMasterIps.Clear();
                 string currentSection = "";
 
                 foreach (var rawLine in lines)
                 {
+                    var separator = rawLine.IndexOf('=');
+                    if (separator > 0
+                        && string.Equals(rawLine[..separator], "GameMaster",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = TrimNativeControlSpace(
+                            rawLine[(separator + 1)..]);
+                        if (value.EndsWith("*", StringComparison.Ordinal))
+                            value = value[..^1];
+                        if (value.Length != 0) _nativeGameMasterIps.Add(value);
+                        continue;
+                    }
+
                     var line = rawLine.Trim();
-                    if (string.IsNullOrEmpty(line) || line.StartsWith(";")) continue;
+                    if (line.Length == 0
+                        || line.StartsWith(";", StringComparison.Ordinal))
+                        continue;
 
                     if (line.StartsWith("[") && line.EndsWith("]"))
                     {
@@ -152,6 +191,17 @@ namespace DBSvr.Core
                 }
             }
             catch { }
+        }
+
+        private static string TrimNativeControlSpace(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            var start = 0;
+            while (start < value.Length && value[start] <= ' ') start++;
+            var end = value.Length - 1;
+            while (end >= start && value[end] <= ' ') end--;
+            return end < start ? string.Empty : value.Substring(start,
+                end - start + 1);
         }
 
         private static void LoadSimpleList(string fileName, HashSet<string> target)

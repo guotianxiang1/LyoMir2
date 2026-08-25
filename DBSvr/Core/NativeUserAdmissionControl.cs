@@ -11,7 +11,7 @@ namespace DBSvr.Core
         private readonly object _sync = new();
         private readonly Dictionary<string, uint> _denyIps =
             new(StringComparer.Ordinal);
-        private Dictionary<string, int> _ipCounts =
+        private Dictionary<string, uint> _ipCounts =
             new(StringComparer.Ordinal);
         private Func<IReadOnlyList<string>> _snapshotUsers =
             () => Array.Empty<string>();
@@ -64,22 +64,74 @@ namespace DBSvr.Core
         {
             Func<IReadOnlyList<string>> snapshot;
             lock (_sync) snapshot = _snapshotUsers;
-            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-            foreach (var ip in snapshot() ?? Array.Empty<string>())
+            var owners = snapshot() ?? Array.Empty<string>();
+            lock (_sync)
             {
-                var key = ip ?? string.Empty;
-                counts.TryGetValue(key, out var count);
-                counts[key] = count + 1;
+                var remove = new List<string>();
+                var keys = new List<string>(_ipCounts.Keys);
+                foreach (var key in keys)
+                {
+                    if (_ipCounts[key] == 0) remove.Add(key);
+                    else _ipCounts[key] = 0;
+                }
+                foreach (var key in remove) _ipCounts.Remove(key);
+
+                foreach (var ip in owners)
+                {
+                    var key = ip ?? string.Empty;
+                    if (_ipCounts.TryGetValue(key, out var count))
+                        _ipCounts[key] = unchecked(count + 1);
+                }
             }
-            lock (_sync) _ipCounts = counts;
             DBShare.MaxSingleIpHumanCount = maximum;
         }
 
-        public int GetIpCount(string ip)
+        public uint GetIpCount(string ip)
         {
             lock (_sync)
                 return _ipCounts.TryGetValue(ip ?? string.Empty, out var count)
                     ? count : 0;
+        }
+
+        public bool TryIncrementNativeOwnerIp(string ip, int maximum,
+            Func<string, bool> isException)
+        {
+            ip ??= string.Empty;
+            lock (_sync)
+            {
+                if (!_ipCounts.TryGetValue(ip, out var count))
+                {
+                    _ipCounts.Add(ip, 1);
+                    return true;
+                }
+
+                count = unchecked(count + 1);
+                _ipCounts[ip] = count;
+
+                if (maximum >= 0 && count <= unchecked((uint)maximum))
+                    return true;
+                return isException?.Invoke(ip) == true;
+            }
+        }
+
+        public bool ReleaseNativeConnection(string account, string ip)
+        {
+            if (string.IsNullOrEmpty(account)) return false;
+            ip ??= string.Empty;
+            lock (_sync)
+            {
+                if (!_ipCounts.TryGetValue(ip, out var count) || count == 0)
+                    return false;
+                count--;
+                if (count == 0) _ipCounts.Remove(ip);
+                else _ipCounts[ip] = count;
+                return true;
+            }
+        }
+
+        public void ClearNativeIpCounts()
+        {
+            lock (_sync) _ipCounts.Clear();
         }
 
         public bool IsDenyTokenMatch(string candidate)

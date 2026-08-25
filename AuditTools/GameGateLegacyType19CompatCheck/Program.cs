@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Text;
 using GameGate.Core;
 using SystemModule;
 using SystemModule.Packet;
@@ -21,7 +22,10 @@ var tests = new (string Name, Action Run)[]
     ("hub rejects handle/index aliases", HubRejectsHandleAndIndexAliases),
     ("session allocator starts at 1000", SessionAllocatorStartsAt1000),
     ("hub skips closed routes", HubSkipsClosedRoutes),
-    ("native route context is stable", NativeRouteContextIsStable)
+    ("native route context is stable", NativeRouteContextIsStable),
+    ("DB mixed text and native-control stream", DbMixedStream),
+    ("DB native-control parser resynchronizes", DbNativeControlResynchronizes),
+    ("DB controls use native session id", DbControlsUseNativeSessionId)
 };
 
 foreach (var test in tests)
@@ -399,6 +403,237 @@ static void NativeRouteContextIsStable()
     catch (ArgumentOutOfRangeException) { }
 }
 
+static void DbMixedStream()
+{
+    var firstText = Encoding.ASCII.GetBytes("%101/#first!$");
+    var open = BuildDbControl(0x2425, 77, 11);
+    var routeClear = BuildDbControl(0x2425, 0, 12);
+    var context = BuildDbControl(0x2425, -999, 21);
+    var reserved = BuildDbControl(0x2425, 0x11223344, 19,
+        new byte[] { 0x77, 0xBB, 0xAA, 0x33, (byte)'%', (byte)'$' });
+    var secondText = new byte[]
+    {
+        (byte)'%', (byte)'1', (byte)'0', (byte)'2', (byte)'/',
+        0x77, 0xBB, 0xAA, 0x33, (byte)'$'
+    };
+    var stream = Join(firstText, open, routeClear, context, reserved,
+        secondText);
+
+    for (var split = 0; split <= stream.Length; split++)
+    {
+        var parser = new DbServerGatewayFrameParser();
+        var parsed = new List<DbServerGatewayFrame>();
+        True(parser.TryAppend(stream, 0, split, out var first, out var error),
+            error);
+        parsed.AddRange(first);
+        True(parser.TryAppend(stream, split, stream.Length - split,
+            out var second, out error), error);
+        parsed.AddRange(second);
+        AssertDbMixedFrames(parsed, firstText, open, routeClear, context,
+            reserved, secondText);
+        Equal(0, parser.BufferedLength,
+            $"DB mixed parser final buffer at split {split}");
+    }
+
+    var byteParser = new DbServerGatewayFrameParser();
+    var byteParsed = new List<DbServerGatewayFrame>();
+    for (var i = 0; i < stream.Length; i++)
+    {
+        True(byteParser.TryAppend(stream, i, 1, out var frames,
+            out var error), error);
+        byteParsed.AddRange(frames);
+    }
+    AssertDbMixedFrames(byteParsed, firstText, open, routeClear, context,
+        reserved, secondText);
+    Equal(0, byteParser.BufferedLength, "byte-split DB parser final buffer");
+}
+
+static void AssertDbMixedFrames(List<DbServerGatewayFrame> parsed,
+    byte[] firstText, byte[] open, byte[] routeClear, byte[] context,
+    byte[] reserved, byte[] secondText)
+{
+    Equal(6, parsed.Count, "DB mixed frame count");
+    Equal(DbServerGatewayFrameKind.PercentDollar, parsed[0].Kind,
+        "first DB frame kind");
+    BytesEqual(firstText, parsed[0].Data, "first DB text frame");
+    Equal(DbServerGatewayFrameKind.NativeControl, parsed[1].Kind,
+        "DB open-control kind");
+    Equal((ushort)11, parsed[1].Command, "DB open-control command");
+    Equal(77, parsed[1].Parameter, "DB open-control parameter");
+    BytesEqual(open, parsed[1].Data, "DB open-control bytes");
+    Equal((ushort)12, parsed[2].Command, "DB route-clear command");
+    Equal(0x2425u, parsed[2].ConnectionId, "DB route-clear session id");
+    BytesEqual(routeClear, parsed[2].Data, "DB route-clear bytes");
+    Equal((ushort)21, parsed[3].Command, "DB context-control command");
+    Equal(-999, parsed[3].Parameter, "DB context-control parameter");
+    BytesEqual(context, parsed[3].Data, "DB context-control bytes");
+    Equal((ushort)19, parsed[4].Command, "DB reserved-control command");
+    BytesEqual(reserved, parsed[4].Data, "DB reserved-control bytes");
+    BytesEqual(new byte[] { 0x77, 0xBB, 0xAA, 0x33, (byte)'%', (byte)'$' },
+        parsed[4].Payload, "DB reserved-control payload");
+    Equal(DbServerGatewayFrameKind.PercentDollar, parsed[5].Kind,
+        "second DB frame kind");
+    BytesEqual(secondText, parsed[5].Data,
+        "text body containing native magic");
+}
+
+static void DbNativeControlResynchronizes()
+{
+    var variableRouteClear = BuildDbControl(1001, 123, 12,
+        new byte[] { 0xAA, 0xBB });
+    var reserved = BuildDbControl(1001, -7, 20,
+        new byte[] { 1, 2, 3 });
+    var stream = Join(new byte[] { 0x01, 0x77, 0x00, 0x02 },
+        variableRouteClear, new byte[] { 0x77, 0xBB, 0x01 }, reserved);
+    var parser = new DbServerGatewayFrameParser();
+    True(parser.TryAppend(stream, 0, stream.Length, out var frames,
+        out var error), error);
+    Equal(2, frames.Count, "resynchronized DB control frame count");
+    Equal((ushort)12, frames[0].Command,
+        "variable route-clear command");
+    Equal(123, frames[0].Parameter, "variable route-clear parameter");
+    BytesEqual(new byte[] { 0xAA, 0xBB }, frames[0].Payload,
+        "variable route-clear payload");
+    Equal((ushort)20, frames[1].Command, "reserved DB command");
+    Equal(-7, frames[1].Parameter, "reserved DB parameter");
+    Equal(0, parser.BufferedLength, "resynchronized DB parser buffer");
+
+    var partial = BuildDbControl(1002, 0, 21);
+    parser = new DbServerGatewayFrameParser();
+    True(parser.TryAppend(partial, 0, 2, out frames, out error), error);
+    Equal(0, frames.Count, "partial native magic emitted a frame");
+    Equal(2, parser.BufferedLength, "partial native magic was discarded");
+    True(parser.TryAppend(partial, 2, partial.Length - 2, out frames,
+        out error), error);
+    Equal(1, frames.Count, "completed native control was not emitted");
+    Equal((ushort)21, frames[0].Command,
+        "completed native control command");
+
+    var oversized = new byte[YbDbLegacy77Codec.HeaderSize];
+    BinaryPrimitives.WriteUInt32LittleEndian(oversized,
+        YbDbLegacy77Codec.FrameMagic);
+    BinaryPrimitives.WriteUInt16LittleEndian(oversized.AsSpan(14, 2),
+        ushort.MaxValue);
+    var afterOversized = BuildDbControl(1003, 0, 17);
+    var recovered = Join(oversized, afterOversized);
+    parser = new DbServerGatewayFrameParser();
+    True(parser.TryAppend(recovered, 0, recovered.Length, out frames,
+        out error), error);
+    Equal(0, frames.Count,
+        "oversized native envelope did not discard the receive buffer");
+    Equal(0, parser.BufferedLength,
+        "oversized native envelope left buffered bytes");
+    True(parser.TryAppend(afterOversized, 0, afterOversized.Length,
+        out frames, out error), error);
+    Equal(1, frames.Count,
+        "parser did not resume after an oversized receive buffer");
+    Equal((ushort)17, frames[0].Command,
+        "post-reset native command");
+}
+
+static void DbControlsUseNativeSessionId()
+{
+    using var hub = CreateHub(out var routes,
+        (1001u, 9001, 11), (1002u, 9002, 22));
+    Volatile.Write(ref routes[1001].NativePlayerRecog, 101);
+    Volatile.Write(ref routes[1002].NativePlayerRecog, 102);
+
+    var open = ParseDbControl(BuildDbControl(1001, 77, 11));
+    True(DispatchDbControl(hub, open), "native DB open control");
+    Equal(0, Volatile.Read(ref routes[1001].NativePlayerRecog),
+        "DB open did not clear route player recog");
+    Equal(0, Volatile.Read(ref routes[1001].NativeServerUserIndex),
+        "DB open did not clear route server-user index");
+    Equal(77, Volatile.Read(ref routes[1001].NativeDbRouteContext),
+        "DB open result was not stored");
+    True(routes[1001].DbResponses.Reader.TryRead(out var loginPrompt),
+        "DB open did not queue the native 4003 prompt");
+    var expectedPrompt = EDcode.EncodeMessage(
+        Grobal2.MakeDefaultMsg(Grobal2.SM_LOGIN, 0, 0, 0, 0));
+    while (expectedPrompt.Length < Grobal2.DEFBLOCKSIZE)
+        expectedPrompt += "0";
+    BytesEqual(HUtil32.GetBytes($"%1001/#{expectedPrompt}!$"), loginPrompt,
+        "native DB open 4003 prompt");
+    Equal(102, Volatile.Read(ref routes[1002].NativePlayerRecog),
+        "DB open changed unrelated route player recog");
+    Equal(22, Volatile.Read(ref routes[1002].NativeServerUserIndex),
+        "DB open changed unrelated route server-user index");
+
+    Volatile.Write(ref routes[1002].NativePlayerRecog, 202);
+    var context = ParseDbControl(BuildDbControl(1002, -999, 21));
+    True(DispatchDbControl(hub, context), "native DB context control");
+    Equal(0, Volatile.Read(ref routes[1002].NativePlayerRecog),
+        "DB context did not clear player recog");
+    Equal(0, Volatile.Read(ref routes[1002].NativeServerUserIndex),
+        "DB context did not clear server-user index");
+    Equal(-999, Volatile.Read(ref routes[1002].NativeDbRouteContext),
+        "DB context sentinel was not stored");
+
+    context = ParseDbControl(BuildDbControl(1001, 88, 21));
+    True(DispatchDbControl(hub, context),
+        "native DB context overwrite control");
+    Equal(88, Volatile.Read(ref routes[1001].NativeDbRouteContext),
+        "commands 11 and 21 did not overwrite the same native field");
+
+    Volatile.Write(ref routes[1001].NativePlayerRecog, 301);
+    Volatile.Write(ref routes[1001].NativeServerUserIndex, 31);
+    var prior = Encoding.ASCII.GetBytes("%1001/#prior!$");
+    True(routes[1001].DbResponses.Writer.TryWrite(prior),
+        "route-clear prior response setup");
+    var routeClear = ParseDbControl(BuildDbControl(1001, 0, 12));
+    True(DispatchDbControl(hub, routeClear), "native session route clear");
+    Equal(301, Volatile.Read(ref routes[1001].NativePlayerRecog),
+        "DB route clear changed M2 player-recog state");
+    Equal(31, Volatile.Read(ref routes[1001].NativeServerUserIndex),
+        "DB route clear changed M2 server-user state");
+    True(routes[1001].IsDbTerminationPending,
+        "DB route clear did not set the termination flag");
+    True(routes[1001].DbResponses.Reader.TryRead(out var queuedPrior),
+        "route-clear lost the prior 4040-equivalent response");
+    BytesEqual(prior, queuedPrior,
+        "route-clear reordered the prior client response");
+    True(routes[1001].DbResponses.Reader.TryRead(out var terminate)
+         && terminate.Length == 0,
+        "route-clear did not queue the terminal sentinel last");
+    False(DispatchDbControl(hub, ParseDbControl(
+            BuildDbControl(9001, 0, 12))),
+        "OS handle alias cleared a route");
+    False(routes[1001].IsClosed,
+        "DB dispatcher closed the route before queued responses drained");
+    Equal(0, DrainQueued(routes[1001]).Count,
+        "DB route clear produced an ACK or game packet");
+
+    var unknown = ParseDbControl(BuildDbControl(1001, 0, 19));
+    True(DispatchDbControl(hub, unknown),
+        "valid reserved DB control was treated as a link failure");
+
+    var saturatedPayload = new byte[] { 0x5A };
+    for (var i = 0; i < 256; i++)
+        True(routes[1002].DbResponses.Writer.TryWrite(saturatedPayload),
+            $"DB response saturation setup {i}");
+    var saturatedClear = ParseDbControl(BuildDbControl(1002, 0, 12));
+    var pendingClear = hub.DispatchDbControlAsync(saturatedClear).AsTask();
+    False(pendingClear.IsCompleted,
+        "full DB response queue caused immediate route termination");
+    True(routes[1002].DbResponses.Reader.TryRead(out var firstQueued),
+        "full DB response queue could not drain its first response");
+    BytesEqual(saturatedPayload, firstQueued,
+        "route termination overtook a saturated response queue");
+    True(pendingClear.GetAwaiter().GetResult(),
+        "route termination sentinel was not queued after capacity returned");
+    var remainingResponses = 0;
+    var sawTerminal = false;
+    while (routes[1002].DbResponses.Reader.TryRead(out var queued))
+    {
+        if (queued.Length == 0) sawTerminal = true;
+        else remainingResponses++;
+    }
+    Equal(255, remainingResponses,
+        "saturated route lost queued responses before termination");
+    True(sawTerminal,
+        "saturated route did not place termination after queued responses");
+}
+
 static SharedBackendHub CreateHub(out Dictionary<uint, SharedBackendRoute> routes,
     params (uint ConnId, int Handle, int NativeIndex)[] definitions)
 {
@@ -432,6 +667,37 @@ static List<InternalPacket77> DrainQueued(SharedBackendRoute route)
     while (route.GameResponses.Reader.TryRead(out var packet))
         packets.Add(packet);
     return packets;
+}
+
+static DbServerGatewayFrame ParseDbControl(byte[] wire)
+{
+    var parser = new DbServerGatewayFrameParser();
+    True(parser.TryAppend(wire, 0, wire.Length, out var frames,
+        out var error), error);
+    Equal(1, frames.Count, "single DB control parse count");
+    Equal(DbServerGatewayFrameKind.NativeControl, frames[0].Kind,
+        "single DB control kind");
+    return frames[0];
+}
+
+static bool DispatchDbControl(SharedBackendHub hub,
+    DbServerGatewayFrame frame) =>
+    hub.DispatchDbControlAsync(frame).AsTask().GetAwaiter().GetResult();
+
+static byte[] BuildDbControl(uint connectionId, int parameter,
+    ushort command, byte[] payload = null)
+{
+    payload ??= Array.Empty<byte>();
+    var frame = new byte[YbDbLegacy77Codec.HeaderSize + payload.Length];
+    BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(0, 4),
+        YbDbLegacy77Codec.FrameMagic);
+    BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(4, 4), connectionId);
+    BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(8, 4), parameter);
+    BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(12, 2), command);
+    BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(14, 2),
+        checked((ushort)payload.Length));
+    payload.CopyTo(frame, YbDbLegacy77Codec.HeaderSize);
+    return frame;
 }
 
 static List<GameGateServerFrame> ParseOnce(byte[] data,
