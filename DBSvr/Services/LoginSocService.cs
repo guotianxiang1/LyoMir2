@@ -36,6 +36,8 @@ namespace DBSvr
         private readonly ConcurrentDictionary<int, ServerReceiveState> _receiveStates = new();
         private readonly IList<TGlobaSessionInfo> GlobaSessionList;
         private readonly Dictionary<(string, int), TGlobaSessionInfo> _sessionDict;
+        private readonly NativeAccountCrossServerLockState
+            _nativeAccountCrossServerLocks = new();
         private readonly ReaderWriterLockSlim _rwLock = new(LockRecursionPolicy.NoRecursion);
         private readonly LoginGateTransportMode _mode;
         private readonly int _reconnectIntervalMs;
@@ -774,24 +776,13 @@ namespace DBSvr
             finally { _rwLock.ExitWriteLock(); }
         }
 
-        public void SetNativeAccountPlayState(string account, bool playing)
+        public void SetNativeAccountCrossServerLock(string account, bool locked)
         {
-            var key = NativeType3Protocol.NormalizePtidKey(account);
-            _rwLock.EnterWriteLock();
-            try
-            {
-                foreach (var session in GlobaSessionList)
-                {
-                    if (session == null
-                        || NativeType3Protocol.NormalizePtidKey(
-                            session.sAccount) != key)
-                        continue;
-                    session.boStartPlay = playing;
-                    TouchSession(session);
-                }
-            }
-            finally { _rwLock.ExitWriteLock(); }
+            _nativeAccountCrossServerLocks.SetLocked(account, locked);
         }
+
+        public bool IsNativeAccountCrossServerLocked(string account) =>
+            _nativeAccountCrossServerLocks.IsLocked(account);
 
         public void OpenMobileSession(string sAccount, string sIPaddr, int nSessionID)
         {

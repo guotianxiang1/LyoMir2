@@ -129,6 +129,20 @@ namespace DBSvr.Core
         public byte[] NativeScriptData { get; init; }
     }
 
+    /// <summary>
+    /// A non-zero native 0x0150 event that must be delivered back to the
+    /// pending UserSoc session after the save has been staged.  The native
+    /// dispatcher forwards the event word separately from the ordinary save;
+    /// event 2 carries the 0x108-byte switch context from the suffix.
+    /// </summary>
+    public sealed class NativeSaveHumanContinuation
+    {
+        public string Account { get; init; } = string.Empty;
+        public string CharacterName { get; init; } = string.Empty;
+        public ushort Event { get; init; }
+        public byte[] LoginExtension { get; init; }
+    }
+
     /// <summary>Original 0x0150 save data after the DBServer's in-memory normalization.</summary>
     public sealed class NativeSavePersistenceData
     {

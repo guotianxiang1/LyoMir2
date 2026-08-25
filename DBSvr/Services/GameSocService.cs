@@ -65,6 +65,8 @@ namespace DBSvr
         private readonly HashSet<int> _nativeSaveTombstones = new();
         private Thread _nativeSaveThread;
         private bool _nativeSaveStopping;
+        private Action<NativeSaveHumanContinuation> _nativeSaveContinuation =
+            static _ => { };
         private readonly object _heroSaveQueueLock = new();
         private readonly Dictionary<string, NativeHeroSaveWorkItem>
             _heroSavePending = new(StringComparer.OrdinalIgnoreCase);
@@ -150,6 +152,13 @@ namespace DBSvr
         {
             Volatile.Write(ref _nativeSwitchHandoffStore,
                 store ?? ((_, _, _) => false));
+        }
+
+        public void AttachNativeSaveContinuation(
+            Action<NativeSaveHumanContinuation> continuation)
+        {
+            Volatile.Write(ref _nativeSaveContinuation,
+                continuation ?? (static _ => { }));
         }
 
         public void Start()
@@ -524,9 +533,9 @@ namespace DBSvr
                     ProcessNativeOnlineAccountLoginTime(frame);
                     return true;
                 }
-                if (command == NativeSessionControlProtocol.SetPlayStateCommand)
+                if (command == NativeSessionControlProtocol.SetCrossServerLockCommand)
                 {
-                    ProcessNativeSessionPlayState(serverInfo, frame);
+                    ProcessNativeAccountCrossServerLock(serverInfo, frame);
                     return true;
                 }
                 if (command == NativeCharacterBusyProtocol.Command)
@@ -2672,19 +2681,19 @@ namespace DBSvr
             return false;
         }
 
-        private void ProcessNativeSessionPlayState(TServerInfo sender,
+        private void ProcessNativeAccountCrossServerLock(TServerInfo sender,
             LegacyDbServerFrame frame)
         {
-            if (!NativeSessionControlProtocol.TryDecodePlayState(frame,
+            if (!NativeSessionControlProtocol.TryDecodeCrossServerLock(frame,
                     out var request, out _)
                 || !_playRecordService.TryGetNativeCharacterByUserId(
-                    request.UserId, out var character))
+                    request.LookupKey, out var character))
                 return;
-            _loginSvrService.SetNativeAccountPlayState(
-                character.PTID, request.State == 1);
+            _loginSvrService.SetNativeAccountCrossServerLock(
+                character.PTID, request.IsLocked);
             TrySendNativeResponse(sender,
-                NativeSessionControlProtocol.CreatePlayStateResponse(request),
-                "019E会话状态");
+                NativeSessionControlProtocol.CreateCrossServerLockResponse(request),
+                "019E跨服账号锁");
         }
 
         private static void TrySendNativeResponse(TServerInfo sender,
@@ -2737,11 +2746,28 @@ namespace DBSvr
                 var staged = _humanLogicalCache.TryStage(index, persistence,
                     staged => EnqueueNativeSave(
                         new NativeSaveWorkItem(index, staged)));
-                if (staged && NativeDbServerProtocol.TryExtractSwitchLoginExtension(
-                        request, out var extension))
+                if (staged && request.HeaderWord2 != 0)
                 {
-                    Volatile.Read(ref _nativeSwitchHandoffStore)(
-                        request.Account, request.CharacterName, extension);
+                    byte[] extension = null;
+                    if (request.HeaderWord2 == NativeDbServerProtocol.SwitchSaveMode
+                        && NativeDbServerProtocol.TryExtractSwitchLoginExtension(
+                            request, out var extracted))
+                        extension = extracted;
+
+                    // Native 0x59C060 forwards every non-zero event only after
+                    // the save validator/staging path succeeds.  Do not retain
+                    // event-2 data in the ordinary handoff slot: the native
+                    // continuation consumes this exact context once, and a
+                    // repeated result-6 remains silent.
+                    var continuation = Volatile.Read(
+                        ref _nativeSaveContinuation);
+                    continuation(new NativeSaveHumanContinuation
+                    {
+                        Account = request.Account,
+                        CharacterName = request.CharacterName,
+                        Event = request.HeaderWord2,
+                        LoginExtension = extension
+                    });
                 }
             }
             catch (Exception ex)

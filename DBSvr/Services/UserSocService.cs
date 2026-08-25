@@ -32,6 +32,7 @@ namespace DBSvr
         private Dictionary<string, int> _mapList;
         private readonly IPlayDataService _playDataService;
         private readonly IPlayRecordService _playRecordService;
+        private readonly IHeroRecordService _heroRecordService;
         private readonly SensitiveWordFilter _sensitiveWordFilter;
         private readonly WhitelistService _whitelistService;
         private readonly ISocketServer _userSocket;
@@ -39,6 +40,7 @@ namespace DBSvr
         private readonly GameSocService _gameSocService;
         private readonly ConfigManager _configManager;
         private readonly NativeUserAdmissionControl _nativeAdmission;
+        private readonly NativeSelectEntryProtocol _selectEntryProtocol;
         // 角色改名三库级联（原版 fn_5A8DDC 主档 + fn_5A923C 的 22 条级联）
         private readonly INativeRenameCascadeService _renameCascade;
         private readonly object _gateLock = new();
@@ -81,11 +83,12 @@ namespace DBSvr
         };
 
         public UserSocService(LoginSvrService loginService, IPlayRecordService playRecordService,
-            IPlayDataService playDataService,
+            IPlayDataService playDataService, IHeroRecordService heroRecordService,
             SensitiveWordFilter sensitiveWordFilter, WhitelistService whitelistService,
             ConfigManager configManager, GameSocService gameSocService,
             NativeUserAdmissionControl nativeAdmission,
-            INativeRenameCascadeService renameCascade)
+            INativeRenameCascadeService renameCascade,
+            NativeSelectEntryProtocol selectEntryProtocol)
         {
             _renameCascade = renameCascade
                 ?? throw new ArgumentNullException(nameof(renameCascade));
@@ -93,11 +96,14 @@ namespace DBSvr
             _gameSocService = gameSocService;
             _playRecordService = playRecordService;
             _playDataService = playDataService;
+            _heroRecordService = heroRecordService;
             _sensitiveWordFilter = sensitiveWordFilter;
             _whitelistService = whitelistService;
             _configManager = configManager;
             _nativeAdmission = nativeAdmission
                 ?? throw new ArgumentNullException(nameof(nativeAdmission));
+            _selectEntryProtocol = selectEntryProtocol
+                ?? throw new ArgumentNullException(nameof(selectEntryProtocol));
             _gateList = new List<TGateInfo>();
             _mapList = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             _userSocket = new ISocketServer(MaxGateConnections, 1024);
@@ -117,6 +123,8 @@ namespace DBSvr
                 UpdateNativeOnlineAccountLoginTime);
             _gameSocService.AttachNativeSwitchHandoffStore(
                 StoreNativeSwitchHandoff);
+            _gameSocService.AttachNativeSaveContinuation(
+                ProcessNativeSaveContinuation);
         }
 
         private bool StoreNativeSwitchHandoff(string account,
@@ -149,6 +157,91 @@ namespace DBSvr
                 }
             }
             return false;
+        }
+
+        private void ProcessNativeSaveContinuation(
+            NativeSaveHumanContinuation continuation)
+        {
+            if (continuation == null
+                || string.IsNullOrEmpty(continuation.Account)
+                || string.IsNullOrEmpty(continuation.CharacterName))
+                return;
+
+            TUserInfo user = null;
+            TGateInfo gate = null;
+            lock (_gateLock)
+            {
+                foreach (var candidateGate in _gateList)
+                {
+                    if (candidateGate?.UserList == null) continue;
+                    lock (candidateGate.UserList)
+                    {
+                        var candidate = candidateGate.UserList.FirstOrDefault(
+                            item => item != null
+                                && item.WireMode == TGateWireMode.Native77
+                                && string.Equals(item.sAccount,
+                                    continuation.Account,
+                                    StringComparison.Ordinal)
+                                && item.NativeSessionState != 7);
+                        if (candidate == null) continue;
+                        user = candidate;
+                        gate = candidateGate;
+                        break;
+                    }
+                    if (user != null) break;
+                }
+            }
+
+            if (user == null || gate == null) return;
+
+            // Native name mismatch is checked before the event switch.  A
+            // pending state (5) silently ignores a stale callback; any other
+            // state follows the native close path.
+            var nameMatches = string.Equals(user.NativeCurrentCharName,
+                continuation.CharacterName, StringComparison.Ordinal);
+            if (!nameMatches)
+            {
+                if (user.NativeSessionState == 5) return;
+                OutOfConnect(user, gate);
+                return;
+            }
+
+            switch (continuation.Event)
+            {
+                case 1:
+                    user.NativeRenameLatch = 0;
+                    user.NativePendingRenameName = null;
+                    user.NativeSessionState = 5;
+                    SendCharacterList(user.sAccount, user);
+                    user.boChrQueryed = true;
+                    break;
+
+                case NativeDbServerProtocol.SwitchSaveMode:
+                    if (continuation.LoginExtension == null
+                        || continuation.LoginExtension.Length
+                            != NativeDbServerProtocol.LoginExtensionSize)
+                    {
+                        OutOfConnect(user, gate);
+                        break;
+                    }
+
+                    var selected = SelectChr(
+                        EDcode.EncodeString(continuation.CharacterName),
+                        gate, ref user, out var handled,
+                        continuation.LoginExtension);
+                    if (selected) user.boChrSelected = true;
+                    if (!handled) OutOfConnect(user, gate);
+                    break;
+
+                case 3:
+                    OutOfConnect(user, gate);
+                    break;
+
+                default:
+                    // The native router has no event-specific action for
+                    // unknown non-zero values.
+                    break;
+            }
         }
 
         private IReadOnlyList<string> SnapshotNativeUserIps()
@@ -683,6 +776,10 @@ namespace DBSvr
         private void ProcessDecodedUserPacket(TGateInfo gateInfo, ref TUserInfo userInfo,
             ushort ident, int pktSessionId, ushort packetParam, string body)
         {
+            if (userInfo.WireMode == TGateWireMode.Native77
+                && userInfo.NativeSessionState == 7)
+                return;
+
             // 排队位次门。原版在**两级 opcode 表之前**就拦，逐字（状态 5 入口）：
             //   0x5CE307  mov eax, [ebp-4]            ; Self
             //   0x5CE30A  cmp word [eax+0x9c], 0      ; 排队位次
@@ -726,18 +823,19 @@ namespace DBSvr
                     break;
 
                 case Grobal2.CM_LOGIN_ALREADY_ONLINE:
-                    // Native fn_5D0714 returns false for Param=0 after
-                    // clearing the account/character state; the outer
-                    // dispatcher then emits exactly one 4018.  The native
-                    // Param!=0 leg depends on two still-unresolved native
+                    // Native fn_5D0714 branches on Param's low byte and
+                    // returns false when that byte is zero after clearing the
+                    // account/character state; the outer dispatcher then
+                    // emits exactly one 4018. The non-zero low-byte leg
+                    // depends on two still-unresolved native
                     // predicates (fn_5A2C40/fn_5CDCB4); fail closed here
                     // instead of inventing a 4040 target or a 4018 reply.
-                    if (packetParam == 0)
+                    if (NativeLoginAlreadyOnlineProtocol
+                        .UsesReturnToLoginLeg(packetParam))
                     {
                         NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin(
                             userInfo);
-                        SendEncodedPacket(userInfo,
-                            Grobal2.SM_OUTOFCONNECTION_4018, 0, 0, 0, 0, null);
+                        OutOfConnect(userInfo, gateInfo);
                     }
                     else
                     {
@@ -747,7 +845,10 @@ namespace DBSvr
                     break;
 
                 case Grobal2.CM_RENAMECHR4016: // 0xFB0 角色改名
-                    ProcessRenameChr(body, pktSessionId, ref userInfo);
+                    if (!ProcessRenameChr(body, pktSessionId, gateInfo,
+                            ref userInfo)
+                        && userInfo.WireMode == TGateWireMode.Native77)
+                        OutOfConnect(userInfo, gateInfo);
                     break;
 
                 case Grobal2.CM_QUERYCHR:
@@ -769,6 +870,26 @@ namespace DBSvr
 
                 case Grobal2.CM_NEWCHR:
                     Log($"[NewChr] START account={userInfo.sAccount} session={userInfo.nSessionID}");
+                    if (userInfo.WireMode == TGateWireMode.Native77)
+                    {
+                        if (!string.IsNullOrEmpty(userInfo.sAccount)
+                            && _loginService.CheckSession(userInfo.sAccount,
+                                userInfo.sUserIPaddr, userInfo.nSessionID))
+                        {
+                            var handled = ProcessNativeNewChr(body,
+                                ref userInfo, out var created);
+                            if (!handled)
+                                OutOfConnect(userInfo, gateInfo);
+                            else if (created)
+                                SendCharacterList(userInfo.sAccount, userInfo);
+                        }
+                        else
+                        {
+                            OutOfConnect(userInfo, gateInfo);
+                        }
+                        break;
+                    }
+
                     if ((HUtil32.GetTickCount() - userInfo.dwChrTick) > 1000)
                     {
                         userInfo.dwChrTick = HUtil32.GetTickCount();
@@ -780,7 +901,7 @@ namespace DBSvr
                             if (userInfo.nSessionID > 0 && !string.IsNullOrEmpty(userInfo.sAccount))
                                 QueryChr(EDcode.EncodeString(userInfo.sAccount + "/" + userInfo.nSessionID), ref userInfo, ref gateInfo);
                         }
-                        else { Log($"[NewChr] Session FAILED, OutOfConnect"); OutOfConnect(userInfo); }
+                        else { Log($"[NewChr] Session FAILED, OutOfConnect"); OutOfConnect(userInfo, gateInfo); }
                     }
                     else Log($"[NewChr] Tick too fast, skip");
                     break;
@@ -802,7 +923,7 @@ namespace DBSvr
                                 userInfo.nSessionID > 0 && !string.IsNullOrEmpty(userInfo.sAccount))
                                 QueryChr(EDcode.EncodeString(userInfo.sAccount + "/" + userInfo.nSessionID), ref userInfo, ref gateInfo);
                         }
-                        else OutOfConnect(userInfo);
+                        else OutOfConnect(userInfo, gateInfo);
                     }
                     break;
 
@@ -822,7 +943,7 @@ namespace DBSvr
                         if (userInfo.nSessionID > 0)
                             QueryChr(EDcode.EncodeString(userInfo.sAccount + "/" + userInfo.nSessionID), ref userInfo, ref gateInfo);
                     }
-                    else OutOfConnect(userInfo);
+                    else OutOfConnect(userInfo, gateInfo);
                     break;
 
                 case Grobal2.CM_SELCHR:
@@ -832,10 +953,15 @@ namespace DBSvr
                             _loginService.CheckSession(userInfo.sAccount, userInfo.sUserIPaddr, userInfo.nSessionID);
                         if (sessionOK)
                         {
-                            if (SelectChr(body, gateInfo, ref userInfo))
+                            var selected = SelectChr(body, gateInfo,
+                                ref userInfo, out var handled);
+                            if (selected)
                                 userInfo.boChrSelected = true;
+                            if (!handled
+                                && userInfo.WireMode == TGateWireMode.Native77)
+                                OutOfConnect(userInfo, gateInfo);
                         }
-                        else OutOfConnect(userInfo);
+                        else OutOfConnect(userInfo, gateInfo);
                     }
                     break;
 
@@ -866,15 +992,13 @@ namespace DBSvr
                     //   0x5CC857  call 0x59D70C                 ; 经 [[0x5DA0E0]] 外发
                     //   0x5CC85F  mov byte [self+8], 7          ; ★状态推进到 7
                     //
-                    // 即原版这条腿**不只是回包，还会关闭会话**。C# 没有
-                    // byte[Self+8] 那个连接状态机、也没接 [[0x5DA0E0]] 外发通道，
-                    // 所以此处只复刻**线上可观测的那一半**（回 4018），
-                    // 并把另一半记为已知缺口，不伪造状态机也不伪造通道。
-                    Log($"[UserSoc] 未建模 opcode {ident} -> 回 4018"
-                        + "（原版 0x5CE472 同时推 10012 并把 byte[Self+8] 置 7，"
-                        + "C# 无该状态机，缺口已记）");
-                    SendEncodedPacket(userInfo,
-                        Grobal2.SM_OUTOFCONNECTION_4018, 0, 0, 0, 0, null);
+                    Log($"[UserSoc] 未建模 opcode {ident} -> 回 4018 并关闭原生会话");
+                    if (userInfo.WireMode == TGateWireMode.Native77)
+                        OutOfConnect(userInfo, gateInfo);
+                    else
+                        SendEncodedPacket(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018,
+                            0, 0, 0, 0, null);
                     break;
             }
         }
@@ -1029,16 +1153,26 @@ namespace DBSvr
             // 从 user_index 直接查询角色列表
             // Removed GetPtid per account_schema_ownership_20260811.md — the native
             // DBServer does not map uid->pt_id; it uses sAccount directly.
-            var ptid = sAccount;
-            var chrList = _playRecordService.QueryChrByPtid(ptid ?? sAccount);
-            Log($"[QueryChr] Found {chrList.Count} chars for account={sAccount}");
+            SendCharacterList(sAccount, userInfo);
+            return true;
+        }
+
+        private void SendCharacterList(string account, TUserInfo userInfo)
+        {
+            var chrList = _playRecordService.QueryChrByPtid(account);
+            Log($"[QueryChr] Found {chrList.Count} chars for account={account}");
             // Character rows are authoritative data. Encoding problems must never be
             // treated as permission to delete a character.
 
             int nChrCount = Math.Min(chrList.Count,
                 NativeCharacterListCodec.MaxRows);
+            NativePendingAward pendingAward = null;
+            if (userInfo.WireMode == TGateWireMode.Native77
+                && nChrCount < NativeCharacterListCodec.MaxRows)
+                TryReadPendingAward(account, out pendingAward);
+            var nativeRowCount = nChrCount + (pendingAward == null ? 0 : 1);
             byte[] chrBody = new byte[
-                NativeCharacterListCodec.RowSize * nChrCount];
+                NativeCharacterListCodec.RowSize * nativeRowCount];
             for (int i = 0; i < nChrCount; i++)
             {
                 var chr = chrList[i];
@@ -1048,22 +1182,133 @@ namespace DBSvr
                     chrBody.AsSpan(off, NativeCharacterListCodec.RowSize),
                     nb, chr.Job, chr.Sex, chr.Level);
             }
+            if (pendingAward != null)
+            {
+                var off = nChrCount * NativeCharacterListCodec.RowSize;
+                NativeCharacterListCodec.WriteRow(
+                    chrBody.AsSpan(off, NativeCharacterListCodec.RowSize),
+                    ReadOnlySpan<byte>.Empty, pendingAward.Job,
+                    pendingAward.Sex, pendingAward.Level);
+            }
             ushort selectedIndex = 0;
             for (int i = 0; i < nChrCount; i++)
             {
                 if (chrList[i].IsSelect)
-                {
                     selectedIndex = (ushort)i;
-                    break;
-                }
             }
             Log($"[QueryChr] chrBody({chrBody.Length}B) hex={BitConverter.ToString(chrBody).Replace("-"," ")}");
             SendEncodedPacket(userInfo, Grobal2.SM_QUERYCHR,
-                1, (ushort)nChrCount, selectedIndex, 0, chrBody);
-            return true;
+                1, (ushort)nativeRowCount, selectedIndex, 0, chrBody);
         }
 
         // ===================== 创建角色 (CM_NEWCHR) =====================
+
+        private bool ProcessNativeNewChr(string sData,
+            ref TUserInfo userInfo, out bool created)
+        {
+            created = false;
+            var body = DecodeRawBody(sData);
+            if (!NativeNewCharacterProtocol.TryDecode(body, out var request))
+                return false;
+
+            var result = NativeNewCharacterProtocol.ValidateFixedGates(
+                request,
+                creationDisabled: false,
+                managerCreationDisabled: false,
+                allowJobThree: false);
+            var characterName = string.Empty;
+            try
+            {
+                if (result == NativeNewCharacterProtocol.ResultPending)
+                {
+                    characterName = LegacyGbkText.Decode(request.NameBytes);
+                    // The two global writer/config-key mappings remain blocked,
+                    // so they are not guessed from unrelated managed options.
+                    // Job 3 stays closed because its constructor default is
+                    // directly proven to be zero.
+                    if (!_sensitiveWordFilter.ValidateNativeHeroName(
+                            characterName))
+                        result = NativeNewCharacterProtocol.ResultInvalidRequest;
+                }
+
+                if (result == NativeNewCharacterProtocol.ResultPending
+                    && (_playRecordService.IsChrNameExists(characterName)
+                        || _heroRecordService.IsHeroNameExists(characterName)))
+                    result = NativeNewCharacterProtocol.ResultDuplicateOrFailure;
+
+                if (result == NativeNewCharacterProtocol.ResultPending
+                    && _loginService.IsNativeAccountCrossServerLocked(
+                        userInfo.sAccount))
+                    result = NativeNewCharacterProtocol.ResultAccountLocked;
+
+                if (result == NativeNewCharacterProtocol.ResultPending)
+                {
+                    var job = (int)request.Job;
+                    var sex = (int)request.Sex;
+                    var level = 0;
+                    var activeCharacterCount = _playRecordService
+                        .ChrCountOfAccount(userInfo.sAccount);
+                    var hasAward = TryReadPendingAward(userInfo.sAccount,
+                        out var award);
+                    if (hasAward)
+                    {
+                        job = award.Job;
+                        sex = award.Sex;
+                        level = award.Level;
+                        MarkPendingAwardClaimed(award.Idx, characterName);
+                    }
+                    else if (activeCharacterCount >= 4)
+                    {
+                        result = NativeNewCharacterProtocol.ResultCharacterLimit;
+                    }
+
+                    if (result == NativeNewCharacterProtocol.ResultPending)
+                    {
+                        var idx = _playRecordService.CreateCharacter(
+                            userInfo.sAccount, characterName, job, sex,
+                            hair: 0, level: level);
+                        if (idx > 0)
+                        {
+                            var human = new THumDataInfo();
+                            human.Header.sName = characterName;
+                            human.Header.sAccount = userInfo.sAccount;
+                            human.Data.sCharName = characterName;
+                            human.Data.sAccount = userInfo.sAccount;
+                            human.Data.btSex = (byte)sex;
+                            human.Data.btJob = (byte)job;
+                            human.Data.btHair = 0;
+                            human.Data.Abil.Level = unchecked((ushort)level);
+                            if (_playDataService.Add(ref human))
+                            {
+                                result = NativeNewCharacterProtocol.ResultSuccess;
+                            }
+                            else
+                            {
+                                _playRecordService.HardDelete(idx);
+                                result = NativeNewCharacterProtocol
+                                    .ResultDuplicateOrFailure;
+                            }
+                        }
+                        else
+                        {
+                            result = NativeNewCharacterProtocol
+                                .ResultDuplicateOrFailure;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                result = NativeNewCharacterProtocol.ResultDuplicateOrFailure;
+                DBShare.MainOutMessage(
+                    $"[NativeNewChr] chr={characterName} account={userInfo.sAccount}: {ex.Message}");
+            }
+
+            SendEncodedPacket(userInfo, NativeNewCharacterProtocol.Command,
+                0, result, 0, 0, null);
+            created = result == NativeNewCharacterProtocol.ResultSuccess;
+            return true;
+        }
 
         private void NewChr(string sData, ref TUserInfo userInfo)
         {
@@ -1389,8 +1634,8 @@ namespace DBSvr
         ///   0x5CD3B7  cmp err,1 / jne ⇒ 只有成功才发 77BBAA33 转发
         ///   0x5CD4A5  回包 opcode 与请求同为 0xFB0，错误码在记录首 dword
         /// </summary>
-        private void ProcessRenameChr(string sData, int packetRecog,
-            ref TUserInfo userInfo)
+        private bool ProcessRenameChr(string sData, int packetRecog,
+            TGateInfo gateInfo, ref TUserInfo userInfo)
         {
             // 极性判据逐字（分支体 0x5CE404 -> 校验层 0x5CD2EC）：
             //   0x5CE412  mov eax, [ebp-0x1c]   ; eax = 报文头指针
@@ -1407,31 +1652,41 @@ namespace DBSvr
             // 而 Param 是另一个偏移（+6），两者无关。已按字节改为 Recog。
             if (packetRecog == 0)
             {
-                // 0x5CD309 起的非改名腿：mov byte [Self+0xb],1；
-                // 若 Self+0x48 非空则 call 0x5CD544（选角进入）。
-                // ⚠️ 那条腿 C# 尚未实现 —— 这是**已知缺口**，不是「忽略」。
-                Log("[RenameChr] Recog==0 -> 原版走 0x5CD309 选角进入腿，C# 未实现");
-                return;
+                var pendingName = NativeSelectEntryProtocol
+                    .BeginRenameContinuation(userInfo);
+                if (string.IsNullOrEmpty(pendingName)) return false;
+
+                var selected = SelectChr(EDcode.EncodeString(pendingName),
+                    gateInfo, ref userInfo, out var handled);
+                if (selected)
+                    userInfo.boChrSelected = true;
+                return handled;
             }
 
-            // 原版：新名来自 [ebp-8]，旧名来自 Self+0x48。
-            // body 形如 "旧名/新名"（与本服务其它 EDcode 命令同构）；若只给一段，
-            // 则按账号解析当前角色作为旧名。
-            // ⚠️ TUserInfo **没有**当前角色名字段（我一度想当然写成 sChrName，
-            // 编译即暴露）——不发明字段，旧名走账号查询。
+            // Native 2.08 takes the new name from [ebp-8] and the old name
+            // exclusively from Self+0x48.  The old slash/account fallback is
+            // retained only for the private legacy transport.
             var decoded = EDcode.DeCodeString(sData)?.TrimEnd('\0') ?? string.Empty;
             string oldName;
             string newName;
-            var slash = decoded.IndexOf('/');
-            if (slash > 0)
+            if (userInfo.WireMode == TGateWireMode.Native77)
             {
-                oldName = decoded.Substring(0, slash);
-                newName = decoded.Substring(slash + 1);
+                oldName = userInfo.NativePendingRenameName;
+                newName = decoded;
             }
             else
             {
-                newName = decoded;
-                oldName = ResolveAccountCharacterName(userInfo.sAccount);
+                var slash = decoded.IndexOf('/');
+                if (slash > 0)
+                {
+                    oldName = decoded.Substring(0, slash);
+                    newName = decoded.Substring(slash + 1);
+                }
+                else
+                {
+                    newName = decoded;
+                    oldName = ResolveAccountCharacterName(userInfo.sAccount);
+                }
             }
 
             var gbkNewName = LegacyGbkText.Encode(newName);
@@ -1440,14 +1695,14 @@ namespace DBSvr
             if (NativeRenameCharProtocol.IsEmptyName(gbkNewName))
             {
                 Log("[RenameChr] 空名字 -> 原版 0x5CD339 直接退出且不回包");
-                return;
+                return false;
             }
 
             if (string.IsNullOrEmpty(oldName))
             {
                 // 原版 Self+0x48 为空时 0x5CD317 也是直接退出不回包。
                 Log("[RenameChr] 会话无当前角色名 -> 不回包");
-                return;
+                return false;
             }
 
             // 长度门 + 字符白名单 + 重名检查，逐条对应上面的 VA。
@@ -1477,9 +1732,9 @@ namespace DBSvr
 
             if (result == NativeRenameCharProtocol.ResultSuccess)
             {
-                // 原版 0x5CD3C8 在此更新 Self+0x48（会话态当前角色名）。
-                // C# 的 TUserInfo 没有该字段，会话态角色名一律从库里解析，
-                // 主档已改名故下次解析即得新名 —— 无需也不应新增字段。
+                // 0x5CD3C4 sets the latch and 0x5CD497 clears Self+0x48.
+                // Failed/empty rename attempts retain the pending name for retry.
+                NativeSelectEntryProtocol.CompleteRename(userInfo);
                 // 0x5CD3F2..0x5CD48F：改名成功才发 77BBAA33 内部转发（子命令 0x57）。
                 // ⚠️ 该转发的出向通道（原版 [0x5DA0E0] 的 0x59E450）在本部署未接入，
                 // 与 YBDB 6108 / GlobalServer 6020 同类。按原版对客户端侧仍回包，
@@ -1490,6 +1745,9 @@ namespace DBSvr
             // 0x5CD49F..0x5CD4BF：回包 opcode 0xFB0，错误码在记录首 dword。
             SendEncodedPacket(userInfo, NativeRenameCharProtocol.ResponseCommand,
                 result, 0, 0, 0, null);
+            if (result == NativeRenameCharProtocol.ResultSuccess)
+                SendCharacterList(userInfo.sAccount, userInfo);
+            return true;
         }
 
         /// <summary>
@@ -1638,8 +1896,11 @@ namespace DBSvr
 
         // ===================== 选择角色进入游戏 (CM_SELCHR) =====================
 
-        private bool SelectChr(string sData, TGateInfo gateInfo, ref TUserInfo userInfo)
+        private bool SelectChr(string sData, TGateInfo gateInfo,
+            ref TUserInfo userInfo, out bool handled,
+            byte[] directLoginExtension = null)
         {
+            handled = false;
             string sAccount = userInfo.sAccount ?? "";
             var sChrName = EDcode.DeCodeString(sData)?.TrimEnd('\0');
             if (string.IsNullOrEmpty(sChrName)) return false;
@@ -1691,6 +1952,7 @@ namespace DBSvr
                     Log($"[SelectChr] native character is deleted: {sChrName}");
                     SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
                         0, 4, 0, 0, null);
+                    handled = true;
                     return false;
                 }
 
@@ -1698,9 +1960,77 @@ namespace DBSvr
                 // dispatcher emits one 4018 and closes the session.  Do not
                 // invent a 4017 loader code for this pre-loader branch.
                 Log($"[SelectChr] native character is not owned by account: {sChrName}");
-                OutOfConnect(userInfo);
                 return false;
             }
+
+            if (nativeWire)
+            {
+                var entryStatus = _selectEntryProtocol.Classify(sChrName);
+                if (entryStatus == NativeSelectEntryStatus.Denied)
+                {
+                    Log($"[SelectChr] native select-entry denied: {sChrName}");
+                    return false;
+                }
+
+                if (entryStatus == NativeSelectEntryStatus.MustRename
+                    && userInfo.NativeRenameLatch == 0)
+                {
+                    SendEncodedPacket(userInfo,
+                        NativeRenameCharProtocol.RequestCommand,
+                        0, 0, 0, 0, null);
+                    NativeSelectEntryProtocol.BeginRenamePrompt(
+                        userInfo, sChrName);
+                    handled = true;
+                    return false;
+                }
+
+                if (entryStatus == NativeSelectEntryStatus.NameNotAllowed)
+                {
+                    // Native fn_5CD544 status=3 sends a 4017/Param=1
+                    // acknowledgement, then a 658 notice formatted from the
+                    // NewZone template. The handler returns false afterwards;
+                    // the outer dispatcher supplies the single 4018/close.
+                    SendEncodedPacket(userInfo,
+                        Grobal2.CM_SELCHR4017, 0, 1, 0, 0, null);
+                    if (_selectEntryProtocol.TryFormatNewZoneNotice(
+                            sChrName, out var notice))
+                    {
+                        SendEncodedPacket(userInfo, Grobal2.SM_SENDNOTICE,
+                            0, 0, 0, 0,
+                            Encoding.GetEncoding(936).GetBytes(notice));
+                    }
+                    Log($"[SelectChr] native NewZone/AdminList rejection: {sChrName}");
+                    return false;
+                }
+
+                // fn_5A777C's first proven result-6 predicate is
+                // record+0x38 != 0.  The native type-3 cache maps that byte to
+                // IsTransLock (the transfer-lock writer sets the same offset),
+                // so this leg is handled with no synchronous packet.  Do not
+                // add a retry/timeout/state-5 wait: the recovered image does
+                // not prove such a continuation in this call path.
+                if (_playRecordService.TryGetNativeCharacterByName(
+                        LegacyGbkText.Encode(sChrName), out var loaderRecord)
+                    && loaderRecord != null && loaderRecord.IsTransLock)
+                {
+                    Log($"[SelectChr] native loader result 6 (record lock): {sChrName}");
+                    handled = true;
+                    return false;
+                }
+
+                // fn_5AD85C reads account-record+0x1E using the selected
+                // character's PTID. Native 0x019E is its only proven writer:
+                // state 1 sets the lock and every other state clears it.
+                if (_loginService.IsNativeAccountCrossServerLocked(sAccount))
+                {
+                    Log($"[SelectChr] native loader result 6 (account lock): {sChrName}");
+                    handled = true;
+                    return false;
+                }
+            }
+
+            if (nativeWire)
+                userInfo.NativeCurrentCharName = sChrName;
 
             // 更新选择状态 only after the native ownership gate succeeds.
             foreach (var humRecord in accountRecords)
@@ -1764,7 +2094,8 @@ namespace DBSvr
                             CachedValue38 = unchecked((int)loginDateTimeBits),
                             CachedValue3C = unchecked(
                                 (int)(loginDateTimeBits >> 32)),
-                            LoginExtension = userInfo.NativeSwitchHandoff.Consume()
+                            LoginExtension = directLoginExtension
+                                ?? userInfo.NativeSwitchHandoff.Consume()
                         };
                         var nativeFanoutOK = _gameSocService.TrySendNativeHuman(
                             ptid2, sChrName, context, out nativeFailureCode);
@@ -1781,14 +2112,21 @@ namespace DBSvr
                         $"{MobileAdmissionPayMode}/{userInfo.sUserIPaddr}");
                 }
                 if (boDataOK && useNativeBackends)
+                {
                     userInfo.NativeSwitchHandoff.SetCurrentCharacter(sChrName);
+                    userInfo.NativeSessionState = 6;
+                }
                 if (boDataOK)
                     _loginService.SetGlobaSessionPlay(userInfo.sAccount, userInfo.nSessionID);
             }
 
             if (boDataOK)
             {
+                if (nativeWire)
+                    NativeSelectEntryProtocol.CompleteSelection(
+                        userInfo, sChrName);
                 SendMobileSelectChr(userInfo, sChrName);
+                handled = true;
                 return true;
             }
 
@@ -1799,6 +2137,7 @@ namespace DBSvr
             SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
                 0, nativeWire ? nativeFailureCode : (ushort)0,
                 0, 0, null);
+            handled = true;
             return false;
         }
 
@@ -1852,17 +2191,24 @@ namespace DBSvr
             if (socket.Connected) socket.SendText("%++$");
         }
 
-        private void OutOfConnect(TUserInfo userInfo)
+        private void OutOfConnect(TUserInfo userInfo, TGateInfo gateInfo)
         {
             // The 2.08 UserSoc image emits 0xFB2 (4018) on its native
             // 0x77 line.  Keep the legacy 528 ident only for the private
             // percent/dollar transport, whose contract is outside that
             // native capture.
-            var ident = (ushort)(userInfo.WireMode == TGateWireMode.Native77
+            var nativeWire = userInfo.WireMode == TGateWireMode.Native77;
+            if (nativeWire && userInfo.NativeSessionState == 7) return;
+
+            var ident = (ushort)(nativeWire
                 ? Grobal2.SM_OUTOFCONNECTION_4018
                 : Grobal2.SM_OUTOFCONNECTION);
             SendEncodedPacket(userInfo, ident,
                 0, 0, 0, 0, null);
+            if (!nativeWire) return;
+
+            userInfo.NativeSessionState = 7;
+            CloseUser(userInfo.sConnID, ref gateInfo);
         }
 
         // ===================== 手游编码辅助方法 =====================
@@ -2055,56 +2401,80 @@ namespace DBSvr
             return false;
         }
 
-        /// <summary>
-        /// 处理预注册奖励。
+        private sealed class NativePendingAward
+        {
+            public int Idx { get; init; }
+            public byte Job { get; init; }
+            public byte Sex { get; init; }
+            public byte Level { get; init; }
+        }
+
+        private static bool TryReadPendingAward(string ptid,
+            out NativePendingAward award)
+        {
+            award = null;
+            try
+            {
+                using var conn = new MySqlConnection(DBShare.DBConnection);
+                conn.Open();
+                using var cmd = new MySqlCommand(
+                    "Select Idx, Job, Level, Sex from mir3.awardplayers where PTID=@p and Status=0",
+                    conn);
+                cmd.Parameters.AddWithValue("@p", ptid);
+                using var reader = cmd.ExecuteReader();
+                if (!reader.Read()) return false;
+                award = new NativePendingAward
+                {
+                    Idx = Convert.ToInt32(reader["Idx"]),
+                    Job = unchecked((byte)Convert.ToInt32(reader["Job"])),
+                    Sex = unchecked((byte)Convert.ToInt32(reader["Sex"])),
+                    Level = unchecked((byte)Convert.ToInt32(reader["Level"]))
+                };
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DBShare.MainOutMessage(
+                    $"[AwardPlayer] 查询未领取记录错误: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static void MarkPendingAwardClaimed(int idx, string chrName)
+        {
+            try
+            {
+                using var conn = new MySqlConnection(DBShare.DBConnection);
+                conn.Open();
+                using var cmd = new MySqlCommand(
+                    "Update mir3.awardplayers Set Status=1, HumName=@h where Idx=@i;",
+                    conn);
+                cmd.Parameters.Add(LegacyGbkText.Parameter("@h", chrName));
+                cmd.Parameters.AddWithValue("@i", idx);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                DBShare.MainOutMessage(
+                    $"[AwardPlayer] 领取状态更新错误: {ex.Message}");
+            }
+        }
+
         [Conditional("DBSVR_PROTOCOL_TRACE")]
         private static void Log(string msg)
         {
             Debug.WriteLine(msg);
         }
 
+        /// <summary>
         /// 对应 Delphi 原版 awardplayers 表:
         ///   SELECT * WHERE PTID=%s AND Status=0
         ///   UPDATE SET Status=1, HumName=%s WHERE Idx=%d
         /// </summary>
         private static void ProcessAwardPlayer(string ptid, string chrName)
         {
-            try
-            {
-                using var conn = new MySqlConnection(DBShare.DBConnection);
-                conn.Open();
-                using (var session = new MySqlCommand(
-                           "SET WAIT_TIMEOUT = 2073600;", conn))
-                    session.ExecuteNonQuery();
-                // 查找未领取的奖励。
-                // 0x5A552C `Select * from awardplayers where PTID="%s" and Status=0`
-                // （rc=-1 len=55）。库名 gamedata. → mir3.：原版先 `use mir3;`
-                // (0x5BAD84) 再跑无前缀语句；真库双证 mir3 有、gamedata 无这张表。
-                // 去掉 LIMIT 1（原版无；PTID 在真库是 UNIQUE，本就至多一行）。
-                // 注意原版是 `Select *`，这里只取 Idx —— 列裁剪不改变行为，
-                // 因为后续只用到 Idx；保留窄投影以免多读 blob 列。
-                using var sel = new MySqlCommand(
-                    "Select Idx from mir3.awardplayers where PTID=@p and Status=0", conn);
-                sel.Parameters.AddWithValue("@p", ptid);
-                var obj = sel.ExecuteScalar();
-                if (obj != null && obj != DBNull.Value)
-                {
-                    int idx = Convert.ToInt32(obj);
-                    // 0x5A72F8 `Update awardplayers Set Status=1, HumName="%s"
-                    // where Idx=%d;`（rc=-1 len=60）—— 原版此处 `Set` 首字母大写、
-                    // 谓词只按 Idx，与 0x5ACDB8 那条（Status=2）拼写风格不同，
-                    // 按各自字面量走，不要统一。
-                    using var upd = new MySqlCommand(
-                        "Update mir3.awardplayers Set Status=1, HumName=@h where Idx=@i;", conn);
-                    upd.Parameters.Add(LegacyGbkText.Parameter("@h", chrName));
-                    upd.Parameters.AddWithValue("@i", idx);
-                    upd.ExecuteNonQuery();
-                }
-            }
-            catch (Exception ex)
-            {
-                DBShare.MainOutMessage($"[AwardPlayer] 错误: {ex.Message}");
-            }
+            if (TryReadPendingAward(ptid, out var award))
+                MarkPendingAwardClaimed(award.Idx, chrName);
         }
 
         // ===================== 配置加载 =====================

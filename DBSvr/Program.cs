@@ -62,6 +62,7 @@ namespace DBSvr
                     // 核心工具
                     services.AddSingleton<SensitiveWordFilter>();
                     services.AddSingleton<WhitelistService>();
+                    services.AddSingleton<NativeSelectEntryProtocol>();
                     services.AddSingleton<NativeType2InitializationCache>();
                     services.AddSingleton<INativeType2StaticLoader,
                         MySqlNativeType2StaticLoader>();

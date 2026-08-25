@@ -298,6 +298,15 @@ namespace DBSvr
         public string sReconnectID;
         public NativeSwitchHandoffSlot NativeSwitchHandoff { get; } = new();
 
+        // Native TGateUserSession fields used by fn_5CD2EC/fn_5CD544.
+        public byte NativeRenameLatch;
+        public string NativePendingRenameName;
+        public string NativeCurrentCharName;
+
+        // Partial mirror of native Self+8. Only terminal state 7 is consumed
+        // until the preceding dispatcher states are modeled from evidence.
+        public byte NativeSessionState;
+
         /// <summary>
         /// 登录排队位次，复刻原版账号/会话对象的 <c>word[Self+0x9C]</c>。
         /// 0 = 不在排队中（原版 <c>0x5CE30A cmp word [eax+0x9c],0 / jbe</c> 放行）。

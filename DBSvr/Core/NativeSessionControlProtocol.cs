@@ -9,17 +9,18 @@ namespace DBSvr.Core
         public byte[] Account { get; init; } = Array.Empty<byte>();
     }
 
-    public sealed class NativeSessionPlayStateRequest
+    public sealed class NativeAccountCrossServerLockRequest
     {
         public ushort State { get; init; }
-        public long UserId { get; init; }
+        public long LookupKey { get; init; }
+        public bool IsLocked => State == 1;
     }
 
     public static class NativeSessionControlProtocol
     {
         public const ushort DisconnectAccountCommand = 0x0045;
-        public const ushort SetPlayStateCommand = 0x019E;
-        public const ushort SetPlayStateResponseCommand = 0x013D;
+        public const ushort SetCrossServerLockCommand = 0x019E;
+        public const ushort SetCrossServerLockResponseCommand = 0x013D;
         public const int HeaderSize = 0x48;
 
         public static bool TryDecodeDisconnect(LegacyDbServerFrame frame,
@@ -40,38 +41,38 @@ namespace DBSvr.Core
             return true;
         }
 
-        public static bool TryDecodePlayState(LegacyDbServerFrame frame,
-            out NativeSessionPlayStateRequest request, out string error)
+        public static bool TryDecodeCrossServerLock(LegacyDbServerFrame frame,
+            out NativeAccountCrossServerLockRequest request, out string error)
         {
             request = null;
             error = string.Empty;
-            if (!HasHeader(frame, SetPlayStateCommand))
+            if (!HasHeader(frame, SetCrossServerLockCommand))
             {
                 error = "native 0x019E envelope is invalid";
                 return false;
             }
             var payload = frame.Payload.AsSpan();
-            request = new NativeSessionPlayStateRequest
+            request = new NativeAccountCrossServerLockRequest
             {
                 State = BinaryPrimitives.ReadUInt16LittleEndian(
                     payload.Slice(2, 2)),
-                UserId = BinaryPrimitives.ReadInt64LittleEndian(
+                LookupKey = BinaryPrimitives.ReadInt64LittleEndian(
                     payload.Slice(8, 8))
             };
             return true;
         }
 
-        public static LegacyDbServerFrame CreatePlayStateResponse(
-            NativeSessionPlayStateRequest request)
+        public static LegacyDbServerFrame CreateCrossServerLockResponse(
+            NativeAccountCrossServerLockRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             var payload = new byte[HeaderSize];
             BinaryPrimitives.WriteUInt16LittleEndian(payload,
-                SetPlayStateResponseCommand);
+                SetCrossServerLockResponseCommand);
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2),
                 request.State);
             BinaryPrimitives.WriteInt64LittleEndian(payload.AsSpan(8, 8),
-                request.UserId);
+                request.LookupKey);
             return new LegacyDbServerFrame(1, 0, payload);
         }
 

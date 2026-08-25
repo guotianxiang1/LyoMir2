@@ -12,11 +12,14 @@ Run("split marker/header/body and coalesced frames", TestSplitAndCoalesced);
 Run("bounded incomplete frame", TestBoundedIncompleteFrame);
 Run("filter reload concurrent with lookups", TestConcurrentFilterReload);
 Run("native GBK character-name validation", TestNativeNameValidation);
+Run("native 4012 new-character contract", TestNativeNewCharacterContract);
 Run("native 5100 control frames", TestNativeGateControlFrames);
 Run("native 5100 data frames", TestNativeGateDataFrames);
 Run("native 4004 login result body", TestNativeLoginResultBody);
 Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
+Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
+Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
 Run("native 4017 deleted-character result", TestNativeSelectDeletedCharacterResult);
 Run("native 4017 load-failure result", TestNativeSelectLoadFailureResult);
@@ -964,19 +967,22 @@ static void TestNativeSessionControl()
     Check(disconnect.Account.SequenceEqual(account),
         "0045 account bytes");
 
-    var playPayload = new byte[NativeSessionControlProtocol.HeaderSize];
-    BitConverter.GetBytes(NativeSessionControlProtocol.SetPlayStateCommand)
-        .CopyTo(playPayload, 0);
-    BitConverter.GetBytes((ushort)3).CopyTo(playPayload, 2);
+    var lockPayload = new byte[NativeSessionControlProtocol.HeaderSize];
+    BitConverter.GetBytes(
+            NativeSessionControlProtocol.SetCrossServerLockCommand)
+        .CopyTo(lockPayload, 0);
+    BitConverter.GetBytes((ushort)3).CopyTo(lockPayload, 2);
     BitConverter.GetBytes(unchecked((long)0x8877665511223344))
-        .CopyTo(playPayload, 8);
-    Check(NativeSessionControlProtocol.TryDecodePlayState(
-        new LegacyDbServerFrame(1, 0, playPayload), out var state,
+        .CopyTo(lockPayload, 8);
+    Check(NativeSessionControlProtocol.TryDecodeCrossServerLock(
+        new LegacyDbServerFrame(1, 0, lockPayload), out var state,
         out error), error);
     Equal((ushort)3, state.State, "019E state word");
-    Equal(unchecked((long)0x8877665511223344), state.UserId,
-        "019E little-endian UserId");
-    var response = NativeSessionControlProtocol.CreatePlayStateResponse(state);
+    Check(!state.IsLocked, "019E non-one state did not clear the lock");
+    Equal(unchecked((long)0x8877665511223344), state.LookupKey,
+        "019E little-endian lookup key");
+    var response = NativeSessionControlProtocol
+        .CreateCrossServerLockResponse(state);
     Equal(NativeSessionControlProtocol.HeaderSize, response.Payload.Length,
         "019E response size");
     Equal((ushort)0x013D, BitConverter.ToUInt16(response.Payload, 0),
@@ -985,8 +991,65 @@ static void TestNativeSessionControl()
         "019E state echo");
     Equal(0, BitConverter.ToInt32(response.Payload, 4),
         "019E zero field");
-    Equal(state.UserId, BitConverter.ToInt64(response.Payload, 8),
-        "019E UserId echo");
+    Equal(state.LookupKey, BitConverter.ToInt64(response.Payload, 8),
+        "019E lookup-key echo");
+
+    lockPayload[2] = 1;
+    lockPayload[3] = 0;
+    Check(NativeSessionControlProtocol.TryDecodeCrossServerLock(
+            new LegacyDbServerFrame(1, 0, lockPayload), out var setState,
+            out error), error);
+    Check(setState.IsLocked,
+        "019E state one did not select the native lock-set branch");
+
+    var accountLocks = new NativeAccountCrossServerLockState();
+    Check(!accountLocks.IsLocked("Account"),
+        "native account lock defaulted to set");
+    accountLocks.SetLocked("Account", true);
+    Check(accountLocks.IsLocked("account"),
+        "native account lock did not normalize PTID case");
+    accountLocks.SetLocked("ACCOUNT", false);
+    Check(!accountLocks.IsLocked("account"),
+        "native account lock did not clear explicitly");
+
+    var root = RepoRoot();
+    var gameSoc = File.ReadAllText(Path.Combine(root,
+        "DBSvr", "Services", "GameSocService.cs"));
+    var loginSoc = File.ReadAllText(Path.Combine(root,
+        "DBSvr", "Services", "LoginSocService.cs"));
+    var userSoc = File.ReadAllText(Path.Combine(root,
+        "DBSvr", "Services", "UserSocService.cs"));
+    Check(gameSoc.Contains("SetNativeAccountCrossServerLock(",
+              StringComparison.Ordinal)
+          && gameSoc.Contains("request.IsLocked", StringComparison.Ordinal)
+          && !gameSoc.Contains("SetNativeAccountPlayState(",
+              StringComparison.Ordinal),
+        "019E still mutates generic login play state");
+    Check(loginSoc.Contains("NativeAccountCrossServerLockState",
+              StringComparison.Ordinal)
+          && !loginSoc.Contains("SetNativeAccountPlayState(",
+              StringComparison.Ordinal),
+        "native account lock is not stored independently from sessions");
+    var selectStart = userSoc.IndexOf(
+        "private bool SelectChr(string sData", StringComparison.Ordinal);
+    var selectEnd = userSoc.IndexOf(
+        "\n        // ===================== 手游进游戏响应包",
+        selectStart, StringComparison.Ordinal);
+    Check(selectStart >= 0 && selectEnd > selectStart,
+        "4017 select handler boundary is missing for account-lock audit");
+    var select = userSoc.Substring(selectStart, selectEnd - selectStart);
+    var characterLock = select.IndexOf("loader result 6 (record lock)",
+        StringComparison.Ordinal);
+    var accountLock = select.IndexOf("loader result 6 (account lock)",
+        StringComparison.Ordinal);
+    var selectionMutation = select.IndexOf("// 更新选择状态 only after",
+        StringComparison.Ordinal);
+    Check(characterLock >= 0 && accountLock > characterLock
+          && selectionMutation > accountLock
+          && select.Contains(
+              "_loginService.IsNativeAccountCrossServerLocked(sAccount)",
+              StringComparison.Ordinal),
+        "4017 account-level result-6 predicate is not wired in native order");
 }
 
 static void TestNativeOnlineAccount()
@@ -1663,6 +1726,138 @@ static void TestNativeNameValidation()
     }
 }
 
+static void TestNativeNewCharacterContract()
+{
+    var gbk = Encoding.GetEncoding(936);
+    var name = gbk.GetBytes("测试");
+    var body = new byte[NativeNewCharacterProtocol.BodySize];
+    body[0] = (byte)name.Length;
+    name.CopyTo(body, 1);
+    body[16] = 0x7F;
+    body[17] = 2;
+    body[18] = 1;
+    body[19] = 99;
+
+    Check(!NativeNewCharacterProtocol.TryDecode(body.AsSpan(0, 19),
+            out _),
+        "4012 accepted a body shorter than 20 bytes");
+    Check(NativeNewCharacterProtocol.TryDecode(body, out var request),
+        "4012 rejected its exact 20-byte body");
+    Equal(name.Length, request.NameLength, "4012 ShortString length");
+    Check(request.NameBytes.SequenceEqual(name),
+        "4012 ShortString GBK payload");
+    Equal((byte)2, request.Job, "4012 job offset");
+    Equal((byte)1, request.Sex, "4012 sex offset");
+    Check(typeof(NativeNewCharacterRequest).GetProperty("Hair") == null
+          && typeof(NativeNewCharacterRequest).GetProperty("Level") == null,
+        "4012 exposed native-ignored hair or pre-cleared level as creation input");
+
+    var padded = new byte[21];
+    body.CopyTo(padded, 0);
+    padded[20] = 0xA5;
+    Check(NativeNewCharacterProtocol.TryDecode(padded, out var paddedRequest)
+          && paddedRequest.NameBytes.SequenceEqual(name)
+          && paddedRequest.Job == request.Job
+          && paddedRequest.Sex == request.Sex,
+        "4012 did not tolerate the client's optional trailing byte");
+
+    Equal(NativeNewCharacterProtocol.ResultPending,
+        NativeNewCharacterProtocol.ValidateFixedGates(request,
+            false, false, false), "4012 ordinary fixed gates");
+
+    body[17] = 3;
+    NativeNewCharacterProtocol.TryDecode(body, out var jobThree);
+    Equal(NativeNewCharacterProtocol.ResultJobUnavailable,
+        NativeNewCharacterProtocol.ValidateFixedGates(jobThree,
+            false, false, false), "4012 default job-3 result");
+    Equal(NativeNewCharacterProtocol.ResultPending,
+        NativeNewCharacterProtocol.ValidateFixedGates(jobThree,
+            false, false, true), "4012 enabled job-3 gate");
+
+    body[17] = 4;
+    NativeNewCharacterProtocol.TryDecode(body, out var jobFour);
+    Equal(NativeNewCharacterProtocol.ResultInvalidRequest,
+        NativeNewCharacterProtocol.ValidateFixedGates(jobFour,
+            false, false, false), "4012 out-of-range job result");
+
+    body[17] = 2;
+    body[18] = 2;
+    NativeNewCharacterProtocol.TryDecode(body, out var sexTwo);
+    Equal(NativeNewCharacterProtocol.ResultInvalidRequest,
+        NativeNewCharacterProtocol.ValidateFixedGates(sexTwo,
+            false, false, false), "4012 out-of-range sex result");
+    Equal(NativeNewCharacterProtocol.ResultCreationDisabled,
+        NativeNewCharacterProtocol.ValidateFixedGates(request,
+            true, false, false), "4012 global-disable result");
+    Equal(NativeNewCharacterProtocol.ResultInvalidRequest,
+        NativeNewCharacterProtocol.ValidateFixedGates(request,
+            false, true, false), "4012 manager-disable result");
+
+    var overlong = (byte[])body.Clone();
+    overlong[0] = 16;
+    NativeNewCharacterProtocol.TryDecode(overlong, out var invalidSlot);
+    Equal(NativeNewCharacterProtocol.ResultInvalidRequest,
+        NativeNewCharacterProtocol.ValidateFixedGates(invalidSlot,
+            false, false, false), "4012 oversized ShortString result");
+
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var caseStart = source.IndexOf("case Grobal2.CM_NEWCHR:",
+        StringComparison.Ordinal);
+    var caseEnd = source.IndexOf("case Grobal2.CM_DELCHR:",
+        caseStart, StringComparison.Ordinal);
+    Check(caseStart >= 0 && caseEnd > caseStart,
+        "4012 dispatcher boundary is missing");
+    var dispatcher = source.Substring(caseStart, caseEnd - caseStart);
+    var nativeBranch = dispatcher.IndexOf(
+        "userInfo.WireMode == TGateWireMode.Native77",
+        StringComparison.Ordinal);
+    var legacyThrottle = dispatcher.IndexOf(
+        "userInfo.dwChrTick) > 1000", StringComparison.Ordinal);
+    Check(nativeBranch >= 0 && legacyThrottle > nativeBranch
+          && dispatcher.Contains("ProcessNativeNewChr(body,",
+              StringComparison.Ordinal)
+          && dispatcher.Contains("if (!handled)", StringComparison.Ordinal)
+          && dispatcher.Contains("else if (created)", StringComparison.Ordinal)
+          && dispatcher.Contains(
+              "SendCharacterList(userInfo.sAccount, userInfo)",
+              StringComparison.Ordinal),
+        "4012 Native77 branch is not separated from the legacy throttle/list behavior");
+
+    var methodStart = source.IndexOf(
+        "private bool ProcessNativeNewChr(string sData",
+        StringComparison.Ordinal);
+    var methodEnd = source.IndexOf("\n        private void NewChr(",
+        methodStart, StringComparison.Ordinal);
+    Check(methodStart >= 0 && methodEnd > methodStart,
+        "native 4012 handler boundary is missing");
+    var method = source.Substring(methodStart, methodEnd - methodStart);
+    var countRead = method.IndexOf(".ChrCountOfAccount(",
+        StringComparison.Ordinal);
+    var award = method.IndexOf("TryReadPendingAward(",
+        StringComparison.Ordinal);
+    var limit = method.IndexOf("else if (activeCharacterCount >= 4)",
+        StringComparison.Ordinal);
+    Check(method.Contains("NativeNewCharacterProtocol.TryDecode",
+              StringComparison.Ordinal)
+          && method.Contains("_heroRecordService.IsHeroNameExists",
+              StringComparison.Ordinal)
+          && method.Contains(
+              "_loginService.IsNativeAccountCrossServerLocked",
+              StringComparison.Ordinal)
+          && countRead >= 0 && award > countRead && limit > award
+          && method.Contains("hair: 0", StringComparison.Ordinal)
+          && method.Contains("level: level", StringComparison.Ordinal)
+          && method.Contains("NativeNewCharacterProtocol.Command",
+              StringComparison.Ordinal)
+          && source.Contains("unchecked((byte)Convert.ToInt32(reader[\"Level\"]))",
+              StringComparison.Ordinal)
+          && !method.Contains("TodayCreateCount", StringComparison.Ordinal)
+          && !method.Contains("IsGmAccount", StringComparison.Ordinal),
+        "native 4012 validation/order/persistence contract drifted");
+}
+
 static void TestNativeGateControlFrames()
 {
     var register = Convert.FromHexString(
@@ -1784,7 +1979,9 @@ static void TestNativeLoginAlreadyOnline()
         NativeAuthResponse = auth,
         NativeText102 = "online",
         NativeLoginDateTimeBits = 0x1122334455667788,
-        sReconnectID = "reconnect"
+        sReconnectID = "reconnect",
+        NativeCurrentCharName = "Role",
+        NativeSessionState = 7
     };
     user.NativeSwitchHandoff.SetCurrentCharacter("Role");
     Check(user.NativeSwitchHandoff.TryStore("Role",
@@ -1796,6 +1993,10 @@ static void TestNativeLoginAlreadyOnline()
     Check(user.sAccount == string.Empty, "4041 did not clear account");
     Check(!user.boChrSelected && !user.boChrQueryed,
         "4041 did not clear character state");
+    Check(user.NativeCurrentCharName == string.Empty,
+        "4041 did not clear native Self+0x44 current character");
+    Equal((byte)0, user.NativeSessionState,
+        "4041 did not reset the native dispatcher state");
     Check(user.NativeAuthTick == 0 && user.NativeAuthResponse == null,
         "4041 did not clear native authentication context");
     Check(user.NativeText102 == string.Empty
@@ -1811,6 +2012,11 @@ static void TestNativeLoginAlreadyOnline()
         "4041 command constant");
     Equal((ushort)4040, NativeLoginAlreadyOnlineProtocol.KickoutCommand,
         "4040 command constant");
+    Check(NativeLoginAlreadyOnlineProtocol.UsesReturnToLoginLeg(0)
+          && NativeLoginAlreadyOnlineProtocol.UsesReturnToLoginLeg(0x0100)
+          && !NativeLoginAlreadyOnlineProtocol.UsesReturnToLoginLeg(1)
+          && !NativeLoginAlreadyOnlineProtocol.UsesReturnToLoginLeg(0x0101),
+        "4041 did not branch on the native low parameter byte");
 
     var source = File.ReadAllText(Path.Combine(
         RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
@@ -1826,12 +2032,15 @@ static void TestNativeLoginAlreadyOnline()
               "NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin",
               StringComparison.Ordinal)
           && caseBlock.Contains(
-              "Grobal2.SM_OUTOFCONNECTION_4018", StringComparison.Ordinal)
-          && caseBlock.Split("Grobal2.SM_OUTOFCONNECTION_4018",
+              ".UsesReturnToLoginLeg(packetParam)",
+              StringComparison.Ordinal)
+          && caseBlock.Contains("OutOfConnect(userInfo, gateInfo)",
+              StringComparison.Ordinal)
+          && caseBlock.Split("OutOfConnect(userInfo, gateInfo)",
               StringSplitOptions.None).Length == 2
           && caseBlock.Contains(
               "fn_5A2C40/fn_5CDCB4", StringComparison.Ordinal),
-        "4041 return branch must clear state and emit one 4018 while the force branch remains fail-closed");
+        "4041 low-byte-zero branch must clear state and emit one 4018 while the force branch remains fail-closed");
     Check(source.Contains(
               "SendEncodedPacket(userInfo, 4041, 0, 0, 0, 0, null)",
               StringComparison.Ordinal),
@@ -1844,7 +2053,7 @@ static void TestNativeOutOfConnectIdent()
         RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
         .Replace("\r\n", "\n");
     var methodStart = source.IndexOf(
-        "private void OutOfConnect(TUserInfo userInfo)",
+        "private void OutOfConnect(TUserInfo userInfo, TGateInfo gateInfo)",
         StringComparison.Ordinal);
     Check(methodStart >= 0, "OutOfConnect method is missing");
     var methodEnd = source.IndexOf(
@@ -1860,8 +2069,273 @@ static void TestNativeOutOfConnectIdent()
               StringComparison.Ordinal)
           && method.Contains(
               "Grobal2.SM_OUTOFCONNECTION)",
+              StringComparison.Ordinal)
+          && method.Contains("userInfo.NativeSessionState == 7",
+              StringComparison.Ordinal)
+          && method.Contains("userInfo.NativeSessionState = 7",
+              StringComparison.Ordinal)
+          && method.Contains("CloseUser(userInfo.sConnID, ref gateInfo)",
               StringComparison.Ordinal),
-        "native OutOfConnect must use 4018 while preserving the legacy transport");
+        "native OutOfConnect must emit one 4018, enter terminal state 7, and close while preserving legacy transport");
+}
+
+static void TestNativeSelectEntryRenameContinuation()
+{
+    var directory = Path.Combine(Path.GetTempPath(),
+        "dbsvr-select-entry-" + Guid.NewGuid().ToString("N"));
+    var renameDirectory = Path.Combine(directory, "Rename");
+    Directory.CreateDirectory(renameDirectory);
+    var gbk = Encoding.GetEncoding(936);
+    try
+    {
+        File.WriteAllText(Path.Combine(directory, "!DenyLogon.txt"),
+            "  SharedName  \r\n;comment\r\nBlockedName\r\n", gbk);
+        File.WriteAllText(Path.Combine(renameDirectory, "HumName.txt"),
+            "sharedname\r\nRenameMe\r\n;comment\r\n", gbk);
+
+        var protocol = new NativeSelectEntryProtocol(directory);
+        Equal(NativeSelectEntryStatus.Denied,
+            protocol.Classify("SHAREDNAME"),
+            "select-entry deny list must precede the rename list");
+        Equal(NativeSelectEntryStatus.Denied,
+            protocol.Classify("blockedname"),
+            "select-entry deny list native ASCII normalization");
+        Equal(NativeSelectEntryStatus.MustRename,
+            protocol.Classify("renameme"),
+            "HumName force-rename lookup");
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("comment"),
+            "select-entry comment filtering");
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("ordinary"),
+            "ordinary select-entry name");
+
+        File.Delete(Path.Combine(directory, "!DenyLogon.txt"));
+        protocol.ReloadDeniedNamesIfDue(
+            unchecked((uint)Environment.TickCount + 30001u));
+        Equal(NativeSelectEntryStatus.Denied,
+            protocol.Classify("blockedname"),
+            "missing DenyLogon file must preserve the active table");
+
+        File.WriteAllText(Path.Combine(directory, "!DenyLogon.txt"),
+            "Replacement\r\n", gbk);
+        File.SetLastWriteTimeUtc(Path.Combine(directory, "!DenyLogon.txt"),
+            DateTime.UtcNow.AddSeconds(2));
+        protocol.ReloadDeniedNamesIfDue(
+            unchecked((uint)Environment.TickCount + 30001u));
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("blockedname"),
+            "changed DenyLogon file must replace the active table");
+        Equal(NativeSelectEntryStatus.Denied,
+            protocol.Classify("replacement"),
+            "changed DenyLogon file was not reloaded");
+        Check(!NativeSelectEntryProtocol.IsDeniedReloadDue(29, 0)
+              && NativeSelectEntryProtocol.IsDeniedReloadDue(30000, 0)
+              && NativeSelectEntryProtocol.IsDeniedReloadDue(
+                  10, uint.MaxValue - 30000),
+            "DenyLogon 30-second due check is not wrap-safe");
+
+        var user = new TUserInfo();
+        NativeSelectEntryProtocol.BeginRenamePrompt(user, "OldName");
+        Equal((byte)0, user.NativeRenameLatch,
+            "first rename prompt must leave the latch clear");
+        Equal("OldName", user.NativePendingRenameName,
+            "first rename prompt pending name");
+
+        Equal("OldName",
+            NativeSelectEntryProtocol.BeginRenameContinuation(user),
+            "Recog zero continuation name");
+        Equal((byte)1, user.NativeRenameLatch,
+            "Recog zero must set the rename latch before selection");
+
+        // A failed or empty rename does not reach 0x5CD3C4/0x5CD497.
+        Equal("OldName", user.NativePendingRenameName,
+            "failed rename must retain the pending name");
+        NativeSelectEntryProtocol.CompleteRename(user);
+        Equal((byte)1, user.NativeRenameLatch,
+            "successful rename latch");
+        Check(user.NativePendingRenameName == null,
+            "successful rename clears pending name");
+
+        NativeSelectEntryProtocol.BeginRenamePrompt(user, "OldAgain");
+        NativeSelectEntryProtocol.BeginRenameContinuation(user);
+        NativeSelectEntryProtocol.CompleteSelection(user, "OldAgain");
+        Equal((byte)1, user.NativeRenameLatch,
+            "synchronous selection must retain the async rename latch");
+        Check(string.Equals(user.NativePendingRenameName, "OldAgain",
+                StringComparison.Ordinal),
+            "synchronous selection must retain pending rename state");
+        Equal("OldAgain", user.NativeCurrentCharName,
+            "completed selection records the native current character");
+
+        var empty = new TUserInfo();
+        Check(NativeSelectEntryProtocol.BeginRenameContinuation(empty) == null,
+            "empty pending continuation stays silent");
+        Equal((byte)1, empty.NativeRenameLatch,
+            "empty pending continuation still sets the native latch");
+    }
+    finally
+    {
+        Directory.Delete(directory, true);
+    }
+
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var processStart = source.IndexOf(
+        "private bool ProcessRenameChr(string sData", StringComparison.Ordinal);
+    var processEnd = source.IndexOf(
+        "\n        private string ResolveAccountCharacterName", processStart,
+        StringComparison.Ordinal);
+    Check(processStart >= 0 && processEnd > processStart,
+        "4016 rename handler boundary is missing");
+    var process = source.Substring(processStart, processEnd - processStart);
+    Check(process.Contains("BeginRenameContinuation(userInfo)",
+              StringComparison.Ordinal)
+          && process.Contains(
+              "SelectChr(EDcode.EncodeString(pendingName)",
+              StringComparison.Ordinal)
+          && process.Contains("out var handled", StringComparison.Ordinal)
+          && process.Contains(
+              "oldName = userInfo.NativePendingRenameName",
+              StringComparison.Ordinal)
+          && process.Contains("CompleteRename(userInfo)",
+              StringComparison.Ordinal)
+          && process.Contains(
+              "SendCharacterList(userInfo.sAccount, userInfo)",
+              StringComparison.Ordinal),
+        "4016 handler is not wired to native pending/latch state");
+    var renameResponse = process.IndexOf(
+        "NativeRenameCharProtocol.ResponseCommand", StringComparison.Ordinal);
+    var renameRefresh = process.IndexOf(
+        "SendCharacterList(userInfo.sAccount, userInfo)",
+        StringComparison.Ordinal);
+    Check(renameResponse >= 0 && renameRefresh > renameResponse,
+        "successful rename must send 4016 before its 4010 list refresh");
+
+    var selectStart = source.IndexOf(
+        "private bool SelectChr(string sData", StringComparison.Ordinal);
+    var selectEnd = source.IndexOf(
+        "\n        // ===================== 手游进游戏响应包",
+        selectStart, StringComparison.Ordinal);
+    Check(selectStart >= 0 && selectEnd > selectStart,
+        "4017 select handler boundary is missing");
+    var select = source.Substring(selectStart, selectEnd - selectStart);
+    var denied = select.IndexOf("NativeSelectEntryStatus.Denied",
+        StringComparison.Ordinal);
+    var mustRename = select.IndexOf("NativeSelectEntryStatus.MustRename",
+        StringComparison.Ordinal);
+    var selectionMutation = select.IndexOf(
+        "// 更新选择状态 only after", StringComparison.Ordinal);
+    Check(denied >= 0 && mustRename > denied
+          && selectionMutation > mustRename
+          && select.Contains(
+              "NativeRenameCharProtocol.RequestCommand",
+              StringComparison.Ordinal)
+          && select.Contains("BeginRenamePrompt(\n                        userInfo, sChrName)",
+              StringComparison.Ordinal)
+          && select.Contains("CompleteSelection(\n                        userInfo, sChrName)",
+              StringComparison.Ordinal)
+          && select.Contains("out bool handled", StringComparison.Ordinal)
+          && select.Contains("handled = true", StringComparison.Ordinal),
+        "select-entry deny/rename gates or completion lifecycle are not wired before mutation");
+    // The first native result-6 predicate is closed: record+0x38 maps to the
+    // type-3 IsTransLock field and returns handled=true with no packet.  The
+    // source must not turn it into a guessed retry/state-5 wait or substitute
+    // the unrelated global session/NativeBusy state for fn_5AD85C.
+    var lockResult = select.IndexOf("loader result 6 (record lock)",
+        StringComparison.Ordinal);
+    Check(lockResult > mustRename && selectionMutation > lockResult
+          && select.Contains("loaderRecord.IsTransLock",
+              StringComparison.Ordinal)
+          && select.IndexOf("handled = true", lockResult,
+              StringComparison.Ordinal) >= lockResult
+          && !select.Contains("native selection deferred",
+              StringComparison.Ordinal)
+          && !select.Contains("NativeSessionState = 5",
+              StringComparison.Ordinal)
+          && select.IndexOf("_loginService.GetGlobaSessionStatus(",
+              lockResult, StringComparison.Ordinal) < 0,
+        "native code-6 record-lock leg must be silent without an invented async wait");
+
+    var nameNotAllowed = select.IndexOf(
+        "NativeSelectEntryStatus.NameNotAllowed",
+        StringComparison.Ordinal);
+    Check(nameNotAllowed > mustRename && selectionMutation > nameNotAllowed
+          && select.Contains("Grobal2.CM_SELCHR4017",
+              StringComparison.Ordinal)
+          && select.Contains("Grobal2.SM_SENDNOTICE",
+              StringComparison.Ordinal)
+          && select.Contains("TryFormatNewZoneNotice",
+              StringComparison.Ordinal),
+        "status-3 NewZone/AdminList response chain is not before loading");
+}
+
+static void TestNativeNewZoneAdminListGate()
+{
+    var directory = Path.Combine(Path.GetTempPath(),
+        "dbsvr-newzone-admin-" + Guid.NewGuid().ToString("N"));
+    var envir = Path.Combine(directory, "Mir200", "Envir");
+    Directory.CreateDirectory(envir);
+    var ipFile = Path.Combine(directory, "IpAddress.txt");
+    var adminFile = Path.Combine(envir, "AdminList.txt");
+    var gbk = Encoding.GetEncoding(936);
+    try
+    {
+        File.WriteAllText(ipFile,
+            ";NewZone=ignored\r\nNewZone=Welcome [%s]*\r\n", gbk);
+        File.WriteAllText(adminFile,
+            "# ignored\r\n/ ignored\r\n\\ ignored\r\n"
+            + "; ignored\r\n* allowed\r\n1 first\r\n2 second,extra\r\n"
+            + "3 rejected\r\n", gbk);
+
+        var protocol = new NativeSelectEntryProtocol(directory);
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("allowed"),
+            "AdminList '*' marker must allow its second token");
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("first"),
+            "AdminList '1' marker must allow its second token");
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("second"),
+            "AdminList '2' marker must allow its second token");
+        Equal(NativeSelectEntryStatus.NameNotAllowed,
+            protocol.Classify("rejected"),
+            "AdminList marker outside *|1|2 must not allow a name");
+        Equal(NativeSelectEntryStatus.NameNotAllowed,
+            protocol.Classify("ordinary"),
+            "active NewZone template must gate unlisted names");
+        Check(protocol.TryFormatNewZoneNotice("Bob", out var notice)
+              && notice == "Welcome [Bob]",
+            "NewZone %s template formatting or trailing '*' trim failed");
+
+        File.WriteAllText(ipFile, ";NewZone=commented\r\n", gbk);
+        File.SetLastWriteTimeUtc(ipFile, DateTime.UtcNow.AddSeconds(2));
+        protocol.ReloadEntryConfigIfDue(
+            unchecked((uint)Environment.TickCount + 30001u));
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("ordinary"),
+            "commented/missing NewZone must disable status 3");
+        Check(!protocol.TryFormatNewZoneNotice("Bob", out _),
+            "disabled NewZone must not produce a notice");
+
+        File.WriteAllText(ipFile, "NewZone=Welcome %s\r\n", gbk);
+        File.WriteAllText(adminFile, "* replacement\r\n", gbk);
+        File.SetLastWriteTimeUtc(ipFile, DateTime.UtcNow.AddSeconds(4));
+        File.SetLastWriteTimeUtc(adminFile, DateTime.UtcNow.AddSeconds(4));
+        protocol.ReloadEntryConfigIfDue(
+            unchecked((uint)Environment.TickCount + 30001u));
+        Equal(NativeSelectEntryStatus.NameNotAllowed,
+            protocol.Classify("allowed"),
+            "changed AdminList must replace the active table");
+        Equal(NativeSelectEntryStatus.Normal,
+            protocol.Classify("replacement"),
+            "changed AdminList entry was not reloaded");
+    }
+    finally
+    {
+        if (Directory.Exists(directory)) Directory.Delete(directory, true);
+    }
 }
 
 static void TestNativeSelectOwnershipGate()
@@ -1901,7 +2375,7 @@ static void TestNativeSelectOwnershipGate()
           && select.Contains(
               "if (nativeWire && (!accountLookupSucceeded || ownedRecord == null))",
               StringComparison.Ordinal)
-          && select.Contains("OutOfConnect(userInfo);", StringComparison.Ordinal)
+          && select.Contains("handled = false;", StringComparison.Ordinal)
           && select.IndexOf("return false;", ownership,
               StringComparison.Ordinal) >= 0,
         "native 4017 must verify account ownership before mutating selection or loading by global name");
@@ -1941,7 +2415,7 @@ static void TestNativeSelectDeletedCharacterResult()
           && select.Contains(
               "SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,\n                        0, 4, 0, 0, null);",
               StringComparison.Ordinal)
-          && select.IndexOf("OutOfConnect(userInfo);", deletedProbe,
+          && select.IndexOf("handled = true;", deletedProbe,
               StringComparison.Ordinal) > deletedProbe,
         "native deleted character must be classified as 4017 Param=4 before the ownership-close path");
 }
@@ -2017,6 +2491,14 @@ static void TestNativeCharacterListRows()
     Equal((byte)0, row[16], "character-list high-level wrap");
     Equal((byte)0xFF, row[19], "character-list low-level maximum");
 
+    NativeCharacterListCodec.WriteRow(row, ReadOnlySpan<byte>.Empty,
+        3, 1, 80);
+    Equal((byte)0, row[0], "award placeholder name length");
+    Equal((byte)1, row[16], "award placeholder level-high marker");
+    Equal((byte)3, row[17], "award placeholder job");
+    Equal((byte)1, row[18], "award placeholder sex");
+    Equal((byte)80, row[19], "award placeholder level");
+
     var userSocSource = File.ReadAllText(Path.Combine(
         RepoRoot(), "DBSvr", "Services", "UserSocService.cs"));
     Check(userSocSource.Contains(
@@ -2026,15 +2508,15 @@ static void TestNativeCharacterListRows()
               "Math.Min(delList.Count,\n                    NativeCharacterListCodec.MaxRows)",
               StringComparison.Ordinal)
           && userSocSource.Split("NativeCharacterListCodec.WriteRow",
-              StringSplitOptions.None).Length == 3,
-        "4010/4014 paths are not both capped and wired to the native row codec");
+              StringSplitOptions.None).Length == 4,
+        "4010/4014/award rows are not capped and wired to the native row codec");
 
     Check(userSocSource.Contains("ushort selectedIndex = 0;",
               StringComparison.Ordinal)
           && userSocSource.Contains("if (chrList[i].IsSelect)",
               StringComparison.Ordinal)
           && userSocSource.Contains(
-              "1, (ushort)nChrCount, selectedIndex, 0, chrBody);",
+              "1, (ushort)nativeRowCount, selectedIndex, 0, chrBody);",
               StringComparison.Ordinal)
           && userSocSource.Contains(
               "1, (ushort)nChrCount, 0, 0, chrBody);",
@@ -2044,6 +2526,17 @@ static void TestNativeCharacterListRows()
           && !userSocSource.Contains("PrepareNativeListBody",
               StringComparison.Ordinal),
         "native 4010/4014 headers or exact 20-byte body contract drifted");
+
+    Check(userSocSource.Contains(
+              "TryReadPendingAward(account, out pendingAward)",
+              StringComparison.Ordinal)
+          && userSocSource.Contains(
+              "ReadOnlySpan<byte>.Empty, pendingAward.Job",
+              StringComparison.Ordinal)
+          && userSocSource.Contains(
+              "nChrCount < NativeCharacterListCodec.MaxRows",
+              StringComparison.Ordinal),
+        "native active-character list is missing its pending-award placeholder");
 
     var playRecordSource = File.ReadAllText(Path.Combine(
         RepoRoot(), "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"));

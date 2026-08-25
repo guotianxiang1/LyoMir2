@@ -18,6 +18,11 @@ namespace DBSvr.Core
         public const ushort Command = 4041;
         public const ushort KickoutCommand = 4040;
 
+        // fn_5D0714 stores DL and branches on that byte. The high byte of the
+        // 16-bit wire parameter is ignored by the native handler.
+        public static bool UsesReturnToLoginLeg(ushort parameter) =>
+            unchecked((byte)parameter) == 0;
+
         public static void ResetForReturnToLogin(TUserInfo userInfo)
         {
             if (userInfo == null) return;
@@ -25,6 +30,8 @@ namespace DBSvr.Core
             userInfo.sAccount = string.Empty;
             userInfo.boChrSelected = false;
             userInfo.boChrQueryed = false;
+            userInfo.NativeCurrentCharName = string.Empty;
+            userInfo.NativeSessionState = 0;
             userInfo.NativeAuthTick = 0;
             userInfo.NativeAuthResponse = null;
             userInfo.NativeText102 = string.Empty;
