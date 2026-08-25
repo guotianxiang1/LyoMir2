@@ -184,12 +184,13 @@ namespace DBSvr.Core
                     return Array.Empty<NativeAdmissionQueueAction>();
 
                 var loopCount = _users.Count;
-                var actions = new List<NativeAdmissionQueueAction>(
-                    Math.Min(loopCount, 10));
+                // The periodic native refresh calls the packet builder directly
+                // for every queued record. The <=10 limit belongs to the
+                // position-setter notification path, not this replay loop.
+                var actions = new List<NativeAdmissionQueueAction>(loopCount);
                 for (var i = 0; i < loopCount; i++)
                 {
                     var user = _users[i];
-                    if (user.NativeQueuePosition > 10) continue;
                     actions.Add(CreatePositionAction(user,
                         user.NativeQueuePosition,
                         unchecked((ushort)_users.Count),

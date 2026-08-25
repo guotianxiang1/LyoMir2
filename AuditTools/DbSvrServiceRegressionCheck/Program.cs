@@ -306,8 +306,8 @@ static void TestNativeAdmissionQueue()
     }).ToArray();
     foreach (var replayUser in replayUsers) replayQueue.Enqueue(replayUser, 0);
     var replay = replayQueue.Refresh(14002);
-    Equal(10, replay.Count,
-        "native queue refresh must stop notifications after position ten");
+    Equal(11, replay.Count,
+        "native queue refresh directly replays every queued position");
     for (var i = 0; i < replay.Count; i++)
     {
         Equal((ushort)(i + 1), replay[i].Position,
