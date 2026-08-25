@@ -162,17 +162,17 @@ foreach (var (found, expected) in new[] { (true, (ushort)0x0046), (false, (ushor
 }
 
 // ---- 0x012D : sub_59E1CC ---------------------------------------------------
-// 0x59E228 mov word [body+2],ax   <- STORED BEFORE the command word
+// 0x59E228 mov word [body+2],ax   <- low 16 bits of the result code
 // 0x59E22F mov word [body],0x12D
 // 0x59E250 add eax,0x10 cl=0x14   account
 // 0x59E276 add eax,0x25 cl=0x0F   character
 {
     const string tag = "0x012D";
     var wire = Encode(NativeOutboundNotificationProtocol
-        .CreateAccountCharacterBroadcast(7, account, charName));
+        .CreateAccountCharacterBroadcast(-21, account, charName));
     Envelope(tag, wire, 1, 0x48);
     Word(tag, wire, 0x00, 0x012D);
-    Word(tag, wire, 0x02, 7);
+    Word(tag, wire, 0x02, 0xFFEB);
     ShortStr(tag, wire, 0x10, account);
     ShortStr(tag, wire, 0x25, charName);
     ZeroExcept(tag, wire, (0x00, 2), (0x02, 2),

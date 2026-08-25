@@ -174,21 +174,23 @@ namespace DBSvr.Core
         }
 
         /// <summary>
-        /// 0x012D — sub_59E1CC(eax=manager, dx=selector, ecx=account,
-        /// [esp+4]=characterName).  Broadcast: 0x59E28C <c>call 0x59E450</c> with
+        /// 0x012D — sub_59E1CC(eax=manager, dx=resultCode, ecx=account,
+        /// [esp+4]=characterName). Broadcast: 0x59E28C <c>call 0x59E450</c> with
         /// dl = 0, and sub_59E450 with a zero filter sends to every connection
         /// whose role byte <c>[conn+0x40A0]</c> is not 9 / DBTool (0x59E4A8
         /// <c>cmp byte [eax+0x40a0],9</c> / 0x59E4AF <c>je</c> skip).
         ///
-        /// Note the ORDER: the selector is stored at 0x59E228, BEFORE the command
-        /// word at 0x59E22F. Both land in the same dword, so a builder that wrote
-        /// a dword command would erase the selector.
+        /// The native caller passes the 0x2750 record's result dword in EDX;
+        /// 0x59E228 stores only its low 16 bits at body+2, so -1 becomes 0xFFFF
+        /// and -21 becomes 0xFFEB. The record's +0x10 selector is not consumed.
+        /// Body+0x04..0x0F stay zero because the 0x54-byte frame is AllocMem'd.
         /// </summary>
         public static LegacyDbServerFrame CreateAccountCharacterBroadcast(
-            ushort selector, byte[] account, byte[] characterName)
+            int resultCode, byte[] account, byte[] characterName)
         {
             var body = NewType1Body(AccountCharacterBroadcastCommand);
-            BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(SecondaryOffset, 2), selector);
+            BinaryPrimitives.WriteUInt16LittleEndian(body.AsSpan(SecondaryOffset, 2),
+                unchecked((ushort)resultCode));
             WriteShortString(body, AccountOffset, AccountCapacity, account);
             WriteShortString(body, CharacterOffset, CharacterCapacity, characterName);
             return new LegacyDbServerFrame(1, 0, body);

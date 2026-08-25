@@ -17,6 +17,7 @@ Run("gate-report fields", GateReportFields);
 Run("global-relay commands and sizes", GlobalRelayConstants);
 Run("global-relay 0156 fields", GlobalRelayRegistrationFields);
 Run("global-relay 0173 packed dword", GlobalRelayQueryFields);
+Run("global-relay 0156 queue record", GlobalRelayRegistrationQueueRecord);
 Run("global-relay 0173 queue record", GlobalRelayQueueRecord);
 Run("type1 opcode space fully accounted", OpcodeSpaceAccounted);
 
@@ -26,7 +27,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("NativeType1GapClosureCheck PASS tests=9 "
+Console.WriteLine("NativeType1GapClosureCheck PASS tests=10 "
                   + "gate=0192/0193 tail=0x87/0xB5 lg=0x7DF/0x7E0 "
                   + "relay=0156/0173 direct=0x1F42 queue=0x274D/0x2750 "
                   + "opcodes=39/39");
@@ -131,9 +132,15 @@ void GlobalRelayConstants()
         "0x0C + 0x40 == 0x4C");
     // 0x5A3440 `mov dx,0x274D` (10061), 0x5A3481 `mov dx,0x2750` (10064).
     Equal(10061, NativeGlobalRelayProtocol.RegistrationQueueCommand, "10061");
+    Equal(0x20, NativeGlobalRelayProtocol.RegistrationQueuePayloadLength,
+        "0x274D payload");
     Equal(10064, NativeGlobalRelayProtocol.QueryQueueCommand, "10064");
     // 0x5A346D `push 0x41`.
     Equal(0x41, NativeGlobalRelayProtocol.QueryQueuePayloadLength, "0x41");
+    Equal(0x0058, NativeGlobalRelayProtocol.RegistrationQueueReplyCommand,
+        "0x274D reply");
+    Equal(0x012D, NativeGlobalRelayProtocol.QueryQueueReplyCommand,
+        "0x2750 reply");
     // 0x5D1D08 `mov eax,0x1C`.
     Equal(0x1C, NativeGlobalRelayProtocol.QueueNodeSize, "queue node 0x1C");
 }
@@ -180,6 +187,43 @@ void GlobalRelayQueryFields()
     False(NativeGlobalRelayProtocol.TryDecodeQuery(
         Frame(0x0173, 0x10, h => h[0x35] = 0x10), out _, out _),
         "+0x35 over 15 refused");
+}
+
+void GlobalRelayRegistrationQueueRecord()
+{
+    // The 0x274D consumer reads result+0, requester id+4, and a ShortString
+    // at +8. The remaining bytes have no proven semantics and must survive a
+    // decode/encode round-trip unchanged.
+    var raw = new byte[NativeGlobalRelayRegistrationQueueRecord.Size];
+    BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(0, 4), -2);
+    raw[4] = 7;
+    raw[5] = 0xA5;
+    raw[6] = 0xA6;
+    raw[7] = 0xA7;
+    raw[8] = 4;
+    raw[9] = (byte)'n';
+    raw[10] = (byte)'a';
+    raw[11] = (byte)'m';
+    raw[12] = (byte)'e';
+    raw[0x1D] = 0xD1;
+    raw[0x1E] = 0xD2;
+    raw[0x1F] = 0xD3;
+
+    True(NativeGlobalRelayRegistrationQueueRecord.TryDecode(raw,
+        out var record, out var error), "0x274D decode: " + error);
+    Equal(-2, record.ResultCode, "0x274D result");
+    Equal(7, record.RequestingServerId, "0x274D requester id");
+    EqualText("name", Text(record.Name), "0x274D name");
+    True(raw.SequenceEqual(record.ToBytes()), "0x274D round-trip");
+
+    False(NativeGlobalRelayRegistrationQueueRecord.TryDecode(
+        new byte[0x1F], out _, out _), "0x274D short length rejected");
+    False(NativeGlobalRelayRegistrationQueueRecord.TryDecode(
+        new byte[0x21], out _, out _), "0x274D long length rejected");
+    var overlong = (byte[])raw.Clone();
+    overlong[8] = 0x15;
+    False(NativeGlobalRelayRegistrationQueueRecord.TryDecode(overlong,
+        out _, out _), "0x274D overlength name rejected");
 }
 
 void GlobalRelayQueueRecord()

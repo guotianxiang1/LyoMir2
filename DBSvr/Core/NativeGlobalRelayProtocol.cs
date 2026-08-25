@@ -37,16 +37,17 @@ namespace DBSvr.Core
     /// header+0x04. 0x5A3339 then branches on <c>byte [Self+0x40]</c>:
     ///   link up   → build a 0x4C-byte record and send it straight out with
     ///               <c>[buf+4]w = 0x1F42</c> (8002) and payload length 0x40;
-    ///   link down → queue command 0x274D (10061) onto [0x5D9EE8] via 0x5D1CF8.
+    ///   link down → queue command 0x274D (10061) onto [0x5D9EE8] via 0x5D1CF8;
+    ///   the queue drain accepts an exact 0x20-byte record and sends a delayed
+    ///   type-1 0x0058 notification to the requesting GameServer.
     ///
     /// 0x0173 (handler 0x599231 → 0x5A3590): same packed dword split as 0x0174 —
     /// 0x5992xx-style <c>mov cx, word[hdr+4]</c> for the low half and
     /// <c>call 0x4080B0</c> (= <c>shr eax,0x10</c>) for the high half — plus the
     /// header+0x35 ShortString and <c>word[hdr+2]</c>. It calls 0x5A3450 twice,
-    /// which queues command 0x2750 (10064) with a 0x41-byte payload.
-    ///
-    /// Neither command replies to the GameServer; both end at the shared exit
-    /// 0x59953D.
+    /// which queues command 0x2750 (10064) with a 0x41-byte payload. The queue
+    /// drain sends a type-1 0x012D broadcast for result codes other than 1/2;
+    /// codes 1/2 continue the external relay instead.
     ///
     /// Evidence: staging/dbsvr_type1_dispatch_census_20260803.md §3之三.
     /// </summary>
@@ -67,10 +68,16 @@ namespace DBSvr.Core
 
         /// <summary>0x5A3440: `mov dx, 0x274D` — queued command for 0x0156.</summary>
         public const ushort RegistrationQueueCommand = 0x274D;
+        /// <summary>0x5A342E: the 0x0156 failure queue record length.</summary>
+        public const int RegistrationQueuePayloadLength = 0x20;
         /// <summary>0x5A3481: `mov dx, 0x2750` — queued command for 0x0173.</summary>
         public const ushort QueryQueueCommand = 0x2750;
         /// <summary>0x5A346D: `push 0x41` — queued payload length for 0x0173.</summary>
         public const int QueryQueuePayloadLength = 0x41;
+        /// <summary>0x598500: delayed 0x274D reply body command.</summary>
+        public const ushort RegistrationQueueReplyCommand = 0x0058;
+        /// <summary>0x59E22F: delayed 0x2750 reply body command.</summary>
+        public const ushort QueryQueueReplyCommand = 0x012D;
 
         /// <summary>0x5D1D08: the async queue node is 0x1C bytes.</summary>
         public const int QueueNodeSize = 0x1C;
