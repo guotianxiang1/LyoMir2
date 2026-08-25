@@ -23,6 +23,7 @@ Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
+Run("native 4017 status-3 handled terminal", TestNativeSelectNameNotAllowedHandled);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
 Run("native 4017 deleted-character result", TestNativeSelectDeletedCharacterResult);
 Run("native 4017 load-failure result", TestNativeSelectLoadFailureResult);
@@ -3282,6 +3283,37 @@ static void TestNativeSelectOwnershipGate()
               "WHERE PTID=@ptid AND IsDelete=0 LIMIT 200",
               StringComparison.Ordinal),
         "native 4017 ownership lookup must not retain the legacy two-row SQL cap");
+}
+
+static void TestNativeSelectNameNotAllowedHandled()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var selectStart = source.IndexOf(
+        "private bool SelectChr(string sData", StringComparison.Ordinal);
+    var selectEnd = source.IndexOf(
+        "\n        // ===================== 手游进游戏响应包 =====================",
+        selectStart, StringComparison.Ordinal);
+    Check(selectStart >= 0 && selectEnd > selectStart,
+        "4017 SelectChr method boundary is missing");
+    var select = source.Substring(selectStart, selectEnd - selectStart);
+    var status3 = select.IndexOf(
+        "if (entryStatus == NativeSelectEntryStatus.NameNotAllowed)",
+        StringComparison.Ordinal);
+    Check(status3 >= 0, "status-3 NameNotAllowed branch is missing");
+    var branchEnd = select.IndexOf(
+        "\n                }", status3 + 1, StringComparison.Ordinal);
+    Check(branchEnd > status3, "status-3 branch boundary is missing");
+    var branch = select.Substring(status3, branchEnd - status3);
+    Check(branch.Contains("Grobal2.CM_SELCHR4017", StringComparison.Ordinal)
+          && branch.Contains("Grobal2.SM_SENDNOTICE", StringComparison.Ordinal)
+          && branch.Contains("TryFormatNewZoneNotice", StringComparison.Ordinal)
+          && branch.Contains("handled = true;", StringComparison.Ordinal)
+          && branch.Contains("return false;", StringComparison.Ordinal)
+          && branch.IndexOf("handled = true;", StringComparison.Ordinal)
+             < branch.IndexOf("return false;", StringComparison.Ordinal),
+        "native status-3 must mark handled after 4017/658 and before returning");
 }
 
 static void TestNativeSelectDeletedCharacterResult()

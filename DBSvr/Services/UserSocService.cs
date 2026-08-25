@@ -2407,8 +2407,9 @@ namespace DBSvr
                 {
                     // Native fn_5CD544 status=3 sends a 4017/Param=1
                     // acknowledgement, then a 658 notice formatted from the
-                    // NewZone template. The handler returns false afterwards;
-                    // the outer dispatcher supplies the single 4018/close.
+                    // NewZone template. Its common loader exit sets handled=1
+                    // after the response, so the outer dispatcher must not
+                    // append 4018/close.
                     SendEncodedPacket(userInfo,
                         Grobal2.CM_SELCHR4017, 0, 1, 0, 0, null);
                     if (_selectEntryProtocol.TryFormatNewZoneNotice(
@@ -2418,6 +2419,7 @@ namespace DBSvr
                             0, 0, 0, 0,
                             Encoding.GetEncoding(936).GetBytes(notice));
                     }
+                    handled = true;
                     Log($"[SelectChr] native NewZone/AdminList rejection: {sChrName}");
                     return false;
                 }
