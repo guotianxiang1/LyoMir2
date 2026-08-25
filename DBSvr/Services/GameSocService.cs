@@ -3053,6 +3053,22 @@ namespace DBSvr
         public bool TrySendNativeHuman(string account, string characterName,
             NativeHumanSessionContext sessionContext)
         {
+            return TrySendNativeHuman(account, characterName, sessionContext,
+                out _);
+        }
+
+        /// <summary>
+        /// Pushes the selected human to the native GameSvr fan-out.
+        ///
+        /// The optional result code is deliberately narrow: the native
+        /// 0x5A777C loader proves code 5 for a failed user-data load/validation.
+        /// Other forwarding failures do not have a proven 4017 code here and
+        /// therefore remain zero (the caller's generic fail-closed path).
+        /// </summary>
+        public bool TrySendNativeHuman(string account, string characterName,
+            NativeHumanSessionContext sessionContext, out ushort nativeFailureCode)
+        {
+            nativeFailureCode = 0;
             var targets = new List<TServerInfo>();
             lock (_serverListLock)
             {
@@ -3077,6 +3093,12 @@ namespace DBSvr
                     out var nativeData, out var nativeScriptData))
             {
                 DBShare.MainOutMessage($"[GameSoc] 原生选角存档读取失败 chr={characterName}");
+                // Native fn_5A777C returns code 5 for this load/validation
+                // failure.  Keep the outer bool's proven sub_59DC1C
+                // fan-out contract (target list was non-empty); the
+                // UserSoc caller consumes this explicit code and refuses the
+                // success acknowledgement.
+                nativeFailureCode = 5;
                 return true;
             }
             if (!string.Equals(persistence.CharacterName, characterName,
@@ -3087,6 +3109,11 @@ namespace DBSvr
             {
                 DBShare.MainOutMessage(
                     $"[GameSoc] 原生选角存档归属不匹配 account={account} chr={characterName}");
+                // Ownership is checked by UserSoc before this call.  A race
+                // or stale cache is not proven to be loader code 3/6, so keep
+                // the fan-out bool contract and expose an unclassified
+                // failure sentinel to the selecting caller.
+                nativeFailureCode = ushort.MaxValue;
                 return true;
             }
             if (TryConsumeAwardPlayer(account, characterName))

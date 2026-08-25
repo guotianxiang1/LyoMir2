@@ -18,6 +18,8 @@ Run("native 4004 login result body", TestNativeLoginResultBody);
 Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
+Run("native 4017 deleted-character result", TestNativeSelectDeletedCharacterResult);
+Run("native 4017 load-failure result", TestNativeSelectLoadFailureResult);
 Run("native 4010/4014 character-list rows", TestNativeCharacterListRows);
 Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
@@ -1914,6 +1916,84 @@ static void TestNativeSelectOwnershipGate()
               "WHERE PTID=@ptid AND IsDelete=0 LIMIT 200",
               StringComparison.Ordinal),
         "native 4017 ownership lookup must not retain the legacy two-row SQL cap");
+}
+
+static void TestNativeSelectDeletedCharacterResult()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var selectStart = source.IndexOf(
+        "private bool SelectChr(string sData", StringComparison.Ordinal);
+    var selectEnd = source.IndexOf(
+        "\n        // ===================== 手游进游戏响应包 =====================",
+        selectStart, StringComparison.Ordinal);
+    Check(selectStart >= 0 && selectEnd > selectStart,
+        "4017 SelectChr method boundary is missing");
+    var select = source.Substring(selectStart, selectEnd - selectStart);
+    var deletedProbe = select.IndexOf(
+        "TryGetNativeCharacterByName(\n                        LegacyGbkText.Encode(sChrName)",
+        StringComparison.Ordinal);
+    Check(deletedProbe >= 0
+          && select.Contains("nativeRecord.DeleteState != 0",
+              StringComparison.Ordinal)
+          && select.Contains("nativeRecord.IsDelete", StringComparison.Ordinal)
+          && select.Contains(
+              "SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,\n                        0, 4, 0, 0, null);",
+              StringComparison.Ordinal)
+          && select.IndexOf("OutOfConnect(userInfo);", deletedProbe,
+              StringComparison.Ordinal) > deletedProbe,
+        "native deleted character must be classified as 4017 Param=4 before the ownership-close path");
+}
+
+static void TestNativeSelectLoadFailureResult()
+{
+    var gameSource = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "GameSocService.cs"))
+        .Replace("\r\n", "\n");
+    Check(gameSource.Contains(
+              "return TrySendNativeHuman(account, characterName, sessionContext,\n                out _);",
+              StringComparison.Ordinal)
+          && gameSource.Contains(
+              "NativeHumanSessionContext sessionContext, out ushort nativeFailureCode",
+              StringComparison.Ordinal),
+        "native human send bool compatibility wrapper/result overload is missing");
+
+    var failureStart = gameSource.IndexOf(
+        "原生选角存档读取失败", StringComparison.Ordinal);
+    var nextBranch = gameSource.IndexOf(
+        "if (!string.Equals(persistence.CharacterName", failureStart,
+        StringComparison.Ordinal);
+    Check(failureStart >= 0 && nextBranch > failureStart,
+        "native human persistence failure branch is missing");
+    var failureBlock = gameSource.Substring(failureStart,
+        nextBranch - failureStart);
+    Check(failureBlock.Contains("nativeFailureCode = 5",
+              StringComparison.Ordinal)
+          && failureBlock.Contains("return true;", StringComparison.Ordinal),
+        "native user-data load failure must expose loader code 5 while preserving fan-out bool semantics");
+
+    var userSource = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var selectStart = userSource.IndexOf(
+        "private bool SelectChr(string sData", StringComparison.Ordinal);
+    var selectEnd = userSource.IndexOf(
+        "\n        // ===================== 手游进游戏响应包 =====================",
+        selectStart, StringComparison.Ordinal);
+    Check(selectStart >= 0 && selectEnd > selectStart,
+        "4017 SelectChr method boundary is missing");
+    var select = userSource.Substring(selectStart, selectEnd - selectStart);
+    Check(select.Contains(
+              "ptid2, sChrName, context, out nativeFailureCode",
+              StringComparison.Ordinal)
+          && select.Contains(
+              "boDataOK = nativeFanoutOK && nativeFailureCode == 0",
+              StringComparison.Ordinal)
+          && select.Contains(
+              "0, nativeWire ? nativeFailureCode : (ushort)0,\n                0, 0, null",
+              StringComparison.Ordinal),
+        "4017 must preserve the proven native load-failure Param=5 while keeping legacy failures at zero");
 }
 
 static void TestNativeCharacterListRows()

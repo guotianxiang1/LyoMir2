@@ -1646,6 +1646,7 @@ namespace DBSvr
 
             bool boDataOK = false;
             var nativeWire = userInfo.WireMode == TGateWireMode.Native77;
+            ushort nativeFailureCode = 0;
 
             // The native 2.08 handler verifies that the requested name belongs
             // to the authenticated account before it classifies/loads the
@@ -1673,6 +1674,26 @@ namespace DBSvr
                     StringComparison.Ordinal));
             if (nativeWire && (!accountLookupSucceeded || ownedRecord == null))
             {
+                // The native character record keeps deleted rows in the
+                // account registry.  Its +0x37 byte is bDeleted, and the
+                // loader reports code 4 for that state.  Find the cached row
+                // before treating a miss from the active-only account query
+                // as a cross-account request.
+                if (ownedRecord == null
+                    && _playRecordService.TryGetNativeCharacterByName(
+                        LegacyGbkText.Encode(sChrName), out var nativeRecord)
+                    && nativeRecord != null
+                    && string.Equals(nativeRecord.PTID, sAccount,
+                        StringComparison.Ordinal)
+                    && (nativeRecord.DeleteState != 0
+                        || nativeRecord.IsDelete))
+                {
+                    Log($"[SelectChr] native character is deleted: {sChrName}");
+                    SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
+                        0, 4, 0, 0, null);
+                    return false;
+                }
+
                 // Native ownership failure leaves the handler unhandled; the
                 // dispatcher emits one 4018 and closes the session.  Do not
                 // invent a 4017 loader code for this pre-loader branch.
@@ -1745,8 +1766,12 @@ namespace DBSvr
                                 (int)(loginDateTimeBits >> 32)),
                             LoginExtension = userInfo.NativeSwitchHandoff.Consume()
                         };
-                        boDataOK = _gameSocService.TrySendNativeHuman(
-                            ptid2, sChrName, context);
+                        var nativeFanoutOK = _gameSocService.TrySendNativeHuman(
+                            ptid2, sChrName, context, out nativeFailureCode);
+                        // TrySendNativeHuman retains the native sub_59DC1C
+                        // fan-out bool (non-empty target list).  A loader
+                        // failure code still vetoes the 4017 success leg.
+                        boDataOK = nativeFanoutOK && nativeFailureCode == 0;
                     }
                 }
                 else
@@ -1767,8 +1792,13 @@ namespace DBSvr
                 return true;
             }
 
+            // Native fn_5A777C reports code 5 for a user-data load/validation
+            // failure.  Preserve the legacy zero result for unclassified
+            // forwarding/session failures until their native predicates are
+            // proven.
             SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
-                0, 0, 0, 0, null);
+                0, nativeWire ? nativeFailureCode : (ushort)0,
+                0, 0, null);
             return false;
         }
 
