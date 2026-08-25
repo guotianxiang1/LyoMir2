@@ -236,6 +236,27 @@ internal static class Program
         // 上限必须是写死的 4，不能读配置 —— 原版是立即数。
         Check(src.Contains("DailyLimit = 4"), "DailyLimit is the literal 4, not configurable");
 
+        // ---- 删除成功腿的 isSelect/isDelete 配对写 ----------------------
+        // Native 0x5A5A5B clears rec+0x36 before 0x5A5A62 sets rec+0x37.
+        // Keep a source-level guard here because this behavior is owned by
+        // UserSocService and the SQL adapter, not by the quota helper above.
+        var userSoc = ReadRepoSource("DBSvr", "Services", "UserSocService.cs");
+        var recordService = ReadRepoSource("DBSvr", "DB", "impl", "MySqlPlayRecordService.cs");
+        if (userSoc == null || recordService == null)
+        {
+            Console.WriteLine("SKIP: cannot locate DelChr state sources.");
+            Console.WriteLine($"INCOMPLETE asserts={_asserts}");
+            return 2;
+        }
+        var userSocCode = StripComments(userSoc);
+        var recordServiceCode = StripComments(recordService);
+        Check(userSocCode.Contains("humRecord.boSelected = 0"),
+            "DelChr clears isSelect before setting isDelete");
+        Check(userSocCode.Contains("humRecord.Header.nSelectID = 0"),
+            "DelChr clears the cached header selection id");
+        Check(recordServiceCode.Contains("IsDelete=1, IsSelect=0"),
+            "deleted-record UPDATE persists isSelect=0 together with isDelete=1");
+
         if (_failures == 0)
         {
             Console.WriteLine($"PASS asserts={_asserts}");
@@ -280,6 +301,25 @@ internal static class Program
         if (dir == null) return null;
         var path = Path.GetFullPath(Path.Combine(
             dir, "..", "..", "DBSvr", "Core", "NativeDelCharQuota.cs"));
+        return File.Exists(path) ? File.ReadAllText(path) : null;
+    }
+
+    private static string ReadRepoSource(params string[] parts)
+    {
+        var thisFile = typeof(Program).Assembly.Location;
+        var dir = Path.GetDirectoryName(thisFile);
+        if (dir == null) return null;
+
+        // The audit is normally run from its source tree (CallerFilePath is
+        // used above), but the compiled tool may run from bin/Debug. Walk up
+        // until the repository marker is found instead of assuming a depth.
+        var current = new DirectoryInfo(dir);
+        while (current != null && !File.Exists(Path.Combine(current.FullName, "LyoMir2.sln")))
+            current = current.Parent;
+        if (current == null) return null;
+
+        var path = current.FullName;
+        foreach (var part in parts) path = Path.Combine(path, part);
         return File.Exists(path) ? File.ReadAllText(path) : null;
     }
 }

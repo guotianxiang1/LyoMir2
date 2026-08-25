@@ -1343,6 +1343,14 @@ namespace DBSvr
 
             // 0x5A5A5B byte[rec+0x36]=0 / 0x5A5A62 byte[rec+0x37]=1 / 0x5A5A77 落库。
             // 原版**无回滚**：落库失败也不退配额、也仍然返回 1 之外的码前已扣数。
+            // isSelect 与 isDelete 是同一条原生成功腿上的两个写点；不能只
+            // 标记删除而保留旧的选中位，否则重载缓存时会把待删角色当成当前角色。
+            humRecord.boSelected = 0;
+            if (humRecord.Header != null)
+            {
+                humRecord.Header.nSelectID = 0;
+                humRecord.Header.boDeleted = true;
+            }
             humRecord.boDeleted = true;
             bool updated = _playRecordService.Update(nIndex, ref humRecord);
             Log($"[DelChr] Update={updated} quotaUsed={NativeDelCharQuota.UsedToday(quotaKey)}");

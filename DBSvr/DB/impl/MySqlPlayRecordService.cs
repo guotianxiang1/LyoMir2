@@ -969,11 +969,18 @@ namespace DBSvr
                 @"UPDATE mir3.user_index SET ModifyDate=NOW()");
             var parameters = new List<MySqlParameter>();
 
+            // Native fn_5A5978 clears isSelect (rec+0x36) before setting
+            // isDelete (rec+0x37). Keep both fields in the same UPDATE so a
+            // deleted record cannot retain the old selected flag in MySQL.
             if (HumDBRecord.boDeleted)
-                sql.Append(", IsDelete=1");
+            {
+                sql.Append(", IsDelete=1, IsSelect=0");
+            }
             else
+            {
                 sql.Append(", IsDelete=0, IsSelect=@sel");
-            parameters.Add(new MySqlParameter("@sel", HumDBRecord.boSelected));
+                parameters.Add(new MySqlParameter("@sel", HumDBRecord.boSelected));
+            }
 
             sql.Append(" WHERE idx=@idx");
             parameters.Add(new MySqlParameter("@idx", HumDBRecord.Id));
