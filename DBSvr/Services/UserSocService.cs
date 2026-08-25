@@ -45,6 +45,9 @@ namespace DBSvr
         private readonly NativeSelectEntryProtocol _selectEntryProtocol;
         private readonly NativeAccountOwnerRegistry _nativeAccountOwners;
         private readonly object _nativeAccountTakeoverSync = new();
+        private readonly object _nativeAdmissionRefreshSync = new();
+        private readonly ManualResetEvent _nativeAdmissionRefreshStop = new(false);
+        private Thread _nativeAdmissionRefreshThread;
         // 角色改名三库级联（原版 fn_5A8DDC 主档 + fn_5A923C 的 22 条级联）
         private readonly INativeRenameCascadeService _renameCascade;
         private readonly object _gateLock = new();
@@ -471,11 +474,13 @@ namespace DBSvr
         {
             DBShare.MainOutMessage("=== DBSvr v3.0 [Full Rewrite] ===");
             _userSocket.Start(DBShare.g_sGateAddr, DBShare.g_nGatePort);
+            StartNativeAdmissionRefreshWorker();
             DBShare.MainOutMessage($"数据库服务[{DBShare.g_sGateAddr}:{DBShare.g_nGatePort}]已启动.等待链接...");
         }
 
         public void Stop()
         {
+            StopNativeAdmissionRefreshWorker();
             _userSocket.Shutdown();
             lock (_nativeAccountTakeoverSync)
             {
@@ -512,6 +517,47 @@ namespace DBSvr
                 _nativeAccountOwners.Clear();
                 _nativeAdmission.ClearNativeIpCounts();
             }
+        }
+
+        private void StartNativeAdmissionRefreshWorker()
+        {
+            lock (_nativeAdmissionRefreshSync)
+            {
+                if (_nativeAdmissionRefreshThread?.IsAlive == true) return;
+                _nativeAdmissionRefreshStop.Reset();
+                _nativeAdmissionRefreshThread = new Thread(
+                    ProcessNativeAdmissionRefresh)
+                {
+                    IsBackground = true,
+                    Name = "DBSvr native admission refresh"
+                };
+                _nativeAdmissionRefreshThread.Start();
+            }
+        }
+
+        private void StopNativeAdmissionRefreshWorker()
+        {
+            Thread worker;
+            lock (_nativeAdmissionRefreshSync)
+            {
+                worker = _nativeAdmissionRefreshThread;
+                if (worker == null) return;
+                _nativeAdmissionRefreshStop.Set();
+            }
+
+            if (!ReferenceEquals(worker, Thread.CurrentThread)) worker.Join();
+            lock (_nativeAdmissionRefreshSync)
+                if (ReferenceEquals(_nativeAdmissionRefreshThread, worker))
+                    _nativeAdmissionRefreshThread = null;
+        }
+
+        private void ProcessNativeAdmissionRefresh()
+        {
+            do
+            {
+                DispatchNativeAdmissionActions(_nativeAdmissionQueue.Refresh(
+                    unchecked((uint)HUtil32.GetTickCount())));
+            } while (!_nativeAdmissionRefreshStop.WaitOne(10));
         }
 
         public int GetUserCount()

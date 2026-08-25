@@ -94,6 +94,14 @@ static string RepoRoot()
 
 static void TestNativeAdmissionQueue()
 {
+    static void AddWaitSample(NativeAdmissionQueue target, uint enqueueTick,
+        uint removalTick)
+    {
+        var sampleUser = new TUserInfo { NativeAdmissionManaged = true };
+        target.Enqueue(sampleUser, enqueueTick);
+        target.RemoveForConnection(sampleUser, removalTick);
+    }
+
     Check(!NativeAdmissionQueue.ShouldQueue(false, 100, 1, 1),
         "disabled native queue admitted threshold");
     Check(!NativeAdmissionQueue.ShouldQueue(true, 9, 10, 20),
@@ -192,6 +200,155 @@ static void TestNativeAdmissionQueue()
             drained[i + 1].Kind, "native drain terminal ordering");
     }
     Equal(0, queue.Count, "native drain final count");
+
+    var refreshGate = new NativeAdmissionQueue();
+    var refreshGateUser = new TUserInfo { NativeAdmissionManaged = true };
+    refreshGate.Enqueue(refreshGateUser, 0);
+    Equal(0, refreshGate.Refresh(7000).Count,
+        "native queue refreshed at exactly 7000ms");
+    Equal((uint)0, refreshGate.LastRefreshTick,
+        "native queue changed refresh tick at exactly 7000ms");
+    Equal(1, refreshGate.Refresh(7001).Count,
+        "native queue did not refresh after 7000ms");
+    Equal((uint)7001, refreshGate.LastRefreshTick,
+        "native queue refresh tick");
+    Check(refreshGate.Dirty, "native queue dirty write was lost");
+
+    var wrapGate = new NativeAdmissionQueue();
+    wrapGate.Refresh(0xFFFFFFF0u);
+    wrapGate.Refresh(0x00001B49u);
+    Equal((uint)0x00001B49, wrapGate.LastRefreshTick,
+        "native queue refresh delta did not wrap as uint32");
+
+    var trimmedAverage = new NativeAdmissionQueue();
+    AddWaitSample(trimmedAverage, 0, 61000);
+    AddWaitSample(trimmedAverage, 0, 120000);
+    AddWaitSample(trimmedAverage, 0, 180000);
+    trimmedAverage.Refresh(7001);
+    Equal((ushort)120, trimmedAverage.SecondsPerPosition,
+        "native queue strict interior average");
+
+    var halfEvenDown = new NativeAdmissionQueue();
+    AddWaitSample(halfEvenDown, 0, 120500);
+    halfEvenDown.Refresh(7001);
+    Equal((ushort)120, halfEvenDown.SecondsPerPosition,
+        "native queue 120.5 half-even rounding");
+    var halfEvenUp = new NativeAdmissionQueue();
+    AddWaitSample(halfEvenUp, 0, 121500);
+    halfEvenUp.Refresh(7001);
+    Equal((ushort)122, halfEvenUp.SecondsPerPosition,
+        "native queue 121.5 half-even rounding");
+
+    var strictBounds = new NativeAdmissionQueue();
+    AddWaitSample(strictBounds, 0, 60000);
+    AddWaitSample(strictBounds, 0, 18000000);
+    AddWaitSample(strictBounds, 0, 60001);
+    AddWaitSample(strictBounds, 0, 17999999);
+    strictBounds.Refresh(7001);
+    Equal((ushort)9030, strictBounds.SecondsPerPosition,
+        "native queue duration bounds are not strict");
+
+    var emptyEstimate = new NativeAdmissionQueue();
+    AddWaitSample(emptyEstimate, 0, 60000);
+    AddWaitSample(emptyEstimate, 0, 18000000);
+    emptyEstimate.Refresh(7001);
+    Equal((ushort)0, emptyEstimate.SecondsPerPosition,
+        "native queue invalid-only history must estimate zero");
+    var upperClamp = new NativeAdmissionQueue();
+    AddWaitSample(upperClamp, 0, 17999999);
+    upperClamp.Refresh(7001);
+    Equal((ushort)10800, upperClamp.SecondsPerPosition,
+        "native queue upper estimate clamp");
+
+    var wrappedSum = new NativeAdmissionQueue();
+    AddWaitSample(wrappedSum, 0, 60001);
+    AddWaitSample(wrappedSum, 0, 17999999);
+    for (var i = 0; i < 256; i++)
+        AddWaitSample(wrappedSum, 0, 16777216);
+    var wrappedHistoryCount = wrappedSum.HistoryCount;
+    var wrappedDirty = wrappedSum.Dirty;
+    wrappedSum.Refresh(7001);
+    Equal((ushort)0, wrappedSum.SecondsPerPosition,
+        "native queue interior sum must wrap at uint32");
+    Equal(wrappedHistoryCount, wrappedSum.HistoryCount,
+        "native queue refresh changed history count");
+    Equal(wrappedDirty, wrappedSum.Dirty,
+        "native queue refresh cleared dirty state");
+
+    var seriesQueue = new NativeAdmissionQueue();
+    AddWaitSample(seriesQueue, 0, 10800000);
+    seriesQueue.Refresh(7001);
+    var seriesUsers = Enumerable.Range(0, 7).Select(_ => new TUserInfo
+    {
+        NativeAdmissionManaged = true
+    }).ToArray();
+    IReadOnlyList<NativeAdmissionQueueAction> seventhActions =
+        Array.Empty<NativeAdmissionQueueAction>();
+    for (var i = 0; i < seriesUsers.Length; i++)
+    {
+        var current = seriesQueue.Enqueue(seriesUsers[i], 1000);
+        if (i == 5)
+            Equal((ushort)64800, current[0].Series,
+                "native queue estimate product below saturation");
+        if (i == 6) seventhActions = current;
+    }
+    Equal((ushort)65535, seventhActions![0].Series,
+        "native queue estimate saturation");
+    Equal(seventhActions[0].Series, seventhActions[1].Series,
+        "native queue duplicate initial notices diverged");
+
+    var replayQueue = new NativeAdmissionQueue();
+    AddWaitSample(replayQueue, 0, 120000);
+    replayQueue.Refresh(7001);
+    var replayUsers = Enumerable.Range(1, 11).Select(_ => new TUserInfo
+    {
+        NativeAdmissionManaged = true
+    }).ToArray();
+    foreach (var replayUser in replayUsers) replayQueue.Enqueue(replayUser, 0);
+    var replay = replayQueue.Refresh(14002);
+    Equal(10, replay.Count,
+        "native queue refresh must stop notifications after position ten");
+    for (var i = 0; i < replay.Count; i++)
+    {
+        Equal((ushort)(i + 1), replay[i].Position,
+            "native queue refresh replay position");
+        Equal((ushort)11, replay[i].QueueCount,
+            "native queue refresh replay count");
+        Equal((ushort)Math.Min(ushort.MaxValue, 120 * (i + 1)),
+            replay[i].Series, "native queue refresh replay estimate");
+    }
+
+    var fullHistory = new NativeAdmissionQueue();
+    for (var i = 0; i < 5000; i++)
+        AddWaitSample(fullHistory, unchecked((uint)i),
+            unchecked((uint)i + 61001u));
+    Equal(2499, fullHistory.HistoryCount,
+        "native queue 5000-sample trim count");
+    var historyField = typeof(NativeAdmissionQueue).GetField("_history",
+        System.Reflection.BindingFlags.Instance
+        | System.Reflection.BindingFlags.NonPublic)!;
+    var history = (System.Collections.IList)historyField.GetValue(fullHistory)!;
+    var enqueueProperty = history[0]!.GetType().GetProperty("EnqueueTick")!;
+    Equal((uint)2499, (uint)enqueueProperty.GetValue(history[0])!,
+        "native queue history trim first source entry");
+    Equal((uint)4997,
+        (uint)enqueueProperty.GetValue(history[history.Count - 1])!,
+        "native queue history trim last logical entry");
+
+    var userSocSource = File.ReadAllText(Path.Combine(RepoRoot(),
+        "DBSvr", "Services", "UserSocService.cs")).Replace("\r\n", "\n");
+    var refreshCall = userSocSource.IndexOf(
+        "DispatchNativeAdmissionActions(_nativeAdmissionQueue.Refresh(",
+        StringComparison.Ordinal);
+    var waitTen = userSocSource.IndexOf(
+        "_nativeAdmissionRefreshStop.WaitOne(10)", refreshCall,
+        StringComparison.Ordinal);
+    Check(refreshCall >= 0 && waitTen > refreshCall
+          && userSocSource.Contains("StartNativeAdmissionRefreshWorker();",
+              StringComparison.Ordinal)
+          && userSocSource.Contains("StopNativeAdmissionRefreshWorker();",
+              StringComparison.Ordinal),
+        "native queue worker must refresh each round before its 10ms maximum wait");
 
     var sent = new List<byte[]>();
     var outbound = new NativeGateOutboundQueue(
