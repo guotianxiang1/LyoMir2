@@ -103,18 +103,30 @@ var job3Offset = FieldOffset("NativeSubmitBallQuestJob3Offset");
 var player = NewPlayer();
 BinaryPrimitives.WriteInt32LittleEndian(
     player.m_NativeHumanData.AsSpan(flagsOffset, 4), 0xA0);
+player.m_NativeHumanData[job012Offset] = 0x11;
+player.m_NativeHumanData[job012Offset + 1] = 0x22;
+player.m_NativeHumanData[job012Offset + 2] = 0x33;
+BinaryPrimitives.WriteInt32LittleEndian(
+    player.m_NativeHumanData.AsSpan(job3Offset, 4), unchecked((int)0x44556677));
+var bonusBlockBefore = player.m_NativeHumanData
+    .Skip(nativeBlockRecordBase).Take(nativeBlockLength).ToArray();
 AddRequiredItems(player, missingIndex: 0, addDuplicate: true);
 var result = Call(bridge, player);
 Equal(1, result, "success result");
 Equal(1, player.m_ItemList.Count, "unique six-item consumption");
 Equal(107, player.m_ItemList[0].MakeIndex, "duplicate survivor");
 Equal(0xA1, ReadInt32(player, flagsOffset), "completion flag preserves other bits");
-Equal(1, player.m_NativeHumanData[job012Offset], "warrior reward byte");
-Equal(0, player.m_NativeHumanData[job012Offset + 1], "wizard reward byte");
-Equal(0, player.m_NativeHumanData[job012Offset + 2], "taoist reward byte");
-Equal(0, ReadInt32(player, job3Offset), "job3 reward dword");
+Equal(0x11, player.m_NativeHumanData[job012Offset], "warrior bonus preserved");
+Equal(0x22, player.m_NativeHumanData[job012Offset + 1], "wizard bonus preserved");
+Equal(0x33, player.m_NativeHumanData[job012Offset + 2], "taoist bonus preserved");
+Equal(unchecked((int)0x44556677), ReadInt32(player, job3Offset),
+    "job3 bonus preserved");
+Assert(bonusBlockBefore.SequenceEqual(
+        player.m_NativeHumanData.Skip(nativeBlockRecordBase)
+            .Take(nativeBlockLength)),
+    "complete native ability-bonus block is byte-for-byte preserved");
 
-// Cross-slot isolation: setting the flag must not disturb the job counters, and
+// Cross-slot isolation: setting the flag must not disturb the ability-bonus block, and
 // the job-3 write must not land on any byte the block copy does not own. Both
 // were violated by the +8 shift.
 Equal(0, player.m_NativeHumanData[nativeBlockEndExclusive],
@@ -190,20 +202,26 @@ for (byte job = 1; job <= 2; job++)
 {
     var jobPlayer = NewPlayer();
     jobPlayer.m_btJob = job;
+    jobPlayer.m_NativeHumanData[job012Offset] = 0x41;
+    jobPlayer.m_NativeHumanData[job012Offset + 1] = 0x52;
+    jobPlayer.m_NativeHumanData[job012Offset + 2] = 0x63;
     AddRequiredItems(jobPlayer, missingIndex: 0, addDuplicate: false);
     Equal(1, Call(bridge, jobPlayer), $"job {job} result");
-    Equal(1, jobPlayer.m_NativeHumanData[job012Offset + job],
-        $"job {job} reward byte");
+    Equal(job == 1 ? 0x52 : 0x63,
+        jobPlayer.m_NativeHumanData[job012Offset + job],
+        $"job {job} bonus preserved");
 }
 
 var job3 = NewPlayer();
 job3.m_btJob = 3;
 job3.m_Abil.Level = 35;
+BinaryPrimitives.WriteInt32LittleEndian(
+    job3.m_NativeHumanData.AsSpan(job3Offset, 4), 0x10203040);
 AddRequiredItems(job3, missingIndex: 0, addDuplicate: false);
 Equal(1, Call(bridge, job3), "job3 success result");
 Equal(0, job3.m_ItemList.Count, "job3 six-item consumption");
 Equal(1, ReadInt32(job3, flagsOffset), "job3 completion flag");
-Equal(1, ReadInt32(job3, job3Offset), "job3 reward dword");
+Equal(0x10203040, ReadInt32(job3, job3Offset), "job3 bonus preserved");
 Equal(1, job3.m_MsgList.Count(message =>
     message.wIdent == Grobal2.RM_SENDDELITEMLIST),
     "job3 delete message");
@@ -225,8 +243,8 @@ var job3Working = typeof(TBaseObject).GetField(
 Equal(15, ReadWorking(job3Working, "HitPoint"), "job3 native Hit");
 Equal(23, ReadWorking(job3Working, "SpeedPoint"), "job3 native Speed");
 Equal(6, ReadWorking(job3Working, "CCLow"), "job3 level CC low");
-Equal(8, ReadWorking(job3Working, "CCHigh"),
-    "job3 level and quest CC high");
+Equal(unchecked((int)0x10203047), ReadWorking(job3Working, "CCHigh"),
+    "job3 level plus preserved bonus CC high");
 Equal(15, job3.m_btHitPoint, "job3 projected Hit");
 Equal(23, job3.m_wSpeedPoint, "job3 projected Speed");
 
@@ -238,8 +256,8 @@ Equal(15, ReadWorking(job3Working, "HitPoint"),
     "job3 repeat native Hit");
 Equal(23, ReadWorking(job3Working, "SpeedPoint"),
     "job3 repeat native Speed");
-Equal(8, ReadWorking(job3Working, "CCHigh"),
-    "job3 repeat CC non-accumulation");
+Equal(unchecked((int)0x10203047), ReadWorking(job3Working, "CCHigh"),
+    "job3 repeat CC preserves bonus without quest increment");
 Equal(15, job3.m_btHitPoint, "job3 repeat projected Hit");
 Equal(23, job3.m_wSpeedPoint, "job3 repeat projected Speed");
 
@@ -279,7 +297,7 @@ Console.WriteLine(
     "delete=10148->709/recog6/body25 " +
     $"offsets=flags0x{flagsOffset:X3}/job012_0x{job012Offset:X3}/job3_0x{job3Offset:X3} " +
     "(derived from 0x6B149B/0x6B14A2/0x6466D7/0x6466F8, block 0x234+20) " +
-    "refresh=HasLevelUp recalc=sbyte job3=level/native/cc/cap");
+    "refresh=HasLevelUp recalc=sbyte job3=level/bonus-preserved/cc/cap");
 return;
 
 static int Call(PasApiBridge bridge, TPlayObject player)

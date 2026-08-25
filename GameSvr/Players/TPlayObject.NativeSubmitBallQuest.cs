@@ -102,7 +102,11 @@ namespace GameSvr
             BinaryPrimitives.WriteUInt32LittleEndian(
                 record.AsSpan(NativeSubmitBallQuestFlagsOffset, sizeof(uint)),
                 flags | NativeSubmitBallQuestCompletedMask);
-            IncrementNativeBallQuestJobReward(record);
+            // The copied 0x234..0x247 block is an ability-bonus block in the
+            // native record.  The native quest path only sets the completion
+            // bit at 0x230; it does not increment those slots.  Leave the
+            // block byte-for-byte intact until the separate bonus producer is
+            // modeled, otherwise every completion injects permanent stats.
 
             SendMsg(this, Grobal2.RM_SENDDELITEMLIST, 0,
                 deletedItems.Count, 0, 0,
@@ -135,24 +139,5 @@ namespace GameSvr
                 : null;
         }
 
-        private void IncrementNativeBallQuestJobReward(byte[] record)
-        {
-            switch (m_btJob)
-            {
-                case 0:
-                case 1:
-                case 2:
-                    var offset = NativeSubmitBallQuestJob012Offset + m_btJob;
-                    record[offset] = unchecked((byte)(record[offset] + 1));
-                    break;
-                case 3:
-                    var value = BinaryPrimitives.ReadInt32LittleEndian(
-                        record.AsSpan(NativeSubmitBallQuestJob3Offset, sizeof(int)));
-                    BinaryPrimitives.WriteInt32LittleEndian(
-                        record.AsSpan(NativeSubmitBallQuestJob3Offset, sizeof(int)),
-                        unchecked(value + 1));
-                    break;
-            }
-        }
     }
 }
