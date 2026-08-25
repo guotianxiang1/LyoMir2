@@ -1894,6 +1894,22 @@ static void TestNativeCharacterListRows()
               StringSplitOptions.None).Length == 3,
         "4010/4014 paths are not both capped and wired to the native row codec");
 
+    Check(userSocSource.Contains("ushort selectedIndex = 0;",
+              StringComparison.Ordinal)
+          && userSocSource.Contains("if (chrList[i].IsSelect)",
+              StringComparison.Ordinal)
+          && userSocSource.Contains(
+              "1, (ushort)nChrCount, selectedIndex, 0, chrBody);",
+              StringComparison.Ordinal)
+          && userSocSource.Contains(
+              "1, (ushort)nChrCount, 0, 0, chrBody);",
+              StringComparison.Ordinal)
+          && !userSocSource.Contains("nChrCount > 0 ? 1 : 0",
+              StringComparison.Ordinal)
+          && !userSocSource.Contains("PrepareNativeListBody",
+              StringComparison.Ordinal),
+        "native 4010/4014 headers or exact 20-byte body contract drifted");
+
     var playRecordSource = File.ReadAllText(Path.Combine(
         RepoRoot(), "DBSvr", "DB", "impl", "MySqlPlayRecordService.cs"));
     Check(playRecordSource.Contains(

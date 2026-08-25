@@ -1048,10 +1048,18 @@ namespace DBSvr
                     chrBody.AsSpan(off, NativeCharacterListCodec.RowSize),
                     nb, chr.Job, chr.Sex, chr.Level);
             }
+            ushort selectedIndex = 0;
+            for (int i = 0; i < nChrCount; i++)
+            {
+                if (chrList[i].IsSelect)
+                {
+                    selectedIndex = (ushort)i;
+                    break;
+                }
+            }
             Log($"[QueryChr] chrBody({chrBody.Length}B) hex={BitConverter.ToString(chrBody).Replace("-"," ")}");
             SendEncodedPacket(userInfo, Grobal2.SM_QUERYCHR,
-                nChrCount > 0 ? 1 : 0, (ushort)nChrCount, 0, 0,
-                PrepareNativeListBody(userInfo, chrBody));
+                1, (ushort)nChrCount, selectedIndex, 0, chrBody);
             return true;
         }
 
@@ -1569,8 +1577,7 @@ namespace DBSvr
                         nb, delList[i].job, delList[i].sex, delList[i].level);
                 }
                 SendEncodedPacket(userInfo, Grobal2.SM_QUERYDELCHR,
-                    nChrCount > 0 ? 1 : 0, (ushort)nChrCount, 0, 0,
-                    PrepareNativeListBody(userInfo, chrBody));
+                    1, (ushort)nChrCount, 0, 0, chrBody);
             }
             catch (Exception ex) { Log($"[QueryDelChr] Error: {ex.Message}"); }
             return true;
@@ -1842,15 +1849,6 @@ namespace DBSvr
             if (body != null && body.Length > 0)
                 encoded += EncodeRawBody(body);
             SendUserSocket(userInfo.Socket, userInfo.sConnID, encoded);
-        }
-
-        private static byte[] PrepareNativeListBody(TUserInfo userInfo, byte[] body)
-        {
-            if (userInfo.WireMode != TGateWireMode.Native77) return body;
-            var terminated = new byte[(body?.Length ?? 0) + 1];
-            if (body != null && body.Length > 0)
-                Buffer.BlockCopy(body, 0, terminated, 0, body.Length);
-            return terminated;
         }
 
         private static byte[] DecodeRawBody(string encoded)
