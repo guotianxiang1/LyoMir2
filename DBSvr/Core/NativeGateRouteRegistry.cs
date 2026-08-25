@@ -56,11 +56,17 @@ namespace DBSvr.Core
         }
 
         public bool TryRemoveNewest(ushort routeId, out TUserInfo user)
+            => TryRemoveNewest(routeId, null, out user);
+
+        public bool TryRemoveNewest(ushort routeId, TUserInfo expectedUser,
+            out TUserInfo user)
         {
             lock (_sync)
             {
                 if (_routes.TryGetValue(routeId, out var values)
-                    && values.Count != 0)
+                    && values.Count != 0
+                    && (expectedUser == null
+                        || ReferenceEquals(values[0], expectedUser)))
                 {
                     user = values[0];
                     values.RemoveAt(0);

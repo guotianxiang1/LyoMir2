@@ -40,6 +40,8 @@ namespace DBSvr
         private readonly GameSocService _gameSocService;
         private readonly ConfigManager _configManager;
         private readonly NativeUserAdmissionControl _nativeAdmission;
+        private readonly NativeYbConsumeGate _nativeYbConsumeGate;
+        private readonly NativeAdmissionQueue _nativeAdmissionQueue = new();
         private readonly NativeSelectEntryProtocol _selectEntryProtocol;
         private readonly NativeAccountOwnerRegistry _nativeAccountOwners;
         private readonly object _nativeAccountTakeoverSync = new();
@@ -89,6 +91,7 @@ namespace DBSvr
             SensitiveWordFilter sensitiveWordFilter, WhitelistService whitelistService,
             ConfigManager configManager, GameSocService gameSocService,
             NativeUserAdmissionControl nativeAdmission,
+            NativeYbConsumeGate nativeYbConsumeGate,
             INativeRenameCascadeService renameCascade,
             NativeSelectEntryProtocol selectEntryProtocol,
             NativeAccountOwnerRegistry nativeAccountOwners)
@@ -105,6 +108,8 @@ namespace DBSvr
             _configManager = configManager;
             _nativeAdmission = nativeAdmission
                 ?? throw new ArgumentNullException(nameof(nativeAdmission));
+            _nativeYbConsumeGate = nativeYbConsumeGate
+                ?? throw new ArgumentNullException(nameof(nativeYbConsumeGate));
             _selectEntryProtocol = selectEntryProtocol
                 ?? throw new ArgumentNullException(nameof(selectEntryProtocol));
             _nativeAccountOwners = nativeAccountOwners
@@ -125,7 +130,8 @@ namespace DBSvr
                 DisconnectNativeGateByAddress, DrainNativeAdmissionQueue,
                 DisconnectNativeUserByAccount,
                 UpdateNativeOnlineAccountText,
-                UpdateNativeOnlineAccountLoginTime);
+                UpdateNativeOnlineAccountLoginTime,
+                _nativeAccountOwners.WithOwnerIpSnapshot);
             _gameSocService.AttachNativeSwitchHandoffStore(
                 StoreNativeSwitchHandoff);
             _gameSocService.AttachNativeSaveContinuation(
@@ -282,35 +288,44 @@ namespace DBSvr
             var key = NativeType3Protocol.NormalizePtidKey(
                 accountBytes ?? Array.Empty<byte>());
             if (string.IsNullOrEmpty(key)) return;
-            (TGateInfo Gate, TUserInfo User)? target = null;
-            lock (_gateLock)
-                foreach (var gate in _gateList)
-                {
-                    if (gate?.UserList == null) continue;
-                    lock (gate.UserList)
-                        foreach (var user in gate.UserList)
-                        {
-                            if (user == null) continue;
-                            var userKey = NativeType3Protocol.NormalizePtidKey(
-                                LegacyGbkText.Encode(user.sAccount ?? string.Empty));
-                            if (userKey == key)
-                            {
-                                target = (gate, user);
-                                break;
-                            }
-                        }
-                    if (target.HasValue) break;
-                }
-            if (!target.HasValue) return;
-            try
+            lock (_nativeAccountTakeoverSync)
             {
-                SendEncodedPacket(target.Value.User,
-                    Grobal2.SM_OUTOFCONNECTION_4018, 0, 0, 0, 0, null);
+                (TGateInfo Gate, TUserInfo User)? target = null;
+                lock (_gateLock)
+                    foreach (var gate in _gateList)
+                    {
+                        if (gate?.UserList == null) continue;
+                        lock (gate.UserList)
+                            foreach (var user in gate.UserList)
+                            {
+                                if (user == null) continue;
+                                var userKey = NativeType3Protocol.NormalizePtidKey(
+                                    LegacyGbkText.Encode(
+                                        user.sAccount ?? string.Empty));
+                                if (userKey == key)
+                                {
+                                    target = (gate, user);
+                                    break;
+                                }
+                            }
+                        if (target.HasValue) break;
+                    }
+                if (!target.HasValue) return;
+                if (TryRemoveNativeRoute(target.Value.Gate,
+                        target.Value.User.NativeConnectionId,
+                        target.Value.User, user =>
+                        {
+                            try
+                            {
+                                SendEncodedPacket(user,
+                                    Grobal2.SM_OUTOFCONNECTION_4018,
+                                    0, 0, 0, 0, null);
+                            }
+                            catch { }
+                            return true;
+                        }, false, false, out var removedUser))
+                    CloseManagedLoginSession(removedUser);
             }
-            catch { }
-            var gateInfo = target.Value.Gate;
-            lock (gateInfo.UserList)
-                CloseUser(target.Value.User.sConnID, ref gateInfo);
         }
 
         private void UpdateNativeOnlineAccountText(byte[] accountBytes,
@@ -366,8 +381,90 @@ namespace DBSvr
 
         private void DrainNativeAdmissionQueue()
         {
-            // The admission queue producer thresholds are still being closed.
-            // Existing live users are not queue entries and must not be drained.
+            lock (_nativeAccountTakeoverSync)
+                DispatchNativeAdmissionActions(_nativeAdmissionQueue.Drain());
+        }
+
+        private IReadOnlyList<NativeAdmissionQueueAction>
+            PrepareNativeAdmission(TUserInfo user)
+        {
+            user.NativeQueueBypass = false;
+            user.NativeQueueEnqueueTick = 0;
+            user.NativeQueuePosition = 0;
+            if (!NativeAdmissionQueue.ShouldQueue(
+                    _nativeAdmission.QueueEnabled,
+                    _nativeAccountOwners.Count,
+                    DBShare.NativeCountLimit,
+                    _loginService.NativeAdmissionCapacity))
+                return Array.Empty<NativeAdmissionQueueAction>();
+
+            user.NativeQueueBypass = _nativeYbConsumeGate.IsExempt(
+                user.sAccount, DBShare.VipYBConsume);
+            if (user.NativeQueueBypass)
+                return Array.Empty<NativeAdmissionQueueAction>();
+            return _nativeAdmissionQueue.Enqueue(user,
+                unchecked((uint)HUtil32.GetTickCount()));
+        }
+
+        private void ReleaseNativeAdmission(TUserInfo user)
+        {
+            if (user == null || !user.NativeAdmissionManaged) return;
+            var actions = _nativeAdmissionQueue.RemoveForConnection(user,
+                unchecked((uint)HUtil32.GetTickCount()));
+            user.NativeAdmissionManaged = false;
+            DispatchNativeAdmissionActions(actions);
+        }
+
+        private void CleanupNativeAdmissionAndOwnership(TUserInfo user,
+            bool preservePendingTakeover)
+        {
+            if (user == null) return;
+            lock (_nativeAccountTakeoverSync)
+            {
+                var wasManaged = user.NativeAdmissionManaged;
+                ReleaseNativeAdmission(user);
+                if (preservePendingTakeover)
+                    _nativeAccountOwners.ReleaseRegisteredOwnerByKey(
+                        user.sAccount);
+                else if (wasManaged)
+                    _nativeAccountOwners.ReleaseForConnection(
+                        user.sAccount, user);
+                ReleaseNativeIpAdmission(user);
+            }
+        }
+
+        private void DispatchNativeAdmissionActions(
+            IReadOnlyList<NativeAdmissionQueueAction> actions)
+        {
+            if (actions == null) return;
+            foreach (var action in actions)
+            {
+                var user = action?.User;
+                if (user == null) continue;
+                try
+                {
+                    if (action.Kind
+                        == NativeAdmissionQueueActionKind.Position)
+                    {
+                        SendEncodedPacket(user, 4332, 0,
+                            action.Position, action.QueueCount,
+                            action.Series, null);
+                    }
+                    else
+                    {
+                        // Native drain sends 4018 on the user wire only. Route
+                        // cleanup remains the connection callback's job.
+                        SendEncodedPacket(user,
+                            Grobal2.SM_OUTOFCONNECTION_4018,
+                            0, 0, 0, 0, null);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log("[UserSoc] native admission notification failed: "
+                        + ex.Message);
+                }
+            }
         }
 
         public void Start()
@@ -380,34 +477,41 @@ namespace DBSvr
         public void Stop()
         {
             _userSocket.Shutdown();
-            lock (_gateLock)
+            lock (_nativeAccountTakeoverSync)
             {
-                foreach (var gate in _gateList)
+                var usersToCleanup = new List<TUserInfo>();
+                var gatesToComplete = new List<TGateInfo>();
+                lock (_gateLock)
                 {
-                    if (gate?.UserList == null) continue;
-                    lock (gate.UserList)
+                    foreach (var gate in _gateList)
                     {
-                        foreach (var user in gate.UserList)
+                        if (gate?.UserList == null) continue;
+                        lock (gate.UserList)
                         {
-                            if (user == null) continue;
-                            lock (user.NativeRouteLifecycleSync)
+                            foreach (var user in gate.UserList)
                             {
-                                user.NativeRouteActive = false;
-                                _nativeAccountOwners.ReleaseForConnection(
-                                    user.sAccount, user);
-                                _nativeAdmission.ReleaseNativeConnection(
-                                    user.sAccount, user.sUserIPaddr);
-                                user.NativeSwitchHandoff.Reset();
+                                if (user == null) continue;
+                                lock (user.NativeRouteLifecycleSync)
+                                {
+                                    user.NativeRouteActive = false;
+                                    user.NativeSwitchHandoff.Reset();
+                                }
+                                usersToCleanup.Add(user);
                             }
+                            gate.UserList.Clear();
+                            gate.NativeRoutes.Clear();
                         }
-                        gate.UserList.Clear();
-                        gate.NativeRoutes.Clear();
+                        gatesToComplete.Add(gate);
                     }
+                    _gateList.Clear();
                 }
-                _gateList.Clear();
+                foreach (var user in usersToCleanup)
+                    CleanupNativeAdmissionAndOwnership(user, false);
+                foreach (var gate in gatesToComplete)
+                    gate.NativeOutboundQueue?.Complete();
+                _nativeAccountOwners.Clear();
+                _nativeAdmission.ClearNativeIpCounts();
             }
-            _nativeAccountOwners.Clear();
-            _nativeAdmission.ClearNativeIpCounts();
         }
 
         public int GetUserCount()
@@ -512,6 +616,10 @@ namespace DBSvr
                 dwTick10 = HUtil32.GetTickCount(),
                 nGateID = DBShare.GetGateID(sIPaddr)
             };
+            gateInfo.NativeOutboundQueue = new NativeGateOutboundQueue(
+                frame => SendAll(e.Socket, frame),
+                ex => Log("[UserSoc] native gate outbound failed: "
+                    + ex.Message));
             int gateIndex;
             lock (_gateLock)
             {
@@ -523,36 +631,41 @@ namespace DBSvr
 
         private void UserSocketClientDisconnect(object sender, AsyncUserToken e)
         {
-            lock (_gateLock)
+            lock (_nativeAccountTakeoverSync)
             {
-                for (var i = 0; i < _gateList.Count; i++)
+                var usersToCleanup = new List<TUserInfo>();
+                TGateInfo disconnectedGate = null;
+                lock (_gateLock)
                 {
-                    if (_gateList[i]?.Socket == e.Socket)
+                    for (var i = 0; i < _gateList.Count; i++)
                     {
-                        DBShare.MainOutMessage($"角色网关[{i}]({e.RemoteIPaddr}:{e.RemotePort})已关闭...");
-                        var users = _gateList[i].UserList;
-                        if (users != null) lock (users)
+                        if (_gateList[i]?.Socket == e.Socket)
                         {
-                            foreach (var user in users)
+                            var users = _gateList[i].UserList;
+                            if (users != null) lock (users)
                             {
-                                if (user == null) continue;
-                                lock (user.NativeRouteLifecycleSync)
+                                foreach (var user in users)
                                 {
-                                    user.NativeRouteActive = false;
-                                    _nativeAccountOwners.ReleaseForConnection(
-                                        user.sAccount, user);
-                                    _nativeAdmission.ReleaseNativeConnection(
-                                        user.sAccount, user.sUserIPaddr);
-                                    user.NativeSwitchHandoff.Reset();
+                                    if (user == null) continue;
+                                    lock (user.NativeRouteLifecycleSync)
+                                    {
+                                        user.NativeRouteActive = false;
+                                        user.NativeSwitchHandoff.Reset();
+                                    }
+                                    usersToCleanup.Add(user);
                                 }
+                                users.Clear();
                             }
-                            users.Clear();
+                            _gateList[i].NativeRoutes.Clear();
+                            disconnectedGate = _gateList[i];
+                            _gateList.RemoveAt(i);
+                            break;
                         }
-                        _gateList[i].NativeRoutes.Clear();
-                        _gateList.RemoveAt(i);
-                        break;
                     }
                 }
+                foreach (var user in usersToCleanup)
+                    CleanupNativeAdmissionAndOwnership(user, false);
+                disconnectedGate?.NativeOutboundQueue?.Complete();
             }
         }
 
@@ -691,7 +804,7 @@ namespace DBSvr
                     frame, gateInfo.NativeRouteID, out var response)) return;
             if (!YbDbLegacy77Codec.TryEncode(response, out var wire, out var error))
                 throw new InvalidOperationException(error);
-            SendAll(gateInfo.Socket, wire);
+            QueueNativeGateFrame(gateInfo, wire);
         }
 
         private static void SendAll(Socket socket, byte[] buffer)
@@ -766,6 +879,15 @@ namespace DBSvr
             }
         }
 
+        private static void QueueNativeGateFrame(TGateInfo gateInfo,
+            byte[] frame)
+        {
+            if (gateInfo?.NativeOutboundQueue == null
+                || !gateInfo.NativeOutboundQueue.TryEnqueue(frame))
+                throw new InvalidOperationException(
+                    "native GameGate outbound queue is closed");
+        }
+
         private void CloseUser(string sConnId, ref TGateInfo gateInfo)
         {
             if (gateInfo.WireMode == TGateWireMode.Native77)
@@ -773,11 +895,12 @@ namespace DBSvr
                 if (int.TryParse(sConnId, out var nativeRouteId)
                     && nativeRouteId is >= 0 and <= ushort.MaxValue
                     && TryRemoveNativeRoute(gateInfo, (ushort)nativeRouteId,
-                        false, false, out var nativeUser))
+                        null, null, false, false, out var nativeUser))
                     CloseManagedLoginSession(nativeUser);
                 return;
             }
 
+            TUserInfo removedUser = null;
             lock (gateInfo.UserList)
             {
                 for (var i = 0; i < gateInfo.UserList.Count; i++)
@@ -788,18 +911,16 @@ namespace DBSvr
                         lock (userInfo.NativeRouteLifecycleSync)
                         {
                             userInfo.NativeRouteActive = false;
-                            _nativeAccountOwners.ReleaseForConnection(
-                                userInfo.sAccount, userInfo);
-                            _nativeAdmission.ReleaseNativeConnection(
-                                userInfo.sAccount, userInfo.sUserIPaddr);
-                            CloseManagedLoginSession(userInfo);
                             userInfo.NativeSwitchHandoff.Reset();
                         }
                         gateInfo.UserList.RemoveAt(i);
+                        removedUser = userInfo;
                         break;
                     }
                 }
             }
+            if (removedUser != null)
+                CloseManagedLoginSession(removedUser);
         }
 
         // ===================== 消息解码与路由 =====================
@@ -849,11 +970,12 @@ namespace DBSvr
             //   12 字节记录、ident=edx、Recog=ecx、三个 word 参数取自栈，
             //   经 call dword [ebx+0x60] 发出，与改名回包同一个虚发送）。
             //
-            // C# 侧 NativeQueuePosition 恒为 0（无生产者，DrainNativeAdmissionQueue
-            // 是空实现），故此门恒放行 —— 等价于原版「未启用排队」，不是伪造。
             // 4039 在 MobileCmdMap 里是恒等映射（_toServer[4039] = 4039），
             // 故进 switch 时仍是 4039；Grobal2 没有对应常量，用字面量。
-            if (userInfo.NativeQueuePosition > 0 && ident != 4039)
+            if (userInfo.WireMode == TGateWireMode.Native77
+                && userInfo.NativeSessionState == 5
+                && userInfo.NativeQueuePosition > 0
+                && ident != 4039)
             {
                 Log($"[UserSoc] 排队中(位次 {userInfo.NativeQueuePosition})"
                     + $" 丢弃 opcode {ident}（原版 0x5CE31D 跳静默出口，不回包）");
@@ -1117,6 +1239,8 @@ namespace DBSvr
             int sessionId, NativeLoginGateAuthResponse response, string error,
             long loginDateTimeBits)
         {
+            TUserInfo currentUser;
+            TGateInfo currentGate;
             lock (gateInfo.UserList)
             {
                 if (!gateInfo.UserList.Any(current => ReferenceEquals(current, userInfo))
@@ -1135,16 +1259,16 @@ namespace DBSvr
                     return;
                 }
 
-                var currentUser = userInfo;
-                var currentGate = gateInfo;
+                currentUser = userInfo;
+                currentGate = gateInfo;
                 userInfo.NativeAuthResponse = response;
                 userInfo.NativeText102 = response.Text102;
                 Interlocked.Exchange(ref userInfo.NativeLoginDateTimeBits,
                     loginDateTimeBits);
                 userInfo.NativeAuthTick = HUtil32.GetTickCount();
-                CompleteMobileLoginAuth(response.Account, sessionId,
-                    ref currentUser, ref currentGate);
             }
+            CompleteMobileLoginAuth(response.Account, sessionId,
+                ref currentUser, ref currentGate);
         }
 
         private void CompleteMobileLoginAuth(string account, int sessionId,
@@ -1177,33 +1301,67 @@ namespace DBSvr
 
             var ownerExists = false;
             var admissionRejected = false;
+            var admissionAborted = false;
             if (querySucceeded
                 && _loginService.Mode == LoginGateTransportMode.Native77Client
                 && userInfo.WireMode == TGateWireMode.Native77)
             {
                 lock (_nativeAccountTakeoverSync)
                 {
-                    ownerExists = !_nativeAccountOwners.TryClaim(account,
-                        userInfo, out _);
-                    if (!ownerExists)
+                    lock (userInfo.NativeRouteLifecycleSync)
                     {
-                        if (_nativeAdmission.TryIncrementNativeOwnerIp(
-                                userInfo.sUserIPaddr,
-                                DBShare.MaxSingleIpHumanCount,
-                                IsNativeSingleIpException))
+                        if (!userInfo.NativeRouteActive
+                            || !ReferenceEquals(userInfo.NativeGateOwner,
+                                gateInfo))
                         {
-                            userInfo.NativeSessionState = 5;
+                            admissionAborted = true;
                         }
                         else
                         {
-                            admissionRejected = true;
-                            TrySendNativeTerminalRoute(userInfo,
-                                Grobal2.SM_OUTOFCONNECTION_4018);
+                            ownerExists = _nativeAccountOwners
+                                .HasRegisteredAccount(account);
+                            if (!ownerExists)
+                            {
+                                var queueActions = PrepareNativeAdmission(userInfo);
+                                DispatchNativeAdmissionActions(queueActions);
+                                ownerExists = !_nativeAccountOwners.TryClaim(account,
+                                    userInfo, out _);
+                                if (!ownerExists)
+                                {
+                                    userInfo.NativeAdmissionManaged = true;
+                                    Interlocked.Exchange(
+                                        ref userInfo.NativeIpCounted, 1);
+                                    if (_nativeAdmission.TryIncrementNativeOwnerIp(
+                                            userInfo.sUserIPaddr,
+                                            DBShare.MaxSingleIpHumanCount,
+                                            IsNativeSingleIpException))
+                                    {
+                                        userInfo.NativeSessionState = 5;
+                                    }
+                                    else
+                                    {
+                                        admissionRejected = true;
+                                    }
+                                }
+                                else if (userInfo.NativeQueuePosition > 0)
+                                {
+                                    userInfo.NativeAdmissionManaged = true;
+                                    ReleaseNativeAdmission(userInfo);
+                                }
+                            }
                         }
                     }
+                    if (admissionRejected)
+                        TrySendNativeTerminalRoute(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018);
                 }
             }
 
+            if (admissionAborted)
+            {
+                CloseManagedLoginSession(userInfo);
+                return;
+            }
             if (admissionRejected)
                 return;
 
@@ -1216,10 +1374,12 @@ namespace DBSvr
             TGateInfo gateInfo)
         {
             if (candidate == null
+                || candidate.WireMode != TGateWireMode.Native77
                 || _loginService.Mode != LoginGateTransportMode.Native77Client)
                 return;
 
             var admissionRejected = false;
+            NativeAccountOwnerTakeover takeover;
 
             // The native manager executes this owner-map transition as one
             // ordered state machine. Serialize confirmations before taking a
@@ -1241,7 +1401,7 @@ namespace DBSvr
                         candidate.sAccount))
                     return;
                 if (!_nativeAccountOwners.TryBeginObservedTakeover(
-                        candidate.sAccount, candidate, out var takeover))
+                        candidate.sAccount, candidate, out takeover))
                     return;
 
                 var displaced = takeover.DisplacedOwner;
@@ -1249,65 +1409,85 @@ namespace DBSvr
                 {
                     var displacedGate = displaced.NativeGateOwner;
                     var displacedRoute = displaced.NativeConnectionId;
-                    lock (displaced.NativeRouteLifecycleSync)
-                    {
-                        var socket = displaced.Socket;
-                        if (displaced.WireMode == TGateWireMode.Native77
-                            && socket != null)
-                        {
-                            lock (socket)
+                    if (!TryRemoveNativeRoute(displacedGate, displacedRoute,
+                            displaced, removed =>
                             {
-                                if (displaced.NativeSessionState != 7)
+                                lock (removed.NativeRouteLifecycleSync)
                                 {
-                                    try
+                                    if (removed.WireMode
+                                        == TGateWireMode.Native77)
                                     {
-                                        SendEncodedPacket(displaced,
-                                            NativeLoginAlreadyOnlineProtocol
-                                                .KickoutCommand,
-                                            0, 0, 0, 0, null);
+                                        if (removed.NativeSessionState != 7)
+                                        {
+                                            try
+                                            {
+                                                SendEncodedPacket(removed,
+                                                    NativeLoginAlreadyOnlineProtocol
+                                                        .KickoutCommand,
+                                                    0, 0, 0, 0, null);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Log("[UserSoc] 4040 displaced-owner send failed: "
+                                                    + ex.Message);
+                                            }
+                                            removed.NativeSessionState = 7;
+                                        }
                                     }
-                                    catch (Exception ex)
+                                    else
                                     {
-                                        Log("[UserSoc] 4040 displaced-owner send failed: "
-                                            + ex.Message);
+                                        removed.NativeSessionState = 7;
                                     }
-
-                                    displaced.NativeSessionState = 7;
                                 }
-                            }
+                                return true;
+                            }, true, true, out var removedDisplaced)
+                        || !ReferenceEquals(removedDisplaced, displaced))
+                        {
+                            _nativeAccountOwners.CancelTakeover(takeover);
+                            return;
+                        }
+                }
+
+                var takeoverCompleted = false;
+                lock (candidate.NativeRouteLifecycleSync)
+                {
+                    if (!candidate.NativeRouteActive)
+                    {
+                        _nativeAccountOwners.CancelTakeover(takeover);
+                        return;
+                    }
+                    var queueActions = PrepareNativeAdmission(candidate);
+                    DispatchNativeAdmissionActions(queueActions);
+                    takeoverCompleted = _nativeAccountOwners
+                        .CompleteTakeover(takeover);
+                    if (takeoverCompleted)
+                    {
+                        candidate.NativeAdmissionManaged = true;
+                        Interlocked.Exchange(
+                            ref candidate.NativeIpCounted, 1);
+                        if (_nativeAdmission.TryIncrementNativeOwnerIp(
+                                candidate.sUserIPaddr,
+                                DBShare.MaxSingleIpHumanCount,
+                                IsNativeSingleIpException))
+                        {
+                            candidate.NativeSessionState = 5;
                         }
                         else
                         {
-                            displaced.NativeSessionState = 7;
+                            admissionRejected = true;
                         }
                     }
-
-                    // fn_59F81C first destructively removes the route. Its
-                    // callback removes owner/IP state; command 12 is emitted
-                    // only after that removal succeeds.
-                    TryRemoveNativeRoute(displacedGate, displacedRoute,
-                        true, true, out _);
-                }
-
-                if (_nativeAccountOwners.CompleteTakeover(takeover))
-                {
-                    if (_nativeAdmission.TryIncrementNativeOwnerIp(
-                            candidate.sUserIPaddr,
-                            DBShare.MaxSingleIpHumanCount,
-                            IsNativeSingleIpException))
+                    else if (candidate.NativeQueuePosition > 0)
                     {
-                        candidate.NativeSessionState = 5;
-                    }
-                    else
-                    {
-                        admissionRejected = true;
-                        TrySendNativeTerminalRoute(candidate,
-                            Grobal2.SM_OUTOFCONNECTION_4018);
+                        candidate.NativeAdmissionManaged = true;
+                        ReleaseNativeAdmission(candidate);
                     }
                 }
+                if (admissionRejected)
+                    TrySendNativeTerminalRoute(candidate,
+                        Grobal2.SM_OUTOFCONNECTION_4018);
             }
 
-            if (admissionRejected) return;
         }
 
         private bool IsNativeSingleIpException(string ip) =>
@@ -2417,24 +2597,19 @@ namespace DBSvr
         private bool TrySendNativeTerminalRoute(TUserInfo userInfo,
             ushort ident)
         {
-            TGateInfo gateInfo;
-            ushort routeId;
-            lock (userInfo.NativeRouteLifecycleSync)
-            {
-                if (!userInfo.NativeRouteActive
-                    || userInfo.NativeSessionState == 7)
-                    return false;
-
-                gateInfo = userInfo.NativeGateOwner;
-                routeId = userInfo.NativeConnectionId;
-                var socket = userInfo.Socket;
-                if (socket != null)
+            if (userInfo == null) return false;
+            return TryRemoveNativeRoute(userInfo.NativeGateOwner,
+                userInfo.NativeConnectionId, userInfo, removed =>
                 {
-                    lock (socket)
+                    lock (removed.NativeRouteLifecycleSync)
                     {
+                        if (!removed.NativeRouteActive
+                            || removed.NativeSessionState == 7)
+                            return false;
+
                         try
                         {
-                            SendEncodedPacket(userInfo, ident,
+                            SendEncodedPacket(removed, ident,
                                 0, 0, 0, 0, null);
                         }
                         catch (Exception ex)
@@ -2442,16 +2617,10 @@ namespace DBSvr
                             Log("[UserSoc] terminal packet send failed: "
                                 + ex.Message);
                         }
-                        userInfo.NativeSessionState = 7;
+                        removed.NativeSessionState = 7;
+                        return true;
                     }
-                }
-                else
-                {
-                    userInfo.NativeSessionState = 7;
-                }
-            }
-            return TryRemoveNativeRoute(gateInfo, routeId, true, false,
-                out _);
+                }, true, false, out _);
         }
 
         private void CloseManagedLoginSession(TUserInfo userInfo)
@@ -2465,73 +2634,91 @@ namespace DBSvr
         }
 
         private bool TryRemoveNativeRoute(TGateInfo gateInfo, ushort routeId,
-            bool sendRouteClear, bool preservePendingTakeover,
+            TUserInfo expectedUser, Func<TUserInfo, bool> beforeDetach,
+            bool sendRouteClear,
+            bool preservePendingTakeover,
             out TUserInfo removedUser)
         {
-            removedUser = null;
-            if (gateInfo?.UserList == null) return false;
-
-            lock (gateInfo.UserList)
+            lock (_nativeAccountTakeoverSync)
             {
-                if (!gateInfo.NativeRoutes.TryRemoveNewest(routeId,
-                        out removedUser))
-                    return false;
+                removedUser = null;
+                if (gateInfo?.UserList == null) return false;
 
-                lock (removedUser.NativeRouteLifecycleSync)
+                lock (_gateLock)
                 {
-                    if (sendRouteClear
-                        && !string.IsNullOrEmpty(removedUser.sAccount)
-                        && removedUser.NativeSessionState != 7)
+                    if (!_gateList.Contains(gateInfo)) return false;
+                    lock (gateInfo.UserList)
                     {
-                        try
-                        {
-                            SendEncodedPacket(removedUser,
-                                Grobal2.SM_OUTOFCONNECTION_4018,
-                                0, 0, 0, 0, null);
-                        }
-                        catch (Exception ex)
-                        {
-                            Log("[UserSoc] native route callback terminal send failed: "
-                                + ex.Message);
-                        }
-                        removedUser.NativeSessionState = 7;
-                    }
+                        if (!gateInfo.NativeRoutes.TryGetNewest(routeId,
+                                out var currentUser)
+                            || expectedUser != null
+                            && !ReferenceEquals(currentUser, expectedUser)
+                            || beforeDetach != null
+                            && !beforeDetach(currentUser)
+                            || !gateInfo.NativeRoutes.TryRemoveNewest(routeId,
+                                currentUser, out removedUser))
+                            return false;
 
-                    removedUser.NativeRouteActive = false;
-                    if (preservePendingTakeover)
-                        _nativeAccountOwners.ReleaseRegisteredOwnerByKey(
-                            removedUser.sAccount);
-                    else
-                        _nativeAccountOwners.ReleaseForConnection(
-                            removedUser.sAccount, removedUser);
-                    _nativeAdmission.ReleaseNativeConnection(
-                        removedUser.sAccount, removedUser.sUserIPaddr);
-                    removedUser.NativeSwitchHandoff.Reset();
+                        lock (removedUser.NativeRouteLifecycleSync)
+                        {
+                            if (sendRouteClear
+                                && !string.IsNullOrEmpty(removedUser.sAccount)
+                                && removedUser.NativeSessionState != 7)
+                            {
+                                try
+                                {
+                                    SendEncodedPacket(removedUser,
+                                        Grobal2.SM_OUTOFCONNECTION_4018,
+                                        0, 0, 0, 0, null);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log("[UserSoc] native route callback terminal send failed: "
+                                        + ex.Message);
+                                }
+                                removedUser.NativeSessionState = 7;
+                            }
+
+                            removedUser.NativeRouteActive = false;
+                            removedUser.NativeSwitchHandoff.Reset();
+                        }
+
+                        for (var i = 0; i < gateInfo.UserList.Count; i++)
+                            if (ReferenceEquals(gateInfo.UserList[i], removedUser))
+                            {
+                                gateInfo.UserList.RemoveAt(i);
+                                break;
+                            }
+                    }
                 }
 
-                for (var i = 0; i < gateInfo.UserList.Count; i++)
-                    if (ReferenceEquals(gateInfo.UserList[i], removedUser))
-                    {
-                        gateInfo.UserList.RemoveAt(i);
-                        break;
-                    }
-
+                CleanupNativeAdmissionAndOwnership(removedUser,
+                    preservePendingTakeover);
                 if (sendRouteClear
                     && NativeLoginAlreadyOnlineProtocol.TryCreateRouteClearFrame(
                         routeId, out var routeClear))
                 {
-                    try { SendAll(gateInfo.Socket, routeClear); }
+                    try { QueueNativeGateFrame(gateInfo, routeClear); }
                     catch (Exception ex)
                     {
                         Log("[UserSoc] command-12 route clear failed: "
                             + ex.Message);
                     }
                 }
+                return true;
             }
-            return true;
         }
 
         // ===================== 手游编码辅助方法 =====================
+
+        private void ReleaseNativeIpAdmission(TUserInfo userInfo)
+        {
+            if (userInfo == null
+                || Interlocked.Exchange(ref userInfo.NativeIpCounted, 0) == 0)
+                return;
+            _nativeAdmission.ReleaseNativeConnection(
+                userInfo.sAccount, userInfo.sUserIPaddr);
+        }
 
         private void SendMobileLoginAuth(TUserInfo userInfo, int recog, ushort param, string message)
         {
@@ -2565,7 +2752,7 @@ namespace DBSvr
                     userInfo.NativeQueryId, recog, clientIdent, param, tag, series, body);
                 if (!YbDbLegacy77Codec.TryEncode(frame, out var wire, out var error))
                     throw new InvalidOperationException(error);
-                SendAll(userInfo.Socket, wire);
+                QueueNativeGateFrame(userInfo.NativeGateOwner, wire);
                 return;
             }
 

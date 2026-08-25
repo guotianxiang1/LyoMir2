@@ -19,6 +19,7 @@ Run("native 4004 login result body", TestNativeLoginResultBody);
 Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native DB gate route multimap", TestNativeGateRouteRegistry);
 Run("native 4041 account-owner takeover", TestNativeAccountOwnerTakeover);
+Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
@@ -89,6 +90,221 @@ static string RepoRoot()
 
     throw new DirectoryNotFoundException(
         "repository root not found above " + AppContext.BaseDirectory);
+}
+
+static void TestNativeAdmissionQueue()
+{
+    Check(!NativeAdmissionQueue.ShouldQueue(false, 100, 1, 1),
+        "disabled native queue admitted threshold");
+    Check(!NativeAdmissionQueue.ShouldQueue(true, 9, 10, 20),
+        "native queue triggered below both limits");
+    Check(NativeAdmissionQueue.ShouldQueue(true, 10, 10, 20),
+        "native queue missed CountLimit equality");
+    Check(NativeAdmissionQueue.ShouldQueue(true, 20, 30, 20),
+        "native queue missed LoginGate capacity equality");
+
+    var queue = new NativeAdmissionQueue();
+    var users = Enumerable.Range(1, 11).Select(_ => new TUserInfo
+    {
+        NativeAdmissionManaged = true
+    }).ToArray();
+    for (var i = 0; i < users.Length; i++)
+    {
+        var actions = queue.Enqueue(users[i], unchecked((uint)(100 + i)));
+        var expectedCount = i < 10 ? 2 : 1;
+        Equal(expectedCount, actions.Count,
+            $"native enqueue action count at {i + 1}");
+        foreach (var action in actions)
+        {
+            Equal(NativeAdmissionQueueActionKind.Position, action.Kind,
+                "native enqueue action kind");
+            Equal((ushort)(i + 1), action.Position,
+                "native enqueue position");
+            Equal((ushort)(i + 1), action.QueueCount,
+                "native enqueue queue count");
+            Equal((ushort)0, action.Series,
+                "native enqueue initial series");
+        }
+    }
+    var duplicate = queue.Enqueue(users[10], 999);
+    Equal(11, queue.Count, "native duplicate enqueue changed queue count");
+    Equal(1, duplicate.Count,
+        "native duplicate tail notification count");
+    Equal((ushort)11, users[10].NativeQueuePosition,
+        "native duplicate tail position");
+
+    var removal = queue.RemoveForConnection(users[4], 500);
+    Equal((ushort)0, removal[0].Position,
+        "native removal zero position");
+    Equal((ushort)11, removal[0].QueueCount,
+        "native removal old queue count");
+    Equal((ushort)5, users[5].NativeQueuePosition,
+        "native removal renumbered next user");
+    Equal((ushort)10, users[10].NativeQueuePosition,
+        "native removal renumbered tail");
+    var shifted = removal.Where(action =>
+            action.Kind == NativeAdmissionQueueActionKind.Position
+            && action.Position != 0)
+        .ToArray();
+    Equal(6, shifted.Length, "native shifted action count");
+    for (var i = 0; i < shifted.Length; i++)
+    {
+        Check(ReferenceEquals(users[i + 5], shifted[i].User),
+            "native shifted action identity/order");
+        Equal((ushort)(i + 5), shifted[i].Position,
+            "native shifted action position");
+        Equal((ushort)10, shifted[i].QueueCount,
+            "native shifted action new queue count");
+    }
+
+    var bypass = new TUserInfo
+    {
+        NativeAdmissionManaged = true,
+        NativeQueueBypass = true
+    };
+    Equal(0, queue.RemoveForConnection(bypass, 600).Count,
+        "native bypass removal actions");
+    Equal(10, queue.Count, "native bypass changed queue");
+
+    var active = new TUserInfo { NativeAdmissionManaged = true };
+    var promotion = queue.RemoveForConnection(active, 700);
+    Equal((ushort)0, promotion[0].Position,
+        "native active cleanup promotes head");
+    Equal(9, queue.Count, "native active cleanup queue count");
+    Equal((ushort)0, users[0].NativeQueuePosition,
+        "native active cleanup released old head");
+    Equal((ushort)1, users[1].NativeQueuePosition,
+        "native active cleanup renumbered head");
+
+    var drainedCount = queue.Count;
+    var drained = queue.Drain();
+    Equal(drainedCount * 2, drained.Count,
+        "native drain action count");
+    for (var i = 0; i < drained.Count; i += 2)
+    {
+        Equal(NativeAdmissionQueueActionKind.Position, drained[i].Kind,
+            "native drain position ordering");
+        Equal((ushort)0, drained[i].Position,
+            "native drain zero position");
+        Equal((ushort)drainedCount, drained[i].QueueCount,
+            "native drain original queue count");
+        Equal(NativeAdmissionQueueActionKind.Terminal4018,
+            drained[i + 1].Kind, "native drain terminal ordering");
+    }
+    Equal(0, queue.Count, "native drain final count");
+
+    var sent = new List<byte[]>();
+    var outbound = new NativeGateOutboundQueue(
+        frame => sent.Add(frame));
+    var firstFrame = new byte[] { 1 };
+    Check(outbound.TryEnqueue(firstFrame)
+          && outbound.TryEnqueue(new byte[] { 2 })
+          && outbound.TryEnqueue(new byte[] { 3 }),
+        "native gate outbound enqueue");
+    firstFrame[0] = 9;
+    outbound.Complete();
+    Check(outbound.WaitForCompletion(2000),
+        "native gate outbound completion timeout");
+    Check(sent.Select(frame => frame[0]).SequenceEqual(
+            new byte[] { 1, 2, 3 }),
+        "native gate outbound FIFO/immutability");
+
+    var source = File.ReadAllText(Path.Combine(RepoRoot(), "DBSvr",
+        "Services", "UserSocService.cs")).Replace("\r\n", "\n");
+    var normalStart = source.IndexOf(
+        "private void CompleteMobileLoginAuth", StringComparison.Ordinal);
+    var takeoverStart = source.IndexOf(
+        "private void ProcessNativeAccountTakeover", normalStart,
+        StringComparison.Ordinal);
+    var normalAdmission = source.IndexOf(
+        "PrepareNativeAdmission(userInfo)", normalStart,
+        StringComparison.Ordinal);
+    var normalClaim = source.IndexOf(
+        "_nativeAccountOwners.TryClaim", normalStart,
+        StringComparison.Ordinal);
+    Check(normalAdmission > normalStart && normalAdmission < normalClaim
+          && normalClaim < takeoverStart,
+        "native queue admission must precede owner claim");
+    var takeoverAdmission = source.IndexOf(
+        "PrepareNativeAdmission(candidate)", takeoverStart,
+        StringComparison.Ordinal);
+    var takeoverInsert = source.IndexOf(
+        ".CompleteTakeover(takeover)", takeoverStart,
+        StringComparison.Ordinal);
+    Check(takeoverAdmission > takeoverStart
+          && takeoverAdmission < takeoverInsert,
+        "native takeover queue admission must precede owner insertion");
+    Check(source.Contains("userInfo.WireMode == TGateWireMode.Native77\n                && userInfo.NativeSessionState == 5\n                && userInfo.NativeQueuePosition > 0\n                && ident != 4039",
+            StringComparison.Ordinal),
+        "native queue packet gate scope");
+    var disconnectStart = source.IndexOf(
+        "private void DisconnectNativeUserByAccount", StringComparison.Ordinal);
+    var updateStart = source.IndexOf(
+        "private void UpdateNativeOnlineAccountText", disconnectStart,
+        StringComparison.Ordinal);
+    var disconnectBlock = source.Substring(disconnectStart,
+        updateStart - disconnectStart);
+    Check(!disconnectBlock.Contains(
+            "lock (gateInfo.UserList)\n                CloseUser",
+            StringComparison.Ordinal),
+        "native account disconnect holds UserList across transition cleanup");
+
+    var socketDisconnectStart = source.IndexOf(
+        "private void UserSocketClientDisconnect", StringComparison.Ordinal);
+    var socketReadStart = source.IndexOf(
+        "private void UserSocketClientRead", socketDisconnectStart,
+        StringComparison.Ordinal);
+    var socketDisconnect = source.Substring(socketDisconnectStart,
+        socketReadStart - socketDisconnectStart);
+    var disconnectTransition = socketDisconnect.IndexOf(
+        "lock (_nativeAccountTakeoverSync)", StringComparison.Ordinal);
+    var disconnectGateList = socketDisconnect.IndexOf(
+        "lock (_gateLock)", disconnectTransition, StringComparison.Ordinal);
+    var disconnectCleanup = socketDisconnect.IndexOf(
+        "CleanupNativeAdmissionAndOwnership(user, false)",
+        disconnectGateList, StringComparison.Ordinal);
+    Check(disconnectTransition >= 0
+          && disconnectGateList > disconnectTransition
+          && disconnectCleanup > disconnectGateList,
+        "native gate disconnect is outside the admission transition");
+
+    var removeStart = source.IndexOf(
+        "private bool TryRemoveNativeRoute", StringComparison.Ordinal);
+    var mobileHelpers = source.IndexOf(
+        "// ===================== 手游编码辅助方法", removeStart,
+        StringComparison.Ordinal);
+    var removeBlock = source.Substring(removeStart,
+        mobileHelpers - removeStart);
+    var removeTransition = removeBlock.IndexOf(
+        "lock (_nativeAccountTakeoverSync)", StringComparison.Ordinal);
+    var removeUserList = removeBlock.IndexOf(
+        "lock (gateInfo.UserList)", removeTransition,
+        StringComparison.Ordinal);
+    var removeCleanup = removeBlock.IndexOf(
+        "CleanupNativeAdmissionAndOwnership(removedUser",
+        removeUserList, StringComparison.Ordinal);
+    Check(removeTransition >= 0 && removeUserList > removeTransition
+          && removeCleanup > removeUserList,
+        "native route removal is outside the admission transition");
+
+    var takeoverTransitionCount = source.Substring(takeoverStart,
+            source.IndexOf("// ===================== 查询角色", takeoverStart,
+                StringComparison.Ordinal) - takeoverStart)
+        .Split("lock (_nativeAccountTakeoverSync)",
+            StringSplitOptions.None).Length - 1;
+    Equal(1, takeoverTransitionCount,
+        "native takeover was split across admission transitions");
+
+    var terminalStart = source.IndexOf(
+        "private bool TrySendNativeTerminalRoute", StringComparison.Ordinal);
+    var managedCloseStart = source.IndexOf(
+        "private void CloseManagedLoginSession", terminalStart,
+        StringComparison.Ordinal);
+    var terminalBlock = source.Substring(terminalStart,
+        managedCloseStart - terminalStart);
+    Check(!terminalBlock.Contains("lock (socket)",
+            StringComparison.Ordinal),
+        "native terminal producer blocks on the gate socket lock");
 }
 
 static void TestNativeSwitchHandoffSlot()
@@ -2218,12 +2434,12 @@ static void TestNativeLoginAlreadyOnline()
         querySection - takeoverStart);
     var begin = takeoverBlock.IndexOf("TryBeginObservedTakeover(",
         StringComparison.Ordinal);
+    var removeRoute = takeoverBlock.IndexOf("TryRemoveNativeRoute(",
+        begin, StringComparison.Ordinal);
     var kick = takeoverBlock.IndexOf("KickoutCommand", StringComparison.Ordinal);
     var stateGuard = takeoverBlock.IndexOf(
-        "if (displaced.NativeSessionState != 7)", StringComparison.Ordinal);
+        "if (removed.NativeSessionState != 7)", StringComparison.Ordinal);
     var terminal = takeoverBlock.IndexOf("NativeSessionState = 7",
-        StringComparison.Ordinal);
-    var removeRoute = takeoverBlock.IndexOf("TryRemoveNativeRoute(",
         StringComparison.Ordinal);
     var complete = takeoverBlock.IndexOf("CompleteTakeover(takeover)",
         StringComparison.Ordinal);
@@ -2233,8 +2449,8 @@ static void TestNativeLoginAlreadyOnline()
     var takeoverRejectionRoute = takeoverBlock.IndexOf(
         "TrySendNativeTerminalRoute(candidate", takeoverIncrement,
         StringComparison.Ordinal);
-    Check(begin >= 0 && stateGuard > begin && kick > stateGuard
-          && terminal > kick && removeRoute > terminal
+    Check(begin >= 0 && removeRoute > begin && stateGuard > removeRoute
+          && kick > stateGuard && terminal > kick
           && complete > removeRoute && takeoverIncrement > complete
           && takeoverRejectionRoute > takeoverIncrement
           && takeoverBlock.Contains(
@@ -2247,7 +2463,7 @@ static void TestNativeLoginAlreadyOnline()
               "lock (candidate.NativeRouteLifecycleSync)",
               StringComparison.Ordinal)
           && takeoverBlock.Contains(
-              "lock (displaced.NativeRouteLifecycleSync)",
+              "lock (removed.NativeRouteLifecycleSync)",
               StringComparison.Ordinal)
           && takeoverBlock.Contains("displaced.NativeRouteActive",
               StringComparison.Ordinal) == false
@@ -2272,6 +2488,9 @@ static void TestNativeGateRouteRegistry()
     Check(routes.TryGetNewest(0, out var newest)
           && ReferenceEquals(zeroNew, newest),
         "native duplicate route did not expose the newest node");
+    Check(!routes.TryRemoveNewest(0, zeroOld, out _)
+          && routes.Count == 3,
+        "native route identity guard removed a reused route");
     Check(routes.TryRemoveNewest(0, out var removedNew)
           && ReferenceEquals(zeroNew, removedNew),
         "native duplicate route did not remove the newest node first");
@@ -2414,6 +2633,23 @@ static void TestNativeAccountOwnerTakeover()
     Equal(0, registry.Count,
         "candidate disconnect left an owner-registry slot behind");
 
+    var cancelledOwner = new TUserInfo { sAccount = "Cancelled" };
+    var cancelledCandidate = new TUserInfo { sAccount = "cancelled" };
+    Check(registry.TryClaim(cancelledOwner.sAccount, cancelledOwner, out _),
+        "cancelled-takeover owner setup failed");
+    Check(registry.TryBeginObservedTakeover(cancelledCandidate.sAccount,
+            cancelledCandidate, out var cancelledTakeover),
+        "cancelled-takeover reservation setup failed");
+    Check(registry.CancelTakeover(cancelledTakeover),
+        "inactive candidate did not cancel its pending takeover");
+    Check(!registry.CompleteTakeover(cancelledTakeover),
+        "cancelled takeover remained completable");
+    Check(registry.TryClaim(cancelledOwner.sAccount, cancelledOwner, out _),
+        "cancelled takeover hid the registered owner");
+    Check(registry.ReleaseForConnection(cancelledOwner.sAccount,
+            cancelledOwner),
+        "cancelled-takeover owner cleanup failed");
+
     var lifecycleSource = File.ReadAllText(Path.Combine(
         RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
         .Replace("\r\n", "\n");
@@ -2425,18 +2661,45 @@ static void TestNativeAccountOwnerTakeover()
     var closeBlock = closeStart >= 0 && closeEnd > closeStart
         ? lifecycleSource.Substring(closeStart, closeEnd - closeStart)
         : string.Empty;
-    var ownerRelease = closeBlock.IndexOf(
+    var closeSession = closeBlock.IndexOf(
+        "CloseManagedLoginSession(removedUser)",
+        StringComparison.Ordinal);
+    var cleanupStart = lifecycleSource.IndexOf(
+        "private void CleanupNativeAdmissionAndOwnership",
+        StringComparison.Ordinal);
+    var cleanupEnd = lifecycleSource.IndexOf(
+        "private void DispatchNativeAdmissionActions", cleanupStart,
+        StringComparison.Ordinal);
+    var cleanupBlock = cleanupStart >= 0 && cleanupEnd > cleanupStart
+        ? lifecycleSource.Substring(cleanupStart, cleanupEnd - cleanupStart)
+        : string.Empty;
+    var managedCapture = cleanupBlock.IndexOf(
+        "var wasManaged = user.NativeAdmissionManaged",
+        StringComparison.Ordinal);
+    var queueRelease = cleanupBlock.IndexOf(
+        "ReleaseNativeAdmission(user)", StringComparison.Ordinal);
+    var ownerRelease = cleanupBlock.IndexOf(
         "_nativeAccountOwners.ReleaseForConnection", StringComparison.Ordinal);
-    var ipRelease = closeBlock.IndexOf(
-        "_nativeAdmission.ReleaseNativeConnection", StringComparison.Ordinal);
+    var ipRelease = cleanupBlock.IndexOf(
+        "ReleaseNativeIpAdmission(user)", StringComparison.Ordinal);
     Check(closeStart >= 0 && closeEnd > closeStart
           && closeBlock.Contains("lock (userInfo.NativeRouteLifecycleSync)",
               StringComparison.Ordinal)
           && closeBlock.Contains("userInfo.NativeRouteActive = false",
               StringComparison.Ordinal)
-          && ownerRelease >= 0 && ipRelease > ownerRelease
+          && closeSession >= 0
+          && !closeBlock.Contains(
+              "CleanupNativeAdmissionAndOwnership(removedUser",
+              StringComparison.Ordinal)
+          && managedCapture >= 0 && queueRelease > managedCapture
+          && ownerRelease > queueRelease && ipRelease > ownerRelease
+          && cleanupBlock.Contains("else if (wasManaged)",
+              StringComparison.Ordinal)
           && lifecycleSource.Contains(
               "_nativeAdmission.Attach(_nativeAccountOwners.SnapshotOwnerIps",
+              StringComparison.Ordinal)
+          && lifecycleSource.Contains(
+              "_nativeAccountOwners.WithOwnerIpSnapshot",
               StringComparison.Ordinal),
         "CloseUser does not serialize route deactivation and native key release");
 
@@ -2487,25 +2750,41 @@ static void TestNativeOutOfConnectIdent()
     var route = method[routeStart..];
     var tryRoute = wrapper.IndexOf("TrySendNativeTerminalRoute(userInfo, ident)",
         StringComparison.Ordinal);
+    var removeRoute = route.IndexOf(
+        "return TryRemoveNativeRoute(userInfo.NativeGateOwner",
+        StringComparison.Ordinal);
     var lifecycle = route.IndexOf(
-        "lock (userInfo.NativeRouteLifecycleSync)", StringComparison.Ordinal);
-    var nativeSend = route.IndexOf("SendEncodedPacket(userInfo, ident",
+        "lock (removed.NativeRouteLifecycleSync)", removeRoute,
+        StringComparison.Ordinal);
+    var nativeSend = route.IndexOf("SendEncodedPacket(removed, ident",
         lifecycle, StringComparison.Ordinal);
-    var terminal = route.IndexOf("userInfo.NativeSessionState = 7",
+    var terminal = route.IndexOf("removed.NativeSessionState = 7",
         nativeSend, StringComparison.Ordinal);
-    var removeRoute = route.IndexOf("TryRemoveNativeRoute(gateInfo, routeId",
-        terminal, StringComparison.Ordinal);
+    var beforeDetach = route.IndexOf("beforeDetach(currentUser)", terminal,
+        StringComparison.Ordinal);
     var destructiveRemove = route.IndexOf(
-        "gateInfo.NativeRoutes.TryRemoveNewest(routeId", removeRoute,
+        "gateInfo.NativeRoutes.TryRemoveNewest(routeId", beforeDetach,
         StringComparison.Ordinal);
-    var ownerRelease = route.IndexOf(
-        "_nativeAccountOwners.ReleaseRegisteredOwnerByKey(",
+    var cleanup = route.IndexOf(
+        "CleanupNativeAdmissionAndOwnership(removedUser",
         destructiveRemove, StringComparison.Ordinal);
-    var ipRelease = route.IndexOf(
-        "_nativeAdmission.ReleaseNativeConnection(", ownerRelease,
+    var routeClear = route.IndexOf(
+        "QueueNativeGateFrame(gateInfo, routeClear)", cleanup,
         StringComparison.Ordinal);
-    var routeClear = route.IndexOf("SendAll(gateInfo.Socket, routeClear)",
-        ipRelease, StringComparison.Ordinal);
+    var cleanupMethod = source.IndexOf(
+        "private void CleanupNativeAdmissionAndOwnership",
+        StringComparison.Ordinal);
+    var cleanupMethodEnd = source.IndexOf(
+        "private void DispatchNativeAdmissionActions", cleanupMethod,
+        StringComparison.Ordinal);
+    var cleanupBlock = source.Substring(cleanupMethod,
+        cleanupMethodEnd - cleanupMethod);
+    var ownerRelease = cleanupBlock.IndexOf(
+        "_nativeAccountOwners.ReleaseRegisteredOwnerByKey(",
+        StringComparison.Ordinal);
+    var ipRelease = cleanupBlock.IndexOf(
+        "ReleaseNativeIpAdmission(user)", ownerRelease,
+        StringComparison.Ordinal);
     Check(method.Contains(
               "userInfo.WireMode == TGateWireMode.Native77",
               StringComparison.Ordinal)
@@ -2515,18 +2794,20 @@ static void TestNativeOutOfConnectIdent()
           && method.Contains(
               "Grobal2.SM_OUTOFCONNECTION)",
               StringComparison.Ordinal)
-          && method.Contains("userInfo.NativeSessionState == 7",
+          && method.Contains("removed.NativeSessionState == 7",
               StringComparison.Ordinal)
-          && method.Contains("userInfo.NativeSessionState = 7",
+          && method.Contains("removed.NativeSessionState = 7",
               StringComparison.Ordinal)
-          && method.Contains("!userInfo.NativeRouteActive",
+          && method.Contains("!removed.NativeRouteActive",
               StringComparison.Ordinal)
           && tryRoute >= 0
           && !wrapper.Contains("CloseUser(", StringComparison.Ordinal)
-          && lifecycle >= 0 && nativeSend > lifecycle
-          && terminal > nativeSend && removeRoute > terminal
-          && destructiveRemove > removeRoute && ownerRelease > destructiveRemove
-          && ipRelease > ownerRelease && routeClear > ipRelease,
+          && removeRoute >= 0 && lifecycle > removeRoute
+          && nativeSend > lifecycle && terminal > nativeSend
+          && beforeDetach > terminal && destructiveRemove > beforeDetach
+          && cleanup > destructiveRemove
+          && ownerRelease >= 0 && ipRelease > ownerRelease
+          && routeClear > cleanup,
         "native OutOfConnect must terminate, remove the DB route, clean owner/IP, then emit command 12");
 }
 

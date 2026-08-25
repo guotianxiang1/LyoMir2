@@ -15,23 +15,33 @@ namespace DBSvr.Core
             new(StringComparer.Ordinal);
         private Func<IReadOnlyList<string>> _snapshotUsers =
             () => Array.Empty<string>();
+        private Action<Action<IReadOnlyList<string>>> _withSnapshotUsers;
         private Action<string> _disconnectIp = _ => { };
         private Action _drainQueue = () => { };
         private Action<byte[]> _disconnectAccount = _ => { };
         private Action<byte[], string> _updateOnlineAccountText = (_, _) => { };
         private Action<byte[], ushort> _updateOnlineAccountLoginTime = (_, _) => { };
 
-        public bool QueueEnabled { get; private set; }
+        private bool _queueEnabled;
+
+        public bool QueueEnabled
+        {
+            get { lock (_sync) return _queueEnabled; }
+        }
 
         public void Attach(Func<IReadOnlyList<string>> snapshotUsers,
             Action<string> disconnectIp, Action drainQueue,
             Action<byte[]> disconnectAccount = null,
             Action<byte[], string> updateOnlineAccountText = null,
-            Action<byte[], ushort> updateOnlineAccountLoginTime = null)
+            Action<byte[], ushort> updateOnlineAccountLoginTime = null,
+            Action<Action<IReadOnlyList<string>>> withSnapshotUsers = null)
         {
             lock (_sync)
             {
                 _snapshotUsers = snapshotUsers ?? (() => Array.Empty<string>());
+                _withSnapshotUsers = withSnapshotUsers
+                    ?? (consume => consume(_snapshotUsers()
+                        ?? Array.Empty<string>()));
                 _disconnectIp = disconnectIp ?? (_ => { });
                 _drainQueue = drainQueue ?? (() => { });
                 _disconnectAccount = disconnectAccount ?? (_ => { });
@@ -62,27 +72,29 @@ namespace DBSvr.Core
 
         public void RecountAndSetMaximum(int maximum)
         {
-            Func<IReadOnlyList<string>> snapshot;
-            lock (_sync) snapshot = _snapshotUsers;
-            var owners = snapshot() ?? Array.Empty<string>();
+            Action<Action<IReadOnlyList<string>>> withSnapshot;
             lock (_sync)
+                withSnapshot = _withSnapshotUsers
+                    ?? (consume => consume(_snapshotUsers()
+                        ?? Array.Empty<string>()));
+            withSnapshot(owners =>
             {
-                var remove = new List<string>();
-                var keys = new List<string>(_ipCounts.Keys);
-                foreach (var key in keys)
+                lock (_sync)
                 {
-                    if (_ipCounts[key] == 0) remove.Add(key);
-                    else _ipCounts[key] = 0;
+                    var replacement = new Dictionary<string, uint>(
+                        StringComparer.Ordinal);
+                    foreach (var pair in _ipCounts)
+                        if (pair.Value != 0)
+                            replacement.Add(pair.Key, 0);
+                    foreach (var ip in owners)
+                    {
+                        var key = ip ?? string.Empty;
+                        if (replacement.TryGetValue(key, out var count))
+                            replacement[key] = unchecked(count + 1);
+                    }
+                    _ipCounts = replacement;
                 }
-                foreach (var key in remove) _ipCounts.Remove(key);
-
-                foreach (var ip in owners)
-                {
-                    var key = ip ?? string.Empty;
-                    if (_ipCounts.TryGetValue(key, out var count))
-                        _ipCounts[key] = unchecked(count + 1);
-                }
-            }
+            });
             DBShare.MaxSingleIpHumanCount = maximum;
         }
 
@@ -168,7 +180,7 @@ namespace DBSvr.Core
 
         public bool SetQueueEnabled(int value)
         {
-            lock (_sync) QueueEnabled = value != 0;
+            lock (_sync) _queueEnabled = value != 0;
             DBShare.NativeQueueEnabled = value != 0;
             return value != 0;
         }

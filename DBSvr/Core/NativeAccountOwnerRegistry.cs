@@ -141,6 +141,21 @@ namespace DBSvr.Core
             }
         }
 
+        public bool CancelTakeover(NativeAccountOwnerTakeover takeover)
+        {
+            if (takeover == null) return false;
+            lock (_sync)
+            {
+                if (!_pending.TryGetValue(takeover.Key, out var pending)
+                    || pending.Token != takeover.Token
+                    || !ReferenceEquals(pending.Candidate,
+                        takeover.Candidate))
+                    return false;
+                _pending.Remove(takeover.Key);
+                return true;
+            }
+        }
+
         public bool ReleaseForConnection(string account, TUserInfo connection)
         {
             if (!TryCreateKey(account, out var key)) return false;
@@ -189,6 +204,22 @@ namespace DBSvr.Core
                         if (owner != null)
                             result.Add(owner.sUserIPaddr ?? string.Empty);
                 return result;
+            }
+        }
+
+        public void WithOwnerIpSnapshot(
+            Action<IReadOnlyList<string>> consume)
+        {
+            if (consume == null)
+                throw new ArgumentNullException(nameof(consume));
+            lock (_sync)
+            {
+                var result = new List<string>();
+                foreach (var values in _owners.Values)
+                    foreach (var owner in values)
+                        if (owner != null)
+                            result.Add(owner.sUserIPaddr ?? string.Empty);
+                consume(result);
             }
         }
 
