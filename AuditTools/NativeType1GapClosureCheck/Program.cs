@@ -17,6 +17,7 @@ Run("gate-report fields", GateReportFields);
 Run("global-relay commands and sizes", GlobalRelayConstants);
 Run("global-relay 0156 fields", GlobalRelayRegistrationFields);
 Run("global-relay 0173 packed dword", GlobalRelayQueryFields);
+Run("global-relay 0173 queue record", GlobalRelayQueueRecord);
 Run("type1 opcode space fully accounted", OpcodeSpaceAccounted);
 
 if (failures.Count != 0)
@@ -25,7 +26,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine("NativeType1GapClosureCheck PASS tests=8 "
+Console.WriteLine("NativeType1GapClosureCheck PASS tests=9 "
                   + "gate=0192/0193 tail=0x87/0xB5 lg=0x7DF/0x7E0 "
                   + "relay=0156/0173 direct=0x1F42 queue=0x274D/0x2750 "
                   + "opcodes=39/39");
@@ -179,6 +180,62 @@ void GlobalRelayQueryFields()
     False(NativeGlobalRelayProtocol.TryDecodeQuery(
         Frame(0x0173, 0x10, h => h[0x35] = 0x10), out _, out _),
         "+0x35 over 15 refused");
+}
+
+void GlobalRelayQueueRecord()
+{
+    // The queue consumer receives exactly the 0x41-byte slice beginning at
+    // the producer's stack record +0x0C. It does not contain the outer magic
+    // or the 0x1F43 command header.
+    var raw = new byte[NativeGlobalRelayQueueRecord.Size];
+    BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(0, 4), -21);
+    for (var i = 0; i < NativeGlobalRelayQueueRecord.OpaqueLength; i++)
+        raw[NativeGlobalRelayQueueRecord.OpaqueOffset + i] = (byte)(0xA0 + i);
+    BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(0x0C, 2), 0x1122);
+    BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(0x0E, 2), 0x3344);
+    BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(0x10, 2), 5);
+    BinaryPrimitives.WriteUInt16LittleEndian(raw.AsSpan(0x12, 2), 0x00AA);
+    BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(0x14, 4),
+        unchecked((int)0x55667788));
+    BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(0x18, 4),
+        unchecked((int)0x99AABBCC));
+    raw[0x1C] = 3;
+    raw[0x1D] = (byte)'c';
+    raw[0x1E] = (byte)'h';
+    raw[0x1F] = (byte)'r';
+    raw[0x2C] = 4;
+    raw[0x2D] = (byte)'a';
+    raw[0x2E] = (byte)'c';
+    raw[0x2F] = (byte)'c';
+    raw[0x30] = (byte)'t';
+
+    True(NativeGlobalRelayQueueRecord.TryDecode(raw, out var record,
+        out var error), "queue record decode: " + error);
+    Equal(-21, record.ResultCode, "queue result");
+    Equal(0x1122, record.ContextWord0, "queue context word 0");
+    Equal(0x3344, record.ContextWord1, "queue context word 1");
+    Equal(5, record.Selector, "queue selector");
+    Equal(0x00AA, record.Tag, "queue tag");
+    Equal(unchecked((int)0x55667788), record.ResponseValue70,
+        "queue response +70");
+    Equal(unchecked((int)0x99AABBCC), record.ResponseValue74,
+        "queue response +74");
+    EqualText("chr", Text(record.CharacterName), "queue character");
+    EqualText("acct", Text(record.Account), "queue account");
+    True(raw.SequenceEqual(record.ToBytes()), "queue record byte round-trip");
+
+    False(NativeGlobalRelayQueueRecord.TryDecode(new byte[0x40], out _, out _),
+        "queue short length rejected");
+    False(NativeGlobalRelayQueueRecord.TryDecode(new byte[0x42], out _, out _),
+        "queue long length rejected");
+    var overlong = (byte[])raw.Clone();
+    overlong[0x1C] = 0x10;
+    False(NativeGlobalRelayQueueRecord.TryDecode(overlong, out _, out _),
+        "queue character overlength rejected");
+    overlong = (byte[])raw.Clone();
+    overlong[0x2C] = 0x15;
+    False(NativeGlobalRelayQueueRecord.TryDecode(overlong, out _, out _),
+        "queue account overlength rejected");
 }
 
 void OpcodeSpaceAccounted()
