@@ -8,15 +8,16 @@ namespace DBSvr.Core
     /// The ten frames the original Delphi DBServer PUSHES to GameServers and
     /// that C# DBSvr had no builder for at all.
     ///
-    /// They are asynchronous notifications, not replies: none of them is reached
-    /// from the type-1 or type-2 request dispatcher.  Every producer is driven
-    /// from the internal event queue drained by <c>sub_5D25EC</c> (pops
+    /// They are asynchronous notifications, not ordinary synchronous replies.
+    /// Most producers are driven from the internal event queue drained by
+    /// <c>sub_5D25EC</c> (pops
     /// <c>[self+0x44]</c> under the critical section at <c>[self+0x4C]</c>, then
     /// switches on <c>word[node+8]</c> @0x5D269C) or, for 0x0078/0x0079/0x007A,
-    /// from the LoginGate session handlers.  Because C# DBSvr has no equivalent
-    /// queue yet, this class only pins the WIRE BYTES; the triggers are still
-    /// unwired and the codes are still MISSING at runtime.  See
-    /// docs/m_dbsvr_fidelity_outbound_20260813.md.
+    /// from the LoginGate session handlers.  The native 0x0156 link-down
+    /// producer is now connected to the managed global-relay queue and emits
+    /// the targeted 0x0058 frame; the remaining notification triggers stay
+    /// intentionally isolated until their producer/session evidence is closed.
+    /// See docs/m_dbsvr_fidelity_outbound_20260813.md.
     ///
     /// All VAs are DBServer (staging/_dbsvr_reunpack_work/dbserver_CODE_live.bin,
     /// VA = 0x401000 + offset).

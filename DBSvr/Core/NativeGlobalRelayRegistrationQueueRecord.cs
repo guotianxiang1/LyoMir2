@@ -43,6 +43,29 @@ namespace DBSvr.Core
         public byte[] Name { get; set; }
         public byte[] OpaqueSuffix { get; set; }
 
+        /// <summary>
+        /// Creates the link-down record emitted by native 0x0156.  The native
+        /// producer initializes a 0x20-byte stack buffer and only the result,
+        /// requester id, and name are consumed by the drain; the untouched
+        /// bytes therefore remain zero in this managed representation.
+        /// </summary>
+        public static NativeGlobalRelayRegistrationQueueRecord Create(
+            int resultCode, byte requestingServerId, byte[] name)
+        {
+            name ??= Array.Empty<byte>();
+            if (name.Length > NameCapacity)
+                throw new ArgumentOutOfRangeException(nameof(name),
+                    $"native 0x274D name exceeds {NameCapacity} bytes");
+
+            var raw = new byte[Size];
+            BinaryPrimitives.WriteInt32LittleEndian(
+                raw.AsSpan(ResultOffset, sizeof(int)), resultCode);
+            raw[RequestingServerIdOffset] = requestingServerId;
+            raw[NameOffset] = (byte)name.Length;
+            name.AsSpan().CopyTo(raw.AsSpan(NameOffset + 1));
+            return new NativeGlobalRelayRegistrationQueueRecord(raw);
+        }
+
         public static bool TryDecode(byte[] source,
             out NativeGlobalRelayRegistrationQueueRecord record,
             out string error)

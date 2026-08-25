@@ -5,6 +5,7 @@
 // addresses in DBServer_unpacked.exe.
 // Evidence: staging/dbsvr_type1_dispatch_census_20260803.md
 using System.Buffers.Binary;
+using System.Text;
 using DBSvr.Core;
 using SystemModule;
 using SystemModule.Packet;
@@ -221,6 +222,16 @@ void GlobalRelayRegistrationQueueRecord()
     Equal(7, record.RequestingServerId, "0x274D requester id");
     EqualText("name", Text(record.Name), "0x274D name");
     True(raw.SequenceEqual(record.ToBytes()), "0x274D round-trip");
+
+    var created = NativeGlobalRelayRegistrationQueueRecord.Create(
+        -2, 7, Encoding.ASCII.GetBytes("name"));
+    Equal(-2, created.ResultCode, "0x274D factory result");
+    Equal(7, created.RequestingServerId, "0x274D factory requester id");
+    EqualText("name", Text(created.Name), "0x274D factory name");
+    Equal(NativeGlobalRelayRegistrationQueueRecord.Size,
+        created.ToBytes().Length, "0x274D factory size");
+    True(created.ToBytes().Skip(5).Take(3).All(value => value == 0),
+        "0x274D factory opaque prefix is zero-initialized");
 
     False(NativeGlobalRelayRegistrationQueueRecord.TryDecode(
         new byte[0x1F], out _, out _), "0x274D short length rejected");

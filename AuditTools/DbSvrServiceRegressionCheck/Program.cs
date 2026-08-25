@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using DBSvr;
 using DBSvr.Core;
 using System.Reflection;
@@ -31,6 +32,7 @@ Run("native 4010/4014 character-list rows", TestNativeCharacterListRows);
 Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
 Run("port 6000 connection wire-mode detection", TestDbServerWireModeDetection);
+Run("native 0156 delayed 0058 route", TestNativeGlobalRelayDelayedReply);
 Run("native 6000 heartbeat + selected-human push", TestNativeDbServerProtocol);
 Run("native mode2 one-time switch handoff slot", TestNativeSwitchHandoffSlot);
 Run("native 6000 DB-tool human/hero reads", TestNativeDbToolReads);
@@ -3715,6 +3717,49 @@ static void TestNativeDbServerFrames()
     Equal((ushort)0x0050, BitConverter.ToUInt16(parsed[1].Payload, 0),
         "native response opcode");
     Equal(0, parser.BufferedLength, "native parser drained");
+}
+
+static void TestNativeGlobalRelayDelayedReply()
+{
+    var response = NativeOutboundNotificationProtocol
+        .CreateAccountNotification(Encoding.ASCII.GetBytes("name"), -2);
+    Check(LegacyDbServerFrameCodec.TryEncode(response, out var wire,
+        out var error), error);
+    Equal(0x54, wire.Length, "0156 delayed 0058 total frame length");
+    Equal((ushort)1, BinaryPrimitives.ReadUInt16LittleEndian(
+        wire.AsSpan(4, 2)), "0156 delayed 0058 frame type");
+    Equal((ushort)0x48, BinaryPrimitives.ReadUInt16LittleEndian(
+        wire.AsSpan(8, 2)), "0156 delayed 0058 payload length");
+    Equal((ushort)0x0058, BinaryPrimitives.ReadUInt16LittleEndian(
+        wire.AsSpan(12, 2)), "0156 delayed 0058 opcode");
+    Equal(-2, BinaryPrimitives.ReadInt32LittleEndian(
+        wire.AsSpan(16, 4)), "0156 delayed 0058 result");
+    Equal((byte)4, wire[0x1C], "0156 delayed 0058 name length");
+    Check(Encoding.ASCII.GetBytes("name").SequenceEqual(
+        wire.AsSpan(0x1D, 4).ToArray()),
+        "0156 delayed 0058 name");
+    Check(wire.AsSpan(20, 8).ToArray().All(value => value == 0),
+        "0156 delayed 0058 reserved body bytes zero");
+
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "GameSocService.cs"))
+        .Replace("\r\n", "\n");
+    Check(source.Contains(
+              "NativeGlobalRelayRegistrationQueueRecord.Create(",
+              StringComparison.Ordinal)
+          && source.Contains("EnqueueNativeGlobalRelayRegistration(queued)",
+              StringComparison.Ordinal)
+          && source.Contains("ProcessNativeGlobalRelayQueue",
+              StringComparison.Ordinal)
+          && source.Contains(
+              "CreateAccountNotification(record.Name, record.ResultCode)",
+              StringComparison.Ordinal)
+          && source.Contains("record.RequestingServerId",
+              StringComparison.Ordinal),
+        "0156 delayed 0058 queue/targeted sender wiring is missing");
+    Check(!source.Contains("BroadcastNativeGlobalRelayRegistration",
+              StringComparison.Ordinal),
+        "0156 delayed 0058 must not be invented as a broadcast");
 }
 
 static void TestDbServerWireModeDetection()

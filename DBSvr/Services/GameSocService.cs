@@ -77,6 +77,14 @@ namespace DBSvr
         private bool _heroSaveStopping;
         private readonly NativeHeroSaveStateTracker _heroSaveState = new();
         private readonly NativeHeroAttachmentStateTracker _heroAttachmentState = new();
+        // Native 0x0156 link-down notifications are queued by TMainExecute and
+        // drained asynchronously.  Keep this queue separate from persistence
+        // workers so a slow SQL save cannot reorder or suppress a wire reply.
+        private readonly object _nativeGlobalRelayQueueLock = new();
+        private readonly Queue<NativeGlobalRelayRegistrationQueueRecord>
+            _nativeGlobalRelayPending = new();
+        private Thread _nativeGlobalRelayThread;
+        private bool _nativeGlobalRelayStopping;
         private Func<string, string, byte[], bool> _nativeSwitchHandoffStore =
             static (_, _, _) => false;
 
@@ -145,6 +153,7 @@ namespace DBSvr
             _serverSocket.Init();
             EnsureNativeSaveWorker();
             EnsureHeroSaveWorker();
+            EnsureNativeGlobalRelayWorker();
         }
 
         public void AttachNativeSwitchHandoffStore(
@@ -165,6 +174,7 @@ namespace DBSvr
         {
             EnsureNativeSaveWorker();
             EnsureHeroSaveWorker();
+            EnsureNativeGlobalRelayWorker();
             _playDataService.LoadQuickList();
             _heroRecordService.LoadQuickList();
             _heroDataService.LoadQuickList();
@@ -206,6 +216,23 @@ namespace DBSvr
             lock (_heroSaveQueueLock)
                 if (ReferenceEquals(_heroSaveThread, heroSaveThread))
                     _heroSaveThread = null;
+            Thread nativeGlobalRelayThread;
+            lock (_nativeGlobalRelayQueueLock)
+            {
+                _nativeGlobalRelayStopping = true;
+                Monitor.PulseAll(_nativeGlobalRelayQueueLock);
+                nativeGlobalRelayThread = _nativeGlobalRelayThread;
+            }
+            if (nativeGlobalRelayThread?.IsAlive == true
+                && Thread.CurrentThread != nativeGlobalRelayThread)
+                nativeGlobalRelayThread.Join();
+            lock (_nativeGlobalRelayQueueLock)
+            {
+                if (ReferenceEquals(_nativeGlobalRelayThread,
+                        nativeGlobalRelayThread))
+                    _nativeGlobalRelayThread = null;
+                _nativeGlobalRelayPending.Clear();
+            }
             _nativeAccountStorage.StopSaveWorker();
             _nativePetBackup.Stop();
             _nativeRelationLog.Stop();
@@ -239,6 +266,22 @@ namespace DBSvr
                     Name = "DBSvr native hero save worker"
                 };
                 _heroSaveThread.Start();
+            }
+        }
+
+        private void EnsureNativeGlobalRelayWorker()
+        {
+            lock (_nativeGlobalRelayQueueLock)
+            {
+                if (_nativeGlobalRelayThread?.IsAlive == true) return;
+                _nativeGlobalRelayStopping = false;
+                _nativeGlobalRelayThread = new Thread(
+                    ProcessNativeGlobalRelayQueue)
+                {
+                    IsBackground = true,
+                    Name = "DBSvr native global-relay worker"
+                };
+                _nativeGlobalRelayThread.Start();
             }
         }
 
@@ -1076,11 +1119,12 @@ namespace DBSvr
         /// straight out or queues 0x274D (10061); 0x0173 queues 0x2750 (10064).
         ///
         /// That external service does not exist in this deployment (same class of
-        /// dependency as YBDB 6108 / GlobalServer 6020), and the outbound record
-        /// FIELDS are not reversed yet, so we decode and validate the request but
-        /// emit nothing. Neither command ever answers the GameServer — both end at
-        /// the shared exit 0x59953D — so staying silent is byte-faithful on the
-        /// GameServer-facing side; only the outbound report is owed.
+        /// dependency as YBDB 6108 / GlobalServer 6020).  The native link-down
+        /// branch nevertheless enqueues a 0x274D record; the TMainExecute drain
+        /// later sends a targeted 0x0058 reply to the original GameServer.  The
+        /// managed worker below preserves that delayed, server-id-routed path.
+        /// The 0x0173 result producer remains deferred because its external
+        /// success/failure state machine is not yet proven.
         /// </summary>
         private void ProcessNativeGlobalRelay(TServerInfo sender,
             LegacyDbServerFrame frame, ushort command)
@@ -1091,14 +1135,20 @@ namespace DBSvr
                 var serverType = unchecked((byte)Volatile.Read(
                     ref sender.NativeServerType));
                 if (!NativeGlobalRelayProtocol.TryDecodeRegistration(
-                        frame, serverType, out _, out error))
+                        frame, serverType, out var request, out error))
                 {
                     DBShare.MainOutMessage("[GameSoc] 原生0156请求拒绝: " + error);
                     return;
                 }
-                DBShare.MainOutMessage(
-                    "[GameSoc] 原生0156已解析，原版此时经TGlobalSocket发8002"
-                    + "或入队10061——外部全局服务未接入，按原版对GameServer侧静默");
+                // No external TGlobalSocket is configured in this deployment,
+                // so this is the native link-down result (-2).  The queue
+                // record carries exactly the fields consumed by 0x5D2AFE:
+                // result, requester server id, and the account ShortString.
+                var queued = NativeGlobalRelayRegistrationQueueRecord.Create(
+                    -2, request.ServerType, request.Name);
+                if (!EnqueueNativeGlobalRelayRegistration(queued))
+                    DBShare.MainOutMessage(
+                        "[GameSoc] 原生0156迟到回包队列停机，丢弃请求");
                 return;
             }
 
@@ -1110,6 +1160,89 @@ namespace DBSvr
             DBShare.MainOutMessage(
                 "[GameSoc] 原生0173已解析，原版此时入队10064(0x41字节)"
                 + "——外部全局服务未接入，按原版对GameServer侧静默");
+        }
+
+        private bool EnqueueNativeGlobalRelayRegistration(
+            NativeGlobalRelayRegistrationQueueRecord record)
+        {
+            if (record == null) return false;
+            lock (_nativeGlobalRelayQueueLock)
+            {
+                if (_nativeGlobalRelayStopping) return false;
+                _nativeGlobalRelayPending.Enqueue(record);
+                Monitor.Pulse(_nativeGlobalRelayQueueLock);
+                return true;
+            }
+        }
+
+        private void ProcessNativeGlobalRelayQueue()
+        {
+            while (true)
+            {
+                NativeGlobalRelayRegistrationQueueRecord record;
+                lock (_nativeGlobalRelayQueueLock)
+                {
+                    while (_nativeGlobalRelayPending.Count == 0
+                           && !_nativeGlobalRelayStopping)
+                        Monitor.Wait(_nativeGlobalRelayQueueLock);
+                    if (_nativeGlobalRelayPending.Count == 0
+                        && _nativeGlobalRelayStopping)
+                        return;
+                    record = _nativeGlobalRelayPending.Dequeue();
+                }
+
+                try
+                {
+                    SendNativeGlobalRelayRegistrationReply(record);
+                }
+                catch (Exception ex)
+                {
+                    // Native queue drain drops a record after a failed target
+                    // lookup/send; it does not retry or turn it into a broadcast.
+                    DBShare.MainOutMessage(
+                        "[GameSoc] 原生0156迟到回包异常: " + ex.Message);
+                }
+            }
+        }
+
+        private void SendNativeGlobalRelayRegistrationReply(
+            NativeGlobalRelayRegistrationQueueRecord record)
+        {
+            TServerInfo target = null;
+            lock (_serverListLock)
+            {
+                foreach (var peer in _serverList)
+                {
+                    if (peer?.Socket?.Connected != true
+                        || peer.WireModeDetector.Mode
+                           != DbServerWireMode.NativeType12)
+                        continue;
+                    if (unchecked((byte)Volatile.Read(
+                            ref peer.NativeServerType))
+                        != record.RequestingServerId)
+                        continue;
+                    target = peer;
+                    break;
+                }
+            }
+            if (target == null) return;
+
+            var response = NativeOutboundNotificationProtocol
+                .CreateAccountNotification(record.Name, record.ResultCode);
+            if (!LegacyDbServerFrameCodec.TryEncode(response, out var wire,
+                    out var error, NativeDbServerProtocol.MaximumFrameLength))
+            {
+                DBShare.MainOutMessage(
+                    "[GameSoc] 原生0156迟到回包编码失败: " + error);
+                return;
+            }
+            try { SendAll(target.Socket, wire); }
+            catch (Exception ex) when (ex is SocketException
+                                       || ex is ObjectDisposedException)
+            {
+                DBShare.MainOutMessage(
+                    "[GameSoc] 原生0156迟到回包发送失败: " + ex.Message);
+            }
         }
 
         /// <summary>
