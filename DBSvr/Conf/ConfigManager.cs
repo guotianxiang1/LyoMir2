@@ -1,3 +1,4 @@
+using DBSvr.Core;
 using SystemModule;
 using SystemModule.Common;
 
@@ -59,7 +60,8 @@ namespace DBSvr
             // ===================== [GameGates] =====================
             // 第二次出现覆盖第一次, 拥有 ListenPort + GameGate1 的完整数据
             DBShare.g_nGatePort = ReadInteger("GameGates", "ListenPort", DBShare.g_nGatePort);
-            var gameGate1 = ReadString("GameGates", "GameGate1", "127.0.0.1:7100");
+            var gameGate1 = ReadString("GameGates", "GameGate1", "127.0.0.1");
+            LoadNativeGameGateRegistrations(gameGate1);
             ParseGameGate(gameGate1);
             ResolvePublicGameGate();
 
@@ -84,18 +86,25 @@ namespace DBSvr
         /// </summary>
         private void ParseGameGate(string gateSpec)
         {
-            var colonIdx = gateSpec.LastIndexOf(':');
-            if (colonIdx > 0 && colonIdx < gateSpec.Length - 1)
-            {
-                DBShare.g_sGateAddr = gateSpec.Substring(0, colonIdx);
-                DBShare.g_nPublicGatePort = HUtil32.Str_ToInt(
-                    gateSpec.Substring(colonIdx + 1), 7100);
-            }
-            else
-            {
-                DBShare.g_sGateAddr = gateSpec;
-            }
+            NativeGameGateRegistrationTable.ParseSpecification(gateSpec,
+                out DBShare.g_sGateAddr, out DBShare.g_nPublicGatePort);
             DBShare.g_sPublicGateAddr = DBShare.g_sGateAddr;
+        }
+
+        private void LoadNativeGameGateRegistrations(string gameGate1)
+        {
+            DBShare.NativeGameGateRegistrations.Clear();
+            for (var gateId = 1;
+                 gateId <= NativeGameGateRegistrationTable.MaximumGateCount;
+                 gateId++)
+            {
+                var gateSpec = gateId == 1
+                    ? gameGate1
+                    : ReadString("GameGates", $"GameGate{gateId}",
+                        "127.0.0.1");
+                DBShare.NativeGameGateRegistrations
+                    .TrySetFromSpecification(gateId, gateSpec);
+            }
         }
 
         private void ResolvePublicGameGate()

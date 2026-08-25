@@ -5,16 +5,17 @@ namespace DBSvr.Core
 {
     public static class NativeGateControlProtocol
     {
-        public const ushort RegisterRequest = 3;
-        public const ushort RegisterResponse = 13;
-        public const ushort OpenRequest = 1;
-        public const ushort OpenResponse = 11;
-        public const ushort DataRequest = 4;
-        public const ushort DataResponse = 14;
-        public const ushort CloseRequest = 6;
-        public const ushort CloseResponse = 16;
+        public const ushort RegisterRequest = NativeGameGateDbProtocol.RegisterRequest;
+        public const ushort RegisterResponse = NativeGameGateDbProtocol.RegisterResponse;
+        public const ushort OpenRequest = NativeGameGateDbProtocol.OpenRequest;
+        public const ushort OpenResponse = NativeGameGateDbProtocol.OpenResponse;
+        public const ushort DataRequest = NativeGameGateDbProtocol.DataRequest;
+        public const ushort DataResponse = NativeGameGateDbProtocol.DataResponse;
+        public const ushort CloseRequest = NativeGameGateDbProtocol.CloseRequest;
+        public const ushort CloseResponse = NativeGameGateDbProtocol.CloseResponse;
 
-        public static bool TryCreateResponse(YbDbLegacy77Frame request, int gateIndex,
+        public static bool TryCreateResponse(YbDbLegacy77Frame request,
+            int assignedGateId,
             out YbDbLegacy77Frame response)
         {
             response = null;
@@ -22,8 +23,12 @@ namespace DBSvr.Core
             switch (request.Ident)
             {
                 case RegisterRequest:
+                    if (assignedGateId is < 1
+                        or > NativeGameGateRegistrationTable.MaximumGateCount)
+                        return false;
                     response = new YbDbLegacy77Frame(
-                        checked(gateIndex + 1), 0, RegisterResponse, Array.Empty<byte>());
+                        assignedGateId, 0, RegisterResponse,
+                        Array.Empty<byte>());
                     return true;
                 case OpenRequest:
                     response = new YbDbLegacy77Frame(

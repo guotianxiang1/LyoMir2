@@ -534,18 +534,29 @@ static void DbNativeControlResynchronizes()
 static void DbControlsUseNativeSessionId()
 {
     using var hub = CreateHub(out var routes,
-        (1001u, 9001, 11), (1002u, 9002, 22));
+        (1001u, 9001, 11), (1002u, 9002, 22), (1003u, 9003, 33),
+        (1004u, 9004, 44));
     Volatile.Write(ref routes[1001].NativePlayerRecog, 101);
     Volatile.Write(ref routes[1002].NativePlayerRecog, 102);
 
-    var open = ParseDbControl(BuildDbControl(1001, 77, 11));
+    var routeId = unchecked((uint)
+        NativeGameGateDbProtocol.ComposeRouteId(1, 1001));
+    routes[1001].TryBeginDbOpen(0, routeId,
+        out _, out var shouldSendOpen);
+    True(shouldSendOpen, "native DB open test route was already pending");
+    var open = ParseDbControl(BuildDbControl(1001, 77,
+        NativeGameGateDbProtocol.OpenResponse));
     True(DispatchDbControl(hub, open), "native DB open control");
     Equal(0, Volatile.Read(ref routes[1001].NativePlayerRecog),
         "DB open did not clear route player recog");
     Equal(0, Volatile.Read(ref routes[1001].NativeServerUserIndex),
         "DB open did not clear route server-user index");
-    Equal(77, Volatile.Read(ref routes[1001].NativeDbRouteContext),
-        "DB open result was not stored");
+    Equal(routeId, routes[1001].DbRouteId,
+        "DB open changed the stable uplink route id");
+    True(routes[1001].IsDbOpen(0),
+        "DB open response did not acknowledge the pending route");
+    Equal(77, Volatile.Read(ref routes[1001].NativeDbOpenContext),
+        "DB open context was not retained for CLOSE");
     True(routes[1001].DbResponses.Reader.TryRead(out var loginPrompt),
         "DB open did not queue the native 4003 prompt");
     var expectedPrompt = EDcode.EncodeMessage(
@@ -559,6 +570,39 @@ static void DbControlsUseNativeSessionId()
     Equal(22, Volatile.Read(ref routes[1002].NativeServerUserIndex),
         "DB open changed unrelated route server-user index");
 
+    routes[1002].TryBeginDbOpen(0,
+        unchecked((uint)NativeGameGateDbProtocol.ComposeRouteId(1, 1002)),
+        out _, out _);
+    True(DispatchDbControl(hub, ParseDbControl(BuildDbControl(1002, -1,
+            NativeGameGateDbProtocol.OpenResponse))),
+        "negative native DB open result");
+    False(routes[1002].IsDbOpen(0),
+        "unsupported negative DB open result completed the route");
+
+    routes[1003].TryBeginDbOpen(0,
+        unchecked((uint)NativeGameGateDbProtocol.ComposeRouteId(1, 1003)),
+        out _, out _);
+    True(DispatchDbControl(hub, ParseDbControl(BuildDbControl(1003, -999,
+            NativeGameGateDbProtocol.OpenResponse,
+            new byte[] { 0xAA }))),
+        "-999 native DB open result");
+    True(routes[1003].IsDbOpen(0),
+        "-999 DB open result did not complete the route");
+    Equal(-999, Volatile.Read(ref routes[1003].NativeDbOpenContext),
+        "-999 DB open context was not retained");
+    True(routes[1003].DbResponses.Reader.TryRead(out _),
+        "-999 DB open did not queue the login prompt");
+
+    routes[1004].TryBeginDbOpen(1,
+        unchecked((uint)NativeGameGateDbProtocol.ComposeRouteId(1, 1004)),
+        out _, out _);
+    Volatile.Write(ref routes[1004].NativePlayerRecog, 404);
+    False(DispatchDbControl(hub, ParseDbControl(BuildDbControl(1004, 0,
+            NativeGameGateDbProtocol.OpenResponse))),
+        "stale DB open generation was accepted");
+    Equal(404, Volatile.Read(ref routes[1004].NativePlayerRecog),
+        "stale DB open generation cleared current route state");
+
     Volatile.Write(ref routes[1002].NativePlayerRecog, 202);
     var context = ParseDbControl(BuildDbControl(1002, -999, 21));
     True(DispatchDbControl(hub, context), "native DB context control");
@@ -566,14 +610,70 @@ static void DbControlsUseNativeSessionId()
         "DB context did not clear player recog");
     Equal(0, Volatile.Read(ref routes[1002].NativeServerUserIndex),
         "DB context did not clear server-user index");
-    Equal(-999, Volatile.Read(ref routes[1002].NativeDbRouteContext),
+    Equal(-999, Volatile.Read(ref routes[1002].NativeDbControlContext),
         "DB context sentinel was not stored");
 
     context = ParseDbControl(BuildDbControl(1001, 88, 21));
     True(DispatchDbControl(hub, context),
         "native DB context overwrite control");
-    Equal(88, Volatile.Read(ref routes[1001].NativeDbRouteContext),
-        "commands 11 and 21 did not overwrite the same native field");
+    Equal(88, Volatile.Read(ref routes[1001].NativeDbControlContext),
+        "command 21 control value was not stored");
+    Equal(routeId, routes[1001].DbRouteId,
+        "command 21 overwrote the stable DB route id");
+
+    var registerResponse = ParseDbControl(BuildDbControl(0x102, -7,
+        NativeGameGateDbProtocol.RegisterResponse,
+        new byte[] { 0xAA }));
+    True(DispatchDbControl(hub, registerResponse),
+        "native DB registration response");
+    Equal(2, hub.RegisteredDbGateId,
+        "native DB assigned gate id");
+    True(DispatchDbControl(hub, ParseDbControl(BuildDbControl(0x100, 1,
+            NativeGameGateDbProtocol.RegisterResponse))),
+        "zero-low-byte DB registration response was not consumed");
+    Equal(2, hub.RegisteredDbGateId,
+        "zero-low-byte DB registration response changed the assigned gate id");
+    True(DispatchDbControl(hub, ParseDbControl(BuildDbControl(3, 1,
+            NativeGameGateDbProtocol.RegisterResponse))),
+        "duplicate DB registration response was not consumed");
+    Equal(2, hub.RegisteredDbGateId,
+        "duplicate DB registration response changed the assigned gate id");
+
+    var nativeBody = new byte[] { 0xC1, 0xFA, 0xC9, 0xF1 };
+    var nativeData = LegacyGateDataCodec.CreateResponse(1001, 7,
+        4012, 1, 2, 3, nativeBody);
+    True(YbDbLegacy77Codec.TryEncode(nativeData, out var nativeDataWire,
+        out var nativeDataError), nativeDataError);
+    True(DispatchDbControl(hub, ParseDbControl(nativeDataWire)),
+        "native DB data response");
+    True(routes[1001].DbResponses.Reader.TryRead(out var normalizedData),
+        "native DB data response was not routed");
+    var normalizedText = HUtil32.GetString(normalizedData, 0,
+        normalizedData.Length);
+    True(normalizedText.StartsWith("%1001/#", StringComparison.Ordinal)
+         && normalizedText.EndsWith("!$", StringComparison.Ordinal),
+        "native DB data response was not normalized for the down relay");
+    var normalizedPayload = normalizedText.Substring(7,
+        normalizedText.Length - 9);
+    var normalizedHeader = EDcode.DecodePacket(
+        normalizedPayload[..Grobal2.DEFBLOCKSIZE]);
+    NotNull(normalizedHeader, "normalized DB data header");
+    Equal((ushort)101, normalizedHeader.Ident,
+        "normalized DB data ident before GateServer ToClient mapping");
+    var normalizedBodyText = normalizedPayload[Grobal2.DEFBLOCKSIZE..];
+    var normalizedBody = Misc.Decode6BitBufDirect(
+        HUtil32.GetBytes(normalizedBodyText), normalizedBodyText.Length);
+    BytesEqual(nativeBody, normalizedBody,
+        "normalized DB data body");
+
+    True(DispatchDbControl(hub, ParseDbControl(BuildDbControl(1001,
+            77,
+            NativeGameGateDbProtocol.CloseResponse))),
+        "native DB close response");
+    True(DispatchDbControl(hub, ParseDbControl(BuildDbControl(65000,
+            123,
+            NativeGameGateDbProtocol.CloseResponse))),
+        "native DB close response required a live route");
 
     Volatile.Write(ref routes[1001].NativePlayerRecog, 301);
     Volatile.Write(ref routes[1001].NativeServerUserIndex, 31);

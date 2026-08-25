@@ -42,9 +42,9 @@ namespace SystemModule.Packet
     }
 
     /// <summary>
-    /// Parses the native DBServer-to-GameGate stream. Ordinary responses use
-    /// %...$ framing, while native SelGate controls use a 0x33AABB77 header
-    /// and a 16-bit payload length on the same ordered TCP stream.
+    /// Parses the DBServer-to-GameGate stream. Native controls and data use a
+    /// 0x33AABB77 header with a 16-bit payload length; the private %...$ form
+    /// remains accepted on the same ordered stream for legacy peers.
     /// </summary>
     public sealed class DbServerGatewayFrameParser
     {

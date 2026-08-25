@@ -361,7 +361,7 @@ public sealed class GateServer : IDisposable
 
         // Bidirectional relay using the original shared-backend topology:
         // Client↔GameGate: MobileCodec binary frames (0xFF3A3A44/0xFF44FF44)
-        // GameGate↔DBSvr: 6bit AccountPacket (%A{nativeSessionId}/{encoded}$)
+        // GameGate↔DBSvr: native 0x33AABB77 register/open/data/close stream
         // GameGate↔GameSvr: one shared 77BBAA33 stream routed by the native
         // logical session key, independent from the OS socket handle.
         var cts = new CancellationTokenSource();
@@ -473,10 +473,8 @@ public sealed class GateServer : IDisposable
 
                 var headerMsg = CreateSoftCloseQueryPacket(sessionId);
                 var queryBody = HUtil32.GetBytes(EDcode.EncodeString($"{account}/{sessionId}"));
-                var bodyEnc = Enc6Body(queryBody);
-                var bodyStr = bodyEnc.Length > 0 ? HUtil32.GetString(bodyEnc, 0, bodyEnc.Length) : "";
-                var apFrame = HUtil32.GetBytes($"%A{route.NativeSessionId}/#{EDcode.EncodeMessage(headerMsg)}{bodyStr}!$");
-                if (!await _backend.SendDbAsync(route, apFrame, cts.Token))
+                if (!await _backend.SendDbAsync(route, headerMsg,
+                        queryBody, cts.Token))
                 {
                     Log("UP", "CM_SOFTCLOSE character query failed: DBSvr unavailable");
                     return;
@@ -973,11 +971,8 @@ public sealed class GateServer : IDisposable
                                 : mf.Inner.Recog;
                             var headerMsg = new ClientPacket { Recog = dbRecog, Ident = serverIdent,
                                 Param = mf.Inner.Param, Tag = mf.Inner.Tag, Series = mf.Inner.Series };
-                            var headerStr = EDcode.EncodeMessage(headerMsg);
-                            var bodyEnc = Enc6Body(bodyToSend);
-                            var bodyStr = bodyEnc.Length > 0 ? HUtil32.GetString(bodyEnc, 0, bodyEnc.Length) : "";
-                            var apFrame = HUtil32.GetBytes($"%A{route.NativeSessionId}/#{headerStr}{bodyStr}!$");
-                            if (!await _backend.SendDbAsync(route, apFrame, cts.Token))
+                            if (!await _backend.SendDbAsync(route, headerMsg,
+                                    bodyToSend, cts.Token))
                                 throw new IOException("shared DBSvr route is unavailable");
                         }
                         else
@@ -1023,16 +1018,6 @@ public sealed class GateServer : IDisposable
             catch (IOException) { }
             catch (Exception ex) { Log("DEBUG", $"Up relay error [{ip}]: {ex.Message}"); }
             finally { cts.Cancel(); }
-        }
-
-        // 6-bit encode raw body bytes (no header — EDcode.EncodeMessage handles that)
-        static byte[] Enc6Body(byte[]? body)
-        {
-            int bodyLen = body?.Length ?? 0;
-            if (bodyLen == 0) body = Array.Empty<byte>(); // 确保始终有ClientPacket字节
-            var enc = new byte[(body?.Length ?? 0) * 2 + 4];
-            int encLen = Misc.Encode6BitBufDirect(body, body!.Length, enc);
-            return encLen > 0 ? enc.Take(encLen).ToArray() : Array.Empty<byte>();
         }
 
         async Task RelayDown()

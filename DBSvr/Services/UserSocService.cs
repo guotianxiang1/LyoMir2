@@ -623,12 +623,23 @@ namespace DBSvr
             var connId = frame.QueryId.ToString();
             if (frame.Ident == NativeGateControlProtocol.RegisterRequest)
             {
-                if (frame.QueryId <= 0 || frame.QueryId > ushort.MaxValue
-                    || gateIndex < 0 || gateIndex >= byte.MaxValue)
+                if (frame.QueryId <= 0 || gateIndex < 0)
                     throw new InvalidOperationException(
                         "native gate registration route values are out of range");
-                gateInfo.NativeRoutePort = (ushort)frame.QueryId;
-                gateInfo.NativeRouteID = checked((byte)(gateIndex + 1));
+                var routePort = frame.QueryId;
+                gateInfo.NativeRoutePort = routePort;
+                var assignedGateId = DBShare.NativeGameGateRegistrations
+                    .ResolveForRegistration(gateInfo.NativeRouteID,
+                        gateInfo.sGateaddr, routePort);
+                if (assignedGateId == 0)
+                {
+                    DBShare.MainOutMessage(
+                        $"角色网关[{gateIndex}]未匹配配置: "
+                        + $"{gateInfo.sGateaddr}:{routePort}");
+                    gateInfo.Socket.Close();
+                    return;
+                }
+                gateInfo.NativeRouteID = assignedGateId;
             }
             if (frame.Ident == NativeGateControlProtocol.OpenRequest)
             {
@@ -677,7 +688,7 @@ namespace DBSvr
             }
 
             if (!NativeGateControlProtocol.TryCreateResponse(
-                    frame, gateIndex, out var response)) return;
+                    frame, gateInfo.NativeRouteID, out var response)) return;
             if (!YbDbLegacy77Codec.TryEncode(response, out var wire, out var error))
                 throw new InvalidOperationException(error);
             SendAll(gateInfo.Socket, wire);

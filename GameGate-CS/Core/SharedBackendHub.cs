@@ -15,6 +15,10 @@ internal sealed class SharedBackendRoute
     private int _dbTerminationPending;
     private int _gateIndex = 1;
     private uint _nativeRouteContext;
+    private readonly object _dbOpenStateLock = new();
+    private long _dbOpenAcknowledgedGeneration = -1;
+    private TaskCompletionSource<bool>? _dbOpenCompletion;
+    private uint _dbRouteId;
 
     public required int Handle { get; init; }
     public ushort NativeSessionId { get; init; }
@@ -32,8 +36,10 @@ internal sealed class SharedBackendRoute
     public long GameConnectionGeneration;
     public int NativePlayerRecog;
     public int NativeServerUserIndex;
-    public int NativeDbRouteContext;
+    public int NativeDbOpenContext;
+    public int NativeDbControlContext;
     public readonly SemaphoreSlim DbOpenLock = new(1, 1);
+    public readonly SemaphoreSlim DbSendCloseLock = new(1, 1);
     public readonly SemaphoreSlim GameOpenLock = new(1, 1);
     public readonly Channel<byte[]> DbResponses = Channel.CreateBounded<byte[]>(
         new BoundedChannelOptions(256)
@@ -56,6 +62,7 @@ internal sealed class SharedBackendRoute
     public bool IsInvalidated => IsDbInvalidated || IsGameInvalidated;
     public bool IsDbTerminationPending =>
         Volatile.Read(ref _dbTerminationPending) != 0;
+    public uint DbRouteId => Volatile.Read(ref _dbRouteId);
 
     public bool TryClose() => Interlocked.Exchange(ref _closed, 1) == 0;
 
@@ -145,14 +152,90 @@ internal sealed class SharedBackendRoute
     public void InvalidateDbRoute()
     {
         if (Interlocked.Exchange(ref _dbInvalidated, 1) != 0) return;
+        TaskCompletionSource<bool>? completion;
+        lock (_dbOpenStateLock)
+        {
+            completion = _dbOpenCompletion;
+            _dbOpenCompletion = null;
+            _dbOpenAcknowledgedGeneration = -1;
+            Volatile.Write(ref _dbRouteId, 0);
+            Volatile.Write(ref NativeDbOpenContext, 0);
+        }
+        completion?.TrySetResult(false);
         AbortOnce();
+    }
+
+    public bool TryBeginDbOpen(long generation, uint routeId,
+        out Task<bool> completion, out bool shouldSend)
+    {
+        lock (_dbOpenStateLock)
+        {
+            if (_dbOpenAcknowledgedGeneration == generation
+                && Volatile.Read(ref _dbRouteId) == routeId)
+            {
+                completion = Task.FromResult(true);
+                shouldSend = false;
+                return true;
+            }
+            if (DbConnectionGeneration == generation
+                && _dbOpenCompletion != null)
+            {
+                completion = _dbOpenCompletion.Task;
+                shouldSend = false;
+                return true;
+            }
+
+            DbConnectionGeneration = generation;
+            _dbOpenAcknowledgedGeneration = -1;
+            Volatile.Write(ref _dbRouteId, routeId);
+            Volatile.Write(ref NativeDbOpenContext, 0);
+            _dbOpenCompletion = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            completion = _dbOpenCompletion.Task;
+            shouldSend = true;
+            return true;
+        }
+    }
+
+    public bool CompleteDbOpen(long generation, bool accepted,
+        int backendContext)
+    {
+        TaskCompletionSource<bool>? completion;
+        lock (_dbOpenStateLock)
+        {
+            if (DbConnectionGeneration != generation
+                || _dbOpenCompletion == null)
+                return false;
+            completion = _dbOpenCompletion;
+            if (accepted)
+            {
+                _dbOpenAcknowledgedGeneration = generation;
+                Volatile.Write(ref NativeDbOpenContext, backendContext);
+            }
+        }
+        return completion.TrySetResult(accepted);
+    }
+
+    public bool IsDbOpen(long generation)
+    {
+        lock (_dbOpenStateLock)
+            return _dbOpenAcknowledgedGeneration == generation
+                && DbConnectionGeneration == generation;
     }
 
     public async ValueTask<bool> QueueDbTerminationAsync(
         CancellationToken cancellationToken)
     {
-        if (Interlocked.Exchange(ref _dbTerminationPending, 1) != 0)
-            return true;
+        await DbSendCloseLock.WaitAsync(cancellationToken);
+        var firstTermination = false;
+        try
+        {
+            firstTermination = Interlocked.Exchange(
+                ref _dbTerminationPending, 1) == 0;
+        }
+        finally { DbSendCloseLock.Release(); }
+        if (!firstTermination) return true;
+
         try
         {
             await DbResponses.Writer.WriteAsync(Array.Empty<byte>(),
@@ -169,9 +252,9 @@ internal sealed class SharedBackendRoute
 
 /// <summary>
 /// Original GameGate topology: one shared DBSvr socket and one shared M2 socket.
-/// Native logical client session keys are carried in %.../ text routes and
-/// InternalPacket77.ConnID; the OS socket handle is retained only for local
-/// diagnostics and lifecycle ownership.
+/// Native logical client session keys are carried in DB 0x33AABB77 envelopes
+/// and InternalPacket77.ConnID; the OS socket handle is retained only for
+/// local diagnostics and lifecycle ownership.
 /// </summary>
 internal sealed class SharedBackendHub : IDisposable
 {
@@ -207,6 +290,9 @@ internal sealed class SharedBackendHub : IDisposable
     private int _heartbeatSequence;
     private int _heartbeatPending;
     private long _heartbeatSentTick;
+    private int _registeredDbGateId;
+    private TaskCompletionSource<int>? _dbRegistrationCompletion;
+    private long _dbRegistrationGeneration;
     private int _registeredGateIndex;
     private TaskCompletionSource<int>? _gameRegistrationCompletion;
     private long _gameRegistrationGeneration;
@@ -242,6 +328,7 @@ internal sealed class SharedBackendHub : IDisposable
     public bool DBConnected { get; private set; }
     public bool GameConnected { get; private set; }
     public int Reconnects => Volatile.Read(ref _reconnects);
+    public int RegisteredDbGateId => Volatile.Read(ref _registeredDbGateId);
     public int RegisteredGateIndex => Volatile.Read(ref _registeredGateIndex);
     public bool GameHeartbeatPending => Volatile.Read(ref _heartbeatPending) != 0;
 
@@ -271,20 +358,18 @@ internal sealed class SharedBackendHub : IDisposable
             ConnId = connId,
             SessionGeneration = sessionGeneration,
             ClientIp = clientIp,
-            DbOpenFrame = HUtil32.GetBytes($"%O{nativeSessionId}/{clientIp}/{clientIp}$"),
+            DbOpenFrame = Array.Empty<byte>(),
             Abort = abort
         };
         if (!_routes.TryAdd(connId, route)) return null;
-
-        if (!await EnsureDbRouteOpenAsync(route, cancellationToken))
-        {
-            route.TryClose();
-            RemoveRoute(route);
-            return null;
-        }
-
         try
         {
+            if (!await EnsureDbRouteOpenAsync(route, cancellationToken))
+            {
+                route.TryClose();
+                RemoveRoute(route);
+                return null;
+            }
             if (!await EnsureGameRouteOpenAsync(route, cancellationToken))
             {
                 await CloseRouteAsync(route);
@@ -299,22 +384,37 @@ internal sealed class SharedBackendHub : IDisposable
         return route;
     }
 
-    public async Task<bool> SendDbAsync(SharedBackendRoute route, byte[] frame,
+    public async Task<bool> SendDbAsync(SharedBackendRoute route,
+        ClientPacket message, byte[] body,
         CancellationToken cancellationToken = default)
     {
-        if (route == null || route.IsClosed || route.IsInvalidated) return false;
+        if (route == null || route.IsClosed || route.IsInvalidated
+            || route.IsDbTerminationPending) return false;
         if (!await EnsureDbRouteOpenAsync(route, cancellationToken)) return false;
-        if (!TryGetDbState(out var stream, out _)) return false;
+        await route.DbSendCloseLock.WaitAsync(cancellationToken);
+        NetworkStream? stream = null;
         try
         {
+            if (route.IsClosed || route.IsInvalidated
+                || route.IsDbTerminationPending
+                || !TryGetDbState(out stream, out var generation)
+                || !route.IsDbOpen(generation)) return false;
+            if (!NativeGameGateDbProtocol.TryCreateData(
+                    route.NativeSessionId, route.DbRouteId, message, body,
+                    out var frame, out var error))
+            {
+                _log("WARN", "drop Gate->DB frame: " + error);
+                return false;
+            }
             await WriteDbCoreAsync(stream, frame, cancellationToken);
             return true;
         }
         catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
         {
-            InvalidateDb(stream, ex.Message);
+            if (stream != null) InvalidateDb(stream, ex.Message);
             return false;
         }
+        finally { route.DbSendCloseLock.Release(); }
     }
 
     public async Task<bool> SendGameAsync(SharedBackendRoute route, byte[] frame,
@@ -354,16 +454,25 @@ internal sealed class SharedBackendHub : IDisposable
     {
         if (route == null || !route.TryClose()) return;
 
-        if (TryGetDbState(out var dbStream, out var dbGeneration)
-            && route.DbConnectionGeneration == dbGeneration)
+        await route.DbSendCloseLock.WaitAsync(CancellationToken.None);
+        try
         {
-            try
+            if (TryGetDbState(out var dbStream, out var dbGeneration)
+                && route.IsDbOpen(dbGeneration))
             {
-                await WriteDbCoreAsync(dbStream, HUtil32.GetBytes($"%X{route.NativeSessionId}$"),
-                    CancellationToken.None);
+                try
+                {
+                    if (NativeGameGateDbProtocol.TryCreateClose(
+                            route.NativeSessionId,
+                            Volatile.Read(ref route.NativeDbOpenContext),
+                            out var closeDb, out _))
+                        await WriteDbCoreAsync(dbStream, closeDb,
+                            CancellationToken.None);
+                }
+                catch { }
             }
-            catch { }
         }
+        finally { route.DbSendCloseLock.Release(); }
 
         if (TryGetGameState(out var gameStream, out var gameGeneration)
             && route.GameConnectionGeneration == gameGeneration)
@@ -418,9 +527,6 @@ internal sealed class SharedBackendHub : IDisposable
             parser.Reset();
             try
             {
-                foreach (var route in _routes.Values)
-                    await EnsureDbRouteOpenAsync(route, cancellationToken);
-
                 while (!cancellationToken.IsCancellationRequested
                        && IsCurrentDbStream(stream, generation))
                 {
@@ -432,9 +538,9 @@ internal sealed class SharedBackendHub : IDisposable
                     {
                         if (frame.Kind == DbServerGatewayFrameKind.NativeControl)
                             await DispatchDbControlAsync(frame,
-                                cancellationToken);
+                                stream, generation, cancellationToken);
                         else
-                            DispatchDbFrame(frame.Data);
+                            DispatchDbFrame(frame.Data, stream, generation);
                     }
                 }
             }
@@ -608,26 +714,120 @@ internal sealed class SharedBackendHub : IDisposable
     }
 
     private async Task<bool> EnsureDbRouteOpenAsync(SharedBackendRoute route,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool waitForRegistration = true,
+        bool waitForOpenReply = true)
     {
         if (route.IsClosed || route.IsInvalidated
             || !await EnsureDbConnectedAsync(cancellationToken)) return false;
+
+        if (!TryGetDbState(out _, out var initialGeneration)) return false;
+        if (!IsDbRegistrationReady(initialGeneration))
+        {
+            if (!waitForRegistration
+                || !await WaitForDbRegistrationAsync(initialGeneration,
+                    cancellationToken))
+                return false;
+        }
+
+        Task<bool>? openCompletion = null;
         await route.DbOpenLock.WaitAsync(cancellationToken);
         try
         {
             if (route.IsClosed || route.IsInvalidated
-                || !TryGetDbState(out var stream, out var generation)) return false;
-            if (route.DbConnectionGeneration == generation) return true;
-            await WriteDbCoreAsync(stream, route.DbOpenFrame, cancellationToken);
-            route.DbConnectionGeneration = generation;
-            return true;
+                || !TryGetDbState(out var stream, out var generation)
+                || !IsDbRegistrationReady(generation)) return false;
+
+            var gateId = RegisteredDbGateId;
+            var routeId = unchecked((uint)
+                NativeGameGateDbProtocol.ComposeRouteId(gateId,
+                    route.NativeSessionId));
+            route.TryBeginDbOpen(generation, routeId,
+                out openCompletion, out var shouldSend);
+            if (shouldSend)
+            {
+                if (!NativeGameGateDbProtocol.TryCreateOpen(
+                        route.NativeSessionId, gateId, route.ClientIp,
+                        out var open, out var error))
+                    throw new InvalidDataException(error);
+                await WriteDbCoreAsync(stream, open, cancellationToken);
+            }
         }
-        catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
+        catch (Exception ex) when (ex is IOException or SocketException
+                                   or ObjectDisposedException
+                                   or InvalidDataException)
         {
-            if (TryGetDbState(out var stream, out _)) InvalidateDb(stream, ex.Message);
+            if (TryGetDbState(out var stream, out _))
+                InvalidateDb(stream, ex.Message);
             return false;
         }
         finally { route.DbOpenLock.Release(); }
+
+        if (!waitForOpenReply) return true;
+        if (openCompletion == null) return false;
+        try
+        {
+            return await openCompletion.WaitAsync(
+                TimeSpan.FromMilliseconds(NativeRegistrationTimeoutMilliseconds),
+                cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            if (TryGetDbState(out var staleStream, out var generation)
+                && route.DbConnectionGeneration == generation)
+                InvalidateDb(staleStream, "native DB route-open timeout");
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    private bool IsDbRegistrationReady(long generation)
+    {
+        lock (_dbStateLock)
+        {
+            return DBConnected && generation == _dbGeneration
+                && _dbRegistrationGeneration == generation
+                && NativeGameGateDbProtocol.IsValidAssignedGateId(
+                    _registeredDbGateId);
+        }
+    }
+
+    private async Task<bool> WaitForDbRegistrationAsync(long generation,
+        CancellationToken cancellationToken)
+    {
+        Task<int>? completion;
+        lock (_dbStateLock)
+        {
+            if (!DBConnected || generation != _dbGeneration
+                || _dbRegistrationGeneration != generation)
+                return false;
+            if (NativeGameGateDbProtocol.IsValidAssignedGateId(
+                    _registeredDbGateId)) return true;
+            completion = _dbRegistrationCompletion?.Task;
+        }
+        if (completion == null) return false;
+
+        try
+        {
+            var assigned = await completion.WaitAsync(
+                TimeSpan.FromMilliseconds(NativeRegistrationTimeoutMilliseconds),
+                cancellationToken);
+            return NativeGameGateDbProtocol.IsValidAssignedGateId(assigned)
+                && IsDbRegistrationReady(generation);
+        }
+        catch (TimeoutException)
+        {
+            if (TryGetDbState(out var staleStream, out var currentGeneration)
+                && currentGeneration == generation)
+                InvalidateDb(staleStream, "native DB registration timeout");
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private async Task<bool> EnsureGameRouteOpenAsync(SharedBackendRoute route,
@@ -743,15 +943,30 @@ internal sealed class SharedBackendHub : IDisposable
                     _dbStream = client.GetStream();
                     _dbGeneration++;
                     DBConnected = true;
+                    _dbRegistrationGeneration = _dbGeneration;
+                    _dbRegistrationCompletion =
+                        new TaskCompletionSource<int>(
+                            TaskCreationOptions.RunContinuationsAsynchronously);
                 }
+                Volatile.Write(ref _registeredDbGateId, 0);
                 Volatile.Write(ref _nextDbConnectTick, 0);
                 Interlocked.Increment(ref _reconnects);
                 _log("INFO", $"DBSvr shared connection {_config.BackendIP}:{_config.BackendPort2}");
+
+                if (!NativeGameGateDbProtocol.TryCreateRegistration(
+                        _config.GatePort, out var registration,
+                        out var registrationError))
+                    throw new InvalidDataException(registrationError);
+                await WriteDbCoreAsync(client.GetStream(), registration,
+                    timeout.Token);
+                _log("TRACE", $"DBSvr gate registration port={_config.GatePort}");
                 return true;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
+                if (TryGetDbState(out var connectedStream, out _))
+                    InvalidateDb(connectedStream, ex.Message);
                 Volatile.Write(ref _nextDbConnectTick, Environment.TickCount64 + 1000);
                 LogBackendError(ref _lastDbErrorTick, "DBSvr", ex.Message);
                 return false;
@@ -847,8 +1062,10 @@ internal sealed class SharedBackendHub : IDisposable
         finally { _gameWriteLock.Release(); }
     }
 
-    private void DispatchDbFrame(byte[] frame)
+    private void DispatchDbFrame(byte[] frame, NetworkStream stream,
+        long generation)
     {
+        if (!IsCurrentDbStream(stream, generation)) return;
         var slash = Array.IndexOf(frame, (byte)'/');
         if (slash <= 1) return;
         var start = 1;
@@ -856,7 +1073,9 @@ internal sealed class SharedBackendHub : IDisposable
         if (!int.TryParse(System.Text.Encoding.ASCII.GetString(frame, start, slash - start),
                 out var handle)) return;
         if (!_routes.TryGetValue(unchecked((uint)handle), out var route) || route.IsClosed
-            || route.IsInvalidated) return;
+            || route.IsInvalidated
+            || route.DbConnectionGeneration != generation
+            || !route.IsDbOpen(generation)) return;
         if (!route.DbResponses.Writer.TryWrite(frame)) route.AbortOnce();
     }
 
@@ -1043,24 +1262,93 @@ internal sealed class SharedBackendHub : IDisposable
         DbServerGatewayFrame frame,
         CancellationToken cancellationToken = default)
     {
+        TryGetDbState(out var stream, out var generation);
+        return await DispatchDbControlAsync(frame, stream, generation,
+            cancellationToken);
+    }
+
+    private async ValueTask<bool> DispatchDbControlAsync(
+        DbServerGatewayFrame frame, NetworkStream? stream, long generation,
+        CancellationToken cancellationToken)
+    {
         if (frame == null
             || frame.Kind != DbServerGatewayFrameKind.NativeControl)
             return false;
 
+        var nativeFrame = new YbDbLegacy77Frame(
+            unchecked((int)frame.ConnectionId), frame.Parameter,
+            frame.Command, frame.Payload);
+
+        if (frame.Command == NativeGameGateDbProtocol.RegisterResponse)
+        {
+            if (!NativeGameGateDbProtocol.TryDecodeRegistrationResponse(
+                    nativeFrame, out var assignedGateId))
+                return true;
+
+            TaskCompletionSource<int>? registrationCompletion;
+            lock (_dbStateLock)
+            {
+                if (stream != null
+                    && (!DBConnected || !ReferenceEquals(stream, _dbStream)
+                        || generation != _dbGeneration
+                        || _dbRegistrationGeneration != generation))
+                    return false;
+                if (Volatile.Read(ref _registeredDbGateId) == 0)
+                    Volatile.Write(ref _registeredDbGateId, assignedGateId);
+                else
+                    assignedGateId = Volatile.Read(ref _registeredDbGateId);
+                registrationCompletion = _dbRegistrationCompletion;
+            }
+            registrationCompletion?.TrySetResult(assignedGateId);
+
+            // The sole DB reader must not wait for command 11 here. Emit each
+            // pending OPEN in order, then return to the read loop for replies.
+            if (stream != null)
+                foreach (var pendingRoute in _routes.Values)
+                {
+                    if (!pendingRoute.IsClosed && !pendingRoute.IsInvalidated)
+                        await EnsureDbRouteOpenAsync(pendingRoute,
+                            cancellationToken, waitForRegistration: false,
+                            waitForOpenReply: false);
+                }
+            return true;
+        }
+
+        if (stream != null && !IsCurrentDbStream(stream, generation))
+            return false;
+
         // Unknown native controls are valid envelopes and are consumed by the
         // original switch default without damaging the shared DB connection.
-        if (frame.Command is not 11 and not 12 and not 21) return true;
+        if (frame.Command is not NativeGameGateDbProtocol.OpenResponse
+            and not 12 and not NativeGameGateDbProtocol.DataResponse
+            and not NativeGameGateDbProtocol.CloseResponse and not 21)
+            return true;
+
+        if (frame.Command == NativeGameGateDbProtocol.CloseResponse)
+            return true;
+
         if (!_routes.TryGetValue(frame.ConnectionId, out var route)
             || route.IsClosed || route.IsInvalidated)
+            return false;
+        if (route.DbConnectionGeneration != generation)
+            return false;
+        if (stream != null
+            && (frame.Command is 12
+                or NativeGameGateDbProtocol.DataResponse)
+            && !route.IsDbOpen(generation))
             return false;
 
         switch (frame.Command)
         {
-            case 11:
+            case NativeGameGateDbProtocol.OpenResponse:
+                if (!NativeGameGateDbProtocol.IsOpenResponse(nativeFrame,
+                        out var openResult)) return true;
+                var acceptedOpen = IsAcceptedDbControlResult(openResult);
+                var firstCompletion = route.CompleteDbOpen(generation,
+                    acceptedOpen, openResult);
+                if (!firstCompletion) return true;
                 ClearNativeRouteState(route);
-                if (!IsAcceptedDbControlResult(frame.Parameter)) return true;
-                Volatile.Write(ref route.NativeDbRouteContext,
-                    frame.Parameter);
+                if (!acceptedOpen) return true;
                 if (route.DbResponses.Writer.TryWrite(
                         CreateNativeDbLoginPrompt(route.NativeSessionId)))
                     return true;
@@ -1071,10 +1359,18 @@ internal sealed class SharedBackendHub : IDisposable
                 // sentinel after every earlier queued response (notably 4040),
                 // then the ordinary client cleanup closes the route.
                 return await route.QueueDbTerminationAsync(cancellationToken);
+            case NativeGameGateDbProtocol.DataResponse:
+                if (!LegacyGateDataCodec.TryDecodeResponse(nativeFrame,
+                        out var dataMessage, out _)) return true;
+                if (route.DbResponses.Writer.TryWrite(
+                        CreateLegacyDbResponseFrame(route.NativeSessionId,
+                            dataMessage))) return true;
+                route.AbortOnce();
+                return false;
             case 21:
                 ClearNativeRouteState(route);
                 if (IsAcceptedDbControlResult(frame.Parameter))
-                    Volatile.Write(ref route.NativeDbRouteContext,
+                    Volatile.Write(ref route.NativeDbControlContext,
                         frame.Parameter);
                 return true;
             default:
@@ -1090,6 +1386,33 @@ internal sealed class SharedBackendHub : IDisposable
         var message = Grobal2.MakeDefaultMsg(Grobal2.SM_LOGIN, 0, 0, 0, 0);
         var encoded = EDcode.EncodeMessage(message);
         while (encoded.Length < Grobal2.DEFBLOCKSIZE) encoded += "0";
+        return HUtil32.GetBytes($"%{connectionId}/#{encoded}!$");
+    }
+
+    private static byte[] CreateLegacyDbResponseFrame(ushort connectionId,
+        LegacyGateDataMessage message)
+    {
+        var header = new ClientPacket
+        {
+            Recog = message.Recog,
+            // Native DB replies already carry the client command. Convert it
+            // back once because GateServer's legacy down-adapter applies the
+            // established ToClient mapping after decoding this frame.
+            Ident = MobileCmdMap.ToServer(message.Ident),
+            Param = message.Param,
+            Tag = message.Tag,
+            Series = message.Series
+        };
+        var encoded = EDcode.EncodeMessage(header);
+        while (encoded.Length < Grobal2.DEFBLOCKSIZE) encoded += "0";
+        if (message.Body.Length > 0)
+        {
+            var body = new byte[message.Body.Length * 2 + 4];
+            var bodyLength = Misc.Encode6BitBufDirect(message.Body,
+                message.Body.Length, body);
+            if (bodyLength > 0)
+                encoded += HUtil32.GetString(body, 0, bodyLength);
+        }
         return HUtil32.GetBytes($"%{connectionId}/#{encoded}!$");
     }
 
@@ -1304,6 +1627,7 @@ internal sealed class SharedBackendHub : IDisposable
     {
         TcpClient? client;
         long invalidatedGeneration;
+        TaskCompletionSource<int>? registrationCompletion;
         lock (_dbStateLock)
         {
             if (expected != null && !ReferenceEquals(expected, _dbStream)) return;
@@ -1312,7 +1636,12 @@ internal sealed class SharedBackendHub : IDisposable
             _dbClient = null;
             _dbStream = null;
             DBConnected = false;
+            registrationCompletion = _dbRegistrationCompletion;
+            _dbRegistrationCompletion = null;
+            _dbRegistrationGeneration = 0;
         }
+        Volatile.Write(ref _registeredDbGateId, 0);
+        registrationCompletion?.TrySetResult(0);
         try { client?.Dispose(); } catch { }
         if (client != null)
         {

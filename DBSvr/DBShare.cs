@@ -80,6 +80,8 @@ namespace DBSvr
         public static StringList DenyChrNameList = null;
         public static StringList g_ClearMakeIndex = null;
         public static TRouteInfo[] g_RouteInfo = new TRouteInfo[20];
+        public static NativeGameGateRegistrationTable NativeGameGateRegistrations
+            { get; } = new NativeGameGateRegistrationTable();
         private static Hashtable ServerIPList = null;
         private static Dictionary<string, short> GateIDList = null;
 
@@ -259,7 +261,7 @@ namespace DBSvr
         public long dwTick10;
         public short nGateID;
         public TGateWireMode WireMode;
-        public ushort NativeRoutePort;
+        public int NativeRoutePort;
         public byte NativeRouteID;
         public NativeGateRouteRegistry NativeRoutes { get; } = new();
         public PercentDollarFrameParser FrameParser = new PercentDollarFrameParser();

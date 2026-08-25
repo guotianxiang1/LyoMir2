@@ -1862,16 +1862,82 @@ static void TestNativeNewCharacterContract()
 
 static void TestNativeGateControlFrames()
 {
+    var registrations = new NativeGameGateRegistrationTable();
+    Check(registrations.TrySet(1, "127.0.0.1", 7100),
+        "native gate endpoint 1 registration");
+    Check(registrations.TrySet(32, "10.0.0.32", 7132),
+        "native gate endpoint 32 registration");
+    Equal((byte)1, registrations.Resolve("127.0.0.1", 7100),
+        "native gate endpoint 1 lookup");
+    Equal((byte)32, registrations.Resolve("10.0.0.32", 7132),
+        "native gate endpoint 32 lookup");
+    Check(registrations.TrySet(31, "10.0.0.31", int.MaxValue)
+          && registrations.Resolve("10.0.0.31", int.MaxValue) == 31,
+        "native gate registration narrowed the DWORD port");
+    Check(registrations.TrySetFromSpecification(2, "10.0.0.2")
+          && registrations.Resolve("10.0.0.2", 7100) == 2,
+        "native gate no-colon default port");
+    Check(registrations.TrySetFromSpecification(3,
+              "10.0.0.3:not-a-port")
+          && registrations.Resolve("10.0.0.3", 7100) == 3,
+        "native gate invalid-port fallback");
+    NativeGameGateRegistrationTable.ParseSpecification(
+        "10.0.0.5:not-a-port", out var publicAddress,
+        out var publicPort);
+    Equal("10.0.0.5", publicAddress,
+        "native public gate parsed address");
+    Equal(7100, publicPort,
+        "native public gate invalid-port fallback");
+    var defaultRegistration = new NativeGameGateRegistrationTable();
+    Check(defaultRegistration.TrySetFromSpecification(4, string.Empty)
+          && defaultRegistration.Resolve("127.0.0.1", 7100) == 4,
+        "native gate missing-entry fallback");
+    Equal((byte)0, registrations.Resolve("127.0.0.1", 7101),
+        "native gate lookup ignored registered port");
+    Equal((byte)0, registrations.Resolve("127.0.0.2", 7100),
+        "native gate lookup ignored remote address");
+    Equal((byte)9, registrations.Resolve("127.0.0.9", 65535),
+        "native gate loopback-nine assignment");
+    Equal((byte)5, registrations.ResolveForRegistration(5,
+            "unmatched", 1),
+        "native gate repeated registration replaced its assigned id");
+    Check(!registrations.TrySet(0, "127.0.0.1", 7100)
+          && !registrations.TrySet(33, "127.0.0.1", 7100),
+        "native gate table accepted an out-of-range gate id");
+
     var register = Convert.FromHexString(
         "77BBAA33BC1B00000000000003000000");
+    Check(NativeGameGateDbProtocol.TryCreateRegistration(7100,
+        out var createdRegister, out var createError), createError);
+    Check(createdRegister.SequenceEqual(register),
+        "native GameGate registration request bytes");
+    Check(NativeGameGateDbProtocol.TryCreateRegistration(int.MaxValue,
+        out var wideRegister, out createError), createError);
+    Check(YbDbLegacy77Codec.TryDecode(wideRegister,
+            out var wideRegistrationFrame, out createError), createError);
+    Equal(int.MaxValue, wideRegistrationFrame.QueryId,
+        "native GameGate registration DWORD port");
     Check(YbDbLegacy77Codec.TryDecode(register, out var request, out var error), error);
     Equal(7100, request.QueryId, "register query");
     Equal((ushort)3, request.Ident, "register ident");
-    Check(NativeGateControlProtocol.TryCreateResponse(request, 0, out var response),
+    Check(!NativeGateControlProtocol.TryCreateResponse(request, 0, out _),
+        "register response accepted an unassigned gate id");
+    Check(NativeGateControlProtocol.TryCreateResponse(request, 1, out var response),
         "register response missing");
     Check(YbDbLegacy77Codec.TryEncode(response, out var encoded, out error), error);
     Check(encoded.SequenceEqual(Convert.FromHexString(
         "77BBAA3301000000000000000D000000")), "register response bytes");
+    Check(NativeGameGateDbProtocol.TryDecodeRegistrationResponse(
+            new YbDbLegacy77Frame(0x101, -7,
+                NativeGameGateDbProtocol.RegisterResponse,
+                new byte[] { 0xAA }), out var assignedGateId)
+          && assignedGateId == 1,
+        "native register response low-byte assignment");
+    Check(!NativeGameGateDbProtocol.TryDecodeRegistrationResponse(
+            new YbDbLegacy77Frame(0x100, 0,
+                NativeGameGateDbProtocol.RegisterResponse,
+                Array.Empty<byte>()), out _),
+        "native register response accepted a zero low byte");
 
     var openPayload = Encoding.ASCII.GetBytes("223.160.203.135\0");
     var open = new YbDbLegacy77Frame(2359, 133431, 1, openPayload);
@@ -1879,6 +1945,10 @@ static void TestNativeGateControlFrames()
     Check(openBytes.SequenceEqual(Convert.FromHexString(
         "77BBAA333709000037090200010010003232332E3136302E3230332E31333500")),
         "captured native gate open bytes");
+    Check(NativeGameGateDbProtocol.TryCreateOpen(2359, 1,
+        "223.160.203.135", out var createdOpen, out createError), createError);
+    Check(createdOpen.SequenceEqual(openBytes),
+        "native GameGate open request bytes");
     Check(NativeGateControlProtocol.TryCreateResponse(open, 0, out response),
         "open response missing");
     Equal(2359, response.QueryId, "open response query");
@@ -1886,6 +1956,11 @@ static void TestNativeGateControlFrames()
     Equal((ushort)11, response.Ident, "open response ident");
 
     var close = new YbDbLegacy77Frame(2359, 1, 6, Array.Empty<byte>());
+    Check(NativeGameGateDbProtocol.TryCreateClose(2359, 1,
+        out var createdClose, out createError), createError);
+    Check(YbDbLegacy77Codec.TryEncode(close, out var closeBytes, out error), error);
+    Check(createdClose.SequenceEqual(closeBytes),
+        "native GameGate close request bytes");
     Check(NativeGateControlProtocol.TryCreateResponse(close, 0, out response),
         "close response missing");
     Equal(2359, response.QueryId, "close response query");
@@ -1904,6 +1979,28 @@ static void TestNativeGateDataFrames()
 {
     var selectRequest = Convert.FromHexString(
         "77BBAA3337090000370902000400110000000000B10F000000000000C1FAC9F100");
+    var selectHeader = new ClientPacket
+    {
+        Recog = 0,
+        Ident = 4017,
+        Param = 0,
+        Tag = 0,
+        Series = 0
+    };
+    Check(NativeGameGateDbProtocol.TryCreateData(2359, 133431,
+        selectHeader, Convert.FromHexString("C1FAC9F1"),
+        out var createdSelect, out var createError), createError);
+    Check(createdSelect.SequenceEqual(selectRequest),
+        "native GameGate data request bytes");
+    Check(NativeGameGateDbProtocol.TryCreateData(2359, 133431,
+        selectHeader, Array.Empty<byte>(), out var emptyRequest,
+        out createError), createError);
+    Check(YbDbLegacy77Codec.TryDecode(emptyRequest,
+        out var emptyOuter, out createError), createError);
+    Equal(13, emptyOuter.Payload.Length,
+        "empty native GameGate data payload length");
+    Equal((byte)0, emptyOuter.Payload[^1],
+        "empty native GameGate data wrapper terminator");
     Check(YbDbLegacy77Codec.TryDecode(
         selectRequest, out var outer, out var error), error);
     Check(LegacyGateDataCodec.TryDecodeRequest(
@@ -1941,6 +2038,12 @@ static void TestNativeGateDataFrames()
     Equal((ushort)14, outer.Ident, "data response outer ident");
     Equal(33, outer.Payload.Length, "list response payload length");
     Equal((byte)0, outer.Payload[^1], "list response trailing zero");
+    Check(LegacyGateDataCodec.TryDecodeResponse(outer,
+        out var listMessage, out error), error);
+    Equal((ushort)4010, listMessage.Ident,
+        "native data response client ident");
+    Check(listMessage.Body.SequenceEqual(listBody),
+        "native data response body bytes");
 }
 
 static void TestNativeLoginResultBody()

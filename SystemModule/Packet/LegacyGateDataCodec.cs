@@ -13,6 +13,20 @@ namespace SystemModule.Packet
         public const ushort ResponseIdent = 14;
         public const int MessageHeaderSize = 12;
 
+        public static YbDbLegacy77Frame CreateRequest(int queryId,
+            int routeId, int recog, ushort ident, ushort param, ushort tag,
+            ushort series, byte[] body)
+        {
+            body ??= Array.Empty<byte>();
+            // Native GameGate always appends one wrapper NUL, including for
+            // an empty logical body. DBServer removes exactly this byte.
+            var payload = new byte[MessageHeaderSize + body.Length + 1];
+            WriteMessageHeader(payload, recog, ident, param, tag, series);
+            body.CopyTo(payload, MessageHeaderSize);
+            return new YbDbLegacy77Frame(queryId, routeId, RequestIdent,
+                payload);
+        }
+
         public static bool TryDecodeRequest(YbDbLegacy77Frame frame,
             out LegacyGateDataMessage message, out string error)
         {
@@ -72,18 +86,58 @@ namespace SystemModule.Packet
             return true;
         }
 
+        public static bool TryDecodeResponse(YbDbLegacy77Frame frame,
+            out LegacyGateDataMessage message, out string error)
+        {
+            message = null;
+            error = string.Empty;
+            if (frame == null)
+            {
+                error = "legacy gate frame is null";
+                return false;
+            }
+            if (frame.Ident != ResponseIdent)
+            {
+                error = $"legacy gate data response ident must be {ResponseIdent}";
+                return false;
+            }
+            if (frame.Payload.Length < MessageHeaderSize)
+            {
+                error = $"legacy gate data payload is shorter than {MessageHeaderSize} bytes";
+                return false;
+            }
+
+            var payload = frame.Payload.AsSpan();
+            message = new LegacyGateDataMessage(
+                BinaryPrimitives.ReadInt32LittleEndian(payload.Slice(0, 4)),
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(4, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(6, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(8, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(10, 2)),
+                payload.Length == MessageHeaderSize
+                    ? Array.Empty<byte>()
+                    : payload.Slice(MessageHeaderSize).ToArray());
+            return true;
+        }
+
         public static YbDbLegacy77Frame CreateResponse(int queryId, int recog,
             ushort ident, ushort param, ushort tag, ushort series, byte[] body)
         {
             body ??= Array.Empty<byte>();
             var payload = new byte[MessageHeaderSize + body.Length];
+            WriteMessageHeader(payload, recog, ident, param, tag, series);
+            body.CopyTo(payload, MessageHeaderSize);
+            return new YbDbLegacy77Frame(queryId, 0, ResponseIdent, payload);
+        }
+
+        private static void WriteMessageHeader(byte[] payload, int recog,
+            ushort ident, ushort param, ushort tag, ushort series)
+        {
             BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(0, 4), recog);
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, 2), ident);
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(6, 2), param);
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(8, 2), tag);
             BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(10, 2), series);
-            body.CopyTo(payload, MessageHeaderSize);
-            return new YbDbLegacy77Frame(queryId, 0, ResponseIdent, payload);
         }
     }
 
