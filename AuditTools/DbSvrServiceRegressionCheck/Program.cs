@@ -16,6 +16,7 @@ Run("native 5100 control frames", TestNativeGateControlFrames);
 Run("native 5100 data frames", TestNativeGateDataFrames);
 Run("native 4004 login result body", TestNativeLoginResultBody);
 Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
+Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4010/4014 character-list rows", TestNativeCharacterListRows);
 Run("native 5600 authentication frames", TestNativeLoginGateFrames);
 Run("native 6000 type1/type2 stream", TestNativeDbServerFrames);
@@ -1832,6 +1833,32 @@ static void TestNativeLoginAlreadyOnline()
               "SendEncodedPacket(userInfo, 4041, 0, 0, 0, 0, null)",
               StringComparison.Ordinal),
         "outgoing 4041 login-chain response was changed");
+}
+
+static void TestNativeOutOfConnectIdent()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var methodStart = source.IndexOf(
+        "private void OutOfConnect(TUserInfo userInfo)",
+        StringComparison.Ordinal);
+    Check(methodStart >= 0, "OutOfConnect method is missing");
+    var methodEnd = source.IndexOf(
+        "\n        // ===================== 手游编码辅助方法 =====================",
+        methodStart, StringComparison.Ordinal);
+    Check(methodEnd > methodStart, "OutOfConnect method boundary is missing");
+    var method = source.Substring(methodStart, methodEnd - methodStart);
+    Check(method.Contains(
+              "userInfo.WireMode == TGateWireMode.Native77",
+              StringComparison.Ordinal)
+          && method.Contains(
+              "Grobal2.SM_OUTOFCONNECTION_4018",
+              StringComparison.Ordinal)
+          && method.Contains(
+              "Grobal2.SM_OUTOFCONNECTION)",
+              StringComparison.Ordinal),
+        "native OutOfConnect must use 4018 while preserving the legacy transport");
 }
 
 static void TestNativeCharacterListRows()

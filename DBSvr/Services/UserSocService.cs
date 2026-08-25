@@ -1778,7 +1778,14 @@ namespace DBSvr
 
         private void OutOfConnect(TUserInfo userInfo)
         {
-            SendEncodedPacket(userInfo, Grobal2.SM_OUTOFCONNECTION,
+            // The 2.08 UserSoc image emits 0xFB2 (4018) on its native
+            // 0x77 line.  Keep the legacy 528 ident only for the private
+            // percent/dollar transport, whose contract is outside that
+            // native capture.
+            var ident = (ushort)(userInfo.WireMode == TGateWireMode.Native77
+                ? Grobal2.SM_OUTOFCONNECTION_4018
+                : Grobal2.SM_OUTOFCONNECTION);
+            SendEncodedPacket(userInfo, ident,
                 0, 0, 0, 0, null);
         }
 
