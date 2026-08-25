@@ -64,6 +64,7 @@ CheckPoseRefusedWhileLocked();
 CheckHorseRunRefusedWhileLocked();
 CheckAllMovementAllowedWhenLockClear();
 CheckGateIsAheadOfIntervalBookkeeping();
+CheckCancelHookPrecedesManagedMovementGate();
 CheckLockValuesThreeAndFive();
 
 Console.WriteLine(
@@ -973,6 +974,28 @@ static void CheckGateIsAheadOfIntervalBookkeeping()
         "refusal must not bump the busy counter");
     Equal(100, player.m_nHealthTick, "refusal must not spend health tick");
     Equal(50, player.m_nSpellTick, "refusal must not spend spell tick");
+}
+
+// Native sub_6BCE2C is entered before the walk/run feasibility gates.  Keep a
+// pending channel visible while the managed action lock refuses both requests;
+// the channel must still be cancelled before ClientWalkXY/ClientRunXY returns.
+static void CheckCancelHookPrecedesManagedMovementGate()
+{
+    var walk = FreePlayer("cancel-before-walk-gate", 5, 5, Grobal2.DR_LEFT);
+    walk.m_boCanWalk = false;
+    walk.m_wNativeChannelMagicId = 0x1234;
+    Assert(walk.Operate(Message(Grobal2.CM_WALK, 5, 4, 0)),
+        "3011 managed gate dispatch");
+    Equal((ushort)0, walk.m_wNativeChannelMagicId,
+        "3011 cancels the native channel before m_boCanWalk gate");
+
+    var run = FreePlayer("cancel-before-run-gate", 5, 5, Grobal2.DR_LEFT);
+    run.m_boCanRun = false;
+    run.m_wNativeChannelMagicId = 0x2345;
+    Assert(run.Operate(Message(Grobal2.CM_RUN, 6, 5, 0)),
+        "3013 managed gate dispatch");
+    Equal((ushort)0, run.m_wNativeChannelMagicId,
+        "3013 cancels the native channel before m_boCanRun gate");
 }
 
 // The two native writes are 5 and 3, chosen by `cmp al,3` at 0x6BC99F, and

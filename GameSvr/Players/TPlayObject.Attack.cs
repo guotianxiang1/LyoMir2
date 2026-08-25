@@ -725,20 +725,14 @@ namespace GameSvr
             bool result = false;
             byte nDir;
             dwDelayTime = 0;
+            // MOVE-11 — native CM_RUN (3013) calls sub_6BCE2C before the
+            // run-action gate.  A request refused by the managed
+            // m_boCanRun lock still cancels the native pending channels.
+            CancelNativeActionChannels();
             if (!m_boCanRun)
             {
                 return result;
             }
-            // MOVE-11 — run handler 3013 runs the cancel hook sub_6BCE2C at
-            // 0x6D9D08, i.e. BEFORE gate3 (`call [edx+0xBC]` @0x6D9D12), gate4
-            // (`call [ecx+0x40]` @0x6D9D23) and the run primitive sub_6BBFBC
-            // (@0x6D9D39): a run that is later refused has still cancelled the
-            // channels. Only the bodyState 0x34 test @0x6D9CEC precedes it, and
-            // that one bails to 0x6DBC2C without ever reaching here (MOVE-10).
-            // m_boCanRun above has no native counterpart on this path (it is the
-            // login/boLockRunAction lock), so the hook sits after it rather than
-            // inventing a cancel inside a C#-only swallow window.
-            CancelNativeActionChannels();
             // MOVE-15 — same gate on the run ladder: `call [ecx+0x40]` at
             // 0x6D9D23 (run case 3013), ahead of the run primitive
             // sub_6BBFBC at 0x6D9D39. Run passes dl=1 to the inherited
@@ -868,16 +862,14 @@ namespace GameSvr
             int n18;
             int n1C;
             dwDelayTime = 0;
+            // MOVE-11 — native CM_WALK (3011) calls sub_6BCE2C before the
+            // walk-action gate.  Keep cancellation observable even when the
+            // managed m_boCanWalk lock refuses the request.
+            CancelNativeActionChannels();
             if (!m_boCanWalk)
             {
                 return result;
             }
-            // MOVE-11 — walk handler 3011 runs the cancel hook sub_6BCE2C at
-            // 0x6D9BEC, ahead of gate3 (`call [edx+0xBC]` @0x6D9BF6), gate4
-            // (`call [ecx+0x40]` @0x6D9C07) and the walk primitive sub_6BBCD8
-            // (@0x6D9C1D), so a walk that is later refused with 0x276 has still
-            // cancelled the channels. Same placement rationale as ClientRunXY.
-            CancelNativeActionChannels();
             // MOVE-15 — gate 4 of the native walk ladder is `call [ecx+0x40]`
             // at 0x6D9C07 (walk case 3011), the TPlayer can-act override
             // sub_6E6700, which refuses while the cast lock +0x574 is set.
