@@ -3067,23 +3067,20 @@ namespace GameSvr
             // m_boTimeRecall is the managed timed-recall state corresponding to
             // that byte; resolve first so an unknown map remains a silent no-op.
             var targetEnvironment = M2Share.MapManager.FindMap(sMap);
-            if (targetEnvironment != null
-                && !ReferenceEquals(targetEnvironment, m_PEnvir)
+            if (targetEnvironment == null)
+            {
+                return;
+            }
+            if (!ReferenceEquals(targetEnvironment, m_PEnvir)
                 && m_btRaceServer == Grobal2.RC_PLAYOBJECT)
             {
                 m_boTimeRecall = false;
             }
 
-            if (sX != 0 && sY != 0)
-            {
-                short nX = sX;
-                short nY = sY;
-                SpaceMove(sMap, nX, nY, 0);
-            }
-            else
-            {
-                MapRandomMove(sMap, 0);
-            }
+            // Native sub_6CE1B8 forwards X and Y independently.  Zero (and
+            // negative values) are sentinels consumed by GetRandomXY, so do
+            // not collapse a single-axis request into MapRandomMove.
+            SpaceMove(targetEnvironment, sX, sY, 0);
         }
 
         internal void ChangeServerMakeSlave(TSlaveInfo slaveInfo)
