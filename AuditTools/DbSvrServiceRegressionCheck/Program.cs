@@ -22,6 +22,7 @@ Run("native DB gate route multimap", TestNativeGateRouteRegistry);
 Run("native 4041 account-owner takeover", TestNativeAccountOwnerTakeover);
 Run("native UserSoc C-string body boundary", TestNativeUserBodyBoundary);
 Run("native UserSoc malformed inner-frame isolation", TestNativeMalformedInnerFrameIsolation);
+Run("native UserSoc header-only 4004 terminal", TestNativeHeaderOnly4004Terminal);
 Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
@@ -3154,6 +3155,35 @@ static void TestNativeMalformedInnerFrameIsolation()
               StringComparison.Ordinal)
           && !failure.Contains("CloseUser(", StringComparison.Ordinal),
         "malformed Native77 data must isolate the routed user and keep the gate alive");
+}
+
+static void TestNativeHeaderOnly4004Terminal()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var caseStart = source.IndexOf("case 4004:", StringComparison.Ordinal);
+    var caseEnd = source.IndexOf("case 4039:", caseStart,
+        StringComparison.Ordinal);
+    Check(caseStart >= 0 && caseEnd > caseStart,
+        "native 4004 case boundary is missing");
+    var block = source.Substring(caseStart, caseEnd - caseStart);
+    var headerOnly = block.IndexOf(
+        "userInfo.WireMode == TGateWireMode.Native77\n"
+        + "                        && string.IsNullOrEmpty(body)",
+        StringComparison.Ordinal);
+    var terminal = block.IndexOf(
+        "OutOfConnect(userInfo, gateInfo)", headerOnly,
+        StringComparison.Ordinal);
+    var sessionMutation = block.IndexOf(
+        "userInfo.nSessionID = pktSessionId", headerOnly,
+        StringComparison.Ordinal);
+    var authDispatch = block.IndexOf(
+        "ProcessMobileLoginAuth(body", headerOnly,
+        StringComparison.Ordinal);
+    Check(headerOnly >= 0 && terminal > headerOnly
+          && sessionMutation > terminal && authDispatch > terminal,
+        "header-only Native77 4004 must terminate before session/auth dispatch");
 }
 
 static void TestNativeSelectEntryRenameContinuation()
