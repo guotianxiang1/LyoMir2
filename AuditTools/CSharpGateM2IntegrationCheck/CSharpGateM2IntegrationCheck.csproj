@@ -9,10 +9,15 @@
     <ProjectReference Include="..\..\SystemModule\SystemModule.csproj" />
     <ProjectReference Include="..\..\GameSvr\GameSvr.csproj" />
     <Compile Include="..\..\GameGate-CS\Core\SharedBackendHub.cs" Link="GameGate\SharedBackendHub.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\GateServer.cs" Link="GameGate\GateServer.cs" />
     <Compile Include="..\..\GameGate-CS\Core\GateConfig.cs" Link="GameGate\GateConfig.cs" />
     <Compile Include="..\..\GameGate-CS\Core\AbusiveFilter.cs" Link="GameGate\AbusiveFilter.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\BanSystem.cs" Link="GameGate\BanSystem.cs" />
     <Compile Include="..\..\GameGate-CS\Core\SessionManager.cs" Link="GameGate\SessionManager.cs" />
     <Compile Include="..\..\GameGate-CS\Core\DelayQueue.cs" Link="GameGate\DelayQueue.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\SpeedDetector.cs" Link="GameGate\SpeedDetector.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\TigerCodec.cs" Link="GameGate\TigerCodec.cs" />
+    <Compile Include="..\..\GameGate-CS\Core\MobileTicketResolver.cs" Link="GameGate\MobileTicketResolver.cs" />
     <Compile Include="..\..\GameGate-CS\Models\ClientSession.cs" Link="GameGate\ClientSession.cs" />
     <Compile Include="..\..\GameGate-CS\Models\GameCommand.cs" Link="GameGate\GameCommand.cs" />
   </ItemGroup>

@@ -222,6 +222,9 @@ try
         "native type-14 payload length");
     Console.WriteLine("PASS native type 14 DATA uses stable route context");
 
+    await VerifyNativeMovementIngressAsync();
+    Console.WriteLine("PASS GateServer movement ingress uses live native route");
+
     var reconnectAccept = fixture.GameListener.AcceptTcpClientAsync();
     fixture.DisconnectFirstGameConnection();
     await WaitUntilAsync(() => Volatile.Read(ref abortCount) == 1,
@@ -267,6 +270,147 @@ static async Task RequireNoOpenReplayAsync(NetworkStream stream, uint staleConnI
     catch (OperationCanceledException) when (timeout.IsCancellationRequested)
     {
     }
+}
+
+static async Task VerifyNativeMovementIngressAsync()
+{
+    var dbListener = new TcpListener(IPAddress.Loopback, 0);
+    var gameListener = new TcpListener(IPAddress.Loopback, 0);
+    dbListener.Start();
+    gameListener.Start();
+    var dbAccept = dbListener.AcceptTcpClientAsync();
+    var gameAccept = gameListener.AcceptTcpClientAsync();
+    var gatePort = GetFreePort();
+    var config = new GateConfig
+    {
+        GateAddr = "127.0.0.1",
+        GatePort = gatePort,
+        BackendIP = "127.0.0.1",
+        BackendPort2 = ((IPEndPoint)dbListener.LocalEndpoint).Port,
+        GameBackendIP = "127.0.0.1",
+        BackendPort = ((IPEndPoint)gameListener.LocalEndpoint).Port,
+        GateIndex = 1,
+        MaxUser = 4,
+        GlobalSpeed = true,
+        ConfigDir = AppContext.BaseDirectory
+    };
+
+    using var gate = new GateServer(config);
+    try
+    {
+        await gate.StartAsync();
+        using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(5));
+        using var gamePeer = await gameAccept.WaitAsync(TimeSpan.FromSeconds(5));
+        var dbStream = dbPeer.GetStream();
+        var gameStream = gamePeer.GetStream();
+
+    var dbRegistration = await ReadDbFrameForFixtureAsync(dbStream);
+    Equal(NativeGameGateDbProtocol.RegisterRequest, dbRegistration.Ident,
+        "GateServer DB registration command");
+    await WriteDbFrameForFixtureAsync(dbStream, new YbDbLegacy77Frame(
+        1, -7, NativeGameGateDbProtocol.RegisterResponse, new byte[] { 0xAA }));
+
+    var gameRegistration = await ReadInternalFrameAsync(gameStream);
+    Equal(NativeGameGateCommands.GateRegistrationRequest,
+        gameRegistration.Cmd, "GateServer M2 registration command");
+    await gameStream.WriteAsync(InternalPacket77.Ack(1, 0,
+        NativeGameGateCommands.M2RegistrationReply).ToBytes());
+    await WaitUntilAsync(() => gate.GameConnected,
+        "GateServer did not establish the fake M2 connection");
+
+    using var client = new TcpClient { NoDelay = true };
+    await client.ConnectAsync(IPAddress.Loopback, gatePort);
+
+    var dbOpen = await ReadDbFrameForFixtureAsync(dbStream);
+    Equal(NativeGameGateDbProtocol.OpenRequest, dbOpen.Ident,
+        "GateServer DB route-open command");
+    await WriteDbFrameForFixtureAsync(dbStream, new YbDbLegacy77Frame(
+        dbOpen.QueryId, 77, NativeGameGateDbProtocol.OpenResponse,
+        Array.Empty<byte>()));
+
+    var gameOpen = await ReadInternalFrameAsync(gameStream);
+    Equal(Grobal2.GM_OPEN, gameOpen.Cmd,
+        "GateServer M2 route-open command");
+    var expectedRoute = SharedBackendRoute.ComposeRouteId(1,
+        checked((ushort)gameOpen.ConnID));
+    Equal(expectedRoute, gameOpen.SeqID,
+        "GateServer M2 route-open stable context");
+    await gameStream.WriteAsync(new InternalPacket77
+    {
+        Magic = InternalPacket77.MAGIC,
+        ConnID = gameOpen.ConnID,
+        SeqID = gameOpen.SeqID,
+        Cmd = Grobal2.GM_SERVERUSERINDEX,
+        Payload = BitConverter.GetBytes(1)
+    }.ToBytes());
+
+    var movement = new[]
+    {
+        (Ident: Grobal2.CM_WALK, Recog: 0x10203040, Param: (ushort)201,
+            Tag: (ushort)7, Series: (ushort)3, Body: new byte[] { 0x11, 0x12 }),
+        (Ident: Grobal2.CM_RUN, Recog: 0x50607080, Param: (ushort)202,
+            Tag: (ushort)8, Series: (ushort)4, Body: new byte[] { 0x21, 0x22, 0x23 }),
+        (Ident: Grobal2.CM_TURN, Recog: unchecked((int)0x90A0B0C0), Param: (ushort)203,
+            Tag: (ushort)9, Series: (ushort)5, Body: new byte[] { 0x31 })
+    };
+    var clientStream = client.GetStream();
+    foreach (var item in movement)
+    {
+        var frame = MobileCodec.WriteFrame(new MobileCodec.InnerHeader
+        {
+            Recog = item.Recog,
+            Ident = item.Ident,
+            Param = item.Param,
+            Tag = item.Tag,
+            Series = item.Series
+        }, item.Body, 0x7000u + item.Ident, MobileCodec.MARKER_DATA);
+        await clientStream.WriteAsync(frame);
+    }
+
+    foreach (var item in movement)
+    {
+        var forwarded = await ReadInternalFrameAsync(gameStream);
+        Equal(InternalPacket77.MAGIC, forwarded.Magic,
+            $"CM_{item.Ident} native 77 magic");
+        Equal(NativeGameGateCommands.GateClientData, forwarded.Cmd,
+            $"CM_{item.Ident} GateClientData command");
+        Equal(gameOpen.ConnID, forwarded.ConnID,
+            $"CM_{item.Ident} native session connection");
+        Equal(expectedRoute, forwarded.SeqID,
+            $"CM_{item.Ident} stable route context");
+        Equal(ClientPacket.PackSize + item.Body.Length, forwarded.Payload.Length,
+            $"CM_{item.Ident} payload length");
+        var clientPacket = Packets.ToPacket<ClientPacket>(forwarded.Payload);
+        Require(clientPacket != null, $"CM_{item.Ident} ClientPacket decode");
+        Equal(item.Recog, clientPacket.Recog, $"CM_{item.Ident} ClientPacket Recog");
+        Equal(item.Ident, clientPacket.Ident, $"CM_{item.Ident} ClientPacket Ident");
+        Equal(item.Param, clientPacket.Param, $"CM_{item.Ident} ClientPacket Param");
+        Equal(item.Tag, clientPacket.Tag, $"CM_{item.Ident} ClientPacket Tag");
+        Equal(item.Series, clientPacket.Series, $"CM_{item.Ident} ClientPacket Series");
+        Require(item.Body.SequenceEqual(forwarded.Payload.AsSpan(ClientPacket.PackSize).ToArray()),
+            $"CM_{item.Ident} body bytes");
+    }
+
+    Equal(0L, gate.TotalDropped,
+        "movement ingress entered the speed delay queue");
+    Equal(3L, gate.TotalPacketsUp, "movement ingress packet count");
+
+    }
+    finally
+    {
+        try { await gate.StopAsync(); } catch { }
+        dbListener.Stop();
+        gameListener.Stop();
+    }
+}
+
+static int GetFreePort()
+{
+    var listener = new TcpListener(IPAddress.Loopback, 0);
+    listener.Start();
+    var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+    listener.Stop();
+    return port;
 }
 
 static async Task WaitUntilAsync(Func<bool> predicate, string failure)
