@@ -53,9 +53,33 @@ Require(messageSource.Contains("ProcessMsg.nParam1,\n                           
         StringComparison.Ordinal),
     "joint-attack direction/x/y fields are not preserved");
 
+var hitArmStart = messageSource.IndexOf(
+    "int nHitGate = RunNativeHitArmGates", StringComparison.Ordinal);
+var immediateHitFailureStart = messageSource.IndexOf(
+    "if (dwDelayTime == 0)", hitArmStart, StringComparison.Ordinal);
+var immediateHitFailureEnd = messageSource.IndexOf(
+    "\n                        else\n", immediateHitFailureStart,
+    StringComparison.Ordinal);
+Require(hitArmStart >= 0 && immediateHitFailureStart > hitArmStart
+        && immediateHitFailureEnd > immediateHitFailureStart,
+    "native hit-failure branch boundary is missing");
+var immediateHitFailure = messageSource[immediateHitFailureStart..
+    immediateHitFailureEnd];
+Require(immediateHitFailure.Contains(
+        "SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0,\n                                0, \"\");",
+        StringComparison.Ordinal),
+    "native hit failure no longer emits the four-zero SM_ACT_FAIL");
+Require(!immediateHitFailure.Contains(
+            "SendRefMsg(Grobal2.RM_MOVEFAIL", StringComparison.Ordinal)
+        && !immediateHitFailure.Contains("ProcessMsg.wIdent",
+            StringComparison.Ordinal)
+        && !immediateHitFailure.Contains("CM_3037", StringComparison.Ordinal),
+    "native hit failure regained a broadcast, request-ident or arm split");
+
 var globalSource = File.ReadAllText(Path.Combine(root, "SystemModule", "Grobal2.cs"));
 var expectedConstants = new[]
 {
+    "public const int SM_ACT_FAIL = 630;",
     "public const int SM_COMMON_INFORMATION = 2821;",
     "public const int SM_SAFE_ZONE_INFO = 4230;",
     "public const int SM_DRINKEXP_STATUS = 2818;",

@@ -1711,20 +1711,12 @@ namespace GameSvr
                     {
                         if (dwDelayTime == 0)
                         {
-                            if (ProcessMsg.wIdent == Grobal2.CM_3037)
-                            {
-                                // CASE2 @0x6D9FAB sends only the four-zero
-                                // SM_ACT_FAIL frame. It has no RM_MOVEFAIL leg.
-                                SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0,
-                                    0, "");
-                            }
-                            else
-                            {
-                                SendRefMsg(Grobal2.RM_MOVEFAIL, 0, 0, 0, 0,
-                                    "");
-                                SendDefMessage(Grobal2.SM_ACT_FAIL,
-                                    (int)ProcessMsg.wIdent, 0, 0, 0, "");
-                            }
+                            // Both native hit arms converge on the same
+                            // four-zero 0x276 block: CASE1 at 0x6D9F0F and
+                            // CASE2 at 0x6D9FAB/0x6D9FE7. Neither broadcasts
+                            // RM_MOVEFAIL or copies the request ident to Recog.
+                            SendDefMessage(Grobal2.SM_ACT_FAIL, 0, 0, 0,
+                                0, "");
                         }
                         else
                         {

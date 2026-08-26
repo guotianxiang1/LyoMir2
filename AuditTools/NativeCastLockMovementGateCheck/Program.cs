@@ -56,6 +56,7 @@ CheckTurnSameDirectionAndWrongCoordinatesFail();
 CheckTurnDropToMapBranch();
 CheckSpellCanActRoutes();
 CheckHitSuccessHasNoMovementActionTick();
+CheckHitFailureIsSingleFourZeroActFail();
 CheckWalkRefusedWhileLocked();
 CheckRunRefusedWhileLocked();
 CheckRun3RefusedWhileLocked();
@@ -324,6 +325,33 @@ static void CheckHitSuccessHasNoMovementActionTick()
         "3028 hit success replaces a stale packet with four-zero 0x275");
     Equal(actionTickSentinel, player.m_dwActionTick,
         "hit success must not write movement action tick");
+}
+
+static void CheckHitFailureIsSingleFourZeroActFail()
+{
+    foreach (var (ident, tag, label) in new[]
+             {
+                 (Grobal2.CM_TWINHIT, 0, "3028 shared hit arm"),
+                 (Grobal2.CM_3037, Grobal2.CM_HIT,
+                     "3027 independent hit arm")
+             })
+    {
+        var player = LockedPlayer(label, 5, 5, Grobal2.DR_LEFT);
+        player.m_boCanHit = true;
+        player.m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_ACT_GOOD,
+            1, 2, 3, 4);
+        var request = Message(ident, 5, 5, Grobal2.DR_RIGHT);
+        request.nParam3 = tag;
+
+        Assert(player.Operate(request), label + " dispatch");
+        Packet(player.m_DefMsg, Grobal2.SM_ACT_FAIL, 0, 0, 0, 0,
+            label + " refusal packet");
+        Equal(1, player.SocketMessages.Count(message =>
+                message.Packet.Ident == Grobal2.SM_ACT_FAIL),
+            label + " sends exactly one SM_ACT_FAIL");
+        Equal(0, CountMessages(player, Grobal2.RM_MOVEFAIL),
+            label + " sends no RM_MOVEFAIL");
+    }
 }
 
 static void CheckTurnLandingEventPrecedesBroadcast()
