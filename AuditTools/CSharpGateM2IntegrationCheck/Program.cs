@@ -359,11 +359,11 @@ static async Task VerifyNativeMovementIngressAsync()
         var frame = MobileCodec.WriteFrame(new MobileCodec.InnerHeader
         {
             Recog = item.Recog,
-            Ident = item.Ident,
+            Ident = checked((ushort)item.Ident),
             Param = item.Param,
             Tag = item.Tag,
             Series = item.Series
-        }, item.Body, 0x7000u + item.Ident, MobileCodec.MARKER_DATA);
+        }, item.Body, 0x7000u + checked((uint)item.Ident), MobileCodec.MARKER_DATA);
         await clientStream.WriteAsync(frame);
     }
 
@@ -382,6 +382,8 @@ static async Task VerifyNativeMovementIngressAsync()
             $"CM_{item.Ident} payload length");
         var clientPacket = Packets.ToPacket<ClientPacket>(forwarded.Payload);
         Require(clientPacket != null, $"CM_{item.Ident} ClientPacket decode");
+        if (clientPacket is null)
+            throw new InvalidOperationException($"CM_{item.Ident} ClientPacket decode");
         Equal(item.Recog, clientPacket.Recog, $"CM_{item.Ident} ClientPacket Recog");
         Equal(item.Ident, clientPacket.Ident, $"CM_{item.Ident} ClientPacket Ident");
         Equal(item.Param, clientPacket.Param, $"CM_{item.Ident} ClientPacket Param");
