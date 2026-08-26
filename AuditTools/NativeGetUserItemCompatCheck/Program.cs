@@ -343,7 +343,7 @@ async Task ResponseSuccessAndAddItemPacket()
     }, fields, "0055 success log");
 
     var packet = await gate.Read();
-    Equal((ushort)Grobal2.GM_DATA, packet.Cmd, "gate command");
+    Equal(NativeGameGateCommands.M2ClientData, packet.Cmd, "native gate DATA command");
     Assert(packet.Payload.Length >= ClientPacket.PackSize + 16,
         "SM_ADDITEM payload is too short");
     var client = Packets.ToPacket<ClientPacket>(

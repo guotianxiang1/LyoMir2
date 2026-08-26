@@ -866,6 +866,8 @@ static void VerifyNativeClientVersionGate()
             }), "first 1018 must be consumed by the pre-dispatch arm");
         Assert(exact.m_boNativeClientVersionHandshakeDone,
             "1018 did not complete the native handshake");
+        Assert(exact.m_boLoginNoticeOK,
+            "1018 did not release the login notice gate");
         Equal("1.2.3.4", exact.m_sNativeClientVersion,
             "1018 native version format");
         Assert(exact.m_boNativeSwitchOffsetB75,

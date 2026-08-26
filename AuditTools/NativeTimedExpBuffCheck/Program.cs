@@ -856,6 +856,7 @@ void CheckClockBaseIsSuppliedByTheSuffixWriter()
     var context = new NativeHumanSessionContext
     {
         UserIp = "127.0.0.1",
+        GateIndex = 1,
         AuthText54 = string.Empty,
         AuthText81 = string.Empty,
         AuthText102 = string.Empty,
