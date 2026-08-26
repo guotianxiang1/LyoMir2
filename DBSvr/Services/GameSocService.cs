@@ -170,6 +170,13 @@ namespace DBSvr
                 continuation ?? (static _ => { }));
         }
 
+        public bool EnqueueNativeNewCharacterRelationLog(
+            byte[] field24, byte[] field28, byte sex, byte[] characterName)
+        {
+            return _nativeRelationLog.EnqueueNewCharacter(
+                field24, field28, sex, characterName);
+        }
+
         public void Start()
         {
             EnsureNativeSaveWorker();

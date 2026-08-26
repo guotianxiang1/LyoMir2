@@ -57,6 +57,9 @@ namespace DBSvr.Core
             if (managerCreationDisabled) return ResultInvalidRequest;
 
             if (request.Job > 3) return ResultInvalidRequest;
+            // 0x5CCFBD..0x5CD01A first enters the result-4 block for a
+            // disabled job 3, then overwrites that result with 5 before the
+            // sex, length, and character-set gates can run.
             if (request.Job == 3 && !allowJobThree)
                 return ResultJobUnavailable;
             if (request.Sex >= 2) return ResultInvalidRequest;

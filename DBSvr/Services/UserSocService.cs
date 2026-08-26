@@ -1645,13 +1645,10 @@ namespace DBSvr
                 if (result == NativeNewCharacterProtocol.ResultPending)
                 {
                     characterName = LegacyGbkText.Decode(request.NameBytes);
-                    // The two global writer/config-key mappings remain blocked,
-                    // so they are not guessed from unrelated managed options.
-                    // Job 3 stays closed because its constructor default is
-                    // directly proven to be zero.
-                    if (!_sensitiveWordFilter.ValidateNativeHeroName(
-                            characterName))
-                        result = NativeNewCharacterProtocol.ResultInvalidRequest;
+                    // The native 0x5CCDE4 gate has already validated the raw
+                    // GBK bytes.  Do not apply the separate managed hero-name
+                    // policy here: its prefix/byte rules are not present in
+                    // the 2.08 CM_NEWCHR path and would reject valid names.
                 }
 
                 if (result == NativeNewCharacterProtocol.ResultPending
@@ -1730,6 +1727,21 @@ namespace DBSvr
             SendEncodedPacket(userInfo, NativeNewCharacterProtocol.Command,
                 0, result, 0, 0, null);
             created = result == NativeNewCharacterProtocol.ResultSuccess;
+            var auth = userInfo.NativeAuthResponse;
+            if (created
+                && auth != null
+                && NativeRelationLogProtocol.TryReadAuthField24(
+                    auth.RawPayload, out var field24)
+                && NativeRelationLogProtocol.TryReadAuthField28(
+                    auth.RawPayload, out var field28))
+            {
+                // Native 0x5CD0D2/0x5CD0E1 passes the request's raw name and
+                // the UserSoc Self+0x24/0x28 fields to 0x590A54.  Queue this
+                // only when the authenticated Native77 record is available;
+                // restore paths without that record remain fail-closed.
+                _gameSocService.EnqueueNativeNewCharacterRelationLog(
+                    field24, field28, request.Sex, request.NameBytes);
+            }
             return true;
         }
 

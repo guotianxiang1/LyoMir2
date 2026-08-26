@@ -14,6 +14,77 @@ namespace DBSvr.Core
             System.Text.Encoding.ASCII.GetBytes("@$&#$");
         private static readonly byte[] End =
             System.Text.Encoding.ASCII.GetBytes("#$@#&");
+        private static readonly byte[] NewCharacterPrefix =
+            System.Text.Encoding.ASCII.GetBytes("3@$&#$");
+        private static readonly byte[] Zero =
+            System.Text.Encoding.ASCII.GetBytes("0");
+        private static readonly byte[] One =
+            System.Text.Encoding.ASCII.GetBytes("1");
+
+        // Native UserSoc+0x24/+0x28 are copied from the 21-byte ShortString
+        // slots at LoginGate auth payload+0x0C/+0x36 (0x5CEE76/0x5CE87E).
+        // Keep both as raw bytes: decoding and re-encoding would corrupt an
+        // AnsiString containing non-ASCII account/session data.
+        public const int AuthField24Offset = 12;
+        public const int AuthField28Offset = 54;
+        public const int AuthField24Capacity = 21;
+        public const int AuthField28Capacity = 21;
+
+        public static bool TryReadAuthField24(byte[] rawPayload,
+            out byte[] value)
+        {
+            return TryReadAuthField(rawPayload, AuthField24Offset,
+                AuthField24Capacity, out value);
+        }
+
+        public static bool TryReadAuthField28(byte[] rawPayload,
+            out byte[] value)
+        {
+            return TryReadAuthField(rawPayload, AuthField28Offset,
+                AuthField28Capacity, out value);
+        }
+
+        private static bool TryReadAuthField(byte[] rawPayload, int offset,
+            int capacity, out byte[] value)
+        {
+            value = Array.Empty<byte>();
+            if (rawPayload == null || offset < 0
+                || rawPayload.Length < offset + capacity)
+                return false;
+
+            var field = rawPayload.AsSpan(offset, capacity);
+            var length = field.IndexOf((byte)0);
+            if (length < 0) length = field.Length;
+            value = field.Slice(0, length).ToArray();
+            return true;
+        }
+
+        /// <summary>
+        /// Builds the successful-NewChr relation record emitted by native
+        /// 0x590A54.  field24 and field28 deliberately retain their raw
+        /// session-offset names until the writer for Self+0x28 is proven.
+        /// </summary>
+        public static byte[] BuildNewCharacterMessage(byte[] field24,
+            byte[] field28, byte sex, byte[] characterName)
+        {
+            field24 ??= Array.Empty<byte>();
+            field28 ??= Array.Empty<byte>();
+            characterName ??= Array.Empty<byte>();
+
+            using var output = new MemoryStream();
+            output.Write(NewCharacterPrefix);
+            output.Write(characterName);
+            output.Write(Separator);
+            output.Write(field28);
+            output.Write(Separator);
+            output.Write(Zero);
+            output.Write(Separator);
+            output.Write(field24);
+            output.Write(Separator);
+            output.Write(sex == 0 ? Zero : One);
+            output.Write(End);
+            return output.ToArray();
+        }
 
         public static List<byte[]> BuildMessages(NativeType2Message request,
             Func<byte[], byte[]> ownerResolver,
@@ -200,6 +271,24 @@ namespace DBSvr.Core
             if (messages.Count == 0) return true;
             lock (_sync)
                 foreach (var message in messages) _pending.Enqueue(message);
+            return true;
+        }
+
+        /// <summary>
+        /// Queues the relation record emitted by native 0x590A54 after a
+        /// successful Native77 4012.  The caller supplies the proven raw
+        /// Self+0x24, Self+0x28, sex and character-name fields.
+        /// </summary>
+        public bool EnqueueNewCharacter(byte[] field24, byte[] field28,
+            byte sex, byte[] characterName)
+        {
+            var message = NativeRelationLogProtocol.BuildNewCharacterMessage(
+                field24, field28, sex, characterName);
+            lock (_sync)
+            {
+                _pending.Enqueue(message);
+                _wake.Set();
+            }
             return true;
         }
 

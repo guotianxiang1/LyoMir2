@@ -2146,6 +2146,22 @@ static void TestNativeNewCharacterContract()
         NativeNewCharacterProtocol.ValidateFixedGates(request,
             false, false, false), "4012 ordinary fixed gates");
 
+    // The native 0x5CCDE4 whitelist accepts two-or-more alphanumeric ASCII
+    // bytes without the separate hero-name prefix policy.  Keep this edge
+    // fixture so a future refactor cannot reintroduce that false negative.
+    var nativeAsciiNameBody = new byte[NativeNewCharacterProtocol.BodySize];
+    var nativeAsciiName = Encoding.ASCII.GetBytes("GM0A");
+    nativeAsciiNameBody[0] = (byte)nativeAsciiName.Length;
+    nativeAsciiName.CopyTo(nativeAsciiNameBody, 1);
+    nativeAsciiNameBody[17] = 2;
+    nativeAsciiNameBody[18] = 0;
+    Check(NativeNewCharacterProtocol.TryDecode(nativeAsciiNameBody,
+            out var nativeAsciiRequest)
+          && NativeNewCharacterProtocol.ValidateFixedGates(
+              nativeAsciiRequest, false, false, false)
+             == NativeNewCharacterProtocol.ResultPending,
+        "4012 native whitelist must not apply hero-only GM0 prefix rules");
+
     body[17] = 3;
     NativeNewCharacterProtocol.TryDecode(body, out var jobThree);
     Equal(NativeNewCharacterProtocol.ResultJobUnavailable,
@@ -2154,6 +2170,33 @@ static void TestNativeNewCharacterContract()
     Equal(NativeNewCharacterProtocol.ResultPending,
         NativeNewCharacterProtocol.ValidateFixedGates(jobThree,
             false, false, true), "4012 enabled job-3 gate");
+
+    var jobThreeInvalidSexBody = (byte[])body.Clone();
+    jobThreeInvalidSexBody[18] = 2;
+    NativeNewCharacterProtocol.TryDecode(jobThreeInvalidSexBody,
+        out var jobThreeInvalidSex);
+    Equal(NativeNewCharacterProtocol.ResultJobUnavailable,
+        NativeNewCharacterProtocol.ValidateFixedGates(jobThreeInvalidSex,
+            false, false, false),
+        "4012 disabled job-3 precedes invalid sex");
+
+    var jobThreeInvalidLengthBody = (byte[])body.Clone();
+    jobThreeInvalidLengthBody[0] = 3;
+    NativeNewCharacterProtocol.TryDecode(jobThreeInvalidLengthBody,
+        out var jobThreeInvalidLength);
+    Equal(NativeNewCharacterProtocol.ResultJobUnavailable,
+        NativeNewCharacterProtocol.ValidateFixedGates(jobThreeInvalidLength,
+            false, false, false),
+        "4012 disabled job-3 precedes invalid name length");
+
+    var jobThreeInvalidCharacterBody = (byte[])body.Clone();
+    jobThreeInvalidCharacterBody[1] = 0x01;
+    NativeNewCharacterProtocol.TryDecode(jobThreeInvalidCharacterBody,
+        out var jobThreeInvalidCharacter);
+    Equal(NativeNewCharacterProtocol.ResultJobUnavailable,
+        NativeNewCharacterProtocol.ValidateFixedGates(jobThreeInvalidCharacter,
+            false, false, false),
+        "4012 disabled job-3 precedes invalid name characters");
 
     body[17] = 4;
     NativeNewCharacterProtocol.TryDecode(body, out var jobFour);
@@ -2220,7 +2263,17 @@ static void TestNativeNewCharacterContract()
         StringComparison.Ordinal);
     var limit = method.IndexOf("else if (activeCharacterCount >= 4)",
         StringComparison.Ordinal);
+    var responseSend = method.IndexOf(
+        "SendEncodedPacket(userInfo, NativeNewCharacterProtocol.Command,",
+        StringComparison.Ordinal);
+    var createdAssignment = method.IndexOf(
+        "created = result == NativeNewCharacterProtocol.ResultSuccess;",
+        StringComparison.Ordinal);
+    var relationEnqueue = method.IndexOf(
+        "EnqueueNativeNewCharacterRelationLog(", StringComparison.Ordinal);
     Check(method.Contains("NativeNewCharacterProtocol.TryDecode",
+              StringComparison.Ordinal)
+          && !method.Contains("ValidateNativeHeroName",
               StringComparison.Ordinal)
           && method.Contains("_heroRecordService.IsHeroNameExists",
               StringComparison.Ordinal)
@@ -2231,6 +2284,11 @@ static void TestNativeNewCharacterContract()
           && method.Contains("hair: 0", StringComparison.Ordinal)
           && method.Contains("level: level", StringComparison.Ordinal)
           && method.Contains("NativeNewCharacterProtocol.Command",
+              StringComparison.Ordinal)
+          && responseSend >= 0 && createdAssignment > responseSend
+          && relationEnqueue > createdAssignment
+          && method.Contains(
+              "NativeRelationLogProtocol.TryReadAuthField28(",
               StringComparison.Ordinal)
           && source.Contains("unchecked((byte)Convert.ToInt32(reader[\"Level\"]))",
               StringComparison.Ordinal)
@@ -4681,6 +4739,40 @@ static void TestNativeRelationLog()
     };
     byte[] Owner(byte[] name) => owners.TryGetValue(
         Encoding.ASCII.GetString(name), out var value) ? value : Array.Empty<byte>();
+
+    var newCharacterSex0 = NativeRelationLogProtocol.BuildNewCharacterMessage(
+        Encoding.ASCII.GetBytes("F24"), Encoding.ASCII.GetBytes("F28"), 0,
+        Encoding.ASCII.GetBytes("NAME"));
+    Equal("3@$&#$NAME@$&#$F28@$&#$0@$&#$F24@$&#$0#$@#&",
+        Text(newCharacterSex0), "NewChr relation record sex 0");
+    var newCharacterSex1 = NativeRelationLogProtocol.BuildNewCharacterMessage(
+        Encoding.ASCII.GetBytes("F24"), Encoding.ASCII.GetBytes("F28"), 1,
+        Encoding.ASCII.GetBytes("NAME"));
+    Equal("3@$&#$NAME@$&#$F28@$&#$0@$&#$F24@$&#$1#$@#&",
+        Text(newCharacterSex1), "NewChr relation record sex 1");
+
+    var authPayload = new byte[NativeLoginGateProtocol.AuthResponsePayloadSize];
+    authPayload[NativeRelationLogProtocol.AuthField24Offset] = 0xD6;
+    authPayload[NativeRelationLogProtocol.AuthField24Offset + 1] = 0xD0;
+    authPayload[NativeRelationLogProtocol.AuthField24Offset + 2] = 0xCE;
+    authPayload[NativeRelationLogProtocol.AuthField24Offset + 3] = 0xC4;
+    Check(NativeRelationLogProtocol.TryReadAuthField24(authPayload,
+            out var field24FromAuth)
+        && field24FromAuth.SequenceEqual(new byte[] { 0xD6, 0xD0, 0xCE, 0xC4 }),
+        "NewChr relation field24 did not preserve raw GBK account bytes");
+    Encoding.ASCII.GetBytes("F28").CopyTo(authPayload,
+        NativeRelationLogProtocol.AuthField28Offset);
+    authPayload[NativeRelationLogProtocol.AuthField28Offset + 3] = 0;
+    authPayload[NativeRelationLogProtocol.AuthField28Offset + 4] = (byte)'X';
+    Check(NativeRelationLogProtocol.TryReadAuthField28(authPayload,
+            out var field28FromAuth)
+        && Text(field28FromAuth) == "F28",
+        "NewChr relation field28 did not preserve the first-NUL raw field");
+    Check(!NativeRelationLogProtocol.TryReadAuthField28(
+            new byte[NativeRelationLogProtocol.AuthField28Offset
+                + NativeRelationLogProtocol.AuthField28Capacity - 1],
+            out _),
+        "NewChr relation field28 accepted a short auth payload");
 
     var request = new NativeType2Message
     {
