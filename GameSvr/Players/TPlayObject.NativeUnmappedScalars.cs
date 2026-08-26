@@ -24,6 +24,7 @@ namespace GameSvr
         //  rec+0x0D4 <- obj+0x67E  FightZoneDieCount(By) enc 0x6B11AA dec 0x6B00E0
         //  rec+0x16E <- obj+0xB85  PlatLv      (Byte)    enc 0x6B1388 dec 0x6B0577
         //  rec+0x5E8 <- obj+0xAF0  JiaYouPoint (Cardinal)enc 0x6B12B2 dec 0x6AFF34
+        //  rec+0x0D6 <- obj+0xBA3  GroupRecallCooldown(Byte) enc 0x6B11CE dec 0x6B00E9
         //  rec+0x0D7 <- obj+0xBA4  AllowGroupReCall(By)  enc 0x6B11DA dec 0x6B0104
         //  rec+0x0D5 <- obj+0xB86  ColorSayTier(Byte)    enc 0x6B137C dec 0x6B0495
         //
@@ -64,6 +65,12 @@ namespace GameSvr
         internal const int NativeLuckNumOffset = 0x00CC;
         internal const int NativeAttackModeOffset = 0x00D0;
         internal const int NativeFightZoneDieCountOffset = 0x00D4;
+        /// <summary>
+        /// <c>rec+0x00D6</c> &lt;-&gt; <c>obj+0xBA3</c>, BYTE.  Native SAVE
+        /// (0x6B11CE) and LOAD (0x6B00E9) carry the 天地合一 cooldown in
+        /// seconds.  This is distinct from the adjacent allow toggle.
+        /// </summary>
+        internal const int NativeGroupRecallCooldownOffset = 0x00D6;
         internal const int NativeAllowGroupReCallOffset = 0x00D7;
         internal const int NativeColorSayTierOffset = 0x00D5;
         internal const int NativePlatLvOffset = 0x016E;
@@ -161,6 +168,10 @@ namespace GameSvr
             // treats every other value (including out-of-range ones) as the
             // third colour, so a raw load is the faithful behaviour.
             m_btNativeColorSayTier = raw[NativeColorSayTierOffset];
+            // Native LOAD copies rec+0xD6 to obj+0xBA3 as a plain byte.  The
+            // runtime consumer applies its countdown semantics; the codec does
+            // not clamp, so preserve every raw byte here.
+            m_btGroupRecallCd = raw[NativeGroupRecallCooldownOffset];
             // 0x6B0104 stores the byte raw, and the only writer (the GM xor at
             // 0x623993) keeps it in {0,1}, so any non-zero record byte means the
             // toggle was on.
@@ -195,6 +206,7 @@ namespace GameSvr
                        && m_btAttatckMode == 0 && m_nFightZoneDieCount == 0
                        && m_btPlatLv == 0 && !m_boAllowGroupReCall
                        && m_btNativeColorSayTier == 0
+                       && m_btGroupRecallCd == 0
                        && m_nNativeTradeProtectAmount == 0
                        && m_nNativeYuanBaoTradeAccum == 0
                        && m_btNativeDamageShare == 0
@@ -215,6 +227,9 @@ namespace GameSvr
             // the tier is written even when the countdown has already expired.
             // Do NOT gate this on m_nNativeThirdBuffSeconds > 0.
             raw[NativeColorSayTierOffset] = m_btNativeColorSayTier;
+            // Native SAVE writes obj+0xBA3 to rec+0xD6 unconditionally as a
+            // BYTE; do not normalize the live countdown on persistence.
+            raw[NativeGroupRecallCooldownOffset] = m_btGroupRecallCd;
             // enc 0x6B11DA copies obj+0xBA4 as a plain byte; the native domain is
             // {0,1} because 0x623993 only ever xors bit 0.
             raw[NativeAllowGroupReCallOffset] =

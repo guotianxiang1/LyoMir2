@@ -57,10 +57,11 @@ namespace GameSvr
     //  target SpaceMove to the owner's front tile (GetFrontPosition + range-3
     //  GetRecallXY) are reused verbatim rather than re-synthesised.
     //
-    //  field map (both transient — sub_6B0FF0 saves NEITHER; fresh object => 0,
-    //  matching the native InitInstance zero-fill):
+    //  field map (the last-use tick is transient; the cooldown byte is
+    //  persisted by sub_6B0FF0 at rec+0xD6):
     //      obj+0x728 -> m_dwGroupRecallLastTick  (last-use tick)
-    //      obj+0xBA3 -> m_btGroupRecallCd        (down-counting cooldown byte)
+    //      obj+0xBA3 -> m_btGroupRecallCd        (down-counting cooldown byte,
+    //                                             rec+0xD6)
     //      obj+0xBA4 -> m_boAllowGroupReCall     (already modeled, TBaseObject.cs)
     //
     //  colour convention (verified against the committed ports): the native
@@ -103,7 +104,8 @@ namespace GameSvr
 
         // native obj+0xBA3 — down-counting cooldown byte (seconds). Set to 0xB4
         // (180) after every accepted attempt, decremented by whole elapsed
-        // seconds on each subsequent attempt. Transient (not persisted).
+        // seconds on each subsequent attempt. Persisted as rec+0xD6 by the
+        // native SAVE/LOAD pair.
         private byte m_btGroupRecallCd;
 
         /// <summary>

@@ -14,6 +14,7 @@
 //   rec+0x50C <-> obj+0x18A0 TradeProtect Word      enc 0x6B12B8/0x6B12BF dec 0x6B06D0
 //   rec+0x534 <-> obj+0x18A4 YuanBaoAccum Word      enc 0x6B12C6/0x6B12CD dec 0x6B06BC
 //   rec+0x537 <-> obj+0x578  DamageShare  Byte      enc 0x6B12ED/0x6B12F3 dec 0x6B07ED/0x6B07F6
+//   rec+0x0D6 <-> obj+0xBA3  GroupRecallCooldown Byte enc 0x6B11CE dec 0x6B00E9
 //
 // The three added 2026-08-09 sit in the same straight-line group as 0x5E8: the
 // encoder does 0x6B12B2 (0x5E8) then 0x6B12BF (0x50C) then 0x6B12CD (0x534), all
@@ -45,6 +46,7 @@ const int JiaYouPointOffset = 0x05E8;  // enc 0x6B12B2
 const int TradeProtectOffset = 0x050C; // enc 0x6B12BF
 const int YuanBaoAccumOffset = 0x0534; // enc 0x6B12CD
 const int DamageShareOffset = 0x0537;  // enc 0x6B12F3
+const int GroupRecallCooldownOffset = 0x00D6; // enc 0x6B11CE / dec 0x6B00E9
 const int YuanBaoAccumCap = 0x01F4;    // 0x633D7C / 0x6F1652
 
 PrepareRuntimeConfig();
@@ -63,14 +65,15 @@ CheckShortRecordIsFailSafe();
 CheckNewTrioRoundTrips();
 CheckYuanBaoAccumulatorResetsNotClamps();
 CheckNewTrioWidthsAndNeighbours();
+CheckGroupRecallCooldownRoundTrip();
 
 Console.WriteLine(
-    "NativeUnmappedSaveScalarsCheck PASS slots=9 " +
+    "NativeUnmappedSaveScalarsCheck PASS slots=10 " +
     "pk=0x0C8 luck=0x0CC atkmode=0x0D0 fzdie=0x0D4 platlv=0x16E jiayou=0x5E8 " +
     "tradeprotect=0x50C yuanbaoaccum=0x534(cap0x1F4=RESET-not-clamp) " +
-    "dmgshare=0x537(unsigned) " +
-    "enc=6B116B/6B1177/6B1183/6B11AA/6B1388/6B12B2/6B12BF/6B12CD/6B12F3 " +
-    "dec=6AFEFC/6AFF0E/6AFFEA/6B00E0/6B0577/6AFF34/6B06D0/6B06BC/6B07ED");
+    "dmgshare=0x537(unsigned) groupcd=0x0D6(byte) " +
+    "enc=6B116B/6B1177/6B1183/6B11AA/6B1388/6B12B2/6B12BF/6B12CD/6B12F3/6B11CE " +
+    "dec=6AFEFC/6AFF0E/6AFFEA/6B00E0/6B0577/6AFF34/6B06D0/6B06BC/6B07ED/6B00E9");
 
 // The constants the production code uses must equal the native EAs above.
 static void CheckOffsetConstants()
@@ -87,6 +90,8 @@ static void CheckOffsetConstants()
         "rec+0x16E constant (enc 0x6B1388 <- [ebx+0xB85] PlatLv)");
     Equal(JiaYouPointOffset, ConstOf("NativeJiaYouPointOffset"),
         "rec+0x5E8 constant (enc 0x6B12B2 <- [ebx+0xAF0] JiaYouPoint)");
+    Equal(GroupRecallCooldownOffset, ConstOf("NativeGroupRecallCooldownOffset"),
+        "rec+0x0D6 constant (enc 0x6B11CE <- [obj+0xBA3] cooldown)");
 }
 
 // Full load path: a native record with nonzero values must reach the live object
@@ -245,6 +250,12 @@ static void CheckShortRecordIsFailSafe()
     player.m_nPkPoint = 5;
     Assert(!Persist(player), "short record with a nonzero field must report failure");
 
+    var cooldownPlayer = NewPlayer();
+    cooldownPlayer.m_NativeHumanData = new byte[0x100];
+    SetGroupRecallCooldown(cooldownPlayer, 1);
+    Assert(!Persist(cooldownPlayer),
+        "short record with a nonzero group-recall cooldown must report failure");
+
     var clean = NewPlayer();
     clean.m_NativeHumanData = new byte[0x100];
     Assert(Persist(clean), "short record with all-zero fields is vacuously fine");
@@ -387,6 +398,42 @@ static void CheckNewTrioWidthsAndNeighbours()
         "nor may it reach rec+0x050F");
 }
 
+static void CheckGroupRecallCooldownRoundTrip()
+{
+    Equal(GroupRecallCooldownOffset,
+        ConstOf("NativeGroupRecallCooldownOffset"),
+        "group-recall cooldown offset must be rec+0x00D6");
+
+    // Native LOAD/SAVE use a single raw byte. Exercise the ordinary domain,
+    // both adjacent out-of-domain values, and 0xFF to prove no managed clamp
+    // or signed conversion has slipped into the persistence path.
+    foreach (var value in new byte[] { 0, 1, 180, 181, 255 })
+    {
+        var raw = new byte[RecordSize];
+        raw[GroupRecallCooldownOffset - 1] = 0xA1;
+        raw[GroupRecallCooldownOffset] = value;
+        raw[GroupRecallCooldownOffset + 1] = 0xB2;
+
+        var loaded = LoadInto(raw);
+        Equal(value, ReadGroupRecallCooldown(loaded),
+            $"rec+0x00D6={value} must restore obj+0xBA3 as a raw byte");
+
+        var live = NewPlayer();
+        live.m_NativeHumanData = raw;
+        var changed = unchecked((byte)(value ^ 0x5A));
+        live.m_btNativeColorSayTier = 0xA1;
+        live.m_boAllowGroupReCall = true;
+        SetGroupRecallCooldown(live, changed);
+        Assert(Persist(live), "group-recall cooldown persist must succeed");
+        Equal(changed, raw[GroupRecallCooldownOffset],
+            $"live obj+0xBA3={changed} must save to rec+0x00D6");
+        Equal((byte)0xA1, raw[GroupRecallCooldownOffset - 1],
+            "cooldown BYTE write must not touch rec+0x00D5");
+        Equal((byte)0x01, raw[GroupRecallCooldownOffset + 1],
+            "cooldown BYTE write must not touch rec+0x00D7");
+    }
+}
+
 static TPlayObject LoadInto(byte[] raw)
 {
     var human = new THumDataInfo { NativeData = raw };
@@ -415,6 +462,22 @@ static object Invoke(TPlayObject player, string name)
         BindingFlags.Instance | BindingFlags.NonPublic);
     Assert(method != null, name + " not found");
     return method!.Invoke(player, Array.Empty<object>());
+}
+
+static byte ReadGroupRecallCooldown(TPlayObject player)
+{
+    var field = typeof(TPlayObject).GetField("m_btGroupRecallCd",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Assert(field != null, "m_btGroupRecallCd not found");
+    return (byte)field!.GetValue(player);
+}
+
+static void SetGroupRecallCooldown(TPlayObject player, byte value)
+{
+    var field = typeof(TPlayObject).GetField("m_btGroupRecallCd",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Assert(field != null, "m_btGroupRecallCd not found");
+    field!.SetValue(player, value);
 }
 
 static int ConstOf(string name)
