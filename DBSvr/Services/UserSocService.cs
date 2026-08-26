@@ -1133,21 +1133,38 @@ namespace DBSvr
                     break;
 
                 case Grobal2.CM_DELCHR:
-                    if ((HUtil32.GetTickCount() - userInfo.dwChrTick) > 1000)
+                    // Native 0x5CE3A7 has no elapsed-tick gate; the worker is
+                    // entered for every non-empty request. Keep the legacy
+                    // private transport's compatibility throttle unchanged.
+                    var nativeDelete = userInfo.WireMode == TGateWireMode.Native77;
+                    if (nativeDelete
+                        || (HUtil32.GetTickCount() - userInfo.dwChrTick) > 1000)
                     {
-                        userInfo.dwChrTick = HUtil32.GetTickCount();
+                        if (!nativeDelete)
+                            userInfo.dwChrTick = HUtil32.GetTickCount();
                         if (!string.IsNullOrEmpty(userInfo.sAccount) &&
                             _loginService.CheckSession(userInfo.sAccount, userInfo.sUserIPaddr, userInfo.nSessionID))
                         {
                             _lastDelChrResendList = false;
-                            try { DelChr(body, ref userInfo); userInfo.boChrQueryed = false; }
+                            var deleteHandled = true;
+                            try
+                            {
+                                deleteHandled = DelChr(body, ref userInfo);
+                                userInfo.boChrQueryed = false;
+                            }
                             catch (Exception ex) { Log($"[DelChr] Exception: {ex.Message}"); }
                             // 0x5CC927 cmp word [ebp-0x16],1 / 0x5CC92C jne 0x5CC997
                             // ⇒ 原版**只有删除真的成功**才重建并重发角色列表。
                             // 原来这里无条件重发，配额用尽/已待删/不是本账号时也会多发一帧。
-                            if (_lastDelChrResendList &&
+                            if (deleteHandled && _lastDelChrResendList &&
                                 userInfo.nSessionID > 0 && !string.IsNullOrEmpty(userInfo.sAccount))
                                 QueryChr(EDcode.EncodeString(userInfo.sAccount + "/" + userInfo.nSessionID), ref userInfo, ref gateInfo);
+
+                            // Native worker fn_5CC8B8 returns false when the
+                            // name length is >14 bytes; the common dispatcher
+                            // then emits the single 4018 terminal packet.
+                            if (!deleteHandled && nativeDelete)
+                                OutOfConnect(userInfo, gateInfo);
                         }
                         else OutOfConnect(userInfo, gateInfo);
                     }
@@ -1919,7 +1936,7 @@ namespace DBSvr
         /// 这里保留仓库既有的 SM_DELCHR_* 常量做映射（MobileCmdMap 把两者都映回
         /// 客户端 4013），但语义按原版统一成「一个 ident + 返回码」。
         /// </summary>
-        private void DelChr(string sData, ref TUserInfo userInfo)
+        private bool DelChr(string sData, ref TUserInfo userInfo)
         {
             var sChrName = EDcode.DeCodeString(sData)?.TrimEnd('\0');
             Log($"[DelChr] name='{sChrName}' sAccount={userInfo.sAccount}");
@@ -1930,8 +1947,8 @@ namespace DBSvr
             var nameBytes = LegacyGbkText.Encode(sChrName ?? string.Empty);
             if (nameBytes.Length > 0x0E)
             {
-                Log($"[DelChr] name too long ({nameBytes.Length} bytes) -> native sends NOTHING");
-                return;
+                Log($"[DelChr] name too long ({nameBytes.Length} bytes) -> native leaves handler unhandled");
+                return false;
             }
 
             var result = DelChrWorker(sChrName, ref userInfo);
@@ -1944,6 +1961,7 @@ namespace DBSvr
             // 0x5CC927 cmp word [ebp-0x16],1 / 0x5CC92C jne ⇒ 仅成功才重发列表。
             // 调用方（case CM_DELCHR）据此决定是否 QueryChr。
             _lastDelChrResendList = result == NativeDelChrResult.Deleted;
+            return true;
         }
 
         /// <summary>
@@ -2001,10 +2019,14 @@ namespace DBSvr
             // BLOCKED：生产者未定位（见 NativeDelChrResult.GloballyDisabled 注释），
             // 故此处不产生 7，等价于开关关闭。
 
-            // 0x5A59F8 跨服锁定 rec+0x1E → 返回 6。
-            // BLOCKED：该标志由 ISM 跨服链路（0x59C970，内层 ident 0x13D）置位，
-            // C# 侧尚无 ISM 角色锁定状态，故此处不产生 6。
-            // 一旦补上 ISM 锁定，必须在这个位置、在配额之前判。
+            // 0x5A59F8 call 0x5AD85C → 返回 6。
+            // 0x5AD85C 读取账号记录 +0x1E；其唯一已证生产者是 0x019E
+            // 跨服锁定链，C# 侧由 LoginSocService 保留同一 transient PTID
+            // 状态。原生顺序是在全局禁删门之后、每日配额之前，故不能让
+            // 锁定角色消耗删除配额，也不能把该状态并入 NativeBusy。
+            if (_loginService.IsNativeAccountCrossServerLocked(
+                    humRecord.sAccount))
+                return NativeDelChrResult.LockedByCrossServer;
 
             // 0x5A5A3F cmp byte [rec+0x37],1 / je → 返回 3。
             // ⚠️ 原版这一判在配额门**之后**，但在记账之前；顺序见下。

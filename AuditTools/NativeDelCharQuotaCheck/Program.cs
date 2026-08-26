@@ -257,6 +257,66 @@ internal static class Program
         Check(recordServiceCode.Contains("IsDelete=1, IsSelect=0"),
             "deleted-record UPDATE persists isSelect=0 together with isDelete=1");
 
+        // Native 0x5A59F8 checks the account-record +0x1E cross-server lock
+        // after the global-disable gate and before the daily quota.  The
+        // managed LoginSoc mirror is the only proven producer for this state;
+        // a deletion request must return Param=6 and must not consume quota.
+        Check(userSocCode.Contains("LockedByCrossServer = 6"),
+            "DelChr keeps the native cross-server-lock result code 6");
+        var ownerGate = userSocCode.IndexOf("if (!owned)",
+            StringComparison.Ordinal);
+        var lockGate = userSocCode.IndexOf(
+            "IsNativeAccountCrossServerLocked(\n                    humRecord.sAccount)",
+            StringComparison.Ordinal);
+        var quotaGate = userSocCode.IndexOf(
+            "NativeDelCharQuota.UsedToday(quotaKey)",
+            StringComparison.Ordinal);
+        Check(ownerGate >= 0 && lockGate > ownerGate && quotaGate > lockGate,
+            "DelChr lock gate follows ownership and precedes quota");
+
+        // Native 0x5CE3A7 does not apply the managed 1000 ms throttle.  The
+        // private percent/dollar line keeps its old gate, while Native77 must
+        // still send the common 4018 terminal packet when fn_5CC8B8 leaves
+        // the request unhandled (name length >14 bytes).
+        var deleteCase = userSocCode.IndexOf(
+            "case Grobal2.CM_DELCHR:", StringComparison.Ordinal);
+        var deleteCaseEnd = userSocCode.IndexOf(
+            "case Grobal2.CM_QUERYDELCHR:", deleteCase,
+            StringComparison.Ordinal);
+        Check(deleteCase >= 0 && deleteCaseEnd > deleteCase,
+            "DelChr dispatcher case boundary is present");
+        var deleteBlock = deleteCase >= 0 && deleteCaseEnd > deleteCase
+            ? userSocCode.Substring(deleteCase, deleteCaseEnd - deleteCase)
+            : string.Empty;
+        Check(deleteBlock.Contains("nativeDelete", StringComparison.Ordinal)
+              && deleteBlock.Contains(
+                  "nativeDelete\n                        || (HUtil32.GetTickCount() - userInfo.dwChrTick) > 1000",
+                  StringComparison.Ordinal)
+              && deleteBlock.Contains("deleteHandled = DelChr(",
+                  StringComparison.Ordinal)
+              && deleteBlock.Contains(
+                  "if (!deleteHandled && nativeDelete)\n                                OutOfConnect",
+                  StringComparison.Ordinal),
+            "Native77 DelChr is unthrottled and closes only the unhandled leg");
+
+        var delMethod = userSocCode.IndexOf(
+            "private bool DelChr(string sData", StringComparison.Ordinal);
+        var delMethodEnd = userSocCode.IndexOf(
+            "private bool _lastDelChrResendList", delMethod,
+            StringComparison.Ordinal);
+        Check(delMethod >= 0 && delMethodEnd > delMethod,
+            "DelChr method boundary is present");
+        var delMethodCode = delMethod >= 0 && delMethodEnd > delMethod
+            ? userSocCode.Substring(delMethod, delMethodEnd - delMethod)
+            : string.Empty;
+        Check(delMethodCode.Contains("if (nameBytes.Length > 0x0E)",
+                  StringComparison.Ordinal)
+              && delMethodCode.Contains("return false;",
+                  StringComparison.Ordinal)
+              && delMethodCode.Contains("return true;",
+                  StringComparison.Ordinal),
+            "DelChr preserves native overlong-name unhandled return");
+
         if (_failures == 0)
         {
             Console.WriteLine($"PASS asserts={_asserts}");
