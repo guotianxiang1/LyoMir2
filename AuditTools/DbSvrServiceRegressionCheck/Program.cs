@@ -3570,11 +3570,12 @@ static void TestNativeSelectNameNotAllowedHandled()
     Check(branch.Contains("Grobal2.CM_SELCHR4017", StringComparison.Ordinal)
           && branch.Contains("Grobal2.SM_SENDNOTICE", StringComparison.Ordinal)
           && branch.Contains("TryFormatNewZoneNotice", StringComparison.Ordinal)
-          && branch.Contains("handled = true;", StringComparison.Ordinal)
+          && branch.Contains("handled = false;", StringComparison.Ordinal)
+          && !branch.Contains("handled = true;", StringComparison.Ordinal)
           && branch.Contains("return false;", StringComparison.Ordinal)
-          && branch.IndexOf("handled = true;", StringComparison.Ordinal)
+          && branch.IndexOf("handled = false;", StringComparison.Ordinal)
              < branch.IndexOf("return false;", StringComparison.Ordinal),
-        "native status-3 must mark handled after 4017/658 and before returning");
+        "native status-3 must return unhandled after 4017/658 so the dispatcher emits 4018");
 }
 
 static void TestNativeSelectDeletedCharacterResult()

@@ -2526,9 +2526,9 @@ namespace DBSvr
                 {
                     // Native fn_5CD544 status=3 sends a 4017/Param=1
                     // acknowledgement, then a 658 notice formatted from the
-                    // NewZone template. Its common loader exit sets handled=1
-                    // after the response, so the outer dispatcher must not
-                    // append 4018/close.
+                    // NewZone template. The native worker returns false
+                    // after these sends; the outer dispatcher appends the
+                    // single 4018/close terminal leg.
                     SendEncodedPacket(userInfo,
                         Grobal2.CM_SELCHR4017, 0, 1, 0, 0, null);
                     if (_selectEntryProtocol.TryFormatNewZoneNotice(
@@ -2577,7 +2577,7 @@ namespace DBSvr
                     Log($"[SelectChr] native character is deleted: {sChrName}");
                     SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
                         0, 4, 0, 0, null);
-                    handled = true;
+                    handled = false;
                     return false;
                 }
             }
