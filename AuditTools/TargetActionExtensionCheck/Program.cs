@@ -171,9 +171,51 @@ Require(allSource.Contains("TryProduceNativeMagic43(UserMagic)",
         StringComparison.Ordinal),
     "native skill-43 visible-target producer is missing");
 
+var actionQueueSource = File.ReadAllText(Path.Combine(gameRoot, "Actors",
+    "TBaseObject.cs"));
+var actionQueueStart = actionQueueSource.IndexOf(
+    "public void SendActionMsg", StringComparison.Ordinal);
+var actionQueueEnd = actionQueueSource.IndexOf(
+    "protected virtual bool GetMessage", actionQueueStart,
+    StringComparison.Ordinal);
+Require(actionQueueStart >= 0 && actionQueueEnd > actionQueueStart,
+    "native action queue helper is missing");
+var actionQueueSection = actionQueueSource[actionQueueStart..actionQueueEnd];
+foreach (var symbol in new[] { "CM_CRSHIT", "CM_3037", "CM_TWINHIT" })
+{
+    Require(actionQueueSection.Contains("Grobal2." + symbol,
+            StringComparison.Ordinal),
+        $"native action queue cleanup is missing: {symbol}");
+}
+
+var gateSource = File.ReadAllText(Path.Combine(root, "GameGate-CS", "Core",
+    "GateServer.cs"));
+var actionCoordStart = gateSource.IndexOf(
+    "private static bool IsActionCoordinateIdent", StringComparison.Ordinal);
+var actionCoordEnd = gateSource.IndexOf(
+    "private static void UpdateClientActionState", actionCoordStart,
+    StringComparison.Ordinal);
+Require(actionCoordStart >= 0 && actionCoordEnd > actionCoordStart,
+    "GameGate action-coordinate tracker is missing");
+var actionCoordSection = gateSource[actionCoordStart..actionCoordEnd];
+Require(actionCoordSection.Contains("Grobal2.CM_3037",
+        StringComparison.Ordinal),
+    "GameGate action-coordinate tracker is missing CM_3037");
+
+var speedSource = File.ReadAllText(Path.Combine(root, "GameGate-CS", "Core",
+    "SpeedDetector.cs"));
+var classifierStart = speedSource.IndexOf(
+    "public static class ActionClassifier", StringComparison.Ordinal);
+Require(classifierStart >= 0, "GameGate action classifier is missing");
+var classifierSection = speedSource[classifierStart..];
+Require(classifierSection.Contains("case Grobal2.CM_3037:",
+        StringComparison.Ordinal),
+    "GameGate speed classifier is missing CM_3037");
+
 Console.WriteLine(
     "TargetActionExtensionCheck PASS horse=RM_RUN slave=TURN/DISAPPEAR " +
     "combat=native-spell/state26 joint=10017/18/19->60/61/62 " +
+    "action-bookkeeping=3026/3027/3028 " +
     "non-target-active=0");
 return 0;
 
