@@ -3502,8 +3502,17 @@ static void TestNativeSelectOwnershipGate()
         "native character is not owned by account",
         StringComparison.Ordinal);
     var stateMutation = select.IndexOf(
-        "_playRecordService.UpdateBy(updatedRecord.Id, ref updatedRecord)",
+        "_playRecordService.UpdateBy(updatedRecord.Id,",
         StringComparison.Ordinal);
+    var nativeFanout = select.IndexOf(
+        "var nativeFanoutOK = _gameSocService.TrySendNativeHuman(",
+        StringComparison.Ordinal);
+    var nativeSuccess = select.IndexOf(
+        "if (boDataOK)\n            {\n                if (nativeWire)",
+        nativeFanout, StringComparison.Ordinal);
+    var completeSelection = select.IndexOf(
+        "NativeSelectEntryProtocol.CompleteSelection(\n                        userInfo, sChrName)",
+        nativeSuccess, StringComparison.Ordinal);
     var globalIndex = select.IndexOf(
         "_playRecordService.Index(sChrName)",
         StringComparison.Ordinal);
@@ -3514,6 +3523,9 @@ static void TestNativeSelectOwnershipGate()
           && ownership > lookup
           && stateMutation > ownership
           && globalIndex > ownership
+          && nativeFanout > ownership
+          && nativeSuccess > nativeFanout
+          && completeSelection > nativeSuccess
           && select.Contains(
               "if (nativeWire && (!accountLookupSucceeded || ownedRecord == null))",
               StringComparison.Ordinal)

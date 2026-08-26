@@ -2572,17 +2572,22 @@ namespace DBSvr
                 }
             }
 
-            if (nativeWire)
-                userInfo.NativeCurrentCharName = sChrName;
-
-            // 更新选择状态 only after the native ownership gate succeeds.
-            foreach (var humRecord in accountRecords)
+            // 更新选择状态 only after the native loader succeeds for
+            // Native77. Keep the private transport's established mutation
+            // before its legacy OpenSession call. Native 0x5CD544 has no
+            // corresponding write before 0x5A777C returns loader result 1,
+            // so the Native77 mutation is deferred to the success leg below.
+            if (!nativeWire)
             {
-                humRecord.boSelected = (byte)(
-                    string.Equals(humRecord.sChrName, sChrName,
-                        StringComparison.Ordinal) ? 1 : 0);
-                var updatedRecord = humRecord;
-                _playRecordService.UpdateBy(updatedRecord.Id, ref updatedRecord);
+                foreach (var humRecord in accountRecords)
+                {
+                    humRecord.boSelected = (byte)(
+                        string.Equals(humRecord.sChrName, sChrName,
+                            StringComparison.Ordinal) ? 1 : 0);
+                    var updatedRecord = humRecord;
+                    _playRecordService.UpdateBy(updatedRecord.Id,
+                        ref updatedRecord);
+                }
             }
 
             int recordIndex = nativeWire && ownedRecord != null
@@ -2669,8 +2674,23 @@ namespace DBSvr
             if (boDataOK)
             {
                 if (nativeWire)
+                {
+                    // Self+0x44 is written only after the native loader
+                    // reports result 1. Keeping the managed current name and
+                    // selection flags at this same boundary prevents a
+                    // failed load from leaving stale selection state.
+                    foreach (var humRecord in accountRecords)
+                    {
+                        humRecord.boSelected = (byte)(
+                            string.Equals(humRecord.sChrName, sChrName,
+                                StringComparison.Ordinal) ? 1 : 0);
+                        var updatedRecord = humRecord;
+                        _playRecordService.UpdateBy(updatedRecord.Id,
+                            ref updatedRecord);
+                    }
                     NativeSelectEntryProtocol.CompleteSelection(
                         userInfo, sChrName);
+                }
                 SendMobileSelectChr(userInfo, sChrName);
                 handled = true;
                 return true;
