@@ -1436,9 +1436,9 @@ static void TestNativeSessionControl()
           && select.Contains(
               "_loginService.IsNativeAccountCrossServerLocked(nativeAccount)",
               StringComparison.Ordinal)
-          && select.Contains("nativeRecord.PTID", StringComparison.Ordinal)
-          && select.Contains(": sAccount", StringComparison.Ordinal)
-          && select.Contains("ref updatedRecord", StringComparison.Ordinal),
+          && select.Contains(
+              "? nativeRecord.PTID\n                    : sAccount",
+              StringComparison.Ordinal),
         "4017 account-level result-6 predicate is not wired in native order");
 }
 
