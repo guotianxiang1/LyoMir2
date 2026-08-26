@@ -43,6 +43,18 @@ try
         "native registration reply payload");
     Console.WriteLine("PASS native gate registration 5 -> 15");
 
+    await fixture.SendToGateFromM2Async(InternalPacket77.Ack(0, 0xCAFE,
+        NativeGameGateCommands.GateKeepAliveRequest).ToBytes());
+    var gateKeepAliveReply = await fixture.M2ToHub.ReadAsync(
+        packet => packet.Cmd == NativeGameGateCommands.M2KeepAliveReply);
+    Equal(0u, gateKeepAliveReply.ConnID,
+        "GameSvr native keepalive reply connection id");
+    Equal(0u, gateKeepAliveReply.SeqID,
+        "GameSvr native keepalive reply sequence id");
+    Equal(0, gateKeepAliveReply.Payload.Length,
+        "GameSvr native keepalive reply payload");
+    Console.WriteLine("PASS GameSvr native heartbeat reply is bare Cmd13");
+
     var reboundRoute = new SharedBackendRoute
     {
         Handle = 7,
@@ -367,15 +379,16 @@ static async Task<InternalPacket77> ReadInternalFrameAsync(NetworkStream stream)
 static async Task<YbDbLegacy77Frame> ReadDbFrameForFixtureAsync(
     NetworkStream stream)
 {
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
     var header = new byte[YbDbLegacy77Codec.HeaderSize];
-    await ReadExactlyAsync(stream, header, CancellationToken.None);
+    await ReadExactlyAsync(stream, header, timeout.Token);
     var payloadLength = BitConverter.ToUInt16(header, 14);
     var wire = new byte[header.Length + payloadLength];
     Buffer.BlockCopy(header, 0, wire, 0, header.Length);
     if (payloadLength > 0)
         await ReadExactlyAsync(stream,
             wire.AsMemory(header.Length, payloadLength),
-            CancellationToken.None);
+            timeout.Token);
     Require(YbDbLegacy77Codec.TryDecode(wire, out var frame, out var error), error);
     return frame;
 }
@@ -628,6 +641,11 @@ sealed class GateM2Fixture : IAsyncDisposable
     public async Task SendFromM2Async(byte[] frame)
     {
         await _m2Socket.SendAsync(frame, SocketFlags.None);
+    }
+
+    public async Task SendToGateFromM2Async(byte[] frame)
+    {
+        await _bridgeM2Peer.GetStream().WriteAsync(frame);
     }
 
     private static async Task PumpAsync(NetworkStream source, NetworkStream destination,
