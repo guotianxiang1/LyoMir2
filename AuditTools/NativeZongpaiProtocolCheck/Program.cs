@@ -34,6 +34,7 @@ Run("sub 2/3/13 field mapping (write-path guardrail)", WritePathFieldMapping);
 Run("sub 1 routing / polarity / tail write-back", Sub1Enumerate);
 Run("sub 10 slots / stride / empty-count boundary", Sub10QueryMembers);
 Run("sub 11/12 no length gate + notice bounds", Sub11And12Notice);
+Run("sub 13 DeleteMaster result ladder", Sub13DeleteMasterResultLadder);
 
 if (failures.Count != 0)
 {
@@ -41,7 +42,7 @@ if (failures.Count != 0)
     return 1;
 }
 
-Console.WriteLine($"NativeZongpaiProtocolCheck PASS tests=15 asserts={asserts} "
+Console.WriteLine($"NativeZongpaiProtocolCheck PASS tests=16 asserts={asserts} "
                   + "type1=0170 reply=0071 gate=0x54 std=0xA8/0x9C "
                   + "lvl=0x84/0x78 member=0x29 dispatch=0x594122 "
                   + "sub1=0x5933CC sub10=0x593B74 sub11=0x593D30 sub12=0x593D70");
@@ -800,6 +801,25 @@ void Sub11And12Notice()
     Equal(0, BinaryPrimitives.ReadUInt16LittleEndian(
             emptyNotice.Payload.AsSpan(2, 2)),
         "sub11/12 empty notice length 0 in body+2");
+}
+
+// sub 13 (DeleteMaster) worker 0x593F6C.  The native worker's precheck
+// result is part of the standard 0x71 sender reply: lookup miss=1, a found
+// master with a member count other than one=2, and the eligible path=0.
+void Sub13DeleteMasterResultLadder()
+{
+    Equal(1, NativeZongpaiProtocol.ClassifyDeleteMasterPrecheck(
+            masterFound: false, memberCount: 0),
+        "sub13 missing master result=1 (0x593F9B/exit)");
+    Equal(2, NativeZongpaiProtocol.ClassifyDeleteMasterPrecheck(
+            masterFound: true, memberCount: 0),
+        "sub13 zero-member result=2 (0x593FA9 + count gate)");
+    Equal(2, NativeZongpaiProtocol.ClassifyDeleteMasterPrecheck(
+            masterFound: true, memberCount: 2),
+        "sub13 multi-member result=2 (exact-one gate)");
+    Equal(0, NativeZongpaiProtocol.ClassifyDeleteMasterPrecheck(
+            masterFound: true, memberCount: 1),
+        "sub13 exact-one result=0 before delete statements");
 }
 
 // ---- helpers ----

@@ -1550,12 +1550,15 @@ namespace DBSvr
                         NativeZongpaiReplyMode.Sender);
                     return;
                 case NativeZongpaiSubCommand.DeleteMaster:
-                    // ⚠️ 原注释说「C# 的两表事务删除是忠实的」——**那是错的**，它只比对了
-                    // 调用顺序，漏了原版的前置门，且删除范围比原版宽。
+                    // Native worker 0x593F6C first looks up the master record,
+                    // then applies the exact-one-member gate.  Its result
+                    // ladder is observable in the 0x71 reply: lookup miss=1,
+                    // gate failure=2, eligible path=0.
                     //
                     // 原版 worker 0x593F6C：
                     //   0x593F9B  call 0x49BAA8          ; 按 MasterName 查内存表记录
-                    //   0x593FA3  cmp [ebp-0x10],0 / je  ; 查不到 -> 整段跳过
+                    //   0x593FA3  cmp [ebp-0x10],0 / je  ; 查不到 -> 返回码 1
+                    //   0x593FA9  mov [ebp-0xC],2       ; 命中后先置失败码 2
                     //   0x593FB3  call 0x591DC4          ; ★成员数门
                     //   0x593FB8  test al,al / je 0x59400D ; 不满足 -> **连删都不删**
                     //   0x593FCA  call 0x593198          ; delete ZongpaiMember（单行）
@@ -1577,14 +1580,30 @@ namespace DBSvr
                     //      而 C# 是 `DELETE ... WHERE MasterName=@n`（**删光全部成员行**）。
                     //  在门成立时两者等价；门一缺，C# 就会在多成员师门上删光成员 ⇒ 写坏数据。
                     //
-                    // 故在此补门：成员数不为 1 时按原版**静默不做任何删除**（result 保持 0，
-                    // 原版 0x59400D 出口也不置错误码），并保留 C# 的 masterName 单参调用
-                    // （门成立 ⇒ 唯一成员行的 MemberName 必然属于该 master，范围等价）。
-                    if (_zongpaiService.CountMembers(
-                            LegacyGbkText.Decode(request.MasterNameSlot35)) == 1)
+                    // Keep the native result even when the precheck fails; a
+                    // default zero here would report success for a missing or
+                    // multi-member master.  The existing storage-failure
+                    // fallback (1) is retained after the native eligible leg.
+                    var deleteMasterName = LegacyGbkText.Decode(
+                        request.MasterNameSlot35);
+                    var masterRecord = _zongpaiService.GetMaster(
+                        deleteMasterName);
+                    if (masterRecord == null)
                     {
-                        result = _zongpaiService.DeleteMaster(
-                            LegacyGbkText.Decode(request.MasterNameSlot35)) ? 0 : 1;
+                        result = NativeZongpaiProtocol
+                            .ClassifyDeleteMasterPrecheck(false, 0);
+                    }
+                    else
+                    {
+                        var memberCount = _zongpaiService.CountMembers(
+                            deleteMasterName);
+                        result = NativeZongpaiProtocol
+                            .ClassifyDeleteMasterPrecheck(true, memberCount);
+                        if (result == 0)
+                        {
+                            result = _zongpaiService.DeleteMaster(
+                                deleteMasterName) ? 0 : 1;
+                        }
                     }
                     break;
                 default:

@@ -232,6 +232,21 @@ namespace DBSvr.Core
         public const int MemberRecordLevelOffset = 0x25;
         /// <summary>See <see cref="MemberRecordRoleNameOffset"/> (0x593CEA byte)。</summary>
         public const int MemberRecordOnlineOffset = 0x27;
+
+        /// <summary>
+        /// Result ladder for sub-command 13 (DeleteMaster), taken from worker
+        /// 0x593F6C.  The name lookup is performed before the member-count
+        /// gate: a missing master returns 1, a found master whose member count
+        /// is not exactly one returns 2, and the eligible path returns 0
+        /// before the two delete statements run.  The caller still decides
+        /// whether the storage operation itself completed.
+        /// </summary>
+        public static int ClassifyDeleteMasterPrecheck(bool masterFound,
+            int memberCount)
+        {
+            if (!masterFound) return 1;
+            return memberCount == 1 ? 0 : 2;
+        }
         /// <summary>
         /// Where trailing data starts, PAYLOAD-relative. The original writes it to
         /// buf+0x54, and payload == buf+0x0C (magic/type/len occupy the first 12
