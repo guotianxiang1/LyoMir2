@@ -147,11 +147,6 @@ namespace GameSvr.Services
                 "[self+0x9C0]/[0x9C4]/[0x9C8]，经脚本对象 [self+0xCD8] 跑 '@AckPieceUp'(0x6E55B0) 成功后 " +
                 "删物品并回 SM 0xB88；拼合计数字段与脚本对象未建模");
 
-            // ---- task-publish board script object [[0x7D5D20]] (same as cm-4 4150/4151) ----
-            Add(1250, 0x006DA5A1, 0x006E1CEC, "任务发布板",
-                "0x6E1CEC 在 [[0x7D5D20]]+0 非空时调脚本 0x6996E8 生成列表并回 SM 0xB31；" +
-                "任务板脚本对象 [[0x7D5D20]] 与 @Main 过程未移植(同 cm-4 CM 4150/4151/4651)");
-
             // ---- 元宝寄售 (YB consignment) manager [[0x7D6ABC]] (named by
             //      NativeYbConsignmentQuery: 'the MANAGER at [[0x7D6ABC]], a singleton') -----
             Add(1251, 0x006DA66A, 0x006E7E0C, "元宝寄售",
