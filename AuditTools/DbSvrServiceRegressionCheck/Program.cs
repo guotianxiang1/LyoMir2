@@ -32,6 +32,8 @@ Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
 Run("native state-5 unknown opcode terminal", TestNativeUnknownOpcodeTerminal);
 Run("native 4039 terminal frame", TestNative4039TerminalFrame);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
+Run("native 4017 status-3 terminal sequence", TestNativeSelectStatus3Terminal);
+Run("native 4017 deleted result-4 terminal", TestNativeSelectDeletedTerminal);
 Run("native 4017 status-3 handled terminal", TestNativeSelectNameNotAllowedHandled);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
 Run("native 4017 deleted-character result", TestNativeSelectDeletedCharacterResult);
@@ -3682,6 +3684,195 @@ static void TestNative4039TerminalFrame()
     Equal(0, message.Body.Length, "4039 response body");
 }
 
+static void TestNativeSelectStatus3Terminal()
+{
+    var root = Path.Combine(Path.GetTempPath(),
+        "dbsvr-status3-" + Guid.NewGuid().ToString("N"));
+    var envir = Path.Combine(root, "Mir200", "Envir");
+    Directory.CreateDirectory(envir);
+    var gbk = Encoding.GetEncoding(936);
+    try
+    {
+        File.WriteAllText(Path.Combine(root, "IpAddress.txt"),
+            "NewZone=Welcome %s\r\n", gbk);
+        File.WriteAllText(Path.Combine(envir, "AdminList.txt"),
+            "* allowed\r\n", gbk);
+
+        const string account = "status3-account";
+        const string character = "ordinary";
+        var record = new HumRecordData
+        {
+            Id = 17,
+            sChrName = character,
+            sAccount = account
+        };
+        var playRecords = CreateNativePlayRecordProxy(record, null);
+        var login = CreateNativeLoginFixture(account, 7, "127.0.0.1");
+        var sent = new List<byte[]>();
+        Exception? queueError = null;
+        var gate = new TGateInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            UserList = new List<TUserInfo>(),
+            NativeOutboundQueue = new NativeGateOutboundQueue(
+                frame => sent.Add(frame),
+                error => queueError = error)
+        };
+        var user = new TUserInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            NativeQueryId = 0x2428,
+            NativeConnectionId = 17,
+            NativeSessionState = 5,
+            NativeGateOwner = gate,
+            NativeRouteActive = true,
+            sAccount = account,
+            sUserIPaddr = "127.0.0.1",
+            nSessionID = 7,
+            boChrQueryed = true
+        };
+        gate.UserList.Add(user);
+        gate.NativeRoutes.Register(user.NativeConnectionId, user);
+
+        var service = CreateNativeUserSocFixture(login, playRecords, gate,
+            new NativeSelectEntryProtocol(root));
+        var method = GetProcessDecodedUserPacket();
+        var args = new object[]
+        {
+            gate,
+            user,
+            (ushort)Grobal2.CM_SELCHR,
+            0,
+            (ushort)0,
+            EDcode.EncodeString(character)
+        };
+        method.Invoke(service, args);
+
+        gate.NativeOutboundQueue.Complete();
+        Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+            "status-3 outbound queue completion timeout");
+        Check(queueError == null,
+            "status-3 outbound queue raised an exception: "
+            + queueError?.Message);
+
+        var responses = DecodeNativeResponses(sent, "status-3");
+        Equal(3, responses.Count,
+            "status-3 must emit 4017, optional 658, then 4018");
+        Equal(0x2428, responses[0].Frame.QueryId,
+            "status-3 first response query id");
+        Equal((ushort)Grobal2.CM_SELCHR4017, responses[0].Message.Ident,
+            "status-3 first response ident");
+        Equal((ushort)1, responses[0].Message.Param,
+            "status-3 4017 result Param");
+        Equal((ushort)Grobal2.SM_SENDNOTICE, responses[1].Message.Ident,
+            "status-3 notice ident");
+        Check(responses[1].Message.Body.SequenceEqual(gbk.GetBytes(
+                "Welcome ordinary")),
+            "status-3 notice body");
+        Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018,
+            responses[2].Message.Ident,
+            "status-3 terminal ident");
+        Equal(0, responses[2].Message.Body.Length,
+            "status-3 terminal body");
+        Equal((byte)7, user.NativeSessionState,
+            "status-3 terminal did not advance state 7");
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, true);
+    }
+}
+
+static void TestNativeSelectDeletedTerminal()
+{
+    var root = Path.Combine(Path.GetTempPath(),
+        "dbsvr-deleted4-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        const string account = "deleted4-account";
+        const string character = "deleted";
+        var record = new HumRecordData
+        {
+            Id = 23,
+            sChrName = character,
+            sAccount = account,
+            boDeleted = true
+        };
+        var nativeRecord = new ChrIndexInfo
+        {
+            Idx = record.Id,
+            ChrName = character,
+            PTID = account,
+            IsDelete = true,
+            DeleteState = 1
+        };
+        var playRecords = CreateNativePlayRecordProxy(record, nativeRecord);
+        var login = CreateNativeLoginFixture(account, 8, "127.0.0.2");
+        var sent = new List<byte[]>();
+        Exception? queueError = null;
+        var gate = new TGateInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            UserList = new List<TUserInfo>(),
+            NativeOutboundQueue = new NativeGateOutboundQueue(
+                frame => sent.Add(frame),
+                error => queueError = error)
+        };
+        var user = new TUserInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            NativeQueryId = 0x2429,
+            NativeSessionState = 5,
+            NativeGateOwner = gate,
+            NativeRouteActive = true,
+            sAccount = account,
+            sUserIPaddr = "127.0.0.2",
+            nSessionID = 8,
+            boChrQueryed = true
+        };
+        gate.UserList.Add(user);
+
+        var service = CreateNativeUserSocFixture(login, playRecords, gate,
+            new NativeSelectEntryProtocol(root));
+        var method = GetProcessDecodedUserPacket();
+        var args = new object[]
+        {
+            gate,
+            user,
+            (ushort)Grobal2.CM_SELCHR,
+            0,
+            (ushort)0,
+            EDcode.EncodeString(character)
+        };
+        method.Invoke(service, args);
+
+        gate.NativeOutboundQueue.Complete();
+        Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+            "deleted result-4 outbound queue completion timeout");
+        Check(queueError == null,
+            "deleted result-4 outbound queue raised an exception: "
+            + queueError?.Message);
+
+        var responses = DecodeNativeResponses(sent, "deleted result-4");
+        Equal(1, responses.Count,
+            "deleted result-4 must emit exactly one 4017 and no 4018");
+        Equal(MobileCmdMap.ToClient((ushort)Grobal2.SM_STARTFAIL),
+            responses[0].Message.Ident,
+            "deleted result-4 client-mapped response ident");
+        Equal(0x2429, responses[0].Frame.QueryId,
+            "deleted result-4 response query id");
+        Equal((ushort)4, responses[0].Message.Param,
+            "deleted result-4 response Param");
+        Equal(0, responses[0].Message.Body.Length,
+            "deleted result-4 response body");
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, true);
+    }
+}
+
 static void TestNativeNewZoneAdminListGate()
 {
     var directory = Path.Combine(Path.GetTempPath(),
@@ -3897,6 +4088,110 @@ static void TestNativeSelectDeletedCharacterResult()
               "if (!nativeDeletedRecordOwned)\n                {",
               StringComparison.Ordinal),
         "native deleted-row ownership or selected-record account key is missing");
+}
+
+static UserSocService CreateNativeUserSocFixture(
+    LoginSvrService login,
+    IPlayRecordService playRecords,
+    TGateInfo gate,
+    NativeSelectEntryProtocol selectEntry)
+{
+    var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
+        typeof(UserSocService));
+    SetPrivateField(service, "_loginService", login);
+    SetPrivateField(service, "_playRecordService", playRecords);
+    SetPrivateField(service, "_playDataService",
+        InterfaceProxy.Create<IPlayDataService>(
+            (method, _) => InterfaceProxy.DefaultValue(method.ReturnType)));
+    SetPrivateField(service, "_selectEntryProtocol", selectEntry);
+    SetPrivateField(service, "_gateList", new List<TGateInfo> { gate });
+    SetPrivateField(service, "_nativeAccountTakeoverSync", new object());
+    SetPrivateField(service, "_gateLock", new object());
+    return service;
+}
+
+static LoginSvrService CreateNativeLoginFixture(
+    string account, int sessionId, string ipAddress)
+{
+    var login = (LoginSvrService)RuntimeHelpers.GetUninitializedObject(
+        typeof(LoginSvrService));
+    var session = new TGlobaSessionInfo
+    {
+        sAccount = account,
+        sIPaddr = ipAddress,
+        nSessionID = sessionId
+    };
+    SetPrivateField(login, "_rwLock",
+        new System.Threading.ReaderWriterLockSlim());
+    SetPrivateField(login, "GlobaSessionList",
+        new List<TGlobaSessionInfo> { session });
+    SetPrivateField(login, "_sessionDict",
+        new Dictionary<(string, int), TGlobaSessionInfo>
+        {
+            [(account, sessionId)] = session
+        });
+    SetPrivateField(login, "_mode", LoginGateTransportMode.Native77Client);
+    SetPrivateField(login, "_nativeAccountCrossServerLocks",
+        new NativeAccountCrossServerLockState());
+    return login;
+}
+
+static IPlayRecordService CreateNativePlayRecordProxy(
+    HumRecordData record, ChrIndexInfo nativeRecord)
+{
+    return InterfaceProxy.Create<IPlayRecordService>((method, args) =>
+    {
+        if (method.Name == nameof(IPlayRecordService.FindByAccount))
+        {
+            args![1] = new List<TQuickID>
+            {
+                new() { nIndex = record.Id, sChrName = record.sChrName }
+            };
+            return 1;
+        }
+        if (method.Name == nameof(IPlayRecordService.GetBy))
+        {
+            args![1] = true;
+            return record;
+        }
+        if (method.Name == nameof(
+                IPlayRecordService.TryGetNativeCharacterByName))
+        {
+            args![1] = nativeRecord;
+            return nativeRecord != null;
+        }
+        return InterfaceProxy.DefaultValue(method.ReturnType);
+    });
+}
+
+static MethodInfo GetProcessDecodedUserPacket() => typeof(UserSocService)
+    .GetMethod("ProcessDecodedUserPacket",
+        BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+static void SetPrivateField(object target, string name, object value)
+{
+    var field = target.GetType().GetField(name,
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Check(field != null, $"private field {name} not found");
+    field!.SetValue(target, value);
+}
+
+static List<(YbDbLegacy77Frame Frame, LegacyGateDataMessage Message)>
+    DecodeNativeResponses(IEnumerable<byte[]> wires, string label)
+{
+    var decoded = new List<(YbDbLegacy77Frame, LegacyGateDataMessage)>();
+    foreach (var wire in wires)
+    {
+        Check(YbDbLegacy77Codec.TryDecode(wire, out var frame,
+            out var error), $"{label} outer frame: {error}");
+        if (frame == null || frame.Ident != LegacyGateDataCodec.ResponseIdent)
+            continue;
+        Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+            out var message, out error), $"{label} response: {error}");
+        if (message != null)
+            decoded.Add((frame, message));
+    }
+    return decoded;
 }
 
 static void TestNativeSelectLoadFailureResult()

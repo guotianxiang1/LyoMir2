@@ -2574,7 +2574,7 @@ namespace DBSvr
                             0, 0, 0, 0,
                             Encoding.GetEncoding(936).GetBytes(notice));
                     }
-                    handled = true;
+                    handled = false;
                     Log($"[SelectChr] native NewZone/AdminList rejection: {sChrName}");
                     return false;
                 }
@@ -2613,7 +2613,7 @@ namespace DBSvr
                     Log($"[SelectChr] native character is deleted: {sChrName}");
                     SendEncodedPacket(userInfo, Grobal2.SM_STARTFAIL,
                         0, 4, 0, 0, null);
-                    handled = false;
+                    handled = true;
                     return false;
                 }
             }
