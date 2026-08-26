@@ -6,6 +6,8 @@ PrepareRuntimeConfig();
 InitializeRuntime();
 
 CheckConstants();
+CheckNativeRunOccupancyProbe();
+CheckNativeRunOccupancyWireMatrix();
 CheckRun3StateGate();
 CheckRun3NativeGateMatrix();
 CheckRun3OverweightSwitchGate();
@@ -38,6 +40,7 @@ CheckHorseDisappearCleansPairing();
 
 Console.WriteLine(
     "NativeRun3HorseProtocolCheck PASS " +
+    "native-run-occupancy=terrain/through-cache/stale+no-boRun-gates " +
     "4108-main=state51+absent(45/29/1/26/24/62)+forced0+bit7/map-CANRUN/weight+server-direction+first-step-only+3416 " +
     "state67/13=one-step-fallback+adjusted-target+health-10+3410 " +
     "partner=state51/non-null+exact-relocate+blocked-terrain+missing-source+push-step-tail " +
@@ -55,6 +58,115 @@ static void CheckConstants()
     Equal(3414, Grobal2.SM_XIAMA_OK, "SM_XIAMA_OK");
     Equal(3416, Grobal2.SM_RUN3, "SM_RUN3");
     Equal(3419, Grobal2.SM_XIAMA_2, "SM_XIAMA_2");
+}
+
+static void CheckNativeRunOccupancyProbe()
+{
+    var originalRunHuman = M2Share.g_Config.boRunHuman;
+    var originalRunMon = M2Share.g_Config.boRunMon;
+    try
+    {
+        var map = NewMap();
+        var blocker = Place(map, NewPlayer("native-run-blocker"), 6, 5);
+
+        // Native sub_777EF8 does not consume the configurable boRun* gates.
+        M2Share.g_Config.boRunHuman = true;
+        map.Flag.boRUNHUMAN = true;
+        Assert(!map.NativeCanRunOccupancy(6, 5, false),
+            "native run probe ignored a live player blocker");
+
+        M2Share.g_Config.boRunHuman = false;
+        map.Flag.boRUNHUMAN = false;
+        Assert(!map.NativeCanRunOccupancy(6, 5, false),
+            "native run probe consumed a run-human switch");
+        blocker.m_boDeath = true;
+        Assert(map.NativeCanRunOccupancy(6, 5, false),
+            "native run probe did not pass a dead actor");
+
+        blocker.m_boDeath = false;
+        blocker.m_sCharName = string.Empty;
+        Assert(map.NativeCanRunOccupancy(6, 5, false),
+            "native run probe did not remove a stale actor");
+        Equal(0, map.GetXYObjCount(6, 5),
+            "native run probe left a stale actor node");
+
+        var wall = NewMap();
+        Assert(wall.NativeCanRunOccupancy(6, 5, true),
+            "native run probe rejected a walkable cell under through cache");
+        wall.SetMapXYFlag(6, 5, false);
+        Assert(!wall.NativeCanRunOccupancy(6, 5, true),
+            "native run probe accepted a wall under through cache");
+    }
+    finally
+    {
+        M2Share.g_Config.boRunHuman = originalRunHuman;
+        M2Share.g_Config.boRunMon = originalRunMon;
+    }
+}
+
+static void CheckNativeRunOccupancyWireMatrix()
+{
+    var originalRunHuman = M2Share.g_Config.boRunHuman;
+    try
+    {
+        // The native run mover must still reject a live adjacent actor when
+        // the run-policy switch is enabled.  That switch belongs to the
+        // ladder, not to sub_777EF8's occupancy predicate.
+        M2Share.g_Config.boRunHuman = true;
+        var blockedMap = NewMap();
+        blockedMap.Flag.boRUNHUMAN = true;
+        var blocked = Place(blockedMap,
+            NewPlayer("native-run-wire-blocked"), 5, 5);
+        Place(blockedMap, NewPlayer("native-run-wire-actor"), 6, 5);
+        EnableRun3(blocked);
+        blocked.m_boThroughOccupancyCache = false;
+
+        Assert(blocked.Operate(Run3Message(8, 5, Grobal2.DR_UP)),
+            "4108 native occupancy blocked dispatch");
+        Packet(blocked.m_DefMsg, Grobal2.SM_ACT_FAIL, 0, 5, 5,
+            Grobal2.DR_RIGHT, "4108 native occupancy blocked 630");
+        Position(blocked, 5, 5, "4108 native occupancy blocked position");
+        Equal(0, CountMessages(blocked, Grobal2.RM_RUN3),
+            "4108 native occupancy blocked broadcast");
+
+        // With the cached through verdict set, the same live actor is skipped
+        // and the three-cell commit is allowed.  This is intentionally an
+        // end-to-end CM_RUN3 assertion, rather than only a helper assertion.
+        var throughMap = NewMap();
+        throughMap.Flag.boRUNHUMAN = true;
+        var through = Place(throughMap,
+            NewPlayer("native-run-wire-through"), 5, 5);
+        Place(throughMap, NewPlayer("native-run-wire-through-actor"), 6, 5);
+        EnableRun3(through);
+        through.m_boThroughOccupancyCache = true;
+
+        Assert(through.Operate(Run3Message(8, 5, Grobal2.DR_UP)),
+            "4108 native occupancy through dispatch");
+        Packet(through.m_DefMsg, Grobal2.SM_ACT_GOOD, 0, 0, 0, 0,
+            "4108 native occupancy through 629");
+        Position(through, 8, 5,
+            "4108 native occupancy through position");
+
+        // The through verdict is an occupancy bypass only.  A terrain wall
+        // at the first adjacent cell must still reject the same request.
+        var wallMap = NewMap();
+        wallMap.Flag.boRUNHUMAN = true;
+        var wall = Place(wallMap,
+            NewPlayer("native-run-wire-wall"), 5, 5);
+        EnableRun3(wall);
+        wall.m_boThroughOccupancyCache = true;
+        wallMap.SetMapXYFlag(6, 5, false);
+
+        Assert(wall.Operate(Run3Message(8, 5, Grobal2.DR_UP)),
+            "4108 native occupancy wall dispatch");
+        Packet(wall.m_DefMsg, Grobal2.SM_ACT_FAIL, 0, 5, 5,
+            Grobal2.DR_RIGHT, "4108 native occupancy wall 630");
+        Position(wall, 5, 5, "4108 native occupancy wall position");
+    }
+    finally
+    {
+        M2Share.g_Config.boRunHuman = originalRunHuman;
+    }
 }
 
 static void CheckRun3StateGate()

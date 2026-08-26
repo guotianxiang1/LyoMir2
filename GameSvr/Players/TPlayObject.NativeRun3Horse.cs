@@ -304,7 +304,7 @@ namespace GameSvr
             // sub_767694 在 0x7676E2(探测 sub_777EF8)/0x76772B(移动 sub_7797CC)都读 Obj+0x3FE
             // (穿透缓存) 作 boIgnoreOccupancy——与 walk / 2 格 run(sub_76756C) 同一缓存判定。
             // MOVE-73：mover 只读，重算与回写只在玩家 tick sub_6B2D38 的 0x6B308E/0x6B30A3。
-            if (!m_PEnvir.CanWalkEx(m_nCurrX + offsetX,
+            if (!m_PEnvir.NativeCanRunOccupancy(m_nCurrX + offsetX,
                     m_nCurrY + offsetY, m_boThroughOccupancyCache))
             {
                 return false;

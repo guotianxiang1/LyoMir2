@@ -1055,52 +1055,52 @@ namespace GameSvr
                 switch (btDir)
                 {
                     case Grobal2.DR_UP:
-                        if (m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY - 2))
+                        if (m_nCurrY > 1 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX, m_nCurrY - 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY - 2))
                         {
                             m_nCurrY -= 2;
                         }
                         break;
                     case Grobal2.DR_UPRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY - 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY - 2))
+                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY > 1 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX + 1, m_nCurrY - 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY - 2))
                         {
                             m_nCurrX += 2;
                             m_nCurrY -= 2;
                         }
                         break;
                     case Grobal2.DR_RIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY))
+                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX + 1, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY))
                         {
                             m_nCurrX += 2;
                         }
                         break;
                     case Grobal2.DR_DOWNRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY + 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY + 2))
+                        if (m_nCurrX < m_PEnvir.wWidth - 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX + 1, m_nCurrY + 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 2, m_nCurrY + 2))
                         {
                             m_nCurrX += 2;
                             m_nCurrY += 2;
                         }
                         break;
                     case Grobal2.DR_DOWN:
-                        if (m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY + 2))
+                        if (m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX, m_nCurrY + 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY + 2))
                         {
                             m_nCurrY += 2;
                         }
                         break;
                     case Grobal2.DR_DOWNLEFT:
-                        if (m_nCurrX > 1 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY + 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY + 2))
+                        if (m_nCurrX > 1 && m_nCurrY < m_PEnvir.wHeight - 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX - 1, m_nCurrY + 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY + 2))
                         {
                             m_nCurrX -= 2;
                             m_nCurrY += 2;
                         }
                         break;
                     case Grobal2.DR_LEFT:
-                        if (m_nCurrX > 1 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY))
+                        if (m_nCurrX > 1 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX - 1, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY))
                         {
                             m_nCurrX -= 2;
                         }
                         break;
                     case Grobal2.DR_UPLEFT:
-                        if (m_nCurrX > 1 && m_nCurrY > 1 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY - 2, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY - 2))
+                        if (m_nCurrX > 1 && m_nCurrY > 1 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX - 1, m_nCurrY - 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 2, m_nCurrY - 2))
                         {
                             m_nCurrX -= 2;
                             m_nCurrY -= 2;
@@ -1149,52 +1149,52 @@ namespace GameSvr
                 switch (btDir)
                 {
                     case Grobal2.DR_UP:
-                        if (m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY - 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY - 3))
+                        if (m_nCurrY > 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX, m_nCurrY - 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY - 3))
                         {
                             m_nCurrY -= 3;
                         }
                         break;
                     case Grobal2.DR_UPRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY - 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY - 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY - 3))
+                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY > 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX + 1, m_nCurrY - 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY - 3))
                         {
                             m_nCurrX += 3;
                             m_nCurrY -= 3;
                         }
                         break;
                     case Grobal2.DR_RIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY))
+                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX + 1, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY))
                         {
                             m_nCurrX += 3;
                         }
                         break;
                     case Grobal2.DR_DOWNRIGHT:
-                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX + 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 2, m_nCurrY + 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX + 3, m_nCurrY + 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY + 3))
+                        if (m_nCurrX < m_PEnvir.wWidth - 3 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX + 1, m_nCurrY + 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX + 3, m_nCurrY + 3))
                         {
                             m_nCurrX += 3;
                             m_nCurrY += 3;
                         }
                         break;
                     case Grobal2.DR_DOWN:
-                        if (m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX, m_nCurrY + 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY + 3))
+                        if (m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX, m_nCurrY + 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX, m_nCurrY + 3))
                         {
                             m_nCurrY += 3;
                         }
                         break;
                     case Grobal2.DR_DOWNLEFT:
-                        if (m_nCurrX > 2 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY + 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY + 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY + 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY + 3))
+                        if (m_nCurrX > 2 && m_nCurrY < m_PEnvir.wHeight - 3 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX - 1, m_nCurrY + 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY + 3))
                         {
                             m_nCurrX -= 3;
                             m_nCurrY += 3;
                         }
                         break;
                     case Grobal2.DR_LEFT:
-                        if (m_nCurrX > 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY))
+                        if (m_nCurrX > 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX - 1, m_nCurrY, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY))
                         {
                             m_nCurrX -= 3;
                         }
                         break;
                     case Grobal2.DR_UPLEFT:
-                        if (m_nCurrX > 2 && m_nCurrY > 2 && m_PEnvir.CanWalkEx(m_nCurrX - 1, m_nCurrY - 1, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 2, m_nCurrY - 2, m_boThroughOccupancyCache) && m_PEnvir.CanWalkEx(m_nCurrX - 3, m_nCurrY - 3, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY - 3))
+                        if (m_nCurrX > 2 && m_nCurrY > 2 && m_PEnvir.NativeCanRunOccupancy(m_nCurrX - 1, m_nCurrY - 1, m_boThroughOccupancyCache) && CommitRunMove(m_nCurrX - 3, m_nCurrY - 3))
                         {
                             m_nCurrX -= 3;
                             m_nCurrY -= 3;

@@ -528,17 +528,13 @@ namespace GameSvr
                     {
                         if (MapCellInfo.ObjList != null)
                         {
-                            if (useRunRules)
-                            {
-                                if (HasRunBlockingObject(MapCellInfo, Cert))
-                                {
-                                    bo1A = false;
-                                }
-                            }
-                            else
-                            {
-                                var i = 0;
-                                while (i < MapCellInfo.Count)
+                            // Native sub_7797CC uses the same moving-object scan for
+                            // walk and run relocation.  Run policy switches belong to
+                            // the caller's ladder, not to this destination occupancy
+                            // primitive; keep useRunRules only for the walk-only
+                            // LinkPoint gate below.
+                            var i = 0;
+                            while (i < MapCellInfo.Count)
                                 {
                                     if (MapCellInfo.ObjList[i].CellType == CellType.OS_MOVINGOBJECT)
                                     {
@@ -579,7 +575,6 @@ namespace GameSvr
                                         }
                                     }
                                     i++;
-                                }
                             }
                         }
                     }
@@ -801,6 +796,71 @@ namespace GameSvr
         public bool CanWalk(int nX, int nY)
         {
             return CanWalk(nX, nY, false);
+        }
+
+        /// <summary>
+        /// Native run-mover read-only probe (<c>sub_777EF8</c>).  The 2/3-cell
+        /// movers call this only for the first adjacent cell; the destination
+        /// is checked again by the destructive <c>sub_7797CC</c> move.  Keep
+        /// this separate from <see cref="CanWalkEx"/> because the latter has
+        /// configurable run-through gates that are not part of the native
+        /// occupancy predicate.  The native auxiliary cell[3] branch has no
+        /// proven managed carrier, so this method deliberately covers the
+        /// verified terrain/ignore/object-list portion only.
+        /// </summary>
+        internal bool NativeCanRunOccupancy(int nX, int nY,
+            bool boIgnoreOccupancy)
+        {
+            if (string.IsNullOrEmpty(sMapName))
+            {
+                return false;
+            }
+
+            var mapCell = false;
+            var mapCellInfo = GetMapCellInfo(nX, nY, ref mapCell);
+            if (!mapCell || !mapCellInfo.Valid)
+            {
+                return false;
+            }
+
+            // Native checks terrain before this short-circuit.  A through
+            // verdict skips occupants, never a wall/invalid cell.
+            if (boIgnoreOccupancy || mapCellInfo.ObjList == null)
+            {
+                return true;
+            }
+
+            var index = 0;
+            while (index < mapCellInfo.Count)
+            {
+                var cellObject = mapCellInfo.ObjList[index];
+                if (cellObject.CellType != CellType.OS_MOVINGOBJECT)
+                {
+                    index++;
+                    continue;
+                }
+
+                if (TBaseObject.IsNativeStaleCellActor(cellObject.CellObj))
+                {
+                    mapCellInfo.Remove(index);
+                    if (mapCellInfo.Count == 0)
+                    {
+                        ReleaseCellObjectList(nX, nY);
+                        break;
+                    }
+                    continue;
+                }
+
+                var baseObject = cellObject.CellObj as TBaseObject;
+                if (baseObject != null && baseObject.IsNativeCellBlocking())
+                {
+                    return false;
+                }
+
+                index++;
+            }
+
+            return true;
         }
 
         
