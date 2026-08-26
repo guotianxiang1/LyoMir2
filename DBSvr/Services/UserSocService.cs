@@ -1227,6 +1227,17 @@ namespace DBSvr
                     // entered for every non-empty request. Keep the legacy
                     // private transport's compatibility throttle unchanged.
                     var nativeDelete = userInfo.WireMode == TGateWireMode.Native77;
+                    // Native 0x5CDFB2 supplies a null body for a header-only
+                    // 4013 frame. It takes the common terminal leg before the
+                    // delete worker can treat an empty name as a lookup miss.
+                    if (nativeDelete && string.IsNullOrEmpty(body))
+                    {
+                        SendEncodedPacket(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018,
+                            0, 0, 0, 0, null);
+                        userInfo.NativeSessionState = 7;
+                        break;
+                    }
                     if (nativeDelete
                         || (HUtil32.GetTickCount() - userInfo.dwChrTick) > 1000)
                     {

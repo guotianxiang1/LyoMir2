@@ -25,6 +25,7 @@ Run("native UserSoc C-string body boundary", TestNativeUserBodyBoundary);
 Run("native UserSoc malformed inner-frame isolation", TestNativeMalformedInnerFrameIsolation);
 Run("native UserSoc header-only 4004 terminal", TestNativeHeaderOnly4004Terminal);
 Run("native UserSoc empty auth body terminal", TestNativeEmptyAuthBodyTerminal);
+Run("native UserSoc empty delete body terminal", TestNativeEmptyDeleteBodyTerminal);
 Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
@@ -3268,6 +3269,68 @@ static void TestNativeEmptyAuthBodyTerminal()
           && nativeTryDecode > nativeDecode
           && legacyDecode > nativeTryDecode,
         "empty Native77 auth body must terminate before native decode and preserve legacy decode");
+}
+
+static void TestNativeEmptyDeleteBodyTerminal()
+{
+    var sent = new List<byte[]>();
+    Exception? queueError = null;
+    var gate = new TGateInfo
+    {
+        NativeOutboundQueue = new NativeGateOutboundQueue(
+            frame => sent.Add(frame),
+            error => queueError = error)
+    };
+    var user = new TUserInfo
+    {
+        WireMode = TGateWireMode.Native77,
+        NativeQueryId = 0x2424,
+        NativeSessionState = 5,
+        NativeGateOwner = gate
+    };
+    var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
+        typeof(UserSocService));
+    var method = typeof(UserSocService).GetMethod(
+        "ProcessDecodedUserPacket",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Check(method != null, "4013 empty-body process dispatcher method not found");
+
+    var args = new object[]
+    {
+        gate,
+        user,
+        (ushort)Grobal2.CM_DELCHR,
+        0,
+        (ushort)0,
+        string.Empty
+    };
+    method!.Invoke(service, args);
+    user = (TUserInfo)args[1];
+
+    gate.NativeOutboundQueue.Complete();
+    Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+        "4013 empty-body outbound queue completion timeout");
+    Check(queueError == null,
+        "4013 empty-body outbound queue raised an exception: "
+        + queueError?.Message);
+    Equal(1, sent.Count,
+        "empty Native77 4013 must emit exactly one 4018");
+    Equal((byte)7, user.NativeSessionState,
+        "empty Native77 4013 did not advance state 7");
+
+    Check(YbDbLegacy77Codec.TryDecode(sent[0], out var frame,
+        out var error), error);
+    Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+        out var message, out error), error);
+    Equal(0x2424, frame.QueryId,
+        "empty 4013 response query id");
+    Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018,
+        message.Ident, "empty 4013 response ident");
+    Equal(0, message.Recog, "empty 4013 response Recog");
+    Equal((ushort)0, message.Param, "empty 4013 response Param");
+    Equal((ushort)0, message.Tag, "empty 4013 response Tag");
+    Equal((ushort)0, message.Series, "empty 4013 response Series");
+    Equal(0, message.Body.Length, "empty 4013 response body");
 }
 
 static void TestNativeSelectEntryRenameContinuation()
