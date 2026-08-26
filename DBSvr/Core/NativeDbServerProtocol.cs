@@ -86,7 +86,14 @@ namespace DBSvr.Core
         public byte AuthByte56 { get; set; }
         public byte AuthByte77 { get; init; }
         public byte AuthByte78 { get; init; }
-        public byte SelectionState { get; init; } = 1;
+        /// <summary>
+        /// Native GameGate index copied to suffix+0x4A.  The registration
+        /// handshake assigns a one-based index in the range 1..32; this is
+        /// not the player's selection state.  Keeping the field explicit
+        /// prevents the old fixed value of 1 from silently routing a session
+        /// through the wrong gate in a multi-gate deployment.
+        /// </summary>
+        public byte GateIndex { get; init; }
         public byte GroupIndex { get; init; }
         public ushort ZoneIndex { get; init; }
         public ushort ConnectionId { get; init; }
@@ -478,6 +485,11 @@ namespace DBSvr.Core
                 error = "native human session context is required";
                 return false;
             }
+            if (context.GateIndex is < 1 or > 32)
+            {
+                error = "native gate index must be in the range 1..32";
+                return false;
+            }
             if (context.LoginExtension != null
                 && context.LoginExtension.Length != LoginExtensionSize)
             {
@@ -501,7 +513,7 @@ namespace DBSvr.Core
             if (context.AuthByte77 != 0)
                 destination[0x48] = context.AuthByte78;
             destination[0x49] = context.AuthByte77;
-            destination[0x4A] = context.SelectionState;
+            destination[0x4A] = context.GateIndex;
             destination[0x4B] = context.GroupIndex;
             BinaryPrimitives.WriteUInt16LittleEndian(destination.Slice(0x4C, 2),
                 context.ZoneIndex);

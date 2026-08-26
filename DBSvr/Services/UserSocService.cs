@@ -2502,7 +2502,10 @@ namespace DBSvr
                     // The original DBServer pushes the selected record directly over port 6000
                     // before acknowledging 4017 on port 5100.
                     var auth = userInfo.NativeAuthResponse;
+                    var nativeGateIndex = gateInfo?.NativeRouteID ?? 0;
                     if (auth == null || userInfo.NativeConnectionId == 0
+                                     || nativeGateIndex < 1
+                                     || nativeGateIndex > 32
                                      || DBShare.nZoneIdx < 0
                                      || DBShare.nZoneIdx > ushort.MaxValue
                                      || DBShare.nGroupIdx < 0
@@ -2529,7 +2532,7 @@ namespace DBSvr
                             AuthFlags75 = auth.Flags75,
                             AuthByte77 = auth.Byte77,
                             AuthByte78 = auth.Byte78,
-                            SelectionState = 1,
+                            GateIndex = (byte)nativeGateIndex,
                             GroupIndex = (byte)DBShare.nGroupIdx,
                             ZoneIndex = (ushort)DBShare.nZoneIdx,
                             ConnectionId = userInfo.NativeConnectionId,

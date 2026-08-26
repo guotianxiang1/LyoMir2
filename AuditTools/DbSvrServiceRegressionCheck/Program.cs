@@ -3942,7 +3942,7 @@ static void TestNativeDbServerProtocol()
         AuthFlags75 = 0x1234,
         AuthByte77 = 0x56,
         AuthByte78 = 0x78,
-        SelectionState = 1,
+        GateIndex = 1,
         GroupIndex = 1,
         ZoneIndex = 180,
         ConnectionId = 2359,
@@ -3994,12 +3994,41 @@ static void TestNativeDbServerProtocol()
         "native session text +54");
     Equal((byte)0x78, suffix[0x48], "native session byte +78");
     Equal((byte)0x56, suffix[0x49], "native session byte +77");
-    Equal((byte)1, suffix[0x4A], "native session selection state");
+    Equal((byte)1, suffix[0x4A], "native session gate index");
     Equal((byte)1, suffix[0x4B], "native session group index");
     Equal((ushort)180, BitConverter.ToUInt16(suffix.Slice(0x4C, 2)),
         "native session zone index");
     Equal((ushort)2359, BitConverter.ToUInt16(suffix.Slice(0x4E, 2)),
         "native session connection id");
+
+    var gateProbe = new byte[NativeDbServerProtocol.HumanInfoSuffixSize];
+    var gateContext = new NativeHumanSessionContext
+    {
+        UserIp = "1.2.3.4",
+        GateIndex = 7,
+        GroupIndex = 11,
+        SessionMode = 1
+    };
+    Check(NativeDbServerProtocol.TryWriteSessionSuffix(
+            gateProbe, "acct", gateContext, out error), error);
+    Equal((byte)7, gateProbe[0x4A],
+        "native session suffix +0x4A carries GateIndex");
+    Equal((byte)11, gateProbe[0x4B],
+        "native session suffix +0x4B independently carries GroupIndex");
+
+    foreach (var invalidGateIndex in new byte[] { 0, 33 })
+    {
+        var invalidGateContext = new NativeHumanSessionContext
+        {
+            UserIp = "1.2.3.4",
+            GateIndex = invalidGateIndex,
+            GroupIndex = 11,
+            SessionMode = 1
+        };
+        Check(!NativeDbServerProtocol.TryWriteSessionSuffix(
+                gateProbe, "acct", invalidGateContext, out _),
+            $"native session accepted invalid GateIndex {invalidGateIndex}");
+    }
     // 0x55 与 0x56 是两个**独立**位域，原版分别逐位测试后送往不同玩家对象字段：
     //   0x6B09AB test [ebx+0x55],2 / 0x6B09D7 test [ebx+0x55],0x10 / 0x6B09E7 test [ebx+0x55],0x20
     //   0x6B09BB test [ebx+0x56],4    -> obj+0xB77
@@ -4023,7 +4052,7 @@ static void TestNativeDbServerProtocol()
     {
         UserIp = "1.2.3.4",
         AuthFlags75 = NativeDbServerProtocol.AwardPlayerFlag,
-        SelectionState = 1,
+        GateIndex = 1,
         SessionMode = 1,
     };
     Check(NativeDbServerProtocol.TryWriteSessionSuffix(
@@ -4092,7 +4121,7 @@ static void TestNativeDbServerProtocol()
     {
         UserIp = sessionContext.UserIp,
         AuthText54 = sessionContext.AuthText54,
-        SelectionState = 1,
+        GateIndex = 1,
         GroupIndex = 1,
         ZoneIndex = 180,
         ConnectionId = 2359,
