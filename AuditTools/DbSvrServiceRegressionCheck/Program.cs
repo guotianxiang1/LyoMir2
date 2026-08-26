@@ -2153,6 +2153,49 @@ static void TestNativeNewCharacterContract()
           && paddedRequest.Sex == request.Sex,
         "4012 did not tolerate the client's optional trailing byte");
 
+    var exactFourName = gbk.GetBytes("测试");
+    var exactFourBody = new byte[NativeNewCharacterProtocol.BodySize];
+    exactFourBody[0] = (byte)exactFourName.Length;
+    exactFourName.CopyTo(exactFourBody, 1);
+    exactFourBody[17] = 2;
+    exactFourBody[18] = 1;
+    Check(NativeNewCharacterProtocol.TryDecode(exactFourBody,
+            out var exactFourRequest)
+          && exactFourRequest.NameBytes.SequenceEqual(exactFourName)
+          && NativeNewCharacterProtocol.ValidateFixedGates(
+              exactFourRequest, false, false, false)
+             == NativeNewCharacterProtocol.ResultPending,
+        "4012 exact 4-byte GBK name boundary");
+
+    var exactFourteenName = gbk.GetBytes("测试1234567890");
+    var exactFourteenBody = new byte[NativeNewCharacterProtocol.BodySize];
+    exactFourteenBody[0] = (byte)exactFourteenName.Length;
+    exactFourteenName.CopyTo(exactFourteenBody, 1);
+    exactFourteenBody[17] = 2;
+    exactFourteenBody[18] = 1;
+    Check(NativeNewCharacterProtocol.TryDecode(exactFourteenBody,
+            out var exactFourteenRequest)
+          && exactFourteenRequest.NameBytes.SequenceEqual(exactFourteenName)
+          && NativeNewCharacterProtocol.ValidateFixedGates(
+              exactFourteenRequest, false, false, false)
+             == NativeNewCharacterProtocol.ResultPending,
+        "4012 exact 14-byte GBK name boundary");
+
+    var exactFifteenName = gbk.GetBytes("测试1234567890A");
+    var exactFifteenBody = new byte[NativeNewCharacterProtocol.BodySize];
+    exactFifteenBody[0] = (byte)exactFifteenName.Length;
+    exactFifteenName.CopyTo(exactFifteenBody, 1);
+    exactFifteenBody[17] = 2;
+    exactFifteenBody[18] = 1;
+    Check(NativeNewCharacterProtocol.TryDecode(exactFifteenBody,
+            out var exactFifteenRequest)
+          && exactFifteenRequest.NameBytes.SequenceEqual(exactFifteenName),
+        "4012 exact 15-byte GBK name fixture did not decode");
+    Equal(NativeNewCharacterProtocol.ResultInvalidRequest,
+        NativeNewCharacterProtocol.ValidateFixedGates(
+            exactFifteenRequest, false, false, false),
+        "4012 exact 15-byte GBK name boundary");
+
     Equal(NativeNewCharacterProtocol.ResultPending,
         NativeNewCharacterProtocol.ValidateFixedGates(request,
             false, false, false), "4012 ordinary fixed gates");
