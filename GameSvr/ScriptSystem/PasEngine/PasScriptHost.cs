@@ -1186,6 +1186,44 @@ namespace GameSvr.PasEngine
         }
 
         /// <summary>
+        /// Calls the fixed LogoutQuest function used by native CM 1250. Native
+        /// TSTDScript.CallFunc strips the leading '@' from @GetPreQuitInfo and
+        /// performs an exact function-table lookup; a missing script/function
+        /// leaves the caller's result empty and does not execute script main.
+        /// </summary>
+        public bool TryCallLogoutQuestPreQuitInfo(TPlayObject player,
+            out PasValue result)
+        {
+            var scriptPath = Path.Combine(_envirPath, "PsMapQuest",
+                "LogoutQuest.pas");
+            return TryCallProcedure(scriptPath, "GetPreQuitInfo", player,
+                null, out result);
+        }
+
+        /// <summary>
+        /// Runs the fixed HelperQuest entry used by native CM 4417. The native
+        /// board owns exactly PsMapQuest\HelperQuest.pas and silently returns
+        /// when that script object was not loaded, so do not use the generic
+        /// script-name resolver or its CommonScripts fallback here.
+        /// </summary>
+        public bool TryCallHelperQuestLabel(TPlayObject player, string label)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+                return false;
+
+            var scriptPath = Path.Combine(_envirPath, "PsMapQuest",
+                "HelperQuest.pas");
+            if (!File.Exists(scriptPath) || !HasLabelHandler(scriptPath, label))
+                return false;
+
+            return TryCallLabelCore(scriptPath, label, player, null, null,
+                out _);
+        }
+
+        public bool TryCallHelperQuestMain(TPlayObject player)
+            => TryCallHelperQuestLabel(player, "@Main");
+
+        /// <summary>
         /// Restores native case 459 (0x00628C39): discard the cached task
         /// dispatch program, compile PsMapQuest/TaskDispatch.pas again, and
         /// invoke its OnInitialize procedure when present.

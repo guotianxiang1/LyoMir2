@@ -439,13 +439,10 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// CM 4417, native leaf 0x6DB1BF, worker 0x699EB4.
-        ///
-        /// The leaf calls 0x699EB4(taskBoard=[[0x7D5D20]], Self, callback=0x6DC000)
-        /// — a task-publish-board command that runs @Main-style script procedures
-        /// against the board object at [[0x7D5D20]] (its +0x2C script slot). That
-        /// script object and its procedures are not modelled in this port, so the
-        /// command's effect and any reply cannot be reproduced.
+        /// CM 4417 is owned by TryHandleTaskBoardCm before this fallback switch.
+        /// Its live handler invokes the fixed PsMapQuest\HelperQuest.pas @Main
+        /// entry through PasScriptHost. Keep this arm fail-closed so a future
+        /// dispatcher-order change cannot create a second owner.
         /// </summary>
         private void ClientNativeTaskBoardScriptCommand()
         {

@@ -186,13 +186,12 @@ namespace GameSvr
         /// CM 4417, leaf 0x6DB1BF → worker 0x699EB4. The worker only runs when
         /// board[0x2C] (the HelperQuest.pas @Main script object) is non-null, then invokes
         /// its TSTDScript.vmt+0x44 (sub_733D84) with (Self, 0, "@Main"), i.e. it enters the
-        /// board's @Main dialog. That board @Main script object and the player↔script
-        /// interaction it drives are not modelled in this port, so the command is
-        /// fail-closed rather than guessed.
+        /// board's @Main dialog. PasScriptHost.TryCallHelperQuestMain supplies the same
+        /// fixed script path, player context and label; a missing script remains silent.
         /// </summary>
         private void NativeTaskBoardScriptCommand()
         {
-            NativeCmTailFailClosed.Drop(Grobal2.CM_4417, m_sCharName);
+            M2Share.PasEngine?.TryCallHelperQuestMain(this);
         }
 
         /// <summary>

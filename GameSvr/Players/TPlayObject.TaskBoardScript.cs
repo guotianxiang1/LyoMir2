@@ -14,7 +14,7 @@ namespace GameSvr
     /// 任务板是原生单例 <c>[[0x7D5D20]]</c>（VMT 0x72868C）。其 <c>+0x2C</c> 槽是一个由
     /// <c>sub_699FE0</c> 从 "&lt;envir&gt;\PsMapQuest\HelperQuest.pas" 装载的 TSTDScript —— 这就是
     /// 任务板的 @Main 脚本对象。CM 4417/4651 驱动的都是这个对象；本服没有"板对象"实体，其 <c>+0x2C</c>
-    /// 非空门等价于"HelperQuest.pas 可装载"，由 <c>TryCallScriptLabel</c> 找不到脚本即静默 no-op 复刻。
+    /// 非空门等价于"HelperQuest.pas 可装载"，由 <c>TryCallHelperQuestLabel</c> 找不到固定脚本即静默 no-op 复刻。
     ///
     /// TSTDScript.GotoLabel = vmt+0x44（sub_733D84）：
     ///   0x733DC6 SetVar This_DB = [[0x7D5C40]]
@@ -22,7 +22,7 @@ namespace GameSvr
     ///   0x733DE5 SetVar This_Player = 参数1（player）
     ///   0x733DF4 若 label ∈ {"@Main","@_Main"} → 0x733F6F: `call [self.vmt+0x38]`（跑脚本主体）
     ///   0x733E15 否则剥离 '@'、处理 '~' 参数，按名在 [self+0x24] 过程表里查表分发。
-    /// 其 C# 等价即脚本宿主 <c>M2Share.PasEngine.TryCallScriptLabel(script, label, player)</c>：
+    /// 其 C# 等价即脚本宿主 <c>M2Share.PasEngine.TryCallHelperQuestLabel(player, label)</c>：
     /// <c>ExecuteLabel</c> 把 "@buy" 规范化为过程 "_buy"（与原生 剥 '@' 一致），把 "@Main" 映射为
     /// <c>ExecuteMain</c>（与 vmt+0x38 主体腿一致），且对 @main 恒有 handler、对缺失 label 直接返回 false。
     ///
@@ -32,7 +32,7 @@ namespace GameSvr
     /// 逻辑: 0x699EED `mov eax,[board+0x2C]` / 0x699EF0 `test eax,eax / je` —— +0x2C 为空则**什么都不做**；
     ///       否则 0x699EFE `mov ebx,[eax]`(vmt) / 0x699F00 `call [ebx+0x44]`，参数 = (Self=脚本对象,
     ///       edx=player, ecx=0, push 0, push "@Main") ⇒ GotoLabel(player, 0, 0, "@Main")。无任何玩家状态门。
-    /// C#:   <c>TryCallScriptLabel("HelperQuest", "@Main", this)</c> —— 以 This_Player=this 跑 @Main。
+    /// C#:   <c>TryCallHelperQuestMain(this)</c> —— 以 This_Player=this 跑 @Main。
     /// 缺口: 无（板对象 +0x2C 非空门由脚本可装载性复刻；This_DB=[[0x7D5C40]] 的默认对象绑定由脚本宿主统一
     ///       负责，与全服所有 label 调用同源，非本处新增语义）。
     ///
@@ -49,7 +49,7 @@ namespace GameSvr
     ///       [player+0xCD8] 会话绑定）：0x6B8E9F `Insert("_", text, 2)`（"@buy"→"@_buy"）后
     ///       0x6B8EB0 `call 0x699EB4(board, player, label)` —— **与 CM 4417 同一个 worker**，只是 label 换成客户端文本。
     ///       原生板腿把 0x4C6AEC（按 CR=0x0D 分词）的结果整体丢弃、直接用原始 text，本处照此传原文。
-    /// C#:   四道门后 <c>TryCallScriptLabel("HelperQuest", text, this)</c> —— 以客户端文本为 label 跑 HelperQuest。
+    /// C#:   四道门后 <c>TryCallHelperQuestLabel(this, text)</c> —— 以客户端文本为 label 跑固定 HelperQuest。
     ///       "@label" 经 ExecuteLabel 规范化为过程 "_label"，与原生 `Insert("_",...,2)` + vmt+0x44 剥 '@' 得到的
     ///       "_label" 逐字一致；label 缺失时 <c>HasLabelHandler</c> 先拦下 → 返回 false（no-op），不误跑 @Main。
     /// 缺口: <c>sub_6B8CC4</c> 面向**其他脚本对象**的分支（mode==1 的 [[0x7D5D9C]] 怪物脚本、[[0x7D6D80]]、
@@ -80,9 +80,6 @@ namespace GameSvr
     /// </summary>
     public partial class TPlayObject
     {
-        private const string TaskBoardHelperQuestScript = "HelperQuest";
-        private const string TaskBoardScriptMainLabel = "@Main";
-
         /// <summary>
         /// 任务板 @Main 脚本派发 hook。命中 CM 4417/4651 即 return true（调用方短路，越过其后的
         /// TaskBoard.cs / cm-4 Tail 对这两条 ident 的 fail-closed 腿）。挂载点见类级 INTEGRATOR HOOKUP。
@@ -105,11 +102,11 @@ namespace GameSvr
         /// <summary>
         /// CM 4417（leaf 0x6DB1BF → worker 0x699EB4）：以 This_Player=this 运行任务板 HelperQuest.pas 的
         /// "@Main" label。原生仅在板对象 +0x2C（HelperQuest 脚本对象）非空时经 vmt+0x44 GotoLabel(player,0,0,"@Main")
-        /// 进入；无玩家状态门。<c>TryCallScriptLabel</c> 在脚本缺失时返回 false（静默），复刻 +0x2C 为空的忠实 no-op。
+        /// 进入；无玩家状态门。<c>TryCallHelperQuestMain</c> 在脚本缺失时返回 false（静默），复刻 +0x2C 为空的忠实 no-op。
         /// </summary>
         private void NativeTaskBoardScriptCommandRun()
         {
-            M2Share.PasEngine?.TryCallScriptLabel(TaskBoardHelperQuestScript, TaskBoardScriptMainLabel, this);
+            M2Share.PasEngine?.TryCallHelperQuestMain(this);
         }
 
         /// <summary>
@@ -132,7 +129,7 @@ namespace GameSvr
                 return;
             }
             // 板腿 0x6B8E6D..0x6B8EB5：原始文本 → 0x699EB4 → GotoLabel(player,0,0,label)。
-            M2Share.PasEngine?.TryCallScriptLabel(TaskBoardHelperQuestScript, text, this);
+            M2Share.PasEngine?.TryCallHelperQuestLabel(this, text);
         }
     }
 }

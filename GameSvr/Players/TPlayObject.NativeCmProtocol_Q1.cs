@@ -17,16 +17,16 @@ namespace GameSvr
     /// word[rec+6]=Param=nParam2, word[rec+8]=Tag=nParam3, word[rec+0xA]=Series=wParam,
     /// body=sMsg/Payload, body length=nBodyLen.
     ///
-    /// Disposition: all 25 are fail-closed. Every leaf reaches a REAL worker (never the
-    /// 0x6DBC2C no-op sink — the missing set excludes no-ops), but every worker's terminal
-    /// action and reply body are a function of runtime subsystem state that is not a
-    /// constant in the image (shop/mall mgr [[0x7D5D98]], 元宝寄售 mgr [[0x7D6ABC]],
-    /// booth/stall mgr [[0x7D7190]], quiz/broadcast mgr [[0x7D62DC]], std-item/strengthen
-    /// tables [[0x7D5D6C]]/[[0x7D6630]]/[[0x7D5F20]], the task-board & piece-up scripts,
-    /// and the equip-secret lock [player+0x711]). Reproducing a reply would put invented
-    /// bytes on the wire, so each is dropped through <see cref="NativeCmQ1FailClosed"/>,
-    /// which records the gap once per ident. This mirrors cm-4 (whole quarter fail-closed)
-    /// and the C# port's own dormancy of these write-side subsystems (NativeStallWriteGate
+    /// Disposition: CM 1250 is closed by its fixed LogoutQuest/GetPreQuitInfo script call
+    /// and unconditional SM 2865 reply. The other workers' terminal actions and reply
+    /// bodies remain functions of runtime subsystem state that is not a constant in the
+    /// image (shop/mall mgr [[0x7D5D98]], 元宝寄售 mgr [[0x7D6ABC]], booth/stall mgr
+    /// [[0x7D7190]], quiz/broadcast mgr [[0x7D62DC]], std-item/strengthen tables
+    /// [[0x7D5D6C]]/[[0x7D6630]]/[[0x7D5F20]], the piece-up script, and the equip-secret
+    /// lock [player+0x711]). Reproducing those replies would put invented bytes on the
+    /// wire, so unresolved fallback legs are dropped through
+    /// <see cref="NativeCmQ1FailClosed"/>, which records each gap once. This preserves
+    /// the C# port's own dormancy of these write-side subsystems (NativeStallWriteGate
     /// off; NativeYbDealPurchaseStateMachine dormant; only the read-only 元宝 views
     /// CM 1252/1253/1256/1257 are wired). Pre-gates that read modelled state only are
     /// reproduced: CM 1061/1080 empty-body silence is already handled upstream by
@@ -385,15 +385,25 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// CM 1250, leaf 0x6DA5A1 -> worker 0x6E1CEC. When the task-board script object
-        /// <c>[[0x7D5D20]]+0</c> is non-null it runs the board script 0x6996E8 to build the
-        /// listing and answers SM 0xB31 with it. The board script object [[0x7D5D20]] and its
-        /// @Main procedures are not ported (the same object cm-4 withholds for CM 4150/4151/
-        /// 4651), so the body cannot be derived.
+        /// CM 1250, leaf 0x6DA5A1 -> worker 0x6E1CEC. The worker initialises an empty
+        /// result, calls 0x6996E8 only when board[0] (the quest-script manager) is non-null,
+        /// then unconditionally sends SM 0xB31/2865 with Recog=Self and
+        /// Param/Tag/Series=0. The manager's +0x0C slot is loaded by the fixed loader at
+        /// 0x69A5D8 from PsMapQuest\LogoutQuest.pas. 0x6996E8 calls its
+        /// TSTDScript.vmt+0x48 with "@GetPreQuitInfo"; vmt worker 0x733B98 strips the single
+        /// '@' and performs an exact GetPreQuitInfo lookup. Missing script/function
+        /// therefore yields the same empty reply rather than suppressing the packet.
         /// </summary>
         private void ClientNativeTaskBoardList()
         {
-            NativeCmQ1FailClosed.Drop(Grobal2.CM_1250, m_sCharName);
+            var text = string.Empty;
+            if (M2Share.PasEngine?.TryCallLogoutQuestPreQuitInfo(this,
+                    out var result) == true)
+            {
+                text = result.AsString();
+            }
+
+            SendDefMessage(Grobal2.SM_2865, ObjectId, 0, 0, 0, text);
         }
 
         // ================================================================================
