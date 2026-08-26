@@ -18,6 +18,7 @@ var skipped = new List<string>();
 
 await Run("44FF44 garbage + partial frame", TestFrame44);
 await Run("44FF44 bounded stream buffer", TestFrame44StreamParser);
+await Run("MirGate native boolean values", TestMirGateNativeBooleanValues);
 await Run("mobile frame native header + large payload", TestMobileCodec);
 await Run("percent-dollar split/coalesced frames", TestPercentDollar);
 await Run("77BBAA33 split/coalesced/compact ACK", TestInternalPacket77Frames);
@@ -30,7 +31,7 @@ await Run("native human 16-slot equipment + eye sidecar + bind", TestNativeHuman
 await Run("5600 account session replacement + IP admission", TestSessionReplacement);
 await Run("5600 private admission requires an M2 peer", TestPrivateAdmissionDelivery);
 await Run("5600 native client registration + auth + probe", TestNativeLoginGateClientMode);
-await Run("GameGate ignored native type17 runtime", TestIgnoredType17Runtime);
+await Run("GameGate consumes negative native type17 target", TestNegativeType17Runtime);
 await Run("GameGate route open requires GameSvr", TestGameRouteOpenFailure);
 await Run("GameGate DB reconnect invalidates clients", TestSharedBackendDbReconnect);
 await Run("GameGate shared backend multiplexing", TestSharedBackendHub);
@@ -295,9 +296,10 @@ static Task TestInternalPacket77Frames()
     var frameBounded = new InternalPacket77FrameParser(64 * 1024, maximumFrameLength);
     Check(frameBounded.TryAppend(invalidThenAck, 0, invalidThenAck.Length,
         out var afterOversized, out error), error);
-    Equal(1, afterOversized.Count, "oversized frame header rejected");
-    Equal((uint)0x76543210, afterOversized[0].ConnID,
-        "valid ACK after oversized frame header");
+    // Native M2 abandons the entire filled receive buffer when the declared
+    // body exceeds the accepted bound; a trailing frame in that same buffer
+    // is therefore discarded rather than resynchronised.
+    Equal(0, afterOversized.Count, "oversized frame buffer discarded");
     Equal(0, frameBounded.BufferedLength, "oversized frame header drained");
 
     var maximumPayload = new byte[maximumFrameLength - InternalPacket77.HEADER_SIZE];
@@ -1125,7 +1127,7 @@ static async Task TestPrivateAdmissionDelivery()
     }
 }
 
-static async Task TestIgnoredType17Runtime()
+static async Task TestNegativeType17Runtime()
 {
     using var dbListener = new TcpListener(IPAddress.Loopback, 0);
     using var gameListener = new TcpListener(IPAddress.Loopback, 0);
@@ -1142,14 +1144,16 @@ static async Task TestIgnoredType17Runtime()
     }, (_, _) => { });
     hub.Start();
 
-    var opening = hub.OpenRouteAsync(117, "127.0.0.17", 1, () => { },
+    var opening = hub.OpenRouteAsync(117, 117, "127.0.0.17", 1, () => { },
         CancellationToken.None);
     using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(3));
     using var gamePeer = await gameAccept.WaitAsync(TimeSpan.FromSeconds(3));
+    await ReadAndReplyDbRegistration(dbPeer.GetStream(), 1);
+    await ReadAndReplyGameRegistration(gamePeer.GetStream(), 1);
+    await ReadAndReplyDbOpen(dbPeer.GetStream(), 0);
+    await ReadUntilGameOpen(gamePeer.GetStream(), 117);
     var route = await opening.WaitAsync(TimeSpan.FromSeconds(3));
     Check(route != null, "type17 runtime route open");
-    await ReadPercentFrames(dbPeer.GetStream(), 1);
-    await ReadInternalFrames(gamePeer.GetStream(), 1);
 
     var state = new[]
     {
@@ -1163,10 +1167,10 @@ static async Task TestIgnoredType17Runtime()
     await route.GameResponses.Reader.ReadAsync().AsTask()
         .WaitAsync(TimeSpan.FromSeconds(3));
 
-    var ignored = BuildIgnoredLegacyType17(0xFFFFFFFF, 0x80000000,
+    var consumed = BuildNegativeLegacyType17(0xFFFFFFFF, 0x80000000,
         new byte[] { 0x41, 0x77, 0xBB, 0xAA, 0x33, 0x42 });
     var tail = BuildInternalReply(117, 0x4444, new byte[] { 0x55 });
-    var sticky = ignored.Concat(tail).ToArray();
+    var sticky = consumed.Concat(tail).ToArray();
     await gamePeer.GetStream().WriteAsync(sticky.AsMemory(0, 7));
     await gamePeer.GetStream().WriteAsync(sticky.AsMemory(7));
     var aligned = await route.GameResponses.Reader.ReadAsync().AsTask()
@@ -1205,38 +1209,42 @@ static async Task TestSharedBackendHub()
 
     var route1AbortCount = 0;
     var route2AbortCount = 0;
-    var open1 = hub.OpenRouteAsync(101, "127.0.0.1", 1,
+    var open1 = hub.OpenRouteAsync(101, 101, "127.0.0.1", 1,
         () => Interlocked.Increment(ref route1AbortCount),
         CancellationToken.None);
     using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(3));
     using var gamePeer = await gameAccept.WaitAsync(TimeSpan.FromSeconds(3));
+    await ReadAndReplyDbRegistration(dbPeer.GetStream(), 1);
+    await ReadAndReplyGameRegistration(gamePeer.GetStream(), 1);
+    await ReadAndReplyDbOpen(dbPeer.GetStream(), 0);
+    await ReadUntilGameOpen(gamePeer.GetStream(), 101);
     var route1 = await open1.WaitAsync(TimeSpan.FromSeconds(3));
     Check(route1 != null, "first shared route");
-    var route2 = await hub.OpenRouteAsync(102, "127.0.0.2", 2,
+    var open2 = hub.OpenRouteAsync(102, 102, "127.0.0.2", 2,
         () => Interlocked.Increment(ref route2AbortCount),
-        CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(3));
+        CancellationToken.None);
+    await ReadAndReplyDbOpen(dbPeer.GetStream(), 0);
+    await ReadUntilGameOpen(gamePeer.GetStream(), 102);
+    var route2 = await open2.WaitAsync(TimeSpan.FromSeconds(3));
     Check(route2 != null, "second shared route");
 
-    var dbOpens = await ReadPercentFrames(dbPeer.GetStream(), 2);
-    Equal(2, dbOpens.Count, "DB logical open count");
-    Check(dbOpens.Any(f => Encoding.ASCII.GetString(f).StartsWith("%O101/")),
-        "DB route 101 open");
-    Check(dbOpens.Any(f => Encoding.ASCII.GetString(f).StartsWith("%O102/")),
-        "DB route 102 open");
-    var gameOpens = await ReadInternalFrames(gamePeer.GetStream(), 2);
-    Equal(2, gameOpens.Count, "Game logical open count");
-    Check(gameOpens.Any(p => p.ConnID == 101 && p.Cmd == Grobal2.GM_OPEN),
-        "Game route 101 open");
-    Check(gameOpens.Any(p => p.ConnID == 102 && p.Cmd == Grobal2.GM_OPEN),
-        "Game route 102 open");
-    Check(gameOpens.All(p => (p.SeqID >> 16) == (p.ConnID & 0xFFFF)),
-        "Game sequence high word carries native connection id");
+    // Native command 11 completion queues the initial SM_LOGIN prompt on each
+    // logical route. Drain those frames before checking later DB payloads.
+    var route1Login = await route1!.DbResponses.Reader.ReadAsync().AsTask()
+        .WaitAsync(TimeSpan.FromSeconds(3));
+    var route2Login = await route2!.DbResponses.Reader.ReadAsync().AsTask()
+        .WaitAsync(TimeSpan.FromSeconds(3));
+    Check(Encoding.ASCII.GetString(route1Login).StartsWith("%101/#",
+        StringComparison.Ordinal), "route 101 native login prompt");
+    Check(Encoding.ASCII.GetString(route2Login).StartsWith("%102/#",
+        StringComparison.Ordinal), "route 102 native login prompt");
+
 
     Check(await hub.SendGameHeartbeatOnceAsync(CancellationToken.None),
         "Game heartbeat send");
     var heartbeat = (await ReadInternalFrames(gamePeer.GetStream(), 1)).Single();
     Equal((uint)0, heartbeat.ConnID, "Game heartbeat connection id");
-    Equal((ushort)Grobal2.GM_CHECKCLIENT, heartbeat.Cmd,
+    Equal(NativeGameGateCommands.GateKeepAliveRequest, heartbeat.Cmd,
         "Game heartbeat direction");
     Equal(0, heartbeat.Payload.Length, "Game heartbeat payload");
 
@@ -1361,7 +1369,7 @@ static async Task TestSharedBackendHub()
         TextBytes = new byte[largestRelay.TextBytes.Length + 1]
     };
     Check(!hub.TryDispatchLegacyType18(oversizedRelay),
-        "native type18 client relay accepted 0x8000-byte envelope");
+        "native type18 client relay accepted body+12 == 0x8000");
     Check(!route1.GameResponses.Reader.TryRead(out _)
           && !route2.GameResponses.Reader.TryRead(out _),
         "oversized legacy type18 produced route packets");
@@ -1407,8 +1415,11 @@ static async Task TestSharedBackendHub()
             Grobal2.GM_DATA, Array.Empty<byte>())),
         "invalidated Game route accepted upstream data");
     using var gamePeer2 = await gameReconnectAccept.WaitAsync(TimeSpan.FromSeconds(5));
-    await Task.Delay(250);
-    Check(!gamePeer2.GetStream().DataAvailable,
+    var reconnectFrames = await ReadInternalFrames(gamePeer2.GetStream(), 1);
+    Check(reconnectFrames.Any(p =>
+            p.Cmd == NativeGameGateCommands.GateRegistrationRequest),
+        "Game reconnect did not send a fresh registration");
+    Check(reconnectFrames.All(p => p.Cmd != Grobal2.GM_OPEN),
         "Game reconnect replayed stale logical opens");
     Equal(0, Volatile.Read(ref route1.NativePlayerRecog),
         "Game reconnect retained route 101 player recog");
@@ -1449,14 +1460,16 @@ static async Task TestSharedBackendDbReconnect()
     hub.Start();
 
     var abortCount = 0;
-    var open = hub.OpenRouteAsync(201, "127.0.0.3", 3,
+    var open = hub.OpenRouteAsync(201, 201, "127.0.0.3", 3,
         () => Interlocked.Increment(ref abortCount), CancellationToken.None);
     using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(3));
     using var gamePeer = await gameAccept.WaitAsync(TimeSpan.FromSeconds(3));
+    await ReadAndReplyDbRegistration(dbPeer.GetStream(), 1);
+    await ReadAndReplyGameRegistration(gamePeer.GetStream(), 1);
+    await ReadAndReplyDbOpen(dbPeer.GetStream(), 0);
+    await ReadUntilGameOpen(gamePeer.GetStream(), 201);
     var route = await open.WaitAsync(TimeSpan.FromSeconds(3));
     Check(route != null, "DB reconnect test route");
-    await ReadPercentFrames(dbPeer.GetStream(), 1);
-    await ReadInternalFrames(gamePeer.GetStream(), 1);
 
     var dbReconnectAccept = dbListener.AcceptTcpClientAsync();
     dbPeer.Close();
@@ -1466,16 +1479,22 @@ static async Task TestSharedBackendDbReconnect()
         "DB disconnect did not invalidate the route generation");
     Check(!hub.TryGetRoute(201, 3, out _),
         "invalidated DB route remained available");
-    Check(!await hub.SendDbAsync(route, Encoding.ASCII.GetBytes("%201/test$")),
+    // The DB uplink now accepts the decoded client header and raw body
+    // separately.  The route is already invalidated, so this deliberately
+    // valid header must still be rejected before any bytes are written.
+    Check(!await hub.SendDbAsync(route,
+            new ClientPacket { Ident = Grobal2.CM_QUERYCHR },
+            Array.Empty<byte>()),
         "invalidated DB route accepted upstream data");
     Check(!await hub.SendGameAsync(route, BuildInternalReply(201,
             Grobal2.GM_DATA, Array.Empty<byte>())),
         "DB-invalidated route accepted GameSvr data");
 
     using var dbPeer2 = await dbReconnectAccept.WaitAsync(TimeSpan.FromSeconds(5));
+    await ReadAndReplyDbRegistration(dbPeer2.GetStream(), 1);
     await Task.Delay(250);
     Check(!dbPeer2.GetStream().DataAvailable,
-        "DB reconnect replayed stale logical opens");
+        "DB reconnect replayed stale logical opens after registration");
 
     await hub.CloseRouteAsync(route);
     await hub.StopAsync();
@@ -1504,18 +1523,24 @@ static async Task TestGameRouteOpenFailure()
     }, (_, _) => { });
     hub.Start();
 
-    var opening = hub.OpenRouteAsync(301, "127.0.0.4", 4, () => { },
+    var opening = hub.OpenRouteAsync(301, 301, "127.0.0.4", 4, () => { },
         CancellationToken.None);
     using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(3));
-    var dbFrames = await ReadPercentFrames(dbPeer.GetStream(), 2);
-    var route = await opening.WaitAsync(TimeSpan.FromSeconds(3));
+    await ReadAndReplyDbRegistration(dbPeer.GetStream(), 1);
+    var dbOpen = await ReadDbFrame(dbPeer.GetStream());
+    Equal(NativeGameGateDbProtocol.OpenRequest, dbOpen.Ident,
+        "failed GameSvr route DB open command");
+    await WriteDbFrame(dbPeer.GetStream(), new YbDbLegacy77Frame(
+        dbOpen.QueryId, 0, NativeGameGateDbProtocol.OpenResponse,
+        Array.Empty<byte>()));
+    var dbClose = await ReadDbFrame(dbPeer.GetStream());
+    Equal(NativeGameGateDbProtocol.CloseRequest, dbClose.Ident,
+        "failed GameSvr route DB close command");
+    Equal(dbOpen.QueryId, dbClose.QueryId,
+        "failed GameSvr route DB close session");
+    var route = await opening.WaitAsync(TimeSpan.FromSeconds(8));
 
     Check(route == null, "GameSvr failure returned a live route");
-    Check(dbFrames.Any(frame => Encoding.ASCII.GetString(frame)
-        == "%O301/127.0.0.4/127.0.0.4$"),
-        "failed GameSvr route did not open its DB logical route");
-    Check(dbFrames.Any(frame => Encoding.ASCII.GetString(frame) == "%X301$"),
-        "failed GameSvr route did not close its DB logical route");
     Check(!hub.TryGetRoute(301, 4, out _),
         "failed GameSvr route remained in the route table");
 
@@ -1580,19 +1605,13 @@ static byte[] BuildInternalReply(uint connId, ushort command, byte[] payload) =>
         Payload = payload
     }.ToBytes();
 
-static byte[] BuildIgnoredLegacyType17(uint field4, uint field8, byte[] payload)
-{
-    var result = new byte[LegacyGateType18.HeaderSize + payload.Length];
-    BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(0, 4),
-        InternalPacket77.MAGIC);
-    BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(4, 4), field4);
-    BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(8, 4), field8);
-    BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(12, 2), 17);
-    BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(14, 2),
-        checked((ushort)payload.Length));
-    payload.CopyTo(result, LegacyGateType18.HeaderSize);
-    return result;
-}
+static byte[] BuildNegativeLegacyType17(uint field4, uint field8, byte[] payload) =>
+    new LegacyGateType17
+    {
+        ConnectionId = field4,
+        TargetGate = field8,
+        Payload = payload
+    }.ToBytes();
 
 static void CheckLegacyClientPacket(InternalPacket77 packet, uint connId,
     int recog, ushort ident, byte[] expectedBody, string name)
@@ -1637,6 +1656,101 @@ static async Task<List<InternalPacket77>> ReadInternalFrames(NetworkStream strea
         frames.AddRange(parsed);
     }
     return frames;
+}
+
+static Task TestMirGateNativeBooleanValues()
+{
+    var root = Path.Combine(Path.GetTempPath(),
+        "loym2-gate-config-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var ini = "[Server]\r\n"
+            + "Globalspeed=真\r\n"
+            + "OpenNewTigerGate=假\r\n"
+            + "Reboot=是\r\n";
+        File.WriteAllText(Path.Combine(root, "MirGate.ini"), ini,
+            Encoding.GetEncoding(936));
+
+        var config = GateConfig.Load(root);
+        Check(config.GlobalSpeed,
+            "native Globalspeed=真 must enable GlobalSpeed");
+        Check(!config.OpenNewTigerGate,
+            "native OpenNewTigerGate=假 must disable Tiger gate");
+        Check(config.RebootM2WhenStuck,
+            "native Reboot=是 must enable M2 reboot");
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, true);
+    }
+    return Task.CompletedTask;
+}
+
+static async Task ReadAndReplyGameRegistration(NetworkStream stream,
+    uint assignedGateIndex)
+{
+    var registration = await ReadUntilGameCommand(stream,
+        NativeGameGateCommands.GateRegistrationRequest);
+    Equal((uint)0, registration.ConnID,
+        "Game gate registration connection id");
+    Equal(0, registration.Payload.Length,
+        "Game gate registration payload");
+    var reply = new InternalPacket77
+    {
+        Magic = InternalPacket77.MAGIC,
+        ConnID = assignedGateIndex,
+        SeqID = 0,
+        Cmd = 15,
+        Payload = Array.Empty<byte>()
+    }.ToBytes();
+    await stream.WriteAsync(reply);
+}
+
+static async Task<InternalPacket77> ReadUntilGameCommand(NetworkStream stream,
+    ushort command)
+{
+    var parser = new InternalPacket77FrameParser();
+    var buffer = new byte[256];
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    while (true)
+    {
+        var count = await stream.ReadAsync(buffer, timeout.Token);
+        if (count <= 0) throw new EndOfStreamException();
+        Check(parser.TryAppend(buffer, 0, count, out var parsed, out var error),
+            error);
+        foreach (var packet in parsed)
+            if (packet.Cmd == command) return packet;
+    }
+}
+
+static async Task<InternalPacket77> ReadUntilGameOpen(NetworkStream stream,
+    uint connId)
+{
+    var parser = new InternalPacket77FrameParser();
+    var buffer = new byte[256];
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+    while (true)
+    {
+        var count = await stream.ReadAsync(buffer, timeout.Token);
+        if (count <= 0) throw new EndOfStreamException();
+        Check(parser.TryAppend(buffer, 0, count, out var parsed, out var error),
+            error);
+        foreach (var packet in parsed)
+        {
+            if (packet.Cmd == NativeGameGateCommands.GateRegistrationRequest)
+            {
+                Equal((uint)0, packet.ConnID,
+                    "Game gate registration connection id");
+                Equal(0, packet.Payload.Length,
+                    "Game gate registration payload");
+                continue;
+            }
+
+            if (packet.ConnID == connId && packet.Cmd == Grobal2.GM_OPEN)
+                return packet;
+        }
+    }
 }
 
 static async Task TestClientSocketReconnect()
@@ -2159,7 +2273,7 @@ static Task TestDatabase(string iniPath)
             Check(NativeDbServerProtocol.TryCreateLoadHumanFrame(
                     loaded.Data.sAccount, loaded.Data.sCharName,
                     loaded.NativeData, loaded.NativeScriptData,
-                    new NativeHumanSessionContext(),
+                    new NativeHumanSessionContext { GateIndex = 1 },
                     out var selectedFrame, out var selectedError),
                 "build native selected-human frame " + name + ": " + selectedError);
             Equal(NativeDbServerProtocol.LoadHumanBasePayloadSize
@@ -2599,6 +2713,45 @@ static async Task<YbDbLegacy77Frame> ReadLegacy77Frame(NetworkStream stream)
     payload.CopyTo(wire, header.Length);
     Check(YbDbLegacy77Codec.TryDecode(wire, out var frame, out var error), error);
     return frame;
+}
+
+static Task<YbDbLegacy77Frame> ReadDbFrame(NetworkStream stream) =>
+    ReadLegacy77Frame(stream);
+
+static async Task WriteDbFrame(NetworkStream stream,
+    YbDbLegacy77Frame frame)
+{
+    Check(YbDbLegacy77Codec.TryEncode(frame, out var wire, out var error),
+        error);
+    await stream.WriteAsync(wire);
+}
+
+static async Task<YbDbLegacy77Frame> ReadAndReplyDbRegistration(
+    NetworkStream stream, int assignedGateId)
+{
+    var request = await ReadDbFrame(stream);
+    Equal(NativeGameGateDbProtocol.RegisterRequest, request.Ident,
+        "DB registration command");
+    Equal(0, request.Param, "DB registration parameter");
+    Check(NativeGameGateDbProtocol.IsValidAssignedGateId(assignedGateId),
+        "DB registration assigned gate id");
+    await WriteDbFrame(stream, new YbDbLegacy77Frame(
+        assignedGateId, 0, NativeGameGateDbProtocol.RegisterResponse,
+        Array.Empty<byte>()));
+    return request;
+}
+
+static async Task<YbDbLegacy77Frame> ReadAndReplyDbOpen(
+    NetworkStream stream, int backendContext)
+{
+    var request = await ReadDbFrame(stream);
+    Equal(NativeGameGateDbProtocol.OpenRequest, request.Ident,
+        "DB route open command");
+    Check(request.QueryId > 0, "DB route open session id");
+    await WriteDbFrame(stream, new YbDbLegacy77Frame(
+        request.QueryId, backendContext,
+        NativeGameGateDbProtocol.OpenResponse, Array.Empty<byte>()));
+    return request;
 }
 
 static TaskCompletionSource NewSignal() =>
