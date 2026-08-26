@@ -69,8 +69,6 @@ namespace GameSvr.Services
             void Add(int ident, uint handler, uint callee, string subsystem, string blocker)
                 => map[ident] = new Entry(ident, handler, callee, subsystem, blocker);
 
-            Add(1265, 0x006DA710, 0x006E8564, "元宝交易设置",
-                "挂单集合子对象 [self+0x192C] 未建模；空集合时原生仅服务端日志、不回包");
             Add(1280, 0x006DA8F3, 0x006E9208, "自身对象回显",
                 "门=客户端 Recog 等于服务端对象指针(C# 无同表示指针身份)，SM 0xCDB body=[self+0x554] 0x1C 字段块未建模");
             Add(1291, 0x006DA3CA, 0x0069059C, "英雄灵珠",

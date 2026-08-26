@@ -98,6 +98,8 @@ namespace GameSvr
         public static NativeNickLinFuState NickLinFuState = NativeNickLinFuState.Disabled;
         public static NativeCreditCardService CreditCardService = NativeCreditCardService.Disabled;
         internal static NativeCorpsService CorpsService = NativeCorpsService.Unavailable;
+        internal static NativeYbDealSetInfoService YbDealSetInfoService =
+            NativeYbDealSetInfoService.Unavailable;
         public static NativeHonorValueManager HonorValueManager = null;
         public static NativeAuthenticationManager AuthenticationManager = null;
         public static ItemUnit ItemUnit = null;

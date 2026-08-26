@@ -17,6 +17,21 @@ namespace GameSvr
             int nCode;
             M2Share.LocalDB = new LocalDB();
             M2Share.CommonDB = new CommonDB();
+            M2Share.YbDealSetInfoService = new NativeYbDealSetInfoService(
+                new MySqlNativeYbDealSetInfoStore(
+                    M2Share.g_Config?.sConnctionString));
+            if (M2Share.YbDealSetInfoService.TryInitialize(
+                    out var ybDealSetInfoError))
+            {
+                M2Share.MainOutMessage(
+                    $"加载原生M2_YB_Deal_SetInfo成功({M2Share.YbDealSetInfoService.Count})...");
+            }
+            else
+            {
+                M2Share.ErrorMessage(
+                    "[Error]:M2_YB_Deal_SetInfo初始化失败 " +
+                    ybDealSetInfoError);
+            }
             if (!NativeYbShopPurchaseStore.EnsureNativeSchema(
                     out var ybConsumeSchemaError))
                 M2Share.ErrorMessage("创建原生YBConsume表失败: " +

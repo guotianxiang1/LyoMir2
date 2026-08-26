@@ -455,16 +455,18 @@ namespace GameSvr
         /// <summary>
         /// CM 4446, native leaf 0x6DBB37, worker 0x6F75C4.
         ///
-        /// The leaf calls 0x6F75C4(Self). The worker reads the consignment
-        /// collection [Self+0x192C] (0x6F75CB); when it is null (0x6F75D3 `je`) it
-        /// does nothing, otherwise it counts the entries through 0x712BE4 and
-        /// answers SM 0x115E/4446 with Recog = that count. The [Self+0x192C]
-        /// sub-object is not modelled here, so the count that fills Recog cannot be
-        /// derived and the reply is withheld.
+        /// The worker reads TYBDealSetInfo [Self+0x192C]; null is silent. Getter
+        /// 0x712BE4 returns zero when the current record is null, otherwise its
+        /// WORD LimitLevel at record+0x26. SM4446 carries that value in Recog.
         /// </summary>
         private void ClientNativeYuanbaoConsignSettings()
         {
-            NativeCmTailFailClosed.Drop(Grobal2.CM_4446, m_sCharName);
+            var state = m_NativeYbDealSetInfo;
+            if (state == null) return;
+            var limitLevel = M2Share.YbDealSetInfoService?.GetLimitLevel(state)
+                             ?? 0;
+            var reply = BuildSm4446(limitLevel);
+            SendSocket(reply.Header, reply.Body);
         }
 
         /// <summary>

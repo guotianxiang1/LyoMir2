@@ -92,7 +92,8 @@ namespace GameSvr
 
                 // --- 独立项 ---
                 case Grobal2.CM_1265:
-                    ClientNativeQ2_1265_YbTradeSettings();
+                    ClientNativeQ2_1265_YbTradeSettings(
+                        unchecked((ushort)processMessage.nParam2));
                     return true;
                 case Grobal2.CM_1280:
                     ClientNativeQ2_1280_SelfEcho();
@@ -243,12 +244,30 @@ namespace GameSvr
 
         /// <summary>
         /// CM 1265, leaf 0x6DA710, worker 0x6E8564 — 元宝交易设置。
-        /// 0x6E8580 `esi=[self+0x192C]`(挂单集合); 空则仅服务端日志、不回包; 非空
-        /// 则 0x712BC4(集合,Param) 查找后 SM 0xBC7(Recog=0/-1, 空 body)。挂单集合
-        /// 子对象未建模 (等价于空 → 原生对客户端静默)。
+        /// leaf 从 wire+6 读取 WORD。holder [self+0x192C] 为空时只记错误日志；
+        /// 否则 0x712BC4 接受 0..999，写 LimitLevel 并置脏，回复
+        /// SM3015(Recog=0)；拒绝时回复 SM3015(Recog=-1)。
         /// </summary>
-        private void ClientNativeQ2_1265_YbTradeSettings()
-            => NativeCmQ2FailClosed.Q2Drop(Grobal2.CM_1265, m_sCharName);
+        private void ClientNativeQ2_1265_YbTradeSettings(ushort limitLevel)
+        {
+            var state = m_NativeYbDealSetInfo;
+            if (state == null)
+            {
+                M2Share.ErrorMessage("[Error]: 交易设置信息读取失败");
+                return;
+            }
+
+            var success = M2Share.YbDealSetInfoService?.TrySetLimitLevel(
+                state, limitLevel) == true;
+            if (success)
+            {
+                M2Share.AddNativeGameDataLog(this, 0x38,
+                    "元宝交易设置", 0, 0, "这是交易等级=" + limitLevel);
+            }
+
+            var reply = BuildSm3015(success ? 0 : -1);
+            SendSocket(reply.Header, reply.Body);
+        }
 
         /// <summary>
         /// CM 1280, leaf 0x6DA8F3, worker 0x6E9208 — 自身对象回显。

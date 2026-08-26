@@ -94,8 +94,6 @@ namespace GameSvr.Services
                 "同 4409；英雄有效时的镶嵌链未移植");
             Add(4417, 0x006DB1BF, 0x00699EB4, "任务发布板脚本",
                 "任务板 @Main 脚本对象 [[0x7D5D20]]+0x2C 未建模");
-            Add(4446, 0x006DBB37, 0x006F75C4, "元宝交易设置",
-                "[player+0x192C] 挂单集合子对象未建模，SM 4446 的 Recog 无法推导");
             Add(4496, 0x006DBBDC, 0x006FAC8C, "新手任务",
                 "FreshmanTaskCommand 脚本入口未接入");
             Add(4626, 0x006DB394, 0x006AE260, "分页列表查询",

@@ -67,3 +67,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeAction1024CompatCheck")]
 [assembly: InternalsVisibleTo("NativePendingNoticeProtocolCheck")]
 [assembly: InternalsVisibleTo("GateLifecycleGenerationCheck")]
+[assembly: InternalsVisibleTo("NativeYbDealSetInfoCheck")]

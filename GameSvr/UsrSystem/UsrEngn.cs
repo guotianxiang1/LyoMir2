@@ -4137,6 +4137,9 @@ namespace GameSvr
                     $"[SaveHumanRcd] 原生切服块编码失败 {PlayObject.m_sCharName}: {switchError}");
                 return;
             }
+            if (saveMode == 0)
+                M2Share.YbDealSetInfoService?.Save(
+                    PlayObject.m_NativeYbDealSetInfo);
             PlayObject.SaveNativeAccountStorageIfDirty();
             if (PlayObject.m_HeroObject != null)
                 HeroDataService.QueueSave(PlayObject.m_HeroObject);
@@ -4534,6 +4537,9 @@ namespace GameSvr
                     }
                 }
             }
+            M2Share.YbDealSetInfoService?.Attach(
+                PlayObject.m_NativeYbDealSetInfo, PlayObject.m_sUserID,
+                PlayObject.m_sCharName);
         }
 
         private void HydrateNativeItemConstructorState(TUserItem item)
