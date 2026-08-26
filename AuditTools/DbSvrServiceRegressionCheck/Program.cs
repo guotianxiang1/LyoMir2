@@ -4137,7 +4137,7 @@ static LoginSvrService CreateNativeLoginFixture(
 }
 
 static IPlayRecordService CreateNativePlayRecordProxy(
-    HumRecordData record, ChrIndexInfo nativeRecord)
+    HumRecordData record, ChrIndexInfo? nativeRecord)
 {
     return InterfaceProxy.Create<IPlayRecordService>((method, args) =>
     {
