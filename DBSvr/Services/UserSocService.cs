@@ -1146,7 +1146,19 @@ namespace DBSvr
                     if (!ProcessRenameChr(body, pktSessionId, gateInfo,
                             ref userInfo)
                         && userInfo.WireMode == TGateWireMode.Native77)
-                        OutOfConnect(userInfo, gateInfo);
+                    {
+                        // fn_5CD2EC returns false after an error response (or
+                        // an early silent exit). The outer 0x5CE423 leg then
+                        // uses 0x5CC7B4: one empty 4018 followed by state 7.
+                        // The native helper also queues internal command
+                        // 0x271C. Its manager fan-out is not the same thing
+                        // as a proven synchronous route deletion, so keep
+                        // that unresolved lifecycle explicit here.
+                        SendEncodedPacket(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018,
+                            0, 0, 0, 0, null);
+                        userInfo.NativeSessionState = 7;
+                    }
                     break;
 
                 case Grobal2.CM_QUERYCHR:
@@ -2272,10 +2284,10 @@ namespace DBSvr
                 }
             }
 
-            if (result == NativeRenameCharProtocol.ResultSuccess)
+            var success = result == NativeRenameCharProtocol.ResultSuccess;
+            if (success)
             {
                 // 0x5CD3C4 sets the latch and 0x5CD497 clears Self+0x48.
-                // Failed/empty rename attempts retain the pending name for retry.
                 NativeSelectEntryProtocol.CompleteRename(userInfo);
                 // 0x5CD3F2..0x5CD48F：改名成功才发 77BBAA33 内部转发（子命令 0x57）。
                 // ⚠️ 该转发的出向通道（原版 [0x5DA0E0] 的 0x59E450）在本部署未接入，
@@ -2283,13 +2295,21 @@ namespace DBSvr
                 // 仅转发缺失，且**不伪造**一个通道。
                 Log("[RenameChr] 原版此处发 77BBAA33 子命令 0x57 转发——外部通道未接入");
             }
+            else if (userInfo.WireMode == TGateWireMode.Native77)
+            {
+                // 0x5CD497 clears Self+0x48 for every non-empty rename that
+                // reaches the 4016 response, including -1/-2 failures. The
+                // empty-name and empty-pending early exits above do not reach
+                // this block and therefore retain their prior state.
+                userInfo.NativePendingRenameName = null;
+            }
 
             // 0x5CD49F..0x5CD4BF：回包 opcode 0xFB0，错误码在记录首 dword。
             SendEncodedPacket(userInfo, NativeRenameCharProtocol.ResponseCommand,
                 result, 0, 0, 0, null);
-            if (result == NativeRenameCharProtocol.ResultSuccess)
+            if (success)
                 SendCharacterList(userInfo.sAccount, userInfo);
-            return true;
+            return success;
         }
 
         /// <summary>

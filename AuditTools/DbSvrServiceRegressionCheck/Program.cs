@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using DBSvr;
 using DBSvr.Core;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using SystemModule;
 using SystemModule.Packet;
@@ -27,6 +28,7 @@ Run("native UserSoc empty auth body terminal", TestNativeEmptyAuthBodyTerminal);
 Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
+Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
 Run("native 4017 status-3 handled terminal", TestNativeSelectNameNotAllowedHandled);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
@@ -3355,6 +3357,45 @@ static void TestNativeSelectEntryRenameContinuation()
     Check(renameResponse >= 0 && renameRefresh > renameResponse,
         "successful rename must send 4016 before its 4010 list refresh");
 
+    // Native fn_5CD2EC clears Self+0x48 on every non-empty response, not only
+    // on success.  Its false return then reaches the common 0x5CE46C exit,
+    // which emits one empty 4018 and advances state 7; it does not refresh the
+    // character list on the failure leg.
+    var failureReset = process.IndexOf(
+        "userInfo.NativePendingRenameName = null;",
+        StringComparison.Ordinal);
+    var failureReturn = process.IndexOf(
+        "return success;", StringComparison.Ordinal);
+    Check(failureReset >= 0 && failureReset < renameResponse
+          && renameResponse < renameRefresh
+          && renameRefresh < failureReturn,
+        "non-empty Native77 rename failures must clear pending state before the 4016 response and keep list refresh success-only");
+
+    var renameDispatchStart = source.IndexOf(
+        "case Grobal2.CM_RENAMECHR4016:", StringComparison.Ordinal);
+    var renameDispatchEnd = source.IndexOf(
+        "case Grobal2.CM_QUERYCHR:", renameDispatchStart,
+        StringComparison.Ordinal);
+    Check(renameDispatchStart >= 0 && renameDispatchEnd > renameDispatchStart,
+        "4016 dispatcher case boundary is missing");
+    var renameDispatch = source.Substring(renameDispatchStart,
+        renameDispatchEnd - renameDispatchStart);
+    Check(renameDispatch.Contains("!ProcessRenameChr(",
+              StringComparison.Ordinal)
+          && renameDispatch.Contains(
+              "Grobal2.SM_OUTOFCONNECTION_4018",
+              StringComparison.Ordinal)
+          && renameDispatch.Contains(
+              "userInfo.NativeSessionState = 7;",
+              StringComparison.Ordinal)
+          && renameDispatch.IndexOf(
+              "Grobal2.SM_OUTOFCONNECTION_4018",
+              StringComparison.Ordinal)
+             < renameDispatch.IndexOf(
+                 "userInfo.NativeSessionState = 7;",
+                 StringComparison.Ordinal),
+        "Native77 4016 failure must append one empty 4018 before state 7");
+
     var selectStart = source.IndexOf(
         "private bool SelectChr(string sData", StringComparison.Ordinal);
     var selectEnd = source.IndexOf(
@@ -3411,6 +3452,101 @@ static void TestNativeSelectEntryRenameContinuation()
           && select.Contains("TryFormatNewZoneNotice",
               StringComparison.Ordinal),
         "status-3 NewZone/AdminList response chain is not before loading");
+}
+
+static void TestNativeRenameFailureTerminal()
+{
+    var sent = new List<byte[]>();
+    Exception? queueError = null;
+    var gate = new TGateInfo
+    {
+        NativeOutboundQueue = new NativeGateOutboundQueue(
+            frame => sent.Add(frame),
+            error => queueError = error)
+    };
+    var user = new TUserInfo
+    {
+        WireMode = TGateWireMode.Native77,
+        NativeQueryId = 0x2425,
+        NativePendingRenameName = "OldName",
+        NativeSessionState = 0,
+        NativeGateOwner = gate
+    };
+    var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
+        typeof(UserSocService));
+    var method = typeof(UserSocService).GetMethod(
+        "ProcessDecodedUserPacket",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Check(method != null, "4016 process dispatcher method not found");
+
+    // Three GBK bytes are deterministically rejected by the native [4,14]
+    // length gate before persistence or rename-cascade dependencies are read.
+    var args = new object[]
+    {
+        gate,
+        user,
+        (ushort)NativeRenameCharProtocol.RequestCommand,
+        1,
+        (ushort)0,
+        EDcode.EncodeString("abc")
+    };
+    method!.Invoke(service, args);
+    user = (TUserInfo)args[1];
+
+    gate.NativeOutboundQueue.Complete();
+    Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+        "4016 failure outbound queue completion timeout");
+    Check(queueError == null,
+        "4016 failure outbound queue raised an exception: "
+        + queueError?.Message);
+    Equal(2, sent.Count,
+        "non-empty Native77 4016 failure must emit exactly 4016 and 4018");
+    Check(user.NativePendingRenameName == null,
+        "non-empty Native77 4016 failure did not clear pending name");
+    Equal((byte)7, user.NativeSessionState,
+        "non-empty Native77 4016 failure did not advance state 7");
+
+    var decoded = new List<LegacyGateDataMessage>();
+    foreach (var wire in sent)
+    {
+        Check(YbDbLegacy77Codec.TryDecode(wire, out var frame,
+            out var error), error);
+        Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+            out var message, out error), error);
+        decoded.Add(message);
+        Equal(0x2425, frame.QueryId,
+            "4016 failure response query id");
+    }
+
+    Equal((ushort)NativeRenameCharProtocol.ResponseCommand,
+        decoded[0].Ident, "4016 failure response ident");
+    Equal(-1, decoded[0].Recog,
+        "4016 invalid-length result code");
+    Equal((ushort)0, decoded[0].Param,
+        "4016 failure response Param");
+    Equal((ushort)0, decoded[0].Tag,
+        "4016 failure response Tag");
+    Equal((ushort)0, decoded[0].Series,
+        "4016 failure response Series");
+    Equal(0, decoded[0].Body.Length,
+        "4016 failure response body");
+
+    Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018,
+        decoded[1].Ident, "4018 terminal response ident");
+    Equal(0, decoded[1].Recog,
+        "4018 terminal response Recog");
+    Equal((ushort)0, decoded[1].Param,
+        "4018 terminal response Param");
+    Equal((ushort)0, decoded[1].Tag,
+        "4018 terminal response Tag");
+    Equal((ushort)0, decoded[1].Series,
+        "4018 terminal response Series");
+    Equal(0, decoded[1].Body.Length,
+        "4018 terminal response body");
+    var clientListIdent = MobileCmdMap.ToClient(
+        (ushort)Grobal2.SM_QUERYCHR);
+    Check(decoded.All(message => message.Ident != clientListIdent),
+        "4016 failure must not refresh the 4010 character list");
 }
 
 static void TestNativeNewZoneAdminListGate()
