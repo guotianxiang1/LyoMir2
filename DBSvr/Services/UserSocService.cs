@@ -1053,6 +1053,21 @@ namespace DBSvr
                 && userInfo.NativeSessionState == 7)
                 return;
 
+            // Native 2.08 never dispatches the mobile select-character
+            // opcode from state 0.  The client 4017 is mapped to the managed
+            // CM_SELCHR value before this method; reject that bounded case
+            // before the flat switch can silently consume it.  The complete
+            // state-0 admission matrix remains deferred because the native
+            // evidence disagrees on one other opcode number.
+            if (userInfo.WireMode == TGateWireMode.Native77
+                && userInfo.NativeSessionState == 0
+                && ident == Grobal2.CM_SELCHR)
+            {
+                Log($"[UserSoc] native state 0 rejects opcode {ident} -> 4018");
+                OutOfConnect(userInfo, gateInfo);
+                return;
+            }
+
             // 排队位次门。原版在**两级 opcode 表之前**就拦，逐字（状态 5 入口）：
             //   0x5CE307  mov eax, [ebp-4]            ; Self
             //   0x5CE30A  cmp word [eax+0x9c], 0      ; 排队位次
