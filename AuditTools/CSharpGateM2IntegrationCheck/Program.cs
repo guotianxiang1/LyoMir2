@@ -43,18 +43,6 @@ try
         "native registration reply payload");
     Console.WriteLine("PASS native gate registration 5 -> 15");
 
-    await fixture.SendToGateFromM2Async(InternalPacket77.Ack(0, 0xCAFE,
-        NativeGameGateCommands.GateKeepAliveRequest).ToBytes());
-    var gateKeepAliveReply = await fixture.M2ToHub.ReadAsync(
-        packet => packet.Cmd == NativeGameGateCommands.M2KeepAliveReply);
-    Equal(0u, gateKeepAliveReply.ConnID,
-        "GameSvr native keepalive reply connection id");
-    Equal(0u, gateKeepAliveReply.SeqID,
-        "GameSvr native keepalive reply sequence id");
-    Equal(0, gateKeepAliveReply.Payload.Length,
-        "GameSvr native keepalive reply payload");
-    Console.WriteLine("PASS GameSvr native heartbeat reply is bare Cmd13");
-
     var reboundRoute = new SharedBackendRoute
     {
         Handle = 7,
@@ -102,10 +90,12 @@ try
     var heartbeat = await fixture.HubToM2.ReadAsync(
         packet => packet.ConnID == 0
                  && packet.Cmd == NativeGameGateCommands.GateKeepAliveRequest);
+    Equal(0u, heartbeat.SeqID, "native keepalive sequence id");
     Equal(0, heartbeat.Payload.Length, "native keepalive payload");
     var heartbeatReply = await fixture.M2ToHub.ReadAsync(
         packet => packet.ConnID == 0
                  && packet.Cmd == NativeGameGateCommands.M2KeepAliveReply);
+    Equal(0u, heartbeatReply.SeqID, "native keepalive reply sequence id");
     Equal(0, heartbeatReply.Payload.Length, "native keepalive reply payload");
     await WaitUntilAsync(() => !fixture.Hub.GameHeartbeatPending,
         "SharedBackendHub did not consume native keepalive reply");
@@ -116,8 +106,9 @@ try
     await fixture.SendFromM2Async(m2Heartbeat);
     var gateHeartbeatReply = await fixture.HubToM2.ReadAsync(
         packet => packet.ConnID == 0
-                  && packet.SeqID == 0x77
                   && packet.Cmd == NativeGameGateCommands.M2KeepAliveReply);
+    Equal(0u, gateHeartbeatReply.SeqID,
+        "M2-initiated heartbeat reply sequence id");
     Equal(0, gateHeartbeatReply.Payload.Length,
         "M2-initiated heartbeat reply payload");
     Console.WriteLine("PASS M2-initiated heartbeat 3 -> 13");
@@ -301,8 +292,18 @@ static async Task DelayedRegistrationGatesOpenAsync()
     hub.Start();
     using var dbPeer = await dbAccept.WaitAsync(TimeSpan.FromSeconds(5));
     using var gamePeer = await gameAccept.WaitAsync(TimeSpan.FromSeconds(5));
+    var dbStream = dbPeer.GetStream();
     try
     {
+        var dbRegistration = await ReadDbFrameForFixtureAsync(dbStream);
+        Equal(NativeGameGateDbProtocol.RegisterRequest, dbRegistration.Ident,
+            "delayed registration DB command");
+        Equal(7100, dbRegistration.QueryId,
+            "delayed registration DB gate port");
+        await WriteDbFrameForFixtureAsync(dbStream, new YbDbLegacy77Frame(
+            0x102, -7, NativeGameGateDbProtocol.RegisterResponse,
+            new byte[] { 0xAA }));
+
         var registration = await ReadInternalFrameAsync(gamePeer.GetStream());
         Equal(NativeGameGateCommands.GateRegistrationRequest,
             registration.Cmd, "delayed registration request command");
@@ -312,6 +313,14 @@ static async Task DelayedRegistrationGatesOpenAsync()
         var openTask = hub.OpenRouteAsync(123, 123, "127.0.0.1", 1,
             () => { }, CancellationToken.None);
         var gameStream = gamePeer.GetStream();
+        var dbOpen = await ReadDbFrameForFixtureAsync(dbStream);
+        Equal(NativeGameGateDbProtocol.OpenRequest, dbOpen.Ident,
+            "delayed registration DB open command");
+        Equal(123, dbOpen.QueryId,
+            "delayed registration DB open session");
+        await WriteDbFrameForFixtureAsync(dbStream, new YbDbLegacy77Frame(
+            dbOpen.QueryId, 77, NativeGameGateDbProtocol.OpenResponse,
+            Array.Empty<byte>()));
         await RequireNoDataAsync(gameStream,
             "OPEN was emitted before Cmd15 registration");
 
@@ -353,6 +362,29 @@ static async Task<InternalPacket77> ReadInternalFrameAsync(NetworkStream stream)
             timeout.Token);
     return InternalPacket77.FromBytes(frame, 0, frame.Length)
         ?? throw new InvalidDataException("internal frame decode failed");
+}
+
+static async Task<YbDbLegacy77Frame> ReadDbFrameForFixtureAsync(
+    NetworkStream stream)
+{
+    var header = new byte[YbDbLegacy77Codec.HeaderSize];
+    await ReadExactlyAsync(stream, header, CancellationToken.None);
+    var payloadLength = BitConverter.ToUInt16(header, 14);
+    var wire = new byte[header.Length + payloadLength];
+    Buffer.BlockCopy(header, 0, wire, 0, header.Length);
+    if (payloadLength > 0)
+        await ReadExactlyAsync(stream,
+            wire.AsMemory(header.Length, payloadLength),
+            CancellationToken.None);
+    Require(YbDbLegacy77Codec.TryDecode(wire, out var frame, out var error), error);
+    return frame;
+}
+
+static async Task WriteDbFrameForFixtureAsync(NetworkStream stream,
+    YbDbLegacy77Frame frame)
+{
+    Require(YbDbLegacy77Codec.TryEncode(frame, out var wire, out var error), error);
+    await stream.WriteAsync(wire);
 }
 
 static async Task ReadExactlyAsync(NetworkStream stream, Memory<byte> destination,
@@ -537,7 +569,7 @@ sealed class GateM2Fixture : IAsyncDisposable
             PumpAsync(_bridgeM2Peer.GetStream(), _firstGamePeer.GetStream(),
                 M2ToHub, _lifetime.Token),
             ReceiveM2Async(_m2Socket, GateService, _lifetime.Token),
-            DrainAsync(_dbPeer.GetStream(), _lifetime.Token)
+            ServeDbAsync(_dbPeer.GetStream(), _lifetime.Token)
         ];
     }
 
@@ -598,11 +630,6 @@ sealed class GateM2Fixture : IAsyncDisposable
         await _m2Socket.SendAsync(frame, SocketFlags.None);
     }
 
-    public async Task SendToGateFromM2Async(byte[] frame)
-    {
-        await _bridgeM2Peer.GetStream().WriteAsync(frame);
-    }
-
     private static async Task PumpAsync(NetworkStream source, NetworkStream destination,
         PacketTap tap, CancellationToken cancellationToken)
     {
@@ -645,14 +672,50 @@ sealed class GateM2Fixture : IAsyncDisposable
         }
     }
 
-    private static async Task DrainAsync(NetworkStream stream,
+    private static async Task ServeDbAsync(NetworkStream stream,
         CancellationToken cancellationToken)
     {
         var buffer = new byte[1024];
+        var parser = new YbDbLegacy77StreamParser();
         try
         {
-            while (await stream.ReadAsync(buffer, cancellationToken) > 0)
+            while (!cancellationToken.IsCancellationRequested)
             {
+                var count = await stream.ReadAsync(buffer, cancellationToken);
+                if (count <= 0) return;
+                var frames = new List<YbDbLegacy77Frame>();
+                parser.Append(buffer.AsSpan(0, count), frames.Add);
+                foreach (var frame in frames)
+                {
+                    YbDbLegacy77Frame? response = null;
+                    if (frame.Ident == NativeGameGateDbProtocol.RegisterRequest)
+                    {
+                        response = new YbDbLegacy77Frame(
+                            0x102, -7,
+                            NativeGameGateDbProtocol.RegisterResponse,
+                            new byte[] { 0xAA });
+                    }
+                    else if (frame.Ident == NativeGameGateDbProtocol.OpenRequest)
+                    {
+                        response = new YbDbLegacy77Frame(
+                            frame.QueryId, 77,
+                            NativeGameGateDbProtocol.OpenResponse,
+                            Array.Empty<byte>());
+                    }
+                    else if (frame.Ident == NativeGameGateDbProtocol.CloseRequest)
+                    {
+                        response = new YbDbLegacy77Frame(
+                            frame.QueryId, frame.Param,
+                            NativeGameGateDbProtocol.CloseResponse,
+                            Array.Empty<byte>());
+                    }
+
+                    if (response == null) continue;
+                    if (!YbDbLegacy77Codec.TryEncode(response,
+                            out var wire, out var error))
+                        throw new InvalidDataException(error);
+                    await stream.WriteAsync(wire, cancellationToken);
+                }
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException

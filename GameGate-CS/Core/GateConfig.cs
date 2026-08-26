@@ -127,7 +127,12 @@ public sealed class GateConfig
             string val = line[(eq + 1)..].Trim();
             if (!CanManageKey(section, key)) continue;
 
-            if (string.IsNullOrEmpty(val) || val is "��" or "无") continue;
+            // MirGate.ini uses the native placeholder bytes only for fields
+            // that are intentionally absent.  Do not treat the real Chinese
+            // false value ("否") as an absent value: boolean options must
+            // still be parsed below.
+            if (string.IsNullOrEmpty(val) || val == "\uFFFD\uFFFD"
+                || val == "\u65E0") continue;
 
             // Try parse as int first, use 0 on failure
             int.TryParse(val, out int iv);
@@ -158,7 +163,7 @@ public sealed class GateConfig
                 case "NpcTime": cfg.NpcInterval = iv; break;
                 case "SpeedNum": cfg.SpeedNum = iv; break;
                 case "Globalspeed":
-                case "GlobalSpeed": cfg.GlobalSpeed = iv != 0; break;
+                case "GlobalSpeed": cfg.GlobalSpeed = ParseBool(val); break;
                 case "WalkSpeedNum": cfg.WalkSpeedNum = iv; break;
                 case "MuteTime": cfg.MuteTime = iv; break;
                 case "blacktime": cfg.BlackTime = iv; break;
@@ -173,7 +178,7 @@ public sealed class GateConfig
                 case "key5": cfg.Key5 = val; break;
                 case "offKey": cfg.OffKey = val; break;
                 case "offKeybot": cfg.OffKeybot = val; break;
-                case "OpenNewTigerGate": cfg.OpenNewTigerGate = iv != 0; break;
+                case "OpenNewTigerGate": cfg.OpenNewTigerGate = ParseBool(val); break;
                 case "site": cfg.M2Path = val; break;
                 case "time": cfg.M2WatchInterval = iv > 0 ? iv : 30000; break;
                 case "Reboot": cfg.RebootM2WhenStuck = ParseBool(val); break;
@@ -212,11 +217,23 @@ public sealed class GateConfig
         key.Equals("offKey", StringComparison.OrdinalIgnoreCase) ||
         key.Equals("offKeybot", StringComparison.OrdinalIgnoreCase);
 
-    private static bool ParseBool(string value) => value.Equals("1", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("true", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("真", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("是", StringComparison.OrdinalIgnoreCase);
+    private static bool ParseBool(string value)
+    {
+        if (value == null) return false;
+        if (value.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("真", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("是", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (value.Equals("0", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("false", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("no", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("否", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("假", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return false;
+    }
 
     private static void LoadWhitelist(GateConfig cfg, string path, bool isUp)
     {

@@ -124,6 +124,7 @@ public sealed class GateServer : IDisposable
             case Grobal2.CM_WIDEHIT:
             case Grobal2.CM_FIREHIT:
             case Grobal2.CM_CRSHIT:
+            case Grobal2.CM_3037:
             case Grobal2.CM_TWINHIT:
                 return true;
             default:

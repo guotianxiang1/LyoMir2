@@ -60,7 +60,7 @@ static void VerifyGameSvrCertificationIsSingleSuccessfulSend()
             "SendGameSvrCertificationOnce(pkt.ToBytes(),"),
         "SM_STARTPLAY GameSvr certification path count");
 
-    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var relayUp = GateServerSection("async Task RelayUp()", "async Task RelayDown()");
     NotContains(relayUp, "SendGameSvrCertificationOnce",
         "the real client 1018 must not be suppressed as a duplicate certification");
 }
@@ -113,7 +113,7 @@ static void VerifyMarkerDataCommand23PreservesRawBody()
     BytesEqual(rawBody, parsed.Body,
         "Header.Cmd=23 ordinary MARKER_DATA body must remain raw");
 
-    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var relayUp = GateServerSection("async Task RelayUp()", "async Task RelayDown()");
     NotContains(relayUp, "Decode6BitBufDirect",
         "RelayUp must not 6-bit decode ordinary MARKER_DATA bodies");
     NotContains(relayUp, "mf.Header.Cmd == 23",
@@ -148,7 +148,7 @@ static void VerifyLoginSessionUsesOuterDataIndex()
     True(unchecked((uint)auth.Inner.Recog) != connect.Header.Seq,
         "client version and LoginGate session must remain distinct");
 
-    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var relayUp = GateServerSection("async Task RelayUp()", "async Task RelayDown()");
     var connectBranch = Position(relayUp,
         "if (mf.Header.Marker == MobileCodec.MARKER_CONNECT)");
     var captureSession = Position(relayUp,
@@ -188,7 +188,7 @@ static void VerifyGameDataUsesSupportedEnvelopeCommand()
 
 static void VerifyLoginFlushKeepsFramesOrdered()
 {
-    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var relayUp = GateServerSection("async Task RelayUp()", "async Task RelayDown()");
     NotContains(relayUp, "clientMainReady = true;",
         "client 1018 must not switch live delivery before buffered frames are flushed");
 
@@ -215,7 +215,7 @@ static void VerifyTwoPhaseLoginRelease()
     Require(relayDown, "SendGameSvrCertificationOnce(pkt.ToBytes(),",
         "SM_STARTPLAY must create the GameSvr player before the notice phase");
 
-    var relayUp = GateServerSection("async Task RelayUp()", "static byte[] Enc6Body");
+    var relayUp = GateServerSection("async Task RelayUp()", "async Task RelayDown()");
     var createPacket = Position(relayUp,
         "var cp = CreateGameSvrClientPacket(mf.Inner, fwdIdent);");
     var allocateBody = Position(relayUp,

@@ -287,7 +287,6 @@ internal sealed class SharedBackendHub : IDisposable
     private long _nextDbConnectTick;
     private long _nextGameConnectTick;
     private int _reconnects;
-    private int _heartbeatSequence;
     private int _heartbeatPending;
     private long _heartbeatSentTick;
     private int _registeredDbGateId;
@@ -651,8 +650,10 @@ internal sealed class SharedBackendHub : IDisposable
             return false;
         try
         {
-            var heartbeat = CreateGameControl(0,
-                unchecked((uint)Interlocked.Increment(ref _heartbeatSequence)),
+            // Native 2.08 emits a bare 16-byte keepalive: both routing words
+            // are zero.  The heartbeat is a liveness probe, not a session
+            // sequence, so do not put a locally generated counter on wire.
+            var heartbeat = CreateGameControl(0, 0,
                 NativeKeepAliveRequest, Array.Empty<byte>());
             // Publish the deadline before the write.  A very fast peer can
             // answer while WriteAsync is still completing; writing the tick
@@ -1121,7 +1122,10 @@ internal sealed class SharedBackendHub : IDisposable
         if (packet.Cmd == NativeKeepAliveRequest && packet.ConnID == 0
             && IsCurrentGameStream(stream, generation))
         {
-            var reply = CreateGameControl(0, packet.SeqID,
+            // The native M2 response is also a bare type-13 frame with both
+            // routing words cleared; it does not echo an arbitrary request
+            // sequence from the control packet.
+            var reply = CreateGameControl(0, 0,
                 NativeKeepAliveReply, Array.Empty<byte>());
             await WriteGameCoreAsync(stream, reply.ToBytes(), cancellationToken);
             return;
