@@ -858,7 +858,27 @@ namespace DBSvr
                 if (!LegacyGateDataCodec.TryDecodeRequest(frame,
                         out var dataMessage, out var dataError))
                 {
-                    throw new InvalidOperationException(dataError);
+                    // Native 0x5CDFB2 rejects a short inner message through
+                    // the common per-user 4018/terminal path.  The outer
+                    // 77 frame still carries the route key, so do not let a
+                    // malformed client payload tear down every user on this
+                    // GameGate socket.  If the route has already vanished,
+                    // there is no user to notify; keep the gate alive and
+                    // discard the frame.
+                    if (frame.QueryId >= 0 && frame.QueryId <= ushort.MaxValue
+                        && gateInfo.NativeRoutes.TryGetNewest(
+                            unchecked((ushort)frame.QueryId), out var malformedUser))
+                    {
+                        DBShare.MainOutMessage(
+                            $"角色网关[{gateIndex}]用户{frame.QueryId}原版77数据帧拒绝: {dataError}");
+                        OutOfConnect(malformedUser, gateInfo);
+                    }
+                    else
+                    {
+                        DBShare.MainOutMessage(
+                            $"角色网关[{gateIndex}]原版77数据帧拒绝且路由不存在: qid={frame.QueryId}, {dataError}");
+                    }
+                    return;
                 }
 
                 if (frame.QueryId < 0 || frame.QueryId > ushort.MaxValue

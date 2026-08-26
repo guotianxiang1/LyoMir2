@@ -21,6 +21,7 @@ Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native DB gate route multimap", TestNativeGateRouteRegistry);
 Run("native 4041 account-owner takeover", TestNativeAccountOwnerTakeover);
 Run("native UserSoc C-string body boundary", TestNativeUserBodyBoundary);
+Run("native UserSoc malformed inner-frame isolation", TestNativeMalformedInnerFrameIsolation);
 Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
@@ -3126,6 +3127,33 @@ static void TestNativeUserBodyBoundary()
         new object[] { encoded, privateUser }) as string ?? "<null>";
     Equal("Alpha\0Tail", privateBody,
         "private body decoder changed its trailing-NUL compatibility rule");
+}
+
+static void TestNativeMalformedInnerFrameIsolation()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var decodeStart = source.IndexOf(
+        "if (!LegacyGateDataCodec.TryDecodeRequest(frame,",
+        StringComparison.Ordinal);
+    var decodeEnd = source.IndexOf(
+        "if (frame.QueryId < 0 || frame.QueryId > ushort.MaxValue",
+        decodeStart, StringComparison.Ordinal);
+    Check(decodeStart >= 0 && decodeEnd > decodeStart,
+        "native malformed inner-frame boundary is missing");
+    var failure = source.Substring(decodeStart, decodeEnd - decodeStart);
+    Check(failure.Contains(
+              "gateInfo.NativeRoutes.TryGetNewest(", StringComparison.Ordinal)
+          && failure.Contains(
+              "OutOfConnect(malformedUser, gateInfo)",
+              StringComparison.Ordinal)
+          && failure.Contains("return;", StringComparison.Ordinal)
+          && !failure.Contains(
+              "throw new InvalidOperationException(dataError)",
+              StringComparison.Ordinal)
+          && !failure.Contains("CloseUser(", StringComparison.Ordinal),
+        "malformed Native77 data must isolate the routed user and keep the gate alive");
 }
 
 static void TestNativeSelectEntryRenameContinuation()
