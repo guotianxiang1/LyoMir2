@@ -1722,6 +1722,88 @@ skipped.Add("COV-ddl-grant_uguiedit-0x5BAEAC: "
             : "absent",
         ok: Contains(wholeDbSvr, "user_data") && Contains(wholeDbSvr, "ChrName"));
 
+    // The native name/index reads at 0x5B52EC and 0x5B5015 carry the
+    // HIGH_PRIORITY modifier.  Keep the assertions tied to the active C#
+    // statements rather than merely counting the token somewhere in DBSvr.
+    var flatPlayDataNames = Regex.Replace(playData, @"\s+", " ");
+    Check("READ-user_data-idx-by-chrname-highpriority",
+        expected: "native 0x5B52EC: SELECT HIGH_PRIORITY user_data idx by ChrName",
+        actual: flatPlayDataNames.Contains(
+            "SELECT HIGH_PRIORITY d.Idx FROM mir3.user_data d INNER JOIN mir3.user_index i ON i.idx=d.Idx WHERE i.ChrName=@name",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY name/index read present"
+            : "missing HIGH_PRIORITY on active name/index read",
+        ok: flatPlayDataNames.Contains(
+            "SELECT HIGH_PRIORITY d.Idx FROM mir3.user_data d INNER JOIN mir3.user_index i ON i.idx=d.Idx WHERE i.ChrName=@name",
+            StringComparison.OrdinalIgnoreCase));
+
+    Check("READ-user_data-blob-by-idx-highpriority",
+        expected: "native 0x5B5250: HIGH_PRIORITY user_data blob read",
+        actual: flatPlayDataNames.Contains(
+            "SELECT HIGH_PRIORITY d.Data, d.ScriptData, i.Job, i.Sex, i.CreateDate, i.UserId FROM mir3.user_data d",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY blob read present"
+            : "missing HIGH_PRIORITY on active blob read",
+        ok: flatPlayDataNames.Contains(
+            "SELECT HIGH_PRIORITY d.Data, d.ScriptData, i.Job, i.Sex, i.CreateDate, i.UserId FROM mir3.user_data d",
+            StringComparison.OrdinalIgnoreCase));
+
+    Check("READ-user_index-idx-by-chrname-highpriority",
+        expected: "native 0x5B5015: SELECT HIGH_PRIORITY idx from user_index by ChrName",
+        actual: flatPlayDataNames.Contains(
+            "SELECT HIGH_PRIORITY idx FROM mir3.user_index WHERE ChrName=@name AND IsDelete=0 LIMIT 1",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY user_index name read present"
+            : "missing HIGH_PRIORITY on user_index name read",
+        ok: flatPlayDataNames.Contains(
+            "SELECT HIGH_PRIORITY idx FROM mir3.user_index WHERE ChrName=@name AND IsDelete=0 LIMIT 1",
+            StringComparison.OrdinalIgnoreCase));
+
+    var flatHeroRecordNames = Regex.Replace(heroRecord, @"\s+", " ");
+    Check("READ-hero_index-idx-by-heroname-highpriority",
+        expected: "native 0x5B5BE1: SELECT HIGH_PRIORITY idx from hero_index by HeroName",
+        actual: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY idx FROM mir3.hero_index WHERE HeroName=@n AND IsDelete=0 LIMIT 1",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY hero_index name read present"
+            : "missing HIGH_PRIORITY on hero_index name read",
+        ok: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY idx FROM mir3.hero_index WHERE HeroName=@n AND IsDelete=0 LIMIT 1",
+            StringComparison.OrdinalIgnoreCase));
+
+    Check("READ-hero_index-name-exists-highpriority",
+        expected: "native 0x5B5BE1: the active HeroName duplicate gate keeps HIGH_PRIORITY",
+        actual: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY COUNT(*) FROM mir3.hero_index WHERE HeroName=@n",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY hero-name duplicate gate present"
+            : "missing HIGH_PRIORITY on hero-name duplicate gate",
+        ok: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY COUNT(*) FROM mir3.hero_index WHERE HeroName=@n",
+            StringComparison.OrdinalIgnoreCase));
+
+    Check("READ-hero_index-force-idx-highpriority",
+        expected: "native hero-name index lookup keeps HIGH_PRIORITY",
+        actual: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY idx FROM mir3.hero_index WHERE HeroName=@name LIMIT 1",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY force-level name read present"
+            : "missing HIGH_PRIORITY on force-level name read",
+        ok: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY idx FROM mir3.hero_index WHERE HeroName=@name LIMIT 1",
+            StringComparison.OrdinalIgnoreCase));
+
+    Check("READ-hero_index-native-name-highpriority",
+        expected: "native hero-name record lookup keeps HIGH_PRIORITY",
+        actual: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp, ForceLv, ForceExp, sfLevel, HeroId, ModifyDate FROM mir3.hero_index",
+            StringComparison.OrdinalIgnoreCase)
+            ? "HIGH_PRIORITY native hero record read present"
+            : "missing HIGH_PRIORITY on native hero record read",
+        ok: flatHeroRecordNames.Contains(
+            "SELECT HIGH_PRIORITY idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp, ForceLv, ForceExp, sfLevel, HeroId, ModifyDate FROM mir3.hero_index",
+            StringComparison.OrdinalIgnoreCase));
+
     // 0x5AD598 len=57 — user_index IsTransLock=1 query
     Check("QUERY-user_index-translock",
         expected: "native 0x5AD598: user_index IsTransLock=1 query for transfer-locked users",

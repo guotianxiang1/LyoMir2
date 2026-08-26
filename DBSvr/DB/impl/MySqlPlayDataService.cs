@@ -70,7 +70,7 @@ namespace DBSvr
             using var conn = OpenConnection();
             if (conn == null) return -1;
             using var cmd = new MySqlCommand(
-                @"SELECT d.Idx
+                @"SELECT HIGH_PRIORITY d.Idx
                   FROM mir3.user_data d
                   INNER JOIN mir3.user_index i ON i.idx=d.Idx
                   WHERE i.ChrName=@name AND i.IsDelete=0 AND d.Status=0 LIMIT 1", conn);
@@ -107,7 +107,7 @@ namespace DBSvr
             // user_index owns character metadata that the native DBServer injects into
             // the record returned to M2. Read it in the same snapshot as the data blob.
             using var cmd = new MySqlCommand(
-                @"SELECT d.Data, d.ScriptData, i.Job, i.Sex, i.CreateDate, i.UserId
+                @"SELECT HIGH_PRIORITY d.Data, d.ScriptData, i.Job, i.Sex, i.CreateDate, i.UserId
                   FROM mir3.user_data d
                   INNER JOIN mir3.user_index i ON i.Idx=d.Idx
                   WHERE d.Idx=@idx AND i.IsDelete=0 AND d.Status=0 LIMIT 1", conn);
@@ -141,7 +141,7 @@ namespace DBSvr
             if (conn == null) return false;
 
             using var cmd = new MySqlCommand(
-                @"SELECT d.Idx, d.Data, d.ScriptData, i.Job, i.Sex, i.CreateDate, i.UserId
+                @"SELECT HIGH_PRIORITY d.Idx, d.Data, d.ScriptData, i.Job, i.Sex, i.CreateDate, i.UserId
                   FROM mir3.user_data d
                   INNER JOIN mir3.user_index i ON i.idx=d.Idx
                   WHERE i.ChrName=@name AND i.IsDelete=0 AND d.Status=0 LIMIT 1", conn);
@@ -424,7 +424,7 @@ namespace DBSvr
             // user_index is authoritative; user_data.ChrName in legacy databases may contain
             // '?' because the original latin1 column was once written as a Unicode string.
             using var findCmd = new MySqlCommand(
-                "SELECT idx FROM mir3.user_index WHERE ChrName=@name AND IsDelete=0 LIMIT 1", conn);
+                "SELECT HIGH_PRIORITY idx FROM mir3.user_index WHERE ChrName=@name AND IsDelete=0 LIMIT 1", conn);
             findCmd.Parameters.Add(LegacyGbkText.Parameter("@name", chrName));
             var obj = findCmd.ExecuteScalar();
             if (obj == null || obj == DBNull.Value) return false;

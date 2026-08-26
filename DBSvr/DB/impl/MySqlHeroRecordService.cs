@@ -154,7 +154,8 @@ namespace DBSvr
         {
             using var conn = OpenConn();
             if (conn == null) return true;
-            using var cmd = new MySqlCommand("SELECT COUNT(*) FROM mir3.hero_index WHERE HeroName=@n", conn);
+            using var cmd = new MySqlCommand(
+                "SELECT HIGH_PRIORITY COUNT(*) FROM mir3.hero_index WHERE HeroName=@n", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", heroName));
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
@@ -400,7 +401,7 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return -1;
             using var cmd = new MySqlCommand(
-                "SELECT idx FROM mir3.hero_index WHERE HeroName=@n AND IsDelete=0 LIMIT 1", conn);
+                "SELECT HIGH_PRIORITY idx FROM mir3.hero_index WHERE HeroName=@n AND IsDelete=0 LIMIT 1", conn);
             cmd.Parameters.Add(LegacyGbkText.Parameter("@n", heroName));
             return Convert.ToInt32(cmd.ExecuteScalar() ?? -1);
         }
@@ -415,7 +416,7 @@ namespace DBSvr
             using var conn = OpenConn();
             if (conn == null) return false;
             const string select =
-                @"SELECT idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp,
+                @"SELECT HIGH_PRIORITY idx, MasterName, HeroName, IsDelete, HeroType, Consignation, Job, Sex, Level, Exp,
                          ForceLv, ForceExp, sfLevel, HeroId, ModifyDate
                   FROM mir3.hero_index";
             if (_nativeRawNameIndex.TryGetValue(key, out var index))
@@ -459,7 +460,7 @@ namespace DBSvr
                 return false;
             }
             using var cmd = new MySqlCommand(
-                "SELECT idx FROM mir3.hero_index WHERE HeroName=@name LIMIT 1", conn);
+                "SELECT HIGH_PRIORITY idx FROM mir3.hero_index WHERE HeroName=@name LIMIT 1", conn);
             cmd.Parameters.Add("@name", MySqlDbType.Binary).Value = heroName;
             var value = cmd.ExecuteScalar();
             if (value == null || value == DBNull.Value)
