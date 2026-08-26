@@ -729,6 +729,12 @@ namespace GameSvr
             // run-action gate.  A request refused by the managed
             // m_boCanRun lock still cancels the native pending channels.
             CancelNativeActionChannels();
+            // Native VMT+0xBC reaches the state-0x2D predicate before the
+            // VMT+0x40 can-act gate and before the movement primitive.
+            if (HasTimedAbility(13))
+            {
+                return result;
+            }
             if (!m_boCanRun)
             {
                 return result;
@@ -764,48 +770,6 @@ namespace GameSvr
             {
                 return result;
             }
-            if (nFlag != wIdent && (!M2Share.g_Config.boSpeedHackCheck))
-            {
-                if (!CheckActionStatus(wIdent, ref dwDelayTime))
-                {
-                    m_boFilterAction = false;
-                    return result;
-                }
-                m_boFilterAction = true;
-                int dwCheckTime = HUtil32.GetTickCount() - m_dwMoveTick;
-                if (dwCheckTime < M2Share.g_Config.dwRunIntervalTime)
-                {
-                    m_dwMoveCount++;
-                    dwDelayTime = M2Share.g_Config.dwRunIntervalTime - dwCheckTime;
-                    if (dwDelayTime > M2Share.g_Config.dwRunIntervalTime / 3)
-                    {
-                        if (m_dwMoveCount >= 4)
-                        {
-                            m_dwMoveTick = HUtil32.GetTickCount();
-                            m_dwMoveCount = 0;
-                            dwDelayTime = M2Share.g_Config.dwRunIntervalTime / 3;
-                            if (m_boTestSpeedMode)
-                            {
-                                SysMsg("跑步忙复位!!!" + dwDelayTime, MsgColor.Red, MsgType.Hint);
-                            }
-                        }
-                        else
-                        {
-                            m_dwMoveCount = 0;
-                        }
-                        return result;
-                    }
-                    else
-                    {
-                        if (m_boTestSpeedMode)
-                        {
-                            SysMsg("跑步忙!!!" + dwDelayTime, MsgColor.Red, MsgType.Hint);
-                        }
-                        return result;
-                    }
-                }
-            }
-            m_dwMoveTick = HUtil32.GetTickCount();
             m_bo316 = false;
             // MOVE-16/17/18/19 — sub_6BBFBC opens with the switch / map RUNFLAG
             // / weight / CanRun ladder before it ever calls the run mover, and
@@ -817,22 +781,23 @@ namespace GameSvr
             // degrade. Sharing ClientNativeRun3Fallback mirrors native, where
             // both run primitives fall into the same walk primitive sub_6BBCD8.
             //
-            // Gate 3 first. Native runs `call [edx+0xBC]` at 0x6D9D12, i.e. at
-            // handler level ahead of the primitive, so a blocked actor never
-            // reaches either the run mover or the degrade. C# carries that term
-            // (internal state 0x2D) inside RunTo/WalkTo, which the degrade would
-            // otherwise walk straight past.
-            if (HasTimedAbility(13))
-            {
-                return result;
-            }
             if (!IsNativeRunLadderAllowed())
             {
-                return ClientNativeRun3Fallback(nX, nY);
+                result = ClientNativeRun3Fallback(nX, nY);
+                if (result)
+                {
+                    // The run degrade enters the one-step walk primitive, so
+                    // its committed arm owns the same success-only tick write.
+                    m_dwMoveTick = HUtil32.GetTickCount();
+                }
+                return result;
             }
             nDir = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, nX, nY);
             if (RunTo(nDir, false, nX, nY))
             {
+                // Native run primitive stores the tick only after a committed
+                // move (0x6BC092..0x6BC097).
+                m_dwMoveTick = HUtil32.GetTickCount();
                 if (m_boTransparent && m_boHideMode)
                 {
                     m_wStatusTimeArr[Grobal2.STATE_TRANSPARENT] = 1;
@@ -866,6 +831,11 @@ namespace GameSvr
             // walk-action gate.  Keep cancellation observable even when the
             // managed m_boCanWalk lock refuses the request.
             CancelNativeActionChannels();
+            // Native VMT+0xBC checks state 0x2D before VMT+0x40.
+            if (HasTimedAbility(13))
+            {
+                return result;
+            }
             if (!m_boCanWalk)
             {
                 return result;
@@ -900,48 +870,6 @@ namespace GameSvr
             {
                 return result;
             }
-            if (!boLateDelivery && (!M2Share.g_Config.boSpeedHackCheck))
-            {
-                if (!CheckActionStatus(wIdent, ref dwDelayTime))
-                {
-                    m_boFilterAction = false;
-                    return result;
-                }
-                m_boFilterAction = true;
-                int dwCheckTime = HUtil32.GetTickCount() - m_dwMoveTick;
-                if (dwCheckTime < M2Share.g_Config.dwWalkIntervalTime)
-                {
-                    m_dwMoveCount++;
-                    dwDelayTime = M2Share.g_Config.dwWalkIntervalTime - dwCheckTime;
-                    if (dwDelayTime > M2Share.g_Config.dwWalkIntervalTime / 3)
-                    {
-                        if (m_dwMoveCount >= 4)
-                        {
-                            m_dwMoveTick = HUtil32.GetTickCount();
-                            m_dwMoveCount = 0;
-                            dwDelayTime = M2Share.g_Config.dwWalkIntervalTime / 3;
-                            if (m_boTestSpeedMode)
-                            {
-                                SysMsg("走路忙复位!!!" + dwDelayTime, MsgColor.Red, MsgType.Hint);
-                            }
-                        }
-                        else
-                        {
-                            m_dwMoveCount = 0;
-                        }
-                        return result;
-                    }
-                    else
-                    {
-                        if (m_boTestSpeedMode)
-                        {
-                            SysMsg("走路忙!!!" + dwDelayTime, MsgColor.Red, MsgType.Hint);
-                        }
-                        return result;
-                    }
-                }
-            }
-            m_dwMoveTick = HUtil32.GetTickCount();
             m_bo316 = false;
             n18 = m_nCurrX;
             n1C = m_nCurrY;
@@ -999,6 +927,9 @@ namespace GameSvr
             // MOVE-73：0x6BBD0C 是 `mov cl,[ebx+0x3FE]` —— 读缓存，不重算。
             if (WalkTo((byte)n14, m_boThroughOccupancyCache))
             {
+                // Native walk primitive stores the tick only after a committed
+                // move (0x6BBD4B..0x6BBD50).
+                m_dwMoveTick = HUtil32.GetTickCount();
                 if (m_bo316 || m_nCurrX == nX && m_nCurrY == nY)
                 {
                     SendMapDescription();
