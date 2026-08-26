@@ -506,9 +506,20 @@ static string FindGameSvrBuildUnder(string repositoryRoot)
     // GameSvr.csproj's Debug OutputPath is ..\..\Build\Mir200 relative to GameSvr\,
     // i.e. a Build\ tree one level ABOVE the checkout. GameSvr\bin therefore never
     // exists in a normal build and probing only there always reported INCOMPLETE.
+    // Directory.Build.props redirects BaseOutputPath to artifacts\obj\<project>\
+    // so that linked worktrees cannot overwrite each other's build products, and
+    // GameSvr.csproj sets AppendTargetFrameworkToOutputPath=false. A plain
+    // `dotnet build GameSvr.csproj -c Debug` therefore lands in
+    // artifacts\obj\GameSvr\Debug\ and none of the historical probes below ever
+    // saw it, so this tool exited 2 (INCOMPLETE) without evaluating a single
+    // assertion -- the "never ran" blind spot REPLICATION_RULES 4.17 warns about.
+    // Probing artifacts\ first keeps every assertion untouched and only removes
+    // that blind spot.
     var parent = Directory.GetParent(repositoryRoot)?.FullName;
     foreach (var configured in new[]
              {
+                 Path.Combine(repositoryRoot, "artifacts", "obj", "GameSvr", "Debug"),
+                 Path.Combine(repositoryRoot, "artifacts", "bin", "GameSvr", "Debug"),
                  parent == null ? null : Path.Combine(parent, "Build", "Mir200"),
                  Path.Combine(repositoryRoot, "Build", "Mir200")
              })

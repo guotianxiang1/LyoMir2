@@ -151,8 +151,12 @@ static void VerifyProtocolSource()
         @"m_btSecHeroPracticeCostTier\s*=\s*0\s*;\s*" +
         @"m_btSecHeroPracticeRewardMode\s*=\s*0\s*;",
         1, "native practice clear field order");
+    // Assert constructor ownership structurally. A fixed character window can
+    // stop executing this check when unrelated field initialization grows.
+    // The flat constructor body has no nested block before this assignment, so
+    // the first closing brace is the exact boundary.
     RequireMatches(playerBaseSource,
-        @"public\s+TPlayObject\s*\(\s*\)[\s\S]{0,800}?" +
+        @"public\s+TPlayObject\s*\(\s*\)\s*:\s*base\s*\(\s*\)\s*\{[^}]*?" +
         @"m_dwSecHeroPracticeTick\s*=\s*HUtil32\.GetTickCount\s*\(\s*\)\s*;",
         1, "practice tick constructor initialization");
     RequireMatches(practiceSource,
