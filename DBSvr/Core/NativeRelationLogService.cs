@@ -54,7 +54,10 @@ namespace DBSvr.Core
 
             var field = rawPayload.AsSpan(offset, capacity);
             var length = field.IndexOf((byte)0);
-            if (length < 0) length = field.Length;
+            // Native 0x404E68 uses a bounded `repne scasb` and returns an
+            // empty AnsiString when the 21-byte slot has no terminator.  Do
+            // not copy an unterminated authentication window into the log.
+            if (length < 0) length = 0;
             value = field.Slice(0, length).ToArray();
             return true;
         }
