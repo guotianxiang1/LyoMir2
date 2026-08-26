@@ -421,18 +421,32 @@ namespace DBSvr
         private void CleanupNativeAdmissionAndOwnership(TUserInfo user,
             bool preservePendingTakeover)
         {
+            CleanupNativeAdmissionAndOwnership(user, preservePendingTakeover,
+                null);
+        }
+
+        private void CleanupNativeAdmissionAndOwnership(TUserInfo user,
+            bool preservePendingTakeover, string accountOverride = null)
+        {
             if (user == null) return;
+            // 4041 clears Self+0x24 before the terminal sender runs.  Keep the
+            // original key only for registry/IP cleanup; the user object still
+            // follows the native cleared state.
+            var cleanupAccount = accountOverride ?? user.sAccount;
             lock (_nativeAccountTakeoverSync)
             {
                 var wasManaged = user.NativeAdmissionManaged;
                 ReleaseNativeAdmission(user);
                 if (preservePendingTakeover)
                     _nativeAccountOwners.ReleaseRegisteredOwnerByKey(
-                        user.sAccount);
+                        cleanupAccount);
                 else if (wasManaged)
                     _nativeAccountOwners.ReleaseForConnection(
-                        user.sAccount, user);
-                ReleaseNativeIpAdmission(user);
+                        cleanupAccount, user);
+                if (accountOverride == null)
+                    ReleaseNativeIpAdmission(user);
+                else
+                    ReleaseNativeIpAdmission(user, accountOverride);
             }
         }
 
@@ -1060,9 +1074,14 @@ namespace DBSvr
                     if (NativeLoginAlreadyOnlineProtocol
                         .UsesReturnToLoginLeg(packetParam))
                     {
+                        // The native handler clears Self+0x24 before the
+                        // terminal 4018 sender.  Preserve that key out of
+                        // band so route teardown can still release the
+                        // account/IP admission entries.
+                        var cleanupAccount = userInfo.sAccount;
                         NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin(
                             userInfo);
-                        OutOfConnect(userInfo, gateInfo);
+                        OutOfConnect(userInfo, gateInfo, cleanupAccount);
                     }
                     else
                     {
@@ -2664,6 +2683,12 @@ namespace DBSvr
 
         private void OutOfConnect(TUserInfo userInfo, TGateInfo gateInfo)
         {
+            OutOfConnect(userInfo, gateInfo, null);
+        }
+
+        private void OutOfConnect(TUserInfo userInfo, TGateInfo gateInfo,
+            string accountOverride)
+        {
             // The 2.08 UserSoc image emits 0xFB2 (4018) on its native
             // 0x77 line.  Keep the legacy 528 ident only for the private
             // percent/dollar transport, whose contract is outside that
@@ -2679,7 +2704,8 @@ namespace DBSvr
                 return;
             }
 
-            SendNativeTerminalPacket(userInfo, gateInfo, ident);
+            SendNativeTerminalPacket(userInfo, gateInfo, ident,
+                accountOverride);
         }
 
         private void SendNativeTerminalPacket(TUserInfo userInfo,
@@ -2688,8 +2714,20 @@ namespace DBSvr
             TrySendNativeTerminalRoute(userInfo, ident);
         }
 
+        private void SendNativeTerminalPacket(TUserInfo userInfo,
+            TGateInfo gateInfo, ushort ident, string accountOverride)
+        {
+            TrySendNativeTerminalRoute(userInfo, ident, accountOverride);
+        }
+
         private bool TrySendNativeTerminalRoute(TUserInfo userInfo,
             ushort ident)
+        {
+            return TrySendNativeTerminalRoute(userInfo, ident, null);
+        }
+
+        private bool TrySendNativeTerminalRoute(TUserInfo userInfo,
+            ushort ident, string accountOverride)
         {
             if (userInfo == null) return false;
             return TryRemoveNativeRoute(userInfo.NativeGateOwner,
@@ -2714,7 +2752,7 @@ namespace DBSvr
                         removed.NativeSessionState = 7;
                         return true;
                     }
-                }, true, false, out _);
+                }, true, false, out _, accountOverride);
         }
 
         private void CloseManagedLoginSession(TUserInfo userInfo)
@@ -2732,6 +2770,17 @@ namespace DBSvr
             bool sendRouteClear,
             bool preservePendingTakeover,
             out TUserInfo removedUser)
+        {
+            return TryRemoveNativeRoute(gateInfo, routeId, expectedUser,
+                beforeDetach, sendRouteClear, preservePendingTakeover,
+                out removedUser, null);
+        }
+
+        private bool TryRemoveNativeRoute(TGateInfo gateInfo, ushort routeId,
+            TUserInfo expectedUser, Func<TUserInfo, bool> beforeDetach,
+            bool sendRouteClear,
+            bool preservePendingTakeover,
+            out TUserInfo removedUser, string accountOverride)
         {
             lock (_nativeAccountTakeoverSync)
             {
@@ -2787,7 +2836,7 @@ namespace DBSvr
                 }
 
                 CleanupNativeAdmissionAndOwnership(removedUser,
-                    preservePendingTakeover);
+                    preservePendingTakeover, accountOverride);
                 if (sendRouteClear
                     && NativeLoginAlreadyOnlineProtocol.TryCreateRouteClearFrame(
                         routeId, out var routeClear))
@@ -2807,11 +2856,17 @@ namespace DBSvr
 
         private void ReleaseNativeIpAdmission(TUserInfo userInfo)
         {
+            ReleaseNativeIpAdmission(userInfo, null);
+        }
+
+        private void ReleaseNativeIpAdmission(TUserInfo userInfo,
+            string accountOverride)
+        {
             if (userInfo == null
                 || Interlocked.Exchange(ref userInfo.NativeIpCounted, 0) == 0)
                 return;
             _nativeAdmission.ReleaseNativeConnection(
-                userInfo.sAccount, userInfo.sUserIPaddr);
+                accountOverride ?? userInfo.sAccount, userInfo.sUserIPaddr);
         }
 
         private void SendMobileLoginAuth(TUserInfo userInfo, int recog, ushort param, string message)

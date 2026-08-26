@@ -2584,19 +2584,28 @@ static void TestNativeLoginAlreadyOnline()
         StringComparison.Ordinal);
     Check(nextCase > caseStart, "4041 switch case boundary is missing");
     var caseBlock = source.Substring(caseStart, nextCase - caseStart);
+    var cleanupCapture = caseBlock.IndexOf(
+        "var cleanupAccount = userInfo.sAccount", StringComparison.Ordinal);
+    var resetForReturn = caseBlock.IndexOf(
+        "NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin",
+        cleanupCapture, StringComparison.Ordinal);
+    var terminalAfterReset = caseBlock.IndexOf(
+        "OutOfConnect(userInfo, gateInfo, cleanupAccount)",
+        resetForReturn, StringComparison.Ordinal);
     Check(caseBlock.Contains(
-              "NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin",
-              StringComparison.Ordinal)
-          && caseBlock.Contains(
-              ".UsesReturnToLoginLeg(packetParam)",
-              StringComparison.Ordinal)
-          && caseBlock.Contains("OutOfConnect(userInfo, gateInfo)",
-              StringComparison.Ordinal)
-          && caseBlock.Split("OutOfConnect(userInfo, gateInfo)",
-              StringSplitOptions.None).Length == 2
-          && !caseBlock.Contains(
-              "_nativeAccountOwners.ReleaseForConnection",
-              StringComparison.Ordinal)
+               "NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin",
+               StringComparison.Ordinal)
+           && caseBlock.Contains(
+               ".UsesReturnToLoginLeg(packetParam)",
+               StringComparison.Ordinal)
+           && cleanupCapture >= 0
+           && resetForReturn > cleanupCapture
+           && terminalAfterReset > resetForReturn
+           && !caseBlock.Contains("OutOfConnect(userInfo, gateInfo)",
+               StringComparison.Ordinal)
+           && !caseBlock.Contains(
+               "_nativeAccountOwners.ReleaseForConnection",
+               StringComparison.Ordinal)
           && caseBlock.Contains(
               "ProcessNativeAccountTakeover(userInfo, gateInfo)",
               StringComparison.Ordinal)
@@ -2745,6 +2754,35 @@ static void TestNativeAccountOwnerTakeover()
     Equal(1, claims.Count(claimed => claimed),
         "concurrent account owner winner count");
     Equal(1, registry.Count, "concurrent account owner slot count");
+
+    // 4041 clears Self+0x24 before the terminal path.  The cleanup key must
+    // therefore be captured out of band so both native registries release the
+    // old account after the user object has been reset.
+    var clearedUser = new TUserInfo
+    {
+        sAccount = "ClearedAccount",
+        sUserIPaddr = "10.20.30.40"
+    };
+    var clearedRegistry = new NativeAccountOwnerRegistry();
+    var clearedAdmission = new NativeUserAdmissionControl();
+    Check(clearedRegistry.TryClaim(clearedUser.sAccount, clearedUser, out _),
+        "4041 cleared-account owner setup");
+    Check(clearedAdmission.TryIncrementNativeOwnerIp(
+            clearedUser.sUserIPaddr, int.MaxValue, _ => false),
+        "4041 cleared-account IP setup");
+    var savedCleanupAccount = clearedUser.sAccount;
+    NativeLoginAlreadyOnlineProtocol.ResetForReturnToLogin(clearedUser);
+    Check(clearedUser.sAccount == string.Empty,
+        "4041 fixture did not clear the user account");
+    Check(clearedRegistry.ReleaseRegisteredOwnerByKey(savedCleanupAccount),
+        "4041 saved owner key did not release after reset");
+    Check(clearedAdmission.ReleaseNativeConnection(
+            savedCleanupAccount, clearedUser.sUserIPaddr),
+        "4041 saved account did not release the IP admission");
+    Equal(0, clearedRegistry.Count,
+        "4041 cleared-account owner registry leaked");
+    Equal(0u, clearedAdmission.GetIpCount(clearedUser.sUserIPaddr),
+        "4041 cleared-account IP admission leaked");
 
     var owner = claims[0] ? first : second;
     var candidate = claims[0] ? second : first;
@@ -3008,8 +3046,8 @@ static void TestNativeOutOfConnectIdent()
         "ReleaseNativeIpAdmission(user)", ownerRelease,
         StringComparison.Ordinal);
     Check(method.Contains(
-              "userInfo.WireMode == TGateWireMode.Native77",
-              StringComparison.Ordinal)
+               "userInfo.WireMode == TGateWireMode.Native77",
+               StringComparison.Ordinal)
           && method.Contains(
               "Grobal2.SM_OUTOFCONNECTION_4018",
               StringComparison.Ordinal)
@@ -3022,14 +3060,34 @@ static void TestNativeOutOfConnectIdent()
               StringComparison.Ordinal)
           && method.Contains("!removed.NativeRouteActive",
               StringComparison.Ordinal)
-          && tryRoute >= 0
-          && !wrapper.Contains("CloseUser(", StringComparison.Ordinal)
-          && removeRoute >= 0 && lifecycle > removeRoute
-          && nativeSend > lifecycle && terminal > nativeSend
-          && beforeDetach > terminal && destructiveRemove > beforeDetach
-          && cleanup > destructiveRemove
-          && ownerRelease >= 0 && ipRelease > ownerRelease
-          && routeClear > cleanup,
+           && tryRoute >= 0
+           && wrapper.Contains(
+               "TrySendNativeTerminalRoute(userInfo, ident, accountOverride)",
+               StringComparison.Ordinal)
+           && !wrapper.Contains("CloseUser(", StringComparison.Ordinal)
+           && removeRoute >= 0 && lifecycle > removeRoute
+           && nativeSend > lifecycle && terminal > nativeSend
+           && beforeDetach > terminal && destructiveRemove > beforeDetach
+           && cleanup > destructiveRemove
+           && route.Contains("out _, accountOverride)",
+               StringComparison.Ordinal)
+           && route.Contains(
+               "CleanupNativeAdmissionAndOwnership(removedUser,\n                    preservePendingTakeover, accountOverride)",
+               StringComparison.Ordinal)
+           && ownerRelease >= 0 && ipRelease > ownerRelease
+           && cleanupBlock.Contains(
+               "var cleanupAccount = accountOverride ?? user.sAccount",
+               StringComparison.Ordinal)
+           && cleanupBlock.Contains(
+               "ReleaseRegisteredOwnerByKey(\n                        cleanupAccount)",
+               StringComparison.Ordinal)
+           && cleanupBlock.Contains(
+               "ReleaseForConnection(\n                        cleanupAccount, user)",
+               StringComparison.Ordinal)
+           && cleanupBlock.Contains(
+               "ReleaseNativeIpAdmission(user, accountOverride)",
+               StringComparison.Ordinal)
+           && routeClear > cleanup,
         "native OutOfConnect must terminate, remove the DB route, clean owner/IP, then emit command 12");
 }
 
