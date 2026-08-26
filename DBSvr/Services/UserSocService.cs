@@ -1319,9 +1319,19 @@ namespace DBSvr
                     //   0x5CC857  call 0x59D70C                 ; 经 [[0x5DA0E0]] 外发
                     //   0x5CC85F  mov byte [self+8], 7          ; ★状态推进到 7
                     //
-                    Log($"[UserSoc] 未建模 opcode {ident} -> 回 4018 并关闭原生会话");
+                    Log($"[UserSoc] 未建模 opcode {ident} -> 回 4018 并封口原生会话");
                     if (userInfo.WireMode == TGateWireMode.Native77)
-                        OutOfConnect(userInfo, gateInfo);
+                    {
+                        // 0x5CE46C -> 0x5CC7B4 sends one empty 4018 and
+                        // advances Self+8 to state 7, then queues its
+                        // internal 0x271C manager message. The managed route
+                        // lifecycle remains separate until that fan-out is
+                        // fully mapped.
+                        SendEncodedPacket(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018,
+                            0, 0, 0, 0, null);
+                        userInfo.NativeSessionState = 7;
+                    }
                     else
                         SendEncodedPacket(userInfo,
                             Grobal2.SM_OUTOFCONNECTION_4018,

@@ -29,6 +29,7 @@ Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
 Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
+Run("native state-5 unknown opcode terminal", TestNativeUnknownOpcodeTerminal);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
 Run("native 4017 status-3 handled terminal", TestNativeSelectNameNotAllowedHandled);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
@@ -3547,6 +3548,75 @@ static void TestNativeRenameFailureTerminal()
         (ushort)Grobal2.SM_QUERYCHR);
     Check(decoded.All(message => message.Ident != clientListIdent),
         "4016 failure must not refresh the 4010 character list");
+}
+
+static void TestNativeUnknownOpcodeTerminal()
+{
+    var sent = new List<byte[]>();
+    Exception? queueError = null;
+    var gate = new TGateInfo
+    {
+        NativeOutboundQueue = new NativeGateOutboundQueue(
+            frame => sent.Add(frame),
+            error => queueError = error)
+    };
+    var user = new TUserInfo
+    {
+        WireMode = TGateWireMode.Native77,
+        NativeQueryId = 0x2426,
+        NativeSessionState = 5,
+        NativeGateOwner = gate,
+        NativeRouteActive = true
+    };
+    var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
+        typeof(UserSocService));
+    var method = typeof(UserSocService).GetMethod(
+        "ProcessDecodedUserPacket",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Check(method != null, "unknown-opcode process dispatcher method not found");
+
+    // 0xFC8 is a state-5 table hole in the native dispatcher and therefore
+    // reaches the common unhandled -> 4018 terminal leg.
+    var args = new object[]
+    {
+        gate,
+        user,
+        (ushort)0xFC8,
+        0,
+        (ushort)0,
+        string.Empty
+    };
+    method!.Invoke(service, args);
+    user = (TUserInfo)args[1];
+
+    gate.NativeOutboundQueue.Complete();
+    Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+        "unknown-opcode outbound queue completion timeout");
+    Check(queueError == null,
+        "unknown-opcode outbound queue raised an exception: "
+        + queueError?.Message);
+    Equal(1, sent.Count,
+        "state-5 unknown opcode must emit exactly one 4018");
+    Equal((byte)7, user.NativeSessionState,
+        "state-5 unknown opcode did not advance state 7");
+
+    Check(YbDbLegacy77Codec.TryDecode(sent[0], out var frame,
+        out var error), error);
+    Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+        out var message, out error), error);
+    Equal(0x2426, frame.QueryId,
+        "unknown-opcode response query id");
+    Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018,
+        message.Ident, "unknown-opcode response ident");
+    Equal(0, message.Recog, "unknown-opcode response Recog");
+    Equal((ushort)0, message.Param,
+        "unknown-opcode response Param");
+    Equal((ushort)0, message.Tag,
+        "unknown-opcode response Tag");
+    Equal((ushort)0, message.Series,
+        "unknown-opcode response Series");
+    Equal(0, message.Body.Length,
+        "unknown-opcode response body");
 }
 
 static void TestNativeNewZoneAdminListGate()
