@@ -57,9 +57,6 @@ namespace GameSvr
         /// <summary>String @0x6EFA20 (20 GBK bytes, byte-exact round-trip).</summary>
         private const string HeroNotifyDragonBreakOnCooldown = "技能升龙破还在冷却中";
 
-        private static readonly HashSet<int> HeroNotifyReportedGaps = new HashSet<int>();
-        private static readonly object HeroNotifyReportLock = new object();
-
         /// <summary>
         /// Insert before TryHandleNativeCmQ3 (see the class remarks). Returns true
         /// for the two idents it owns so the dispatch chain stops.
@@ -89,10 +86,9 @@ namespace GameSvr
         ///   0x6EF9C7  mov cx,0x38FF         -> SysMsg red colour word
         ///   0x6EF9D2  call [Self.vmt+0xD4]  -> SysMsg on Self (the player)
         ///
-        /// The no-hero SILENCE and both notice legs read only modelled state
-        /// (m_HeroObject, the hero magic list, the hero cold-time table) and are
-        /// reproduced 1:1. The "ready" leg (learned + off cooldown) writes the
-        /// unmodelled arm flag [hero+0x6D9]=1 and sends nothing, so it is withheld.
+        /// The no-hero silence, both notice legs, and the raw +0x6D9 state write
+        /// are reproduced. The ready leg writes one and deliberately sends no
+        /// success reply.
         /// </summary>
         private void HeroNotifyCm3503()
         {
@@ -114,13 +110,7 @@ namespace GameSvr
                     HeroNotifyRedSysMsg(HeroNotifyDragonBreakOnCooldown);
                     break;
                 default:
-                    // 0x690A75 sets [hero+0x6D9]=1 and 0x6EF9C1 sends nothing. That
-                    // arm flag (read by the hero 升龙破 combat legs at 0x692AFF /
-                    // 0x693C88 / 0x6946CF) is not modelled, so the packet is dropped
-                    // rather than pretending to arm a skill this port cannot fire.
-                    HeroNotifyFailClosed(Grobal2.CM_3503,
-                        "hero 升龙破 就绪腿置 [hero+0x6D9]=1（arm 标志 + 其战斗读取端 "
-                        + "0x692AFF/0x693C88/0x6946CF 未建模）；原生此腿本就不发包");
+                    // 0x690A75 writes one; 0x6EF9C1 then exits in silence.
                     break;
             }
         }
@@ -149,6 +139,7 @@ namespace GameSvr
             // 0x690A39 hero.vmt+0xE8: magic learned?
             if (!HeroNotifyHasLearnedMagic(hero, HeroNotifyDragonBreakId))
             {
+                hero.m_btNativeDragonBreakState6D9 = 0;
                 return -1;
             }
 
@@ -156,9 +147,11 @@ namespace GameSvr
             // (0x690A63 test/jle keeps <=0, including a negative, as ready).
             if (hero.GetNativeColdTimeRemaining(HeroNotifyDragonBreakId) > 0)
             {
+                hero.m_btNativeDragonBreakState6D9 = 0;
                 return -2;
             }
 
+            hero.m_btNativeDragonBreakState6D9 = 1;
             return 0;
         }
 
@@ -233,24 +226,5 @@ namespace GameSvr
             NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_4105, m_sCharName);
         }
 
-        /// <summary>Drop the packet and record the gap once per ident per process,
-        /// mirroring NativeCmQ3FailClosed.Q3Drop's throttle. Used for the CM 3503
-        /// ready leg, whose blocker is not the stale whole-ident entry in the Q3
-        /// ledger (the hero legs above are now implemented).</summary>
-        private void HeroNotifyFailClosed(int ident, string blocker)
-        {
-            lock (HeroNotifyReportLock)
-            {
-                if (!HeroNotifyReportedGaps.Add(ident))
-                {
-                    return;
-                }
-            }
-
-            M2Share.MainOutMessage(
-                $"[CM未移植:HeroNotify] CM {ident} 部分腿已丢弃; "
-                + $"角色={(string.IsNullOrEmpty(m_sCharName) ? "<unknown>" : m_sCharName)}; "
-                + $"缺口={blocker}");
-        }
     }
 }

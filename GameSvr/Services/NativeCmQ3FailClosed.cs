@@ -101,8 +101,6 @@ namespace GameSvr.Services
                 "[+0x1F0]/[+0x1F4]/[+0x290]，链 0x6BCE2C/0x741698；未建模");
             Add(3410, 0x006DAED9, 0x006EBE50, "定长40字节记录",
                 "leaf 门 nBodyLen==0x28；worker 读 body[+0x10]/[+0x20]/[+0x24] 并走 [+0x760]/[+0xA10]/[+0xA14]/[+0xA18] + [0x7D6D50]，SM 0xD27；未建模（nBodyLen!=0x28 已复现为静默）");
-            Add(3503, 0x006DAF44, 0x006EF970, "英雄相关通知",
-                "hero [+0xBB0] 门；有英雄时 0x690A24 返回 -1/-2 决定 SM 0x38FF 通知文本 (0x6EFA04/0x6EFA20)；hero 子系统未建模（无英雄腿已复现为静默）");
             Add(4102, 0x006DABFC, 0x006B7BCC, "交易/市场命令",
                 "globals [0x7D62DC]/[0x7D6214]/[0x7D5C0C]/[0x7D6038]/[0x7D5D98] + [+0x18DC]/[+0x18DE]/[+0xAF4]；短包腿写 [+0x18DC]/[+0x18DE]；未建模");
             Add(4105, 0x006DA005, 0x007742C0, "状态刷新三连",

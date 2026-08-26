@@ -62,7 +62,6 @@ namespace GameSvr
                 case Grobal2.CM_3340: Q3Cm3340(); return true;
                 case Grobal2.CM_3344: Q3Cm3344(); return true;
                 case Grobal2.CM_3410: Q3Cm3410(processMessage.nBodyLen); return true;
-                case Grobal2.CM_3503: Q3Cm3503(); return true;
                 case Grobal2.CM_4102: Q3Cm4102(); return true;
                 case Grobal2.CM_4105: Q3Cm4105(); return true;
                 case Grobal2.CM_4123: Q3Cm4123(processMessage.nParam3); return true;
@@ -296,24 +295,6 @@ namespace GameSvr
             }
 
             NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3410, m_sCharName);
-        }
-
-        /// <summary>
-        /// CM 3503, leaf 0x6DAF44, worker 0x6EF970(Self). The worker returns at once
-        /// when there is no hero (0x6EF98E `mov eax,[Self+0xBB0]` / `test eax` /
-        /// `je 0x6EF9D8` — a bare teardown), so the no-hero case is reproduced as
-        /// silence. With a hero, 0x690A24 returns -1/-2 which selects a notice
-        /// string (0x6EFA04/0x6EFA20) sent as SM 0x38FF via vmt+0xD4; that hero
-        /// check is not modelled, so the notice is withheld.
-        /// </summary>
-        private void Q3Cm3503()
-        {
-            if (m_HeroObject == null)
-            {
-                return;
-            }
-
-            NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_3503, m_sCharName);
         }
 
         /// <summary>
