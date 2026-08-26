@@ -1100,6 +1100,16 @@ namespace DBSvr
                         OutOfConnect(userInfo, gateInfo);
                         break;
                     }
+                    // The native dispatcher only calls its 4004 worker when
+                    // the frame has a body pointer.  A header-only request
+                    // therefore takes the common 4018 terminal leg before it
+                    // can mutate the session id.
+                    if (userInfo.WireMode == TGateWireMode.Native77
+                        && string.IsNullOrEmpty(body))
+                    {
+                        OutOfConnect(userInfo, gateInfo);
+                        break;
+                    }
                     userInfo.nSessionID = pktSessionId > 0 ? pktSessionId : userInfo.nSessionID;
                     ProcessMobileLoginAuth(body, userInfo.nSessionID, ref userInfo, ref gateInfo);
                     break;
@@ -3291,13 +3301,3 @@ namespace DBSvr
         public TGateInfo GateInfo;
     }
 }
-                    // The native dispatcher only calls its 4004 worker when
-                    // the frame has a body pointer.  A header-only request
-                    // therefore takes the common 4018 terminal leg before it
-                    // can mutate the session id.
-                    if (userInfo.WireMode == TGateWireMode.Native77
-                        && string.IsNullOrEmpty(body))
-                    {
-                        OutOfConnect(userInfo, gateInfo);
-                        break;
-                    }
