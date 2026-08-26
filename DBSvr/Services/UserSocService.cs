@@ -1313,12 +1313,24 @@ namespace DBSvr
         private void ProcessMobileLoginAuth(string sData, int sessionId, ref TUserInfo userInfo, ref TGateInfo gateInfo)
         {
             Log($"[MobileAuth] START sDataLen={sData?.Length} sessionId={sessionId}");
-            var body = DecodeRawBody(sData);
             if (_loginService.Mode == LoginGateTransportMode.Native77Client)
             {
+                // Native 0x5CE... computes a null body for a 4004 frame
+                // whose encoded payload is absent (len <= 13).  That frame
+                // is not dispatched to the auth decoder; it falls through
+                // the common terminal leg and emits one 4018.  Keep malformed
+                // non-empty requests on the distinct 4004 failure path.
+                if (string.IsNullOrEmpty(sData))
+                {
+                    Log("[MobileAuth] native empty body -> terminal 4018");
+                    OutOfConnect(userInfo, gateInfo);
+                    return;
+                }
+
+                var nativeBody = DecodeRawBody(sData);
                 var decodeError = string.Empty;
                 if (sessionId == 0
-                    || !NativeMobileLoginAuthCodec.TryDecode(body,
+                    || !NativeMobileLoginAuthCodec.TryDecode(nativeBody,
                         out var nativeRequest, out decodeError))
                 {
                     Log("[MobileAuth] native request rejected: " + decodeError);
@@ -1344,6 +1356,7 @@ namespace DBSvr
                 return;
             }
 
+            var body = DecodeRawBody(sData);
             var ticket = ExtractCStr(body, 0);
             // Removed ResolveMobileTicket per account_schema_ownership_20260811.md —
             // ticket resolution belongs to LoginGate, not DBServer. Use ticket as-is.

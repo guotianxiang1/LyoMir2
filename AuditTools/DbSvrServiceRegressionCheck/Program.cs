@@ -23,6 +23,7 @@ Run("native 4041 account-owner takeover", TestNativeAccountOwnerTakeover);
 Run("native UserSoc C-string body boundary", TestNativeUserBodyBoundary);
 Run("native UserSoc malformed inner-frame isolation", TestNativeMalformedInnerFrameIsolation);
 Run("native UserSoc header-only 4004 terminal", TestNativeHeaderOnly4004Terminal);
+Run("native UserSoc empty auth body terminal", TestNativeEmptyAuthBodyTerminal);
 Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
@@ -3184,6 +3185,40 @@ static void TestNativeHeaderOnly4004Terminal()
     Check(headerOnly >= 0 && terminal > headerOnly
           && sessionMutation > terminal && authDispatch > terminal,
         "header-only Native77 4004 must terminate before session/auth dispatch");
+}
+
+static void TestNativeEmptyAuthBodyTerminal()
+{
+    var source = File.ReadAllText(Path.Combine(
+        RepoRoot(), "DBSvr", "Services", "UserSocService.cs"))
+        .Replace("\r\n", "\n");
+    var methodStart = source.IndexOf(
+        "private void ProcessMobileLoginAuth(", StringComparison.Ordinal);
+    var methodEnd = source.IndexOf(
+        "private void CompleteNativeMobileLoginAuth(", methodStart,
+        StringComparison.Ordinal);
+    Check(methodStart >= 0 && methodEnd > methodStart,
+        "native mobile-auth method boundary is missing");
+    var method = source.Substring(methodStart, methodEnd - methodStart);
+    var empty = method.IndexOf("if (string.IsNullOrEmpty(sData))",
+        StringComparison.Ordinal);
+    var terminal = method.IndexOf("OutOfConnect(userInfo, gateInfo)", empty,
+        StringComparison.Ordinal);
+    var terminalReturn = method.IndexOf("return;", terminal,
+        StringComparison.Ordinal);
+    var nativeDecode = method.IndexOf(
+        "var nativeBody = DecodeRawBody(sData)", terminalReturn,
+        StringComparison.Ordinal);
+    var nativeTryDecode = method.IndexOf(
+        "NativeMobileLoginAuthCodec.TryDecode(nativeBody", nativeDecode,
+        StringComparison.Ordinal);
+    var legacyDecode = method.IndexOf("var body = DecodeRawBody(sData)",
+        nativeTryDecode, StringComparison.Ordinal);
+    Check(empty >= 0 && terminal > empty && terminalReturn > terminal
+          && nativeDecode > terminalReturn
+          && nativeTryDecode > nativeDecode
+          && legacyDecode > nativeTryDecode,
+        "empty Native77 auth body must terminate before native decode and preserve legacy decode");
 }
 
 static void TestNativeSelectEntryRenameContinuation()
