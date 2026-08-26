@@ -52,6 +52,29 @@ namespace DBSvr
         private readonly INativeRenameCascadeService _renameCascade;
         private readonly object _gateLock = new();
 
+        // Native UserSoc workers receive Delphi AnsiString values built with
+        // LStrFromPChar/strlen (0x404DF0).  That conversion terminates at the
+        // first NUL, not only at a final padding terminator.  Keep this rule
+        // isolated to the Native77 transport; the private percent/dollar
+        // transport retains its established TrimEnd compatibility behavior.
+        private static string DecodeNativeCString(string encoded)
+        {
+            var decoded = EDcode.DeCodeString(encoded)?.TrimEnd('\0')
+                ?? string.Empty;
+            var nul = decoded.IndexOf('\0');
+            return nul >= 0 ? decoded.Substring(0, nul) : decoded;
+        }
+
+        private static string DecodeUserBodyString(string encoded,
+            TUserInfo userInfo)
+        {
+            if (userInfo != null
+                && userInfo.WireMode == TGateWireMode.Native77)
+                return DecodeNativeCString(encoded);
+            return EDcode.DeCodeString(encoded)?.TrimEnd('\0')
+                ?? string.Empty;
+        }
+
         /// <summary>
         /// ⚠️ 这个名单**不是**全局 fail-closed 闸门。我先前在这里写过
         /// 「不登记则请求根本进不到 switch」——那句话是错的，已按调用点推翻：
@@ -1957,7 +1980,7 @@ namespace DBSvr
         /// </summary>
         private bool DelChr(string sData, ref TUserInfo userInfo)
         {
-            var sChrName = EDcode.DeCodeString(sData)?.TrimEnd('\0');
+            var sChrName = DecodeUserBodyString(sData, userInfo);
             Log($"[DelChr] name='{sChrName}' sAccount={userInfo.sAccount}");
 
             // 0x5CC8C9 call 0x404EB8 (Length) / 0x5CC8D1 cmp eax,0x0E / 0x5CC8D4 jg
@@ -2142,7 +2165,7 @@ namespace DBSvr
             // Native 2.08 takes the new name from [ebp-8] and the old name
             // exclusively from Self+0x48.  The old slash/account fallback is
             // retained only for the private legacy transport.
-            var decoded = EDcode.DeCodeString(sData)?.TrimEnd('\0') ?? string.Empty;
+            var decoded = DecodeUserBodyString(sData, userInfo);
             string oldName;
             string newName;
             if (userInfo.WireMode == TGateWireMode.Native77)
@@ -2378,7 +2401,7 @@ namespace DBSvr
         {
             handled = false;
             string sAccount = userInfo.sAccount ?? "";
-            var sChrName = EDcode.DeCodeString(sData)?.TrimEnd('\0');
+            var sChrName = DecodeUserBodyString(sData, userInfo);
             if (string.IsNullOrEmpty(sChrName)) return false;
 
             bool boDataOK = false;

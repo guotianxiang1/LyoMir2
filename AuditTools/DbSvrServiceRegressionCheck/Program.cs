@@ -20,6 +20,7 @@ Run("native 4004 login result body", TestNativeLoginResultBody);
 Run("native 4041 return-to-login state", TestNativeLoginAlreadyOnline);
 Run("native DB gate route multimap", TestNativeGateRouteRegistry);
 Run("native 4041 account-owner takeover", TestNativeAccountOwnerTakeover);
+Run("native UserSoc C-string body boundary", TestNativeUserBodyBoundary);
 Run("native admission queue", TestNativeAdmissionQueue);
 Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
@@ -3089,6 +3090,42 @@ static void TestNativeOutOfConnectIdent()
                StringComparison.Ordinal)
            && routeClear > cleanup,
         "native OutOfConnect must terminate, remove the DB route, clean owner/IP, then emit command 12");
+}
+
+static void TestNativeUserBodyBoundary()
+{
+    var nativeDecoder = typeof(UserSocService).GetMethod(
+        "DecodeNativeCString",
+        BindingFlags.Static | BindingFlags.NonPublic);
+    var bodyDecoder = typeof(UserSocService).GetMethod(
+        "DecodeUserBodyString",
+        BindingFlags.Static | BindingFlags.NonPublic);
+    Check(nativeDecoder != null && bodyDecoder != null,
+        "native UserSoc decoder methods are missing");
+
+    // EDcode carries the Delphi AnsiString bytes through the existing 6-bit
+    // transport.  The native LStrFromPChar/strlen path stops at the first NUL;
+    // the private percent/dollar compatibility path trims only terminal NULs.
+    var encoded = EDcode.EncodeString("Alpha\0Tail\0");
+    var native = nativeDecoder!.Invoke(null, new object[] { encoded }) as string
+        ?? "<null>";
+    Equal("Alpha", native,
+        "Native77 body decoder did not stop at the first NUL");
+
+    var nativeUser = new TUserInfo { WireMode = TGateWireMode.Native77 };
+    var nativeBody = bodyDecoder!.Invoke(null,
+        new object[] { encoded, nativeUser }) as string ?? "<null>";
+    Equal("Alpha", nativeBody,
+        "Native77 dispatch decoder did not use the C-string boundary");
+
+    var privateUser = new TUserInfo
+    {
+        WireMode = TGateWireMode.PrivatePercentDollar
+    };
+    var privateBody = bodyDecoder.Invoke(null,
+        new object[] { encoded, privateUser }) as string ?? "<null>";
+    Equal("Alpha\0Tail", privateBody,
+        "private body decoder changed its trailing-NUL compatibility rule");
 }
 
 static void TestNativeSelectEntryRenameContinuation()
