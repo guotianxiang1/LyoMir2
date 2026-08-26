@@ -1115,7 +1115,13 @@ namespace DBSvr
                     break;
 
                 case 4039: // CM_SELCHR_EXIT — 返回登录/退出选角
+                    // Native 0x5CE445 invokes 0x5CC7B4 with ident=4039 and
+                    // dl=0.  Besides the visible 4039 frame that helper
+                    // advances Self+8 to terminal state 7.  Its internal
+                    // 0x271C manager fan-out is not guessed in this layer.
                     SendEncodedPacket(userInfo, 4039, 0, 0, 0, 0, null);
+                    if (userInfo.WireMode == TGateWireMode.Native77)
+                        userInfo.NativeSessionState = 7;
                     break;
 
                 case Grobal2.CM_LOGIN_ALREADY_ONLINE:

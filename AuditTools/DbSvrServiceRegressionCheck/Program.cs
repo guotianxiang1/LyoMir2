@@ -30,6 +30,7 @@ Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
 Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
 Run("native state-5 unknown opcode terminal", TestNativeUnknownOpcodeTerminal);
+Run("native 4039 terminal frame", TestNative4039TerminalFrame);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
 Run("native 4017 status-3 handled terminal", TestNativeSelectNameNotAllowedHandled);
 Run("native 4017 account ownership gate", TestNativeSelectOwnershipGate);
@@ -3617,6 +3618,68 @@ static void TestNativeUnknownOpcodeTerminal()
         "unknown-opcode response Series");
     Equal(0, message.Body.Length,
         "unknown-opcode response body");
+}
+
+static void TestNative4039TerminalFrame()
+{
+    var sent = new List<byte[]>();
+    Exception? queueError = null;
+    var gate = new TGateInfo
+    {
+        NativeOutboundQueue = new NativeGateOutboundQueue(
+            frame => sent.Add(frame),
+            error => queueError = error)
+    };
+    var user = new TUserInfo
+    {
+        WireMode = TGateWireMode.Native77,
+        NativeQueryId = 0x2427,
+        NativeSessionState = 5,
+        NativeGateOwner = gate,
+        NativeRouteActive = true
+    };
+    var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
+        typeof(UserSocService));
+    var method = typeof(UserSocService).GetMethod(
+        "ProcessDecodedUserPacket",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+    Check(method != null, "4039 process dispatcher method not found");
+
+    var args = new object[]
+    {
+        gate,
+        user,
+        // Native state-5 dispatcher leaf 0x5CE445: decimal 4039.
+        (ushort)4039,
+        0,
+        (ushort)0,
+        string.Empty
+    };
+    method!.Invoke(service, args);
+    user = (TUserInfo)args[1];
+
+    gate.NativeOutboundQueue.Complete();
+    Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+        "4039 outbound queue completion timeout");
+    Check(queueError == null,
+        "4039 outbound queue raised an exception: " + queueError?.Message);
+    Equal(1, sent.Count,
+        "native 4039 must emit exactly one visible frame");
+    Equal((byte)7, user.NativeSessionState,
+        "native 4039 did not advance state 7");
+
+    Check(YbDbLegacy77Codec.TryDecode(sent[0], out var frame,
+        out var error), error);
+    Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+        out var message, out error), error);
+    Equal(0x2427, frame.QueryId, "4039 response query id");
+    Equal((ushort)4039,
+        message.Ident, "4039 response ident");
+    Equal(0, message.Recog, "4039 response Recog");
+    Equal((ushort)0, message.Param, "4039 response Param");
+    Equal((ushort)0, message.Tag, "4039 response Tag");
+    Equal((ushort)0, message.Series, "4039 response Series");
+    Equal(0, message.Body.Length, "4039 response body");
 }
 
 static void TestNativeNewZoneAdminListGate()
