@@ -3,7 +3,15 @@ using SystemModule;
 
 namespace GameSvr
 {
-    public partial class TBaseObject
+    /// <summary>
+    /// Native <c>TCreature</c>, VMT 0x00764608, instance size 1104.
+    ///
+    /// Native derives it from <c>TBaseObj</c> (12 bytes, own band [0x4, 0xC)),
+    /// not from TObject directly, so the two dwords below the actor's own fields
+    /// belong to that base rather than to this class. Attaching the edge here is
+    /// what makes the offset band of this class start at 0x00C instead of 0x004.
+    /// </summary>
+    public partial class TBaseObject : TBaseObj
     {
         public readonly int ObjectId;
         public string m_sMapName;
