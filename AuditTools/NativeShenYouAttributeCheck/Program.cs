@@ -44,6 +44,7 @@ try
     CheckShippedFormatParsesAsNative();
     CheckCommentAndBlankLinesSkipped();
     CheckSlotCapDirectiveAlwaysResolvesToFour();
+    CheckSlotCapStartsAtZeroBeforeAnyLoad();
     CheckZeroIdRowIsDropped();
     CheckDuplicateIdKeepsBothRowsAndLastWinsOnLookup();
     CheckMalformedFieldsDoNotAbortTheLoad();
@@ -208,6 +209,26 @@ static void CheckNameTruncatedAtThirtyBytes()
     var gbkName = new string('\u4e2d', 20);
     var gbk = LoadRows("1|0|0|" + gbkName);
     Equal(30, gbk.Rows[0].NameBytes.Length, "GBK name capped at 0x1E bytes");
+}
+
+static void CheckSlotCapStartsAtZeroBeforeAnyLoad()
+{
+    // word[[0x7D5AEC]] is BSS, and the only write that raises it to 4 (0x7553F9) is
+    // inside the file-exists branch taken at 0x7553AC. The runtime capture proves the
+    // state is reachable: 0x7DCF44 reads 0 while the table object at 0x7DCF40 already
+    // holds a live heap pointer, i.e. the table was constructed but never loaded.
+    var fresh = new NativeShenYouAttributeConfig();
+    Equal(0, fresh.SlotCap, "cap before any load (BSS, 0x7553F9 not yet run)");
+    Equal(0, fresh.Count, "no rows before any load");
+
+    // The same is true after a failed first load: the missing-file leg jumps straight
+    // from 0x7553AC to 0x7555BF and never reaches 0x7553F9.
+    var missingFirst = Path.Combine(TempDir(), "never-written.txt");
+    fresh.Reload(missingFirst, TempDir(), out _);
+    Equal(0, fresh.SlotCap, "cap still 0 after a first load that found no file");
+
+    // Only a load that actually reads the file raises it.
+    Equal(4, LoadRows("1|1|1|n").SlotCap, "cap is 4 once 0x7553F9 has run");
 }
 
 static void CheckMissingFileLeavesPreviousRowsStanding()

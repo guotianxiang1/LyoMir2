@@ -76,8 +76,16 @@ namespace GameSvr
 
         public IReadOnlyList<NativeShenYouAttributeEntry> Rows => _rows;
 
-        /// <summary>Native [[0x7D5AEC]], initialised to 4 at 0x7553F9.</summary>
-        public int SlotCap { get; private set; } = NativeDefaultSlotCap;
+        /// <summary>
+        /// Native word[[0x7D5AEC]], read as a word at 0x746CF7.
+        ///
+        /// The slot is plain BSS, so it starts at 0, and the only write that can raise
+        /// it to 4 (0x7553F9) sits behind the FileExists branch at 0x7553AC. A server
+        /// whose config file never loaded therefore keeps 0: the runtime capture has
+        /// 0x7DCF44 = 0 while the table object at 0x7DCF40 is already a live heap
+        /// pointer. Initialising this to 4 would model a state native never reaches.
+        /// </summary>
+        public int SlotCap { get; private set; }
 
         /// <summary>Native byte[[0x7D6938]] — mir2Actor.ini [setup] ShenYouAbilSwitch.</summary>
         public bool AbilSwitch { get; private set; }
@@ -182,6 +190,8 @@ namespace GameSvr
                 return false;
             }
 
+            // 0x7553EF clears the table and 0x7553F9 writes the cap, both only on this
+            // leg. Neither runs when FileExists failed at 0x7553AC.
             _rows.Clear();
             _byId.Clear();
             SlotCap = NativeDefaultSlotCap;
