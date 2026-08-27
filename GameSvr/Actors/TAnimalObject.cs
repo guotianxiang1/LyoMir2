@@ -80,8 +80,10 @@ namespace GameSvr
         internal override bool IsNativeMagic43Target(TPlayObject source)
         {
             // These C# classes map to native VMT+0x19C constant-false holders.
-            // SuperGuard is the one flattened exception: native TSuperGuard is
-            // a direct TAnimal child and inherits the accepting slot.
+            // SuperGuard used to need an exception here because the port had it
+            // under NormNpc; it is a direct TAnimal child now, so it reaches the
+            // accepting slot below on its own. Trainer likewise left NormNpc, and
+            // carries its own constant-false override per 0x681C34.
             if (this is TPlayObject || this is HeroObject ||
                 this is TFieldHero || this is AiMon || this is SearchMon ||
                 this is WalkMon || this is FoxBossMon ||
@@ -91,7 +93,7 @@ namespace GameSvr
                 this is SuicideBat || this is FireCracker ||
                 this is QingLong || this is BaiHu || this is ItemAttMon ||
                 this is TimerBombMon || this is CreateBombMon ||
-                (this is NormNpc && !(this is SuperGuard)))
+                this is NormNpc)
             {
                 return false;
             }

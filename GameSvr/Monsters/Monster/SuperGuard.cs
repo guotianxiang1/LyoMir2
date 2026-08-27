@@ -1,8 +1,17 @@
-using SystemModule;
+﻿using SystemModule;
 
 namespace GameSvr
 {
-    public class SuperGuard : NormNpc
+    /// <summary>
+    /// Native <c>TSuperGuard</c>, VMT 0x0067FCF4, instance size 1240.
+    ///
+    /// A direct <c>TAnimal</c> child, not an NPC: 1240 is exactly TAnimal's own
+    /// size, so it declares no fields, and VMT +0x018 (Operate) and +0x19C
+    /// (IsProperTarget) both hold TAnimal's 0x71DEE8 / 0x71F840 unchanged. The
+    /// port had it under NormNpc, which is why AnimalObject.IsNativeMagic43Target
+    /// needed an explicit exception to hand it back the accepting slot.
+    /// </summary>
+    public class SuperGuard : AnimalObject
     {
         public int n564 = 0;
         protected bool m_boAttackPet = false;
