@@ -58,6 +58,13 @@ namespace GameSvr
         private const string HeroNotifyDragonBreakOnCooldown = "技能升龙破还在冷却中";
 
         /// <summary>
+        /// Managed-only broadcast carrier for the CM 4105 summon-start frame.
+        /// This value is not a native RM constant; the message pump serializes
+        /// it as SM 3412.
+        /// </summary>
+        internal const int NativeHorseCallStartRefMessage = 15324;
+
+        /// <summary>
         /// Insert before TryHandleNativeCmQ3 (see the class remarks). Returns true
         /// for the two idents it owns so the dispatch chain stops.
         /// </summary>
@@ -195,8 +202,7 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// CM 4105, leaf 0x6DA005 fires three workers in program order, every one of
-        /// which drives an unmodelled subsystem:
+        /// CM 4105, leaf 0x6DA005 fires three workers in program order:
         ///
         ///   0x7742C0(Self) — stealth reveal. Gates on state 0x40
         ///     (0x7742D6 `mov dl,0x40` / 0x772960 getter); when set it clears it
@@ -209,24 +215,76 @@ namespace GameSvr
         ///     and vmt+0x1D8 = 0x6EE2AC (0x6EE2DF `mov dx,0xD57`). Modelled as
         ///     TPlayObject.CancelNativeActionChannels. The Ident argument is dead:
         ///     all three callees start by overwriting edx with eax.
-        ///   0x6EE174(Self,Ident) — mount summon. Gates on state 0x33 (0x6BBEB8),
-        ///     the mount object [Self+0x128].[0x85], [Self+0x4C0] via 0x75EC20, and
-        ///     [Self+0xA24]==0x72, each raising its own notice (SM 0xFCFF strings
-        ///     @0x6EE248 "当前地图不能召唤坐骑！" / @0x6EE268 "您无主宰者马牌，无法召唤
-        ///     坐骑！"; SM 0xFFDB string @0x6EE290 "正在开启心法，不能上坐骑！"); on
-        ///     success it re-refreshes (0x6BCE2C), stamps the timer [Self+0x1914] and
-        ///     sends SM 0xD54 via vmt+0xE0.
+        ///   0x6EE174(Self,Ident) — mount summon. Gates on state 0x33/0x34,
+        ///     nullable map NORIDE, then equipment slot 15. Its generic
+        ///     [Self+0xA24]==0x72 refusal is unreachable here because the preceding
+        ///     0x6BCE2C clears every nonzero value. Success repeats 0x6BCE2C, arms
+        ///     pending/tick/delay=3000, and broadcasts SM 3412 to visible players
+        ///     including Self.
         ///
-        /// Workers one and two are now modelled, but the mount-summon fields
-        /// [+0x4C0]/[+0xA24]/[+0x1914] behind worker three still are not, and that
-        /// worker is the point of the command. Emitting only the two refreshes would
-        /// answer CM 4105 with neither the mount nor any of its three refusal
-        /// notices, so the arm stays withheld. The evidence is already in cm-3's
-        /// ledger, so this reuses that throttled record rather than duplicating it.
+        /// The two reachable refusals use raw GBK-plus-NUL RM_SYSMESSAGE payloads
+        /// with Param=0xFCFF. No client record field other than Ident participates.
         /// </summary>
         private void HeroNotifyCm4105()
         {
-            NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_4105, m_sCharName);
+            // Leaf order 0x6DA008 then 0x6DA017. Both prefix effects precede
+            // every worker gate, including an already-mounted silent return.
+            BreakNativeStealthOnAction();
+            CancelNativeActionChannels();
+
+            // sub_6BBEB8 checks both body states 0x33 and 0x34.
+            if (HasNativeActiveState(NativeHorseMountedState) ||
+                HasNativeActiveState(NativeHorseBlockedState))
+            {
+                return;
+            }
+
+            // A null map pointer skips this restriction in native 2.08.
+            if (m_PEnvir?.Flag.boNORIDE == true)
+            {
+                HeroNotifyHorseRefusal("当前地图不能召唤坐骑！");
+                return;
+            }
+
+            var mount = m_UseItems != null &&
+                        m_UseItems.Length > Grobal2.U_MOUNT
+                ? m_UseItems[Grobal2.U_MOUNT]
+                : null;
+            if (mount == null)
+            {
+                HeroNotifyHorseRefusal("您无主宰者马牌,无法召唤坐骑！");
+                return;
+            }
+
+            // The worker repeats sub_6BCE2C on success. After the leaf prefix it
+            // is packet-idempotent, while preserving the unconditional location
+            // channel active-byte clear.
+            CancelNativeActionChannels();
+            m_boNativeHorseCallPending = true;
+            m_dwNativeHorseCallTick = unchecked((uint)HUtil32.GetTickCount());
+            m_wNativeHorseCallDelay = 3000;
+            if (m_PEnvir == null)
+            {
+                // Native's nullable map gate skips only NORIDE; the +0xE0
+                // worker still reaches the caller. With no environment there
+                // is no visible set to walk, so retain the Self delivery.
+                SendMsg(this, NativeHorseCallStartRefMessage, 0, 0, 3000, 0,
+                    string.Empty);
+            }
+            else
+            {
+                SendRefMsg(NativeHorseCallStartRefMessage, 0, 0, 3000, 0,
+                    string.Empty);
+            }
+        }
+
+        private void HeroNotifyHorseRefusal(string text)
+        {
+            var textBytes = HUtil32.GbkEncoding.GetBytes(text);
+            var body = new byte[textBytes.Length + 1];
+            textBytes.CopyTo(body, 0);
+            SendMsg(this, Grobal2.RM_SYSMESSAGE, 0xFCFF,
+                0, 0, 0, string.Empty, body, body.Length);
         }
 
     }

@@ -103,8 +103,6 @@ namespace GameSvr.Services
                 "leaf 门 nBodyLen==0x28；worker 读 body[+0x10]/[+0x20]/[+0x24] 并走 [+0x760]/[+0xA10]/[+0xA14]/[+0xA18] + [0x7D6D50]，SM 0xD27；未建模（nBodyLen!=0x28 已复现为静默）");
             Add(4102, 0x006DABFC, 0x006B7BCC, "交易/市场命令",
                 "globals [0x7D62DC]/[0x7D6214]/[0x7D5C0C]/[0x7D6038]/[0x7D5D98] + [+0x18DC]/[+0x18DE]/[+0xAF4]；短包腿写 [+0x18DC]/[+0x18DE]；未建模");
-            Add(4105, 0x006DA005, 0x007742C0, "状态刷新三连",
-                "leaf 依次调 0x7742C0(隐身态 0x40 揭示，已建模为 BreakNativeStealthOnAction)、0x6BCE2C(取消挂起通道三连 0x4D0/0x4D2/0xD57，已建模为 CancelNativeActionChannels)、0x6EE174(召唤坐骑，读 [+0x4C0]/[+0xA24]==0x72/[+0x1914])；前两个 worker 已建模，第三个未建模，故整臂仍丢弃");
             Add(4123, 0x006DAE32, 0x006BF908, "洗灵(英雄/本人)",
                 "Tag==1&&hero 走英雄腿 / Tag==0 走本人腿，均用洗灵字段 [+0x610]/[+0x5A4] 与链 0x747B38/0x747878/0x74738C，回 SM 0xFC3；洗灵字段未建模（Tag 非法腿已复现为 SM 0xFC3 Recog=1）");
             Add(4124, 0x006DAE53, 0x006BFA88, "洗灵(英雄/本人)-2",

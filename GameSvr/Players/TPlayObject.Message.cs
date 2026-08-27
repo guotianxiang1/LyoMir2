@@ -1971,6 +1971,11 @@ namespace GameSvr
                         ProcessMsg.BaseObject, 0, 0, 0);
                     SendSocket(m_DefMsg);
                     break;
+                case NativeHorseCallStartRefMessage:
+                    m_DefMsg = Grobal2.MakeDefaultMsg(Grobal2.SM_3412,
+                        ProcessMsg.BaseObject, 0, 3000, 0);
+                    SendSocket(m_DefMsg);
+                    break;
                 case Grobal2.RM_SHANGMA_OK:
                     var horseFeatureBody = ProcessMsg.Payload as byte[]
                                            ?? BaseObject?.GetMobileFeature()

@@ -27,6 +27,11 @@ CheckRun3HorsePartnerSuccess();
 CheckRun3HorsePartnerBlockedTerrainStillMoves();
 CheckRun3HorsePartnerMissingSourceOnlyTurns();
 CheckPushedHorsePartnerFollowsWithoutTail();
+CheckHorseCallStartHeaderBodyInvariance();
+CheckHorseCallStartNorideRefusal();
+CheckHorseCallStartMissingTokenRefusal();
+CheckHorseCallStartBlockedPrefixEffects();
+CheckHorseCallStartOrderedPreemption();
 CheckHorseSilentGates();
 CheckHorseMissingMount();
 CheckHorseDelayGate();
@@ -44,12 +49,17 @@ Console.WriteLine(
     "4108-main=state51+absent(45/29/1/26/24/62)+forced0+bit7/map-CANRUN/weight+server-direction+first-step-only+3416 " +
     "state67/13=one-step-fallback+adjusted-target+health-10+3410 " +
     "partner=state51/non-null+exact-relocate+blocked-terrain+missing-source+push-step-tail " +
+    "4105=reveal/cancel/gates+raw-refusals+pending3000+3412+channel72-success " +
     "629=zeros 630=0/x/y/dir run3=recovery-60/10/shared-sbyte+no-hide-side-effect " +
     "4106=state52/state51/pending/delay+no-node+status16B+3555/header-only+3413/10B " +
     "4107/4111=silent-gates+state51/52-clear+bidirectional-partner+3414/3419/51B+adjacent-drop");
 
 static void CheckConstants()
 {
+    Equal(4105, Grobal2.CM_4105, "CM_4105");
+    Equal(15324, TPlayObject.NativeHorseCallStartRefMessage,
+        "managed horse-call-start carrier");
+    Equal(3412, Grobal2.SM_3412, "SM_3412");
     Equal(4106, Grobal2.CM_SHANGMA_OK, "CM_SHANGMA_OK");
     Equal(4107, Grobal2.CM_XIAMA, "CM_XIAMA");
     Equal(4108, Grobal2.CM_RUN3, "CM_RUN3");
@@ -723,6 +733,263 @@ static void CheckPushedHorsePartnerFollowsWithoutTail()
         "passenger must not emit an independent push broadcast");
 }
 
+static void CheckHorseCallStartHeaderBodyInvariance()
+{
+    var requests = new[]
+    {
+        HorseCallStartMessage(0, 0, 0, 0, null),
+        HorseCallStartMessage(0x11223344, 0x5566, 0x7788,
+            0x99AA, new byte[] { 1, 2, 3, 4 })
+    };
+    for (var i = 0; i < requests.Length; i++)
+    {
+        var request = requests[i];
+        var player = NewPlayer("horse-call-invariant");
+        if (i == 1)
+            player = Place(NewMap(), player, 5, 5);
+        var mount = EquipMount(player, 7);
+        if (i == 0)
+        {
+            // 0x75EC20's gate is pointer-only: a non-null slot record passes.
+            mount.wIndex = 0;
+        }
+        var before = unchecked((uint)HUtil32.GetTickCount());
+
+        Assert(player.Operate(request), "4105 invariant dispatch");
+        var after = unchecked((uint)HUtil32.GetTickCount());
+        PendingTickRange(player, before, after,
+            "4105 invariant pending");
+
+        var queued = TakeQueuedMessage(player,
+            TPlayObject.NativeHorseCallStartRefMessage,
+            "4105 invariant start carrier");
+        Equal(player.ObjectId, queued.BaseObject,
+            "4105 invariant carrier source");
+        Equal(0, queued.wParam, "4105 invariant carrier param");
+        Equal(0, queued.nParam1, "4105 invariant carrier nParam1");
+        Equal(3000, queued.nParam2, "4105 invariant carrier nParam2");
+        Equal(0, queued.nParam3, "4105 invariant carrier nParam3");
+        Assert(player.Operate(queued), "4105 invariant carrier dispatch");
+        Packet(player.m_DefMsg, Grobal2.SM_3412, player.ObjectId,
+            0, 3000, 0, "4105 invariant 3412");
+        var socket = player.StringSocketMessages.Single(entry =>
+            entry.Packet.Ident == Grobal2.SM_3412);
+        Equal(string.Empty, socket.Body, "4105 invariant empty body");
+        Equal(0, CountMessages(player, Grobal2.RM_SYSMESSAGE),
+            "4105 invariant no refusal");
+    }
+}
+
+static void CheckHorseCallStartNorideRefusal()
+{
+    var map = NewMap();
+    map.Flag.boNORIDE = true;
+    var player = Place(map, NewPlayer("horse-call-noride"), 5, 5);
+    EquipMount(player, 7);
+
+    Assert(player.Operate(HorseCallStartMessage()),
+        "4105 NORIDE dispatch");
+    Pending(player, false, 0, 0, "4105 NORIDE pending");
+    Equal(0, CountMessages(player, TPlayObject.NativeHorseCallStartRefMessage),
+        "4105 NORIDE no start");
+    CheckRawHorseCallRefusal(player,
+        new byte[]
+        {
+            0xB5, 0xB1, 0xC7, 0xB0, 0xB5, 0xD8, 0xCD, 0xBC,
+            0xB2, 0xBB, 0xC4, 0xDC, 0xD5, 0xD9, 0xBB, 0xBD,
+            0xD7, 0xF8, 0xC6, 0xEF, 0xA3, 0xA1, 0x00
+        }, "4105 NORIDE refusal");
+}
+
+static void CheckHorseCallStartMissingTokenRefusal()
+{
+    // Native treats a null map pointer as unrestricted, then reaches slot 15.
+    var player = NewPlayer("horse-call-missing-token");
+
+    Assert(player.Operate(HorseCallStartMessage()),
+        "4105 missing-token dispatch");
+    Pending(player, false, 0, 0, "4105 missing-token pending");
+    Equal(0, CountMessages(player, TPlayObject.NativeHorseCallStartRefMessage),
+        "4105 missing-token no start");
+    CheckRawHorseCallRefusal(player,
+        new byte[]
+        {
+            0xC4, 0xFA, 0xCE, 0xDE, 0xD6, 0xF7, 0xD4, 0xD7,
+            0xD5, 0xDF, 0xC2, 0xED, 0xC5, 0xC6, 0x2C, 0xCE,
+            0xDE, 0xB7, 0xA8, 0xD5, 0xD9, 0xBB, 0xBD, 0xD7,
+            0xF8, 0xC6, 0xEF, 0xA3, 0xA1, 0x00
+        }, "4105 missing-token refusal");
+}
+
+static void CheckHorseCallStartBlockedPrefixEffects()
+{
+    foreach (var blockedState in new[] { 51, 52 })
+    {
+        var map = NewMap();
+        var player = Place(map,
+            NewPlayer("horse-call-blocked-" + blockedState), 5, 5);
+        var observer = Place(map,
+            NewPlayer("horse-call-blocked-observer-" + blockedState), 5, 6);
+        EquipMount(player, 7);
+        Assert(player.SetNativeActiveState(64),
+            "4105 blocked stealth set");
+        Assert(player.SetNativeActiveState(blockedState),
+            "4105 blocked mount state set");
+        SeedHorseCallChannels(player, 0x1234, 0x5678);
+
+        Assert(player.Operate(HorseCallStartMessage()),
+            "4105 blocked dispatch");
+        Assert(!player.HasNativeActiveState(64),
+            "4105 blocked stealth removed");
+        Assert(player.HasNativeActiveState(blockedState),
+            "4105 blocked state preserved");
+        CheckHorseCallChannelsCleared(player, "4105 blocked channels");
+        Pending(player, false, 0, 0, "4105 blocked pending clear");
+        MessageOrder(observer, "4105 blocked prefix order",
+            Grobal2.RM_TURN, Grobal2.SM_CHANNEL_MAGIC_CANCEL,
+            Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL,
+            Grobal2.RM_NATIVE_HORSE_CALL_STOP);
+        Equal(0, CountMessages(observer,
+            TPlayObject.NativeHorseCallStartRefMessage),
+            "4105 blocked no start");
+        Equal(0, CountMessages(player, Grobal2.RM_SYSMESSAGE),
+            "4105 blocked no refusal");
+    }
+}
+
+static void CheckHorseCallStartOrderedPreemption()
+{
+    var map = NewMap();
+    var player = Place(map, NewPlayer("horse-call-preemption"), 5, 5);
+    var observer = Place(map,
+        NewPlayer("horse-call-preemption-observer"), 5, 6);
+    EquipMount(player, 7);
+    Assert(player.SetNativeActiveState(64),
+        "4105 preemption stealth set");
+    SeedHorseCallChannels(player, 0x72, 0x3456);
+    var before = unchecked((uint)HUtil32.GetTickCount());
+
+    Assert(player.Operate(HorseCallStartMessage()),
+        "4105 preemption dispatch");
+    var after = unchecked((uint)HUtil32.GetTickCount());
+    Assert(!player.HasNativeActiveState(64),
+        "4105 preemption stealth removed");
+    CheckHorseCallChannelsCleared(player, "4105 preemption channels");
+    PendingTickRange(player, before, after,
+        "4105 preemption pending rearm");
+    MessageOrder(observer, "4105 preemption order",
+        Grobal2.RM_TURN, Grobal2.SM_CHANNEL_MAGIC_CANCEL,
+        Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL,
+        Grobal2.RM_NATIVE_HORSE_CALL_STOP,
+        TPlayObject.NativeHorseCallStartRefMessage);
+    Equal(1, CountMessages(observer, Grobal2.SM_CHANNEL_MAGIC_CANCEL),
+        "4105 preemption no duplicate channel cancel");
+    Equal(1, CountMessages(observer,
+        Grobal2.SM_LOCATION_CHANNEL_MAGIC_CANCEL),
+        "4105 preemption no duplicate location cancel");
+    Equal(1, CountMessages(observer,
+        Grobal2.RM_NATIVE_HORSE_CALL_STOP),
+        "4105 preemption no duplicate pending cancel");
+    Equal(0, CountMessages(player, Grobal2.RM_SYSMESSAGE),
+        "4105 channel72 no generic refusal");
+
+    var queued = TakeQueuedMessage(observer,
+        TPlayObject.NativeHorseCallStartRefMessage,
+        "4105 preemption observer start");
+    Assert(observer.Operate(queued),
+        "4105 preemption observer start dispatch");
+    Packet(observer.m_DefMsg, Grobal2.SM_3412, player.ObjectId,
+        0, 3000, 0, "4105 preemption observer 3412");
+}
+
+static void CheckRawHorseCallRefusal(ProbePlayer player, byte[] expected,
+    string label)
+{
+    var queued = TakeQueuedMessage(player, Grobal2.RM_SYSMESSAGE, label);
+    Equal(player.ObjectId, queued.BaseObject, label + " source");
+    Equal(0xFCFF, queued.wParam, label + " param");
+    Equal(0, queued.nParam1, label + " nParam1");
+    Equal(0, queued.nParam2, label + " nParam2");
+    Equal(0, queued.nParam3, label + " nParam3");
+    var body = queued.Payload as byte[];
+    Assert(body != null, label + " raw payload");
+    Assert(body.SequenceEqual(expected), label + " GBK+NUL payload");
+    Equal(expected.Length, queued.nBodyLen, label + " body length");
+
+    Assert(player.Operate(queued), label + " pump dispatch");
+    Packet(player.m_DefMsg, Grobal2.SM_SYSMESSAGE, player.ObjectId,
+        0xFCFF, 0, 1, label + " SM100");
+    var socket = player.RawSocketMessages.Single(entry =>
+        entry.Packet.Ident == Grobal2.SM_SYSMESSAGE);
+    Assert(socket.Body.SequenceEqual(expected), label + " wire body");
+}
+
+static void SeedHorseCallChannels(TPlayObject player, ushort channelId,
+    ushort locationId)
+{
+    player.m_dwNativeChannelMagicTick = 0x11223344;
+    player.m_wNativeChannelMagicId = channelId;
+    player.m_wNativeChannelMagicParam = 0x7788;
+    player.m_boNativeLocationChannelActive = true;
+    player.m_dwNativeLocationChannelStartTick = 1;
+    player.m_dwNativeLocationChannelPulseTick = 2;
+    player.m_nNativeLocationChannelContext0 = 3;
+    player.m_dwNativeLocationChannelDuration = 4;
+    player.m_nNativeLocationChannelContext1 = 5;
+    player.m_nNativeLocationChannelContext2 = 6;
+    player.m_nNativeLocationChannelX = 7;
+    player.m_nNativeLocationChannelY = 8;
+    player.m_wNativeLocationChannelMagicId = locationId;
+    SetPending(player, true, 0xAABBCCDD, 0x5566);
+}
+
+static void CheckHorseCallChannelsCleared(TPlayObject player, string label)
+{
+    Equal((uint)0, player.m_dwNativeChannelMagicTick,
+        label + " channel tick");
+    Equal((ushort)0, player.m_wNativeChannelMagicId,
+        label + " channel id");
+    Equal((ushort)0, player.m_wNativeChannelMagicParam,
+        label + " channel param");
+    Assert(!player.m_boNativeLocationChannelActive,
+        label + " location active");
+    Equal((uint)0, player.m_dwNativeLocationChannelStartTick,
+        label + " location start");
+    Equal((uint)0, player.m_dwNativeLocationChannelPulseTick,
+        label + " location pulse");
+    Equal(0, player.m_nNativeLocationChannelContext0,
+        label + " location context0");
+    Equal((uint)0, player.m_dwNativeLocationChannelDuration,
+        label + " location duration");
+    Equal(0, player.m_nNativeLocationChannelContext1,
+        label + " location context1");
+    Equal(0, player.m_nNativeLocationChannelContext2,
+        label + " location context2");
+    Equal(0, player.m_nNativeLocationChannelX, label + " location x");
+    Equal(0, player.m_nNativeLocationChannelY, label + " location y");
+    Equal((ushort)0, player.m_wNativeLocationChannelMagicId,
+        label + " location id");
+}
+
+static void PendingTickRange(TPlayObject player, uint before, uint after,
+    string label)
+{
+    Assert(player.m_boNativeHorseCallPending, label + " flag");
+    var tick = player.m_dwNativeHorseCallTick;
+    Assert(unchecked(tick - before) <= unchecked(after - before),
+        label + " tick range");
+    Equal((ushort)3000, player.m_wNativeHorseCallDelay,
+        label + " delay");
+}
+
+static void MessageOrder(TBaseObject actor, string label, params int[] expected)
+{
+    var actual = actor.m_MsgList.Select(message => message.wIdent).ToArray();
+    Assert(actual.SequenceEqual(expected),
+        label + $": expected={string.Join(",", expected)} " +
+        $"actual={string.Join(",", actual)}");
+}
+
 static void CheckHorseSilentGates()
 {
     foreach (var state in new[] { 52, 51 })
@@ -1049,6 +1316,20 @@ static TProcessMessage Run3Message(int x, int y, int clientDirection) => new()
     nParam2 = y
 };
 
+static TProcessMessage HorseCallStartMessage(int recog = 0, int param = 0,
+    int tag = 0, int series = 0, byte[] body = null) => new()
+{
+    wIdent = Grobal2.CM_4105,
+    BaseObject = recog,
+    wParam = param,
+    nParam1 = tag,
+    nParam2 = series,
+    nParam3 = unchecked((int)0xCCDDEEFF),
+    Payload = body,
+    nBodyLen = body?.Length ?? 0,
+    sMsg = body == null ? string.Empty : "ignored-client-body"
+};
+
 static TProcessMessage HorseReadyMessage() => new()
 {
     wIdent = Grobal2.CM_SHANGMA_OK,
@@ -1281,8 +1562,17 @@ sealed class ProbePlayer : TPlayObject
 {
     internal List<(ClientPacket Packet, string Body)> SocketMessages { get; } =
         new();
+    internal List<(ClientPacket Packet, string Body)> StringSocketMessages =>
+        SocketMessages;
+    internal List<(ClientPacket Packet, byte[] Body)> RawSocketMessages { get; } =
+        new();
 
     public bool TryTake(ref TProcessMessage message) => GetMessage(ref message);
+
+    internal override void SendSocket(ClientPacket defMsg, byte[] body)
+    {
+        RawSocketMessages.Add((defMsg, body));
+    }
 
     internal override void SendSocket(ClientPacket defMsg, string message)
     {
