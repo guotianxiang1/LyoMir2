@@ -167,6 +167,26 @@ internal static class LoginGateSelfTests
         await WaitUntilAsync(() => server.GetBackends().Any(backend =>
             backend.Type2Enabled), timeout.Token);
 
+        var beforeSdoa = server.GetStats();
+        var silentSdoaWire = new[] { 0, 12, 13, 8175 }
+            .Select(length => EncodeNative(new YbDbLegacy77Frame(0, 0,
+                LoginGateWireProtocol.NativeDirectSdoaAuthIdent,
+                new byte[length])))
+            .SelectMany(bytes => bytes)
+            .Concat(EncodeNative(CreateRegistration("LOCAL-OFFLINE", 9)))
+            .ToArray();
+        await nativeStream.WriteAsync(silentSdoaWire, timeout.Token);
+        var postSdoaAck = DecodeNative(
+            await ReadNativeWireAsync(nativeStream, timeout.Token));
+        Equal(LoginGateWireProtocol.NativeRegistrationAckIdent,
+            postSdoaAck.Ident, "2014 stream remains aligned");
+        var afterSdoa = server.GetStats();
+        Equal(beforeSdoa.RejectedFrames, afterSdoa.RejectedFrames,
+            "2014 does not increment rejected frames");
+        Equal(beforeSdoa.ActiveAuthentications, afterSdoa.ActiveAuthentications,
+            "2014 does not start authentication");
+        await CheckPeerKeptOpenAsync(nativeStream, timeout.Token);
+
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, started.ClientListenPort,
             timeout.Token);

@@ -388,6 +388,12 @@ internal sealed class NativeDbServerService
                         cancellationToken).ConfigureAwait(false);
                 return;
 
+            case LoginGateWireProtocol.NativeDirectSdoaAuthIdent:
+                // Native 2.08 initializes G_USE_SDOAAUTH to zero at 0x4CCC6A.
+                // The 2014 dispatcher gates on that byte before inspecting the
+                // payload, so the shipped build consumes every such frame silently.
+                return;
+
             case LoginGateWireProtocol.NativeType2EnabledIdent:
             case LoginGateWireProtocol.NativeType2DisabledIdent:
                 if (!LoginGateWireProtocol.TryParseNativeType2Control(frame,

@@ -48,6 +48,7 @@ namespace LoginGate.Core
         public const ushort NativeDirectStaticAuthIdent = 2011;
         public const ushort NativeDirectDynAuthIdent = 2012;
         public const ushort NativeDirectECardAuthIdent = 2013;
+        public const ushort NativeDirectSdoaAuthIdent = 2014;
         public const ushort NativeAuthRequestIdent = 2018;
         public const ushort NativeAuthResponseIdent = 1003;
         public const ushort NativeAuthFailureIdent = 1004;
