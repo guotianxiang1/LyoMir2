@@ -1,10 +1,16 @@
-using SystemModule;
+﻿using SystemModule;
 
 namespace GameSvr
 {
-    public class BeeQueen : AnimalObject
+    /// <summary>
+    /// Native <c>TBeeQueen</c>, VMT 0x0067E5A8, instance size 1244 = its
+    /// parent <c>TWithChildMon</c>'s size, so it declares no fields of its own; the
+    /// spawned-child list lives on TWithChildMon (m_ChildList), shared with the
+    /// sibling TSpiderHouseMon. The port had it as a direct AnimalObject child with
+    /// a private BBList, which skipped the native intermediate layer.
+    /// </summary>
+    public class BeeQueen : TWithChildMon
     {
-        private readonly IList<TBaseObject> BBList;
 
         public BeeQueen() : base()
         {
@@ -13,12 +19,11 @@ namespace GameSvr
             m_dwSearchTime = M2Share.RandomNumber.Random(1500) + 2500;
             m_dwSearchTick = HUtil32.GetTickCount();
             m_boStickMode = true;
-            BBList = new List<TBaseObject>();
         }
 
         private void MakeChildBee()
         {
-            if (BBList.Count >= 15)
+            if (m_ChildList.Count >= 15)
             {
                 return;
             }
@@ -34,7 +39,7 @@ namespace GameSvr
                 if (BB != null)
                 {
                     BB.SetTargetCreat(m_TargetCret);
-                    BBList.Add(BB);
+                    m_ChildList.Add(BB);
                 }
             }
             return base.Operate(ProcessMsg);
@@ -56,12 +61,12 @@ namespace GameSvr
                             MakeChildBee();
                         }
                     }
-                    for (var i = BBList.Count - 1; i >= 0; i--)
+                    for (var i = m_ChildList.Count - 1; i >= 0; i--)
                     {
-                        var BB = BBList[i];
+                        var BB = m_ChildList[i];
                         if (BB.m_boDeath || BB.m_boGhost)
                         {
-                            BBList.RemoveAt(i);
+                            m_ChildList.RemoveAt(i);
                         }
                     }
                 }
