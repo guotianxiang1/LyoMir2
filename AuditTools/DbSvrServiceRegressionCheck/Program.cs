@@ -32,7 +32,7 @@ Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameC
 Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
 Run("native state-5 unknown opcode terminal", TestNativeUnknownOpcodeTerminal);
 Run("native state-6 pre-dispatch terminal", TestNativeState6PreDispatchTerminal);
-Run("native state-0 select-character terminal", TestNativeState0SelectCharacterTerminal);
+Run("native state-0 opcode admission", TestNativeState0OpcodeAdmission);
 Run("native 4039 terminal frame", TestNative4039TerminalFrame);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
 Run("native 4017 status-3 terminal sequence", TestNativeSelectStatus3Terminal);
@@ -3581,7 +3581,7 @@ static void TestNativeRenameFailureTerminal()
         WireMode = TGateWireMode.Native77,
         NativeQueryId = 0x2425,
         NativePendingRenameName = "OldName",
-        NativeSessionState = 0,
+        NativeSessionState = 5,
         NativeGateOwner = gate
     };
     var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
@@ -3816,88 +3816,109 @@ static void TestNativeState6PreDispatchTerminal()
         "state-6 packet entered rename or character-list handling");
 }
 
-static void TestNativeState0SelectCharacterTerminal()
+static void TestNativeState0OpcodeAdmission()
 {
-    var sent = new List<byte[]>();
-    Exception? queueError = null;
-    var gate = new TGateInfo
+    Check(NativeUserSessionDispatchProtocol.IsStateZeroOpcodeAllowed(4004),
+        "state zero rejected native login auth 4004");
+    Check(NativeUserSessionDispatchProtocol.IsStateZeroOpcodeAllowed(4008),
+        "state zero rejected native direct auth 4008");
+    Check(NativeUserSessionDispatchProtocol.IsStateZeroOpcodeAllowed(4031),
+        "state zero rejected native reconnect 4031");
+    Check(!NativeUserSessionDispatchProtocol.IsStateZeroOpcodeAllowed(4027),
+        "state zero admitted state-four opcode 4027");
+    Check(!NativeUserSessionDispatchProtocol.IsStateZeroOpcodeAllowed(
+            (ushort)Grobal2.CM_NEWCHR),
+        "state zero admitted mapped new-character opcode");
+    Check(!NativeUserSessionDispatchProtocol.IsStateZeroOpcodeAllowed(
+            (ushort)Grobal2.CM_SELCHR),
+        "state zero admitted mapped select-character opcode");
+
+    AssertRejected((ushort)Grobal2.CM_SELCHR, 0x242A,
+        "select-character");
+    AssertRejected((ushort)Grobal2.CM_NEWCHR, 0x242C,
+        "new-character");
+    AssertRejected(4027, 0x242D, "state-four-4027");
+
+    static void AssertRejected(ushort ident, ushort queryId, string label)
     {
-        WireMode = TGateWireMode.Native77,
-        UserList = new List<TUserInfo>(),
-        NativeOutboundQueue = new NativeGateOutboundQueue(
-            frame => sent.Add(frame),
-            error => queueError = error)
-    };
-    var user = new TUserInfo
-    {
-        WireMode = TGateWireMode.Native77,
-        NativeQueryId = 0x242A,
-        NativeConnectionId = 0x242A,
-        NativeSessionState = 0,
-        NativeGateOwner = gate,
-        NativeRouteActive = true,
-        boChrQueryed = false
-    };
-    gate.UserList.Add(user);
-    gate.NativeRoutes.Register(user.NativeConnectionId, user);
+        var sent = new List<byte[]>();
+        Exception? queueError = null;
+        var gate = new TGateInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            UserList = new List<TUserInfo>(),
+            NativeOutboundQueue = new NativeGateOutboundQueue(
+                frame => sent.Add(frame),
+                error => queueError = error)
+        };
+        var user = new TUserInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            NativeQueryId = queryId,
+            NativeConnectionId = queryId,
+            NativeSessionState = 0,
+            NativeGateOwner = gate,
+            NativeRouteActive = true,
+            boChrQueryed = false
+        };
+        gate.UserList.Add(user);
+        gate.NativeRoutes.Register(user.NativeConnectionId, user);
 
-    var service = CreateNativeUserSocFixture(null!, null!, gate, null!);
-    var method = GetProcessDecodedUserPacket();
-    var args = new object[]
-    {
-        gate,
-        user,
-        // The native mobile 4017 is mapped to internal CM_SELCHR (103)
-        // before ProcessDecodedUserPacket is entered.
-        (ushort)Grobal2.CM_SELCHR,
-        0,
-        (ushort)0,
-        string.Empty
-    };
-    method.Invoke(service, args);
+        var service = CreateNativeUserSocFixture(null!, null!, gate, null!);
+        var args = new object[]
+        {
+            gate,
+            user,
+            ident,
+            0,
+            (ushort)0,
+            string.Empty
+        };
+        GetProcessDecodedUserPacket().Invoke(service, args);
 
-    gate.NativeOutboundQueue.Complete();
-    Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
-        "state-0 select-character outbound queue completion timeout");
-    Check(queueError == null,
-        "state-0 select-character outbound queue raised an exception: "
-        + queueError?.Message);
+        gate.NativeOutboundQueue.Complete();
+        Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+            $"state-0 {label} outbound queue completion timeout");
+        Check(queueError == null,
+            $"state-0 {label} outbound queue raised an exception: "
+            + queueError?.Message);
+        Equal(2, sent.Count,
+            $"state-0 {label} must emit one 4018 and one command-12 clear");
 
-    Equal(2, sent.Count,
-        "state-0 select-character must emit one 4018 and one command-12 clear");
-    Check(YbDbLegacy77Codec.TryDecode(sent[0], out var responseFrame,
-        out var error), error);
-    Check(LegacyGateDataCodec.TryDecodeResponse(responseFrame,
-        out var message, out error), error);
-    Equal(user.NativeQueryId, responseFrame.QueryId,
-        "state-0 select-character response query id");
-    Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018, message.Ident,
-        "state-0 select-character response ident");
-    Equal(0, message.Recog, "state-0 select-character response Recog");
-    Equal((ushort)0, message.Param,
-        "state-0 select-character response Param");
-    Equal((ushort)0, message.Tag,
-        "state-0 select-character response Tag");
-    Equal((ushort)0, message.Series,
-        "state-0 select-character response Series");
-    Equal(0, message.Body.Length,
-        "state-0 select-character response body");
+        Check(YbDbLegacy77Codec.TryDecode(sent[0], out var responseFrame,
+            out var error), error);
+        Check(LegacyGateDataCodec.TryDecodeResponse(responseFrame,
+            out var message, out error), error);
+        Equal(queryId, responseFrame.QueryId,
+            $"state-0 {label} response query id");
+        Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018, message.Ident,
+            $"state-0 {label} response ident");
+        Equal(0, message.Recog, $"state-0 {label} response Recog");
+        Equal((ushort)0, message.Param,
+            $"state-0 {label} response Param");
+        Equal((ushort)0, message.Tag,
+            $"state-0 {label} response Tag");
+        Equal((ushort)0, message.Series,
+            $"state-0 {label} response Series");
+        Equal(0, message.Body.Length,
+            $"state-0 {label} response body");
 
-    Check(YbDbLegacy77Codec.TryDecode(sent[1], out var clearFrame,
-        out error), error);
-    Equal(user.NativeConnectionId, clearFrame.QueryId,
-        "state-0 select-character command-12 query id");
-    Equal((ushort)NativeLoginAlreadyOnlineProtocol.RouteClearCommand,
-        clearFrame.Ident, "state-0 select-character command-12 ident");
-    Equal(0, clearFrame.Param,
-        "state-0 select-character command-12 Param");
-    Equal(0, clearFrame.Payload.Length,
-        "state-0 select-character command-12 body");
-    Equal((byte)7, user.NativeSessionState,
-        "state-0 select-character did not advance state 7");
-    Check(!user.NativeRouteActive && gate.UserList.Count == 0
-          && gate.NativeRoutes.Count == 0,
-        "state-0 select-character did not tear down the native route");
+        Check(YbDbLegacy77Codec.TryDecode(sent[1], out var clearFrame,
+            out error), error);
+        Equal(queryId, clearFrame.QueryId,
+            $"state-0 {label} command-12 query id");
+        Equal((ushort)NativeLoginAlreadyOnlineProtocol.RouteClearCommand,
+            clearFrame.Ident, $"state-0 {label} command-12 ident");
+        Equal(0, clearFrame.Param,
+            $"state-0 {label} command-12 Param");
+        Equal(0, clearFrame.Payload.Length,
+            $"state-0 {label} command-12 body");
+        Equal((byte)7, user.NativeSessionState,
+            $"state-0 {label} did not advance state 7");
+        Check(!user.NativeRouteActive && gate.UserList.Count == 0
+              && gate.NativeRoutes.Count == 0,
+            $"state-0 {label} did not tear down the native route");
+    }
 }
 
 static void TestNative4039TerminalFrame()

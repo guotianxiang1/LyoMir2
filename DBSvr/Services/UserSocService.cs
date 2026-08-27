@@ -1067,15 +1067,15 @@ namespace DBSvr
                 return;
             }
 
-            // Native 2.08 never dispatches the mobile select-character
-            // opcode from state 0.  The client 4017 is mapped to the managed
-            // CM_SELCHR value before this method; reject that bounded case
-            // before the flat switch can silently consume it.  The complete
-            // state-0 admission matrix remains deferred because the native
-            // evidence disagrees on one other opcode number.
+            // The state-0 subtract chain at 0x5CE07D admits exactly
+            // 4004/4008/4031. MobileCmdMap has already translated the legacy
+            // login-stage ids before this point, so every other internal
+            // ident must take the native common 4018 terminal instead of
+            // entering the flat managed switch.
             if (userInfo.WireMode == TGateWireMode.Native77
                 && userInfo.NativeSessionState == 0
-                && ident == Grobal2.CM_SELCHR)
+                && !NativeUserSessionDispatchProtocol
+                    .IsStateZeroOpcodeAllowed(ident))
             {
                 Log($"[UserSoc] native state 0 rejects opcode {ident} -> 4018");
                 OutOfConnect(userInfo, gateInfo);
