@@ -44,6 +44,7 @@ artifacts/
 *.ps1
 *.bat
 *.cmd
+*.csproj.user
 /docs/
 /tools/
 /_audit/
