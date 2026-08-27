@@ -896,6 +896,31 @@ namespace DBSvr
                     userInfo.WireMode = TGateWireMode.Native77;
                     userInfo.NativeQueryId = frame.QueryId;
                 }
+
+                if (userInfo.NativeSessionState == 5)
+                {
+                    var admission = NativeUserSessionDispatchProtocol
+                        .ClassifyStateFiveOpcode(dataMessage.Ident,
+                            userInfo.NativeQueuePosition);
+                    if (admission == NativeUserSessionDispatchOutcome.SilentDrop)
+                    {
+                        Log($"[UserSoc] native state 5 queue position "
+                            + $"{userInfo.NativeQueuePosition} silently drops raw opcode "
+                            + dataMessage.Ident);
+                        return;
+                    }
+                    if (admission == NativeUserSessionDispatchOutcome.TerminalReject)
+                    {
+                        Log($"[UserSoc] native state 5 rejects raw opcode "
+                            + $"{dataMessage.Ident} -> 4018");
+                        SendEncodedPacket(userInfo,
+                            Grobal2.SM_OUTOFCONNECTION_4018,
+                            0, 0, 0, 0, null);
+                        userInfo.NativeSessionState = 7;
+                        return;
+                    }
+                }
+
                 var serverIdent = MobileCmdMap.ToServer(dataMessage.Ident);
                 ProcessDecodedUserPacket(gateInfo, ref userInfo, serverIdent,
                     dataMessage.Recog, dataMessage.Param,
@@ -1079,38 +1104,6 @@ namespace DBSvr
             {
                 Log($"[UserSoc] native state 0 rejects opcode {ident} -> 4018");
                 OutOfConnect(userInfo, gateInfo);
-                return;
-            }
-
-            // 排队位次门。原版在**两级 opcode 表之前**就拦，逐字（状态 5 入口）：
-            //   0x5CE307  mov eax, [ebp-4]            ; Self
-            //   0x5CE30A  cmp word [eax+0x9c], 0      ; 排队位次
-            //   0x5CE312  jbe 0x5CE323                ; == 0 -> 正常派发
-            //   0x5CE314  mov eax, [ebp-0x1c]         ; 报文头
-            //   0x5CE317  cmp word [eax+4], 0xfc7     ; 位次 > 0 时只认 4039
-            //   0x5CE31D  jne 0x5CE481                ; ★否则跳**静默**出口
-            //   0x5CE323  movzx eax,[eax+4] / add eax,0xfffff054
-            //   0x5CE32F  cmp eax,0x1d / ja 0x5CE46C  ; opcode 越界才走 4018 腿
-            //
-            // ⚠️ 这两条出口语义相反，我一度把它们混为一谈：
-            //   0x5CE481 = 静默丢弃（排队中发了不该发的 opcode）
-            //   0x5CE46C = 回 ident 4018（opcode 根本不在 0xFAC..0xFC9 表里）
-            // 所以被排队门拦下的请求**不回包**，不能走上面那个 default 分支。
-            //
-            // 位次的唯一写者 0x5CFC90，其后 0x5CFC97 `cmp word [ebp-6],0xa / ja`
-            // ⇒ 位次 <= 10 才发通知（opcode 0x10EC = 4332，帧由 0x5CFC24 组装：
-            //   12 字节记录、ident=edx、Recog=ecx、三个 word 参数取自栈，
-            //   经 call dword [ebx+0x60] 发出，与改名回包同一个虚发送）。
-            //
-            // 4039 在 MobileCmdMap 里是恒等映射（_toServer[4039] = 4039），
-            // 故进 switch 时仍是 4039；Grobal2 没有对应常量，用字面量。
-            if (userInfo.WireMode == TGateWireMode.Native77
-                && userInfo.NativeSessionState == 5
-                && userInfo.NativeQueuePosition > 0
-                && ident != 4039)
-            {
-                Log($"[UserSoc] 排队中(位次 {userInfo.NativeQueuePosition})"
-                    + $" 丢弃 opcode {ident}（原版 0x5CE31D 跳静默出口，不回包）");
                 return;
             }
 

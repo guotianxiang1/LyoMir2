@@ -33,6 +33,7 @@ Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
 Run("native state-5 unknown opcode terminal", TestNativeUnknownOpcodeTerminal);
 Run("native state-6 pre-dispatch terminal", TestNativeState6PreDispatchTerminal);
 Run("native state-0 opcode admission", TestNativeState0OpcodeAdmission);
+Run("native state-5 raw opcode admission", TestNativeState5RawOpcodeAdmission);
 Run("native 4039 terminal frame", TestNative4039TerminalFrame);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
 Run("native 4017 status-3 terminal sequence", TestNativeSelectStatus3Terminal);
@@ -407,9 +408,14 @@ static void TestNativeAdmissionQueue()
     Check(takeoverAdmission > takeoverStart
           && takeoverAdmission < takeoverInsert,
         "native takeover queue admission must precede owner insertion");
-    Check(source.Contains("userInfo.WireMode == TGateWireMode.Native77\n                && userInfo.NativeSessionState == 5\n                && userInfo.NativeQueuePosition > 0\n                && ident != 4039",
-            StringComparison.Ordinal),
-        "native queue packet gate scope");
+    var stateFiveAdmission = source.IndexOf(
+        ".ClassifyStateFiveOpcode(dataMessage.Ident,",
+        StringComparison.Ordinal);
+    var mobileMapping = source.IndexOf(
+        "MobileCmdMap.ToServer(dataMessage.Ident)",
+        stateFiveAdmission, StringComparison.Ordinal);
+    Check(stateFiveAdmission >= 0 && mobileMapping > stateFiveAdmission,
+        "native state-5 raw admission must precede mobile opcode mapping");
     var disconnectStart = source.IndexOf(
         "private void DisconnectNativeUserByAccount", StringComparison.Ordinal);
     var updateStart = source.IndexOf(
@@ -3918,6 +3924,150 @@ static void TestNativeState0OpcodeAdmission()
         Check(!user.NativeRouteActive && gate.UserList.Count == 0
               && gate.NativeRoutes.Count == 0,
             $"state-0 {label} did not tear down the native route");
+    }
+}
+
+static void TestNativeState5RawOpcodeAdmission()
+{
+    var admitted = new HashSet<ushort>
+    {
+        4012, 4013, 4014, 4015, 4016, 4017, 4039, 4041
+    };
+    var dispatchCount = 0;
+    for (var value = 0; value <= ushort.MaxValue; value++)
+    {
+        var ident = (ushort)value;
+        var outcome = NativeUserSessionDispatchProtocol
+            .ClassifyStateFiveOpcode(ident, 0);
+        if (outcome == NativeUserSessionDispatchOutcome.Dispatch)
+            dispatchCount++;
+        Equal(admitted.Contains(ident)
+                ? NativeUserSessionDispatchOutcome.Dispatch
+                : NativeUserSessionDispatchOutcome.TerminalReject,
+            outcome, $"state-5 zero-queue opcode {value}");
+    }
+    Equal(8, dispatchCount, "state-5 admitted opcode count");
+
+    for (var value = 0; value <= ushort.MaxValue; value++)
+    {
+        var ident = (ushort)value;
+        Equal(ident == 4039
+                ? NativeUserSessionDispatchOutcome.Dispatch
+                : NativeUserSessionDispatchOutcome.SilentDrop,
+            NativeUserSessionDispatchProtocol.ClassifyStateFiveOpcode(
+                ident, 1),
+            $"state-5 queued opcode {value}");
+    }
+
+    var rawInternal = DispatchRaw(103, 0, 0x2430);
+    AssertTerminal(rawInternal, 0x2430, "raw internal 103");
+
+    var tableHole = DispatchRaw(4040, 0, 0x2431);
+    AssertTerminal(tableHole, 0x2431, "raw 4040 table hole");
+
+    var select = DispatchRaw(4017, 0, 0x2432);
+    Equal(0, select.Sent.Count,
+        "raw 4017 did not dispatch through mapped selection case");
+    Equal((byte)5, select.User.NativeSessionState,
+        "raw 4017 changed state without selection preconditions");
+
+    var queuedSelect = DispatchRaw(4017, 2, 0x2433);
+    Equal(0, queuedSelect.Sent.Count,
+        "queued raw 4017 must be silent");
+    Equal((byte)5, queuedSelect.User.NativeSessionState,
+        "queued raw 4017 changed state");
+
+    var queuedHole = DispatchRaw(4040, 2, 0x2434);
+    Equal(0, queuedHole.Sent.Count,
+        "queued raw 4040 must be silent before the table");
+    Equal((byte)5, queuedHole.User.NativeSessionState,
+        "queued raw 4040 changed state");
+
+    var queuedAck = DispatchRaw(4039, 2, 0x2435);
+    Equal(1, queuedAck.Sent.Count,
+        "queued raw 4039 must emit one ack");
+    Equal((byte)7, queuedAck.User.NativeSessionState,
+        "queued raw 4039 did not advance state 7");
+    Check(YbDbLegacy77Codec.TryDecode(queuedAck.Sent[0],
+        out var ackFrame, out var error), error);
+    Check(LegacyGateDataCodec.TryDecodeResponse(ackFrame,
+        out var ackMessage, out error), error);
+    Equal((ushort)4039, ackMessage.Ident,
+        "queued raw 4039 response ident");
+
+    static (TUserInfo User, TGateInfo Gate, List<byte[]> Sent)
+        DispatchRaw(ushort rawIdent, ushort queuePosition, ushort queryId)
+    {
+        var sent = new List<byte[]>();
+        Exception? queueError = null;
+        var gate = new TGateInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            UserList = new List<TUserInfo>(),
+            NativeOutboundQueue = new NativeGateOutboundQueue(
+                frame => sent.Add(frame),
+                error => queueError = error)
+        };
+        var user = new TUserInfo
+        {
+            WireMode = TGateWireMode.Native77,
+            NativeQueryId = queryId,
+            NativeConnectionId = queryId,
+            NativeSessionState = 5,
+            NativeQueuePosition = queuePosition,
+            NativeGateOwner = gate,
+            NativeRouteActive = true,
+            boChrQueryed = false
+        };
+        gate.UserList.Add(user);
+        gate.NativeRoutes.Register(queryId, user);
+
+        var request = LegacyGateDataCodec.CreateRequest(queryId, 0,
+            0, rawIdent, 0, 0, 0, Array.Empty<byte>());
+        var service = CreateNativeUserSocFixture(null!, null!, gate, null!);
+        var method = typeof(UserSocService).GetMethod(
+            "ProcessNativeGateFrame",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Check(method != null, "native gate frame dispatcher method not found");
+        method!.Invoke(service, new object[] { gate, 0, request });
+
+        gate.NativeOutboundQueue.Complete();
+        Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+            $"state-5 raw {rawIdent} queue completion timeout");
+        Check(queueError == null,
+            $"state-5 raw {rawIdent} queue exception: "
+            + queueError?.Message);
+        return (user, gate, sent);
+    }
+
+    static void AssertTerminal(
+        (TUserInfo User, TGateInfo Gate, List<byte[]> Sent) probe,
+        ushort queryId, string label)
+    {
+        Equal(1, probe.Sent.Count,
+            $"state-5 {label} must emit one 4018");
+        Equal((byte)7, probe.User.NativeSessionState,
+            $"state-5 {label} did not advance state 7");
+        Check(probe.User.NativeRouteActive
+              && probe.Gate.NativeRoutes.Count == 1,
+            $"state-5 {label} invented synchronous route teardown");
+        Check(YbDbLegacy77Codec.TryDecode(probe.Sent[0],
+            out var frame, out var error), error);
+        Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+            out var message, out error), error);
+        Equal(queryId, frame.QueryId,
+            $"state-5 {label} response query id");
+        Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018,
+            message.Ident, $"state-5 {label} response ident");
+        Equal(0, message.Recog, $"state-5 {label} response Recog");
+        Equal((ushort)0, message.Param,
+            $"state-5 {label} response Param");
+        Equal((ushort)0, message.Tag,
+            $"state-5 {label} response Tag");
+        Equal((ushort)0, message.Series,
+            $"state-5 {label} response Series");
+        Equal(0, message.Body.Length,
+            $"state-5 {label} response body");
     }
 }
 
