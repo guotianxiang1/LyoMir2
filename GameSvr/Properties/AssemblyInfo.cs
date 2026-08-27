@@ -69,3 +69,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("GateLifecycleGenerationCheck")]
 [assembly: InternalsVisibleTo("NativeYbDealSetInfoCheck")]
 [assembly: InternalsVisibleTo("NativeShenYouAttributeCheck")]
+[assembly: InternalsVisibleTo("NativeSoulWashRecomputeCheck")]

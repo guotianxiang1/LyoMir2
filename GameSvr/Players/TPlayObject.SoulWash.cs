@@ -47,11 +47,17 @@ namespace GameSvr
     ///    is a full dword and the masks span bits 0..23; popcount is 0x4C7A34.)
     ///
     /// ── base formula (0x747B38): sum over the non-zero slots of
-    ///   [[0x7D6014]].lookup(slotId).[+4] — the fixed-length (0x2B-byte) record table
-    ///   CM 4125 rebuilds, NOT modeled in this port (loaded from a server config
-    ///   file). When every slot is 0 the recompute never calls 0x747B38 and base is
-    ///   exactly 0; a non-zero slot array is therefore FAIL-CLOSED. All 34 golden DB
-    ///   blobs carry an all-zero shenYou window, so the reproducible path is live.
+    ///   [[0x7D6014]].lookup(slotId).[+4] — the 0x2B-byte record table CM 4125
+    ///   rebuilds, modeled by NativeShenYouAttributeConfig. When every slot is 0 the
+    ///   recompute never calls 0x747B38 and base is exactly 0. A lookup miss makes
+    ///   0x747B38 return -1, and 0x747E11 `jl 0x747E1B` then stores base 0 and keeps
+    ///   going, so a miss is NOT fatal to the recompute.
+    ///
+    /// ── slot cap: the recompute counts the non-zero slots into [+0x5BC] and, the
+    ///   moment that count passes the global cap [[0x7D5AEC]]
+    ///   (NativeShenYouAttributeConfig.SlotCap), FillChars the offending slot and
+    ///   every slot after it to zero (0x747D50). The truncation is destructive and
+    ///   is therefore visible in the very next SM 4033/4037 body.
     /// </summary>
     public partial class TPlayObject
     {
@@ -157,21 +163,105 @@ namespace GameSvr
             BinaryPrimitives.WriteInt32LittleEndian(block.AsSpan(0, sizeof(int)), value);
         }
 
-        /// <summary>True when any of the 10 slot words at [+0x5A8] is non-zero.</summary>
-        private static bool SoulWashHasAnySlot(byte[] block)
+        /// <summary>Number of slot words at [+0x5A8]; the window is always 10 wide.</summary>
+        private const int SoulWashSlotCount = 10;
+
+        /// <summary>Read slot i (0..9) out of the shenYou window.</summary>
+        private static ushort GetSoulWashSlot(byte[] block, int index)
+            => BinaryPrimitives.ReadUInt16LittleEndian(
+                block.AsSpan(sizeof(int) + index * sizeof(ushort), sizeof(ushort)));
+
+        /// <summary>
+        /// 0x747D24..0x747D75 — count the non-zero slots into [+0x5BC] and enforce the
+        /// global slot cap [[0x7D5AEC]] destructively.
+        ///
+        /// The counter is bumped BEFORE the test (0x747D38 `inc byte [ebx+0x5BC]` then
+        /// 0x747D4C `cmp eax,[edx]` / `jle`), so the first slot that pushes the count
+        /// past the cap triggers 0x747D50: FillChar clears (10 - i) words starting AT
+        /// that slot — wiping the offender and everything after it, zero or not — then
+        /// 0x747D69 decrements the count back under the cap and breaks out of the scan.
+        /// This mutates the persisted window, so it is a real truncation and not just
+        /// a read-side clamp.
+        /// </summary>
+        private static int SoulWashCountSlotsAndTruncate(byte[] block, int slotCap)
         {
+            var count = 0;
+            for (var i = 0; i < SoulWashSlotCount; i++)
+            {
+                if (GetSoulWashSlot(block, i) != 0)
+                {
+                    count++;
+                }
+
+                if (count <= slotCap)
+                {
+                    continue;
+                }
+
+                block.AsSpan(sizeof(int) + i * sizeof(ushort),
+                    (SoulWashSlotCount - i) * sizeof(ushort)).Clear();
+                count--;
+                break;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 0x747CF4 — recompute [+0x5BC] / [+0x59C] / [+0x5A0] and clamp [+0x5A4].
+        /// Returns false only when the persisted source fields are unreadable, which
+        /// is a port-side condition native has no equivalent of.
+        /// </summary>
+        private bool TrySoulWashRecompute(out int cap, out int baseValue, out int current)
+        {
+            cap = 0;
+            baseValue = 0;
+            current = GetSoulWashCurrent();
+
+            if (!TrySoulWashSource(out var capBitmask, out var prereq))
+            {
+                return false;
+            }
+
+            var block = m_NativeShenYouBlock;
             if (block == null || block.Length < NativeShenYouBlockSize)
             {
                 return false;
             }
-            for (var i = sizeof(int); i < NativeShenYouBlockSize; i++)
+
+            // 0x747CFF `cmp [ebx+0x610],0` / `jg`: a non-positive prereq zeroes the
+            // count, the cap and the base and returns with [+0x5A4] untouched.
+            if (prereq <= 0)
             {
-                if (block[i] != 0)
-                {
-                    return true;
-                }
+                return true;
             }
-            return false;
+
+            var slots = SoulWashCountSlotsAndTruncate(block,
+                NativeShenYouAttributeConfig.Shared.SlotCap);
+
+            cap = SoulWashCap(capBitmask);
+
+            if (slots > 0)
+            {
+                // 0x747E0A: 0x747B38 over the compacted slot list. 0x747E11 `jl` sends
+                // a negative return (a table miss) to 0x747E1B, which stores base 0 and
+                // carries on — native does NOT abandon the recompute on a miss.
+                var sum = TryComputeSoulWashBaseFromConfig(out var configured)
+                    ? configured
+                    : -1;
+                baseValue = sum < 0 ? 0 : sum;
+            }
+
+            // 0x747E2D..0x747E58.
+            if (current < 0)
+            {
+                current = 0;
+            }
+            if (current + baseValue > cap)
+            {
+                current = cap - baseValue;
+            }
+            SetSoulWashCurrent(current);
+            return true;
         }
 
         /// <summary>Read the cap bitmask (obj+0x60C) out of a player's raw record,
@@ -239,9 +329,12 @@ namespace GameSvr
         /// hero is only a gate — 战神 reloads EAX=[ebp-4]=self before both calls, so
         /// the work never runs on the hero.
         ///
-        /// 0x747CF4 recomputes cap/base and clamps [+0x5A4] to [0, cap-base];
-        /// 0x74730C answers SM 4033 (0xFC1) through [vmt+0x254] with the 32-byte body
+        /// 0x747CF4 recomputes the slot count, cap and base, truncates the slot window
+        /// to the global cap and clamps [+0x5A4] to [0, cap-base]; 0x74730C answers
+        /// SM 4033 (0xFC1) through [vmt+0x254] with the 32-byte body
         /// {int cur; int base; int cap; word[10] slots} and Tag = ([+0x178]==0x36).
+        /// The slots go on the wire AFTER the truncation, so a window that was over
+        /// the cap comes back shortened.
         /// </summary>
         private void SoulWashRecomputeAndSend(int nTag)
         {
@@ -251,42 +344,10 @@ namespace GameSvr
                 return;
             }
 
-            if (!TrySoulWashSource(out var capBitmask, out var prereq))
+            if (!TrySoulWashRecompute(out var cap, out var baseValue, out var current))
             {
                 NativeCmTailFailClosed.Drop(Grobal2.CM_4127, m_sCharName);
                 return;
-            }
-
-            var current = GetSoulWashCurrent();
-            int cap;
-            var baseValue = 0;
-            if (prereq <= 0)
-            {
-                // 0x747D08: cap=base=0, current untouched (dead after the login fixup).
-                cap = 0;
-            }
-            else
-            {
-                // 0x747DBF..0x747E29: non-zero slot -> 0x747B38 base sum.
-                if (SoulWashHasAnySlot(m_NativeShenYouBlock))
-                {
-                    if (!TryComputeSoulWashBaseFromConfig(out var configuredBase))
-                    {
-                        NativeCmTailFailClosed.Drop(Grobal2.CM_4127, m_sCharName);
-                        return;
-                    }
-                    baseValue = configuredBase;
-                }
-                cap = SoulWashCap(capBitmask);
-                if (current < 0)
-                {
-                    current = 0;
-                }
-                if (current + baseValue > cap)
-                {
-                    current = cap - baseValue;
-                }
-                SetSoulWashCurrent(current);
             }
 
             SendSoulWashState(cap, baseValue, current);
@@ -414,26 +475,16 @@ namespace GameSvr
                 return;
             }
 
-            // Tag==0: self leg.
-            if (!TrySoulWashSource(out var capBitmask, out var prereq))
+            // Tag==0: self leg. 0x6BF75C only READS the derived fields; 0x747CF4 is
+            // what fills them, at login (0x6B2076) and after every commit. Deriving
+            // them here reaches the same values, and the truncation it carries is
+            // idempotent once login has run it.
+            if (!TrySoulWashSource(out _, out var prereq)
+                || !TrySoulWashRecompute(out var cap, out var baseValue, out var current))
             {
                 NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
                 return;
             }
-
-            // A non-zero slot array makes the base ([+0x5A0]) depend on [[0x7D6014]].
-            if (SoulWashHasAnySlot(m_NativeShenYouBlock)
-                && !TryComputeSoulWashBaseFromConfig(out var gateBase))
-            {
-                NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
-                return;
-            }
-
-            var cap = prereq > 0 ? SoulWashCap(capBitmask) : 0;
-            var baseValue = 0;
-            if (SoulWashHasAnySlot(m_NativeShenYouBlock))
-                TryComputeSoulWashBaseFromConfig(out baseValue);
-            var current = GetSoulWashCurrent();
 
             // 0x6BF841 `jle` and 0x6BF84E `jle`: prereq or cap not positive -> Tag=0.
             if (prereq <= 0 || cap <= 0)
