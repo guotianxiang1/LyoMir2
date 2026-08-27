@@ -79,16 +79,25 @@ namespace GameSvr.Services
                 "0x73CF08 名查 + [0x7D5D6C]，字段 [+0x3C0]，SM 0xCD3 (vmt+0x254 与 +0x250)；对象表未建模（nBodyLen<0x14 短包腿已复现为静默）");
             Add(3283, 0x006DA626, 0x006E67B0, "槽数组重建",
                 "字段 [+0x9F4]/[+0x9F8]/[+0x9FC] 集合 + [0x7D64B8]；集合结构未建模");
+            // ── 3284..3288：全部由 TryHandleQiankunCm(链位 2，链首第二位) 接管，本表这五条 Drop 均不可达 ──
+            // 【台账卫生】3285/3286/3287/3288 同时登记在本表与 NativeQiankunFailClosed，同一缺口两处台账，
+            // 统计缺口总数时会重复计数。真正生效的记账口是 NativeQiankunFailClosed。
             Add(3284, 0x006DA650, 0x006E6EA4, "槽数组清空",
-                "由 Q3 前置 TryHandleQiankunCm 实现；Q3 fallback 不应成为第二 owner");
+                "【A/SUPERSEDED 2026-08-27】Qiankun.cs:200→102 完整实现 SendDefMessage(SM_2957,0,0,0,0,\"\")，" +
+                "不落任何 Drop。本表 fallback 不应成为第二 owner");
             Add(3285, 0x006DA638, 0x006E6DE8, "槽数组应用",
-                "dl=(Param==1)，读写 [+0x9F4]/[+0x9FC]，链 0x6E68A8/0x6DF62C/0x6D3694；集合未建模");
+                "【A/SUPERSEDED 2026-08-27】Qiankun.cs:203→140 接管并改走 NativeQiankunFailClosed.Drop，" +
+                "本表 Drop 不可达。缺口未关闭：dl=(Param==1)，读写 [+0x9F4]/[+0x9FC]，" +
+                "链 0x6E68A8/0x6DF62C/0x6D3694；集合仍未建模");
             Add(3286, 0x006DA65D, 0x006E6B54, "槽数组提交",
-                "空列表腿由 Q3 前置 TryHandleQiankunCm 实现；非空配置奖励仍 fail-closed");
+                "【A/SUPERSEDED 2026-08-27】Qiankun.cs:207→175 接管：空列表重置腿已实现，" +
+                "非空配置奖励仍 fail-closed 但走 NativeQiankunFailClosed，本表 Drop 不可达");
             Add(3287, 0x006DA895, 0x006E8734, "宠物/召唤命令A",
-                "[0x7D6784] + [+0x128]/[+0x760]/[+0x9A0]，ecx=MakeLong(Param,Tag,Series)；子系统未建模");
+                "【A/SUPERSEDED 2026-08-27】Qiankun.cs:210→243 接管并改走 NativeQiankunFailClosed.Drop，" +
+                "本表 Drop 不可达。缺口未关闭：[0x7D6784] + [+0x128]/[+0x760]/[+0x9A0]，" +
+                "ecx=MakeLong(Param,Tag,Series)；子系统仍未建模");
             Add(3288, 0x006DA8C4, 0x006E8820, "宠物/召唤命令B",
-                "同 3287 子系统 + [+0x178]；子系统未建模");
+                "【A/SUPERSEDED 2026-08-27】Qiankun.cs:213→258 接管，同 3287；额外涉及 [+0x178]");
             Add(3294, 0x006DA613, 0x006EB190, "摆摊/展示建立",
                 "[+0x3C4]/[+0xB74]/[+0x18BC]/[+0x18C0] + [0x7D5D6C]/[0x7D7038]/[0x7D6784]，SM 0xCF1/0xB9A；未建模（nBodyLen<4 短包腿已复现为静默）");
             Add(3306, 0x006DAB39, 0x006EFD54, "按名双值操作",
@@ -102,7 +111,10 @@ namespace GameSvr.Services
             Add(3410, 0x006DAED9, 0x006EBE50, "定长40字节记录",
                 "leaf 门 nBodyLen==0x28；worker 读 body[+0x10]/[+0x20]/[+0x24] 并走 [+0x760]/[+0xA10]/[+0xA14]/[+0xA18] + [0x7D6D50]，SM 0xD27；未建模（nBodyLen!=0x28 已复现为静默）");
             Add(4102, 0x006DABFC, 0x006B7BCC, "交易/市场命令",
-                "globals [0x7D62DC]/[0x7D6214]/[0x7D5C0C]/[0x7D6038]/[0x7D5D98] + [+0x18DC]/[+0x18DE]/[+0xAF4]；短包腿写 [+0x18DC]/[+0x18DE]；未建模");
+                "【A/SUPERSEDED 2026-08-27】已由 CmMiscTail.cs:122→163 接管(链位 22，早于本表 28)，" +
+                "改用自有 ReportCmMiscTailGap 记账，本表 Drop 不可达（同一缺口两处台账，勿重复计数）。" +
+                "缺口未关闭：globals [0x7D62DC]/[0x7D6214]/[0x7D5C0C]/[0x7D6038]/[0x7D5D98] + " +
+                "[+0x18DC]/[+0x18DE]/[+0xAF4]；短包腿写 [+0x18DC]/[+0x18DE]；仍未建模");
             Add(4123, 0x006DAE32, 0x006BF908, "洗灵(英雄/本人)",
                 "Tag==1&&hero 走英雄腿 / Tag==0 走本人腿，均用洗灵字段 [+0x610]/[+0x5A4] 与链 0x747B38/0x747878/0x74738C，回 SM 0xFC3；洗灵字段未建模（Tag 非法腿已复现为 SM 0xFC3 Recog=1）");
             Add(4124, 0x006DAE53, 0x006BFA88, "洗灵(英雄/本人)-2",

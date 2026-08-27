@@ -83,17 +83,22 @@ namespace GameSvr.Services
                 "与同一条 SysMsg 均已复刻（原文称节流字段未建模、无法到达该门，已过期）。" +
                 "残留缺口仅剩 shopMgr [[0x7D5D98]] 0x637A00(dx=0x6B) 的对端本身");
             Add(1056, 0x006D953A, 0x006CB9B4, "商城/mall 提交",
-                "0x6CB9B4 门 0x6C7D88(self,1) + [self+0x758]>0 后经 0x6D3694 提交 subcmd 0x76 给 " +
-                "shopMgr [[0x7D5D98]]；门字段 [self+0x758] 与 shopMgr 未建模");
+                "【D/FAITHFUL 2026-08-27】由 MallCm.cs:115 接管(链位 8)，本表 Drop 不可达。" +
+                "MallCm.cs:230 的 NativeMallActiveDealId => 0 是表达式体常量且全库无其他写者，" +
+                "故门字段 [self+0x758] 恒为 0，恒走原生 0x6CB9D0 jbe 0x6CB9EA 的静默腿 —— " +
+                "C# 的静默等于原生的静默，属 FAITHFUL 而非 MISSING，不应计入缺口清单");
             Add(1057, 0x006D9547, 0x006CB9F0, "商城/mall 提交",
-                "0x6CB9F0 门 0x6C7D88(self,1)+[self+0x75C]>0+[self+0x758]>0，[vmt+0x244] 成功则 " +
-                "提交 subcmd 0x75，失败回 SM 0x38FF(0x6CBA64 '[失败]…单位不足，无法领取。')；" +
-                "[self+0x758]/[self+0x75C] 与 shopMgr [[0x7D5D98]] 未建模");
+                "【D/FAITHFUL 2026-08-27】由 MallCm.cs:118 接管(链位 8)，本表 Drop 不可达。" +
+                "MallCm.cs:233 的 NativeMallSellerDealCount => 0 加上 DealId=0，使 planner 恒返回 " +
+                "NoCancelableDeal，恒走原生 0x6CBA0C jle / 0x6CBA15 jbe 的静默腿。" +
+                "失败文案 SM 0x38FF(0x6CBA64 '[失败]…单位不足，无法领取。') 在原生同样到不了");
 
             // ---- 0x6D7794 activity throttle -----------------------------------------------
             Add(1059, 0x006D9554, 0x006D7794, "限时活动确认",
-                "0x6D7794 节流 [self+0x744]<0x2710(10000ms)+标志 [self+0x757] 后调 0x6E3944(self,dl=1)；" +
-                "节流/标志字段与 0x6E3944 目标子系统未建模");
+                "【D/FAITHFUL 2026-08-27】由 TimedActivity.cs:80 接管(链位 18)，本表 Drop 不可达。" +
+                "m_boTimedActivityConfirmPending 全库仅声明(:69)、判读(:122)、清零(:136)，无任何置 true 的写者，" +
+                "故恒走原生 0x6D77A2 cmp byte[self+0x757],0 / je 的未武装静默腿 —— 静默即忠实。" +
+                "若将来该标志有了生产者，本条须从 D 降级为真缺口(0x6E3944 目标子系统仍未建模)");
 
             // ---- skill-stone copy ---------------------------------------------------------
             Add(1061, 0x006D9579, 0x006CBDD4, "技能石复制",
@@ -109,18 +114,22 @@ namespace GameSvr.Services
                 "'系统已禁能交易输入…')；锁状态 [player+0x711] 及该子系统经 NativeMakeItemUseDiamHost " +
                 "核实本服不存在，回码无法推导");
             Add(1084, 0x006D95C9, 0x006D1AB8, "装备密码锁计时",
-                "0x6D1AB8 门 [self+0xB78]>0 + 0x6C7D88(self,1)，按 (0x2BF20-(now-[self+0x740]))/1000 " +
-                "算剩余秒并回 SM 0x2733/0x2737；[self+0xB78]/[0xB7B]/[0x74C]/[0x740] 等锁字段未建模");
+                "【D/FAITHFUL 2026-08-27】由 EquipLock.cs:157 接管(链位 5)，本表 Drop 不可达。" +
+                "_nativeEquipLockMode 仅 EquipLock.cs:93 声明为 0、:283 判读，无写者——原生唯一写 " +
+                "[self+0x711]=1 的是人物记录加载 0x6B0AAA(条件 [THumanRcd+0x48]→[+0xB78]==3)，" +
+                "而本服不持久化该字段，故锁永远未武装，恒走原生 0x6D1ACF cmp byte[self+0xB78],0 / jbe " +
+                "的静默腿 —— 静默即忠实。要武装需先持久化 THumanRcd+0x48/+0x49");
 
             // ---- quiz / cross-server broadcast manager [[0x7D62DC]] (off_7D62DC, named by
             //      NativeGmItemExtraCommands reloadStditem sub_713094([off_7D62DC],...)) -----
             Add(1090, 0x006D9732, 0x006BD674, "答题/广播提交",
-                "0x6BD674(cl=0) 校验 [self+0x7C3]/[0x7C4] 答题态，经 [[0x7D5D6C]] 0x750F3C + " +
-                "0x6C87B4 结算并回 '回答正确,请稍后再来'(0xFFDB)/'超过次数'(0x38FF)，提交经 " +
-                "[[0x7D62DC]] 0x71315C；答题字段 [self+0x7B0..0x7C4] 与两管理器未建模");
+                "【D/FAITHFUL 2026-08-27】由 QuizBroadcast.cs:142 接管(链位 6)，本表 Drop 不可达。" +
+                "置位 [self+0x7C3]/[0x7C4] 的出题/答题窗口子系统(0x6D6644/0x6DCF30)未移植，故答题态恒为 0，" +
+                "恒走原生 0x6BD76A cmp [+0x7C3],0 / je 0x6BD864 —— 原生此时同样直接返回、不发包不改状态，" +
+                "静默即忠实。要让它真跑起来须先移植整个出题/反作弊子系统");
             Add(1200, 0x006DA21F, 0x006BD674, "答题/广播提交",
-                "同 1090 worker 0x6BD674，cl=(Param==1)，body 串为答案；[self+0x7B0..0x7C4] 答题态 " +
-                "与管理器 [[0x7D62DC]]/[[0x7D5D6C]] 未建模");
+                "【D/FAITHFUL 2026-08-27】同 1090（同一 worker 0x6BD674，cl=(Param==1)，body 串为答案）：" +
+                "cl=1 腿 0x6BD6A1 与 cl=0 腿 0x6BD76A 被同一答题态标志门住，恒静默");
             Add(1217, 0x006DA372, 0x006C53B8, "广播提交",
                 "0x6C53B8 把 {name[self+0xAF4], map[self+0x106], body} 以 subcmd 0x165 提交给 " +
                 "[[0x7D62DC]] 0x71315C；管理器未建模");
