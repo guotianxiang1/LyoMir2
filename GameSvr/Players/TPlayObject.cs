@@ -6,7 +6,7 @@ using SystemModule.Packages;
 
 namespace GameSvr
 {
-    public partial class TPlayObject : AnimalObject
+    public partial class TPlayObject : THumanKind
     {
         private int _merchantDialogSeq;
         private string _nativeQuestInfoBuffer = string.Empty;
