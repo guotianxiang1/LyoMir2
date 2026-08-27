@@ -70,9 +70,10 @@ namespace GameSvr
         /// silently. Always write it.</summary>
         internal const uint NativeColdTimeInnerMagic = 0x0000FAFA;
 
-        /// <summary>obj+0x5A4 shenYou block, held as raw bytes because native
-        /// moves the window verbatim and never marshals fields.</summary>
-        public byte[] m_NativeShenYouBlock;
+        // obj+0x5A4 shenYou block: moved to THumanKind, whose own fields are
+        // exactly [0x450, 0x62C). Native shares the window between TPlayer and
+        // THeroAct through that base, which is why the hero legs could not read it
+        // while it was declared here.
 
         /// <summary>obj+0x1938 one-shot bitset.</summary>
         public uint m_dwNativeFirstDoSome;

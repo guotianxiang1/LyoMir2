@@ -49,6 +49,14 @@ namespace GameSvr
     /// </summary>
     public partial class THumanKind : AnimalObject
     {
+        /// <summary>
+        /// obj+0x5A4, the 24-byte soul-wash window, held as raw bytes because
+        /// native moves it verbatim and never marshals its fields. 0x5A4 falls in
+        /// this class's band, so it is shared by player and hero rather than owned
+        /// by the player, which is the whole reason the layer exists.
+        /// </summary>
+        public byte[] m_NativeShenYouBlock;
+
         public THumanKind() : base()
         {
         }
