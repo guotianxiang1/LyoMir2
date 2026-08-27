@@ -11,6 +11,10 @@ internal sealed class NativeDbServerService
 {
     private const int MaximumBackendConnections = 128;
     private const int MaximumConcurrentAuthentications = 64;
+    // LoginGate's native SocketRead accepts total frame lengths strictly below
+    // 0x2000 (payload <= 8175). Keep the shared codec's broader ceiling for
+    // DBSvr/GameGate; this limit belongs only to this listener.
+    private const int NativeLoginGateMaximumFrameLength = 0x1FFF;
     private readonly LoginGateConfig _config;
     private readonly ILoginTicketAuthenticator _authenticator;
     private readonly LoginGateCounters _counters;
@@ -274,7 +278,8 @@ internal sealed class NativeDbServerService
     {
         var remote = client.Client.RemoteEndPoint?.ToString() ?? "?";
         var state = new NativeConnectionState(connectionId, serverCancellation);
-        var parser = new YbDbLegacy77StreamParser();
+        var parser = new YbDbLegacy77StreamParser(
+            maximumFrameLength: NativeLoginGateMaximumFrameLength);
         var buffer = new byte[8192];
         var stream = client.GetStream();
         state.Stream = stream;

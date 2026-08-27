@@ -167,6 +167,25 @@ internal static class LoginGateSelfTests
         await WaitUntilAsync(() => server.GetBackends().Any(backend =>
             backend.Type2Enabled), timeout.Token);
 
+        // Native LoginGate uses jl against total=payload+16 and therefore
+        // accepts 0x1FFF but rejects 0x2000. The oversized frame is consumed
+        // without a reply; a following frame on the same connection must still
+        // be parsed by the managed stream resynchronizer.
+        var beforeCeiling = server.GetStats();
+        var oversized = EncodeNative(new YbDbLegacy77Frame(0, 0,
+            LoginGateWireProtocol.NativeRegistrationIdent,
+            new byte[8176]));
+        await nativeStream.WriteAsync(oversized, timeout.Token);
+        await nativeStream.WriteAsync(EncodeNative(CreateRegistration(
+            "LOCAL-OFFLINE", 10)), timeout.Token);
+        var ceilingAck = DecodeNative(
+            await ReadNativeWireAsync(nativeStream, timeout.Token));
+        Equal(LoginGateWireProtocol.NativeRegistrationAckIdent,
+            ceilingAck.Ident, "oversized LoginGate frame resynchronizes");
+        var afterCeiling = server.GetStats();
+        Equal(beforeCeiling.RejectedFrames, afterCeiling.RejectedFrames,
+            "oversized LoginGate frame does not count as rejected command");
+
         var beforeSdoa = server.GetStats();
         var silentSdoaWire = new[] { 0, 12, 13, 8175 }
             .Select(length => EncodeNative(new YbDbLegacy77Frame(0, 0,
