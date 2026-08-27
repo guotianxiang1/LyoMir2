@@ -23,11 +23,14 @@ namespace GameSvr
     // machine on [self+0x128]. Neither the manager [[0x7D7190]] nor the session object nor the leaf
     // mode flag [self+0x1899] is modelled in this port, so there is no existing model to route into.
     //
-    // WRITE-SIDE DORMANCY (faithful default, do NOT flip on). Mirroring the CM 4418-4467 write ops,
-    // this router is gated on the SAME master switch NativeStallWriteGate.Enabled (SupportsStallWrites
-    // && Store), which is OFF by default. Dormant => this returns false and the packet falls through
-    // to the existing NativeCmQ1FailClosed drop — nothing on the wire, behaviour IDENTICAL to today.
-    // This is the "写侧默认休眠" the port already enforces for stalls; it is NOT changed here.
+    // WRITE-SIDE GATE. Mirroring the CM 4418-4467 write ops, this router is gated on the SAME master
+    // switch NativeStallWriteGate.Enabled (SupportsStallWrites && Store). GameApp.cs:191 and :214 set
+    // both UNCONDITIONALLY at startup, so in a running GameSvr the gate is ON and CM 1210-1214 are
+    // consumed here — recorded and dropped by NativeStallWriteCmFailClosed below, NOT by Q1. Only a host
+    // that skips GameApp startup (AuditTools / tests) observes Enabled==false, in which case this
+    // returns false and the packet does fall through to the Q1 drop.
+    // (Historical note: this block used to say the gate is "OFF by default" and that the packet always
+    //  lands on NativeCmQ1FailClosed. That went stale on 2026-08-03. Corrected 2026-08-27.)
     //
     // FAIL-CLOSED (per the fidelity rules — 有据不臆造). Every worker's terminal action and its SM
     // reply are a function of the unmodelled [[0x7D7190]] session state (see the per-op notes below).
@@ -126,11 +129,12 @@ namespace GameSvr
         // ------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Route a booth-trade WRITE op to the (dormant) [[0x7D7190]] session executor. The write side is
-        /// OFF by default (NativeStallWriteGate.Enabled — the same master switch as the CM 4418-4467 stall
-        /// writes), so this returns false and the op falls through to the existing Q1 drop, unchanged.
+        /// Route a booth-trade WRITE op to the [[0x7D7190]] session executor. Gated on
+        /// NativeStallWriteGate.Enabled — the same master switch as the CM 4418-4467 stall writes — which
+        /// GameApp.cs:191/:214 turn on unconditionally at startup. Gate OFF (AuditTools / tests only):
+        /// return false and let the op fall through to the Q1 drop.
         ///
-        /// When the reviewer flips the write gate live, the [[0x7D7190]] trade-session manager, the session
+        /// Gate ON (the normal server case): the [[0x7D7190]] trade-session manager, the session
         /// object [self+0x128] and the leaf mode flag [self+0x1899] are STILL unmodelled in this port, so
         /// the terminal action (money/item settlement + SM reply) cannot be reproduced from image bytes
         /// without fabrication. We therefore fail-closed: record the gap once and drop (nothing on the
@@ -138,7 +142,8 @@ namespace GameSvr
         /// </summary>
         private bool TryRouteBoothTradeWrite(TProcessMessage msg)
         {
-            // 写侧默认休眠：与 CM 4418-4467 摆摊写操作共用同一主开关，默认关。关 => 交回调用链，落既有 Q1 drop。
+            // 与 CM 4418-4467 摆摊写操作共用同一主开关。GameApp 启动时无条件开启，故正常服务端走下面的
+            // fail-closed 记录；仅跳过 GameApp 启动的宿主（AuditTools/测试）里为关 => 交回调用链落 Q1 drop。
             if (!NativeStallWriteGate.Enabled)
                 return false;
 

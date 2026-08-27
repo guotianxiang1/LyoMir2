@@ -75,9 +75,6 @@ namespace GameSvr
                 case Grobal2.CM_1084:
                     ClientNativeEquipSecretTimer();
                     return true;
-                case Grobal2.CM_1080:
-                    ClientNativeStrengthenTableOp();
-                    return true;
                 case Grobal2.CM_1090:
                     ClientNativeQuizAnswerSelf();
                     return true;
@@ -245,21 +242,13 @@ namespace GameSvr
         // ================================================================================
         // 强化/标准物品表 [[0x7D5D6C]] (off_7D5D6C: std-item + PowerupItem table, named by
         // NativeGmItemCommands / NativeStrengthenRecipeStore) with [[0x7D6630]].
+        //
+        // CM 1080 is owned by TryHandleSkillStoneCm (TPlayObject.SkillStone.cs:413), which
+        // runs at chain position 19 ahead of this file's 26 and additionally reproduces the
+        // worker's short-body silence (0x6CF4CE `cmp edi,0x28 / jl 0x6CF5D6`) that the arm
+        // here lacked. No arm for 1080 belongs in this file: 1080 has no
+        // NativeCmQ1FailClosed entry, so a Drop from here would throw.
         // ================================================================================
-
-        /// <summary>
-        /// CM 1080, leaf 0x6D95D6 -> worker 0x6CF49C (body string, body length). The
-        /// empty-body silence is reproduced upstream by NativeClientBodyLengthGate[1080].
-        /// For a non-empty body the worker requires <c>body&gt;=0x28</c>, then gates on four
-        /// flags <c>[self+0xD48]/[0xD5D]/[0xF29]/[0xF14]</c> all being 0, resolves two
-        /// names through [[0x7D5D6C]] 0x74C1E0, matches a bag item on <c>[self+0x508]</c>,
-        /// runs [[0x7D6630]] 0x600F6C, and answers SM 0x3B7. The four gate flags and both
-        /// tables are unmodelled.
-        /// </summary>
-        private void ClientNativeStrengthenTableOp()
-        {
-            NativeCmQ1FailClosed.Drop(Grobal2.CM_1080, m_sCharName);
-        }
 
         // ================================================================================
         // 答题/广播提交 — broadcast/quiz manager [[0x7D62DC]] (off_7D62DC, named by

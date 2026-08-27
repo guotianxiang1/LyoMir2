@@ -73,14 +73,15 @@ namespace GameSvr.Services
             // ---- shop/mall manager [[0x7D5D98]] (shopMgr, named by NativeGmItemCommands
             //      case 0x624DD6 sub_63B4E4(shopMgr@off_7D5D98,...)) ----------------------
             Add(1054, 0x006D942F, 0x006D3694, "商城/mall 提交",
-                "0x6D942F 节流 [self+0x788]<0x7D0(2000ms) 后经 0x6D3694 把 {name[self+0xAF4], " +
-                "map[self+0x106], [self+0xB09], [self+0xB33]} 提交给 shopMgr [[0x7D5D98]] 的 " +
-                "0x637A00(subcmd 0x7B)；提交结果决定是否回 SM 0x38FF(0x6DBF88 '请稍候')，" +
-                "shopMgr 运行态与 [self+0x788] 均未建模");
+                "【SUPERSEDED 2026-08-27】已由 MallCm.cs:109→131-142 接管（链位 8，早于本表的 26）且不含 Drop：" +
+                "节流门 [self+0x788]<0x7D0(2000ms) 已 1:1 复刻为 _nativeMallSubmitTick（原文称其未建模已过期），" +
+                "链路不可用时发原生 SysMsg「网络故障，请稍候...」(0x6D9471 test al,al / 0x6D9479 cx=0x38FF)。" +
+                "残留缺口仅剩 shopMgr [[0x7D5D98]] 0x637A00(subcmd 0x7B) 的对端本身");
             Add(1055, 0x006D9492, 0x006D3694, "商城/mall 提交",
-                "0x6D9492 节流 [self+0x788]<0x7D0 后按 Param(1..4)映射 subcmd={0x6F,0x75,0x7A,0x7D} " +
-                "经 0x6D3694 提交给 shopMgr [[0x7D5D98]] 0x637A00(dx=0x6B)；Param 越界则静默，" +
-                "但节流字段与 shopMgr 运行态未建模，无法到达该门");
+                "【SUPERSEDED 2026-08-27】已由 MallCm.cs:112→150-174 接管（链位 8，早于本表的 26）且不含 Drop：" +
+                "节流门、Param(1..4)→subcmd{0x6F,0x75,0x7A,0x7D} 映射、Param 越界静默(原生 0x6D94F8) " +
+                "与同一条 SysMsg 均已复刻（原文称节流字段未建模、无法到达该门，已过期）。" +
+                "残留缺口仅剩 shopMgr [[0x7D5D98]] 0x637A00(dx=0x6B) 的对端本身");
             Add(1056, 0x006D953A, 0x006CB9B4, "商城/mall 提交",
                 "0x6CB9B4 门 0x6C7D88(self,1) + [self+0x758]>0 后经 0x6D3694 提交 subcmd 0x76 给 " +
                 "shopMgr [[0x7D5D98]]；门字段 [self+0x758] 与 shopMgr 未建模");

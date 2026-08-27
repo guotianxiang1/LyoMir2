@@ -7,16 +7,17 @@ namespace GameSvr
     // Stall (摆摊) CM WRITE ops — gated fail-safe routing to the reversed stall executors + the injected
     // NativeStallMySqlStore / in-memory NativeStallManager, mirroring the gild write pattern.
     //
-    // STATE (2026-08-02, task #83 wire layer complete): WIRED here (DORMANT until the flip — see the gate
-    // below): the money/item-FREE booth-setup pair SetTimeLevel(4419)/START(4424) via NativeStallBoothSetup
+    // STATE (2026-08-02 wire layer complete; LIVE since 2026-08-03): WIRED here — see the gate note
+    // below: the money/item-FREE booth-setup pair SetTimeLevel(4419)/START(4424) via NativeStallBoothSetup
     // (Δgold=Δitems=0 BY CONSTRUCTION; the affordability gate READS GoldNum, never deducts), the item-side
     // ADD(4421)/DEL(4422)/PAUSE(4425) via NativeStallItemMove (bag<->stall moves — items-out==items-in /
     // total-Dura preserved BY CONSTRUCTION; ADD's StdMode==7 split is Dura-conserving, no dup/loss), the
-    // BUY(4426) finalize, and the 4418 browse READ. DORMANT because every route requires the master switch
-    // NativeStallWriteGate.Enabled (SupportsStallWrites && Store) — OFF by default even though GameApp PRIMES
-    // the store + manager (for DB hydration/recovery) — so every op falls back to RejectUnavailableStallRequest
-    // (guards green). ENDGAME (per team-lead, user "match the original"): the FAITHFUL ops FLIP LIVE together
-    // when the reviewer sets SupportsStallWrites=true.
+    // BUY(4426) finalize, and the 4418 browse READ. Every route is gated on NativeStallWriteGate.Enabled
+    // (SupportsStallWrites && Store); GameApp.cs:191 and :214 set both UNCONDITIONALLY at startup, so the
+    // gate is ON in a running GameSvr and these ops are LIVE. Only a host that skips GameApp startup
+    // (AuditTools / tests) observes Enabled==false and the RejectUnavailableStallRequest fallback.
+    // (Historical note: this block used to say DORMANT / OFF by default. That went stale on 2026-08-03 when
+    //  the gate was flipped — see the LIVE rationale at GameApp.cs:208-214. Corrected 2026-08-27.)
     //
     // Wire layer (byte-exact, staging/stall_cm_wire_formats_20260802.md): all per-op field extraction lives in
     // NativeStallWireCodec (the single source of truth, shared with AuditTools/NativeStallWireIntegrationCheck).

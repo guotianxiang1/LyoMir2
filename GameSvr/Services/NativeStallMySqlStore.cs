@@ -124,11 +124,14 @@ namespace GameSvr.Services
     }
 
     /// <summary>
-    /// Dormant injection point for the stall store. Defaults OFF / null so the live
-    /// stall message handlers keep their RejectUnavailableStallRequest fallback (guards
-    /// green). A future full-stack cutover sets <see cref="Store"/> and enables
-    /// <see cref="SupportsStallWrites"/>. <see cref="Enabled"/> is the single check a
+    /// Injection point for the stall store. The static defaults are OFF / null, but
+    /// GameApp.cs:191 and :214 set both UNCONDITIONALLY at startup, so a running GameSvr has
+    /// <see cref="Enabled"/> == true and the stall write routes are LIVE. Only a host that
+    /// skips GameApp startup (AuditTools / tests) keeps the defaults and therefore the
+    /// RejectUnavailableStallRequest fallback. <see cref="Enabled"/> is the single check a
     /// router uses: only route to the store when a store is present AND the flag is on.
+    /// (Historical note: this used to be described as a dormant injection point awaiting a
+    ///  future cutover. That went stale on 2026-08-03. Corrected 2026-08-27.)
     /// </summary>
     public static class NativeStallWriteGate
     {

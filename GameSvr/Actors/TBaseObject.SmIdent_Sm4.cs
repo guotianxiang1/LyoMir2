@@ -189,9 +189,12 @@ namespace GameSvr
         //  SM 4363 (0x110B) @0x767158 — same: mov dx,0x110B then `call [obj+0xE0]`
         //      (0x767160). Non-slot dispatch -> not derivable.
         //  SM 4032 (0xFC0) @0x746D18 slot 0x254 — Buf=[ebp-8],Len=[ebp-0xC] is a
-        //      record from the [[0x7D6014]] table (CM 4125 worker 0x746C34); the
-        //      table's 0x2B(43)-byte record format is undefined (matches
-        //      NativeCmTailFailClosed.cs CM 4125 note).
+        //      record from the [[0x7D6014]] table (CM 4125 worker 0x746C34). That table
+        //      and its 0x2B(43)-byte record format ARE modelled, by
+        //      NativeShenYouAttributeConfig; the residual CM 4125 blocker is the second
+        //      frame's Param (byte[[0x7D6938]]), not this body. See the CM 4125 note in
+        //      NativeCmTailFailClosed.cs. (Corrected 2026-08-27; previously said the
+        //      record format was undefined.)
         //  SM 4033 (0xFC1) @0x747362/@0x747380 slot 0x254 — Buf=[ebp-0x20],Len=0x20
         //      (32 bytes). The record is the state-0x36 spirit block copied from
         //      [self+0x5A8] (20 bytes @0x74733E) plus a computed dword; that record

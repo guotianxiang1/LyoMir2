@@ -63,7 +63,6 @@ namespace GameSvr
                 case Grobal2.CM_3344: Q3Cm3344(); return true;
                 case Grobal2.CM_3410: Q3Cm3410(processMessage.nBodyLen); return true;
                 case Grobal2.CM_4102: Q3Cm4102(); return true;
-                case Grobal2.CM_4105: Q3Cm4105(); return true;
                 case Grobal2.CM_4123: Q3Cm4123(processMessage.nParam3); return true;
                 case Grobal2.CM_4124: Q3Cm4124(processMessage.nParam3); return true;
                 default:
@@ -308,19 +307,11 @@ namespace GameSvr
         /// </summary>
         private void Q3Cm4102() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_4102, m_sCharName);
 
-        /// <summary>
-        /// CM 4105, leaf 0x6DA005, which fires three workers in order.
-        /// 0x7742C0(Self) drops stealth state 0x40 and re-broadcasts RM_TURN
-        /// (0x774317 `mov dx,0x2711`) — modelled as BreakNativeStealthOnAction.
-        /// 0x6BCE2C(Self, Ident=word[+4]) cancels the pending channels, emitting
-        /// 0x4D0 / 0x4D2 / 0xD57 (0x6EE164, 0x6EF62E, 0x6EE2DF) — modelled as
-        /// CancelNativeActionChannels; note its Ident argument is dead, since all
-        /// three callees open with `mov edx,eax`. 0x6EE174(Self, Ident) is the mount
-        /// summon and drives [+0x4C0]/[+0xA24]/[+0x1914]. Only that third worker is
-        /// still unmodelled, but it is the bulk of the leaf, so the arm stays
-        /// withheld rather than emitting two thirds of a native response.
-        /// </summary>
-        private void Q3Cm4105() => NativeCmQ3FailClosed.Q3Drop(Grobal2.CM_4105, m_sCharName);
+        // CM 4105 is owned by TryHandleHeroNotifyCm (TPlayObject.HeroNotify.cs:76) at chain
+        // position 20, ahead of this file's 28. The whole leaf 0x6DA005 is implemented there,
+        // including the mount summon 0x6EE174 that was the last unmodelled third when the arm
+        // here was written. No arm for 4105 belongs in this file: 4105 has no
+        // NativeCmQ3FailClosed entry, so a Q3Drop from here would throw.
 
         /// <summary>
         /// CM 4123, leaf 0x6DAE32, worker 0x6BF908(Self, Recog=ECX, Tag=EDX,

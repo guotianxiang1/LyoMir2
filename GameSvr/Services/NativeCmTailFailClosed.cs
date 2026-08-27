@@ -63,17 +63,27 @@ namespace GameSvr.Services
                 => map[ident] = new Entry(ident, handler, callee, subsystem, blocker);
 
             Add(4125, 0x006DAE25, 0x00746C34, "定长记录表广播",
-                "[[0x7D6014]] 表的 0x2B 字节记录格式未定义，SM 4032 body 无法推导");
+                "[[0x7D6014]] 表与其 0x2B 字节记录格式现已由 NativeShenYouAttributeConfig 建模" +
+                "(载入 Config 下 神佑属性.txt，记录 +0x00 int/+0x04 int/+0x08 int/+0x0C ShortString[0x1E])，" +
+                "行数即 Count，SM 4032 body 可推导；残留阻塞只剩第二个包 SM 0xFC6 的 " +
+                "Param = byte[[0x7D6938]] != 0 (0x746D28 push 1 vs 0x746D43 push 0)，该标志位无已知 owner");
             Add(4126, 0x006DAE74, 0x006BF75C, "洗灵石",
                 "洗灵字段 [+0x59C]/[+0x5A0]/[+0x5A4]/[+0x610] 未建模");
             Add(4127, 0x006DAE8D, 0x00747CF4, "洗灵石重算",
                 "0x747CF4 重算的 [+0x59C]/[+0x5A0]/[+0x5A8]/[+0x5BC]/[+0x60C] 未建模");
             Add(4128, 0x006DAF23, 0x006B7184, "邻域对象洗灵态查询",
                 "SM 4037 的 24 字节 body 取自未建模的 [T+0x60C]+[T+0x5A8]");
+            // 【已废弃条目，2026-08-27】4150/4151 已由 TPlayObject.TaskBoard.cs 的 TryHandleTaskBoardCm
+            // 完整实现（它嵌套在 NativeCmTailProtocol.cs:43，先于本文件的 fallback switch 运行），
+            // 故本表这两条的 Drop 不可达。保留条目仅为不破坏 Drop 的参数校验。
             Add(4150, 0x006DAF51, 0x00699B68, "任务发布板",
-                "任务板状态机与 GetTaskDispatchCnt 等脚本过程未移植，SM 3452 的 873 字节 body 无法推导");
+                "【SUPERSEDED】已实现于 TaskBoard.cs:106-155：经 M2Share.PasEngine 实调 " +
+                "GetTaskDispatchCnt/GetTaskAcceptCnt/GetTaskPrizeDesc/GetTaskAcceptDesc，" +
+                "逐字段填满 873 字节后无条件发 SM 3452。原文称脚本过程未移植，与代码矛盾");
             Add(4151, 0x006DAF5E, 0x006999D4, "任务发布板",
-                "DoTaskDispatch / DoTaskAccept / DoTaskComplete 脚本过程未移植");
+                "【SUPERSEDED】已实现于 TaskBoard.cs:167-183：Tag 1/2/3 分别走 " +
+                "DoTaskDispatch/DoTaskAccept/DoTaskComplete，其余 Tag 静默；原生 worker 本身不发包，" +
+                "故无回包即完整。原文称脚本过程未移植，与代码矛盾");
             Add(4173, 0x006DB068, 0x006E600C, "免费回收装备",
                 "回收链会删物品并结算声望，物品选择与结算规则未移植");
             Add(4204, 0x006DAF87, 0x006F03E8, "短信认证码校验",
@@ -93,11 +103,15 @@ namespace GameSvr.Services
             Add(4411, 0x006DB0F8, 0x006F38A8, "宝玉镶嵌(英雄)",
                 "同 4409；英雄有效时的镶嵌链未移植");
             Add(4417, 0x006DB1BF, 0x00699EB4, "任务发布板脚本",
-                "任务板 @Main 脚本对象 [[0x7D5D20]]+0x2C 未建模");
+                "【SUPERSEDED 2026-08-27】已由 TaskBoardScript.cs:91→107-110 接管（链位 23，早于本表的 25）：" +
+                "转 TryCallHelperQuestMain；原生仅在板 +0x2C 非空时进入且无玩家状态门，脚本缺失时 " +
+                "TryCall 返回 false 即忠实 no-op。该文件自述“缺口：无”。本表条目 Drop 不可达");
             Add(4496, 0x006DBBDC, 0x006FAC8C, "新手任务",
                 "FreshmanTaskCommand 脚本入口未接入");
             Add(4626, 0x006DB394, 0x006AE260, "分页列表查询",
-                "[[0x7D5C60]] 列表源与记录格式未建模");
+                "【SUPERSEDED 2026-08-27】已由 NewbieQuest.cs:53→126-177 完整实现（链位 10，早于本表的 25）：" +
+                "Tag>0x20 静默门(原生 0x6AE285)、sub_705690 成员<30 过滤、分页/status 语义、" +
+                "64 字节记录经 EncodeNativeCorpsDescriptions 发 SM 0x1212。本表条目 Drop 不可达");
             Add(4646, 0x006DBBEB, 0x006FBB90, "领奖列表",
                 "[[0x7D605C]] 领奖管理器与 [self+0x62C]/[+0x658] 奖励 id 数组未建模");
             Add(4647, 0x006DBBF5, 0x006FB6FC, "领奖前置校验",
@@ -105,11 +119,16 @@ namespace GameSvr.Services
             Add(4648, 0x006DBBFF, 0x006FB874, "领奖结算",
                 "[[0x7D605C]] 领奖管理器与声望/金币加账链未建模");
             Add(4649, 0x006DBC09, 0x006FBB28, "领奖(含删物品)",
-                "0x69C47C 会按 client-id 扫背包删物品，规则未移植");
+                "【SUPERSEDED 2026-08-27】已由 RewardList.cs:125→246-254 完整实现且不含任何 Drop" +
+                "（链位 15，早于本表的 25）：NativeDeleteBagItemByWIndex 按 wIndex 倒序扫包删除、" +
+                "发 SM_DELITEM、NativeGrantDiamonds(588)，再发 SM 0x1229 Recog=deleted?0:1。" +
+                "本表条目 Drop 不可达");
             Add(4650, 0x006DBC18, 0x006FB51C, "藏宝图合成",
                 "0x69C03C 合成状态机未移植，6 路结果码无法推导");
             Add(4651, 0x006DB1D8, 0x006FC054, "任务发布板文本命令",
-                "任务板脚本对象 [[0x7D5D20]]+0x2C 未建模");
+                "【SUPERSEDED 2026-08-27】已由 TaskBoardScript.cs:94→119-133 接管（链位 23，早于本表的 25，" +
+                "也早于嵌套的 TaskBoardCm）：忠实复刻 sub_6B8CC4 四道门(ghost/death/dealing/文本非空)" +
+                "后转 TryCallHelperQuestLabel。本表条目与 TaskBoard.cs:206 的 Drop 均不可达");
 
             return map;
         }

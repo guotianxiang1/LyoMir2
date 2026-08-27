@@ -10,11 +10,17 @@ namespace GameSvr.Services
     /// ctor sub_61ED04 (status Initial, level 1, pos -1, createDate = now).
     ///
     /// SCOPE (team-lead directive): this ONLY holds / creates / finds / removes records and hosts the
-    /// recovery populate hook. It moves NO money and NO items — the write EXECUTORS (start / add / del / buy /
-    /// pause) and the crash-recovery flag replay stay STUBBED / fail-closed until codec-fidelity confirms each
-    /// leaf (sub_61A4C0 open, sub_61E0C8 buy-finalize, sub_61A36C/sub_61FEAC pause-close, sub_620F58 order).
-    /// Do NOT guess money/item movement here. Until the executors land, the live router keeps returning null
-    /// context → RejectUnavailableStallRequest (guards green).
+    /// recovery populate hook. It moves NO money and NO items, and that must stay true — do NOT add
+    /// money/item movement here.
+    ///
+    /// The write EXECUTORS live OUTSIDE this class and are LIVE: NativeStallBoothSetup (start /
+    /// SetTimeLevel), NativeStallItemMove (add / del / pause) and NativeStallBuyExecutor (buy-finalize,
+    /// called from TPlayObject.NativeStall.cs:387). They are gated on NativeStallWriteGate.Enabled, which
+    /// GameApp.cs:191 and :214 turn on unconditionally at startup; the null-context →
+    /// RejectUnavailableStallRequest path is now only reached by hosts that skip GameApp startup.
+    /// (Historical note: this paragraph used to say the executors "stay STUBBED / fail-closed" pending
+    ///  codec fidelity on sub_61A4C0 / sub_61E0C8 / sub_61A36C / sub_61FEAC / sub_620F58. That went stale
+    ///  on 2026-08-03 when the gate was flipped. Corrected 2026-08-27.)
     /// </summary>
     public sealed class NativeStallManager
     {
