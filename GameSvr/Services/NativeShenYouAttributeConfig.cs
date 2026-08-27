@@ -1,18 +1,20 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using SystemModule;
+using SystemModule.Common;
 
 namespace GameSvr
 {
     /// <summary>
-    /// Loader for Config\神佑属性.txt — native sub_755350 @0x755350.
-    /// Each non-comment line with '=' parses into a 0x2B-byte record:
-    ///   +0x00 int, +0x04 int (base value for 0x747B38), +0x08 int,
-    ///   +0x0C ShortString[0x1E] name.
-    /// Records are stored in the singleton table [[0x7D6014]]; slot cap
-    /// [[0x7D5AEC]] is set to 4 at 0x7553F9.
+    /// One row of Config\神佑属性.txt exactly as native sub_755350 @0x755350 lays it
+    /// out in its GetMem(0x2B) block:
+    ///   +0x00 int32 Id      (0x7554BA)
+    ///   +0x04 int32 Base    (0x7554E2)
+    ///   +0x08 int32 Param   (0x75550B)
+    ///   +0x0C ShortString, capacity 0x1E (0x75552C, `mov cl,0x1E` then 0x4039E4)
+    /// which is 12 + 1 + 30 = 0x2B bytes.
     /// </summary>
     public sealed class NativeShenYouAttributeEntry
     {
@@ -20,23 +22,65 @@ namespace GameSvr
         public int BaseValue { get; init; }
         public int Param3 { get; init; }
         public string Name { get; init; }
+
+        /// <summary>
+        /// The GBK bytes 0x4039E4 actually stores, i.e. after the 0x1E cap. The cap
+        /// counts bytes, so it can cut a double-byte character in half; keeping the
+        /// bytes rather than the string is what makes the wire body reproducible.
+        /// </summary>
+        public byte[] NameBytes { get; init; }
     }
 
+    /// <summary>
+    /// Loader for Config\神佑属性.txt — native sub_755350 @0x755350, reached from the
+    /// GM reload arm @0x628A72 and from 0x74C1D5.
+    ///
+    /// Line handling, in native order:
+    ///   0x755428  empty line                      -> skip
+    ///   0x755435  first char ';'                  -> skip
+    ///   0x755441  first char '/'                  -> skip
+    ///   0x75544D  first char '='                  -> slot-cap directive
+    ///   otherwise                                 -> Id|Base|Param|Name record
+    ///
+    /// The rows live in the hash list at [[0x7D6014]], whose Add (0x49EC5C) appends to
+    /// a tail-linked chain, so First/Next (0x49EE4C/0x49EE54) walk them in file order.
+    /// That order is what CM 4125 puts on the wire, which is why this class keeps an
+    /// ordered list and not just the id lookup.
+    /// </summary>
     public sealed class NativeShenYouAttributeConfig
     {
         public const string ConfigRelativePath = @"Share\config\神佑属性.txt";
         public const int NativeRecordSize = 0x2B;
-        public const int NativeMaxSlots = 4;
+        public const int NativeNameCapacity = 0x1E;
+        public const int NativeDefaultSlotCap = 4;
+
+        public const string MissingFileMessage = "[Error]:神佑属性文件不存在！！ ";
+        public const string LoadErrorMessage = "[Error]:神佑属性文件加载错误";
+
+        public const string AbilSwitchFileName = "Mir2Actor.ini";
+        public const string AbilSwitchSection = "setup";
+        public const string AbilSwitchKey = "ShenYouAbilSwitch";
 
         private static readonly NativeShenYouAttributeConfig _shared =
             new NativeShenYouAttributeConfig();
 
         public static NativeShenYouAttributeConfig Shared => _shared;
 
+        private readonly List<NativeShenYouAttributeEntry> _rows =
+            new List<NativeShenYouAttributeEntry>();
+
         private readonly Dictionary<int, NativeShenYouAttributeEntry> _byId =
             new Dictionary<int, NativeShenYouAttributeEntry>();
 
-        public int Count => _byId.Count;
+        public int Count => _rows.Count;
+
+        public IReadOnlyList<NativeShenYouAttributeEntry> Rows => _rows;
+
+        /// <summary>Native [[0x7D5AEC]], initialised to 4 at 0x7553F9.</summary>
+        public int SlotCap { get; private set; } = NativeDefaultSlotCap;
+
+        /// <summary>Native byte[[0x7D6938]] — mir2Actor.ini [setup] ShenYouAbilSwitch.</summary>
+        public bool AbilSwitch { get; private set; }
 
         public static string ResolveDefaultPath(string rootPath, string baseDir)
         {
@@ -47,7 +91,16 @@ namespace GameSvr
         public bool TryGet(int id, out NativeShenYouAttributeEntry entry)
             => _byId.TryGetValue(id, out entry);
 
-        /// <summary>0x747B38 — sum [entry+4] for each non-zero slot word.</summary>
+        /// <summary>
+        /// 0x747B38 — sum table[+4] over the caller's slot words.
+        ///
+        /// Native takes the used-slot count from byte[self+0x5BC] (see the cap test at
+        /// 0x7478D2) and looks every one of those words up, so a miss is fatal there.
+        /// The managed caller hands over the whole fixed 10-word window instead, so the
+        /// zero test below stands in for native's shorter loop bound; it is not a native
+        /// skip. A non-zero id that is absent from the table is still fatal, as at
+        /// 0x747BC8.
+        /// </summary>
         public int ComputeBaseFromSlots(ReadOnlySpan<ushort> slotIds)
         {
             var total = 0;
@@ -63,21 +116,56 @@ namespace GameSvr
             return total;
         }
 
-        public bool Reload(string fileName, out string error)
+        /// <summary>
+        /// The count*0x2B body CM 4125 hands to [vmt+0x254] at 0x746D18.
+        ///
+        /// Native builds it with GetMem(count*0x2B) at 0x746C5F and a 0x2B-byte Move per
+        /// row, so every byte comes from the record block. The one byte range that is not
+        /// reproducible is the tail of each name field: the record itself came from an
+        /// uninitialised GetMem(0x2B) at 0x75548D and 0x4039E4 writes only the length byte
+        /// and the characters, leaving whatever the allocator left behind. Zero is used
+        /// here because heap residue has no defined value to copy.
+        /// </summary>
+        public byte[] BuildNativeRecordBuffer()
+        {
+            var buffer = new byte[_rows.Count * NativeRecordSize];
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                var span = buffer.AsSpan(i * NativeRecordSize, NativeRecordSize);
+                BinaryPrimitives.WriteInt32LittleEndian(span, row.Id);
+                BinaryPrimitives.WriteInt32LittleEndian(span.Slice(4), row.BaseValue);
+                BinaryPrimitives.WriteInt32LittleEndian(span.Slice(8), row.Param3);
+                var name = row.NameBytes ?? Array.Empty<byte>();
+                span[0x0C] = (byte)name.Length;
+                name.CopyTo(span.Slice(0x0D));
+            }
+            return buffer;
+        }
+
+        /// <summary>
+        /// Native sub_755350 end to end. The record load and the switch read are one
+        /// unit there: 0x75557C (success), 0x7555BD (exception) and the missing-file
+        /// fallthrough at 0x7555BF all converge on 0x7555E6, so the switch is refreshed
+        /// on every outcome.
+        /// </summary>
+        public bool Reload(string fileName, string shareDirectory, out string error)
+        {
+            var loaded = ReloadRecords(fileName, out error);
+            AbilSwitch = ReadAbilSwitch(shareDirectory);
+            return loaded;
+        }
+
+        private bool ReloadRecords(string fileName, out string error)
         {
             error = string.Empty;
-            _byId.Clear();
 
-            if (string.IsNullOrWhiteSpace(fileName))
+            // 0x7553A2 tests FileExists before the TStringList is even created, and the
+            // table clear at 0x7553EF sits after LoadFromFile. A missing or unreadable
+            // file therefore leaves the previously loaded rows and slot cap standing.
+            if (string.IsNullOrWhiteSpace(fileName) || !File.Exists(fileName))
             {
-                error = "[Error]:神佑属性文件不存在！！";
-                M2Share.ErrorMessage(error);
-                return false;
-            }
-
-            if (!File.Exists(fileName))
-            {
-                error = "[Error]:神佑属性文件不存在！！";
+                error = MissingFileMessage + (fileName ?? string.Empty);
                 M2Share.ErrorMessage(error);
                 return false;
             }
@@ -89,89 +177,194 @@ namespace GameSvr
             }
             catch (Exception ex)
             {
-                error = "[Error]:神佑属性文件加载错误: " + ex.Message;
+                error = LoadErrorMessage + ex.Message;
                 M2Share.ErrorMessage(error);
                 return false;
             }
 
-            foreach (var raw in lines)
-            {
-                var line = raw?.Trim();
-                if (string.IsNullOrEmpty(line))
-                    continue;
-                if (line[0] == ';' || line[0] == '/')
-                    continue;
+            _rows.Clear();
+            _byId.Clear();
+            SlotCap = NativeDefaultSlotCap;
 
-                if (!TryParseLine(line, out var entry, out var lineError))
-                {
-                    error = "[Error]:神佑属性文件加载错误: " + lineError;
-                    M2Share.ErrorMessage(error);
-                    return false;
-                }
-
-                if (_byId.ContainsKey(entry.Id))
-                {
-                    error = "[Error]:神佑属性文件加载错误: duplicate id " + entry.Id;
-                    M2Share.ErrorMessage(error);
-                    return false;
-                }
-
-                _byId[entry.Id] = entry;
-                if (_byId.Count > NativeMaxSlots * 64)
-                    break;
-            }
+            for (var i = 0; i < lines.Length; i++)
+                ParseLine(lines[i]);
 
             return true;
         }
 
-        private static bool TryParseLine(string line,
-            out NativeShenYouAttributeEntry entry, out string error)
+        private void ParseLine(string line)
         {
-            entry = null;
-            error = string.Empty;
+            // Native reads the TStringList entry as-is; there is no Trim anywhere in
+            // 0x75541A..0x755547, so leading blanks make a line a record line.
+            if (string.IsNullOrEmpty(line))
+                return;
 
-            var eq = line.IndexOf('=');
-            if (eq <= 0)
+            var first = line[0];
+            if (first == ';' || first == '/')
+                return;
+
+            if (first == '=')
             {
-                error = "missing '=' in: " + line;
-                return false;
+                // 0x755452 splits on '=' and converts the part BEFORE it. On a line that
+                // starts with '=' that part is always empty, so 0x755476's StrToIntDef
+                // always falls back to its default of 4. `=8` does not mean 8 natively.
+                SlotCap = StrToIntDef(SplitFirst(line, '=', out _), NativeDefaultSlotCap);
+                return;
             }
 
-            var name = line.Substring(0, eq).Trim();
-            var rest = line.Substring(eq + 1);
-            var parts = rest.Split('|');
-            if (parts.Length < 3)
-            {
-                error = "need id|base|param: " + line;
-                return false;
-            }
+            var rest = line;
+            var id = StrToIntDef(SplitFirst(rest, '|', out rest), 0);
+            var baseValue = StrToIntDef(SplitFirst(rest, '|', out rest), 0);
+            var param = StrToIntDef(SplitFirst(rest, '|', out rest), 0);
+            var nameBytes = TruncateGbk(rest, NativeNameCapacity);
 
-            if (!int.TryParse(parts[0].Trim(), out var id)
-                || !int.TryParse(parts[1].Trim(), out var baseValue)
-                || !int.TryParse(parts[2].Trim(), out var param3))
-            {
-                error = "bad numeric fields: " + line;
-                return false;
-            }
+            // 0x755531 `test eax,eax` / `je 0x755547`: a row whose first field is zero is
+            // never added (native simply leaks the block).
+            if (id == 0)
+                return;
 
-            if (string.IsNullOrEmpty(name))
-                name = id.ToString();
-
-            var nameBytes = HUtil32.GbkEncoding.GetBytes(name);
-            if (nameBytes.Length > 0x1E)
-            {
-                error = "name too long: " + name;
-                return false;
-            }
-
-            entry = new NativeShenYouAttributeEntry
+            var entry = new NativeShenYouAttributeEntry
             {
                 Id = id,
                 BaseValue = baseValue,
-                Param3 = param3,
-                Name = name
+                Param3 = param,
+                Name = HUtil32.GbkEncoding.GetString(nameBytes),
+                NameBytes = nameBytes
             };
-            return true;
+
+            _rows.Add(entry);
+
+            // 0x49EC5C pushes the new node onto the front of its bucket chain, so the
+            // 0x49F0EC lookup finds the LAST row added for a duplicated id, while the
+            // ordered walk still sees every row.
+            _byId[id] = entry;
+        }
+
+        /// <summary>
+        /// 0x4C6AEC — returns the text before the first divider (or the whole string when
+        /// there is none) and leaves the text after it in <paramref name="remainder"/>.
+        /// </summary>
+        private static string SplitFirst(string source, char divider, out string remainder)
+        {
+            source ??= string.Empty;
+            var at = source.IndexOf(divider);
+            if (at < 0)
+            {
+                remainder = string.Empty;
+                return source;
+            }
+            remainder = source.Substring(at + 1);
+            return source.Substring(0, at);
+        }
+
+        /// <summary>
+        /// Delphi StrToIntDef (0x40CA18): leading blanks are skipped, '$' or '0x' marks
+        /// hex, and anything the scan cannot consume whole yields the default.
+        /// </summary>
+        private static int StrToIntDef(string text, int defaultValue)
+        {
+            if (string.IsNullOrEmpty(text))
+                return defaultValue;
+
+            var i = 0;
+            while (i < text.Length && text[i] == ' ')
+                i++;
+            if (i >= text.Length)
+                return defaultValue;
+
+            var negative = false;
+            if (text[i] == '-' || text[i] == '+')
+            {
+                negative = text[i] == '-';
+                i++;
+            }
+
+            var radix = 10;
+            if (i < text.Length && text[i] == '$')
+            {
+                radix = 16;
+                i++;
+            }
+            else if (i + 1 < text.Length && text[i] == '0'
+                     && (text[i + 1] == 'x' || text[i + 1] == 'X'))
+            {
+                radix = 16;
+                i += 2;
+            }
+
+            if (i >= text.Length)
+                return defaultValue;
+
+            long value = 0;
+            for (; i < text.Length; i++)
+            {
+                var digit = DigitValue(text[i]);
+                if (digit < 0 || digit >= radix)
+                    return defaultValue;
+                value = value * radix + digit;
+                if (value > uint.MaxValue)
+                    return defaultValue;
+            }
+
+            var signed = negative ? -value : value;
+            if (signed < int.MinValue || signed > uint.MaxValue)
+                return defaultValue;
+            return unchecked((int)signed);
+        }
+
+        private static int DigitValue(char c)
+        {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return -1;
+        }
+
+        private static byte[] TruncateGbk(string text, int maxBytes)
+        {
+            if (string.IsNullOrEmpty(text))
+                return Array.Empty<byte>();
+            var bytes = HUtil32.GbkEncoding.GetBytes(text);
+            if (bytes.Length <= maxBytes)
+                return bytes;
+            var cut = new byte[maxBytes];
+            Array.Copy(bytes, cut, maxBytes);
+            return cut;
+        }
+
+        /// <summary>
+        /// 0x7555E6 — reopen mir2Actor.ini through 0x790210 and take
+        /// [setup]/ShenYouAbilSwitch with a default of False. Delphi's TIniFile.ReadBool
+        /// is ReadInteger &lt;&gt; 0, so "1" and "2" are on while "TRUE" is not a number
+        /// and falls back to the default.
+        /// </summary>
+        public static bool ReadAbilSwitch(string shareDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(shareDirectory))
+                return false;
+            try
+            {
+                var ini = new ActorSetupIni(Path.Combine(shareDirectory, AbilSwitchFileName));
+                var raw = ini.ReadRaw(AbilSwitchSection, AbilSwitchKey);
+                return StrToIntDef(raw, 0) != 0;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private sealed class ActorSetupIni : IniFile
+        {
+            public ActorSetupIni(string fileName) : base(fileName)
+            {
+                // IniFile only caches on an explicit Load; the base constructor just
+                // records the path. Load also creates a missing file, matching 0x790210.
+                Load();
+            }
+
+            public string ReadRaw(string section, string key)
+                => ReadString(section, key, string.Empty);
         }
     }
 }

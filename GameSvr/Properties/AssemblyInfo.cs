@@ -68,3 +68,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativePendingNoticeProtocolCheck")]
 [assembly: InternalsVisibleTo("GateLifecycleGenerationCheck")]
 [assembly: InternalsVisibleTo("NativeYbDealSetInfoCheck")]
+[assembly: InternalsVisibleTo("NativeShenYouAttributeCheck")]

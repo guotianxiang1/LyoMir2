@@ -62,11 +62,15 @@ namespace GameSvr.Services
             void Add(int ident, uint handler, uint callee, string subsystem, string blocker)
                 => map[ident] = new Entry(ident, handler, callee, subsystem, blocker);
 
-            Add(4125, 0x006DAE25, 0x00746C34, "定长记录表广播",
-                "[[0x7D6014]] 表与其 0x2B 字节记录格式现已由 NativeShenYouAttributeConfig 建模" +
-                "(载入 Config 下 神佑属性.txt，记录 +0x00 int/+0x04 int/+0x08 int/+0x0C ShortString[0x1E])，" +
-                "行数即 Count，SM 4032 body 可推导；残留阻塞只剩第二个包 SM 0xFC6 的 " +
-                "Param = byte[[0x7D6938]] != 0 (0x746D28 push 1 vs 0x746D43 push 0)，该标志位无已知 owner");
+            // 【已废弃条目，2026-08-27】4125 已由 TPlayObject.NativeCmTailProtocol.cs 的
+            // ClientNativeShenYouAttributeQuery 完整实现，本表的 Drop 不可达。
+            // 最后一个阻塞点 byte[[0x7D6938]] 已定位：mir2Actor.ini [setup]/ShenYouAbilSwitch，
+            // 由 0x755350 结尾的 0x7555F1 ReadBool / 0x755604 写入（三条出口都会走），
+            // GM 臂 0x628AA3 -> 0x6BF658 负责改写并回写。保留条目仅为不破坏 Drop 的参数校验。
+            Add(4125, 0x006DAE25, 0x00746C34, "神佑属性表查询",
+                "【SUPERSEDED】已实现：Count<=0 (0x746C4A jle) 两包都不发；否则 SM 4032 " +
+                "(Recog=Count, Param=0, Tag=word[[0x7D5AEC]]=4, Series=0, body=Count*0x2B 按文件顺序) " +
+                "接 SM 4038 (Recog=0, Param=ShenYouAbilSwitch?1:0, Tag=Series=0, 空 body)");
             Add(4126, 0x006DAE74, 0x006BF75C, "洗灵石",
                 "洗灵字段 [+0x59C]/[+0x5A0]/[+0x5A4]/[+0x610] 未建模");
             Add(4127, 0x006DAE8D, 0x00747CF4, "洗灵石重算",

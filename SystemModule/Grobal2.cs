@@ -2209,7 +2209,7 @@ namespace SystemModule
         public const int SM_4206 = 4206;  // 0x106E -> [obj+0x250] @0x6F0496 (Recog 0)/@0x6F04F7 (Recog -1)
         //   -- fail-closed (BLOCKED, no builder; body/frame not evaluable at a mapped slot) --
         public const int SM_3412 = 3412;  // 0xD54  BLOCKED: mov dx @0x6EE22C -> call [obj+0xE0] @0x6EE234 (non-slot virtual)
-        public const int SM_4032 = 4032;  // 0xFC0  BLOCKED: [obj+0x254] @0x746D18, Buf/Len = [[0x7D6014]] 43-byte table record (undefined)
+        public const int SM_4032 = 4032;  // 0xFC0  [obj+0x254] @0x746D18, body = [[0x7D6014]] rows at 43 bytes each, file order
         public const int SM_4033 = 4033;  // 0xFC1  BLOCKED: [obj+0x254] @0x747362, 32-byte state-0x36 record from [self+0x5A8] (unmapped)
         public const int SM_4037 = 4037;  // 0xFC5  BLOCKED: [obj+0x254] @0x6B71ED, 24-byte body [self+0x60C]+[self+0x5A8] (unmapped)
 

@@ -2588,8 +2588,12 @@ namespace GameSvr
                 NativeSealItemConfig.ResolveDefaultPath(root, baseDir), out _);
             NativeClothUpgradeConfig.Shared.Reload(
                 NativeClothUpgradeConfig.ResolveDefaultPath(root, baseDir), out _);
+            // 0x755350 finishes by rereading mir2Actor.ini [setup]/ShenYouAbilSwitch
+            // (0x7555E6), so the share directory travels with the config path.
             NativeShenYouAttributeConfig.Shared.Reload(
-                NativeShenYouAttributeConfig.ResolveDefaultPath(root, baseDir), out _);
+                NativeShenYouAttributeConfig.ResolveDefaultPath(root, baseDir),
+                Path.GetFullPath(Path.Combine(root ?? string.Empty, baseDir ?? string.Empty)),
+                out _);
         }
 
         internal void LoadNativePowerupItems(string path)

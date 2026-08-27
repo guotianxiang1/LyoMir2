@@ -48,7 +48,7 @@ namespace GameSvr
             switch (processMessage.wIdent)
             {
                 case Grobal2.CM_4125:
-                    ClientNativeFixedRecordTableQuery();
+                    ClientNativeShenYouAttributeQuery();
                     return true;
                 case Grobal2.CM_4126:
                     ClientNativeSoulWashApply(processMessage.nParam3);
@@ -142,20 +142,39 @@ namespace GameSvr
         /// sends SM 0xFC6 through [vmt+0x250] with Param = byte[[0x7D6938]] != 0
         /// (0x746D28 push 1 vs 0x746D43 push 0).
         ///
-        /// The table at [[0x7D6014]] and its 0x2B-byte row format ARE modelled in this
-        /// port, by NativeShenYouAttributeConfig (loader for Config\神佑属性.txt, native
+        /// The table at [[0x7D6014]] and its 0x2B-byte row format are modelled by
+        /// NativeShenYouAttributeConfig (loader for Config\神佑属性.txt, native
         /// sub_755350; row = +0x00 int, +0x04 int, +0x08 int, +0x0C ShortString[0x1E]).
-        /// Its Count is the row count that decides "send nothing" vs "send two packets",
-        /// so the SM 4032 body is derivable. What is still missing is the SECOND packet:
-        /// SM 0xFC6's Param comes from byte[[0x7D6938]], which has no owner in this port.
-        /// The arm therefore stays withheld rather than emitting one of the two frames.
-        /// (Historical note: this used to say neither the row format nor the table exists
-        ///  here. That went stale when NativeShenYouAttributeConfig landed for the
-        ///  soul-wash base formula. Corrected 2026-08-27.)
+        /// Row order on the wire is file order: Add at 0x49EC5C appends to the tail chain
+        /// that First/Next at 0x49EE4C/0x49EE54 walk.
+        ///
+        /// byte[[0x7D6938]] is mir2Actor.ini [setup]/ShenYouAbilSwitch. 0x755350 reads it
+        /// through 0x790210 at 0x7555F1 and stores it at 0x755604, on every exit path;
+        /// the GM arm at 0x628AA3 -> 0x6BF658 rewrites and persists the same byte.
+        ///
+        /// Tag on the first frame is word[[0x7D5AEC]], the slot cap set to 4 at 0x7553F9.
+        /// The only line that can rewrite it (0x755476) converts the text before the
+        /// leading '=', which is always empty, so it always resolves back to 4.
         /// </summary>
-        private void ClientNativeFixedRecordTableQuery()
+        private void ClientNativeShenYouAttributeQuery()
         {
-            NativeCmTailFailClosed.Drop(Grobal2.CM_4125, m_sCharName);
+            var config = NativeShenYouAttributeConfig.Shared;
+            var count = config.Count;
+
+            // 0x746C4A `0F 8E 14 01 00 00 jle 0x746D64` — an empty table answers nothing
+            // at all, not even the switch frame.
+            if (count <= 0)
+                return;
+
+            // 0x746D18 `FF 93 54 02 00 00 call [vmt+0x254]`, Recog=count (0x746D0C),
+            // Param=0, Tag=word[[0x7D5AEC]], Series=0, body = count*0x2B raw bytes.
+            SendSocket(
+                Grobal2.MakeDefaultMsg(Grobal2.SM_4032, count, 0, config.SlotCap, 0),
+                config.BuildNativeRecordBuffer());
+
+            // 0x746D1E reads the switch byte; 0x746D28 pushes Param=1, 0x746D43 pushes 0.
+            var (header, body) = BuildSm4038(config.AbilSwitch ? (ushort)1 : (ushort)0);
+            SendSocket(header, body);
         }
 
         /// <summary>
