@@ -181,14 +181,17 @@ namespace GameSvr
         }
 
         /// <summary>
-        /// 0x6EF9C7..0x6EF9D2: cx=0x38FF SysMsg on Self via vmt+0xD4. Reproduced as a
-        /// direct RM_SYSMESSAGE with the split colour bytes, identical in shape to
-        /// TBaseObject.NativeSkill273.cs's vmt+0xD4 hint (the same 升龙破 family).
+        /// 0x6EF9C7..0x6EF9D2: cx=0x38FF SysMsg on Self via vmt+0xD4. Native stores
+        /// that word in the RM record and copies the GBK text including its trailing
+        /// NUL. Use the raw RM_SYSMESSAGE path so both values survive the queue hop.
         /// </summary>
         private void HeroNotifyRedSysMsg(string text)
         {
-            SendMsg(this, Grobal2.RM_SYSMESSAGE, 0,
-                HeroNotifyRedFColor, HeroNotifyRedBColor, 0, text);
+            var textBytes = HUtil32.GbkEncoding.GetBytes(text);
+            var body = new byte[textBytes.Length + 1];
+            textBytes.CopyTo(body, 0);
+            SendMsg(this, Grobal2.RM_SYSMESSAGE, 0x38FF,
+                0, 0, 0, string.Empty, body, body.Length);
         }
 
         /// <summary>

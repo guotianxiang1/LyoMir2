@@ -62,7 +62,9 @@ var player = new TPlayObject { m_HeroObject = new HeroObject() };
 Assert(player.Operate(new TProcessMessage { wIdent = Grobal2.CM_3503 }),
     "CM3503 dispatch");
 Equal(1, player.m_MsgList.Count, "unlearned queue count");
-Queued(player.m_MsgList[0], "没有学会技能升龙破", "unlearned queue");
+Queued(player.m_MsgList[0],
+    Convert.FromHexString("C3BBD3D0D1A7BBE1BCBCC4DCC9FDC1FAC6C600"),
+    "unlearned queue");
 Equal((byte)0, State(player.m_HeroObject), "dispatch unlearned +0x6D9");
 
 player.m_MsgList.Clear();
@@ -85,7 +87,9 @@ player.m_HeroObject.m_NativeColdTimes.Add(
 Assert(player.Operate(new TProcessMessage { wIdent = Grobal2.CM_3503 }),
     "cooling CM3503 dispatch");
 Equal(1, player.m_MsgList.Count, "cooling queue count");
-Queued(player.m_MsgList[0], "技能升龙破还在冷却中", "cooling queue");
+Queued(player.m_MsgList[0],
+    Convert.FromHexString("BCBCC4DCC9FDC1FAC6C6BBB9D4DAC0E4C8B4D6D000"),
+    "cooling queue");
 Equal((byte)0, State(player.m_HeroObject), "dispatch cooling +0x6D9");
 
 player.m_MsgList.Clear();
@@ -98,16 +102,23 @@ Equal((byte)0, State(player.m_HeroObject),
 
 Console.WriteLine(
     "NativeHeroDragonBreakNotifyCheck PASS CM3503 states=-1/-2/0 "
-    + "hero+0x6D9=0/0/1 queue=RM10100 colors=0x38FF ready=silent");
+    + "hero+0x6D9=0/0/1 queue=RM10100 param=0x38FF "
+    + "bodies=19/21-NUL ready=silent");
 
-static void Queued(SendMessage message, string text, string label)
+static void Queued(SendMessage message, byte[] expectedBody, string label)
 {
     Equal(Grobal2.RM_SYSMESSAGE, message.wIdent, label + " ident");
-    Equal(0, message.wParam, label + " wParam");
-    Equal(0xFF, message.nParam1, label + " foreground");
-    Equal(0x38, message.nParam2, label + " background");
+    Equal(0x38FF, message.wParam, label + " wParam");
+    Equal(0, message.nParam1, label + " nParam1");
+    Equal(0, message.nParam2, label + " nParam2");
     Equal(0, message.nParam3, label + " nParam3");
-    Equal(text, message.Buff, label + " text");
+    Assert(string.IsNullOrEmpty(message.Buff), label + " string body");
+    var body = message.Payload as byte[]
+        ?? throw new InvalidOperationException(label + " raw body missing");
+    Assert(expectedBody.SequenceEqual(body),
+        label + $" raw body: expected={Convert.ToHexString(expectedBody)} "
+        + $"actual={Convert.ToHexString(body)}");
+    Equal(expectedBody.Length, message.nBodyLen, label + " body length");
 }
 
 static void PrepareRuntimeFiles()
