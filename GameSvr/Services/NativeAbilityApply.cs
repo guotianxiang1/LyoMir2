@@ -34,14 +34,18 @@ namespace GameSvr
         public const int AddedBlockOffset = 0x1F8;
 
         /// <summary>
-        /// AddedBlockOffset - BaseBlockOffset. The highest base-block byte any arm
-        /// touches is 0x1AF (code 158), i.e. the table stops exactly where
-        /// the added block starts, which is what pins the block boundary.
+        /// 0x75F515 `mov edx,0x1B0` — the FillChar sub_75F4F8 opens the rebuild with.
+        /// The highest base-block byte any arm touches is 0x1AF (code 158), and
+        /// BaseBlockOffset + 0x1B0 lands exactly on AddedBlockOffset, so all three
+        /// agree on where the block ends.
         /// </summary>
         public const int BaseBlockSize = 0x1B0;
 
-        /// <summary>Highest added-block byte any arm touches, plus one.</summary>
-        public const int AddedBlockUsed = 0x35;
+        /// <summary>
+        /// 0x75F527 `mov edx,0x36` — the matching FillChar for the added block. The
+        /// highest byte any arm touches is 0x34.
+        /// </summary>
+        public const int AddedBlockSize = 0x36;
 
         /// <summary>0x78F03F `and edx,0x7F` — code 254 keys on the low 7 bits.</summary>
         public const int NestedCode = 254;

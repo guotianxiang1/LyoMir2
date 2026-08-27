@@ -506,6 +506,50 @@ namespace GameSvr
             NativeCmTailFailClosed.Drop(Grobal2.CM_4126, m_sCharName);
         }
 
+        /// <summary>
+        /// The 0x747CF4 + 0x746D6C pair native runs together on the refresh paths
+        /// (0x6B2076 then 0x6B2086, and 0x687F1F after its own recompute). The
+        /// recompute has to come first because it is what truncates the slot window,
+        /// and the block must be built from the truncated window, not the stored one.
+        ///
+        /// Native reaches these paths at login and after each commit. Running the pair
+        /// at the head of every RecalcAbilitys reaches the same state — both halves are
+        /// idempotent — without needing a hook on each individual mutation site.
+        /// </summary>
+        internal void RefreshSoulWashAbilityBlock()
+        {
+            TrySoulWashRecompute(out _, out _, out _);
+            RebuildSoulWashAbilityBlock();
+        }
+
+        /// <summary>
+        /// sub_746D6C — rebuild the 神佑 named-ability block from the slot window.
+        ///
+        /// Native calls this unconditionally at the two commits (0x747420, 0x74750E)
+        /// and behind `cmp byte[obj+0x5BC],0` / `jbe` on the two refresh paths
+        /// (0x687F14, 0x6B207B); the guard only skips work, it never clears a block,
+        /// because the builder's own FillChar is what clears it. Rebuilding whenever
+        /// the window changes reaches the same state.
+        /// </summary>
+        internal void RebuildSoulWashAbilityBlock()
+        {
+            var block = m_NativeShenYouBlock;
+            if (block == null || block.Length < NativeShenYouBlockSize)
+            {
+                m_NativeShenYouAbilityBlock = null;
+                return;
+            }
+
+            Span<ushort> slots = stackalloc ushort[SoulWashSlotCount];
+            for (var i = 0; i < SoulWashSlotCount; i++)
+            {
+                slots[i] = GetSoulWashSlot(block, i);
+            }
+
+            m_NativeShenYouAbilityBlock = NativeShenYouAbilityBlock.Build(
+                slots, NativeShenYouAttributeConfig.Shared);
+        }
+
         /// <summary>0x747B38 — sum table[+4] for each non-zero slot word in shenYou window.</summary>
         private bool TryComputeSoulWashBaseFromConfig(out int baseValue)
         {

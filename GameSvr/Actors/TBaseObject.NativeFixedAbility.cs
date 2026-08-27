@@ -7,6 +7,47 @@ namespace GameSvr
     {
         private const int NativeFixedAbilityMinimumSize = 0x22E;
 
+        /// <summary>
+        /// How much of the container-shaped record the overlay has to carry: every
+        /// offset the two readers below touch, the highest being the ball-quest job-3
+        /// dword at 0x240.
+        /// </summary>
+        private const int NativeFixedAbilityOverlaySize =
+            TPlayObject.NativeSubmitBallQuestJob3Offset + sizeof(int);
+
+        /// <summary>
+        /// The 10-entry 神佑 block sub_746D6C builds at container+0x375, or null when
+        /// the actor has no 神佑 slots. Kept on TBaseObject because native hangs it off
+        /// the equipment container, which both players and heroes own.
+        /// </summary>
+        internal byte[] m_NativeShenYouAbilityBlock;
+
+        private byte[] _nativeFixedAbilityOverlay;
+
+        /// <summary>
+        /// The record as the ability readers should see it: sub_75EE78 applies the
+        /// 神佑 block into the container's ability blocks (0x75EEB0 `call 0x75F548`)
+        /// before anything derives fields from them, so the bonuses have to be in
+        /// place here too. Without a block this is the plain record and costs nothing.
+        /// </summary>
+        private ReadOnlySpan<byte> GetEffectiveNativeFixedAbilityRecord()
+        {
+            ReadOnlySpan<byte> record = GetNativeFixedAbilityRecord();
+            var block = m_NativeShenYouAbilityBlock;
+            if (block == null
+                || record.Length < NativeFixedAbilityOverlaySize
+                || NativeShenYouAbilityBlock.IsEmpty(block))
+            {
+                return record;
+            }
+
+            _nativeFixedAbilityOverlay ??= new byte[NativeFixedAbilityOverlaySize];
+            record.Slice(0, NativeFixedAbilityOverlaySize).CopyTo(_nativeFixedAbilityOverlay);
+            NativeShenYouAbilityBlock.Apply(_nativeFixedAbilityOverlay, block,
+                NativeShenYouAttributeConfig.Shared.SlotCap);
+            return _nativeFixedAbilityOverlay;
+        }
+
         internal struct NativeCoreWorkingAbility
         {
             internal int MaxHP;
@@ -44,7 +85,7 @@ namespace GameSvr
                 m_NativeCoreWorkingAbility.CCHigh = Math.Max(mainAbility, 1);
             }
             NativeMagicLevelBonus = 0;
-            ReadOnlySpan<byte> record = GetNativeFixedAbilityRecord();
+            ReadOnlySpan<byte> record = GetEffectiveNativeFixedAbilityRecord();
             if (record.Length < NativeFixedAbilityMinimumSize)
                 return;
 

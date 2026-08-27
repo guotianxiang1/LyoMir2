@@ -30,7 +30,9 @@ namespace GameSvr
                     m_nNativeUnionFastness);
             }
 
-            ReadOnlySpan<byte> record = GetNativeFixedAbilityRecord();
+            // The two reductions live inside the container's base ability block, which
+            // the 神佑 codes write into, so this reads the overlaid record as well.
+            ReadOnlySpan<byte> record = GetEffectiveNativeFixedAbilityRecord();
             if (record.Length <= NativeUnionPercentReductionOffset)
                 return damage;
 

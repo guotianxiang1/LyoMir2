@@ -271,7 +271,7 @@ namespace GameSvr
         /// Delphi StrToIntDef (0x40CA18): leading blanks are skipped, '$' or '0x' marks
         /// hex, and anything the scan cannot consume whole yields the default.
         /// </summary>
-        private static int StrToIntDef(string text, int defaultValue)
+        internal static int StrToIntDef(string text, int defaultValue)
         {
             if (string.IsNullOrEmpty(text))
                 return defaultValue;
