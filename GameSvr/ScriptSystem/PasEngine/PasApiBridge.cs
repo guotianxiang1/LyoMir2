@@ -5840,11 +5840,17 @@ namespace GameSvr.PasEngine
                     return true;
 
                 case "setmontargetxy":
-                    // SetMonTargetXY(x: Integer, y: Integer) - set current NPC/monster target position
-                    if (args.Count >= 2)
+                    // SetMonTargetXY(x, y): the target-XY pathing slot is native
+                    // +0x454/+0x458, inside the TAnimal band [0x450, 0x4D8), so it
+                    // exists only on monsters. A pure TPsNpc has no such field and
+                    // does not path, so this is a no-op for a plain NPC.
+                    // NormNpc is a TCreature sibling of AnimalObject now, not a
+                    // subtype, so the guard upcasts through TBaseObject; a plain
+                    // TPsNpc host has no target-XY and this stays a no-op for it.
+                    if (args.Count >= 2 && (TBaseObject)CurrentNpc is AnimalObject monTarget)
                     {
-                        CurrentNpc.m_nTargetX = (short)args[0].AsInt();
-                        CurrentNpc.m_nTargetY = (short)args[1].AsInt();
+                        monTarget.m_nTargetX = (short)args[0].AsInt();
+                        monTarget.m_nTargetY = (short)args[1].AsInt();
                     }
                     return true;
 

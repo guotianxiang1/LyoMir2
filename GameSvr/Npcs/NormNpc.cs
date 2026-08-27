@@ -1,4 +1,4 @@
-using SystemModule;
+﻿using SystemModule;
 using System;
 using GameSvr.Plugins;
 
@@ -8,7 +8,17 @@ namespace GameSvr
     
     
     
-    public partial class NormNpc : AnimalObject
+    /// <summary>
+    /// Native <c>TPsNpc</c>, VMT 0x0063CFF4, instance size 1532; own band
+    /// [0x450, 0x5FC). A direct <c>TCreature</c> child (C# <c>TBaseObject</c>),
+    /// a sibling of TAnimal and THumanKind, not an animal: VMT +0x018 Operate is
+    /// TCreature's 0x766A7C (which does not handle RM_STRUCK), +0x030 the mover
+    /// is TCreature's xor-eax stub (NPCs are stationary), and +0x19C IsProperTarget
+    /// is TCreature's constant-false 0x76B348. The port had it under AnimalObject,
+    /// which gave NPCs TAnimal's struck re-broadcast and loose mover that native
+    /// TPsNpc never has. Uses no AnimalObject member.
+    /// </summary>
+    public partial class NormNpc : TBaseObject
     {
         private static readonly Lazy<NormNpc> GeneralVariableFormatter = new(() => new NormNpc());
         
