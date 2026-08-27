@@ -6024,8 +6024,25 @@ namespace GameSvr
             RefNameColor();
         }
 
+        /// <summary>
+        /// sub_71E9E8. The early-out is inside the function, not at its call sites:
+        /// <code>
+        ///   0071E9EB  cmp byte [eax+0x480], 0
+        ///   0071E9F2  je  0x71EA00
+        ///   0071E9F4  mov byte [eax+0x480], 0
+        ///   0071E9FB  call 0x767548            ; RefNameColor
+        /// </code>
+        /// Without it every struck on an actor that is not holy-seized — the normal
+        /// case — refreshed the name colour anyway, putting a broadcast on the wire
+        /// native never sends. BreakCrazyMode below already had the matching guard.
+        /// </summary>
         public void BreakHolySeizeMode()
         {
+            if (!m_boHolySeize)
+            {
+                return;
+            }
+
             m_boHolySeize = false;
             RefNameColor();
         }
