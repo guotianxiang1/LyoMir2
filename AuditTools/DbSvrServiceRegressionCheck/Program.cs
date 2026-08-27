@@ -31,6 +31,7 @@ Run("native UserSoc out-of-connect ident", TestNativeOutOfConnectIdent);
 Run("native 4016 select-entry rename continuation", TestNativeSelectEntryRenameContinuation);
 Run("native 4016 non-empty failure order", TestNativeRenameFailureTerminal);
 Run("native state-5 unknown opcode terminal", TestNativeUnknownOpcodeTerminal);
+Run("native state-6 pre-dispatch terminal", TestNativeState6PreDispatchTerminal);
 Run("native state-0 select-character terminal", TestNativeState0SelectCharacterTerminal);
 Run("native 4039 terminal frame", TestNative4039TerminalFrame);
 Run("native NewZone/AdminList select-entry gate", TestNativeNewZoneAdminListGate);
@@ -3727,6 +3728,92 @@ static void TestNativeUnknownOpcodeTerminal()
         "unknown-opcode response Series");
     Equal(0, message.Body.Length,
         "unknown-opcode response body");
+}
+
+static void TestNativeState6PreDispatchTerminal()
+{
+    var sent = new List<byte[]>();
+    Exception? queueError = null;
+    var gate = new TGateInfo
+    {
+        NativeOutboundQueue = new NativeGateOutboundQueue(
+            frame => sent.Add(frame),
+            error => queueError = error)
+    };
+    var user = new TUserInfo
+    {
+        WireMode = TGateWireMode.Native77,
+        NativeQueryId = 0x242B,
+        NativeSessionState = 6,
+        NativeGateOwner = gate,
+        NativePendingRenameName = "OldName",
+        NativeCurrentCharName = "CurrentName",
+        NativeRenameLatch = 0x5A
+    };
+    var service = (UserSocService)RuntimeHelpers.GetUninitializedObject(
+        typeof(UserSocService));
+    var method = GetProcessDecodedUserPacket();
+
+    var args = new object[]
+    {
+        gate,
+        user,
+        (ushort)Grobal2.CM_RENAMECHR4016,
+        1,
+        (ushort)0,
+        EDcode.EncodeString("NewName")
+    };
+    method.Invoke(service, args);
+    user = (TUserInfo)args[1];
+
+    Equal((byte)7, user.NativeSessionState,
+        "state-6 packet did not advance state 7");
+    Equal("OldName", user.NativePendingRenameName,
+        "state-6 packet entered rename pending-name handling");
+    Equal("CurrentName", user.NativeCurrentCharName,
+        "state-6 packet changed the selected character");
+    Equal((byte)0x5A, user.NativeRenameLatch,
+        "state-6 packet changed the rename latch");
+
+    // State 7 suppresses every later packet and therefore must not enqueue a
+    // duplicate terminal frame.
+    var secondArgs = new object[]
+    {
+        gate,
+        user,
+        (ushort)Grobal2.CM_RENAMECHR4016,
+        1,
+        (ushort)0,
+        EDcode.EncodeString("AnotherName")
+    };
+    method.Invoke(service, secondArgs);
+
+    gate.NativeOutboundQueue.Complete();
+    Check(gate.NativeOutboundQueue.WaitForCompletion(2000),
+        "state-6 outbound queue completion timeout");
+    Check(queueError == null,
+        "state-6 outbound queue raised an exception: "
+        + queueError?.Message);
+    Equal(1, sent.Count,
+        "state-6 packet must emit one terminal frame only");
+
+    Check(YbDbLegacy77Codec.TryDecode(sent[0], out var frame,
+        out var error), error);
+    Check(LegacyGateDataCodec.TryDecodeResponse(frame,
+        out var message, out error), error);
+    Equal(0x242B, frame.QueryId,
+        "state-6 response query id");
+    Equal((ushort)Grobal2.SM_OUTOFCONNECTION_4018,
+        message.Ident, "state-6 response ident");
+    Equal(0, message.Recog, "state-6 response Recog");
+    Equal((ushort)0, message.Param, "state-6 response Param");
+    Equal((ushort)0, message.Tag, "state-6 response Tag");
+    Equal((ushort)0, message.Series, "state-6 response Series");
+    Equal(0, message.Body.Length, "state-6 response body");
+    Check(message.Ident != NativeRenameCharProtocol.ResponseCommand
+          && message.Ident != MobileCmdMap.ToClient(
+              (ushort)Grobal2.SM_QUERYCHR),
+        "state-6 packet entered rename or character-list handling");
 }
 
 static void TestNativeState0SelectCharacterTerminal()

@@ -1053,6 +1053,20 @@ namespace DBSvr
                 && userInfo.NativeSessionState == 7)
                 return;
 
+            // Native 2.08 dispatches only states 0..5.  State 6 is a
+            // teardown-pending state and branches to the common unhandled
+            // terminal before any opcode table is consulted.
+            if (userInfo.WireMode == TGateWireMode.Native77
+                && userInfo.NativeSessionState == 6)
+            {
+                Log($"[UserSoc] native state 6 rejects opcode {ident} -> 4018");
+                SendEncodedPacket(userInfo,
+                    Grobal2.SM_OUTOFCONNECTION_4018,
+                    0, 0, 0, 0, null);
+                userInfo.NativeSessionState = 7;
+                return;
+            }
+
             // Native 2.08 never dispatches the mobile select-character
             // opcode from state 0.  The client 4017 is mapped to the managed
             // CM_SELCHR value before this method; reject that bounded case
