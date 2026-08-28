@@ -692,8 +692,12 @@ namespace GameSvr
 
             // ≥12 过远、3..11 跟随、&lt;3 但不在主人格：都走向主人。
             // 同格贴身已在上面 return。不发明 dist>20 传送（H-B6，sub_68BAD4 无此 cmp）。
-            SetTargetXY(master.m_nCurrX, master.m_nCurrY);
-            GotoTargetXY();
+            //
+            // 走 THeroAct 自己的 mover sub_68B838，不再走 TAnimal 的
+            // SetTargetXY/GotoTargetXY —— 后者是 sub_71DDD0，非虚且不在任何 VMT 里，
+            // 原生 THeroAct 根本够不到，调它本身就是分叉。原生把目标当参数传，
+            // 不存字段，所以人形类从来不需要 m_nTargetX/m_nTargetY。
+            NativeMoveTowardXY(master.m_nCurrX, master.m_nCurrY);
             m_btDirection = M2Share.GetNextDirection(
                 m_nCurrX, m_nCurrY, master.m_nCurrX, master.m_nCurrY);
         }
@@ -741,8 +745,8 @@ namespace GameSvr
             };
             if (dist > approach)
             {
-                SetTargetXY(m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
-                GotoTargetXY();
+                // 同 FollowMasterNative：走 THeroAct 自己的 mover sub_68B838。
+                NativeMoveTowardXY(m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
                 return;
             }
 
