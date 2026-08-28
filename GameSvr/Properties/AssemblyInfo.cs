@@ -70,3 +70,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("NativeYbDealSetInfoCheck")]
 [assembly: InternalsVisibleTo("NativeShenYouAttributeCheck")]
 [assembly: InternalsVisibleTo("NativeSoulWashRecomputeCheck")]
+[assembly: InternalsVisibleTo("NativeARoundListCheck")]
