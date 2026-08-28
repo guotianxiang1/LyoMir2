@@ -6,6 +6,56 @@ namespace GameSvr
 {
     public partial class TPlayObject
     {
+        /// <summary>
+        /// Sibling of <see cref="TraceNativeMovement"/> for gate bind/unbind and logon
+        /// transitions. The call sites (here at the run-close and run-exception ghost
+        /// paths, and in UsrEngn at gate-bind and user-logon) were written without this
+        /// definition, so the tree did not compile; it is supplied in the same
+        /// conditional-diagnostic shape as its sibling.
+        ///
+        /// Diagnostics only — <c>[Conditional]</c> means every call compiles away unless
+        /// GAMESVR_PACKET_TRACE is defined, so this adds no behaviour and nothing native
+        /// has to be matched against.
+        /// </summary>
+        [System.Diagnostics.Conditional("GAMESVR_PACKET_TRACE")]
+        internal void TraceGateLifecycle(string stage)
+        {
+#if GAMESVR_PACKET_TRACE
+            PacketTraceWriter.Write(
+                $"{DateTime.Now:O} [GateLifecycle] stage={stage} " +
+                $"chr={m_sCharName} gate={m_nGateIdx} socket={m_nSocket} " +
+                $"socketIdx={m_nGSocketIdx} ready={m_boReadyRun} " +
+                $"ghost={m_boGhost} offline={m_boOffLineFlag}");
+#endif
+        }
+
+        [System.Diagnostics.Conditional("GAMESVR_PACKET_TRACE")]
+        private void TraceNativeMovement(string stage, TProcessMessage message,
+            int delayTime, bool? handled = null)
+        {
+#if GAMESVR_PACKET_TRACE
+            if (message == null || message.wIdent is not (
+                    Grobal2.CM_TURN or Grobal2.CM_WALK or Grobal2.CM_SITDOWN or
+                    Grobal2.CM_RUN))
+            {
+                return;
+            }
+
+            var reply = handled.HasValue && m_DefMsg != null
+                ? $" reply={m_DefMsg.Ident}/{m_DefMsg.Recog}/" +
+                  $"{m_DefMsg.Param}/{m_DefMsg.Tag}/{m_DefMsg.Series}"
+                : string.Empty;
+            PacketTraceWriter.Write(
+                $"{DateTime.Now:O} [MoveOperate] stage={stage} " +
+                $"ident={message.wIdent} reqX={message.nParam1} " +
+                $"reqY={message.nParam2} reqDir={message.wParam} " +
+                $"reqFlag={message.nParam3} currX={m_nCurrX} " +
+                $"currY={m_nCurrY} currDir={m_btDirection} " +
+                $"delay={delayTime} handled={handled?.ToString() ?? "n/a"}" +
+                reply);
+#endif
+        }
+
         private void SendMoveActionFail()
         {
             SendDefMessage(Grobal2.SM_ACT_FAIL, 0, m_nCurrX, m_nCurrY, m_btDirection, "");
@@ -439,6 +489,7 @@ namespace GameSvr
                 }
                 if (m_boEmergencyClose || m_boKickFlag || m_boSoftClose)
                 {
+                    TraceGateLifecycle("run-close-before-ghost");
                     if (m_boSwitchData)
                     {
                         m_sMapName = m_sSwitchMapName;
@@ -468,6 +519,7 @@ namespace GameSvr
             {
                 if (ProcessMsg.wIdent == 0)
                 {
+                    TraceGateLifecycle("run-exception-ghost");
                     MakeGhost(); 
                 }
                 M2Share.ErrorMessage(format(sExceptionMsg2, m_sCharName, ProcessMsg.wIdent, ProcessMsg.BaseObject, ProcessMsg.wParam, ProcessMsg.nParam1, ProcessMsg.nParam2, ProcessMsg.nParam3, ProcessMsg.sMsg));
@@ -932,6 +984,7 @@ namespace GameSvr
             var dwDelayTime = 0;
             int nMsgCount;
             var result = true;
+            TraceNativeMovement("enter", ProcessMsg, dwDelayTime);
             TBaseObject BaseObject = null;
             if (ProcessMsg.BaseObject > 0)
             {
@@ -3200,6 +3253,7 @@ namespace GameSvr
                     }
                     break;
             }
+            TraceNativeMovement("exit", ProcessMsg, dwDelayTime, result);
             return result;
         }
 
