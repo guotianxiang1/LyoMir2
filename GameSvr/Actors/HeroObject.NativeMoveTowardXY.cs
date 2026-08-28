@@ -321,13 +321,36 @@ namespace GameSvr
         /// <summary>
         /// <c>sub_774348</c>, reached through VMT slot <c>+0x0C0</c> — the same
         /// pointer on TCreature, TAnimal, THumanKind, TPlayer, THeroAct and TPsNpc,
-        /// i.e. nobody overrides it. Read whole it is 22 bytes and returns
-        /// <c>!HasState(0x43) &amp;&amp; !HasState(0x0D)</c> via <c>sub_772960</c> —
-        /// a predicate, not a step.
+        /// i.e. nobody overrides it. Read whole it is 22 bytes and is a predicate,
+        /// not a step:
+        /// <code>
+        ///   77434E  mov dl,0x43 / call 0x772960 / test al,al / jne -> FALSE
+        ///   77435B  mov dl,0x0D / call 0x772960 / test al,al / je  -> TRUE
+        ///   774368  xor eax,eax / ret        ; either state set
+        ///   77436D  mov al,1    / ret
+        /// </code>
+        ///
+        /// <c>sub_772960</c> is the <b>112-bit presence bitset at obj+0x168</b>, not
+        /// the timed-ability list:
+        /// <code>
+        ///   772960  cmp dl,0x6F / ja 0x77296F      ; ids above 0x6F answer false
+        ///   772965  and edx,0x7F
+        ///   772968  bt dword [eax+0x168], edx
+        ///   77296F  setb al / ret
+        /// </code>
+        /// with <c>bts</c> at <c>0x77299B</c> and <c>btr</c> at <c>0x7729B9</c> as its
+        /// write sides. The port already models it exactly as
+        /// <see cref="TBaseObject.HasNativeActiveState"/>, whose
+        /// <c>NativeActiveStateMax = 111</c> is the same 0x6F ceiling.
+        ///
+        /// This method first used <c>HasTimedAbility</c>, which was simply the wrong
+        /// structure — that is the timed-ability linked list <c>sub_76B4D0</c> unlinks
+        /// from, a different mechanism with different contents. The gate was therefore
+        /// consulting state that has nothing to do with the two ids native checks.
         /// </summary>
         private bool NativeCanRunGate()
         {
-            return !HasTimedAbility(0x43) && !HasTimedAbility(0x0D);
+            return !HasNativeActiveState(0x43) && !HasNativeActiveState(0x0D);
         }
 
         /// <summary>
@@ -347,18 +370,32 @@ namespace GameSvr
 
             // 0x68BD31 `mov dl,0x17 / call 0x76B4D0` — sub_76B4D0 is the thin shell
             // over sub_7731C0 that unlinks a timed-state node, i.e. the port's
-            // RemoveNativeMovementTimedState. The mover it then calls clears 0x17
-            // again on its own success arm, so native really does clear twice.
+            // RemoveNativeMovementTimedState. The run mover clears 0x17 again on its
+            // own success arm (0x767638), so native really does clear twice.
             RemoveNativeMovementTimedState(0x17);
 
+            // 0x767597 `mov byte [Self+0x154], al` — the facing is written BEFORE any
+            // walkability test, so a refused run still turns the hero.
+            m_btDirection = (byte)dir;
+
+            // 0x7675A4..0x7675D3: the MID cell is probed first, and a failure aborts
+            // the whole run. Skipping this was a real defect — without it the hero
+            // could cross a blocked cell in a two-cell run. The player's RunTo already
+            // models the same probe as Envirnoment.NativeCanRunOccupancy, and both
+            // native probe sites read obj+0x3FE for boIgnoreOccupancy
+            // (0x7675BA and 0x767601).
+            var midX = m_nCurrX + NativeDirDX[dir];
+            var midY = m_nCurrY + NativeDirDY[dir];
+            if (!m_PEnvir.NativeCanRunOccupancy(midX, midY, m_boThroughOccupancyCache))
+            {
+                return false;
+            }
+
+            // 0x7675E0: only now is the two-cell destination formed.
             var targetX = m_nCurrX + NativeDirDX[dir] * 2;
             var targetY = m_nCurrY + NativeDirDY[dir] * 2;
 
-            // 0x68BD3E -> sub_76756C, the two-cell run mover. Its move primitive is
-            // MoveToMovingObjectForRun, and the boIgnoreOccupancy argument comes from
-            // the through-occupancy cache at obj+0x3FE (read at 0x767601
-            // `mov al,[ebx+0x3fe] / push eax`), exactly as TPlayObject.CommitRunMove
-            // already documents for the player side.
+            // 0x76761C -> sub_7797CC, the move primitive, = MoveToMovingObjectForRun.
             return m_PEnvir.MoveToMovingObjectForRun(
                 m_nCurrX, m_nCurrY, this, targetX, targetY,
                 m_boThroughOccupancyCache) > 0;
