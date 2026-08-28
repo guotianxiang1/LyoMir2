@@ -396,9 +396,47 @@ namespace GameSvr
             var targetY = m_nCurrY + NativeDirDY[dir] * 2;
 
             // 0x76761C -> sub_7797CC, the move primitive, = MoveToMovingObjectForRun.
-            return m_PEnvir.MoveToMovingObjectForRun(
-                m_nCurrX, m_nCurrY, this, targetX, targetY,
-                m_boThroughOccupancyCache) > 0;
+            if (m_PEnvir.MoveToMovingObjectForRun(
+                    m_nCurrX, m_nCurrY, this, targetX, targetY,
+                    m_boThroughOccupancyCache) <= 0)
+            {
+                return false;
+            }
+
+            // 0x68BD57 `sub_76BECC(edx=0x3C, ecx=0xA, push 0)` then
+            // 0x68BD63 `sub_76BEC8(edx=1)`, both on the run's success arm only.
+            // These are NOT diagnostics: sub_76BECC decrements the two recovery
+            // budgets at obj+0x10 / obj+0x14 and floors the second at zero
+            // (0x76BEE1 `sub [eax+0x10],edx` / `sub [eax+0x14],ecx`, then
+            // 0x76BEE7 `cmp [eax+0x14],0 / jge` / `mov [eax+0x14],0`), and
+            // sub_76BEC8 is the single instruction `sub byte [eax+0x20], dl`.
+            // HeroObject.NativeCrossMoon.CompleteNativeWarHeroAction already models
+            // this exact pair for sub_76BECC(30,100,0) + sub_76BEC8(2), so this
+            // follows that precedent rather than introducing a second shape.
+            ApplyNativeMoveRecoveryCost(0x3C, 0x0A);
+            DecreaseHealthSpellRecoveryStep(1);
+            return true;
+        }
+
+        /// <summary>
+        /// <c>sub_76BECC(Self, edx=health, ecx=spell, [ebp+8]=reset)</c>, <c>ret 4</c>.
+        /// The movers always pass <c>0</c> for the reset flag, so only the decrement
+        /// arm is reachable from here:
+        /// <code>
+        ///   76BECF  cmp byte [ebp+8],0 / je 0x76BEE1      ; reset flag
+        ///   76BED5  [eax+0x10]=0 ; [eax+0x14]=0           ; (reset arm, unused here)
+        ///   76BEE1  sub [eax+0x10], edx                   ; health budget
+        ///   76BEE4  sub [eax+0x14], ecx                   ; spell budget
+        ///   76BEE7  cmp [eax+0x14],0 / jge / mov [eax+0x14],0   ; spell floors at 0
+        /// </code>
+        /// Note the asymmetry: only the spell budget is clamped; the health budget is
+        /// allowed to go negative, which
+        /// <c>NativeCrossMoon.CompleteNativeWarHeroAction</c> already records.
+        /// </summary>
+        private void ApplyNativeMoveRecoveryCost(int health, int spell)
+        {
+            m_nHealthTick = unchecked(m_nHealthTick - health);
+            m_nSpellTick = HUtil32._MAX(0, unchecked(m_nSpellTick - spell));
         }
 
         /// <summary>
@@ -421,7 +459,16 @@ namespace GameSvr
 
             // 0x68BD7C, the same pre-clear the run path does.
             RemoveNativeMovementTimedState(0x17);
-            return WalkTo((byte)dir, false);
+            if (!WalkTo((byte)dir, false))
+            {
+                return false;
+            }
+
+            // 0x68BDA1 `sub_76BECC(edx=0xA, ecx=0, push 0)` on the success arm only.
+            // The walk costs health budget alone — no spell component and no
+            // sub_76BEC8 call, unlike the run path.
+            ApplyNativeMoveRecoveryCost(0x0A, 0);
+            return true;
         }
     }
 }
