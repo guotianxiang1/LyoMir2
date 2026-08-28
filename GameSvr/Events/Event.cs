@@ -2,7 +2,35 @@ using SystemModule;
 
 namespace GameSvr
 {
-    public class Event : IDisposable
+    /// <summary>
+    /// Native <c>TMapEvent</c> (instance size 72, VMT descends from
+    /// <c>TBaseObj</c>) — map events are lightweight actors, siblings of
+    /// <c>TCreature</c> rather than a separate hierarchy:
+    /// <code>
+    ///   TBaseObj  (12)
+    ///     +-- TCreature   -> C# TBaseObject
+    ///     +-- TMapEvent   -> C# Event      (this class)
+    /// </code>
+    /// The port renamed the class semantically, which is why the skeleton pass
+    /// mistook it for a missing class and emitted an orphan <c>TMapEvent</c> shell
+    /// beside it (removed in <c>13d16c44</c>). All 11 native TMapEvent children are
+    /// already declared here as <c>: Event</c>, and this file's own
+    /// <c>sub_7199B8</c> / <c>obj+0x08</c> / <c>obj+0x20</c> citations were written
+    /// against TMapEvent, so the identification is threefold.
+    ///
+    /// Only the parent link was missing. Restoring it is behaviour-neutral: the
+    /// shell declares no members, nothing in the tree does an <c>is</c>/<c>as</c>
+    /// test against <c>TBaseObj</c>, and <c>Dispose</c> is non-virtual, so every
+    /// member still resolves exactly where it did.
+    ///
+    /// <c>StoneMineEvent</c> is deliberately NOT fixed by this: native
+    /// <c>TStoneMineEvent</c> is 36 bytes with parent <c>TBaseObj</c>, i.e. a
+    /// sibling of this class, not a child. A Delphi child can never be smaller than
+    /// its parent, so <c>StoneMineEvent : Event</c> is provably wrong — but unlike
+    /// this edit that re-parent drops inherited fields and the ctor chain, so it
+    /// needs the native field evidence first (see ACTIVE_STATE.md).
+    /// </summary>
+    public class Event : TBaseObj, IDisposable
     {
         
         
