@@ -285,43 +285,24 @@ namespace GameSvr
             m_nTargetY = -1;
         }
 
+        /// <summary>
+        /// Native <c>sub_71DA70</c> — pick the nearest proper target among the visible
+        /// actors. The body now lives on
+        /// <see cref="TBaseObject.ScanVisibleActorsForTarget"/> because
+        /// <c>RobotPlayObject</c> needs the same scan and will stop being an
+        /// AnimalObject descendant once <c>THumanKind</c> is re-parented; sharing one
+        /// implementation avoids a second source of truth for a native-cited
+        /// algorithm. Every citation that documented this scan moved with it, and the
+        /// dispatch that makes it per-class — <see cref="IsProperTarget"/> — is still
+        /// virtual, so this override selects targets by TAnimal's rule as before.
+        ///
+        /// Note this method never touched <c>m_nTargetX</c>/<c>m_nTargetY</c>: those
+        /// belong to the separate <see cref="SetTargetXY"/>, which is why the scan
+        /// could move down at all.
+        /// </summary>
         protected virtual bool SearchTarget()
         {
-            TBaseObject BaseObject = null;
-            TBaseObject BaseObject18 = null;
-            int nC;
-            var n10 = 999;
-            for (var i = 0; i < this.m_VisibleActors.Count; i++)
-            {
-                BaseObject = this.m_VisibleActors[i].BaseObject;
-                // MONAI-13 — sub_71DA70 扫描臂用 sub_772DA8 = `mov al,[eax+0x74]; ret`
-                // （TBaseObject.cs 已钉 +0x74 = m_boDeath），不是 +0x73 ghost。
-                if (!BaseObject.m_boDeath)
-                {
-                    if (this.IsProperTarget(BaseObject) && (!BaseObject.m_boHideMode || this.m_boCoolEye))
-                    {
-                        // 战神 sub_71DA70 @0x0071DA70: view-range box gate uses strictly-greater-than
-                        // comparison (actors AT viewRange are included, beyond it are excluded).
-                        // SPAWN-25: C# was missing this native range check entirely.
-                        if (Math.Abs(this.m_nCurrX - BaseObject.m_nCurrX) > this.m_nViewRange
-                            || Math.Abs(this.m_nCurrY - BaseObject.m_nCurrY) > this.m_nViewRange)
-                            continue;
-                        nC = Math.Abs(this.m_nCurrX - BaseObject.m_nCurrX) + Math.Abs(this.m_nCurrY - BaseObject.m_nCurrY);
-                        if (nC < n10)
-                        {
-                            n10 = nC;
-                            BaseObject18 = BaseObject;
-                        }
-                    }
-                }
-            }
-            if (BaseObject18 != null)
-            {
-                this.SetTargetCreat(BaseObject18);
-                // 0071DC04  C6 45 FB 01  mov byte [ebp-5],1  then 0071DCA8  8A 45 FB  mov al,[ebp-5]
-                return true;
-            }
-            return false;
+            return ScanVisibleActorsForTarget();
         }
 
         protected void sub_4C959C()

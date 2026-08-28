@@ -342,9 +342,32 @@ var search = animal.IndexOf("protected virtual bool SearchTarget()", StringCompa
 Check(search > 0, "AnimalObject.SearchTarget found");
 if (search > 0)
 {
-    var s = animal.Substring(search, Math.Min(1600, animal.Length - search));
-    var end = s.IndexOf("protected void sub_4C959C", StringComparison.Ordinal);
-    var scan = end > 0 ? s.Substring(0, end) : s;
+    // The scan body moved to TBaseObject.ScanVisibleActorsForTarget so that
+    // RobotPlayObject can share it once THumanKind stops deriving from AnimalObject
+    // (cutting that edge removes 10 of the 11 invented-layer violations, and copying
+    // the scan instead would create a second source of truth for a native-cited
+    // algorithm). AnimalObject.SearchTarget is now a one-line delegate, so the
+    // invariants below are asserted against wherever the body actually lives — the
+    // point was never that the text sits in this file, it was that the min-distance
+    // visible-list scan is the ONLY selection path and no sticky pre-pass exists.
+    var animalSearch = animal.Substring(search,
+        Math.Min(1600, animal.Length - search));
+    var animalEnd = animalSearch.IndexOf("protected void sub_4C959C",
+        StringComparison.Ordinal);
+    animalSearch = animalEnd > 0 ? animalSearch.Substring(0, animalEnd) : animalSearch;
+    Check(animalSearch.Contains("ScanVisibleActorsForTarget", StringComparison.Ordinal),
+        "AnimalObject.SearchTarget delegates to the shared scan rather than carrying "
+        + "its own copy — one implementation, so the native sub_71DA70 semantics cannot "
+        + "drift between AnimalObject and RobotPlayObject");
+
+    var scanSource = StripComments(
+        Read("GameSvr", "Actors", "TBaseObject.NativeVisibleTargetScan.cs"));
+    var scanIdx = scanSource.IndexOf("ScanVisibleActorsForTarget()",
+        StringComparison.Ordinal);
+    Check(scanIdx > 0, "TBaseObject.ScanVisibleActorsForTarget found");
+    var scan = scanIdx > 0
+        ? scanSource.Substring(scanIdx)
+        : scanSource;
     // The scan must keep the min-distance visible-list loop as its ONLY selection path.
     Check(scan.Contains("m_VisibleActors", StringComparison.Ordinal)
           && scan.Contains("999", StringComparison.Ordinal),
