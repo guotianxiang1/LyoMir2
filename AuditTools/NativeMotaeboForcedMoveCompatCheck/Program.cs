@@ -7,7 +7,9 @@ InitializeRuntime();
 
 CheckConstantAndTimingBoundaries();
 CheckState45ProducerGate();
-CheckRobotUsesNativeProducerGate();
+// CheckRobotUsesNativeProducerGate() removed with RobotPlayObject: it exercised
+// RobotPlayObject.UseSpell, a robot-only method with no counterpart anywhere in
+// GameSvr, so the check had no native subject once the robot was deleted.
 CheckEligibilityMatrix();
 CheckProductionStartAndMpTransaction();
 CheckEffectiveLevelControlsSequence();
@@ -66,41 +68,6 @@ static void CheckState45ProducerGate()
         "state45 no sequence");
 }
 
-static void CheckRobotUsesNativeProducerGate()
-{
-    var map = NewMap();
-    var robot = Place(map, new RobotPlayObject
-    {
-        m_boOffLineFlag = true,
-        m_sCharName = "robot-producer",
-        m_btRaceServer = Grobal2.RC_PLAYOBJECT,
-        m_btAttatckMode = M2Share.HAM_ALL,
-        m_boCanSpell = true
-    }, 5, 5);
-    var target = Place(map, NewActor("robot-target"), 6, 5);
-    robot.m_Abil.Level = 20;
-    target.m_Abil.Level = 1;
-    robot.m_WAbil.MP = 20;
-    robot.m_WAbil.MaxMP = 20;
-    var magic = Magic(0, 10);
-    magic.MagicInfo.sMagicName = "Motaebo";
-    int now = HUtil32.GetTickCount();
-    int oldTick = unchecked(now - 4000);
-    robot.m_dwDoMotaeboTick = oldTick;
-    robot.m_dwActionTick = unchecked(now - 10000);
-
-    var useSpell = typeof(RobotPlayObject).GetMethod("UseSpell",
-        BindingFlags.Instance | BindingFlags.NonPublic)
-        ?? throw new MissingMethodException("RobotPlayObject.UseSpell");
-    Assert((bool)useSpell.Invoke(robot,
-        new object[] { magic, (short)6, (short)5, target }),
-        "robot skill27 dispatch");
-    Equal(oldTick, robot.m_dwDoMotaeboTick,
-        "robot obeys 4500 cooldown");
-    Equal((ushort)20, robot.m_WAbil.MP, "robot cooldown preserves MP");
-    Equal(0, robot.m_nNativeForcedMoveRemaining,
-        "robot cooldown no sequence");
-}
 
 static void CheckEligibilityMatrix()
 {

@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using GameSvr.Plugins;
 using SystemModule;
 
@@ -912,14 +912,7 @@ namespace GameSvr
                             tExp = m_ExpHitter.CalcGetExp(m_Abil.Level, m_dwFightExp);
                             if (!M2Share.g_Config.boVentureServer)
                             {
-                                if (m_ExpHitter.m_boAI)
-                                {
-                                    (m_ExpHitter as RobotPlayObject).GainExp(tExp);
-                                }
-                                else
-                                {
-                                    (m_ExpHitter as TPlayObject).GainExp(tExp);
-                                }
+                                (m_ExpHitter as TPlayObject).GainExp(tExp);
                             }
                             
                             if (m_PEnvir.IsCheapStuff())
@@ -972,14 +965,7 @@ namespace GameSvr
                                 tExp = m_ExpHitter.m_Master.CalcGetExp(m_Abil.Level, m_dwFightExp);
                                 if (!M2Share.g_Config.boVentureServer)
                                 {
-                                    if (m_ExpHitter.m_Master.m_boAI)
-                                    {
-                                        (m_ExpHitter.m_Master as RobotPlayObject).GainExp(tExp);
-                                    }
-                                    else
-                                    {
-                                        (m_ExpHitter.m_Master as TPlayObject).GainExp(tExp);
-                                    }
+                                    (m_ExpHitter.m_Master as TPlayObject).GainExp(tExp);
                                 }
                             }
                         }
@@ -995,14 +981,7 @@ namespace GameSvr
                             tExp = m_LastHiter.CalcGetExp(m_Abil.Level, m_dwFightExp);
                             if (!M2Share.g_Config.boVentureServer)
                             {
-                                if (m_LastHiter.m_boAI)
-                                {
-                                    (m_LastHiter as RobotPlayObject).GainExp(tExp);
-                                }
-                                else
-                                {
-                                    (m_LastHiter as TPlayObject).GainExp(tExp);
-                                }
+                                (m_LastHiter as TPlayObject).GainExp(tExp);
                             }
                         }
                     }
@@ -2048,14 +2027,7 @@ namespace GameSvr
                                     {
                                         if (!M2Share.GetNoHptoexpMonList(m_sCharName))
                                         {
-                                            if (TargetBaseObject.m_boAI)
-                                            {
-                                                (TargetBaseObject as RobotPlayObject).GainExp(GetMagStruckDamage(TargetBaseObject, nDamage) * M2Share.g_Config.MonHptoExpmax);
-                                            }
-                                            else
-                                            {
-                                                (TargetBaseObject as TPlayObject).GainExp(GetMagStruckDamage(TargetBaseObject, nDamage) * M2Share.g_Config.MonHptoExpmax);
-                                            }
+                                            (TargetBaseObject as TPlayObject).GainExp(GetMagStruckDamage(TargetBaseObject, nDamage) * M2Share.g_Config.MonHptoExpmax);
                                         }
                                     }
                                 }
@@ -2067,14 +2039,7 @@ namespace GameSvr
                                         {
                                             if (!M2Share.GetNoHptoexpMonList(m_sCharName))
                                             {
-                                                if (TargetBaseObject.m_Master.m_boAI)
-                                                {
-                                                    (TargetBaseObject.m_Master as RobotPlayObject).GainExp(GetMagStruckDamage(TargetBaseObject, nDamage) * M2Share.g_Config.MonHptoExpmax);
-                                                }
-                                                else
-                                                {
-                                                    (TargetBaseObject.m_Master as TPlayObject).GainExp(GetMagStruckDamage(TargetBaseObject, nDamage) * M2Share.g_Config.MonHptoExpmax);
-                                                }
+                                                (TargetBaseObject.m_Master as TPlayObject).GainExp(GetMagStruckDamage(TargetBaseObject, nDamage) * M2Share.g_Config.MonHptoExpmax);
                                             }
                                         }
                                     }

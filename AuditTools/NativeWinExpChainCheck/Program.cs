@@ -67,7 +67,9 @@ namespace NativeWinExpChainCheck
                 CheckKillPathDisablesHeroBonus();
                 CheckNativeSwitchExperienceFields();
                 CheckNonNativeScalersAreGone();
-                CheckRobotDuplicateIsGone();
+                // CheckRobotDuplicateIsGone() removed with RobotPlayObject: native has no
+                // robot class (0 of 636 game classes), so there is no second WinExp copy
+                // left to guard against. The single native WinExp is sub_6F7A18.
                 CheckPasBindingIsRaw();
             }
             catch (Exception ex)
@@ -584,20 +586,6 @@ namespace NativeWinExpChainCheck
             }
         }
 
-        private static void CheckRobotDuplicateIsGone()
-        {
-            // Native has ONE WinExp shared by every THumanKind; a second C# copy is
-            // how the two drifted apart before.
-            var robot = ReadCode("GameSvr", "RobotPlay", "RobotPlayObject.cs");
-            True(!robot.Contains("void WinExp("),
-                "RobotPlayObject must not redeclare WinExp (native shares sub_6F7A18)");
-            foreach (var forbidden in new[]
-                     { "nLimitExpLevel", "dwKillMonExpMultiple", "nEXPRATE" })
-            {
-                True(!robot.Contains(forbidden),
-                    $"the robot copy must not reintroduce `{forbidden}`");
-            }
-        }
 
         private static void CheckPasBindingIsRaw()
         {

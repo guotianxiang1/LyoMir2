@@ -1070,24 +1070,17 @@ namespace GameSvr
                     {
                         if (m_btRaceServer == Grobal2.RC_PLAYOBJECT)
                         {
-                            if (this.m_boAI)
+                            // The RobotPlayObject arm that used to sit here is gone with
+                            // the robot itself: native has no such class (zero of the 636
+                            // recovered game classes), m_boAI had exactly one writer in
+                            // the whole tree (RobotPlayObject.cs:123), and no runtime
+                            // config to drive it exists on disk — so this branch was
+                            // permanently unreachable inherited legacy-Mir2 code.
+                            if ((this as TPlayObject).m_WAbil.Level <= M2Share.g_Config.MonHptoExpLevel)
                             {
-                                if ((this as RobotPlayObject).m_WAbil.Level <= M2Share.g_Config.MonHptoExpLevel)
+                                if (!M2Share.GetNoHptoexpMonList(AttackTarget.m_sCharName))
                                 {
-                                    if (!M2Share.GetNoHptoexpMonList(AttackTarget.m_sCharName))
-                                    {
-                                        (this as RobotPlayObject).GainExp(nPower * M2Share.g_Config.MonHptoExpmax);
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                if ((this as TPlayObject).m_WAbil.Level <= M2Share.g_Config.MonHptoExpLevel)
-                                {
-                                    if (!M2Share.GetNoHptoexpMonList(AttackTarget.m_sCharName))
-                                    {
-                                        (this as TPlayObject).GainExp(nPower * M2Share.g_Config.MonHptoExpmax);
-                                    }
+                                    (this as TPlayObject).GainExp(nPower * M2Share.g_Config.MonHptoExpmax);
                                 }
                             }
                         }
@@ -1095,17 +1088,6 @@ namespace GameSvr
                         {
                             if (m_Master != null)
                             {
-                                if (m_Master.m_boAI)
-                                {
-                                    if ((m_Master as RobotPlayObject).m_WAbil.Level <= M2Share.g_Config.MonHptoExpLevel)
-                                    {
-                                        if (!M2Share.GetNoHptoexpMonList(AttackTarget.m_sCharName))
-                                        {
-                                            (m_Master as RobotPlayObject).GainExp(nPower * M2Share.g_Config.MonHptoExpmax);
-                                        }
-                                    }
-                                }
-                                else
                                 {
                                     if ((m_Master as TPlayObject).m_WAbil.Level <= M2Share.g_Config.MonHptoExpLevel)
                                     {

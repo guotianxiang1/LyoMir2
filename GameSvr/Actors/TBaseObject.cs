@@ -722,7 +722,11 @@ namespace GameSvr
         
         
         
-        public bool m_boAI;
+        // m_boAI is gone with RobotPlayObject. Native has no robot/fake-player class
+        // at all — zero of the 636 recovered game classes match, the only near-name
+        // being the GUI form TSimulateSendForm (parent TForm) — and the field had
+        // exactly ONE writer in the whole tree, RobotPlayObject.cs:123, so every
+        // `if (m_boAI)` arm was permanently unreachable inherited legacy-Mir2 code.
 
         public TBaseObject()
         {

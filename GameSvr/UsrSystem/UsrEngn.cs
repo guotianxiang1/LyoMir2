@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using GameSvr.Services;
 using SystemModule;
 using ThreadState = System.Threading.ThreadState;
@@ -153,7 +153,6 @@ namespace GameSvr
         private readonly object m_HeroSync;
         private readonly Dictionary<string, ServerGruopInfo> m_OtherUserNameList;
         private readonly IList<TPlayObject> m_PlayObjectList;
-        private readonly IList<TPlayObject> m_AiPlayObjectList;
         private readonly object _nativeSmsUserListSync;
         private readonly IList<string> _nativeSmsUserList;
         public IList<TMonInfo> MonsterList =>
@@ -186,10 +185,7 @@ namespace GameSvr
         private int _nativeStdItemDefinitionsPublished;
         public IList<GoodItem> StdItemList =>
             Volatile.Read(ref _stdItemDefinitions).Definitions;
-        public long m_dwAILogonTick;//处理假人间隔
-        public IList<TAILogon> m_UserLogonList;//假人列表
         private readonly Thread _userEngineThread;
-        private readonly Thread _processAiThread;
         private readonly Queue<NativeMagicTowerDeferredSpawn>
             _nativeMagicTowerDeferredSpawns;
         private readonly IList<TBaseObject>
@@ -247,7 +243,6 @@ namespace GameSvr
             m_OtherUserNameList = new Dictionary<string, ServerGruopInfo>(StringComparer.OrdinalIgnoreCase);
             _nativeSmsUserListSync = new object();
             _nativeSmsUserList = new List<string>();
-            m_UserLogonList = new List<TAILogon>();
             _nativeMagicTowerDeferredSpawns =
                 new Queue<NativeMagicTowerDeferredSpawn>();
             _nativeMagicTowerRuntimeMonsters = new List<TBaseObject>();
@@ -261,8 +256,6 @@ namespace GameSvr
                 HUtil32.GetTickCount,
                 () => DateTime.Now);
             _userEngineThread = new Thread(PrcocessData) { IsBackground = true };
-            _processAiThread = new Thread(ProcessAiPlayObjectData) { IsBackground = true };
-            m_AiPlayObjectList = new List<TPlayObject>();
         }
 
         public int MonsterCount => nMonsterCount;
@@ -364,7 +357,6 @@ namespace GameSvr
         {
             _stopRequested = true;
             JoinThread(_userEngineThread);
-            JoinThread(_processAiThread);
             FlushNativeMerchantGoods();
             _nativeMagicTowerDeferredSpawns.Clear();
             ClearNativeMagicTowerRuntimeMonsters();
@@ -564,12 +556,12 @@ namespace GameSvr
 
         private int GetOnlineHumCount()
         {
-            return m_PlayObjectList.Count + m_AiPlayObjectList.Count;
+            return m_PlayObjectList.Count;
         }
 
         private int GetUserCount()
         {
-            return m_PlayObjectList.Count + m_AiPlayObjectList.Count;
+            return m_PlayObjectList.Count;
         }
 
         private bool ProcessHumans_IsLogined(string sChrName)
@@ -929,14 +921,7 @@ namespace GameSvr
                                 PlayObject = ProcessHumans_MakeNewHuman(UserOpenInfo);
                                 if (PlayObject != null)
                                 {
-                                    if (PlayObject.m_boAI)
-                                    {
-                                        m_AiPlayObjectList.Add(PlayObject);
-                                    }
-                                    else
-                                    {
                                         m_PlayObjectList.Add(PlayObject);
-                                    }
                                     m_NewHumanList.Add(PlayObject);
                                     SendServerGroupMsg(Grobal2.ISM_USERLOGON, M2Share.nServerIndex, PlayObject.m_sCharName);
                                 }
@@ -986,6 +971,9 @@ namespace GameSvr
                         var gateBound = M2Share.GateManager.SetGateUserList(
                                 PlayObject.m_nGateIdx, PlayObject.m_nSocket,
                                 PlayObject);
+                        PlayObject.TraceGateLifecycle(gateBound
+                            ? "gate-bind-success"
+                            : "gate-bind-failure");
                         if (!gateBound)
                         {
                             PlayObject.m_boEmergencyClose = true;
@@ -1007,21 +995,6 @@ namespace GameSvr
                 {
                     M2Share.ErrorMessage(sExceptionMsg1);
                     M2Share.ErrorMessage(e.Message);
-                }
-            }
-
-            
-            if (m_UserLogonList.Count > 0)
-            {
-                if (HUtil32.GetTickCount() - m_dwAILogonTick > 1000)
-                {
-                    m_dwAILogonTick = HUtil32.GetTickCount();
-                    if (m_UserLogonList.Count > 0)
-                    {
-                        var AI = m_UserLogonList[0];
-                        RegenAIObject(AI);
-                        m_UserLogonList.RemoveAt(0);
-                    }
                 }
             }
 
@@ -1462,97 +1435,6 @@ namespace GameSvr
             }
         }
 
-        private void ProcessAiPlayObjectData()
-        {
-            const string sExceptionMsg8 = "[Exception] TUserEngine::ProcessHumans";
-            try
-            {
-                while (M2Share.boStartReady && !_stopRequested)
-                {
-                    HUtil32.EnterCriticalSection(M2Share.ProcessHumanCriticalSection);
-                    try
-                    {
-                        var dwCurTick = HUtil32.GetTickCount();
-                        var nIdx = m_nProcHumIDx;
-                        var boCheckTimeLimit = false;
-                        var dwCheckTime = HUtil32.GetTickCount();
-                        while (true)
-                        {
-                            if (m_AiPlayObjectList.Count <= nIdx) break;
-                            var PlayObject = m_AiPlayObjectList[nIdx];
-                            if (dwCurTick - PlayObject.m_dwRunTick > PlayObject.m_nRunTime)
-                            {
-                                PlayObject.m_dwRunTick = dwCurTick;
-                                if (!PlayObject.m_boGhost)
-                                {
-                                    if (!PlayObject.m_boLoginNoticeOK)
-                                    {
-                                        PlayObject.RunNotice();
-                                    }
-                                    else
-                                    {
-                                        if (!PlayObject.m_boReadyRun)
-                                        {
-                                            PlayObject.m_boReadyRun = true;
-                                            PlayObject.UserLogon();
-#if GAMESVR_PACKET_TRACE
-                                            PacketTraceWriter.Write(
-                                                $"{DateTime.Now:O} [UserLogon] notice=" +
-                                                $"{PlayObject.m_boLoginNoticeOK} ready=" +
-                                                $"{PlayObject.m_boReadyRun} char={PlayObject.m_sCharName}");
-#endif
-                                        }
-                                        else
-                                        {
-                                            if ((HUtil32.GetTickCount() - PlayObject.m_dwSearchTick) > PlayObject.m_dwSearchTime)
-                                            {
-                                                PlayObject.m_dwSearchTick = HUtil32.GetTickCount();
-                                                PlayObject.SearchViewRange();
-                                                PlayObject.GameTimeChanged();
-                                            }
-                                            PlayObject.Run();
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    m_AiPlayObjectList.Remove(PlayObject);
-                                    PlayObject.Disappear();
-                                    AddToHumanFreeList(PlayObject);
-                                    PlayObject.DealCancelA();
-                                    SaveHumanRcd(PlayObject, 3);
-                                    M2Share.GateManager.CloseUser(
-                                        PlayObject.m_nGateIdx,
-                                        PlayObject.m_nSocket,
-                                        PlayObject.m_UserGeneration);
-                                    SendServerGroupMsg(Grobal2.ISM_CS_USERLOGOUT, M2Share.nServerIndex, PlayObject.m_sCharName);
-                                    continue;
-                                }
-                            }
-                            nIdx++;
-                            if ((HUtil32.GetTickCount() - dwCheckTime) > M2Share.g_dwHumLimit)
-                            {
-                                boCheckTimeLimit = true;
-                                m_nProcHumIDx = nIdx;
-                                break;
-                            }
-                        }
-                        if (!boCheckTimeLimit) m_nProcHumIDx = 0;
-                    }
-                    finally
-                    {
-                        HUtil32.LeaveCriticalSection(M2Share.ProcessHumanCriticalSection);
-                    }
-
-                    Thread.Sleep(30);
-                }
-            }
-            catch (Exception ex)
-            {
-                M2Share.MainOutMessage(sExceptionMsg8);
-                M2Share.MainOutMessage(ex.StackTrace);
-            }
-        }
 
         private void ProcessPlayObjectData()
         {
@@ -1592,6 +1474,7 @@ namespace GameSvr
                                         {
                                             PlayObject.m_boReadyRun = true;
                                             PlayObject.UserLogon();
+                                            PlayObject.TraceGateLifecycle("user-logon-after-call");
 #if GAMESVR_PACKET_TRACE
                                             PacketTraceWriter.Write(
                                                 $"{DateTime.Now:O} [UserLogon] notice=" +
@@ -4040,8 +3923,6 @@ namespace GameSvr
                     userGeneration);
                 MarkCancelledUsers(m_PlayObjectList, gateIdx, socket,
                     userGeneration);
-                MarkCancelledUsers(m_AiPlayObjectList, gateIdx, socket,
-                    userGeneration);
                 MarkCancelledUsers(m_PlayObjectFreeList, gateIdx, socket,
                     userGeneration);
             }
@@ -4128,10 +4009,6 @@ namespace GameSvr
         private void SaveHumanRcdCore(TPlayObject PlayObject, ushort saveMode)
         {
             if (PlayObject == null) return;
-            if (PlayObject.m_boAI) 
-            {
-                return;
-            }
             byte[] nativeSwitchExtension = null;
             if (saveMode == 2
                 && !NativeSwitchDataCodec.TryEncode(PlayObject,
@@ -4173,6 +4050,11 @@ namespace GameSvr
             {
                 M2Share.ErrorMessage(
                     $"[SaveHumanRcd] 人物原生记录过短，PK点/幸运/攻击模式/平台等级/加油点/天地合一无法回写: {PlayObject.m_sCharName}");
+            }
+            if (!PlayObject.PersistNativeObj540Window())
+            {
+                M2Share.ErrorMessage(
+                    $"[SaveHumanRcd] 人物原生记录过短，obj+0x540窗口无法回写: {PlayObject.m_sCharName}");
             }
             if (!PlayObject.PersistNativeAccountSuffixTypeFlags())
             {
@@ -4425,6 +4307,9 @@ namespace GameSvr
             // login. Re-read them straight from the native record; must stay
             // AFTER the DTO assignments it supersedes.
             PlayObject.RestoreNativeUnmappedScalars();
+            // rec+0x0508 is not a DTO member.  Restore it after all ordinary
+            // HumanInfo assignments, alongside the other raw native slots.
+            PlayObject.RestoreNativeObj540Window();
             // Same reasoning for rec[0x5AC]/[0x5BC]/[0x5BE] (定位石 recall anchor):
             // pure clone-carry with no DTO member, so TryDecode never surfaces them.
             PlayObject.RestoreNativeFixedCoord();
@@ -5272,145 +5157,6 @@ namespace GameSvr
                 nX = M2Share.g_Config.nHomeX;
                 nY = M2Share.g_Config.nHomeY;
             }
-            return result;
-        }
-
-        public void StartAI()
-        {
-            if ((_processAiThread.ThreadState & ThreadState.Unstarted) != 0)
-            {
-                _processAiThread.Start();
-            }
-        }
-
-        public int RobotPopulation => m_AiPlayObjectList.Count + m_UserLogonList.Count;
-
-        public void AddAILogon(TAILogon AI)
-        {
-            m_UserLogonList.Add(AI);
-        }
-
-        private bool RegenAIObject(TAILogon AI)
-        {
-            var PlayObject = AddAIPlayObject(AI);
-            if (PlayObject != null)
-            {
-                PlayObject.m_sHomeMap = GetHomeInfo(ref PlayObject.m_nHomeX, ref PlayObject.m_nHomeY);
-                PlayObject.m_sUserID = "假人";
-                PlayObject.Start(TPathType.t_Dynamic);
-                m_AiPlayObjectList.Add(PlayObject);
-                return true;
-            }
-            return false;
-        }
-
-        private RobotPlayObject AddAIPlayObject(TAILogon AI)
-        {
-            int n1C;
-            int n20;
-            int n24;
-            object p28;
-            RobotPlayObject result = null;
-            var Map = M2Share.MapManager.FindMap(AI.sMapName);
-            if (Map == null)
-            {
-                return result;
-            }
-            RobotPlayObject Cert = new RobotPlayObject();
-            if (Cert != null)
-            {
-                Cert.m_PEnvir = Map;
-                Cert.m_sMapName = AI.sMapName;
-                Cert.m_nCurrX = AI.nX;
-                Cert.m_nCurrY = AI.nY;
-                Cert.m_btDirection = (byte)M2Share.RandomNumber.Random(8);
-                Cert.m_sCharName = AI.sCharName;
-                // Bug1 fix 2026-04-22: deep copy instead of aliasing.
-                Cert.m_WAbil.CopyFrom(Cert.m_Abil);
-                if (M2Share.RandomNumber.Random(100) < Cert.m_btCoolEye)
-                {
-                    Cert.m_boCoolEye = true;
-                }
-                
-                
-                Cert.m_sConfigFileName = AI.sConfigFileName;
-                Cert.m_sHeroConfigFileName = AI.sHeroConfigFileName;
-                Cert.m_sFilePath = AI.sFilePath;
-                Cert.m_sConfigListFileName = AI.sConfigListFileName;
-                Cert.m_sHeroConfigListFileName = AI.sHeroConfigListFileName;
-                
-                Cert.Initialize();
-                Cert.RecalcLevelAbilitys();
-                Cert.RecalcAbilitys();
-                Cert.m_WAbil.HP = Cert.m_WAbil.MaxHP;
-                Cert.m_WAbil.MP = Cert.m_WAbil.MaxMP;
-                if (Cert.m_boAddtoMapSuccess)
-                {
-                    p28 = null;
-                    if (Cert.m_PEnvir.wWidth < 50)
-                    {
-                        n20 = 2;
-                    }
-                    else
-                    {
-                        n20 = 3;
-                    }
-                    if ((Cert.m_PEnvir.wHeight < 250))
-                    {
-                        if ((Cert.m_PEnvir.wHeight < 30))
-                        {
-                            n24 = 2;
-                        }
-                        else
-                        {
-                            n24 = 20;
-                        }
-                    }
-                    else
-                    {
-                        n24 = 50;
-                    }
-                    n1C = 0;
-                    while (true)
-                    {
-                        if (!Cert.m_PEnvir.CanWalk(Cert.m_nCurrX, Cert.m_nCurrY, false))
-                        {
-                            if ((Cert.m_PEnvir.wWidth - n24 - 1) > Cert.m_nCurrX)
-                            {
-                                Cert.m_nCurrX += (short)n20;
-                            }
-                            else
-                            {
-                                Cert.m_nCurrX = (byte)(M2Share.RandomNumber.Random(Cert.m_PEnvir.wWidth / 2) + n24);
-                                if (Cert.m_PEnvir.wHeight - n24 - 1 > Cert.m_nCurrY)
-                                {
-                                    Cert.m_nCurrY += (short)n20;
-                                }
-                                else
-                                {
-                                    Cert.m_nCurrY = (byte)(M2Share.RandomNumber.Random(Cert.m_PEnvir.wHeight / 2) + n24);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            p28 = Cert.m_PEnvir.AddToMap(Cert.m_nCurrX, Cert.m_nCurrY, CellType.OS_MOVINGOBJECT, Cert);
-                            break;
-                        }
-                        n1C++;
-                        if (n1C >= 31)
-                        {
-                            break;
-                        }
-                    }
-                    if (p28 == null)
-                    {
-                        M2Share.ObjectManager.Remove(Cert.ObjectId);
-                        Cert = null;
-                    }
-                }
-            }
-            result = Cert;
             return result;
         }
 

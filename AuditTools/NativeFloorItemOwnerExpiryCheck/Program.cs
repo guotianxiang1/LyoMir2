@@ -51,8 +51,10 @@ var cfg = new GameSvrConfig();
 Check(cfg.dwFloorItemCanPickUpTime == 120000,
     "0x78399D cmp edx,0x1D4C0: 归属保留窗口 = 120000 ms");
 
-foreach (var rel in new[] { "GameSvr/Players/TPlayObject.Base.cs",
-                            "GameSvr/RobotPlay/RobotPlayObject.Base.cs" })
+// RobotPlayObject.Base.cs dropped from this list with the robot itself: native has
+// no robot/fake-player class at all (0 of the 636 recovered game classes), so there
+// is no second copy of the pickup-expiry段 left to keep in step.
+foreach (var rel in new[] { "GameSvr/Players/TPlayObject.Base.cs" })
 {
     var src = ReadRepoFile(rel);
     var expiry = src.IndexOf("MapItem.CanPickUpTick", StringComparison.Ordinal);
