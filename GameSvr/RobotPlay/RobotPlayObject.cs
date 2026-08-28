@@ -58,6 +58,12 @@ namespace GameSvr
         public bool m_boProtectStatus = false;
         public short m_nProtectTargetX = 0;
         public short m_nProtectTargetY = 0;
+
+        // Robot-only movement target state. This was previously inherited from
+        // AnimalObject, but RobotPlayObject is a port-only TPlayer descendant and
+        // must not make that animal field part of THumanKind.
+        private short m_nTargetX = -1;
+        private short m_nTargetY = -1;
         
         
         
@@ -1053,7 +1059,7 @@ namespace GameSvr
             }
         }
 
-        protected override void Wondering()
+        protected void Wondering()
         {
             short nX = 0;
             short nY = 0;
@@ -1346,6 +1352,19 @@ namespace GameSvr
                 M2Share.MainOutMessage(ex.Message);
             }
             return result;
+        }
+
+        protected override void DelTargetCreat()
+        {
+            base.DelTargetCreat();
+            m_nTargetX = -1;
+            m_nTargetY = -1;
+        }
+
+        private void SetTargetXY(short nX, short nY)
+        {
+            m_nTargetX = nX;
+            m_nTargetY = nY;
         }
 
         private int GetRangeTargetCountByDir(byte nDir, short nX, short nY, int nRange)
@@ -2205,7 +2224,7 @@ namespace GameSvr
                                         m_wHitMode = 4;
                                         m_dwTargetFocusTick = HUtil32.GetTickCount();
                                         m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
-                                        Attack(m_TargetCret, m_btDirection);
+                                        AttackDir(m_TargetCret, 0, m_btDirection);
                                         BreakHolySeizeMode();
                                         m_dwHitTick = HUtil32.GetTickCount();
                                         return result;
@@ -2246,7 +2265,7 @@ namespace GameSvr
                                         m_wHitMode = 9;
                                         m_dwTargetFocusTick = HUtil32.GetTickCount();
                                         m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
-                                        Attack(m_TargetCret, m_btDirection);
+                                        AttackDir(m_TargetCret, 0, m_btDirection);
                                         BreakHolySeizeMode();
                                         m_dwHitTick = HUtil32.GetTickCount();
                                         return result;
@@ -2281,7 +2300,7 @@ namespace GameSvr
                                         m_wHitMode = 9;
                                         m_dwTargetFocusTick = HUtil32.GetTickCount();
                                         m_btDirection = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
-                                        Attack(m_TargetCret, m_btDirection);
+                                        AttackDir(m_TargetCret, 0, m_btDirection);
                                         BreakHolySeizeMode();
                                         m_dwHitTick = HUtil32.GetTickCount();
                                         return result;

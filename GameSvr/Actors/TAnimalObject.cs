@@ -41,7 +41,8 @@ namespace GameSvr
         // 于是怪物可以"尝试"第 0 行/列和 Width/Height，x==Width 那一格再由
         // MoveToMovingObject 自己的 [0,Width) 闸拒掉；净效果是怪物能站上第 0 行/列，玩家不能。
         // 原版注记明确要求"不要给两个 mover 共用一个边界 helper"，故此处单独 override。
-        // 人形类（TPlayObject / HeroObject）继承自本类，必须各自把人形边界 override 回去。
+        // 人形类（TPlayObject / HeroObject）位于独立的 THumanKind 分支，
+        // 因而不会继承此怪物边界实现。
         protected override bool WalkToInBounds(short nNX, short nNY)
         {
             return nNX >= 0 && nNX <= m_PEnvir.wWidth
@@ -84,8 +85,7 @@ namespace GameSvr
             // NormNpc left AnimalObject entirely for TBaseObject (native TPsNpc :
             // TCreature), so it reaches TBaseObject's own constant-false 0x76B348
             // and no longer needs an arm here.
-            if (this is TPlayObject || this is HeroObject ||
-                this is TFieldHero || this is AiMon || this is SearchMon ||
+            if (this is TFieldHero || this is AiMon || this is SearchMon ||
                 this is WalkMon || this is FoxBossMon ||
                 this is FourteenYearBossMon ||
                 this is WorldCupPreMatchMon || this is HuoSheMonster ||

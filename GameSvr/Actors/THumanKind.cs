@@ -31,22 +31,19 @@ namespace GameSvr
     /// band, which is why only players own a hero.
     ///
     /// ── State of the migration
-    /// This layer is introduced empty and still derives from AnimalObject, which is
-    /// where the two humanoids sat before. Natively THumanKind derives from
-    /// TCreature and has nothing to do with TAnimal; re-parenting it needs each
-    /// AnimalObject member the humanoids currently rely on to be resolved against
-    /// the image first, since some are real TCreature members and some only exist
-    /// because of the wrong ancestry. One known compensation for that wrong
-    /// ancestry, to be removed once the parent link is corrected, is the
-    /// <c>this is TPlayObject || this is HeroObject</c> arm of
-    /// <see cref="AnimalObject.IsNativeMagic43Target"/>.
+    /// The native parent edge is now corrected: THumanKind derives from the
+    /// TCreature port (TBaseObject), and the two humanoids no longer inherit the
+    /// AnimalObject layer. Remaining equipment/cold-time storage work is tracked
+    /// separately and must be moved only after each flattened method has an owner
+    /// proof. The former player/hero compensation arm of
+    /// <see cref="AnimalObject.IsNativeMagic43Target"/> was removed with this cut.
     ///
     /// <see cref="WalkToInBounds"/> was previously listed here as a second such
     /// compensation. It is not: the VMT shows THumanKind genuinely overriding the
     /// mover slot, so the override is real native behaviour and stays. What was
     /// wrong is only that the port wrote it twice — see the override below.
     /// </summary>
-    public partial class THumanKind : AnimalObject
+    public partial class THumanKind : TBaseObject
     {
         /// <summary>
         /// obj+0x5A4, the 24-byte soul-wash window, held as raw bytes because

@@ -768,7 +768,7 @@ namespace GameSvr
             {
                 byte nDir = M2Share.GetNextDirection(m_nCurrX, m_nCurrY, m_TargetCret.m_nCurrX, m_TargetCret.m_nCurrY);
                 m_btDirection = nDir;
-                Attack(m_TargetCret, nDir);
+                AttackDir(m_TargetCret, 0, nDir);
                 m_dwHitTick = dwCurTick;
 
                 // Try casting a hero skill
