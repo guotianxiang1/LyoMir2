@@ -17,14 +17,6 @@ namespace GameSvr
         /// <summary>Character name of the master player.</summary>
         public string MasterName;
 
-        /// <summary>Heroes descend from THumanKind too, so they own a cooldown
-        /// table: THeroAct VMT 0x685630+0x1F0 and all six hero leaves hold the
-        /// same sub_748130. Their notifications reach the client indirectly --
-        /// VMT+0x254 is sub_689A38, which forwards to the master at obj+0x68C.
-        /// (Monsters do NOT have a table: TCreature 0x764608+0x1F0 is a
-        /// different function, sub_773CA0.)</summary>
-        internal override bool SupportsNativeColdTime => true;
-
         /// <summary>
         /// 0x73FCEF 的 `is THumanKind`（类指针 [0x73BBE8]）。英雄同样是 THumanKind 的一支，
         /// 所以英雄当凶手时，它的 [+0x579] 一样会从受害者的爆装分母里减掉。

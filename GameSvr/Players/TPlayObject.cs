@@ -21,11 +21,6 @@ namespace GameSvr
 
         internal int MerchantDialogSeq => _merchantDialogSeq;
 
-        /// <summary>The cooldown table lives on THumanKind (created at 0x73BFF2
-        /// in ctor sub_73BF00), so TPlayer has it: VMT 0x6AC8C8+0x1F0 holds the
-        /// same sub_748130 as THumanKind's own slot, with no override.</summary>
-        internal override bool SupportsNativeColdTime => true;
-
         internal void SetNativeAuthenticationStatus(byte status1, byte status2, byte status3)
         {
             _nativeAuthStatus1 = status1;

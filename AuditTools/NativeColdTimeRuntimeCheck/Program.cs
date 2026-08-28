@@ -69,6 +69,20 @@ void CheckOwnership()
     Assert(!new TBaseObject().SupportsNativeColdTime,
         "plain TBaseObject must NOT own a table (TCreature+0x1F0 = sub_773CA0)");
 
+    var owner = typeof(THumanKind).GetProperty("SupportsNativeColdTime",
+        BindingFlags.Instance | BindingFlags.NonPublic |
+        BindingFlags.DeclaredOnly)?.DeclaringType;
+    Equal(typeof(THumanKind), owner,
+        "VMT+0x1F0 override must be declared once on THumanKind");
+    Assert(typeof(TPlayObject).GetProperty("SupportsNativeColdTime",
+               BindingFlags.Instance | BindingFlags.NonPublic |
+               BindingFlags.DeclaredOnly) == null,
+        "TPlayer must inherit THumanKind VMT+0x1F0");
+    Assert(typeof(HeroObject).GetProperty("SupportsNativeColdTime",
+               BindingFlags.Instance | BindingFlags.NonPublic |
+               BindingFlags.DeclaredOnly) == null,
+        "THeroAct must inherit THumanKind VMT+0x1F0");
+
     // A non-owner must be inert on every entry point rather than throwing.
     var creature = new TBaseObject();
     Assert(!creature.ArmNativeColdTime(0x111, 1000, 1000),

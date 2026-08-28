@@ -54,6 +54,13 @@ namespace GameSvr
         public byte[] m_NativeShenYouBlock;
 
         /// <summary>
+        /// Native VMT slot <c>+0x1F0</c>: THumanKind overrides the TCreature slot
+        /// with <c>sub_748130</c>. TPlayer and THeroAct inherit that same target;
+        /// neither leaf declares another override.
+        /// </summary>
+        internal override bool SupportsNativeColdTime => true;
+
+        /// <summary>
         /// The humanoid mover, VMT slot <c>+0x030</c>. This class is where native
         /// overrides it, and both humanoids inherit the override rather than
         /// declaring it:
