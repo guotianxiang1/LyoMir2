@@ -4312,7 +4312,20 @@ namespace GameSvr
             HUtil32.EnterCriticalSection(M2Share.ProcessMsgCriticalSection);
             try
             {
-                if (((HUtil32.GetTickCount() - m_SendRefMsgTick) >= 500) || (m_VisibleHumanList.Count == 0))
+                // 战神 sub_7651EC 的重建节流是 800ms，不是 500：
+                //   765248  call 0x408340              ; GetTickCount
+                //   76524F  sub  edx,[ebx+0x37C]       ; elapsed
+                //   765255  cmp  edx,0x320             ; 0x320 = 800
+                //   76525B  jb   0x76528D              ; 未到 800ms 就跳过重建，沿用旧表
+                //   76525D  mov  [ebx+0x37C],eax       ; 只有真重建才打戳
+                // 本端原先写 500，等于比原版多重建 60% 次数。同文件 4474 行那段注释
+                // 早就写着「800 ms throttle on [self+0x37C]」，是代码与自身文档不符。
+                //
+                // `|| m_VisibleHumanList.Count == 0` 这一支原生没有：被节流挡住时它
+                // 直接拿旧表(可能是空表)去投递，不会因为表空而强制重建。此处暂时保留
+                // 该支，因为移除它会改变「空表时是否广播」这一可观测行为，需要单独
+                // 取证；节流值本身则是无歧义的。
+                if (((HUtil32.GetTickCount() - m_SendRefMsgTick) >= 800) || (m_VisibleHumanList.Count == 0))
                 {
                     m_SendRefMsgTick = HUtil32.GetTickCount();
                     m_VisibleHumanList.Clear();
