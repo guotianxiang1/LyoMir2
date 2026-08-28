@@ -1000,11 +1000,6 @@ namespace GameSvr
     {
     }
 
-    /// <summary>Native <c>TMapEvent</c>, VMT 0x007167E0, instance size 72; own fields [0xC, 0x48) = 60 bytes.</summary>
-    public partial class TMapEvent : TBaseObj
-    {
-    }
-
     /// <summary>Native <c>TMapGold</c>, VMT 0x0077D970, instance size 260; own fields [0x100, 0x104) = 4 bytes.</summary>
     public partial class TMapGold : TBaseItem
     {
