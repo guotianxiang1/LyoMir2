@@ -39,7 +39,12 @@ namespace GameSvr
         // 经 vmt[+0x250]）。这一整段现由 NativeTickThroughOccupancyTransition() 复刻
         // （TPlayObject.NativeThroughOccupancyTick.cs），接在玩家 tick 里；各 mover
         // 与原版一样**只读**本字段，不再自行刷新（MOVE-73）。
-        public bool m_boThroughOccupancyCache;
+        //
+        // 字段声明已按偏移带上移到 TBaseObject（= 原生 TCreature，自有带
+        // [0x00C,0x450)，0x3FE 落在其中）。原生自己就是证据：sub_68BEC0 在 0x68BEEF
+        // 于**英雄**对象上读 `byte [Self+0x3FE]`，所以它是 TCreature 层的共享字段，
+        // 不是玩家私有——尽管上面那段说明的唯一写点仍只在玩家 tick 里。
+        // 见 TBaseObject.NativeThroughOccupancyField.cs。
 
         // 原版 sub_768454(Self) -> Boolean。返回「本对象能否穿过占格者」。
         //   0x76845C  call 0x772EB8     ; 无条件穿透授予 → 立刻 TRUE
