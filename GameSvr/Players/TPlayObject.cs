@@ -1014,15 +1014,9 @@ namespace GameSvr
             }
         }
 
-        // TPlayer 的 mover 是 0x741224（人形），不是父类 AnimalObject 对应的 0x71F0F4（怪物）——
-        // MOVE-40 的 VMT 普查里 TPlayer 和 THumanKind / THeroAct 同槽。C# 的继承链把玩家放在
-        // AnimalObject 之下，若不 override 就会继承怪物的松边界，玩家便能站上第 0 行/列。
-        // 故这里把人形边界（严格 > 0 且 < Width / < Height，0x741276 jle、0x741284 jge）取回。
-        protected override bool WalkToInBounds(short nNX, short nNY)
-        {
-            return nNX > 0 && nNX < m_PEnvir.wWidth
-                && nNY > 0 && nNY < m_PEnvir.wHeight;
-        }
+        // 人形边界 override 已上移到 THumanKind：VMT +0x030 显示 TPlayer 与 THeroAct 都是
+        // 从 THumanKind 继承 0x741224（本层覆写），并非各自覆写，所以忠实形状是在拥有该槽的
+        // 类上写一次。见 THumanKind.WalkToInBounds。
 
         private bool CommitRunMove(int nX, int nY)
         {

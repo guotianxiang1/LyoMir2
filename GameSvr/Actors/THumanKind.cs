@@ -36,16 +36,15 @@ namespace GameSvr
     /// TCreature and has nothing to do with TAnimal; re-parenting it needs each
     /// AnimalObject member the humanoids currently rely on to be resolved against
     /// the image first, since some are real TCreature members and some only exist
-    /// because of the wrong ancestry. Two known compensations for that wrong
-    /// ancestry, both to be removed once the parent link is corrected, are
-    /// <see cref="AnimalObject.WalkToInBounds"/> — which the humanoids each have to
-    /// override back to the tighter humanoid bounds — and the
+    /// because of the wrong ancestry. One known compensation for that wrong
+    /// ancestry, to be removed once the parent link is corrected, is the
     /// <c>this is TPlayObject || this is HeroObject</c> arm of
     /// <see cref="AnimalObject.IsNativeMagic43Target"/>.
     ///
-    /// Inserting the layer changes no behaviour on its own: it declares nothing and
-    /// forwards construction, so both humanoids resolve exactly the members they
-    /// resolved before.
+    /// <see cref="WalkToInBounds"/> was previously listed here as a second such
+    /// compensation. It is not: the VMT shows THumanKind genuinely overriding the
+    /// mover slot, so the override is real native behaviour and stays. What was
+    /// wrong is only that the port wrote it twice — see the override below.
     /// </summary>
     public partial class THumanKind : AnimalObject
     {
@@ -56,6 +55,35 @@ namespace GameSvr
         /// by the player, which is the whole reason the layer exists.
         /// </summary>
         public byte[] m_NativeShenYouBlock;
+
+        /// <summary>
+        /// The humanoid mover, VMT slot <c>+0x030</c>. This class is where native
+        /// overrides it, and both humanoids inherit the override rather than
+        /// declaring it:
+        /// <code>
+        ///   TCreature   +0x030 = 0x767568
+        ///   TAnimal     +0x030 = 0x71F0F4   (monster, loose bounds)
+        ///   THumanKind  +0x030 = 0x741224   &lt;-- overridden here
+        ///   TPlayer     +0x030 = 0x741224   inherited
+        ///   THeroAct    +0x030 = 0x741224   inherited
+        /// </code>
+        /// The humanoid bounds are strict on both edges (0x741276 <c>jle</c>,
+        /// 0x741284 <c>jge</c>), so a humanoid cannot stand on row/column 0 the way
+        /// a monster can. The port had this same body copied onto TPlayObject and
+        /// HeroObject; one override on the class that actually owns the slot is the
+        /// faithful shape.
+        ///
+        /// TFieldHero is deliberately unaffected: natively it descends from TAIMon
+        /// with <c>+0x030 = 0x71F0F4</c>, and in C# it is <c>TFieldHero : AiMon</c>,
+        /// outside this subtree, so it keeps the monster bounds correctly. The
+        /// THeroAct subclasses that do sit under this layer — TWarHero, TTaosHero,
+        /// TMagHero and their TSec* variants — all carry 0x741224 too.
+        /// </summary>
+        protected override bool WalkToInBounds(short nNX, short nNY)
+        {
+            return nNX > 0 && nNX < m_PEnvir.wWidth
+                && nNY > 0 && nNY < m_PEnvir.wHeight;
+        }
 
         public THumanKind() : base()
         {
