@@ -106,3 +106,21 @@ project.assets.json
 !/GameSvr/Resources/M2Server_bitmap_001.bmp
 !/GameSvr/Resources/M2Server_bitmap_002.bmp
 !/GameSvr/Resources/M2Server_bitmap_003.bmp
+
+# Local audit outputs are not part of the public server source distribution.
+/AuditTools/_tmp_*.txt
+/AuditTools/_iso_dominator_pet_save/
+/AuditTools/NativeCreateCampAnimalCheck/Share/
+/AuditTools/NativeCreateCampAnimalCheck/campanimal.rsp
+/AuditTools/NativeFieldHeroProductionCheck/Share/
+/AuditTools/NativeGetUserItemCheck/Share/
+/AuditTools/NativeType2FieldHeroActorContractCheck/Share/
+/AuditTools/NativeCm2815MessageBoardCheck/Share/
+/AuditTools/NativeCastleActCheck/native_castle_act.csv
+/AuditTools/NativeHelperEngineCheck/helper*-iso.props
+/AuditTools/NativeHelperEngineCheck/obj_helper*.targets
+
+# Local runtime/state and unrelated workspace files.
+/GuildBase/Guilds/
+/pelican-bicycle.html
+/眼神爆率.json
