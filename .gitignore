@@ -69,3 +69,40 @@ _runtime_backup_*/
 # run_audits.py output artifact (regenerated on every sweep, machine-specific
 # paths and timings); the runner itself is committed, its results are not.
 /AuditTools/_audit_report.json
+
+# Non-standard local build output directories used by isolated audit projects.
+**/bin_*/
+**/obj_*/
+**/artifacts_*/
+/_build_*/
+/bin_*/
+/obj_*/
+/artifacts*/
+
+# Compiled/debugger artifacts must never enter the source-only repository.
+*.dll
+*.exe
+*.pdb
+*.obj
+*.ilk
+*.exp
+*.lib
+*.nupkg
+*.dmp
+*.i64
+*.idb
+*.deps.json
+*.runtimeconfig.json
+project.assets.json
+*.nuget.g.props
+*.nuget.g.targets
+
+# Legacy resource-extraction dumps. Keep only the five GameSvr resources that
+# GameSvr.csproj explicitly embeds; GameGate/LoginGate have their own required
+# source assets in their respective Resources directories.
+/GameSvr/Resources/*
+!/GameSvr/Resources/M2Server_icon_000_1imgs.ico
+!/GameSvr/Resources/M2Server_bitmap_000.bmp
+!/GameSvr/Resources/M2Server_bitmap_001.bmp
+!/GameSvr/Resources/M2Server_bitmap_002.bmp
+!/GameSvr/Resources/M2Server_bitmap_003.bmp
